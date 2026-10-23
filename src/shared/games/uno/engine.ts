@@ -9,7 +9,7 @@ import {
   type Card,
   type Color,
 } from "./cards.ts";
-import { buildNoMercyDeck, MERCY_LIMIT } from "./nomercy.ts";
+import { buildNoMercyDeck, MERCY_BONUS, MERCY_LIMIT } from "./nomercy.ts";
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,8 @@ export function effectiveRules(settings: UnoSettings) {
     sevenZero: noMercy || settings.sevenZero,
     jumpIn: settings.jumpIn,
     challenge: !noMercy,
+    /** No Mercy : on ne pioche que si on ne peut pas jouer, et la carte piochee doit etre posee */
+    mustPlay: noMercy,
   };
 }
 
@@ -259,9 +261,10 @@ function dealRound(s: UnoState, ev: UnoEvent[]) {
   }
   for (const p of s.players) p.stats.maxHand = Math.max(p.stats.maxHand, p.hand.length);
 
-  // La premiere carte retournee ne peut pas etre un joker : on la remet au hasard dans la pioche.
+  // La premiere carte retournee ne peut pas etre un joker (ni une carte action en No Mercy) :
+  // on la remet au hasard dans la pioche.
   let top = deck.pop()!;
-  while (isWild(top)) {
+  while (isWild(top) || (rules.noMercy && top.kind !== "number")) {
     deck.splice(randomInt(s, deck.length + 1), 0, top);
     top = deck.pop()!;
   }
@@ -381,7 +384,10 @@ function drawOne(s: UnoState, ev: UnoEvent[]): Card | null {
 function drawCards(s: UnoState, p: number, count: number, reason: DrawReason, ev: UnoEvent[]): Card[] {
   const player = s.players[p]!;
   const drawn: Card[] = [];
+  const noMercy = effectiveRules(s.settings).noMercy;
   for (let k = 0; k < count; k++) {
+    // En No Mercy, on est elimine des la 25e carte : inutile de piocher la suite
+    if (noMercy && player.hand.length >= MERCY_LIMIT) break;
     const card = drawOne(s, ev);
     if (!card) break;
     drawn.push(card);
@@ -410,6 +416,12 @@ function checkMercy(s: UnoState, p: number, ev: UnoEvent[]) {
   s.drawPile = shuffle(s, player.hand.concat(s.drawPile));
   player.hand = [];
   ev.push({ type: "eliminated", player: player.id });
+}
+
+function checkMercyAll(s: UnoState, ev: UnoEvent[]): boolean {
+  const before = s.eliminationOrder.length;
+  for (let i = 0; i < s.players.length; i++) checkMercy(s, i, ev);
+  return s.eliminationOrder.length > before;
 }
 
 function canStack(s: UnoState, card: Card, top: Card): boolean {
@@ -578,6 +590,9 @@ export function applyAction(s: UnoState, playerId: string, action: UnoAction, no
         return ok(ev);
       }
       if (s.hasDrawn) return fail("Tu as déjà pioché ce tour-ci.");
+      if (effectiveRules(s.settings).mustPlay && player.hand.some((c) => canPlayCard(s, p, c))) {
+        return fail("Sans pitié : tu as une carte jouable, tu dois la poser.");
+      }
       voluntaryDraw(s, p, ev);
       return ok(ev);
     }
@@ -585,6 +600,7 @@ export function applyAction(s: UnoState, playerId: string, action: UnoAction, no
     case "pass": {
       if (p !== s.turn) return fail("Ce n'est pas ton tour.");
       if (!s.hasDrawn || s.drawnCardId === null) return fail("Pioche d'abord une carte.");
+      if (effectiveRules(s.settings).mustPlay) return fail("Sans pitié : la carte piochée doit être posée.");
       markActed(s, p, now);
       ev.push({ type: "pass", player: player.id });
       advance(s, 1);
@@ -748,6 +764,8 @@ function playCard(
       } else if (rules.sevenZero && !finished && card.value === 0) {
         rotateHands(s, ev);
       }
+      // Recevoir une grosse main peut faire depasser la limite de pitie
+      if (checkMercyAll(s, ev) && checkRoundEndByElimination(s, ev)) return;
       advance(s, 1);
       break;
     }
@@ -854,10 +872,12 @@ function spinRoulette(s: UnoState, p: number, color: Color, ev: UnoEvent[]) {
   const flipped: Card[] = [];
   const local: UnoEvent[] = [];
   for (;;) {
+    if (player.hand.length >= MERCY_LIMIT) break;
     const card = drawOne(s, local);
     if (!card) break;
     flipped.push(card);
     player.hand.push(card);
+    // Les jokers ne comptent pas comme la couleur annoncee
     if (card.color === color) break;
   }
   s.color = color;
@@ -927,6 +947,7 @@ function endRound(s: UnoState, winner: number, ev: UnoEvent[]) {
     hands[pl.id] = pl.hand.slice();
     if (pl !== winnerPlayer) points += pl.hand.reduce((sum, c) => sum + cardPoints(c), 0);
   }
+  if (effectiveRules(s.settings).noMercy) points += MERCY_BONUS * s.eliminationOrder.length;
   if (winnerPlayer) winnerPlayer.score += points;
   s.unoWindow = null;
   s.challenge = null;
@@ -1001,11 +1022,27 @@ function computeRanking(s: UnoState, winner: number): string[] {
 
 export function timeoutActions(s: UnoState): UnoAction[] {
   if (s.phase !== "playing") return [];
-  const player = s.players[s.turn]!;
+  const p = s.turn;
+  const player = s.players[p]!;
   if (s.roulette) return [{ type: "roulette", color: mostCommonColor(player.hand) }];
   if (s.pendingDraw > 0) return [{ type: "draw" }];
-  if (s.hasDrawn && s.drawnCardId !== null) return [{ type: "pass" }];
+  const mustPlay = effectiveRules(s.settings).mustPlay;
+  if (s.hasDrawn && s.drawnCardId !== null) {
+    if (!mustPlay) return [{ type: "pass" }];
+    const drawn = player.hand.find((c) => c.id === s.drawnCardId)!;
+    return [autoPlay(player.hand, drawn)];
+  }
+  if (mustPlay) {
+    const playable = player.hand.filter((c) => canPlayCard(s, p, c));
+    if (playable.length > 0) return [autoPlay(player.hand, playable.find((c) => !isWild(c)) ?? playable[0]!)];
+  }
   return [{ type: "draw" }];
+}
+
+function autoPlay(hand: Card[], card: Card): UnoAction {
+  const action: UnoAction = { type: "play", cardId: card.id };
+  if (isWild(card) && card.kind !== "wildRoulette") action.color = mostCommonColor(hand.filter((c) => c.id !== card.id));
+  return action;
 }
 
 export function mostCommonColor(hand: Card[], fallback: RngHolder | null = null): Color {

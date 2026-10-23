@@ -68,11 +68,10 @@ export function cardPoints(card: Card): number {
     case "skip":
     case "reverse":
     case "draw2":
-      return 20;
     case "draw4":
     case "skipAll":
     case "discardAll":
-      return 30;
+      return 20;
     case "wild":
     case "wild4":
     case "wildReverse4":

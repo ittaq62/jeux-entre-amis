@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildClassicDeck, type Card, type CardKind, type Color } from "./cards.ts";
+import { buildNoMercyDeck } from "./nomercy.ts";
 import {
   applyAction,
   createGame,
@@ -444,4 +445,103 @@ describe("parties completes entre bots", () => {
       }
     });
   }
+});
+
+describe("No Mercy", () => {
+  const nm = { variant: "nomercy" as const };
+
+  it("contient les 168 cartes du jeu officiel", () => {
+    const deck = buildNoMercyDeck();
+    expect(deck).toHaveLength(168);
+    expect(deck.filter((x) => x.kind === "number")).toHaveLength(80);
+    expect(deck.filter((x) => x.kind === "draw2")).toHaveLength(12);
+    expect(deck.filter((x) => x.kind === "draw4")).toHaveLength(8);
+    expect(deck.filter((x) => x.kind === "wild")).toHaveLength(0);
+    expect(deck.filter((x) => x.color === null)).toHaveLength(24);
+  });
+
+  it("on ne cumule qu'avec une carte de valeur egale ou superieure", () => {
+    const six = c("wild6");
+    const s = rig({
+      hands: [[six, n("red", 1)], [c("draw2", "red"), c("draw4", "blue"), n("red", 3)], [n("green", 1)]],
+      top: n("red", 5),
+      settings: nm,
+    });
+    act(s, 0, { type: "play", cardId: six.id, color: "red" });
+    // Le +2 et le +4 sont trop faibles face au +6 : le joueur 1 encaisse automatiquement
+    expect(s.players[1]!.hand).toHaveLength(9);
+    expect(s.turn).toBe(2);
+  });
+
+  it("un +4 colore peut repondre a un +2", () => {
+    const two = c("draw2", "red");
+    const four = c("draw4", "blue");
+    const s = rig({ hands: [[two, n("red", 1)], [four, n("yellow", 3)], [n("green", 1)]], top: n("red", 5), settings: nm });
+    act(s, 0, { type: "play", cardId: two.id });
+    act(s, 1, { type: "play", cardId: four.id });
+    expect(s.players[2]!.hand).toHaveLength(7);
+  });
+
+  it("interdit de piocher quand on a une carte jouable, et oblige a poser la carte piochee", () => {
+    const s = rig({ hands: [[n("red", 1), n("blue", 2)], [n("yellow", 1)]], top: n("red", 5), settings: nm, drawPile: [n("red", 9), n("green", 3)] });
+    expectFail(s, 0, { type: "draw" });
+    const t = rig({ hands: [[n("blue", 2)], [n("yellow", 1)]], top: n("red", 5), settings: nm, drawPile: [n("red", 9), n("green", 3)] });
+    act(t, 0, { type: "draw" });
+    expect(t.players[0]!.hand).toHaveLength(3);
+    expectFail(t, 0, { type: "pass" });
+    expect(timeoutActions(t)[0]).toMatchObject({ type: "play", cardId: t.drawnCardId });
+  });
+
+  it("elimine un joueur qui atteint 25 cartes et donne la manche au dernier survivant", () => {
+    const ten = c("wild10");
+    const big = Array.from({ length: 16 }, (_, i) => n("green", i % 10));
+    const s = rig({ hands: [[ten, n("red", 1)], big], top: n("red", 5), settings: { ...nm, endMode: "points", targetScore: 5000 } });
+    act(s, 0, { type: "play", cardId: ten.id, color: "red" });
+    expect(s.players[1]!.eliminated).toBe(true);
+    expect(s.phase).toBe("roundOver");
+    expect(s.lastRound?.winner).toBe("p0");
+    expect(s.lastRound?.points).toBe(250);
+  });
+
+  it("la roulette fait retourner des cartes jusqu'a la couleur choisie par la victime", () => {
+    const roulette = c("wildRoulette");
+    const s = rig({
+      hands: [[roulette, n("red", 1)], [n("yellow", 1)], [n("green", 2)]],
+      top: n("red", 5),
+      settings: nm,
+      drawPile: [n("blue", 4), c("wild6"), n("yellow", 7), n("green", 8)],
+    });
+    act(s, 0, { type: "play", cardId: roulette.id });
+    expect(viewFor(s, "p1").rouletteVictim).toBe("p1");
+    act(s, 1, { type: "roulette", color: "blue" });
+    // vert 8, jaune 7, joker +6 (ne compte pas), bleu 4
+    expect(s.players[1]!.hand).toHaveLength(5);
+    expect(s.color).toBe("blue");
+    expect(s.turn).toBe(2);
+  });
+
+  it("passe pour tous fait rejouer, defausse tout vide la couleur", () => {
+    const skipAll = c("skipAll", "red");
+    const discard = c("discardAll", "blue");
+    const s = rig({
+      hands: [[skipAll, discard, n("blue", 1), n("blue", 2), n("yellow", 3)], [n("yellow", 1)], [n("green", 2)]],
+      top: n("red", 5),
+      settings: nm,
+    });
+    act(s, 0, { type: "play", cardId: skipAll.id });
+    expect(s.turn).toBe(0);
+    s.color = "blue";
+    act(s, 0, { type: "play", cardId: discard.id });
+    expect(s.players[0]!.hand.map((x) => x.color)).toEqual(["yellow"]);
+    expect(s.discard[s.discard.length - 1]!.id).toBe(discard.id);
+  });
+
+  it("le joker inversion +4 inverse puis fait piocher le joueur precedent", () => {
+    const rev4 = c("wildReverse4");
+    const s = rig({ hands: [[rev4, n("red", 1)], [n("yellow", 1)], [n("green", 2)]], top: n("red", 5), settings: nm });
+    act(s, 0, { type: "play", cardId: rev4.id, color: "green" });
+    expect(s.direction).toBe(-1);
+    expect(s.players[2]!.hand).toHaveLength(5);
+    expect(s.turn).toBe(1);
+  });
 });
