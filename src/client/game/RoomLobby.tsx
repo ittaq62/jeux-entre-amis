@@ -88,7 +88,7 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
             </div>
           </section>
 
-          <section className="lobby-section">
+          <section className="lobby-section panel">
             <h2>
               Autour de la table
               <span className="hint num">
@@ -145,7 +145,7 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
           </section>
         </div>
 
-        <section className="rules-sheet paper paper-ruled">
+        <section className="rules-sheet panel">
           <div>
             <h2>Règles de la table</h2>
             {!isHost && (
@@ -199,7 +199,7 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
               disabled={!isHost}
               onChange={(endMode) => update({ endMode, ...(endMode === "points" ? { targetScore: rules.noMercy ? 1000 : 500 } : {}) })}
               options={[
-                { value: "first", label: "Le premier qui n'a plus de cartes" },
+                { value: "first", label: "Premier à finir" },
                 { value: "ranking", label: "Jusqu'au dernier" },
                 { value: "points", label: "Aux points" },
               ]}

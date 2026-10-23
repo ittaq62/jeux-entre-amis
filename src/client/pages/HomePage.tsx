@@ -6,7 +6,7 @@ import type { Card } from "../../shared/games/uno/cards.ts";
 import type { RoomSummary, Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { CardFace } from "../components/Card.tsx";
+import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -91,8 +91,33 @@ export function HomePage() {
           {greeting()}, {user.pseudo}.
         </h1>
 
-        <section className="home-game" aria-label="UNO">
-          <div className="game-sheet paper paper-ruled">
+        <section className="home-game panel" aria-label="UNO">
+          <div className="game-stage" aria-hidden="true">
+            <div className="table-scatter">
+              {TABLE_CARDS.map(({ card, x, y, r }, i) => (
+                <motion.div
+                  key={card.id}
+                  className="scatter-card"
+                  style={{ left: x, top: y }}
+                  initial={{ opacity: 0, y: -18, rotate: r - 10 }}
+                  animate={{ opacity: 1, y: 0, rotate: r }}
+                  transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
+                >
+                  <CardFace card={card} width={96} />
+                </motion.div>
+              ))}
+              <motion.div
+                className="scatter-card scatter-deck"
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
+              >
+                <CardBack width={80} />
+              </motion.div>
+            </div>
+          </div>
+
+          <div className="game-sheet">
             <h2 className="game-name">UNO</h2>
             <p className="game-desc">Classique ou No Mercy, de 2 à 8 joueurs. S'il manque du monde, des bots complètent la table.</p>
             <div className="game-actions">
@@ -131,25 +156,10 @@ export function HomePage() {
               </div>
             </form>
           </div>
-
-          <div className="table-scatter" aria-hidden="true">
-            {TABLE_CARDS.map(({ card, x, y, r }, i) => (
-              <motion.div
-                key={card.id}
-                className="scatter-card"
-                style={{ left: x, top: y }}
-                initial={{ opacity: 0, y: -18, rotate: r - 10 }}
-                animate={{ opacity: 1, y: 0, rotate: r }}
-                transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
-              >
-                <CardFace card={card} width={96} />
-              </motion.div>
-            ))}
-          </div>
         </section>
 
         <div className="home-columns">
-          <section className="home-list">
+          <section className="home-list panel">
             <h2>Tables ouvertes</h2>
             {lobby.length === 0 ? (
               <p className="empty">
@@ -164,7 +174,7 @@ export function HomePage() {
             )}
           </section>
 
-          <section className="home-list">
+          <section className="home-list panel">
             <h2>
               Tes amis{" "}
               <Link href="/amis" className="heading-link">
