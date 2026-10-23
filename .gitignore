@@ -8,3 +8,6 @@ dist/
 .DS_Store
 Thumbs.db
 coverage/
+
+# Types generes par `npm run types`
+src/worker/worker-configuration.d.ts
