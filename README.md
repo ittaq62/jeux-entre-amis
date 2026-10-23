@@ -92,7 +92,7 @@ Puis, à chaque nouvelle version :
 npm run deploy
 ```
 
-Le site est publié sur `https://jeux-entre-amis.<ton-sous-domaine>.workers.dev`.
+Le site est publié sur **https://jouer.latablee.workers.dev**.
 
 ## Limites de l'offre gratuite
 
