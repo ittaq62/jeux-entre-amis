@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jeux-entre-amis",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "GameRoom" },
+      { "name": "HUB", "class_name": "Hub" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom", "Hub"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jeux-entre-amis",
+      // Remplace par l'id affiche par `npx wrangler d1 create jeux-entre-amis`
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "APP_URL": "http://localhost:5173",
+    "EMAIL_MODE": "smtp",
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "465"
+  },
+  "observability": { "enabled": true }
+}

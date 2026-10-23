@@ -1,0 +1,11 @@
+# Copie ce fichier en .dev.vars pour le developpement local.
+# En local, EMAIL_MODE=console affiche les codes de connexion dans le terminal
+# au lieu de les envoyer par email.
+EMAIL_MODE=console
+DEV_MODE=1
+SESSION_PEPPER=change-moi-en-une-longue-chaine-aleatoire
+
+# Pour tester l'envoi reel depuis ton PC (facultatif) :
+# EMAIL_MODE=smtp
+# SMTP_USER=ton.adresse.dediee@gmail.com
+# SMTP_PASS=le-mot-de-passe-d-application
