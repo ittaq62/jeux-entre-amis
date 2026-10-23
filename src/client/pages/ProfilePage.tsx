@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import type { PublicUser } from "../../shared/protocol.ts";
+import { rankingPoints } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
@@ -17,7 +18,7 @@ interface Profile {
   stats: {
     played: number;
     won: number;
-    rating: number;
+    points: number;
     streak: number;
     bestStreak: number;
     totals: Record<string, number>;
@@ -88,9 +89,13 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             <h1>{user.pseudo}</h1>
             <p>
               À la table depuis {since}
-              {stats.played > 0 && <>, {stats.rating} points au classement</>}
               {stats.streak >= 2 && <>, {stats.streak} victoires d'affilée en ce moment</>}.
             </p>
+            {stats.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{stats.points.toLocaleString("fr-FR")}</strong> points au classement
+              </p>
+            )}
           </div>
           <div className="row-actions">
             {profile.friendship === "self" && (
@@ -114,7 +119,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
         </section>
 
         <div className="profile-grid">
-          <section className="carnet paper">
+          <section className="carnet panel">
             <h2>Le carnet</h2>
             <p className="carnet-summary">
               {stats.played === 0
@@ -136,7 +141,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             </dl>
           </section>
 
-          <section className="achievements">
+          <section className="achievements panel">
             <h2>
               Succès{" "}
               <span className="hint num">
@@ -160,7 +165,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
           </section>
         </div>
 
-        <section className="history">
+        <section className="history panel">
           <h2>Dernières parties</h2>
           {profile.recent.length === 0 ? (
             <p className="empty">Pas encore de partie terminée.</p>
@@ -175,7 +180,10 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                     </strong>
                     <span className="hint">{g.table.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ")}</span>
                   </span>
-                  <span className="hint">{timeAgo(g.endedAt)}</span>
+                  <span className="history-side">
+                    <strong className="history-points num">+{gamePoints(g)}</strong>
+                    <span className="hint">{timeAgo(g.endedAt)}</span>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -184,6 +192,12 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       </main>
     </div>
   );
+}
+
+/** Points rapportés par une partie de l'historique, avec le barème du classement. */
+function gamePoints(g: Profile["recent"][number]): number {
+  const players = g.table.map((p) => ({ rank: p.rank, isBot: p.bot }));
+  return rankingPoints(players, players.find((p) => p.rank === g.rank) ?? { rank: 0, isBot: false });
 }
 
 function LedgerRow({ label, value, strong }: { label: string; value: number | undefined; strong?: boolean }) {

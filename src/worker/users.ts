@@ -2,6 +2,7 @@ import { sanitizeAvatar, seededAvatar, type AvatarConfig } from "../shared/avata
 import { earnedAchievements } from "../shared/achievements.ts";
 import type { FriendEntry, Me, PublicUser } from "../shared/protocol.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
+import { rankingPoints } from "../shared/ranking.ts";
 import type { UserRow } from "./auth.ts";
 import { randomId } from "./util.ts";
 
@@ -203,9 +204,6 @@ export interface GameRecord {
   players: GameRecordPlayer[];
 }
 
-const BOT_RATING = 1000;
-const ELO_K = 28;
-
 /** Enregistre une partie terminee ; renvoie les succes nouvellement debloques par joueur. */
 export async function recordGame(db: D1Database, rec: GameRecord): Promise<Record<string, string[]>> {
   const gameId = randomId(10);
@@ -241,27 +239,13 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
   const { results: statRows } = await db
     .prepare(`SELECT * FROM user_stats WHERE game = 'uno' AND user_id IN (${placeholders})`)
     .bind(...humans.map((h) => h.userId))
-    .all<{ user_id: string; played: number; won: number; rating: number; streak: number; best_streak: number; totals: string }>();
+    .all<{ user_id: string; played: number; won: number; points: number; streak: number; best_streak: number; totals: string }>();
   const { results: achRows } = await db
     .prepare(`SELECT user_id, achievement FROM achievements WHERE user_id IN (${placeholders})`)
     .bind(...humans.map((h) => h.userId))
     .all<{ user_id: string; achievement: string }>();
   const byUser = new Map(statRows.map((r) => [r.user_id, r]));
   const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
-
-  // Classement Elo multijoueur : chaque paire de joueurs compte comme un duel
-  const ratingOf = (p: GameRecordPlayer) => (p.userId ? (byUser.get(p.userId)?.rating ?? 1000) : BOT_RATING);
-  const delta = new Map<string, number>();
-  for (const p of humans) {
-    let d = 0;
-    for (const q of rec.players) {
-      if (q === p) continue;
-      const expected = 1 / (1 + 10 ** ((ratingOf(q) - ratingOf(p)) / 400));
-      const actual = p.rank < q.rank ? 1 : p.rank > q.rank ? 0 : 0.5;
-      d += (ELO_K * (actual - expected)) / (rec.players.length - 1);
-    }
-    delta.set(p.userId!, Math.round(d));
-  }
 
   const now = Date.now();
   const unlocked: Record<string, string[]> = {};
@@ -278,15 +262,15 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
     statements.push(
       db
         .prepare(
-          `INSERT INTO user_stats (user_id, game, played, won, rating, streak, best_streak, totals, updated_at)
+          `INSERT INTO user_stats (user_id, game, played, won, points, streak, best_streak, totals, updated_at)
            VALUES (?1, 'uno', ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-           ON CONFLICT(user_id, game) DO UPDATE SET played = ?2, won = ?3, rating = ?4, streak = ?5, best_streak = ?6, totals = ?7, updated_at = ?8`,
+           ON CONFLICT(user_id, game) DO UPDATE SET played = ?2, won = ?3, points = ?4, streak = ?5, best_streak = ?6, totals = ?7, updated_at = ?8`,
         )
         .bind(
           p.userId,
           played,
           (prev?.won ?? 0) + (won ? 1 : 0),
-          Math.max(100, (prev?.rating ?? 1000) + delta.get(p.userId!)!),
+          (prev?.points ?? 0) + rankingPoints(rec.players, p),
           streak,
           Math.max(prev?.best_streak ?? 0, streak),
           JSON.stringify(totals),
@@ -318,12 +302,12 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
 export async function userProfile(db: D1Database, user: UserRow) {
   const [stats, achievements, recent] = await Promise.all([
     db
-      .prepare("SELECT played, won, rating, streak, best_streak, totals FROM user_stats WHERE user_id = ? AND game = 'uno'")
+      .prepare("SELECT played, won, points, streak, best_streak, totals FROM user_stats WHERE user_id = ? AND game = 'uno'")
       .bind(user.id)
       .first<{
         played: number;
         won: number;
-        rating: number;
+        points: number;
         streak: number;
         best_streak: number;
         totals: string;
@@ -349,7 +333,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     stats: {
       played: stats?.played ?? 0,
       won: stats?.won ?? 0,
-      rating: stats?.rating ?? 1000,
+      points: stats?.points ?? 0,
       streak: stats?.streak ?? 0,
       bestStreak: stats?.best_streak ?? 0,
       totals: parseTotals(stats?.totals ?? null),
@@ -376,10 +360,10 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
            WHERE (user_a = ?1 OR user_b = ?1) AND status = 'accepted'))`
       : "";
   const statement = db.prepare(
-    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, s.played, s.won, s.rating, s.best_streak
+    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, s.played, s.won, s.points, s.best_streak
      FROM user_stats s JOIN users u ON u.id = s.user_id
      WHERE s.game = 'uno' AND u.pseudo IS NOT NULL AND s.played > 0 ${friendFilter}
-     ORDER BY s.rating DESC, s.won DESC LIMIT 100`,
+     ORDER BY s.points DESC, s.won DESC, s.played ASC LIMIT 100`,
   );
   const { results } = await (scope === "friends" ? statement.bind(me) : statement).all<{
     id: string;
@@ -388,7 +372,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     photo_version: number;
     played: number;
     won: number;
-    rating: number;
+    points: number;
     best_streak: number;
   }>();
   return results.map((r, i) => ({
@@ -396,7 +380,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     user: toPublic(r),
     played: r.played,
     won: r.won,
-    rating: r.rating,
+    points: r.points,
     bestStreak: r.best_streak,
   }));
 }

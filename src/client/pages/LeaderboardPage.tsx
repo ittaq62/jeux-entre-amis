@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import type { PublicUser } from "../../shared/protocol.ts";
+import { RANKING_POINTS } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { api } from "../lib/api.ts";
@@ -11,7 +12,7 @@ interface Entry {
   user: PublicUser;
   played: number;
   won: number;
-  rating: number;
+  points: number;
   bestStreak: number;
 }
 
@@ -43,18 +44,15 @@ export function LeaderboardPage() {
             </button>
           </div>
         </div>
-        <p className="hint" style={{ margin: 0, maxWidth: "60ch" }}>
-          Battre quelqu'un de mieux classé que soi rapporte beaucoup de points ; perdre contre lui en coûte peu.
+        <p className="hint" style={{ margin: 0, maxWidth: "62ch" }}>
+          Chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points ({RANKING_POINTS.bot} si c'est un bot), et la
+          victoire en ajoute {RANKING_POINTS.win}. Les points ne baissent jamais.
         </p>
-        <section className="board paper">
+        <section className="board panel">
           {entries === null ? (
-            <p className="hint" style={{ padding: "18px 0" }}>
-              Chargement…
-            </p>
+            <p className="hint board-note">Chargement…</p>
           ) : entries.length === 0 ? (
-            <p className="empty" style={{ padding: "6px 0 14px" }}>
-              Personne n'a encore terminé de partie. La première victoire ouvrira le tableau.
-            </p>
+            <p className="empty board-note">Personne n'a encore terminé de partie. La première victoire ouvrira le tableau.</p>
           ) : (
             <ol className="rows" style={{ margin: 0 }}>
               {entries.map((e) => (
@@ -70,8 +68,8 @@ export function LeaderboardPage() {
                     </strong>
                     <span>victoires</span>
                   </span>
-                  <span className="board-stat">
-                    <strong>{e.rating}</strong>
+                  <span className="board-stat board-points">
+                    <strong>{e.points.toLocaleString("fr-FR")}</strong>
                     <span>points</span>
                   </span>
                 </li>

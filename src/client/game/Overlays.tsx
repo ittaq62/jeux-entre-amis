@@ -2,6 +2,7 @@ import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { RoomView, SeatView } from "../../shared/protocol.ts";
+import { rankingPoints } from "../../shared/ranking.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { usePrefs } from "../stores/prefs.ts";
@@ -92,6 +93,9 @@ export function GameOver({
   const reduced = usePrefs((s) => s.reducedEffects);
   const r = g.lastRound;
   const winner = seatOf(room, ranking[0] ?? "");
+  const placed = ranking.map((id, i) => ({ id, rank: i + 1, isBot: seatOf(room, id)?.kind !== "human" }));
+  const mine = placed.find((p) => p.id === me && !p.isBot);
+  const earned = mine ? rankingPoints(placed, mine) : null;
 
   useEffect(() => {
     if (!won || reduced) return;
@@ -111,6 +115,14 @@ export function GameOver({
               {g.settings.variant === "nomercy" ? "No Mercy" : "UNO classique"}
               {g.round > 1 ? `, en ${g.round} manches` : ""}
             </p>
+            {earned !== null &&
+              (earned > 0 ? (
+                <p className="gameover-points">
+                  <strong className="num">+{earned}</strong> points au classement
+                </p>
+              ) : (
+                <p className="gameover-points">Pas de point au classement cette fois.</p>
+              ))}
           </div>
         </div>
 
