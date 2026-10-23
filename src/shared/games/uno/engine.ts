@@ -541,8 +541,8 @@ export function applyAction(s: UnoState, playerId: string, action: UnoAction, no
         ev.push({ type: "uno", player: player.id });
         return ok(ev);
       }
-      if (player.hand.length <= 2 && player.declaredUno) return ok(ev);
-      return fail("Tu ne peux crier UNO qu'avec deux cartes ou moins.");
+      // Trop tot ou trop tard (deja denonce) : on ignore sans message d'erreur
+      return ok(ev);
     }
 
     case "catch": {
