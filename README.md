@@ -94,15 +94,6 @@ npm run deploy
 
 Le site est publié sur `https://jeux-entre-amis.<ton-sous-domaine>.workers.dev`.
 
-### Déploiement automatique (facultatif)
-
-Le dépôt contient un workflow GitHub Actions qui lance les tests à chaque push et déploie la branche `main`. Pour activer le
-déploiement, ajouter dans les secrets du dépôt GitHub :
-
-- `CLOUDFLARE_API_TOKEN` : un jeton créé sur Cloudflare avec le modèle « Modifier les Workers Cloudflare », plus le droit D1 en
-  écriture ;
-- `CLOUDFLARE_ACCOUNT_ID` : l'identifiant du compte, visible sur le tableau de bord Cloudflare.
-
 ## Limites de l'offre gratuite
 
 Largement suffisantes pour une bande d'amis :
