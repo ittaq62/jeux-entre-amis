@@ -16,7 +16,8 @@ export async function sendLoginCode(env: Env, to: string, code: string, siteUrl:
     port,
     secure: port === 465,
     startTls: port !== 465,
-    credentials: { username: env.SMTP_USER, password: env.SMTP_PASS },
+    // Google affiche le mot de passe d'application par groupes de 4 : on retire les espaces
+    credentials: { username: env.SMTP_USER.trim(), password: env.SMTP_PASS.replace(/\s+/g, "") },
     authType: ["plain", "login"],
     socketTimeoutMs: 15000,
     responseTimeoutMs: 15000,
