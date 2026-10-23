@@ -7,25 +7,24 @@ import { useToasts } from "../lib/toast.ts";
 import { COLOR_HEX } from "./Card.tsx";
 import { Icon } from "./Icon.tsx";
 
-/** Logo : un petit eventail de cartes et le nom du site. */
-export function Logo({ size = 26, withName = true, withIcon = true }: { size?: number; withName?: boolean; withIcon?: boolean }) {
+/** Logotype : quatre cartes en éventail et le nom en caractères d'imprimerie. */
+export function Logo({ size = 24, withName = true, withIcon = true }: { size?: number; withName?: boolean; withIcon?: boolean }) {
   return (
     <span className="logo" style={{ fontSize: size }}>
       {withIcon && (
-        <svg viewBox="0 0 48 40" width={size * 1.45} height={size * 1.2} aria-hidden="true">
+        <svg viewBox="0 0 48 40" width={size * 1.3} height={size * 1.08} aria-hidden="true">
           <g transform="translate(24 38)">
             {[
-              [-22, COLOR_HEX.blue],
-              [-7, COLOR_HEX.green],
+              [-24, COLOR_HEX.blue],
+              [-8, COLOR_HEX.green],
               [8, COLOR_HEX.yellow],
-              [23, COLOR_HEX.red],
+              [24, COLOR_HEX.red],
             ].map(([angle, color]) => (
-              <g key={String(angle)} transform={`rotate(${angle}) translate(-8.5 -31)`}>
-                <rect width="17" height="25" rx="3" fill="#fbf5e6" />
-                <rect x="1.8" y="1.8" width="13.4" height="21.4" rx="2" fill={color as string} />
+              <g key={String(angle)} transform={`rotate(${angle}) translate(-8 -30)`}>
+                <rect width="16" height="24" rx="2" fill="#f2ecdf" />
+                <rect x="1.6" y="1.6" width="12.8" height="20.8" rx="1.2" fill={color as string} />
               </g>
             ))}
-            <circle cx="0" cy="-14" r="4.6" fill="#fbf5e6" stroke="#c9a14b" strokeWidth="0.8" transform="rotate(23) translate(0 -2)" />
           </g>
         </svg>
       )}
@@ -61,20 +60,21 @@ export function Modal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
-            className={`modal panel ${wide ? "modal-wide" : ""}`}
+            className={`modal paper ${wide ? "modal-wide" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            initial={{ y: 24, scale: 0.96, opacity: 0 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={{ y: 16, scale: 0.97, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            initial={{ y: 12, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 8, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
           >
             <div className="modal-head">
-              {title && <h3>{title}</h3>}
+              {title && <h2>{title}</h2>}
               <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Fermer">
                 <Icon name="close" />
               </button>
@@ -98,9 +98,10 @@ export function Toasts() {
             key={t.id}
             layout
             className={`toast toast-${t.tone ?? "default"}`}
-            initial={{ opacity: 0, y: -16, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
           >
             {t.icon && <span className="toast-icon">{t.icon}</span>}
             <div className="toast-text">
@@ -128,7 +129,8 @@ export function Toasts() {
   );
 }
 
-export function Switch({
+/** Case à cocher imprimée. */
+export function Check({
   checked,
   onChange,
   disabled,
@@ -142,8 +144,8 @@ export function Switch({
   return (
     <button
       type="button"
-      role="switch"
-      className="switch"
+      role="checkbox"
+      className="check"
       aria-checked={checked}
       aria-label={label}
       disabled={disabled}
@@ -152,21 +154,32 @@ export function Switch({
   );
 }
 
-export function Segmented<T extends string | number>({
+/** Choix exclusif présenté comme des options imprimées. */
+export function Options<T extends string | number>({
   value,
   options,
   onChange,
   disabled,
+  label,
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
   disabled?: boolean;
+  label?: string;
 }) {
   return (
-    <div className="segmented" role="group">
+    <div className="options" role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <button key={String(o.value)} type="button" aria-pressed={o.value === value} disabled={disabled} onClick={() => onChange(o.value)}>
+        <button
+          key={String(o.value)}
+          type="button"
+          role="radio"
+          aria-checked={o.value === value}
+          aria-pressed={o.value === value}
+          disabled={disabled}
+          onClick={() => onChange(o.value)}
+        >
           {o.label}
         </button>
       ))}
