@@ -110,7 +110,7 @@ export function FriendsPage() {
         </section>
 
         {incoming.length > 0 && (
-          <section className="home-list">
+          <section className="home-list panel">
             <h2>Demandes reçues</h2>
             <ul className="rows">
               {incoming.map((f) => (
@@ -133,7 +133,7 @@ export function FriendsPage() {
           </section>
         )}
 
-        <section className="home-list">
+        <section className="home-list panel">
           <h2>
             Mes amis <span className="hint num">{accepted.length}</span>
           </h2>
@@ -178,7 +178,7 @@ export function FriendsPage() {
         </section>
 
         {outgoing.length > 0 && (
-          <section className="home-list">
+          <section className="home-list panel">
             <h2>Demandes envoyées</h2>
             <ul className="rows">
               {outgoing.map((f) => (

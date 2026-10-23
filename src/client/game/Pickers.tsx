@@ -80,7 +80,7 @@ export function TargetPicker({
       {open && (
         <motion.div className="picker-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel}>
           <motion.div
-            className="target-picker paper"
+            className="target-picker panel"
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 20, opacity: 0 }}

@@ -34,7 +34,7 @@ export function ChatPanel({
     <AnimatePresence>
       {open && (
         <motion.aside
-          className="chat-panel paper"
+          className="chat-panel panel"
           initial={{ x: 40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 40, opacity: 0 }}
@@ -87,7 +87,7 @@ export function EmotePicker({ open, onPick, onClose }: { open: boolean; onPick: 
         <>
           <div className="emote-catcher" onClick={onClose} />
           <motion.div
-            className="emote-picker paper"
+            className="emote-picker panel"
             initial={{ y: 16, scale: 0.9, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 10, opacity: 0 }}

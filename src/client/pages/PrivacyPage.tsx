@@ -4,7 +4,7 @@ import { PageShell } from "../components/ui.tsx";
 export function PrivacyPage() {
   return (
     <PageShell back="/" title="Confidentialité">
-      <article className="prose sheet paper">
+      <article className="prose sheet panel">
         <p>
           {APP_NAME} est un site de jeux entre amis, sans publicité et sans revente de données. Voici exactement ce qu'il garde, et
           pourquoi.

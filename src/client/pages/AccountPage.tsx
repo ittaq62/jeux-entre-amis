@@ -96,7 +96,7 @@ export function AccountPage() {
           </Link>
         </div>
 
-        <section className="sheet paper">
+        <section className="sheet panel">
           <h2>Profil</h2>
           <label className="field">
             <span className="field-label">Pseudo</span>
@@ -137,7 +137,7 @@ export function AccountPage() {
           </button>
         </section>
 
-        <section className="sheet paper">
+        <section className="sheet panel">
           <h2>Son et confort</h2>
           <PrefRow label="Effets sonores" desc="Bruits de cartes, UNO, victoire…">
             <Check label="Effets sonores" checked={prefs.sound} onChange={(v) => prefs.set({ sound: v })} />
@@ -166,7 +166,7 @@ export function AccountPage() {
           </PrefRow>
         </section>
 
-        <section className="sheet paper">
+        <section className="sheet panel">
           <h2>Compte</h2>
           <p className="hint">Connecté avec {user.email}</p>
           <div className="row-actions">

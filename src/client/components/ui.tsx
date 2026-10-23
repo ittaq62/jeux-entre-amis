@@ -64,7 +64,7 @@ export function Modal({
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
-            className={`modal paper ${wide ? "modal-wide" : ""}`}
+            className={`modal panel ${wide ? "modal-wide" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label={title}

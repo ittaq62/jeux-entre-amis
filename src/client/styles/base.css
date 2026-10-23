@@ -1,38 +1,54 @@
 /*
-  La Tablée : une table de jeu de cercle, le soir.
-  Feutre, rampe en bois, liserés en laiton, objets imprimés sur carton.
+  La Tablée : une table de jeu, le soir.
+  Feutre vert profond sous une lampe, surfaces laquées vert-noir, accents dorés.
 */
 :root {
-  --felt: #23543d;
-  --felt-deep: #163828;
-  --felt-line: rgba(239, 231, 212, 0.14);
-  --wood: #3a2418;
-  --wood-dark: #261710;
-  --brass: #b08d57;
-  --brass-light: #cfae74;
-  --paper: #f2ecdf;
-  --paper-shade: #e4dccb;
-  --paper-line: #d3c8b2;
+  --felt-light: #17603f;
+  --felt: #0e432f;
+  --felt-deep: #082a1d;
+  --night: #05130d;
+
+  /* Surfaces posées sur le feutre : laque opaque, un filet doré */
+  --panel-top: #10291f;
+  --panel: #0c2219;
+  --panel-raised: #133126;
+  --panel-sunken: #071911;
+  --line: rgba(226, 189, 110, 0.17);
+  --line-soft: rgba(244, 236, 218, 0.08);
+  --line-strong: rgba(244, 236, 218, 0.16);
+
+  --gold: #e2bd6e;
+  --gold-light: #f1d595;
+  --gold-deep: #b48b43;
+  --gold-edge: #7a5b27;
+  --gold-ink: #2a1c07;
+  --gold-tint: rgba(226, 189, 110, 0.13);
+
+  --text: #f4ecda;
+  --text-soft: #b6c5bc;
+  --text-faint: #7d958a;
+  --red: #e0463c;
+  --red-deep: #b3261e;
+  --ok: #4cc38a;
+  --danger: #ef6a5a;
+
+  /* Le papier ne sert plus qu'aux vrais objets imprimés : ticket, feuille de marque */
+  --paper: #f3ecdc;
+  --paper-line: #d8ccb4;
   --ink: #1d1b18;
   --ink-soft: #5c554b;
-  --red: #b3261e;
-  --red-dark: #8f1c16;
-  --on-felt: #efe7d4;
-  --on-felt-soft: #a9bfb3;
-  --on-felt-faint: #7b978a;
-  --ok: #4f9e6f;
-  --danger: #c2412d;
 
   --font-title: "Young Serif", "Iowan Old Style", Georgia, serif;
   --font-text: "Libre Franklin Variable", "Franklin Gothic Medium", "Segoe UI", sans-serif;
   --font-card: "Big Shoulders Display Variable", "Arial Narrow", sans-serif;
 
-  --radius-button: 6px;
-  --radius-paper: 3px;
-  --radius-field: 4px;
+  --radius-panel: 14px;
+  --radius-row: 10px;
+  --radius-button: 10px;
+  --radius-field: 10px;
   /* Une seule lampe, au-dessus de la table : les ombres tombent vers le bas */
-  --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.18), 0 10px 22px -14px rgba(0, 0, 0, 0.75);
-  --shadow-float: 0 18px 40px -18px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 18px 36px -20px rgba(0, 0, 0, 0.8);
+  --shadow-float: 0 24px 48px -16px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.35);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -56,36 +72,41 @@ body {
   font-family: var(--font-text);
   font-size: 16px;
   line-height: 1.5;
-  color: var(--on-felt);
-  background: var(--felt-deep);
+  color: var(--text);
+  background: var(--night);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
   font-feature-settings: "kern";
 }
 
-/* Le feutre : grain très fin et une seule flaque de lumière de lampe */
+/* Le feutre : lumière de lampe au centre, bords dans l'ombre. Calque fixe pour que la lampe reste en place au défilement. */
 .felt {
   position: relative;
   min-height: 100%;
-  background-color: var(--felt);
-  background-image:
-    radial-gradient(ellipse 60% 45% at 50% 30%, rgba(255, 226, 170, 0.07), transparent 70%),
-    linear-gradient(180deg, transparent 55%, rgba(10, 30, 20, 0.45) 100%);
+  isolation: isolate;
+  background: var(--night);
+}
+
+.felt::before,
+.felt::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
 }
 
 .felt::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background:
+    radial-gradient(ellipse 58% 46% at 50% 30%, rgba(255, 214, 150, 0.1), transparent 70%),
+    radial-gradient(ellipse 115% 88% at 50% 32%, var(--felt-light) 0%, var(--felt) 42%, var(--felt-deep) 76%, var(--night) 100%);
 }
 
-.felt > * {
-  position: relative;
-  z-index: 1;
+.felt::after {
+  opacity: 0.2;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 h1,
@@ -104,14 +125,13 @@ p {
 }
 
 a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-  text-underline-offset: 3px;
+  color: var(--gold);
+  text-decoration: none;
 }
 
 a:hover {
-  text-decoration-color: currentColor;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 button {
@@ -127,11 +147,11 @@ textarea {
 }
 
 ::selection {
-  background: rgba(176, 141, 87, 0.45);
+  background: rgba(226, 189, 110, 0.35);
 }
 
 :focus-visible {
-  outline: 2px solid var(--brass-light);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
@@ -149,7 +169,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* Boutons : rouge plein pour l'action principale, contour pour le reste */
+/* Boutons : plaque dorée pour l'action principale, laque sombre sinon  */
 /* ------------------------------------------------------------------ */
 
 .btn {
@@ -160,15 +180,16 @@ textarea {
   min-height: 44px;
   padding: 0 18px;
   border-radius: var(--radius-button);
-  border: 1px solid var(--felt-line);
-  background: transparent;
-  color: var(--on-felt);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
   text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition:
     background-color 0.15s,
     border-color 0.15s,
@@ -176,8 +197,9 @@ textarea {
 }
 
 .btn:hover {
-  border-color: rgba(239, 231, 212, 0.4);
-  background: rgba(239, 231, 212, 0.05);
+  border-color: rgba(226, 189, 110, 0.45);
+  background: #173a2d;
+  text-decoration: none;
 }
 
 .btn:active {
@@ -191,42 +213,67 @@ textarea {
 }
 
 .btn-primary {
-  border-color: var(--red-dark);
-  background: var(--red);
-  color: #fbf4e6;
+  border-color: var(--gold-deep);
+  background: linear-gradient(180deg, #eecd84 0%, #dcb365 100%);
+  color: var(--gold-ink);
+  font-weight: 700;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 0 rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 2px 0 var(--gold-edge),
+    0 10px 18px -10px rgba(0, 0, 0, 0.8);
 }
 
 .btn-primary:hover {
-  border-color: var(--red-dark);
-  background: #c22c23;
+  border-color: var(--gold-deep);
+  background: linear-gradient(180deg, #f3d692 0%, #e2ba6c 100%);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 0 var(--gold-edge);
+}
+
+.btn-primary:disabled {
+  opacity: 1;
+  background: #2a3f35;
+  border-color: transparent;
+  color: rgba(244, 236, 218, 0.45);
+  box-shadow: none;
 }
 
 .btn-danger {
-  border-color: rgba(194, 65, 45, 0.6);
-  color: #f0a597;
+  border-color: rgba(239, 106, 90, 0.45);
+  color: #f39a8d;
+}
+
+.btn-danger:hover {
+  border-color: var(--danger);
+  background: rgba(239, 106, 90, 0.08);
 }
 
 .btn-ghost {
   border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .btn-ghost:hover {
   border-color: transparent;
-  background: rgba(239, 231, 212, 0.07);
+  background: rgba(244, 236, 218, 0.07);
 }
 
 .btn-sm {
   min-height: 34px;
   padding: 0 12px;
   font-size: 14px;
+  border-radius: 8px;
 }
 
 .btn-lg {
   min-height: 52px;
-  padding: 0 24px;
+  padding: 0 26px;
   font-size: 16px;
 }
 
@@ -240,31 +287,28 @@ textarea {
   width: 100%;
 }
 
-/* Sur le carton, le contour passe à l'encre */
-.paper .btn:not(.btn-primary) {
-  border-color: rgba(29, 27, 24, 0.35);
-  color: var(--ink);
-}
-
-.paper .btn:not(.btn-primary):hover {
-  border-color: var(--ink);
-  background: rgba(29, 27, 24, 0.05);
-}
-
-.paper .btn-ghost {
-  border-color: transparent !important;
-}
-
 /* ------------------------------------------------------------------ */
-/* Le carton : formulaires, fiches, bloc de score                       */
+/* Panneaux                                                            */
 /* ------------------------------------------------------------------ */
 
+.panel {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel-top), var(--panel) 220px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-pad {
+  padding: 26px;
+}
+
+/* Papier imprimé : seulement pour la feuille de marque */
 .paper {
   position: relative;
   background-color: var(--paper);
   color: var(--ink);
-  border-radius: var(--radius-paper);
-  box-shadow: var(--shadow-paper);
+  border-radius: 4px;
 }
 
 .paper::before {
@@ -281,30 +325,29 @@ textarea {
   position: relative;
 }
 
-.paper-pad {
-  padding: 24px;
-}
-
-.paper a {
-  color: var(--red-dark);
-}
-
 .paper .hint {
   color: var(--ink-soft);
 }
 
-.paper h1,
-.paper h2,
-.paper h3 {
+.paper .btn:not(.btn-primary) {
+  background: transparent;
+  border-color: rgba(29, 27, 24, 0.3);
   color: var(--ink);
+  box-shadow: none;
 }
 
-/* Filet imprimé à l'intérieur du carton */
-.paper-ruled {
-  box-shadow:
-    var(--shadow-paper),
-    inset 0 0 0 6px var(--paper),
-    inset 0 0 0 7px var(--paper-line);
+.paper .btn:not(.btn-primary):hover {
+  border-color: var(--ink);
+  background: rgba(29, 27, 24, 0.05);
+}
+
+.paper .btn-ghost {
+  border-color: transparent !important;
+}
+
+.paper .btn-primary:disabled {
+  background: #d9cfba;
+  color: #8a8172;
 }
 
 /* ------------------------------------------------------------------ */
@@ -314,12 +357,13 @@ textarea {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .field-label {
   font-size: 14px;
   font-weight: 600;
+  color: var(--text);
 }
 
 .input {
@@ -327,90 +371,66 @@ textarea {
   min-height: 46px;
   padding: 0 14px;
   border-radius: var(--radius-field);
-  border: 1px solid var(--felt-line);
-  background: var(--felt-deep);
-  color: var(--on-felt);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-sunken);
+  color: var(--text);
   outline: none;
   font-size: 16px;
-  transition: border-color 0.15s;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .input::placeholder {
-  color: var(--on-felt-faint);
+  color: var(--text-faint);
 }
 
 .input:focus {
-  border-color: var(--brass);
-}
-
-.paper .input {
-  background: #fbf8f1;
-  border-color: #c9bda4;
-  color: var(--ink);
-}
-
-.paper .input::placeholder {
-  color: #a49a87;
-}
-
-.paper .input:focus {
-  border-color: var(--ink);
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.3),
+    0 0 0 3px rgba(226, 189, 110, 0.14);
 }
 
 .error-text {
-  color: #f0a597;
+  color: #f39a8d;
   font-size: 14px;
   margin: 0;
 }
 
-.paper .error-text {
-  color: var(--red);
-}
-
 .hint {
-  color: var(--on-felt-soft);
+  color: var(--text-soft);
   font-size: 14px;
 }
 
 .divider {
   height: 1px;
-  background: var(--felt-line);
+  background: var(--line-soft);
   border: 0;
   margin: 18px 0;
 }
 
-.paper .divider {
-  background: var(--paper-line);
-}
-
-/* Petite étiquette d'information (pas de pilule colorée) */
+/* Petite étiquette d'information */
 .tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 13px;
-  color: var(--on-felt-soft);
+  color: var(--text-soft);
   white-space: nowrap;
 }
 
-.paper .tag {
-  color: var(--ink-soft);
-}
-
 .tag-strong {
-  color: var(--brass-light);
+  color: var(--gold);
   font-weight: 600;
-}
-
-.paper .tag-strong {
-  color: var(--red-dark);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--on-felt-faint);
+  background: var(--text-faint);
   flex: none;
 }
 
@@ -419,7 +439,7 @@ textarea {
 }
 
 .dot-playing {
-  background: var(--brass);
+  background: var(--gold);
 }
 
 .spinner {
@@ -446,7 +466,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/* Case à cocher imprimée (remplace les interrupteurs)                  */
+/* Case à cocher                                                        */
 /* ------------------------------------------------------------------ */
 
 .check {
@@ -454,25 +474,32 @@ textarea {
   flex: none;
   width: 22px;
   height: 22px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  background: transparent;
+  border: 1.5px solid rgba(244, 236, 218, 0.38);
+  border-radius: 6px;
+  background: var(--panel-sunken);
   cursor: pointer;
   padding: 0;
-  color: inherit;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 
 .check::after {
   content: "";
   position: absolute;
-  left: 6px;
-  top: 1px;
-  width: 6px;
-  height: 12px;
-  border: solid var(--red);
+  left: 6.5px;
+  top: 2.5px;
+  width: 5px;
+  height: 10px;
+  border: solid var(--gold-ink);
   border-width: 0 2.5px 2.5px 0;
   transform: rotate(42deg) scale(0);
   transition: transform 0.12s ease-out;
+}
+
+.check[aria-checked="true"] {
+  background: var(--gold);
+  border-color: var(--gold);
 }
 
 .check[aria-checked="true"]::after {
@@ -481,46 +508,47 @@ textarea {
 
 .check:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
-/* Choix exclusif : options imprimées, celle retenue est encadrée */
+/* Choix exclusif : rangée de boutons, celui retenu passe à l'or */
 .options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 18px;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
 .options button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0;
-  border: 0;
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
-  color: inherit;
-  font-size: 15px;
+  color: var(--text-soft);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
 }
 
-.options button::before {
-  content: "";
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid currentColor;
-  box-shadow: inset 0 0 0 3px var(--paper);
-  flex: none;
+.options button:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(244, 236, 218, 0.05);
 }
 
 .options button[aria-pressed="true"] {
-  font-weight: 600;
-}
-
-.options button[aria-pressed="true"]::before {
-  background: var(--red);
-  border-color: var(--red);
+  color: var(--gold-light);
+  background: var(--gold-tint);
+  border-color: rgba(226, 189, 110, 0.45);
 }
 
 .options button:disabled {
@@ -528,13 +556,13 @@ textarea {
 }
 
 .options button:disabled:not([aria-pressed="true"]) {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 /* Barres de défilement discrètes */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(239, 231, 212, 0.2) transparent;
+  scrollbar-color: rgba(244, 236, 218, 0.2) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -544,19 +572,4 @@ textarea {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Action principale indisponible : grisée, pas rose délavé */
-.btn-primary:disabled {
-  opacity: 1;
-  background: #9c958a;
-  border-color: #8a8378;
-  color: #ece6da;
-  box-shadow: none;
-}
-
-.paper .btn-primary:disabled {
-  background: #cfc5b0;
-  border-color: #bfb49d;
-  color: #f8f4ea;
 }

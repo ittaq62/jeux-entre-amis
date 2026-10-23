@@ -260,7 +260,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             <>
               <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
               <motion.div
-                className="table-menu paper"
+                className="table-menu panel"
                 initial={{ y: -8, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
