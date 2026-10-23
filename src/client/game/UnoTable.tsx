@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isWild, type Card, type Color } from "../../shared/games/uno/cards.ts";
 import { effectiveRules, type UnoAction } from "../../shared/games/uno/engine.ts";
 import type { RoomClientMessage, RoomView } from "../../shared/protocol.ts";
+import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { play, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -223,7 +224,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
         whileTap={{ scale: 0.88 }}
         aria-label="Crier UNO"
       >
-        UNO
+        <Chip label="UNO" tone="red" size={compact ? 52 : 60} muted={!g.canUno} />
       </motion.button>
     </div>
   );
@@ -259,7 +260,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             <>
               <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
               <motion.div
-                className="table-menu panel"
+                className="table-menu paper"
                 initial={{ y: -8, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}

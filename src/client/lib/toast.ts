@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { create } from "zustand";
 
 export interface Toast {
   id: number;
-  icon?: string;
+  icon?: ReactNode;
   title: string;
   body?: string;
   tone?: "default" | "gold" | "danger";

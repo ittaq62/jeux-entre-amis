@@ -75,14 +75,10 @@ export function Seat({
             </motion.span>
           )}
         </AnimatePresence>
-        {player.rank && (
-          <span className="rank-badge">
-            {player.rank === 1 ? "🥇" : player.rank === 2 ? "🥈" : player.rank === 3 ? "🥉" : `${player.rank}e`}
-          </span>
-        )}
-        {player.eliminated && <span className="rank-badge">💀</span>}
+        {player.rank && <span className="rank-badge num">{player.rank}</span>}
+        {player.eliminated && <span className="rank-badge is-out">×</span>}
       </div>
-      <div className="seat-name">{seat.name}</div>
+      <div className="seat-plate">{seat.name}</div>
       <div className="seat-meta">
         {!player.out && (
           <div
@@ -101,14 +97,14 @@ export function Seat({
             ))}
           </div>
         )}
-        <span className={`seat-count ${danger ? "is-danger" : ""}`}>
+        <span className={`seat-count num ${danger ? "is-danger" : ""}`}>
           {player.out ? (player.eliminated ? "éliminé" : "fini") : player.count}
         </span>
-        {showScore && <span className="seat-score">{player.score} pts</span>}
+        {showScore && <span className="seat-score num">{player.score} pts</span>}
       </div>
       {vulnerable && onCatch && (
         <motion.button className="catch-btn" onClick={onCatch} initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}>
-          Contre-UNO !
+          Contre-UNO
         </motion.button>
       )}
       <AnimatePresence>
@@ -144,10 +140,10 @@ export function TimerRing({ size, deadline, total, offset }: { size: number; dea
   const r = size / 2 - 3;
   const c = 2 * Math.PI * r;
   const left = deadline && total > 0 ? Math.max(0, Math.min(1, (deadline - now) / (total * 1000))) : 1;
-  const color = left > 0.5 ? "var(--gold)" : left > 0.2 ? "#f39c3d" : "var(--danger)";
+  const color = left > 0.25 ? "var(--brass-light)" : "#d9473a";
   return (
     <svg className="timer-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="4" />
       <circle
         cx={size / 2}
         cy={size / 2}

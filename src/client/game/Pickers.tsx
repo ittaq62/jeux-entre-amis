@@ -80,7 +80,7 @@ export function TargetPicker({
       {open && (
         <motion.div className="picker-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel}>
           <motion.div
-            className="target-picker panel"
+            className="target-picker paper"
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 20, opacity: 0 }}
@@ -95,7 +95,7 @@ export function TargetPicker({
                   <button key={p.id} className="target-option" onClick={() => onPick(p.id)}>
                     <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={44} />
                     <strong>{seat.name}</strong>
-                    <span className="chip">
+                    <span className="hint num">
                       {p.count} carte{p.count > 1 ? "s" : ""}
                     </span>
                   </button>

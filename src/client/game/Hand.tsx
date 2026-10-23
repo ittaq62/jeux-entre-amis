@@ -61,14 +61,17 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
   const visible = cards.filter((c) => !hidden.has(c.id));
   const n = visible.length;
   const height = cardWidth * CARD_RATIO;
-  // Marge pour la rotation des cartes du bord de l'eventail
-  const usable = Math.max(cardWidth, width - 24 - cardWidth * 0.3);
+  // Les cartes du bord de l'eventail sont inclinees : leur coin deborde d'autant sur les cotes
+  const fanAngle = Math.min(4, 36 / Math.max(n, 1));
+  const edgeTilt = (((n - 1) / 2) * fanAngle * Math.PI) / 180;
+  const margin = 10 + Math.sin(edgeTilt) * height * 1.05;
+  const usable = Math.max(cardWidth, width - 2 * margin);
   let step = n > 1 ? Math.min(cardWidth * 0.68, (usable - cardWidth) / (n - 1)) : 0;
   const scroll = n > 1 && step < cardWidth * 0.3;
   if (scroll) step = cardWidth * 0.34;
   const total = cardWidth + step * Math.max(0, n - 1);
-  const start = scroll ? 12 : Math.max(18, (width - total) / 2);
-  const maxAngle = scroll ? 0 : Math.min(5, 48 / Math.max(n, 1));
+  const start = scroll ? 12 : (width - total) / 2;
+  const maxAngle = scroll ? 0 : fanAngle;
 
   return (
     <div className={`hand ${scroll ? "is-scroll" : ""} ${myTurn ? "is-my-turn" : ""}`} ref={ref} style={{ height: height + 34 }}>

@@ -20,52 +20,60 @@ function useCountdown(target: number | null, offset: number) {
   return target ? Math.max(0, Math.ceil((target - (now + offset)) / 1000)) : null;
 }
 
+const sheetIn = {
+  initial: { y: 24, opacity: 0, rotate: -1.5 },
+  animate: { y: 0, opacity: 1, rotate: -0.6 },
+  transition: { duration: 0.35, ease: [0.2, 0.8, 0.3, 1] as const },
+};
+
+/** Fin de manche (mode aux points) : la feuille de marque. */
 export function RoundOver({ room, offset, onNext }: { room: RoomView; offset: number; onNext?: () => void }) {
   const g = room.uno!;
   const r = g.lastRound!;
   const winner = r.winner ? seatOf(room, r.winner) : undefined;
   const seconds = useCountdown(room.nextRoundAt, offset);
   const ranking = g.players.slice().sort((a, b) => b.score - a.score);
-  const max = Math.max(g.settings.targetScore, ...ranking.map((p) => p.score));
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <motion.div className="overlay-card panel" initial={{ y: 30, scale: 0.95 }} animate={{ y: 0, scale: 1 }}>
-        <p className="eyebrow">Manche {r.round} terminée</p>
-        <h2>{winner ? `${winner.name} remporte la manche` : "Fin de la manche"}</h2>
-        <p className="round-points">+{r.points} points</p>
-        <ul className="score-list">
-          {ranking.map((p) => {
+      <motion.div className="score-sheet paper" {...sheetIn}>
+        <h2>Manche {r.round}</h2>
+        <p className="score-lead">
+          {winner ? (
+            <>
+              {winner.name} marque <strong className="num">{r.points}</strong> points.
+            </>
+          ) : (
+            "Manche terminée."
+          )}
+        </p>
+        <ol className="score-lines">
+          {ranking.map((p, i) => {
             const seat = seatOf(room, p.id);
             return (
               <li key={p.id} className={p.id === r.winner ? "is-winner" : ""}>
-                {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={30} />}
+                <span className="score-rank num">{i + 1}</span>
+                {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
                 <span className="score-name">{seat?.name}</span>
-                <span className="score-bar">
-                  <motion.span
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(p.score / max) * 100}%` }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
-                  />
-                </span>
-                <strong>{p.score}</strong>
+                <span className="score-points num">{p.score}</span>
               </li>
             );
           })}
-        </ul>
-        <p className="hint">Objectif : {g.settings.targetScore} points</p>
+        </ol>
+        <p className="hint score-goal">Premier à {g.settings.targetScore} points.</p>
         <div className="overlay-actions">
           {onNext && (
             <button className="btn btn-primary" onClick={onNext}>
               Manche suivante
             </button>
           )}
-          {seconds !== null && <span className="hint">Reprise dans {seconds} s</span>}
+          {seconds !== null && <span className="hint">Distribution dans {seconds} s</span>}
         </div>
       </motion.div>
     </motion.div>
   );
 }
 
+/** Fin de partie : la feuille de marque finale. */
 export function GameOver({
   room,
   onRematch,
@@ -83,79 +91,55 @@ export function GameOver({
   const won = ranking[0] === me;
   const reduced = usePrefs((s) => s.reducedEffects);
   const r = g.lastRound;
+  const winner = seatOf(room, ranking[0] ?? "");
 
   useEffect(() => {
     if (!won || reduced) return;
-    const colors = ["#e23b3f", "#f3b62c", "#2fa864", "#2c7be5", "#e6c36f"];
-    const end = Date.now() + 1600;
-    const frame = () => {
-      confetti({ particleCount: 5, angle: 60, spread: 60, origin: { x: 0, y: 0.7 }, colors });
-      confetti({ particleCount: 5, angle: 120, spread: 60, origin: { x: 1, y: 0.7 }, colors });
-      if (Date.now() < end) requestAnimationFrame(frame);
-    };
-    frame();
+    const colors = ["#b3261e", "#f3b62c", "#2fa864", "#2c7be5", "#f2ecdf"];
+    confetti({ particleCount: 90, spread: 75, startVelocity: 38, origin: { y: 0.35 }, colors, scalar: 0.9 });
   }, [won, reduced]);
 
-  const podium = [ranking[1], ranking[0], ranking[2]];
   const voted = room.rematch.includes(room.you.userId);
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <motion.div
-        className="overlay-card panel gameover"
-        initial={{ y: 40, scale: 0.94 }}
-        animate={{ y: 0, scale: 1 }}
-        transition={{ type: "spring", stiffness: 260, damping: 24 }}
-      >
-        <p className="eyebrow">{won ? "Victoire !" : me ? "Partie terminée" : "Fin de partie"}</p>
-        <h2>{won ? "Tu as gagné la partie 🎉" : `${seatOf(room, ranking[0] ?? "")?.name ?? "?"} gagne la partie`}</h2>
-
-        <div className="podium">
-          {podium.map((id, i) => {
-            if (!id) return <div key={i} className="podium-slot is-empty" />;
-            const seat = seatOf(room, id);
-            const place = i === 1 ? 1 : i === 0 ? 2 : 3;
-            return (
-              <motion.div
-                key={id}
-                className={`podium-slot place-${place}`}
-                initial={{ y: 40, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.25 + (3 - place) * 0.15, type: "spring", stiffness: 220, damping: 18 }}
-              >
-                {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={place === 1 ? 70 : 54} />}
-                <strong>{seat?.name}</strong>
-                <div className="podium-step">{place}</div>
-              </motion.div>
-            );
-          })}
+      <motion.div className="score-sheet paper gameover" {...sheetIn}>
+        <div className="gameover-head">
+          {winner && <Avatar avatar={winner.avatar} userId={winner.userId} photo={winner.photo} size={64} />}
+          <div>
+            <h2>{won ? "Tu remportes la partie." : `${winner?.name ?? "?"} remporte la partie.`}</h2>
+            <p className="hint" style={{ margin: "4px 0 0" }}>
+              {g.settings.variant === "nomercy" ? "No Mercy" : "UNO classique"}
+              {g.round > 1 ? `, en ${g.round} manches` : ""}
+            </p>
+          </div>
         </div>
 
-        <ul className="final-list">
+        <ol className="score-lines">
           {ranking.map((id, i) => {
             const seat = seatOf(room, id);
             const p = g.players.find((pl) => pl.id === id);
             const left = r?.hands[id] ?? [];
             return (
-              <li key={id} className={id === me ? "is-me" : ""}>
-                <span className="final-rank">{i + 1}</span>
+              <li key={id} className={`${i === 0 ? "is-winner" : ""} ${id === me ? "is-me" : ""} ${p?.eliminated ? "is-out" : ""}`}>
+                <span className="score-rank num">{i + 1}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
-                <span className="final-name">{seat?.name}</span>
+                <span className="score-name">{seat?.name}</span>
                 {g.settings.endMode === "points" ? (
-                  <span className="chip chip-gold">{p?.score ?? 0} pts</span>
+                  <span className="score-points num">{p?.score ?? 0}</span>
                 ) : p?.eliminated ? (
-                  <span className="chip">éliminé</span>
-                ) : (
-                  <span className="final-hand">
-                    {left.slice(0, 7).map((c) => (
-                      <CardFace key={c.id} card={c} width={18} />
+                  <span className="hint">éliminé</span>
+                ) : left.length > 0 ? (
+                  <span className="final-hand" aria-label={`${left.length} cartes restantes`}>
+                    {left.slice(0, 6).map((c) => (
+                      <CardFace key={c.id} card={c} width={17} />
                     ))}
-                    {left.length > 7 && <span className="hint">+{left.length - 7}</span>}
+                    {left.length > 6 && <span className="hint">+{left.length - 6}</span>}
                   </span>
-                )}
+                ) : null}
               </li>
             );
           })}
-        </ul>
+        </ol>
 
         <div className="overlay-actions">
           {room.you.isHost ? (
@@ -164,23 +148,24 @@ export function GameOver({
             </button>
           ) : me ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
-              {voted ? "Revanche demandée…" : "Revanche !"}
+              {voted ? "Revanche demandée" : "Demander la revanche"}
             </button>
           ) : null}
           <button className="btn" onClick={onLobby}>
-            {room.you.isHost ? "Changer les règles" : "Voir le salon"}
+            {room.you.isHost ? "Changer les règles" : "Voir la table"}
           </button>
           <button className="btn btn-ghost" onClick={onLeave}>
             Quitter
           </button>
         </div>
         {room.rematch.length > 0 && (
-          <p className="hint">
+          <p className="hint" style={{ margin: 0 }}>
             Revanche demandée par{" "}
             {room.rematch
               .map((uid) => room.seats.find((s) => s.userId === uid)?.name)
               .filter(Boolean)
               .join(", ")}
+            .
           </p>
         )}
       </motion.div>

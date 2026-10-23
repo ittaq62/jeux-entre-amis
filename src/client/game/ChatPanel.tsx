@@ -34,7 +34,7 @@ export function ChatPanel({
     <AnimatePresence>
       {open && (
         <motion.aside
-          className="chat-panel panel"
+          className="chat-panel paper"
           initial={{ x: 40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 40, opacity: 0 }}
@@ -47,7 +47,7 @@ export function ChatPanel({
             </button>
           </div>
           <div className="chat-list" ref={listRef}>
-            {messages.length === 0 && <p className="hint chat-empty">Personne n'a encore rien dit. Lance les hostilités !</p>}
+            {messages.length === 0 && <p className="hint chat-empty">Rien pour l'instant. Lance les hostilités.</p>}
             {messages.map((m) =>
               m.system ? (
                 <p key={m.id} className="chat-system">
@@ -87,7 +87,7 @@ export function EmotePicker({ open, onPick, onClose }: { open: boolean; onPick: 
         <>
           <div className="emote-catcher" onClick={onClose} />
           <motion.div
-            className="emote-picker panel"
+            className="emote-picker paper"
             initial={{ y: 16, scale: 0.9, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 10, opacity: 0 }}

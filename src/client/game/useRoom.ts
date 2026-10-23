@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import type { ChatMessage, RoomClientMessage, RoomServerMessage, RoomView } from "../../shared/protocol.ts";
 import type { UnoEvent } from "../../shared/games/uno/engine.ts";
+import { Chip } from "../components/Chip.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
 import { play, vibrate } from "../lib/sound.ts";
@@ -113,7 +114,13 @@ export function useRoom(code: string) {
                   setTimeout(
                     () => {
                       play("achievement");
-                      toast({ icon: a.icon, tone: "gold", title: `Succès débloqué : ${a.title}`, body: a.description, duration: 6000 });
+                      toast({
+                        icon: createElement(Chip, { label: a.chip, tone: a.tone, size: 34 }),
+                        tone: "gold",
+                        title: `Succès débloqué : ${a.title}`,
+                        body: a.description,
+                        duration: 6000,
+                      });
                     },
                     1800 + i * 1400,
                   );
