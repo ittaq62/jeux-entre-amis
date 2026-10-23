@@ -24,8 +24,8 @@ export function PrivacyPage() {
             <strong>Tes amis</strong> et les demandes en cours.
           </li>
           <li>
-            Un <strong>cookie de session</strong>, indispensable pour rester connecté (30 jours). Aucun cookie publicitaire ni de
-            mesure d'audience.
+            Un <strong>cookie de session</strong>, indispensable pour rester connecté (30 jours). Aucun cookie publicitaire ni de mesure
+            d'audience.
           </li>
         </ul>
         <h3>Ce qui n'est pas gardé</h3>
@@ -37,8 +37,8 @@ export function PrivacyPage() {
         <p>Le site et sa base de données sont hébergés par Cloudflare. Les emails de connexion partent via Gmail.</p>
         <h3>Tes droits</h3>
         <p>
-          Tu peux modifier ton profil ou <strong>supprimer ton compte</strong> à tout moment depuis la page « Mon compte » : tout est
-          effacé immédiatement.
+          Tu peux modifier ton profil ou <strong>supprimer ton compte</strong> à tout moment depuis la page « Mon compte » : tout est effacé
+          immédiatement.
         </p>
       </article>
     </PageShell>

@@ -23,12 +23,28 @@ interface SeatProps {
   mercyLimit: number | null;
 }
 
-export function Seat({ seat, player, isTurn, deadline, turnSeconds, serverOffset, showScore, emotes, compact, vulnerable, onCatch, mercyLimit }: SeatProps) {
+export function Seat({
+  seat,
+  player,
+  isTurn,
+  deadline,
+  turnSeconds,
+  serverOffset,
+  showScore,
+  emotes,
+  compact,
+  vulnerable,
+  onCatch,
+  mercyLimit,
+}: SeatProps) {
   const size = compact ? 44 : 58;
   const fan = Math.min(player.count, compact ? 5 : 8);
   const danger = mercyLimit !== null && player.count >= mercyLimit - 5;
   return (
-    <div className={`seat ${isTurn ? "is-turn" : ""} ${player.out ? "is-out" : ""} ${seat.connected ? "" : "is-offline"}`} ref={anchor(`seat-${seat.id}`)}>
+    <div
+      className={`seat ${isTurn ? "is-turn" : ""} ${player.out ? "is-out" : ""} ${seat.connected ? "" : "is-offline"}`}
+      ref={anchor(`seat-${seat.id}`)}
+    >
       <div className="seat-avatar" style={{ width: size + 12, height: size + 12 }}>
         {isTurn && <TimerRing size={size + 12} deadline={deadline} total={turnSeconds} offset={serverOffset} />}
         <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={size} title={seat.name} />
@@ -49,26 +65,45 @@ export function Seat({ seat, player, isTurn, deadline, turnSeconds, serverOffset
         )}
         <AnimatePresence>
           {player.count === 1 && !player.out && (
-            <motion.span className={`uno-badge ${player.declaredUno ? "" : "is-naked"}`} initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+            <motion.span
+              className={`uno-badge ${player.declaredUno ? "" : "is-naked"}`}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+            >
               UNO
             </motion.span>
           )}
         </AnimatePresence>
-        {player.rank && <span className="rank-badge">{player.rank === 1 ? "🥇" : player.rank === 2 ? "🥈" : player.rank === 3 ? "🥉" : `${player.rank}e`}</span>}
+        {player.rank && (
+          <span className="rank-badge">
+            {player.rank === 1 ? "🥇" : player.rank === 2 ? "🥈" : player.rank === 3 ? "🥉" : `${player.rank}e`}
+          </span>
+        )}
         {player.eliminated && <span className="rank-badge">💀</span>}
       </div>
       <div className="seat-name">{seat.name}</div>
       <div className="seat-meta">
         {!player.out && (
-          <div className="seat-fan" aria-label={`${player.count} cartes`} style={{ width: (compact ? 14 : 18) + (fan - 1) * (compact ? 5 : 7) + 8 }}>
+          <div
+            className="seat-fan"
+            aria-label={`${player.count} cartes`}
+            style={{ width: (compact ? 14 : 18) + (fan - 1) * (compact ? 5 : 7) + 8 }}
+          >
             {Array.from({ length: fan }, (_, i) => (
-              <span key={i} className="seat-fan-card" style={{ transform: `translateX(${(i - (fan - 1) / 2) * (compact ? 5 : 7)}px) rotate(${(i - (fan - 1) / 2) * 7}deg)` }}>
+              <span
+                key={i}
+                className="seat-fan-card"
+                style={{ transform: `translateX(${(i - (fan - 1) / 2) * (compact ? 5 : 7)}px) rotate(${(i - (fan - 1) / 2) * 7}deg)` }}
+              >
                 <CardBack width={compact ? 14 : 18} />
               </span>
             ))}
           </div>
         )}
-        <span className={`seat-count ${danger ? "is-danger" : ""}`}>{player.out ? (player.eliminated ? "éliminé" : "fini") : player.count}</span>
+        <span className={`seat-count ${danger ? "is-danger" : ""}`}>
+          {player.out ? (player.eliminated ? "éliminé" : "fini") : player.count}
+        </span>
         {showScore && <span className="seat-score">{player.score} pts</span>}
       </div>
       {vulnerable && onCatch && (

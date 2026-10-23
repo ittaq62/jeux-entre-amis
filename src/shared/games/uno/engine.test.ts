@@ -94,7 +94,13 @@ describe("poser une carte", () => {
 
   it("refuse une carte injouable et le jeu hors de son tour", () => {
     const bad = n("green", 9);
-    const s = rig({ hands: [[bad, n("red", 2)], [n("red", 1), n("red", 4)]], top: n("red", 5) });
+    const s = rig({
+      hands: [
+        [bad, n("red", 2)],
+        [n("red", 1), n("red", 4)],
+      ],
+      top: n("red", 5),
+    });
     expectFail(s, 0, { type: "play", cardId: bad.id });
     expectFail(s, 1, { type: "play", cardId: s.players[1]!.hand[0]!.id });
   });
@@ -144,7 +150,11 @@ describe("cartes +2 et +4", () => {
     const a = c("draw2", "red");
     const b = c("draw2", "blue");
     const s = rig({
-      hands: [[a, n("red", 2)], [b, n("yellow", 1)], [n("green", 4), n("green", 6)]],
+      hands: [
+        [a, n("red", 2)],
+        [b, n("yellow", 1)],
+        [n("green", 4), n("green", 6)],
+      ],
       top: n("red", 5),
       settings: { stacking: true },
     });
@@ -161,7 +171,11 @@ describe("cartes +2 et +4", () => {
 
   it("avec cumul, on peut choisir d'encaisser au lieu de renvoyer", () => {
     const a = c("draw2", "red");
-    const s = rig({ hands: [[a, n("red", 2)], [c("draw2", "blue"), n("yellow", 1)], [n("green", 4)]], top: n("red", 5), settings: { stacking: true } });
+    const s = rig({
+      hands: [[a, n("red", 2)], [c("draw2", "blue"), n("yellow", 1)], [n("green", 4)]],
+      top: n("red", 5),
+      settings: { stacking: true },
+    });
     act(s, 0, { type: "play", cardId: a.id });
     act(s, 1, { type: "draw" });
     expect(s.players[1]!.hand).toHaveLength(4);
@@ -259,7 +273,13 @@ describe("UNO !", () => {
 
   it("crier UNO a temps protege", () => {
     const card = n("red", 2);
-    const s = rig({ hands: [[card, n("blue", 3)], [n("yellow", 1), n("yellow", 2)]], top: n("red", 5) });
+    const s = rig({
+      hands: [
+        [card, n("blue", 3)],
+        [n("yellow", 1), n("yellow", 2)],
+      ],
+      top: n("red", 5),
+    });
     act(s, 0, { type: "play", cardId: card.id }, 0);
     act(s, 0, { type: "uno" }, 300);
     expectFail(s, 1, { type: "catch", target: "p0" });
@@ -267,7 +287,13 @@ describe("UNO !", () => {
 
   it("annoncer UNO avant de poser l'avant-derniere carte evite la fenetre", () => {
     const card = n("red", 2);
-    const s = rig({ hands: [[card, n("blue", 3)], [n("yellow", 1), n("yellow", 2)]], top: n("red", 5) });
+    const s = rig({
+      hands: [
+        [card, n("blue", 3)],
+        [n("yellow", 1), n("yellow", 2)],
+      ],
+      top: n("red", 5),
+    });
     act(s, 0, { type: "uno" });
     act(s, 0, { type: "play", cardId: card.id });
     expect(s.unoWindow).toBeNull();
@@ -301,7 +327,11 @@ describe("regle du 7-0", () => {
   it("un 0 fait tourner toutes les mains dans le sens du jeu", () => {
     const zero = n("red", 0);
     const s = rig({
-      hands: [[zero, n("blue", 1)], [n("yellow", 1), n("yellow", 2)], [n("green", 1), n("green", 2), n("green", 3)]],
+      hands: [
+        [zero, n("blue", 1)],
+        [n("yellow", 1), n("yellow", 2)],
+        [n("green", 1), n("green", 2), n("green", 3)],
+      ],
       top: n("red", 5),
       settings: { sevenZero: true },
     });
@@ -324,7 +354,11 @@ describe("interception", () => {
   });
 
   it("refuse une carte seulement semblable", () => {
-    const s = rig({ hands: [[n("red", 1)], [n("yellow", 1)], [n("blue", 5), n("green", 2)]], top: n("red", 5), settings: { jumpIn: true } });
+    const s = rig({
+      hands: [[n("red", 1)], [n("yellow", 1)], [n("blue", 5), n("green", 2)]],
+      top: n("red", 5),
+      settings: { jumpIn: true },
+    });
     expectFail(s, 2, { type: "play", cardId: s.players[2]!.hand[0]!.id });
   });
 });
@@ -353,7 +387,12 @@ describe("fin de manche", () => {
 
   it("finir sur un +2 fait quand meme piocher le suivant (points)", () => {
     const last = c("draw2", "red");
-    const s = rig({ hands: [[last], [n("yellow", 8)]], top: n("red", 5), settings: { endMode: "points" }, drawPile: [n("blue", 9), n("blue", 9)] });
+    const s = rig({
+      hands: [[last], [n("yellow", 8)]],
+      top: n("red", 5),
+      settings: { endMode: "points" },
+      drawPile: [n("blue", 9), n("blue", 9)],
+    });
     act(s, 0, { type: "play", cardId: last.id });
     expect(s.lastRound?.points).toBe(8 + 18);
   });
@@ -483,7 +522,12 @@ describe("No Mercy", () => {
   });
 
   it("interdit de piocher quand on a une carte jouable, et oblige a poser la carte piochee", () => {
-    const s = rig({ hands: [[n("red", 1), n("blue", 2)], [n("yellow", 1)]], top: n("red", 5), settings: nm, drawPile: [n("red", 9), n("green", 3)] });
+    const s = rig({
+      hands: [[n("red", 1), n("blue", 2)], [n("yellow", 1)]],
+      top: n("red", 5),
+      settings: nm,
+      drawPile: [n("red", 9), n("green", 3)],
+    });
     expectFail(s, 0, { type: "draw" });
     const t = rig({ hands: [[n("blue", 2)], [n("yellow", 1)]], top: n("red", 5), settings: nm, drawPile: [n("red", 9), n("green", 3)] });
     act(t, 0, { type: "draw" });

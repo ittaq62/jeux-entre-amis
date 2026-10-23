@@ -48,12 +48,22 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
           const flights: Promise<void>[] = [];
           for (let round = 0; round < 3; round++) {
             targets.forEach((to, i) => {
-              flights.push(fly({ card: null, from: deck, to, width: pileW, toWidth: 26, duration: 320, delay: (round * targets.length + i) * 45 }));
+              flights.push(
+                fly({ card: null, from: deck, to, width: pileW, toWidth: 26, duration: 320, delay: (round * targets.length + i) * 45 }),
+              );
             });
           }
           await Promise.all(flights);
           play("cardSlide");
-          await fly({ card: e.top, from: deck, to: anchorRect("pile") ?? deck, width: pileW, duration: 380, flip: true, toRotate: pileRotation(e.top.id) });
+          await fly({
+            card: e.top,
+            from: deck,
+            to: anchorRect("pile") ?? deck,
+            width: pileW,
+            duration: 380,
+            flip: true,
+            toRotate: pileRotation(e.top.id),
+          });
           usePileExtras.getState().push(e.top);
         }
         break;
@@ -118,7 +128,14 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
 
       case "reverse": {
         const p = centerOf(anchorRect("pile"));
-        effect({ kind: "float", text: e.direction === 1 ? "↻ Sens horaire" : "↺ Sens inversé", tone: "white", x: p.x, y: p.y - 62, duration: 1300 });
+        effect({
+          kind: "float",
+          text: e.direction === 1 ? "↻ Sens horaire" : "↺ Sens inversé",
+          tone: "white",
+          x: p.x,
+          y: p.y - 62,
+          duration: 1300,
+        });
         play("reverse");
         break;
       }
@@ -170,7 +187,15 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
 
       case "challenge": {
         const p = centerOf(anchorRect("pile"));
-        effect({ kind: "banner", text: "Contesté !", sub: `${nameOf(next, e.challenger)} accuse ${nameOf(next, e.target)}`, tone: "white", x: p.x, y: p.y - 70, duration: 1100 });
+        effect({
+          kind: "banner",
+          text: "Contesté !",
+          sub: `${nameOf(next, e.challenger)} accuse ${nameOf(next, e.target)}`,
+          tone: "white",
+          x: p.x,
+          y: p.y - 70,
+          duration: 1100,
+        });
         play("buzzer", { volume: 0.5 });
         await wait(900);
         effect({
@@ -211,12 +236,35 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
         if (a && b) {
           play("cardSlide");
           await Promise.all([
-            fly({ card: null, from: a, to: b, width: pileW, fromWidth: arrivalWidth(e.a, me, pileW), toWidth: arrivalWidth(e.b, me, pileW), duration: 520 }),
-            fly({ card: null, from: b, to: a, width: pileW, fromWidth: arrivalWidth(e.b, me, pileW), toWidth: arrivalWidth(e.a, me, pileW), duration: 520 }),
+            fly({
+              card: null,
+              from: a,
+              to: b,
+              width: pileW,
+              fromWidth: arrivalWidth(e.a, me, pileW),
+              toWidth: arrivalWidth(e.b, me, pileW),
+              duration: 520,
+            }),
+            fly({
+              card: null,
+              from: b,
+              to: a,
+              width: pileW,
+              fromWidth: arrivalWidth(e.b, me, pileW),
+              toWidth: arrivalWidth(e.a, me, pileW),
+              duration: 520,
+            }),
           ]);
         }
         const p = centerOf(anchorRect("pile"));
-        effect({ kind: "banner", text: "Échange de mains !", sub: `${nameOf(next, e.a)} ⇄ ${nameOf(next, e.b)}`, tone: "blue", x: p.x, y: p.y - 70 });
+        effect({
+          kind: "banner",
+          text: "Échange de mains !",
+          sub: `${nameOf(next, e.a)} ⇄ ${nameOf(next, e.b)}`,
+          tone: "blue",
+          x: p.x,
+          y: p.y - 70,
+        });
         break;
       }
 
@@ -227,7 +275,18 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
           const target = players[(i + (e.direction === 1 ? 1 : players.length - 1)) % players.length]!;
           const a = seatRect(pl.id, me);
           const b = seatRect(target.id, me);
-          if (a && b) flights.push(fly({ card: null, from: a, to: b, width: pileW, fromWidth: arrivalWidth(pl.id, me, pileW), toWidth: arrivalWidth(target.id, me, pileW), duration: 600 }));
+          if (a && b)
+            flights.push(
+              fly({
+                card: null,
+                from: a,
+                to: b,
+                width: pileW,
+                fromWidth: arrivalWidth(pl.id, me, pileW),
+                toWidth: arrivalWidth(target.id, me, pileW),
+                duration: 600,
+              }),
+            );
         });
         play("cardSlide");
         await Promise.all(flights);
@@ -239,7 +298,14 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
       case "discardAll": {
         const p = centerOf(anchorRect("pile"));
         if (e.count > 0) {
-          effect({ kind: "banner", text: "Défausse tout !", sub: `${e.count} carte${e.count > 1 ? "s" : ""} en plus`, tone: e.color, x: p.x, y: p.y - 70 });
+          effect({
+            kind: "banner",
+            text: "Défausse tout !",
+            sub: `${e.count} carte${e.count > 1 ? "s" : ""} en plus`,
+            tone: e.color,
+            x: p.x,
+            y: p.y - 70,
+          });
           play("cardSlide");
         }
         break;
@@ -247,7 +313,14 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
 
       case "roulette": {
         const p = centerOf(anchorRect("pile"));
-        effect({ kind: "banner", text: "Roulette !", sub: `${nameOf(next, e.victim)} cherche du ${COLOR_LABELS[e.color].toLowerCase()}`, tone: e.color, x: p.x, y: p.y - 70 });
+        effect({
+          kind: "banner",
+          text: "Roulette !",
+          sub: `${nameOf(next, e.victim)} cherche du ${COLOR_LABELS[e.color].toLowerCase()}`,
+          tone: e.color,
+          x: p.x,
+          y: p.y - 70,
+        });
         const deck = anchorRect("deck");
         const target = seatRect(e.victim, me);
         if (deck && target) {
@@ -255,11 +328,27 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
           await Promise.all(
             shown.map((card, i) => {
               play("cardDraw", { delay: i * 140 });
-              return fly({ card, from: deck, to: target, width: pileW, toWidth: arrivalWidth(e.victim, me, pileW), duration: 360, delay: i * 140, flip: true });
+              return fly({
+                card,
+                from: deck,
+                to: target,
+                width: pileW,
+                toWidth: arrivalWidth(e.victim, me, pileW),
+                duration: 360,
+                delay: i * 140,
+                flip: true,
+              });
             }),
           );
         }
-        effect({ kind: "float", text: `+${e.flipped.length}`, tone: "danger", x: centerOf(target).x, y: centerOf(target).y - 20, duration: 1400 });
+        effect({
+          kind: "float",
+          text: `+${e.flipped.length}`,
+          tone: "danger",
+          x: centerOf(target).x,
+          y: centerOf(target).y - 20,
+          duration: 1400,
+        });
         if (e.flipped.length >= 5 && !reduced) shake(1);
         play(e.flipped.length >= 5 ? "bigHit" : "hit");
         break;

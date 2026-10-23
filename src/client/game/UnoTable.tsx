@@ -48,8 +48,9 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   const rules = effectiveRules(g.settings);
   const { w, h } = useViewport();
   const compact = w < 720 || h < 600;
-  const handW = compact ? clamp(w / 5.6, 58, 82) : clamp(h / 8.4, 78, 112);
-  const pileW = compact ? clamp(w / 5.2, 62, 84) : clamp(h / 7.8, 84, 116);
+  const portrait = h > w * 1.15;
+  const handW = compact ? clamp(portrait ? w / 4.5 : w / 5.6, 58, 90) : clamp(h / 8.4, 78, 112);
+  const pileW = compact ? clamp(portrait ? w / 4.6 : w / 5.2, 62, 88) : clamp(h / 7.8, 84, 116);
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const [colorFor, setColorFor] = useState<Card | null>(null);
@@ -100,10 +101,14 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     return ordered.map((_, k) => {
       let theta: number;
       if (myIndex < 0) theta = -Math.PI / 2 - ((k + 0.5) / n) * Math.PI * 2;
-      else theta = 1.1 * Math.PI - ((k + 1) / (n + 1)) * 1.2 * Math.PI;
+      else {
+        // En portrait, les adversaires descendent le long des bords pour occuper la hauteur
+        const spread = portrait ? 1.5 : 1.2;
+        theta = (1 + (spread - 1) / 2) * Math.PI - ((k + 1) / (n + 1)) * spread * Math.PI;
+      }
       return { x: area.w / 2 + rx * Math.cos(theta), y: area.h / 2 - ry * Math.sin(theta) * (myIndex < 0 ? 1 : 1) };
     });
-  }, [ordered, area, compact, myIndex]);
+  }, [ordered, area, compact, myIndex, portrait]);
 
   function act(action: UnoAction) {
     unlockAudio();
@@ -118,8 +123,13 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
       return;
     }
     if (isWild(card) && card.kind !== "wildRoulette") return setColorFor(card);
-    if (card.kind === "number" && card.value === 7 && rules.sevenZero && ordered.filter((p) => !p.out).length > 1) return setTargetFor(card);
-    act({ type: "play", cardId: card.id, ...(card.kind === "number" && card.value === 7 && rules.sevenZero ? { target: ordered.find((p) => !p.out)?.id } : {}) });
+    if (card.kind === "number" && card.value === 7 && rules.sevenZero && ordered.filter((p) => !p.out).length > 1)
+      return setTargetFor(card);
+    act({
+      type: "play",
+      cardId: card.id,
+      ...(card.kind === "number" && card.value === 7 && rules.sevenZero ? { target: ordered.find((p) => !p.out)?.id } : {}),
+    });
   }
 
   const canDraw = myTurn && !g.rouletteVictim && !g.hasDrawn && !(rules.mustPlay && g.playable.length > 0 && g.pendingDraw === 0);
@@ -151,12 +161,58 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   else if (!myTurn) status = g.rouletteVictim ? `${current?.name} fait tourner la roulette…` : `Au tour de ${current?.name ?? "…"}`;
   else if (isRouletteVictim) status = "Roulette ! Choisis la couleur à chercher";
   else if (g.canChallenge) status = `+${g.pendingDraw} sur toi ! Contester le bluff, cumuler ou encaisser ?`;
-  else if (g.pendingDraw > 0) status = g.canStack ? `+${g.pendingDraw} ! Cumule une carte « + » ou encaisse` : `Tu encaisses +${g.pendingDraw}…`;
+  else if (g.pendingDraw > 0)
+    status = g.canStack ? `+${g.pendingDraw} ! Cumule une carte « + » ou encaisse` : `Tu encaisses +${g.pendingDraw}…`;
   else if (g.drawnCardId !== null) status = rules.mustPlay ? "Pose la carte piochée" : "Carte piochée jouable : la poser ou la garder ?";
   else if (g.playable.length === 0) status = "Aucune carte jouable : pioche !";
   else status = "À toi de jouer !";
 
   const timerTotal = g.settings.turnSeconds;
+
+  const emoteSide = (
+    <div className="my-side my-side-left">
+      <button className="round-btn" onClick={() => setEmoteOpen(!emoteOpen)} aria-label="Réactions">
+        <Icon name="smile" />
+      </button>
+      <EmotePicker
+        open={emoteOpen}
+        onClose={() => setEmoteOpen(false)}
+        onPick={(emote) => {
+          send({ t: "emote", emote });
+          setEmoteOpen(false);
+        }}
+      />
+      <AnimatePresence>
+        {emotes
+          .filter((e) => e.seatId === me)
+          .map((e) => (
+            <motion.div
+              key={e.id}
+              className={`emote-bubble is-mine ${e.emote.length <= 2 ? "is-emoji" : ""}`}
+              initial={{ y: 10, scale: 0.4, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: -16, opacity: 0 }}
+            >
+              {e.emote}
+            </motion.div>
+          ))}
+      </AnimatePresence>
+    </div>
+  );
+
+  const unoSide = (
+    <div className="my-side my-side-right">
+      <motion.button
+        className={`uno-btn ${g.canUno ? "is-ready" : ""} ${vulnerable === me ? "is-urgent" : ""}`}
+        disabled={!g.canUno}
+        onClick={() => act({ type: "uno" })}
+        whileTap={{ scale: 0.88 }}
+        aria-label="Crier UNO"
+      >
+        UNO
+      </motion.button>
+    </div>
+  );
 
   return (
     <div className="table-root felt" ref={scope}>
@@ -172,7 +228,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           </span>
         </div>
         <div className="table-top-actions">
-          <button className="btn btn-ghost btn-icon" onClick={() => setPrefs({ sound: !sound })} aria-label={sound ? "Couper le son" : "Activer le son"}>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setPrefs({ sound: !sound })}
+            aria-label={sound ? "Couper le son" : "Activer le son"}
+          >
             <Icon name={sound ? "volume" : "mute"} />
           </button>
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
@@ -184,7 +244,12 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           {menuOpen && (
             <>
               <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
-              <motion.div className="table-menu panel" initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }}>
+              <motion.div
+                className="table-menu panel"
+                initial={{ y: -8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -8, opacity: 0 }}
+              >
                 <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                   <Icon name="users" size={18} /> Voir le salon et les règles
                 </button>
@@ -225,7 +290,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             </div>
           );
         })}
-        <div className="center-slot">
+        <div className="center-slot" style={portrait && ordered.length > 1 ? { top: "57%" } : undefined}>
           <Center game={g} pileWidth={pileW} canDraw={canDraw} onDraw={() => act({ type: "draw" })} />
         </div>
       </div>
@@ -233,6 +298,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
       {me && myPlayer && (
         <div className={`my-zone ${myTurn ? "is-turn" : ""}`}>
           <div className="my-bar">
+            {compact && emoteSide}
             <div className="my-status">
               {myTurn && room.turnDeadline && timerTotal > 0 && (
                 <span className="my-timer">
@@ -240,7 +306,13 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 </span>
               )}
               <AnimatePresence mode="wait">
-                <motion.span key={status} className="my-status-text" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                <motion.span
+                  key={status}
+                  className="my-status-text"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                >
                   {status}
                 </motion.span>
               </AnimatePresence>
@@ -272,48 +344,19 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 </button>
               )}
             </div>
+            {compact && unoSide}
           </div>
           <div className="my-hand-row">
-            <div className="my-side my-side-left">
-              <button className="round-btn" onClick={() => setEmoteOpen(!emoteOpen)} aria-label="Réactions">
-                <Icon name="smile" />
-              </button>
-              <EmotePicker
-                open={emoteOpen}
-                onClose={() => setEmoteOpen(false)}
-                onPick={(emote) => {
-                  send({ t: "emote", emote });
-                  setEmoteOpen(false);
-                }}
-              />
-              <AnimatePresence>
-                {emotes
-                  .filter((e) => e.seatId === me)
-                  .map((e) => (
-                    <motion.div
-                      key={e.id}
-                      className={`emote-bubble is-mine ${e.emote.length <= 2 ? "is-emoji" : ""}`}
-                      initial={{ y: 10, scale: 0.4, opacity: 0 }}
-                      animate={{ y: 0, scale: 1, opacity: 1 }}
-                      exit={{ y: -16, opacity: 0 }}
-                    >
-                      {e.emote}
-                    </motion.div>
-                  ))}
-              </AnimatePresence>
-            </div>
-            <Hand cards={hand} playable={playable} myTurn={myTurn} cardWidth={handW} onPlay={onCardClick} highlight={myTurn ? g.drawnCardId : null} />
-            <div className="my-side my-side-right">
-              <motion.button
-                className={`uno-btn ${g.canUno ? "is-ready" : ""} ${vulnerable === me ? "is-urgent" : ""}`}
-                disabled={!g.canUno}
-                onClick={() => act({ type: "uno" })}
-                whileTap={{ scale: 0.88 }}
-                aria-label="Crier UNO"
-              >
-                UNO
-              </motion.button>
-            </div>
+            {!compact && emoteSide}
+            <Hand
+              cards={hand}
+              playable={playable}
+              myTurn={myTurn}
+              cardWidth={handW}
+              onPlay={onCardClick}
+              highlight={myTurn ? g.drawnCardId : null}
+            />
+            {!compact && unoSide}
           </div>
         </div>
       )}
@@ -329,7 +372,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           setColorFor(null);
         }}
       />
-      <ColorPicker open={isRouletteVictim} title="Roulette ! Quelle couleur chercher ?" onPick={(color) => act({ type: "roulette", color })} />
+      <ColorPicker
+        open={isRouletteVictim}
+        title="Roulette ! Quelle couleur chercher ?"
+        onPick={(color) => act({ type: "roulette", color })}
+      />
       <TargetPicker
         open={targetFor !== null}
         seats={room.seats}
@@ -342,7 +389,9 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
         }}
       />
 
-      {g.phase === "roundOver" && g.lastRound && <RoundOver room={room} offset={serverOffset} onNext={room.you.isHost ? () => send({ t: "nextRound" }) : undefined} />}
+      {g.phase === "roundOver" && g.lastRound && (
+        <RoundOver room={room} offset={serverOffset} onNext={room.you.isHost ? () => send({ t: "nextRound" }) : undefined} />
+      )}
       {g.phase === "gameOver" && !resultsHidden && (
         <GameOver
           room={room}

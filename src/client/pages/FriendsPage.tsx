@@ -34,7 +34,15 @@ export function FriendsPage() {
   async function add(pseudo: string) {
     try {
       const res = await api.post<{ result: string }>("/friends", { pseudo });
-      toast({ icon: "👋", title: res.result === "accepted" ? `${pseudo} et toi êtes amis !` : res.result === "already" ? "Déjà fait !" : `Demande envoyée à ${pseudo}` });
+      toast({
+        icon: "👋",
+        title:
+          res.result === "accepted"
+            ? `${pseudo} et toi êtes amis !`
+            : res.result === "already"
+              ? "Déjà fait !"
+              : `Demande envoyée à ${pseudo}`,
+      });
       setQuery("");
       await refresh();
     } catch (err) {
@@ -73,7 +81,13 @@ export function FriendsPage() {
         <section className="panel panel-pad">
           <form className="search-row" onSubmit={submit}>
             <Icon name="search" />
-            <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Chercher un pseudo…" aria-label="Pseudo à ajouter" />
+            <input
+              className="input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Chercher un pseudo…"
+              aria-label="Pseudo à ajouter"
+            />
           </form>
           {results.length > 0 && (
             <ul className="friend-list search-results">
@@ -149,7 +163,11 @@ export function FriendsPage() {
                           Rejoindre
                         </Link>
                       )}
-                      <button className="btn btn-sm btn-ghost" onClick={() => void remove(f.user.id)} aria-label={`Retirer ${f.user.pseudo}`}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => void remove(f.user.id)}
+                        aria-label={`Retirer ${f.user.pseudo}`}
+                      >
                         <Icon name="close" size={16} />
                       </button>
                     </span>

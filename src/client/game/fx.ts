@@ -74,7 +74,10 @@ export const useFx = create<FxState>((set, get) => ({
 
 let seq = 0;
 
-export function fly(spec: Omit<Flight, "id" | "done" | "delay" | "fromRotate" | "toRotate" | "flip"> & Partial<Pick<Flight, "delay" | "fromRotate" | "toRotate" | "flip">>): Promise<void> {
+export function fly(
+  spec: Omit<Flight, "id" | "done" | "delay" | "fromRotate" | "toRotate" | "flip"> &
+    Partial<Pick<Flight, "delay" | "fromRotate" | "toRotate" | "flip">>,
+): Promise<void> {
   return new Promise((resolve) => {
     const id = ++seq;
     const flight: Flight = {

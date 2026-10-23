@@ -221,7 +221,18 @@ function wildCenter(card: CardData): ReactNode {
           <g transform="translate(0 -6) scale(0.8)">
             <ReverseIcon color="#fffaf0" />
           </g>
-          <text y="23" className="card-num" fontSize="18" fill="#fffaf0" textAnchor="middle" stroke="#000" strokeOpacity="0.8" strokeWidth="4" strokeLinejoin="round" paintOrder="stroke">
+          <text
+            y="23"
+            className="card-num"
+            fontSize="18"
+            fill="#fffaf0"
+            textAnchor="middle"
+            stroke="#000"
+            strokeOpacity="0.8"
+            strokeWidth="4"
+            strokeLinejoin="round"
+            paintOrder="stroke"
+          >
             +4
           </text>
         </g>

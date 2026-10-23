@@ -24,7 +24,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "pile-eater", icon: "🍽️", title: "Ramasse-tout", description: "Encaisser 8 cartes ou plus d'un coup." },
   { id: "pickpocket", icon: "🔄", title: "Pickpocket", description: "Échanger sa main avec un 7." },
   { id: "sniper", icon: "🎯", title: "Intercepteur", description: "Réussir une interception." },
-  { id: "full-table", icon: "👑", title: "Roi de la tablée", description: "Gagner une partie à 6 joueurs ou plus." },
+  { id: "full-table", icon: "👑", title: "Maître de la table", description: "Gagner une partie à 6 joueurs ou plus." },
   { id: "survivor", icon: "💀", title: "Survivant", description: "Gagner une partie No Mercy." },
   { id: "mercy", icon: "💔", title: "Pitié refusée", description: "Être éliminé par la règle des 25 cartes." },
 ];

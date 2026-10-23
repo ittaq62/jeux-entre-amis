@@ -76,7 +76,13 @@ export function RoomPage({ code }: { code: string }) {
           onBackToGame={view.status === "playing" ? () => setLobbyOpen(false) : undefined}
         />
       )}
-      <ChatPanel open={chatOpen} messages={chat} meId={me?.id ?? ""} onSend={(text) => send({ t: "chat", text })} onClose={() => setChatOpen(false)} />
+      <ChatPanel
+        open={chatOpen}
+        messages={chat}
+        meId={me?.id ?? ""}
+        onSend={(text) => send({ t: "chat", text })}
+        onClose={() => setChatOpen(false)}
+      />
       {status === "reconnecting" && <div className="conn-banner">Connexion perdue, on se reconnecte…</div>}
     </>
   );

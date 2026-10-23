@@ -26,7 +26,12 @@ export function AvatarEditor({ value, onChange }: { value: AvatarConfig; onChang
   return (
     <div className="avatar-editor">
       <div className="avatar-editor-preview">
-        <motion.div key={spin} initial={{ rotate: -12, scale: 0.85 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}>
+        <motion.div
+          key={spin}
+          initial={{ rotate: -12, scale: 0.85 }}
+          animate={{ rotate: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 14 }}
+        >
           <AvatarDrawing avatar={value} size={132} />
         </motion.div>
         <button

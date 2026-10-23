@@ -91,10 +91,7 @@ export function viewFor(s: UnoState, viewerId: string | null): UnoView {
     unoVulnerable: w ? s.players[w.player]!.id : null,
     unoWindowEndsAt: w ? w.since + UNO_GRACE_MS : null,
     canUno:
-      meP !== null &&
-      !meP.out &&
-      s.phase === "playing" &&
-      ((w?.player === me) || (meP.hand.length === 2 && !meP.declaredUno && isMyTurn)),
+      meP !== null && !meP.out && s.phase === "playing" && (w?.player === me || (meP.hand.length === 2 && !meP.declaredUno && isMyTurn)),
     rouletteVictim: s.roulette ? s.players[s.turn]!.id : null,
     phase: s.phase,
     round: s.round,

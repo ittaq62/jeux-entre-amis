@@ -1,7 +1,6 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 import { Link } from "wouter";
-import QRCode from "qrcode";
 import { effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
 import { MAX_PLAYERS, MIN_PLAYERS, type RoomClientMessage, type RoomView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
@@ -71,7 +70,13 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
             <p className="eyebrow">{room.settings.visibility === "public" ? "Salon public" : "Salon privé"}</p>
             <div className="code-tiles" aria-label={`Code du salon ${room.code}`}>
               {room.code.split("").map((ch, i) => (
-                <motion.span key={i} className="code-tile" initial={{ rotateX: 90 }} animate={{ rotateX: 0 }} transition={{ delay: i * 0.08 }}>
+                <motion.span
+                  key={i}
+                  className="code-tile"
+                  initial={{ rotateX: 90 }}
+                  animate={{ rotateX: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                >
                   {ch}
                 </motion.span>
               ))}
@@ -98,7 +103,13 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
             </div>
             <ul className="seat-grid">
               {room.seats.map((seat) => (
-                <motion.li key={seat.id} className="seat-card" layout initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                <motion.li
+                  key={seat.id}
+                  className="seat-card"
+                  layout
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                >
                   <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={52} />
                   <div className="seat-card-text">
                     <strong>
@@ -181,7 +192,12 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
                       <strong>{r.label}</strong>
                       <span className="hint">{forced ? "Toujours actif en No Mercy." : r.desc}</span>
                     </span>
-                    <Switch label={r.label} checked={forced || s[r.key]} disabled={!isHost || forced} onChange={(v) => update({ [r.key]: v })} />
+                    <Switch
+                      label={r.label}
+                      checked={forced || s[r.key]}
+                      disabled={!isHost || forced}
+                      onChange={(v) => update({ [r.key]: v })}
+                    />
                   </label>
                 );
               })}
@@ -230,7 +246,9 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
                 <div className="stepper">
                   <button
                     className="btn btn-icon btn-sm"
-                    disabled={!isHost || room.settings.maxPlayers <= Math.max(MIN_PLAYERS, room.seats.filter((x) => x.kind === "human").length)}
+                    disabled={
+                      !isHost || room.settings.maxPlayers <= Math.max(MIN_PLAYERS, room.seats.filter((x) => x.kind === "human").length)
+                    }
                     onClick={() => send({ t: "settings", settings: {}, maxPlayers: room.settings.maxPlayers - 1 })}
                     aria-label="Moins de joueurs"
                   >
@@ -274,7 +292,12 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
           (isHost ? (
             <div className="lobby-start">
               {!canStart && <span className="hint">Il faut au moins 2 joueurs : ajoute un bot pour jouer tout de suite.</span>}
-              <motion.button className="btn btn-primary btn-lg" disabled={!canStart} onClick={() => send({ t: "start" })} whileTap={{ scale: 0.96 }}>
+              <motion.button
+                className="btn btn-primary btn-lg"
+                disabled={!canStart}
+                onClick={() => send({ t: "start" })}
+                whileTap={{ scale: 0.96 }}
+              >
                 <Icon name="play" size={18} /> {finished ? "Nouvelle partie" : "Lancer la partie"}
               </motion.button>
             </div>
@@ -297,7 +320,9 @@ function InviteModal({ open, onClose, code, link }: { open: boolean; onClose: ()
   const [qr, setQr] = useState<string | null>(null);
   const [sent, setSent] = useState<Set<string>>(new Set());
   if (open && !qr) {
-    void QRCode.toDataURL(link, { margin: 1, width: 360, color: { dark: "#0c1f18", light: "#fbf5e6" } }).then(setQr);
+    void import("qrcode").then((QRCode) =>
+      QRCode.toDataURL(link, { margin: 1, width: 360, color: { dark: "#0c1f18", light: "#fbf5e6" } }).then(setQr),
+    );
   }
   const available = friends.filter((f) => f.status === "accepted" && f.user.id in online && online[f.user.id]?.code !== code);
   return (

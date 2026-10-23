@@ -62,7 +62,14 @@ export function ChatPanel({
             )}
           </div>
           <form className="chat-form" onSubmit={submit}>
-            <input className="input" value={text} maxLength={CHAT_MAX} onChange={(e) => setText(e.target.value)} placeholder="Écris un message…" aria-label="Message" />
+            <input
+              className="input"
+              value={text}
+              maxLength={CHAT_MAX}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Écris un message…"
+              aria-label="Message"
+            />
             <button className="btn btn-primary btn-icon" aria-label="Envoyer" disabled={!text.trim()}>
               <Icon name="play" size={16} />
             </button>

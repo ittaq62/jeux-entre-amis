@@ -22,7 +22,11 @@ export function AppHeader() {
         <Logo size={22} />
       </Link>
       <nav className="app-nav">
-        <button className="btn btn-ghost btn-icon" onClick={() => setPrefs({ sound: !sound })} aria-label={sound ? "Couper le son" : "Activer le son"}>
+        <button
+          className="btn btn-ghost btn-icon"
+          onClick={() => setPrefs({ sound: !sound })}
+          aria-label={sound ? "Couper le son" : "Activer le son"}
+        >
           <Icon name={sound ? "volume" : "mute"} />
         </button>
         <Link href="/classement" className={`btn btn-ghost nav-btn ${location === "/classement" ? "is-active" : ""}`}>
@@ -32,7 +36,11 @@ export function AppHeader() {
         <Link href="/amis" className={`btn btn-ghost nav-btn ${location === "/amis" ? "is-active" : ""}`}>
           <Icon name="users" />
           <span className="nav-label">Amis</span>
-          {requests > 0 ? <span className="badge badge-red">{requests}</span> : onlineCount > 0 ? <span className="badge">{onlineCount}</span> : null}
+          {requests > 0 ? (
+            <span className="badge badge-red">{requests}</span>
+          ) : onlineCount > 0 ? (
+            <span className="badge">{onlineCount}</span>
+          ) : null}
         </Link>
         <Link href={`/joueur/${encodeURIComponent(user.pseudo)}`} className="nav-avatar" aria-label="Mon profil">
           <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={36} />

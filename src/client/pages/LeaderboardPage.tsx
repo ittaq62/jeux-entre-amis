@@ -44,7 +44,9 @@ export function LeaderboardPage() {
             ]}
           />
         </div>
-        <p className="hint">Les points de classement montent quand tu bats des joueurs mieux classés que toi, et baissent dans le cas contraire.</p>
+        <p className="hint">
+          Les points de classement montent quand tu bats des joueurs mieux classés que toi, et baissent dans le cas contraire.
+        </p>
         <section className="panel leaderboard">
           {entries === null ? (
             <div className="center-text" style={{ padding: 32 }}>

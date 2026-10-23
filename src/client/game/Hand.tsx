@@ -5,7 +5,21 @@ import { CardFace, CARD_RATIO } from "../components/Card.tsx";
 import { anchor } from "./fx.ts";
 import { usePileExtras } from "./pileExtras.ts";
 
-const KIND_ORDER = ["number", "skip", "reverse", "draw2", "draw4", "skipAll", "discardAll", "wild", "wildRoulette", "wild4", "wildReverse4", "wild6", "wild10"];
+const KIND_ORDER = [
+  "number",
+  "skip",
+  "reverse",
+  "draw2",
+  "draw4",
+  "skipAll",
+  "discardAll",
+  "wild",
+  "wildRoulette",
+  "wild4",
+  "wildReverse4",
+  "wild6",
+  "wild10",
+];
 
 /** Main triee par couleur puis par valeur, jokers a la fin. */
 export function sortHand(hand: Card[]): Card[] {
@@ -47,12 +61,13 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
   const visible = cards.filter((c) => !hidden.has(c.id));
   const n = visible.length;
   const height = cardWidth * CARD_RATIO;
-  const usable = Math.max(cardWidth, width - 24);
+  // Marge pour la rotation des cartes du bord de l'eventail
+  const usable = Math.max(cardWidth, width - 24 - cardWidth * 0.3);
   let step = n > 1 ? Math.min(cardWidth * 0.68, (usable - cardWidth) / (n - 1)) : 0;
   const scroll = n > 1 && step < cardWidth * 0.3;
   if (scroll) step = cardWidth * 0.34;
   const total = cardWidth + step * Math.max(0, n - 1);
-  const start = scroll ? 12 : (width - total) / 2;
+  const start = scroll ? 12 : Math.max(18, (width - total) / 2);
   const maxAngle = scroll ? 0 : Math.min(5, 48 / Math.max(n, 1));
 
   return (

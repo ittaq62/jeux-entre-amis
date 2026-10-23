@@ -8,7 +8,9 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 /** Planche de controle visuel (uniquement en developpement). */
 export function DevGallery() {
   const [seed, setSeed] = useState(0);
-  const classic = buildClassicDeck().filter((c, i, all) => all.findIndex((o) => o.kind === c.kind && o.color === c.color && o.value === c.value) === i);
+  const classic = buildClassicDeck().filter(
+    (c, i, all) => all.findIndex((o) => o.kind === c.kind && o.color === c.color && o.value === c.value) === i,
+  );
   const extra = buildNoMercyDeck().filter(
     (c, i, all) =>
       !["number", "skip", "reverse", "draw2"].includes(c.kind) && all.findIndex((o) => o.kind === c.kind && o.color === c.color) === i,
@@ -23,7 +25,10 @@ export function DevGallery() {
         ))}
       </div>
       <h2 style={{ margin: "28px 0 16px" }}>
-        Avatars <button className="btn btn-sm" onClick={() => setSeed(seed + 1)}>Mélanger</button>
+        Avatars{" "}
+        <button className="btn btn-sm" onClick={() => setSeed(seed + 1)}>
+          Mélanger
+        </button>
       </h2>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }} key={seed}>
         {Array.from({ length: 24 }, (_, i) => (

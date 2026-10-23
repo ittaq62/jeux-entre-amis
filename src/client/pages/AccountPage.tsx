@@ -186,7 +186,10 @@ export function AccountPage() {
 
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Supprimer ton compte ?">
         <div className="stack">
-          <p>Ton profil, tes statistiques, tes succès et tes amis seront effacés définitivement. Tes anciens adversaires verront juste ton pseudo dans leurs historiques.</p>
+          <p>
+            Ton profil, tes statistiques, tes succès et tes amis seront effacés définitivement. Tes anciens adversaires verront juste ton
+            pseudo dans leurs historiques.
+          </p>
           <div className="row-actions">
             <button className="btn btn-danger" onClick={() => void deleteAccount()}>
               Oui, tout supprimer

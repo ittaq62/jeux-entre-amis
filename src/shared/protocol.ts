@@ -170,6 +170,4 @@ export type HubServerMessage =
   | { t: "friendsChanged" }
   | { t: "invite"; from: PublicUser; code: string; game: GameId };
 
-export type HubClientMessage =
-  | { t: "watchLobby"; on: boolean }
-  | { t: "invite"; to: string; code: string };
+export type HubClientMessage = { t: "watchLobby"; on: boolean } | { t: "invite"; to: string; code: string };

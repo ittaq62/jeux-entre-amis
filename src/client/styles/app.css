@@ -602,8 +602,7 @@
   overflow: hidden;
   background:
     radial-gradient(ellipse at 20% 50%, rgba(226, 59, 63, 0.18), transparent 60%),
-    radial-gradient(ellipse at 90% 0%, rgba(44, 123, 229, 0.12), transparent 50%),
-    var(--panel);
+    radial-gradient(ellipse at 90% 0%, rgba(44, 123, 229, 0.12), transparent 50%), var(--panel);
 }
 
 .feature-art {

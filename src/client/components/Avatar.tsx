@@ -39,14 +39,7 @@ export function AvatarDrawing({ avatar, size = 48, className, title }: Omit<Prop
   const shade = "rgba(0,0,0,0.12)";
   const hair = AVATAR_HAIR_COLORS[avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!;
   return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      className={`avatar ${className ?? ""}`}
-      role="img"
-      aria-label={title ?? "Avatar"}
-    >
+    <svg viewBox="0 0 100 100" width={size} height={size} className={`avatar ${className ?? ""}`} role="img" aria-label={title ?? "Avatar"}>
       <defs>
         <clipPath id={clip}>
           <circle cx="50" cy="50" r="50" />
@@ -180,8 +173,7 @@ function Mouth({ kind }: { kind: number }) {
 
 function Hair({ kind, color, back }: { kind: number; color: string; back?: boolean }) {
   if (back) {
-    if (kind === 4)
-      return <path d="M20 56 C18 26 82 26 80 56 L82 84 C76 88 70 86 68 80 L32 80 C30 86 24 88 18 84 Z" fill={color} />;
+    if (kind === 4) return <path d="M20 56 C18 26 82 26 80 56 L82 84 C76 88 70 86 68 80 L32 80 C30 86 24 88 18 84 Z" fill={color} />;
     if (kind === 7) return <path d="M70 34 C88 36 92 60 84 76 C82 62 78 50 68 44 Z" fill={color} />;
     return null;
   }
@@ -189,9 +181,7 @@ function Hair({ kind, color, back }: { kind: number; color: string; back?: boole
     case 1: // court
       return <path d="M19 54 C15 17 85 17 81 54 C78 43 71 37 63 38 C57 33 43 33 37 38 C29 37 22 43 19 54 Z" fill={color} />;
     case 2: // raie sur le cote
-      return (
-        <path d="M18 56 C13 15 87 15 82 56 C80 45 75 38 67 35 C56 42 38 45 27 42 C23 46 20 51 18 56 Z" fill={color} />
-      );
+      return <path d="M18 56 C13 15 87 15 82 56 C80 45 75 38 67 35 C56 42 38 45 27 42 C23 46 20 51 18 56 Z" fill={color} />;
     case 3: // boucles
       return (
         <g fill={color}>
@@ -250,7 +240,13 @@ function Hat({ kind }: { kind: number }) {
     case 3: // couronne
       return (
         <g>
-          <path d="M30 32 L30 14 L40 23 L50 10 L60 23 L70 14 L70 32 Z" fill="#f2c04d" stroke="#a87b16" strokeWidth="1.5" strokeLinejoin="round" />
+          <path
+            d="M30 32 L30 14 L40 23 L50 10 L60 23 L70 14 L70 32 Z"
+            fill="#f2c04d"
+            stroke="#a87b16"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
           <circle cx="50" cy="25" r="2.6" fill="#d9304a" />
           <circle cx="38" cy="27" r="1.8" fill="#2c7be5" />
           <circle cx="62" cy="27" r="1.8" fill="#2fa864" />

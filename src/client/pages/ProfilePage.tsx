@@ -23,7 +23,15 @@ interface Profile {
     totals: Record<string, number>;
   };
   achievements: { id: string; at: number }[];
-  recent: { id: string; variant: string; endedAt: number; players: number; rank: number; score: number; table: { name: string; rank: number; bot: boolean }[] }[];
+  recent: {
+    id: string;
+    variant: string;
+    endedAt: number;
+    players: number;
+    rank: number;
+    score: number;
+    table: { name: string; rank: number; bot: boolean }[];
+  }[];
 }
 
 export function ProfilePage({ pseudo }: { pseudo: string }) {
@@ -75,7 +83,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
           <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={96} />
           <div className="profile-id">
             <h1>{user.pseudo}</h1>
-            <p className="hint">À la table depuis {new Date(profile.memberSince).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p>
+            <p className="hint">
+              À la table depuis {new Date(profile.memberSince).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </p>
             <div className="profile-chips">
               <span className="chip chip-gold">
                 <Icon name="trophy" size={13} /> {stats.rating} pts de classement
@@ -130,7 +140,10 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 
           <section className="panel panel-pad">
             <h3 className="section-title">
-              Succès <span className="hint">{owned.size}/{ACHIEVEMENTS.length}</span>
+              Succès{" "}
+              <span className="hint">
+                {owned.size}/{ACHIEVEMENTS.length}
+              </span>
             </h3>
             <ul className="achievement-grid">
               {ACHIEVEMENTS.map((a) => {

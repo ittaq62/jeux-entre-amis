@@ -110,10 +110,13 @@ export function useRoom(code: string) {
                 mine?.ids.forEach((id, i) => {
                   const a = ACHIEVEMENT_BY_ID.get(id);
                   if (!a) return;
-                  setTimeout(() => {
-                    play("achievement");
-                    toast({ icon: a.icon, tone: "gold", title: `Succès débloqué : ${a.title}`, body: a.description, duration: 6000 });
-                  }, 1800 + i * 1400);
+                  setTimeout(
+                    () => {
+                      play("achievement");
+                      toast({ icon: a.icon, tone: "gold", title: `Succès débloqué : ${a.title}`, body: a.description, duration: 6000 });
+                    },
+                    1800 + i * 1400,
+                  );
                 });
                 break;
               }

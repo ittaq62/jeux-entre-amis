@@ -69,7 +69,11 @@ export function OnboardingPage() {
 
 function suggestPseudo(email: string): string {
   const base = email.split("@")[0] ?? "";
-  const clean = base.replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(" ")[0] ?? "";
+  const clean =
+    base
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .split(" ")[0] ?? "";
   if (clean.length < 3) return "";
   return (clean.charAt(0).toUpperCase() + clean.slice(1)).slice(0, PSEUDO_MAX);
 }

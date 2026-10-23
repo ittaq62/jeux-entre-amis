@@ -12,22 +12,22 @@ export function Logo({ size = 26, withName = true, withIcon = true }: { size?: n
   return (
     <span className="logo" style={{ fontSize: size }}>
       {withIcon && (
-      <svg viewBox="0 0 48 40" width={size * 1.45} height={size * 1.2} aria-hidden="true">
-        <g transform="translate(24 38)">
-          {[
-            [-22, COLOR_HEX.blue],
-            [-7, COLOR_HEX.green],
-            [8, COLOR_HEX.yellow],
-            [23, COLOR_HEX.red],
-          ].map(([angle, color]) => (
-            <g key={String(angle)} transform={`rotate(${angle}) translate(-8.5 -31)`}>
-              <rect width="17" height="25" rx="3" fill="#fbf5e6" />
-              <rect x="1.8" y="1.8" width="13.4" height="21.4" rx="2" fill={color as string} />
-            </g>
-          ))}
-          <circle cx="0" cy="-14" r="4.6" fill="#fbf5e6" stroke="#c9a14b" strokeWidth="0.8" transform="rotate(23) translate(0 -2)" />
-        </g>
-      </svg>
+        <svg viewBox="0 0 48 40" width={size * 1.45} height={size * 1.2} aria-hidden="true">
+          <g transform="translate(24 38)">
+            {[
+              [-22, COLOR_HEX.blue],
+              [-7, COLOR_HEX.green],
+              [8, COLOR_HEX.yellow],
+              [23, COLOR_HEX.red],
+            ].map(([angle, color]) => (
+              <g key={String(angle)} transform={`rotate(${angle}) translate(-8.5 -31)`}>
+                <rect width="17" height="25" rx="3" fill="#fbf5e6" />
+                <rect x="1.8" y="1.8" width="13.4" height="21.4" rx="2" fill={color as string} />
+              </g>
+            ))}
+            <circle cx="0" cy="-14" r="4.6" fill="#fbf5e6" stroke="#c9a14b" strokeWidth="0.8" transform="rotate(23) translate(0 -2)" />
+          </g>
+        </svg>
       )}
       {withName && <span className="logo-name">{APP_NAME}</span>}
     </span>
@@ -128,7 +128,17 @@ export function Toasts() {
   );
 }
 
-export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+export function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
   return (
     <button
       type="button"

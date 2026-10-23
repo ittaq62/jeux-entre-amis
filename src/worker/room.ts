@@ -39,7 +39,20 @@ import { random, randomSeed } from "../shared/rng.ts";
 import { recordGame } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
-const BOT_NAMES = ["Gaston", "Ginette", "Marcel", "Josiane", "Raymond", "Huguette", "Lucien", "Simone", "Bernard", "Paulette", "Roger", "Mireille"];
+const BOT_NAMES = [
+  "Gaston",
+  "Ginette",
+  "Marcel",
+  "Josiane",
+  "Raymond",
+  "Huguette",
+  "Lucien",
+  "Simone",
+  "Bernard",
+  "Paulette",
+  "Roger",
+  "Mireille",
+];
 const AWAY_AFTER_MS = 8000;
 const SEAT_RELEASE_MS = 25_000;
 const NEXT_ROUND_MS = 12_000;

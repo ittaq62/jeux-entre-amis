@@ -1161,7 +1161,9 @@
 }
 
 .place-1 .avatar {
-  box-shadow: 0 0 0 3px var(--gold), 0 0 30px var(--gold-glow);
+  box-shadow:
+    0 0 0 3px var(--gold),
+    0 0 30px var(--gold-glow);
 }
 
 .final-list {
@@ -1359,5 +1361,26 @@
 
   .fx-stamp {
     font-size: 17px;
+  }
+}
+
+/* Sur petit ecran, reactions et UNO rejoignent la barre de statut : la main a toute la largeur */
+.my-bar .my-side {
+  width: auto;
+  padding-bottom: 0;
+}
+
+.my-bar .my-status {
+  flex: 1;
+}
+
+@media (max-width: 720px), (max-height: 600px) {
+  .my-bar {
+    gap: 8px;
+    padding: 4px 10px;
+  }
+
+  .my-hand-row {
+    padding: 0 2px;
   }
 }

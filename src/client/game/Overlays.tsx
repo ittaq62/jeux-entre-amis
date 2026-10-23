@@ -41,7 +41,11 @@ export function RoundOver({ room, offset, onNext }: { room: RoomView; offset: nu
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={30} />}
                 <span className="score-name">{seat?.name}</span>
                 <span className="score-bar">
-                  <motion.span initial={{ width: 0 }} animate={{ width: `${(p.score / max) * 100}%` }} transition={{ duration: 0.8, delay: 0.2 }} />
+                  <motion.span
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(p.score / max) * 100}%` }}
+                    transition={{ duration: 0.8, delay: 0.2 }}
+                  />
                 </span>
                 <strong>{p.score}</strong>
               </li>
@@ -96,7 +100,12 @@ export function GameOver({
   const voted = room.rematch.includes(room.you.userId);
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <motion.div className="overlay-card panel gameover" initial={{ y: 40, scale: 0.94 }} animate={{ y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 24 }}>
+      <motion.div
+        className="overlay-card panel gameover"
+        initial={{ y: 40, scale: 0.94 }}
+        animate={{ y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 24 }}
+      >
         <p className="eyebrow">{won ? "Victoire !" : me ? "Partie terminée" : "Fin de partie"}</p>
         <h2>{won ? "Tu as gagné la partie 🎉" : `${seatOf(room, ranking[0] ?? "")?.name ?? "?"} gagne la partie`}</h2>
 
@@ -167,7 +176,11 @@ export function GameOver({
         </div>
         {room.rematch.length > 0 && (
           <p className="hint">
-            Revanche demandée par {room.rematch.map((uid) => room.seats.find((s) => s.userId === uid)?.name).filter(Boolean).join(", ")}
+            Revanche demandée par{" "}
+            {room.rematch
+              .map((uid) => room.seats.find((s) => s.userId === uid)?.name)
+              .filter(Boolean)
+              .join(", ")}
           </p>
         )}
       </motion.div>

@@ -117,7 +117,9 @@ export function HomePage() {
           <div className="feature-body">
             <p className="eyebrow">Jeu de cartes · 2 à 8 joueurs</p>
             <h2 className="feature-title">UNO</h2>
-            <p className="feature-desc">Classique ou No Mercy, règles maison à la carte, bots pour compléter la table. Pense à crier UNO… ou dénonce les étourdis.</p>
+            <p className="feature-desc">
+              Classique ou No Mercy, règles maison à la carte, bots pour compléter la table. Pense à crier UNO… ou dénonce les étourdis.
+            </p>
             <div className="feature-actions">
               <button className="btn btn-primary btn-lg" onClick={() => void quickMatch()} disabled={busy !== null}>
                 {busy === "quick" ? <span className="spinner" /> : <Icon name="zap" />} Partie rapide
@@ -130,7 +132,14 @@ export function HomePage() {
               <input
                 className="input"
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, ROOM_CODE_LENGTH))}
+                onChange={(e) =>
+                  setCode(
+                    e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z]/g, "")
+                      .slice(0, ROOM_CODE_LENGTH),
+                  )
+                }
                 placeholder="CODE"
                 aria-label="Code du salon"
                 autoCapitalize="characters"
@@ -185,7 +194,15 @@ export function HomePage() {
                         </span>
                         <span className="friend-text">
                           <strong>{f.user.pseudo}</strong>
-                          <span className="hint">{!isOnline ? "Hors ligne" : room ? (room.status === "playing" ? "En pleine partie" : "Dans un salon") : "En ligne"}</span>
+                          <span className="hint">
+                            {!isOnline
+                              ? "Hors ligne"
+                              : room
+                                ? room.status === "playing"
+                                  ? "En pleine partie"
+                                  : "Dans un salon"
+                                : "En ligne"}
+                          </span>
                         </span>
                       </Link>
                       {room && (

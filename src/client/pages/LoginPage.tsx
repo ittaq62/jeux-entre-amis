@@ -217,7 +217,10 @@ function CodeInput({
       />
       <div className="code-boxes" aria-hidden="true">
         {Array.from({ length: 6 }, (_, i) => (
-          <span key={i} className={`code-box ${focused && i === Math.min(value.length, 5) ? "is-active" : ""} ${value[i] ? "is-filled" : ""}`}>
+          <span
+            key={i}
+            className={`code-box ${focused && i === Math.min(value.length, 5) ? "is-active" : ""} ${value[i] ? "is-filled" : ""}`}
+          >
             {value[i] ?? ""}
           </span>
         ))}

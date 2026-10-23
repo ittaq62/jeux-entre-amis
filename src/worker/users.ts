@@ -215,7 +215,16 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
       .prepare(
         "INSERT INTO games (id, game, variant, room_code, settings, started_at, ended_at, rounds, player_count) VALUES (?, 'uno', ?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(gameId, rec.settings.variant, rec.roomCode, JSON.stringify(rec.settings), rec.startedAt, rec.endedAt, rec.rounds, rec.players.length),
+      .bind(
+        gameId,
+        rec.settings.variant,
+        rec.roomCode,
+        JSON.stringify(rec.settings),
+        rec.startedAt,
+        rec.endedAt,
+        rec.rounds,
+        rec.players.length,
+      ),
     ...rec.players.map((p) =>
       db
         .prepare("INSERT INTO game_players (game_id, seat, user_id, name, is_bot, rank, score, stats) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
@@ -308,14 +317,17 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
 
 export async function userProfile(db: D1Database, user: UserRow) {
   const [stats, achievements, recent] = await Promise.all([
-    db.prepare("SELECT played, won, rating, streak, best_streak, totals FROM user_stats WHERE user_id = ? AND game = 'uno'").bind(user.id).first<{
-      played: number;
-      won: number;
-      rating: number;
-      streak: number;
-      best_streak: number;
-      totals: string;
-    }>(),
+    db
+      .prepare("SELECT played, won, rating, streak, best_streak, totals FROM user_stats WHERE user_id = ? AND game = 'uno'")
+      .bind(user.id)
+      .first<{
+        played: number;
+        won: number;
+        rating: number;
+        streak: number;
+        best_streak: number;
+        totals: string;
+      }>(),
     db.prepare("SELECT achievement, unlocked_at FROM achievements WHERE user_id = ? ORDER BY unlocked_at DESC").bind(user.id).all<{
       achievement: string;
       unlocked_at: number;
@@ -369,8 +381,16 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
      WHERE s.game = 'uno' AND u.pseudo IS NOT NULL AND s.played > 0 ${friendFilter}
      ORDER BY s.rating DESC, s.won DESC LIMIT 100`,
   );
-  const { results } = await (scope === "friends" ? statement.bind(me) : statement)
-    .all<{ id: string; pseudo: string; avatar: string; photo_version: number; played: number; won: number; rating: number; best_streak: number }>();
+  const { results } = await (scope === "friends" ? statement.bind(me) : statement).all<{
+    id: string;
+    pseudo: string;
+    avatar: string;
+    photo_version: number;
+    played: number;
+    won: number;
+    rating: number;
+    best_streak: number;
+  }>();
   return results.map((r, i) => ({
     rank: i + 1,
     user: toPublic(r),

@@ -1,14 +1,4 @@
-import {
-  buildClassicDeck,
-  cardPoints,
-  COLORS,
-  drawValue,
-  isDrawCard,
-  isWild,
-  sameFace,
-  type Card,
-  type Color,
-} from "./cards.ts";
+import { buildClassicDeck, cardPoints, COLORS, drawValue, isDrawCard, isWild, sameFace, type Card, type Color } from "./cards.ts";
 import { buildNoMercyDeck, MERCY_BONUS, MERCY_LIMIT } from "./nomercy.ts";
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 
@@ -1001,7 +991,10 @@ function computeRanking(s: UnoState, winner: number): string[] {
   const eliminatedLast = (list: number[]) => {
     const alive = list.filter((i) => !s.players[i]!.eliminated);
     // Le premier elimine finit dernier
-    const dead = s.eliminationOrder.slice().reverse().filter((i) => list.includes(i));
+    const dead = s.eliminationOrder
+      .slice()
+      .reverse()
+      .filter((i) => list.includes(i));
     return alive.concat(dead);
   };
   if (mode === "ranking") {
