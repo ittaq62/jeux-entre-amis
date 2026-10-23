@@ -134,6 +134,20 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   const canDraw = myTurn && !g.rouletteVictim && !g.hasDrawn && !(rules.mustPlay && g.playable.length > 0 && g.pendingDraw === 0);
 
+  // Tic-tac pendant les 5 dernieres secondes de mon tour
+  useEffect(() => {
+    if (!myTurn || !room.turnDeadline || g.settings.turnSeconds === 0) return;
+    let last = -1;
+    const timer = setInterval(() => {
+      const left = Math.ceil((room.turnDeadline! - (Date.now() + serverOffset)) / 1000);
+      if (left <= 5 && left > 0 && left !== last) {
+        last = left;
+        play("tick", { volume: left <= 2 ? 1.3 : 1 });
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [myTurn, room.turnDeadline, serverOffset, g.settings.turnSeconds]);
+
   // Raccourcis clavier
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
