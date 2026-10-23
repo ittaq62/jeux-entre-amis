@@ -2,6 +2,8 @@
 export interface AvatarConfig {
   bg: number;
   skin: number;
+  hair: number;
+  hairColor: number;
   eyes: number;
   mouth: number;
   hat: number;
@@ -25,9 +27,13 @@ export const AVATAR_BACKGROUNDS = [
 
 export const AVATAR_SKINS = ["#ffdbb4", "#f1c27d", "#e0ac69", "#c68642", "#8d5524", "#5c3a1e", "#a5d6a7", "#b39ddb"];
 
+export const AVATAR_HAIR_COLORS = ["#1f1a17", "#4a2e1e", "#8a3b1f", "#d9a74a", "#c8c2b8", "#e86aa6", "#4f7bd9"];
+
 export const AVATAR_PARTS = {
   bg: AVATAR_BACKGROUNDS.length,
   skin: AVATAR_SKINS.length,
+  hair: 8,
+  hairColor: AVATAR_HAIR_COLORS.length,
   eyes: 8,
   mouth: 8,
   hat: 9,
@@ -37,6 +43,8 @@ export const AVATAR_PARTS = {
 export const AVATAR_PART_LABELS: Record<keyof AvatarConfig, string> = {
   bg: "Fond",
   skin: "Teint",
+  hair: "Coiffure",
+  hairColor: "Couleur",
   eyes: "Yeux",
   mouth: "Bouche",
   hat: "Chapeau",
@@ -48,9 +56,11 @@ export function randomAvatar(rand: () => number = Math.random): AvatarConfig {
   return {
     bg: r(AVATAR_PARTS.bg),
     skin: r(6),
+    hair: rand() < 0.85 ? 1 + r(AVATAR_PARTS.hair - 1) : 0,
+    hairColor: rand() < 0.88 ? r(5) : 5 + r(2),
     eyes: r(AVATAR_PARTS.eyes),
     mouth: r(AVATAR_PARTS.mouth),
-    hat: rand() < 0.55 ? r(AVATAR_PARTS.hat) : 0,
+    hat: rand() < 0.3 ? r(AVATAR_PARTS.hat) : 0,
     extra: rand() < 0.4 ? r(AVATAR_PARTS.extra) : 0,
   };
 }
