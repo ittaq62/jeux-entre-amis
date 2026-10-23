@@ -19,8 +19,7 @@
     {
       "binding": "DB",
       "database_name": "jeux-entre-amis",
-      // Remplace par l'id affiche par `npx wrangler d1 create jeux-entre-amis`
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "90954a63-3798-432d-b625-b0a9f7a2e11d",
       "migrations_dir": "migrations"
     }
   ],
