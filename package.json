@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "npm run types && tsc -b",
-    "types": "wrangler types src/worker/worker-configuration.d.ts > /dev/null",
+    "types": "wrangler types src/worker/worker-configuration.d.ts",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "format": "prettier --write ."
