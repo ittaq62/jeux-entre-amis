@@ -146,18 +146,20 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </span>
             </h3>
             <ul className="achievement-grid">
-              {ACHIEVEMENTS.map((a) => {
-                const at = owned.get(a.id);
-                return (
-                  <li key={a.id} className={`achievement ${at ? "is-owned" : ""}`} title={a.description}>
-                    <span className="achievement-icon">{a.icon}</span>
-                    <span className="achievement-text">
-                      <strong>{a.title}</strong>
-                      <span className="hint">{a.description}</span>
-                    </span>
-                  </li>
-                );
-              })}
+              {[...ACHIEVEMENTS]
+                .sort((x, y) => Number(owned.has(y.id)) - Number(owned.has(x.id)))
+                .map((a) => {
+                  const at = owned.get(a.id);
+                  return (
+                    <li key={a.id} className={`achievement ${at ? "is-owned" : ""}`} title={a.description}>
+                      <span className="achievement-icon">{a.icon}</span>
+                      <span className="achievement-text">
+                        <strong>{a.title}</strong>
+                        <span className="hint">{a.description}</span>
+                      </span>
+                    </li>
+                  );
+                })}
             </ul>
           </section>
         </div>

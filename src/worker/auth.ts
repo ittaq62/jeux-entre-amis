@@ -49,7 +49,8 @@ export async function rateLimit(db: D1Database, key: string, limit: number, wind
 }
 
 function codeHash(env: Env, email: string, code: string) {
-  return sha256Hex(`${env.SESSION_PEPPER}:${email}:${code}`);
+  if (!env.SESSION_PEPPER) console.warn("SESSION_PEPPER n'est pas defini : ajoute-le avec `wrangler secret put SESSION_PEPPER`");
+  return sha256Hex(`${env.SESSION_PEPPER ?? "tablee"}:${email}:${code}`);
 }
 
 export type RequestCodeResult = { ok: true; devCode?: string } | { ok: false; status: number; error: string };
