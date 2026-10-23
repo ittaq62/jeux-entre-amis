@@ -35,7 +35,6 @@ export function FriendsPage() {
     try {
       const res = await api.post<{ result: string }>("/friends", { pseudo });
       toast({
-        icon: "👋",
         title:
           res.result === "accepted"
             ? `${pseudo} et toi êtes amis !`
@@ -78,27 +77,27 @@ export function FriendsPage() {
           <h1>Amis</h1>
         </div>
 
-        <section className="panel panel-pad">
+        <section>
           <form className="search-row" onSubmit={submit}>
             <Icon name="search" />
             <input
               className="input"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Chercher un pseudo…"
+              placeholder="Le pseudo d'un ami…"
               aria-label="Pseudo à ajouter"
             />
           </form>
           {results.length > 0 && (
-            <ul className="friend-list search-results">
+            <ul className="rows search-results">
               {results.map((u) => (
-                <li key={u.id} className="friend-row">
-                  <Link href={`/joueur/${encodeURIComponent(u.pseudo)}`} className="friend-who">
+                <li key={u.id} className="row">
+                  <Link href={`/joueur/${encodeURIComponent(u.pseudo)}`} className="row-who">
                     <Avatar avatar={u.avatar} userId={u.id} photo={u.photo} size={36} />
                     <strong>{u.pseudo}</strong>
                   </Link>
                   {known.has(u.id) ? (
-                    <span className="chip">déjà dans ta liste</span>
+                    <span className="tag">déjà dans ta liste</span>
                   ) : (
                     <button className="btn btn-sm btn-primary" onClick={() => void add(u.pseudo)}>
                       Ajouter
@@ -111,12 +110,12 @@ export function FriendsPage() {
         </section>
 
         {incoming.length > 0 && (
-          <section className="panel panel-pad">
-            <h3 className="section-title">Demandes reçues</h3>
-            <ul className="friend-list">
+          <section className="home-list">
+            <h2>Demandes reçues</h2>
+            <ul className="rows">
               {incoming.map((f) => (
-                <li key={f.user.id} className="friend-row">
-                  <span className="friend-who">
+                <li key={f.user.id} className="row">
+                  <span className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={38} />
                     <strong>{f.user.pseudo}</strong>
                   </span>
@@ -134,27 +133,27 @@ export function FriendsPage() {
           </section>
         )}
 
-        <section className="panel panel-pad">
-          <h3 className="section-title">
-            Mes amis <span className="hint">{accepted.length}</span>
-          </h3>
+        <section className="home-list">
+          <h2>
+            Mes amis <span className="hint num">{accepted.length}</span>
+          </h2>
           {accepted.length === 0 ? (
-            <p className="empty">Cherche le pseudo de tes amis ci-dessus pour les ajouter. Ils devront accepter ta demande.</p>
+            <p className="empty">Tape le pseudo d'un ami ci-dessus : il recevra ta demande et devra l'accepter.</p>
           ) : (
-            <ul className="friend-list">
+            <ul className="rows">
               {accepted.map((f) => {
                 const isOnline = f.user.id in online;
                 const room = online[f.user.id];
                 return (
-                  <li key={f.user.id} className="friend-row">
-                    <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="friend-who">
+                  <li key={f.user.id} className="row">
+                    <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                       <span className="avatar-wrap">
                         <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={40} />
                         <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
                       </span>
-                      <span className="friend-text">
+                      <span className="row-text">
                         <strong>{f.user.pseudo}</strong>
-                        <span className="hint">{!isOnline ? "Hors ligne" : room ? `Salon ${room.code}` : "En ligne"}</span>
+                        <span className="hint">{!isOnline ? "hors ligne" : room ? `à la table ${room.code}` : "en ligne"}</span>
                       </span>
                     </Link>
                     <span className="row-actions">
@@ -179,12 +178,12 @@ export function FriendsPage() {
         </section>
 
         {outgoing.length > 0 && (
-          <section className="panel panel-pad">
-            <h3 className="section-title">Demandes envoyées</h3>
-            <ul className="friend-list">
+          <section className="home-list">
+            <h2>Demandes envoyées</h2>
+            <ul className="rows">
               {outgoing.map((f) => (
-                <li key={f.user.id} className="friend-row">
-                  <span className="friend-who">
+                <li key={f.user.id} className="row">
+                  <span className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={34} />
                     <strong>{f.user.pseudo}</strong>
                   </span>

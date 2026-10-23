@@ -68,7 +68,6 @@ export const useHub = create<HubState>((set, get) => ({
                   const last = incoming[incoming.length - 1]!;
                   play("pop");
                   toast({
-                    icon: "👋",
                     title: `${last.user.pseudo} veut devenir ton ami`,
                     action: { label: "Voir", run: () => navigateTo("/amis") },
                   });
@@ -79,7 +78,6 @@ export const useHub = create<HubState>((set, get) => ({
           case "invite":
             play("join");
             toast({
-              icon: "🎴",
               tone: "gold",
               title: `${msg.from.pseudo} t'invite à jouer`,
               body: `Salon ${msg.code}`,

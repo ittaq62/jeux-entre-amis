@@ -5,8 +5,7 @@ import type { MeResponse } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { AvatarEditor } from "../components/AvatarEditor.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { Modal, Switch } from "../components/ui.tsx";
+import { Check, Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
@@ -51,7 +50,7 @@ export function AccountPage() {
     setError(null);
     try {
       apply(await api.patch<MeResponse>("/me", { pseudo, avatar }));
-      toast({ icon: "✨", title: "Profil enregistré" });
+      toast({ title: "Profil enregistré" });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Une erreur est survenue.");
     } finally {
@@ -63,7 +62,7 @@ export function AccountPage() {
     try {
       const blob = await toSquareWebp(file);
       apply(await api.put<MeResponse>("/me/photo", blob));
-      toast({ icon: "📸", title: "Photo mise à jour" });
+      toast({ title: "Photo mise à jour" });
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Cette image n'a pas pu être utilisée." });
     }
@@ -97,8 +96,8 @@ export function AccountPage() {
           </Link>
         </div>
 
-        <section className="panel panel-pad stack">
-          <h3 className="section-title">Profil</h3>
+        <section className="sheet paper">
+          <h2>Profil</h2>
           <label className="field">
             <span className="field-label">Pseudo</span>
             <input className="input" value={pseudo} maxLength={PSEUDO_MAX} onChange={(e) => setPseudo(e.target.value)} />
@@ -110,7 +109,7 @@ export function AccountPage() {
               <span className="hint">Facultative : elle remplace ton avatar dessiné.</span>
               <span className="row-actions">
                 <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
-                  <Icon name="camera" size={16} /> {user.photo ? "Changer" : "Ajouter une photo"}
+                  {user.photo ? "Changer de photo" : "Ajouter une photo"}
                 </button>
                 {user.photo > 0 && (
                   <button className="btn btn-sm btn-ghost" onClick={() => void removePhoto()}>
@@ -138,10 +137,10 @@ export function AccountPage() {
           </button>
         </section>
 
-        <section className="panel panel-pad stack">
-          <h3 className="section-title">Son et confort</h3>
+        <section className="sheet paper">
+          <h2>Son et confort</h2>
           <PrefRow label="Effets sonores" desc="Bruits de cartes, UNO, victoire…">
-            <Switch label="Effets sonores" checked={prefs.sound} onChange={(v) => prefs.set({ sound: v })} />
+            <Check label="Effets sonores" checked={prefs.sound} onChange={(v) => prefs.set({ sound: v })} />
           </PrefRow>
           <PrefRow label="Volume" desc={`${Math.round(prefs.volume * 100)} %`}>
             <input
@@ -156,26 +155,26 @@ export function AccountPage() {
               aria-label="Volume"
             />
           </PrefRow>
-          <PrefRow label="Vibrations" desc="Sur les téléphones qui le permettent (pas sur iPhone).">
-            <Switch label="Vibrations" checked={prefs.haptics} onChange={(v) => prefs.set({ haptics: v })} />
+          <PrefRow label="Vibrations" desc="Sur les téléphones Android ; l'iPhone ne le permet pas.">
+            <Check label="Vibrations" checked={prefs.haptics} onChange={(v) => prefs.set({ haptics: v })} />
           </PrefRow>
-          <PrefRow label="Symboles de couleur" desc="Ajoute ● ▲ ■ ◆ sur les cartes, pour les daltoniens.">
-            <Switch label="Symboles de couleur" checked={prefs.colorblind} onChange={(v) => prefs.set({ colorblind: v })} />
+          <PrefRow label="Symboles de couleur" desc="Un petit signe par couleur dans le coin des cartes, pour les daltoniens.">
+            <Check label="Symboles de couleur" checked={prefs.colorblind} onChange={(v) => prefs.set({ colorblind: v })} />
           </PrefRow>
           <PrefRow label="Effets réduits" desc="Pas de secousses ni de confettis.">
-            <Switch label="Effets réduits" checked={prefs.reducedEffects} onChange={(v) => prefs.set({ reducedEffects: v })} />
+            <Check label="Effets réduits" checked={prefs.reducedEffects} onChange={(v) => prefs.set({ reducedEffects: v })} />
           </PrefRow>
         </section>
 
-        <section className="panel panel-pad stack">
-          <h3 className="section-title">Compte</h3>
+        <section className="sheet paper">
+          <h2>Compte</h2>
           <p className="hint">Connecté avec {user.email}</p>
           <div className="row-actions">
             <button className="btn" onClick={() => void signOut()}>
-              <Icon name="logout" size={18} /> Me déconnecter
+              Me déconnecter
             </button>
             <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
-              <Icon name="trash" size={18} /> Supprimer mon compte
+              Supprimer mon compte
             </button>
           </div>
           <p className="hint">
@@ -207,11 +206,11 @@ export function AccountPage() {
 function PrefRow({ label, desc, children }: { label: string; desc: string; children: React.ReactNode }) {
   return (
     <div className="pref-row">
+      {children}
       <span>
         <strong>{label}</strong>
         <span className="hint">{desc}</span>
       </span>
-      {children}
     </div>
   );
 }

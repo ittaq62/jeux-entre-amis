@@ -3,7 +3,6 @@ import { Link } from "wouter";
 import type { PublicUser } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { Segmented } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { useSession } from "../stores/session.ts";
 
@@ -35,41 +34,45 @@ export function LeaderboardPage() {
       <main className="narrow">
         <div className="page-heading">
           <h1>Classement</h1>
-          <Segmented
-            value={scope}
-            onChange={setScope}
-            options={[
-              { value: "friends", label: "Entre amis" },
-              { value: "all", label: "Tout le monde" },
-            ]}
-          />
+          <div className="tabs" role="group" aria-label="Qui afficher">
+            <button aria-pressed={scope === "friends"} onClick={() => setScope("friends")}>
+              Entre amis
+            </button>
+            <button aria-pressed={scope === "all"} onClick={() => setScope("all")}>
+              Tout le monde
+            </button>
+          </div>
         </div>
-        <p className="hint">
-          Les points de classement montent quand tu bats des joueurs mieux classés que toi, et baissent dans le cas contraire.
+        <p className="hint" style={{ margin: 0, maxWidth: "60ch" }}>
+          Battre quelqu'un de mieux classé que soi rapporte beaucoup de points ; perdre contre lui en coûte peu.
         </p>
-        <section className="panel leaderboard">
+        <section className="board paper">
           {entries === null ? (
-            <div className="center-text" style={{ padding: 32 }}>
-              <span className="spinner" style={{ display: "inline-block" }} />
-            </div>
+            <p className="hint" style={{ padding: "18px 0" }}>
+              Chargement…
+            </p>
           ) : entries.length === 0 ? (
-            <p className="empty">Personne n'a encore joué. Lance une partie pour ouvrir le bal !</p>
+            <p className="empty" style={{ padding: "6px 0 14px" }}>
+              Personne n'a encore terminé de partie. La première victoire ouvrira le tableau.
+            </p>
           ) : (
-            <ol className="lb-list">
+            <ol className="rows" style={{ margin: 0 }}>
               {entries.map((e) => (
-                <li key={e.user.id} className={`lb-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top-${e.rank}` : ""}`}>
-                  <span className="lb-rank">{e.rank <= 3 ? ["🥇", "🥈", "🥉"][e.rank - 1] : e.rank}</span>
-                  <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="lb-who">
-                    <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={36} />
+                <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? "top" : ""}`}>
+                  <span className="board-rank num">{e.rank}</span>
+                  <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
+                    <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
                     <strong>{e.user.pseudo}</strong>
                   </Link>
-                  <span className="lb-stat">
-                    <strong>{e.rating}</strong>
-                    <span className="hint">pts</span>
+                  <span className="board-stat board-extra">
+                    <strong>
+                      {e.won} / {e.played}
+                    </strong>
+                    <span>victoires</span>
                   </span>
-                  <span className="lb-stat lb-extra">
-                    <strong>{e.won}</strong>
-                    <span className="hint">/{e.played} gagnées</span>
+                  <span className="board-stat">
+                    <strong>{e.rating}</strong>
+                    <span>points</span>
                   </span>
                 </li>
               ))}

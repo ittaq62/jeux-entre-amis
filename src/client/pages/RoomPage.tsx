@@ -33,8 +33,7 @@ export function RoomPage({ code }: { code: string }) {
   if (fatal) {
     return (
       <div className="felt center-screen">
-        <div className="panel panel-pad stack center-text" style={{ maxWidth: 420 }}>
-          <span style={{ fontSize: 42 }}>🃏</span>
+        <div className="paper paper-ruled paper-pad stack center-text" style={{ maxWidth: 420 }}>
           <h2>Oups</h2>
           <p className="hint">{fatal}</p>
           <Link href="/" className="btn btn-primary">

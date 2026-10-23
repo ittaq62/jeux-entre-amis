@@ -106,5 +106,5 @@ Largement suffisantes pour une bande d'amis :
 ## Crédits
 
 Les effets sonores viennent de [Kenney](https://kenney.nl) (domaine public, CC0) et de [Mixkit](https://mixkit.co) (licence libre
-Mixkit). UNO est une marque de Mattel : ce projet est un jeu amateur entre amis, sans lien avec Mattel, et ses cartes sont dessinées à la
+Mixkit). Polices : Young Serif, Libre Franklin et Big Shoulders (licence OFL). UNO est une marque de Mattel : ce projet est un jeu amateur entre amis, sans lien avec Mattel, et ses cartes sont dessinées à la
 main.

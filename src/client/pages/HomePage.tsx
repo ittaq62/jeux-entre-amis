@@ -6,19 +6,19 @@ import type { Card } from "../../shared/games/uno/cards.ts";
 import type { RoomSummary, Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { CardBack, CardFace } from "../components/Card.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 import { useSession } from "../stores/session.ts";
 
-const HERO_CARDS: Card[] = [
-  { id: 1, kind: "number", color: "blue", value: 9 },
-  { id: 2, kind: "skip", color: "green" },
-  { id: 3, kind: "wild4", color: null },
-  { id: 4, kind: "draw2", color: "red" },
+// Quelques cartes posees sur le feutre, a cote de la fiche du jeu
+const TABLE_CARDS: { card: Card; x: number; y: number; r: number }[] = [
+  { card: { id: 1, kind: "number", color: "blue", value: 9 }, x: 0, y: 26, r: -14 },
+  { card: { id: 2, kind: "skip", color: "green" }, x: 62, y: 4, r: -4 },
+  { card: { id: 3, kind: "wild4", color: null }, x: 128, y: 18, r: 7 },
+  { card: { id: 4, kind: "draw2", color: "red" }, x: 70, y: 112, r: 19 },
 ];
 
 function greeting() {
@@ -61,7 +61,7 @@ export function HomePage() {
       const res = await api.post<{ code: string }>("/rooms", { visibility });
       navigate(`/salon/${res.code}`);
     } catch (err) {
-      toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible de créer le salon." });
+      toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible d'ouvrir la table." });
       setBusy(null);
     }
   }
@@ -69,13 +69,13 @@ export function HomePage() {
   async function join(e: FormEvent) {
     e.preventDefault();
     const value = code.trim().toUpperCase();
-    if (!isRoomCode(value)) return toast({ tone: "danger", title: "Un code de salon fait 4 lettres." });
+    if (!isRoomCode(value)) return toast({ tone: "danger", title: "Un code de table fait 4 lettres." });
     setBusy("join");
     try {
       await api.get(`/rooms/${value}`);
       navigate(`/salon/${value}`);
     } catch (err) {
-      toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Salon introuvable." });
+      toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Table introuvable." });
       setBusy(null);
     }
   }
@@ -87,81 +87,76 @@ export function HomePage() {
     <div className="felt page">
       <AppHeader />
       <main className="home">
-        <section className="home-hero">
-          <p className="eyebrow">
-            {greeting()}, {user.pseudo}
-          </p>
-          <h1>On joue à quoi ce soir&nbsp;?</h1>
-        </section>
+        <h1 className="home-greeting">
+          {greeting()}, {user.pseudo}.
+        </h1>
 
-        <section className="feature panel">
-          <div className="feature-art" aria-hidden="true">
-            <div className="feature-fan">
-              {HERO_CARDS.map((card, i) => (
-                <motion.div
-                  key={card.id}
-                  className="feature-card"
-                  initial={{ rotate: 0, y: 30, opacity: 0 }}
-                  animate={{ rotate: (i - 1.5) * 13, y: Math.abs(i - 1.5) * 9, opacity: 1 }}
-                  transition={{ delay: 0.1 + i * 0.06, type: "spring", stiffness: 160, damping: 15 }}
-                  whileHover={{ y: -14 }}
-                >
-                  <CardFace card={card} width={104} />
-                </motion.div>
-              ))}
-            </div>
-            <div className="feature-deck">
-              <CardBack width={70} />
-            </div>
-          </div>
-          <div className="feature-body">
-            <p className="eyebrow">Jeu de cartes · 2 à 8 joueurs</p>
-            <h2 className="feature-title">UNO</h2>
-            <p className="feature-desc">
-              Classique ou No Mercy, règles maison à la carte, bots pour compléter la table. Pense à crier UNO… ou dénonce les étourdis.
-            </p>
-            <div className="feature-actions">
+        <section className="home-game" aria-label="UNO">
+          <div className="game-sheet paper paper-ruled">
+            <h2 className="game-name">UNO</h2>
+            <p className="game-desc">Classique ou No Mercy, de 2 à 8 joueurs. S'il manque du monde, des bots complètent la table.</p>
+            <div className="game-actions">
               <button className="btn btn-primary btn-lg" onClick={() => void quickMatch()} disabled={busy !== null}>
-                {busy === "quick" ? <span className="spinner" /> : <Icon name="zap" />} Partie rapide
+                {busy === "quick" && <span className="spinner" />} Partie rapide
               </button>
               <button className="btn btn-lg" onClick={() => setCreateOpen(true)} disabled={busy !== null}>
-                <Icon name="plus" /> Créer un salon
+                Ouvrir une table
               </button>
             </div>
             <form className="join-code" onSubmit={join}>
-              <input
-                className="input"
-                value={code}
-                onChange={(e) =>
-                  setCode(
-                    e.target.value
-                      .toUpperCase()
-                      .replace(/[^A-Z]/g, "")
-                      .slice(0, ROOM_CODE_LENGTH),
-                  )
-                }
-                placeholder="CODE"
-                aria-label="Code du salon"
-                autoCapitalize="characters"
-                spellCheck={false}
-              />
-              <button className="btn" disabled={code.length !== ROOM_CODE_LENGTH || busy !== null}>
-                Rejoindre
-              </button>
+              <label className="join-label" htmlFor="join-code">
+                Un ami t'a donné un code ?
+              </label>
+              <div className="join-row">
+                <input
+                  id="join-code"
+                  className="input join-input"
+                  value={code}
+                  onChange={(e) =>
+                    setCode(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z]/g, "")
+                        .slice(0, ROOM_CODE_LENGTH),
+                    )
+                  }
+                  placeholder="ABCD"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button className="btn" disabled={code.length !== ROOM_CODE_LENGTH || busy !== null}>
+                  Rejoindre
+                </button>
+              </div>
             </form>
+          </div>
+
+          <div className="table-scatter" aria-hidden="true">
+            {TABLE_CARDS.map(({ card, x, y, r }, i) => (
+              <motion.div
+                key={card.id}
+                className="scatter-card"
+                style={{ left: x, top: y }}
+                initial={{ opacity: 0, y: -18, rotate: r - 10 }}
+                animate={{ opacity: 1, y: 0, rotate: r }}
+                transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
+              >
+                <CardFace card={card} width={96} />
+              </motion.div>
+            ))}
           </div>
         </section>
 
-        <div className="home-grid">
-          <section className="panel panel-pad">
-            <div className="section-head">
-              <h3>Salons publics</h3>
-              <span className="chip">{lobby.length}</span>
-            </div>
+        <div className="home-columns">
+          <section className="home-list">
+            <h2>Tables ouvertes</h2>
             {lobby.length === 0 ? (
-              <p className="empty">Aucun salon public pour l'instant. Lance une partie rapide : les prochains arrivés te rejoindront.</p>
+              <p className="empty">
+                Personne n'attend pour l'instant. Lance une partie rapide : les prochains arrivés s'assoiront avec toi.
+              </p>
             ) : (
-              <ul className="room-list">
+              <ul className="rows">
                 {lobby.map((room) => (
                   <RoomRow key={room.code} room={room} />
                 ))}
@@ -169,39 +164,39 @@ export function HomePage() {
             )}
           </section>
 
-          <section className="panel panel-pad">
-            <div className="section-head">
-              <h3>Amis</h3>
-              <Link href="/amis" className="btn btn-sm btn-ghost">
-                Gérer
+          <section className="home-list">
+            <h2>
+              Tes amis{" "}
+              <Link href="/amis" className="heading-link">
+                gérer
               </Link>
-            </div>
+            </h2>
             {sortedFriends.length === 0 ? (
               <p className="empty">
-                Ajoute tes amis par leur pseudo pour les voir en ligne et les inviter. <Link href="/amis">Ajouter des amis</Link>
+                Pas encore d'amis ici. <Link href="/amis">Cherche leur pseudo</Link> pour les voir en ligne et les inviter.
               </p>
             ) : (
-              <ul className="friend-list">
+              <ul className="rows">
                 {sortedFriends.slice(0, 8).map((f) => {
                   const isOnline = f.user.id in online;
                   const room = online[f.user.id];
                   return (
-                    <li key={f.user.id} className="friend-row">
-                      <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="friend-who">
+                    <li key={f.user.id} className="row">
+                      <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                         <span className="avatar-wrap">
-                          <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={38} />
+                          <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={36} />
                           <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
                         </span>
-                        <span className="friend-text">
+                        <span className="row-text">
                           <strong>{f.user.pseudo}</strong>
                           <span className="hint">
                             {!isOnline
-                              ? "Hors ligne"
+                              ? "hors ligne"
                               : room
                                 ? room.status === "playing"
-                                  ? "En pleine partie"
-                                  : "Dans un salon"
-                                : "En ligne"}
+                                  ? "en pleine partie"
+                                  : "à une table"
+                                : "en ligne"}
                           </span>
                         </span>
                       </Link>
@@ -217,27 +212,17 @@ export function HomePage() {
             )}
           </section>
         </div>
-
-        <section className="coming-soon">
-          <span className="coming-soon-icon">🗺️</span>
-          <div>
-            <strong>Bientôt sur la table</strong>
-            <p className="hint">Un jeu de plateau de conquête, à jouer en plusieurs soirées.</p>
-          </div>
-        </section>
       </main>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nouveau salon">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Ouvrir une table">
         <div className="create-options">
           <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
-            <Icon name="lock" size={26} />
-            <strong>Privé</strong>
-            <span className="hint">Seuls ceux qui ont le code ou le lien peuvent entrer. Idéal entre amis.</span>
+            <strong>Entre amis</strong>
+            <span>Seuls ceux qui ont le code ou le lien peuvent s'asseoir.</span>
           </button>
           <button className="create-option" onClick={() => void createRoom("public")} disabled={busy !== null}>
-            <Icon name="globe" size={26} />
-            <strong>Public</strong>
-            <span className="hint">Visible dans la liste des salons : n'importe quel joueur peut s'asseoir.</span>
+            <strong>Ouverte à tous</strong>
+            <span>La table apparaît dans la liste : n'importe quel joueur peut venir.</span>
           </button>
         </div>
       </Modal>
@@ -248,17 +233,17 @@ export function HomePage() {
 function RoomRow({ room }: { room: RoomSummary }) {
   const seats = room.humans + room.bots;
   return (
-    <li className="room-row">
-      <div className="room-code-mini">{room.code}</div>
-      <div className="room-info">
+    <li className="row">
+      <span className="room-code">{room.code}</span>
+      <span className="row-text">
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>
         <span className="hint">
-          {room.variant === "nomercy" ? "No Mercy" : "Classique"} · {seats}/{room.maxPlayers} joueurs
-          {room.status === "playing" ? " · en cours" : ""}
+          {room.variant === "nomercy" ? "No Mercy" : "classique"}, {seats} sur {room.maxPlayers}
+          {room.status === "playing" ? ", partie en cours" : ""}
         </span>
-      </div>
+      </span>
       <Link href={`/salon/${room.code}`} className="btn btn-sm">
-        {room.status === "playing" ? "Regarder" : "Rejoindre"}
+        {room.status === "playing" ? "Regarder" : "S'asseoir"}
       </Link>
     </li>
   );

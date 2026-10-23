@@ -4,7 +4,7 @@ import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import type { PublicUser } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { Chip } from "../components/Chip.tsx";
 import { Loading, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -67,7 +67,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   async function addFriend() {
     try {
       const res = await api.post<{ result: string }>("/friends", { pseudo: user.pseudo });
-      toast({ icon: "👋", title: res.result === "accepted" ? `Vous êtes maintenant amis !` : "Demande d'ami envoyée" });
+      toast({ title: res.result === "accepted" ? "Vous êtes maintenant amis" : "Demande d'ami envoyée" });
       await refreshFriends();
       void load();
     } catch (err) {
@@ -75,109 +75,105 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
     }
   }
 
+  const since = new Date(profile.memberSince).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const sortedAchievements = [...ACHIEVEMENTS].sort((x, y) => Number(owned.has(y.id)) - Number(owned.has(x.id)));
+
   return (
     <div className="felt page">
       <AppHeader />
       <main className="profile">
-        <section className="profile-head panel panel-pad">
-          <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={96} />
+        <section className="profile-head">
+          <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={88} />
           <div className="profile-id">
             <h1>{user.pseudo}</h1>
-            <p className="hint">
-              À la table depuis {new Date(profile.memberSince).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            <p>
+              À la table depuis {since}
+              {stats.played > 0 && <>, {stats.rating} points au classement</>}
+              {stats.streak >= 2 && <>, {stats.streak} victoires d'affilée en ce moment</>}.
             </p>
-            <div className="profile-chips">
-              <span className="chip chip-gold">
-                <Icon name="trophy" size={13} /> {stats.rating} pts de classement
-              </span>
-              {stats.streak >= 2 && <span className="chip">🔥 {stats.streak} victoires d'affilée</span>}
-            </div>
           </div>
-          <div className="profile-actions">
+          <div className="row-actions">
             {profile.friendship === "self" && (
               <Link href="/compte" className="btn">
-                <Icon name="settings" size={18} /> Modifier
+                Modifier mon profil
               </Link>
             )}
             {profile.friendship === "none" && (
               <button className="btn btn-primary" onClick={() => void addFriend()}>
-                <Icon name="plus" size={18} /> Ajouter en ami
+                Ajouter en ami
               </button>
             )}
             {profile.friendship === "incoming" && (
               <button className="btn btn-primary" onClick={() => void addFriend()}>
-                Accepter la demande
+                Accepter sa demande
               </button>
             )}
-            {profile.friendship === "outgoing" && <span className="chip">Demande envoyée</span>}
-            {profile.friendship === "accepted" && <span className="chip chip-green">Ami</span>}
+            {profile.friendship === "outgoing" && <span className="tag">Demande envoyée</span>}
+            {profile.friendship === "accepted" && <span className="tag tag-strong">Ami</span>}
           </div>
         </section>
 
-        <section className="stat-tiles">
-          <StatTile label="Parties" value={stats.played} />
-          <StatTile label="Victoires" value={stats.won} />
-          <StatTile label="Taux de victoire" value={`${rate} %`} />
-          <StatTile label="Série record" value={stats.bestStreak} />
-        </section>
-
         <div className="profile-grid">
-          <section className="panel panel-pad">
-            <h3 className="section-title">Le détail</h3>
-            <dl className="stat-list">
-              <StatRow label="Cartes posées" value={t.played} />
-              <StatRow label="Cartes piochées" value={t.drawn} />
-              <StatRow label="Cartes infligées avec des « + »" value={t.plusGiven} />
-              <StatRow label="Cartes encaissées en pénalité" value={t.penaltyCards} />
-              <StatRow label="Plus grosse main" value={t.maxHand} />
-              <StatRow label="Plus grosse pile encaissée" value={t.biggestStackTaken} />
-              <StatRow label="UNO criés" value={t.unoCalls} />
-              <StatRow label="Oublis dénoncés" value={t.caughtOthers} />
-              <StatRow label="Pris la main dans le sac" value={t.gotCaught} />
-              <StatRow label="Bluffs démasqués" value={t.challengesWon} />
+          <section className="carnet paper">
+            <h2>Le carnet</h2>
+            <p className="carnet-summary">
+              {stats.played === 0
+                ? "Aucune partie jouée pour l'instant."
+                : `${stats.played} partie${stats.played > 1 ? "s" : ""}, ${stats.won} gagnée${stats.won > 1 ? "s" : ""} (${rate} %).`}
+            </p>
+            <dl className="ledger">
+              <LedgerRow label="Meilleure série" value={stats.bestStreak} strong />
+              <LedgerRow label="Cartes posées" value={t.played} />
+              <LedgerRow label="Cartes piochées" value={t.drawn} />
+              <LedgerRow label="Pénalités infligées" value={t.plusGiven} />
+              <LedgerRow label="Pénalités encaissées" value={t.penaltyCards} />
+              <LedgerRow label="Plus grosse main" value={t.maxHand} />
+              <LedgerRow label="Plus grosse pile ramassée" value={t.biggestStackTaken} />
+              <LedgerRow label="UNO criés" value={t.unoCalls} />
+              <LedgerRow label="Étourdis dénoncés" value={t.caughtOthers} />
+              <LedgerRow label="Fois pris sans UNO" value={t.gotCaught} />
+              <LedgerRow label="Bluffs démasqués" value={t.challengesWon} />
             </dl>
           </section>
 
-          <section className="panel panel-pad">
-            <h3 className="section-title">
+          <section className="achievements">
+            <h2>
               Succès{" "}
-              <span className="hint">
-                {owned.size}/{ACHIEVEMENTS.length}
+              <span className="hint num">
+                {owned.size} sur {ACHIEVEMENTS.length}
               </span>
-            </h3>
+            </h2>
             <ul className="achievement-grid">
-              {[...ACHIEVEMENTS]
-                .sort((x, y) => Number(owned.has(y.id)) - Number(owned.has(x.id)))
-                .map((a) => {
-                  const at = owned.get(a.id);
-                  return (
-                    <li key={a.id} className={`achievement ${at ? "is-owned" : ""}`} title={a.description}>
-                      <span className="achievement-icon">{a.icon}</span>
-                      <span className="achievement-text">
-                        <strong>{a.title}</strong>
-                        <span className="hint">{a.description}</span>
-                      </span>
-                    </li>
-                  );
-                })}
+              {sortedAchievements.map((a) => {
+                const at = owned.get(a.id);
+                return (
+                  <li key={a.id} className={`achievement ${at ? "is-owned" : ""}`}>
+                    <Chip label={a.chip} tone={a.tone} size={46} muted={!at} title={a.title} />
+                    <span className="achievement-text">
+                      <strong>{a.title}</strong>
+                      <span>{a.description}</span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </div>
 
-        <section className="panel panel-pad">
-          <h3 className="section-title">Dernières parties</h3>
+        <section className="history">
+          <h2>Dernières parties</h2>
           {profile.recent.length === 0 ? (
-            <p className="empty">Aucune partie pour l'instant.</p>
+            <p className="empty">Pas encore de partie terminée.</p>
           ) : (
-            <ul className="history">
+            <ul className="rows">
               {profile.recent.map((g) => (
-                <li key={g.id} className={`history-row ${g.rank === 1 ? "is-win" : ""}`}>
-                  <span className="history-rank">{g.rank === 1 ? "🏆" : `${g.rank}e`}</span>
-                  <span className="history-main">
+                <li key={g.id} className={`row ${g.rank === 1 ? "is-win" : ""}`}>
+                  <span className="history-rank num">{g.rank}</span>
+                  <span className="row-text">
                     <strong>
-                      {g.variant === "nomercy" ? "No Mercy" : "Classique"} · {g.players} joueurs
+                      {g.rank === 1 ? "Victoire" : `${g.rank}e sur ${g.players}`}, {g.variant === "nomercy" ? "No Mercy" : "classique"}
                     </strong>
-                    <span className="hint">{g.table.map((p) => `${p.name}${p.bot ? " 🤖" : ""}`).join(" · ")}</span>
+                    <span className="hint">{g.table.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ")}</span>
                   </span>
                   <span className="hint">{timeAgo(g.endedAt)}</span>
                 </li>
@@ -190,18 +186,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number | string }) {
+function LedgerRow({ label, value, strong }: { label: string; value: number | undefined; strong?: boolean }) {
   return (
-    <div className="stat-tile panel">
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-    </div>
-  );
-}
-
-function StatRow({ label, value }: { label: string; value: number | undefined }) {
-  return (
-    <div className="stat-row">
+    <div className={`ledger-row ${strong ? "is-key" : ""}`}>
       <dt>{label}</dt>
       <dd>{value ?? 0}</dd>
     </div>

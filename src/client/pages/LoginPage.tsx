@@ -110,12 +110,12 @@ export function LoginPage() {
           <p className="login-tagline">{APP_TAGLINE}</p>
         </div>
 
-        <div className="panel panel-pad login-panel">
+        <div className="paper paper-ruled login-panel">
           {step === "email" ? (
             <form onSubmit={sendCode} className="stack">
               <div>
                 <h2>Connexion</h2>
-                <p className="hint">Pas de mot de passe : on t'envoie un code par email.</p>
+                <p className="hint">Pas de mot de passe : tu reçois un code par email.</p>
               </div>
               <label className="field">
                 <span className="field-label">Ton adresse email</span>
@@ -145,9 +145,9 @@ export function LoginPage() {
               }}
             >
               <div>
-                <h2>Vérifie tes emails</h2>
+                <h2>Regarde tes emails</h2>
                 <p className="hint">
-                  Code envoyé à <strong className="text-ink">{email}</strong>. Pense à regarder dans les spams.
+                  On a envoyé un code à <strong>{email}</strong>. S'il n'arrive pas, regarde dans les spams.
                 </p>
               </div>
               <CodeInput
@@ -161,7 +161,7 @@ export function LoginPage() {
               />
               {devCode && (
                 <button type="button" className="dev-code" onClick={() => void verify(devCode).then(() => setCode(devCode))}>
-                  Mode développement : code <strong>{devCode}</strong> (cliquer pour l'utiliser)
+                  Développement : code <strong>{devCode}</strong>, touche pour l'utiliser
                 </button>
               )}
               {error && <p className="error-text">{error}</p>}

@@ -38,12 +38,11 @@ export function OnboardingPage() {
   return (
     <div className="felt onboarding">
       <form className="onboarding-box" onSubmit={submit}>
-        <Logo size={24} />
-        <div className="panel panel-pad stack">
+        <Logo size={26} />
+        <div className="paper paper-ruled paper-pad stack">
           <div>
-            <p className="eyebrow">Bienvenue à table</p>
-            <h2>Qui es-tu ?</h2>
-            <p className="hint">Choisis ton pseudo et compose ta tête. Tu pourras tout changer plus tard.</p>
+            <h2>Bienvenue à table</h2>
+            <p className="hint">Choisis ton pseudo et compose ton portrait. Tout se change plus tard.</p>
           </div>
           <label className="field">
             <span className="field-label">Pseudo</span>
@@ -59,7 +58,7 @@ export function OnboardingPage() {
           <AvatarEditor value={avatar} onChange={setAvatar} />
           {error && <p className="error-text">{error}</p>}
           <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
-            {busy ? <span className="spinner" /> : "C'est parti !"}
+            {busy ? <span className="spinner" /> : "M'asseoir à la table"}
           </button>
         </div>
       </form>
