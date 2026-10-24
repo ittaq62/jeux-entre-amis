@@ -18,7 +18,7 @@ import { MiniBoard, miniEffects } from "./MiniBoard.tsx";
 import { OwnBoard, type OwnBoardHandle } from "./OwnBoard.tsx";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { SHOWN_ROWS } from "./draw.ts";
-import type { BricksListeners } from "./useBricksRoom.ts";
+import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -117,9 +117,8 @@ export function BricksTable({
             setTrails((prev) => [...prev.slice(-6), { id, from, to, lines: f.lines }]);
             setTimeout(() => setTrails((prev) => prev.filter((t) => t.id !== id)), 700);
           }
-          if (f.from === meId) play("brickAttack", { volume: 0.55 });
         } else if (f.type === "ko" && f.id !== meId) {
-          play("brickKo", { volume: 0.45 });
+          play("brickKo", { volume: 0.5 });
           const fxm = miniEffects.get(f.id);
           if (fxm) fxm.shake = 1;
         }
@@ -157,7 +156,7 @@ export function BricksTable({
           <span className="table-code">{room.code}</span>
           <span className="hint">Briques, {modeLabel}</span>
         </div>
-        <RoundHud room={room} serverOffset={serverOffset} me={me} />
+        <RoundHud room={room} serverOffset={serverOffset} meId={meId} />
         <div className="table-top-actions">
           <button
             className="btn btn-ghost btn-icon"
@@ -211,46 +210,29 @@ export function BricksTable({
             {rivals.length > 0 && (
               <section className="bricks-rivals" aria-label="Adversaires">
                 <div className="rivals-grid">
-                  {rivals.map((p) => {
-                    const isEnemy = enemies.includes(p);
-                    return (
-                      <MiniBoard
-                        key={p.id}
-                        player={p}
-                        seat={seat(p.id)}
-                        cell={rivalCell}
-                        serverOffset={serverOffset}
-                        targeted={isEnemy && me.target === p.id && enemies.length > 1}
-                        threat={isEnemy && p.target === me.id && enemies.length > 1}
-                        teamLabel={p.team !== null ? (p.team === me.team ? "équipier" : BRICK_TEAMS[p.team]) : undefined}
-                        compact={phone}
-                        onPick={
-                          isEnemy && enemies.length > 1 && p.alive
-                            ? () => send({ t: "strategy", strategy: "manual", target: p.id })
-                            : undefined
-                        }
-                      />
-                    );
-                  })}
-                </div>
-                {enemies.length > 1 && me.alive && (
-                  <div className="strategy-pick">
-                    {!phone && <span className="field-label">Tes attaques vont</span>}
-                    <Options<TargetStrategy>
-                      label="Cible des attaques"
-                      value={me.strategy}
-                      onChange={(strategy) => send({ t: "strategy", strategy })}
-                      options={STRATEGIES}
+                  {rivals.map((p) => (
+                    <MiniBoard
+                      key={p.id}
+                      initial={p}
+                      meId={me.id}
+                      seat={seat(p.id)}
+                      cell={rivalCell}
+                      serverOffset={serverOffset}
+                      pickable={enemies.includes(p) && enemies.length > 1}
+                      teamLabel={p.team !== null ? (p.team === me.team ? "équipier" : BRICK_TEAMS[p.team]) : undefined}
+                      compact={phone}
+                      onPick={() => send({ t: "strategy", strategy: "manual", target: p.id })}
                     />
-                  </div>
-                )}
+                  ))}
+                </div>
+                {enemies.length > 1 && <StrategyPick meId={me.id} phone={phone} send={send} />}
               </section>
             )}
             <section className="bricks-me" aria-label="Ton plateau">
               <OwnBoard
                 ref={own}
                 room={room}
-                me={me}
+                meId={me.id}
                 cell={cell}
                 phone={phone}
                 serverOffset={serverOffset}
@@ -266,12 +248,12 @@ export function BricksTable({
             {g.players.map((p) => (
               <MiniBoard
                 key={p.id}
-                player={p}
+                initial={p}
+                meId={null}
                 seat={seat(p.id)}
                 cell={spectatorCell}
                 serverOffset={serverOffset}
-                targeted={false}
-                threat={false}
+                pickable={false}
               />
             ))}
           </section>
@@ -359,9 +341,28 @@ export function BricksTable({
   );
 }
 
+/** Le choix de la cible des attaques, en mêlée */
+function StrategyPick({ meId, phone, send }: { meId: string; phone: boolean; send: (msg: BricksClientMessage) => void }) {
+  const strategy = useBoards((s) => s.players[meId]?.strategy ?? "random");
+  const alive = useBoards((s) => s.players[meId]?.alive ?? true);
+  if (!alive) return null;
+  return (
+    <div className="strategy-pick">
+      {!phone && <span className="field-label">Tes attaques vont</span>}
+      <Options<TargetStrategy>
+        label="Cible des attaques"
+        value={strategy}
+        onChange={(next) => send({ t: "strategy", strategy: next })}
+        options={STRATEGIES}
+      />
+    </div>
+  );
+}
+
 /** Chrono de la manche, marée montante, score de la série */
-function RoundHud({ room, serverOffset, me }: { room: BricksRoomView; serverOffset: number; me: BricksPlayerView | undefined }) {
+function RoundHud({ room, serverOffset, meId }: { room: BricksRoomView; serverOffset: number; meId: string | null }) {
   const g = room.bricks!;
+  const me = useBoards((s) => (meId ? s.players[meId] : undefined));
   const [now, setNow] = useState(() => Date.now() + serverOffset);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() + serverOffset), 200);
@@ -374,7 +375,8 @@ function RoundHud({ room, serverOffset, me }: { room: BricksRoomView; serverOffs
     const ms = me?.sprintTime ?? (r.phase === "playing" ? Math.max(0, now - r.startAt) : 0);
     clock = `${(ms / 1000).toFixed(1)} s · ${Math.min(40, me?.lines ?? 0)}/40`;
   } else if (r.endAt) {
-    const left = Math.max(0, Math.ceil((r.endAt - Math.max(now, r.startAt)) / 1000));
+    // Manche finie : le chrono affiche 0:00 tout de suite, sans attendre son prochain battement
+    const left = r.phase === "over" ? 0 : Math.max(0, Math.ceil((r.endAt - Math.max(now, r.startAt)) / 1000));
     clock = formatClock(left);
     urgent = left <= 15 && r.phase === "playing";
   } else if (r.tideAt) {

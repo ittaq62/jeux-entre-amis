@@ -4,30 +4,37 @@ import type { BricksPlayerView } from "../../shared/games/bricks/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
 import { AwayNote } from "../game/AwayNote.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { boardSize, drawBoard, Effects } from "./draw.ts";
-import { useLive } from "./useBricksRoom.ts";
+import { BoardRenderer, boardSize, Effects } from "./draw.ts";
+import { useBoards, useLive } from "./useBricksRoom.ts";
 
 /** Effets des petits plateaux, pour que la table y fasse éclater les lignes des autres */
 export const miniEffects = new Map<string, Effects>();
 
 interface Props {
-  player: BricksPlayerView;
+  /** Son plateau tel que donné par la table ; la suite arrive pose après pose dans useBoards */
+  initial: BricksPlayerView;
+  /** Le joueur qui regarde (null pour un spectateur) */
+  meId: string | null;
   seat: SeatView | undefined;
   cell: number;
   serverOffset: number;
-  /** Je l'attaque en ce moment */
-  targeted: boolean;
-  /** Il m'attaque en ce moment (sa cible, c'est moi) */
-  threat: boolean;
+  /** Un adversaire qu'on peut viser (en mêlée) */
+  pickable: boolean;
   teamLabel?: string;
   onPick?: () => void;
   compact?: boolean;
 }
 
 /** Le plateau d'un adversaire, en petit : sa pile, sa pièce en vol, ses lignes grises en attente. */
-export function MiniBoard({ player, seat, cell, serverOffset, targeted, threat, teamLabel, onPick, compact }: Props) {
+export function MiniBoard({ initial, meId, seat, cell, serverOffset, pickable, teamLabel, onPick, compact }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const player = useBoards((s) => s.players[initial.id]) ?? initial;
+  // Ma cible du moment, pour entourer son plateau (une valeur simple : pas de redessin à chaque pose)
+  const myTarget = useBoards((s) => (meId ? (s.players[meId]?.target ?? null) : null));
+  const targeted = pickable && myTarget === player.id;
+  const threat = pickable && meId !== null && player.target === meId;
   const live = useLive((s) => s.pieces[player.id] ?? null);
+  const renderer = useRef<BoardRenderer | null>(null);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const { width, height } = boardSize(cell);
   const fx = useRef<Effects>(miniEffects.get(player.id) ?? new Effects());
@@ -39,6 +46,8 @@ export function MiniBoard({ player, seat, cell, serverOffset, targeted, threat, 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
+    if (!renderer.current) renderer.current = new BoardRenderer(ctx, cell, dpr);
+    const r = renderer.current;
     const grid = gridFromString(player.grid);
     const now = Date.now() + serverOffset;
     const dim = !player.alive || (player.koUntil !== null && player.koUntil > now);
@@ -47,7 +56,17 @@ export function MiniBoard({ player, seat, cell, serverOffset, targeted, threat, 
     const draw = (t: number) => {
       fx.current.step(Math.min(50, t - last), cell);
       last = t;
-      drawBoard(ctx, { grid, piece: dim ? null : live, ghost: null, cell, dpr, effects: fx.current, dim, pieceAlpha: 0.85 });
+      r.render({
+        grid,
+        gridKey: player.grid,
+        piece: dim ? null : live,
+        ghost: null,
+        cell,
+        dpr,
+        effects: fx.current,
+        dim,
+        pieceAlpha: 0.85,
+      });
       if (fx.current.busy) raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
@@ -59,9 +78,9 @@ export function MiniBoard({ player, seat, cell, serverOffset, targeted, threat, 
     <div
       className={`mini-board ${targeted ? "is-targeted" : ""} ${threat ? "is-threat" : ""} ${!player.alive ? "is-out" : ""} ${compact ? "is-compact" : ""}`}
       style={{ ["--cell" as string]: `${cell}px` }}
-      onClick={onPick}
-      role={onPick ? "button" : undefined}
-      aria-label={onPick ? `Viser ${seat?.name ?? "ce joueur"}` : undefined}
+      onClick={pickable && player.alive ? onPick : undefined}
+      role={pickable && player.alive ? "button" : undefined}
+      aria-label={pickable && player.alive ? `Viser ${seat?.name ?? "ce joueur"}` : undefined}
     >
       <div className="mini-head">
         {seat && !compact && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={22} />}

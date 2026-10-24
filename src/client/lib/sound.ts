@@ -267,12 +267,6 @@ export function startLoop(name: SoundName) {
   });
 }
 
-/** Accélère ou ralentit doucement la boucle en cours (la musique de Briques quand la pile est en danger). */
-export function setLoopRate(rate: number) {
-  if (!loop || !ctx) return;
-  loop.source.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.5);
-}
-
 export function stopLoop() {
   if (!loop || !ctx) return;
   const { source, gain } = loop;

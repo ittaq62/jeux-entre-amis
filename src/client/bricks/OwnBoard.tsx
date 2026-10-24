@@ -1,14 +1,14 @@
 import { AnimatePresence, motion } from "motion/react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type MutableRefObject } from "react";
-import { locked, stackHeight, type Active, type Spin } from "../../shared/games/bricks/engine.ts";
+import { gridFromString, locked, stackHeight, type Active, type Spin } from "../../shared/games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot } from "../../shared/games/bricks/view.ts";
 import type { BricksClientMessage, BricksRoomView } from "../../shared/protocol.ts";
-import { play, setLoopRate, unlockAudio, vibrate } from "../lib/sound.ts";
+import { play, unlockAudio, vibrate } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { actionFor, useControls } from "./controls.ts";
-import { boardSize, drawBoard, drawPiece, Effects, SKY_ROWS } from "./draw.ts";
+import { BoardRenderer, boardSize, drawPiece, Effects, SKY_ROWS } from "./draw.ts";
 import { LocalGame, type InputAction, type LocalEvent } from "./local.ts";
-import type { BricksListeners } from "./useBricksRoom.ts";
+import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 
 export interface OwnBoardHandle {
   /** Le serveur a diffusé notre plateau (vérification) ou des effets qui nous concernent */
@@ -17,7 +17,7 @@ export interface OwnBoardHandle {
 
 interface Props {
   room: BricksRoomView;
-  me: BricksPlayerView;
+  meId: string;
   cell: number;
   phone: boolean;
   serverOffset: number;
@@ -46,9 +46,11 @@ function clearLabel(lines: number, spin: Spin): string | null {
 
 /** Son plateau : la partie tourne ici, au clavier, au doigt ou avec les boutons. */
 export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
-  { room, me, cell, phone, serverOffset, send, listeners, lastSnapshot, relayed },
+  { room, meId, cell, phone, serverOffset, send, listeners, lastSnapshot, relayed },
   ref,
 ) {
+  // Ses chiffres (lignes, envoyées, K.O., place) arrivent pose après pose dans useBoards
+  const me = useBoards((s) => s.players[meId]) ?? room.bricks!.players.find((p) => p.id === meId)!;
   const canvas = useRef<HTMLCanvasElement>(null);
   const holdCanvas = useRef<HTMLCanvasElement>(null);
   const nextCanvases = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -61,6 +63,9 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
   const relayedRef = useRef(relayed);
   const [popups, setPopups] = useState<Popup[]>([]);
   const [koUntil, setKoUntil] = useState(0);
+  const [koBy, setKoBy] = useState<string | null>(null);
+  const meRef = useRef(me);
+  meRef.current = me;
   const das = useControls((s) => s.das);
   const arr = useControls((s) => s.arr);
   const keys = useControls((s) => s.keys);
@@ -71,6 +76,12 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
   const previews = g.settings.previews;
   const side = phone ? Math.round(cell * 2.1) : Math.round(cell * 3.4);
 
+  // En développement seulement : les tests lisent l'état de la partie et comptent les rendus
+  if (import.meta.env.DEV) {
+    const w = window as unknown as { __bricks?: unknown; __bricksRenders?: number };
+    w.__bricks = game;
+    w.__bricksRenders = (w.__bricksRenders ?? 0) + 1;
+  }
   roomRef.current = room;
   offset.current = serverOffset;
   relayedRef.current = relayed;
@@ -82,29 +93,37 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
     setTimeout(() => setPopups((prev) => prev.filter((x) => x.id !== id)), p.big ? 1400 : 1000);
   }
 
-  // Ce que l'écran fait tout de suite à chaque geste : sons, éclats, messages
+  // Ce que l'écran fait tout de suite à chaque geste : sons, éclats, messages.
+  // Tout part d'ici, au moment même du geste : rien n'attend la réponse du serveur.
+  const hardDrop = useRef(false);
   function onLocal(e: LocalEvent) {
     const fx = effects.current;
     switch (e.type) {
       case "move":
-        play("tick", { volume: 0.25 });
+        play("brickMove");
         break;
       case "rotate":
-        play("click", { volume: 0.3, rate: 1.15 });
+        play("brickRotate");
         break;
       case "hold":
-        play("brickHold", { volume: 0.6 });
+        play("brickHold");
         break;
       case "drop":
         fx.dropStreak(e.from, e.to);
+        hardDrop.current = true;
         break;
       case "lock": {
         const r = e.result;
+        const dropped = hardDrop.current;
+        hardDrop.current = false;
         if (r.lines > 0) {
           const big = r.lines === 4 || r.spin !== "none" || r.perfect;
           fx.burst(r.rows, locked(e.before, e.piece), cell, big, reduced);
-          play(big ? "brickQuad" : "brickClear", { volume: big ? 0.85 : 0.65 });
-          if (r.combo >= 1) play("brickCombo", { rate: 1 + Math.min(r.combo, 10) * 0.07, volume: 0.55, delay: 60 });
+          // Un carillon de verre, un peu plus aigu à chaque ligne de plus
+          if (big) play("brickQuad");
+          else play("brickClear", { rate: [1, 1, 1.12, 1.26][r.lines] });
+          if (r.combo >= 1) play("brickCombo", { rate: 1 + Math.min(r.combo, 10) * 0.06 });
+          if (r.sent > 0) play("brickAttack");
           if (big) vibrate(40);
           const label = clearLabel(r.lines, r.spin);
           if (r.perfect) popup({ text: "Plateau vidé !", sub: `+${r.attack}`, tone: "gold", big: true });
@@ -119,18 +138,25 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
             });
           }
         } else {
-          play("brickLock", { volume: 0.5 });
+          play(dropped ? "brickDrop" : "brickLock");
         }
-        if (r.spin !== "none") play("brickSpin", { volume: 0.6 });
+        if (r.spin !== "none") play("brickSpin");
         if (r.garbageIn > 0) {
           fx.rise = Math.min(4, r.garbageIn);
           fx.shake = Math.max(fx.shake, 0.6);
-          play("brickGarbage", { volume: 0.7 });
+          play("brickGarbage");
           vibrate(30);
+        }
+        if (r.topOut) {
+          play("brickKo");
+          vibrate([80, 40, 120]);
         }
         break;
       }
       case "blocked":
+        // La réserve ou la pièce suivante ne peut plus apparaître : on le dit au serveur, qui vérifie
+        send({ t: "blocked" });
+        play("brickKo");
         break;
     }
   }
@@ -148,11 +174,12 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       const gm = game.current!;
       gm.startAt = roomRef.current.bricks?.round.startAt ?? gm.startAt;
       if (s.koUntil && s.koUntil > serverNow()) setKoUntil(s.koUntil);
+      else setKoBy(null);
     };
     listeners.current.self = onSelf;
     listeners.current.garbage = (c) => {
       game.current?.addGarbage(c);
-      play("brickWarn", { volume: 0.45 });
+      play("brickWarn");
     };
     if (lastSnapshot.current) onSelf(lastSnapshot.current);
     return () => {
@@ -169,12 +196,8 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
   useImperativeHandle(ref, () => ({
     onServerBoard: (p, fx) => {
       game.current?.verify(p.seq, p.grid);
-      for (const f of fx) {
-        if (f.type === "ko" && f.id === p.id && roomRef.current.bricks?.settings.win === "ko") {
-          play("brickKo", { volume: 0.8 });
-          vibrate([80, 40, 120]);
-        }
-      }
+      // Qui nous a mis K.O., pour le dire sur le plateau (le son, lui, est déjà parti)
+      for (const f of fx) if (f.type === "ko" && f.id === p.id) setKoBy(f.by);
     },
   }));
 
@@ -187,7 +210,12 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
     let holdKey = "";
     let nextKey = "";
     let danger = false;
+    let meterValue = -1;
+    let lastFrame = "";
     const ctx = canvas.current?.getContext("2d");
+    const renderer = ctx ? new BoardRenderer(ctx, cell, dpr) : null;
+    let relayGrid: { key: string; grid: ReturnType<typeof gridFromString> } | null = null;
+    let drawnGrid: unknown = null;
     const tick = (t: number) => {
       const dt = Math.min(50, t - last);
       last = t;
@@ -195,18 +223,32 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       const gm = game.current;
       const cur = roomRef.current.bricks;
       const playing = cur?.round.phase === "playing" || (cur?.round.phase === "countdown" && now >= cur.round.startAt);
-      if (gm && playing && !relayedRef.current) gm.tick(dt, now);
+      const relayedNow = relayedRef.current;
+      if (gm && playing && !relayedNow) gm.tick(dt, now);
       effects.current.step(dt, cell);
-      if (ctx && gm) {
-        drawBoard(ctx, {
-          grid: gm.board.grid,
-          piece: gm.piece,
-          ghost: useControls.getState().ghost ? gm.ghost : null,
-          cell,
-          dpr,
-          effects: effects.current,
-          dim: !playing || now < gm.pausedUntil || relayedRef.current,
-        });
+      if (renderer && gm) {
+        const over = cur?.round.phase === "over";
+        const paused = now < gm.pausedUntil;
+        // Pendant un K.O., en fin de manche ou quand un bot joue pour nous, aucune pièce ne tombe à l'écran
+        const piece = over || paused || relayedNow ? null : gm.piece;
+        const ghost = piece && useControls.getState().ghost ? gm.ghost : null;
+        // Un bot joue pour nous : on montre le plateau tel que le serveur le voit
+        let grid = gm.board.grid;
+        if (relayedNow) {
+          const key = meRef.current.grid;
+          if (relayGrid?.key !== key) relayGrid = { key, grid: gridFromString(key) };
+          grid = relayGrid.grid;
+        }
+        const fall = piece ? Math.round(gm.fall * 24) / 24 : 0;
+        // Éliminé : sa pile reste visible mais s'efface, la manche continue sans nous
+        const dim = !playing || paused || relayedNow || !meRef.current.alive;
+        const frameKey = `${piece ? `${piece.type}${piece.x},${piece.y},${piece.rot},${fall}` : "-"}|${ghost ? ghost.y : "-"}|${dim}`;
+        // Rien n'a bougé et aucun effet en cours : on ne redessine pas
+        if (frameKey !== lastFrame || grid !== drawnGrid || effects.current.busy) {
+          renderer.render({ grid, piece, ghost, cell, dpr, effects: effects.current, dim, fall });
+          lastFrame = frameKey;
+          drawnGrid = grid;
+        }
         // Réserve et aperçus, redessinés seulement quand ils changent
         const hk = `${gm.shownHold}:${gm.held}`;
         if (hk !== holdKey && holdCanvas.current) {
@@ -221,15 +263,18 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
             if (c) drawPiece(c.getContext("2d")!, type, i === 0 ? side : Math.round(side * 0.82), dpr);
           });
         }
-        if (meter.current) meter.current.style.height = `${Math.min(100, (gm.pending / 20) * 100)}%`;
-        const high = stackHeight(gm.board.grid) >= 15;
+        const pending = Math.min(100, (gm.pending / 20) * 100);
+        if (pending !== meterValue && meter.current) {
+          meterValue = pending;
+          meter.current.style.height = `${pending}%`;
+        }
+        const high = !over && stackHeight(grid) >= 15;
         if (high !== danger) {
           danger = high;
           frame.current?.classList.toggle("is-danger", high);
-          setLoopRate(high ? 1.12 : 1);
         }
         // Montrer sa pièce aux autres, une dizaine de fois par seconde au plus
-        const live: Active | null = playing ? gm.live : null;
+        const live: Active | null = playing && !paused ? gm.live : null;
         const key = live ? `${live.type}${live.x},${live.y},${live.rot}` : "-";
         if (key !== liveKey && t - lastLive > 100) {
           liveKey = key;
@@ -323,6 +368,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
   const now = serverNow();
   const counting = g.round.phase !== "over" && now < g.round.startAt;
   const koActive = koUntil > now;
+  const koByName = koBy ? room.seats.find((x) => x.id === koBy)?.name : null;
 
   return (
     <div
@@ -365,10 +411,15 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
             ))}
           </AnimatePresence>
           {koActive && (
-            <motion.div className="board-stamp is-ko" initial={{ scale: 1.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-              K.O. !
+            <motion.div className="board-stamp is-ko is-explained" initial={{ scale: 1.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+              <strong>K.O. !</strong>
+              <span>
+                Ta pile repart à zéro
+                {koByName ? `, un point pour ${koByName}` : ""}
+              </span>
             </motion.div>
           )}
+          {g.round.phase === "over" && !g.matchOver && g.settings.win === "ko" && <div className="board-stamp">Temps écoulé !</div>}
           {!me.alive && g.mode !== "sprint" && <div className="board-stamp">{me.place ? `${me.place}e` : "Éliminé"}</div>}
           {counting && <Countdown startAt={g.round.startAt} serverOffset={serverOffset} />}
           {relayed && (

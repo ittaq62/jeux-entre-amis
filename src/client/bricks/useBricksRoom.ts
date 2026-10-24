@@ -22,6 +22,20 @@ export const useLive = create<{ pieces: Record<string, Active | null>; set: (id:
   }),
 );
 
+/**
+ * Le plateau de chaque joueur, mis à jour à chaque pose. Chaque petit plateau lit le sien ici :
+ * une pose d'un adversaire ne redessine que son plateau, pas toute la table.
+ */
+export const useBoards = create<{
+  players: Record<string, BricksPlayerView>;
+  setAll: (list: BricksPlayerView[]) => void;
+  setOne: (p: BricksPlayerView) => void;
+}>((set) => ({
+  players: {},
+  setAll: (list) => set({ players: Object.fromEntries(list.map((p) => [p.id, p])) }),
+  setOne: (p) => set((s) => ({ players: { ...s.players, [p.id]: p } })),
+}));
+
 /** Ce que la table de jeu veut entendre en direct (son propre plateau, les lignes grises, les effets) */
 export interface BricksListeners {
   self?: (s: BricksSnapshot) => void;
@@ -51,6 +65,9 @@ export function useBricksRoom(code: string) {
     viewRef.current = next;
     setView(next);
     setServerOffset(next.serverNow - Date.now());
+    if (next.bricks) useBoards.getState().setAll(next.bricks.players);
+    // Fin de manche : on n'affiche plus les pièces en vol des autres
+    if (next.bricks?.round.phase !== "playing") useLive.getState().clear();
     announceSeatChanges(prev, next, next.you.userId);
     const seat = next.you.seatId;
     const g = next.bricks;
@@ -60,13 +77,7 @@ export function useBricksRoom(code: string) {
   }, []);
 
   const onBoard = useCallback((player: BricksPlayerView, fx: BricksFx[]) => {
-    const cur = viewRef.current;
-    if (cur?.bricks) {
-      const players = cur.bricks.players.map((p) => (p.id === player.id ? player : p));
-      const next = { ...cur, bricks: { ...cur.bricks, players } };
-      viewRef.current = next;
-      setView(next);
-    }
+    useBoards.getState().setOne(player);
     listeners.current.board?.(player, fx);
   }, []);
 
@@ -99,7 +110,7 @@ export function useBricksRoom(code: string) {
                 listeners.current.garbage?.(msg.chunk);
                 break;
               case "live":
-                useLive.getState().set(msg.id, msg.piece);
+                if (viewRef.current?.bricks?.round.phase === "playing") useLive.getState().set(msg.id, msg.piece);
                 break;
               case "fx":
                 break;
