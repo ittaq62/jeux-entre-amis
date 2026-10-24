@@ -4,6 +4,7 @@ import { sanitizeAvatar } from "../shared/avatar.ts";
 import {
   ANNOUNCE_MAX,
   BAN_REASON_MAX,
+  BETA_GAMES,
   type AdminOverview,
   type AdminUserAction,
   type FriendEntry,
@@ -42,6 +43,7 @@ import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
 export { GameRoom } from "./room.ts";
 export { NavalRoom } from "./navalRoom.ts";
+export { BricksRoom } from "./bricksRoom.ts";
 export { Hub } from "./hub.ts";
 
 type AppEnv = { Bindings: Env; Variables: { session: Session; user: UserRow } };
@@ -84,33 +86,47 @@ function siteUrl(c: Ctx) {
   return new URL(c.req.url).origin;
 }
 
-/** La bataille navale est en bêta tant que l'admin ne l'a pas ouverte à tous. */
-async function navalPublic(db: D1Database): Promise<boolean> {
-  const row = await db.prepare("SELECT value FROM site_settings WHERE key = 'naval_public'").first<{ value: string }>();
-  return row?.value === "1";
+const ALL_GAMES: GameId[] = ["uno", "naval", "bricks"];
+const isBeta = (game: GameId) => (BETA_GAMES as readonly GameId[]).includes(game);
+
+/** Jeux en bêta que l'admin a ouverts à tous (réglage « <jeu>_public » à 1). */
+async function openGames(db: D1Database): Promise<Set<GameId>> {
+  const { results } = await db
+    .prepare("SELECT key FROM site_settings WHERE substr(key, -7) = '_public' AND value = '1'")
+    .all<{ key: string }>();
+  return new Set(results.map((r) => r.key.slice(0, -"_public".length)).filter(isGame));
 }
 
 async function visibleGames(env: Env, user: UserRow): Promise<GameId[]> {
-  return isAdmin(user) || (await navalPublic(env.DB)) ? ["uno", "naval"] : ["uno"];
+  const open = await openGames(env.DB);
+  return ALL_GAMES.filter((g) => !isBeta(g) || isAdmin(user) || open.has(g));
 }
 
 async function meResponse(env: Env, user: UserRow): Promise<MeResponse> {
   if (!user.pseudo) return { user: null, pending: { email: user.email } };
-  const open = await navalPublic(env.DB);
+  const open = await openGames(env.DB);
+  const beta = BETA_GAMES.filter((g) => !open.has(g));
   return {
     user: toMe(user),
     pending: null,
-    games: isAdmin(user) || open ? ["uno", "naval"] : ["uno"],
-    ...(isAdmin(user) && !open ? { beta: ["naval" as const] } : {}),
+    games: ALL_GAMES.filter((g) => !isBeta(g) || isAdmin(user) || open.has(g)),
+    ...(isAdmin(user) && beta.length > 0 ? { beta } : {}),
   };
 }
 
-const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval";
+const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval" || value === "bricks";
+
+/** La salle d'un jeu pour un code. */
+function stubFor(c: Ctx, game: GameId, code: string) {
+  if (game === "naval") return c.env.NAVAL.get(c.env.NAVAL.idFromName(code));
+  if (game === "bricks") return c.env.BRICKS.get(c.env.BRICKS.idFromName(code));
+  return c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
+}
 
 /** La salle d'un code : le hub sait à quel jeu il appartient, UNO par défaut. */
 async function roomStub(c: Ctx, code: string) {
   const summary = await hub(c).getRoom(code);
-  return summary?.game === "naval" ? c.env.NAVAL.get(c.env.NAVAL.idFromName(code)) : c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
+  return stubFor(c, summary?.game ?? "uno", code);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +265,8 @@ app.get("/profile/:pseudo", withSession, async (c) => {
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
   const game = isGame(c.req.query("game")) ? (c.req.query("game") as GameId) : "uno";
-  const sort = c.req.query("sort") === "elo" ? "elo" : "points";
+  const sortParam = c.req.query("sort");
+  const sort = sortParam === "elo" || sortParam === "sprint" ? sortParam : "points";
   return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game, sort) });
 });
 
@@ -316,8 +333,7 @@ app.delete("/friends/:id", withSession, withProfile, async (c) => {
 
 async function createRoom(c: Ctx, visibility: Visibility, quick: boolean, game: GameId): Promise<string> {
   const code = await hub(c).allocateCode();
-  const stub = game === "naval" ? c.env.NAVAL.get(c.env.NAVAL.idFromName(code)) : c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
-  await stub.init({ code, host: toPublic(c.get("user")), visibility, quick });
+  await stubFor(c, game, code).init({ code, host: toPublic(c.get("user")), visibility, quick });
   return code;
 }
 
@@ -403,18 +419,23 @@ app.get("/admin/overview", withSession, withAdmin, async (c) => {
     rooms: snapshot.rooms.filter((r) => r.status !== "finished" || Date.now() - r.updatedAt < 30 * 60_000),
     recentGames: games,
     announcement,
-    navalBeta: !(await navalPublic(c.env.DB)),
+    betaGames: await betaGames(c.env.DB),
   } satisfies AdminOverview);
 });
 
-/** Sortir la bataille navale de la bêta (ou l'y remettre). */
+async function betaGames(db: D1Database): Promise<GameId[]> {
+  const open = await openGames(db);
+  return BETA_GAMES.filter((g) => !open.has(g));
+}
+
+/** Sortir un jeu de la bêta (ou l'y remettre). */
 app.post("/admin/games", withSession, withAdmin, async (c) => {
-  const body = await c.req.json<{ navalBeta?: unknown }>().catch(() => ({}) as { navalBeta?: unknown });
-  if (typeof body.navalBeta !== "boolean") return c.json({ error: "Réglage invalide." }, 400);
-  await c.env.DB.prepare("INSERT INTO site_settings (key, value) VALUES ('naval_public', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1")
-    .bind(body.navalBeta ? "0" : "1")
+  const body = await c.req.json<{ game?: unknown; beta?: unknown }>().catch(() => ({}) as { game?: unknown; beta?: unknown });
+  if (!isGame(body.game) || !isBeta(body.game) || typeof body.beta !== "boolean") return c.json({ error: "Réglage invalide." }, 400);
+  await c.env.DB.prepare("INSERT INTO site_settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2")
+    .bind(`${body.game}_public`, body.beta ? "0" : "1")
     .run();
-  return c.json({ navalBeta: body.navalBeta });
+  return c.json({ betaGames: await betaGames(c.env.DB) });
 });
 
 app.get("/admin/users", withSession, withAdmin, async (c) => {

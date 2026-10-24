@@ -4,6 +4,9 @@ import { PSEUDO_MAX } from "../../shared/app.ts";
 import {
   ANNOUNCE_MAX,
   BAN_REASON_MAX,
+  BETA_GAMES,
+  GAME_NAMES,
+  type GameId,
   type AdminGame,
   type AdminOverview,
   type AdminRoom,
@@ -92,7 +95,7 @@ export function AdminPage() {
               </dl>
             </section>
 
-            <GamesSection beta={overview.navalBeta} onChange={loadOverview} />
+            <GamesSection beta={overview.betaGames} onChange={loadOverview} />
 
             <AnnounceSection overview={overview} onChange={loadOverview} />
 
@@ -187,37 +190,43 @@ function LedgerRow({ label, value, detail, strong }: { label: string; value: num
   );
 }
 
-/** Sortir un jeu de la bêta : tant que la case est cochée, seuls les admins et leurs invités y jouent. */
-function GamesSection({ beta, onChange }: { beta: boolean; onChange: () => void }) {
-  const [busy, setBusy] = useState(false);
-  async function toggle() {
+/** Sortir un jeu de la bêta : tant que sa case est cochée, seuls les admins et leurs invités y jouent. */
+function GamesSection({ beta, onChange }: { beta: GameId[]; onChange: () => void }) {
+  const [busy, setBusy] = useState<GameId | null>(null);
+  async function toggle(game: GameId) {
     if (busy) return;
-    setBusy(true);
+    const inBeta = beta.includes(game);
+    setBusy(game);
     try {
-      await api.post("/admin/games", { navalBeta: !beta });
+      await api.post("/admin/games", { game, beta: !inBeta });
       await useSession.getState().load();
-      toast({ title: beta ? "La bataille navale est ouverte à tous" : "La bataille navale repasse en bêta" });
+      toast({ title: inBeta ? `${GAME_NAMES[game]} est ouvert à tous` : `${GAME_NAMES[game]} repasse en bêta` });
       onChange();
     } catch (err) {
       failed(err);
     }
-    setBusy(false);
+    setBusy(null);
   }
   return (
     <section className="panel admin-section">
       <h2>Jeux</h2>
       <div className="rule-list">
-        <div className="rule-row" onClick={() => void toggle()}>
-          <Check label="Bataille navale en bêta" checked={beta} disabled={busy} onChange={() => {}} />
-          <span>
-            <strong>Bataille navale en bêta</strong>
-            <span className="hint">
-              {beta
-                ? "Cochée : visible seulement pour toi et tes invités, qui peuvent s'asseoir grâce au lien d'une table."
-                : "Décochée : tout le monde la voit sur l'accueil et peut y jouer."}
-            </span>
-          </span>
-        </div>
+        {BETA_GAMES.map((game) => {
+          const inBeta = beta.includes(game);
+          return (
+            <div key={game} className="rule-row" onClick={() => void toggle(game)}>
+              <Check label={`${GAME_NAMES[game]} en bêta`} checked={inBeta} disabled={busy !== null} onChange={() => {}} />
+              <span>
+                <strong>{GAME_NAMES[game]} en bêta</strong>
+                <span className="hint">
+                  {inBeta
+                    ? "Cochée : visible seulement pour toi et tes invités, qui peuvent s'asseoir grâce au lien d'une table."
+                    : "Décochée : tout le monde le voit sur l'accueil et peut y jouer."}
+                </span>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -335,7 +344,13 @@ function GameLine({ game }: { game: AdminGame }) {
       <span className="row-text">
         <strong>
           {winner ? `${winner.name}${winner.bot ? " (bot)" : ""} gagne` : "Partie"},{" "}
-          {game.game === "naval" ? "bataille navale" : game.variant === "nomercy" ? "UNO No Mercy" : "UNO classique"}
+          {game.game === "naval"
+            ? "bataille navale"
+            : game.game === "bricks"
+              ? "Briques"
+              : game.variant === "nomercy"
+                ? "UNO No Mercy"
+                : "UNO classique"}
           {game.rounds > 1 ? `, ${game.rounds} manches` : ""}
         </strong>
         <span className="hint">contre {others.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ") || "personne"}</span>

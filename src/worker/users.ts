@@ -1,5 +1,7 @@
 import { sanitizeAvatar, seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { earnedAchievements, earnedNavalAchievements } from "../shared/achievements.ts";
+import { earnedAchievements, earnedBricksAchievements, earnedNavalAchievements } from "../shared/achievements.ts";
+import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
+import type { BricksStats } from "../shared/games/bricks/view.ts";
 import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
 import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval/engine.ts";
 import type { FriendEntry, GameId, Me, PublicUser } from "../shared/protocol.ts";
@@ -200,7 +202,7 @@ export interface GameRecordPlayer {
   eliminated: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
-  stats: PlayerStats | NavalRecordStats;
+  stats: PlayerStats | NavalRecordStats | BricksStats;
 }
 
 /** Elo de chaque joueur humain après la partie, et ce qu'il a gagné ou perdu */
@@ -215,7 +217,30 @@ export type GameRecord = {
   endedAt: number;
   rounds: number;
   players: GameRecordPlayer[];
-} & ({ game: "uno"; settings: UnoSettings } | { game: "naval"; settings: NavalSettings; mode: NavalMode });
+} & (
+  | { game: "uno"; settings: UnoSettings }
+  | { game: "naval"; settings: NavalSettings; mode: NavalMode }
+  | { game: "bricks"; settings: BricksSettings; mode: BricksMode }
+);
+
+/** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
+function mergeBricksTotals(raw: string | null, stats: BricksStats, sprintTime: number | null): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of ["lines", "sent", "received", "pieces", "tetrises", "tspins", "allClears", "kos", "deaths", "roundsWon"] as const) {
+    totals[key] = (totals[key] ?? 0) + stats[key];
+  }
+  totals.maxCombo = Math.max(totals.maxCombo ?? 0, stats.maxCombo);
+  if (sprintTime !== null) {
+    totals.sprints = (totals.sprints ?? 0) + 1;
+    totals.bestSprint = totals.bestSprint ? Math.min(totals.bestSprint, sprintTime) : sprintTime;
+  }
+  return totals;
+}
 
 /** Cumul des stats de bataille navale : on additionne tout, sauf les records qu'on garde au maximum. */
 function mergeNavalTotals(raw: string | null, stats: NavalRecordStats): Record<string, number> {
@@ -284,7 +309,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
   const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
 
   // Elo : tout le monde avec son niveau d'avant la partie, les bots à leur niveau fixe
-  const botLevel = rec.game === "naval" ? rec.settings.botLevel : undefined;
+  const botLevel = rec.game === "uno" ? undefined : rec.settings.botLevel;
   const ratingOf = (p: GameRecordPlayer) => (p.userId ? (byUser.get(p.userId)?.elo ?? ELO_START) : botElo(rec.game, botLevel));
   const deltas = eloChanges(
     rec.players.map((p) => ({
@@ -324,6 +349,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
         played,
         streak,
       });
+    } else if (rec.game === "bricks") {
+      const stats = p.stats as BricksStats;
+      totals = mergeBricksTotals(prev?.totals ?? null, stats, null);
+      earnedIds = earnedBricksAchievements({ won, mode: rec.mode, stats, played });
     } else {
       const stats = p.stats as NavalRecordStats;
       totals = mergeNavalTotals(prev?.totals ?? null, stats);
@@ -363,6 +392,45 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
   }
   await db.batch(statements);
   return { unlocked, elo };
+}
+
+/**
+ * Solo 40 lignes : ni points ni Elo, seulement le record et les stats de pose.
+ * Un essai raté (pile qui déborde) compte ses stats mais pas de temps.
+ */
+export async function recordSprint(
+  db: D1Database,
+  userId: string,
+  time: number | null,
+  stats: BricksStats,
+): Promise<{ unlocked: Record<string, string[]> }> {
+  const now = Date.now();
+  const prev = await db
+    .prepare("SELECT played, totals FROM user_stats WHERE user_id = ? AND game = 'bricks'")
+    .bind(userId)
+    .first<{ played: number; totals: string }>();
+  const totals = mergeBricksTotals(prev?.totals ?? null, stats, time);
+  const { results: owned } = await db
+    .prepare("SELECT achievement FROM achievements WHERE user_id = ?")
+    .bind(userId)
+    .all<{ achievement: string }>();
+  const have = new Set(owned.map((r) => r.achievement));
+  const earned = earnedBricksAchievements({ won: false, mode: "sprint", stats, played: prev?.played ?? 0, sprintTime: time }).filter(
+    (id) => !have.has(id),
+  );
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO user_stats (user_id, game, played, won, points, streak, best_streak, totals, updated_at)
+         VALUES (?1, 'bricks', 0, 0, 0, 0, 0, ?2, ?3)
+         ON CONFLICT(user_id, game) DO UPDATE SET totals = ?2, updated_at = ?3`,
+      )
+      .bind(userId, JSON.stringify(totals), now),
+    ...earned.map((id) =>
+      db.prepare("INSERT OR IGNORE INTO achievements (user_id, achievement, unlocked_at) VALUES (?, ?, ?)").bind(userId, id, now),
+    ),
+  ]);
+  return { unlocked: earned.length > 0 ? { [userId]: earned } : {} };
 }
 
 interface StatsRow {
@@ -419,17 +487,20 @@ export async function userProfile(db: D1Database, user: UserRow) {
   ]);
   const uno = statRows.results.find((r) => r.game === "uno");
   const naval = statRows.results.find((r) => r.game === "naval");
-  let navalTotals: Record<string, number> = {};
-  try {
-    navalTotals = naval ? (JSON.parse(naval.totals) as Record<string, number>) : {};
-  } catch {
-    navalTotals = {};
-  }
+  const bricks = statRows.results.find((r) => r.game === "bricks");
+  const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
+    try {
+      return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  };
   return {
     user: toPublic(user),
     memberSince: user.created_at,
     stats: { ...statsSummary(uno), totals: parseTotals(uno?.totals ?? null) },
-    naval: { ...statsSummary(naval), totals: navalTotals },
+    naval: { ...statsSummary(naval), totals: totalsOf(naval) },
+    bricks: { ...statsSummary(bricks), totals: totalsOf(bricks) },
     achievements: achievements.results.map((a) => ({ id: a.achievement, at: a.unlocked_at })),
     recent: recent.results.map((r) => ({
       id: r.id,
@@ -446,17 +517,31 @@ export async function userProfile(db: D1Database, user: UserRow) {
   };
 }
 
-export async function leaderboard(db: D1Database, scope: "all" | "friends", me: string, game: GameId, sort: "points" | "elo" = "points") {
+export async function leaderboard(
+  db: D1Database,
+  scope: "all" | "friends",
+  me: string,
+  game: GameId,
+  sort: "points" | "elo" | "sprint" = "points",
+) {
   const friendFilter =
     scope === "friends"
       ? `AND (s.user_id = ?1 OR s.user_id IN (SELECT CASE WHEN user_a = ?1 THEN user_b ELSE user_a END FROM friendships
            WHERE (user_a = ?1 OR user_b = ?1) AND status = 'accepted'))`
       : "";
   const statement = db.prepare(
-    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.elo, s.best_streak
+    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.elo, s.best_streak,
+            json_extract(s.totals, '$.bestSprint') AS best_sprint
      FROM user_stats s JOIN users u ON u.id = s.user_id
-     WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL AND s.played > 0 ${friendFilter}
-     ORDER BY ${sort === "elo" ? "s.elo DESC, s.points DESC" : "s.points DESC, s.elo DESC"}, s.won DESC, s.played ASC LIMIT 100`,
+     WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL
+       AND ${sort === "sprint" ? "json_extract(s.totals, '$.bestSprint') IS NOT NULL" : "s.played > 0"} ${friendFilter}
+     ORDER BY ${
+       sort === "sprint"
+         ? "best_sprint ASC"
+         : sort === "elo"
+           ? "s.elo DESC, s.points DESC, s.won DESC"
+           : "s.points DESC, s.elo DESC, s.won DESC"
+     }, s.played ASC LIMIT 100`,
   );
   const { results } = await statement.bind(me, game).all<{
     id: string;
@@ -469,6 +554,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     points: number;
     elo: number;
     best_streak: number;
+    best_sprint: number | null;
   }>();
   return results.map((r, i) => ({
     rank: i + 1,
@@ -477,6 +563,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     won: r.won,
     points: r.points,
     elo: r.elo,
+    bestSprint: r.best_sprint,
     bestStreak: r.best_streak,
   }));
 }
