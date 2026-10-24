@@ -9,8 +9,9 @@ import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 
-// La bataille navale n'est chargée que pour ses tables
+// La bataille navale et Briques ne sont chargées que pour leurs tables
 const NavalRoom = lazy(() => import("../naval/NavalRoom.tsx").then((m) => ({ default: m.NavalRoom })));
+const BricksRoom = lazy(() => import("../bricks/BricksRoom.tsx").then((m) => ({ default: m.BricksRoom })));
 
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
 export function RoomPage({ code }: { code: string }) {
@@ -31,10 +32,10 @@ export function RoomPage({ code }: { code: string }) {
 
   if (fatal) return <RoomError message={fatal} />;
   if (!game) return <Loading label="Arrivée à la table…" />;
-  if (game === "naval") {
+  if (game === "naval" || game === "bricks") {
     return (
       <Suspense fallback={<Loading label="Arrivée à la table…" />}>
-        <NavalRoom code={upper} />
+        {game === "naval" ? <NavalRoom code={upper} /> : <BricksRoom code={upper} />}
       </Suspense>
     );
   }

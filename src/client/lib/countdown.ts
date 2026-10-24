@@ -15,3 +15,11 @@ export function useCountdown(target: number | null, offset: number): number | nu
 export function formatClock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+/** Un temps de solo, au centième : « 52,31 s » ou « 1 min 04,20 s » */
+export function formatSprint(ms: number): string {
+  const s = ms / 1000;
+  return s >= 60
+    ? `${Math.floor(s / 60)} min ${(s % 60).toFixed(2).padStart(5, "0").replace(".", ",")} s`
+    : `${s.toFixed(2).replace(".", ",")} s`;
+}

@@ -34,7 +34,20 @@ export type SoundName =
   | "bubbles"
   | "sonar"
   | "torpedo"
-  | "ambience";
+  | "ambience"
+  | "brickLock"
+  | "brickClear"
+  | "brickQuad"
+  | "brickCombo"
+  | "brickSpin"
+  | "brickHold"
+  | "brickAttack"
+  | "brickGarbage"
+  | "brickWarn"
+  | "brickKo"
+  | "brickCount"
+  | "brickGo"
+  | "brickMusic";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -67,6 +80,19 @@ const FILES: Record<SoundName, string[]> = {
   sonar: ["naval-sonar.mp3"],
   torpedo: ["naval-torpedo.mp3"],
   ambience: ["naval-ambience.mp3"],
+  brickLock: ["bricks-lock.mp3"],
+  brickClear: ["bricks-clear.mp3"],
+  brickQuad: ["bricks-quad.mp3"],
+  brickCombo: ["bricks-combo.mp3"],
+  brickSpin: ["bricks-spin.mp3"],
+  brickHold: ["bricks-hold.mp3"],
+  brickAttack: ["bricks-attack.mp3"],
+  brickGarbage: ["bricks-garbage.mp3"],
+  brickWarn: ["bricks-warn.mp3"],
+  brickKo: ["bricks-ko.mp3"],
+  brickCount: ["bricks-count.mp3"],
+  brickGo: ["bricks-go.mp3"],
+  brickMusic: ["bricks-music.mp3"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -103,6 +129,26 @@ export const NAVAL_SOUNDS: SoundName[] = [
   "buzzer",
 ];
 
+export const BRICKS_SOUNDS: SoundName[] = [
+  "brickLock",
+  "brickClear",
+  "brickQuad",
+  "brickCombo",
+  "brickSpin",
+  "brickHold",
+  "brickAttack",
+  "brickGarbage",
+  "brickWarn",
+  "brickKo",
+  "brickCount",
+  "brickGo",
+  "brickMusic",
+  "tick",
+  "click",
+  "win",
+  "lose",
+];
+
 // Les sons frequents restent discrets, les evenements rares ressortent
 const VOLUME: Partial<Record<SoundName, number>> = {
   cardPlace: 0.75,
@@ -128,6 +174,19 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   sonar: 0.5,
   torpedo: 0.6,
   ambience: 0.35,
+  brickLock: 0.5,
+  brickClear: 0.7,
+  brickQuad: 0.85,
+  brickCombo: 0.6,
+  brickSpin: 0.6,
+  brickHold: 0.45,
+  brickAttack: 0.55,
+  brickGarbage: 0.7,
+  brickWarn: 0.45,
+  brickKo: 0.8,
+  brickCount: 0.6,
+  brickGo: 0.7,
+  brickMusic: 0.32,
 };
 
 let ctx: AudioContext | null = null;
@@ -194,6 +253,12 @@ export function startLoop(name: SoundName) {
     source.start();
     loop = { source, gain };
   });
+}
+
+/** Accélère ou ralentit doucement la boucle en cours (la musique de Briques quand la pile est en danger). */
+export function setLoopRate(rate: number) {
+  if (!loop || !ctx) return;
+  loop.source.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.5);
 }
 
 export function stopLoop() {
