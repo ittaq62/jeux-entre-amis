@@ -26,6 +26,8 @@ export interface TableLobbyProps {
   startHint?: string;
   /** Précision sous le nom d'un joueur (équipe…) */
   seatNote?: (seat: SeatView, index: number) => string | null;
+  /** Bloc propre au jeu sous la liste des joueurs (les équipes de la bataille navale…) */
+  aside?: ReactNode;
 }
 
 /** Le salon d'attente, commun à tous les jeux : ticket du code, places autour de la table, invitations, départ. */
@@ -43,6 +45,7 @@ export function TableLobby({
   canStart = room.seats.length >= MIN_PLAYERS,
   startHint = "Il faut au moins deux joueurs : ajoute un bot pour commencer tout de suite.",
   seatNote,
+  aside,
 }: TableLobbyProps) {
   const isHost = room.you.isHost;
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -167,6 +170,8 @@ export function TableLobby({
               </p>
             )}
           </section>
+
+          {aside}
         </div>
 
         {rules}

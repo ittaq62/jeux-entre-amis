@@ -972,3 +972,124 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Salon : Bâbord contre Tribord                                       */
+/* ------------------------------------------------------------------ */
+
+/* Les feux de navigation : rouge à bâbord, vert à tribord */
+.naval-teams {
+  --port: #e0574a;
+  --starboard: #4fbf83;
+}
+
+.teams-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.team-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 12px 14px;
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  box-shadow: inset 0 3px 0 var(--team-color);
+}
+
+.team-col.is-port {
+  --team-color: var(--port);
+}
+
+.team-col.is-starboard {
+  --team-color: var(--starboard);
+}
+
+.team-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.team-name::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--team-color);
+  box-shadow: 0 0 8px var(--team-color);
+}
+
+.team-crew {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-crew li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  min-width: 0;
+}
+
+.team-crew li.is-empty {
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+.team-member {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.team-empty-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px dashed rgba(244, 236, 218, 0.22);
+}
+
+.team-move {
+  flex: none;
+  min-width: 34px;
+  padding: 0 8px;
+  font-size: 17px;
+}
+
+.teams-warning {
+  margin: 12px 0 0;
+}
+
+/* Sur téléphone, Bâbord au-dessus de Tribord : les noms gardent toute la largeur */
+.team-move .arrow-stack {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .teams-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-move .arrow-side {
+    display: none;
+  }
+
+  .team-move .arrow-stack {
+    display: inline;
+  }
+}

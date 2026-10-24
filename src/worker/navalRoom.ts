@@ -58,6 +58,14 @@ interface Seat {
   autoplay: false | "away" | "afk";
   missed: number;
   disconnectedAt: number | null;
+  /** Équipe choisie au salon pour le 2 contre 2 : 0 bâbord, 1 tribord */
+  team: 0 | 1;
+}
+
+/** L'équipe la moins remplie, bâbord en cas d'égalité : on y place chaque nouvel arrivant. */
+function emptierTeam(seats: Seat[]): 0 | 1 {
+  const port = seats.filter((s) => s.team === 0).length;
+  return port <= seats.length - port ? 0 : 1;
 }
 
 type TimerKind = "bot" | "timeout" | "placement" | "away" | "seatCleanup" | "cleanup" | "emote";
@@ -110,6 +118,8 @@ export class NavalRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.data = (await ctx.storage.get<NavalData>("room")) ?? null;
+      // Tables ouvertes avant le choix des équipes : on alterne comme avant
+      this.data?.seats.forEach((seat, i) => (seat.team ??= (i % 2) as 0 | 1));
     });
   }
 
@@ -227,13 +237,16 @@ export class NavalRoom extends DurableObject<Env> {
       autoplay: false,
       missed: 0,
       disconnectedAt: null,
+      team: emptierTeam(d.seats),
     };
     if (d.seats.length < d.settings.maxPlayers) {
       d.seats.push(seat);
       return seat;
     }
+    // Table pleine : on prend la place d'un bot, et son équipe
     for (let i = d.seats.length - 1; i >= 0; i--) {
       if (d.seats[i]!.kind === "bot") {
+        seat.team = d.seats[i]!.team;
         d.seats[i] = seat;
         return seat;
       }
@@ -397,6 +410,19 @@ export class NavalRoom extends DurableObject<Env> {
         return this.afterChange([], now, ws);
       }
 
+      case "team": {
+        if (d.status === "playing") return error("Les équipes sont faites : attends la fin de la bataille.");
+        const target = d.seats.find((s) => s.id === msg.seatId);
+        if (!target || (msg.team !== 0 && msg.team !== 1) || target.team === msg.team) return;
+        if (target !== seat && !isHost) return error("Seul l'hôte peut changer l'équipe d'un autre joueur.");
+        // Équipe déjà à deux : un de ses bots passe de l'autre côté pour faire la place
+        const crew = d.seats.filter((s) => s !== target && s.team === msg.team);
+        const bot = crew.length >= 2 ? crew.findLast((s) => s.kind === "bot") : undefined;
+        if (bot) bot.team = target.team;
+        target.team = msg.team;
+        return this.afterChange([], now);
+      }
+
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
@@ -449,6 +475,7 @@ export class NavalRoom extends DurableObject<Env> {
           autoplay: false,
           missed: 0,
           disconnectedAt: null,
+          team: emptierTeam(d.seats),
         });
         return this.afterChange([], now);
       }
@@ -531,13 +558,25 @@ export class NavalRoom extends DurableObject<Env> {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux joueurs : ajoute un bot !" });
       return this.afterChange([], now);
     }
+    // En 2 contre 2, les équipes choisies au salon ; on alterne bâbord et tribord pour l'ordre de tir
+    let order = d.seats;
+    if (d.settings.naval.teams && d.seats.length === 4) {
+      const port = d.seats.filter((s) => s.team === 0);
+      const starboard = d.seats.filter((s) => s.team === 1);
+      if (port.length !== 2) {
+        const msg = `Il faut deux marins de chaque côté : c'est ${port.length} contre ${starboard.length} pour l'instant.`;
+        if (ws) this.send(ws, { t: "error", message: msg });
+        return this.afterChange([], now);
+      }
+      order = [port[0]!, starboard[0]!, port[1]!, starboard[1]!];
+    }
     for (const s of d.seats) {
       s.autoplay = false;
       s.missed = 0;
       s.disconnectedAt = null;
     }
     const { state, events } = createGame(
-      d.seats.map((s) => s.id),
+      order.map((s) => s.id),
       d.settings.naval,
       randomSeed(),
     );
@@ -831,6 +870,7 @@ export class NavalRoom extends DurableObject<Env> {
         connected: s.kind === "bot" || connected.has(s.userId!),
         autoplay: Boolean(s.autoplay),
         isHost: s.userId === d.hostId,
+        team: s.team,
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,

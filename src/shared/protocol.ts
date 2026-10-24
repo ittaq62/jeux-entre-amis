@@ -132,6 +132,8 @@ export interface SeatView {
   isHost: boolean;
   /** Administrateur du site */
   admin: boolean;
+  /** Bataille navale en équipes : 0 bâbord, 1 tribord */
+  team?: 0 | 1;
 }
 
 export interface SpectatorView {
@@ -259,6 +261,8 @@ export type NavalClientMessage =
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
   | { t: "start" }
+  /** Changer d'équipe : soi-même, ou n'importe qui pour l'hôte */
+  | { t: "team"; seatId: string; team: 0 | 1 }
   | { t: "action"; action: NavalAction }
   | { t: "takeBack" }
   | { t: "chat"; text: string }
