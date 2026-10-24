@@ -41,6 +41,10 @@ export interface NavalPlayerView {
   /** Armes en réserve : le détail pour son camp, seulement le nombre pour les autres */
   arsenal: Weapon[] | null;
   arsenalCount: number;
+  /** Tirs, touchés et navires coulés : publics, chacun voit les tirs de tout le monde */
+  shots: number;
+  hits: number;
+  sunk: number;
 }
 
 /** Ce qu'un joueur a le droit de voir : ses navires, et des autres seulement les tirs et les épaves. */
@@ -82,6 +86,9 @@ export function viewFor(s: NavalState, viewerId: string | null): NavalView {
       out: p.out,
       arsenal: sameSide(p.id) ? [...p.arsenal] : null,
       arsenalCount: p.arsenal.length,
+      shots: p.stats.shots,
+      hits: p.stats.hits,
+      sunk: p.stats.sunk,
     })),
     boards: s.players.map((p) => {
       const b = p.board;

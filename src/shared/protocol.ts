@@ -98,6 +98,8 @@ export interface MeResponse {
   pending: { email: string } | null;
   /** Jeux que ce compte voit dans ses menus (les jeux en bêta n'y sont que pour les admins) */
   games?: GameId[];
+  /** Parmi eux, ceux encore en bêta (renseigné pour les admins) */
+  beta?: GameId[];
 }
 
 // ---------------------------------------------------------------------------

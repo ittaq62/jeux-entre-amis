@@ -96,7 +96,13 @@ async function visibleGames(env: Env, user: UserRow): Promise<GameId[]> {
 
 async function meResponse(env: Env, user: UserRow): Promise<MeResponse> {
   if (!user.pseudo) return { user: null, pending: { email: user.email } };
-  return { user: toMe(user), pending: null, games: await visibleGames(env, user) };
+  const open = await navalPublic(env.DB);
+  return {
+    user: toMe(user),
+    pending: null,
+    games: isAdmin(user) || open ? ["uno", "naval"] : ["uno"],
+    ...(isAdmin(user) && !open ? { beta: ["naval" as const] } : {}),
+  };
 }
 
 const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval";
