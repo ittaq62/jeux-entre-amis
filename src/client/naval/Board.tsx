@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cellIndex, cellX, cellY, shipCells, type Placement } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView } from "../../shared/games/naval/view.ts";
 import { useNavalFx, type FxItem } from "./fx.ts";
@@ -10,7 +10,7 @@ const MARGIN = 7;
 export type BoardMode = "sea" | "radar";
 
 export interface BoardPointer {
-  type: "down" | "move" | "up" | "leave";
+  type: "down" | "move" | "up" | "leave" | "cancel";
   cell: number | null;
   event: ReactPointerEvent<SVGSVGElement>;
 }
@@ -45,6 +45,18 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
   const fx = useMemo(() => items.filter((f) => f.board === board.owner), [items, board.owner]);
   const pending = useMemo(() => new Set(pendingList ?? []), [pendingList]);
 
+  // Plateau qu'on manipule au doigt (placement) : le navigateur ne doit lancer aucun geste à lui,
+  // ni défilement, ni loupe, ni menu d'appui long, sinon il annule le glissement en cours.
+  // React écoute touchstart en mode passif : il faut un écouteur natif pour pouvoir l'empêcher.
+  const draggable = Boolean(onPointer);
+  useEffect(() => {
+    const el = svg.current;
+    if (!el || !draggable) return;
+    const block = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener("touchstart", block, { passive: false });
+    return () => el.removeEventListener("touchstart", block);
+  }, [draggable]);
+
   const ships = fleet ?? board.ships;
   const hits = board.hits.filter((c) => !pending.has(c));
   const misses = board.misses.filter((c) => !pending.has(c));
@@ -68,8 +80,8 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
   }
 
   const handle = (type: BoardPointer["type"]) => (e: ReactPointerEvent<SVGSVGElement>) => {
-    const cell = type === "leave" ? null : cellAt(e.clientX, e.clientY);
-    if (type === "move" || type === "leave") {
+    const cell = type === "leave" || type === "cancel" ? null : cellAt(e.clientX, e.clientY);
+    if (type === "move" || type === "leave" || type === "cancel") {
       if (cell !== hover) {
         setHover(cell);
         onHover?.(cell);
@@ -93,6 +105,9 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
       onPointerMove={handle("move")}
       onPointerUp={handle("up")}
       onPointerLeave={handle("leave")}
+      onPointerCancel={handle("cancel")}
+      // Un appui long sur téléphone ouvrirait le menu du navigateur au lieu d'attraper le navire
+      onContextMenu={onPointer ? (e) => e.preventDefault() : undefined}
       onClick={(e) => {
         const cell = cellAt(e.clientX, e.clientY);
         if (cell !== null) onCell?.(cell);

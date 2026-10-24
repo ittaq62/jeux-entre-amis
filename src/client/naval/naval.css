@@ -185,8 +185,10 @@
   -webkit-user-select: none;
 }
 
+/* Au placement, le doigt déplace les navires : le navigateur ne doit pas en faire un défilement */
 .naval-board.is-placing {
   touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .naval-board.is-aiming {

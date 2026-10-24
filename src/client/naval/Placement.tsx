@@ -16,6 +16,12 @@ interface Props {
   serverOffset: number;
 }
 
+interface Ghost {
+  index: number;
+  p: Placement;
+  ok: boolean;
+}
+
 interface Drag {
   index: number;
   start: number;
@@ -30,7 +36,14 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
   const touching = g.settings.touching;
   const [fleet, setFleet] = useState<Placement[]>(() => (board.ships ?? []).map(({ kind, x, y, dir }) => ({ kind, x, y, dir })));
   const [selected, setSelected] = useState<number | null>(null);
-  const [ghost, setGhost] = useState<{ index: number; p: Placement; ok: boolean } | null>(null);
+  const [ghost, setGhostState] = useState<Ghost | null>(null);
+  // Copie immédiate du fantôme : le relâchement arrive souvent dans la même image que le dernier
+  // mouvement, avant que React ait redessiné, et doit quand même voir la dernière position.
+  const ghostRef = useRef<Ghost | null>(null);
+  const setGhost = (g: Ghost | null) => {
+    ghostRef.current = g;
+    setGhostState(g);
+  };
   const [shake, setShake] = useState<number | null>(null);
   const drag = useRef<Drag | null>(null);
   const left = useCountdown(room.placementDeadline, serverOffset);
@@ -86,14 +99,16 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
       const p = { ...d.origin, x: d.origin.x + dx, y: d.origin.y + dy };
       setGhost({ index: d.index, p, ok: shipCells(size, p) !== null && valid(withShip(d.index, p)) });
     }
-    if (type === "up" || type === "leave") {
+    if (type === "up" || type === "leave" || type === "cancel") {
       drag.current = null;
+      const last = ghostRef.current;
       if (!d.moved) {
+        // Un simple appui tourne le navire ; un geste interrompu par le navigateur ne fait rien
         if (type === "up") rotate(d.index);
-      } else if (ghost && ghost.ok) {
-        setFleet(withShip(ghost.index, ghost.p));
+      } else if (last && last.ok) {
+        setFleet(withShip(last.index, last.p));
         play("click", { volume: 0.6 });
-      } else if (ghost) refuse(d.index);
+      } else if (last) refuse(d.index);
       setGhost(null);
     }
   }
