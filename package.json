@@ -14,6 +14,8 @@
     "types": "wrangler types src/worker/worker-configuration.d.ts",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
+    "elo:local": "node --experimental-strip-types scripts/elo-history.ts --local",
+    "elo:remote": "node --experimental-strip-types scripts/elo-history.ts --remote",
     "format": "prettier --write ."
   },
   "dependencies": {

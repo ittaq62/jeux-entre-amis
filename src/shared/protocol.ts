@@ -145,6 +145,12 @@ export interface SpectatorView {
   name: string;
 }
 
+/** Elo après une partie et ce qu'elle a fait gagner ou perdre */
+export interface EloResult {
+  elo: number;
+  delta: number;
+}
+
 export interface RoomView {
   code: string;
   game: "uno";
@@ -159,6 +165,8 @@ export interface RoomView {
   nextRoundAt: number | null;
   serverNow: number;
   rematch: string[];
+  /** Elo de chaque joueur (par id utilisateur) après la partie qui vient de finir */
+  results?: Record<string, EloResult> | null;
   quick: boolean;
 }
 
@@ -243,6 +251,8 @@ export interface NavalRoomView {
   placementDeadline: number | null;
   serverNow: number;
   rematch: string[];
+  /** Elo de chaque joueur (par id utilisateur) après la partie qui vient de finir */
+  results?: Record<string, EloResult> | null;
   quick: boolean;
 }
 

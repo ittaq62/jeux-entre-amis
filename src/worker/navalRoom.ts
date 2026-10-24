@@ -36,7 +36,7 @@ import {
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import type { RoomInit } from "./room.ts";
-import { recordGame } from "./users.ts";
+import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
 // Des marins bretons pour compléter l'équipage
@@ -100,6 +100,8 @@ interface NavalData {
   kicked: string[];
   rng: number;
   recorded: boolean;
+  /** Elo de chacun après la dernière partie, affiché sur la feuille de fin */
+  results?: EloResults | null;
 }
 
 interface Attachment {
@@ -586,6 +588,7 @@ export class NavalRoom extends DurableObject<Env> {
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
+    d.results = null;
     d.rematch = [];
     d.scheduledTurnId = -1;
     d.turnDeadline = null;
@@ -807,7 +810,7 @@ export class NavalRoom extends DurableObject<Env> {
     const d = this.data!;
     const g = d.naval!;
     try {
-      const unlocked = await recordGame(this.env.DB, {
+      const { unlocked, elo } = await recordGame(this.env.DB, {
         game: "naval",
         mode: modeOf(g),
         roomCode: d.code,
@@ -825,12 +828,19 @@ export class NavalRoom extends DurableObject<Env> {
             rank: g.ranks?.[p.id] ?? g.players.length,
             score: p.stats.hits,
             eliminated: p.out,
+            team: p.team,
             stats: { ...p.stats, afloat: fleetAfloat(p.board) },
           };
         }),
       });
       const unlocks = Object.entries(unlocked).map(([userId, ids]) => ({ userId, ids }));
       if (unlocks.length > 0) this.broadcastRaw({ t: "achievements", unlocks });
+      // Le nouvel Elo arrive après la fin de partie : on rediffuse la table pour la feuille de fin
+      if (this.data === d && Object.keys(elo).length > 0) {
+        d.results = elo;
+        await this.persist();
+        this.broadcast([]);
+      }
     } catch (err) {
       console.error("Enregistrement de la bataille impossible", err);
     }
@@ -888,6 +898,7 @@ export class NavalRoom extends DurableObject<Env> {
       placementDeadline: d.placementDeadline,
       serverNow: Date.now(),
       rematch: d.rematch,
+      results: d.results ?? null,
       quick: d.quick,
     };
   }

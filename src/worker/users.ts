@@ -1,5 +1,6 @@
 import { sanitizeAvatar, seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { earnedAchievements, earnedNavalAchievements } from "../shared/achievements.ts";
+import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
 import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval/engine.ts";
 import type { FriendEntry, GameId, Me, PublicUser } from "../shared/protocol.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
@@ -197,8 +198,13 @@ export interface GameRecordPlayer {
   rank: number;
   score: number;
   eliminated: boolean;
+  /** Équipe en 2 contre 2 */
+  team?: number | null;
   stats: PlayerStats | NavalRecordStats;
 }
+
+/** Elo de chaque joueur humain après la partie, et ce qu'il a gagné ou perdu */
+export type EloResults = Record<string, { elo: number; delta: number }>;
 
 /** Stats d'une bataille navale, avec les navires restés à flot */
 export type NavalRecordStats = NavalStats & { afloat: number };
@@ -224,8 +230,8 @@ function mergeNavalTotals(raw: string | null, stats: NavalRecordStats): Record<s
   return totals;
 }
 
-/** Enregistre une partie terminee ; renvoie les succes nouvellement debloques par joueur. */
-export async function recordGame(db: D1Database, rec: GameRecord): Promise<Record<string, string[]>> {
+/** Enregistre une partie terminee ; renvoie les succes nouvellement debloques et le nouvel Elo de chaque joueur. */
+export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unlocked: Record<string, string[]>; elo: EloResults }> {
   const gameId = randomId(10);
   const humans = rec.players.filter((p) => p.userId);
   const statements: D1PreparedStatement[] = [
@@ -252,7 +258,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
   ];
   if (humans.length === 0) {
     await db.batch(statements);
-    return {};
+    return { unlocked: {}, elo: {} };
   }
 
   // Etat actuel des joueurs humains
@@ -260,13 +266,37 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
   const { results: statRows } = await db
     .prepare(`SELECT * FROM user_stats WHERE game = ? AND user_id IN (${placeholders})`)
     .bind(rec.game, ...humans.map((h) => h.userId))
-    .all<{ user_id: string; played: number; won: number; points: number; streak: number; best_streak: number; totals: string }>();
+    .all<{
+      user_id: string;
+      played: number;
+      won: number;
+      points: number;
+      elo: number;
+      streak: number;
+      best_streak: number;
+      totals: string;
+    }>();
   const { results: achRows } = await db
     .prepare(`SELECT user_id, achievement FROM achievements WHERE user_id IN (${placeholders})`)
     .bind(...humans.map((h) => h.userId))
     .all<{ user_id: string; achievement: string }>();
   const byUser = new Map(statRows.map((r) => [r.user_id, r]));
   const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
+
+  // Elo : tout le monde avec son niveau d'avant la partie, les bots à leur niveau fixe
+  const botLevel = rec.game === "naval" ? rec.settings.botLevel : undefined;
+  const ratingOf = (p: GameRecordPlayer) => (p.userId ? (byUser.get(p.userId)?.elo ?? ELO_START) : botElo(rec.game, botLevel));
+  const deltas = eloChanges(
+    rec.players.map((p) => ({
+      id: p.userId ?? `bot-${p.seat}`,
+      rating: ratingOf(p),
+      rank: p.rank,
+      team: p.team ?? null,
+      isBot: !p.userId,
+      played: p.userId ? (byUser.get(p.userId)?.played ?? 0) : 0,
+    })),
+  );
+  const elo: EloResults = {};
 
   const now = Date.now();
   const unlocked: Record<string, string[]> = {};
@@ -299,12 +329,14 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
       totals = mergeNavalTotals(prev?.totals ?? null, stats);
       earnedIds = earnedNavalAchievements({ won, mode: rec.mode, afloat: stats.afloat, out: p.eliminated, stats, played });
     }
+    const delta = deltas[p.userId!] ?? 0;
+    elo[p.userId!] = { elo: ratingOf(p) + delta, delta };
     statements.push(
       db
         .prepare(
-          `INSERT INTO user_stats (user_id, game, played, won, points, streak, best_streak, totals, updated_at)
-           VALUES (?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-           ON CONFLICT(user_id, game) DO UPDATE SET played = ?2, won = ?3, points = ?4, streak = ?5, best_streak = ?6, totals = ?7, updated_at = ?8`,
+          `INSERT INTO user_stats (user_id, game, played, won, points, streak, best_streak, totals, updated_at, elo)
+           VALUES (?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10)
+           ON CONFLICT(user_id, game) DO UPDATE SET played = ?2, won = ?3, points = ?4, streak = ?5, best_streak = ?6, totals = ?7, updated_at = ?8, elo = ?10`,
         )
         .bind(
           p.userId,
@@ -316,6 +348,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
           JSON.stringify(totals),
           now,
           rec.game,
+          elo[p.userId!]!.elo,
         ),
     );
     const earned = earnedIds.filter((id) => !owned.has(`${p.userId}:${id}`));
@@ -329,7 +362,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<Recor
     }
   }
   await db.batch(statements);
-  return unlocked;
+  return { unlocked, elo };
 }
 
 interface StatsRow {
@@ -337,6 +370,7 @@ interface StatsRow {
   played: number;
   won: number;
   points: number;
+  elo: number;
   streak: number;
   best_streak: number;
   totals: string;
@@ -347,6 +381,7 @@ function statsSummary(row: StatsRow | undefined) {
     played: row?.played ?? 0,
     won: row?.won ?? 0,
     points: row?.points ?? 0,
+    elo: row?.elo ?? ELO_START,
     streak: row?.streak ?? 0,
     bestStreak: row?.best_streak ?? 0,
   };
@@ -355,7 +390,7 @@ function statsSummary(row: StatsRow | undefined) {
 export async function userProfile(db: D1Database, user: UserRow) {
   const [statRows, achievements, recent] = await Promise.all([
     db
-      .prepare("SELECT game, played, won, points, streak, best_streak, totals FROM user_stats WHERE user_id = ?")
+      .prepare("SELECT game, played, won, points, elo, streak, best_streak, totals FROM user_stats WHERE user_id = ?")
       .bind(user.id)
       .all<StatsRow>(),
     db.prepare("SELECT achievement, unlocked_at FROM achievements WHERE user_id = ? ORDER BY unlocked_at DESC").bind(user.id).all<{
@@ -411,17 +446,17 @@ export async function userProfile(db: D1Database, user: UserRow) {
   };
 }
 
-export async function leaderboard(db: D1Database, scope: "all" | "friends", me: string, game: GameId) {
+export async function leaderboard(db: D1Database, scope: "all" | "friends", me: string, game: GameId, sort: "points" | "elo" = "points") {
   const friendFilter =
     scope === "friends"
       ? `AND (s.user_id = ?1 OR s.user_id IN (SELECT CASE WHEN user_a = ?1 THEN user_b ELSE user_a END FROM friendships
            WHERE (user_a = ?1 OR user_b = ?1) AND status = 'accepted'))`
       : "";
   const statement = db.prepare(
-    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.best_streak
+    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.elo, s.best_streak
      FROM user_stats s JOIN users u ON u.id = s.user_id
      WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL AND s.played > 0 ${friendFilter}
-     ORDER BY s.points DESC, s.won DESC, s.played ASC LIMIT 100`,
+     ORDER BY ${sort === "elo" ? "s.elo DESC, s.points DESC" : "s.points DESC, s.elo DESC"}, s.won DESC, s.played ASC LIMIT 100`,
   );
   const { results } = await statement.bind(me, game).all<{
     id: string;
@@ -432,6 +467,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     played: number;
     won: number;
     points: number;
+    elo: number;
     best_streak: number;
   }>();
   return results.map((r, i) => ({
@@ -440,6 +476,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     played: r.played,
     won: r.won,
     points: r.points,
+    elo: r.elo,
     bestStreak: r.best_streak,
   }));
 }

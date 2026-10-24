@@ -249,7 +249,8 @@ app.get("/profile/:pseudo", withSession, async (c) => {
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
   const game = isGame(c.req.query("game")) ? (c.req.query("game") as GameId) : "uno";
-  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game) });
+  const sort = c.req.query("sort") === "elo" ? "elo" : "points";
+  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game, sort) });
 });
 
 app.get("/users/search", withSession, withProfile, async (c) => {

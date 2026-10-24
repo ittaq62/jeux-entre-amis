@@ -36,7 +36,7 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import { recordGame } from "./users.ts";
+import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
 const BOT_NAMES = [
@@ -109,6 +109,8 @@ interface RoomData {
   kicked: string[];
   rng: number;
   recorded: boolean;
+  /** Elo de chacun après la dernière partie, affiché sur la feuille de fin */
+  results?: EloResults | null;
 }
 
 interface Attachment {
@@ -585,6 +587,7 @@ export class GameRoom extends DurableObject<Env> {
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
+    d.results = null;
     d.rematch = [];
     d.scheduledTurnId = -1;
     d.catchKey = null;
@@ -862,7 +865,7 @@ export class GameRoom extends DurableObject<Env> {
     const g = d.uno!;
     const ranking = g.ranking ?? [];
     try {
-      const unlocked = await recordGame(this.env.DB, {
+      const { unlocked, elo } = await recordGame(this.env.DB, {
         game: "uno",
         roomCode: d.code,
         settings: g.settings,
@@ -885,6 +888,12 @@ export class GameRoom extends DurableObject<Env> {
       });
       const unlocks = Object.entries(unlocked).map(([userId, ids]) => ({ userId, ids }));
       if (unlocks.length > 0) this.broadcastRaw({ t: "achievements", unlocks });
+      // Le nouvel Elo arrive après la fin de partie : on rediffuse la table pour la feuille de fin
+      if (this.data === d && Object.keys(elo).length > 0) {
+        d.results = elo;
+        await this.persist();
+        this.broadcast([]);
+      }
     } catch (err) {
       console.error("Enregistrement de la partie impossible", err);
     }
@@ -941,6 +950,7 @@ export class GameRoom extends DurableObject<Env> {
       nextRoundAt: d.nextRoundAt,
       serverNow: Date.now(),
       rematch: d.rematch,
+      results: d.results ?? null,
       quick: d.quick,
     };
   }
