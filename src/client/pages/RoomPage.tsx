@@ -1,22 +1,55 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
-import { ChatPanel } from "../game/ChatPanel.tsx";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import type { GameId, RoomSummary } from "../../shared/protocol.ts";
+import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { RoomLobby } from "../game/RoomLobby.tsx";
 import { UnoTable } from "../game/UnoTable.tsx";
 import { useRoom } from "../game/useRoom.ts";
 import { Loading } from "../components/ui.tsx";
-import { preloadSounds } from "../lib/sound.ts";
+import { api, ApiError } from "../lib/api.ts";
+import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 
+// La bataille navale n'est chargée que pour ses tables
+const NavalRoom = lazy(() => import("../naval/NavalRoom.tsx").then((m) => ({ default: m.NavalRoom })));
+
+/** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
 export function RoomPage({ code }: { code: string }) {
-  const [, navigate] = useLocation();
   const upper = code.toUpperCase();
-  const { view, status, chat, emotes, fatal, send, serverOffset, me } = useRoom(upper);
+  const [game, setGame] = useState<GameId | null>(null);
+  const [fatal, setFatal] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ room: RoomSummary }>(`/rooms/${upper}`)
+      .then((r) => !cancelled && setGame(r.room.game))
+      .catch((err) => !cancelled && setFatal(err instanceof ApiError ? err.message : "Salon introuvable."));
+    return () => {
+      cancelled = true;
+    };
+  }, [upper]);
+
+  if (fatal) return <RoomError message={fatal} />;
+  if (!game) return <Loading label="Arrivée à la table…" />;
+  if (game === "naval") {
+    return (
+      <Suspense fallback={<Loading label="Arrivée à la table…" />}>
+        <NavalRoom code={upper} />
+      </Suspense>
+    );
+  }
+  return <UnoRoom code={upper} />;
+}
+
+function UnoRoom({ code }: { code: string }) {
+  const [, navigate] = useLocation();
+  const { view, status, chat, emotes, fatal, send, serverOffset, me } = useRoom(code);
   const [chatOpen, setChatOpen] = useState(false);
   const [lobbyOpen, setLobbyOpen] = useState(false);
-  const [seen, setSeen] = useState(0);
   const lastStatus = useRef(view?.status);
+  const unread = useUnread(chat, chatOpen, me?.id);
 
-  useEffect(() => preloadSounds(), []);
+  useEffect(() => preloadSounds(UNO_SOUNDS), []);
 
   // Quand une partie demarre, on bascule sur la table
   useEffect(() => {
@@ -24,25 +57,7 @@ export function RoomPage({ code }: { code: string }) {
     lastStatus.current = view?.status;
   }, [view]);
 
-  useEffect(() => {
-    if (chatOpen) setSeen(chat.length);
-  }, [chatOpen, chat.length]);
-
-  const unread = chatOpen ? 0 : chat.slice(seen).filter((m) => !m.system && m.userId !== me?.id).length;
-
-  if (fatal) {
-    return (
-      <div className="felt center-screen">
-        <div className="panel panel-pad stack center-text" style={{ maxWidth: 420 }}>
-          <h2>Oups</h2>
-          <p className="hint">{fatal}</p>
-          <Link href="/" className="btn btn-primary">
-            Retour à l'accueil
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion au salon…" : "Arrivée à la table…"} />;
 
   const leave = () => {
@@ -53,7 +68,14 @@ export function RoomPage({ code }: { code: string }) {
   const showTable = view.uno !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
 
   return (
-    <>
+    <RoomShell
+      chat={chat}
+      meId={me?.id ?? ""}
+      chatOpen={chatOpen}
+      onCloseChat={() => setChatOpen(false)}
+      onSend={(text) => send({ t: "chat", text })}
+      reconnecting={status === "reconnecting"}
+    >
       {showTable ? (
         <UnoTable
           room={view}
@@ -75,14 +97,6 @@ export function RoomPage({ code }: { code: string }) {
           onBackToGame={view.status === "playing" ? () => setLobbyOpen(false) : undefined}
         />
       )}
-      <ChatPanel
-        open={chatOpen}
-        messages={chat}
-        meId={me?.id ?? ""}
-        onSend={(text) => send({ t: "chat", text })}
-        onClose={() => setChatOpen(false)}
-      />
-      {status === "reconnecting" && <div className="conn-banner">Connexion perdue, on se reconnecte…</div>}
-    </>
+    </RoomShell>
   );
 }
