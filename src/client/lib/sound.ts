@@ -35,6 +35,9 @@ export type SoundName =
   | "sonar"
   | "torpedo"
   | "ambience"
+  | "brickMove"
+  | "brickRotate"
+  | "brickDrop"
   | "brickLock"
   | "brickClear"
   | "brickQuad"
@@ -80,18 +83,22 @@ const FILES: Record<SoundName, string[]> = {
   sonar: ["naval-sonar.mp3"],
   torpedo: ["naval-torpedo.mp3"],
   ambience: ["naval-ambience.mp3"],
-  brickLock: ["bricks-lock.mp3"],
-  brickClear: ["bricks-clear.mp3"],
-  brickQuad: ["bricks-quad.mp3"],
-  brickCombo: ["bricks-combo.mp3"],
-  brickSpin: ["bricks-spin.mp3"],
-  brickHold: ["bricks-hold.mp3"],
-  brickAttack: ["bricks-attack.mp3"],
-  brickGarbage: ["bricks-garbage.mp3"],
-  brickWarn: ["bricks-warn.mp3"],
-  brickKo: ["bricks-ko.mp3"],
-  brickCount: ["bricks-count.mp3"],
-  brickGo: ["bricks-go.mp3"],
+  // Briques : des WAV courts, sans le petit silence que le MP3 ajoute au début de chaque son
+  brickMove: ["bricks-move.wav"],
+  brickRotate: ["bricks-rotate.wav"],
+  brickDrop: ["bricks-drop-1.wav", "bricks-drop-2.wav", "bricks-drop-3.wav"],
+  brickLock: ["bricks-lock-1.wav", "bricks-lock-2.wav", "bricks-lock-3.wav"],
+  brickClear: ["bricks-clear.wav"],
+  brickQuad: ["bricks-quad.wav"],
+  brickCombo: ["bricks-combo.wav"],
+  brickSpin: ["bricks-spin.wav"],
+  brickHold: ["bricks-hold.wav"],
+  brickAttack: ["bricks-attack.wav"],
+  brickGarbage: ["bricks-garbage.wav"],
+  brickWarn: ["bricks-warn.wav"],
+  brickKo: ["bricks-ko.wav"],
+  brickCount: ["bricks-count.wav"],
+  brickGo: ["bricks-go.wav"],
   brickMusic: ["bricks-music.mp3"],
 };
 
@@ -130,6 +137,9 @@ export const NAVAL_SOUNDS: SoundName[] = [
 ];
 
 export const BRICKS_SOUNDS: SoundName[] = [
+  "brickMove",
+  "brickRotate",
+  "brickDrop",
   "brickLock",
   "brickClear",
   "brickQuad",
@@ -143,8 +153,6 @@ export const BRICKS_SOUNDS: SoundName[] = [
   "brickCount",
   "brickGo",
   "brickMusic",
-  "tick",
-  "click",
   "win",
   "lose",
 ];
@@ -174,19 +182,23 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   sonar: 0.5,
   torpedo: 0.6,
   ambience: 0.35,
-  brickLock: 0.5,
-  brickClear: 0.7,
-  brickQuad: 0.85,
-  brickCombo: 0.6,
-  brickSpin: 0.6,
-  brickHold: 0.45,
-  brickAttack: 0.55,
-  brickGarbage: 0.7,
-  brickWarn: 0.45,
-  brickKo: 0.8,
-  brickCount: 0.6,
-  brickGo: 0.7,
-  brickMusic: 0.32,
+  // Doux et feutré : la pose et les gestes restent à peine audibles, les belles poses sortent un peu
+  brickMove: 0.18,
+  brickRotate: 0.28,
+  brickDrop: 0.55,
+  brickLock: 0.42,
+  brickClear: 0.55,
+  brickQuad: 0.62,
+  brickCombo: 0.4,
+  brickSpin: 0.45,
+  brickHold: 0.35,
+  brickAttack: 0.35,
+  brickGarbage: 0.6,
+  brickWarn: 0.35,
+  brickKo: 0.6,
+  brickCount: 0.5,
+  brickGo: 0.55,
+  brickMusic: 0.22,
 };
 
 let ctx: AudioContext | null = null;
@@ -282,8 +294,14 @@ export function play(name: SoundName, opts: { volume?: number; rate?: number; de
   if (!ac || !master) return;
   const files = FILES[name];
   const file = files[Math.floor(Math.random() * files.length)]!;
+  const asked = performance.now();
   void load(file).then((buffer) => {
     if (!buffer || !master) return;
+    // En développement seulement : quand chaque son part vraiment, pour mesurer les décalages
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __sounds?: { name: string; asked: number; started: number }[] };
+      (w.__sounds ??= []).push({ name, asked, started: performance.now() });
+    }
     const source = ac.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
