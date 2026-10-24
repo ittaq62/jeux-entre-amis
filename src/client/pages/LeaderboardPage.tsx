@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { GAME_NAMES, type GameId, type PublicUser } from "../../shared/protocol.ts";
 import { BOT_ELO, ELO_START } from "../../shared/elo.ts";
+import { formatSprint } from "../lib/countdown.ts";
 import { RANKING_POINTS } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
@@ -18,9 +19,10 @@ interface Entry {
   points: number;
   elo: number;
   bestStreak: number;
+  bestSprint: number | null;
 }
 
-type Sort = "points" | "elo";
+type Sort = "points" | "elo" | "sprint";
 
 export function LeaderboardPage() {
   const me = useSession((s) => s.user);
@@ -38,10 +40,17 @@ export function LeaderboardPage() {
       .catch(() => setEntries([]));
   }, [scope, game, sort]);
 
+  // Les records du solo n'existent qu'à Briques
+  useEffect(() => {
+    if (sort === "sprint" && game !== "bricks") setSort("points");
+  }, [game, sort]);
+
   const bots =
     game === "naval"
       ? `Les bots comptent pour ${BOT_ELO.naval.mousse} (Mousse), ${BOT_ELO.naval.chasseur} (Chasseur) ou ${BOT_ELO.naval.amiral} (Amiral).`
-      : `Les bots comptent pour ${BOT_ELO.uno}.`;
+      : game === "bricks"
+        ? `Les bots comptent pour ${BOT_ELO.bricks.apprenti} (Apprenti), ${BOT_ELO.bricks.confirme} (Confirmé) ou ${BOT_ELO.bricks.expert} (Expert).`
+        : `Les bots comptent pour ${BOT_ELO.uno}.`;
 
   return (
     <div className="felt page">
@@ -69,11 +78,14 @@ export function LeaderboardPage() {
             options={[
               { value: "points", label: "Points" },
               { value: "elo", label: "Elo" },
+              ...(game === "bricks" ? [{ value: "sprint" as const, label: "Records 40 lignes" }] : []),
             ]}
           />
         </div>
         <p className="hint" style={{ margin: 0, maxWidth: "62ch" }}>
-          {sort === "points" ? (
+          {sort === "sprint" ? (
+            <>Le meilleur temps de chacun au solo 40 lignes, du plus rapide au plus lent.</>
+          ) : sort === "points" ? (
             <>
               Chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points ({RANKING_POINTS.bot} si c'est un bot), et la
               victoire en ajoute {RANKING_POINTS.win}. Les points ne baissent jamais.
@@ -94,9 +106,15 @@ export function LeaderboardPage() {
             <>
               <div className="board-head" aria-hidden="true">
                 <span className="board-head-who">Joueur</span>
-                <span className="board-stat board-extra">Victoires</span>
-                <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`}>Elo</span>
-                <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`}>Points</span>
+                {sort === "sprint" ? (
+                  <span className="board-stat board-score board-time is-main">Record</span>
+                ) : (
+                  <>
+                    <span className="board-stat board-extra">Victoires</span>
+                    <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`}>Elo</span>
+                    <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`}>Points</span>
+                  </>
+                )}
               </div>
               <ol className="rows" style={{ margin: 0 }}>
                 {entries.map((e) => (
@@ -108,17 +126,28 @@ export function LeaderboardPage() {
                         <PlayerName name={e.user.pseudo} admin={e.user.admin} />
                       </strong>
                     </Link>
-                    <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
-                      <strong>
-                        {e.won} / {e.played}
-                      </strong>
-                    </span>
-                    <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`} aria-label={`Elo ${e.elo}`}>
-                      <strong>{e.elo}</strong>
-                    </span>
-                    <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`} aria-label={`${e.points} points`}>
-                      <strong>{e.points.toLocaleString("fr-FR")}</strong>
-                    </span>
+                    {sort === "sprint" ? (
+                      <span
+                        className="board-stat board-score board-time is-main"
+                        aria-label={`Record en ${formatSprint(e.bestSprint ?? 0)}`}
+                      >
+                        <strong>{formatSprint(e.bestSprint ?? 0)}</strong>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
+                          <strong>
+                            {e.won} / {e.played}
+                          </strong>
+                        </span>
+                        <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`} aria-label={`Elo ${e.elo}`}>
+                          <strong>{e.elo}</strong>
+                        </span>
+                        <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`} aria-label={`${e.points} points`}>
+                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                        </span>
+                      </>
+                    )}
                   </li>
                 ))}
               </ol>

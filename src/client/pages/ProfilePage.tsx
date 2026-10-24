@@ -9,6 +9,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { formatSprint } from "../lib/countdown.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 import { useSession } from "../stores/session.ts";
@@ -29,6 +30,7 @@ interface Profile {
   friendship: "none" | "self" | "accepted" | "incoming" | "outgoing";
   stats: GameStats;
   naval: GameStats;
+  bricks: GameStats;
   achievements: { id: string; at: number }[];
   recent: {
     id: string;
@@ -89,7 +91,12 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const naval = profile.naval;
   // La bataille navale n'apparaît que si on la voit déjà, ou si ce joueur y a joué
   const showNaval = games.includes("naval") || naval.played > 0;
-  const shelfGame = showNaval ? shelf : "uno";
+  const bricks = profile.bricks;
+  const bt = bricks.totals;
+  // Pareil pour Briques (un record au solo suffit à l'afficher)
+  const showBricks = games.includes("bricks") || bricks.played > 0 || Boolean(bt.bestSprint);
+  const shelfGames = (["uno", "naval", "bricks"] as GameId[]).filter((g) => g === "uno" || (g === "naval" ? showNaval : showBricks));
+  const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
   // Les succès gagnés d'abord, du plus récent au plus ancien, puis ceux qui restent à décrocher
   const won = shelfList.filter((a) => owned.has(a.id)).sort((x, y) => owned.get(y.id)! - owned.get(x.id)!);
@@ -115,7 +122,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             {stats.played > 0 && (
               <p className="profile-points">
                 <strong className="num">{stats.points.toLocaleString("fr-FR")}</strong> points au classement
-                {showNaval && naval.played > 0 && " de UNO"}
+                {((showNaval && naval.played > 0) || (showBricks && bricks.played > 0)) && " de UNO"}
                 <span className="profile-elo">
                   Elo <strong className="num">{stats.elo}</strong>
                 </span>
@@ -126,6 +133,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{naval.points.toLocaleString("fr-FR")}</strong> points en bataille navale
                 <span className="profile-elo">
                   Elo <strong className="num">{naval.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showBricks && bricks.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{bricks.points.toLocaleString("fr-FR")}</strong> points à Briques
+                <span className="profile-elo">
+                  Elo <strong className="num">{bricks.elo}</strong>
                 </span>
               </p>
             )}
@@ -194,6 +209,34 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 </dl>
               </section>
             )}
+
+            {showBricks && (
+              <section className="carnet panel">
+                <h2>Le chantier</h2>
+                <p className="carnet-summary">
+                  {bricks.played === 0
+                    ? bt.bestSprint
+                      ? "Aucune partie contre les autres pour l'instant, seulement le solo."
+                      : "Aucune partie de Briques pour l'instant."
+                    : `${bricks.played} partie${bricks.played > 1 ? "s" : ""}, ${bricks.won} gagnée${bricks.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  {bt.bestSprint ? (
+                    <div className="ledger-row is-key">
+                      <dt>Record au solo 40 lignes</dt>
+                      <dd>{formatSprint(bt.bestSprint)}</dd>
+                    </div>
+                  ) : null}
+                  <LedgerRow label="Lignes faites" value={bt.lines} strong={!bt.bestSprint} />
+                  <LedgerRow label="Lignes envoyées" value={bt.sent} />
+                  <LedgerRow label="Quatre lignes d'un coup" value={bt.tetrises} />
+                  <LedgerRow label="T-spins" value={bt.tspins} />
+                  <LedgerRow label="Plus long combo" value={bt.maxCombo} />
+                  <LedgerRow label="K.O. infligés" value={bt.kos} />
+                  <LedgerRow label="Plateaux vidés" value={bt.allClears} />
+                </dl>
+              </section>
+            )}
           </div>
 
           <section className="achievements">
@@ -203,12 +246,12 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 {shelfList.filter((a) => owned.has(a.id)).length} sur {shelfList.length}
               </span>
             </h2>
-            {showNaval && (
+            {shelfGames.length > 1 && (
               <Options<GameId>
                 label="Succès de quel jeu"
                 value={shelfGame}
                 onChange={setShelf}
-                options={(["uno", "naval"] as GameId[]).map((g) => ({ value: g, label: GAME_NAMES[g] }))}
+                options={shelfGames.map((g) => ({ value: g, label: GAME_NAMES[g] }))}
               />
             )}
             {won.length > 0 && (
@@ -281,6 +324,7 @@ const NAVAL_MODES: Record<string, string> = { duel: "en duel", melee: "en mêlé
 
 function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "naval") return `bataille navale ${NAVAL_MODES[g.variant] ?? ""}`.trim();
+  if (g.game === "bricks") return `Briques ${NAVAL_MODES[g.variant] ?? ""}`.trim();
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }
 

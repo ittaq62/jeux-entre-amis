@@ -799,6 +799,34 @@
     8px 10px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* Briques : une laque bordeaux sous la lampe, et un titre ivoire en relief */
+.home-game-bricks {
+  margin-top: 24px;
+}
+
+.game-stage.is-lacquer {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 40%, rgba(255, 190, 120, 0.14), transparent 70%),
+    radial-gradient(ellipse 90% 85% at 50% 45%, #4a1d27 0%, #2c1018 55%, #160709 100%);
+}
+
+.bricks-preview {
+  rotate: 3deg;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+}
+
+.game-name.is-bricks {
+  color: #f6ecd6;
+  text-shadow:
+    1px 1px 0 #b8323a,
+    2px 2px 0 #a52c33,
+    3px 3px 0 #92262c,
+    4px 4px 0 #7f2026,
+    5px 5px 0 #6c1a1f,
+    6px 6px 0 #591419,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
 .beta-tag {
   display: inline-block;
   margin-right: 6px;
@@ -1055,6 +1083,10 @@
     scale: 0.78;
   }
 
+  .bricks-preview {
+    scale: 0.72;
+  }
+
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1082,6 +1114,10 @@
 
   .naval-preview {
     scale: 0.7;
+  }
+
+  .bricks-preview {
+    scale: 0.62;
   }
 
   .game-sheet {
@@ -1868,6 +1904,10 @@
   font-size: 24px;
   line-height: 1.05;
   color: var(--gold);
+}
+
+.board-score.board-time {
+  width: 120px;
 }
 
 .board-head .board-score.is-main {

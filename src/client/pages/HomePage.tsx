@@ -10,6 +10,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
+import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -162,6 +163,36 @@ export function HomePage() {
           </section>
         )}
 
+        {games.includes("bricks") && (
+          <section className="home-game home-game-bricks panel" aria-label="Briques">
+            <div className="game-stage is-lacquer" aria-hidden="true">
+              <BricksPreview cell={14} />
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-bricks">Briques</h2>
+              {beta.includes("bricks") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                Empile, fais des lignes, et envoie-les en lignes grises chez les autres. En duel, en mêlée jusqu'à 6, en équipes ou seul
+                contre la montre.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bricks")} disabled={busy !== null}>
+                  {busy === "quick-bricks" && <span className="spinner" />} Partie rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("bricks")} disabled={busy !== null}>
+                  Ouvrir une table
+                </button>
+              </div>
+              <JoinCode id="join-code-bricks" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
@@ -233,7 +264,13 @@ export function HomePage() {
       <Modal
         open={createFor !== null}
         onClose={() => setCreateFor(null)}
-        title={createFor === "naval" ? "Ouvrir une table de bataille navale" : "Ouvrir une table"}
+        title={
+          createFor === "naval"
+            ? "Ouvrir une table de bataille navale"
+            : createFor === "bricks"
+              ? "Ouvrir une table de Briques"
+              : "Ouvrir une table"
+        }
       >
         <div className="create-options">
           <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
@@ -288,12 +325,11 @@ function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (co
   );
 }
 
-const NAVAL_MODES: Record<string, string> = { duel: "duel", melee: "mêlée", teams: "en équipes" };
+const NAVAL_MODES: Record<string, string> = { duel: "duel", melee: "mêlée", teams: "en équipes", sprint: "solo 40 lignes" };
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
   const seats = room.humans + room.bots;
-  const variant =
-    room.game === "naval" ? (NAVAL_MODES[room.variant] ?? room.variant) : room.variant === "nomercy" ? "No Mercy" : "classique";
+  const variant = room.game !== "uno" ? (NAVAL_MODES[room.variant] ?? room.variant) : room.variant === "nomercy" ? "No Mercy" : "classique";
   return (
     <li className="row">
       <span className="room-code">{room.code}</span>
