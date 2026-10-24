@@ -49,35 +49,40 @@ export function LeaderboardPage() {
           Chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points ({RANKING_POINTS.bot} si c'est un bot), et la
           victoire en ajoute {RANKING_POINTS.win}. Les points ne baissent jamais.
         </p>
-        <section className="board panel suit-diamond">
+        <section className="board panel">
           {entries === null ? (
             <p className="hint board-note">Chargement…</p>
           ) : entries.length === 0 ? (
             <p className="empty board-note">Personne n'a encore terminé de partie. La première victoire ouvrira le tableau.</p>
           ) : (
-            <ol className="rows" style={{ margin: 0 }}>
-              {entries.map((e) => (
-                <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? "top" : ""}`}>
-                  <span className="board-rank num">{e.rank}</span>
-                  <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
-                    <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
-                    <strong>
-                      <PlayerName name={e.user.pseudo} admin={e.user.admin} />
-                    </strong>
-                  </Link>
-                  <span className="board-stat board-extra">
-                    <strong>
-                      {e.won} / {e.played}
-                    </strong>
-                    <span>victoires</span>
-                  </span>
-                  <span className="board-stat board-points">
-                    <strong>{e.points.toLocaleString("fr-FR")}</strong>
-                    <span>points</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <>
+              <div className="board-head" aria-hidden="true">
+                <span className="board-head-who">Joueur</span>
+                <span className="board-stat board-extra">Victoires</span>
+                <span className="board-stat board-points">Points</span>
+              </div>
+              <ol className="rows" style={{ margin: 0 }}>
+                {entries.map((e) => (
+                  <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? "top" : ""}`}>
+                    <span className="board-rank num">{e.rank}</span>
+                    <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
+                      <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
+                      <strong>
+                        <PlayerName name={e.user.pseudo} admin={e.user.admin} />
+                      </strong>
+                    </Link>
+                    <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
+                      <strong>
+                        {e.won} / {e.played}
+                      </strong>
+                    </span>
+                    <span className="board-stat board-points" aria-label={`${e.points} points`}>
+                      <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </>
           )}
         </section>
       </main>

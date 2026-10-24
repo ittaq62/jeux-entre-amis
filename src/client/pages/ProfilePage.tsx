@@ -78,7 +78,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   }
 
   const since = new Date(profile.memberSince).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-  const sortedAchievements = [...ACHIEVEMENTS].sort((x, y) => Number(owned.has(y.id)) - Number(owned.has(x.id)));
+  // Les succès gagnés d'abord, du plus récent au plus ancien, puis ceux qui restent à décrocher
+  const won = ACHIEVEMENTS.filter((a) => owned.has(a.id)).sort((x, y) => owned.get(y.id)! - owned.get(x.id)!);
+  const toWin = ACHIEVEMENTS.filter((a) => !owned.has(a.id));
 
   return (
     <div className="felt page">
@@ -123,8 +125,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
         </section>
 
         <div className="profile-grid">
-          <section className="carnet panel suit-spade">
-            <h2 className="panel-title">Le carnet</h2>
+          <section className="carnet panel">
+            <h2>Le carnet</h2>
             <p className="carnet-summary">
               {stats.played === 0
                 ? "Aucune partie jouée pour l'instant."
@@ -145,32 +147,50 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             </dl>
           </section>
 
-          <section className="achievements panel">
-            <h2 className="panel-title">
+          <section className="achievements">
+            <h2>
               Succès{" "}
               <span className="hint num">
                 {owned.size} sur {ACHIEVEMENTS.length}
               </span>
             </h2>
-            <ul className="achievement-grid">
-              {sortedAchievements.map((a) => {
-                const at = owned.get(a.id);
-                return (
-                  <li key={a.id} className={`achievement ${at ? "is-owned" : ""}`}>
-                    <Chip label={a.chip} tone={a.tone} size={46} muted={!at} title={a.title} />
+            {won.length > 0 && (
+              <ul className="achievement-grid">
+                {won.map((a) => (
+                  <li key={a.id} className="achievement is-owned">
+                    <Chip label={a.chip} tone={a.tone} size={46} title={a.title} />
                     <span className="achievement-text">
                       <strong>{a.title}</strong>
                       <span>{a.description}</span>
+                      <span className="achievement-date">Obtenu le {dayMonth(owned.get(a.id)!)}</span>
                     </span>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
+            {toWin.length > 0 && (
+              <>
+                <h3 className="achievement-group">{won.length > 0 ? "À décrocher" : "Tous à décrocher"}</h3>
+                <ul className="achievement-grid">
+                  {toWin.map((a) => (
+                    <li key={a.id} className="achievement">
+                      <span className="chip-slot" aria-hidden="true">
+                        <span>{a.chip}</span>
+                      </span>
+                      <span className="achievement-text">
+                        <strong>{a.title}</strong>
+                        <span>{a.description}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </section>
         </div>
 
-        <section className="history panel suit-club">
-          <h2 className="panel-title">Dernières parties</h2>
+        <section className="home-list history">
+          <h2>Dernières parties</h2>
           {profile.recent.length === 0 ? (
             <p className="empty">Pas encore de partie terminée.</p>
           ) : (
@@ -197,6 +217,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
     </div>
   );
 }
+
+const dayMonth = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
 
 /** Points rapportés par une partie de l'historique, avec le barème du classement. */
 function gamePoints(g: Profile["recent"][number]): number {
