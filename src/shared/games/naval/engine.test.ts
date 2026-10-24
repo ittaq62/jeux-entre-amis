@@ -163,7 +163,7 @@ describe("à plusieurs", () => {
     for (let i = 0; i < 6 && s.phase === "battle"; i++) expect(turnOf(s)).not.toBe("b");
   });
 
-  it("équipes : un joueur coulé continue à tirer tant que son coéquipier tient", () => {
+  it("équipes : un joueur coulé ne tire plus, son coéquipier continue seul", () => {
     const s = battle(["a", "b", "c", "d"], { teams: true, shots: "single" });
     expect(s.players.map((p) => p.team)).toEqual([0, 1, 0, 1]);
     expect(fire(s, "a", "c", 50).ok).toBe(false);
@@ -177,15 +177,39 @@ describe("à plusieurs", () => {
     }
     expect(s.eliminated).toEqual([]);
     expect(s.phase).toBe("battle");
-    // b peut encore jouer à son tour
-    let sawB = false;
+    // b est sauté à chaque tour, d joue pour l'équipe
+    let sawD = false;
     for (let i = 0; i < 8 && s.phase === "battle"; i++) {
       const who = turnOf(s);
-      if (who === "b") sawB = true;
+      expect(who).not.toBe("b");
+      if (who === "d") sawD = true;
       const target = who === "a" || who === "c" ? "d" : "a";
       expect(fire(s, who, target, water(s, target)).ok).toBe(true);
     }
-    expect(sawB).toBe(true);
+    expect(sawD).toBe(true);
+    expect(fire(s, "b", "a", water(s, "a")).ok).toBe(false);
+  });
+
+  it("équipes : le coéquipier coulé gagne quand même si son équipe l'emporte", () => {
+    const s = battle(["a", "b", "c", "d"], { teams: true, shots: "single" });
+    const cells = cellsOf(ROWS);
+    const idx: Record<string, number> = { a: 0, b: 0, c: 0, d: 0 };
+    // Équipe 0 (a, c) : a coule d'abord, puis l'équipe 1 (b, d) tombe entièrement
+    const plan = (who: string) => {
+      if (who === "b" || who === "d") return s.players[0]!.out ? "c" : "a";
+      return s.players[1]!.out ? "d" : "b";
+    };
+    let guard = 0;
+    while (s.phase === "battle" && guard++ < 800) {
+      const who = turnOf(s);
+      const target = plan(who);
+      // b et d ne visent juste que tant que a flotte, ensuite ils tirent dans l'eau
+      const aimed = who === "b" || who === "d" ? (target === "a" ? cells[idx.a!++]! : water(s, "c")) : cells[idx[target]!++]!;
+      expect(fire(s, who, target, aimed).ok).toBe(true);
+    }
+    expect(s.players[0]!.out).toBe(true);
+    expect(s.players[2]!.out).toBe(false);
+    expect(s.ranks).toEqual({ a: 1, c: 1, b: 3, d: 3 });
   });
 
   it("équipes : les deux gagnants partagent la première place", () => {

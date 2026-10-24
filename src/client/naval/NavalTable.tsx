@@ -300,7 +300,11 @@ function Battle({
   else if (myTurn) {
     const shots = g.settings.shots === "salvo" && g.shotsLeft > 1 ? `, ${g.shotsLeft} tirs` : "";
     status = enemies.filter((p) => !p.out).length > 1 ? `À toi de tirer${shots} : choisis ta cible.` : `À toi de tirer${shots} !`;
-  } else if (meP?.out && meP.team === null) status = "Ta flotte est au fond. Tu regardes la fin de la bataille.";
+  } else if (meP?.out)
+    status =
+      mate && !mate.out
+        ? `Ta flotte est au fond : ${seat(mate.id)?.name ?? "ton équipier"} continue seul.`
+        : "Ta flotte est au fond. Tu regardes la fin de la bataille.";
   else status = `Au tour de ${turnSeat?.name ?? "?"}`;
 
   const arsenal = meP?.arsenal ?? [];

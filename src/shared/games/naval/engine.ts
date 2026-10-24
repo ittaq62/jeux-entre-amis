@@ -312,11 +312,6 @@ function sideAlive(s: NavalState, p: NavalPlayer): boolean {
   return s.players.some((q) => allies(p, q) && !q.out);
 }
 
-/** Peut encore tirer : sa flotte flotte, ou en équipes son coéquipier tient encore. */
-export function canPlay(s: NavalState, p: NavalPlayer): boolean {
-  return p.team !== null ? sideAlive(s, p) : !p.out;
-}
-
 /** Plateaux qu'un joueur peut viser. */
 export function targetsOf(s: NavalState, shooterId: string): NavalPlayer[] {
   const me = s.players[playerIndex(s, shooterId)];
@@ -345,7 +340,8 @@ function passTurn(s: NavalState, events: NavalEvent[]) {
   const n = s.players.length;
   for (let step = 1; step <= n; step++) {
     const i = (s.turn + step) % n;
-    if (canPlay(s, s.players[i]!)) return startTurn(s, i, events);
+    // Une flotte au fond ne tire plus, même en équipes : le coéquipier finit seul
+    if (!s.players[i]!.out) return startTurn(s, i, events);
   }
 }
 
@@ -357,11 +353,12 @@ function startBattle(s: NavalState, events: NavalEvent[]) {
 }
 
 function checkOver(s: NavalState, events: NavalEvent[]): boolean {
-  const alive = s.players.filter((p) => canPlay(s, p));
+  const alive = s.players.filter((p) => !p.out);
   const sides = new Set(alive.map((p) => (p.team !== null ? `t${p.team}` : p.id)));
   if (sides.size > 1) return false;
   s.phase = "gameOver";
-  const winners = alive;
+  // En équipes, le coéquipier coulé gagne avec celui qui a tenu
+  const winners = s.players.filter((p) => alive.some((a) => allies(a, p)));
   const losers = [...s.eliminated].reverse().filter((id) => !winners.some((w) => w.id === id));
   // Ceux qui n'ont pas encore été comptés (sécurité)
   for (const p of s.players) if (!winners.includes(p) && !losers.includes(p.id)) losers.push(p.id);
