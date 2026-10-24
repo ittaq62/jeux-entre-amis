@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { UnoPlayerView } from "../../shared/games/uno/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
+import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
@@ -78,7 +79,10 @@ export function Seat({
         {player.rank && <span className="rank-badge num">{player.rank}</span>}
         {player.eliminated && <span className="rank-badge is-out">×</span>}
       </div>
-      <div className="seat-plate">{seat.name}</div>
+      <div className="seat-plate">
+        <span className="seat-plate-name">{seat.name}</span>
+        {seat.admin && <AdminBadge />}
+      </div>
       <div className="seat-meta">
         {!player.out && (
           <div
@@ -140,7 +144,7 @@ export function TimerRing({ size, deadline, total, offset }: { size: number; dea
   const r = size / 2 - 3;
   const c = 2 * Math.PI * r;
   const left = deadline && total > 0 ? Math.max(0, Math.min(1, (deadline - now) / (total * 1000))) : 1;
-  const color = left > 0.25 ? "var(--brass-light)" : "#d9473a";
+  const color = left > 0.25 ? "var(--gold)" : "#d9473a";
   return (
     <svg className="timer-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="4" />

@@ -83,7 +83,7 @@ export function useRoom(code: string) {
       .then(() => {
         if (cancelled) return;
         socket.current = new LiveSocket<RoomServerMessage, RoomClientMessage>(`/rooms/${code}/ws`, {
-          fatalCodes: [4003],
+          fatalCodes: [4003, 4004],
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {
@@ -132,7 +132,7 @@ export function useRoom(code: string) {
                 play("buzzer", { volume: 0.35 });
                 break;
               case "kicked":
-                setFatal("L'hôte t'a exclu de ce salon.");
+                setFatal("Tu as été exclu de ce salon.");
                 break;
               case "closed":
                 setFatal(msg.reason);

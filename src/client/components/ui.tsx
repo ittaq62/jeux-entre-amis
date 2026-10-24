@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { APP_NAME } from "../../shared/app.ts";
@@ -151,6 +151,42 @@ export function Check({
       disabled={disabled}
       onClick={() => onChange(!checked)}
     />
+  );
+}
+
+/** Bouton qui demande un second clic avant d'agir, pour ce qu'on ne peut pas défaire. */
+export function ConfirmButton({
+  children,
+  confirm = "Tu confirmes ?",
+  onConfirm,
+  className = "btn btn-danger",
+  disabled,
+}: {
+  children: ReactNode;
+  confirm?: string;
+  onConfirm: () => void;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3500);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      className={`${className} ${armed ? "is-armed" : ""}`}
+      disabled={disabled}
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
+      }}
+    >
+      {armed ? confirm : children}
+    </button>
   );
 }
 

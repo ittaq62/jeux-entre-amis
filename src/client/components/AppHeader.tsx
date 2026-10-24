@@ -21,6 +21,12 @@ export function AppHeader() {
         <Logo size={22} />
       </Link>
       <nav className="app-nav">
+        {user.admin && (
+          <Link href="/admin" className={`nav-link nav-admin ${location === "/admin" ? "is-active" : ""}`} aria-label="Administration">
+            <Icon name="shield" size={17} />
+            <span className="nav-admin-label">Admin</span>
+          </Link>
+        )}
         <Link href="/classement" className={`nav-link ${location === "/classement" ? "is-active" : ""}`}>
           Classement
         </Link>

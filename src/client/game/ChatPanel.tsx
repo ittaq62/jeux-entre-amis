@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CHAT_MAX, REACTIONS, TAUNTS, type ChatMessage } from "../../shared/protocol.ts";
+import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Icon } from "../components/Icon.tsx";
 
 export function ChatPanel({
@@ -55,7 +56,10 @@ export function ChatPanel({
                 </p>
               ) : (
                 <p key={m.id} className={`chat-msg ${m.userId === meId ? "is-me" : ""}`}>
-                  <strong>{m.name}</strong>
+                  <strong>
+                    {m.name}
+                    {m.admin && <AdminBadge />}
+                  </strong>
                   <span>{m.text}</span>
                 </p>
               ),

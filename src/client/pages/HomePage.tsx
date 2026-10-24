@@ -5,6 +5,7 @@ import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import type { RoomSummary, Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
+import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
@@ -198,7 +199,9 @@ export function HomePage() {
                           <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
                         </span>
                         <span className="row-text">
-                          <strong>{f.user.pseudo}</strong>
+                          <strong>
+                            <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                          </strong>
                           <span className="hint">
                             {!isOnline
                               ? "hors ligne"

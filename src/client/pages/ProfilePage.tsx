@@ -4,6 +4,7 @@ import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import type { PublicUser } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
+import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Loading, timeAgo } from "../components/ui.tsx";
@@ -86,7 +87,10 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
         <section className="profile-head">
           <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={88} />
           <div className="profile-id">
-            <h1>{user.pseudo}</h1>
+            <h1>
+              {user.pseudo}
+              {user.admin && <AdminBadge large />}
+            </h1>
             <p>
               À la table depuis {since}
               {stats.streak >= 2 && <>, {stats.streak} victoires d'affilée en ce moment</>}.

@@ -3,6 +3,7 @@ import { api } from "../lib/api.ts";
 import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
+import { useSession } from "./session.ts";
 import type { FriendEntry, HubClientMessage, HubServerMessage, PresenceRoom, RoomSummary } from "../../shared/protocol.ts";
 
 interface HubState {
@@ -26,6 +27,17 @@ let navigateTo: (path: string) => void = (path) => {
 
 export function setHubNavigator(fn: (path: string) => void) {
   navigateTo = fn;
+}
+
+/** Une annonce n'apparaît qu'une fois, même si la connexion se refait. */
+function alreadySeen(id: number): boolean {
+  try {
+    if (sessionStorage.getItem("annonce-vue") === String(id)) return true;
+    sessionStorage.setItem("annonce-vue", String(id));
+  } catch {
+    // stockage indisponible : tant pis, on la remontre
+  }
+  return false;
 }
 
 /** Connexion permanente : amis en ligne, salons publics, invitations. */
@@ -75,6 +87,18 @@ export const useHub = create<HubState>((set, get) => ({
               });
             break;
           }
+          case "announce": {
+            const a = msg.announcement;
+            if (alreadySeen(a.id)) break;
+            play("join");
+            toast({ tone: "gold", title: `Message de ${a.from}`, body: a.text, duration: 20000 });
+            break;
+          }
+          case "signedOut":
+            toast({ tone: "danger", title: msg.reason, duration: 10000 });
+            get().disconnect();
+            useSession.setState({ user: null, pending: null });
+            break;
           case "invite":
             play("join");
             toast({

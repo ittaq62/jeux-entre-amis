@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
 import { MAX_PLAYERS, MIN_PLAYERS, type RoomClientMessage, type RoomView } from "../../shared/protocol.ts";
+import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { Check, Modal, Options } from "../components/ui.tsx";
+import { Check, ConfirmButton, Modal, Options } from "../components/ui.tsx";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 
@@ -57,6 +58,11 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
         </button>
         <h1 className="page-title">{finished ? "Fin de partie" : host && !isHost ? `Table de ${host.name}` : "Ta table"}</h1>
         <div className="page-top-actions">
+          {room.you.isAdmin && (
+            <ConfirmButton className="btn btn-sm btn-danger" confirm="Fermer pour tous ?" onConfirm={() => send({ t: "close" })}>
+              Fermer la table
+            </ConfirmButton>
+          )}
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" />
             {unread > 0 && <span className="badge">{unread}</span>}
@@ -101,8 +107,7 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
                   <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={44} />
                   <span className="row-text">
                     <strong>
-                      {seat.name}
-                      {seat.id === room.you.seatId && " (toi)"}
+                      <PlayerName name={seat.name} admin={seat.admin} suffix={seat.id === room.you.seatId ? " (toi)" : undefined} />
                     </strong>
                     <span className="hint">
                       {[seat.isHost && "hôte", seat.kind === "bot" && "bot", seat.kind === "human" && !seat.connected && "absent"]
@@ -110,7 +115,7 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
                         .join(", ") || " "}
                     </span>
                   </span>
-                  {isHost && seat.id !== room.you.seatId && (
+                  {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
                     <button
                       className="btn btn-ghost btn-sm"
                       onClick={() => send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })}

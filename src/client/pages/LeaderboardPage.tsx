@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import type { PublicUser } from "../../shared/protocol.ts";
 import { RANKING_POINTS } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
+import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { api } from "../lib/api.ts";
 import { useSession } from "../stores/session.ts";
@@ -60,7 +61,9 @@ export function LeaderboardPage() {
                   <span className="board-rank num">{e.rank}</span>
                   <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
                     <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
-                    <strong>{e.user.pseudo}</strong>
+                    <strong>
+                      <PlayerName name={e.user.pseudo} admin={e.user.admin} />
+                    </strong>
                   </Link>
                   <span className="board-stat board-extra">
                     <strong>

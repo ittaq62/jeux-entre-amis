@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import type { PublicUser } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
+import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -94,7 +95,9 @@ export function FriendsPage() {
                 <li key={u.id} className="row">
                   <Link href={`/joueur/${encodeURIComponent(u.pseudo)}`} className="row-who">
                     <Avatar avatar={u.avatar} userId={u.id} photo={u.photo} size={36} />
-                    <strong>{u.pseudo}</strong>
+                    <strong>
+                      <PlayerName name={u.pseudo} admin={u.admin} />
+                    </strong>
                   </Link>
                   {known.has(u.id) ? (
                     <span className="tag">déjà dans ta liste</span>
@@ -117,7 +120,9 @@ export function FriendsPage() {
                 <li key={f.user.id} className="row">
                   <span className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={38} />
-                    <strong>{f.user.pseudo}</strong>
+                    <strong>
+                      <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                    </strong>
                   </span>
                   <span className="row-actions">
                     <button className="btn btn-sm btn-primary" onClick={() => void accept(f.user.id)}>
@@ -152,7 +157,9 @@ export function FriendsPage() {
                         <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
                       </span>
                       <span className="row-text">
-                        <strong>{f.user.pseudo}</strong>
+                        <strong>
+                          <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                        </strong>
                         <span className="hint">{!isOnline ? "hors ligne" : room ? `à la table ${room.code}` : "en ligne"}</span>
                       </span>
                     </Link>
@@ -185,7 +192,9 @@ export function FriendsPage() {
                 <li key={f.user.id} className="row">
                   <span className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={34} />
-                    <strong>{f.user.pseudo}</strong>
+                    <strong>
+                      <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                    </strong>
                   </span>
                   <button className="btn btn-sm btn-ghost" onClick={() => void remove(f.user.id)}>
                     Annuler

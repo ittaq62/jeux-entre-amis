@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { RoomView, SeatView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
+import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { usePrefs } from "../stores/prefs.ts";
@@ -54,7 +55,10 @@ export function RoundOver({ room, offset, onNext }: { room: RoomView; offset: nu
               <li key={p.id} className={p.id === r.winner ? "is-winner" : ""}>
                 <span className="score-rank num">{i + 1}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
-                <span className="score-name">{seat?.name}</span>
+                <span className="score-name">
+                  {seat?.name}
+                  {seat?.admin && <AdminBadge />}
+                </span>
                 <span className="score-points num">{p.score}</span>
               </li>
             );
@@ -135,7 +139,10 @@ export function GameOver({
               <li key={id} className={`${i === 0 ? "is-winner" : ""} ${id === me ? "is-me" : ""} ${p?.eliminated ? "is-out" : ""}`}>
                 <span className="score-rank num">{i + 1}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
-                <span className="score-name">{seat?.name}</span>
+                <span className="score-name">
+                  {seat?.name}
+                  {seat?.admin && <AdminBadge />}
+                </span>
                 {g.settings.endMode === "points" ? (
                   <span className="score-points num">{p?.score ?? 0}</span>
                 ) : p?.eliminated ? (

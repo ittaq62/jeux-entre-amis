@@ -5,6 +5,7 @@ import { effectiveRules, type UnoAction } from "../../shared/games/uno/engine.ts
 import type { RoomClientMessage, RoomView } from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { ConfirmButton } from "../components/ui.tsx";
 import { play, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Center } from "./Center.tsx";
@@ -274,6 +275,15 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> Quitter la table
                 </button>
+                {room.you.isAdmin && (
+                  <ConfirmButton
+                    className="menu-item is-danger"
+                    confirm="Fermer la table pour tous ?"
+                    onConfirm={() => send({ t: "close" })}
+                  >
+                    <Icon name="shield" size={18} /> Fermer la table (admin)
+                  </ConfirmButton>
+                )}
               </motion.div>
             </>
           )}
