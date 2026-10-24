@@ -13,7 +13,7 @@ import {
 import { AdminBadge, PlayerName } from "../components/AdminBadge.tsx";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { ConfirmButton, Loading, Modal, timeAgo } from "../components/ui.tsx";
+import { Check, ConfirmButton, Loading, Modal, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
@@ -91,6 +91,8 @@ export function AdminPage() {
                 <LedgerRow label="Comptes suspendus" value={overview.banned} />
               </dl>
             </section>
+
+            <GamesSection beta={overview.navalBeta} onChange={loadOverview} />
 
             <AnnounceSection overview={overview} onChange={loadOverview} />
 
@@ -182,6 +184,42 @@ function LedgerRow({ label, value, detail, strong }: { label: string; value: num
       </dt>
       <dd className="num">{value.toLocaleString("fr-FR")}</dd>
     </div>
+  );
+}
+
+/** Sortir un jeu de la bêta : tant que la case est cochée, seuls les admins et leurs invités y jouent. */
+function GamesSection({ beta, onChange }: { beta: boolean; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.post("/admin/games", { navalBeta: !beta });
+      await useSession.getState().load();
+      toast({ title: beta ? "La bataille navale est ouverte à tous" : "La bataille navale repasse en bêta" });
+      onChange();
+    } catch (err) {
+      failed(err);
+    }
+    setBusy(false);
+  }
+  return (
+    <section className="panel admin-section">
+      <h2>Jeux</h2>
+      <div className="rule-list">
+        <div className="rule-row" onClick={() => void toggle()}>
+          <Check label="Bataille navale en bêta" checked={beta} disabled={busy} onChange={() => {}} />
+          <span>
+            <strong>Bataille navale en bêta</strong>
+            <span className="hint">
+              {beta
+                ? "Cochée : visible seulement pour toi et tes invités, qui peuvent s'asseoir grâce au lien d'une table."
+                : "Décochée : tout le monde la voit sur l'accueil et peut y jouer."}
+            </span>
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -296,7 +334,8 @@ function GameLine({ game }: { game: AdminGame }) {
     <li className="row">
       <span className="row-text">
         <strong>
-          {winner ? `${winner.name}${winner.bot ? " (bot)" : ""} gagne` : "Partie"}, {game.variant === "nomercy" ? "No Mercy" : "classique"}
+          {winner ? `${winner.name}${winner.bot ? " (bot)" : ""} gagne` : "Partie"},{" "}
+          {game.game === "naval" ? "bataille navale" : game.variant === "nomercy" ? "UNO No Mercy" : "UNO classique"}
           {game.rounds > 1 ? `, ${game.rounds} manches` : ""}
         </strong>
         <span className="hint">contre {others.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ") || "personne"}</span>
