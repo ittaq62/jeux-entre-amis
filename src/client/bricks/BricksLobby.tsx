@@ -1,8 +1,10 @@
+import { useEffect, useRef } from "react";
 import type { BotLevel, BricksSettings, BricksWin } from "../../shared/games/bricks/engine.ts";
 import { BRICKS_MAX_PLAYERS, type BricksClientMessage, type BricksRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
+import { sprite } from "./draw.ts";
 
 export const BRICK_TEAMS = ["Rubis", "Saphir"] as const;
 
@@ -13,14 +15,56 @@ const BOT_HINTS: Record<BotLevel, string> = {
 };
 
 /** Ce que chaque coup envoie, d'après la table du moteur (attackOf) */
-const ATTACKS: { move: string; detail?: string; sent: string }[] = [
+const ATTACKS: { move: string; detail?: string; sent: string; picture?: boolean }[] = [
   { move: "1 ligne", sent: "rien" },
   { move: "2 lignes", sent: "1" },
   { move: "3 lignes", sent: "2" },
   { move: "4 lignes d'un coup", sent: "4" },
-  { move: "T-spin", detail: "le T tourné pour entrer dans un trou", sent: "2 par ligne" },
-  { move: "Plateau entièrement vidé", sent: "+10" },
+  { move: "T-spin", detail: "le T tourné au dernier moment pour se glisser sous un rebord", sent: "2 par ligne", picture: true },
+  { move: "Plateau vidé", detail: "ta ligne ne laisse plus une seule brique", sent: "10 en plus" },
 ];
+
+// Le dessin du T-spin : une pile avec un rebord, et le T glissé dessous qui complète deux lignes
+const TSPIN_STACK = ["......", "SS....", "S...SS", "SS.SSS"];
+const TSPIN_T: [number, number][] = [
+  [1, 2],
+  [2, 2],
+  [3, 2],
+  [2, 3],
+];
+const TSPIN_CELL = 16;
+
+function TSpinPicture() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = 6 * TSPIN_CELL;
+  const h = TSPIN_STACK.length * TSPIN_CELL;
+  useEffect(() => {
+    const g = ref.current?.getContext("2d");
+    if (!g) return;
+    const c = TSPIN_CELL;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    TSPIN_STACK.forEach((row, y) => [...row].forEach((v, x) => v === "S" && g.drawImage(sprite(8, c, dpr), x * c, y * c, c, c)));
+    for (const [x, y] of TSPIN_T) g.drawImage(sprite(3, c, dpr), x * c, y * c, c, c);
+    // Le geste : le T arrive par le haut et tourne pour passer sous le rebord
+    g.strokeStyle = "#f1d595";
+    g.fillStyle = "#f1d595";
+    g.lineWidth = 1.5;
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(4.7 * c, 0.3 * c);
+    g.quadraticCurveTo(2.6 * c, 0.2 * c, 2.5 * c, 1.45 * c);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(2.5 * c, 1.9 * c);
+    g.lineTo(2.12 * c, 1.3 * c);
+    g.lineTo(2.88 * c, 1.3 * c);
+    g.closePath();
+    g.fill();
+  }, [dpr, w, h]);
+  return <canvas ref={ref} className="tspin-picture" width={w * dpr} height={h * dpr} style={{ width: w, height: h }} aria-hidden="true" />;
+}
 
 /** Le mémo du salon : comment on attaque, et comment on se défend */
 function AttackMemo() {
@@ -32,18 +76,15 @@ function AttackMemo() {
       <ul className="attack-list">
         {ATTACKS.map((a) => (
           <li key={a.move}>
-            <span>
+            {a.picture && <TSpinPicture />}
+            <span className="attack-move">
               {a.move}
-              {a.detail && <span className="hint"> · {a.detail}</span>}
+              {a.detail && <span className="hint attack-detail">{a.detail}</span>}
             </span>
             <strong className={a.sent === "rien" ? "is-none" : undefined}>{a.sent}</strong>
           </li>
         ))}
       </ul>
-      <p className="hint">
-        En plus : un bonus qui grandit dès la 3e pose de suite qui fait une ligne (de +1 à +5), et +1 pour deux coups difficiles enchaînés
-        (4 lignes ou T-spin).
-      </p>
       <p className="hint">
         Pour te défendre : tes lignes annulent d'abord celles qui t'arrivent (la barre rouge à côté de ton plateau), le reste part chez
         l'adversaire. Les lignes grises montent quand tu poses une pièce sans faire de ligne.

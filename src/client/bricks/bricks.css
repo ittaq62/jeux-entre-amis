@@ -214,6 +214,23 @@
   border-bottom: 0;
 }
 
+.attack-move {
+  flex: 1;
+  min-width: 0;
+}
+
+.attack-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.tspin-picture {
+  flex: none;
+  align-self: center;
+}
+
 .attack-list strong {
   flex: none;
   font-family: var(--font-card);
