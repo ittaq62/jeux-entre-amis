@@ -16,10 +16,12 @@ export const ELO_K = { provisional: 40, settled: 24, provisionalGames: 10 } as c
 export const BOT_ELO = {
   uno: 1000,
   naval: { mousse: 800, chasseur: 1000, amiral: 1200 },
+  bricks: { apprenti: 800, confirme: 1000, expert: 1200 },
 } as const;
 
 export function botElo(game: GameId, botLevel?: string): number {
   if (game === "naval") return BOT_ELO.naval[botLevel as keyof typeof BOT_ELO.naval] ?? BOT_ELO.naval.chasseur;
+  if (game === "bricks") return BOT_ELO.bricks[botLevel as keyof typeof BOT_ELO.bricks] ?? BOT_ELO.bricks.confirme;
   return BOT_ELO.uno;
 }
 

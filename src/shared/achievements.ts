@@ -1,3 +1,5 @@
+import type { BricksMode } from "./games/bricks/engine.ts";
+import type { BricksStats } from "./games/bricks/view.ts";
 import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
 import type { GameId } from "./protocol.ts";
@@ -82,6 +84,53 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: "Utiliser 3 armes spéciales en une partie.",
   },
   { id: "naval-sunk", game: "naval", chip: "×", tone: "black", title: "Par le fond", description: "Voir toute sa flotte coulée." },
+
+  // Briques
+  { id: "bricks-first-win", game: "bricks", chip: "1re", tone: "red", title: "Premier mur", description: "Gagner une partie de Briques." },
+  {
+    id: "bricks-regular",
+    game: "bricks",
+    chip: "25",
+    tone: "blue",
+    title: "Compagnon bâtisseur",
+    description: "Jouer 25 parties de Briques.",
+  },
+  {
+    id: "bricks-tetra",
+    game: "bricks",
+    chip: "4",
+    tone: "green",
+    title: "Quatre d'un coup",
+    description: "Faire quatre lignes d'une seule pièce.",
+  },
+  { id: "bricks-tspin", game: "bricks", chip: "T", tone: "red", title: "Coup tordu", description: "Réussir un T-spin." },
+  { id: "bricks-combo", game: "bricks", chip: "×6", tone: "red", title: "Enchaîneur", description: "Faire des lignes 6 poses de suite." },
+  { id: "bricks-clean", game: "bricks", chip: "0", tone: "ivory", title: "Table rase", description: "Vider entièrement son plateau." },
+  {
+    id: "bricks-ko",
+    game: "bricks",
+    chip: "K.O.",
+    tone: "black",
+    title: "Démolisseur",
+    description: "Mettre 3 adversaires K.O. dans une même partie.",
+  },
+  {
+    id: "bricks-melee",
+    game: "bricks",
+    chip: "3+",
+    tone: "ivory",
+    title: "Roi du chantier",
+    description: "Gagner une mêlée à 3 joueurs ou plus.",
+  },
+  { id: "bricks-team", game: "bricks", chip: "2v2", tone: "blue", title: "Maçons associés", description: "Gagner une partie en équipes." },
+  {
+    id: "bricks-sprint",
+    game: "bricks",
+    chip: "40",
+    tone: "green",
+    title: "Coup de truelle",
+    description: "Finir le solo 40 lignes en moins de 90 secondes.",
+  },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
@@ -147,5 +196,33 @@ export function earnedNavalAchievements(o: NavalOutcome): string[] {
   add("naval-team", o.won && o.mode === "teams");
   add("naval-arsenal", s.weapons >= 3);
   add("naval-sunk", o.out);
+  return out;
+}
+
+export interface BricksOutcome {
+  won: boolean;
+  mode: BricksMode;
+  stats: BricksStats;
+  played: number;
+  /** Solo 40 lignes : temps en millisecondes, null s'il n'a pas été fini */
+  sprintTime?: number | null;
+}
+
+export function earnedBricksAchievements(o: BricksOutcome): string[] {
+  const s = o.stats;
+  const out: string[] = [];
+  const add = (id: string, cond: boolean) => cond && out.push(id);
+  if (o.mode !== "sprint") {
+    add("bricks-first-win", o.won);
+    add("bricks-regular", o.played >= 25);
+    add("bricks-ko", s.kos >= 3);
+    add("bricks-melee", o.won && o.mode === "melee");
+    add("bricks-team", o.won && o.mode === "teams");
+  }
+  add("bricks-tetra", s.tetrises >= 1);
+  add("bricks-tspin", s.tspins >= 1);
+  add("bricks-combo", s.maxCombo >= 5);
+  add("bricks-clean", s.allClears >= 1);
+  add("bricks-sprint", o.sprintTime !== undefined && o.sprintTime !== null && o.sprintTime < 90_000);
   return out;
 }

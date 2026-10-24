@@ -1,12 +1,17 @@
 import type { AvatarConfig } from "./avatar.ts";
+import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
+import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
 import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno" | "naval";
+export type GameId = "uno" | "naval" | "bricks";
 
-export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale" };
+export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques" };
+
+/** Jeux en bêta tant que l'admin ne les a pas ouverts à tous */
+export const BETA_GAMES = ["naval", "bricks"] as const satisfies readonly GameId[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -68,8 +73,8 @@ export interface AdminOverview {
   rooms: AdminRoom[];
   recentGames: AdminGame[];
   announcement: Announcement | null;
-  /** La bataille navale n'est visible que des admins et de leurs invités */
-  navalBeta: boolean;
+  /** Jeux encore en bêta : visibles seulement des admins et de leurs invités */
+  betaGames: GameId[];
 }
 
 export type AdminUserAction =
@@ -285,6 +290,67 @@ export type NavalClientMessage =
   | { t: "sit" }
   | { t: "leave" }
   | { t: "close" };
+
+export interface BricksRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  bricks: BricksSettings;
+}
+
+export const BRICKS_MAX_PLAYERS = 6;
+
+export interface BricksRoomView {
+  code: string;
+  game: "bricks";
+  status: RoomStatus;
+  settings: BricksRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  bricks: BricksView | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+}
+
+export type BricksClientMessage =
+  | { t: "settings"; settings: Partial<BricksSettings>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  | { t: "team"; seatId: string; team: 0 | 1 }
+  /** Une pièce posée : `seq` est le nombre de poses déjà faites, `ack` le dernier paquet de lignes grises vu */
+  | { t: "place"; seq: number; p: BrickPlacement; ack: number }
+  /** La pièce en vol, pour l'afficher chez les autres */
+  | { t: "live"; piece: Active | null }
+  | { t: "strategy"; strategy: TargetStrategy; target?: string | null }
+  /** L'écran demande l'état exact de son plateau */
+  | { t: "resync" }
+  | { t: "takeBack" }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type BricksServerMessage =
+  | { t: "room"; room: BricksRoomView }
+  /** Le plateau d'un joueur après une pose, et ce qu'elle a déclenché */
+  | { t: "board"; player: BricksPlayerView; fx: BricksFx[] }
+  | { t: "self"; snapshot: BricksSnapshot }
+  | { t: "garbage"; chunk: GarbageChunk }
+  | { t: "live"; id: string; piece: Active | null }
+  | { t: "fx"; fx: BricksFx[] }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
 
 export type NavalServerMessage =
   | { t: "room"; room: NavalRoomView; events: NavalEvent[] }
