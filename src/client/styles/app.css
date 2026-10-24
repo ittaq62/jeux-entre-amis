@@ -689,52 +689,34 @@
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
 }
 
-/* La fiche du jeu : un coin de tapis éclairé et ce qu'il faut pour s'asseoir */
+/* La fiche du jeu : à gauche un coin de tapis éclairé, à droite de quoi s'asseoir */
 .home-game {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   align-items: stretch;
-  gap: 0;
   overflow: hidden;
 }
 
 .game-stage {
   position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 330px;
-  margin: 10px;
-  border-radius: 10px;
+  /* Centrage en flex : la pile de cartes, réduite sur mobile, reste au milieu même plus haute que le cadre */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 340px;
   background:
     radial-gradient(ellipse 70% 60% at 50% 45%, rgba(255, 214, 150, 0.14), transparent 72%),
     radial-gradient(ellipse 90% 80% at 50% 45%, #1b6a47 0%, #114a33 55%, #0a3022 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(226, 189, 110, 0.22),
-    inset 0 10px 40px rgba(0, 0, 0, 0.45);
+    inset -1px 0 0 rgba(0, 0, 0, 0.45),
+    inset 0 12px 36px -12px rgba(0, 0, 0, 0.5);
 }
 
-/* Équerres dorées aux quatre coins du tapis */
-.game-stage::before {
-  content: "";
-  position: absolute;
-  inset: 9px;
-  pointer-events: none;
-  background:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M1 15V5a4 4 0 0 1 4-4h10' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='5' cy='5' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
-      left top / 16px 16px no-repeat,
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M15 15V5a4 4 0 0 0-4-4H1' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='11' cy='5' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
-      right top / 16px 16px no-repeat,
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M1 1v10a4 4 0 0 0 4 4h10' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='5' cy='11' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
-      left bottom / 16px 16px no-repeat,
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M15 1v10a4 4 0 0 1-4 4H1' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='11' cy='11' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
-      right bottom / 16px 16px no-repeat;
-}
-
+/* Le grain du feutre */
 .game-stage::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
   pointer-events: none;
   opacity: 0.18;
   mix-blend-mode: overlay;
@@ -743,6 +725,7 @@
 
 .table-scatter {
   position: relative;
+  flex: none;
   width: 300px;
   height: 262px;
 }
@@ -762,21 +745,34 @@
 }
 
 .game-sheet {
-  padding: 34px 36px 32px 30px;
+  padding: 34px 36px 32px 34px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
+/* Le nom du jeu en relief, comme imprimé sur le couvercle d'une boîte */
 .game-name {
+  margin: 0 0 6px -2px;
   font-family: var(--font-title);
-  font-size: 64px;
+  font-size: 76px;
   line-height: 0.95;
-  color: var(--gold);
+  letter-spacing: 0.01em;
+  color: #fbf5e6;
+  rotate: -3deg;
+  transform-origin: left center;
+  text-shadow:
+    1px 1px 0 #c0242f,
+    2px 2px 0 #b3202b,
+    3px 3px 0 #a51c27,
+    4px 4px 0 #961823,
+    5px 5px 0 #86141f,
+    6px 6px 0 #76111b,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
 }
 
 .game-desc {
-  margin: 12px 0 24px;
+  margin: 14px 0 24px;
   color: var(--text-soft);
   max-width: 40ch;
 }
@@ -815,23 +811,30 @@
   text-transform: uppercase;
 }
 
+/* Les listes : posées sur le feutre, la plus utile prend plus de place */
 .home-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.home-list {
-  padding: 22px 24px 14px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 56px;
+  margin-top: 44px;
 }
 
 .home-list h2 {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
-  font-size: 23px;
-  margin-bottom: 4px;
+  font-size: 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(244, 236, 218, 0.14);
+}
+
+.home-list h2 .hint,
+.home-list h2 .heading-link {
+  font-family: var(--font-text);
+}
+
+.home-list .empty {
+  margin-top: 14px;
 }
 
 .rows {
@@ -896,7 +899,7 @@
   bottom: -1px;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--panel);
+  border: 2px solid var(--felt-deep);
 }
 
 .room-code {
@@ -911,54 +914,66 @@
   padding: 2px 9px;
 }
 
+/* Les places d'une table : pleines pour les joueurs, claires pour les bots, vides sinon */
+.seat-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+
+.seat-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(244, 236, 218, 0.35);
+}
+
+.seat-dots .is-human {
+  background: var(--gold);
+  box-shadow: none;
+}
+
+.seat-dots .is-bot {
+  background: rgba(244, 236, 218, 0.4);
+  box-shadow: none;
+}
+
+/* Fenêtre « Ouvrir une table » : deux choix en liste, pas deux cartes */
 .create-options {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  margin: 0 -12px;
 }
 
 .create-option {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   text-align: left;
-  padding: 16px 64px 16px 18px;
-  border-radius: var(--radius-row);
-  border: 1px solid var(--line-strong);
-  background: var(--panel-raised);
+  padding: 14px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text);
   cursor: pointer;
-  transition:
-    border-color 0.12s,
-    background-color 0.12s;
+  transition: background-color 0.12s;
+}
+
+.create-option + .create-option {
+  border-top: 1px solid var(--line-soft);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .create-option:hover {
-  border-color: var(--gold);
-  background: #173a2d;
-}
-
-.create-option[class*="suit-"]::after {
-  content: "";
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  width: 26px;
-  height: 26px;
-  margin-top: -13px;
-  background: var(--suit) center / contain no-repeat;
-  opacity: 0.45;
-  transition: opacity 0.15s;
-}
-
-.create-option:hover::after {
-  opacity: 0.9;
+  background: rgba(244, 236, 218, 0.05);
 }
 
 .create-option strong {
   font-family: var(--font-title);
   font-weight: 400;
-  font-size: 19px;
+  font-size: 20px;
   color: var(--gold-light);
 }
 
@@ -979,7 +994,9 @@
   .game-stage {
     min-height: 0;
     height: 230px;
-    margin-bottom: 0;
+    box-shadow:
+      inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+      inset 0 12px 36px -12px rgba(0, 0, 0, 0.5);
   }
 
   .table-scatter {
@@ -987,13 +1004,13 @@
   }
 
   .game-sheet {
-    padding: 22px 26px 26px;
+    padding: 24px 26px 26px;
   }
 
   .home-columns {
     grid-template-columns: 1fr;
-    gap: 16px;
-    margin-top: 16px;
+    gap: 36px;
+    margin-top: 36px;
   }
 }
 
@@ -1016,7 +1033,7 @@
   }
 
   .game-name {
-    font-size: 54px;
+    font-size: 62px;
   }
 
   .game-actions .btn {
@@ -1026,10 +1043,6 @@
   .join-input {
     flex: 1;
     width: auto;
-  }
-
-  .home-list {
-    padding: 18px 18px 10px;
   }
 }
 
@@ -1124,7 +1137,8 @@
   font-size: 23px;
   padding-bottom: 6px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
 }
 
@@ -1392,8 +1406,9 @@
 .profile-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 20px;
+  gap: 28px;
   align-items: start;
+  margin-bottom: 24px;
 }
 
 /* Le carnet : lignes avec points de conduite */
@@ -1455,21 +1470,34 @@
   color: var(--gold);
 }
 
-.achievements,
-.history {
-  padding: 22px 24px 20px;
+/* Les succès : un coffret creusé où les jetons gagnés prennent leur place */
+.achievements {
+  padding: 22px 24px 24px;
+  border-radius: var(--radius-panel);
+  background: linear-gradient(180deg, rgba(3, 12, 8, 0.5), rgba(3, 12, 8, 0.32));
+  box-shadow:
+    inset 0 2px 10px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.achievements h2,
-.history h2 {
+.achievements h2 {
   font-size: 23px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
 }
 
 .achievements h2 .hint {
   font-family: var(--font-text);
+}
+
+.achievement-group {
+  margin: 26px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 18px;
+  color: var(--text-soft);
 }
 
 .achievement-grid {
@@ -1508,11 +1536,38 @@
   color: var(--gold-light);
 }
 
+.achievement-text .achievement-date {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--gold);
+}
+
 .achievement:not(.is-owned) .achievement-text strong {
   color: var(--text-soft);
+  font-weight: 500;
 }
 
 .achievement:not(.is-owned) .achievement-text span {
+  color: var(--text-faint);
+}
+
+/* Place vide du coffret : le jeton n'est pas encore gagné */
+.chip-slot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(244, 236, 218, 0.18);
+  background: radial-gradient(circle at 50% 38%, #0a1d15, #05120c);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+.chip-slot span {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 14px;
   color: var(--text-faint);
 }
 
@@ -1609,7 +1664,23 @@
   border-radius: var(--radius-row);
   border-bottom-color: transparent;
   background: var(--gold-tint);
-  box-shadow: inset 0 0 0 1px rgba(226, 189, 110, 0.28);
+}
+
+/* Les intitulés de colonnes, une seule fois en haut du tableau */
+.board-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.board-head-who {
+  flex: 1;
+  padding-left: 42px;
 }
 
 .board-rank {
@@ -1693,13 +1764,12 @@
   font-size: 17px;
 }
 
-.board-stat span {
-  font-size: 12px;
-  color: var(--text-faint);
+.board-extra {
+  width: 84px;
 }
 
 .board-points {
-  min-width: 64px;
+  width: 72px;
 }
 
 .board-points strong {
@@ -1911,7 +1981,7 @@ h3 .hint {
 .admin-section h2 {
   font-size: 23px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
 }
 
@@ -1937,7 +2007,6 @@ h3 .hint {
   padding: 12px 14px;
   border-radius: var(--radius-row);
   background: var(--gold-tint);
-  border: 1px solid rgba(226, 189, 110, 0.3);
 }
 
 .admin-announce p {

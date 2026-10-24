@@ -92,7 +92,7 @@ export function HomePage() {
           <span className="script-word">{greeting()},</span> {user.pseudo}
         </h1>
 
-        <section className="home-game panel panel-feature" aria-label="UNO">
+        <section className="home-game panel" aria-label="UNO">
           <div className="game-stage" aria-hidden="true">
             <div className="table-scatter">
               {TABLE_CARDS.map(({ card, x, y, r }, i) => (
@@ -160,8 +160,8 @@ export function HomePage() {
         </section>
 
         <div className="home-columns">
-          <section className="home-list panel suit-club">
-            <h2 className="panel-title">Tables ouvertes</h2>
+          <section className="home-list">
+            <h2>Tables ouvertes</h2>
             {lobby.length === 0 ? (
               <p className="empty">
                 Personne n'attend pour l'instant. Lance une partie rapide : les prochains arrivés s'assoiront avec toi.
@@ -175,8 +175,8 @@ export function HomePage() {
             )}
           </section>
 
-          <section className="home-list panel suit-heart">
-            <h2 className="panel-title">
+          <section className="home-list">
+            <h2>
               Tes amis{" "}
               <Link href="/amis" className="heading-link">
                 gérer
@@ -229,11 +229,11 @@ export function HomePage() {
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Ouvrir une table">
         <div className="create-options">
-          <button className="create-option suit-heart" onClick={() => void createRoom("private")} disabled={busy !== null}>
+          <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
             <strong>Entre amis</strong>
             <span>Seuls ceux qui ont le code ou le lien peuvent s'asseoir.</span>
           </button>
-          <button className="create-option suit-club" onClick={() => void createRoom("public")} disabled={busy !== null}>
+          <button className="create-option" onClick={() => void createRoom("public")} disabled={busy !== null}>
             <strong>Ouverte à tous</strong>
             <span>La table apparaît dans la liste : n'importe quel joueur peut venir.</span>
           </button>
@@ -253,6 +253,11 @@ function RoomRow({ room }: { room: RoomSummary }) {
         <span className="hint">
           {room.variant === "nomercy" ? "No Mercy" : "classique"}, {seats} sur {room.maxPlayers}
           {room.status === "playing" ? ", partie en cours" : ""}
+          <span className="seat-dots" aria-hidden="true">
+            {Array.from({ length: room.maxPlayers }, (_, i) => (
+              <span key={i} className={i < room.humans ? "is-human" : i < seats ? "is-bot" : ""} />
+            ))}
+          </span>
         </span>
       </span>
       <Link href={`/salon/${room.code}`} className="btn btn-sm">

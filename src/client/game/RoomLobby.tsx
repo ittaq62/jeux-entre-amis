@@ -94,8 +94,8 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
             </div>
           </section>
 
-          <section className="lobby-section panel suit-spade">
-            <h2 className="panel-title">
+          <section className="lobby-section panel">
+            <h2>
               Autour de la table
               <span className="hint num">
                 {room.seats.length} sur {room.settings.maxPlayers}
@@ -150,9 +150,9 @@ export function RoomLobby({ room, send, unread, onOpenChat, onLeave, onBackToGam
           </section>
         </div>
 
-        <section className="rules-sheet panel suit-diamond">
+        <section className="rules-sheet panel">
           <div>
-            <h2 className="panel-title">Règles de la table</h2>
+            <h2>Règles de la table</h2>
             {!isHost && (
               <p className="hint" style={{ margin: "4px 0 0" }}>
                 Choisies par {host?.name ?? "l'hôte"}.

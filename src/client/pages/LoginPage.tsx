@@ -110,7 +110,7 @@ export function LoginPage() {
           <p className="login-tagline">{APP_TAGLINE}</p>
         </div>
 
-        <div className="panel panel-feature login-panel">
+        <div className="panel login-panel">
           {step === "email" ? (
             <form onSubmit={sendCode} className="stack">
               <div>
