@@ -26,7 +26,15 @@ export type SoundName =
   | "eliminated"
   | "buzzer"
   | "achievement"
-  | "join";
+  | "join"
+  | "cannon"
+  | "splash"
+  | "explosion"
+  | "sunk"
+  | "bubbles"
+  | "sonar"
+  | "torpedo"
+  | "ambience";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -51,7 +59,49 @@ const FILES: Record<SoundName, string[]> = {
   buzzer: ["buzzer.mp3"],
   achievement: ["achievement.mp3"],
   join: ["join.mp3"],
+  cannon: ["naval-cannon.mp3"],
+  splash: ["naval-splash.mp3"],
+  explosion: ["naval-hit.mp3"],
+  sunk: ["naval-sunk.mp3"],
+  bubbles: ["naval-bubbles.mp3"],
+  sonar: ["naval-sonar.mp3"],
+  torpedo: ["naval-torpedo.mp3"],
+  ambience: ["naval-ambience.mp3"],
 };
+
+/** Sons de chaque jeu, pour ne précharger que ceux qui servent */
+export const UNO_SOUNDS: SoundName[] = [
+  "cardPlace",
+  "cardSlide",
+  "cardDraw",
+  "shuffle",
+  "yourTurn",
+  "uno",
+  "caught",
+  "hit",
+  "bigHit",
+  "skip",
+  "reverse",
+  "wild",
+  "win",
+  "lose",
+  "tick",
+  "eliminated",
+  "buzzer",
+];
+export const NAVAL_SOUNDS: SoundName[] = [
+  "cannon",
+  "splash",
+  "explosion",
+  "sunk",
+  "bubbles",
+  "sonar",
+  "torpedo",
+  "ambience",
+  "win",
+  "lose",
+  "buzzer",
+];
 
 // Les sons frequents restent discrets, les evenements rares ressortent
 const VOLUME: Partial<Record<SoundName, number>> = {
@@ -70,6 +120,14 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   win: 0.75,
   lose: 0.7,
   join: 0.5,
+  cannon: 0.7,
+  splash: 0.6,
+  explosion: 0.8,
+  sunk: 0.85,
+  bubbles: 0.55,
+  sonar: 0.5,
+  torpedo: 0.6,
+  ambience: 0.35,
 };
 
 let ctx: AudioContext | null = null;
@@ -111,17 +169,50 @@ export function unlockAudio() {
   if (ac && ac.state === "suspended") void ac.resume();
 }
 
-export function preloadSounds() {
-  for (const files of Object.values(FILES)) for (const f of files) void load(f);
+export function preloadSounds(names: SoundName[] = Object.keys(FILES) as SoundName[]) {
+  for (const name of names) for (const f of FILES[name]) void load(f);
+}
+
+let loop: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
+
+/** Un son d'ambiance en boucle (une seule à la fois), coupé avec le reste quand le son est désactivé. */
+export function startLoop(name: SoundName) {
+  stopLoop();
+  const prefs = usePrefs.getState();
+  if (!prefs.sound) return;
+  const ac = context();
+  if (!ac || !master) return;
+  void load(FILES[name][0]!).then((buffer) => {
+    if (!buffer || !master || loop) return;
+    const source = ac.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(prefs.volume * (VOLUME[name] ?? 1), ac.currentTime + 1.5);
+    source.connect(gain).connect(master);
+    source.start();
+    loop = { source, gain };
+  });
+}
+
+export function stopLoop() {
+  if (!loop || !ctx) return;
+  const { source, gain } = loop;
+  loop = null;
+  gain.gain.cancelScheduledValues(ctx.currentTime);
+  gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+  source.stop(ctx.currentTime + 0.65);
 }
 
 export function play(name: SoundName, opts: { volume?: number; rate?: number; delay?: number } = {}) {
   const prefs = usePrefs.getState();
   if (!prefs.sound) return;
-  const now = performance.now();
-  // Evite l'effet mitraillette quand beaucoup d'evenements arrivent d'un coup
-  if (now - (lastPlayed.get(name) ?? 0) < 45) return;
-  lastPlayed.set(name, now);
+  // Evite l'effet mitraillette quand beaucoup d'evenements arrivent d'un coup (sur l'heure prevue du son)
+  const when = performance.now() + (opts.delay ?? 0);
+  if (Math.abs(when - (lastPlayed.get(name) ?? -1e9)) < 45) return;
+  lastPlayed.set(name, when);
   const ac = context();
   if (!ac || !master) return;
   const files = FILES[name];
