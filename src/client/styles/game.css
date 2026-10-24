@@ -282,15 +282,15 @@
 }
 
 .seat-plate:has(.admin-badge) {
-  max-width: 150px;
+  max-width: 190px;
 }
 
 .seat-plate .admin-badge {
-  margin-left: 5px;
-  padding: 0 4px 0 3px;
-  font-size: 9.5px;
-  line-height: 13px;
-  gap: 2px;
+  font-size: 8px;
+  margin-left: 0.7em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 0 var(--gold-edge);
 }
 
 .seat.is-turn .seat-plate {
@@ -1311,9 +1311,7 @@
 }
 
 .chat-msg .admin-badge {
-  font-size: 9.5px;
-  line-height: 13px;
-  padding: 0 4px 0 3px;
+  font-size: 8.5px;
 }
 
 .chat-msg.is-me strong {
@@ -1369,6 +1367,10 @@
 @media (max-width: 720px), (max-height: 600px) {
   .seat {
     min-width: 64px;
+  }
+
+  .seat-plate:has(.admin-badge) {
+    max-width: 150px;
   }
 
   .seat-plate {
