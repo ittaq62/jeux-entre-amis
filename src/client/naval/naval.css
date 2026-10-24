@@ -1,0 +1,974 @@
+/* ------------------------------------------------------------------ */
+/* Bataille navale                                                     */
+/* ------------------------------------------------------------------ */
+
+.naval-root {
+  overflow-y: auto;
+}
+
+.naval-stage {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 6px 16px calc(90px + var(--safe-bottom));
+}
+
+.naval-battle {
+  width: 100%;
+  max-width: 1240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.naval-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 42px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.naval-status.is-turn .naval-status-text {
+  color: var(--gold-light);
+}
+
+.naval-timer {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+.naval-boards {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 36px;
+}
+
+.naval-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.naval-fleet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 56px;
+}
+
+.naval-fleet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+}
+
+.naval-fleet-head h3 {
+  font-size: 19px;
+}
+
+/* Le cadre du radar : un instrument de bord */
+.naval-scope {
+  padding: 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1b2c25, #0b1611);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.4),
+    0 18px 36px -18px rgba(0, 0, 0, 0.9);
+  transition: box-shadow 0.3s;
+}
+
+.naval-scope.is-armed {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(226, 189, 110, 0.55),
+    0 18px 36px -18px rgba(0, 0, 0, 0.9);
+}
+
+/* Cibles */
+.naval-targets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.naval-target-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: rgba(3, 12, 8, 0.5);
+  color: var(--text-soft);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+
+.naval-target-tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.naval-target-tab.is-active {
+  border-color: rgba(226, 189, 110, 0.6);
+  background: var(--gold-tint);
+  color: var(--text);
+}
+
+.naval-target-tab.is-turn .avatar {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.naval-target-tab.is-out {
+  opacity: 0.45;
+}
+
+.naval-target-tab.is-out .naval-target-name {
+  text-decoration: line-through;
+}
+
+.naval-opponent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.naval-opponent-name {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-title);
+  font-size: 21px;
+}
+
+/* Petits navires : à flot ou coulés */
+.fleet-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.fleet-pips span {
+  width: 12px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(244, 236, 218, 0.16);
+}
+
+.fleet-pips span.is-afloat {
+  background: var(--gold);
+}
+
+/* ------------------------------------------------------------------ */
+/* Plateau                                                             */
+/* ------------------------------------------------------------------ */
+
+.naval-board {
+  display: block;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.naval-board.is-placing {
+  touch-action: none;
+}
+
+.naval-board.is-aiming {
+  cursor: crosshair;
+}
+
+.board-labels text {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 4.3px;
+  fill: rgba(244, 236, 218, 0.5);
+}
+
+.mode-radar .board-labels text {
+  fill: rgba(130, 240, 190, 0.6);
+}
+
+.board-frame {
+  fill: none;
+  stroke: rgba(226, 189, 110, 0.5);
+  stroke-width: 0.6;
+}
+
+.mode-radar .board-frame {
+  stroke: rgba(130, 240, 190, 0.35);
+}
+
+.board-grid line {
+  stroke: rgba(255, 255, 255, 0.09);
+  stroke-width: 0.25;
+}
+
+.mode-radar .board-grid line {
+  stroke: rgba(130, 240, 190, 0.15);
+}
+
+.radar-ring {
+  fill: none;
+  stroke: rgba(130, 240, 190, 0.1);
+  stroke-width: 0.4;
+}
+
+/* Navires */
+.ship-shadow {
+  fill: rgba(0, 12, 22, 0.4);
+}
+
+.ship-hull {
+  fill: var(--hull, #7c898e);
+  stroke: rgba(8, 18, 24, 0.6);
+  stroke-width: 0.35;
+}
+
+.ship-deck rect {
+  fill: rgba(28, 38, 44, 0.32);
+}
+
+.ship-runway {
+  fill: none;
+  stroke: rgba(244, 236, 218, 0.55);
+  stroke-width: 0.35;
+  stroke-dasharray: 1.4 1;
+}
+
+.ship-deck .ship-island {
+  fill: #3d4a4f;
+}
+
+.ship-funnel {
+  fill: #2b3336;
+  stroke: #c9a14b;
+  stroke-width: 0.35;
+}
+
+.ship-turret circle {
+  fill: #47565b;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 0.25;
+}
+
+.ship-turret rect {
+  fill: #364246;
+}
+
+/* Les navires dansent un peu sur l'eau */
+.mode-sea .ship {
+  animation: ship-bob 4.6s ease-in-out infinite;
+}
+
+.ship-wrap:nth-child(2n) .ship {
+  animation-delay: -1.7s;
+}
+
+.ship-wrap:nth-child(3n) .ship {
+  animation-delay: -3.1s;
+}
+
+@keyframes ship-bob {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(0.25px, 0.35px);
+  }
+}
+
+.ship-wrap {
+  transition:
+    opacity 0.8s,
+    filter 0.8s;
+}
+
+.ship-wrap.is-sunk {
+  opacity: 0.5;
+  filter: grayscale(0.7) brightness(0.55);
+}
+
+.ship-wrap.is-sunk .ship {
+  animation: none;
+}
+
+.is-placing .ship-wrap {
+  cursor: grab;
+}
+
+.is-placing .ship-wrap:active {
+  cursor: grabbing;
+}
+
+.ship-wrap.is-selected .ship-hull {
+  stroke: var(--gold-light);
+  stroke-width: 0.8;
+}
+
+/* Tirs déjà joués */
+.mode-sea .mark-miss circle:first-child {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: rgba(230, 250, 255, 0.6);
+  stroke-width: 0.4;
+}
+
+.mode-sea .mark-miss circle:last-child {
+  fill: rgba(230, 250, 255, 0.75);
+}
+
+.mode-radar .mark-miss {
+  fill: none;
+  stroke: rgba(160, 255, 210, 0.6);
+  stroke-width: 0.5;
+}
+
+.hit-cross {
+  stroke: #ff6a4d;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.hit-glow {
+  fill: rgba(255, 106, 77, 0.24);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hit-glow 1.6s ease-in-out infinite;
+}
+
+.mark-hit.is-wreck .hit-cross {
+  stroke: #d2503f;
+}
+
+@keyframes hit-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.wreck {
+  fill: rgba(205, 72, 58, 0.18);
+  stroke: #e0574a;
+  stroke-width: 0.6;
+  stroke-dasharray: 1.2 0.8;
+}
+
+.wreck.is-afloat {
+  fill: rgba(126, 216, 170, 0.14);
+  stroke: #7ed8aa;
+  stroke-dasharray: none;
+}
+
+/* Incendie sur sa propre flotte */
+.flames circle {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.flames .smoke {
+  fill: rgba(25, 25, 25, 0.45);
+  animation: smoke 2.4s ease-in-out infinite;
+}
+
+.flame {
+  animation: flicker 0.45s ease-in-out infinite alternate;
+}
+
+.flame-1 {
+  fill: #ff7a2e;
+}
+
+.flame-2 {
+  fill: #ffc145;
+  animation-delay: -0.15s;
+}
+
+.flame-3 {
+  fill: #ff4d2e;
+  animation-delay: -0.3s;
+}
+
+.flames.is-out .flame {
+  display: none;
+}
+
+.flames.is-out .smoke {
+  fill: rgba(15, 15, 15, 0.6);
+}
+
+@keyframes flicker {
+  from {
+    transform: scale(0.82);
+    opacity: 0.85;
+  }
+  to {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes smoke {
+  0%,
+  100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.25) translate(0.4px, -0.5px);
+    opacity: 0.35;
+  }
+}
+
+/* Échos du radar */
+.scan-echo {
+  fill: #ffbf47;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: echo 1.4s ease-in-out infinite;
+}
+
+.scan-empty {
+  fill: none;
+  stroke: rgba(255, 191, 71, 0.35);
+  stroke-width: 0.35;
+  stroke-dasharray: 0.8 0.8;
+}
+
+@keyframes echo {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Visée et aperçu */
+.board-preview rect {
+  fill: rgba(226, 189, 110, 0.22);
+  stroke: rgba(241, 213, 149, 0.85);
+  stroke-width: 0.4;
+}
+
+.board-preview.is-bad rect {
+  fill: rgba(239, 106, 90, 0.25);
+  stroke: #ef6a5a;
+}
+
+.board-reticle line {
+  stroke: rgba(241, 213, 149, 0.32);
+  stroke-width: 0.3;
+}
+
+.board-reticle circle {
+  fill: none;
+  stroke: var(--gold-light);
+  stroke-width: 0.6;
+}
+
+/* ------------------------------------------------------------------ */
+/* Effets : obus, gerbes, explosions, torpille, radar                 */
+/* ------------------------------------------------------------------ */
+
+.board-fx circle,
+.board-fx rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-fill-mode: forwards;
+}
+
+.fx-shadow {
+  fill: rgba(0, 0, 0, 0.5);
+  animation-name: fx-shadow;
+  animation-timing-function: linear;
+}
+
+.fx-shell {
+  fill: #1c1c1c;
+  stroke: #ffd27a;
+  stroke-width: 0.45;
+  animation-name: fx-shell;
+  animation-timing-function: ease-in;
+}
+
+@keyframes fx-shadow {
+  from {
+    transform: scale(2.8);
+    opacity: 0.05;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+}
+
+@keyframes fx-shell {
+  from {
+    transform: translate(-5px, -9px) scale(3.2);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(0, 0) scale(0.8);
+    opacity: 1;
+  }
+}
+
+.fx-splash .ring {
+  fill: none;
+  stroke: rgba(235, 250, 255, 0.9);
+  stroke-width: 0.6;
+  animation-name: fx-ring;
+  animation-timing-function: ease-out;
+}
+
+.fx-splash .ring-2 {
+  animation-delay: 0.12s;
+  opacity: 0;
+}
+
+.fx-splash .drop {
+  fill: #e9fbff;
+  animation-name: fx-drop;
+  animation-timing-function: ease-out;
+}
+
+@keyframes fx-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+@keyframes fx-drop {
+  from {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0;
+  }
+}
+
+.fx-blast .blast-core {
+  fill: #ffd27a;
+  animation-name: fx-core;
+  animation-timing-function: ease-out;
+}
+
+.fx-blast.is-big .blast-core {
+  animation-name: fx-core-big;
+}
+
+.fx-blast .blast-ring {
+  fill: none;
+  stroke: #ff8a3d;
+  stroke-width: 0.8;
+  animation-name: fx-ring;
+  animation-timing-function: ease-out;
+}
+
+.fx-blast .spark {
+  fill: #ffcf6b;
+  animation-name: fx-drop;
+  animation-timing-function: ease-out;
+}
+
+@keyframes fx-core {
+  0% {
+    transform: scale(0.2);
+    fill: #fff1c2;
+    opacity: 1;
+  }
+  40% {
+    fill: #ff8a3d;
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(2.2);
+    fill: #5b2a1a;
+    opacity: 0;
+  }
+}
+
+@keyframes fx-core-big {
+  0% {
+    transform: scale(0.2);
+    fill: #fff1c2;
+    opacity: 1;
+  }
+  35% {
+    fill: #ff7a2e;
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3.8);
+    fill: #3b1a10;
+    opacity: 0;
+  }
+}
+
+.fx-torpedo {
+  stroke: rgba(235, 250, 255, 0.9);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: fx-wake linear forwards;
+}
+
+@keyframes fx-wake {
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+.fx-scan {
+  fill: rgba(255, 191, 71, 0.12);
+  stroke: #ffbf47;
+  stroke-width: 0.6;
+  animation-name: fx-scan;
+  animation-timing-function: ease-out;
+}
+
+@keyframes fx-scan {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Arsenal                                                             */
+/* ------------------------------------------------------------------ */
+
+.naval-arsenal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 600px;
+}
+
+.naval-arsenal .hint {
+  margin: 0;
+}
+
+.weapon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.weapon-btn:hover:not(:disabled) {
+  border-color: rgba(226, 189, 110, 0.5);
+}
+
+.weapon-btn.is-active {
+  border-color: var(--gold);
+  background: var(--gold-tint);
+  color: var(--gold-light);
+}
+
+.weapon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.weapon-icon {
+  flex: none;
+  color: var(--gold);
+}
+
+.weapon-count {
+  font-family: var(--font-card);
+  color: var(--gold);
+}
+
+.weapon-dir {
+  flex: none;
+}
+
+.weapon-help {
+  width: 100%;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Placement                                                           */
+/* ------------------------------------------------------------------ */
+
+.naval-placement {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.placement-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.placement-head h2 {
+  font-size: 30px;
+}
+
+.placement-clock {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--gold);
+}
+
+.placement-clock.is-urgent {
+  color: #ff8a7a;
+}
+
+.placement-help {
+  margin: -6px 0 2px;
+}
+
+.placement-board {
+  padding: 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #16303b, #0b1c24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 18px 36px -18px rgba(0, 0, 0, 0.9);
+}
+
+.placement-board.is-shaking {
+  animation: placement-shake 0.35s;
+}
+
+@keyframes placement-shake {
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+
+.placement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.placement-crew {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.placement-crew li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.placement-crew li.is-ready .hint {
+  color: var(--ok);
+}
+
+/* ------------------------------------------------------------------ */
+/* Réactions, fin de partie                                            */
+/* ------------------------------------------------------------------ */
+
+.naval-emotes {
+  position: fixed;
+  top: calc(70px + var(--safe-top));
+  right: 14px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.naval-emote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.7);
+}
+
+.naval-emote.is-emoji span {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.naval-react {
+  position: fixed;
+  left: 16px;
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 30;
+}
+
+.naval-results-back {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + var(--safe-bottom));
+  translate: -50% 0;
+  z-index: 40;
+}
+
+.naval-log-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.naval-log-stats .hint {
+  font-weight: 400;
+  font-size: 12.5px;
+}
+
+/* Téléphone : radar en haut, flotte en dessous */
+.naval-battle.is-phone .naval-boards {
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.naval-battle.is-phone .naval-fleet {
+  padding-top: 0;
+}
+
+.naval-battle.is-phone .naval-targets {
+  flex-wrap: nowrap;
+  justify-content: safe center;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.naval-battle.is-phone .naval-target-tab {
+  flex: none;
+  gap: 6px;
+  min-height: 38px;
+  padding: 3px 10px 3px 4px;
+  font-size: 14px;
+}
+
+.naval-target[hidden] {
+  display: none;
+}
+
+/* Bascule radar / flotte sur téléphone */
+.naval-view {
+  align-self: center;
+  margin: -4px 0 12px;
+}
+
+.naval-view button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.naval-view .fleet-pips span {
+  width: 8px;
+  height: 4px;
+}
+
+@media (max-width: 760px) {
+  .naval-stage {
+    padding: 4px 12px calc(90px + var(--safe-bottom));
+  }
+
+  .naval-scope,
+  .placement-board {
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .placement-head h2 {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-sea .ship,
+  .radar-sweep {
+    animation: none;
+  }
+}
