@@ -12,6 +12,46 @@ const BOT_HINTS: Record<BotLevel, string> = {
   expert: "Rapide, garde un puits pour les quatre lignes et tente les T-spins.",
 };
 
+/** Ce que chaque coup envoie, d'après la table du moteur (attackOf) */
+const ATTACKS: { move: string; detail?: string; sent: string }[] = [
+  { move: "1 ligne", sent: "rien" },
+  { move: "2 lignes", sent: "1" },
+  { move: "3 lignes", sent: "2" },
+  { move: "4 lignes d'un coup", sent: "4" },
+  { move: "T-spin", detail: "le T tourné pour entrer dans un trou", sent: "2 par ligne" },
+  { move: "Plateau entièrement vidé", sent: "+10" },
+];
+
+/** Le mémo du salon : comment on attaque, et comment on se défend */
+function AttackMemo() {
+  return (
+    <section className="lobby-section panel attack-memo" aria-label="Ce que tes lignes envoient">
+      <h2>
+        Les attaques <span className="hint">lignes grises envoyées</span>
+      </h2>
+      <ul className="attack-list">
+        {ATTACKS.map((a) => (
+          <li key={a.move}>
+            <span>
+              {a.move}
+              {a.detail && <span className="hint"> · {a.detail}</span>}
+            </span>
+            <strong className={a.sent === "rien" ? "is-none" : undefined}>{a.sent}</strong>
+          </li>
+        ))}
+      </ul>
+      <p className="hint">
+        En plus : un bonus qui grandit dès la 3e pose de suite qui fait une ligne (de +1 à +5), et +1 pour deux coups difficiles enchaînés
+        (4 lignes ou T-spin).
+      </p>
+      <p className="hint">
+        Pour te défendre : tes lignes annulent d'abord celles qui t'arrivent (la barre rouge à côté de ton plateau), le reste part chez
+        l'adversaire. Les lignes grises montent quand tu poses une pièce sans faire de ligne.
+      </p>
+    </section>
+  );
+}
+
 interface Props {
   room: BricksRoomView;
   send: (msg: BricksClientMessage) => void;
@@ -65,7 +105,12 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             : undefined
       }
       seatNote={teamsReady ? (seat) => `équipe ${BRICK_TEAMS[seat.team ?? 0]}` : undefined}
-      aside={teamsReady ? <TeamsPanel room={room} send={send} names={BRICK_TEAMS} colors={["#e0574a", "#5b8fe8"]} /> : undefined}
+      aside={
+        <>
+          {teamsReady && <TeamsPanel room={room} send={send} names={BRICK_TEAMS} colors={["#e0574a", "#5b8fe8"]} />}
+          {!s.sprint && <AttackMemo />}
+        </>
+      }
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />

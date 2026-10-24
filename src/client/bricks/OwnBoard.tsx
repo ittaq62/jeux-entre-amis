@@ -126,11 +126,30 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
           if (r.sent > 0) play("brickAttack");
           if (big) vibrate(40);
           const label = clearLabel(r.lines, r.spin);
-          if (r.perfect) popup({ text: "Plateau vidé !", sub: `+${r.attack}`, tone: "gold", big: true });
-          else if (label || r.combo >= 1 || r.sent > 0) {
+          // Nos lignes ont d'abord annulé des lignes grises qui nous arrivaient : on le dit, sinon l'attaque semble perdue
+          const parried = r.cancelled > 0 ? `${r.cancelled} parée${r.cancelled > 1 ? "s" : ""}` : null;
+          if (r.cancelled > 0) {
+            const bar = meter.current?.parentElement;
+            bar?.classList.remove("is-parried");
+            void bar?.offsetWidth;
+            bar?.classList.add("is-parried");
+          }
+          if (r.perfect)
             popup({
-              text: label ?? `Combo ×${r.combo}`,
-              sub: [r.b2b ? "enchaîné" : null, label && r.combo >= 1 ? `combo ×${r.combo}` : null, r.sent > 0 ? `+${r.sent}` : null]
+              text: "Plateau vidé !",
+              sub: [r.sent > 0 ? `+${r.sent}` : null, parried].filter(Boolean).join(" · "),
+              tone: "gold",
+              big: true,
+            });
+          else if (label || r.combo >= 1 || r.sent > 0 || parried) {
+            popup({
+              text: label ?? (r.combo >= 1 ? `Combo ×${r.combo}` : "Parée !"),
+              sub: [
+                r.b2b ? "enchaîné" : null,
+                label && r.combo >= 1 ? `combo ×${r.combo}` : null,
+                r.sent > 0 ? `+${r.sent} envoyée${r.sent > 1 ? "s" : ""}` : null,
+                parried,
+              ]
                 .filter(Boolean)
                 .join(" · "),
               tone: r.spin !== "none" ? "jade" : r.lines === 4 ? "gold" : "white",
