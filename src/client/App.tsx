@@ -21,6 +21,7 @@ const LeaderboardPage = lazy(() =>
 const FriendsPage = lazy(() => import("./pages/FriendsPage.tsx").then((m) => ({ default: m.FriendsPage })));
 const AccountPage = lazy(() => import("./pages/AccountPage.tsx").then((m) => ({ default: m.AccountPage })));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage.tsx").then((m) => ({ default: m.PrivacyPage })));
+const AdminPage = lazy(() => import("./pages/AdminPage.tsx").then((m) => ({ default: m.AdminPage })));
 const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ default: m.DevGallery })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -76,6 +77,7 @@ export function App() {
           <Route path="/classement" component={LeaderboardPage} />
           <Route path="/amis" component={FriendsPage} />
           <Route path="/compte" component={AccountPage} />
+          <Route path="/admin" component={AdminPage} />
           {import.meta.env.DEV && <Route path="/dev/galerie" component={DevGallery} />}
           <Route component={NotFoundPage} />
         </Switch>

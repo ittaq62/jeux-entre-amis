@@ -1727,3 +1727,287 @@ h3 .hint {
 .search-results {
   margin-top: 10px;
 }
+
+/* ------------------------------------------------------------------ */
+/* Badge admin                                                         */
+/* ------------------------------------------------------------------ */
+
+/* Petite plaque dorée gravée, à côté du nom */
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  margin-left: 6px;
+  padding: 1px 6px 0 5px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #f1d590, #d4a957);
+  color: var(--gold-ink);
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: 0.08em;
+  vertical-align: 0.15em;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 0 var(--gold-edge);
+}
+
+.admin-badge svg {
+  flex: none;
+  margin-top: -1px;
+}
+
+.admin-badge.is-large {
+  margin-left: 12px;
+  padding: 2px 9px 1px 7px;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  vertical-align: 0.35em;
+  border-radius: 5px;
+}
+
+/* Un nom trop long se coupe, le badge reste visible */
+.player-name {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: bottom;
+}
+
+.player-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-admin {
+  color: var(--gold);
+}
+
+.toast-gold {
+  border-color: rgba(226, 189, 110, 0.55);
+}
+
+.btn.is-armed,
+.menu-item.is-armed {
+  border-color: var(--danger);
+  background: rgba(239, 106, 90, 0.14);
+  color: #ffb3a7;
+}
+
+@media (max-width: 520px) {
+  .nav-admin-label {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Administration                                                      */
+/* ------------------------------------------------------------------ */
+
+.admin {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin .page-heading h1 {
+  font-size: 34px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.admin-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.admin-section {
+  padding: 22px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-section h2 {
+  font-size: 23px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.admin-section .empty {
+  margin: 0;
+}
+
+.admin-lead {
+  margin: -4px 0 0;
+}
+
+.ledger-detail {
+  margin-left: 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.admin-announce {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-row);
+  background: var(--gold-tint);
+  border: 1px solid rgba(226, 189, 110, 0.3);
+}
+
+.admin-announce p {
+  margin: 0;
+  grid-column: 1;
+  color: var(--gold-light);
+  font-weight: 600;
+}
+
+.admin-announce .hint {
+  grid-column: 1;
+  font-size: 13px;
+}
+
+.admin-announce .btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.admin-textarea {
+  min-height: 0;
+  padding: 10px 14px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.admin-form-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-room .row-text .hint {
+  white-space: normal;
+}
+
+.admin-user-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-banned {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(239, 106, 90, 0.16);
+  color: #f39a8d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.admin-sheet-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.admin-sheet-head h3 {
+  font-size: 24px;
+}
+
+.admin-sheet-head p {
+  margin: 4px 0 0;
+}
+
+.admin-profile-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-ban-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-row);
+  background: rgba(239, 106, 90, 0.12);
+  border: 1px solid rgba(239, 106, 90, 0.35);
+  color: #f7b4a9;
+}
+
+.admin-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.admin-action .join-row .input {
+  flex: 1;
+}
+
+.admin-action .hint {
+  margin: 0;
+}
+
+.admin-delete {
+  margin-top: 6px;
+}
+
+@media (max-width: 900px) {
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 440px) {
+  .admin {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .admin-section {
+    padding: 18px 18px 14px;
+  }
+
+  .admin-room {
+    flex-wrap: wrap;
+  }
+
+  .admin-room .row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -12,7 +12,8 @@ export function PrivacyPage() {
         <h3>Ce qui est enregistré</h3>
         <ul>
           <li>
-            <strong>Ton adresse email</strong>, pour t'envoyer ton code de connexion. Elle n'est jamais affichée aux autres joueurs.
+            <strong>Ton adresse email</strong>, pour t'envoyer ton code de connexion. Elle n'est jamais affichée aux autres joueurs ; seul
+            l'administrateur du site la voit, pour gérer les comptes.
           </li>
           <li>
             <strong>Ton pseudo, ton avatar et ta photo</strong> si tu en ajoutes une : ils sont visibles par les autres joueurs.
@@ -33,6 +34,11 @@ export function PrivacyPage() {
           <li>Les messages du chat disparaissent avec le salon.</li>
           <li>Les codes de connexion sont stockés sous forme chiffrée et expirent au bout de 10 minutes.</li>
         </ul>
+        <h3>Modération</h3>
+        <p>
+          L'administrateur du site, signalé par un badge ADMIN, peut renommer un pseudo, retirer une photo, fermer une table ou suspendre un
+          compte qui ne respecte pas les autres joueurs.
+        </p>
         <h3>Où sont les données</h3>
         <p>Le site et sa base de données sont hébergés par Cloudflare. Les emails de connexion partent via Gmail.</p>
         <h3>Tes droits</h3>
