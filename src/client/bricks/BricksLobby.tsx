@@ -7,9 +7,9 @@ import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
 export const BRICK_TEAMS = ["Rubis", "Saphir"] as const;
 
 const BOT_HINTS: Record<BotLevel, string> = {
-  apprenti: "Pose lentement et laisse des trous.",
-  confirme: "Pose proprement et envoie des lignes.",
-  expert: "Rapide, garde un puits pour les quatre lignes et tente les T-spins.",
+  apprenti: "Pose lentement, laisse des trous et n'attaque presque jamais.",
+  confirme: "Un rythme tranquille et quelques erreurs : un bon adversaire pour s'entraîner.",
+  expert: "Rapide et précis : garde un puits pour les quatre lignes et tente les T-spins.",
 };
 
 /** Ce que chaque coup envoie, d'après la table du moteur (attackOf) */

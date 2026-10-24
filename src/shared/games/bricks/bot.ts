@@ -20,8 +20,12 @@ import {
   type Spin,
 } from "./engine.ts";
 
-/** Temps de réflexion par pièce, en millisecondes */
-export const BOT_PACE: Record<BotLevel, number> = { apprenti: 1150, confirme: 640, expert: 390 };
+/**
+ * Temps de réflexion par pièce, en millisecondes. Réglé sur des duels simulés contre des joueurs types :
+ * un joueur moyen gagne presque toujours contre l'apprenti, une fois sur deux contre le confirmé,
+ * et l'expert reste un défi pour un habitué (une victoire sur quatre).
+ */
+export const BOT_PACE: Record<BotLevel, number> = { apprenti: 1400, confirme: 1150, expert: 850 };
 
 interface Weights {
   height: number;
@@ -48,7 +52,7 @@ const WEIGHTS: Record<BotLevel, Weights> = {
     spin: 0,
     well: 0,
     noise: 1.6,
-    blunder: 0.18,
+    blunder: 0.22,
     useHold: false,
   },
   confirme: {
@@ -56,11 +60,11 @@ const WEIGHTS: Record<BotLevel, Weights> = {
     holes: -0.42,
     bumpiness: -0.19,
     lines: 0.5,
-    attack: 0.45,
-    spin: 0.4,
+    attack: 0.25,
+    spin: 0.1,
     well: 0.08,
-    noise: 0.25,
-    blunder: 0.03,
+    noise: 1,
+    blunder: 0.12,
     useHold: true,
   },
   expert: {
@@ -71,8 +75,8 @@ const WEIGHTS: Record<BotLevel, Weights> = {
     attack: 0.9,
     spin: 1.4,
     well: 0.18,
-    noise: 0.05,
-    blunder: 0,
+    noise: 0.5,
+    blunder: 0.06,
     useHold: true,
   },
 };
