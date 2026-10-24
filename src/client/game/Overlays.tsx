@@ -7,6 +7,7 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { EloLine } from "./EloLine.tsx";
 
 function seatOf(room: RoomView, id: string): SeatView | undefined {
   return room.seats.find((s) => s.id === id);
@@ -127,6 +128,7 @@ export function GameOver({
               ) : (
                 <p className="gameover-points">Pas de point au classement cette fois.</p>
               ))}
+            <EloLine result={room.results?.[room.you.userId]} />
           </div>
         </div>
 

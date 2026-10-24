@@ -17,6 +17,7 @@ interface GameStats {
   played: number;
   won: number;
   points: number;
+  elo: number;
   streak: number;
   bestStreak: number;
   totals: Record<string, number>;
@@ -115,11 +116,17 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               <p className="profile-points">
                 <strong className="num">{stats.points.toLocaleString("fr-FR")}</strong> points au classement
                 {showNaval && naval.played > 0 && " de UNO"}
+                <span className="profile-elo">
+                  Elo <strong className="num">{stats.elo}</strong>
+                </span>
               </p>
             )}
             {showNaval && naval.played > 0 && (
               <p className="profile-points">
                 <strong className="num">{naval.points.toLocaleString("fr-FR")}</strong> points en bataille navale
+                <span className="profile-elo">
+                  Elo <strong className="num">{naval.elo}</strong>
+                </span>
               </p>
             )}
           </div>

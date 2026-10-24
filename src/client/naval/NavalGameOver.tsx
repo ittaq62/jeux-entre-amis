@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { NavalRoomView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
+import { EloLine } from "../game/EloLine.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
@@ -78,6 +79,7 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
               ) : (
                 <p className="gameover-points">Pas de point au classement cette fois.</p>
               ))}
+            <EloLine result={room.results?.[room.you.userId]} />
           </div>
         </div>
 

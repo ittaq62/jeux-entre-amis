@@ -1463,6 +1463,20 @@
   margin-right: 2px;
 }
 
+/* L'Elo à côté des points, en plus discret */
+.profile-elo {
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-soft);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.profile-points .profile-elo strong {
+  font-size: 20px;
+  color: var(--text);
+}
+
 .profile-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -1839,16 +1853,31 @@
   width: 84px;
 }
 
-.board-points {
+/* Elo et points côte à côte : la colonne qui classe est en grand, l'autre en retrait */
+.board-score {
   width: 72px;
 }
 
-.board-points strong {
+.board-score strong {
+  color: var(--text-soft);
+}
+
+.board-score.is-main strong {
   font-family: var(--font-card);
   font-weight: 800;
   font-size: 24px;
   line-height: 1.05;
   color: var(--gold);
+}
+
+.board-head .board-score.is-main {
+  color: var(--gold);
+}
+
+.board-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
 }
 
 .search-row {
@@ -1915,6 +1944,10 @@ h3 .hint {
 
   .board-extra {
     display: none;
+  }
+
+  .board-score {
+    width: 58px;
   }
 }
 

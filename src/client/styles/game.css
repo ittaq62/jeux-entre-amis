@@ -1228,6 +1228,35 @@
   color: var(--red-deep);
 }
 
+.gameover-elo {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.gameover-elo strong {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.elo-delta {
+  font-weight: 700;
+}
+
+.elo-delta.is-up {
+  color: #2f7d4f;
+}
+
+.elo-delta.is-down {
+  color: var(--red-deep);
+}
+
 .final-hand {
   display: flex;
   align-items: center;
