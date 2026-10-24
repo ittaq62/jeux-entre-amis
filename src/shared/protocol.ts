@@ -329,6 +329,8 @@ export type BricksClientMessage =
   | { t: "strategy"; strategy: TargetStrategy; target?: string | null }
   /** L'écran demande l'état exact de son plateau */
   | { t: "resync" }
+  /** La pièce suivante (ou celle de la réserve) ne peut plus apparaître : la pile a débordé */
+  | { t: "blocked" }
   | { t: "takeBack" }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }

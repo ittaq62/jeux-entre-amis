@@ -45,7 +45,7 @@ export interface BricksSettings {
 
 export const DEFAULT_SETTINGS: BricksSettings = {
   sprint: false,
-  win: "ko",
+  win: "survival",
   minutes: 2,
   series: 1,
   teams: false,

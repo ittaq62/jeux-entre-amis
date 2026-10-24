@@ -5,11 +5,13 @@ import {
   COLS,
   DEFAULT_SETTINGS,
   emptyGrid,
+  fits,
   garbageHoles,
   gridToString,
   newBoard,
   PIECES,
   place,
+  spawn,
   SPRINT_LINES,
   stackHeight,
   type Active,
@@ -53,7 +55,8 @@ const SEAT_RELEASE_MS = 25_000;
 const AFK_MS = 20_000;
 const COUNTDOWN_MS = 3600;
 const INTERMISSION_MS = 6000;
-const KO_PAUSE_MS = 1500;
+// Le temps de lire « K.O. ! Ta pile repart à zéro » avant que les pièces reprennent
+const KO_PAUSE_MS = 2000;
 /** Dernier debout : la marée montante commence après 3 minutes, une ligne grise toutes les 5 s */
 const TIDE_AFTER_MS = 180_000;
 const TIDE_EVERY_MS = 5000;
@@ -425,6 +428,23 @@ export class BricksRoom extends DurableObject<Env> {
       case "resync":
         if (seat) this.sendSnapshot(seat.id, false);
         return;
+
+      case "blocked": {
+        // L'écran dit que sa prochaine pièce ne peut plus apparaître : on le vérifie sur notre plateau
+        const m = d.match;
+        const p = seat && m ? this.player(seat.id) : undefined;
+        if (!p || !m || m.round.phase !== "playing" || !p.alive || seat!.autoplay || (p.koUntil && now < p.koUntil)) return;
+        const b = p.board;
+        const alternative = b.hold ?? b.bag.queue[0]!;
+        const stuck = !fits(b.grid, spawn(b.current)) || (m.settings.hold && !fits(b.grid, spawn(alternative)));
+        if (!stuck) return this.sendSnapshot(seat!.id, false);
+        const fx: BricksFx[] = [];
+        this.topOut(p, now, fx);
+        this.dirty = true;
+        this.broadcastBoard(p, fx);
+        this.checkRoundEnd(now);
+        return this.afterChange(now);
+      }
 
       case "takeBack": {
         if (!seat || !seat.autoplay) return;

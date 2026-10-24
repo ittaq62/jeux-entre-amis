@@ -99,8 +99,8 @@ export function BricksLobby({ room, send, ...rest }: Props) {
                   disabled={!isHost}
                   onChange={(win) => update({ win })}
                   options={[
-                    { value: "ko", label: "Au chrono, aux K.O." },
                     { value: "survival", label: "Dernier debout" },
+                    { value: "ko", label: "Au chrono, aux K.O." },
                   ]}
                 />
                 <p className="hint" style={{ margin: 0 }}>
