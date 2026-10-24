@@ -133,8 +133,11 @@ describe("tirs", () => {
 
   it("coule un navire, puis toute la flotte : la partie est finie", () => {
     const s = battle(["a", "b"]);
-    const events = [0, 1].flatMap((x) => (fire(s, "a", "b", cellIndex(10, x, 8)) as { events: never[] }).events);
-    expect(events.find((e: { type: string; result?: string }) => e.type === "shot" && e.result === "sunk")).toBeTruthy();
+    const events = [0, 1].flatMap((x) => {
+      const res = fire(s, "a", "b", cellIndex(10, x, 8));
+      return res.ok ? res.events : [];
+    });
+    expect(events.find((e) => e.type === "shot" && e.result === "sunk")).toBeTruthy();
     for (const c of cellsOf(ROWS)) if (!s.players[1]!.board.shots.includes(c)) fire(s, "a", "b", c);
     expect(s.phase).toBe("gameOver");
     expect(s.ranking).toEqual(["a", "b"]);

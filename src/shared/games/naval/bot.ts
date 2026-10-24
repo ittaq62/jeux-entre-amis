@@ -229,7 +229,7 @@ export function botAction(s: NavalState, botId: string, level: BotLevel): NavalA
 
   if (level === "mousse") {
     const cell = hunting.length > 0 && random(s) < 0.5 ? hunting[randomInt(s, hunting.length)]! : randomOpen(k, s);
-    if (bot.arsenal.length > 0 && random(s) < 0.3) return useWeapon(s, bot, target.id, k, null, cell);
+    if (bot.arsenal.length > 0 && random(s) < 0.3) return useWeapon(bot, target.id, k, null, cell);
     return { type: "fire", target: target.id, cell };
   }
 
@@ -244,21 +244,20 @@ export function botAction(s: NavalState, botId: string, level: BotLevel): NavalA
       const pool = echoes.length > 0 ? echoes : parity.length > 0 ? parity : [...k.cells.keys()].filter((c) => open(k, c));
       cell = pool[randomInt(s, pool.length)] ?? randomOpen(k, s);
     }
-    if (bot.arsenal.length > 0 && random(s) < 0.4) return useWeapon(s, bot, target.id, k, null, cell);
+    if (bot.arsenal.length > 0 && random(s) < 0.4) return useWeapon(bot, target.id, k, null, cell);
     return { type: "fire", target: target.id, cell };
   }
 
   // Amiral : densité de probabilité, et les armes au meilleur endroit
   const score = density(k);
   if (bot.arsenal.length > 0) {
-    const action = useWeapon(s, bot, target.id, k, score, null);
+    const action = useWeapon(bot, target.id, k, score, null);
     if (action) return action;
   }
   return { type: "fire", target: target.id, cell: bestCell(k, score, s) };
 }
 
 function useWeapon(
-  s: NavalState,
   bot: NavalPlayer,
   target: string,
   k: Knowledge,
