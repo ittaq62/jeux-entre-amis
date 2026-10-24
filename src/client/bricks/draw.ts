@@ -190,6 +190,8 @@ export class Effects {
 
 export interface DrawOptions {
   grid: Grid;
+  /** Clé du plateau posé : tant qu'elle ne change pas, le fond et les briques posées ne sont pas redessinés */
+  gridKey?: unknown;
   piece: Active | null;
   ghost: Active | null;
   cell: number;
@@ -199,141 +201,194 @@ export interface DrawOptions {
   dim?: boolean;
   /** Pièce posée à moitié transparente (vue d'un adversaire) */
   pieceAlpha?: number;
+  /** Fraction de case déjà parcourue par la pièce vers le bas : la chute glisse au lieu de sauter */
+  fall?: number;
 }
 
-/** Dessine un plateau entier sur son canvas (taille : 10 × SHOWN_ROWS cases). */
-export function drawBoard(g: CanvasRenderingContext2D, o: DrawOptions) {
-  const { cell, dpr } = o;
-  const W = COLS * cell;
-  const H = SHOWN_ROWS * cell;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, W, H);
-  const fx = o.effects;
-  const shakeY = fx && fx.shake > 0 ? Math.sin(fx.shake * 30) * fx.shake * cell * 0.12 : 0;
-  g.save();
-  g.translate(0, shakeY);
-  // Fond du bac : feutre sombre et grille très fine, sous les lignes du ciel
-  const top = SKY_ROWS * cell;
-  const felt = g.createLinearGradient(0, top, 0, H);
-  felt.addColorStop(0, "#0b241a");
-  felt.addColorStop(1, "#06150f");
-  g.fillStyle = felt;
-  g.fillRect(0, top, W, H - top);
-  g.strokeStyle = "rgba(244,236,218,0.045)";
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let x = 1; x < COLS; x++) {
-    g.moveTo(x * cell + 0.5, top);
-    g.lineTo(x * cell + 0.5, H);
-  }
-  for (let y = SKY_ROWS + 1; y < SHOWN_ROWS; y++) {
-    g.moveTo(0, y * cell + 0.5);
-    g.lineTo(W, y * cell + 0.5);
-  }
-  g.stroke();
+/**
+ * Dessine un plateau sur son canvas. Le fond (feutre, grille, ombre) et les briques posées vivent dans
+ * un calque à part, refait seulement quand la pile change ; à chaque image on ne pose par-dessus que la
+ * pièce en vol, son fantôme et les effets. Bien moins de travail par image, donc une chute régulière.
+ */
+export class BoardRenderer {
+  private layer = document.createElement("canvas");
+  private layerKey: unknown = undefined;
+  private layerRise = -1;
+  private beam: CanvasGradient | null = null;
 
-  // Ombre portée par le haut du bac, pour la profondeur
-  const shadow = g.createLinearGradient(0, top, 0, top + cell * 2.5);
-  shadow.addColorStop(0, "rgba(0,0,0,0.45)");
-  shadow.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = shadow;
-  g.fillRect(0, top, W, cell * 2.5);
-  // Un rai de lumière sous la pièce qui tombe, pour viser
-  if (o.piece && !o.dim && o.ghost) {
-    const xs = cellsOf(o.piece).map(([x]) => x);
-    const x0 = Math.min(...xs) * cell;
-    const x1 = (Math.max(...xs) + 1) * cell;
-    const beam = g.createLinearGradient(0, top, 0, H);
-    beam.addColorStop(0, "rgba(255,240,200,0.0)");
-    beam.addColorStop(1, "rgba(255,240,200,0.06)");
-    g.fillStyle = beam;
-    g.fillRect(x0, top, x1 - x0, H - top);
+  constructor(
+    private g: CanvasRenderingContext2D,
+    private cell: number,
+    private dpr: number,
+  ) {
+    this.layer.width = Math.round(COLS * cell * dpr);
+    this.layer.height = Math.round(SHOWN_ROWS * cell * dpr);
   }
 
-  const rise = fx ? fx.rise * cell : 0;
-  // Briques posées
-  for (let y = FIRST_ROW; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const v = o.grid[y * COLS + x]!;
-      if (v === 0) continue;
-      g.drawImage(sprite(v, cell, dpr), x * cell, (y - FIRST_ROW) * cell + rise, cell, cell);
+  private buildLayer(grid: Grid, rise: number) {
+    const { cell, dpr } = this;
+    const g = this.layer.getContext("2d")!;
+    const W = COLS * cell;
+    const H = SHOWN_ROWS * cell;
+    const top = SKY_ROWS * cell;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    // Fond du bac : feutre sombre et grille très fine, sous les lignes du ciel
+    const felt = g.createLinearGradient(0, top, 0, H);
+    felt.addColorStop(0, "#0b241a");
+    felt.addColorStop(1, "#06150f");
+    g.fillStyle = felt;
+    g.fillRect(0, top, W, H - top);
+    g.strokeStyle = "rgba(244,236,218,0.045)";
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let x = 1; x < COLS; x++) {
+      g.moveTo(x * cell + 0.5, top);
+      g.lineTo(x * cell + 0.5, H);
+    }
+    for (let y = SKY_ROWS + 1; y < SHOWN_ROWS; y++) {
+      g.moveTo(0, y * cell + 0.5);
+      g.lineTo(W, y * cell + 0.5);
+    }
+    g.stroke();
+    // Ombre portée par le haut du bac, pour la profondeur
+    const shadow = g.createLinearGradient(0, top, 0, top + cell * 2.5);
+    shadow.addColorStop(0, "rgba(0,0,0,0.45)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = shadow;
+    g.fillRect(0, top, W, cell * 2.5);
+    // Briques posées
+    const lift = rise * cell;
+    for (let y = FIRST_ROW; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const v = grid[y * COLS + x]!;
+        if (v !== 0) g.drawImage(sprite(v, cell, dpr), x * cell, (y - FIRST_ROW) * cell + lift, cell, cell);
+      }
     }
   }
-  // Fantôme : là où la pièce va tomber
-  if (o.ghost && o.piece && o.ghost.y !== o.piece.y) {
-    const l = LACQUER[colorOf(o.ghost.type)]!;
-    g.save();
-    g.globalAlpha = 0.28;
-    for (const [x, y] of cellsOf(o.ghost)) {
-      if (y < FIRST_ROW) continue;
-      roundRect(g, x * cell + cell * 0.1, (y - FIRST_ROW) * cell + cell * 0.1, cell * 0.8, cell * 0.8, cell * 0.16);
-      g.fillStyle = l.base;
-      g.fill();
+
+  render(o: DrawOptions) {
+    const { g, cell, dpr } = this;
+    const W = COLS * cell;
+    const H = SHOWN_ROWS * cell;
+    const top = SKY_ROWS * cell;
+    const fx = o.effects;
+    const rise = fx ? Math.round(fx.rise * 16) / 16 : 0;
+    const key = o.gridKey ?? o.grid;
+    if (key !== this.layerKey || rise !== this.layerRise) {
+      this.buildLayer(o.grid, rise);
+      this.layerKey = key;
+      this.layerRise = rise;
     }
-    g.globalAlpha = 0.7;
-    g.strokeStyle = l.light;
-    g.lineWidth = Math.max(1, cell * 0.06);
-    for (const [x, y] of cellsOf(o.ghost)) {
-      if (y < FIRST_ROW) continue;
-      roundRect(g, x * cell + cell * 0.1, (y - FIRST_ROW) * cell + cell * 0.1, cell * 0.8, cell * 0.8, cell * 0.16);
-      g.stroke();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, this.layer.width, this.layer.height);
+    const shakeY = fx && fx.shake > 0 ? Math.sin(fx.shake * 30) * fx.shake * cell * 0.12 : 0;
+    g.drawImage(this.layer, 0, Math.round(shakeY * dpr));
+    g.setTransform(dpr, 0, 0, dpr, 0, shakeY * dpr);
+
+    // Un rai de lumière sous la pièce qui tombe, pour viser
+    if (o.piece && !o.dim && o.ghost) {
+      let x0 = COLS;
+      let x1 = 0;
+      for (const [x] of cellsOf(o.piece)) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x + 1);
+      }
+      if (!this.beam) {
+        this.beam = g.createLinearGradient(0, top, 0, H);
+        this.beam.addColorStop(0, "rgba(255,240,200,0.0)");
+        this.beam.addColorStop(1, "rgba(255,240,200,0.06)");
+      }
+      g.fillStyle = this.beam;
+      g.fillRect(x0 * cell, top, (x1 - x0) * cell, H - top);
     }
-    g.restore();
-  }
-  // Traînées de chute directe
-  if (fx) {
-    for (const s of fx.streaks) {
-      const t = s.life / s.max;
-      const l = LACQUER[s.color]!;
-      const grad = g.createLinearGradient(0, (s.from - FIRST_ROW) * cell, 0, (s.to - FIRST_ROW + 1) * cell);
-      grad.addColorStop(0, "rgba(255,255,255,0)");
-      grad.addColorStop(1, l.light);
-      g.globalAlpha = (1 - t) * 0.45;
-      g.fillStyle = grad;
-      g.fillRect(s.x * cell + cell * 0.12, (s.from - FIRST_ROW) * cell, s.width * cell - cell * 0.24, (s.to - s.from + 1) * cell);
-      g.globalAlpha = 1;
-    }
-  }
-  // Pièce en vol
-  if (o.piece) {
-    g.globalAlpha = o.pieceAlpha ?? 1;
-    const color = colorOf(o.piece.type);
-    for (const [x, y] of cellsOf(o.piece)) {
-      if (y < FIRST_ROW) continue;
-      g.drawImage(sprite(color, cell, dpr), x * cell, (y - FIRST_ROW) * cell, cell, cell);
-    }
-    g.globalAlpha = 1;
-  }
-  // Éclairs des lignes faites, puis éclats de verre
-  if (fx) {
-    for (const f of fx.flashes) {
-      const t = f.life / f.max;
-      g.fillStyle = f.gold ? `rgba(255,226,150,${0.85 * (1 - t)})` : `rgba(255,255,255,${0.75 * (1 - t)})`;
-      const y = (f.row - FIRST_ROW) * cell;
-      const grow = cell * 0.35 * t;
-      g.fillRect(0, y - grow, W, cell + grow * 2);
-    }
-    for (const p of fx.particles) {
-      const t = p.life / p.max;
+    // Fantôme : là où la pièce va tomber
+    if (o.ghost && o.piece && o.ghost.y !== o.piece.y) {
+      const l = LACQUER[colorOf(o.ghost.type)]!;
       g.save();
-      g.globalAlpha = 1 - t;
-      g.translate(p.x, p.y);
-      g.rotate(p.angle);
-      g.fillStyle = p.color;
-      g.beginPath();
-      g.moveTo(0, -p.size);
-      g.lineTo(p.size * 0.8, p.size * 0.6);
-      g.lineTo(-p.size * 0.7, p.size * 0.4);
-      g.closePath();
-      g.fill();
+      g.lineWidth = Math.max(1, cell * 0.06);
+      g.strokeStyle = l.light;
+      g.fillStyle = l.base;
+      for (const [x, y] of cellsOf(o.ghost)) {
+        if (y < FIRST_ROW) continue;
+        roundRect(g, x * cell + cell * 0.1, (y - FIRST_ROW) * cell + cell * 0.1, cell * 0.8, cell * 0.8, cell * 0.16);
+        g.globalAlpha = 0.28;
+        g.fill();
+        g.globalAlpha = 0.7;
+        g.stroke();
+      }
       g.restore();
     }
+    // Traînées de chute directe
+    if (fx) {
+      for (const s of fx.streaks) {
+        const t = s.life / s.max;
+        const l = LACQUER[s.color]!;
+        const grad = g.createLinearGradient(0, (s.from - FIRST_ROW) * cell, 0, (s.to - FIRST_ROW + 1) * cell);
+        grad.addColorStop(0, "rgba(255,255,255,0)");
+        grad.addColorStop(1, l.light);
+        g.globalAlpha = (1 - t) * 0.45;
+        g.fillStyle = grad;
+        g.fillRect(s.x * cell + cell * 0.12, (s.from - FIRST_ROW) * cell, s.width * cell - cell * 0.24, (s.to - s.from + 1) * cell);
+        g.globalAlpha = 1;
+      }
+    }
+    // Pièce en vol, un peu plus bas que sa case quand elle est en train de descendre
+    if (o.piece) {
+      g.globalAlpha = o.pieceAlpha ?? 1;
+      const img = sprite(colorOf(o.piece.type), cell, dpr);
+      const dy = (o.fall ?? 0) * cell;
+      for (const [x, y] of cellsOf(o.piece)) {
+        if (y < FIRST_ROW - 1) continue;
+        g.drawImage(img, x * cell, (y - FIRST_ROW) * cell + dy, cell, cell);
+      }
+      g.globalAlpha = 1;
+    }
+    // Éclairs des lignes faites, puis éclats de verre
+    if (fx) {
+      for (const f of fx.flashes) {
+        const t = f.life / f.max;
+        g.fillStyle = f.gold ? `rgba(255,226,150,${0.85 * (1 - t)})` : `rgba(255,255,255,${0.75 * (1 - t)})`;
+        const y = (f.row - FIRST_ROW) * cell;
+        const grow = cell * 0.35 * t;
+        g.fillRect(0, y - grow, W, cell + grow * 2);
+      }
+      for (const p of fx.particles) {
+        const t = p.life / p.max;
+        g.globalAlpha = 1 - t;
+        g.fillStyle = p.color;
+        const c = Math.cos(p.angle);
+        const sn = Math.sin(p.angle);
+        // Un éclat triangulaire tourné, sans sauvegarder tout le contexte
+        const pt = (px: number, py: number) => [p.x + px * c - py * sn, p.y + px * sn + py * c] as const;
+        const [ax, ay] = pt(0, -p.size);
+        const [bx, by] = pt(p.size * 0.8, p.size * 0.6);
+        const [cx, cy] = pt(-p.size * 0.7, p.size * 0.4);
+        g.beginPath();
+        g.moveTo(ax, ay);
+        g.lineTo(bx, by);
+        g.lineTo(cx, cy);
+        g.closePath();
+        g.fill();
+      }
+      g.globalAlpha = 1;
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (o.dim) {
+      g.fillStyle = "rgba(3,10,7,0.55)";
+      g.fillRect(0, top, W, H - top);
+      // Le ciel n'a pas de fond : ce qui y dépasse s'efface à moitié au lieu d'être assombri
+      g.globalCompositeOperation = "destination-out";
+      g.fillStyle = "rgba(0,0,0,0.55)";
+      g.fillRect(0, 0, W, top);
+      g.globalCompositeOperation = "source-over";
+    }
   }
-  g.restore();
-  if (o.dim) {
-    g.fillStyle = "rgba(3,10,7,0.55)";
-    g.fillRect(0, top, W, H - top);
-  }
+}
+
+/** Dessin ponctuel d'un plateau (l'aperçu de l'accueil). */
+export function drawBoard(g: CanvasRenderingContext2D, o: DrawOptions) {
+  new BoardRenderer(g, o.cell, o.dpr).render(o);
 }
 
 /** Une pièce seule, centrée dans une petite case (réserve, aperçus). */

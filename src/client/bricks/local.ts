@@ -55,6 +55,9 @@ export class LocalGame {
   ack = 0;
   pausedUntil = 0;
   topped = false;
+  /** Fraction de case parcourue vers le bas par la pièce, pour dessiner une chute qui glisse */
+  fall = 0;
+  private ghostFor: { piece: Active | null; grid: Grid | null; ghost: Active | null } = { piece: null, grid: null, ghost: null };
   private lastRotation = false;
   private lastKick = 0;
   private lockMs = 0;
@@ -106,8 +109,15 @@ export class LocalGame {
     return this.board.pending.reduce((n, g) => n + g.lines, 0);
   }
 
+  /** Là où la pièce tomberait : recalculé seulement quand la pièce ou la pile bougent */
   get ghost(): Active | null {
-    return this.piece ? dropped(this.board.grid, this.piece) : null;
+    const c = this.ghostFor;
+    if (c.piece !== this.piece || c.grid !== this.board.grid) {
+      c.piece = this.piece;
+      c.grid = this.board.grid;
+      c.ghost = this.piece ? dropped(this.board.grid, this.piece) : null;
+    }
+    return c.ghost;
   }
 
   addGarbage(chunk: GarbageChunk) {
@@ -230,7 +240,10 @@ export class LocalGame {
 
   /** Avance le temps : répétition des déplacements, gravité, verrou. */
   tick(dt: number, now: number) {
-    if (!this.canPlay(now) || !this.piece) return;
+    if (!this.canPlay(now) || !this.piece) {
+      this.fall = 0;
+      return;
+    }
     // Répétition automatique d'un déplacement maintenu
     if (this.dir !== 0 && now - this.dirSince >= this.handling.das) {
       if (this.handling.arr <= 0) {
@@ -262,9 +275,14 @@ export class LocalGame {
       }
     }
     if (this.piece && grounded(this.board.grid, this.piece)) {
+      this.fall = 0;
       this.lockMs += dt;
       if (this.lockMs >= LOCK_MS || this.lockResets >= MAX_LOCK_RESETS) this.lock(now);
-    } else this.lockMs = 0;
+    } else {
+      this.lockMs = 0;
+      // Entre deux cases : la pièce est dessinée en chemin vers la suivante
+      this.fall = Math.min(0.999, this.gravityAcc / interval);
+    }
   }
 
   private lock(now: number) {
