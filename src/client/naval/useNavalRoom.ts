@@ -2,6 +2,7 @@ import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import type { ChatMessage, NavalClientMessage, NavalRoomView, NavalServerMessage } from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
+import { announceSeatChanges } from "../game/AwayNote.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
@@ -29,6 +30,7 @@ export function useNavalRoom(code: string) {
     const prev = viewRef.current;
     viewRef.current = next;
     setView(next);
+    announceSeatChanges(prev, next, next.you.userId);
     setServerOffset(next.serverNow - Date.now());
     const seat = next.you.seatId;
     const g = next.naval;

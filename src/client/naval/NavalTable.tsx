@@ -7,15 +7,17 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
+import { AwayNote, awayTurnNote } from "../game/AwayNote.tsx";
 import { EmotePicker } from "../game/ChatPanel.tsx";
 import { TimerRing } from "../game/Seat.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
+import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { NAVAL_SOUNDS, play, preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Board } from "./Board.tsx";
 import { NavalGameOver } from "./NavalGameOver.tsx";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
-import { formatClock, PlacementBoard, useCountdown } from "./Placement.tsx";
+import { PlacementBoard } from "./Placement.tsx";
 
 interface Props {
   room: NavalRoomView;
@@ -251,6 +253,7 @@ function Battle({
   const [sentFor, setSentFor] = useState(-1);
   const mySeat = me ? seat(me) : undefined;
   const turnSeat = g.turn ? seat(g.turn) : undefined;
+  const turnLeft = useCountdown(turnSeat?.awayAt ?? null, serverOffset);
   const placementLeft = useCountdown(room.placementDeadline, serverOffset);
 
   useEffect(() => {
@@ -305,7 +308,7 @@ function Battle({
       mate && !mate.out
         ? `Ta flotte est au fond : ${seat(mate.id)?.name ?? "ton équipier"} continue seul.`
         : "Ta flotte est au fond. Tu regardes la fin de la bataille.";
-  else status = `Au tour de ${turnSeat?.name ?? "?"}`;
+  else status = `Au tour de ${turnSeat?.name ?? "?"}${awayTurnNote(turnSeat, turnLeft)}`;
 
   const arsenal = meP?.arsenal ?? [];
   const counts = (["radar", "torpedo", "barrage"] as Weapon[]).map((k) => ({ k, n: arsenal.filter((a) => a === k).length }));
@@ -358,6 +361,7 @@ function Battle({
                   >
                     {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={28} />}
                     <span className="naval-target-name">{s?.name}</span>
+                    {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
                     <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
                   </button>
                 );
@@ -373,6 +377,7 @@ function Battle({
                   {seat(target.id)?.name}
                   {seat(target.id)?.admin && <AdminBadge />}
                 </span>
+                {seat(target.id) && <AwayNote seat={seat(target.id)!} serverOffset={serverOffset} />}
                 <FleetPips total={FLEETS[size].length} afloat={targetBoard?.afloat ?? 0} />
               </div>
             )
@@ -447,6 +452,7 @@ function Battle({
               <>
                 <div className="naval-fleet-head">
                   <h3>Flotte de {seat(mate.id)?.name}</h3>
+                  {seat(mate.id) && <AwayNote seat={seat(mate.id)!} serverOffset={serverOffset} compact />}
                   <FleetPips total={FLEETS[size].length} afloat={mateBoard.afloat} />
                 </div>
                 <Board

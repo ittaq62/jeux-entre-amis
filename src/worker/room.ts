@@ -53,7 +53,8 @@ const BOT_NAMES = [
   "Roger",
   "Mireille",
 ];
-const AWAY_AFTER_MS = 8000;
+// Délai laissé à un joueur déconnecté pour revenir avant qu'un bot joue à sa place (compte à rebours affiché à tous)
+const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const NEXT_ROUND_MS = 12_000;
 const MAX_MISSED_TURNS = 2;
@@ -224,6 +225,7 @@ export class GameRoom extends DurableObject<Env> {
         seat.autoplay = false;
         seat.missed = 0;
         d.scheduledTurnId = -1;
+        if (d.status === "playing") this.systemChat(`${seat.name} est de retour à la table.`);
       }
       if (d.status !== "playing") {
         seat.name = user.pseudo;
@@ -802,6 +804,7 @@ export class GameRoom extends DurableObject<Env> {
         if (!seat || seat.disconnectedAt === null || d.status !== "playing" || seat.autoplay) return null;
         seat.autoplay = "away";
         d.scheduledTurnId = -1;
+        this.systemChat(`${seat.name} s'est déconnecté : un bot joue à sa place en attendant son retour.`);
         return [];
       }
       case "seatCleanup": {
@@ -923,6 +926,11 @@ export class GameRoom extends DurableObject<Env> {
         admin: Boolean(s.admin),
         connected: s.kind === "bot" || connected.has(s.userId!),
         autoplay: Boolean(s.autoplay),
+        ...(s.autoplay ? { autoplayReason: s.autoplay } : {}),
+        awayAt:
+          d.status === "playing" && s.kind === "human" && !s.autoplay && s.disconnectedAt !== null && !connected.has(s.userId!)
+            ? s.disconnectedAt + AWAY_AFTER_MS
+            : null,
         isHost: s.userId === d.hostId,
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),

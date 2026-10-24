@@ -6,8 +6,10 @@ import type { RoomClientMessage, RoomView } from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
+import { useCountdown } from "../lib/countdown.ts";
 import { play, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { awayTurnNote } from "./AwayNote.tsx";
 import { Center } from "./Center.tsx";
 import { EmotePicker } from "./ChatPanel.tsx";
 import { useFx } from "./fx.ts";
@@ -168,13 +170,16 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   });
 
   const current = room.seats.find((s) => s.id === g.turn);
+  const currentLeft = useCountdown(current?.awayAt ?? null, serverOffset);
+  const currentAway = awayTurnNote(current, currentLeft);
   const vulnerable = g.unoVulnerable;
 
   let status: string;
   if (g.phase !== "playing") status = "";
-  else if (!me) status = `Tu regardes la partie · au tour de ${current?.name ?? "…"}`;
+  else if (!me) status = `Tu regardes la partie · au tour de ${current?.name ?? "…"}${currentAway}`;
   else if (mySeat?.autoplay) status = "Un bot joue à ta place";
-  else if (!myTurn) status = g.rouletteVictim ? `${current?.name} fait tourner la roulette…` : `Au tour de ${current?.name ?? "…"}`;
+  else if (!myTurn)
+    status = g.rouletteVictim ? `${current?.name} fait tourner la roulette…` : `Au tour de ${current?.name ?? "…"}${currentAway}`;
   else if (isRouletteVictim) status = "Roulette ! Choisis la couleur à chercher";
   else if (g.canChallenge) status = `+${g.pendingDraw} sur toi ! Contester le bluff, cumuler ou encaisser ?`;
   else if (g.pendingDraw > 0)

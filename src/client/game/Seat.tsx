@@ -6,6 +6,7 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { AwayNote } from "./AwayNote.tsx";
 import { anchor } from "./fx.ts";
 import type { EmoteBubble } from "./useRoom.ts";
 
@@ -83,6 +84,7 @@ export function Seat({
         <span className="seat-plate-name">{seat.name}</span>
         {seat.admin && <AdminBadge />}
       </div>
+      <AwayNote seat={seat} serverOffset={serverOffset} compact={compact} />
       <div className="seat-meta">
         {!player.out && (
           <div

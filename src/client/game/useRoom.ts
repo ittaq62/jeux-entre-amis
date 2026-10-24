@@ -9,6 +9,7 @@ import { play, vibrate } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
 import { animateEvents } from "./animate.ts";
+import { announceSeatChanges } from "./AwayNote.tsx";
 import { usePileExtras } from "./pileExtras.ts";
 
 export interface EmoteBubble {
@@ -37,6 +38,7 @@ export function useRoom(code: string) {
   const commit = useCallback((prev: RoomView | null, next: RoomView) => {
     viewRef.current = next;
     setView(next);
+    announceSeatChanges(prev, next, next.you.userId);
     const seat = next.you.seatId;
     const g = next.uno;
     if (!g || !seat) return;

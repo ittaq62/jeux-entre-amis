@@ -41,7 +41,8 @@ import { decodeHeaderJson } from "./util.ts";
 
 // Des marins bretons pour compléter l'équipage
 const BOT_NAMES = ["Corentin", "Yvonne", "Loïc", "Maëlle", "Gwenaël", "Soizic", "Erwan", "Nolwenn", "Ronan", "Anaïg"];
-const AWAY_AFTER_MS = 8000;
+// Délai laissé à un joueur déconnecté pour revenir avant qu'un bot joue à sa place (compte à rebours affiché à tous)
+const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const PLACEMENT_MS = 90_000;
 const MAX_MISSED_TURNS = 2;
@@ -207,6 +208,7 @@ export class NavalRoom extends DurableObject<Env> {
         seat.autoplay = false;
         seat.missed = 0;
         d.scheduledTurnId = -1;
+        if (d.status === "playing") this.systemChat(`${seat.name} est de retour à bord.`);
       }
       if (d.status !== "playing") {
         seat.name = user.pseudo;
@@ -769,6 +771,7 @@ export class NavalRoom extends DurableObject<Env> {
         if (!seat || seat.disconnectedAt === null || d.status !== "playing" || seat.autoplay) return null;
         seat.autoplay = "away";
         d.scheduledTurnId = -1;
+        this.systemChat(`${seat.name} s'est déconnecté : un bot tient la barre en attendant son retour.`);
         return [];
       }
       case "seatCleanup": {
@@ -869,6 +872,11 @@ export class NavalRoom extends DurableObject<Env> {
         admin: Boolean(s.admin),
         connected: s.kind === "bot" || connected.has(s.userId!),
         autoplay: Boolean(s.autoplay),
+        ...(s.autoplay ? { autoplayReason: s.autoplay } : {}),
+        awayAt:
+          d.status === "playing" && s.kind === "human" && !s.autoplay && s.disconnectedAt !== null && !connected.has(s.userId!)
+            ? s.disconnectedAt + AWAY_AFTER_MS
+            : null,
         isHost: s.userId === d.hostId,
         team: s.team,
       })),

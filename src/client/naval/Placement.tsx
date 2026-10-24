@@ -4,6 +4,7 @@ import type { NavalView } from "../../shared/games/naval/view.ts";
 import type { NavalClientMessage, NavalRoomView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { Board, type BoardPointer } from "./Board.tsx";
 
@@ -177,18 +178,4 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
       )}
     </section>
   );
-}
-
-export function useCountdown(target: number | null, offset: number): number | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!target) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [target]);
-  return target ? Math.max(0, Math.ceil((target - (now + offset)) / 1000)) : null;
-}
-
-export function formatClock(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }

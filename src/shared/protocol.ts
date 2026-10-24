@@ -129,6 +129,10 @@ export interface SeatView {
   connected: boolean;
   /** Un bot joue a la place de ce joueur absent */
   autoplay: boolean;
+  /** Pourquoi : déconnecté (« away ») ou plus de réponse pendant ses tours (« afk ») */
+  autoplayReason?: "away" | "afk";
+  /** Déconnecté en pleine partie : heure (du serveur) à laquelle un bot prendra sa place, sauf retour d'ici là */
+  awayAt?: number | null;
   isHost: boolean;
   /** Administrateur du site */
   admin: boolean;
