@@ -1051,6 +1051,10 @@
     transform: scale(0.8);
   }
 
+  .naval-preview {
+    scale: 0.78;
+  }
+
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1074,6 +1078,10 @@
 
   .table-scatter {
     transform: scale(0.68);
+  }
+
+  .naval-preview {
+    scale: 0.7;
   }
 
   .game-sheet {

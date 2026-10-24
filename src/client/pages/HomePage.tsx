@@ -41,7 +41,6 @@ export function HomePage() {
   const beta = useSession((s) => s.beta);
   const [createFor, setCreateFor] = useState<GameId | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [code, setCode] = useState("");
 
   useEffect(() => {
     watchLobby(true);
@@ -70,9 +69,8 @@ export function HomePage() {
     }
   }
 
-  async function join(e: FormEvent) {
-    e.preventDefault();
-    const value = code.trim().toUpperCase();
+  // Le code mène à la bonne table quel que soit le jeu : la salle sait à quoi on y joue
+  async function join(value: string) {
     if (!isRoomCode(value)) return toast({ tone: "danger", title: "Un code de table fait 4 lettres." });
     setBusy("join");
     try {
@@ -133,33 +131,7 @@ export function HomePage() {
                 Ouvrir une table
               </button>
             </div>
-            <form className="join-code" onSubmit={join}>
-              <label className="join-label" htmlFor="join-code">
-                Un ami t'a donné un code ?
-              </label>
-              <div className="join-row">
-                <input
-                  id="join-code"
-                  className="input join-input"
-                  value={code}
-                  onChange={(e) =>
-                    setCode(
-                      e.target.value
-                        .toUpperCase()
-                        .replace(/[^A-Z]/g, "")
-                        .slice(0, ROOM_CODE_LENGTH),
-                    )
-                  }
-                  placeholder="ABCD"
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button className="btn" disabled={code.length !== ROOM_CODE_LENGTH || busy !== null}>
-                  Rejoindre
-                </button>
-              </div>
-            </form>
+            <JoinCode id="join-code-uno" busy={busy !== null} onJoin={join} />
           </div>
         </section>
 
@@ -185,6 +157,7 @@ export function HomePage() {
                   Ouvrir une table
                 </button>
               </div>
+              <JoinCode id="join-code-naval" busy={busy !== null} onJoin={join} />
             </div>
           </section>
         )}
@@ -274,6 +247,44 @@ export function HomePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** « Un ami t'a donné un code ? » : le même champ sur la fiche de chaque jeu. */
+function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (code: string) => void }) {
+  const [code, setCode] = useState("");
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    onJoin(code.trim().toUpperCase());
+  }
+  return (
+    <form className="join-code" onSubmit={submit}>
+      <label className="join-label" htmlFor={id}>
+        Un ami t'a donné un code ?
+      </label>
+      <div className="join-row">
+        <input
+          id={id}
+          className="input join-input"
+          value={code}
+          onChange={(e) =>
+            setCode(
+              e.target.value
+                .toUpperCase()
+                .replace(/[^A-Z]/g, "")
+                .slice(0, ROOM_CODE_LENGTH),
+            )
+          }
+          placeholder="ABCD"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button className="btn" disabled={code.length !== ROOM_CODE_LENGTH || busy}>
+          Rejoindre
+        </button>
+      </div>
+    </form>
   );
 }
 
