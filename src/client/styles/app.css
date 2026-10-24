@@ -771,6 +771,54 @@
     8px 10px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* La bataille navale : même fiche, relief bleu marine et un coin de mer à la place du tapis */
+.home-game-naval {
+  margin-top: 24px;
+}
+
+.game-stage.is-sea {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%, rgba(150, 220, 255, 0.12), transparent 72%),
+    radial-gradient(ellipse 90% 80% at 50% 45%, #15485d 0%, #0d3344 55%, #071f2a 100%);
+}
+
+.naval-preview {
+  rotate: -3deg;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.55));
+}
+
+.game-name.is-naval {
+  font-size: 52px;
+  text-shadow:
+    1px 1px 0 #2c6aa8,
+    2px 2px 0 #255d95,
+    3px 3px 0 #1f5082,
+    4px 4px 0 #19436f,
+    5px 5px 0 #13365c,
+    6px 6px 0 #0e2a49,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
+.beta-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(130, 200, 255, 0.14);
+  color: #a9d6ff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.beta-note {
+  margin: 12px 0 0;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  max-width: 44ch;
+}
+
 .game-desc {
   margin: 14px 0 24px;
   color: var(--text-soft);
@@ -1034,6 +1082,10 @@
 
   .game-name {
     font-size: 62px;
+  }
+
+  .game-name.is-naval {
+    font-size: 42px;
   }
 
   .game-actions .btn {
@@ -1409,6 +1461,17 @@
   gap: 28px;
   align-items: start;
   margin-bottom: 24px;
+}
+
+.profile-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.achievements .options {
+  margin-top: 14px;
 }
 
 /* Le carnet : lignes avec points de conduite */

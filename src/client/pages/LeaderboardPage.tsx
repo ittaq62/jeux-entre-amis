@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import type { PublicUser } from "../../shared/protocol.ts";
+import { GAME_NAMES, type GameId, type PublicUser } from "../../shared/protocol.ts";
 import { RANKING_POINTS } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
+import { Options } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { useSession } from "../stores/session.ts";
 
@@ -19,16 +20,18 @@ interface Entry {
 
 export function LeaderboardPage() {
   const me = useSession((s) => s.user);
+  const games = useSession((s) => s.games);
   const [scope, setScope] = useState<"friends" | "all">("friends");
+  const [game, setGame] = useState<GameId>("uno");
   const [entries, setEntries] = useState<Entry[] | null>(null);
 
   useEffect(() => {
     setEntries(null);
     api
-      .get<{ entries: Entry[] }>(`/leaderboard?scope=${scope}`)
+      .get<{ entries: Entry[] }>(`/leaderboard?scope=${scope}&game=${game}`)
       .then((r) => setEntries(r.entries))
       .catch(() => setEntries([]));
-  }, [scope]);
+  }, [scope, game]);
 
   return (
     <div className="felt page">
@@ -45,6 +48,9 @@ export function LeaderboardPage() {
             </button>
           </div>
         </div>
+        {games.length > 1 && (
+          <Options<GameId> label="Jeu" value={game} onChange={setGame} options={games.map((g) => ({ value: g, label: GAME_NAMES[g] }))} />
+        )}
         <p className="hint" style={{ margin: 0, maxWidth: "62ch" }}>
           Chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points ({RANKING_POINTS.bot} si c'est un bot), et la
           victoire en ajoute {RANKING_POINTS.win}. Les points ne baissent jamais.

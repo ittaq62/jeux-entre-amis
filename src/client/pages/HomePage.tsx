@@ -3,12 +3,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
-import type { RoomSummary, Visibility } from "../../shared/protocol.ts";
+import { GAME_NAMES, type GameId, type RoomSummary, type Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
+import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -36,7 +37,9 @@ export function HomePage() {
   const watchLobby = useHub((s) => s.watchLobby);
   const friends = useHub((s) => s.friends);
   const online = useHub((s) => s.online);
-  const [createOpen, setCreateOpen] = useState(false);
+  const games = useSession((s) => s.games);
+  const beta = useSession((s) => s.beta);
+  const [createFor, setCreateFor] = useState<GameId | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [code, setCode] = useState("");
 
@@ -45,10 +48,10 @@ export function HomePage() {
     return () => watchLobby(false);
   }, [watchLobby]);
 
-  async function quickMatch() {
-    setBusy("quick");
+  async function quickMatch(game: GameId) {
+    setBusy(`quick-${game}`);
     try {
-      const res = await api.post<{ code: string; created: boolean }>("/rooms/quick");
+      const res = await api.post<{ code: string; created: boolean }>("/rooms/quick", { game });
       navigate(`/salon/${res.code}`);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible de trouver une partie." });
@@ -59,7 +62,7 @@ export function HomePage() {
   async function createRoom(visibility: Visibility) {
     setBusy(visibility);
     try {
-      const res = await api.post<{ code: string }>("/rooms", { visibility });
+      const res = await api.post<{ code: string }>("/rooms", { visibility, game: createFor ?? "uno" });
       navigate(`/salon/${res.code}`);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible d'ouvrir la table." });
@@ -81,6 +84,7 @@ export function HomePage() {
     }
   }
 
+  const rooms = lobby.filter((r) => games.includes(r.game));
   const accepted = friends.filter((f) => f.status === "accepted");
   const sortedFriends = accepted.slice().sort((a, b) => Number(b.user.id in online) - Number(a.user.id in online));
 
@@ -122,10 +126,10 @@ export function HomePage() {
             <h2 className="game-name">UNO</h2>
             <p className="game-desc">Classique ou No Mercy, de 2 à 8 joueurs. S'il manque du monde, des bots complètent la table.</p>
             <div className="game-actions">
-              <button className="btn btn-primary btn-lg" onClick={() => void quickMatch()} disabled={busy !== null}>
-                {busy === "quick" && <span className="spinner" />} Partie rapide
+              <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("uno")} disabled={busy !== null}>
+                {busy === "quick-uno" && <span className="spinner" />} Partie rapide
               </button>
-              <button className="btn btn-lg" onClick={() => setCreateOpen(true)} disabled={busy !== null}>
+              <button className="btn btn-lg" onClick={() => setCreateFor("uno")} disabled={busy !== null}>
                 Ouvrir une table
               </button>
             </div>
@@ -159,17 +163,43 @@ export function HomePage() {
           </div>
         </section>
 
+        {games.includes("naval") && (
+          <section className="home-game home-game-naval panel" aria-label="Bataille navale">
+            <div className="game-stage is-sea" aria-hidden="true">
+              <NavalPreview px={250} />
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-naval">Bataille navale</h2>
+              {beta.includes("naval") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">En duel, en mêlée jusqu'à 6 ou en équipes 2 contre 2. Radar, torpille et barrage en option.</p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("naval")} disabled={busy !== null}>
+                  {busy === "quick-naval" && <span className="spinner" />} Partie rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("naval")} disabled={busy !== null}>
+                  Ouvrir une table
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
-            {lobby.length === 0 ? (
+            {rooms.length === 0 ? (
               <p className="empty">
                 Personne n'attend pour l'instant. Lance une partie rapide : les prochains arrivés s'assoiront avec toi.
               </p>
             ) : (
               <ul className="rows">
-                {lobby.map((room) => (
-                  <RoomRow key={room.code} room={room} />
+                {rooms.map((room) => (
+                  <RoomRow key={room.code} room={room} showGame={games.length > 1} />
                 ))}
               </ul>
             )}
@@ -227,7 +257,11 @@ export function HomePage() {
         </div>
       </main>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Ouvrir une table">
+      <Modal
+        open={createFor !== null}
+        onClose={() => setCreateFor(null)}
+        title={createFor === "naval" ? "Ouvrir une table de bataille navale" : "Ouvrir une table"}
+      >
         <div className="create-options">
           <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
             <strong>Entre amis</strong>
@@ -243,15 +277,19 @@ export function HomePage() {
   );
 }
 
-function RoomRow({ room }: { room: RoomSummary }) {
+const NAVAL_MODES: Record<string, string> = { duel: "duel", melee: "mêlée", teams: "en équipes" };
+
+function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
   const seats = room.humans + room.bots;
+  const variant =
+    room.game === "naval" ? (NAVAL_MODES[room.variant] ?? room.variant) : room.variant === "nomercy" ? "No Mercy" : "classique";
   return (
     <li className="row">
       <span className="room-code">{room.code}</span>
       <span className="row-text">
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>
         <span className="hint">
-          {room.variant === "nomercy" ? "No Mercy" : "classique"}, {seats} sur {room.maxPlayers}
+          {showGame ? `${GAME_NAMES[room.game]} ${variant}` : variant}, {seats} sur {room.maxPlayers}
           {room.status === "playing" ? ", partie en cours" : ""}
           <span className="seat-dots" aria-hidden="true">
             {Array.from({ length: room.maxPlayers }, (_, i) => (
