@@ -257,13 +257,7 @@ export function botAction(s: NavalState, botId: string, level: BotLevel): NavalA
   return { type: "fire", target: target.id, cell: bestCell(k, score, s) };
 }
 
-function useWeapon(
-  bot: NavalPlayer,
-  target: string,
-  k: Knowledge,
-  score: Float64Array | null,
-  cell: number | null,
-): NavalAction | null {
+function useWeapon(bot: NavalPlayer, target: string, k: Knowledge, score: Float64Array | null, cell: number | null): NavalAction | null {
   const scores = score ?? density(k);
   const hunting = huntAround(k).length > 0;
   const has = (w: Weapon) => bot.arsenal.includes(w);

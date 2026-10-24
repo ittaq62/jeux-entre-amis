@@ -7,6 +7,7 @@ import {
   type AdminOverview,
   type AdminUserAction,
   type FriendEntry,
+  type GameId,
   type MeResponse,
   type PresenceRoom,
   type Visibility,
@@ -40,6 +41,7 @@ import {
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
 export { GameRoom } from "./room.ts";
+export { NavalRoom } from "./navalRoom.ts";
 export { Hub } from "./hub.ts";
 
 type AppEnv = { Bindings: Env; Variables: { session: Session; user: UserRow } };
@@ -82,8 +84,27 @@ function siteUrl(c: Ctx) {
   return new URL(c.req.url).origin;
 }
 
-function meResponse(user: UserRow): MeResponse {
-  return user.pseudo ? { user: toMe(user), pending: null } : { user: null, pending: { email: user.email } };
+/** La bataille navale est en bêta tant que l'admin ne l'a pas ouverte à tous. */
+async function navalPublic(db: D1Database): Promise<boolean> {
+  const row = await db.prepare("SELECT value FROM site_settings WHERE key = 'naval_public'").first<{ value: string }>();
+  return row?.value === "1";
+}
+
+async function visibleGames(env: Env, user: UserRow): Promise<GameId[]> {
+  return isAdmin(user) || (await navalPublic(env.DB)) ? ["uno", "naval"] : ["uno"];
+}
+
+async function meResponse(env: Env, user: UserRow): Promise<MeResponse> {
+  if (!user.pseudo) return { user: null, pending: { email: user.email } };
+  return { user: toMe(user), pending: null, games: await visibleGames(env, user) };
+}
+
+const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval";
+
+/** La salle d'un code : le hub sait à quel jeu il appartient, UNO par défaut. */
+async function roomStub(c: Ctx, code: string) {
+  const summary = await hub(c).getRoom(code);
+  return summary?.game === "naval" ? c.env.NAVAL.get(c.env.NAVAL.idFromName(code)) : c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +127,7 @@ app.post("/auth/verify", async (c) => {
   if (!res.ok) return c.json({ error: res.error }, res.status as 400);
   const { token, expires } = await createSession(c.env, res.user.id);
   c.header("Set-Cookie", sessionCookie(c.req.raw, token, expires));
-  return c.json(meResponse(res.user));
+  return c.json(await meResponse(c.env, res.user));
 });
 
 app.post("/auth/logout", async (c) => {
@@ -120,7 +141,7 @@ app.get("/me", async (c) => {
   const session = await getSession(c.env, c.req.raw);
   if (!session) return c.json({ user: null, pending: null } satisfies MeResponse);
   if (session.renewed) c.header("Set-Cookie", sessionCookie(c.req.raw, session.token, session.renewed));
-  return c.json(meResponse(session.user));
+  return c.json(await meResponse(c.env, session.user));
 });
 
 // ---------------------------------------------------------------------------
@@ -150,7 +171,7 @@ app.patch("/me", withSession, async (c) => {
     const updated = await c.env.DB.prepare("UPDATE users SET pseudo = ?, avatar = ? WHERE id = ? RETURNING *")
       .bind(pseudo, avatar, user.id)
       .first<UserRow>();
-    return c.json(meResponse(updated!));
+    return c.json(await meResponse(c.env, updated!));
   } catch {
     return c.json({ error: "Ce pseudo est déjà pris." }, 409);
   }
@@ -181,7 +202,7 @@ app.put("/me/photo", withSession, withProfile, async (c) => {
     c.env.DB.prepare("UPDATE users SET photo_version = photo_version + 1 WHERE id = ? RETURNING *").bind(user.id),
   ]);
   const updated = (res[1]!.results as UserRow[])[0]!;
-  return c.json(meResponse(updated));
+  return c.json(await meResponse(c.env, updated));
 });
 
 app.delete("/me/photo", withSession, async (c) => {
@@ -190,7 +211,7 @@ app.delete("/me/photo", withSession, async (c) => {
     c.env.DB.prepare("DELETE FROM user_photos WHERE user_id = ?").bind(user.id),
     c.env.DB.prepare("UPDATE users SET photo_version = 0 WHERE id = ? RETURNING *").bind(user.id),
   ]);
-  return c.json(meResponse((res[1]!.results as UserRow[])[0]!));
+  return c.json(await meResponse(c.env, (res[1]!.results as UserRow[])[0]!));
 });
 
 app.get("/users/:id/photo", async (c) => {
@@ -221,7 +242,8 @@ app.get("/profile/:pseudo", withSession, async (c) => {
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
-  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id) });
+  const game = isGame(c.req.query("game")) ? (c.req.query("game") as GameId) : "uno";
+  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game) });
 });
 
 app.get("/users/search", withSession, withProfile, async (c) => {
@@ -285,30 +307,41 @@ app.delete("/friends/:id", withSession, withProfile, async (c) => {
 // Salons
 // ---------------------------------------------------------------------------
 
-async function createRoom(c: Ctx, visibility: Visibility, quick: boolean): Promise<string> {
+async function createRoom(c: Ctx, visibility: Visibility, quick: boolean, game: GameId): Promise<string> {
   const code = await hub(c).allocateCode();
-  const stub = c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
+  const stub = game === "naval" ? c.env.NAVAL.get(c.env.NAVAL.idFromName(code)) : c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
   await stub.init({ code, host: toPublic(c.get("user")), visibility, quick });
   return code;
 }
 
+/** Le jeu demandé, s'il est visible pour ce compte (un jeu en bêta n'est ouvert qu'aux admins). */
+async function requestedGame(c: Ctx, raw: unknown): Promise<GameId | null> {
+  const game = isGame(raw) ? raw : "uno";
+  return (await visibleGames(c.env, c.get("user"))).includes(game) ? game : null;
+}
+
 app.post("/rooms", withSession, withProfile, async (c) => {
-  const body = await c.req.json<{ visibility?: unknown }>().catch(() => ({}) as { visibility?: unknown });
+  const body = await c.req.json<{ visibility?: unknown; game?: unknown }>().catch(() => ({}) as { visibility?: unknown; game?: unknown });
   if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
+  const game = await requestedGame(c, body.game);
+  if (!game) return c.json({ error: "Ce jeu n'est pas encore ouvert." }, 403);
   const visibility: Visibility = body.visibility === "public" ? "public" : "private";
-  return c.json({ code: await createRoom(c, visibility, false) });
+  return c.json({ code: await createRoom(c, visibility, false, game) });
 });
 
 app.post("/rooms/quick", withSession, withProfile, async (c) => {
-  const existing = await hub(c).quickMatch();
+  const body = await c.req.json<{ game?: unknown }>().catch(() => ({}) as { game?: unknown });
+  const game = await requestedGame(c, body.game);
+  if (!game) return c.json({ error: "Ce jeu n'est pas encore ouvert." }, 403);
+  const existing = await hub(c).quickMatch(game);
   if (existing) return c.json({ code: existing, created: false });
-  return c.json({ code: await createRoom(c, "public", true), created: true });
+  return c.json({ code: await createRoom(c, "public", true, game), created: true });
 });
 
 app.get("/rooms/:code", withSession, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
-  const summary = await c.env.ROOMS.get(c.env.ROOMS.idFromName(code)).summary();
+  const summary = await (await roomStub(c, code)).summary();
   if (!summary) return c.json({ error: "Ce salon n'existe pas ou est fermé." }, 404);
   return c.json({ room: summary });
 });
@@ -325,7 +358,7 @@ function upgradeTo(c: Ctx, stub: { fetch: (req: Request) => Promise<Response> })
 app.get("/rooms/:code/ws", withSession, withProfile, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
-  return upgradeTo(c, c.env.ROOMS.get(c.env.ROOMS.idFromName(code)));
+  return upgradeTo(c, await roomStub(c, code));
 });
 
 app.get("/hub/ws", withSession, withProfile, async (c) => upgradeTo(c, hub(c)));
@@ -347,7 +380,7 @@ async function onlineUsers(c: Ctx): Promise<Set<string>> {
 async function cutOff(c: Ctx, userId: string, reason: string) {
   await hub(c).signOut(userId, reason);
   const room = await hub(c).userRoom(userId);
-  if (room) await c.env.ROOMS.get(c.env.ROOMS.idFromName(room.code)).adminKick(userId);
+  if (room) await (await roomStub(c, room.code)).adminKick(userId);
 }
 
 app.get("/admin/overview", withSession, withAdmin, async (c) => {
@@ -363,7 +396,18 @@ app.get("/admin/overview", withSession, withAdmin, async (c) => {
     rooms: snapshot.rooms.filter((r) => r.status !== "finished" || Date.now() - r.updatedAt < 30 * 60_000),
     recentGames: games,
     announcement,
+    navalBeta: !(await navalPublic(c.env.DB)),
   } satisfies AdminOverview);
+});
+
+/** Sortir la bataille navale de la bêta (ou l'y remettre). */
+app.post("/admin/games", withSession, withAdmin, async (c) => {
+  const body = await c.req.json<{ navalBeta?: unknown }>().catch(() => ({}) as { navalBeta?: unknown });
+  if (typeof body.navalBeta !== "boolean") return c.json({ error: "Réglage invalide." }, 400);
+  await c.env.DB.prepare("INSERT INTO site_settings (key, value) VALUES ('naval_public', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1")
+    .bind(body.navalBeta ? "0" : "1")
+    .run();
+  return c.json({ navalBeta: body.navalBeta });
 });
 
 app.get("/admin/users", withSession, withAdmin, async (c) => {
@@ -441,7 +485,7 @@ app.delete("/admin/users/:id", withSession, withAdmin, async (c) => {
 app.delete("/admin/rooms/:code", withSession, withAdmin, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
-  const closed = await c.env.ROOMS.get(c.env.ROOMS.idFromName(code)).adminClose();
+  const closed = await (await roomStub(c, code)).adminClose();
   // Une table deja disparue peut encore trainer dans la liste du hub
   if (!closed) await hub(c).removeRoom(code);
   return c.json({ ok: true });

@@ -1,4 +1,4 @@
-import type { AdminGame, AdminUser } from "../shared/protocol.ts";
+import type { AdminGame, AdminUser, GameId } from "../shared/protocol.ts";
 import type { UserRow } from "./auth.ts";
 import { toPublic } from "./users.ts";
 
@@ -47,15 +47,16 @@ export async function siteCounts(db: D1Database) {
 export async function recentGames(db: D1Database, limit = 12): Promise<AdminGame[]> {
   const { results } = await db
     .prepare(
-      `SELECT g.id, g.variant, g.ended_at, g.rounds,
+      `SELECT g.id, g.game, g.variant, g.ended_at, g.rounds,
          (SELECT json_group_array(json_object('name', p.name, 'rank', p.rank, 'bot', p.is_bot))
             FROM game_players p WHERE p.game_id = g.id) AS players
        FROM games g ORDER BY g.ended_at DESC LIMIT ?`,
     )
     .bind(limit)
-    .all<{ id: string; variant: string; ended_at: number; rounds: number; players: string }>();
+    .all<{ id: string; game: GameId; variant: string; ended_at: number; rounds: number; players: string }>();
   return results.map((r) => ({
     id: r.id,
+    game: r.game,
     variant: r.variant,
     endedAt: r.ended_at,
     rounds: r.rounds,

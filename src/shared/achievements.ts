@@ -1,9 +1,13 @@
+import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
+import type { GameId } from "./protocol.ts";
 
 export type ChipTone = "red" | "blue" | "green" | "black" | "ivory";
 
 export interface AchievementDef {
   id: string;
+  /** Jeu concerne, UNO si absent */
+  game?: GameId;
   /** Inscription du jeton (un chiffre lie a la regle du succes) */
   chip: string;
   tone: ChipTone;
@@ -31,6 +35,53 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "full-table", chip: "6+", tone: "ivory", title: "Maître de la table", description: "Gagner une partie à 6 joueurs ou plus." },
   { id: "survivor", chip: "168", tone: "ivory", title: "Survivant", description: "Gagner une partie No Mercy." },
   { id: "mercy", chip: "25", tone: "black", title: "Pitié refusée", description: "Être éliminé par la règle des 25 cartes." },
+
+  // Bataille navale
+  { id: "naval-first-win", game: "naval", chip: "1re", tone: "blue", title: "Amiral en herbe", description: "Gagner une bataille navale." },
+  { id: "naval-regular", game: "naval", chip: "25", tone: "green", title: "Loup de mer", description: "Jouer 25 batailles navales." },
+  { id: "naval-streak", game: "naval", chip: "×5", tone: "red", title: "Tireur d'élite", description: "Toucher 5 fois de suite." },
+  {
+    id: "naval-flawless",
+    game: "naval",
+    chip: "0",
+    tone: "ivory",
+    title: "Coque intacte",
+    description: "Gagner sans perdre un seul navire.",
+  },
+  {
+    id: "naval-close",
+    game: "naval",
+    chip: "1",
+    tone: "black",
+    title: "Sur le fil",
+    description: "Gagner avec un seul navire encore à flot.",
+  },
+  {
+    id: "naval-hawk",
+    game: "naval",
+    chip: "70",
+    tone: "green",
+    title: "Œil de faucon",
+    description: "Gagner avec au moins 70 % de tirs au but.",
+  },
+  {
+    id: "naval-melee",
+    game: "naval",
+    chip: "3+",
+    tone: "red",
+    title: "Maître des mers",
+    description: "Gagner une mêlée à 3 joueurs ou plus.",
+  },
+  { id: "naval-team", game: "naval", chip: "2v2", tone: "blue", title: "Frères d'armes", description: "Gagner une partie en équipes." },
+  {
+    id: "naval-arsenal",
+    game: "naval",
+    chip: "3",
+    tone: "black",
+    title: "Artificier",
+    description: "Utiliser 3 armes spéciales en une partie.",
+  },
+  { id: "naval-sunk", game: "naval", chip: "×", tone: "black", title: "Par le fond", description: "Voir toute sa flotte coulée." },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
@@ -69,5 +120,32 @@ export function earnedAchievements(o: GameOutcome): string[] {
   add("full-table", o.won && o.players >= 6);
   add("survivor", o.won && o.variant === "nomercy");
   add("mercy", o.eliminated);
+  return out;
+}
+
+export interface NavalOutcome {
+  won: boolean;
+  mode: NavalMode;
+  /** Navires encore à flot à la fin */
+  afloat: number;
+  out: boolean;
+  stats: NavalStats;
+  played: number;
+}
+
+export function earnedNavalAchievements(o: NavalOutcome): string[] {
+  const s = o.stats;
+  const out: string[] = [];
+  const add = (id: string, cond: boolean) => cond && out.push(id);
+  add("naval-first-win", o.won);
+  add("naval-regular", o.played >= 25);
+  add("naval-streak", s.bestStreak >= 5);
+  add("naval-flawless", o.won && s.lost === 0);
+  add("naval-close", o.won && o.afloat === 1);
+  add("naval-hawk", o.won && s.shots >= 10 && s.hits / s.shots >= 0.7);
+  add("naval-melee", o.won && o.mode === "melee");
+  add("naval-team", o.won && o.mode === "teams");
+  add("naval-arsenal", s.weapons >= 3);
+  add("naval-sunk", o.out);
   return out;
 }

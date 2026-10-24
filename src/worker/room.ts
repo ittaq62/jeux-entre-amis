@@ -860,6 +860,7 @@ export class GameRoom extends DurableObject<Env> {
     const ranking = g.ranking ?? [];
     try {
       const unlocked = await recordGame(this.env.DB, {
+        game: "uno",
         roomCode: d.code,
         settings: g.settings,
         startedAt: d.startedAt ?? now,

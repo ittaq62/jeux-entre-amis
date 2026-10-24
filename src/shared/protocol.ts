@@ -1,8 +1,12 @@
 import type { AvatarConfig } from "./avatar.ts";
+import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
+import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno";
+export type GameId = "uno" | "naval";
+
+export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale" };
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -43,6 +47,7 @@ export interface AdminUser {
 
 export interface AdminGame {
   id: string;
+  game: GameId;
   variant: string;
   endedAt: number;
   rounds: number;
@@ -63,6 +68,8 @@ export interface AdminOverview {
   rooms: AdminRoom[];
   recentGames: AdminGame[];
   announcement: Announcement | null;
+  /** La bataille navale n'est visible que des admins et de leurs invités */
+  navalBeta: boolean;
 }
 
 export type AdminUserAction =
@@ -89,6 +96,8 @@ export interface MeResponse {
   user: Me | null;
   /** Connecte mais pas encore de pseudo */
   pending: { email: string } | null;
+  /** Jeux que ce compte voit dans ses menus (les jeux en bêta n'y sont que pour les admins) */
+  games?: GameId[];
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +139,7 @@ export interface SpectatorView {
 
 export interface RoomView {
   code: string;
-  game: GameId;
+  game: "uno";
   status: RoomStatus;
   settings: RoomSettings;
   seats: SeatView[];
@@ -191,6 +200,81 @@ export type RoomClientMessage =
   | { t: "leave" }
   | { t: "close" };
 
+/** Ce que tous les salons ont en commun, quel que soit le jeu : sert au salon d'attente partagé. */
+export interface LobbyRoom {
+  code: string;
+  game: GameId;
+  status: RoomStatus;
+  settings: { visibility: Visibility; maxPlayers: number };
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+}
+
+export interface NavalRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  naval: NavalSettings;
+}
+
+export const NAVAL_MAX_PLAYERS = 6;
+
+export interface NavalRoomView {
+  code: string;
+  game: "naval";
+  status: RoomStatus;
+  settings: NavalRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  naval: NavalView | null;
+  /** Fin du chrono du tir en cours */
+  turnDeadline: number | null;
+  /** Fin du temps de placement des navires */
+  placementDeadline: number | null;
+  serverNow: number;
+  rematch: string[];
+  quick: boolean;
+}
+
+/** Messages communs à tous les salons (le salon d'attente partagé n'envoie que ceux-là) */
+export type LobbyClientMessage =
+  | { t: "settings"; settings: Record<string, never>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type NavalClientMessage =
+  | { t: "settings"; settings: Partial<NavalSettings>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  | { t: "action"; action: NavalAction }
+  | { t: "takeBack" }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type NavalServerMessage =
+  | { t: "room"; room: NavalRoomView; events: NavalEvent[] }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
+
 export type RoomServerMessage =
   | { t: "room"; room: RoomView; events: UnoEvent[] }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
@@ -203,7 +287,8 @@ export type RoomServerMessage =
 export interface RoomSummary {
   code: string;
   game: GameId;
-  variant: UnoSettings["variant"];
+  /** UNO : classic ou nomercy ; bataille navale : duel, melee ou teams */
+  variant: string;
   status: RoomStatus;
   visibility: Visibility;
   hostName: string;

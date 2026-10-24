@@ -1,6 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from "../shared/app.ts";
-import type { Announcement, HubClientMessage, HubServerMessage, PresenceRoom, PublicUser, RoomSummary } from "../shared/protocol.ts";
+import type {
+  Announcement,
+  GameId,
+  HubClientMessage,
+  HubServerMessage,
+  PresenceRoom,
+  PublicUser,
+  RoomSummary,
+} from "../shared/protocol.ts";
 import { acceptedFriendIds } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -195,11 +203,12 @@ export class Hub extends DurableObject<Env> {
   }
 
   /** Partie rapide : le salon public en attente le plus rempli qui a encore de la place. */
-  async quickMatch(): Promise<string | null> {
+  async quickMatch(game: GameId = "uno"): Promise<string | null> {
     const now = Date.now();
     const candidates = [...this.rooms.values()]
       .filter(
         (r) =>
+          r.summary.game === game &&
           r.summary.visibility === "public" &&
           r.summary.status === "lobby" &&
           r.summary.humans > 0 &&
