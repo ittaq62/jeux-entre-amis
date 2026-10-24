@@ -706,6 +706,9 @@
   cursor: default;
   transform-origin: 50% 110%;
   transition: filter 0.2s;
+  /* Chaque carte sur son propre calque : ses ombres ne sont pas redessinées à chaque image de l'animation */
+  will-change: transform;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .hand-card .card-svg {

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { COLORS, type Card } from "../../shared/games/uno/cards.ts";
 import { CardFace, CARD_RATIO } from "../components/Card.tsx";
 import { anchor } from "./fx.ts";
@@ -43,10 +43,27 @@ interface HandProps {
   highlight: number | null;
 }
 
+/**
+ * Vrai survol à la souris ? Sur téléphone, le navigateur simule un survol à l'endroit du dernier appui,
+ * et le rejoue quand les cartes bougent dessous : une carte restait levée par-dessus ses voisines
+ * et prenait les appuis destinés à celles-ci.
+ */
+function useCanHover(): boolean {
+  const [can, setCan] = useState(() => window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const update = () => setCan(mq.matches);
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return can;
+}
+
 export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: HandProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<number | null>(null);
+  const canHover = useCanHover();
   const hidden = usePileExtras((s) => s.hidden);
 
   useLayoutEffect(() => {
@@ -72,10 +89,14 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
   const total = cardWidth + step * Math.max(0, n - 1);
   const start = scroll ? 12 : (width - total) / 2;
   const maxAngle = scroll ? 0 : fanAngle;
+  const innerWidth = scroll ? total + 24 : width;
+  // Une carte qui arrive part du centre de la main, là où se pose la carte piochée qui vole
+  // depuis la pioche : elle glisse jusqu'à sa place au lieu de réapparaître en fondu.
+  const arrival = { x: innerWidth / 2 - cardWidth / 2, y: 15, opacity: 1, rotate: 0 };
 
   return (
     <div className={`hand ${scroll ? "is-scroll" : ""} ${myTurn ? "is-my-turn" : ""}`} ref={ref} style={{ height: height + 34 }}>
-      <div className="hand-inner" ref={anchor("hand")} style={{ width: scroll ? total + 24 : "100%", height: height + 30 }}>
+      <div className="hand-inner" ref={anchor("hand")} style={{ width: scroll ? innerWidth : "100%", height: height + 30 }}>
         {visible.map((card, i) => {
           const offset = i - (n - 1) / 2;
           const angle = offset * maxAngle;
@@ -90,12 +111,13 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
               ref={anchor(`hand-card-${card.id}`)}
               className={`hand-card ${canPlay ? "is-playable" : ""} ${myTurn && !canPlay ? "is-dim" : ""} ${highlight === card.id ? "is-highlight" : ""}`}
               style={{ width: cardWidth, height, zIndex: lifted ? 100 : i }}
-              initial={{ x: start + i * step, y: y - 50, opacity: 0, rotate: angle }}
+              initial={arrival}
               animate={{ x: start + i * step, y, opacity: 1, rotate: angle }}
               transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.7 }}
-              onMouseEnter={() => setHover(card.id)}
-              onMouseLeave={() => setHover((h) => (h === card.id ? null : h))}
-              onFocus={() => setHover(card.id)}
+              onPointerEnter={(e) => canHover && e.pointerType === "mouse" && setHover(card.id)}
+              onPointerLeave={() => setHover((h) => (h === card.id ? null : h))}
+              // Au clavier seulement : un appui du doigt donne aussi le focus à la carte
+              onFocus={(e) => e.currentTarget.matches(":focus-visible") && setHover(card.id)}
               onBlur={() => setHover((h) => (h === card.id ? null : h))}
               onClick={() => onPlay(card)}
               aria-disabled={!canPlay}
