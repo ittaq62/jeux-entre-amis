@@ -1,8 +1,19 @@
 import { Hono, type Context, type Next } from "hono";
 import { normalizePseudo, validatePseudo, isRoomCode } from "../shared/app.ts";
 import { sanitizeAvatar } from "../shared/avatar.ts";
-import type { FriendEntry, MeResponse, PresenceRoom, Visibility } from "../shared/protocol.ts";
 import {
+  ANNOUNCE_MAX,
+  BAN_REASON_MAX,
+  type AdminOverview,
+  type AdminUserAction,
+  type FriendEntry,
+  type MeResponse,
+  type PresenceRoom,
+  type Visibility,
+} from "../shared/protocol.ts";
+import { findUser, findUsers, recentGames, siteCounts } from "./admin.ts";
+import {
+  BANNED_MESSAGE,
   clearSessionCookie,
   createSession,
   destroySession,
@@ -17,6 +28,7 @@ import {
 import {
   acceptFriend,
   findUserByPseudo,
+  isAdmin,
   leaderboard,
   listFriends,
   removeFriend,
@@ -195,8 +207,8 @@ app.get("/users/:id/photo", async (c) => {
 
 app.get("/profile/:pseudo", withSession, async (c) => {
   const user = await findUserByPseudo(c.env.DB, param(c, "pseudo"));
-  if (!user || !user.pseudo) return c.json({ error: "Joueur introuvable." }, 404);
   const me = c.get("user");
+  if (!user || !user.pseudo || (user.banned_at && !isAdmin(me))) return c.json({ error: "Joueur introuvable." }, 404);
   const profile = await userProfile(c.env.DB, user);
   let friendship: FriendEntry["status"] | "none" | "self" = "none";
   if (user.id === me.id) friendship = "self";
@@ -216,10 +228,10 @@ app.get("/users/search", withSession, withProfile, async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length < 2) return c.json({ users: [] });
   const { results } = await c.env.DB.prepare(
-    "SELECT id, pseudo, avatar, photo_version FROM users WHERE pseudo LIKE ? ESCAPE '\\' AND id != ? ORDER BY length(pseudo) LIMIT 8",
+    "SELECT id, pseudo, avatar, photo_version, is_admin FROM users WHERE pseudo LIKE ? ESCAPE '\\' AND banned_at IS NULL AND id != ? ORDER BY length(pseudo) LIMIT 8",
   )
     .bind(`${q.replace(/[\\%_]/g, "\\$&")}%`, c.get("user").id)
-    .all<Pick<UserRow, "id" | "pseudo" | "avatar" | "photo_version">>();
+    .all<Pick<UserRow, "id" | "pseudo" | "avatar" | "photo_version" | "is_admin">>();
   return c.json({ users: results.map(toPublic) });
 });
 
@@ -317,6 +329,135 @@ app.get("/rooms/:code/ws", withSession, withProfile, async (c) => {
 });
 
 app.get("/hub/ws", withSession, withProfile, async (c) => upgradeTo(c, hub(c)));
+
+// ---------------------------------------------------------------------------
+// Administration
+// ---------------------------------------------------------------------------
+
+async function withAdmin(c: Ctx, next: Next) {
+  if (!isAdmin(c.get("user"))) return c.json({ error: "Réservé à l'administrateur du site." }, 403);
+  await next();
+}
+
+async function onlineUsers(c: Ctx): Promise<Set<string>> {
+  return new Set((await hub(c).adminSnapshot()).online);
+}
+
+/** Sort un compte de partout : connexions au site et table en cours. */
+async function cutOff(c: Ctx, userId: string, reason: string) {
+  await hub(c).signOut(userId, reason);
+  const room = await hub(c).userRoom(userId);
+  if (room) await c.env.ROOMS.get(c.env.ROOMS.idFromName(room.code)).adminKick(userId);
+}
+
+app.get("/admin/overview", withSession, withAdmin, async (c) => {
+  const [counts, snapshot, games, announcement] = await Promise.all([
+    siteCounts(c.env.DB),
+    hub(c).adminSnapshot(),
+    recentGames(c.env.DB),
+    hub(c).currentAnnouncement(),
+  ]);
+  return c.json({
+    ...counts,
+    online: snapshot.online.length,
+    rooms: snapshot.rooms.filter((r) => r.status !== "finished" || Date.now() - r.updatedAt < 30 * 60_000),
+    recentGames: games,
+    announcement,
+  } satisfies AdminOverview);
+});
+
+app.get("/admin/users", withSession, withAdmin, async (c) => {
+  return c.json({ users: await findUsers(c.env.DB, c.req.query("q") ?? "", await onlineUsers(c)) });
+});
+
+app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
+  const me = c.get("user");
+  const id = param(c, "id");
+  const target = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
+  if (!target) return c.json({ error: "Compte introuvable." }, 404);
+  const body = await c.req.json<AdminUserAction>().catch(() => null);
+  const db = c.env.DB;
+  switch (body?.action) {
+    case "rename": {
+      if (typeof body.pseudo !== "string") return c.json({ error: "Pseudo invalide." }, 400);
+      const problem = validatePseudo(body.pseudo);
+      if (problem) return c.json({ error: problem }, 400);
+      const pseudo = normalizePseudo(body.pseudo);
+      const taken = await findUserByPseudo(db, pseudo);
+      if (taken && taken.id !== id) return c.json({ error: "Ce pseudo est déjà pris." }, 409);
+      await db.prepare("UPDATE users SET pseudo = ? WHERE id = ?").bind(pseudo, id).run();
+      break;
+    }
+    case "removePhoto":
+      await db.batch([
+        db.prepare("DELETE FROM user_photos WHERE user_id = ?").bind(id),
+        db.prepare("UPDATE users SET photo_version = 0 WHERE id = ?").bind(id),
+      ]);
+      break;
+    case "resetStats":
+      await db.batch([
+        db.prepare("DELETE FROM user_stats WHERE user_id = ?").bind(id),
+        db.prepare("DELETE FROM achievements WHERE user_id = ?").bind(id),
+      ]);
+      break;
+    case "setAdmin":
+      if (id === me.id && !body.on) return c.json({ error: "Tu ne peux pas te retirer toi-même le rôle d'admin." }, 400);
+      await db
+        .prepare("UPDATE users SET is_admin = ? WHERE id = ?")
+        .bind(body.on ? 1 : 0, id)
+        .run();
+      break;
+    case "ban": {
+      if (id === me.id) return c.json({ error: "Tu ne peux pas suspendre ton propre compte." }, 400);
+      if (isAdmin(target)) return c.json({ error: "Retire-lui d'abord le rôle d'admin." }, 400);
+      const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, BAN_REASON_MAX) || null : null;
+      await db.batch([
+        db.prepare("UPDATE users SET banned_at = ?, ban_reason = ? WHERE id = ?").bind(Date.now(), reason, id),
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(id),
+      ]);
+      await cutOff(c, id, BANNED_MESSAGE);
+      break;
+    }
+    case "unban":
+      await db.prepare("UPDATE users SET banned_at = NULL, ban_reason = NULL WHERE id = ?").bind(id).run();
+      break;
+    default:
+      return c.json({ error: "Action inconnue." }, 400);
+  }
+  return c.json({ user: await findUser(db, id, await onlineUsers(c)) });
+});
+
+app.delete("/admin/users/:id", withSession, withAdmin, async (c) => {
+  const id = param(c, "id");
+  if (id === c.get("user").id) return c.json({ error: "Pour supprimer ton propre compte, passe par la page Mon compte." }, 400);
+  await cutOff(c, id, "Ce compte a été supprimé par l'administrateur du site.");
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM friendships WHERE user_a = ?1 OR user_b = ?1").bind(id),
+    c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(id),
+  ]);
+  return c.json({ ok: true });
+});
+
+app.delete("/admin/rooms/:code", withSession, withAdmin, async (c) => {
+  const code = param(c, "code").toUpperCase();
+  if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
+  const closed = await c.env.ROOMS.get(c.env.ROOMS.idFromName(code)).adminClose();
+  // Une table deja disparue peut encore trainer dans la liste du hub
+  if (!closed) await hub(c).removeRoom(code);
+  return c.json({ ok: true });
+});
+
+app.post("/admin/announce", withSession, withAdmin, async (c) => {
+  const body = await c.req.json<{ text?: unknown }>().catch(() => ({}) as { text?: unknown });
+  const text = typeof body.text === "string" ? body.text.replace(/\s+/g, " ").trim().slice(0, ANNOUNCE_MAX) : "";
+  if (!text) return c.json({ error: "Écris d'abord ton message." }, 400);
+  return c.json({ announcement: await hub(c).announce(text, c.get("user").pseudo ?? "L'admin") });
+});
+
+app.delete("/admin/announce", withSession, withAdmin, async (c) => {
+  await hub(c).clearAnnouncement();
+  return c.json({ ok: true });
+});
 
 app.notFound((c) => c.json({ error: "Introuvable." }, 404));
 app.onError((err, c) => {

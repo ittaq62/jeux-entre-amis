@@ -14,18 +14,21 @@ export function parseAvatar(raw: string, seed: string): AvatarConfig {
   }
 }
 
-export function toPublic(row: Pick<UserRow, "id" | "pseudo" | "avatar" | "photo_version">): PublicUser {
+export function toPublic(row: Pick<UserRow, "id" | "pseudo" | "avatar" | "photo_version"> & { is_admin?: number }): PublicUser {
   return {
     id: row.id,
     pseudo: row.pseudo ?? "Anonyme",
     avatar: parseAvatar(row.avatar, row.id),
     photo: row.photo_version,
+    ...(row.is_admin ? { admin: true as const } : {}),
   };
 }
 
 export function toMe(row: UserRow): Me {
   return { ...toPublic(row), email: row.email, createdAt: row.created_at };
 }
+
+export const isAdmin = (row: Pick<UserRow, "is_admin">) => row.is_admin === 1;
 
 export async function findUserByPseudo(db: D1Database, pseudo: string): Promise<UserRow | null> {
   return db.prepare("SELECT * FROM users WHERE pseudo = ? COLLATE NOCASE").bind(pseudo).first<UserRow>();
@@ -48,12 +51,13 @@ interface FriendRow {
   pseudo: string | null;
   avatar: string;
   photo_version: number;
+  is_admin: number;
 }
 
 export async function listFriends(db: D1Database, userId: string): Promise<Omit<FriendEntry, "online" | "room">[]> {
   const { results } = await db
     .prepare(
-      `SELECT f.user_a, f.user_b, f.requested_by, f.status, u.id, u.pseudo, u.avatar, u.photo_version
+      `SELECT f.user_a, f.user_b, f.requested_by, f.status, u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin
        FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = ?1 THEN f.user_b ELSE f.user_a END
        WHERE (f.user_a = ?1 OR f.user_b = ?1) AND u.pseudo IS NOT NULL
        ORDER BY u.pseudo COLLATE NOCASE`,
@@ -360,9 +364,9 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
            WHERE (user_a = ?1 OR user_b = ?1) AND status = 'accepted'))`
       : "";
   const statement = db.prepare(
-    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, s.played, s.won, s.points, s.best_streak
+    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.best_streak
      FROM user_stats s JOIN users u ON u.id = s.user_id
-     WHERE s.game = 'uno' AND u.pseudo IS NOT NULL AND s.played > 0 ${friendFilter}
+     WHERE s.game = 'uno' AND u.pseudo IS NOT NULL AND u.banned_at IS NULL AND s.played > 0 ${friendFilter}
      ORDER BY s.points DESC, s.won DESC, s.played ASC LIMIT 100`,
   );
   const { results } = await (scope === "friends" ? statement.bind(me) : statement).all<{
@@ -370,6 +374,7 @@ export async function leaderboard(db: D1Database, scope: "all" | "friends", me: 
     pseudo: string;
     avatar: string;
     photo_version: number;
+    is_admin: number;
     played: number;
     won: number;
     points: number;

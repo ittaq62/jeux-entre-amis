@@ -23,7 +23,12 @@ export interface UserRow {
   photo_version: number;
   created_at: number;
   last_seen_at: number;
+  is_admin: number;
+  banned_at: number | null;
+  ban_reason: string | null;
 }
+
+export const BANNED_MESSAGE = "Ce compte a été suspendu par l'administrateur du site.";
 
 export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -59,6 +64,9 @@ export async function requestLoginCode(env: Env, rawEmail: unknown, ip: string, 
   const email = normalizeEmail(rawEmail);
   if (!email) return { ok: false, status: 400, error: "Cette adresse email ne semble pas valide." };
   const now = Date.now();
+
+  const banned = await env.DB.prepare("SELECT 1 AS yes FROM users WHERE email = ? AND banned_at IS NOT NULL").bind(email).first();
+  if (banned) return { ok: false, status: 403, error: BANNED_MESSAGE };
 
   const existing = await env.DB.prepare("SELECT sent_at FROM login_codes WHERE email = ?").bind(email).first<{ sent_at: number }>();
   if (existing && now - existing.sent_at < RESEND_COOLDOWN) {
@@ -127,6 +135,7 @@ export async function verifyLoginCode(env: Env, rawEmail: unknown, rawCode: unkn
       .bind(randomId(9), email, now, now)
       .first<UserRow>();
   }
+  if (user!.banned_at) return { ok: false, status: 403, error: BANNED_MESSAGE };
   return { ok: true, user: user! };
 }
 
@@ -168,7 +177,7 @@ export async function getSession(env: Env, request: Request): Promise<Session | 
   )
     .bind(tokenHash)
     .first<UserRow & { session_expires: number }>();
-  if (!row || row.session_expires < now) return null;
+  if (!row || row.session_expires < now || row.banned_at) return null;
   let renewed: number | null = null;
   if (row.session_expires - now < SESSION_RENEW_BELOW) {
     renewed = now + SESSION_TTL;

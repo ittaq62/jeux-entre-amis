@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from "../shared/app.ts";
-import type { HubClientMessage, HubServerMessage, PresenceRoom, PublicUser, RoomSummary } from "../shared/protocol.ts";
+import type { Announcement, HubClientMessage, HubServerMessage, PresenceRoom, PublicUser, RoomSummary } from "../shared/protocol.ts";
 import { acceptedFriendIds } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -17,6 +17,8 @@ interface StoredRoom {
 }
 
 const STALE_ROOM_MS = 6 * 3600_000;
+/** Une annonce reste visible pour ceux qui arrivent pendant ce temps */
+const ANNOUNCE_TTL_MS = 3 * 3600_000;
 
 /**
  * Objet unique du site : presence des joueurs, liste des salons publics,
@@ -26,6 +28,7 @@ export class Hub extends DurableObject<Env> {
   private rooms = new Map<string, StoredRoom>();
   private userRooms = new Map<string, PresenceRoom>();
   private reserved = new Map<string, number>();
+  private announcement: Announcement | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -35,6 +38,7 @@ export class Hub extends DurableObject<Env> {
       const userRooms = await ctx.storage.get<Record<string, PresenceRoom>>("userRooms");
       this.rooms = new Map(Object.entries(rooms ?? {}));
       this.userRooms = new Map(Object.entries(userRooms ?? {}));
+      this.announcement = (await ctx.storage.get<Announcement>("announcement")) ?? null;
     });
   }
 
@@ -52,6 +56,8 @@ export class Hub extends DurableObject<Env> {
     const attachment: HubAttachment = { userId: user.id, user, friends, lobby: false };
     server.serializeAttachment(attachment);
     this.send(server, { t: "presence", online: this.presenceMap(friends) });
+    const announcement = this.activeAnnouncement();
+    if (announcement) this.send(server, { t: "announce", announcement });
     if (!wasOnline) this.notifyFriends(user.id, friends);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -234,5 +240,59 @@ export class Hub extends DurableObject<Env> {
 
   async presence(ids: string[]): Promise<Record<string, PresenceRoom | null>> {
     return this.presenceMap(ids);
+  }
+
+  // -------------------------------------------------------------------------
+  // Administration
+  // -------------------------------------------------------------------------
+
+  /** Joueurs connectés et toutes les tables, privées comprises. */
+  async adminSnapshot(): Promise<{ online: string[]; rooms: (RoomSummary & { updatedAt: number })[] }> {
+    const online = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as HubAttachment | null;
+      if (att && ws.readyState === WebSocket.OPEN) online.add(att.userId);
+    }
+    const rooms = [...this.rooms.values()].map((r) => ({ ...r.summary, updatedAt: r.updatedAt })).sort((a, b) => b.updatedAt - a.updatedAt);
+    return { online: [...online], rooms };
+  }
+
+  async userRoom(userId: string): Promise<PresenceRoom | null> {
+    return this.userRooms.get(userId) ?? null;
+  }
+
+  /** Message à tout le site : affiché aux connectés et aux arrivants pendant quelques heures. */
+  async announce(text: string, from: string): Promise<Announcement> {
+    const now = Date.now();
+    const announcement: Announcement = { id: now, text, from, at: now, until: now + ANNOUNCE_TTL_MS };
+    this.announcement = announcement;
+    await this.ctx.storage.put("announcement", announcement);
+    for (const ws of this.ctx.getWebSockets()) this.send(ws, { t: "announce", announcement });
+    return announcement;
+  }
+
+  async clearAnnouncement(): Promise<void> {
+    this.announcement = null;
+    await this.ctx.storage.delete("announcement");
+  }
+
+  async currentAnnouncement(): Promise<Announcement | null> {
+    return this.activeAnnouncement();
+  }
+
+  private activeAnnouncement(): Announcement | null {
+    return this.announcement && this.announcement.until > Date.now() ? this.announcement : null;
+  }
+
+  /** Coupe les connexions d'un compte (suspendu ou supprimé). */
+  async signOut(userId: string, reason: string): Promise<void> {
+    for (const ws of this.ctx.getWebSockets(userId)) {
+      this.send(ws, { t: "signedOut", reason });
+      try {
+        ws.close(4001, "Deconnecte");
+      } catch {
+        // deja fermee
+      }
+    }
   }
 }

@@ -66,6 +66,8 @@ interface Seat {
   name: string;
   avatar: AvatarConfig;
   photo: number;
+  /** Administrateur du site */
+  admin?: boolean;
   /** « away » : deconnecte ; « afk » : a laisse passer plusieurs tours */
   autoplay: false | "away" | "afk";
   missed: number;
@@ -179,6 +181,19 @@ export class GameRoom extends DurableObject<Env> {
     return this.data ? this.buildSummary() : null;
   }
 
+  /** Administration : ferme la table pour tout le monde. */
+  async adminClose(): Promise<boolean> {
+    if (!this.data) return false;
+    await this.close("La table a été fermée par l'administrateur du site.");
+    return true;
+  }
+
+  /** Administration : sort un joueur de la table (compte suspendu par exemple). */
+  async adminKick(userId: string): Promise<void> {
+    if (!this.data) return;
+    await this.kickUser(userId, Date.now());
+  }
+
   override async fetch(request: Request): Promise<Response> {
     const d = this.data;
     if (!d) return new Response("Salon introuvable", { status: 404 });
@@ -203,6 +218,7 @@ export class GameRoom extends DurableObject<Env> {
     let seat = d.seats.find((s) => s.userId === user.id);
     if (seat) {
       seat.disconnectedAt = null;
+      seat.admin = Boolean(user.admin);
       d.timers = d.timers.filter((t) => !((t.kind === "away" || t.kind === "seatCleanup") && t.seatId === seat!.id));
       if (seat.autoplay === "away") {
         seat.autoplay = false;
@@ -235,6 +251,7 @@ export class GameRoom extends DurableObject<Env> {
       name: user.pseudo,
       avatar: user.avatar,
       photo: user.photo,
+      admin: Boolean(user.admin),
       autoplay: false,
       missed: 0,
       disconnectedAt: null,
@@ -326,6 +343,7 @@ export class GameRoom extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment;
     const userId = att.userId;
     const isHost = userId === d.hostId;
+    const isAdmin = Boolean(att.user.admin);
     const seat = d.seats.find((s) => s.userId === userId) ?? null;
     const now = Date.now();
     const error = (message: string) => this.send(ws, { t: "error", message });
@@ -361,7 +379,7 @@ export class GameRoom extends DurableObject<Env> {
         if (typeof msg.text !== "string") return;
         const text = msg.text.replace(/\s+/g, " ").trim().slice(0, CHAT_MAX);
         if (!text || !this.allowMessage(userId, 700)) return;
-        const message: ChatMessage = { id: ++d.chatSeq, userId, name: att.user.pseudo, text, at: now };
+        const message: ChatMessage = { id: ++d.chatSeq, userId, name: att.user.pseudo, text, at: now, ...(isAdmin ? { admin: true } : {}) };
         this.pushChat(message);
         await this.persist();
         return this.broadcastRaw({ t: "chat", messages: [message] });
@@ -415,8 +433,14 @@ export class GameRoom extends DurableObject<Env> {
       }
     }
 
-    // Actions reservees a l'hote
-    if (!isHost) return error("Seul l'hôte peut faire ça.");
+    if (msg.t === "close") {
+      if (!isAdmin) return error("Seul l'administrateur du site peut fermer une table.");
+      return this.close("La table a été fermée par l'administrateur du site.");
+    }
+
+    // Actions reservees a l'hote ; l'admin du site peut aussi faire le menage
+    const moderation = msg.t === "kick" || msg.t === "removeSeat";
+    if (!isHost && !(isAdmin && moderation)) return error("Seul l'hôte peut faire ça.");
     switch (msg.t) {
       case "settings": {
         if (d.status === "playing") return error("On ne change pas les règles en pleine partie.");
@@ -468,29 +492,8 @@ export class GameRoom extends DurableObject<Env> {
       }
 
       case "kick": {
-        if (msg.userId === userId) return;
-        d.kicked.push(msg.userId);
-        const target = d.seats.find((s) => s.userId === msg.userId);
-        if (target) {
-          if (d.status === "playing") {
-            target.autoplay = "away";
-            target.disconnectedAt = now;
-            d.scheduledTurnId = -1;
-          } else {
-            d.seats = d.seats.filter((s) => s !== target);
-          }
-          this.systemChat(`${target.name} a été exclu du salon.`);
-        }
-        for (const other of this.ctx.getWebSockets(msg.userId)) {
-          this.send(other, { t: "kicked" });
-          try {
-            other.close(4003, "Exclu");
-          } catch {
-            // deja fermee
-          }
-        }
-        void this.hub.setUserRoom(msg.userId, null).catch(() => {});
-        return this.afterChange([], now);
+        if (typeof msg.userId !== "string" || msg.userId === userId) return;
+        return this.kickUser(msg.userId, now);
       }
 
       case "start": {
@@ -505,6 +508,48 @@ export class GameRoom extends DurableObject<Env> {
         return this.afterChange(startNextRound(d.uno), now);
       }
     }
+  }
+
+  private async kickUser(target: string, now: number) {
+    const d = this.data!;
+    if (!d.kicked.includes(target)) d.kicked.push(target);
+    const seat = d.seats.find((s) => s.userId === target);
+    if (seat) {
+      if (d.status === "playing") {
+        seat.autoplay = "away";
+        seat.disconnectedAt = now;
+        d.scheduledTurnId = -1;
+      } else {
+        d.seats = d.seats.filter((s) => s !== seat);
+      }
+      this.systemChat(`${seat.name} a été exclu du salon.`);
+    }
+    for (const other of this.ctx.getWebSockets(target)) {
+      this.send(other, { t: "kicked" });
+      try {
+        other.close(4003, "Exclu");
+      } catch {
+        // deja fermee
+      }
+    }
+    this.ensureHost();
+    void this.hub.setUserRoom(target, null).catch(() => {});
+    return this.afterChange([], now);
+  }
+
+  /** Ferme la table : tout le monde est prevenu puis le salon disparait. */
+  private async close(reason: string) {
+    const connected = [...this.connectedUsers().keys()];
+    for (const ws of this.ctx.getWebSockets()) {
+      this.send(ws, { t: "closed", reason });
+      try {
+        ws.close(4004, "Table fermee");
+      } catch {
+        // deja fermee
+      }
+    }
+    for (const id of connected) void this.hub.setUserRoom(id, null).catch(() => {});
+    await this.destroy();
   }
 
   private allowMessage(key: string, minGapMs: number): boolean {
@@ -874,13 +919,14 @@ export class GameRoom extends DurableObject<Env> {
         name: s.name,
         avatar: s.avatar,
         photo: s.photo,
+        admin: Boolean(s.admin),
         connected: s.kind === "bot" || connected.has(s.userId!),
         autoplay: Boolean(s.autoplay),
         isHost: s.userId === d.hostId,
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
-      you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId },
+      you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       uno: d.uno ? viewFor(d.uno, seat?.id ?? null) : null,
       turnDeadline: d.turnDeadline,
       nextRoundAt: d.nextRoundAt,

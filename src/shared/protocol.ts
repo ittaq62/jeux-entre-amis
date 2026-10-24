@@ -14,11 +14,75 @@ export interface PublicUser {
   avatar: AvatarConfig;
   /** Version de la photo de profil, 0 = pas de photo */
   photo: number;
+  /** Administrateur du site (absent sinon) */
+  admin?: true;
 }
 
 export interface Me extends PublicUser {
   email: string;
   createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Administration
+// ---------------------------------------------------------------------------
+
+export interface AdminUser {
+  user: PublicUser;
+  /** Pas encore choisi de pseudo */
+  pending: boolean;
+  email: string;
+  createdAt: number;
+  lastSeenAt: number;
+  played: number;
+  won: number;
+  points: number;
+  banned: { at: number; reason: string | null } | null;
+  online: boolean;
+}
+
+export interface AdminGame {
+  id: string;
+  variant: string;
+  endedAt: number;
+  rounds: number;
+  players: { name: string; rank: number; bot: boolean }[];
+}
+
+export interface AdminRoom extends RoomSummary {
+  updatedAt: number;
+}
+
+export interface AdminOverview {
+  accounts: number;
+  newThisWeek: number;
+  banned: number;
+  games: number;
+  gamesToday: number;
+  online: number;
+  rooms: AdminRoom[];
+  recentGames: AdminGame[];
+  announcement: Announcement | null;
+}
+
+export type AdminUserAction =
+  | { action: "rename"; pseudo: string }
+  | { action: "removePhoto" }
+  | { action: "resetStats" }
+  | { action: "setAdmin"; on: boolean }
+  | { action: "ban"; reason?: string }
+  | { action: "unban" };
+
+export const ANNOUNCE_MAX = 280;
+export const BAN_REASON_MAX = 200;
+
+export interface Announcement {
+  id: number;
+  text: string;
+  from: string;
+  at: number;
+  /** Plus montrée aux nouveaux arrivants après cette date */
+  until: number;
 }
 
 export interface MeResponse {
@@ -55,6 +119,8 @@ export interface SeatView {
   /** Un bot joue a la place de ce joueur absent */
   autoplay: boolean;
   isHost: boolean;
+  /** Administrateur du site */
+  admin: boolean;
 }
 
 export interface SpectatorView {
@@ -70,7 +136,7 @@ export interface RoomView {
   seats: SeatView[];
   spectators: SpectatorView[];
   hostId: string;
-  you: { userId: string; seatId: string | null; isHost: boolean };
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   uno: UnoView | null;
   turnDeadline: number | null;
   nextRoundAt: number | null;
@@ -86,6 +152,8 @@ export interface ChatMessage {
   text: string;
   at: number;
   system?: boolean;
+  /** Message de l'administrateur du site */
+  admin?: boolean;
 }
 
 export const CHAT_MAX = 240;
@@ -120,7 +188,8 @@ export type RoomClientMessage =
   | { t: "rematch" }
   | { t: "nextRound" }
   | { t: "sit" }
-  | { t: "leave" };
+  | { t: "leave" }
+  | { t: "close" };
 
 export type RoomServerMessage =
   | { t: "room"; room: RoomView; events: UnoEvent[] }
@@ -168,6 +237,8 @@ export type HubServerMessage =
   | { t: "presenceUpdate"; userId: string; online: boolean; room: PresenceRoom | null }
   | { t: "lobby"; rooms: RoomSummary[] }
   | { t: "friendsChanged" }
-  | { t: "invite"; from: PublicUser; code: string; game: GameId };
+  | { t: "invite"; from: PublicUser; code: string; game: GameId }
+  | { t: "announce"; announcement: Announcement }
+  | { t: "signedOut"; reason: string };
 
 export type HubClientMessage = { t: "watchLobby"; on: boolean } | { t: "invite"; to: string; code: string };
