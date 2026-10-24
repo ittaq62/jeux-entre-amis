@@ -41,6 +41,8 @@
   --font-title: "Young Serif", "Iowan Old Style", Georgia, serif;
   --font-text: "Libre Franklin Variable", "Franklin Gothic Medium", "Segoe UI", sans-serif;
   --font-card: "Big Shoulders Display Variable", "Arial Narrow", sans-serif;
+  /* Écriture d'invitation : seulement pour les mots d'accueil */
+  --font-script: "Great Vibes", "Snell Roundhand", cursive;
 
   --radius-panel: 14px;
   --radius-row: 10px;
@@ -122,6 +124,17 @@ h3 {
 
 p {
   text-wrap: pretty;
+}
+
+/* Mot d'accueil à la plume, en or, devant un titre */
+.script-word {
+  font-family: var(--font-script);
+  font-weight: 400;
+  font-size: 1.34em;
+  line-height: 0.8;
+  letter-spacing: 0;
+  color: var(--gold);
+  margin-right: 0.06em;
 }
 
 a {
@@ -301,6 +314,110 @@ textarea {
 
 .panel-pad {
   padding: 26px;
+}
+
+/*
+  Les blocs des menus (pas ceux du jeu) : la lampe éclaire leur bord haut,
+  un double filet doré court à l'intérieur comme sur le cadre de la table.
+*/
+.panel:not(.table-menu, .chat-panel, .emote-picker, .target-picker) {
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 55% 70px at 50% 0, rgba(255, 214, 150, 0.075), transparent 100%),
+    linear-gradient(180deg, var(--panel-top), var(--panel) 220px);
+}
+
+.panel:not(.table-menu, .chat-panel, .emote-picker, .target-picker)::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  z-index: -1;
+  border: 1px solid rgba(226, 189, 110, 0.1);
+  border-radius: calc(var(--radius-panel) - 5px);
+  pointer-events: none;
+}
+
+/* Bloc vedette : un losange doré posé sur le filet du haut */
+.panel-feature::after {
+  content: "";
+  position: absolute;
+  top: 1.5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  rotate: 45deg;
+  background: var(--gold);
+  box-shadow: 0 0 0 3px var(--panel-top);
+  pointer-events: none;
+}
+
+/* Une couleur de carte en filigrane dans le coin, très discrète */
+.panel[class*="suit-"]::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: -1;
+  width: 96px;
+  height: 96px;
+  background: var(--suit) center / contain no-repeat;
+  opacity: 0.055;
+  rotate: -12deg;
+  pointer-events: none;
+}
+
+.suit-spade {
+  --suit: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23e2bd6e' d='M12 1.5S3.5 8 3.5 13.3c0 3 2.2 5.2 4.9 5.2 1.4 0 2.6-.5 3.3-1.4-.3 2-1.2 3.6-2.7 4.9h6c-1.5-1.3-2.4-2.9-2.7-4.9.7.9 1.9 1.4 3.3 1.4 2.7 0 4.9-2.2 4.9-5.2C20.5 8 12 1.5 12 1.5z'/></svg>");
+}
+
+.suit-heart {
+  --suit: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23e2bd6e' d='M12 21.5s-8.6-5.3-10.2-10.4C.6 7.2 3.1 3.5 6.9 3.5c2.3 0 3.9 1.3 5.1 3.1 1.2-1.8 2.8-3.1 5.1-3.1 3.8 0 6.3 3.7 5.1 7.6-1.6 5.1-10.2 10.4-10.2 10.4z'/></svg>");
+}
+
+.suit-diamond {
+  --suit: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23e2bd6e' d='M12 1.5 20.5 12 12 22.5 3.5 12z'/></svg>");
+}
+
+.suit-club {
+  --suit: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23e2bd6e' d='M12 2a4.4 4.4 0 0 1 3.7 6.8 4.4 4.4 0 1 1-2.4 7.9c.3 2.1 1.2 3.7 2.8 4.8H7.9c1.6-1.1 2.5-2.7 2.8-4.8a4.4 4.4 0 1 1-2.4-7.9A4.4 4.4 0 0 1 12 2z'/></svg>");
+}
+
+/* Titres de bloc : suivis d'un filet doré qui s'efface, ouvert par un petit losange */
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panel-title::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  min-width: 28px;
+  height: 9px;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='9' height='9'><path d='M4.5 0 9 4.5 4.5 9 0 4.5z' fill='%23e2bd6e'/></svg>")
+      left center / 7px 7px no-repeat,
+    linear-gradient(90deg, rgba(226, 189, 110, 0.55), rgba(226, 189, 110, 0)) 13px center / calc(100% - 13px) 1px no-repeat;
+}
+
+/* Le texte du titre passe avant le filet, les compteurs et liens après */
+.panel-title > * {
+  order: 2;
+}
+
+/* Les lignes des listes s'éclairent au passage */
+.panel .rows .row {
+  margin: 0 -10px;
+  padding-left: 10px;
+  padding-right: 10px;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+}
+
+.panel .rows .row:hover {
+  background: rgba(244, 236, 218, 0.035);
 }
 
 /* Papier imprimé : seulement pour la feuille de marque */

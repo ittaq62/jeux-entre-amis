@@ -123,8 +123,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
         </section>
 
         <div className="profile-grid">
-          <section className="carnet panel">
-            <h2>Le carnet</h2>
+          <section className="carnet panel suit-spade">
+            <h2 className="panel-title">Le carnet</h2>
             <p className="carnet-summary">
               {stats.played === 0
                 ? "Aucune partie jouée pour l'instant."
@@ -146,7 +146,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
           </section>
 
           <section className="achievements panel">
-            <h2>
+            <h2 className="panel-title">
               Succès{" "}
               <span className="hint num">
                 {owned.size} sur {ACHIEVEMENTS.length}
@@ -169,8 +169,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
           </section>
         </div>
 
-        <section className="history panel">
-          <h2>Dernières parties</h2>
+        <section className="history panel suit-club">
+          <h2 className="panel-title">Dernières parties</h2>
           {profile.recent.length === 0 ? (
             <p className="empty">Pas encore de partie terminée.</p>
           ) : (

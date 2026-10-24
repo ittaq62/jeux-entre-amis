@@ -97,7 +97,7 @@ export function AccountPage() {
         </div>
 
         <section className="sheet panel">
-          <h2>Profil</h2>
+          <h2 className="panel-title">Profil</h2>
           <label className="field">
             <span className="field-label">Pseudo</span>
             <input className="input" value={pseudo} maxLength={PSEUDO_MAX} onChange={(e) => setPseudo(e.target.value)} />
@@ -138,7 +138,7 @@ export function AccountPage() {
         </section>
 
         <section className="sheet panel">
-          <h2>Son et confort</h2>
+          <h2 className="panel-title">Son et confort</h2>
           <PrefRow label="Effets sonores" desc="Bruits de cartes, UNO, victoire…">
             <Check label="Effets sonores" checked={prefs.sound} onChange={(v) => prefs.set({ sound: v })} />
           </PrefRow>
@@ -167,7 +167,7 @@ export function AccountPage() {
         </section>
 
         <section className="sheet panel">
-          <h2>Compte</h2>
+          <h2 className="panel-title">Compte</h2>
           <p className="hint">Connecté avec {user.email}</p>
           <div className="row-actions">
             <button className="btn" onClick={() => void signOut()}>

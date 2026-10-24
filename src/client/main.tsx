@@ -4,6 +4,7 @@ import "@fontsource/young-serif";
 import "@fontsource-variable/libre-franklin";
 import "@fontsource-variable/libre-franklin/wght-italic";
 import "@fontsource-variable/big-shoulders-display";
+import "@fontsource/great-vibes";
 import "./styles/base.css";
 import "./styles/app.css";
 import "./styles/game.css";

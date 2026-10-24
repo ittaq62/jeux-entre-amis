@@ -49,7 +49,7 @@ export function LeaderboardPage() {
           Chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points ({RANKING_POINTS.bot} si c'est un bot), et la
           victoire en ajoute {RANKING_POINTS.win}. Les points ne baissent jamais.
         </p>
-        <section className="board panel">
+        <section className="board panel suit-diamond">
           {entries === null ? (
             <p className="hint board-note">Chargement…</p>
           ) : entries.length === 0 ? (

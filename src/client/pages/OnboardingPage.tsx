@@ -39,9 +39,11 @@ export function OnboardingPage() {
     <div className="felt onboarding">
       <form className="onboarding-box" onSubmit={submit}>
         <Logo size={26} />
-        <div className="panel panel-pad stack">
+        <div className="panel panel-feature panel-pad stack">
           <div>
-            <h2>Bienvenue à table</h2>
+            <h2>
+              <span className="script-word">Bienvenue</span> à table
+            </h2>
             <p className="hint">Choisis ton pseudo et compose ton portrait. Tout se change plus tard.</p>
           </div>
           <label className="field">

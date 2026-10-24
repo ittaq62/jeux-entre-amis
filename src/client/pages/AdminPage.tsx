@@ -82,7 +82,7 @@ export function AdminPage() {
         <div className="admin-grid">
           <div className="admin-col">
             <section className="panel admin-section">
-              <h2>En ce moment</h2>
+              <h2 className="panel-title">En ce moment</h2>
               <dl className="ledger">
                 <LedgerRow label="Joueurs en ligne" value={overview.online} strong />
                 <LedgerRow label="Tables ouvertes" value={overview.rooms.filter((r) => r.status !== "finished").length} />
@@ -95,7 +95,7 @@ export function AdminPage() {
             <AnnounceSection overview={overview} onChange={loadOverview} />
 
             <section className="panel admin-section">
-              <h2>
+              <h2 className="panel-title">
                 Tables <span className="hint num">{overview.rooms.length}</span>
               </h2>
               {overview.rooms.length === 0 ? (
@@ -112,7 +112,7 @@ export function AdminPage() {
 
           <div className="admin-col">
             <section className="panel admin-section">
-              <h2>Joueurs</h2>
+              <h2 className="panel-title">Joueurs</h2>
               <input
                 className="input"
                 value={query}
@@ -151,7 +151,7 @@ export function AdminPage() {
             </section>
 
             <section className="panel admin-section">
-              <h2>Dernières parties</h2>
+              <h2 className="panel-title">Dernières parties</h2>
               {overview.recentGames.length === 0 ? (
                 <p className="empty">Aucune partie terminée pour l'instant.</p>
               ) : (
@@ -216,7 +216,7 @@ function AnnounceSection({ overview, onChange }: { overview: AdminOverview; onCh
 
   return (
     <section className="panel admin-section">
-      <h2>Annonce à tout le site</h2>
+      <h2 className="panel-title">Annonce à tout le site</h2>
       <p className="hint admin-lead">
         Elle s'affiche chez tous les joueurs connectés, et chez ceux qui arrivent dans les trois heures. Pratique pour lancer un tournoi ou
         prévenir d'une coupure.

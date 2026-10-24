@@ -467,9 +467,12 @@
 }
 
 .login-tagline {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 16px;
+  margin: -2px 0 0;
+  font-family: var(--font-script);
+  color: var(--text);
+  font-size: 30px;
+  line-height: 1.1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 .login-panel {
@@ -681,8 +684,9 @@
 }
 
 .home-greeting {
-  font-size: clamp(30px, 5vw, 44px);
-  margin-bottom: 26px;
+  font-size: clamp(32px, 5vw, 46px);
+  margin-bottom: 24px;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
 }
 
 /* La fiche du jeu : un coin de tapis éclairé et ce qu'il faut pour s'asseoir */
@@ -707,6 +711,23 @@
   box-shadow:
     inset 0 0 0 1px rgba(226, 189, 110, 0.22),
     inset 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Équerres dorées aux quatre coins du tapis */
+.game-stage::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  pointer-events: none;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M1 15V5a4 4 0 0 1 4-4h10' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='5' cy='5' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
+      left top / 16px 16px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M15 15V5a4 4 0 0 0-4-4H1' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='11' cy='5' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
+      right top / 16px 16px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M1 1v10a4 4 0 0 0 4 4h10' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='5' cy='11' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
+      left bottom / 16px 16px no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'><path d='M15 1v10a4 4 0 0 1-4 4H1' stroke='%23e2bd6e' stroke-opacity='.6' stroke-width='1.2'/><circle cx='11' cy='11' r='1.4' fill='%23e2bd6e' fill-opacity='.7'/></svg>")
+      right bottom / 16px 16px no-repeat;
 }
 
 .game-stage::after {
@@ -807,8 +828,8 @@
 
 .home-list h2 {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   font-size: 23px;
   margin-bottom: 4px;
 }
@@ -896,11 +917,12 @@
 }
 
 .create-option {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
   text-align: left;
-  padding: 16px 18px;
+  padding: 16px 64px 16px 18px;
   border-radius: var(--radius-row);
   border: 1px solid var(--line-strong);
   background: var(--panel-raised);
@@ -914,6 +936,23 @@
 .create-option:hover {
   border-color: var(--gold);
   background: #173a2d;
+}
+
+.create-option[class*="suit-"]::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin-top: -13px;
+  background: var(--suit) center / contain no-repeat;
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+
+.create-option:hover::after {
+  opacity: 0.9;
 }
 
 .create-option strong {
@@ -1085,9 +1124,8 @@
   font-size: 23px;
   padding-bottom: 6px;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
 }
 
 .lobby-section h2 .hint {
@@ -1426,8 +1464,8 @@
 .history h2 {
   font-size: 23px;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
 }
 
 .achievements h2 .hint {
@@ -1584,17 +1622,32 @@
   color: var(--text-faint);
 }
 
-/* Les trois premières places : or, argent, bronze */
+/* Les trois premières places : une médaille d'or, d'argent et de bronze */
+.board-row.top .board-rank {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 17px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 3px 8px -3px rgba(0, 0, 0, 0.7);
+}
+
 .board-row.top:nth-child(1) .board-rank {
-  color: var(--gold);
+  background: linear-gradient(180deg, #f5dc9c, #c9993f);
+  color: var(--gold-ink);
 }
 
 .board-row.top:nth-child(2) .board-rank {
-  color: #cfd6d2;
+  background: linear-gradient(180deg, #f1f3f1, #a6b0ab);
+  color: #1f2b26;
 }
 
 .board-row.top:nth-child(3) .board-rank {
-  color: #d39a6a;
+  background: linear-gradient(180deg, #ecbb90, #a3653a);
+  color: #2b1609;
 }
 
 .board-row.top:nth-child(1) .avatar {
@@ -1732,42 +1785,51 @@ h3 .hint {
 /* Badge admin                                                         */
 /* ------------------------------------------------------------------ */
 
-/* Petite plaque dorée gravée, à côté du nom */
+/* Jeton doré : une couronne dans un médaillon sombre, puis ADMIN en capitales espacées.
+   Tout est en em : il suffit de changer la taille de police pour l'agrandir. */
 .admin-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 0.55em;
   flex: none;
-  margin-left: 6px;
-  padding: 1px 6px 0 5px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #f1d590, #d4a957);
+  height: 2.15em;
+  margin-left: 0.75em;
+  padding: 0 0.75em 0 0.22em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f3d896, #d6ab5b);
   color: var(--gold-ink);
-  font-family: var(--font-card);
+  font-family: var(--font-text);
+  font-size: 9.5px;
   font-weight: 800;
-  font-size: 11px;
-  line-height: 15px;
-  letter-spacing: 0.08em;
-  vertical-align: 0.15em;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  vertical-align: middle;
   white-space: nowrap;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 1px 0 var(--gold-edge);
+    0 1px 0 var(--gold-edge),
+    0 2px 6px -2px rgba(0, 0, 0, 0.6);
 }
 
-.admin-badge svg {
-  flex: none;
-  margin-top: -1px;
+.admin-badge-medal {
+  display: grid;
+  place-items: center;
+  width: 1.72em;
+  height: 1.72em;
+  border-radius: 50%;
+  background: var(--gold-ink);
+  color: var(--gold-light);
+}
+
+.admin-badge-medal svg {
+  width: 62%;
+  height: 62%;
 }
 
 .admin-badge.is-large {
-  margin-left: 12px;
-  padding: 2px 9px 1px 7px;
-  gap: 4px;
-  font-size: 14px;
-  line-height: 20px;
-  vertical-align: 0.35em;
-  border-radius: 5px;
+  font-size: 12.5px;
+  margin-left: 0.9em;
+  vertical-align: 0.4em;
 }
 
 /* Un nom trop long se coupe, le badge reste visible */
@@ -1849,8 +1911,8 @@ h3 .hint {
 .admin-section h2 {
   font-size: 23px;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
 }
 
 .admin-section .empty {
