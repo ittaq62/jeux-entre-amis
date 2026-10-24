@@ -315,7 +315,24 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
 
   // Gestes au doigt sur le plateau : glisser pour déplacer, toucher pour tourner,
   // balayer vers le bas pour lâcher, glisser lentement vers le bas pour descendre, vers le haut pour la réserve
-  const touch = useRef<{ x: number; y: number; t: number; lastX: number; moved: boolean; soft: boolean; id: number } | null>(null);
+  const touch = useRef<{
+    x: number;
+    y: number;
+    t: number;
+    lastX: number;
+    moved: boolean;
+    soft: boolean;
+    id: number;
+    trail: { y: number; t: number }[];
+  } | null>(null);
+  // Vitesse du doigt vers le bas sur les 80 dernières ms : un geste qui part lentement devient une descente.
+  // La moyenne depuis le début du toucher mélangeait tout (l'hésitation au départ ralentit le calcul).
+  function speedDown(tc: NonNullable<typeof touch.current>, y: number, t: number) {
+    tc.trail.push({ y, t });
+    while (tc.trail.length > 2 && t - tc.trail[0]!.t > 80) tc.trail.shift();
+    const first = tc.trail[0]!;
+    return (y - first.y) / Math.max(1, t - first.t);
+  }
   function act(action: InputAction) {
     if (relayedRef.current) return;
     game.current?.press(action, serverNow());
@@ -326,7 +343,17 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       if (e.pointerType === "mouse") return;
       unlockAudio();
       e.currentTarget.setPointerCapture(e.pointerId);
-      touch.current = { x: e.clientX, y: e.clientY, t: performance.now(), lastX: e.clientX, moved: false, soft: false, id: e.pointerId };
+      const t = performance.now();
+      touch.current = {
+        x: e.clientX,
+        y: e.clientY,
+        t,
+        lastX: e.clientX,
+        moved: false,
+        soft: false,
+        id: e.pointerId,
+        trail: [{ y: e.clientY, t }],
+      };
     },
     onPointerMove: (e: React.PointerEvent) => {
       const tc = touch.current;
@@ -340,8 +367,10 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
         tc.moved = true;
       }
       const dy = e.clientY - tc.y;
-      const fast = dy / Math.max(1, performance.now() - tc.t);
-      if (!tc.soft && dy > cell * 1.4 && fast < 0.9 && Math.abs(e.clientX - tc.x) < cell * 1.5) {
+      const now = performance.now();
+      const speed = speedDown(tc, e.clientY, now);
+      // Un coup de doigt est fini en moins de 140 ms : passé ce temps, un geste lent est une descente
+      if (!tc.soft && now - tc.t >= 140 && dy > cell * 1.4 && speed < 0.45 && Math.abs(e.clientX - tc.x) < cell * 1.5) {
         tc.soft = true;
         tc.moved = true;
         if (!relayedRef.current) game.current?.press("soft", serverNow());
@@ -355,7 +384,8 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       const dt = performance.now() - tc.t;
       const dy = e.clientY - tc.y;
       const dx = e.clientX - tc.x;
-      if (dy > cell * 2.2 && dy / dt > 0.7 && Math.abs(dx) < Math.abs(dy)) act("hard");
+      // Une descente commencée doucement ne lâche jamais la pièce ; tout autre balayage net vers le bas la lâche
+      if (!tc.soft && dy > cell * 2.2 && Math.abs(dx) < Math.abs(dy)) act("hard");
       else if (dy < -cell * 2 && -dy / dt > 0.5 && Math.abs(dx) < Math.abs(dy)) act("hold");
       else if (!tc.moved && Math.abs(dy) < cell * 0.7 && Math.abs(dx) < cell * 0.7 && dt < 320) act("cw");
     },
