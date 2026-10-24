@@ -25,9 +25,13 @@ import type { BricksClientMessage } from "../../shared/protocol.ts";
 
 export type InputAction = "left" | "right" | "soft" | "hard" | "cw" | "ccw" | "flip" | "hold";
 
-const LOCK_MS = 500;
+/** Temps laissé au sol pour glisser ou tourner la pièce avant qu'elle se pose */
+const LOCK_MS = 400;
+/** Bas maintenu : la pièce se pose presque dès qu'elle touche */
+const SOFT_LOCK_MS = 90;
 const MAX_LOCK_RESETS = 15;
-const SOFT_DROP_FACTOR = 20;
+/** Descente au bas maintenu : toujours la même allure, quelle que soit la vitesse de la manche */
+const SOFT_DROP_MS = 28;
 
 export interface Handling {
   /** Délai avant la répétition d'un déplacement */
@@ -63,7 +67,8 @@ export class LocalGame {
   private lockMs = 0;
   private lockResets = 0;
   private lowestY = -99;
-  private gravityAcc = 0;
+  /** Chemin parcouru vers la case du dessous, en fraction de case */
+  private progress = 0;
   private dir: -1 | 0 | 1 = 0;
   private dirSince = 0;
   private arrAcc = 0;
@@ -138,7 +143,7 @@ export class LocalGame {
     this.held = false;
     this.resetLock();
     this.lastRotation = false;
-    this.gravityAcc = 0;
+    this.progress = 0;
     if (!fits(this.board.grid, this.piece)) {
       this.topped = true;
       this.piece = null;
@@ -222,6 +227,7 @@ export class LocalGame {
         this.piece = spawn(next);
         this.resetLock();
         this.lastRotation = false;
+        this.progress = 0;
         this.emit({ type: "hold" });
         if (!fits(this.board.grid, this.piece)) {
           this.topped = true;
@@ -257,13 +263,16 @@ export class LocalGame {
         }
       }
     }
-    const interval = gravityMs(now - this.startAt, this.settings.speedUp) / (this.softDrop ? SOFT_DROP_FACTOR : 1);
-    this.gravityAcc += dt;
-    while (this.gravityAcc >= interval && this.piece) {
-      this.gravityAcc -= interval;
+    const gravity = gravityMs(now - this.startAt, this.settings.speedUp);
+    const interval = this.softDrop ? Math.min(gravity, SOFT_DROP_MS) : gravity;
+    // Compté en cases et non en millisecondes : appuyer vers le bas accélère la pièce là où elle en est,
+    // sans lui faire rattraper d'un coup tout le temps déjà passé dans sa case
+    this.progress += dt / interval;
+    while (this.progress >= 1 && this.piece) {
+      this.progress -= 1;
       const next = moved(this.board.grid, this.piece, 0, 1);
       if (!next) {
-        this.gravityAcc = 0;
+        this.progress = 0;
         break;
       }
       this.piece = next;
@@ -277,11 +286,12 @@ export class LocalGame {
     if (this.piece && grounded(this.board.grid, this.piece)) {
       this.fall = 0;
       this.lockMs += dt;
-      if (this.lockMs >= LOCK_MS || this.lockResets >= MAX_LOCK_RESETS) this.lock(now);
+      const delay = this.softDrop ? SOFT_LOCK_MS : LOCK_MS;
+      if (this.lockMs >= delay || this.lockResets >= MAX_LOCK_RESETS) this.lock(now);
     } else {
       this.lockMs = 0;
       // Entre deux cases : la pièce est dessinée en chemin vers la suivante
-      this.fall = Math.min(0.999, this.gravityAcc / interval);
+      this.fall = Math.min(0.999, this.progress);
     }
   }
 
