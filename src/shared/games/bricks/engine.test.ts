@@ -223,30 +223,45 @@ function botDuel(levels: [Parameters<typeof botPlacement>[1], Parameters<typeof 
 }
 
 describe("bots", () => {
-  it("toutes les poses proposées sont valides et une partie se termine", () => {
-    const r = botDuel(["confirme", "confirme"], 11);
-    expect(r.invalid).toBeNull();
-    expect(r.winner).not.toBe(-1);
-  });
+  // Des parties entières de bots, simulées : plus long que les 5 s par défaut quand la machine est chargée
+  const DUELS_MS = 20_000;
 
-  it("l'expert bat l'apprenti presque à chaque fois", () => {
-    let wins = 0;
-    for (let s = 1; s <= 12; s++) {
-      const r = botDuel(s % 2 ? ["expert", "apprenti"] : ["apprenti", "expert"], s);
+  it(
+    "toutes les poses proposées sont valides et une partie se termine",
+    () => {
+      const r = botDuel(["confirme", "confirme"], 11);
       expect(r.invalid).toBeNull();
-      if (r.winner === (s % 2 ? 0 : 1)) wins++;
-    }
-    expect(wins).toBeGreaterThanOrEqual(10);
-  });
+      expect(r.winner).not.toBe(-1);
+    },
+    DUELS_MS,
+  );
 
-  it("le confirmé bat l'apprenti le plus souvent", () => {
-    let wins = 0;
-    for (let s = 1; s <= 12; s++) {
-      const r = botDuel(s % 2 ? ["confirme", "apprenti"] : ["apprenti", "confirme"], 100 + s);
-      if (r.winner === (s % 2 ? 0 : 1)) wins++;
-    }
-    expect(wins).toBeGreaterThanOrEqual(8);
-  });
+  it(
+    "l'expert bat l'apprenti presque à chaque fois",
+    () => {
+      let wins = 0;
+      for (let s = 1; s <= 12; s++) {
+        const r = botDuel(s % 2 ? ["expert", "apprenti"] : ["apprenti", "expert"], s);
+        expect(r.invalid).toBeNull();
+        if (r.winner === (s % 2 ? 0 : 1)) wins++;
+      }
+      expect(wins).toBeGreaterThanOrEqual(10);
+    },
+    DUELS_MS,
+  );
+
+  it(
+    "le confirmé bat l'apprenti le plus souvent",
+    () => {
+      let wins = 0;
+      for (let s = 1; s <= 12; s++) {
+        const r = botDuel(s % 2 ? ["confirme", "apprenti"] : ["apprenti", "confirme"], 100 + s);
+        if (r.winner === (s % 2 ? 0 : 1)) wins++;
+      }
+      expect(wins).toBeGreaterThanOrEqual(8);
+    },
+    DUELS_MS,
+  );
 
   it("chaque pose possible d'une pièce sur un plateau vide est posée au fond", () => {
     const all = landings(emptyGrid(), "T");
