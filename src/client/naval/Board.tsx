@@ -10,9 +10,9 @@ const MARGIN = 7;
 export type BoardMode = "sea" | "radar";
 
 export interface BoardPointer {
-  type: "down" | "move" | "up" | "leave" | "cancel";
+  type: "down" | "move" | "up" | "cancel";
   cell: number | null;
-  event: ReactPointerEvent<SVGSVGElement>;
+  event: ReactPointerEvent<SVGSVGElement> | PointerEvent;
 }
 
 interface BoardProps {
@@ -79,16 +79,44 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
     return x >= 0 && y >= 0 && x < n && y < n ? cellIndex(n, x, y) : null;
   }
 
-  const handle = (type: BoardPointer["type"]) => (e: ReactPointerEvent<SVGSVGElement>) => {
-    const cell = type === "leave" || type === "cancel" ? null : cellAt(e.clientX, e.clientY);
-    if (type === "move" || type === "leave" || type === "cancel") {
-      if (cell !== hover) {
-        setHover(cell);
-        onHover?.(cell);
-      }
+  function hoverAt(cell: number | null) {
+    if (cell !== hover) {
+      setHover(cell);
+      onHover?.(cell);
     }
-    onPointer?.({ type, cell, event: e });
-  };
+  }
+
+  // Un doigt ou une souris qui appuie sur le plateau est suivi sur toute la page jusqu'à ce qu'il se lève.
+  // On ne détourne pas le pointeur vers le plateau (setPointerCapture) : ce changement de cible envoie
+  // des « sorties » que certains navigateurs de téléphone font remonter jusqu'au plateau, et le glissement
+  // s'arrêtait avant d'avoir commencé.
+  const onPointerRef = useRef(onPointer);
+  onPointerRef.current = onPointer;
+  const tracking = useRef<(() => void) | null>(null);
+  useEffect(() => () => tracking.current?.(), []);
+  function track(pointerId: number) {
+    tracking.current?.();
+    const move = (e: PointerEvent) => {
+      if (e.pointerId === pointerId) onPointerRef.current?.({ type: "move", cell: cellAt(e.clientX, e.clientY), event: e });
+    };
+    const end = (type: "up" | "cancel") => (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      stop();
+      onPointerRef.current?.({ type, cell: type === "up" ? cellAt(e.clientX, e.clientY) : null, event: e });
+    };
+    const up = end("up");
+    const cancel = end("cancel");
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      tracking.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    tracking.current = stop;
+  }
 
   const center = (c: number) => ({ x: cellX(n, c) * CELL + CELL / 2, y: cellY(n, c) * CELL + CELL / 2 });
 
@@ -101,11 +129,14 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
       height={px}
       role="grid"
       aria-label={label}
-      onPointerDown={handle("down")}
-      onPointerMove={handle("move")}
-      onPointerUp={handle("up")}
-      onPointerLeave={handle("leave")}
-      onPointerCancel={handle("cancel")}
+      onPointerDown={(e) => {
+        if (!onPointer) return;
+        onPointer({ type: "down", cell: cellAt(e.clientX, e.clientY), event: e });
+        track(e.pointerId);
+      }}
+      onPointerMove={(e) => hoverAt(cellAt(e.clientX, e.clientY))}
+      onPointerLeave={() => hoverAt(null)}
+      onPointerCancel={() => hoverAt(null)}
       // Un appui long sur téléphone ouvrirait le menu du navigateur au lieu d'attraper le navire
       onContextMenu={onPointer ? (e) => e.preventDefault() : undefined}
       onClick={(e) => {

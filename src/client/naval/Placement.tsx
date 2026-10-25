@@ -87,7 +87,6 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
       const index = Number(hit.getAttribute("data-ship"));
       setSelected(index);
       drag.current = { index, start: cell, origin: fleet[index]!, moved: false };
-      event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
     const d = drag.current;
@@ -100,7 +99,7 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
       const p = { ...d.origin, x: d.origin.x + dx, y: d.origin.y + dy };
       setGhost({ index: d.index, p, ok: shipCells(size, p) !== null && valid(withShip(d.index, p)) });
     }
-    if (type === "up" || type === "leave" || type === "cancel") {
+    if (type === "up" || type === "cancel") {
       drag.current = null;
       const last = ghostRef.current;
       if (!d.moved) {
