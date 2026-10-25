@@ -7,6 +7,8 @@ interface Prefs {
   haptics: boolean;
   colorblind: boolean;
   reducedEffects: boolean;
+  /** Musique d'entracte de la tournée */
+  tourMusic: boolean;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -26,6 +28,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   haptics: true,
   colorblind: false,
   reducedEffects: false,
+  tourMusic: true,
   ...load(),
   set: (patch) => {
     set(patch);

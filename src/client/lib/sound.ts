@@ -50,7 +50,17 @@ export type SoundName =
   | "brickKo"
   | "brickCount"
   | "brickGo"
-  | "brickMusic";
+  | "brickMusic"
+  | "tourShake"
+  | "tourThrow"
+  | "tourReveal"
+  | "tourFlip"
+  | "tourRules"
+  | "tourChip"
+  | "tourVote"
+  | "tourFanfare"
+  | "tourApplause"
+  | "tourMusic";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -100,6 +110,17 @@ const FILES: Record<SoundName, string[]> = {
   brickCount: ["bricks-count.wav"],
   brickGo: ["bricks-go.wav"],
   brickMusic: ["bricks-music.mp3"],
+  // La tournée : des dés, des jetons et des cartes, des jingles, les applaudissements et la musique d'entracte
+  tourShake: ["tour-shake.wav"],
+  tourThrow: ["tour-throw.wav"],
+  tourReveal: ["tour-reveal.wav"],
+  tourFlip: ["tour-flip.wav"],
+  tourRules: ["tour-rules.wav"],
+  tourChip: ["tour-chip.wav"],
+  tourVote: ["tour-vote.wav"],
+  tourFanfare: ["tour-fanfare.wav"],
+  tourApplause: ["tour-applause.mp3"],
+  tourMusic: ["tour-music.mp3"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -157,6 +178,22 @@ export const BRICKS_SOUNDS: SoundName[] = [
   "lose",
 ];
 
+export const TOUR_SOUNDS: SoundName[] = [
+  "tourShake",
+  "tourThrow",
+  "tourReveal",
+  "tourFlip",
+  "tourRules",
+  "tourChip",
+  "tourVote",
+  "tourFanfare",
+  "tourApplause",
+  "tourMusic",
+  "tick",
+  "join",
+  "click",
+];
+
 // Les sons frequents restent discrets, les evenements rares ressortent
 const VOLUME: Partial<Record<SoundName, number>> = {
   cardPlace: 0.75,
@@ -199,6 +236,16 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   brickCount: 0.5,
   brickGo: 0.55,
   brickMusic: 0.22,
+  tourShake: 0.45,
+  tourThrow: 0.5,
+  tourReveal: 0.55,
+  tourFlip: 0.5,
+  tourRules: 0.45,
+  tourChip: 0.4,
+  tourVote: 0.4,
+  tourFanfare: 0.6,
+  tourApplause: 0.55,
+  tourMusic: 0.25,
 };
 
 let ctx: AudioContext | null = null;
@@ -244,7 +291,9 @@ export function preloadSounds(names: SoundName[] = Object.keys(FILES) as SoundNa
   for (const name of names) for (const f of FILES[name]) void load(f);
 }
 
-let loop: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
+let loop: { name: SoundName; source: AudioBufferSourceNode; gain: GainNode } | null = null;
+/** La boucle demandée : si on l'a coupée pendant son chargement, elle ne part pas une fois chargée */
+let wanted: SoundName | null = null;
 
 /** Un son d'ambiance en boucle (une seule à la fois), coupé avec le reste quand le son est désactivé. */
 export function startLoop(name: SoundName) {
@@ -253,8 +302,9 @@ export function startLoop(name: SoundName) {
   if (!prefs.sound) return;
   const ac = context();
   if (!ac || !master) return;
+  wanted = name;
   void load(FILES[name][0]!).then((buffer) => {
-    if (!buffer || !master || loop) return;
+    if (!buffer || !master || loop || wanted !== name) return;
     const source = ac.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -263,12 +313,14 @@ export function startLoop(name: SoundName) {
     gain.gain.linearRampToValueAtTime(prefs.volume * (VOLUME[name] ?? 1), ac.currentTime + 1.5);
     source.connect(gain).connect(master);
     source.start();
-    loop = { source, gain };
+    loop = { name, source, gain };
   });
 }
 
-export function stopLoop() {
-  if (!loop || !ctx) return;
+/** Coupe la boucle en cours ; avec un nom, seulement si c'est celle-là (la musique d'entracte ne coupe pas celle d'un jeu) */
+export function stopLoop(only?: SoundName) {
+  if (!only || wanted === only) wanted = null;
+  if (!loop || !ctx || (only && loop.name !== only)) return;
   const { source, gain } = loop;
   loop = null;
   gain.gain.cancelScheduledValues(ctx.currentTime);
