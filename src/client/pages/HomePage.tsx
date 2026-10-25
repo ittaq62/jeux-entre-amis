@@ -103,6 +103,40 @@ export function HomePage() {
           <span className="script-word">{greeting()},</span> {user.pseudo}
         </h1>
 
+        {tourOn && (
+          <section className="home-game home-game-tour panel" aria-label="La Tournée">
+            <div className="game-stage is-stage" aria-hidden="true">
+              <div className="tour-programme">
+                <GameTicket game="uno" />
+                <GameTicket game="bricks" />
+                <GameTicket game="naval" />
+              </div>
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-tour">La Tournée</h2>
+              {beta.includes("tour") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                Plusieurs jeux à la suite pour la même bande. L'hôte coche les jeux, ils sortent au hasard, et chaque place rapporte des
+                points jusqu'au podium.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("tour")} disabled={busy !== null}>
+                  {busy === "quick-tour" && <span className="spinner" />} Tournée rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("tour")} disabled={busy !== null}>
+                  Lancer une tournée
+                </button>
+              </div>
+              <JoinCode id="join-code-tour" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <section className="home-game panel" aria-label="UNO">
           <div className="game-stage" aria-hidden="true">
             <div className="table-scatter">
@@ -197,40 +231,6 @@ export function HomePage() {
                 </button>
               </div>
               <JoinCode id="join-code-bricks" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        {tourOn && (
-          <section className="home-game home-game-tour panel" aria-label="La Tournée">
-            <div className="game-stage is-stage" aria-hidden="true">
-              <div className="tour-programme">
-                <GameTicket game="uno" />
-                <GameTicket game="bricks" />
-                <GameTicket game="naval" />
-              </div>
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-tour">La Tournée</h2>
-              {beta.includes("tour") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                Plusieurs jeux à la suite pour la même bande. L'hôte coche les jeux, ils sortent au hasard, et chaque place rapporte des
-                points jusqu'au podium.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("tour")} disabled={busy !== null}>
-                  {busy === "quick-tour" && <span className="spinner" />} Tournée rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("tour")} disabled={busy !== null}>
-                  Lancer une tournée
-                </button>
-              </div>
-              <JoinCode id="join-code-tour" busy={busy !== null} onJoin={join} />
             </div>
           </section>
         )}
