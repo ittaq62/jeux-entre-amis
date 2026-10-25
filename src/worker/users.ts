@@ -439,7 +439,8 @@ export async function recordSprint(
 // ---------------------------------------------------------------------------
 
 export interface TourRecordPlayer {
-  userId: string;
+  /** null pour un bot de la tournée : il a sa ligne sur la feuille, mais ni stats ni succès */
+  userId: string | null;
   name: string;
   /** Place finale ; en équipes, 1 pour l'équipe gagnante (ou pour tous en cas d'égalité) */
   rank: number;
@@ -481,17 +482,18 @@ export async function recordTour(db: D1Database, rec: TourRecord): Promise<{ unl
     ...rec.players.map((p) =>
       db
         .prepare(
-          "INSERT OR IGNORE INTO tour_players (tour_id, user_id, name, rank, points, wins, team, titles) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT OR IGNORE INTO tour_players (tour_id, user_id, name, rank, points, wins, team, titles, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(tourId, p.userId, p.name, p.rank, p.points, p.wins, p.team, JSON.stringify(p.titles)),
+        .bind(tourId, p.userId, p.name, p.rank, p.points, p.wins, p.team, JSON.stringify(p.titles), p.userId === null ? 1 : 0),
     ),
   ];
-  if (rec.players.length === 0) {
+  const humans = rec.players.filter((p): p is TourRecordPlayer & { userId: string } => p.userId !== null);
+  if (humans.length === 0) {
     await db.batch(statements);
     return { unlocked: {} };
   }
-  const placeholders = rec.players.map(() => "?").join(",");
-  const ids = rec.players.map((p) => p.userId);
+  const placeholders = humans.map(() => "?").join(",");
+  const ids = humans.map((p) => p.userId);
   const { results: statRows } = await db
     .prepare(
       `SELECT user_id, played, won, points, streak, best_streak, totals FROM user_stats WHERE game = 'tour' AND user_id IN (${placeholders})`,
@@ -506,7 +508,7 @@ export async function recordTour(db: D1Database, rec: TourRecord): Promise<{ unl
   const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
   const now = Date.now();
   const unlocked: Record<string, string[]> = {};
-  for (const p of rec.players) {
+  for (const p of humans) {
     const prev = byUser.get(p.userId);
     const won = p.rank === 1;
     const played = (prev?.played ?? 0) + 1;
@@ -569,7 +571,16 @@ export interface TourSheet {
   settings: TourSettings;
   games: { game: GameId; results: TourGameResult[] }[];
   winnerTeam: 0 | 1 | null;
-  players: { userId: string | null; name: string; rank: number; points: number; wins: number; team: 0 | 1 | null; titles: string[] }[];
+  players: {
+    userId: string | null;
+    name: string;
+    rank: number;
+    points: number;
+    wins: number;
+    team: 0 | 1 | null;
+    titles: string[];
+    bot: boolean;
+  }[];
 }
 
 /** La feuille d'une tournée terminée */
@@ -588,9 +599,20 @@ export async function tourSheet(db: D1Database, id: string): Promise<TourSheet |
     }>();
   if (!tour) return null;
   const { results } = await db
-    .prepare("SELECT user_id, name, rank, points, wins, team, titles FROM tour_players WHERE tour_id = ? ORDER BY rank, points DESC")
+    .prepare(
+      "SELECT user_id, name, rank, points, wins, team, titles, is_bot FROM tour_players WHERE tour_id = ? ORDER BY rank, points DESC",
+    )
     .bind(id)
-    .all<{ user_id: string | null; name: string; rank: number; points: number; wins: number; team: number | null; titles: string }>();
+    .all<{
+      user_id: string | null;
+      name: string;
+      rank: number;
+      points: number;
+      wins: number;
+      team: number | null;
+      titles: string;
+      is_bot: number;
+    }>();
   const parse = <T>(raw: string, fallback: T): T => {
     try {
       return JSON.parse(raw) as T;
@@ -614,6 +636,7 @@ export async function tourSheet(db: D1Database, id: string): Promise<TourSheet |
       wins: r.wins,
       team: r.team === 0 || r.team === 1 ? r.team : null,
       titles: parse<string[]>(r.titles, []),
+      bot: r.is_bot === 1,
     })),
   };
 }

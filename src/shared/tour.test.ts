@@ -42,6 +42,13 @@ describe("tirage", () => {
     expect([...seen].sort()).toEqual(["bricks", "naval", "uno"]);
   });
 
+  it("écarte les jeux déjà joués quand chaque jeu ne passe qu'une fois", () => {
+    for (let i = 0; i < 30; i++) expect(drawGame(["uno", "bricks", "naval"], 4, "bricks", rand, ["uno", "bricks"])).toBe("naval");
+    expect(drawGame(["uno", "bricks"], 4, "bricks", rand, ["uno", "bricks"])).toBeNull();
+    // Le seul jeu restant passe, même s'il vient d'être joué ailleurs dans la liste
+    expect(drawGame(["uno"], 3, null, rand, [])).toBe("uno");
+  });
+
   it("garde le seul jeu coché, même deux fois de suite", () => {
     expect(drawGame(["bricks"], 2, "bricks", rand)).toBe("bricks");
   });

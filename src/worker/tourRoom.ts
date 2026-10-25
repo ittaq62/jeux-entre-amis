@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { AvatarConfig } from "../shared/avatar.ts";
+import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import {
   CHAT_MAX,
   GAME_NAMES,
@@ -22,6 +22,7 @@ import {
   INTERMISSION_MS,
   sanitizeEnd,
   teamScores,
+  TOUR_BOT_NAMES,
   TOUR_GAMES,
   TOUR_MAX_PLAYERS,
   TOUR_MIN_PLAYERS,
@@ -53,7 +54,9 @@ const STALE_TABLE_MS = 45 * 60_000;
 const CHAT_KEEP = 120;
 
 interface Member {
+  /** Id du compte, ou « bot-t1 »… pour un bot de la tournée */
   userId: string;
+  kind: "human" | "bot";
   name: string;
   avatar: AvatarConfig;
   photo: number;
@@ -113,6 +116,7 @@ interface TourData {
   kicked: string[];
   rng: number;
   recorded: boolean;
+  botCounter: number;
 }
 
 interface Attachment {
@@ -133,6 +137,14 @@ export class TourRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.data = (await ctx.storage.get<TourData>("tour")) ?? null;
+      // Tournées ouvertes avant les bots et l'option « chaque jeu une fois »
+      const d = this.data;
+      if (d) {
+        for (const m of d.members) m.kind ??= "human";
+        d.settings.once ??= false;
+        d.settings.botLevel ??= "normal";
+        d.botCounter ??= 0;
+      }
     });
   }
 
@@ -169,6 +181,7 @@ export class TourRoom extends DurableObject<Env> {
       kicked: [],
       rng: randomSeed(),
       recorded: false,
+      botCounter: 0,
     };
     await this.persist();
     await this.syncHub();
@@ -217,6 +230,12 @@ export class TourRoom extends DurableObject<Env> {
       await this.finishTour(now);
       return;
     }
+    // Chaque jeu une seule fois : quand ils sont tous passés, c'est la fin
+    if (d.settings.once && this.nextDraw() === null) {
+      this.systemChat("Tous les jeux du programme ont été joués !");
+      await this.finishTour(now);
+      return;
+    }
     d.status = "intermission";
     this.drawNext(now, INTERMISSION_MS);
     await this.afterChange();
@@ -235,6 +254,19 @@ export class TourRoom extends DurableObject<Env> {
     d.current = null;
     d.timers = d.timers.filter((t) => t.kind !== "stale");
     d.status = "intermission";
+    // Deux tables de suite où personne n'est venu : on attend l'hôte plutôt que d'en recréer sans fin
+    const lastTwo = d.games.slice(-2);
+    if (lastTwo.length === 2 && lastTwo.every((g) => g.aborted)) {
+      this.systemChat("Personne n'est arrivé à la table : la tournée se met en pause.");
+      this.drawNext(now, INTERMISSION_MS);
+      if (d.next) {
+        d.next.at = null;
+        d.timers = d.timers.filter((t) => t.kind !== "launch");
+        d.notice = "Personne n'est venu aux deux dernières tables : la tournée est en pause. L'hôte la relance quand tout le monde est là.";
+      }
+      await this.afterChange();
+      return;
+    }
     this.systemChat("Pas assez de joueurs arrivés à la table : ce jeu ne compte pas, on retire au sort.");
     this.drawNext(now, INTERMISSION_MS);
     await this.afterChange();
@@ -269,11 +301,32 @@ export class TourRoom extends DurableObject<Env> {
     return this.data!.members.find((m) => m.userId === userId);
   }
 
+  /** Un bot est toujours là ; un joueur, s'il est connecté */
+  private present(m: Member): boolean {
+    return m.kind === "bot" || this.isConnected(m.userId);
+  }
+
   /** Joueurs présents qui joueront le prochain jeu, dans l'ordre d'arrivée */
   private activePlayers(): Member[] {
-    return this.data!.members.filter((m) => m.role === "player" && !m.left && this.isConnected(m.userId)).sort(
-      (a, b) => a.joinedAt - b.joinedAt,
-    );
+    return this.data!.members.filter((m) => m.role === "player" && !m.left && this.present(m)).sort((a, b) => a.joinedAt - b.joinedAt);
+  }
+
+  /** Un nouveau joueur prend la place d'un bot quand la tournée est complète */
+  private freeSeatFromBot(): boolean {
+    const d = this.data!;
+    if (d.status === "finished") return false;
+    const bot = d.members.findLast((m) => m.kind === "bot" && m.role === "player" && !m.left);
+    if (!bot) return false;
+    if (d.status === "lobby") {
+      d.members = d.members.filter((m) => m !== bot);
+      this.systemChat(`${bot.name}, un bot, cède sa place.`);
+    } else {
+      // Tournée commencée : il garde ses points au classement, mais ne joue plus (il finit le jeu en cours)
+      bot.left = true;
+      const atTable = d.status === "playing" && d.games.at(-1)?.players.includes(bot.userId);
+      this.systemChat(atTable ? `${bot.name}, un bot, finit ce jeu puis cède sa place.` : `${bot.name}, un bot, cède sa place.`);
+    }
+    return true;
   }
 
   private playerCount(): number {
@@ -306,9 +359,10 @@ export class TourRoom extends DurableObject<Env> {
         if (d.status !== "finished") this.systemChat(`${member.name} revient dans la tournée.`);
       }
     } else if (d.status !== "finished") {
-      const player = this.playerCount() < d.settings.maxPlayers;
+      const player = this.playerCount() < d.settings.maxPlayers || this.freeSeatFromBot();
       member = {
         userId: user.id,
+        kind: "human",
         name: user.pseudo,
         avatar: user.avatar,
         photo: user.photo,
@@ -384,7 +438,7 @@ export class TourRoom extends DurableObject<Env> {
     if (!force && host && !host.left) return;
     const connected = this.connectedUsers();
     if (!force && !host && d.members.length === 0 && connected.has(d.hostId)) return;
-    const present = d.members.filter((m) => !m.left && m.userId !== d.hostId && this.isConnected(m.userId));
+    const present = d.members.filter((m) => m.kind === "human" && !m.left && m.userId !== d.hostId && this.isConnected(m.userId));
     const next = present.find((m) => m.role === "player") ?? present[0];
     if (next) {
       d.hostId = next.userId;
@@ -432,7 +486,7 @@ export class TourRoom extends DurableObject<Env> {
 
       case "sit": {
         if (!member || member.role === "player" || d.status === "finished") return;
-        if (this.playerCount() >= d.settings.maxPlayers) return error("La tournée est complète.");
+        if (this.playerCount() >= d.settings.maxPlayers && !this.freeSeatFromBot()) return error("La tournée est complète.");
         member.role = "player";
         member.waiting = d.status === "playing";
         if (d.settings.teams) member.team = this.emptierTeam();
@@ -479,11 +533,6 @@ export class TourRoom extends DurableObject<Env> {
         void this.hub.setUserRoom(userId, null).catch(() => {});
         return this.afterChange(ws);
       }
-
-      case "addBot":
-      case "removeSeat":
-        // Pas de bots dans une tournée : ils ne servent qu'à remplacer un absent pendant un jeu
-        return;
     }
 
     if (msg.t === "close") {
@@ -497,6 +546,39 @@ export class TourRoom extends DurableObject<Env> {
       case "kick": {
         if (typeof msg.userId !== "string" || msg.userId === userId) return;
         return this.kickUser(msg.userId, now);
+      }
+
+      case "addBot": {
+        if (d.status !== "lobby") return error("Les bots s'ajoutent au salon, avant le départ.");
+        if (this.playerCount() >= d.settings.maxPlayers) return error("La tournée est complète.");
+        const used = new Set(d.members.map((m) => m.name));
+        const name = TOUR_BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${d.botCounter + 1}`;
+        const bot: Member = {
+          userId: `bot-t${++d.botCounter}`,
+          kind: "bot",
+          name,
+          avatar: seededAvatar(`${name}-${d.code}`),
+          photo: 0,
+          admin: false,
+          role: "player",
+          team: d.settings.teams ? this.emptierTeam() : null,
+          points: 0,
+          wins: 0,
+          joinedAt: now,
+          waiting: false,
+          left: false,
+          disconnectedAt: null,
+        };
+        d.members.push(bot);
+        return this.afterChange();
+      }
+
+      case "removeSeat": {
+        if (d.status !== "lobby") return;
+        const bot = this.member(msg.seatId);
+        if (!bot || bot.kind !== "bot") return;
+        d.members = d.members.filter((m) => m !== bot);
+        return this.afterChange();
       }
 
       case "settings": {
@@ -515,6 +597,8 @@ export class TourRoom extends DurableObject<Env> {
           for (const m of d.members) m.team = null;
           if (patch.teams) players.forEach((m, i) => (m.team = (i % 2) as 0 | 1));
         }
+        if (typeof patch.once === "boolean") d.settings.once = patch.once;
+        if (patch.botLevel === "easy" || patch.botLevel === "normal" || patch.botLevel === "hard") d.settings.botLevel = patch.botLevel;
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -526,7 +610,8 @@ export class TourRoom extends DurableObject<Env> {
       case "start": {
         if (d.status !== "lobby") return;
         const players = this.activePlayers();
-        if (players.length < TOUR_MIN_PLAYERS) return error("Il faut au moins deux joueurs pour lancer la tournée.");
+        if (players.length < TOUR_MIN_PLAYERS) return error("Il faut au moins deux joueurs : invite un ami ou ajoute un bot.");
+        if (!players.some((m) => m.kind === "human")) return error("Il faut au moins un vrai joueur dans la tournée.");
         if (!d.settings.games.some((g) => fitsGame(g, players.length))) {
           return error(`Aucun des jeux cochés n'accueille ${players.length} joueurs.`);
         }
@@ -537,7 +622,7 @@ export class TourRoom extends DurableObject<Env> {
           }
         }
         // Ceux qui ne sont pas là au départ restent dans la liste, mais en spectateurs
-        for (const m of d.members) if (m.role === "player" && !this.isConnected(m.userId)) m.role = "spectator";
+        for (const m of d.members) if (m.role === "player" && !this.present(m)) m.role = "spectator";
         d.status = "intermission";
         d.startedAt = now;
         this.systemChat(`La tournée commence : ${d.settings.games.map((g) => GAME_NAMES[g]).join(", ")} au programme !`);
@@ -583,7 +668,7 @@ export class TourRoom extends DurableObject<Env> {
       case "again": {
         if (d.status !== "finished") return;
         // Une nouvelle tournée avec la même bande et les mêmes règles
-        d.members = d.members.filter((m) => !m.left && this.isConnected(m.userId));
+        d.members = d.members.filter((m) => !m.left && this.present(m));
         for (const m of d.members) {
           m.points = 0;
           m.wins = 0;
@@ -659,6 +744,18 @@ export class TourRoom extends DurableObject<Env> {
   // Le programme : tirage, table du jeu, fin
   // -------------------------------------------------------------------------
 
+  /** Jeux joués jusqu'au bout, à écarter du tirage quand chaque jeu ne se joue qu'une fois */
+  private excluded(): GameId[] {
+    const d = this.data!;
+    return d.settings.once ? d.games.filter((g) => !g.aborted && g.results).map((g) => g.game) : [];
+  }
+
+  /** Le jeu que donnerait le tirage maintenant, ou rien s'il ne reste aucun jeu possible */
+  private nextDraw(players = this.activePlayers().length): GameId | null {
+    const d = this.data!;
+    return drawGame(d.settings.games, Math.max(TOUR_MIN_PLAYERS, players), this.previousGame(), () => random(d), this.excluded());
+  }
+
   private previousGame(): GameId | null {
     const played = this.data!.games.filter((g) => !g.aborted);
     return played.at(-1)?.game ?? null;
@@ -669,10 +766,10 @@ export class TourRoom extends DurableObject<Env> {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "launch");
     const players = this.activePlayers().length;
-    const game = drawGame(d.settings.games, Math.max(TOUR_MIN_PLAYERS, players), this.previousGame(), () => random(d));
+    const game = this.nextDraw(players);
     if (!game) {
       d.next = null;
-      d.notice = `Aucun des jeux cochés n'accueille ${players} joueurs : la tournée est en pause.`;
+      d.notice = `Aucun des jeux ${this.excluded().length > 0 ? "qui restent" : "cochés"} n'accueille ${players} joueurs : la tournée est en pause.`;
       return;
     }
     d.notice = null;
@@ -687,16 +784,18 @@ export class TourRoom extends DurableObject<Env> {
     this.launching = true;
     try {
       d.timers = d.timers.filter((t) => t.kind !== "launch");
-      let players = this.activePlayers();
-      if (players.length < TOUR_MIN_PLAYERS) {
+      // Les joueurs d'abord, les bots ensuite : s'il y a trop de monde pour le jeu, ce sont les bots qui attendent
+      const active = this.activePlayers();
+      let players = [...active.filter((m) => m.kind === "human"), ...active.filter((m) => m.kind === "bot")];
+      if (players.length < TOUR_MIN_PLAYERS || !players.some((m) => m.kind === "human")) {
         d.next.at = null;
-        d.notice = "Il faut au moins deux joueurs connectés pour continuer : la tournée attend.";
+        d.notice = "Il faut au moins deux joueurs, dont un vrai joueur connecté, pour continuer : la tournée attend.";
         return await this.afterChange();
       }
       let game = d.next.game;
       if (!fitsGame(game, players.length)) {
         // Le nombre de joueurs a changé depuis le tirage
-        const other = drawGame(d.settings.games, players.length, this.previousGame(), () => random(d));
+        const other = this.nextDraw(players.length);
         if (other) {
           this.systemChat(`${GAME_NAMES[game]} n'accueille pas ${players.length} joueurs : on passe à ${GAME_NAMES[other]}.`);
           game = other;
@@ -716,19 +815,22 @@ export class TourRoom extends DurableObject<Env> {
         d.settings.teams && game !== "uno" && players.length === 4 && red === 2
           ? Object.fromEntries(players.map((m) => [m.userId, m.team as 0 | 1]))
           : null;
-      const users: PublicUser[] = players.map((m) => ({
-        id: m.userId,
-        pseudo: m.name,
-        avatar: m.avatar,
-        photo: m.photo,
-        ...(m.admin ? { admin: true as const } : {}),
-      }));
+      const users: PublicUser[] = players
+        .filter((m) => m.kind === "human")
+        .map((m) => ({
+          id: m.userId,
+          pseudo: m.name,
+          avatar: m.avatar,
+          photo: m.photo,
+          ...(m.admin ? { admin: true as const } : {}),
+        }));
+      const bots = players.filter((m) => m.kind === "bot").map((m) => ({ id: m.userId, name: m.name, avatar: m.avatar }));
       await gameStub(this.env, game, code).init({
         code,
         host: users[0]!,
         visibility: "private",
         quick: false,
-        tour: { code: d.code, index, players: users, teams },
+        tour: { code: d.code, index, players: users, bots, botLevel: d.settings.botLevel, teams },
       });
       if (this.data !== d || d.status !== "intermission") return;
       d.games.push({
@@ -817,7 +919,8 @@ export class TourRoom extends DurableObject<Env> {
         games: games.map((g) => ({ game: g.game, results: g.results! })),
         winnerTeam,
         players: placed.map(({ member, rank: r }) => ({
-          userId: member.userId,
+          // Les bots ont leur ligne sur la feuille, mais ni stats ni succès
+          userId: member.kind === "human" ? member.userId : null,
           name: member.name,
           rank: d.settings.teams ? (member.team === winnerTeam ? 1 : winnerTeam === null ? 1 : 2) : r,
           points: member.points,
@@ -950,11 +1053,12 @@ export class TourRoom extends DurableObject<Env> {
       hostId: d.hostId,
       members: d.members.map((m) => ({
         userId: m.userId,
+        kind: m.kind,
         name: m.name,
         avatar: m.avatar,
         photo: m.photo,
         admin: m.admin,
-        connected: connected.has(m.userId),
+        connected: m.kind === "bot" || connected.has(m.userId),
         role: m.role,
         team: m.team,
         points: m.points,
@@ -1038,10 +1142,10 @@ export class TourRoom extends DurableObject<Env> {
       status: this.roomStatus(),
       visibility: d.settings.visibility,
       hostName: host?.name ?? "",
-      humans: players.length,
-      bots: 0,
+      humans: players.filter((m) => m.kind === "human").length,
+      bots: players.filter((m) => m.kind === "bot").length,
       maxPlayers: d.settings.maxPlayers,
-      names: players.map((m) => m.name),
+      names: players.filter((m) => m.kind === "human").map((m) => m.name),
       createdAt: d.createdAt,
       quick: d.quick,
     };

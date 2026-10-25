@@ -35,7 +35,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import type { TourInit } from "../shared/tour.ts";
+import { TOUR_BOT_LEVELS, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -168,9 +168,25 @@ export class NavalRoom extends DurableObject<Env> {
       // Tout le monde est déjà à bord ; en 2 contre 2, avec les équipes de la tournée
       const d = this.data;
       const teams = opts.tour.teams;
-      d.seats = opts.tour.players.map((u, i) => ({ ...this.newHumanSeat(u, teams?.[u.id] ?? ((i % 2) as 0 | 1)), disconnectedAt: now }));
+      d.seats = [
+        ...opts.tour.players.map((u, i) => ({ ...this.newHumanSeat(u, teams?.[u.id] ?? ((i % 2) as 0 | 1)), disconnectedAt: now })),
+        // Les bots de la tournée, sous leur nom de tournée
+        ...opts.tour.bots.map((b, i) => ({
+          id: b.id,
+          kind: "bot" as const,
+          userId: null,
+          name: b.name,
+          avatar: b.avatar,
+          photo: 0,
+          autoplay: false as const,
+          missed: 0,
+          disconnectedAt: null,
+          team: teams?.[b.id] ?? (((opts.tour!.players.length + i) % 2) as 0 | 1),
+        })),
+      ];
       d.settings.maxPlayers = Math.min(NAVAL_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
       d.settings.naval.teams = teams !== null && d.seats.length === 4;
+      d.settings.naval.botLevel = TOUR_BOT_LEVELS[opts.tour.botLevel]?.naval ?? d.settings.naval.botLevel;
       d.hostId = d.seats[0]?.userId ?? opts.host.id;
       d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
     }
@@ -582,7 +598,8 @@ export class NavalRoom extends DurableObject<Env> {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
-    if (present.length < MIN_PLAYERS) {
+    // Il faut au moins un vrai joueur à la table : une partie entre bots seuls ne compte pas
+    if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
       await abortToTour(this.env, d.tour!.code, d.code);
       await this.close("Pas assez de joueurs arrivés : la tournée reprend la main.");
       return;
@@ -875,7 +892,8 @@ export class NavalRoom extends DurableObject<Env> {
         index: d.tour.index,
         game: "naval",
         seats: players.length,
-        players: players.flatMap((p) => (p.userId ? [{ userId: p.userId, rank: p.rank, stats: { ...p.stats } }] : [])),
+        // Un bot de la tournée se reconnaît à son id de siège
+        players: g.players.map((p, i) => ({ userId: players[i]!.userId ?? p.id, rank: players[i]!.rank, stats: { ...players[i]!.stats } })),
       });
     }
     try {

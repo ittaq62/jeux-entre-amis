@@ -2,6 +2,8 @@
 // La place à chaque jeu rapporte des points, cumulés jusqu'au podium.
 
 import type { AvatarConfig } from "./avatar.ts";
+import type { BotLevel as BricksBotLevel } from "./games/bricks/engine.ts";
+import type { BotLevel as NavalBotLevel } from "./games/naval/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
@@ -30,6 +32,15 @@ export type TourEnd =
 /** Les choix proposés à l'hôte pour chaque façon de finir */
 export const END_CHOICES = { games: [3, 5, 7, 10], score: [30, 50, 100], time: [30, 60, 90] } as const;
 
+/** Niveau des bots de la tournée, traduit pour chaque jeu */
+export type TourBotLevel = "easy" | "normal" | "hard";
+
+export const TOUR_BOT_LEVELS: Record<TourBotLevel, { label: string; naval: NavalBotLevel; bricks: BricksBotLevel }> = {
+  easy: { label: "Facile", naval: "mousse", bricks: "apprenti" },
+  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme" },
+  hard: { label: "Fort", naval: "amiral", bricks: "expert" },
+};
+
 export interface TourSettings {
   visibility: Visibility;
   maxPlayers: number;
@@ -37,11 +48,25 @@ export interface TourSettings {
   end: TourEnd;
   /** Deux équipes fixes pour toute la tournée, sinon chacun pour soi */
   teams: boolean;
+  /** Chaque jeu coché ne se joue qu'une fois : la tournée s'arrête quand ils sont tous passés */
+  once: boolean;
+  botLevel: TourBotLevel;
 }
 
 export function defaultTourSettings(visibility: Visibility): TourSettings {
-  return { visibility, maxPlayers: TOUR_MAX_PLAYERS, games: [...TOUR_GAMES], end: { kind: "games", count: 5 }, teams: false };
+  return {
+    visibility,
+    maxPlayers: TOUR_MAX_PLAYERS,
+    games: [...TOUR_GAMES],
+    end: { kind: "games", count: 5 },
+    teams: false,
+    once: false,
+    botLevel: "normal",
+  };
 }
+
+/** Les bots de la tournée : ils gardent leur nom d'un jeu à l'autre */
+export const TOUR_BOT_NAMES = ["Gaston", "Ginette", "Marcel", "Josiane", "Raymond", "Huguette", "Lucien", "Simone"];
 
 export const TOUR_TEAMS = ["Rouges", "Bleus"] as const;
 export const TOUR_TEAM_COLORS = ["#d4453c", "#3f7fd8"] as const;
@@ -58,8 +83,15 @@ export function fitsGame(game: GameId, players: number): boolean {
 }
 
 /** Jeu suivant : au hasard parmi les jeux cochés qui accueillent tout le monde, jamais deux fois de suite le même s'il y a le choix. */
-export function drawGame(games: GameId[], players: number, previous: GameId | null, random: () => number): GameId | null {
-  const fit = [...new Set(games)].filter((g) => fitsGame(g, players));
+export function drawGame(
+  games: GameId[],
+  players: number,
+  previous: GameId | null,
+  random: () => number,
+  /** Jeux déjà joués, écartés quand chaque jeu ne se joue qu'une fois */
+  exclude: GameId[] = [],
+): GameId | null {
+  const fit = [...new Set(games)].filter((g) => fitsGame(g, players) && !exclude.includes(g));
   if (fit.length === 0) return null;
   const pool = fit.length > 1 ? fit.filter((g) => g !== previous) : fit;
   return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))]!;
@@ -255,7 +287,9 @@ export function tourTitles(candidates: TitleCandidate[]): TourTitle[] {
 export type TourStatus = "lobby" | "playing" | "intermission" | "finished";
 
 export interface TourMemberView {
+  /** Id du compte, ou du bot de la tournée */
   userId: string;
+  kind: "human" | "bot";
   name: string;
   avatar: AvatarConfig;
   photo: number;
@@ -320,7 +354,12 @@ export interface TourView {
 }
 
 export type TourClientMessage =
-  | { t: "settings"; settings: Partial<Pick<TourSettings, "games" | "end" | "teams">>; visibility?: Visibility; maxPlayers?: number }
+  | {
+      t: "settings";
+      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel">>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+    }
   | { t: "start" }
   /** Jouer la tournée (plutôt que la regarder) */
   | { t: "sit" }
@@ -359,6 +398,7 @@ export interface TableReport {
   game: GameId;
   /** Nombre de joueurs assis, bots compris */
   seats: number;
+  /** Chaque joueur assis : le compte, ou le bot de la tournée (son id de siège) */
   players: { userId: string; rank: number; stats: Record<string, number> }[];
 }
 
@@ -367,7 +407,10 @@ export interface TourInit {
   code: string;
   index: number;
   players: PublicUser[];
-  /** Équipe de chacun quand le jeu se joue en 2 contre 2 */
+  /** Les bots de la tournée assis à ce jeu, avec leur nom */
+  bots: { id: string; name: string; avatar: AvatarConfig }[];
+  botLevel: TourBotLevel;
+  /** Équipe de chacun (comptes et bots) quand le jeu se joue en 2 contre 2 */
   teams: Record<string, 0 | 1> | null;
 }
 
