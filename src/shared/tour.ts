@@ -2,8 +2,9 @@
 // La place à chaque jeu rapporte des points, cumulés jusqu'au podium.
 
 import type { AvatarConfig } from "./avatar.ts";
-import type { BotLevel as BricksBotLevel } from "./games/bricks/engine.ts";
-import type { BotLevel as NavalBotLevel } from "./games/naval/engine.ts";
+import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
+import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
+import type { UnoSettings } from "./games/uno/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
@@ -41,6 +42,15 @@ export const TOUR_BOT_LEVELS: Record<TourBotLevel, { label: string; naval: Naval
   hard: { label: "Fort", naval: "amiral", bricks: "expert" },
 };
 
+/** Comment se choisissent les règles de chaque jeu */
+export type TourRulesMode = "base" | "random" | "vote";
+
+export const RULES_MODES: Record<TourRulesMode, { label: string; hint: string }> = {
+  base: { label: "De base", hint: "Chaque jeu se joue avec ses règles habituelles." },
+  random: { label: "Au hasard", hint: "Les règles sont tirées au sort avec le jeu, et révélées juste après." },
+  vote: { label: "Votées", hint: "À chaque entracte, on vote pour les règles du jeu tiré : adoptées dès la moitié des voix." },
+};
+
 export interface TourSettings {
   visibility: Visibility;
   maxPlayers: number;
@@ -51,6 +61,7 @@ export interface TourSettings {
   /** Chaque jeu coché ne se joue qu'une fois : la tournée s'arrête quand ils sont tous passés */
   once: boolean;
   botLevel: TourBotLevel;
+  rules: TourRulesMode;
 }
 
 export function defaultTourSettings(visibility: Visibility): TourSettings {
@@ -62,6 +73,7 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
     teams: false,
     once: false,
     botLevel: "normal",
+    rules: "base",
   };
 }
 
@@ -77,6 +89,8 @@ export const INTERMISSION_MS = 25_000;
 export const FIRST_DRAW_MS = 9_000;
 /** Temps laissé à la feuille de fin du jeu avant d'afficher l'entracte */
 export const GAME_END_HOLD_MS = 5_000;
+/** Règles votées : un peu plus de temps à l'entracte pour voter */
+export const VOTE_EXTRA_MS = 12_000;
 
 export function fitsGame(game: GameId, players: number): boolean {
   return players >= GAME_SEATS[game].min && players <= GAME_SEATS[game].max;
@@ -159,6 +173,145 @@ export function sanitizeEnd(raw: unknown): TourEnd | null {
     default:
       return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Les règles de chaque jeu : quelques variantes nommées, la première est celle de base
+// ---------------------------------------------------------------------------
+
+interface VariantOf<S> {
+  id: string;
+  name: string;
+  blurb: string;
+  /** Ce qui change par rapport aux réglages habituels du jeu */
+  settings: Partial<S>;
+}
+
+export interface TourVariant {
+  id: string;
+  name: string;
+  blurb: string;
+}
+
+const UNO_VARIANTS: VariantOf<UnoSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "Les règles habituelles : les +2 et les +4 se cumulent.", settings: {} },
+  {
+    id: "sept-zero",
+    name: "7-0 et interception",
+    blurb: "Un 7 échange ta main avec celle de ton choix, un 0 fait tourner les mains, et une carte identique se joue hors de son tour.",
+    settings: { sevenZero: true, jumpIn: true },
+  },
+  {
+    id: "pioche",
+    name: "Pioche sans fin",
+    blurb: "On pioche tant qu'aucune carte ne peut être posée.",
+    settings: { drawUntilPlayable: true },
+  },
+  {
+    id: "no-mercy",
+    name: "No Mercy",
+    blurb: "168 cartes avec des +6, des +10 et la roulette ; on est éliminé à 25 cartes.",
+    settings: { variant: "nomercy" },
+  },
+];
+
+const NAVAL_VARIANTS: VariantOf<NavalSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "Grille 10 × 10, celui qui touche rejoue.", settings: {} },
+  { id: "salve", name: "Salve", blurb: "À chaque tour, autant de tirs que de navires encore à flot.", settings: { shots: "salvo" } },
+  {
+    id: "arsenal",
+    name: "Arsenal",
+    blurb: "Grande grille 12 × 12, et couler un navire rapporte une arme : radar, torpille ou barrage.",
+    settings: { grid: 12, arsenal: true },
+  },
+  {
+    id: "eclair",
+    name: "Éclair",
+    blurb: "Petite grille 8 × 8 et navires collés : ça va très vite.",
+    settings: { grid: 8, touching: true },
+  },
+];
+
+const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
+  { id: "survie", name: "Dernier debout", blurb: "Une seule vie ; après 3 minutes, la marée de lignes grises monte.", settings: {} },
+  {
+    id: "chrono",
+    name: "K.O. au chrono",
+    blurb: "2 minutes : une pile qui déborde repart de zéro, et le plus de K.O. gagne.",
+    settings: { win: "ko", minutes: 2 },
+  },
+  {
+    id: "vrac",
+    name: "Lignes en vrac",
+    blurb: "Chaque ligne grise reçue a son propre trou : plus dur à déblayer.",
+    settings: { messy: true },
+  },
+  {
+    id: "ancienne",
+    name: "À l'ancienne",
+    blurb: "Pas de réserve, et une seule pièce annoncée à l'avance.",
+    settings: { hold: false, previews: 1 },
+  },
+];
+
+const VARIANTS: Record<GameId, VariantOf<object>[]> = { uno: UNO_VARIANTS, naval: NAVAL_VARIANTS, bricks: BRICKS_VARIANTS };
+
+/** Les variantes d'un jeu, sans leurs réglages */
+export function gameVariants(game: GameId): TourVariant[] {
+  return VARIANTS[game].map(({ id, name, blurb }) => ({ id, name, blurb }));
+}
+
+export function baseVariant(game: GameId): string {
+  return VARIANTS[game][0]!.id;
+}
+
+export function findVariant(game: GameId, id: string | null | undefined): TourVariant | null {
+  const v = VARIANTS[game].find((x) => x.id === id);
+  return v ? { id: v.id, name: v.name, blurb: v.blurb } : null;
+}
+
+/** Les réglages à appliquer à la table pour cette variante (rien si elle est inconnue) */
+export function variantSettings(game: "uno", id: string | null | undefined): Partial<UnoSettings>;
+export function variantSettings(game: "naval", id: string | null | undefined): Partial<NavalSettings>;
+export function variantSettings(game: "bricks", id: string | null | undefined): Partial<BricksSettings>;
+export function variantSettings(game: GameId, id: string | null | undefined): object {
+  return { ...(VARIANTS[game].find((v) => v.id === id)?.settings ?? {}) };
+}
+
+export function drawVariant(game: GameId, random: () => number): string {
+  const all = VARIANTS[game];
+  return all[Math.min(all.length - 1, Math.floor(random() * all.length))]!.id;
+}
+
+/** Voix nécessaires : la moitié des votants, au moins une */
+export function voteNeed(voters: number): number {
+  return Math.max(1, Math.ceil(voters / 2));
+}
+
+/** Les voix de chaque variante, en ne comptant que les votants présents */
+export function tallyVotes(votes: Record<string, string>, voters: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const id of voters) {
+    const v = votes[id];
+    if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** La variante qui a déjà la moitié des voix, s'il y en a une */
+export function adoptedVariant(votes: Record<string, string>, voters: string[]): string | null {
+  const need = voteNeed(voters.length);
+  for (const [v, n] of tallyVotes(votes, voters)) if (n >= need) return v;
+  return null;
+}
+
+/** Au départ : la plus votée (au hasard entre les ex aequo), ou celle de base si personne n'a voté */
+export function resolveVariant(game: GameId, votes: Record<string, string>, voters: string[], random: () => number): string {
+  const counts = [...tallyVotes(votes, voters)].filter(([v]) => findVariant(game, v));
+  if (counts.length === 0) return baseVariant(game);
+  const best = Math.max(...counts.map(([, n]) => n));
+  const top = counts.filter(([, n]) => n === best).map(([v]) => v);
+  return top[Math.min(top.length - 1, Math.floor(random() * top.length))]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +478,8 @@ export interface TourGameView {
   results: TourGameResult[] | null;
   /** Pas assez de monde au départ : le jeu ne compte pas */
   aborted: boolean;
+  /** Les règles jouées (id de variante) */
+  variant: string;
 }
 
 export interface TourView {
@@ -339,8 +494,14 @@ export interface TourView {
   you: { userId: string; isHost: boolean; isAdmin: boolean; member: boolean; role: "player" | "spectator" | null };
   games: TourGameView[];
   current: { index: number; game: GameId; code: string } | null;
-  /** Jeu tiré pour la suite, et l'heure du départ (null : en pause) */
-  next: { game: GameId; at: number | null } | null;
+  /**
+   * Jeu tiré pour la suite et l'heure du départ (null : en pause). Les règles : la variante retenue, ou null
+   * tant que le vote est ouvert ; les voix de chacun.
+   */
+  next: { game: GameId; at: number | null; variant: string | null; votes: Record<string, string> } | null;
+  /** Joueurs présents qui peuvent voter (bots et spectateurs exclus), et ceux qui sont prêts à lancer */
+  voters: string[];
+  ready: string[];
   startedAt: number | null;
   /** Tournée à durée fixe : l'heure à partir de laquelle le jeu en cours est le dernier */
   endsAt: number | null;
@@ -356,7 +517,7 @@ export interface TourView {
 export type TourClientMessage =
   | {
       t: "settings";
-      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel">>;
+      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules">>;
       visibility?: Visibility;
       maxPlayers?: number;
     }
@@ -373,6 +534,12 @@ export type TourClientMessage =
   | { t: "emote"; emote: string }
   /** Hôte, à l'entracte : lancer le jeu tiré sans attendre */
   | { t: "launch" }
+  /** Un joueur est prêt à lancer (au salon ou à l'entracte) : à la moitié des joueurs, c'est parti */
+  | { t: "ready"; ready: boolean }
+  /** Règles votées : la voix d'un joueur pour une variante du jeu tiré */
+  | { t: "vote"; variant: string }
+  /** Hôte : choisir lui-même les règles du jeu tiré */
+  | { t: "pickVariant"; variant: string }
   | { t: "pause" }
   | { t: "resume" }
   /** Hôte : finir la tournée (à l'entracte), ou après le jeu en cours */
@@ -412,6 +579,8 @@ export interface TourInit {
   botLevel: TourBotLevel;
   /** Équipe de chacun (comptes et bots) quand le jeu se joue en 2 contre 2 */
   teams: Record<string, 0 | 1> | null;
+  /** Les règles du jeu (id de variante) */
+  variant: string;
 }
 
 /** Le nom de chaque titre, pour la feuille d'une tournée passée */

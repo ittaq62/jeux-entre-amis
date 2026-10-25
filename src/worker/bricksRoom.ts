@@ -42,7 +42,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import { TOUR_BOT_LEVELS, type TourInit } from "../shared/tour.ts";
+import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, recordSprint, type EloResults } from "./users.ts";
@@ -241,6 +241,8 @@ export class BricksRoom extends DurableObject<Env> {
         })),
       ];
       d.settings.maxPlayers = Math.min(BRICKS_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
+      // Les règles choisies par la tournée (variante), puis ce que la tournée règle elle-même
+      d.settings.bricks = { ...d.settings.bricks, ...variantSettings("bricks", opts.tour.variant) };
       d.settings.bricks.teams = teams !== null && d.seats.length === 4;
       d.settings.bricks.botLevel = TOUR_BOT_LEVELS[opts.tour.botLevel]?.bricks ?? d.settings.bricks.botLevel;
       d.hostId = d.seats[0]?.userId ?? opts.host.id;

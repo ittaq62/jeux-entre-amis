@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { random } from "./rng.ts";
+import { DEFAULT_SETTINGS as BRICKS_DEFAULTS } from "./games/bricks/engine.ts";
+import { DEFAULT_SETTINGS as NAVAL_DEFAULTS } from "./games/naval/engine.ts";
+import { DEFAULT_SETTINGS as UNO_DEFAULTS } from "./games/uno/engine.ts";
 import {
+  adoptedVariant,
+  baseVariant,
   drawGame,
+  drawVariant,
+  findVariant,
   fitsGame,
+  gameVariants,
+  resolveVariant,
+  TOUR_GAMES,
+  variantSettings,
+  voteNeed,
   sanitizeEnd,
   teamScores,
   tourCapacity,
@@ -137,5 +149,79 @@ describe("titres", () => {
 
   it("ne donne rien sans exploit", () => {
     expect(tourTitles([{ userId: "a", name: "Alice", lines: [line("uno", 2)] }])).toEqual([]);
+  });
+});
+
+describe("règles des jeux", () => {
+  const rng = { rng: 7 };
+  const rand = () => random(rng);
+  const defaults = { uno: UNO_DEFAULTS, naval: NAVAL_DEFAULTS, bricks: BRICKS_DEFAULTS };
+
+  it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {
+    for (const game of TOUR_GAMES) {
+      const all = gameVariants(game);
+      expect(all.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
+      expect(baseVariant(game)).toBe(all[0]!.id);
+      expect(variantSettings(game as "uno", baseVariant(game))).toEqual({});
+    }
+  });
+
+  it("ne touche qu'à de vrais réglages du jeu, avec des valeurs du bon type", () => {
+    for (const game of TOUR_GAMES) {
+      const base = defaults[game] as unknown as Record<string, unknown>;
+      for (const v of gameVariants(game)) {
+        for (const [key, value] of Object.entries(variantSettings(game as "uno", v.id))) {
+          expect(key in base, `${game}/${v.id}/${key}`).toBe(true);
+          expect(typeof value).toBe(typeof base[key]);
+        }
+      }
+    }
+  });
+
+  it("ne garde jamais les équipes, les bots ni le solo, réglés par la tournée", () => {
+    for (const game of TOUR_GAMES) {
+      for (const v of gameVariants(game)) {
+        const keys = Object.keys(variantSettings(game as "uno", v.id));
+        expect(keys.filter((k) => ["teams", "botLevel", "sprint", "endMode", "turnSeconds"].includes(k))).toEqual([]);
+      }
+    }
+  });
+
+  it("ignore une variante inconnue", () => {
+    expect(findVariant("uno", "n'importe quoi")).toBeNull();
+    expect(variantSettings("naval", "n'importe quoi")).toEqual({});
+    expect(findVariant("bricks", "chrono")?.name).toBe("K.O. au chrono");
+  });
+
+  it("tire toutes les variantes au hasard", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 200; i++) seen.add(drawVariant("naval", rand));
+    expect(seen.size).toBe(gameVariants("naval").length);
+  });
+
+  it("adopte une variante dès la moitié des voix des joueurs présents", () => {
+    expect(voteNeed(1)).toBe(1);
+    expect(voteNeed(2)).toBe(1);
+    expect(voteNeed(3)).toBe(2);
+    expect(voteNeed(4)).toBe(2);
+    expect(voteNeed(0)).toBe(1);
+    const voters = ["a", "b", "c"];
+    expect(adoptedVariant({ a: "salve" }, voters)).toBeNull();
+    expect(adoptedVariant({ a: "salve", b: "salve" }, voters)).toBe("salve");
+    // Les voix de ceux qui ne sont plus là ne comptent pas
+    expect(adoptedVariant({ a: "salve", z: "salve" }, voters)).toBeNull();
+    expect(adoptedVariant({ a: "salve", z: "salve" }, ["a", "b"])).toBe("salve");
+  });
+
+  it("au départ, prend la plus votée, ou celle de base sans voix", () => {
+    expect(resolveVariant("uno", {}, ["a", "b"], rand)).toBe("classique");
+    expect(resolveVariant("uno", { a: "no-mercy", b: "no-mercy", c: "pioche" }, ["a", "b", "c"], rand)).toBe("no-mercy");
+    // Une voix inconnue est écartée
+    expect(resolveVariant("uno", { a: "triche" }, ["a"], rand)).toBe("classique");
+    // À égalité, l'une des ex aequo, jamais une autre
+    for (let i = 0; i < 40; i++) {
+      expect(["pioche", "sept-zero"]).toContain(resolveVariant("uno", { a: "pioche", b: "sept-zero" }, ["a", "b"], rand));
+    }
   });
 });

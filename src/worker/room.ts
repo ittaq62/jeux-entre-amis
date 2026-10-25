@@ -36,7 +36,7 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import type { TourInit } from "../shared/tour.ts";
+import { variantSettings, type TourInit } from "../shared/tour.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -201,6 +201,8 @@ export class GameRoom extends DurableObject<Env> {
         })),
       ];
       d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
+      // Les règles choisies par la tournée (variante)
+      d.settings.uno = { ...d.settings.uno, ...variantSettings("uno", opts.tour.variant) };
       d.hostId = d.seats[0]?.userId ?? opts.host.id;
       d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
     }

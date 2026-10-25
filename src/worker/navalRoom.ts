@@ -35,7 +35,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import { TOUR_BOT_LEVELS, type TourInit } from "../shared/tour.ts";
+import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -185,6 +185,8 @@ export class NavalRoom extends DurableObject<Env> {
         })),
       ];
       d.settings.maxPlayers = Math.min(NAVAL_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
+      // Les règles choisies par la tournée (variante), puis ce que la tournée règle elle-même
+      d.settings.naval = { ...d.settings.naval, ...variantSettings("naval", opts.tour.variant) };
       d.settings.naval.teams = teams !== null && d.seats.length === 4;
       d.settings.naval.botLevel = TOUR_BOT_LEVELS[opts.tour.botLevel]?.naval ?? d.settings.naval.botLevel;
       d.hostId = d.seats[0]?.userId ?? opts.host.id;

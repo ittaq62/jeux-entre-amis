@@ -456,7 +456,8 @@ export interface TourRecord {
   startedAt: number;
   endedAt: number;
   settings: TourSettings;
-  games: { game: GameId; results: TourGameResult[] }[];
+  /** Jeu par jeu ; les règles jouées (id de variante), absentes des tournées d'avant le choix des règles */
+  games: { game: GameId; variant?: string; results: TourGameResult[] }[];
   winnerTeam: 0 | 1 | null;
   players: TourRecordPlayer[];
 }
@@ -569,7 +570,8 @@ export interface TourSheet {
   startedAt: number;
   endedAt: number;
   settings: TourSettings;
-  games: { game: GameId; results: TourGameResult[] }[];
+  /** Jeu par jeu ; les règles jouées (id de variante), absentes des tournées d'avant le choix des règles */
+  games: { game: GameId; variant?: string; results: TourGameResult[] }[];
   winnerTeam: 0 | 1 | null;
   players: {
     userId: string | null;
