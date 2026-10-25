@@ -1,10 +1,11 @@
 import { sanitizeAvatar, seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { earnedAchievements, earnedBricksAchievements, earnedNavalAchievements } from "../shared/achievements.ts";
+import { earnedAchievements, earnedBricksAchievements, earnedNavalAchievements, earnedTourAchievements } from "../shared/achievements.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
 import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
 import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval/engine.ts";
-import type { FriendEntry, GameId, Me, PublicUser } from "../shared/protocol.ts";
+import type { FriendEntry, GameId, Me, PublicUser, TableGame } from "../shared/protocol.ts";
+import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
 import { rankingPoints } from "../shared/ranking.ts";
 import type { UserRow } from "./auth.ts";
@@ -433,8 +434,192 @@ export async function recordSprint(
   return { unlocked: earned.length > 0 ? { [userId]: earned } : {} };
 }
 
+// ---------------------------------------------------------------------------
+// Tournées
+// ---------------------------------------------------------------------------
+
+export interface TourRecordPlayer {
+  userId: string;
+  name: string;
+  /** Place finale ; en équipes, 1 pour l'équipe gagnante (ou pour tous en cas d'égalité) */
+  rank: number;
+  points: number;
+  wins: number;
+  team: 0 | 1 | null;
+  lines: TourGameLine[];
+  titles: string[];
+}
+
+export interface TourRecord {
+  code: string;
+  startedAt: number;
+  endedAt: number;
+  settings: TourSettings;
+  games: { game: GameId; results: TourGameResult[] }[];
+  winnerTeam: 0 | 1 | null;
+  players: TourRecordPlayer[];
+}
+
+/** Enregistre une tournée terminée : son résumé, la place de chacun, les stats et succès de tournée. */
+export async function recordTour(db: D1Database, rec: TourRecord): Promise<{ unlocked: Record<string, string[]> }> {
+  const tourId = randomId(10);
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        "INSERT INTO tours (id, room_code, settings, games, started_at, ended_at, player_count, winner_team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(
+        tourId,
+        rec.code,
+        JSON.stringify(rec.settings),
+        JSON.stringify(rec.games),
+        rec.startedAt,
+        rec.endedAt,
+        rec.players.length,
+        rec.winnerTeam,
+      ),
+    ...rec.players.map((p) =>
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO tour_players (tour_id, user_id, name, rank, points, wins, team, titles) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(tourId, p.userId, p.name, p.rank, p.points, p.wins, p.team, JSON.stringify(p.titles)),
+    ),
+  ];
+  if (rec.players.length === 0) {
+    await db.batch(statements);
+    return { unlocked: {} };
+  }
+  const placeholders = rec.players.map(() => "?").join(",");
+  const ids = rec.players.map((p) => p.userId);
+  const { results: statRows } = await db
+    .prepare(
+      `SELECT user_id, played, won, points, streak, best_streak, totals FROM user_stats WHERE game = 'tour' AND user_id IN (${placeholders})`,
+    )
+    .bind(...ids)
+    .all<{ user_id: string; played: number; won: number; points: number; streak: number; best_streak: number; totals: string }>();
+  const { results: achRows } = await db
+    .prepare(`SELECT user_id, achievement FROM achievements WHERE user_id IN (${placeholders})`)
+    .bind(...ids)
+    .all<{ user_id: string; achievement: string }>();
+  const byUser = new Map(statRows.map((r) => [r.user_id, r]));
+  const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
+  const now = Date.now();
+  const unlocked: Record<string, string[]> = {};
+  for (const p of rec.players) {
+    const prev = byUser.get(p.userId);
+    const won = p.rank === 1;
+    const played = (prev?.played ?? 0) + 1;
+    const streak = won ? (prev?.streak ?? 0) + 1 : 0;
+    let totals: Record<string, number> = {};
+    try {
+      totals = prev ? (JSON.parse(prev.totals) as Record<string, number>) : {};
+    } catch {
+      totals = {};
+    }
+    totals.games = (totals.games ?? 0) + p.lines.length;
+    totals.gameWins = (totals.gameWins ?? 0) + p.wins;
+    totals.podiums = (totals.podiums ?? 0) + (p.rank <= 3 ? 1 : 0);
+    totals.titles = (totals.titles ?? 0) + p.titles.length;
+    totals.bestPoints = Math.max(totals.bestPoints ?? 0, p.points);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO user_stats (user_id, game, played, won, points, streak, best_streak, totals, updated_at)
+           VALUES (?1, 'tour', ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+           ON CONFLICT(user_id, game) DO UPDATE SET played = ?2, won = ?3, points = ?4, streak = ?5, best_streak = ?6, totals = ?7, updated_at = ?8`,
+        )
+        .bind(
+          p.userId,
+          played,
+          (prev?.won ?? 0) + (won ? 1 : 0),
+          (prev?.points ?? 0) + p.points,
+          streak,
+          Math.max(prev?.best_streak ?? 0, streak),
+          JSON.stringify(totals),
+          now,
+        ),
+    );
+    const earned = earnedTourAchievements({
+      won,
+      players: rec.players.length,
+      games: p.lines.length,
+      wins: p.wins,
+      titles: p.titles.length,
+      played,
+    }).filter((id) => !owned.has(`${p.userId}:${id}`));
+    if (earned.length > 0) {
+      unlocked[p.userId] = earned;
+      for (const id of earned) {
+        statements.push(
+          db.prepare("INSERT OR IGNORE INTO achievements (user_id, achievement, unlocked_at) VALUES (?, ?, ?)").bind(p.userId, id, now),
+        );
+      }
+    }
+  }
+  await db.batch(statements);
+  return { unlocked };
+}
+
+export interface TourSheet {
+  id: string;
+  code: string;
+  startedAt: number;
+  endedAt: number;
+  settings: TourSettings;
+  games: { game: GameId; results: TourGameResult[] }[];
+  winnerTeam: 0 | 1 | null;
+  players: { userId: string | null; name: string; rank: number; points: number; wins: number; team: 0 | 1 | null; titles: string[] }[];
+}
+
+/** La feuille d'une tournée terminée */
+export async function tourSheet(db: D1Database, id: string): Promise<TourSheet | null> {
+  const tour = await db
+    .prepare("SELECT id, room_code, settings, games, started_at, ended_at, winner_team FROM tours WHERE id = ?")
+    .bind(id)
+    .first<{
+      id: string;
+      room_code: string;
+      settings: string;
+      games: string;
+      started_at: number;
+      ended_at: number;
+      winner_team: number | null;
+    }>();
+  if (!tour) return null;
+  const { results } = await db
+    .prepare("SELECT user_id, name, rank, points, wins, team, titles FROM tour_players WHERE tour_id = ? ORDER BY rank, points DESC")
+    .bind(id)
+    .all<{ user_id: string | null; name: string; rank: number; points: number; wins: number; team: number | null; titles: string }>();
+  const parse = <T>(raw: string, fallback: T): T => {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback;
+    }
+  };
+  return {
+    id: tour.id,
+    code: tour.room_code,
+    startedAt: tour.started_at,
+    endedAt: tour.ended_at,
+    settings: parse<TourSettings>(tour.settings, {} as TourSettings),
+    games: parse<TourSheet["games"]>(tour.games, []),
+    winnerTeam: tour.winner_team === 0 || tour.winner_team === 1 ? tour.winner_team : null,
+    players: results.map((r) => ({
+      userId: r.user_id,
+      name: r.name,
+      rank: r.rank,
+      points: r.points,
+      wins: r.wins,
+      team: r.team === 0 || r.team === 1 ? r.team : null,
+      titles: parse<string[]>(r.titles, []),
+    })),
+  };
+}
+
 interface StatsRow {
-  game: GameId;
+  game: TableGame;
   played: number;
   won: number;
   points: number;
@@ -456,7 +641,7 @@ function statsSummary(row: StatsRow | undefined) {
 }
 
 export async function userProfile(db: D1Database, user: UserRow) {
-  const [statRows, achievements, recent] = await Promise.all([
+  const [statRows, achievements, recent, tours] = await Promise.all([
     db
       .prepare("SELECT game, played, won, points, elo, streak, best_streak, totals FROM user_stats WHERE user_id = ?")
       .bind(user.id)
@@ -484,8 +669,17 @@ export async function userProfile(db: D1Database, user: UserRow) {
         score: number;
         players: string;
       }>(),
+    db
+      .prepare(
+        `SELECT t.id, t.ended_at, t.player_count, json_array_length(t.games) AS game_count, tp.rank, tp.points, tp.wins
+         FROM tour_players tp JOIN tours t ON t.id = tp.tour_id
+         WHERE tp.user_id = ? ORDER BY t.ended_at DESC LIMIT 8`,
+      )
+      .bind(user.id)
+      .all<{ id: string; ended_at: number; player_count: number; game_count: number; rank: number; points: number; wins: number }>(),
   ]);
   const uno = statRows.results.find((r) => r.game === "uno");
+  const tour = statRows.results.find((r) => r.game === "tour");
   const naval = statRows.results.find((r) => r.game === "naval");
   const bricks = statRows.results.find((r) => r.game === "bricks");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
@@ -501,6 +695,16 @@ export async function userProfile(db: D1Database, user: UserRow) {
     stats: { ...statsSummary(uno), totals: parseTotals(uno?.totals ?? null) },
     naval: { ...statsSummary(naval), totals: totalsOf(naval) },
     bricks: { ...statsSummary(bricks), totals: totalsOf(bricks) },
+    tour: { ...statsSummary(tour), totals: totalsOf(tour) },
+    tours: tours.results.map((t) => ({
+      id: t.id,
+      endedAt: t.ended_at,
+      players: t.player_count,
+      games: t.game_count,
+      rank: t.rank,
+      points: t.points,
+      wins: t.wins,
+    })),
     achievements: achievements.results.map((a) => ({ id: a.achievement, at: a.unlocked_at })),
     recent: recent.results.map((r) => ({
       id: r.id,
@@ -521,7 +725,7 @@ export async function leaderboard(
   db: D1Database,
   scope: "all" | "friends",
   me: string,
-  game: GameId,
+  game: TableGame,
   sort: "points" | "elo" | "sprint" = "points",
 ) {
   const friendFilter =
@@ -536,11 +740,13 @@ export async function leaderboard(
      WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL
        AND ${sort === "sprint" ? "json_extract(s.totals, '$.bestSprint') IS NOT NULL" : "s.played > 0"} ${friendFilter}
      ORDER BY ${
-       sort === "sprint"
-         ? "best_sprint ASC"
-         : sort === "elo"
-           ? "s.elo DESC, s.points DESC, s.won DESC"
-           : "s.points DESC, s.elo DESC, s.won DESC"
+       game === "tour"
+         ? "s.won DESC, s.points DESC"
+         : sort === "sprint"
+           ? "best_sprint ASC"
+           : sort === "elo"
+             ? "s.elo DESC, s.points DESC, s.won DESC"
+             : "s.points DESC, s.elo DESC, s.won DESC"
      }, s.played ASC LIMIT 100`,
   );
   const { results } = await statement.bind(me, game).all<{
