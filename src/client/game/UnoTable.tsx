@@ -19,6 +19,7 @@ import { GameOver, RoundOver } from "./Overlays.tsx";
 import { ColorPicker, TargetPicker } from "./Pickers.tsx";
 import { Seat, TimerRing } from "./Seat.tsx";
 import type { EmoteBubble } from "./useRoom.ts";
+import { useTourBridge } from "../tour/bridge.ts";
 
 interface TableProps {
   room: RoomView;
@@ -44,6 +45,7 @@ function useViewport() {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
 export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: TableProps) {
+  const inTour = useTourBridge() !== null;
   const g = room.uno!;
   const me = room.you.seatId;
   const mySeat = room.seats.find((s) => s.id === me) ?? null;
@@ -271,14 +273,16 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
-                <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
-                  <Icon name="users" size={18} /> Voir le salon et les règles
-                </button>
+                {!inTour && (
+                  <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
+                    <Icon name="users" size={18} /> Voir le salon et les règles
+                  </button>
+                )}
                 <button className="menu-item" onClick={() => setPrefs({ colorblind: !usePrefs.getState().colorblind })}>
                   <Icon name="eye" size={18} /> Symboles de couleur
                 </button>
                 <button className="menu-item is-danger" onClick={onLeave}>
-                  <Icon name="door" size={18} /> Quitter la table
+                  <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>
                 {room.you.isAdmin && (
                   <ConfirmButton

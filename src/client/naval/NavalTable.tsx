@@ -18,6 +18,7 @@ import { Board } from "./Board.tsx";
 import { NavalGameOver } from "./NavalGameOver.tsx";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { PlacementBoard } from "./Placement.tsx";
+import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -70,6 +71,7 @@ function weaponArea(weapon: Weapon, cell: number, size: number, dir: Dir): numbe
 }
 
 export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
+  const inTour = useTourBridge() !== null;
   const g = room.naval!;
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
@@ -134,11 +136,13 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
-                <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
-                  <Icon name="users" size={18} /> Voir le salon et les règles
-                </button>
+                {!inTour && (
+                  <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
+                    <Icon name="users" size={18} /> Voir le salon et les règles
+                  </button>
+                )}
                 <button className="menu-item is-danger" onClick={onLeave}>
-                  <Icon name="door" size={18} /> Quitter la table
+                  <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>
                 {room.you.isAdmin && (
                   <ConfirmButton

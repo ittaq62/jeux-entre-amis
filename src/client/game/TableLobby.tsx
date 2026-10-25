@@ -28,6 +28,8 @@ export interface TableLobbyProps {
   seatNote?: (seat: SeatView, index: number) => string | null;
   /** Bloc propre au jeu sous la liste des joueurs (les équipes de la bataille navale…) */
   aside?: ReactNode;
+  /** Le salon d'une tournée plutôt que d'une table : ses mots, et pas de bots */
+  kind?: "table" | "tour";
 }
 
 /** Le salon d'attente, commun à tous les jeux : ticket du code, places autour de la table, invitations, départ. */
@@ -46,8 +48,10 @@ export function TableLobby({
   startHint = "Il faut au moins deux joueurs : ajoute un bot pour commencer tout de suite.",
   seatNote,
   aside,
+  kind = "table",
 }: TableLobbyProps) {
   const isHost = room.you.isHost;
+  const tour = kind === "tour";
   const [inviteOpen, setInviteOpen] = useState(false);
   const link = `${location.origin}/salon/${room.code}`;
   const emptySeats = Math.max(0, room.settings.maxPlayers - room.seats.length);
@@ -57,8 +61,9 @@ export function TableLobby({
 
   async function share() {
     try {
-      if (navigator.share) await navigator.share({ title: shareTitle, text: `Rejoins ma table, code ${room.code}`, url: link });
-      else {
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle, text: `Rejoins ma ${tour ? "tournée" : "table"}, code ${room.code}`, url: link });
+      } else {
         await navigator.clipboard.writeText(link);
         toast({ title: "Lien copié", body: "Colle-le sur Discord pour inviter tes amis." });
       }
@@ -73,11 +78,21 @@ export function TableLobby({
         <button className="btn btn-ghost btn-icon" onClick={onLeave} aria-label="Quitter la table">
           <Icon name="back" />
         </button>
-        <h1 className="page-title">{finished ? "Fin de partie" : host && !isHost ? `Table de ${host.name}` : "Ta table"}</h1>
+        <h1 className="page-title">
+          {tour
+            ? host && !isHost
+              ? `Tournée de ${host.name}`
+              : "Ta tournée"
+            : finished
+              ? "Fin de partie"
+              : host && !isHost
+                ? `Table de ${host.name}`
+                : "Ta table"}
+        </h1>
         <div className="page-top-actions">
           {room.you.isAdmin && (
             <ConfirmButton className="btn btn-sm btn-danger" confirm="Fermer pour tous ?" onConfirm={() => send({ t: "close" })}>
-              Fermer la table
+              {tour ? "Fermer la tournée" : "Fermer la table"}
             </ConfirmButton>
           )}
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
@@ -93,7 +108,7 @@ export function TableLobby({
             <div className="ticket-wrap">
               <div className="ticket">
                 <span className="ticket-label">
-                  <strong>Table</strong>
+                  <strong>{tour ? "Tournée" : "Table"}</strong>
                   {room.settings.visibility === "public" ? "ouverte à tous" : "entre amis"}
                 </span>
                 <span className="ticket-code" aria-label={`Code ${room.code.split("").join(" ")}`}>
@@ -113,7 +128,7 @@ export function TableLobby({
 
           <section className="lobby-section panel">
             <h2>
-              Autour de la table
+              {tour ? "Les joueurs" : "Autour de la table"}
               <span className="hint num">
                 {room.seats.length} sur {room.settings.maxPlayers}
               </span>
@@ -147,7 +162,13 @@ export function TableLobby({
                   </li>
                 );
               })}
-              {Array.from({ length: emptySeats }, (_, i) => (
+              {tour && emptySeats > 0 && (
+                <li className="seat-row is-empty">
+                  <span className="seat-empty-mark" />
+                  <span className="row-text">{emptySeats === 1 ? "Encore une place libre" : `Encore ${emptySeats} places libres`}</span>
+                </li>
+              )}
+              {Array.from({ length: tour ? 0 : emptySeats }, (_, i) => (
                 <li key={`empty-${i}`} className="seat-row is-empty">
                   <span className="seat-empty-mark" />
                   <span className="row-text">Place libre</span>
@@ -161,12 +182,12 @@ export function TableLobby({
             </ul>
             {!seated && room.seats.length < room.settings.maxPlayers && (
               <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
-                Prendre une place
+                {tour ? "Jouer la tournée" : "Prendre une place"}
               </button>
             )}
             {room.spectators.length > 0 && (
               <p className="hint" style={{ marginTop: 12 }}>
-                Regardent la partie : {room.spectators.map((sp) => sp.name).join(", ")}
+                {tour ? "Regardent seulement" : "Regardent la partie"} : {room.spectators.map((sp) => sp.name).join(", ")}
               </p>
             )}
           </section>
@@ -198,7 +219,7 @@ export function TableLobby({
           ))}
       </footer>
 
-      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} code={room.code} link={link} />
+      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} code={room.code} link={link} tour={tour} />
     </div>
   );
 }
@@ -262,7 +283,19 @@ export function TableSize({ room, send, max }: { room: LobbyRoom; send: (msg: Lo
   );
 }
 
-function InviteModal({ open, onClose, code, link }: { open: boolean; onClose: () => void; code: string; link: string }) {
+function InviteModal({
+  open,
+  onClose,
+  code,
+  link,
+  tour,
+}: {
+  open: boolean;
+  onClose: () => void;
+  code: string;
+  link: string;
+  tour: boolean;
+}) {
   const friends = useHub((s) => s.friends);
   const online = useHub((s) => s.online);
   const invite = useHub((s) => s.invite);
@@ -275,7 +308,7 @@ function InviteModal({ open, onClose, code, link }: { open: boolean; onClose: ()
   }
   const available = friends.filter((f) => f.status === "accepted" && f.user.id in online && online[f.user.id]?.code !== code);
   return (
-    <Modal open={open} onClose={onClose} title="Inviter à la table">
+    <Modal open={open} onClose={onClose} title={tour ? "Inviter à la tournée" : "Inviter à la table"}>
       <div className="invite-modal">
         {qr && <img src={qr} alt={`QR code de la table ${code}`} className="invite-qr" />}
         <p className="hint center-text" style={{ margin: 0 }}>

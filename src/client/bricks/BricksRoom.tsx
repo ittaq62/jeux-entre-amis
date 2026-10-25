@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { useTourBridge } from "../tour/bridge.ts";
 import { BricksLobby } from "./BricksLobby.tsx";
 import { BricksTable } from "./BricksTable.tsx";
 import { useBricksRoom } from "./useBricksRoom.ts";
@@ -14,7 +15,10 @@ export function BricksRoom({ code }: { code: string }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [lobbyOpen, setLobbyOpen] = useState(false);
   const lastStatus = useRef(view?.status);
-  const unread = useUnread(chat, chatOpen, me?.id);
+  // Table d'une tournée : le chat et la sortie sont ceux de la tournée
+  const bridge = useTourBridge();
+  const messages = bridge?.chat ?? chat;
+  const unread = useUnread(messages, chatOpen, me?.id);
 
   useEffect(() => {
     if (view && lastStatus.current !== "playing" && view.status === "playing") setLobbyOpen(false);
@@ -26,17 +30,18 @@ export function BricksRoom({ code }: { code: string }) {
 
   const leave = () => {
     send({ t: "leave" });
-    navigate("/");
+    if (bridge) bridge.leave();
+    else navigate("/");
   };
   const showTable = view.bricks !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
 
   return (
     <RoomShell
-      chat={chat}
+      chat={messages}
       meId={me?.id ?? ""}
       chatOpen={chatOpen}
       onCloseChat={() => setChatOpen(false)}
-      onSend={(text) => send({ t: "chat", text })}
+      onSend={(text) => (bridge ? bridge.sendChat(text) : send({ t: "chat", text }))}
       reconnecting={status === "reconnecting"}
     >
       {showTable ? (
@@ -47,11 +52,13 @@ export function BricksRoom({ code }: { code: string }) {
           serverOffset={serverOffset}
           unread={unread}
           onOpenChat={() => setChatOpen(true)}
-          onShowLobby={() => setLobbyOpen(true)}
+          onShowLobby={() => !bridge && setLobbyOpen(true)}
           onLeave={leave}
           listeners={listeners}
           lastSnapshot={lastSnapshot}
         />
+      ) : bridge ? (
+        bridge.waiting
       ) : (
         <BricksLobby
           room={view}

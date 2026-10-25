@@ -19,6 +19,7 @@ import { OwnBoard, type OwnBoardHandle } from "./OwnBoard.tsx";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { SHOWN_ROWS } from "./draw.ts";
 import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
+import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -73,6 +74,7 @@ export function BricksTable({
   listeners,
   lastSnapshot,
 }: Props) {
+  const inTour = useTourBridge() !== null;
   const g = room.bricks!;
   const { w, h } = useViewport();
   const phone = w < 760;
@@ -183,11 +185,13 @@ export function BricksTable({
                 <button className="menu-item" onClick={() => (setMenuOpen(false), setKeysOpen(true))}>
                   <Icon name="settings" size={18} /> Touches et réglages
                 </button>
-                <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
-                  <Icon name="users" size={18} /> Voir le salon et les règles
-                </button>
+                {!inTour && (
+                  <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
+                    <Icon name="users" size={18} /> Voir le salon et les règles
+                  </button>
+                )}
                 <button className="menu-item is-danger" onClick={onLeave}>
-                  <Icon name="door" size={18} /> Quitter la table
+                  <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>
                 {room.you.isAdmin && (
                   <ConfirmButton

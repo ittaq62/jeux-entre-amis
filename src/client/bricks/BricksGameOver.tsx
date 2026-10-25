@@ -11,6 +11,7 @@ import { formatSprint } from "../lib/countdown.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useSession } from "../stores/session.ts";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
+import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -28,6 +29,7 @@ const sheetIn = {
 
 /** Fin de partie : le classement et les briques de chacun. */
 export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }: Props) {
+  const inTour = useTourBridge() !== null;
   const g = room.bricks!;
   const ranks = g.ranks ?? {};
   const ranking = g.ranking ?? [];
@@ -61,7 +63,18 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
     return () => clearTimeout(t);
   }, [sprint, pseudo]);
 
-  const actions = (
+  const actions = inTour ? (
+    <>
+      <p className="tour-next-note">
+        <span className="spinner" /> La tournée continue : le classement arrive.
+      </p>
+      <div className="overlay-actions">
+        <button className="btn" onClick={onInspect}>
+          Voir les plateaux
+        </button>
+      </div>
+    </>
+  ) : (
     <div className="overlay-actions">
       {room.you.isHost ? (
         <button className="btn btn-primary btn-lg" onClick={onRematch}>

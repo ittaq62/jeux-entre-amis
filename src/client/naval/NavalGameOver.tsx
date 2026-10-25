@@ -8,6 +8,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
+import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -25,6 +26,7 @@ const sheetIn = {
 
 /** Fin de bataille : le journal de bord, comme la feuille de marque du UNO. */
 export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: Props) {
+  const inTour = useTourBridge() !== null;
   const g = room.naval!;
   const ranks = g.ranks ?? {};
   const ranking = g.ranking ?? [];
@@ -109,8 +111,13 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
           })}
         </ol>
 
+        {inTour && (
+          <p className="tour-next-note">
+            <span className="spinner" /> La tournée continue : le classement arrive.
+          </p>
+        )}
         <div className="overlay-actions">
-          {room.you.isHost ? (
+          {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>
               Rejouer
             </button>
@@ -122,12 +129,16 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
           <button className="btn" onClick={onInspect}>
             Voir les flottes
           </button>
-          <button className="btn" onClick={onLobby}>
-            {room.you.isHost ? "Changer les règles" : "Voir la table"}
-          </button>
-          <button className="btn btn-ghost" onClick={onLeave}>
-            Quitter
-          </button>
+          {!inTour && (
+            <button className="btn" onClick={onLobby}>
+              {room.you.isHost ? "Changer les règles" : "Voir la table"}
+            </button>
+          )}
+          {!inTour && (
+            <button className="btn btn-ghost" onClick={onLeave}>
+              Quitter
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

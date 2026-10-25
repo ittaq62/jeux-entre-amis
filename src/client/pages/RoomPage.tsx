@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import type { GameId, RoomSummary } from "../../shared/protocol.ts";
+import type { RoomSummary, TableGame } from "../../shared/protocol.ts";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { RoomLobby } from "../game/RoomLobby.tsx";
 import { UnoTable } from "../game/UnoTable.tsx";
@@ -8,15 +8,17 @@ import { useRoom } from "../game/useRoom.ts";
 import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
+import { useTourBridge } from "../tour/bridge.ts";
 
 // La bataille navale et Briques ne sont chargées que pour leurs tables
 const NavalRoom = lazy(() => import("../naval/NavalRoom.tsx").then((m) => ({ default: m.NavalRoom })));
 const BricksRoom = lazy(() => import("../bricks/BricksRoom.tsx").then((m) => ({ default: m.BricksRoom })));
+const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ default: m.TourRoom })));
 
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
 export function RoomPage({ code }: { code: string }) {
   const upper = code.toUpperCase();
-  const [game, setGame] = useState<GameId | null>(null);
+  const [game, setGame] = useState<TableGame | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,14 +34,26 @@ export function RoomPage({ code }: { code: string }) {
 
   if (fatal) return <RoomError message={fatal} />;
   if (!game) return <Loading label="Arrivée à la table…" />;
-  if (game === "naval" || game === "bricks") {
+  if (game === "tour") {
     return (
-      <Suspense fallback={<Loading label="Arrivée à la table…" />}>
-        {game === "naval" ? <NavalRoom code={upper} /> : <BricksRoom code={upper} />}
+      <Suspense fallback={<Loading label="Arrivée à la tournée…" />}>
+        <TourRoom code={upper} />
       </Suspense>
     );
   }
-  return <UnoRoom code={upper} />;
+  return <GameRoom game={game} code={upper} />;
+}
+
+/** La table d'un jeu, sous son code : aussi celle qu'une tournée affiche pour le jeu en cours */
+export function GameRoom({ game, code }: { game: TableGame; code: string }) {
+  if (game === "naval" || game === "bricks") {
+    return (
+      <Suspense fallback={<Loading label="Arrivée à la table…" />}>
+        {game === "naval" ? <NavalRoom code={code} /> : <BricksRoom code={code} />}
+      </Suspense>
+    );
+  }
+  return <UnoRoom code={code} />;
 }
 
 function UnoRoom({ code }: { code: string }) {
@@ -48,7 +62,10 @@ function UnoRoom({ code }: { code: string }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [lobbyOpen, setLobbyOpen] = useState(false);
   const lastStatus = useRef(view?.status);
-  const unread = useUnread(chat, chatOpen, me?.id);
+  // Table d'une tournée : le chat et la sortie sont ceux de la tournée
+  const bridge = useTourBridge();
+  const messages = bridge?.chat ?? chat;
+  const unread = useUnread(messages, chatOpen, me?.id);
 
   useEffect(() => preloadSounds(UNO_SOUNDS), []);
 
@@ -63,18 +80,19 @@ function UnoRoom({ code }: { code: string }) {
 
   const leave = () => {
     send({ t: "leave" });
-    navigate("/");
+    if (bridge) bridge.leave();
+    else navigate("/");
   };
 
   const showTable = view.uno !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
 
   return (
     <RoomShell
-      chat={chat}
+      chat={messages}
       meId={me?.id ?? ""}
       chatOpen={chatOpen}
       onCloseChat={() => setChatOpen(false)}
-      onSend={(text) => send({ t: "chat", text })}
+      onSend={(text) => (bridge ? bridge.sendChat(text) : send({ t: "chat", text }))}
       reconnecting={status === "reconnecting"}
     >
       {showTable ? (
@@ -85,9 +103,11 @@ function UnoRoom({ code }: { code: string }) {
           serverOffset={serverOffset}
           unread={unread}
           onOpenChat={() => setChatOpen(true)}
-          onShowLobby={() => setLobbyOpen(true)}
+          onShowLobby={() => !bridge && setLobbyOpen(true)}
           onLeave={leave}
         />
+      ) : bridge ? (
+        bridge.waiting
       ) : (
         <RoomLobby
           room={view}

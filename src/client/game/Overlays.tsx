@@ -8,6 +8,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { EloLine } from "./EloLine.tsx";
+import { useTourBridge } from "../tour/bridge.ts";
 
 function seatOf(room: RoomView, id: string): SeatView | undefined {
   return room.seats.find((s) => s.id === id);
@@ -109,6 +110,7 @@ export function GameOver({
   }, [won, reduced]);
 
   const voted = room.rematch.includes(room.you.userId);
+  const inTour = useTourBridge() !== null;
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <motion.div className="score-sheet paper gameover" {...sheetIn}>
@@ -162,24 +164,30 @@ export function GameOver({
           })}
         </ol>
 
-        <div className="overlay-actions">
-          {room.you.isHost ? (
-            <button className="btn btn-primary btn-lg" onClick={onRematch}>
-              Rejouer
+        {inTour ? (
+          <p className="tour-next-note">
+            <span className="spinner" /> La tournée continue : le classement arrive.
+          </p>
+        ) : (
+          <div className="overlay-actions">
+            {room.you.isHost ? (
+              <button className="btn btn-primary btn-lg" onClick={onRematch}>
+                Rejouer
+              </button>
+            ) : me ? (
+              <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
+                {voted ? "Revanche demandée" : "Demander la revanche"}
+              </button>
+            ) : null}
+            <button className="btn" onClick={onLobby}>
+              {room.you.isHost ? "Changer les règles" : "Voir la table"}
             </button>
-          ) : me ? (
-            <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
-              {voted ? "Revanche demandée" : "Demander la revanche"}
+            <button className="btn btn-ghost" onClick={onLeave}>
+              Quitter
             </button>
-          ) : null}
-          <button className="btn" onClick={onLobby}>
-            {room.you.isHost ? "Changer les règles" : "Voir la table"}
-          </button>
-          <button className="btn btn-ghost" onClick={onLeave}>
-            Quitter
-          </button>
-        </div>
-        {room.rematch.length > 0 && (
+          </div>
+        )}
+        {!inTour && room.rematch.length > 0 && (
           <p className="hint" style={{ margin: 0 }}>
             Revanche demandée par{" "}
             {room.rematch
