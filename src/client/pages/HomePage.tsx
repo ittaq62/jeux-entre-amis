@@ -393,7 +393,7 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
         <span className="row-text">
           <strong>{room.hostName ? `Tournée de ${room.hostName}` : "Tournée ouverte"}</strong>
           <span className="hint">
-            {programme}, {room.humans} sur {room.maxPlayers}
+            {programme}, {room.humans + room.bots} sur {room.maxPlayers}
             {room.status === "playing" ? ", en cours" : ""}
           </span>
         </span>

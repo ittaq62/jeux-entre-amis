@@ -166,6 +166,11 @@ export function TableLobby({
                 <li className="seat-row is-empty">
                   <span className="seat-empty-mark" />
                   <span className="row-text">{emptySeats === 1 ? "Encore une place libre" : `Encore ${emptySeats} places libres`}</span>
+                  {isHost && (
+                    <button className="btn btn-sm" onClick={() => send({ t: "addBot" })}>
+                      Ajouter un bot
+                    </button>
+                  )}
                 </li>
               )}
               {Array.from({ length: tour ? 0 : emptySeats }, (_, i) => (
@@ -180,7 +185,7 @@ export function TableLobby({
                 </li>
               ))}
             </ul>
-            {!seated && room.seats.length < room.settings.maxPlayers && (
+            {!seated && (room.seats.length < room.settings.maxPlayers || (tour && room.seats.some((x) => x.kind === "bot"))) && (
               <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
                 {tour ? "Jouer la tournée" : "Prendre une place"}
               </button>

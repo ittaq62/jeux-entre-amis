@@ -167,9 +167,13 @@ export function progressLabel(view: TourView, now: number): string {
   const played = playedGames(view).length;
   const end = view.settings.end;
   const upcoming = view.status === "finished" ? played : played + (view.status === "playing" ? 0 : 1);
+  // Chaque jeu une seule fois : la tournée ne peut pas dépasser le nombre de jeux cochés
+  const cap = view.settings.once ? view.settings.games.length : Infinity;
   switch (end.kind) {
-    case "games":
-      return view.status === "finished" ? playedLabel(played) : `Jeu ${Math.max(1, Math.min(upcoming, end.count))} sur ${end.count}`;
+    case "games": {
+      const total = Math.min(end.count, cap);
+      return view.status === "finished" ? playedLabel(played) : `Jeu ${Math.max(1, Math.min(upcoming, total))} sur ${total}`;
+    }
     case "score":
       return `Premier à ${end.target} points`;
     case "time": {
@@ -178,7 +182,8 @@ export function progressLabel(view: TourView, now: number): string {
       return left > 0 ? `Encore ${left} min` : "Dernier jeu";
     }
     case "endless":
-      return view.status === "finished" ? playedLabel(played) : `Jeu ${Math.max(1, upcoming)}, sans fin`;
+      if (view.status === "finished") return playedLabel(played);
+      return cap < Infinity ? `Jeu ${Math.max(1, Math.min(upcoming, cap))} sur ${cap}` : `Jeu ${Math.max(1, upcoming)}, sans fin`;
   }
 }
 
@@ -223,9 +228,10 @@ export function Standings({ view, last, meId }: { view: TourView; last: TourGame
             </strong>
             <span className="hint">
               {[
+                m.kind === "bot" && "bot",
                 m.team !== null && TOUR_TEAMS[m.team],
                 m.wins > 0 && `${m.wins} jeu${m.wins > 1 ? "x" : ""} gagné${m.wins > 1 ? "s" : ""}`,
-                m.left ? "a quitté la tournée" : !m.connected && "absent",
+                m.left ? (m.kind === "bot" ? "a cédé sa place" : "a quitté la tournée") : !m.connected && "absent",
                 m.waiting && !m.left && "joue au prochain jeu",
               ]
                 .filter(Boolean)

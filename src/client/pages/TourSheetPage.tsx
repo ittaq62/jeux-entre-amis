@@ -15,7 +15,16 @@ interface Sheet {
   settings: TourSettings;
   games: { game: GameId; results: TourGameResult[] }[];
   winnerTeam: 0 | 1 | null;
-  players: { userId: string | null; name: string; rank: number; points: number; wins: number; team: 0 | 1 | null; titles: string[] }[];
+  players: {
+    userId: string | null;
+    name: string;
+    rank: number;
+    points: number;
+    wins: number;
+    team: 0 | 1 | null;
+    titles: string[];
+    bot?: boolean;
+  }[];
 }
 
 /** La feuille d'une tournée passée : le classement final, les titres, et qui a gagné quoi, jeu par jeu. */
@@ -68,6 +77,7 @@ export function TourSheetPage({ id }: { id: string }) {
                 )}
                 <span className="score-name">
                   {p.name}
+                  {p.bot && <span className="hint"> (bot)</span>}
                   {p.titles.length > 0 && <span className="hint"> · {p.titles.map((t) => TITLE_LABELS[t] ?? t).join(", ")}</span>}
                 </span>
                 <span className="hint">

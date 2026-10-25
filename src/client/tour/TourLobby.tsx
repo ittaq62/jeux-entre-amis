@@ -1,6 +1,7 @@
 import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import {
   END_CHOICES,
+  TOUR_BOT_LEVELS,
   fitsGame,
   GAME_SEATS,
   TOUR_GAMES,
@@ -8,6 +9,7 @@ import {
   TOUR_POINTS,
   TOUR_TEAM_COLORS,
   TOUR_TEAMS,
+  type TourBotLevel,
   type TourClientMessage,
   type TourEnd,
   type TourView,
@@ -30,8 +32,8 @@ export function lobbyRoomOf(view: TourView): LobbyRoom {
   const players = view.members.filter((m) => m.role === "player" && !m.left);
   const seats: SeatView[] = players.map((m) => ({
     id: m.userId,
-    kind: "human",
-    userId: m.userId,
+    kind: m.kind,
+    userId: m.kind === "bot" ? null : m.userId,
     name: m.name,
     avatar: m.avatar,
     photo: m.photo,
@@ -87,18 +89,22 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
   const s = view.settings;
   const present = room.seats.filter((x) => x.connected);
   const count = present.length;
+  const humans = present.filter((x) => x.kind === "human").length;
+  const bots = room.seats.filter((x) => x.kind === "bot").length;
   const fitting = s.games.filter((g) => fitsGame(g, Math.max(2, count)));
   const red = present.filter((x) => x.team === 0).length;
   const teamsOk = !s.teams || (red > 0 && red * 2 === count);
-  const canStart = count >= 2 && fitting.length > 0 && teamsOk;
+  const canStart = count >= 2 && humans > 0 && fitting.length > 0 && teamsOk;
   const startHint =
     count < 2
-      ? "Il faut au moins deux joueurs : envoie le lien à tes amis."
-      : fitting.length === 0
-        ? `Aucun jeu coché n'accueille ${count} joueurs.`
-        : !teamsOk
-          ? `Il faut deux équipes de même taille : c'est ${red} contre ${count - red}.`
-          : undefined;
+      ? "Il faut au moins deux joueurs : envoie le lien à tes amis ou ajoute un bot."
+      : humans === 0
+        ? "Il faut au moins un vrai joueur dans la tournée."
+        : fitting.length === 0
+          ? `Aucun jeu coché n'accueille ${count} joueurs.`
+          : !teamsOk
+            ? `Il faut deux équipes de même taille : c'est ${red} contre ${count - red}.`
+            : undefined;
   const update = (settings: Extract<TourClientMessage, { t: "settings" }>["settings"]) => send({ t: "settings", settings });
 
   const toggleGame = (game: (typeof TOUR_GAMES)[number]) => {
@@ -189,8 +195,21 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
                 );
               })}
             </div>
+            <div className="rule-list">
+              <div className="rule-row" onClick={() => isHost && update({ once: !s.once })}>
+                <Check label="Chaque jeu une seule fois" checked={s.once} disabled={!isHost} onChange={() => {}} />
+                <span>
+                  <strong>Chaque jeu une seule fois</strong>
+                  <span className="hint">
+                    {s.once
+                      ? `Un jeu joué ne revient plus : la tournée s'arrête quand les ${s.games.length > 1 ? `${s.games.length} jeux cochés ont` : "jeux cochés ont"} tous été joués.`
+                      : "Sinon, un jeu peut revenir, mais jamais deux fois de suite."}
+                  </span>
+                </span>
+              </div>
+            </div>
             <p className="hint" style={{ margin: 0 }}>
-              Les jeux cochés sortent au hasard, jamais deux fois de suite le même. Chacun se joue avec ses règles habituelles.
+              Les jeux cochés sortent au hasard. Chacun se joue avec ses règles habituelles.
             </p>
           </div>
 
@@ -223,7 +242,9 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             )}
             <p className="hint" style={{ margin: 0 }}>
               {end.kind === "games"
-                ? `La tournée s'arrête après ${end.count} jeux.`
+                ? s.once && end.count > s.games.length
+                  ? `Chaque jeu ne passant qu'une fois, la tournée s'arrêtera après ${s.games.length} jeu${s.games.length > 1 ? "x" : ""}.`
+                  : `La tournée s'arrête après ${end.count} jeux.`
                 : end.kind === "score"
                   ? `La tournée s'arrête dès qu'un joueur${s.teams ? " (ou une équipe)" : ""} atteint ${end.target} points.`
                   : end.kind === "time"
@@ -247,6 +268,26 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             <p className="hint" style={{ margin: 0 }}>
               Points à chaque jeu : {TOUR_POINTS.map((p, i) => `${i + 1}${i === 0 ? "er" : "e"} ${p}`).join(", ")}, puis 1 point.
               {s.teams && ` Les ${TOUR_TEAMS[0]} et les ${TOUR_TEAMS[1]} additionnent les points de leurs joueurs.`}
+            </p>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Niveau des bots</span>
+            <Options<TourBotLevel>
+              label="Niveau des bots"
+              value={s.botLevel}
+              disabled={!isHost}
+              onChange={(botLevel) => update({ botLevel })}
+              options={(Object.keys(TOUR_BOT_LEVELS) as TourBotLevel[]).map((v) => ({ value: v, label: TOUR_BOT_LEVELS[v].label }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {bots === 0 ? "Ajoute des bots dans la liste des joueurs pour compléter la tournée. " : ""}
+              {s.botLevel === "easy"
+                ? "Apprenti à Briques, Mousse à la bataille navale."
+                : s.botLevel === "normal"
+                  ? "Confirmé à Briques, Chasseur à la bataille navale."
+                  : "Expert à Briques, Amiral à la bataille navale."}{" "}
+              Ils jouent toute la tournée, marquent leurs points comme tout le monde, et cèdent leur place à un ami qui arrive.
             </p>
           </div>
 

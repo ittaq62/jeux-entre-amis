@@ -25,6 +25,9 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
   const isHost = view.you.isHost;
   const paused = view.next !== null && view.next.at === null;
   const players = view.members.filter((m) => m.role === "player" && !m.left && m.connected).length;
+  // Comme au serveur : une place libre, ou un bot qui la cède
+  const seated = view.members.filter((m) => m.role === "player" && !m.left);
+  const canSit = seated.length < view.settings.maxPlayers || seated.some((m) => m.kind === "bot");
   const seatOf = (id: string) => view.members.find((m) => m.userId === id);
   const [now, setNow] = useState(() => Date.now() + serverOffset);
   useEffect(() => {
@@ -83,7 +86,7 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
               </ConfirmButton>
             </div>
           )}
-          {view.you.member && view.you.role === "spectator" && players < view.settings.maxPlayers && (
+          {view.you.member && view.you.role === "spectator" && canSit && (
             <button className="btn" onClick={() => send({ t: "sit" })}>
               Jouer au prochain jeu
             </button>
