@@ -2,14 +2,14 @@ import type { BricksMode } from "./games/bricks/engine.ts";
 import type { BricksStats } from "./games/bricks/view.ts";
 import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
-import type { GameId } from "./protocol.ts";
+import type { TableGame } from "./protocol.ts";
 
 export type ChipTone = "red" | "blue" | "green" | "black" | "ivory";
 
 export interface AchievementDef {
   id: string;
-  /** Jeu concerne, UNO si absent */
-  game?: GameId;
+  /** Jeu concerne (ou la tournée), UNO si absent */
+  game?: TableGame;
   /** Inscription du jeton (un chiffre lie a la regle du succes) */
   chip: string;
   tone: ChipTone;
@@ -131,9 +131,71 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Coup de truelle",
     description: "Finir le solo 40 lignes en moins de 90 secondes.",
   },
+
+  // Tournée
+  { id: "tour-first", game: "tour", chip: "1re", tone: "ivory", title: "Premier acte", description: "Terminer une tournée." },
+  { id: "tour-win", game: "tour", chip: "1er", tone: "red", title: "Tête d'affiche", description: "Gagner une tournée." },
+  {
+    id: "tour-sweep",
+    game: "tour",
+    chip: "100",
+    tone: "green",
+    title: "Grand chelem",
+    description: "Gagner tous les jeux d'une tournée d'au moins 3 jeux.",
+  },
+  {
+    id: "tour-underdog",
+    game: "tour",
+    chip: "0",
+    tone: "black",
+    title: "L'outsider",
+    description: "Gagner une tournée sans gagner un seul de ses jeux.",
+  },
+  {
+    id: "tour-titled",
+    game: "tour",
+    chip: "T",
+    tone: "blue",
+    title: "Dans les titres",
+    description: "Recevoir un titre en fin de tournée.",
+  },
+  {
+    id: "tour-full",
+    game: "tour",
+    chip: "6+",
+    tone: "ivory",
+    title: "Salle comble",
+    description: "Terminer une tournée à 6 joueurs ou plus.",
+  },
+  { id: "tour-regular", game: "tour", chip: "10", tone: "blue", title: "Saltimbanque", description: "Terminer 10 tournées." },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
+
+export interface TourOutcome {
+  won: boolean;
+  /** Joueurs classés à la fin */
+  players: number;
+  /** Jeux joués par ce joueur, et ceux qu'il a gagnés */
+  games: number;
+  wins: number;
+  titles: number;
+  /** Tournées terminées, celle-ci comprise */
+  played: number;
+}
+
+export function earnedTourAchievements(o: TourOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, cond: boolean) => cond && out.push(id);
+  add("tour-first", true);
+  add("tour-win", o.won);
+  add("tour-sweep", o.won && o.games >= 3 && o.wins === o.games);
+  add("tour-underdog", o.won && o.wins === 0 && o.games > 0);
+  add("tour-titled", o.titles > 0);
+  add("tour-full", o.players >= 6);
+  add("tour-regular", o.played >= 10);
+  return out;
+}
 
 export interface GameOutcome {
   won: boolean;

@@ -8,10 +8,14 @@ import type { UnoView } from "./games/uno/view.ts";
 
 export type GameId = "uno" | "naval" | "bricks";
 
-export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques" };
+/** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
+export type TableGame = GameId | "tour";
 
-/** Jeux en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks"] as const satisfies readonly GameId[];
+export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques" };
+export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
+
+/** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
+export const BETA_GAMES = ["naval", "bricks", "tour"] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -73,8 +77,8 @@ export interface AdminOverview {
   rooms: AdminRoom[];
   recentGames: AdminGame[];
   announcement: Announcement | null;
-  /** Jeux encore en bêta : visibles seulement des admins et de leurs invités */
-  betaGames: GameId[];
+  /** Jeux (et tournée) encore en bêta : visibles seulement des admins et de leurs invités */
+  betaGames: TableGame[];
 }
 
 export type AdminUserAction =
@@ -103,8 +107,10 @@ export interface MeResponse {
   pending: { email: string } | null;
   /** Jeux que ce compte voit dans ses menus (les jeux en bêta n'y sont que pour les admins) */
   games?: GameId[];
+  /** La tournée lui est ouverte */
+  tour?: boolean;
   /** Parmi eux, ceux encore en bêta (renseigné pour les admins) */
-  beta?: GameId[];
+  beta?: TableGame[];
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +179,8 @@ export interface RoomView {
   /** Elo de chaque joueur (par id utilisateur) après la partie qui vient de finir */
   results?: Record<string, EloResult> | null;
   quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
 }
 
 export interface ChatMessage {
@@ -224,7 +232,7 @@ export type RoomClientMessage =
 /** Ce que tous les salons ont en commun, quel que soit le jeu : sert au salon d'attente partagé. */
 export interface LobbyRoom {
   code: string;
-  game: GameId;
+  game: TableGame;
   status: RoomStatus;
   settings: { visibility: Visibility; maxPlayers: number };
   seats: SeatView[];
@@ -259,6 +267,8 @@ export interface NavalRoomView {
   /** Elo de chaque joueur (par id utilisateur) après la partie qui vient de finir */
   results?: Record<string, EloResult> | null;
   quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
 }
 
 /** Messages communs à tous les salons (le salon d'attente partagé n'envoie que ceux-là) */
@@ -313,6 +323,8 @@ export interface BricksRoomView {
   rematch: string[];
   results?: Record<string, EloResult> | null;
   quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
 }
 
 export type BricksClientMessage =
@@ -374,7 +386,7 @@ export type RoomServerMessage =
 
 export interface RoomSummary {
   code: string;
-  game: GameId;
+  game: TableGame;
   /** UNO : classic ou nomercy ; bataille navale : duel, melee ou teams */
   variant: string;
   status: RoomStatus;
@@ -394,7 +406,7 @@ export interface RoomSummary {
 
 export interface PresenceRoom {
   code: string;
-  game: GameId;
+  game: TableGame;
   status: RoomStatus;
 }
 
@@ -410,7 +422,7 @@ export type HubServerMessage =
   | { t: "presenceUpdate"; userId: string; online: boolean; room: PresenceRoom | null }
   | { t: "lobby"; rooms: RoomSummary[] }
   | { t: "friendsChanged" }
-  | { t: "invite"; from: PublicUser; code: string; game: GameId }
+  | { t: "invite"; from: PublicUser; code: string; game: TableGame }
   | { t: "announce"; announcement: Announcement }
   | { t: "signedOut"; reason: string };
 
