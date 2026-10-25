@@ -2,12 +2,12 @@ import { DurableObject } from "cloudflare:workers";
 import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from "../shared/app.ts";
 import type {
   Announcement,
-  GameId,
   HubClientMessage,
   HubServerMessage,
   PresenceRoom,
   PublicUser,
   RoomSummary,
+  TableGame,
 } from "../shared/protocol.ts";
 import { acceptedFriendIds } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -87,9 +87,10 @@ export class Hub extends DurableObject<Env> {
         break;
       case "invite":
         if (typeof msg.to !== "string" || typeof msg.code !== "string" || !att.friends.includes(msg.to)) return;
-        if (!this.rooms.has(msg.code)) return;
+        const room = this.rooms.get(msg.code);
+        if (!room) return;
         for (const target of this.ctx.getWebSockets(msg.to)) {
-          this.send(target, { t: "invite", from: att.user, code: msg.code, game: "uno" });
+          this.send(target, { t: "invite", from: att.user, code: msg.code, game: room.summary.game });
         }
         break;
     }
@@ -203,14 +204,15 @@ export class Hub extends DurableObject<Env> {
   }
 
   /** Partie rapide : le salon public en attente le plus rempli qui a encore de la place. */
-  async quickMatch(game: GameId = "uno"): Promise<string | null> {
+  async quickMatch(game: TableGame = "uno"): Promise<string | null> {
     const now = Date.now();
     const candidates = [...this.rooms.values()]
       .filter(
         (r) =>
           r.summary.game === game &&
           r.summary.visibility === "public" &&
-          r.summary.status === "lobby" &&
+          // On rejoint une tournée en cours entre deux jeux ; une table de jeu, seulement avant la partie
+          (r.summary.status === "lobby" || (game === "tour" && r.summary.status === "playing")) &&
           r.summary.humans > 0 &&
           r.summary.humans < r.summary.maxPlayers &&
           now - r.updatedAt < 30 * 60_000,

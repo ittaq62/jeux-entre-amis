@@ -36,6 +36,8 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
+import type { TourInit } from "../shared/tour.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -75,7 +77,8 @@ interface Seat {
   disconnectedAt: number | null;
 }
 
-type TimerKind = "bot" | "timeout" | "tick" | "catch" | "botUno" | "jumpIn" | "nextRound" | "away" | "seatCleanup" | "cleanup" | "emote";
+type TimerKind =
+  "bot" | "timeout" | "tick" | "catch" | "botUno" | "jumpIn" | "nextRound" | "away" | "seatCleanup" | "cleanup" | "emote" | "tourStart";
 
 interface Timer {
   at: number;
@@ -111,6 +114,8 @@ interface RoomData {
   recorded: boolean;
   /** Elo de chacun après la dernière partie, affiché sur la feuille de fin */
   results?: EloResults | null;
+  /** Table d'une tournée : la tournée l'a créée et attend son résultat */
+  tour?: TourInit | null;
 }
 
 interface Attachment {
@@ -123,6 +128,8 @@ export interface RoomInit {
   host: PublicUser;
   visibility: Visibility;
   quick: boolean;
+  /** Table créée par une tournée, avec ses joueurs déjà assis */
+  tour?: TourInit;
 }
 
 /** Un salon de jeu : un serveur de partie autoritaire, une connexion WebSocket par joueur. */
@@ -173,7 +180,16 @@ export class GameRoom extends DurableObject<Env> {
       kicked: [],
       rng: randomSeed(),
       recorded: false,
+      tour: opts.tour ?? null,
     };
+    if (opts.tour) {
+      // Tout le monde est déjà assis ; la partie part dès que chacun est arrivé, ou sans les absents
+      const d = this.data;
+      d.seats = opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now }));
+      d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
+      d.hostId = d.seats[0]?.userId ?? opts.host.id;
+      d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
+    }
     await this.persist();
     await this.syncHub();
     await this.armAlarm();
@@ -234,21 +250,22 @@ export class GameRoom extends DurableObject<Env> {
         seat.avatar = user.avatar;
         seat.photo = user.photo;
       }
-    } else if (d.status !== "playing") {
+    } else if (d.status !== "playing" && !d.tour) {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} s'installe à la table.`);
     }
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
+    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      return this.startTourGame(now);
+    }
     await this.afterChange([], now);
-    void this.hub.setUserRoom(user.id, this.presenceRoom()).catch(() => {});
+    void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
   }
 
-  /** Installe un humain : place libre, ou a la place d'un bot si la table est pleine. */
-  private seatHuman(user: PublicUser): Seat | null {
-    const d = this.data!;
-    const seat: Seat = {
+  private newHumanSeat(user: PublicUser): Seat {
+    return {
       id: user.id,
       kind: "human",
       userId: user.id,
@@ -260,6 +277,12 @@ export class GameRoom extends DurableObject<Env> {
       missed: 0,
       disconnectedAt: null,
     };
+  }
+
+  /** Installe un humain : place libre, ou a la place d'un bot si la table est pleine. */
+  private seatHuman(user: PublicUser): Seat | null {
+    const d = this.data!;
+    const seat = this.newHumanSeat(user);
     if (d.seats.length < d.settings.maxPlayers) {
       d.seats.push(seat);
       return seat;
@@ -312,7 +335,7 @@ export class GameRoom extends DurableObject<Env> {
     if (this.connectedUsers(ws).size === 0) {
       this.addTimer({ at: now + (d.status === "playing" ? 20 : 10) * 60_000, kind: "cleanup" });
     }
-    void this.hub.setUserRoom(att.userId, null).catch(() => {});
+    void this.setPresence(att.userId, null).catch(() => {});
     await this.afterChange([], now, ws);
   }
 
@@ -351,6 +374,7 @@ export class GameRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === userId) ?? null;
     const now = Date.now();
     const error = (message: string) => this.send(ws, { t: "error", message });
+    if (d.tour && TOUR_LOCKED.has(msg.t)) return;
 
     switch (msg.t) {
       case "action": {
@@ -424,7 +448,7 @@ export class GameRoom extends DurableObject<Env> {
           }
         }
         this.ensureHost();
-        void this.hub.setUserRoom(userId, null).catch(() => {});
+        void this.setPresence(userId, null).catch(() => {});
         return this.afterChange([], now, ws);
       }
 
@@ -537,7 +561,7 @@ export class GameRoom extends DurableObject<Env> {
       }
     }
     this.ensureHost();
-    void this.hub.setUserRoom(target, null).catch(() => {});
+    void this.setPresence(target, null).catch(() => {});
     return this.afterChange([], now);
   }
 
@@ -552,7 +576,7 @@ export class GameRoom extends DurableObject<Env> {
         // deja fermee
       }
     }
-    for (const id of connected) void this.hub.setUserRoom(id, null).catch(() => {});
+    for (const id of connected) void this.setPresence(id, null).catch(() => {});
     await this.destroy();
   }
 
@@ -562,6 +586,19 @@ export class GameRoom extends DurableObject<Env> {
     if (now - last < minGapMs) return false;
     this.lastMessageAt.set(key, now);
     return true;
+  }
+
+  /** Table de tournée : on joue avec ceux qui sont arrivés ; s'ils sont moins de deux, la tournée reprend la main. */
+  private async startTourGame(now: number) {
+    const d = this.data!;
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
+    if (present.length < MIN_PLAYERS) {
+      await abortToTour(this.env, d.tour!.code, d.code);
+      await this.close("Pas assez de joueurs arrivés : la tournée reprend la main.");
+      return;
+    }
+    return this.startGame(now);
   }
 
   private async startGame(now: number, ws?: WebSocket) {
@@ -614,6 +651,7 @@ export class GameRoom extends DurableObject<Env> {
         if (finished) d.recorded = true;
         const winner = d.seats.find((s) => s.id === d.uno!.ranking?.[0]);
         if (winner) this.systemChat(`${winner.name} remporte la partie !`);
+        if (finished && d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
       } else if (d.uno.phase === "roundOver" && d.nextRoundAt === null) {
         d.nextRoundAt = now + NEXT_ROUND_MS;
         this.addTimer({ at: d.nextRoundAt, kind: "nextRound" });
@@ -827,6 +865,11 @@ export class GameRoom extends DurableObject<Env> {
         await this.destroy();
         return null;
       }
+      case "tourStart": {
+        if (!d.tour || d.status !== "lobby") return null;
+        await this.startTourGame(now);
+        return null;
+      }
     }
   }
 
@@ -853,7 +896,7 @@ export class GameRoom extends DurableObject<Env> {
 
   private async destroy() {
     const d = this.data!;
-    for (const s of d.seats) if (s.userId) void this.hub.setUserRoom(s.userId, null).catch(() => {});
+    for (const s of d.seats) if (s.userId) void this.setPresence(s.userId, null).catch(() => {});
     await this.hub.removeRoom(d.code).catch(() => {});
     this.data = null;
     await this.ctx.storage.deleteAlarm();
@@ -864,6 +907,28 @@ export class GameRoom extends DurableObject<Env> {
     const d = this.data!;
     const g = d.uno!;
     const ranking = g.ranking ?? [];
+    const players = g.players.map((p, i) => {
+      const seat = this.seatById(p.id);
+      return {
+        seat: i,
+        userId: seat?.kind === "human" ? seat.userId : null,
+        name: seat?.name ?? "?",
+        isBot: seat?.kind !== "human",
+        rank: ranking.indexOf(p.id) + 1,
+        score: p.score,
+        eliminated: p.eliminated,
+        stats: p.stats,
+      };
+    });
+    if (d.tour) {
+      await reportToTour(this.env, d.tour.code, {
+        code: d.code,
+        index: d.tour.index,
+        game: "uno",
+        seats: players.length,
+        players: players.flatMap((p) => (p.userId ? [{ userId: p.userId, rank: p.rank, stats: { ...p.stats } }] : [])),
+      });
+    }
     try {
       const { unlocked, elo } = await recordGame(this.env.DB, {
         game: "uno",
@@ -872,19 +937,7 @@ export class GameRoom extends DurableObject<Env> {
         startedAt: d.startedAt ?? now,
         endedAt: now,
         rounds: g.round,
-        players: g.players.map((p, i) => {
-          const seat = this.seatById(p.id);
-          return {
-            seat: i,
-            userId: seat?.kind === "human" ? seat.userId : null,
-            name: seat?.name ?? "?",
-            isBot: seat?.kind !== "human",
-            rank: ranking.indexOf(p.id) + 1,
-            score: p.score,
-            eliminated: p.eliminated,
-            stats: p.stats,
-          };
-        }),
+        players,
       });
       const unlocks = Object.entries(unlocked).map(([userId, ids]) => ({ userId, ids }));
       if (unlocks.length > 0) this.broadcastRaw({ t: "achievements", unlocks });
@@ -908,6 +961,13 @@ export class GameRoom extends DurableObject<Env> {
     const message: ChatMessage = { id: ++d.chatSeq, userId: null, name: "", text, at: Date.now(), system: true };
     this.pushChat(message);
     this.broadcastRaw({ t: "chat", messages: [message] });
+    if (d.tour && d.status !== "lobby") tourChat(this.env, d.tour.code, d.code, text);
+  }
+
+  /** Statut montré aux amis ; à une table de tournée, c'est la tournée qui le donne */
+  private setPresence(userId: string, room: PresenceRoom | null): Promise<void> {
+    if (this.data?.tour) return Promise.resolve();
+    return this.hub.setUserRoom(userId, room);
   }
 
   private pushChat(message: ChatMessage) {
@@ -952,6 +1012,7 @@ export class GameRoom extends DurableObject<Env> {
       rematch: d.rematch,
       results: d.results ?? null,
       quick: d.quick,
+      tour: d.tour?.code ?? null,
     };
   }
 
@@ -1025,7 +1086,7 @@ export class GameRoom extends DurableObject<Env> {
     for (const userId of this.connectedUsers().keys()) {
       if (this.lastPresence.get(userId) === presence) continue;
       this.lastPresence.set(userId, presence);
-      void this.hub.setUserRoom(userId, this.presenceRoom()).catch(() => {});
+      void this.setPresence(userId, this.presenceRoom()).catch(() => {});
     }
   }
 }

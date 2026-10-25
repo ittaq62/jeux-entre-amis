@@ -11,6 +11,7 @@ import {
   type GameId,
   type MeResponse,
   type PresenceRoom,
+  type TableGame,
   type Visibility,
 } from "../shared/protocol.ts";
 import { findUser, findUsers, recentGames, siteCounts } from "./admin.ts";
@@ -37,13 +38,16 @@ import {
   requestFriend,
   toMe,
   toPublic,
+  tourSheet,
   userProfile,
 } from "./users.ts";
+import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
 export { GameRoom } from "./room.ts";
 export { NavalRoom } from "./navalRoom.ts";
 export { BricksRoom } from "./bricksRoom.ts";
+export { TourRoom } from "./tourRoom.ts";
 export { Hub } from "./hub.ts";
 
 type AppEnv = { Bindings: Env; Variables: { session: Session; user: UserRow } };
@@ -87,19 +91,26 @@ function siteUrl(c: Ctx) {
 }
 
 const ALL_GAMES: GameId[] = ["uno", "naval", "bricks"];
-const isBeta = (game: GameId) => (BETA_GAMES as readonly GameId[]).includes(game);
+const isBeta = (game: TableGame) => (BETA_GAMES as readonly TableGame[]).includes(game);
 
-/** Jeux en bêta que l'admin a ouverts à tous (réglage « <jeu>_public » à 1). */
-async function openGames(db: D1Database): Promise<Set<GameId>> {
+const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval" || value === "bricks";
+const isTableGame = (value: unknown): value is TableGame => isGame(value) || value === "tour";
+
+/** Jeux (et tournée) en bêta que l'admin a ouverts à tous (réglage « <jeu>_public » à 1). */
+async function openGames(db: D1Database): Promise<Set<TableGame>> {
   const { results } = await db
     .prepare("SELECT key FROM site_settings WHERE substr(key, -7) = '_public' AND value = '1'")
     .all<{ key: string }>();
-  return new Set(results.map((r) => r.key.slice(0, -"_public".length)).filter(isGame));
+  return new Set(results.map((r) => r.key.slice(0, -"_public".length)).filter(isTableGame));
 }
 
 async function visibleGames(env: Env, user: UserRow): Promise<GameId[]> {
   const open = await openGames(env.DB);
   return ALL_GAMES.filter((g) => !isBeta(g) || isAdmin(user) || open.has(g));
+}
+
+async function tourVisible(env: Env, user: UserRow): Promise<boolean> {
+  return isAdmin(user) || (await openGames(env.DB)).has("tour");
 }
 
 async function meResponse(env: Env, user: UserRow): Promise<MeResponse> {
@@ -110,17 +121,14 @@ async function meResponse(env: Env, user: UserRow): Promise<MeResponse> {
     user: toMe(user),
     pending: null,
     games: ALL_GAMES.filter((g) => !isBeta(g) || isAdmin(user) || open.has(g)),
+    tour: isAdmin(user) || open.has("tour"),
     ...(isAdmin(user) && beta.length > 0 ? { beta } : {}),
   };
 }
 
-const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval" || value === "bricks";
-
-/** La salle d'un jeu pour un code. */
-function stubFor(c: Ctx, game: GameId, code: string) {
-  if (game === "naval") return c.env.NAVAL.get(c.env.NAVAL.idFromName(code));
-  if (game === "bricks") return c.env.BRICKS.get(c.env.BRICKS.idFromName(code));
-  return c.env.ROOMS.get(c.env.ROOMS.idFromName(code));
+/** La salle d'un code : une table de jeu, ou une tournée. */
+function stubFor(c: Ctx, game: TableGame, code: string) {
+  return game === "tour" ? tourStub(c.env, code) : gameStub(c.env, game, code);
 }
 
 /** La salle d'un code : le hub sait à quel jeu il appartient, UNO par défaut. */
@@ -264,7 +272,7 @@ app.get("/profile/:pseudo", withSession, async (c) => {
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
-  const game = isGame(c.req.query("game")) ? (c.req.query("game") as GameId) : "uno";
+  const game = isTableGame(c.req.query("game")) ? (c.req.query("game") as TableGame) : "uno";
   const sortParam = c.req.query("sort");
   const sort = sortParam === "elo" || sortParam === "sprint" ? sortParam : "points";
   return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game, sort) });
@@ -361,6 +369,39 @@ app.post("/rooms/quick", withSession, withProfile, async (c) => {
   return c.json({ code: await createRoom(c, "public", true, game), created: true });
 });
 
+// ---------------------------------------------------------------------------
+// Tournées
+// ---------------------------------------------------------------------------
+
+async function createTour(c: Ctx, visibility: Visibility, quick: boolean): Promise<string> {
+  const code = await hub(c).allocateCode();
+  await tourStub(c.env, code).init({ code, host: toPublic(c.get("user")), visibility, quick });
+  return code;
+}
+
+app.post("/tours", withSession, withProfile, async (c) => {
+  const body = await c.req.json<{ visibility?: unknown }>().catch(() => ({}) as { visibility?: unknown });
+  if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
+  if (!(await tourVisible(c.env, c.get("user")))) return c.json({ error: "La tournée n'est pas encore ouverte." }, 403);
+  const visibility: Visibility = body.visibility === "public" ? "public" : "private";
+  return c.json({ code: await createTour(c, visibility, false) });
+});
+
+app.post("/tours/quick", withSession, withProfile, async (c) => {
+  if (!(await tourVisible(c.env, c.get("user")))) return c.json({ error: "La tournée n'est pas encore ouverte." }, 403);
+  const existing = await hub(c).quickMatch("tour");
+  if (existing) return c.json({ code: existing, created: false });
+  if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
+  return c.json({ code: await createTour(c, "public", true), created: true });
+});
+
+/** La feuille d'une tournée terminée : qui a gagné quoi, jeu par jeu */
+app.get("/tours/:id", withSession, withProfile, async (c) => {
+  const sheet = await tourSheet(c.env.DB, param(c, "id"));
+  if (!sheet) return c.json({ error: "Tournée introuvable." }, 404);
+  return c.json({ tour: sheet });
+});
+
 app.get("/rooms/:code", withSession, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
@@ -423,7 +464,7 @@ app.get("/admin/overview", withSession, withAdmin, async (c) => {
   } satisfies AdminOverview);
 });
 
-async function betaGames(db: D1Database): Promise<GameId[]> {
+async function betaGames(db: D1Database): Promise<TableGame[]> {
   const open = await openGames(db);
   return BETA_GAMES.filter((g) => !open.has(g));
 }
@@ -431,7 +472,7 @@ async function betaGames(db: D1Database): Promise<GameId[]> {
 /** Sortir un jeu de la bêta (ou l'y remettre). */
 app.post("/admin/games", withSession, withAdmin, async (c) => {
   const body = await c.req.json<{ game?: unknown; beta?: unknown }>().catch(() => ({}) as { game?: unknown; beta?: unknown });
-  if (!isGame(body.game) || !isBeta(body.game) || typeof body.beta !== "boolean") return c.json({ error: "Réglage invalide." }, 400);
+  if (!isTableGame(body.game) || !isBeta(body.game) || typeof body.beta !== "boolean") return c.json({ error: "Réglage invalide." }, 400);
   await c.env.DB.prepare("INSERT INTO site_settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2")
     .bind(`${body.game}_public`, body.beta ? "0" : "1")
     .run();

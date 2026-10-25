@@ -13,13 +13,15 @@
       { "name": "ROOMS", "class_name": "GameRoom" },
       { "name": "NAVAL", "class_name": "NavalRoom" },
       { "name": "BRICKS", "class_name": "BricksRoom" },
+      { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["GameRoom", "Hub"] },
     { "tag": "v2", "new_sqlite_classes": ["NavalRoom"] },
-    { "tag": "v3", "new_sqlite_classes": ["BricksRoom"] }
+    { "tag": "v3", "new_sqlite_classes": ["BricksRoom"] },
+    { "tag": "v4", "new_sqlite_classes": ["TourRoom"] }
   ],
   "d1_databases": [
     {
