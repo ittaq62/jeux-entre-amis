@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
-import { GAME_NAMES, type GameId, type RoomSummary, type Visibility } from "../../shared/protocol.ts";
+import { GAME_NAMES, type GameId, type RoomSummary, type TableGame, type Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
@@ -11,6 +11,7 @@ import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
+import { GameTicket } from "../tour/TourParts.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -40,7 +41,8 @@ export function HomePage() {
   const online = useHub((s) => s.online);
   const games = useSession((s) => s.games);
   const beta = useSession((s) => s.beta);
-  const [createFor, setCreateFor] = useState<GameId | null>(null);
+  const tourOn = useSession((s) => s.tour);
+  const [createFor, setCreateFor] = useState<TableGame | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,10 +50,13 @@ export function HomePage() {
     return () => watchLobby(false);
   }, [watchLobby]);
 
-  async function quickMatch(game: GameId) {
+  async function quickMatch(game: TableGame) {
     setBusy(`quick-${game}`);
     try {
-      const res = await api.post<{ code: string; created: boolean }>("/rooms/quick", { game });
+      const res =
+        game === "tour"
+          ? await api.post<{ code: string; created: boolean }>("/tours/quick")
+          : await api.post<{ code: string; created: boolean }>("/rooms/quick", { game });
       navigate(`/salon/${res.code}`);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible de trouver une partie." });
@@ -62,7 +67,10 @@ export function HomePage() {
   async function createRoom(visibility: Visibility) {
     setBusy(visibility);
     try {
-      const res = await api.post<{ code: string }>("/rooms", { visibility, game: createFor ?? "uno" });
+      const res =
+        createFor === "tour"
+          ? await api.post<{ code: string }>("/tours", { visibility })
+          : await api.post<{ code: string }>("/rooms", { visibility, game: createFor ?? "uno" });
       navigate(`/salon/${res.code}`);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible d'ouvrir la table." });
@@ -83,7 +91,7 @@ export function HomePage() {
     }
   }
 
-  const rooms = lobby.filter((r) => games.includes(r.game));
+  const rooms = lobby.filter((r) => (r.game === "tour" ? tourOn : games.includes(r.game)));
   const accepted = friends.filter((f) => f.status === "accepted");
   const sortedFriends = accepted.slice().sort((a, b) => Number(b.user.id in online) - Number(a.user.id in online));
 
@@ -193,6 +201,40 @@ export function HomePage() {
           </section>
         )}
 
+        {tourOn && (
+          <section className="home-game home-game-tour panel" aria-label="La Tournée">
+            <div className="game-stage is-stage" aria-hidden="true">
+              <div className="tour-programme">
+                <GameTicket game="uno" />
+                <GameTicket game="bricks" />
+                <GameTicket game="naval" />
+              </div>
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-tour">La Tournée</h2>
+              {beta.includes("tour") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                Plusieurs jeux à la suite pour la même bande. L'hôte coche les jeux, ils sortent au hasard, et chaque place rapporte des
+                points jusqu'au podium.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("tour")} disabled={busy !== null}>
+                  {busy === "quick-tour" && <span className="spinner" />} Tournée rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("tour")} disabled={busy !== null}>
+                  Lancer une tournée
+                </button>
+              </div>
+              <JoinCode id="join-code-tour" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
@@ -265,21 +307,31 @@ export function HomePage() {
         open={createFor !== null}
         onClose={() => setCreateFor(null)}
         title={
-          createFor === "naval"
-            ? "Ouvrir une table de bataille navale"
-            : createFor === "bricks"
-              ? "Ouvrir une table de Briques"
-              : "Ouvrir une table"
+          createFor === "tour"
+            ? "Lancer une tournée"
+            : createFor === "naval"
+              ? "Ouvrir une table de bataille navale"
+              : createFor === "bricks"
+                ? "Ouvrir une table de Briques"
+                : "Ouvrir une table"
         }
       >
         <div className="create-options">
           <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
             <strong>Entre amis</strong>
-            <span>Seuls ceux qui ont le code ou le lien peuvent s'asseoir.</span>
+            <span>
+              {createFor === "tour"
+                ? "Seuls ceux qui ont le code ou le lien peuvent rejoindre la tournée."
+                : "Seuls ceux qui ont le code ou le lien peuvent s'asseoir."}
+            </span>
           </button>
           <button className="create-option" onClick={() => void createRoom("public")} disabled={busy !== null}>
             <strong>Ouverte à tous</strong>
-            <span>La table apparaît dans la liste : n'importe quel joueur peut venir.</span>
+            <span>
+              {createFor === "tour"
+                ? "La tournée apparaît dans la liste : n'importe qui peut la rejoindre, même entre deux jeux."
+                : "La table apparaît dans la liste : n'importe quel joueur peut venir."}
+            </span>
           </button>
         </div>
       </Modal>
@@ -329,6 +381,28 @@ const NAVAL_MODES: Record<string, string> = { duel: "duel", melee: "mêlée", te
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
   const seats = room.humans + room.bots;
+  if (room.game === "tour") {
+    const programme = room.variant
+      .split(",")
+      .filter((g): g is GameId => g in GAME_NAMES)
+      .map((g) => GAME_NAMES[g])
+      .join(", ");
+    return (
+      <li className="row">
+        <span className="room-code">{room.code}</span>
+        <span className="row-text">
+          <strong>{room.hostName ? `Tournée de ${room.hostName}` : "Tournée ouverte"}</strong>
+          <span className="hint">
+            {programme}, {room.humans} sur {room.maxPlayers}
+            {room.status === "playing" ? ", en cours" : ""}
+          </span>
+        </span>
+        <Link href={`/salon/${room.code}`} className="btn btn-sm">
+          Rejoindre
+        </Link>
+      </li>
+    );
+  }
   const variant = room.game !== "uno" ? (NAVAL_MODES[room.variant] ?? room.variant) : room.variant === "nomercy" ? "No Mercy" : "classique";
   return (
     <li className="row">
@@ -336,7 +410,7 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
       <span className="row-text">
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>
         <span className="hint">
-          {showGame ? `${GAME_NAMES[room.game]} ${variant}` : variant}, {seats} sur {room.maxPlayers}
+          {showGame ? `${GAME_NAMES[room.game as GameId]} ${variant}` : variant}, {seats} sur {room.maxPlayers}
           {room.status === "playing" ? ", partie en cours" : ""}
           <span className="seat-dots" aria-hidden="true">
             {Array.from({ length: room.maxPlayers }, (_, i) => (

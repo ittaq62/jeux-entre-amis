@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
-import { GAME_NAMES, type GameId, type PublicUser } from "../../shared/protocol.ts";
+import { TABLE_NAMES, type GameId, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -31,6 +31,8 @@ interface Profile {
   stats: GameStats;
   naval: GameStats;
   bricks: GameStats;
+  tour: GameStats;
+  tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   achievements: { id: string; at: number }[];
   recent: {
     id: string;
@@ -49,7 +51,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const [error, setError] = useState<string | null>(null);
   const refreshFriends = useHub((s) => s.refreshFriends);
   const games = useSession((s) => s.games);
-  const [shelf, setShelf] = useState<GameId>("uno");
+  const tourOn = useSession((s) => s.tour);
+  const [shelf, setShelf] = useState<TableGame>("uno");
 
   const load = () =>
     api
@@ -95,7 +98,13 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const bt = bricks.totals;
   // Pareil pour Briques (un record au solo suffit à l'afficher)
   const showBricks = games.includes("bricks") || bricks.played > 0 || Boolean(bt.bestSprint);
-  const shelfGames = (["uno", "naval", "bricks"] as GameId[]).filter((g) => g === "uno" || (g === "naval" ? showNaval : showBricks));
+  const tour = profile.tour;
+  const tt = tour.totals;
+  // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
+  const showTour = tourOn || tour.played > 0;
+  const shelfGames = (["uno", "naval", "bricks", "tour"] as TableGame[]).filter(
+    (g) => g === "uno" || (g === "naval" ? showNaval : g === "bricks" ? showBricks : showTour),
+  );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
   // Les succès gagnés d'abord, du plus récent au plus ancien, puis ceux qui restent à décrocher
@@ -237,6 +246,25 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 </dl>
               </section>
             )}
+
+            {showTour && (
+              <section className="carnet panel">
+                <h2>Les tournées</h2>
+                <p className="carnet-summary">
+                  {tour.played === 0
+                    ? "Aucune tournée terminée pour l'instant."
+                    : `${tour.played} tournée${tour.played > 1 ? "s" : ""}, ${tour.won} gagnée${tour.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Points marqués en tournée" value={tour.points} strong />
+                  <LedgerRow label="Jeux joués en tournée" value={tt.games} />
+                  <LedgerRow label="Jeux gagnés en tournée" value={tt.gameWins} />
+                  <LedgerRow label="Podiums" value={tt.podiums} />
+                  <LedgerRow label="Titres reçus" value={tt.titles} />
+                  <LedgerRow label="Meilleur total" value={tt.bestPoints} unit=" pts" />
+                </dl>
+              </section>
+            )}
           </div>
 
           <section className="achievements">
@@ -247,11 +275,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </span>
             </h2>
             {shelfGames.length > 1 && (
-              <Options<GameId>
+              <Options<TableGame>
                 label="Succès de quel jeu"
                 value={shelfGame}
                 onChange={setShelf}
-                options={shelfGames.map((g) => ({ value: g, label: GAME_NAMES[g] }))}
+                options={shelfGames.map((g) => ({ value: g, label: g === "tour" ? "Tournée" : TABLE_NAMES[g] }))}
               />
             )}
             {won.length > 0 && (
@@ -288,6 +316,32 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             )}
           </section>
         </div>
+
+        {profile.tours.length > 0 && (
+          <section className="home-list history">
+            <h2>Dernières tournées</h2>
+            <ul className="rows">
+              {profile.tours.map((t) => (
+                <li key={t.id} className={`row ${t.rank === 1 ? "is-win" : ""}`}>
+                  <span className="history-rank num">{t.rank}</span>
+                  <span className="row-text">
+                    <strong>
+                      {t.rank === 1 ? "Tournée gagnée" : `${t.rank}e sur ${t.players}`}, {t.games} jeu{t.games > 1 ? "x" : ""}
+                    </strong>
+                    <span className="hint">
+                      {t.wins > 0 ? `${t.wins} jeu${t.wins > 1 ? "x" : ""} gagné${t.wins > 1 ? "s" : ""}, ` : ""}
+                      <Link href={`/tournee/${t.id}`}>la feuille de tournée</Link>
+                    </span>
+                  </span>
+                  <span className="history-side">
+                    <strong className="history-points num">{t.points} pts</strong>
+                    <span className="hint">{timeAgo(t.endedAt)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="home-list history">
           <h2>Dernières parties</h2>

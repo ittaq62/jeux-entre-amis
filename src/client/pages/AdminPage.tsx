@@ -5,8 +5,8 @@ import {
   ANNOUNCE_MAX,
   BAN_REASON_MAX,
   BETA_GAMES,
-  GAME_NAMES,
-  type GameId,
+  TABLE_NAMES,
+  type TableGame,
   type AdminGame,
   type AdminOverview,
   type AdminRoom,
@@ -191,16 +191,16 @@ function LedgerRow({ label, value, detail, strong }: { label: string; value: num
 }
 
 /** Sortir un jeu de la bêta : tant que sa case est cochée, seuls les admins et leurs invités y jouent. */
-function GamesSection({ beta, onChange }: { beta: GameId[]; onChange: () => void }) {
-  const [busy, setBusy] = useState<GameId | null>(null);
-  async function toggle(game: GameId) {
+function GamesSection({ beta, onChange }: { beta: TableGame[]; onChange: () => void }) {
+  const [busy, setBusy] = useState<TableGame | null>(null);
+  async function toggle(game: TableGame) {
     if (busy) return;
     const inBeta = beta.includes(game);
     setBusy(game);
     try {
       await api.post("/admin/games", { game, beta: !inBeta });
       await useSession.getState().load();
-      toast({ title: inBeta ? `${GAME_NAMES[game]} est ouvert à tous` : `${GAME_NAMES[game]} repasse en bêta` });
+      toast({ title: inBeta ? `${TABLE_NAMES[game]} est ouvert à tous` : `${TABLE_NAMES[game]} repasse en bêta` });
       onChange();
     } catch (err) {
       failed(err);
@@ -215,9 +215,9 @@ function GamesSection({ beta, onChange }: { beta: GameId[]; onChange: () => void
           const inBeta = beta.includes(game);
           return (
             <div key={game} className="rule-row" onClick={() => void toggle(game)}>
-              <Check label={`${GAME_NAMES[game]} en bêta`} checked={inBeta} disabled={busy !== null} onChange={() => {}} />
+              <Check label={`${TABLE_NAMES[game]} en bêta`} checked={inBeta} disabled={busy !== null} onChange={() => {}} />
               <span>
-                <strong>{GAME_NAMES[game]} en bêta</strong>
+                <strong>{TABLE_NAMES[game]} en bêta</strong>
                 <span className="hint">
                   {inBeta
                     ? "Cochée : visible seulement pour toi et tes invités, qui peuvent s'asseoir grâce au lien d'une table."
@@ -317,9 +317,18 @@ function RoomLine({ room, onClosed }: { room: AdminRoom; onClosed: () => void })
     <li className="row admin-room">
       <span className="room-code">{room.code}</span>
       <span className="row-text">
-        <strong>{room.hostName ? `Table de ${room.hostName}` : "Table sans hôte"}</strong>
+        <strong>
+          {room.game === "tour"
+            ? room.hostName
+              ? `Tournée de ${room.hostName}`
+              : "Tournée sans hôte"
+            : room.hostName
+              ? `Table de ${room.hostName}`
+              : "Table sans hôte"}
+        </strong>
         <span className="hint">
-          {room.variant === "nomercy" ? "No Mercy" : "classique"}, {room.humans} joueur{room.humans > 1 ? "s" : ""}
+          {room.game === "uno" ? (room.variant === "nomercy" ? "No Mercy" : "classique") : TABLE_NAMES[room.game]}, {room.humans} joueur
+          {room.humans > 1 ? "s" : ""}
           {room.bots > 0 ? ` et ${room.bots} bot${room.bots > 1 ? "s" : ""}` : ""}, {status},{" "}
           {room.visibility === "public" ? "ouverte à tous" : "privée"}
           {room.names.length > 0 && <> : {room.names.join(", ")}</>}

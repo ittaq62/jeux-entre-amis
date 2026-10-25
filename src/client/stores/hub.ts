@@ -4,7 +4,14 @@ import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "./session.ts";
-import type { FriendEntry, HubClientMessage, HubServerMessage, PresenceRoom, RoomSummary } from "../../shared/protocol.ts";
+import {
+  TABLE_NAMES,
+  type FriendEntry,
+  type HubClientMessage,
+  type HubServerMessage,
+  type PresenceRoom,
+  type RoomSummary,
+} from "../../shared/protocol.ts";
 
 interface HubState {
   status: SocketStatus;
@@ -103,8 +110,8 @@ export const useHub = create<HubState>((set, get) => ({
             play("join");
             toast({
               tone: "gold",
-              title: `${msg.from.pseudo} t'invite à jouer`,
-              body: `Salon ${msg.code}`,
+              title: msg.game === "tour" ? `${msg.from.pseudo} t'invite à sa tournée` : `${msg.from.pseudo} t'invite à jouer`,
+              body: `${TABLE_NAMES[msg.game] ?? "Salon"}, code ${msg.code}`,
               duration: 12000,
               action: { label: "Rejoindre", run: () => navigateTo(`/salon/${msg.code}`) },
             });

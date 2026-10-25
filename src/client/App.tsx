@@ -23,6 +23,7 @@ const AccountPage = lazy(() => import("./pages/AccountPage.tsx").then((m) => ({ 
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage.tsx").then((m) => ({ default: m.PrivacyPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx").then((m) => ({ default: m.AdminPage })));
 const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ default: m.DevGallery })));
+const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
 
@@ -74,6 +75,7 @@ export function App() {
           <Route path="/" component={HomePage} />
           <Route path="/salon/:code">{(params) => <RoomPage key={params.code} code={params.code} />}</Route>
           <Route path="/joueur/:pseudo">{(params) => <ProfilePage pseudo={decodeURIComponent(params.pseudo)} />}</Route>
+          <Route path="/tournee/:id">{(params) => <TourSheetPage id={params.id} />}</Route>
           <Route path="/classement" component={LeaderboardPage} />
           <Route path="/amis" component={FriendsPage} />
           <Route path="/compte" component={AccountPage} />

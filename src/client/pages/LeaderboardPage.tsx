@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { GAME_NAMES, type GameId, type PublicUser } from "../../shared/protocol.ts";
+import { TABLE_NAMES, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { BOT_ELO, ELO_START } from "../../shared/elo.ts";
 import { formatSprint } from "../lib/countdown.ts";
 import { RANKING_POINTS } from "../../shared/ranking.ts";
@@ -27,8 +27,11 @@ type Sort = "points" | "elo" | "sprint";
 export function LeaderboardPage() {
   const me = useSession((s) => s.user);
   const games = useSession((s) => s.games);
+  const tourOn = useSession((s) => s.tour);
+  const choices: TableGame[] = tourOn ? [...games, "tour"] : games;
   const [scope, setScope] = useState<"friends" | "all">("friends");
-  const [game, setGame] = useState<GameId>("uno");
+  const [game, setGame] = useState<TableGame>("uno");
+  const tour = game === "tour";
   const [sort, setSort] = useState<Sort>("points");
   const [entries, setEntries] = useState<Entry[] | null>(null);
 
@@ -68,22 +71,33 @@ export function LeaderboardPage() {
           </div>
         </div>
         <div className="board-filters">
-          {games.length > 1 && (
-            <Options<GameId> label="Jeu" value={game} onChange={setGame} options={games.map((g) => ({ value: g, label: GAME_NAMES[g] }))} />
+          {choices.length > 1 && (
+            <Options<TableGame>
+              label="Jeu"
+              value={game}
+              onChange={setGame}
+              options={choices.map((g) => ({ value: g, label: TABLE_NAMES[g] }))}
+            />
           )}
-          <Options<Sort>
-            label="Classer par"
-            value={sort}
-            onChange={setSort}
-            options={[
-              { value: "points", label: "Points" },
-              { value: "elo", label: "Elo" },
-              ...(game === "bricks" ? [{ value: "sprint" as const, label: "Records 40 lignes" }] : []),
-            ]}
-          />
+          {!tour && (
+            <Options<Sort>
+              label="Classer par"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: "points", label: "Points" },
+                { value: "elo", label: "Elo" },
+                ...(game === "bricks" ? [{ value: "sprint" as const, label: "Records 40 lignes" }] : []),
+              ]}
+            />
+          )}
         </div>
         <p className="hint" style={{ margin: 0, maxWidth: "62ch" }}>
-          {sort === "sprint" ? (
+          {tour ? (
+            <>
+              Les tournées gagnées d'abord, puis le total des points marqués en tournée (10 pour une victoire de jeu, 7 pour la 2e place…).
+            </>
+          ) : sort === "sprint" ? (
             <>Le meilleur temps de chacun au solo 40 lignes, du plus rapide au plus lent.</>
           ) : sort === "points" ? (
             <>
@@ -101,12 +115,22 @@ export function LeaderboardPage() {
           {entries === null ? (
             <p className="hint board-note">Chargement…</p>
           ) : entries.length === 0 ? (
-            <p className="empty board-note">Personne n'a encore terminé de partie. La première victoire ouvrira le tableau.</p>
+            <p className="empty board-note">
+              {tour
+                ? "Personne n'a encore terminé de tournée. Lance la première depuis l'accueil."
+                : "Personne n'a encore terminé de partie. La première victoire ouvrira le tableau."}
+            </p>
           ) : (
             <>
               <div className="board-head" aria-hidden="true">
                 <span className="board-head-who">Joueur</span>
-                {sort === "sprint" ? (
+                {tour ? (
+                  <>
+                    <span className="board-stat board-extra">Tournées</span>
+                    <span className="board-stat board-score is-main">Gagnées</span>
+                    <span className="board-stat board-score">Points</span>
+                  </>
+                ) : sort === "sprint" ? (
                   <span className="board-stat board-score board-time is-main">Record</span>
                 ) : (
                   <>
@@ -126,7 +150,19 @@ export function LeaderboardPage() {
                         <PlayerName name={e.user.pseudo} admin={e.user.admin} />
                       </strong>
                     </Link>
-                    {sort === "sprint" ? (
+                    {tour ? (
+                      <>
+                        <span className="board-stat board-extra" aria-label={`${e.played} tournées terminées`}>
+                          <strong>{e.played}</strong>
+                        </span>
+                        <span className="board-stat board-score is-main" aria-label={`${e.won} tournées gagnées`}>
+                          <strong>{e.won}</strong>
+                        </span>
+                        <span className="board-stat board-score" aria-label={`${e.points} points de tournée`}>
+                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                        </span>
+                      </>
+                    ) : sort === "sprint" ? (
                       <span
                         className="board-stat board-score board-time is-main"
                         aria-label={`Record en ${formatSprint(e.bestSprint ?? 0)}`}
