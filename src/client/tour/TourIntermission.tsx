@@ -7,7 +7,8 @@ import { ConfirmButton } from "../components/ui.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
-import { GameTicket, playedGames, Standings, TeamScore, TourTop } from "./TourParts.tsx";
+import { GameTicket, playedGames, ReadyVote, rulesName, Standings, TeamScore, TourTop } from "./TourParts.tsx";
+import { TourRules } from "./TourRules.tsx";
 
 interface Props {
   view: TourView;
@@ -34,6 +35,16 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
     const t = setInterval(() => setNow(Date.now() + serverOffset), 15_000);
     return () => clearInterval(t);
   }, [serverOffset]);
+  // Le tirage révèle le jeu, puis vient le tour des règles ; un nouveau tirage repart de zéro
+  const drawKey = view.next ? `${view.games.length}-${view.next.game}` : "";
+  const [revealedKey, setRevealedKey] = useState("");
+  const revealed = drawKey !== "" && revealedKey === drawKey;
+  // Les dernières secondes du compte à rebours se font entendre
+  const lastSeconds = !paused && !view.notice && left !== null && left > 0 && left <= 5;
+  useEffect(() => {
+    if (lastSeconds) play("tick", { volume: 0.55, rate: left === 1 ? 1.25 : 1 });
+  }, [lastSeconds, left]);
+  const lastRules = last && view.settings.rules !== "base" ? rulesName(last.game, last.variant) : null;
 
   return (
     <div className="felt page tour-page">
@@ -42,7 +53,13 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
         <section className="tour-draw panel" aria-label="Prochain jeu">
           <h2>{view.games.length === 0 ? "Premier jeu" : "Prochain jeu"}</h2>
           {view.next ? (
-            <TourDraw key={`${view.games.length}-${view.next.game}`} games={view.settings.games} pick={view.next.game} players={players} />
+            <TourDraw
+              key={drawKey}
+              games={view.settings.games}
+              pick={view.next.game}
+              players={players}
+              onDone={() => setRevealedKey(drawKey)}
+            />
           ) : (
             <div className="tour-draw-row">
               {view.settings.games.map((g) => (
@@ -50,7 +67,8 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
               ))}
             </div>
           )}
-          <div className="tour-countdown" aria-live="polite">
+          <TourRules view={view} send={send} revealed={revealed} />
+          <div className={`tour-countdown ${lastSeconds ? "is-last" : ""}`} aria-live="polite">
             {view.notice ? (
               <p className="tour-notice">{view.notice}</p>
             ) : paused ? (
@@ -60,10 +78,14 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
             ) : view.next && left !== null ? (
               <p>
                 {/* Le nom du jeu n'est pas écrit ici : c'est le tirage qui le révèle */}
-                Départ dans <strong className="num">{left > 59 ? formatClock(left) : `${left} s`}</strong>
+                Départ dans{" "}
+                <strong key={lastSeconds ? left : "clock"} className="num countdown-num">
+                  {left > 59 ? formatClock(left) : `${left} s`}
+                </strong>
               </p>
             ) : null}
           </div>
+          {view.next && <ReadyVote view={view} send={send} action="le jeu est lancé" />}
           {isHost && (
             <div className="tour-host-actions">
               {view.next && !paused && (
@@ -105,7 +127,8 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
               <div>
                 <h2>{GAME_NAMES[last.game]}</h2>
                 <p className="hint" style={{ margin: 0 }}>
-                  Jeu {last.index}, les points qu'il rapporte
+                  Jeu {last.index}
+                  {lastRules ? `, règles « ${lastRules} »` : ""}, les points qu'il rapporte
                 </p>
               </div>
             </div>
@@ -128,15 +151,15 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
         <section className="tour-standings panel" aria-label="Classement de la tournée">
           <h2>Classement</h2>
           {view.settings.teams && <TeamScore view={view} />}
-          <Standings view={view} last={last} meId={view.you.userId} />
+          <Standings view={view} last={last} meId={view.you.userId} celebrate />
         </section>
       </main>
     </div>
   );
 }
 
-/** Le tirage : la lumière passe d'une affiche à l'autre, ralentit, et s'arrête sur le jeu tiré. */
-function TourDraw({ games, pick, players }: { games: GameId[]; pick: GameId; players: number }) {
+/** Le tirage : les dés roulent, la lumière passe d'une affiche à l'autre, ralentit, et s'arrête sur le jeu tiré. */
+function TourDraw({ games, pick, players, onDone }: { games: GameId[]; pick: GameId; players: number; onDone: () => void }) {
   const reduced = usePrefs((s) => s.reducedEffects);
   const target = Math.max(0, games.indexOf(pick));
   const [lit, setLit] = useState(reduced ? target : 0);
@@ -148,8 +171,10 @@ function TourDraw({ games, pick, players }: { games: GameId[]; pick: GameId; pla
     if (reduced || count <= 1) {
       setLit(target);
       setDone(true);
+      onDone();
       return;
     }
+    play("tourShake");
     const timers: ReturnType<typeof setTimeout>[] = [];
     const steps = count * 3 + target + 1;
     let at = 0;
@@ -161,18 +186,21 @@ function TourDraw({ games, pick, players }: { games: GameId[]; pick: GameId; pla
       timers.push(
         setTimeout(() => {
           setLit(pos);
-          play("tick", { volume: 0.25 });
+          play("tick", { volume: 0.16 });
         }, at),
       );
     }
     timers.push(
       setTimeout(() => {
         setDone(true);
-        play("pop");
+        play("tourThrow");
+        play("tourReveal", { delay: 120 });
+        onDone();
       }, at + 260),
     );
     return () => timers.forEach(clearTimeout);
-  }, [count, target, reduced]);
+    // Le tirage ne repart que si le programme change vraiment, pas à chaque nouvelle vue
+  }, [count, target, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="tour-draw-row">

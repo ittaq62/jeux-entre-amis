@@ -1,8 +1,27 @@
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
-import { teamScores, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourGameView, type TourMemberView, type TourView } from "../../shared/tour.ts";
+import {
+  findVariant,
+  teamScores,
+  TOUR_TEAM_COLORS,
+  TOUR_TEAMS,
+  voteNeed,
+  type TourClientMessage,
+  type TourGameView,
+  type TourMemberView,
+  type TourView,
+} from "../../shared/tour.ts";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { play } from "../lib/sound.ts";
+import { usePrefs } from "../stores/prefs.ts";
+
+/** Le nom des règles jouées à un jeu (variante), ou rien si elles sont inconnues */
+export function rulesName(game: GameId, variant: string | null | undefined): string | null {
+  return findVariant(game, variant)?.name ?? null;
+}
 
 /** L'affiche d'un jeu de la tournée : une illustration encadrée, entièrement dans son cadre, et le nom du jeu */
 export function GameTicket({
@@ -194,11 +213,19 @@ export interface Placed {
   gained: number | null;
 }
 
-/** Classement de la tournée : points, puis jeux gagnés ; à égalité, même place */
-export function standingsOf(view: TourView, last: TourGameView | null): Placed[] {
+/**
+ * Classement de la tournée : points, puis jeux gagnés ; à égalité, même place. Avec « before », le classement
+ * tel qu'il était avant le dernier jeu (pour animer les places qui changent).
+ */
+export function standingsOf(view: TourView, last: TourGameView | null, before = false): Placed[] {
   const playedIds = new Set(view.games.flatMap((g) => g.results?.map((r) => r.userId) ?? []));
+  const earlier = (m: TourMemberView): TourMemberView => {
+    const r = last?.results?.find((x) => x.userId === m.userId);
+    return r ? { ...m, points: m.points - r.points, wins: m.wins - (r.rank === 1 ? 1 : 0) } : m;
+  };
   const list = view.members
     .filter((m) => playedIds.has(m.userId) || (m.role === "player" && !m.left))
+    .map((m) => (before ? earlier(m) : m))
     .sort((a, b) => b.points - a.points || b.wins - a.wins);
   let rank = 0;
   return list.map((member, i) => {
@@ -209,40 +236,192 @@ export function standingsOf(view: TourView, last: TourGameView | null): Placed[]
   });
 }
 
-export function Standings({ view, last, meId }: { view: TourView; last: TourGameView | null; meId: string }) {
-  const rows = standingsOf(view, last);
+/** Un nombre qui défile jusqu'à sa nouvelle valeur */
+function RollingNumber({ value, className }: { value: number; className?: string }) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    const start = from.current;
+    from.current = value;
+    if (start === value) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / 650);
+      setShown(Math.round(start + (value - start) * (1 - (1 - k) ** 3)));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span className={className}>{shown}</span>;
+}
+
+/** Après un jeu : les « +10 » arrivent un à un (en ms), puis les lignes glissent à leur nouvelle place */
+const GAIN_AT = 650;
+const GAIN_STEP = 150;
+
+export function Standings({
+  view,
+  last,
+  meId,
+  celebrate = false,
+}: {
+  view: TourView;
+  last: TourGameView | null;
+  meId: string;
+  /** Rejouer l'arrivée des points du dernier jeu */
+  celebrate?: boolean;
+}) {
+  const reduced = usePrefs((s) => s.reducedEffects);
+  const animate = celebrate && !reduced && Boolean(last?.results);
+  const [before, setBefore] = useState(animate);
+  const rows = standingsOf(view, last, before);
+
+  useEffect(() => {
+    if (!animate) return;
+    const order = standingsOf(view, last, true).filter((r) => (r.gained ?? 0) > 0);
+    const timers = order.map((_, i) => setTimeout(() => play("tourChip", { rate: 0.94 + i * 0.07 }), GAIN_AT + i * GAIN_STEP));
+    timers.push(setTimeout(() => setBefore(false), GAIN_AT + order.length * GAIN_STEP + 450));
+    return () => timers.forEach(clearTimeout);
+    // Une seule fois par jeu terminé
+  }, [animate, last?.code]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (rows.length === 0) return <p className="hint">Personne n'a encore marqué.</p>;
+  let gainIndex = 0;
   return (
     <ol className="tour-standings-list">
-      {rows.map(({ member: m, rank, gained }) => (
-        <li
-          key={m.userId}
-          className={`standing-row ${rank === 1 ? "is-first" : ""} ${m.userId === meId ? "is-me" : ""} ${m.left ? "is-left" : ""}`}
-          style={m.team !== null ? { ["--team" as string]: TOUR_TEAM_COLORS[m.team] } : undefined}
-        >
-          <span className="standing-rank num">{rank}</span>
-          <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={34} />
-          <span className="standing-who">
-            <strong>
-              <PlayerName name={m.name} admin={m.admin} suffix={m.userId === meId ? " (toi)" : undefined} />
-            </strong>
-            <span className="hint">
-              {[
-                m.kind === "bot" && "bot",
-                m.team !== null && TOUR_TEAMS[m.team],
-                m.wins > 0 && `${m.wins} jeu${m.wins > 1 ? "x" : ""} gagné${m.wins > 1 ? "s" : ""}`,
-                m.left ? (m.kind === "bot" ? "a cédé sa place" : "a quitté la tournée") : !m.connected && "absent",
-                m.waiting && !m.left && "joue au prochain jeu",
-              ]
-                .filter(Boolean)
-                .join(", ") || " "}
+      {rows.map(({ member: m, rank, gained }) => {
+        const popAt = (gained ?? 0) > 0 ? GAIN_AT + gainIndex++ * GAIN_STEP : 0;
+        return (
+          <motion.li
+            key={m.userId}
+            layout={!reduced}
+            transition={{ type: "spring", stiffness: 340, damping: 30 }}
+            className={`standing-row ${rank === 1 ? "is-first" : ""} ${m.userId === meId ? "is-me" : ""} ${m.left ? "is-left" : ""}`}
+            style={m.team !== null ? { ["--team" as string]: TOUR_TEAM_COLORS[m.team] } : undefined}
+          >
+            <span className="standing-rank num">{rank}</span>
+            <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={34} />
+            <span className="standing-who">
+              <strong>
+                <PlayerName name={m.name} admin={m.admin} suffix={m.userId === meId ? " (toi)" : undefined} />
+              </strong>
+              <span className="hint">
+                {[
+                  m.kind === "bot" && "bot",
+                  m.team !== null && TOUR_TEAMS[m.team],
+                  m.wins > 0 && `${m.wins} jeu${m.wins > 1 ? "x" : ""} gagné${m.wins > 1 ? "s" : ""}`,
+                  m.left ? (m.kind === "bot" ? "a cédé sa place" : "a quitté la tournée") : !m.connected && "absent",
+                  m.waiting && !m.left && "joue au prochain jeu",
+                ]
+                  .filter(Boolean)
+                  .join(", ") || " "}
+              </span>
             </span>
-          </span>
-          {gained !== null && <span className="standing-gain num">+{gained}</span>}
-          <span className="standing-points num">{m.points}</span>
-        </li>
-      ))}
+            {gained !== null && (
+              <motion.span
+                className="standing-gain num"
+                initial={animate ? { opacity: 0, y: 12, scale: 0.5 } : false}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ delay: popAt / 1000, type: "spring", stiffness: 460, damping: 17 }}
+              >
+                +{gained}
+              </motion.span>
+            )}
+            <RollingNumber className="standing-points num" value={m.points} />
+          </motion.li>
+        );
+      })}
     </ol>
+  );
+}
+
+/** Le vote « prêt » : à la moitié des joueurs présents, c'est parti ; l'hôte, lui, a son bouton */
+export function ReadyVote({
+  view,
+  send,
+  action,
+  hint,
+}: {
+  view: TourView;
+  send: (msg: TourClientMessage) => void;
+  /** Ce qui se passe quand assez de joueurs sont prêts, par exemple « la tournée part » */
+  action: string;
+  hint?: string;
+}) {
+  const me = view.you.userId;
+  const canVote = view.voters.includes(me) && !view.you.isHost;
+  const mine = view.ready.includes(me);
+  const need = voteNeed(view.voters.length);
+  const count = view.ready.length;
+  const faces = view.ready.map((id) => view.members.find((m) => m.userId === id)).filter((m): m is TourMemberView => Boolean(m));
+  // L'hôte a son bouton : il ne voit le vote qu'une fois que d'autres sont prêts, et sans autre votant que lui,
+  // le vote n'a pas lieu d'être
+  if (!view.voters.some((id) => id !== view.hostId) || (view.you.isHost && count === 0)) return null;
+  return (
+    <div className="ready-vote">
+      <div className="ready-faces" aria-hidden="true">
+        <AnimatePresence initial={false}>
+          {faces.map((m) => (
+            <motion.span
+              key={m.userId}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 520, damping: 22 }}
+            >
+              <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={26} />
+            </motion.span>
+          ))}
+        </AnimatePresence>
+      </div>
+      <p className="ready-text">
+        {count === 0
+          ? need > 1
+            ? `Dès que ${need} joueurs sont prêts, ${action}.`
+            : `Dès qu'un joueur est prêt, ${action}.`
+          : `${count} prêt${count > 1 ? "s" : ""} sur ${view.voters.length} : encore ${Math.max(0, need - count)} et ${action}.`}
+        {hint && <span className="hint"> {hint}</span>}
+      </p>
+      {canVote && (
+        <button
+          className={`btn ready-btn ${mine ? "btn-primary is-ready" : ""}`}
+          aria-pressed={mine}
+          onClick={() => {
+            play("click");
+            send({ t: "ready", ready: !mine });
+          }}
+        >
+          {mine ? (
+            <>
+              <Icon name="check" size={18} /> Prêt
+            </>
+          ) : (
+            "Je suis prêt"
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Couper ou remettre la musique d'entracte (gardé sur cet appareil) */
+export function MusicToggle() {
+  const on = usePrefs((s) => s.tourMusic);
+  const sound = usePrefs((s) => s.sound);
+  const set = usePrefs((s) => s.set);
+  if (!sound) return null;
+  return (
+    <button
+      className="btn btn-ghost btn-icon"
+      aria-pressed={on}
+      aria-label={on ? "Couper la musique" : "Mettre la musique"}
+      title={on ? "Couper la musique" : "Mettre la musique"}
+      onClick={() => set({ tourMusic: !on })}
+    >
+      <Icon name={on ? "music" : "musicOff"} />
+    </button>
   );
 }
 
@@ -294,6 +473,7 @@ export function TourTop({
         </span>
       </div>
       <div className="page-top-actions">
+        <MusicToggle />
         <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
           <Icon name="chat" />
           {unread > 0 && <span className="badge">{unread}</span>}

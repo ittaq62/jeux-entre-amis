@@ -5,7 +5,7 @@ import { GAME_NAMES } from "../../shared/protocol.ts";
 import { teamScores, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourClientMessage, type TourView } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { usePrefs } from "../stores/prefs.ts";
-import { GameTicket, playedGames, Standings, standingsOf, TeamScore, TourTop } from "./TourParts.tsx";
+import { GameTicket, playedGames, rulesName, Standings, standingsOf, TeamScore, TourTop } from "./TourParts.tsx";
 
 interface Props {
   view: TourView;
@@ -108,12 +108,14 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
               <ol className="tour-recap-list">
                 {games.map((g) => {
                   const winners = (g.results ?? []).filter((r) => r.rank === 1).map((r) => r.name);
+                  const rules = view.settings.rules !== "base" ? rulesName(g.game, g.variant) : null;
                   return (
                     <li key={g.code}>
                       <GameTicket game={g.game} size="sm" />
                       <span>
                         <strong>
                           {g.index}. {GAME_NAMES[g.game]}
+                          {rules && <span className="recap-rules"> · {rules}</span>}
                         </strong>
                         <span className="hint">{winners.length > 0 ? `gagné par ${winners.join(" et ")}` : "sans vainqueur"}</span>
                       </span>

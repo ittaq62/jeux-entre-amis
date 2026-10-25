@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
-import { endLabel, TITLE_LABELS, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourGameResult, type TourSettings } from "../../shared/tour.ts";
+import {
+  baseVariant,
+  endLabel,
+  findVariant,
+  TITLE_LABELS,
+  TOUR_TEAM_COLORS,
+  TOUR_TEAMS,
+  type TourGameResult,
+  type TourSettings,
+} from "../../shared/tour.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -13,7 +22,7 @@ interface Sheet {
   startedAt: number;
   endedAt: number;
   settings: TourSettings;
-  games: { game: GameId; results: TourGameResult[] }[];
+  games: { game: GameId; variant?: string; results: TourGameResult[] }[];
   winnerTeam: 0 | 1 | null;
   players: {
     userId: string | null;
@@ -98,6 +107,9 @@ export function TourSheetPage({ id }: { id: string }) {
                 <span>
                   <strong>
                     {i + 1}. {GAME_NAMES[g.game]}
+                    {g.variant && g.variant !== baseVariant(g.game) && (
+                      <span className="recap-rules"> · {findVariant(g.game, g.variant)?.name}</span>
+                    )}
                   </strong>
                   <span className="hint">{g.results.map((r) => `${r.rank}. ${r.name} +${r.points}`).join(" · ")}</span>
                 </span>

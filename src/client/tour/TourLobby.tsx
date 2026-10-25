@@ -1,6 +1,8 @@
 import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import {
   END_CHOICES,
+  gameVariants,
+  RULES_MODES,
   TOUR_BOT_LEVELS,
   fitsGame,
   GAME_SEATS,
@@ -12,12 +14,13 @@ import {
   type TourBotLevel,
   type TourClientMessage,
   type TourEnd,
+  type TourRulesMode,
   type TourView,
 } from "../../shared/tour.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { TeamsPanel } from "../game/TeamsPanel.tsx";
-import { GameTicket } from "./TourParts.tsx";
+import { GameTicket, MusicToggle, ReadyVote } from "./TourParts.tsx";
 
 interface Props {
   view: TourView;
@@ -138,6 +141,20 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
       hostWillStart="va lancer la tournée"
       canStart={canStart}
       startHint={startHint}
+      topActions={<MusicToggle />}
+      // Le vote n'a lieu que s'il y a d'autres vrais joueurs que l'hôte ; sinon, on attend l'hôte comme avant
+      vote={
+        view.voters.some((id) => id !== view.hostId) ? (
+          <ReadyVote
+            view={view}
+            send={send}
+            action="la tournée part"
+            hint={
+              !isHost && !canStart ? startHint : !isHost ? `Ou ${room.seats.find((x) => x.isHost)?.name ?? "l'hôte"} la lance.` : undefined
+            }
+          />
+        ) : undefined
+      }
       seatNote={(seat) => (s.teams && seat.team !== undefined ? TOUR_TEAMS[seat.team] : null)}
       aside={
         <>
@@ -209,8 +226,34 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
               </div>
             </div>
             <p className="hint" style={{ margin: 0 }}>
-              Les jeux cochés sortent au hasard. Chacun se joue avec ses règles habituelles.
+              Les jeux cochés sortent au hasard.
             </p>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Règles des jeux</span>
+            <Options<TourRulesMode>
+              label="Règles des jeux"
+              value={s.rules}
+              disabled={!isHost}
+              onChange={(rules) => update({ rules })}
+              options={(Object.keys(RULES_MODES) as TourRulesMode[]).map((v) => ({ value: v, label: RULES_MODES[v].label }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {RULES_MODES[s.rules].hint}
+            </p>
+            {s.rules !== "base" && (
+              <ul className="variant-list">
+                {s.games.map((g) => (
+                  <li key={g}>
+                    <strong>{GAME_NAMES[g]}</strong> :{" "}
+                    {gameVariants(g)
+                      .map((v) => v.name)
+                      .join(", ")}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="field">

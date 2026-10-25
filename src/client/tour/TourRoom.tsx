@@ -4,12 +4,14 @@ import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
 import { GAME_END_HOLD_MS, type TourView } from "../../shared/tour.ts";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { preloadSounds, startLoop, stopLoop, TOUR_SOUNDS } from "../lib/sound.ts";
 import { GameRoom } from "../pages/RoomPage.tsx";
+import { usePrefs } from "../stores/prefs.ts";
 import { TourBridgeContext, type TourBridge } from "./bridge.ts";
 import { TourFinale } from "./TourFinale.tsx";
 import { TourIntermission } from "./TourIntermission.tsx";
 import { TourLobby } from "./TourLobby.tsx";
-import { GameTicket, progressLabel } from "./TourParts.tsx";
+import { GameTicket, progressLabel, rulesName } from "./TourParts.tsx";
 import { useTourRoom } from "./useTourRoom.ts";
 import "./tour.css";
 
@@ -23,6 +25,16 @@ export function TourRoom({ code }: { code: string }) {
   const [chatOpen, setChatOpen] = useState(false);
   const unread = useUnread(chat, chatOpen, me?.id);
   const shown = useShownGame(view);
+
+  // La musique d'entracte : au salon et entre deux jeux, coupée dès qu'un jeu s'affiche (il a ses propres sons)
+  const musicOn = usePrefs((s) => s.sound && s.tourMusic);
+  const breakTime = view !== null && (view.status === "lobby" || view.status === "intermission") && shown === null;
+  useEffect(() => preloadSounds(TOUR_SOUNDS), []);
+  useEffect(() => {
+    if (musicOn && breakTime) startLoop("tourMusic");
+    else stopLoop("tourMusic");
+  }, [musicOn, breakTime]);
+  useEffect(() => () => stopLoop("tourMusic"), []);
 
   const leave = useCallback(() => {
     send({ t: "leave" });
@@ -95,8 +107,10 @@ function useShownGame(view: TourView | null): { game: GameId; code: string } | n
 
 /** Pendant que chacun arrive à la table du jeu tiré */
 function TourWaiting({ view, game, serverOffset }: { view: TourView; game: GameId; serverOffset: number }) {
-  const players = view.current ? (view.games.find((g) => g.code === view.current!.code)?.players ?? []) : [];
+  const current = view.current ? view.games.find((g) => g.code === view.current!.code) : undefined;
+  const players = current?.players ?? [];
   const names = players.map((id) => view.members.find((m) => m.userId === id)?.name).filter(Boolean);
+  const rules = current && view.settings.rules !== "base" ? rulesName(current.game, current.variant) : null;
   return (
     <div className="felt center-screen tour-waiting">
       <div className="tour-waiting-card">
@@ -106,6 +120,7 @@ function TourWaiting({ view, game, serverOffset }: { view: TourView; game: GameI
             {progressLabel(view, Date.now() + serverOffset)}
           </p>
           <h2>{GAME_NAMES[game]}</h2>
+          {rules && <p className="tour-waiting-rules">Règles « {rules} »</p>}
           <p className="lobby-wait">
             <span className="spinner" /> Tout le monde s'installe à la table…
           </p>

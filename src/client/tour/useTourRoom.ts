@@ -25,8 +25,21 @@ export function useTourRoom(code: string) {
     viewRef.current = next;
     setView(next);
     setServerOffset(next.serverNow - Date.now());
-    if (prev && prev.status !== "finished" && next.status === "finished") play("win", { delay: 400 });
-    else if (prev && prev.current === null && next.current !== null) play("join");
+    if (!prev) return;
+    const meId = useSession.getState().user?.id;
+    if (prev.status !== "finished" && next.status === "finished") {
+      // Le podium monte : la fanfare avec le premier, puis les applaudissements
+      play("tourFanfare", { delay: 700 });
+      play("tourApplause", { delay: 1300 });
+    } else if (prev.current === null && next.current !== null) play("join");
+    else if (next.status === "lobby" && next.members.length > prev.members.length) play("join", { volume: 0.6 });
+    else if (next.status === prev.status) {
+      // Un autre joueur est prêt, ou vote pour des règles (ses propres clics font déjà leur bruit)
+      const ready = next.ready.some((id) => id !== meId && !prev.ready.includes(id));
+      const before = prev.next?.votes ?? {};
+      const voted = Object.entries(next.next?.votes ?? {}).some(([id, v]) => id !== meId && before[id] !== v);
+      if (ready || voted) play("tourVote", { rate: 1.08 });
+    }
   }, []);
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { MIN_PLAYERS, type LobbyClientMessage, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
@@ -30,6 +31,10 @@ export interface TableLobbyProps {
   aside?: ReactNode;
   /** Le salon d'une tournée plutôt que d'une table : ses mots, et pas de bots */
   kind?: "table" | "tour";
+  /** Le vote pour lancer (tournée) : à côté du bouton de l'hôte, à la place de l'attente pour les autres */
+  vote?: ReactNode;
+  /** Boutons en plus dans l'en-tête (la musique de la tournée…) */
+  topActions?: ReactNode;
 }
 
 /** Le salon d'attente, commun à tous les jeux : ticket du code, places autour de la table, invitations, départ. */
@@ -49,6 +54,8 @@ export function TableLobby({
   seatNote,
   aside,
   kind = "table",
+  vote,
+  topActions,
 }: TableLobbyProps) {
   const isHost = room.you.isHost;
   const tour = kind === "tour";
@@ -90,6 +97,7 @@ export function TableLobby({
                 : "Ta table"}
         </h1>
         <div className="page-top-actions">
+          {topActions}
           {room.you.isAdmin && (
             <ConfirmButton className="btn btn-sm btn-danger" confirm="Fermer pour tous ?" onConfirm={() => send({ t: "close" })}>
               {tour ? "Fermer la tournée" : "Fermer la table"}
@@ -134,34 +142,44 @@ export function TableLobby({
               </span>
             </h2>
             <ul className="seat-list">
-              {room.seats.map((seat, i) => {
-                const note = seatNote?.(seat, i);
-                return (
-                  <li key={seat.id} className="seat-row">
-                    <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={44} />
-                    <span className="row-text">
-                      <strong>
-                        <PlayerName name={seat.name} admin={seat.admin} suffix={seat.id === room.you.seatId ? " (toi)" : undefined} />
-                      </strong>
-                      <span className="hint">
-                        {[note, seat.isHost && "hôte", seat.kind === "bot" && "bot", seat.kind === "human" && !seat.connected && "absent"]
-                          .filter(Boolean)
-                          .join(", ") || " "}
+              <AnimatePresence initial={false}>
+                {room.seats.map((seat, i) => {
+                  const note = seatNote?.(seat, i);
+                  return (
+                    <motion.li
+                      key={seat.id}
+                      className="seat-row"
+                      // Dans une tournée, les arrivées glissent en place ; les tables gardent leur liste fixe
+                      initial={tour ? { opacity: 0, x: -14 } : false}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={tour ? { opacity: 0, x: 14, transition: { duration: 0.18 } } : undefined}
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                    >
+                      <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={44} />
+                      <span className="row-text">
+                        <strong>
+                          <PlayerName name={seat.name} admin={seat.admin} suffix={seat.id === room.you.seatId ? " (toi)" : undefined} />
+                        </strong>
+                        <span className="hint">
+                          {[note, seat.isHost && "hôte", seat.kind === "bot" && "bot", seat.kind === "human" && !seat.connected && "absent"]
+                            .filter(Boolean)
+                            .join(", ") || " "}
+                        </span>
                       </span>
-                    </span>
-                    {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() =>
-                          send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
-                        }
-                      >
-                        {seat.kind === "bot" ? "Retirer" : "Exclure"}
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
+                      {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
+                          }
+                        >
+                          {seat.kind === "bot" ? "Retirer" : "Exclure"}
+                        </button>
+                      )}
+                    </motion.li>
+                  );
+                })}
+              </AnimatePresence>
               {tour && emptySeats > 0 && (
                 <li className="seat-row is-empty">
                   <span className="seat-empty-mark" />
@@ -212,11 +230,14 @@ export function TableLobby({
         {room.status !== "playing" &&
           (isHost ? (
             <div className="lobby-start">
+              {vote}
               {!canStart && <span className="hint">{startHint}</span>}
               <button className="btn btn-primary btn-lg" disabled={!canStart} onClick={() => send({ t: "start" })}>
                 {finished ? "Rejouer" : startLabel}
               </button>
             </div>
+          ) : vote ? (
+            <div className="lobby-start">{vote}</div>
           ) : (
             <p className="lobby-wait">
               <span className="spinner" /> {host ? `${host.name} ${hostWillStart}…` : "On attend l'hôte…"}
