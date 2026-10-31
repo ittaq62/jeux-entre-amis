@@ -132,6 +132,8 @@ export interface SpecialInfo {
   the: string;
   /** Une nuisance se pose chez un adversaire ; les autres, chez soi */
   nuisance: boolean;
+  /** Où il se pose, puis ce qu'il fait, chacun en une phrase */
+  where: string;
   effect: string;
 }
 
@@ -144,28 +146,39 @@ export const SPECIALS: Record<SpecialKind, SpecialInfo> = {
     one: "une décharge",
     the: "la décharge",
     nuisance: true,
-    effect: "Chez un adversaire : les loyers de tout le quartier sont divisés par deux.",
+    where: "Chez un adversaire.",
+    effect: "Les loyers de tout le quartier sont divisés par deux.",
   },
   centrale: {
     name: "Centrale",
     one: "une centrale",
     the: "la centrale",
     nuisance: true,
-    effect: "Chez un adversaire : le quartier ne rapporte plus aucun loyer.",
+    where: "Chez un adversaire.",
+    effect: "Le quartier ne rapporte plus aucun loyer.",
   },
-  parc: { name: "Parc", one: "un parc", the: "le parc", nuisance: false, effect: "Aucune nuisance ne peut entrer dans le quartier." },
+  parc: {
+    name: "Parc",
+    one: "un parc",
+    the: "le parc",
+    nuisance: false,
+    where: "Chez toi.",
+    effect: "Aucune nuisance ne peut entrer dans le quartier.",
+  },
   tour: {
     name: "Tour Capitale",
     one: "une tour Capitale",
     the: "la tour Capitale",
     nuisance: false,
-    effect: "Dans un quartier complet à toi : tous ses loyers sont doublés.",
+    where: "Dans un quartier complet à toi.",
+    effect: "Tous les loyers du quartier sont doublés.",
   },
   stade: {
     name: "Stade",
     one: "un stade",
     the: "le stade",
     nuisance: false,
+    where: "Chez toi, un seul par joueur.",
     effect: `Chaque adversaire qui passe sur la case paie un billet de ${STADIUM_TICKET}.`,
   },
 };

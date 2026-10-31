@@ -615,6 +615,100 @@
   border: 2px solid var(--owner);
 }
 
+/* Les bâtiments spéciaux, sur la fiche d'un terrain et au salon */
+.cap-specials {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.cap-specials h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.cap-specials p {
+  margin: 0;
+}
+
+.cap-special-now {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--gold-light);
+  background: var(--panel-sunken);
+}
+
+.cap-special-now.is-nuisance,
+.cap-special-row.is-nuisance strong {
+  border-color: var(--danger);
+}
+
+.cap-special-row.is-nuisance strong {
+  color: var(--danger);
+}
+
+.cap-special-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.cap-special-row > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cap-special-row .btn {
+  flex: none;
+}
+
+.cap-special-rules {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.cap-special-rules li {
+  display: contents;
+}
+
+.cap-special-rules li.is-nuisance strong {
+  color: var(--danger);
+}
+
+.cap-special-rules .num {
+  font-family: var(--font-card);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cap-special-rules li.cap-special-limits {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
+  .cap-special-rules {
+    grid-template-columns: auto 1fr;
+  }
+
+  .cap-special-rules .hint {
+    grid-column: 1 / -1;
+    margin-bottom: 4px;
+  }
+}
+
 /* Mes titres */
 .cap-titles {
   display: flex;

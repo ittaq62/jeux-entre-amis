@@ -45,7 +45,18 @@ interface Bill {
 }
 
 /** Ce qui change les titres : on les montre changer à ce moment-là, pas avant */
-const DEED_EVENTS = new Set<CapitaleEvent["type"]>(["buy", "auctionEnd", "build", "sell", "mortgage", "unmortgage", "trade", "bankrupt"]);
+const DEED_EVENTS = new Set<CapitaleEvent["type"]>([
+  "buy",
+  "auctionEnd",
+  "build",
+  "sell",
+  "mortgage",
+  "unmortgage",
+  "special",
+  "raze",
+  "trade",
+  "bankrupt",
+]);
 
 let billSeq = 0;
 
@@ -411,7 +422,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
         </div>
       )}
 
-      <DeedSheet g={g} index={deed} seat={seat} onClose={() => setDeed(null)} />
+      <DeedSheet g={g} index={deed} me={me} seat={seat} act={act} onClose={() => setDeed(null)} />
       {me && <TitlesSheet g={g} me={me} open={titlesOpen} onClose={() => setTitlesOpen(false)} act={act} />}
       {me && <TradeModal g={g} me={me} seat={seat} draft={draft} onClose={() => setDraft(null)} act={act} />}
 

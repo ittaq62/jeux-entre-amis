@@ -48,7 +48,7 @@ export function eventTimes(events: CapitaleEvent[]): number[] {
     else if (e.type === "move") t += e.jump ? JUMP_MS : Math.abs(e.steps) * HOP_MS + 160;
     else if (e.type === "card") t += CARD_MS;
     else if (e.type === "money") t += 260;
-    else if (e.type === "buy" || e.type === "build" || e.type === "auctionEnd") t += 220;
+    else if (e.type === "buy" || e.type === "build" || e.type === "auctionEnd" || e.type === "special") t += 220;
     return at;
   });
 }
@@ -84,11 +84,20 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
           play("capBills", { delay, rate: 0.9 });
         } else if (e.reason === "sell" || e.reason === "mortgage") {
           play("capCoins", { delay, volume: 0.7 });
-        } else if (e.reason === "unmortgage") {
+        } else if (e.reason === "unmortgage" || e.reason === "special") {
           play("capBills", { delay });
+        } else if (e.reason === "ticket") {
+          play("capCoins", { delay, rate: 1.1 });
         }
         return;
       }
+      case "special":
+        // Le chantier sonne quand le bâtiment sort de terre (la scène 3D) ; une nuisance s'annonce en plus
+        if (e.kind === "centrale" || e.kind === "decharge") play("wild", { delay, volume: 0.5 });
+        return;
+      case "raze":
+        if (e.how !== "bankrupt") play("cardSlide", { delay });
+        return;
       case "buy":
         play("capBuy", { delay });
         return;

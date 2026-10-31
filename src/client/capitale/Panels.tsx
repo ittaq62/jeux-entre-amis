@@ -8,6 +8,9 @@ import {
   groupOf,
   HOTEL,
   mortgageValue,
+  SPECIAL_ORDER,
+  specialPrice,
+  SPECIALS,
   SQUARES,
   STATIONS,
   unmortgageCost,
@@ -17,8 +20,12 @@ import {
 import {
   canBuild,
   canMortgage,
+  canPlaceSpecial,
+  canRaze,
   canSell,
   rentFor,
+  specialsIn,
+  tradeProblem,
   type CapitaleAction,
   type Offer,
   type Trade,
@@ -50,7 +57,21 @@ const kindLabel = (i: number) => {
 // La fiche d'une case
 // ---------------------------------------------------------------------------
 
-export function DeedSheet({ g, index, seat, onClose }: { g: CapitaleView; index: number | null; seat: Seat; onClose: () => void }) {
+export function DeedSheet({
+  g,
+  index,
+  me,
+  seat,
+  act,
+  onClose,
+}: {
+  g: CapitaleView;
+  index: number | null;
+  me: string | null;
+  seat: Seat;
+  act: (a: CapitaleAction) => void;
+  onClose: () => void;
+}) {
   const sq = index !== null ? SQUARES[index] : undefined;
   const deed = index !== null ? g.deeds[index] : null;
   const group = index !== null ? groupOf(index) : null;
@@ -148,9 +169,101 @@ export function DeedSheet({ g, index, seat, onClose }: { g: CapitaleView; index:
               )}
             </dl>
           )}
+          {sq.kind === "property" && deed && g.settings.specials && (
+            <SpecialPanel
+              g={g}
+              index={index}
+              me={me}
+              seat={seat}
+              act={(a) => {
+                act(a);
+                // On referme pour voir le bâtiment sortir de terre (ou disparaître)
+                onClose();
+              }}
+            />
+          )}
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Le bâtiment spécial d'un terrain : ce qui s'y trouve, ce qu'on peut y poser, le raser ou le revendre */
+function SpecialPanel({
+  g,
+  index,
+  me,
+  seat,
+  act,
+}: {
+  g: CapitaleView;
+  index: number;
+  me: string | null;
+  seat: Seat;
+  act: (a: CapitaleAction) => void;
+}) {
+  const s = asState(g);
+  const deed = g.deeds[index]!;
+  const sp = deed.special;
+  const rights = manageRights(g, me);
+  const mine = me !== null && deed.owner === me;
+  const kinds = !me || sp || !deed.owner ? [] : SPECIAL_ORDER.filter((k) => SPECIALS[k].nuisance !== mine);
+  const here = specialsIn(s, groupOf(index)!.id).filter((k) => k !== sp?.kind);
+
+  return (
+    <section className="cap-specials">
+      <h3>Bâtiment spécial</h3>
+      {sp ? (
+        <div className={`cap-special-now ${SPECIALS[sp.kind].nuisance ? "is-nuisance" : ""}`}>
+          <strong>{SPECIALS[sp.kind].name}</strong>
+          <span className="hint">
+            {SPECIALS[sp.kind].effect}
+            {SPECIALS[sp.kind].nuisance && ` Posée par ${seat(sp.by)?.name ?? "?"}.`}
+          </span>
+        </div>
+      ) : (
+        <p className="hint">{deed.owner ? "Aucun sur ce terrain." : "Il faut un propriétaire pour bâtir ici."}</p>
+      )}
+      {here.length > 0 && (
+        <p className="hint">Dans le quartier : {here.map((k) => SPECIALS[k].one).join(", ")}.</p>
+      )}
+      {mine && sp && (
+        <div className="cap-special-row">
+          <span className="hint">
+            {SPECIALS[sp.kind].nuisance
+              ? `Tu peux la faire raser pendant ton tour, à ses frais.`
+              : `Tu peux le revendre à la banque à moitié prix.`}
+          </span>
+          {SPECIALS[sp.kind].nuisance ? (
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={rights !== "full" || canRaze(s, me, index) !== null}
+              onClick={() => act({ type: "raze", square: index })}
+            >
+              Faire raser <span className="num">{specialPrice(sp.kind, index)}</span>
+            </button>
+          ) : (
+            <button className="btn btn-sm" disabled={rights === null} onClick={() => act({ type: "raze", square: index })}>
+              Revendre <span className="num">+{Math.floor(specialPrice(sp.kind, index) / 2)}</span>
+            </button>
+          )}
+        </div>
+      )}
+      {kinds.map((k) => {
+        const problem = rights !== "full" ? "Pendant ton tour." : canPlaceSpecial(s, me!, index, k);
+        return (
+          <div key={k} className={`cap-special-row ${SPECIALS[k].nuisance ? "is-nuisance" : ""}`}>
+            <span>
+              <strong>{SPECIALS[k].name}</strong>
+              <span className="hint">{problem ?? `${SPECIALS[k].where} ${SPECIALS[k].effect}`}</span>
+            </span>
+            <button className="btn btn-sm btn-primary" disabled={problem !== null} onClick={() => act({ type: "special", square: index, kind: k })}>
+              Poser <span className="num">{specialPrice(k, index)}</span>
+            </button>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -205,6 +318,9 @@ export function TitlesSheet({
           </p>
         )}
         {groups.length === 0 && <p className="hint">Tu n'as encore aucun titre.</p>}
+        {g.settings.specials && rights === "full" && (
+          <p className="hint">Pour poser un bâtiment spécial, chez toi ou chez un adversaire, touche son terrain dans la ville.</p>
+        )}
         {groups.map((grp) => (
           <section key={grp.key} className="cap-titles-group" style={{ ["--group" as string]: grp.color }}>
             <h3>{grp.name}</h3>
@@ -216,6 +332,9 @@ export function TitlesSheet({
               const sellOk = rights !== null && canSell(s, me, i) === null;
               const mortOk = rights !== null && canMortgage(s, me, i) === null;
               const liftOk = rights === "full" && d.mortgaged && (p?.cash ?? 0) >= unmortgageCost(i);
+              const sp = d.special;
+              const spNuisance = sp ? SPECIALS[sp.kind].nuisance : false;
+              const razeOk = sp && (spNuisance ? rights === "full" : rights !== null) && canRaze(s, me, i) === null;
               return (
                 <div key={i} className={`cap-title-row ${d.mortgaged ? "is-mortgaged" : ""}`}>
                   <span className="cap-title-name">
@@ -228,10 +347,29 @@ export function TitlesSheet({
                           : d.houses > 0
                             ? `${d.houses} maison${d.houses > 1 ? "s" : ""}`
                             : "nu"}
+                      {sp && ` · ${SPECIALS[sp.kind].name.toLowerCase()}`}
                       {!d.mortgaged && sq.kind !== "utility" && ` · loyer ${money(rentFor(s, i, { diceTotal: 7 }))}`}
                     </span>
                   </span>
                   <span className="cap-title-actions">
+                    {sp && (
+                      <button
+                        className={`btn btn-sm ${spNuisance ? "btn-primary" : "btn-ghost"}`}
+                        disabled={!razeOk}
+                        onClick={() => act({ type: "raze", square: i })}
+                        title={spNuisance ? `Faire raser ${SPECIALS[sp.kind].the}` : `Revendre ${SPECIALS[sp.kind].the} à la banque`}
+                      >
+                        {spNuisance ? (
+                          <>
+                            Raser <span className="num">{specialPrice(sp.kind, i)}</span>
+                          </>
+                        ) : (
+                          <>
+                            Revendre <span className="num">+{Math.floor(specialPrice(sp.kind, i) / 2)}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                     {group && sq.kind === "property" && !d.mortgaged && (
                       <>
                         <button
@@ -273,14 +411,9 @@ export function TitlesSheet({
 
 const EMPTY: Offer = { cash: 0, squares: [], jailCards: 0 };
 
-/** Les titres qu'un joueur peut céder : pas de construction dans leur groupe */
+/** Les titres qu'un joueur peut céder : pas de construction dans leur groupe, ni parc, tour ou stade à lui */
 function tradable(g: CapitaleView, playerId: string): number[] {
-  return SQUARES.filter((sq) => {
-    const d = g.deeds[sq.index];
-    if (!d || d.owner !== playerId) return false;
-    const grp = groupOf(sq.index);
-    return !(grp && grp.squares.some((x) => g.deeds[x]!.houses > 0));
-  }).map((sq) => sq.index);
+  return SQUARES.filter((sq) => g.deeds[sq.index] && tradeProblem(asState(g), playerId, sq.index) === null).map((sq) => sq.index);
 }
 
 export function describeOffer(o: Offer): string {
@@ -447,7 +580,8 @@ function TradeForm({
         </div>
       )}
       <p className="hint">
-        Un titre hypothéqué reçu coûte 10 % d'intérêts tout de suite. Les terrains d'un groupe bâti ne s'échangent pas.
+        Un titre hypothéqué reçu coûte 10 % d'intérêts tout de suite. Les terrains d'un groupe bâti ne s'échangent pas
+        {g.settings.specials && ", ni ceux qui portent un parc, une tour ou un stade"}.
       </p>
       <div className="overlay-actions">
         <button
