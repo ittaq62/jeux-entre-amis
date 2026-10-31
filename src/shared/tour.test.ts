@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { random } from "./rng.ts";
 import { DEFAULT_SETTINGS as BRICKS_DEFAULTS } from "./games/bricks/engine.ts";
+import { DEFAULT_SETTINGS as CAPITALE_DEFAULTS } from "./games/capitale/engine.ts";
 import { DEFAULT_SETTINGS as NAVAL_DEFAULTS } from "./games/naval/engine.ts";
 import { DEFAULT_SETTINGS as UNO_DEFAULTS } from "./games/uno/engine.ts";
 import {
@@ -155,7 +156,7 @@ describe("titres", () => {
 describe("règles des jeux", () => {
   const rng = { rng: 7 };
   const rand = () => random(rng);
-  const defaults = { uno: UNO_DEFAULTS, naval: NAVAL_DEFAULTS, bricks: BRICKS_DEFAULTS };
+  const defaults = { uno: UNO_DEFAULTS, naval: NAVAL_DEFAULTS, bricks: BRICKS_DEFAULTS, capitale: CAPITALE_DEFAULTS };
 
   it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {
     for (const game of TOUR_GAMES) {
@@ -183,7 +184,9 @@ describe("règles des jeux", () => {
     for (const game of TOUR_GAMES) {
       for (const v of gameVariants(game)) {
         const keys = Object.keys(variantSettings(game as "uno", v.id));
-        expect(keys.filter((k) => ["teams", "botLevel", "sprint", "endMode", "turnSeconds"].includes(k))).toEqual([]);
+        // La tournée règle aussi la durée de Capitale (20 minutes) : ses variantes n'y touchent pas
+        const owned = ["teams", "botLevel", "sprint", "endMode", "turnSeconds", ...(game === "capitale" ? ["end", "minutes"] : [])];
+        expect(keys.filter((k) => owned.includes(k))).toEqual([]);
       }
     }
   });

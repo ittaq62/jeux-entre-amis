@@ -47,6 +47,7 @@ import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 export { GameRoom } from "./room.ts";
 export { NavalRoom } from "./navalRoom.ts";
 export { BricksRoom } from "./bricksRoom.ts";
+export { CapitaleRoom } from "./capitaleRoom.ts";
 export { TourRoom } from "./tourRoom.ts";
 export { Hub } from "./hub.ts";
 
@@ -90,10 +91,10 @@ function siteUrl(c: Ctx) {
   return new URL(c.req.url).origin;
 }
 
-const ALL_GAMES: GameId[] = ["uno", "naval", "bricks"];
+const ALL_GAMES: GameId[] = ["uno", "naval", "bricks", "capitale"];
 const isBeta = (game: TableGame) => (BETA_GAMES as readonly TableGame[]).includes(game);
 
-const isGame = (value: unknown): value is GameId => value === "uno" || value === "naval" || value === "bricks";
+const isGame = (value: unknown): value is GameId => (ALL_GAMES as unknown[]).includes(value);
 const isTableGame = (value: unknown): value is TableGame => isGame(value) || value === "tour";
 
 /** Jeux (et tournée) en bêta que l'admin a ouverts à tous (réglage « <jeu>_public » à 1). */

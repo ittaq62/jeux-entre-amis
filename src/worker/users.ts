@@ -1,5 +1,12 @@
 import { sanitizeAvatar, seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { earnedAchievements, earnedBricksAchievements, earnedNavalAchievements, earnedTourAchievements } from "../shared/achievements.ts";
+import {
+  earnedAchievements,
+  earnedBricksAchievements,
+  earnedCapitaleAchievements,
+  earnedNavalAchievements,
+  earnedTourAchievements,
+} from "../shared/achievements.ts";
+import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/capitale/engine.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
 import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
@@ -203,7 +210,7 @@ export interface GameRecordPlayer {
   eliminated: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
-  stats: PlayerStats | NavalRecordStats | BricksStats;
+  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats;
 }
 
 /** Elo de chaque joueur humain après la partie, et ce qu'il a gagné ou perdu */
@@ -222,6 +229,7 @@ export type GameRecord = {
   | { game: "uno"; settings: UnoSettings }
   | { game: "naval"; settings: NavalSettings; mode: NavalMode }
   | { game: "bricks"; settings: BricksSettings; mode: BricksMode }
+  | { game: "capitale"; settings: CapitaleSettings; mode: EndMode }
 );
 
 /** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
@@ -240,6 +248,33 @@ function mergeBricksTotals(raw: string | null, stats: BricksStats, sprintTime: n
     totals.sprints = (totals.sprints ?? 0) + 1;
     totals.bestSprint = totals.bestSprint ? Math.min(totals.bestSprint, sprintTime) : sprintTime;
   }
+  return totals;
+}
+
+/** Cumul des stats de Capitale : on additionne, sauf les records (groupes réunis, plus belle fortune). */
+function mergeCapitaleTotals(raw: string | null, stats: CapitaleStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  const sums = [
+    "rentEarned",
+    "rentPaid",
+    "bought",
+    "houses",
+    "hotels",
+    "trades",
+    "jail",
+    "doubles",
+    "passGo",
+    "auctionsWon",
+    "bankrupted",
+  ] as const;
+  for (const key of sums) totals[key] = (totals[key] ?? 0) + stats[key];
+  totals.monopolies = Math.max(totals.monopolies ?? 0, stats.monopolies);
+  totals.bestWorth = Math.max(totals.bestWorth ?? 0, stats.netWorth);
   return totals;
 }
 
@@ -354,6 +389,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as BricksStats;
       totals = mergeBricksTotals(prev?.totals ?? null, stats, null);
       earnedIds = earnedBricksAchievements({ won, mode: rec.mode, stats, played });
+    } else if (rec.game === "capitale") {
+      const stats = p.stats as CapitaleStats;
+      totals = mergeCapitaleTotals(prev?.totals ?? null, stats);
+      earnedIds = earnedCapitaleAchievements({ won, played, bankrupt: p.eliminated, stats });
     } else {
       const stats = p.stats as NavalRecordStats;
       totals = mergeNavalTotals(prev?.totals ?? null, stats);
@@ -707,6 +746,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const tour = statRows.results.find((r) => r.game === "tour");
   const naval = statRows.results.find((r) => r.game === "naval");
   const bricks = statRows.results.find((r) => r.game === "bricks");
+  const capitale = statRows.results.find((r) => r.game === "capitale");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -720,6 +760,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     stats: { ...statsSummary(uno), totals: parseTotals(uno?.totals ?? null) },
     naval: { ...statsSummary(naval), totals: totalsOf(naval) },
     bricks: { ...statsSummary(bricks), totals: totalsOf(bricks) },
+    capitale: { ...statsSummary(capitale), totals: totalsOf(capitale) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

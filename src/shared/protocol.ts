@@ -1,21 +1,23 @@
 import type { AvatarConfig } from "./avatar.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
+import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
+import type { CapitaleView } from "./games/capitale/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
 import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno" | "naval" | "bricks";
+export type GameId = "uno" | "naval" | "bricks" | "capitale";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
 
-export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques" };
+export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques", capitale: "Capitale" };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
 /** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks", "tour"] as const satisfies readonly TableGame[];
+export const BETA_GAMES = ["naval", "bricks", "tour", "capitale"] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -359,6 +361,62 @@ export type BricksServerMessage =
   | { t: "garbage"; chunk: GarbageChunk }
   | { t: "live"; id: string; piece: Active | null }
   | { t: "fx"; fx: BricksFx[] }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
+
+export interface CapitaleRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  capitale: CapitaleSettings;
+}
+
+export const CAPITALE_MAX_PLAYERS = 6;
+
+export interface CapitaleRoomView {
+  code: string;
+  game: "capitale";
+  status: RoomStatus;
+  settings: CapitaleRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  capitale: CapitaleView | null;
+  /** Fin du temps laissé à la décision en cours */
+  deadline: number | null;
+  /** Fin de l'enchère en cours (le chrono repart à chaque offre) */
+  auctionDeadline: number | null;
+  /** Partie à durée fixe : l'heure à laquelle le tour en cours devient le dernier */
+  endsAt: number | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
+}
+
+export type CapitaleClientMessage =
+  | { t: "settings"; settings: Partial<CapitaleSettings>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  | { t: "action"; action: CapitaleAction }
+  | { t: "takeBack" }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type CapitaleServerMessage =
+  | { t: "room"; room: CapitaleRoomView; events: CapitaleEvent[] }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
   | { t: "emote"; seatId: string | null; userId: string; emote: string }
   | { t: "achievements"; unlocks: AchievementUnlock[] }

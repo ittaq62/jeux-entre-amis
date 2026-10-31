@@ -1,5 +1,6 @@
 import type { BricksMode } from "./games/bricks/engine.ts";
 import type { BricksStats } from "./games/bricks/view.ts";
+import type { CapitaleStats } from "./games/capitale/engine.ts";
 import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
 import type { TableGame } from "./protocol.ts";
@@ -132,6 +133,74 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: "Finir le solo 40 lignes en moins de 90 secondes.",
   },
 
+  // Capitale
+  {
+    id: "capitale-first-win",
+    game: "capitale",
+    chip: "1re",
+    tone: "green",
+    title: "Premier capital",
+    description: "Gagner une partie de Capitale.",
+  },
+  {
+    id: "capitale-regular",
+    game: "capitale",
+    chip: "25",
+    tone: "blue",
+    title: "Agent immobilier",
+    description: "Jouer 25 parties de Capitale.",
+  },
+  { id: "capitale-hotel", game: "capitale", chip: "H", tone: "red", title: "Palace", description: "Construire un hôtel." },
+  {
+    id: "capitale-builder",
+    game: "capitale",
+    chip: "10",
+    tone: "green",
+    title: "Promoteur",
+    description: "Construire 10 maisons dans une même partie.",
+  },
+  {
+    id: "capitale-landlord",
+    game: "capitale",
+    chip: "3",
+    tone: "ivory",
+    title: "Seigneur des terres",
+    description: "Réunir 3 groupes de couleur dans une même partie.",
+  },
+  {
+    id: "capitale-trader",
+    game: "capitale",
+    chip: "×3",
+    tone: "blue",
+    title: "Marchand de tapis",
+    description: "Conclure 3 échanges dans une même partie.",
+  },
+  {
+    id: "capitale-rentier",
+    game: "capitale",
+    chip: "2k",
+    tone: "green",
+    title: "Rentier",
+    description: "Toucher 2 000 de loyers dans une même partie.",
+  },
+  {
+    id: "capitale-tycoon",
+    game: "capitale",
+    chip: "5k",
+    tone: "ivory",
+    title: "Magnat",
+    description: "Finir une partie avec une fortune de 5 000.",
+  },
+  {
+    id: "capitale-jailbird",
+    game: "capitale",
+    chip: "×3",
+    tone: "black",
+    title: "Habitué du parloir",
+    description: "Aller 3 fois en prison dans une même partie.",
+  },
+  { id: "capitale-ruin", game: "capitale", chip: "0", tone: "black", title: "Sur la paille", description: "Faire faillite." },
+
   // Tournée
   { id: "tour-first", game: "tour", chip: "1re", tone: "ivory", title: "Premier acte", description: "Terminer une tournée." },
   { id: "tour-win", game: "tour", chip: "1er", tone: "red", title: "Tête d'affiche", description: "Gagner une tournée." },
@@ -171,6 +240,30 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
+
+export interface CapitaleOutcome {
+  won: boolean;
+  played: number;
+  bankrupt: boolean;
+  stats: CapitaleStats;
+}
+
+export function earnedCapitaleAchievements(o: CapitaleOutcome): string[] {
+  const s = o.stats;
+  const out: string[] = [];
+  const add = (id: string, cond: boolean) => cond && out.push(id);
+  add("capitale-first-win", o.won);
+  add("capitale-regular", o.played >= 25);
+  add("capitale-hotel", s.hotels >= 1);
+  add("capitale-builder", s.houses >= 10);
+  add("capitale-landlord", s.monopolies >= 3);
+  add("capitale-trader", s.trades >= 3);
+  add("capitale-rentier", s.rentEarned >= 2000);
+  add("capitale-tycoon", !o.bankrupt && s.netWorth >= 5000);
+  add("capitale-jailbird", s.jail >= 3);
+  add("capitale-ruin", o.bankrupt);
+  return out;
+}
 
 export interface TourOutcome {
   won: boolean;

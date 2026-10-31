@@ -4,17 +4,21 @@
 import type { AvatarConfig } from "./avatar.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
+import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
 import type { UnoSettings } from "./games/uno/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval"];
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale"];
+/** Capitale dure 20 minutes dans une tournée : l'hôte la coche s'il veut, elle ne l'est pas d'office */
+const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale");
 
 /** Nombre de joueurs qu'accueille chaque jeu */
 export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   uno: { min: 2, max: 8 },
   naval: { min: 2, max: 6 },
   bricks: { min: 2, max: 6 },
+  capitale: { min: 2, max: 6 },
 };
 
 export const TOUR_MIN_PLAYERS = 2;
@@ -36,10 +40,13 @@ export const END_CHOICES = { games: [3, 5, 7, 10], score: [30, 50, 100], time: [
 /** Niveau des bots de la tournée, traduit pour chaque jeu */
 export type TourBotLevel = "easy" | "normal" | "hard";
 
-export const TOUR_BOT_LEVELS: Record<TourBotLevel, { label: string; naval: NavalBotLevel; bricks: BricksBotLevel }> = {
-  easy: { label: "Facile", naval: "mousse", bricks: "apprenti" },
-  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme" },
-  hard: { label: "Fort", naval: "amiral", bricks: "expert" },
+export const TOUR_BOT_LEVELS: Record<
+  TourBotLevel,
+  { label: string; naval: NavalBotLevel; bricks: BricksBotLevel; capitale: CapitaleBotLevel }
+> = {
+  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile" },
+  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen" },
+  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort" },
 };
 
 /** Comment se choisissent les règles de chaque jeu */
@@ -68,7 +75,7 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
   return {
     visibility,
     maxPlayers: TOUR_MAX_PLAYERS,
-    games: [...TOUR_GAMES],
+    games: [...DEFAULT_TOUR_GAMES],
     end: { kind: "games", count: 5 },
     teams: false,
     once: false,
@@ -254,7 +261,29 @@ const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
   },
 ];
 
-const VARIANTS: Record<GameId, VariantOf<object>[]> = { uno: UNO_VARIANTS, naval: NAVAL_VARIANTS, bricks: BRICKS_VARIANTS };
+const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "Les règles officielles, en 20 minutes : le plus riche gagne.", settings: {} },
+  {
+    id: "cagnotte",
+    name: "Cagnotte",
+    blurb: "Taxes et amendes s'entassent sur l'Aire de repos, et tomber pile sur Départ double le salaire.",
+    settings: { freeParking: true, doubleGo: true },
+  },
+  { id: "depart-rapide", name: "Départ rapide", blurb: "Chacun commence avec deux titres tirés au sort.", settings: { quickStart: true } },
+  {
+    id: "prison-sans-loyer",
+    name: "Prison sans loyer",
+    blurb: "Un propriétaire en prison ne touche plus ses loyers.",
+    settings: { noRentInJail: true },
+  },
+];
+
+const VARIANTS: Record<GameId, VariantOf<object>[]> = {
+  uno: UNO_VARIANTS,
+  naval: NAVAL_VARIANTS,
+  bricks: BRICKS_VARIANTS,
+  capitale: CAPITALE_VARIANTS,
+};
 
 /** Les variantes d'un jeu, sans leurs réglages */
 export function gameVariants(game: GameId): TourVariant[] {
@@ -274,6 +303,7 @@ export function findVariant(game: GameId, id: string | null | undefined): TourVa
 export function variantSettings(game: "uno", id: string | null | undefined): Partial<UnoSettings>;
 export function variantSettings(game: "naval", id: string | null | undefined): Partial<NavalSettings>;
 export function variantSettings(game: "bricks", id: string | null | undefined): Partial<BricksSettings>;
+export function variantSettings(game: "capitale", id: string | null | undefined): Partial<CapitaleSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   return { ...(VARIANTS[game].find((v) => v.id === id)?.settings ?? {}) };
 }
