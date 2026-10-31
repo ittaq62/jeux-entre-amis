@@ -3,32 +3,33 @@
 // Aucune décision ne tire sur le hasard de la partie : le doute de Facile vient d'un calcul sur l'état.
 
 import {
-  BUILDINGS,
-  buildingPrice,
   BUYABLE,
   GROUP_ORDER,
   GROUPS,
   groupOf,
+  MAX_LEVEL,
   mortgageInterest,
   mortgageValue,
+  SPECIALS,
+  specialPrice,
   SQUARES,
   STATIONS,
   unmortgageCost,
-  type BuildingKind,
+  upgradeCost,
+  type SpecialKind,
 } from "./board.ts";
 import {
-  buildCost,
-  canBuild,
   canMortgage,
+  canPlaceSpecial,
   canRaze,
-  districtBuildings,
-  floorsLeft,
-  floorsOf,
+  canSell,
+  canUpgrade,
+  districtSpecials,
   hasStadium,
+  levelOf,
   liquidity,
-  nuisanceOn,
-  ownBuildings,
   ownedBy,
+  ownSpecial,
   ownsGroup,
   playerOf,
   rentFor,
@@ -40,10 +41,6 @@ import {
   type Offer,
   type Trade,
 } from "./engine.ts";
-
-/** L'ordre des cases où les bots posent : les maisons devant, les grands bâtiments au fond */
-const FRONT_FIRST = [0, 1, 2, 3];
-const BACK_FIRST = [2, 3, 0, 1];
 
 /** Un nombre entre 0 et 1 propre à la situation, sans toucher au hasard de la partie */
 function doubt(s: CapitaleState, salt: number): number {
@@ -70,7 +67,8 @@ function reserve(s: CapitaleState, playerId: string, level: BotLevel): number {
   // Ce que coûterait la pire carte de travaux : sans cette marge, on revend à moitié prix puis on rebâtit
   let repairs = 0;
   for (const i of ownedBy(s, playerId)) {
-    for (const b of ownBuildings(s, i)) repairs += b.kind === "gratte" ? 115 : BUILDINGS[b.kind].floors * 20;
+    const l = levelOf(s, i);
+    repairs += l === MAX_LEVEL ? 115 : l * 40;
   }
   if (level === "moyen") return Math.min(400, 80 + risk * 0.4) + repairs * 0.5;
   return Math.min(500, 40 + risk * 0.6) + repairs * 0.6;
@@ -173,7 +171,7 @@ export function botAction(s: CapitaleState, playerId: string, level: BotLevel, o
   }
 }
 
-/** Gestion de fin de tour : lever des hypothèques, bâtir, poser un bâtiment spécial, éventuellement proposer un échange */
+/** Gestion de fin de tour : lever des hypothèques, améliorer, poser un bâtiment spécial, éventuellement proposer un échange */
 function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   const keep = reserve(s, playerId, level);
@@ -186,10 +184,10 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
   if (level !== "facile" || p.cash >= 400) {
     const special = s.settings.specials && !specialUsed(s) ? specialMove(s, playerId, level, keep) : null;
     if (special) return special;
-    const floor = bestFloor(s, playerId, level, keep);
-    if (floor) return floor;
+    const up = bestUpgrade(s, playerId, level, keep);
+    if (up) return up;
   }
-  // Riche et sans rien à bâtir : lever les autres hypothèques
+  // Riche et sans rien à améliorer : lever les autres hypothèques
   for (const i of ownedBy(s, playerId)) {
     if (s.deeds[i]!.mortgaged && p.cash - unmortgageCost(i) >= keep * 2) return { type: "unmortgage", square: i };
   }
@@ -197,112 +195,91 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
   return null;
 }
 
-/** Le loyer qu'aurait la rue avec ce bâtiment en plus (essayé puis retiré) */
-function rentWith(s: CapitaleState, index: number, cell: number, kind: BuildingKind, by: string): number {
-  const lots = s.deeds[index]!.lots!;
-  const was = lots[cell] ?? null;
-  lots[cell] = { kind, by };
+/** Le loyer qu'aurait la rue un niveau plus haut (essayé puis remis) */
+function rentAt(s: CapitaleState, index: number, level: number): number {
+  const d = s.deeds[index]!;
+  const was = d.level;
+  d.level = level;
   const rent = rentFor(s, index, { diceTotal: 8 });
-  lots[cell] = was;
+  d.level = was;
   return rent;
 }
 
-/** L'étage qui rapporte le plus de loyer pour son prix, sur ses rues ; Fort remplit d'abord les cases libres (une case libre attire les nuisances) */
-function bestFloor(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
-  if (floorsLeft(s) <= 0) return null;
+/** La rue dont un niveau de plus rapporte le plus de loyer pour son prix ; Facile s'arrête à deux maisons */
+function bestUpgrade(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
-  let best: { action: CapitaleAction; score: number } | null = null;
+  let best: { square: number; score: number } | null = null;
   for (const i of ownedBy(s, playerId)) {
-    const d = s.deeds[i]!;
-    if (!d.lots || d.mortgaged || nuisanceOn(s, i)?.kind === "centrale") continue;
-    const free = FRONT_FIRST.find((c) => !d.lots![c]);
-    const house = BACK_FIRST.find((c) => d.lots![c]?.kind === "maison");
-    const options: { cell: number; kind: BuildingKind }[] = [];
-    if (free !== undefined) options.push({ cell: free, kind: "maison" });
-    if (house !== undefined && level !== "facile") options.push({ cell: house, kind: "immeuble" });
-    const before = rentFor(s, i, { diceTotal: 8 });
-    for (const o of options) {
-      if (canBuild(s, playerId, i, o.cell, o.kind) !== null) continue;
-      const cost = buildCost(s, i, o.cell, o.kind);
-      if (p.cash - cost < keep) continue;
-      let score = (rentWith(s, i, o.cell, o.kind, playerId) - before) / cost;
-      if (level === "fort" && o.kind === "maison") score *= 1.2;
-      if (score > 0 && (!best || score > best.score)) best = { action: { type: "build", square: i, cell: o.cell, kind: o.kind }, score };
-    }
+    if (canUpgrade(s, playerId, i) !== null) continue;
+    const now = levelOf(s, i);
+    if (level === "facile" && now >= 2) continue;
+    if (p.cash - upgradeCost(i) < keep) continue;
+    const score = (rentAt(s, i, now + 1) - rentFor(s, i, { diceTotal: 8 })) / upgradeCost(i);
+    if (score > 0 && (!best || score > best.score)) best = { square: i, score };
   }
-  return best?.action ?? null;
+  return best ? { type: "upgrade", square: best.square } : null;
 }
 
-/** Une case libre d'une rue, du fond vers l'avant */
-const freeCell = (s: CapitaleState, index: number) => BACK_FIRST.find((c) => s.deeds[index]!.lots && !s.deeds[index]!.lots![c]);
-
-/** Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un gratte-ciel, une nuisance chez le meilleur loyer adverse, un parc, un stade */
+/** Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un monument, une nuisance chez le meilleur loyer adverse, un parc, un stade */
 function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   const affordable = (price: number, margin = 1) => p.cash - price >= keep * margin;
-  const mine = ownedBy(s, playerId).filter((i) => s.deeds[i]!.lots);
+  const mine = ownedBy(s, playerId).filter((i) => SQUARES[i]!.kind === "property");
   // Une nuisance chez soi : on la fait raser si elle coûte plus que son prix en trois passages
   for (const i of mine) {
-    const lots = s.deeds[i]!.lots!;
-    const cell = lots.findIndex((b) => b !== null && BUILDINGS[b.kind].nuisance);
-    if (cell < 0 || canRaze(s, playerId, i, cell) !== null) continue;
-    const nuisance = lots[cell]!;
-    const price = buildingPrice(nuisance.kind, i);
+    const sp = s.deeds[i]!.special;
+    if (!sp || !SPECIALS[sp.kind].nuisance || canRaze(s, playerId, i) !== null) continue;
+    const price = specialPrice(sp.kind, i);
     const now = rentFor(s, i, { diceTotal: 8 });
-    lots[cell] = null;
+    s.deeds[i]!.special = null;
     const clean = rentFor(s, i, { diceTotal: 8 });
-    lots[cell] = nuisance;
-    if ((clean - now) * 3 >= price && affordable(price)) return { type: "raze", square: i, cell };
+    s.deeds[i]!.special = sp;
+    if ((clean - now) * 3 >= price && affordable(price)) return { type: "raze", square: i };
   }
   if (level === "facile") return null;
-  const tryBuild = (index: number, kind: BuildingKind): CapitaleAction | null => {
-    const cell = freeCell(s, index);
-    if (cell === undefined || canBuild(s, playerId, index, cell, kind) !== null) return null;
-    return { type: "build", square: index, cell, kind };
-  };
-  // Le gratte-ciel, dès qu'un quartier complet le permet : sur la rue la plus chère
+  const place = (index: number, kind: SpecialKind): CapitaleAction | null =>
+    canPlaceSpecial(s, playerId, index, kind) === null ? { type: "special", square: index, kind } : null;
+  // Le monument, dès qu'un quartier complet le permet : sur la rue la plus chère
   for (const g of GROUP_ORDER) {
-    if (!ownsGroup(s, playerId, g) || !affordable(buildingPrice("gratte", GROUPS[g].squares[0]!), 1.2)) continue;
+    if (!ownsGroup(s, playerId, g) || !affordable(specialPrice("monument", GROUPS[g].squares[0]!), 1.2)) continue;
     for (const i of [...GROUPS[g].squares].reverse()) {
-      const a = tryBuild(i, "gratte");
+      const a = place(i, "monument");
       if (a) return a;
     }
   }
   // Une nuisance sur la rue adverse qui rapporte le plus
-  const targets = BUYABLE.filter((i) => {
+  const target = BUYABLE.filter((i) => {
     const d = s.deeds[i]!;
-    return d.lots && d.owner && d.owner !== playerId && !d.mortgaged;
-  }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }));
-  const target = targets[0];
+    return SQUARES[i]!.kind === "property" && d.owner && d.owner !== playerId && !d.mortgaged && !d.special;
+  }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }))[0];
   if (target !== undefined) {
     const rent = rentFor(s, target, { diceTotal: 8 });
-    const kind: BuildingKind | null =
-      floorsOf(s, target) >= 3 && rent >= 300 ? "centrale" : rent >= (level === "fort" ? 100 : 160) ? "decharge" : null;
-    if (kind && affordable(buildingPrice(kind, target), level === "fort" ? 1 : 1.5)) {
-      const a = tryBuild(target, kind);
+    const kind: SpecialKind | null =
+      levelOf(s, target) >= 2 && rent >= 300 ? "centrale" : rent >= (level === "fort" ? 100 : 160) ? "decharge" : null;
+    if (kind && affordable(specialPrice(kind, target), level === "fort" ? 1 : 1.5)) {
+      const a = place(target, kind);
       if (a) return a;
     }
   }
   // Un parc pour protéger un quartier où l'on a bâti
   for (const i of mine) {
-    const g = groupOf(i);
-    if (!g || floorsOf(s, i) < 3 || districtBuildings(s, g.id).some((b) => b.kind === "parc")) continue;
-    if (!affordable(buildingPrice("parc", i), 1.5)) continue;
-    const a = tryBuild(i, "parc");
+    const g = groupOf(i)!;
+    if (levelOf(s, i) < 2 || districtSpecials(s, g.id).some((b) => b.kind === "parc") || !affordable(specialPrice("parc", i), 1.5))
+      continue;
+    const a = place(i, "parc");
     if (a) return a;
   }
   // Un stade sur la rue la plus passante (celles qui suivent la prison)
-  if (!hasStadium(s, playerId) && affordable(buildingPrice("stade", 0), level === "fort" ? 1.3 : 2)) {
-    const busy = [...mine].sort((a, b) => Math.abs(a - 19) - Math.abs(b - 19));
-    for (const i of busy) {
-      const a = tryBuild(i, "stade");
+  if (!hasStadium(s, playerId) && affordable(specialPrice("stade", 0), level === "fort" ? 1.3 : 2)) {
+    for (const i of [...mine].sort((a, b) => Math.abs(a - 19) - Math.abs(b - 19))) {
+      const a = place(i, "stade");
       if (a) return a;
     }
   }
   return null;
 }
 
-/** Trouver de quoi payer : hypothéquer ce qui est hors des groupes complets, vendre des bâtiments, sinon la faillite */
+/** Trouver de quoi payer : hypothéquer ce qui est hors des groupes complets, revendre des niveaux, sinon la faillite */
 function raiseMoney(s: CapitaleState, playerId: string, level: BotLevel): CapitaleAction {
   const owed = s.debts.filter((d) => d.debtor === playerId).reduce((n, d) => n + d.amount, 0);
   if (liquidity(s, playerId) < owed) return { type: "bankrupt" };
@@ -317,11 +294,11 @@ function raiseMoney(s: CapitaleState, playerId: string, level: BotLevel): Capita
     .sort((a, b) => full(a) - full(b) || valueFor(s, playerId, a, level) - valueFor(s, playerId, b, level));
   const first = loose[0];
   if (first !== undefined && !full(first)) return { type: "mortgage", square: first };
-  // Puis revendre des bâtiments, les moins chers d'abord
-  const sales = mine
-    .flatMap((i) => ownBuildings(s, i).map((b) => ({ square: i, cell: b.cell, price: buildingPrice(b.kind, i) })))
-    .sort((a, b) => a.price - b.price);
-  if (sales.length > 0) return { type: "sell", square: sales[0]!.square, cell: sales[0]!.cell };
+  // Puis revendre : les bâtiments spéciaux, puis un niveau sur la rue la moins chère
+  const special = mine.find((i) => ownSpecial(s, i) && canRaze(s, playerId, i) === null);
+  if (special !== undefined) return { type: "raze", square: special };
+  const sellable = mine.filter((i) => canSell(s, playerId, i) === null).sort((a, b) => upgradeCost(a) - upgradeCost(b));
+  if (sellable.length > 0) return { type: "sell", square: sellable[0]! };
   if (first !== undefined) return { type: "mortgage", square: first };
   return { type: "bankrupt" };
 }

@@ -20,7 +20,8 @@ function durationOf(e: CapitaleEvent): number {
       return CARD_MS;
     case "money":
       return 260;
-    case "build":
+    case "upgrade":
+    case "special":
       return 520;
     case "buy":
     case "auctionEnd":

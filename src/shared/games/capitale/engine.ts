@@ -3,33 +3,32 @@
 
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 import {
-  BUILDINGS,
-  buildingPrice,
   BUYABLE,
   DECKS,
-  floorCost,
-  floorRents,
-  FLOORS_PER_TURN,
+  FREE_LEVELS,
   GO_SALARY,
   GROUP_ORDER,
   GROUPS,
   groupOf,
-  isBuildingKind,
+  isSpecialKind,
   JAIL_FINE,
   JAIL_SQUARE,
+  MAX_LEVEL,
   mortgageInterest,
   mortgageValue,
+  SPECIALS,
+  specialPrice,
   SQUARES,
-  START_CASH,
-  LOT_CELLS,
   STADIUM_TICKET,
+  START_CASH,
   STATION_RENTS,
   STATIONS,
   unmortgageCost,
+  upgradeCost,
   UTILITIES,
-  type BuildingKind,
   type DeckId,
   type GroupId,
+  type SpecialKind,
 } from "./board.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -67,26 +66,28 @@ export const DEFAULT_SETTINGS: CapitaleSettings = {
   botLevel: "moyen",
 };
 
-/** Un bâtiment posé sur une case de parcelle, et qui l'a posé (le propriétaire, ou l'adversaire d'une nuisance) */
-export interface Building {
-  kind: BuildingKind;
+/** Le bâtiment spécial d'une rue, et qui l'a posé (le propriétaire, ou l'adversaire d'une nuisance) */
+export interface Special {
+  kind: SpecialKind;
   by: string;
 }
 
 export interface Deed {
   owner: string | null;
   mortgaged: boolean;
-  /** Les terrains : les 4 cases de leur parcelle, vides ou bâties */
-  lots?: (Building | null)[];
+  /** Les terrains : leur niveau, de 0 (terrain nu) à 5 (le gratte-ciel) */
+  level?: number;
+  /** Les terrains : un bâtiment spécial au plus */
+  special?: Special | null;
 }
 
 export interface CapitaleStats {
   rentEarned: number;
   rentPaid: number;
   bought: number;
-  /** Étages bâtis (une maison en vaut 1, un immeuble 2) */
+  /** Niveaux ajoutés à ses rues */
   houses: number;
-  /** Gratte-ciel bâtis */
+  /** Gratte-ciel atteints */
   hotels: number;
   trades: number;
   jail: number;
@@ -173,8 +174,8 @@ export interface CapitaleState {
   players: CapitalePlayer[];
   /** Un titre par case achetable, null ailleurs */
   deeds: (Deed | null)[];
-  /** Le chantier du tour en cours : les étages déjà bâtis, et si le bâtiment spécial est posé */
-  site: { turnId: number; floors: number; special: boolean };
+  /** Le tour en cours : les rues déjà améliorées (une fois chacune), et si le bâtiment spécial est posé */
+  site: { turnId: number; upgraded: number[]; special: boolean };
   /** Cagnotte de l'Aire de repos (règle maison) */
   pot: number;
   decks: Record<DeckId, number[]>;
@@ -213,10 +214,12 @@ export type CapitaleEvent =
   | { type: "bid"; player: string; amount: number }
   | { type: "pass"; player: string }
   | { type: "auctionEnd"; square: number; winner: string | null; amount: number }
-  | { type: "build"; player: string; square: number; cell: number; kind: BuildingKind; upgrade: boolean }
-  | { type: "sell"; player: string; square: number; cell: number; kind: BuildingKind }
-  /** Une nuisance enlevée : rasée aux frais du propriétaire, ou d'office (faillite, titre repris par celui qui l'avait posée) */
-  | { type: "raze"; player: string; square: number; cell: number; kind: BuildingKind; how: "pay" | "auto" }
+  | { type: "upgrade"; player: string; square: number; level: number }
+  /** Un niveau revendu à la banque */
+  | { type: "sell"; player: string; square: number; level: number }
+  | { type: "special"; player: string; square: number; kind: SpecialKind }
+  /** Un bâtiment spécial enlevé : revendu par son propriétaire, une nuisance rasée à ses frais, ou d'office */
+  | { type: "raze"; player: string; square: number; kind: SpecialKind; how: "sell" | "pay" | "auto" }
   | { type: "mortgage"; player: string; square: number }
   | { type: "unmortgage"; player: string; square: number }
   | { type: "card"; player: string; deck: DeckId; card: number }
@@ -236,9 +239,10 @@ export type CapitaleAction =
   | { type: "decline" }
   | { type: "bid"; amount: number }
   | { type: "pass" }
-  | { type: "build"; square: number; cell: number; kind: BuildingKind }
-  | { type: "sell"; square: number; cell: number }
-  | { type: "raze"; square: number; cell: number }
+  | { type: "upgrade"; square: number }
+  | { type: "sell"; square: number }
+  | { type: "special"; square: number; kind: SpecialKind }
+  | { type: "raze"; square: number }
   | { type: "mortgage"; square: number }
   | { type: "unmortgage"; square: number }
   | { type: "propose"; to: string; give: Offer; get: Offer; replaces?: number }
@@ -279,7 +283,7 @@ const JAIL_CARD_INDEX: Record<DeckId, number> = {
 function freshDeed(index: number): Deed | null {
   const sq = SQUARES[index]!;
   if (sq.price === undefined) return null;
-  return sq.kind === "property" ? { owner: null, mortgaged: false, lots: Array(LOT_CELLS).fill(null) } : { owner: null, mortgaged: false };
+  return sq.kind === "property" ? { owner: null, mortgaged: false, level: 0, special: null } : { owner: null, mortgaged: false };
 }
 
 export function createGame(
@@ -301,7 +305,7 @@ export function createGame(
       stats: emptyStats(),
     })),
     deeds: SQUARES.map((s) => freshDeed(s.index)),
-    site: { turnId: 0, floors: 0, special: false },
+    site: { turnId: 0, upgraded: [], special: false },
     pot: 0,
     decks: {
       hasard: shuffle(
@@ -381,32 +385,37 @@ export function ownedBy(s: CapitaleState, playerId: string): number[] {
   return BUYABLE.filter((i) => s.deeds[i]!.owner === playerId);
 }
 
-/** Les étages d'une rue : 1 par maison, 2 par immeuble */
-export function floorsOf(s: CapitaleState, index: number): number {
-  return (s.deeds[index]?.lots ?? []).reduce((n, b) => n + (b ? BUILDINGS[b.kind].floors : 0), 0);
-}
+/** Le niveau d'une rue (0 ailleurs) */
+export const levelOf = (s: CapitaleState, index: number) => s.deeds[index]?.level ?? 0;
 
-/** Les bâtiments du propriétaire sur sa propre rue (logements et spéciaux) : ce qui se revend, ce qui bloque un échange */
-export function ownBuildings(s: CapitaleState, index: number): { cell: number; kind: BuildingKind }[] {
+/** Le bâtiment spécial du propriétaire sur sa propre rue (pas une nuisance subie) */
+export function ownSpecial(s: CapitaleState, index: number): SpecialKind | null {
   const d = s.deeds[index];
-  if (!d?.owner || !d.lots) return [];
-  return d.lots.flatMap((b, cell) => (b && b.by === d.owner ? [{ cell, kind: b.kind }] : []));
-}
-
-/** Tous les bâtiments d'un quartier, rue par rue */
-export function districtBuildings(s: CapitaleState, group: GroupId): (Building & { square: number; cell: number })[] {
-  return GROUPS[group].squares.flatMap((i) => (s.deeds[i]!.lots ?? []).flatMap((b, cell) => (b ? [{ ...b, square: i, cell }] : [])));
+  return d?.special && d.special.by === d.owner ? d.special.kind : null;
 }
 
 /** La nuisance posée sur une rue, s'il y en a une */
-export function nuisanceOn(s: CapitaleState, index: number): Building | null {
-  return (s.deeds[index]?.lots ?? []).find((b): b is Building => b !== null && BUILDINGS[b.kind].nuisance) ?? null;
+export function nuisanceOn(s: CapitaleState, index: number): SpecialKind | null {
+  const k = s.deeds[index]?.special?.kind;
+  return k && SPECIALS[k].nuisance ? k : null;
 }
 
-/** Ce qu'ont coûté les bâtiments d'un joueur sur ses rues */
+/** Les bâtiments spéciaux d'un quartier, rue par rue */
+export function districtSpecials(s: CapitaleState, group: GroupId): (Special & { square: number })[] {
+  return GROUPS[group].squares.flatMap((i) => {
+    const sp = s.deeds[i]!.special;
+    return sp ? [{ ...sp, square: i }] : [];
+  });
+}
+
+/** Ce qu'ont coûté les niveaux et les bâtiments spéciaux d'un joueur sur ses rues */
 function buildingsValue(s: CapitaleState, playerId: string): number {
   let total = 0;
-  for (const i of ownedBy(s, playerId)) for (const b of ownBuildings(s, i)) total += buildingPrice(b.kind, i);
+  for (const i of ownedBy(s, playerId)) {
+    total += levelOf(s, i) * upgradeCost(i);
+    const own = ownSpecial(s, i);
+    if (own) total += specialPrice(own, i);
+  }
   return total;
 }
 
@@ -444,14 +453,14 @@ export function rentFor(s: CapitaleState, index: number, ctx: RentContext): numb
   if (!owner || owner.bankrupt) return 0;
   if (s.settings.noRentInJail && owner.inJail) return 0;
   if (sq.kind === "property") {
-    // Les étages, sinon le terrain nu (doublé avec tout le quartier) ; une centrale coupe les étages, une décharge divise
-    // par deux, le gratte-ciel du propriétaire double tout le quartier
+    // Le niveau, sinon le terrain nu (doublé avec tout le quartier) ; une centrale ramène au terrain nu, une décharge
+    // divise par deux, le monument du propriétaire double tout le quartier
     const full = ownsGroup(s, deed.owner, sq.group!);
     const nuisance = nuisanceOn(s, index);
-    const floors = nuisance?.kind === "centrale" ? 0 : floorsOf(s, index);
-    let rent = floors > 0 ? floorRents(index)[floors]! : sq.rents![0] * (full ? 2 : 1);
-    if (nuisance?.kind === "decharge") rent = Math.floor(rent / 2);
-    if (full && districtBuildings(s, sq.group!).some((b) => b.kind === "gratte" && b.by === deed.owner)) rent *= 2;
+    const level = nuisance === "centrale" ? 0 : levelOf(s, index);
+    let rent = level > 0 ? sq.rents![level]! : sq.rents![0] * (full ? 2 : 1);
+    if (nuisance === "decharge") rent = Math.floor(rent / 2);
+    if (full && districtSpecials(s, sq.group!).some((b) => b.kind === "monument" && b.by === deed.owner)) rent *= 2;
     return rent;
   }
   if (sq.kind === "station") {
@@ -553,7 +562,7 @@ function payTickets(s: CapitaleState, p: CapitalePlayer, from: number, steps: nu
   for (let k = 1; k <= steps; k++) {
     const i = (from + k) % 40;
     const d = s.deeds[i];
-    if (!d?.owner || d.owner === p.id || d.mortgaged || !d.lots?.some((b) => b?.kind === "stade" && b.by === d.owner)) continue;
+    if (!d?.owner || d.owner === p.id || d.mortgaged || ownSpecial(s, i) !== "stade") continue;
     const owner = playerOf(s, d.owner);
     if (!owner || owner.bankrupt || (s.settings.noRentInJail && owner.inJail)) continue;
     charge(s, p, owner.id, STADIUM_TICKET, "ticket", events, i);
@@ -657,15 +666,15 @@ function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: Cap
     case "jailFree":
       return;
     case "repairs": {
-      let floors = 0;
+      // Comme la règle classique : un gratte-ciel compte comme un hôtel, les autres niveaux comme des maisons
+      let levels = 0;
       let towers = 0;
       for (const i of ownedBy(s, p.id)) {
-        for (const b of ownBuildings(s, i)) {
-          floors += BUILDINGS[b.kind].floors;
-          if (b.kind === "gratte") towers += 1;
-        }
+        const l = levelOf(s, i);
+        if (l === MAX_LEVEL) towers += 1;
+        else levels += l;
       }
-      charge(s, p, taxAccount(s), floors * effect.floor + towers * effect.tower, "card", events);
+      charge(s, p, taxAccount(s), levels * effect.level + towers * effect.tower, "card", events);
       return;
     }
     case "eachPlayer":
@@ -800,93 +809,79 @@ function manageRight(s: CapitaleState, playerId: string): "full" | "raise" | nul
   return s.step === "roll" || s.step === "buy" || s.step === "manage" ? "full" : null;
 }
 
-/** Les étages qu'on peut encore bâtir ce tour-ci */
-export function floorsLeft(s: CapitaleState): number {
-  return FLOORS_PER_TURN - (s.site.turnId === s.turnId ? s.site.floors : 0);
-}
-
 /** Le bâtiment spécial du tour est-il déjà posé ? */
 export function specialUsed(s: CapitaleState): boolean {
   return s.site.turnId === s.turnId && s.site.special;
 }
 
-/** Un immeuble à la place d'une maison du propriétaire : on ne paie que l'étage de plus */
-function isUpgrade(s: CapitaleState, index: number, cell: number, kind: BuildingKind): boolean {
-  const here = s.deeds[index]?.lots?.[cell];
-  return kind === "immeuble" && here?.kind === "maison" && here.by === s.deeds[index]!.owner;
-}
-
-/** Ce que coûte de poser ce bâtiment sur cette case */
-export function buildCost(s: CapitaleState, index: number, cell: number, kind: BuildingKind): number {
-  return isUpgrade(s, index, cell, kind) ? floorCost(index) : buildingPrice(kind, index);
+/** Cette rue a-t-elle déjà été améliorée ce tour-ci ? */
+export function upgradedThisTurn(s: CapitaleState, index: number): boolean {
+  return s.site.turnId === s.turnId && s.site.upgraded.includes(index);
 }
 
 export function hasStadium(s: CapitaleState, playerId: string): boolean {
-  return ownedBy(s, playerId).some((i) => ownBuildings(s, i).some((b) => b.kind === "stade"));
+  return ownedBy(s, playerId).some((i) => ownSpecial(s, i) === "stade");
 }
 
-/** Peut-on poser ce bâtiment sur cette case ? Les logements et les spéciaux chez soi, une nuisance chez un adversaire */
-export function canBuild(s: CapitaleState, playerId: string, index: number, cell: number, kind: BuildingKind): string | null {
+/** Peut-on améliorer cette rue d'un niveau ? Une fois par tour ; au-delà du niveau 3, il faut tout le quartier */
+export function canUpgrade(s: CapitaleState, playerId: string, index: number): string | null {
   const sq = SQUARES[index];
   const deed = s.deeds[index];
-  if (!sq || sq.kind !== "property" || !deed?.lots) return "On ne bâtit que sur la parcelle d'une rue.";
-  if (!isBuildingKind(kind)) return "Ce bâtiment n'existe pas.";
-  if (!Number.isInteger(cell) || cell < 0 || cell >= LOT_CELLS) return "Choisis une case de la parcelle.";
-  const info = BUILDINGS[kind];
-  const here = deed.lots[cell];
-  if (info.special) {
-    if (!s.settings.specials) return "Les bâtiments spéciaux ne sont pas de la partie.";
-    if (specialUsed(s)) return "Un seul bâtiment spécial par tour.";
-    if (here) return "Cette case est déjà prise.";
-    if (deed.mortgaged) return "Ce terrain est hypothéqué.";
-    const district = districtBuildings(s, sq.group!);
-    if (info.nuisance) {
-      if (!deed.owner || deed.owner === playerId) return "Une nuisance se pose chez un adversaire.";
-      if (district.some((b) => b.kind === "parc")) return "Un parc protège ce quartier.";
-      if (nuisanceOn(s, index)) return "Cette rue a déjà sa nuisance.";
-    } else {
-      if (deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
-      if (kind === "gratte" && !ownsGroup(s, playerId, sq.group!)) return "Il faut tout le quartier pour un gratte-ciel.";
-      if (kind === "gratte" && district.some((b) => b.kind === "gratte")) return "Le quartier a déjà son gratte-ciel.";
-      if (kind === "parc" && district.some((b) => b.kind === "parc")) return "Le quartier a déjà son parc.";
-      if (kind === "parc" && district.some((b) => BUILDINGS[b.kind].nuisance)) return "Fais d'abord raser la nuisance du quartier.";
-      if (kind === "stade" && hasStadium(s, playerId)) return "Tu as déjà un stade.";
-    }
+  if (!sq || sq.kind !== "property" || !deed) return "On n'améliore que les rues.";
+  if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
+  if (deed.mortgaged) return "Cette rue est hypothéquée.";
+  const level = deed.level ?? 0;
+  if (level >= MAX_LEVEL) return "Le gratte-ciel est déjà là : c'est le plus haut niveau.";
+  if (level >= FREE_LEVELS && !ownsGroup(s, playerId, sq.group!))
+    return `Pour monter plus haut, il faut tout le quartier ${GROUPS[sq.group!].name.toLowerCase()}.`;
+  if (upgradedThisTurn(s, index)) return "Une amélioration par rue et par tour.";
+  if (playerOf(s, playerId)!.cash < upgradeCost(index)) return `Il faut ${upgradeCost(index)}.`;
+  return null;
+}
+
+/** Peut-on revendre un niveau de cette rue ? À moitié prix */
+export function canSell(s: CapitaleState, playerId: string, index: number): string | null {
+  const deed = s.deeds[index];
+  if (!deed || deed.owner !== playerId) return "Cette rue n'est pas à toi.";
+  if (!deed.level) return "Il n'y a rien à revendre ici.";
+  return null;
+}
+
+/** Peut-on poser ce bâtiment spécial sur cette rue ? Une nuisance chez un adversaire, le reste chez soi */
+export function canPlaceSpecial(s: CapitaleState, playerId: string, index: number, kind: SpecialKind): string | null {
+  if (!s.settings.specials) return "Les bâtiments spéciaux ne sont pas de la partie.";
+  const sq = SQUARES[index];
+  const deed = s.deeds[index];
+  if (!isSpecialKind(kind) || !sq || sq.kind !== "property" || !deed) return "Les bâtiments spéciaux se posent sur une rue.";
+  const info = SPECIALS[kind];
+  if (specialUsed(s)) return "Un seul bâtiment spécial par tour.";
+  if (deed.special) return "Cette rue a déjà son bâtiment spécial.";
+  if (deed.mortgaged) return "Cette rue est hypothéquée.";
+  const here = districtSpecials(s, sq.group!);
+  if (info.nuisance) {
+    if (!deed.owner || deed.owner === playerId) return "Une nuisance se pose chez un adversaire.";
+    if (here.some((b) => b.kind === "parc")) return "Un parc protège ce quartier.";
   } else {
-    if (deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
-    if (deed.mortgaged) return "Ce terrain est hypothéqué.";
-    const upgrade = isUpgrade(s, index, cell, kind);
-    if (here && !upgrade) return here.kind === "immeuble" ? "Il y a déjà un immeuble ici." : "Cette case est déjà prise.";
-    const add = upgrade ? 1 : info.floors;
-    const left = floorsLeft(s);
-    if (add > left)
-      return left === 0
-        ? `Le chantier du tour est fini : ${FLOORS_PER_TURN} étages par tour.`
-        : "Il ne reste qu'un étage à bâtir ce tour-ci.";
+    if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
+    if (kind === "monument" && !ownsGroup(s, playerId, sq.group!)) return "Il faut tout le quartier pour un monument.";
+    if (kind === "monument" && here.some((b) => b.kind === "monument")) return "Le quartier a déjà son monument.";
+    if (kind === "parc" && here.some((b) => b.kind === "parc")) return "Le quartier a déjà son parc.";
+    if (kind === "parc" && here.some((b) => SPECIALS[b.kind].nuisance)) return "Fais d'abord raser la nuisance du quartier.";
+    if (kind === "stade" && hasStadium(s, playerId)) return "Tu as déjà un stade.";
   }
-  const price = buildCost(s, index, cell, kind);
+  const price = specialPrice(kind, index);
   if (playerOf(s, playerId)!.cash < price) return `Il faut ${price}.`;
   return null;
 }
 
-/** Peut-on revendre le bâtiment de cette case ? Le sien, sur sa rue, à moitié prix */
-export function canSell(s: CapitaleState, playerId: string, index: number, cell: number): string | null {
+/** Peut-on enlever le bâtiment spécial de sa rue ? Le sien se revend à moitié prix, une nuisance se fait raser à ses frais */
+export function canRaze(s: CapitaleState, playerId: string, index: number): string | null {
   const deed = s.deeds[index];
-  if (!deed || deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
-  const b = deed.lots?.[cell];
-  if (!b) return "Il n'y a rien à vendre sur cette case.";
-  if (b.by !== playerId) return `${BUILDINGS[b.kind].name} : une nuisance se fait raser, elle ne se vend pas.`;
-  return null;
-}
-
-/** Peut-on faire raser la nuisance de cette case ? Aux frais du propriétaire de la rue */
-export function canRaze(s: CapitaleState, playerId: string, index: number, cell: number): string | null {
-  const deed = s.deeds[index];
-  if (!deed || deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
-  const b = deed.lots?.[cell];
-  if (!b || !BUILDINGS[b.kind].nuisance) return "Il n'y a pas de nuisance sur cette case.";
-  const cost = buildingPrice(b.kind, index);
-  if (playerOf(s, playerId)!.cash < cost) return `Il faut ${cost} pour faire raser ${BUILDINGS[b.kind].the}.`;
+  const sp = deed?.special;
+  if (!deed || !sp) return "Il n'y a pas de bâtiment spécial ici.";
+  if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
+  const cost = specialPrice(sp.kind, index);
+  if (SPECIALS[sp.kind].nuisance && playerOf(s, playerId)!.cash < cost) return `Il faut ${cost} pour faire raser ${SPECIALS[sp.kind].the}.`;
   return null;
 }
 
@@ -894,52 +889,58 @@ export function canMortgage(s: CapitaleState, playerId: string, index: number): 
   const deed = s.deeds[index];
   if (!deed || deed.owner !== playerId) return "Ce titre n'est pas à toi.";
   if (deed.mortgaged) return "Déjà hypothéqué.";
-  if (ownBuildings(s, index).length > 0) return "Vends d'abord les bâtiments de la rue.";
+  if (deed.level) return "Revends d'abord les niveaux de la rue.";
+  const own = ownSpecial(s, index);
+  if (own) return `Revends d'abord ${SPECIALS[own].the}.`;
   return null;
 }
 
-function build(s: CapitaleState, p: CapitalePlayer, index: number, cell: number, kind: BuildingKind, events: CapitaleEvent[]) {
-  const lots = s.deeds[index]!.lots!;
-  const upgrade = isUpgrade(s, index, cell, kind);
-  const info = BUILDINGS[kind];
-  pay(s, p.id, "bank", buildCost(s, index, cell, kind), info.special ? "special" : "build", events, index);
-  lots[cell] = { kind, by: p.id };
-  if (s.site.turnId !== s.turnId) s.site = { turnId: s.turnId, floors: 0, special: false };
-  if (info.special) {
-    s.site.special = true;
-    if (kind === "gratte") p.stats.hotels += 1;
-  } else {
-    const add = upgrade ? 1 : info.floors;
-    s.site.floors += add;
-    p.stats.houses += add;
-  }
-  events.push({ type: "build", player: p.id, square: index, cell, kind, upgrade });
+function touchSite(s: CapitaleState) {
+  if (s.site.turnId !== s.turnId) s.site = { turnId: s.turnId, upgraded: [], special: false };
 }
 
-function sellOne(s: CapitaleState, p: CapitalePlayer, index: number, cell: number, events: CapitaleEvent[]) {
-  const lots = s.deeds[index]!.lots!;
-  const kind = lots[cell]!.kind;
-  lots[cell] = null;
-  pay(s, "bank", p.id, Math.floor(buildingPrice(kind, index) / 2), "sell", events, index);
-  events.push({ type: "sell", player: p.id, square: index, cell, kind });
+function upgrade(s: CapitaleState, p: CapitalePlayer, index: number, events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  pay(s, p.id, "bank", upgradeCost(index), "build", events, index);
+  deed.level = (deed.level ?? 0) + 1;
+  touchSite(s);
+  s.site.upgraded.push(index);
+  p.stats.houses += 1;
+  if (deed.level === MAX_LEVEL) p.stats.hotels += 1;
+  events.push({ type: "upgrade", player: p.id, square: index, level: deed.level });
 }
 
-/** Enlever une nuisance : payée par le propriétaire, ou d'office */
-function raze(s: CapitaleState, p: CapitalePlayer, index: number, cell: number, how: "pay" | "auto", events: CapitaleEvent[]) {
-  const lots = s.deeds[index]!.lots!;
-  const kind = lots[cell]!.kind;
-  if (how === "pay") pay(s, p.id, "bank", buildingPrice(kind, index), "special", events, index);
-  lots[cell] = null;
-  events.push({ type: "raze", player: p.id, square: index, cell, kind, how });
+function sellLevel(s: CapitaleState, p: CapitalePlayer, index: number, events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  deed.level = Math.max(0, (deed.level ?? 0) - 1);
+  pay(s, "bank", p.id, Math.floor(upgradeCost(index) / 2), "sell", events, index);
+  events.push({ type: "sell", player: p.id, square: index, level: deed.level });
 }
 
-/** Les nuisances qu'un joueur avait posées sur des rues qui deviennent les siennes disparaissent */
-function dropOwnNuisances(s: CapitaleState, index: number, events: CapitaleEvent[]) {
+function placeSpecial(s: CapitaleState, p: CapitalePlayer, index: number, kind: SpecialKind, events: CapitaleEvent[]) {
+  pay(s, p.id, "bank", specialPrice(kind, index), "special", events, index);
+  s.deeds[index]!.special = { kind, by: p.id };
+  touchSite(s);
+  s.site.special = true;
+  events.push({ type: "special", player: p.id, square: index, kind });
+}
+
+/** Enlever le bâtiment spécial d'une rue : revendu à moitié prix, une nuisance rasée aux frais du propriétaire, ou d'office */
+function raze(s: CapitaleState, p: CapitalePlayer, index: number, how: "sell" | "pay" | "auto", events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  const kind = deed.special!.kind;
+  const price = specialPrice(kind, index);
+  if (how === "pay") pay(s, p.id, "bank", price, "special", events, index);
+  else if (how === "sell") pay(s, "bank", p.id, Math.floor(price / 2), "sell", events, index);
+  deed.special = null;
+  events.push({ type: "raze", player: p.id, square: index, kind, how });
+}
+
+/** La nuisance qu'un joueur avait posée sur une rue qui devient la sienne disparaît */
+function dropOwnNuisance(s: CapitaleState, index: number, events: CapitaleEvent[]) {
   const d = s.deeds[index];
-  if (!d?.owner || !d.lots) return;
-  d.lots.forEach((b, cell) => {
-    if (b && BUILDINGS[b.kind].nuisance && b.by === d.owner) raze(s, playerOf(s, d.owner!)!, index, cell, "auto", events);
-  });
+  if (d?.owner && d.special && SPECIALS[d.special.kind].nuisance && d.special.by === d.owner)
+    raze(s, playerOf(s, d.owner)!, index, "auto", events);
 }
 
 // ---------------------------------------------------------------------------
@@ -957,10 +958,12 @@ export function tradeProblem(s: CapitaleState, playerId: string, index: number):
   const deed = s.deeds[index];
   if (!deed || deed.owner !== playerId) return `${SQUARES[index]?.name ?? "Ce titre"} n'appartient pas à ce joueur.`;
   const name = SQUARES[index]!.name;
-  if (ownBuildings(s, index).length > 0) return `Il y a des bâtiments sur ${name} : il faut les vendre avant.`;
+  if (levelOf(s, index) > 0) return `${name} est construite : il faut d'abord revendre ses niveaux.`;
+  const own = ownSpecial(s, index);
+  if (own) return `Il faut d'abord revendre ${SPECIALS[own].the} de ${name}.`;
   const g = groupOf(index);
-  if (g && districtBuildings(s, g.id).some((b) => b.kind === "gratte"))
-    return `Il y a un gratte-ciel dans le quartier de ${name} : il faut le vendre avant.`;
+  if (g && districtSpecials(s, g.id).some((b) => b.kind === "monument"))
+    return `Il y a un monument dans le quartier de ${name} : il faut le revendre avant.`;
   return null;
 }
 
@@ -995,7 +998,7 @@ function executeTrade(s: CapitaleState, t: Trade, events: CapitaleEvent[]) {
   };
   move(a, b, t.give);
   move(b, a, t.get);
-  for (const i of [...t.give.squares, ...t.get.squares]) dropOwnNuisances(s, i, events);
+  for (const i of [...t.give.squares, ...t.get.squares]) dropOwnNuisance(s, i, events);
   // Un titre hypothéqué reçu : 10 % d'intérêts tout de suite
   const toA = interestOn(s, t.get.squares);
   const toB = interestOn(s, t.give.squares);
@@ -1012,19 +1015,18 @@ function executeTrade(s: CapitaleState, t: Trade, events: CapitaleEvent[]) {
 
 function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, events: CapitaleEvent[]) {
   const wasCurrent = currentPlayer(s) === p;
-  // Ses bâtiments sont rachetés par la banque à moitié prix ; ses nuisances chez les autres disparaissent
-  for (const i of ownedBy(s, p.id)) for (const b of ownBuildings(s, i)) sellOne(s, p, i, b.cell, events);
-  for (const i of BUYABLE) {
-    s.deeds[i]!.lots?.forEach((b, cell) => {
-      if (b && b.by === p.id) raze(s, p, i, cell, "auto", events);
-    });
+  // Ses niveaux et ses bâtiments spéciaux sont rachetés par la banque à moitié prix ; ses nuisances chez les autres disparaissent
+  for (const i of ownedBy(s, p.id)) {
+    while (levelOf(s, i) > 0) sellLevel(s, p, i, events);
+    if (ownSpecial(s, i)) raze(s, p, i, "sell", events);
   }
+  for (const i of BUYABLE) if (s.deeds[i]!.special?.by === p.id) raze(s, p, i, "auto", events);
   const heir = creditor !== "bank" && creditor !== "pot" ? playerOf(s, creditor) : undefined;
   if (heir && !heir.bankrupt) {
     if (p.cash > 0) pay(s, p.id, heir.id, p.cash, "bankrupt", events);
     for (const i of ownedBy(s, p.id)) {
       s.deeds[i]!.owner = heir.id;
-      dropOwnNuisances(s, i, events);
+      dropOwnNuisance(s, i, events);
     }
     heir.jailCards.push(...p.jailCards);
     heir.stats.bankrupted += 1;
@@ -1189,25 +1191,34 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       maybeCloseAuction(s, events);
       break;
     }
-    case "build": {
-      if (manageRight(s, playerId) !== "full") return fail("Tu construis pendant ton tour.");
-      const problem = canBuild(s, playerId, action.square, action.cell, action.kind);
+    case "upgrade": {
+      if (manageRight(s, playerId) !== "full") return fail("Tu améliores tes rues pendant ton tour.");
+      const problem = canUpgrade(s, playerId, action.square);
       if (problem) return fail(problem);
-      build(s, p, action.square, action.cell, action.kind, events);
+      upgrade(s, p, action.square, events);
       break;
     }
     case "sell": {
-      if (!manageRight(s, playerId)) return fail("Tu vends tes bâtiments pendant ton tour.");
-      const problem = canSell(s, playerId, action.square, action.cell);
+      if (!manageRight(s, playerId)) return fail("Tu revends pendant ton tour.");
+      const problem = canSell(s, playerId, action.square);
       if (problem) return fail(problem);
-      sellOne(s, p, action.square, action.cell, events);
+      sellLevel(s, p, action.square, events);
+      break;
+    }
+    case "special": {
+      if (manageRight(s, playerId) !== "full") return fail("Tu poses un bâtiment spécial pendant ton tour.");
+      const problem = canPlaceSpecial(s, playerId, action.square, action.kind);
+      if (problem) return fail(problem);
+      placeSpecial(s, p, action.square, action.kind, events);
       break;
     }
     case "raze": {
-      if (manageRight(s, playerId) !== "full") return fail("Tu fais raser une nuisance pendant ton tour.");
-      const problem = canRaze(s, playerId, action.square, action.cell);
+      if (!manageRight(s, playerId)) return fail("Tu t'occupes de tes bâtiments pendant ton tour.");
+      const problem = canRaze(s, playerId, action.square);
       if (problem) return fail(problem);
-      raze(s, p, action.square, action.cell, "pay", events);
+      const nuisance = SPECIALS[s.deeds[action.square]!.special!.kind].nuisance;
+      if (nuisance && manageRight(s, playerId) !== "full") return fail("Tu fais raser une nuisance pendant ton tour.");
+      raze(s, p, action.square, nuisance ? "pay" : "sell", events);
       break;
     }
     case "mortgage": {

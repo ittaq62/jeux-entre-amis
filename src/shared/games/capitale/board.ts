@@ -13,7 +13,7 @@ export interface Square {
   /** Prix d'achat (terrains, gares, réseaux) */
   price?: number;
   group?: GroupId;
-  /** Terrain : loyer nu, puis les paliers de la règle classique (étirés sur 8 étages, voir floorRents) */
+  /** Terrain : loyer nu, puis aux niveaux 1 à 5 (de la maison au gratte-ciel) */
   rents?: [number, number, number, number, number, number];
   /** Impôts et péage */
   tax?: number;
@@ -24,7 +24,7 @@ export interface Group {
   id: GroupId;
   name: string;
   color: string;
-  /** Le prix de référence des constructions du quartier : un étage en coûte la moitié */
+  /** Le prix d'un niveau dans ce quartier */
   houseCost: number;
   squares: number[];
 }
@@ -115,125 +115,87 @@ export const unmortgageCost = (index: number) => Math.ceil(mortgageValue(index) 
 export const mortgageInterest = (index: number) => unmortgageCost(index) - mortgageValue(index);
 
 // ---------------------------------------------------------------------------
-// La ville : chaque rue a sa parcelle de 4 cases, où son propriétaire bâtit où il veut
+// Améliorer une rue : un bouton, un niveau de plus, de la maison au gratte-ciel
 // ---------------------------------------------------------------------------
 
-/** Les cases d'une parcelle : deux rangs de deux, 0 et 1 côté rue, 2 et 3 au fond */
-export const LOT_CELLS = 4;
-/** Le chantier d'un tour : pas plus de 3 étages, et un seul bâtiment spécial */
-export const FLOORS_PER_TURN = 3;
-/** Quatre immeubles : le plus haut qu'une rue puisse monter */
-export const MAX_FLOORS = 8;
+/** Le plus haut niveau : le gratte-ciel (le loyer de l'hôtel de la règle classique) */
+export const MAX_LEVEL = 5;
+/** Jusqu'à ce niveau, une rue seule suffit ; au-delà, il faut tout le quartier */
+export const FREE_LEVELS = 3;
+/** Ce qu'on voit pousser sur la rue, niveau par niveau */
+export const LEVEL_NAMES = ["Terrain nu", "Une maison", "Deux maisons", "Un immeuble", "Deux immeubles", "Un gratte-ciel"] as const;
+
+/** Un niveau de plus coûte le prix de référence du quartier */
+export const upgradeCost = (index: number) => groupOf(index)?.houseCost ?? 50;
+
 /** Ce que paie chaque adversaire qui passe sur la case d'un stade */
 export const STADIUM_TICKET = 50;
 
-export type BuildingKind = "maison" | "immeuble" | "gratte" | "parc" | "stade" | "decharge" | "centrale";
+export type SpecialKind = "monument" | "parc" | "stade" | "decharge" | "centrale";
 
-export interface BuildingInfo {
+export interface SpecialInfo {
   name: string;
   /** Le nom avec son article, pour les phrases : « une décharge », « le parc » */
   one: string;
   the: string;
-  /** Ce que compte le bâtiment pour le loyer de la rue (les maisons et les immeubles seulement) */
-  floors: number;
-  /** Bâtiment spécial : un par tour, et seulement si la règle est de la partie */
-  special: boolean;
-  /** Une nuisance se pose chez un adversaire, le reste chez soi */
+  /** Une nuisance se pose chez un adversaire ; les autres, chez soi */
   nuisance: boolean;
-  /** Où il se pose, puis ce qu'il fait, chacun en une phrase */
+  /** Où il se pose, puis ce qu'il fait, chacun en une phrase courte */
   where: string;
   effect: string;
 }
 
-export const BUILDINGS: Record<BuildingKind, BuildingInfo> = {
-  maison: {
-    name: "Maison",
-    one: "une maison",
-    the: "la maison",
-    floors: 1,
-    special: false,
+export const SPECIALS: Record<SpecialKind, SpecialInfo> = {
+  monument: {
+    name: "Monument",
+    one: "un monument",
+    the: "le monument",
     nuisance: false,
-    where: "Sur une case libre de ta rue.",
-    effect: "Compte pour 1 étage dans le loyer de la rue.",
-  },
-  immeuble: {
-    name: "Immeuble",
-    one: "un immeuble",
-    the: "l'immeuble",
-    floors: 2,
-    special: false,
-    nuisance: false,
-    where: "Sur une case libre, ou à la place d'une maison.",
-    effect: "Compte pour 2 étages dans le loyer de la rue.",
-  },
-  gratte: {
-    name: "Gratte-ciel",
-    one: "un gratte-ciel",
-    the: "le gratte-ciel",
-    floors: 0,
-    special: true,
-    nuisance: false,
-    where: "Dans un quartier complet à toi, un seul par quartier.",
-    effect: "Tous les loyers du quartier sont doublés.",
+    where: "Sur une rue d'un quartier complet à toi.",
+    effect: "Double tous les loyers du quartier.",
   },
   parc: {
     name: "Parc",
     one: "un parc",
     the: "le parc",
-    floors: 0,
-    special: true,
     nuisance: false,
-    where: "Chez toi, un seul par quartier.",
-    effect: "Aucune nuisance ne peut entrer dans le quartier.",
+    where: "Sur une de tes rues.",
+    effect: "Protège tout le quartier des nuisances.",
   },
   stade: {
     name: "Stade",
     one: "un stade",
     the: "le stade",
-    floors: 0,
-    special: true,
     nuisance: false,
-    where: "Chez toi, un seul par joueur.",
-    effect: `Chaque adversaire qui passe sur la case paie un billet de ${STADIUM_TICKET}.`,
+    where: "Sur une de tes rues, un seul par joueur.",
+    effect: `Chaque adversaire qui passe sur la case te paie ${STADIUM_TICKET} ₣.`,
   },
   decharge: {
     name: "Décharge",
     one: "une décharge",
     the: "la décharge",
-    floors: 0,
-    special: true,
     nuisance: true,
-    where: "Sur une case libre chez un adversaire.",
-    effect: "Le loyer de cette rue est divisé par deux.",
+    where: "Chez un adversaire.",
+    effect: "Divise par deux le loyer de la rue.",
   },
   centrale: {
     name: "Centrale",
     one: "une centrale",
     the: "la centrale",
-    floors: 0,
-    special: true,
     nuisance: true,
-    where: "Sur une case libre chez un adversaire.",
-    effect: "Les étages de cette rue ne rapportent plus rien : loyer du terrain nu.",
+    where: "Chez un adversaire.",
+    effect: "Ramène le loyer de la rue à celui du terrain nu.",
   },
 };
 
-export const RESIDENTIAL: BuildingKind[] = ["maison", "immeuble"];
-export const SPECIAL_ORDER: BuildingKind[] = ["gratte", "parc", "stade", "decharge", "centrale"];
-export const isBuildingKind = (k: unknown): k is BuildingKind => typeof k === "string" && Object.hasOwn(BUILDINGS, k);
+export const SPECIAL_ORDER: SpecialKind[] = ["monument", "parc", "stade", "decharge", "centrale"];
+export const isSpecialKind = (k: unknown): k is SpecialKind => typeof k === "string" && Object.hasOwn(SPECIALS, k);
 
-/** Un étage : la moitié du prix de référence du quartier */
-export const floorCost = (index: number) => Math.round((groupOf(index)?.houseCost ?? 50) / 2);
-
-/** Le prix d'un bâtiment sur une rue ; le gratte-ciel vaut huit étages du quartier */
-export function buildingPrice(kind: BuildingKind, index: number): number {
+/** Le prix d'un bâtiment spécial ; le monument vaut quatre niveaux du quartier */
+export function specialPrice(kind: SpecialKind, index: number): number {
   switch (kind) {
-    case "maison":
-      return floorCost(index);
-    case "immeuble":
-      return 2 * floorCost(index);
-    case "gratte":
-      return 8 * floorCost(index);
+    case "monument":
+      return 4 * upgradeCost(index);
     case "parc":
       return 100;
     case "stade":
@@ -243,26 +205,6 @@ export function buildingPrice(kind: BuildingKind, index: number): number {
     case "centrale":
       return 200;
   }
-}
-
-const rentCache = new Map<number, number[]>();
-
-/**
- * Le loyer d'une rue selon ses étages, de 0 à 8 : la courbe classique (nu, 1 à 4 maisons, hôtel) étirée sur 8 étages.
- * Huit étages valent l'hôtel ; le loyer nu (doublé avec tout le quartier) se calcule à part.
- */
-export function floorRents(index: number): number[] {
-  const hit = rentCache.get(index);
-  if (hit) return hit;
-  const r = SQUARES[index]!.rents ?? [0, 0, 0, 0, 0, 0];
-  const out = Array.from({ length: MAX_FLOORS + 1 }, (_, e) => {
-    const h = (e * 5) / MAX_FLOORS;
-    const lo = Math.floor(h);
-    const v = lo >= 5 ? r[5]! : r[lo]! + (r[lo + 1]! - r[lo]!) * (h - lo);
-    return v >= 50 ? Math.round(v / 5) * 5 : Math.round(v);
-  });
-  rentCache.set(index, out);
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -279,8 +221,8 @@ export type CardEffect =
   | { kind: "nearest"; target: "station" | "utility" }
   | { kind: "jail" }
   | { kind: "jailFree" }
-  /** Travaux : tant par étage, tant par gratte-ciel */
-  | { kind: "repairs"; floor: number; tower: number }
+  /** Travaux : tant par niveau, tant par gratte-ciel */
+  | { kind: "repairs"; level: number; tower: number }
   /** Chaque joueur vous donne (positif), ou vous donnez à chacun (négatif) */
   | { kind: "eachPlayer"; amount: number };
 
@@ -311,7 +253,7 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Libéré de prison ! Gardez cette carte jusqu'à ce que vous en ayez besoin.", effect: { kind: "jailFree" } },
     { text: "Vous avez oublié vos clés : reculez de 3 cases.", effect: { kind: "moveBy", steps: -3 } },
     { text: "Contrôle de police : allez en prison, sans passer par Départ.", effect: { kind: "jail" } },
-    { text: "Travaux dans vos logements : 15 par étage et 100 par gratte-ciel.", effect: { kind: "repairs", floor: 15, tower: 100 } },
+    { text: "Travaux dans vos logements : 25 par niveau et 100 par gratte-ciel.", effect: { kind: "repairs", level: 25, tower: 100 } },
     { text: "Excès de vitesse : amende de 15.", effect: { kind: "money", amount: -15 } },
     { text: "Prenez le TGV Atlantique. Si vous passez par Départ, touchez 200.", effect: { kind: "moveTo", square: 5 } },
     { text: "Vous voilà élu maire : offrez 50 à chaque joueur.", effect: { kind: "eachPlayer", amount: -50 } },
@@ -330,7 +272,7 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Facture d'hôpital : payez 100.", effect: { kind: "money", amount: -100 } },
     { text: "Frais de scolarité : payez 50.", effect: { kind: "money", amount: -50 } },
     { text: "Vous conseillez un voisin pour sa déco : recevez 25.", effect: { kind: "money", amount: 25 } },
-    { text: "Ravalement de façade : 20 par étage et 115 par gratte-ciel.", effect: { kind: "repairs", floor: 20, tower: 115 } },
+    { text: "Ravalement de façade : 40 par niveau et 115 par gratte-ciel.", effect: { kind: "repairs", level: 40, tower: 115 } },
     { text: "Deuxième prix au concours de pétanque : recevez 10.", effect: { kind: "money", amount: 10 } },
     { text: "Héritage d'une tante éloignée : recevez 100.", effect: { kind: "money", amount: 100 } },
     { text: "La fête du village a bien marché : recevez 100.", effect: { kind: "money", amount: 100 } },

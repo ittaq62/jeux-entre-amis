@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUYABLE, DECKS, floorRents, GROUPS, SQUARES, type BuildingKind } from "./board.ts";
+import { BUYABLE, DECKS, GROUPS, SQUARES, type SpecialKind } from "./board.ts";
 import { botAction, botAnswer, botBid } from "./bot.ts";
 import {
   actorOf,
@@ -8,7 +8,6 @@ import {
   closeAuction,
   createGame,
   DEFAULT_SETTINGS,
-  floorsOf,
   netWorth,
   rentFor,
   timeUp,
@@ -39,8 +38,9 @@ const rollAs = (s: CapitaleState, id: string, dice: [number, number]) => {
 const own = (s: CapitaleState, id: string, ...squares: number[]) => squares.forEach((i) => (s.deeds[i]!.owner = id));
 const P = (s: CapitaleState, id: string) => s.players.find((p) => p.id === id)!;
 /** Poser directement un bâtiment sur une case de parcelle */
-const put = (s: CapitaleState, square: number, cell: number, kind: BuildingKind, by: string) =>
-  (s.deeds[square]!.lots![cell] = { kind, by });
+/** Mettre directement une rue à un niveau, ou y poser un bâtiment spécial */
+const lvl = (s: CapitaleState, square: number, level: number) => (s.deeds[square]!.level = level);
+const spec = (s: CapitaleState, square: number, kind: SpecialKind, by: string) => (s.deeds[square]!.special = { kind, by });
 /** Un nouveau tour pour ce joueur : le chantier repart de zéro */
 const newTurn = (s: CapitaleState, id: string) => {
   s.turn = s.players.findIndex((p) => p.id === id);
@@ -178,19 +178,16 @@ describe("tour de jeu", () => {
 });
 
 describe("loyers", () => {
-  it("terrain nu, doublé avec tout le quartier, puis les étages : huit étages valent l'hôtel", () => {
+  it("terrain nu, doublé avec tout le quartier, puis les niveaux jusqu'au gratte-ciel", () => {
     const s = game();
     own(s, "b", 37);
     expect(rentFor(s, 37, { diceTotal: 7 })).toBe(35);
     own(s, "b", 39);
     expect(rentFor(s, 37, { diceTotal: 7 })).toBe(70);
-    put(s, 37, 0, "immeuble", "b");
-    put(s, 37, 1, "maison", "b");
-    expect(floorsOf(s, 37)).toBe(3);
-    expect(rentFor(s, 37, { diceTotal: 7 })).toBe(460);
-    for (let c = 0; c < 4; c++) put(s, 39, c, "immeuble", "b");
+    lvl(s, 37, 3);
+    expect(rentFor(s, 37, { diceTotal: 7 })).toBe(1100);
+    lvl(s, 39, 5);
     expect(rentFor(s, 39, { diceTotal: 7 })).toBe(2000);
-    expect(floorRents(39)).toEqual([50, 145, 300, 550, 1000, 1440, 1625, 1815, 2000]);
     s.deeds[37]!.mortgaged = true;
     expect(rentFor(s, 37, { diceTotal: 7 })).toBe(0);
   });
@@ -217,80 +214,80 @@ describe("loyers", () => {
   it("tomber chez un autre joueur fait payer le loyer", () => {
     const s = game();
     own(s, "b", 37, 39);
-    put(s, 39, 2, "maison", "b");
+    lvl(s, 39, 1);
     P(s, "a").position = 33;
     rollAs(s, "a", [2, 4]);
-    expect(P(s, "a").cash).toBe(1355);
-    expect(P(s, "b").cash).toBe(1645);
-    expect(P(s, "b").stats.rentEarned).toBe(145);
+    expect(P(s, "a").cash).toBe(1300);
+    expect(P(s, "b").cash).toBe(1700);
+    expect(P(s, "b").stats.rentEarned).toBe(200);
   });
 });
 
-describe("la ville : parcelles et bâtiments", () => {
-  it("on bâtit dès le premier terrain, sur la case qu'on veut, 3 étages par tour au plus", () => {
+describe("la ville : améliorer ses rues, les bâtiments spéciaux", () => {
+  it("une amélioration par rue et par tour ; au-delà du niveau 3, il faut tout le quartier", () => {
     const s = game();
     own(s, "a", 1);
-    act(s, "a", { type: "build", square: 1, cell: 2, kind: "maison" });
-    expect(s.deeds[1]!.lots![2]).toEqual({ kind: "maison", by: "a" });
-    expect(P(s, "a").cash).toBe(1475);
-    expect(applyAction(s, "a", { type: "build", square: 1, cell: 2, kind: "maison" }).ok).toBe(false);
-    act(s, "a", { type: "build", square: 1, cell: 0, kind: "immeuble" });
-    expect(P(s, "a").cash).toBe(1425);
-    expect(applyAction(s, "a", { type: "build", square: 1, cell: 1, kind: "maison" }).ok).toBe(false);
-    // Au tour suivant : l'immeuble à la place de la maison ne coûte qu'un étage
+    act(s, "a", { type: "upgrade", square: 1 });
+    expect(s.deeds[1]!.level).toBe(1);
+    expect(P(s, "a").cash).toBe(1450);
+    expect(applyAction(s, "a", { type: "upgrade", square: 1 }).ok).toBe(false);
     newTurn(s, "a");
-    act(s, "a", { type: "build", square: 1, cell: 2, kind: "immeuble" });
-    expect(P(s, "a").cash).toBe(1400);
-    expect(floorsOf(s, 1)).toBe(4);
-    expect(rentFor(s, 1, { diceTotal: 7 })).toBe(60);
-    expect(P(s, "a").stats.houses).toBe(4);
-    expect(applyAction(s, "a", { type: "build", square: 1, cell: 3, kind: "gratte" }).ok).toBe(false);
+    act(s, "a", { type: "upgrade", square: 1 });
+    newTurn(s, "a");
+    act(s, "a", { type: "upgrade", square: 1 });
+    newTurn(s, "a");
+    expect(applyAction(s, "a", { type: "upgrade", square: 1 }).ok).toBe(false);
+    own(s, "a", 3);
+    act(s, "a", { type: "upgrade", square: 1 });
+    act(s, "a", { type: "upgrade", square: 3 });
+    expect(s.deeds[1]!.level).toBe(4);
+    expect(P(s, "a").cash).toBe(1500 - 5 * 50);
+    expect(rentFor(s, 1, { diceTotal: 7 })).toBe(160);
+    expect(P(s, "a").stats.houses).toBe(5);
   });
 
-  it("le gratte-ciel demande tout le quartier et double ses loyers ; un bâtiment spécial par tour", () => {
+  it("le monument demande tout le quartier et double ses loyers ; un bâtiment spécial par tour", () => {
     const s = game();
     own(s, "a", 1, 3);
     expect(rentFor(s, 1, { diceTotal: 7 })).toBe(4);
-    act(s, "a", { type: "build", square: 3, cell: 3, kind: "gratte" });
+    act(s, "a", { type: "special", square: 3, kind: "monument" });
     expect(P(s, "a").cash).toBe(1300);
     expect(rentFor(s, 1, { diceTotal: 7 })).toBe(8);
     expect(rentFor(s, 3, { diceTotal: 7 })).toBe(16);
-    expect(applyAction(s, "a", { type: "build", square: 1, cell: 0, kind: "parc" }).ok).toBe(false);
+    expect(applyAction(s, "a", { type: "special", square: 1, kind: "parc" }).ok).toBe(false);
     newTurn(s, "a");
-    expect(applyAction(s, "a", { type: "build", square: 1, cell: 0, kind: "gratte" }).ok).toBe(false);
-    act(s, "a", { type: "build", square: 1, cell: 0, kind: "parc" });
+    expect(applyAction(s, "a", { type: "special", square: 1, kind: "monument" }).ok).toBe(false);
+    act(s, "a", { type: "special", square: 1, kind: "parc" });
   });
 
   it("les nuisances se posent chez un adversaire, se font raser, et un parc protège le quartier", () => {
     const s = game();
     own(s, "b", 37, 39);
-    put(s, 39, 0, "immeuble", "b");
-    put(s, 39, 1, "immeuble", "b");
-    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(1000);
-    expect(applyAction(s, "a", { type: "build", square: 39, cell: 0, kind: "decharge" }).ok).toBe(false);
-    act(s, "a", { type: "build", square: 39, cell: 2, kind: "decharge" });
-    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(500);
+    lvl(s, 39, 4);
+    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(1700);
+    expect(applyAction(s, "a", { type: "special", square: 1, kind: "decharge" }).ok).toBe(false);
+    act(s, "a", { type: "special", square: 39, kind: "decharge" });
+    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(850);
     newTurn(s, "a");
-    expect(applyAction(s, "a", { type: "build", square: 39, cell: 3, kind: "centrale" }).ok).toBe(false);
-    act(s, "a", { type: "build", square: 37, cell: 0, kind: "centrale" });
+    expect(applyAction(s, "a", { type: "special", square: 39, kind: "centrale" }).ok).toBe(false);
+    act(s, "a", { type: "special", square: 37, kind: "centrale" });
     expect(P(s, "a").cash).toBe(1200);
-    // Chez b : la décharge ne se vend pas, elle se fait raser
+    // Chez b : la décharge se fait raser à ses frais, puis le parc protège le quartier
     newTurn(s, "b");
-    expect(applyAction(s, "b", { type: "sell", square: 39, cell: 2 }).ok).toBe(false);
-    act(s, "b", { type: "raze", square: 39, cell: 2 });
-    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(1000);
-    expect(applyAction(s, "b", { type: "build", square: 39, cell: 3, kind: "parc" }).ok).toBe(false);
-    act(s, "b", { type: "raze", square: 37, cell: 0 });
-    act(s, "b", { type: "build", square: 39, cell: 3, kind: "parc" });
+    act(s, "b", { type: "raze", square: 39 });
+    expect(rentFor(s, 39, { diceTotal: 7 })).toBe(1700);
+    expect(applyAction(s, "b", { type: "special", square: 39, kind: "parc" }).ok).toBe(false);
+    act(s, "b", { type: "raze", square: 37 });
+    act(s, "b", { type: "special", square: 39, kind: "parc" });
     expect(P(s, "b").cash).toBe(1500 - 100 - 200 - 100);
     newTurn(s, "a");
-    expect(applyAction(s, "a", { type: "build", square: 37, cell: 1, kind: "decharge" }).ok).toBe(false);
+    expect(applyAction(s, "a", { type: "special", square: 37, kind: "decharge" }).ok).toBe(false);
   });
 
   it("le stade fait payer un billet à chaque adversaire qui passe sur la case", () => {
     const s = game();
     own(s, "b", 6);
-    put(s, 6, 1, "stade", "b");
+    spec(s, 6, "stade", "b");
     P(s, "a").position = 3;
     rollAs(s, "a", [2, 3]);
     expect(P(s, "a").position).toBe(8);
@@ -298,31 +295,31 @@ describe("la ville : parcelles et bâtiments", () => {
     expect(P(s, "b").cash).toBe(1550);
     const t = game(2, { specials: false });
     own(t, "b", 6);
-    put(t, 6, 1, "stade", "b");
+    spec(t, 6, "stade", "b");
     P(t, "a").position = 3;
     rollAs(t, "a", [2, 3]);
     expect(P(t, "a").cash).toBe(1500);
-    expect(applyAction(t, "a", { type: "build", square: 6, cell: 0, kind: "decharge" }).ok).toBe(false);
+    expect(applyAction(t, "a", { type: "special", square: 6, kind: "decharge" }).ok).toBe(false);
   });
 
-  it("on revend ses bâtiments à moitié prix ; on n'hypothèque pas une rue bâtie ; on lève l'hypothèque à +10 %", () => {
+  it("on revend un niveau à moitié prix ; on n'hypothèque pas une rue construite ; on lève l'hypothèque à +10 %", () => {
     const s = game();
     own(s, "a", 1, 3);
-    put(s, 1, 0, "maison", "a");
+    lvl(s, 1, 1);
     expect(applyAction(s, "a", { type: "mortgage", square: 1 }).ok).toBe(false);
     act(s, "a", { type: "mortgage", square: 3 });
-    expect(applyAction(s, "a", { type: "build", square: 3, cell: 0, kind: "maison" }).ok).toBe(false);
-    act(s, "a", { type: "sell", square: 1, cell: 0 });
-    expect(s.deeds[1]!.lots![0]).toBeNull();
+    expect(applyAction(s, "a", { type: "upgrade", square: 3 }).ok).toBe(false);
+    act(s, "a", { type: "sell", square: 1 });
+    expect(s.deeds[1]!.level).toBe(0);
     act(s, "a", { type: "mortgage", square: 1 });
     act(s, "a", { type: "unmortgage", square: 1 });
-    expect(P(s, "a").cash).toBe(1500 + 30 + 12 + 30 - 33);
+    expect(P(s, "a").cash).toBe(1500 + 30 + 25 + 30 - 33);
   });
 
-  it("on ne bâtit pas pendant le tour d'un autre", () => {
+  it("on n'améliore pas pendant le tour d'un autre", () => {
     const s = game();
     own(s, "b", 1, 3);
-    expect(applyAction(s, "b", { type: "build", square: 1, cell: 0, kind: "maison" }).ok).toBe(false);
+    expect(applyAction(s, "b", { type: "upgrade", square: 1 }).ok).toBe(false);
   });
 });
 
@@ -330,25 +327,25 @@ describe("dettes et faillite", () => {
   it("une dette se paie dès qu'on a hypothéqué de quoi la couvrir", () => {
     const s = game();
     own(s, "b", 37, 39);
-    put(s, 39, 0, "maison", "b");
+    lvl(s, 39, 1);
     own(s, "a", 6);
-    Object.assign(P(s, "a"), { position: 33, cash: 100 });
+    Object.assign(P(s, "a"), { position: 33, cash: 180 });
     rollAs(s, "a", [2, 4]);
     expect(s.step).toBe("debt");
     expect(actorOf(s)).toBe("a");
     expect(applyAction(s, "a", { type: "endTurn" }).ok).toBe(false);
     act(s, "a", { type: "mortgage", square: 6 });
     expect(s.step).toBe("manage");
-    expect(P(s, "a").cash).toBe(5);
-    expect(P(s, "b").cash).toBe(1645);
+    expect(P(s, "a").cash).toBe(30);
+    expect(P(s, "b").cash).toBe(1700);
   });
 
   it("la faillite envers un joueur lui donne tout ; la partie s'arrête au dernier", () => {
     const s = game();
     own(s, "b", 37, 39);
-    put(s, 39, 0, "maison", "b");
+    lvl(s, 39, 1);
     own(s, "a", 1, 6);
-    put(s, 37, 1, "decharge", "a");
+    spec(s, 37, "decharge", "a");
     Object.assign(P(s, "a"), { position: 33, cash: 100 });
     rollAs(s, "a", [2, 4]);
     act(s, "a", { type: "mortgage", square: 1 });
@@ -357,7 +354,7 @@ describe("dettes et faillite", () => {
     expect(s.deeds[1]!.owner).toBe("b");
     expect(s.deeds[1]!.mortgaged).toBe(true);
     expect(s.deeds[6]!.owner).toBe("b");
-    expect(s.deeds[37]!.lots![1]).toBeNull();
+    expect(s.deeds[37]!.special).toBeNull();
     expect(P(s, "b").cash).toBe(1630);
     expect(s.step).toBe("over");
     expect(s.ranking).toEqual(["b", "a"]);
@@ -366,14 +363,14 @@ describe("dettes et faillite", () => {
   it("la faillite envers la banque rend les titres libres", () => {
     const s = game(3);
     own(s, "a", 1, 3);
-    put(s, 1, 0, "maison", "a");
-    put(s, 1, 1, "decharge", "b");
+    lvl(s, 1, 1);
+    spec(s, 1, "decharge", "b");
     Object.assign(P(s, "a"), { position: 0, cash: 10 });
     rollAs(s, "a", [1, 3]);
     expect(s.step).toBe("debt");
     act(s, "a", { type: "bankrupt" });
     expect(s.deeds[1]!.owner).toBeNull();
-    expect(s.deeds[1]!.lots).toEqual([null, null, null, null]);
+    expect(s.deeds[1]).toEqual({ owner: null, mortgaged: false, level: 0, special: null });
     expect(s.step).toBe("roll");
     expect(s.players[s.turn]!.id).toBe("b");
   });
@@ -393,10 +390,10 @@ describe("échanges", () => {
     expect(P(s, "a").stats.trades).toBe(1);
   });
 
-  it("pas d'échange d'une rue bâtie, ni d'un quartier qui a son gratte-ciel", () => {
+  it("pas d'échange d'une rue construite, ni d'un quartier qui a son monument", () => {
     const s = game();
     own(s, "a", 1, 3);
-    put(s, 3, 0, "maison", "a");
+    lvl(s, 3, 1);
     const offer = (sq: number): CapitaleAction => ({
       type: "propose",
       to: "b",
@@ -405,15 +402,15 @@ describe("échanges", () => {
     });
     expect(applyAction(s, "a", offer(3)).ok).toBe(false);
     expect(applyAction(s, "a", offer(1)).ok).toBe(true);
-    s.deeds[3]!.lots![0] = null;
-    put(s, 3, 1, "gratte", "a");
+    lvl(s, 3, 0);
+    spec(s, 3, "monument", "a");
     expect(applyAction(s, "a", offer(1)).ok).toBe(false);
   });
 
   it("une nuisance disparaît quand celui qui l'a posée reçoit la rue", () => {
     const s = game();
     own(s, "b", 39);
-    put(s, 39, 2, "decharge", "a");
+    spec(s, 39, "decharge", "a");
     act(s, "a", {
       type: "propose",
       to: "b",
@@ -422,7 +419,7 @@ describe("échanges", () => {
     });
     act(s, "b", { type: "accept", trade: s.trades[0]!.id });
     expect(s.deeds[39]!.owner).toBe("a");
-    expect(s.deeds[39]!.lots![2]).toBeNull();
+    expect(s.deeds[39]!.special).toBeNull();
   });
 
   it("une contre-proposition remplace l'offre reçue ; une seule offre à la fois par joueur", () => {
@@ -466,17 +463,16 @@ describe("cartes", () => {
     expect(P(s, "b").cash).toBe(1490);
   });
 
-  it("les travaux se paient par étage et par gratte-ciel", () => {
+  it("les travaux se paient par niveau et par gratte-ciel", () => {
     const s = game();
     own(s, "a", 1, 3);
-    put(s, 1, 0, "immeuble", "a");
-    put(s, 1, 1, "maison", "a");
-    put(s, 3, 0, "gratte", "a");
-    put(s, 3, 1, "decharge", "b");
+    lvl(s, 1, 3);
+    lvl(s, 3, 5);
+    spec(s, 3, "decharge", "b");
     const i = cardIndex("hasard", "Travaux");
     s.decks.hasard = [i, ...s.decks.hasard.filter((x) => x !== i)];
     rollAs(s, "a", [3, 4]);
-    expect(P(s, "a").cash).toBe(1500 - 3 * 15 - 100);
+    expect(P(s, "a").cash).toBe(1500 - 3 * 25 - 100);
   });
 
   it("le TGV le plus proche coûte le double du loyer", () => {
@@ -510,30 +506,30 @@ describe("fin de partie", () => {
 // Parties jouées par les bots, du début à la fin
 // ---------------------------------------------------------------------------
 
-/** Ce que la ville doit toujours respecter : chacun bâtit chez soi, les nuisances viennent des autres, une seule par rue */
+/** Ce que la ville doit toujours respecter : chacun bâtit chez soi, les nuisances viennent des autres */
 function checkInvariants(s: CapitaleState, seen: Set<string>) {
   for (const g of Object.values(GROUPS)) {
-    let towers = 0;
+    const kinds: string[] = [];
     for (const i of g.squares) {
       const d = s.deeds[i]!;
-      const lots = d.lots!;
-      expect(lots).toHaveLength(4);
-      if (!d.owner) expect(lots.every((b) => b === null)).toBe(true);
-      let nuisances = 0;
-      for (const b of lots) {
-        if (!b) continue;
-        seen.add(b.kind);
-        const nuisance = b.kind === "decharge" || b.kind === "centrale";
-        if (nuisance) {
-          nuisances += 1;
-          expect(b.by).not.toBe(d.owner);
-        } else expect(b.by).toBe(d.owner);
-        if (b.kind === "gratte") towers += 1;
+      const level = d.level ?? 0;
+      expect(level).toBeGreaterThanOrEqual(0);
+      expect(level).toBeLessThanOrEqual(5);
+      if (level === 5) seen.add("gratte-ciel");
+      if (!d.owner) {
+        expect(level).toBe(0);
+        expect(d.special ?? null).toBeNull();
       }
-      expect(nuisances).toBeLessThanOrEqual(1);
-      expect(floorsOf(s, i)).toBeLessThanOrEqual(8);
+      const sp = d.special;
+      if (sp) {
+        seen.add(sp.kind);
+        kinds.push(sp.kind);
+        if (sp.kind === "decharge" || sp.kind === "centrale") expect(sp.by).not.toBe(d.owner);
+        else expect(sp.by).toBe(d.owner);
+      }
     }
-    expect(towers).toBeLessThanOrEqual(1);
+    expect(kinds.filter((k) => k === "monument").length).toBeLessThanOrEqual(1);
+    expect(kinds.filter((k) => k === "parc").length).toBeLessThanOrEqual(1);
   }
   for (const p of s.players) expect(p.cash).toBeGreaterThanOrEqual(0);
 }
@@ -596,7 +592,7 @@ describe("bots", () => {
       }
     }
     // Les bots se servent de toute la ville
-    expect([...built].sort()).toEqual(["centrale", "decharge", "gratte", "immeuble", "maison", "parc", "stade"]);
+    expect([...built].sort()).toEqual(["centrale", "decharge", "gratte-ciel", "monument", "parc", "stade"]);
   }, 60_000);
 
   it("le bot Fort bat le bot Facile la plupart du temps", () => {

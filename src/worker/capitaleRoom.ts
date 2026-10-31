@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid } from "../shared/games/capitale/bot.ts";
-import { SQUARES, type BuildingKind } from "../shared/games/capitale/board.ts";
+import { SQUARES, type SpecialKind } from "../shared/games/capitale/board.ts";
 import {
   actorOf,
   applyAction,
@@ -1270,11 +1270,11 @@ function sanitizeAction(raw: unknown): CapitaleAction | null {
       return { type: a.type };
     case "bid":
       return { type: "bid", amount: Number(a.amount) };
-    case "build":
-      return { type: "build", square: Number(a.square), cell: Number(a.cell), kind: String(a.kind) as BuildingKind };
+    case "special":
+      return { type: "special", square: Number(a.square), kind: String(a.kind) as SpecialKind };
+    case "upgrade":
     case "sell":
     case "raze":
-      return { type: a.type, square: Number(a.square), cell: Number(a.cell) };
     case "mortgage":
     case "unmortgage":
       return { type: a.type, square: Number(a.square) };
