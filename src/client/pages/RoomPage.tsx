@@ -10,9 +10,10 @@ import { api, ApiError } from "../lib/api.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 
-// La bataille navale et Briques ne sont chargées que pour leurs tables
+// La bataille navale, Briques et Capitale ne sont chargées que pour leurs tables
 const NavalRoom = lazy(() => import("../naval/NavalRoom.tsx").then((m) => ({ default: m.NavalRoom })));
 const BricksRoom = lazy(() => import("../bricks/BricksRoom.tsx").then((m) => ({ default: m.BricksRoom })));
+const CapitaleRoom = lazy(() => import("../capitale/CapitaleRoom.tsx").then((m) => ({ default: m.CapitaleRoom })));
 const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ default: m.TourRoom })));
 
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
@@ -46,10 +47,10 @@ export function RoomPage({ code }: { code: string }) {
 
 /** La table d'un jeu, sous son code : aussi celle qu'une tournée affiche pour le jeu en cours */
 export function GameRoom({ game, code }: { game: TableGame; code: string }) {
-  if (game === "naval" || game === "bricks") {
+  if (game === "naval" || game === "bricks" || game === "capitale") {
     return (
       <Suspense fallback={<Loading label="Arrivée à la table…" />}>
-        {game === "naval" ? <NavalRoom code={code} /> : <BricksRoom code={code} />}
+        {game === "naval" ? <NavalRoom code={code} /> : game === "bricks" ? <BricksRoom code={code} /> : <CapitaleRoom code={code} />}
       </Suspense>
     );
   }
