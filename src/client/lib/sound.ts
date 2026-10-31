@@ -60,7 +60,20 @@ export type SoundName =
   | "tourVote"
   | "tourFanfare"
   | "tourApplause"
-  | "tourMusic";
+  | "tourMusic"
+  | "capDiceShake"
+  | "capDiceHit"
+  | "capHop"
+  | "capJump"
+  | "capBuild"
+  | "capBuildBig"
+  | "capGavel"
+  | "capBills"
+  | "capBuy"
+  | "capRent"
+  | "capCoins"
+  | "capJail"
+  | "capBigMoney";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -121,6 +134,20 @@ const FILES: Record<SoundName, string[]> = {
   tourFanfare: ["tour-fanfare.wav"],
   tourApplause: ["tour-applause.mp3"],
   tourMusic: ["tour-music.mp3"],
+  // Capitale : les dés qui roulent, les pions de bois, le marteau, les billets, la sonnette, la porte de la prison
+  capDiceShake: ["cap-dice-shake.wav"],
+  capDiceHit: ["cap-dice-hit-1.wav", "cap-dice-hit-2.wav", "cap-dice-hit-3.wav", "cap-dice-hit-4.wav"],
+  capHop: ["cap-hop-1.wav", "cap-hop-2.wav", "cap-hop-3.wav"],
+  capJump: ["cap-jump.wav"],
+  capBuild: ["cap-build.wav"],
+  capBuildBig: ["cap-build-big.wav"],
+  capGavel: ["cap-gavel.wav"],
+  capBills: ["cap-bills.wav"],
+  capBuy: ["cap-buy.mp3"],
+  capRent: ["cap-rent.mp3"],
+  capCoins: ["cap-coins.mp3"],
+  capJail: ["cap-jail.mp3"],
+  capBigMoney: ["cap-big-money.mp3"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -246,6 +273,19 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   tourFanfare: 0.6,
   tourApplause: 0.55,
   tourMusic: 0.25,
+  capDiceShake: 0.4,
+  capDiceHit: 0.55,
+  capHop: 0.45,
+  capJump: 0.55,
+  capBuild: 0.5,
+  capBuildBig: 0.55,
+  capGavel: 0.55,
+  capBills: 0.35,
+  capBuy: 0.45,
+  capRent: 0.5,
+  capCoins: 0.45,
+  capJail: 0.5,
+  capBigMoney: 0.5,
 };
 
 let ctx: AudioContext | null = null;
