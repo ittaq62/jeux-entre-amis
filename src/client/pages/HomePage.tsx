@@ -11,6 +11,7 @@ import { CardBack, CardFace } from "../components/Card.tsx";
 import { Modal } from "../components/ui.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
+import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { GameTicket } from "../tour/TourParts.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -235,6 +236,36 @@ export function HomePage() {
           </section>
         )}
 
+        {games.includes("capitale") && (
+          <section className="home-game home-game-capitale panel" aria-label="Capitale">
+            <div className="game-stage is-map" aria-hidden="true">
+              <CapitalePreview px={250} />
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-capitale">Capitale</h2>
+              {beta.includes("capitale") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                Achète les villes de France, de Guéret à Paris, bâtis maisons et hôtels, négocie avec les autres et ruine-les à coups de
+                loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("capitale")} disabled={busy !== null}>
+                  {busy === "quick-capitale" && <span className="spinner" />} Partie rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("capitale")} disabled={busy !== null}>
+                  Ouvrir une table
+                </button>
+              </div>
+              <JoinCode id="join-code-capitale" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
@@ -313,7 +344,9 @@ export function HomePage() {
               ? "Ouvrir une table de bataille navale"
               : createFor === "bricks"
                 ? "Ouvrir une table de Briques"
-                : "Ouvrir une table"
+                : createFor === "capitale"
+                  ? "Ouvrir une table de Capitale"
+                  : "Ouvrir une table"
         }
       >
         <div className="create-options">

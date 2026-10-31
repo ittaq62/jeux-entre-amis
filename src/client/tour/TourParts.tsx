@@ -46,7 +46,9 @@ export function GameTicket({
       aria-label={GAME_NAMES[game]}
     >
       <span className="ticket-art" aria-hidden="true">
-        <svg viewBox="0 0 100 72">{game === "uno" ? <UnoArt /> : game === "bricks" ? <BricksArt /> : <NavalArt />}</svg>
+        <svg viewBox="0 0 100 72">
+          {game === "uno" ? <UnoArt /> : game === "bricks" ? <BricksArt /> : game === "capitale" ? <CapitaleArt /> : <NavalArt />}
+        </svg>
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
@@ -144,6 +146,52 @@ function BricksArt() {
 }
 
 /** Un navire sur la houle */
+/** Une parcelle de Capitale : trois maisons, un hôtel, et deux dés qui roulent au-dessus */
+function CapitaleArt() {
+  const house = (x: number) => (
+    <path
+      key={x}
+      d={`M${x} 52 V42 L${x + 6} 36 L${x + 12} 42 V52 Z`}
+      fill="#2fa864"
+      stroke="#145c35"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  );
+  const pips = (cx: number, cy: number, spots: [number, number][]) =>
+    spots.map(([dx, dy], k) => <circle key={k} cx={cx + dx} cy={cy + dy} r={1.25} fill="#1d1b18" />);
+  return (
+    <>
+      {/* La parcelle */}
+      <rect x={10} y={51} width={80} height={9} rx={2} fill="#e3ebd9" stroke="#9fb39a" strokeWidth={1} />
+      {house(16)}
+      {house(31)}
+      {house(46)}
+      {/* L'hôtel */}
+      <path d="M62 52 V30 L73 25 L84 30 V52 Z" fill="#d6433a" stroke="#7d1d18" strokeWidth={1.2} strokeLinejoin="round" />
+      {[34, 41].map((y) => [66, 71.5, 77].map((x) => <rect key={`${x}-${y}`} x={x} y={y} width={3} height={3.5} fill="#f1d595" />))}
+      {/* Les dés */}
+      <g transform="rotate(-14 24 18)">
+        <rect x={17} y={11} width={14} height={14} rx={3} fill="#fbf7ee" stroke="#1d1b18" strokeWidth={0.8} />
+        {pips(24, 18, [
+          [-3.5, -3.5],
+          [0, 0],
+          [3.5, 3.5],
+        ])}
+      </g>
+      <g transform="rotate(12 44 15)">
+        <rect x={37} y={8} width={14} height={14} rx={3} fill="#fbf7ee" stroke="#1d1b18" strokeWidth={0.8} />
+        {pips(44, 15, [
+          [-3.5, -3.5],
+          [3.5, -3.5],
+          [-3.5, 3.5],
+          [3.5, 3.5],
+        ])}
+      </g>
+    </>
+  );
+}
+
 function NavalArt() {
   const wave = (y: number, opacity: number) => (
     <path

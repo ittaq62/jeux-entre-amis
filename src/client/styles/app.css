@@ -799,6 +799,34 @@
     8px 10px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* Capitale : un plan de ville sous la lampe, et un titre doré en relief */
+.home-game-capitale {
+  margin-top: 24px;
+}
+
+.game-stage.is-map {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(255, 236, 190, 0.16), transparent 70%),
+    radial-gradient(ellipse 90% 85% at 50% 45%, #2f6b4c 0%, #1c4733 55%, #0d2a1d 100%);
+}
+
+.capitale-preview {
+  rotate: -3deg;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+}
+
+.game-name.is-capitale {
+  color: #f6ecd6;
+  text-shadow:
+    1px 1px 0 #c9a04f,
+    2px 2px 0 #b48b43,
+    3px 3px 0 #9d7838,
+    4px 4px 0 #86652e,
+    5px 5px 0 #6f5224,
+    6px 6px 0 #58401b,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
 /* Briques : une laque bordeaux sous la lampe, et un titre ivoire en relief */
 .home-game-bricks {
   margin-top: 24px;
@@ -1087,6 +1115,10 @@
     scale: 0.72;
   }
 
+  .capitale-preview {
+    scale: 0.8;
+  }
+
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1113,6 +1145,10 @@
   }
 
   .naval-preview {
+    scale: 0.7;
+  }
+
+  .capitale-preview {
     scale: 0.7;
   }
 
@@ -2474,6 +2510,10 @@ h3 .hint {
 
 .game-ticket.is-bricks {
   --art: linear-gradient(160deg, #6a2733 0%, #2a0f16 100%);
+}
+
+.game-ticket.is-capitale {
+  --art: linear-gradient(165deg, #3b8a5f 0%, #17422d 100%);
 }
 
 .game-ticket.is-naval {
