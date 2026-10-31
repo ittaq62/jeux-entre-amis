@@ -398,6 +398,32 @@ export function gratteCiel(group: GroupId, accent: string, paris: boolean): THRE
   return bake(shadowed(g));
 }
 
+/** Le monument : un obélisque sur un socle à gradins, la pointe dorée, un ruban à la couleur du propriétaire */
+export function monument(accent: string): THREE.Group {
+  const g = new THREE.Group();
+  const stone = mat("#e9e1cf", { rough: 0.7 });
+  g.add(box(0.42, 0.05, 0.42, mat("#d2c6ad")));
+  g.add(box(0.32, 0.06, 0.32, stone, 0, 0.05));
+  g.add(box(0.24, 0.05, 0.24, stone, 0, 0.11));
+  g.add(box(0.245, 0.03, 0.245, mat(accent, { rough: 0.45 }), 0, 0.16));
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.07, 0.62, 4), stone);
+  shaft.rotation.y = Math.PI / 4;
+  shaft.position.y = 0.19 + 0.31;
+  g.add(shaft);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 4), mat("#d8b24a", { metal: 0.75, rough: 0.3 }));
+  tip.rotation.y = Math.PI / 4;
+  tip.position.y = 0.19 + 0.62 + 0.05;
+  g.add(tip);
+  for (const [x, z] of [
+    [-0.17, 0.17],
+    [0.17, 0.17],
+  ] as const) {
+    g.add(cyl(0.006, 0.006, 0.22, mat("#8a8f94", { metal: 0.6 }), 6, x, 0.05, z));
+    g.add(box(0.05, 0.035, 0.004, mat(accent), x + 0.026, 0.22, z));
+  }
+  return bake(shadowed(g));
+}
+
 /** Le parc : une pelouse, trois arbres, une fontaine et un banc */
 export function parc(): { group: THREE.Group; jet: THREE.Mesh } {
   const g = new THREE.Group();

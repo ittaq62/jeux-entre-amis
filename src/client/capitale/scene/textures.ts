@@ -1,30 +1,7 @@
 import * as THREE from "three";
 import { GROUPS, SQUARES } from "../../../shared/games/capitale/board.ts";
-import {
-  ARENA,
-  AVENUE,
-  bandRect,
-  BLOCK,
-  BOARD,
-  C,
-  CELL,
-  CELL_D,
-  CELL_W,
-  cellCenter,
-  CITY,
-  DECK_SPOT,
-  HALF,
-  INNER,
-  lotPoint,
-  LOTS,
-  OUTER_ROAD,
-  PLAZA,
-  ROAD,
-  squareRect,
-  STRIP,
-  type Lot,
-  type WRect,
-} from "./layout.ts";
+import { ARENA, KIOSK_PARCEL, PARCELS, parcelPoint, PLAZA_PARCEL, type Parcel, type Pt } from "./city.ts";
+import { bandRect, BOARD, C, CELL, HALF, INNER, OUTER_ROAD, squareRect, type WRect } from "./layout.ts";
 
 // Tout ce qui est imprimé est dessiné ici, sur des toiles : le plateau (cases et sol de la ville), les façades, les dés.
 // Le texte du plateau est tourné vers la caméra : on le redessine quand on fait tourner le plateau.
@@ -464,183 +441,96 @@ function drawCorner(p: Pen, i: number, x: number, y: number, w: number, h: numbe
   });
 }
 
-/** Un texte posé dans un rectangle du monde, dans le sens où il se lit le mieux face à la caméra */
-function stripText(p: Pen, text: string, r: WRect, size: number, color: string) {
+/** Un polygone aux coins arrondis */
+function roundPoly(p: Pen, poly: Pt[], radius: number) {
   const { ctx, k } = p;
-  const [x, y, w, h] = rectPx(p, r);
-  const long = r.w >= r.d ? [1, 0] : [0, 1];
-  const right = [Math.cos(p.alpha), Math.sin(p.alpha)];
-  const along = Math.abs(long[0]! * right[0]! + long[1]! * right[1]!) > 0.7;
+  const pts = poly.map((q) => [px(p, q.x), px(p, q.z)] as const);
+  const n = pts.length;
+  ctx.beginPath();
+  const mid = (i: number) => {
+    const a = pts[i % n]!;
+    const b = pts[(i + 1) % n]!;
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as const;
+  };
+  const start = mid(n - 1);
+  ctx.moveTo(start[0], start[1]);
+  for (let i = 0; i < n; i++) {
+    const c = pts[i]!;
+    const m = mid(i);
+    ctx.arcTo(c[0], c[1], m[0], m[1], radius * k);
+  }
+  ctx.closePath();
+}
+
+/** Un nom posé au sol, lisible face à la caméra */
+function groundText(p: Pen, text: string, at: Pt, size: number, maxW: number, color: string, weight = "800") {
+  const { ctx, k } = p;
   ctx.save();
-  ctx.translate(x + w / 2, y + h / 2);
-  ctx.rotate(along ? p.alpha : p.alpha - Math.PI / 2);
-  const len = Math.max(w, h);
-  textLine(p, text, 0, 0, size * k, len - 0.08 * k, "800", FONT_TEXT, color);
+  ctx.translate(px(p, at.x), px(p, at.z));
+  ctx.rotate(p.alpha);
+  // Un liseré clair autour des lettres : le nom se lit sur n'importe quel sol
+  fitFont(ctx, text, size * k, maxW * k, weight, FONT_TEXT);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = size * k * 0.28;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.strokeText(text, 0, 0);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 0, 0);
   ctx.restore();
 }
 
-/** La bande d'un lieu le long de sa rue de devant */
-export function frontStrip(l: Lot, depth: number): WRect {
-  const fx = Math.round(Math.sin(l.facing));
-  const fz = Math.round(Math.cos(l.facing));
-  if (fz === 1) return { x: l.x, z: l.z + l.d - depth, w: l.w, d: depth };
-  if (fz === -1) return { x: l.x, z: l.z, w: l.w, d: depth };
-  if (fx === 1) return { x: l.x + l.w - depth, z: l.z, w: depth, d: l.d };
-  return { x: l.x, z: l.z, w: depth, d: l.d };
-}
+const GROUND: Partial<Record<Parcel["kind"], string>> = {
+  station: "#d3cbbb",
+  utility: "#a9cd86",
+  tax: "#ddd6c6",
+  toll: "#cfd2d4",
+  bank: "#e6dcc6",
+  kiosk: PAVING,
+  garden: "#93c46d",
+  plaza: PAVING,
+};
 
-/** Le rectangle du monde d'une case de parcelle (les lieux ne tournent que par quarts de tour) */
-export function cellRect(l: Lot, cell: number): WRect {
-  const c = cellCenter(l, cell);
-  const odd = Math.abs(Math.sin(l.facing)) > 0.5;
-  const w = odd ? CELL_D : CELL_W;
-  const d = odd ? CELL_W : CELL_D;
-  return { x: c.x - w / 2, z: c.z - d / 2, w, d };
-}
-
-function fillRound(p: Pen, r: WRect, radius: number, fill: string) {
+function drawParcel(p: Pen, l: Parcel) {
   const { ctx, k } = p;
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.roundRect(...rectPx(p, r), radius * k);
-  ctx.fill();
-}
-
-/** Un nom de lieu sur sa bande, côté rue */
-function placeName(p: Pen, l: Lot, text: string, bg: string, fg = INK) {
-  const strip = frontStrip(l, STRIP);
-  p.ctx.fillStyle = bg;
-  p.ctx.fillRect(...rectPx(p, strip));
-  stripText(p, text, strip, 0.115, fg);
-}
-
-function drawLot(p: Pen, l: Lot) {
-  const { ctx, k } = p;
-  const [x, y, w, h] = rectPx(p, l);
   if (l.kind === "property") {
     const color = GROUPS[l.group!].color;
-    fillRound(p, l, 0.05, mix(color, "#ffffff", 0.7));
-    // Les 4 cases à bâtir : des dalles claires, bien marquées
-    for (let c = 0; c < 4; c++) {
-      const r = cellRect(l, c);
-      fillRound(p, r, 0.045, "#fbf7ec");
-      ctx.strokeStyle = mix(color, INK, 0.3);
-      ctx.lineWidth = 0.014 * k;
-      ctx.setLineDash([0.05 * k, 0.03 * k]);
-      ctx.beginPath();
-      ctx.roundRect(...rectPx(p, { x: r.x + 0.02, z: r.z + 0.02, w: r.w - 0.04, d: r.d - 0.04 }), 0.035 * k);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    const light = l.group === "jaune" || l.group === "ciel";
-    placeName(p, l, SQUARES[l.square]!.name.replace("Clermont-Ferrand", "Clermont"), color, light ? INK : "#ffffff");
-    ctx.strokeStyle = mix(color, INK, 0.3);
-    ctx.lineWidth = 0.022 * k;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 0.05 * k);
+    roundPoly(p, l.poly, 0.09);
+    ctx.fillStyle = mix(color, "#ffffff", 0.62);
+    ctx.fill();
+    ctx.lineWidth = 0.05 * k;
+    ctx.strokeStyle = color;
     ctx.stroke();
+    // Le nom de la rue, vers le bord extérieur de la parcelle, dans la couleur du quartier
+    const at = parcelPoint(l, 0, l.room * 0.72);
+    groundText(p, SQUARES[l.square]!.name.replace("Clermont-Ferrand", "Clermont"), at, 0.16, l.room * 1.9, mix(color, INK, 0.45));
     return;
   }
-  if (l.kind === "station") {
-    fillRound(p, l, 0.05, "#cdc5b4");
-    // Deux voies le long du lieu, au fond ; le quai et le nom côté rue
-    for (const off of [-0.18, -0.42]) {
-      const a = lotPoint(l, -0.62, off);
-      const b = lotPoint(l, 0.62, off);
-      ctx.strokeStyle = "#7a5a3a";
-      ctx.lineWidth = 0.05 * k;
-      ctx.setLineDash([0.025 * k, 0.045 * k]);
-      ctx.beginPath();
-      ctx.moveTo(px(p, a.x), px(p, a.z));
-      ctx.lineTo(px(p, b.x), px(p, b.z));
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#8c9196";
-      ctx.lineWidth = 0.01 * k;
-      for (const s of [-0.03, 0.03]) {
-        const a2 = lotPoint(l, -0.62, off + s);
-        const b2 = lotPoint(l, 0.62, off + s);
-        ctx.beginPath();
-        ctx.moveTo(px(p, a2.x), px(p, a2.z));
-        ctx.lineTo(px(p, b2.x), px(p, b2.z));
-        ctx.stroke();
-      }
-    }
-    placeName(p, l, SQUARES[l.square]!.name.toUpperCase(), "#e4ded2");
-    return;
+  roundPoly(p, l.poly, 0.09);
+  ctx.fillStyle = GROUND[l.kind] ?? "#ddd6c6";
+  ctx.fill();
+  if (l.kind === "utility" && l.square === 12) {
+    // Le barrage : un lac
+    ctx.fillStyle = "#4f97c4";
+    ctx.beginPath();
+    ctx.ellipse(px(p, l.center.x), px(p, l.center.z), l.room * 0.85 * k, l.room * 0.7 * k, 0.4, 0, Math.PI * 2);
+    ctx.fill();
   }
-  if (l.kind === "utility") {
-    if (l.square === 12) {
-      // Le barrage : un lac dans l'herbe
-      fillRound(p, l, 0.05, "#9cc27a");
-      const c = lotPoint(l, 0, -0.08);
-      ctx.fillStyle = "#4f97c4";
-      ctx.beginPath();
-      ctx.ellipse(px(p, c.x), px(p, c.z), 0.42 * k, 0.36 * k, 0.4, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Les éoliennes : des champs en bandes
-      const stripes = ["#c3d48f", "#b2c97f", "#d3d99a", "#a9c37a"];
-      for (let n = 0; n < 6; n++) {
-        ctx.fillStyle = stripes[n % stripes.length]!;
-        ctx.fillRect(x, y + (n * h) / 6, w, h / 6 + 1);
-      }
-    }
-    placeName(p, l, SQUARES[l.square]!.name.toUpperCase(), "#e4ded2");
-    return;
-  }
-  if (l.kind === "toll") {
-    // Le péage : trois voies sous l'auvent
-    ctx.fillStyle = ASPHALT;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "#f4f1e8";
-    ctx.lineWidth = 0.02 * k;
-    ctx.setLineDash([0.08 * k, 0.06 * k]);
-    for (const t of [-0.14, 0.14]) {
-      const a = lotPoint(l, t, -0.62);
-      const b = lotPoint(l, t, 0.45);
-      ctx.beginPath();
-      ctx.moveTo(px(p, a.x), px(p, a.z));
-      ctx.lineTo(px(p, b.x), px(p, b.z));
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    placeName(p, l, "PÉAGE", "#c9c1ae");
-    return;
-  }
-  if (l.kind === "kiosk") {
-    // Le kiosque : un parvis pavé, l'emplacement des deux paquets de cartes
-    fillRound(p, l, 0.05, PAVING);
-    for (const s of Object.values(DECK_SPOT)) {
-      ctx.fillStyle = "rgba(90, 70, 40, 0.16)";
-      ctx.beginPath();
-      ctx.arc(px(p, s.x), px(p, s.z), 0.3 * k, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    placeName(p, l, "CARTES", "#d8ccb2");
-    return;
-  }
-  // Les impôts et la banque : un parvis de pierre
-  fillRound(p, l, 0.05, l.kind === "bank" ? "#e2d8c2" : "#ddd6c6");
-  placeName(p, l, l.kind === "bank" ? "BANQUE" : "IMPÔTS", "#c9c1ae");
-}
-
-/** Une ligne pointillée au milieu d'une rue, d'un point à un autre du monde */
-function laneLine(p: Pen, x0: number, z0: number, x1: number, z1: number) {
-  const { ctx, k } = p;
-  ctx.strokeStyle = "rgba(244, 241, 232, 0.9)";
-  ctx.lineWidth = 0.014 * k;
-  ctx.setLineDash([0.09 * k, 0.07 * k]);
-  ctx.beginPath();
-  ctx.moveTo(px(p, x0), px(p, z0));
-  ctx.lineTo(px(p, x1), px(p, z1));
-  ctx.stroke();
-  ctx.setLineDash([]);
+  if (l.kind === "plaza") return;
+  const label: Partial<Record<Parcel["kind"], string>> = {
+    bank: "BANQUE",
+    kiosk: "CARTES",
+    tax: "IMPÔTS",
+    toll: "PÉAGE",
+  };
+  const name = l.square >= 0 && l.kind !== "tax" && l.kind !== "toll" ? SQUARES[l.square]!.name.toUpperCase() : label[l.kind];
+  if (name) groundText(p, name, parcelPoint(l, 0, l.room * 0.75), 0.105, l.room * 1.9, INK);
 }
 
 function drawCity(p: Pen) {
   const { ctx, k } = p;
-  // Tout est rue, sauf les pâtés de maisons posés dessus
+  // Tout est rue, sauf les parcelles posées dessus
   ctx.fillStyle = ASPHALT;
   ctx.fillRect(px(p, -INNER), px(p, -INNER), 2 * INNER * k, 2 * INNER * k);
   ctx.strokeStyle = "rgba(244, 241, 232, 0.9)";
@@ -650,60 +540,31 @@ function drawCity(p: Pen) {
   ctx.roundRect(px(p, -OUTER_ROAD), px(p, -OUTER_ROAD), 2 * OUTER_ROAD * k, 2 * OUTER_ROAD * k, 0.2 * k);
   ctx.stroke();
   ctx.setLineDash([]);
-  for (const s of [-1, 1]) {
-    laneLine(p, s * AVENUE, -CITY, s * AVENUE, CITY);
-    laneLine(p, -CITY, s * AVENUE, CITY, s * AVENUE);
-  }
-  // Les passages piétons autour de la place
-  ctx.fillStyle = "rgba(244, 241, 232, 0.92)";
-  for (const s of [-1, 1]) {
-    for (let n = -2; n <= 2; n++) {
-      const a = n * 0.07;
-      ctx.fillRect(px(p, a - 0.022), px(p, s * AVENUE - ROAD * 0.4), 0.044 * k, ROAD * 0.8 * k);
-      ctx.fillRect(px(p, s * AVENUE - ROAD * 0.4), px(p, a - 0.022), ROAD * 0.8 * k, 0.044 * k);
-    }
-  }
-  // Les pâtés : un trottoir, puis leurs quatre lieux
-  const step = BLOCK + ROAD;
-  for (const col of [-1, 0, 1]) {
-    for (const row of [-1, 0, 1]) {
-      const r = { x: col * step - BLOCK / 2 - 0.02, z: row * step - BLOCK / 2 - 0.02, w: BLOCK + 0.04, d: BLOCK + 0.04 };
-      fillRound(p, r, 0.1, col === 0 && row === 0 ? PAVING : SIDEWALK);
-    }
-  }
-  for (const l of LOTS) drawLot(p, l);
-
-  // La place : un dallage clair, la rose des vents où roulent les dés
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k, 0.1 * k);
-  ctx.clip();
-  ctx.strokeStyle = "rgba(160, 140, 105, 0.22)";
-  ctx.lineWidth = 0.006 * k;
-  for (let v = -PLAZA; v <= PLAZA + 1e-6; v += 0.2) {
-    ctx.beginPath();
-    ctx.moveTo(px(p, v), px(p, -PLAZA));
-    ctx.lineTo(px(p, v), px(p, PLAZA));
-    ctx.moveTo(px(p, -PLAZA), px(p, v));
-    ctx.lineTo(px(p, PLAZA), px(p, v));
+  // Un trottoir clair autour de chaque parcelle, puis la parcelle
+  for (const l of PARCELS) {
+    roundPoly(p, l.poly, 0.11);
+    ctx.lineWidth = 0.07 * k;
+    ctx.strokeStyle = SIDEWALK;
     ctx.stroke();
   }
-  ctx.restore();
-  ctx.strokeStyle = "#b9a988";
-  ctx.lineWidth = 0.03 * k;
-  ctx.beginPath();
-  ctx.roundRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k, 0.1 * k);
-  ctx.stroke();
+  for (const l of PARCELS) drawParcel(p, l);
+  // Les paquets de cartes : leur emplacement sur le parvis du kiosque
+  for (const x of [-0.16, 0.16]) {
+    const at = parcelPoint(KIOSK_PARCEL, x, 0.12);
+    ctx.fillStyle = "rgba(90, 70, 40, 0.18)";
+    ctx.beginPath();
+    ctx.arc(px(p, at.x), px(p, at.z), 0.2 * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
   drawArena(p);
 }
 
 function drawArena(p: Pen) {
   const { ctx, k } = p;
-  const cx = px(p, 0);
-  const cy = px(p, 0);
-  const R = ARENA * k;
+  const c = PLAZA_PARCEL.center;
+  const R = ARENA * k * 1.08;
   ctx.save();
-  ctx.translate(cx, cy);
+  ctx.translate(px(p, c.x), px(p, c.z));
   // Une rose des vents en mosaïque, sur laquelle roulent les dés
   ctx.fillStyle = "#efe4cb";
   ctx.beginPath();
@@ -964,6 +825,56 @@ export function signTexture(text: string, bg: string, fg: string, w = 256, h = 9
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, w / 2, h / 2 + h * 0.03);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Le texte lisible sur un fond : foncé sur les couleurs claires, blanc sur les autres */
+function inkOn(bg: string): string {
+  const c = new THREE.Color(bg);
+  return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b > 0.62 ? INK : "#ffffff";
+}
+
+/**
+ * L'étiquette au-dessus d'une case : le prix d'une case libre (fond crème), le loyer chez son propriétaire (à sa couleur),
+ * avec des points pour le niveau ; grisée si elle est hypothéquée
+ */
+export function tagTexture(text: string, color: string | null, level: number, muted: boolean): THREE.CanvasTexture {
+  const W = 256;
+  const H = 128;
+  const [canvas, ctx] = makeCanvas(W, H);
+  const bg = muted ? "#a9adb1" : (color ?? "#fffaf0");
+  ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.roundRect(10, 8, W - 20, 70, 26);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = color && !muted ? "#ffffff" : "rgba(40, 32, 20, 0.55)";
+  ctx.stroke();
+  ctx.fillStyle = muted ? "#ffffff" : color ? inkOn(color) : INK;
+  fitFont(ctx, text, 50, W - 50, "800", FONT_NUM);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, W / 2, 45);
+  // Le niveau : cinq points, pleins jusqu'au niveau atteint
+  if (level > 0) {
+    for (let k = 0; k < 5; k++) {
+      const x = W / 2 + (k - 2) * 26;
+      ctx.beginPath();
+      ctx.arc(x, 101, 9, 0, Math.PI * 2);
+      ctx.fillStyle = k < level ? (color ?? "#e2bd6e") : "rgba(255, 255, 255, 0.85)";
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+    }
+  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
