@@ -119,6 +119,90 @@ export const unmortgageCost = (index: number) => Math.ceil(mortgageValue(index) 
 export const mortgageInterest = (index: number) => unmortgageCost(index) - mortgageValue(index);
 
 // ---------------------------------------------------------------------------
+// Les bâtiments spéciaux (règle maison) : des nuisances chez les autres, un parc, une tour, un stade.
+// Ils se posent sur un terrain mais agissent sur tout son quartier (son groupe de couleur).
+// ---------------------------------------------------------------------------
+
+export type SpecialKind = "decharge" | "centrale" | "parc" | "tour" | "stade";
+
+export interface SpecialInfo {
+  name: string;
+  /** Le nom avec son article, pour les phrases : « une décharge », « le parc » */
+  one: string;
+  the: string;
+  /** Une nuisance se pose chez un adversaire ; les autres, chez soi */
+  nuisance: boolean;
+  /** Où il se pose, puis ce qu'il fait, chacun en une phrase */
+  where: string;
+  effect: string;
+}
+
+/** Ce que paie chaque adversaire qui passe sur la case d'un stade */
+export const STADIUM_TICKET = 50;
+
+export const SPECIALS: Record<SpecialKind, SpecialInfo> = {
+  decharge: {
+    name: "Décharge",
+    one: "une décharge",
+    the: "la décharge",
+    nuisance: true,
+    where: "Chez un adversaire.",
+    effect: "Les loyers de tout le quartier sont divisés par deux.",
+  },
+  centrale: {
+    name: "Centrale",
+    one: "une centrale",
+    the: "la centrale",
+    nuisance: true,
+    where: "Chez un adversaire.",
+    effect: "Le quartier ne rapporte plus aucun loyer.",
+  },
+  parc: {
+    name: "Parc",
+    one: "un parc",
+    the: "le parc",
+    nuisance: false,
+    where: "Chez toi.",
+    effect: "Aucune nuisance ne peut entrer dans le quartier.",
+  },
+  tour: {
+    name: "Tour Capitale",
+    one: "une tour Capitale",
+    the: "la tour Capitale",
+    nuisance: false,
+    where: "Dans un quartier complet à toi.",
+    effect: "Tous les loyers du quartier sont doublés.",
+  },
+  stade: {
+    name: "Stade",
+    one: "un stade",
+    the: "le stade",
+    nuisance: false,
+    where: "Chez toi, un seul par joueur.",
+    effect: `Chaque adversaire qui passe sur la case paie un billet de ${STADIUM_TICKET}.`,
+  },
+};
+
+export const SPECIAL_ORDER: SpecialKind[] = ["parc", "tour", "stade", "decharge", "centrale"];
+export const isSpecialKind = (k: unknown): k is SpecialKind => typeof k === "string" && Object.hasOwn(SPECIALS, k);
+
+/** Le prix d'un bâtiment spécial ; la tour vaut quatre maisons de son quartier */
+export function specialPrice(kind: SpecialKind, index: number): number {
+  switch (kind) {
+    case "decharge":
+      return 100;
+    case "centrale":
+      return 250;
+    case "parc":
+      return 150;
+    case "stade":
+      return 200;
+    case "tour":
+      return 4 * (groupOf(index)?.houseCost ?? 50);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Les cartes : « Hasard » fait surtout bouger, « Courrier » surtout payer ou encaisser
 // ---------------------------------------------------------------------------
 

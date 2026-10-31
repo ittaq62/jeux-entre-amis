@@ -276,6 +276,12 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
     blurb: "Un propriétaire en prison ne touche plus ses loyers.",
     settings: { noRentInJail: true },
   },
+  {
+    id: "ville-en-chantier",
+    name: "Ville en chantier",
+    blurb: "Bâtiments spéciaux : décharges et centrales chez les autres, parcs, tours et stades chez soi.",
+    settings: { specials: true },
+  },
 ];
 
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {

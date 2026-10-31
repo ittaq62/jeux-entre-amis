@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { HOTEL, SQUARES, UTILITIES, type DeckId } from "../../../shared/games/capitale/board.ts";
+import { HOTEL, SQUARES, UTILITIES, type DeckId, type SpecialKind } from "../../../shared/games/capitale/board.ts";
 import { play } from "../../lib/sound.ts";
 import * as B from "./buildings.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
@@ -22,6 +22,8 @@ export interface SceneDeed {
   owner: string | null;
   houses: number;
   mortgaged: boolean;
+  /** Le bâtiment spécial posé sur le terrain, et qui l'a posé */
+  special?: { kind: SpecialKind; by: string };
 }
 
 export interface SceneState {
@@ -79,6 +81,9 @@ interface LotObj {
   sale: THREE.Group | null;
   fence: THREE.Group | null;
   outline: THREE.Mesh | null;
+  special: THREE.Group | null;
+  /** Les maisons ont reculé pour laisser l'avant-cour au bâtiment spécial */
+  yard: boolean;
   shown: SceneDeed;
 }
 
@@ -152,6 +157,8 @@ export class CapitaleScene {
   >;
   private rotors: { obj: THREE.Group; speed: number }[] = [];
   private flags: THREE.Object3D[] = [];
+  /** La vapeur des centrales */
+  private steams: THREE.Object3D[] = [];
   private water: THREE.Mesh | null = null;
   private jet: THREE.Mesh | null = null;
   private siren: THREE.Mesh | null = null;
@@ -380,6 +387,8 @@ export class CapitaleScene {
           sale: null,
           fence: null,
           outline: null,
+          special: null,
+          yard: false,
           shown: { owner: null, houses: 0, mortgaged: false },
         };
         this.lots.set(lot.square, obj);
@@ -700,15 +709,15 @@ export class CapitaleScene {
         if (d.owner) ((uf.getObjectByName("cloth") as THREE.Mesh).material as THREE.MeshStandardMaterial).color.set(colorOf(d.owner));
       }
       const lot = this.lots.get(i);
-      if (lot) this.syncLot(lot, d, colorOf(d.owner), first);
+      if (lot) this.syncLot(lot, d, colorOf(d.owner), first, colorOf(d.special?.by ?? null));
     }
   }
 
-  private syncLot(o: LotObj, d: SceneDeed, color: string, first: boolean) {
+  private syncLot(o: LotObj, d: SceneDeed, color: string, first: boolean, byColor: string) {
     const prev = o.shown;
     const animate = !first && !this.opts.reduced;
     const property = o.lot.kind === "property";
-    const halfW = (o.lot.side === "bottom" || o.lot.side === "top" ? o.lot.w : o.lot.d) / 2;
+    const halfW = lotHalfWidth(o.lot);
     // Le propriétaire : son drapeau, le liseré de la parcelle ; le panneau « à vendre » s'en va
     if (d.owner !== prev.owner) {
       if (o.flag) this.removeObj(o.flag, animate);
@@ -741,6 +750,33 @@ export class CapitaleScene {
         if (animate) this.popIn(o.fence);
       }
     }
+    // Le bâtiment spécial, dans l'avant-cour : les maisons reculent d'abord pour lui faire de la place
+    const specialKey = (x: SceneDeed) => (x.special ? `${x.special.kind}|${x.special.by}` : "");
+    if (property && specialKey(d) !== specialKey(prev)) {
+      if (o.special) {
+        const old = o.special;
+        this.removeObj(old, animate);
+        this.steams = this.steams.filter((s) => !isDescendant(s, old));
+      }
+      o.special = null;
+      const yard = Boolean(d.special);
+      if (yard !== o.yard) {
+        o.yard = yard;
+        this.slideHouses(o, animate, yard ? 0 : 0.3);
+      }
+      if (d.special) {
+        const b = B.specialBuilding(d.special.kind, color, byColor);
+        o.special = b.group;
+        o.special.position.set(d.special.kind === "tour" ? -0.12 : -0.04, 0, YARD_Z);
+        o.root.add(o.special);
+        this.steams.push(...b.steam);
+        if (animate) {
+          this.rise(o.special, d.special.kind === "tour" ? 1.0 : 0.6, 0.35);
+          this.dust(o.root, o.special.position.x, YARD_Z, 0.35);
+          this.lookAtSoon(o.root.position.clone());
+        }
+      }
+    }
     // Les constructions
     if (property && d.houses !== prev.houses) {
       const group = o.lot.group!;
@@ -749,7 +785,7 @@ export class CapitaleScene {
         o.houses = [];
         if (!o.tower) {
           o.tower = B.skyscraper(group, color, o.lot.square === 39);
-          o.tower.position.set(0, 0, -0.1);
+          o.tower.position.set(0, 0, towerZ(o.yard));
           o.root.add(o.tower);
           if (animate) {
             this.rise(o.tower, 1.1, 0.35);
@@ -766,8 +802,7 @@ export class CapitaleScene {
         while (o.houses.length < d.houses) {
           const k = o.houses.length + 1;
           const h = B.houseBuilding(group, k, color);
-          const slot = HOUSE_SLOTS[k - 1]!;
-          h.position.set(slot[0] * (halfW / 0.42), 0, slot[1]);
+          h.position.copy(houseSpot(k, o.yard, halfW));
           o.root.add(h);
           o.houses.push(h);
           if (animate) {
@@ -779,6 +814,21 @@ export class CapitaleScene {
       }
     }
     o.shown = { ...d };
+  }
+
+  /** Les maisons et le gratte-ciel glissent à leur place : au fond de la parcelle quand l'avant-cour est prise */
+  private slideHouses(o: LotObj, animate: boolean, delay = 0) {
+    const halfW = lotHalfWidth(o.lot);
+    const moves = o.houses.map((h, k) => ({ obj: h as THREE.Object3D, to: houseSpot(k + 1, o.yard, halfW) }));
+    if (o.tower) moves.push({ obj: o.tower, to: new THREE.Vector3(0, 0, towerZ(o.yard)) });
+    for (const m of moves) {
+      if (!animate) {
+        m.obj.position.copy(m.to);
+        continue;
+      }
+      const from = m.obj.position.clone();
+      this.tween(0.45, (t) => m.obj.position.lerpVectors(from, m.to, easeInOut(t)), undefined, delay);
+    }
   }
 
   /** Un liseré à plat autour de la parcelle */
@@ -1081,6 +1131,7 @@ export class CapitaleScene {
     for (const c of this.cars) c.s += c.speed * dt * (c.reverse ? -1 : 1);
     this.placeCars();
     for (const r of this.rotors) r.obj.rotation.z -= r.speed * dt;
+    for (const s of this.steams) B.placeSteam(s, this.time * 0.3);
     this.flags.forEach((f, k) => (f.rotation.y = Math.sin(this.time * 2.2 + k) * 0.35));
     if (this.water) {
       const m = this.water.material as THREE.MeshStandardMaterial;
@@ -1405,6 +1456,22 @@ const HOUSE_SLOTS: [number, number][] = [
   [-0.2, -0.33],
   [0.2, -0.36],
 ];
+/** Les mêmes, reculées quand un bâtiment spécial occupe l'avant-cour (entre les maisons et la bande au nom de la ville) */
+const HOUSE_SLOTS_YARD: [number, number][] = [
+  [-0.21, 0.0],
+  [0.21, -0.01],
+  [-0.2, -0.47],
+  [0.2, -0.48],
+];
+/** Le milieu de l'avant-cour, devant les maisons */
+const YARD_Z = 0.34;
+
+const lotHalfWidth = (lot: L.Lot) => (lot.side === "bottom" || lot.side === "top" ? lot.w : lot.d) / 2;
+const houseSpot = (k: number, yard: boolean, halfW: number) => {
+  const slot = (yard ? HOUSE_SLOTS_YARD : HOUSE_SLOTS)[k - 1]!;
+  return new THREE.Vector3(slot[0] * (halfW / 0.42), 0, slot[1]);
+};
+const towerZ = (yard: boolean) => (yard ? -0.27 : -0.1);
 
 /** La parcelle de la ville qui représente une case (ou le coin de la place pour le barrage et les éoliennes) */
 function cityRect(square: number): L.WRect | null {

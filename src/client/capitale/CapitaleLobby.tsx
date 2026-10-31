@@ -1,3 +1,4 @@
+import { SPECIAL_ORDER, specialPrice, SPECIALS } from "../../shared/games/capitale/board.ts";
 import type { BotLevel, CapitaleSettings, EndMode } from "../../shared/games/capitale/engine.ts";
 import { CAPITALE_MAX_PLAYERS, type CapitaleClientMessage, type CapitaleRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
@@ -9,7 +10,7 @@ const BOT_HINTS: Record<BotLevel, string> = {
   fort: "Rafle les terrains, monte vite à trois maisons et négocie pour compléter ses groupes.",
 };
 
-type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart";
+type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart" | "specials";
 
 const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   {
@@ -20,7 +21,33 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   { key: "doubleGo", label: "Double salaire sur Départ", desc: "Tomber pile sur Départ rapporte 400 au lieu de 200." },
   { key: "noRentInJail", label: "Pas de loyer en prison", desc: "Un propriétaire derrière les barreaux ne touche plus ses loyers." },
   { key: "quickStart", label: "Départ rapide", desc: "Chacun reçoit deux titres tirés au sort pour commencer." },
+  {
+    key: "specials",
+    label: "Bâtiments spéciaux",
+    desc: "Décharges et centrales chez les autres, parcs, tours et stades chez soi : la ville devient un champ de bataille.",
+  },
 ];
+
+/** Les bâtiments spéciaux, leur prix et leur effet, sous la règle cochée */
+function SpecialRules() {
+  return (
+    <ul className="cap-special-rules">
+      {SPECIAL_ORDER.map((k) => (
+        <li key={k} className={SPECIALS[k].nuisance ? "is-nuisance" : ""}>
+          <strong>{SPECIALS[k].name}</strong>
+          <span className="num">{k === "tour" ? "200 à 800" : specialPrice(k, 0)} ₣</span>
+          <span className="hint">
+            {SPECIALS[k].where} {SPECIALS[k].effect}
+          </span>
+        </li>
+      ))}
+      <li className="cap-special-limits hint">
+        Un bâtiment par terrain et par tour, une nuisance par quartier, un stade par joueur. Le propriétaire fait raser une nuisance
+        à son prix ; ses propres bâtiments se revendent à moitié prix.
+      </li>
+    </ul>
+  );
+}
 
 interface Props {
   room: CapitaleRoomView;
@@ -86,7 +113,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             <div className="rule-list">
               {HOUSE_RULES.map((r) => (
                 <div key={r.key} className="rule-row" onClick={() => isHost && update({ [r.key]: !s[r.key] })}>
-                  <Check label={r.label} checked={s[r.key]} disabled={!isHost} onChange={() => {}} />
+                  <Check label={r.label} checked={Boolean(s[r.key])} disabled={!isHost} onChange={() => {}} />
                   <span>
                     <strong>{r.label}</strong>
                     <span className="hint">{r.desc}</span>
@@ -94,6 +121,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                 </div>
               ))}
             </div>
+            {s.specials && <SpecialRules />}
             <p className="hint" style={{ margin: 0 }}>
               Le reste suit la règle : enchères quand on refuse d'acheter, prison, hypothèques, constructions égales, 32 maisons et 12
               hôtels à la banque.

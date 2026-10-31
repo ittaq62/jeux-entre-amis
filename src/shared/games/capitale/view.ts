@@ -18,7 +18,7 @@ export function viewFor(s: CapitaleState, viewerId: string | null): CapitaleView
   const { decks, rng: _rng, decisionKey: _key, rigged: _rigged, ...rest } = s;
   return {
     ...rest,
-    deeds: s.deeds.map((d) => (d ? { ...d } : null)),
+    deeds: s.deeds.map((d) => (d ? { ...d, ...(d.special ? { special: { ...d.special } } : {}) } : null)),
     players: s.players.map((p) => ({ ...p, jailCards: [...p.jailCards], stats: { ...p.stats } })),
     deckCounts: { hasard: decks.hasard.length, courrier: decks.courrier.length },
     actor: actorOf(s),
