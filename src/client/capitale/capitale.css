@@ -13,31 +13,6 @@
   --g-bleu: #2f5bb8;
 }
 
-.cap-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 22px;
-  padding: 4px 16px 16px;
-  overflow: hidden;
-}
-
-.cap-stage.is-phone {
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 8px;
-  padding: 0 6px 12px;
-  overflow-y: auto;
-}
-
-.cap-board-area {
-  position: relative;
-  flex: none;
-}
-
 /* Le plateau en 3D : la toile remplit la zone, les repères des billets et le bouton par-dessus */
 .cap-board3d {
   position: absolute;
@@ -234,45 +209,6 @@
   box-shadow: 0 0 0 1px var(--line-soft);
 }
 
-/* La carte tirée */
-.cap-card {
-  position: absolute;
-  left: 50%;
-  top: 38%;
-  z-index: 30;
-  width: min(66%, 340px);
-  margin-left: max(-33%, -170px);
-  padding: 16px 18px 14px;
-  border-radius: 10px;
-  background: var(--paper);
-  color: var(--ink);
-  text-align: center;
-  box-shadow: var(--shadow-float);
-}
-
-.cap-card p {
-  margin: 8px 0 6px;
-  font-size: 16px;
-  line-height: 1.35;
-}
-
-.cap-card-deck {
-  display: inline-block;
-  padding: 3px 12px;
-  border-radius: 999px;
-  font-family: var(--font-title);
-  font-size: 15px;
-  color: #fff;
-}
-
-.cap-card.deck-hasard .cap-card-deck {
-  background: #d9702c;
-}
-
-.cap-card.deck-courrier .cap-card-deck {
-  background: #2f6fb8;
-}
-
 /* Les billets qui volent d'un joueur à l'autre */
 .cap-bills {
   position: fixed;
@@ -288,147 +224,6 @@
   margin: -15px 0 0 -29px;
   line-height: 0;
   filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.35));
-}
-
-/* La colonne de droite : les joueurs, les offres, la barre d'action */
-.cap-side {
-  flex: 0 1 380px;
-  min-width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 100%;
-  overflow-y: auto;
-  padding-bottom: 12px;
-}
-
-.is-phone .cap-side {
-  width: 100%;
-  min-width: 0;
-  flex: none;
-  max-height: none;
-  overflow: visible;
-}
-
-.cap-players {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cap-players.is-compact {
-  flex-direction: row;
-  width: 100%;
-  overflow-x: auto;
-  gap: 6px;
-  padding: 2px 2px 4px;
-  scrollbar-width: none;
-}
-
-.cap-player {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-row);
-  background: var(--panel);
-  border: 1px solid var(--line-soft);
-  border-left: 4px solid var(--pawn);
-  box-shadow: var(--shadow-panel);
-}
-
-.cap-players.is-compact .cap-player {
-  flex: none;
-  gap: 6px;
-  padding: 5px 9px 5px 6px;
-}
-
-.cap-player.is-turn {
-  border-color: var(--line);
-  border-left-color: var(--pawn);
-  background: var(--panel-raised);
-}
-
-.cap-player.is-acting {
-  box-shadow:
-    0 0 0 1px var(--gold),
-    var(--shadow-panel);
-}
-
-.cap-player.is-out {
-  opacity: 0.5;
-}
-
-.cap-player.is-me .cap-player-text strong::after {
-  content: " (toi)";
-  font-weight: 400;
-  color: var(--text-faint);
-}
-
-.cap-player-avatar {
-  position: relative;
-  flex: none;
-  display: grid;
-  place-items: center;
-}
-
-.cap-player-timer {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.cap-player-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.cap-player-text strong {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cap-player-cash {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 20px;
-  color: var(--gold-light);
-}
-
-.cap-players.is-compact .cap-player-cash {
-  font-size: 16px;
-}
-
-.cap-player-text .hint {
-  font-size: 12px;
-}
-
-.cap-player-deeds {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  max-width: 96px;
-  justify-content: flex-end;
-}
-
-.cap-mini {
-  width: 8px;
-  height: 11px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
-}
-
-.cap-mini.is-mortgaged {
-  opacity: 0.35;
 }
 
 .cap-react {
@@ -482,42 +277,6 @@
   padding: 1px 8px;
   border-radius: 999px;
   border: 2px solid var(--owner);
-}
-
-/* Mes titres */
-.cap-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cap-titles-sum {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-}
-
-.cap-titles-sum strong {
-  font-family: var(--font-card);
-  font-size: 19px;
-  color: var(--gold-light);
-}
-
-.cap-titles-debt strong {
-  color: var(--danger);
-}
-
-.cap-titles-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cap-titles-group h3 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  color: var(--text-soft);
 }
 
 /* L'échange */
@@ -614,10 +373,6 @@
 @media (max-width: 600px) {
   .cap-trade-sides {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .cap-card p {
-    font-size: 14px;
   }
 }
 
@@ -814,12 +569,6 @@
   opacity: 0.5;
 }
 
-.cap-board-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
 .cap-hand {
   position: relative;
   z-index: 10;
@@ -913,691 +662,6 @@
   font-size: 19px;
 }
 
-/* ------------------------------------------------------------------ */
-/* Le panneau d'action                                                  */
-/* ------------------------------------------------------------------ */
-
-.cap-dock {
-  padding: 12px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cap-dock.is-mine {
-  box-shadow:
-    0 0 0 1px var(--gold),
-    var(--shadow-panel);
-}
-
-.cap-dock-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.cap-dock-head > :first-child {
-  box-shadow: 0 0 0 3px var(--pawn);
-  border-radius: 50%;
-}
-
-.cap-dock-who {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.cap-dock-who strong {
-  font-family: var(--font-title);
-  font-weight: 400;
-  font-size: 19px;
-}
-
-.cap-dock-wait {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.cap-dock-text {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.4;
-}
-
-.cap-dock-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cap-dock-buttons .btn-lg {
-  flex: 1 1 auto;
-}
-
-.cap-roll {
-  min-height: 56px;
-  font-size: 18px;
-}
-
-.cap-dock-links {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.cap-dock.is-busy .cap-dock-buttons,
-.cap-dock.is-busy .cap-manage {
-  opacity: 0.55;
-}
-
-.cap-manage {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.cap-big {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 78px;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
-  color: var(--text);
-  font-weight: 700;
-  font-size: 15px;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.cap-big:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: var(--gold);
-}
-
-.cap-big:disabled {
-  cursor: default;
-}
-
-.cap-big.is-build {
-  background: linear-gradient(180deg, #2f7a4f, #1d5537);
-  border-color: #4cc38a;
-}
-
-.cap-big.is-end {
-  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
-  border-color: var(--gold-edge);
-  color: var(--gold-ink);
-}
-
-.cap-buy,
-.cap-debt {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.cap-buy-group {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-soft);
-}
-
-.cap-buy-btn .num {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 19px;
-}
-
-.cap-auction {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.cap-auction-live {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cap-auction-high {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 40px;
-  line-height: 1;
-  color: var(--gold-light);
-}
-
-.cap-auction-by {
-  font-size: 13px;
-  color: var(--text-soft);
-}
-
-.cap-auction-bar {
-  position: relative;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--panel-sunken);
-  overflow: hidden;
-}
-
-.cap-auction-bar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: calc(var(--left) * 100%);
-  background: linear-gradient(90deg, #d6433a, var(--gold));
-  transition: width 1s linear;
-}
-
-.cap-auction-bar .num {
-  position: relative;
-  display: block;
-  text-align: center;
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.cap-bids {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cap-bid {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--line-strong);
-  background: var(--panel-raised);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.cap-bid:hover:not(:disabled) {
-  border-color: var(--gold);
-}
-
-.cap-bid:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.cap-bid .num {
-  font-family: var(--font-card);
-  font-weight: 800;
-}
-
-.cap-warn {
-  color: var(--danger);
-}
-
-/* ------------------------------------------------------------------ */
-/* Le titre de propriété                                                */
-/* ------------------------------------------------------------------ */
-
-.cap-deedcard {
-  border-radius: 10px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow:
-    inset 0 0 0 1px var(--paper-line),
-    0 10px 24px -14px rgba(0, 0, 0, 0.9);
-  overflow: hidden;
-}
-
-.cap-deedcard.is-mortgaged {
-  filter: grayscale(0.6);
-}
-
-.cap-deedcard-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  margin: 8px 8px 0;
-  padding: 8px 10px 9px;
-  border-radius: 6px;
-  color: #fff;
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.cap-deedcard-head.is-light {
-  color: var(--ink);
-  text-shadow: none;
-}
-
-.cap-deedcard-head > span:first-child {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-
-.cap-deedcard-head strong {
-  font-family: var(--font-title);
-  font-weight: 400;
-  font-size: 22px;
-  line-height: 1.15;
-}
-
-.cap-deedcard.is-compact .cap-deedcard-head strong {
-  font-size: 18px;
-}
-
-.cap-deedcard-owner {
-  margin-top: 3px;
-  padding: 1px 9px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-  text-shadow: none;
-  box-shadow: 0 0 0 2px var(--owner);
-}
-
-.cap-deedcard-body {
-  padding: 6px 12px 0;
-}
-
-.cap-floors {
-  margin: 0;
-  padding: 6px 12px 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px 14px;
-}
-
-.cap-deedcard-body .cap-floors {
-  padding: 0;
-}
-
-.cap-floors li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 2px 4px;
-  border-bottom: 1px dotted var(--paper-line);
-  font-size: 13px;
-}
-
-.cap-floors li:first-child {
-  grid-column: 1 / -1;
-  flex-wrap: wrap;
-}
-
-.cap-floors li b {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 15px;
-}
-
-.cap-floors li em {
-  width: 100%;
-  font-style: normal;
-  font-size: 11px;
-  color: var(--ink-soft);
-}
-
-.cap-floors li.is-now {
-  border-radius: 4px;
-  background: #ffe9a8;
-  font-weight: 700;
-}
-
-.cap-deedcard.is-compact .cap-floors li {
-  font-size: 12px;
-  padding: 1px 3px;
-}
-
-.cap-deedcard-note {
-  margin: 8px 12px 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ink-soft);
-}
-
-.cap-deedcard-body .cap-deedcard-note {
-  margin: 8px 0 0;
-}
-
-.cap-deedcard-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 8px 0 0;
-  padding: 7px 12px 9px;
-  border-top: 1px solid var(--paper-line);
-  font-size: 13px;
-}
-
-.cap-deedcard-foot b {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 16px;
-}
-
-/* La parcelle et ses 4 cases, vue d'en haut */
-.cap-parcel {
-  display: inline-grid;
-  grid-template-columns: repeat(2, var(--cell));
-  gap: 3px;
-  padding: 4px 4px 0;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--group) 28%, #fff);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--group) 70%, #000);
-}
-
-.cap-parcel-cell {
-  width: var(--cell);
-  height: var(--cell);
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 4px;
-  border: 1.5px dashed color-mix(in srgb, var(--group) 60%, #000);
-  background: #fbf7ec;
-  overflow: hidden;
-}
-
-button.cap-parcel-cell {
-  cursor: pointer;
-}
-
-.cap-parcel-cell.is-built {
-  border-style: solid;
-}
-
-.cap-parcel-cell.is-nuisance {
-  border-color: #b3261e;
-  background: #f5d9d4;
-}
-
-.cap-parcel-cell.is-active {
-  outline: 3px solid var(--gold);
-  outline-offset: 1px;
-}
-
-.cap-parcel-street {
-  grid-column: 1 / -1;
-  margin: 2px -4px 0;
-  padding: 2px 4px;
-  background: var(--group);
-  border-radius: 0 0 5px 5px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cap-bicon {
-  display: block;
-  object-fit: contain;
-}
-
-.cap-bicon.is-text {
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  color: var(--ink);
-}
-
-/* La fiche d'une case */
-.cap-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cap-sheet-owner {
-  margin: 0;
-}
-
-.cap-sheet-parcel {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.cap-sheet-cell {
-  flex: 1;
-  min-width: 0;
-}
-
-.cap-sheet-cell p {
-  margin: 0 0 6px;
-}
-
-.cap-sheet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* Mes titres : des cartes en main */
-.cap-hand-deeds {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.cap-mini-deed {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 132px;
-  padding: 6px 6px 8px;
-  border-radius: 9px;
-  border: none;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.9);
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.cap-mini-deed:hover {
-  transform: translateY(-3px) rotate(-1deg);
-}
-
-.cap-mini-deed.is-mortgaged {
-  filter: grayscale(0.7);
-  opacity: 0.8;
-}
-
-.cap-mini-deed-head {
-  align-self: stretch;
-  padding: 4px 6px;
-  border-radius: 5px;
-  color: #fff;
-  font-family: var(--font-title);
-  font-size: 14px;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cap-mini-deed-head.is-light {
-  color: var(--ink);
-}
-
-.cap-mini-deed-kind {
-  padding: 20px 0;
-  font-weight: 700;
-  color: var(--ink-soft);
-}
-
-.cap-mini-deed-foot {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* ------------------------------------------------------------------ */
-/* Le chantier                                                          */
-/* ------------------------------------------------------------------ */
-
-.cap-tray {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  box-shadow:
-    0 0 0 1px #19c25a,
-    var(--shadow-panel);
-}
-
-.cap-tray-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.cap-tray-head strong {
-  font-family: var(--font-title);
-  font-weight: 400;
-  font-size: 19px;
-}
-
-.cap-tray-site {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 13px;
-  color: var(--gold-light);
-}
-
-.cap-tray-site .is-done {
-  color: var(--text-faint);
-  text-decoration: line-through;
-}
-
-.cap-tray-kinds {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 6px;
-}
-
-.cap-kind {
-  display: grid;
-  grid-template-columns: auto;
-  justify-items: center;
-  padding: 4px 4px 6px;
-  border-radius: 10px;
-  border: 1.5px solid var(--line-strong);
-  background: var(--paper);
-  color: var(--ink);
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.cap-kind img {
-  width: 58px;
-  height: 58px;
-}
-
-.cap-kind:hover:not(:disabled) {
-  transform: translateY(-3px);
-}
-
-.cap-kind.is-on {
-  border-color: #19c25a;
-  box-shadow:
-    0 0 0 3px rgba(25, 194, 90, 0.45),
-    0 8px 16px -8px rgba(0, 0, 0, 0.8);
-  transform: translateY(-3px);
-}
-
-.cap-kind:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.cap-kind-name {
-  font-weight: 800;
-  font-size: 13px;
-}
-
-.cap-kind-price {
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 15px;
-}
-
-.cap-kind-tag {
-  margin-top: 2px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #e8e1cf;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.cap-kind.is-special .cap-kind-tag {
-  background: #f4dd94;
-}
-
-.cap-kind.is-nuisance .cap-kind-tag {
-  background: #f1c3bc;
-  color: #7a1b14;
-}
-
-.cap-tray-help {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-soft);
-}
-
-.cap-tray-help strong,
-.cap-tray-help b {
-  color: var(--text);
-}
-
-.cap-tray-help .num {
-  font-family: var(--font-card);
-  font-size: 16px;
-  color: var(--gold-light);
-}
-
-@media (max-width: 600px) {
-  .cap-auction {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .cap-line.is-new {
-    font-size: 15px;
-  }
-
-  .cap-tray-kinds {
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  }
-}
-
 /* Le choix du pion, au salon */
 .cap-tokens {
   display: grid;
@@ -1660,4 +724,1135 @@ button.cap-parcel-cell {
   color: var(--gold-light);
   font-size: 11px;
   font-weight: 800;
+}
+
+/* ------------------------------------------------------------------ */
+/* La table claire : le plateau au centre, les joueurs aux coins        */
+/* ------------------------------------------------------------------ */
+
+.cap-bright {
+  --sky-top: #bfe4f6;
+  --sky-bottom: #e7f3df;
+  --card: #ffffff;
+  --card-ink: #22313a;
+  --card-soft: #6a7b85;
+  background: linear-gradient(180deg, var(--sky-top) 0%, #d6edf3 45%, var(--sky-bottom) 100%);
+  color: var(--card-ink);
+}
+
+.cap-bright .table-top {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(34, 49, 58, 0.08);
+}
+
+.cap-bright .table-top .btn-ghost,
+.cap-bright .table-title,
+.cap-bright .table-title .hint {
+  color: var(--card-ink);
+}
+
+.cap-arena {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cap-board-zone {
+  position: absolute;
+  inset: 0 0 96px;
+}
+
+.cap-board-zone .cap-board3d {
+  border-radius: 0;
+}
+
+/* Les joueurs aux coins */
+.cap-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cap-corner {
+  position: absolute;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 240px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--pawn) 75%, #fff),
+    0 10px 24px -12px rgba(20, 40, 60, 0.55);
+  pointer-events: auto;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.cap-corner.at-tl {
+  left: 14px;
+  top: 20px;
+}
+
+.cap-corner.at-tr {
+  right: 14px;
+  top: 20px;
+}
+
+.cap-corner.at-br {
+  right: 14px;
+  bottom: 108px;
+}
+
+.cap-corner.at-bl {
+  left: 14px;
+  bottom: 108px;
+}
+
+.cap-corner.at-ml {
+  left: 14px;
+  top: 42%;
+}
+
+.cap-corner.at-mr {
+  right: 14px;
+  top: 42%;
+}
+
+.cap-corner.is-turn {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 4px var(--pawn),
+    0 0 0 9px color-mix(in srgb, var(--pawn) 30%, transparent),
+    0 14px 30px -12px rgba(20, 40, 60, 0.6);
+}
+
+.cap-corner.is-out {
+  opacity: 0.5;
+  filter: grayscale(0.8);
+}
+
+.cap-corner-avatar {
+  position: relative;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--pawn);
+}
+
+.cap-corner-timer {
+  position: absolute;
+  inset: -5px;
+  display: grid;
+  place-items: center;
+}
+
+.cap-corner-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.cap-corner-name {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--pawn);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cap-corner-name em {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.cap-corner-cash {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 30px;
+  color: var(--card-ink);
+}
+
+.cap-corner-meta {
+  font-size: 12px;
+  color: var(--card-soft);
+}
+
+.cap-corner-arrow {
+  position: absolute;
+  right: 10px;
+  top: -12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--pawn);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  animation: cap-bob 1.2s ease-in-out infinite;
+}
+
+@keyframes cap-bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.cap-corners.is-phone {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  pointer-events: auto;
+  z-index: 9;
+}
+
+.cap-corners.is-phone .cap-corner {
+  position: relative;
+  inset: auto;
+  width: auto;
+  padding: 4px 8px 4px 4px;
+  gap: 6px;
+  border-radius: 14px;
+}
+
+.cap-corners.is-phone .cap-corner.is-turn {
+  transform: none;
+}
+
+.cap-corners.is-phone .cap-corner-cash {
+  font-size: 19px;
+}
+
+.cap-corners.is-phone .cap-corner-name {
+  font-size: 11px;
+}
+
+/* La barre du bas : mes billets, le grand bouton, mes villes */
+.cap-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 24px;
+  padding: 0 280px 12px;
+  pointer-events: none;
+}
+
+.cap-bar > * {
+  pointer-events: auto;
+}
+
+.cap-bar .cap-hand {
+  margin-top: 0;
+}
+
+.cap-bar-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 250px;
+  justify-content: center;
+  padding: 16px 28px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffb54a, #f08a1c);
+  color: #fff;
+  font-family: var(--font-text);
+  font-weight: 900;
+  font-size: 22px;
+  text-shadow: 0 1px 2px rgba(120, 50, 0, 0.45);
+  box-shadow:
+    0 6px 0 #c4650c,
+    0 14px 24px -8px rgba(160, 80, 0, 0.6);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.cap-go:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.cap-go:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    0 2px 0 #c4650c,
+    0 6px 14px -8px rgba(160, 80, 0, 0.6);
+}
+
+.cap-go:disabled {
+  filter: grayscale(0.7) brightness(1.05);
+  opacity: 0.7;
+  cursor: default;
+}
+
+.cap-go.is-roll:not(:disabled) {
+  animation: cap-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes cap-pulse {
+  50% {
+    box-shadow:
+      0 6px 0 #c4650c,
+      0 0 0 10px rgba(255, 170, 60, 0.28),
+      0 14px 24px -8px rgba(160, 80, 0, 0.6);
+  }
+}
+
+.cap-go.is-end {
+  background: linear-gradient(180deg, #48c47c, #22955a);
+  box-shadow:
+    0 6px 0 #17703f,
+    0 14px 24px -8px rgba(10, 90, 40, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 60, 20, 0.45);
+}
+
+.cap-wait {
+  display: inline-flex;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pawn, #c9b27a) 70%, #fff);
+  color: var(--card-ink);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.cap-bar-more {
+  display: flex;
+  gap: 8px;
+}
+
+.cap-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--card-ink);
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 4px 12px -6px rgba(20, 40, 60, 0.5);
+  cursor: pointer;
+}
+
+.cap-small:hover {
+  background: #fff7e6;
+}
+
+.cap-jail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Les étiquettes du fil des annonces, en clair sur fond blanc */
+.cap-bright .cap-line {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--card-ink);
+  border-color: transparent;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--pawn) 65%, #fff),
+    0 10px 22px -12px rgba(20, 40, 60, 0.55);
+}
+
+.cap-bright .cap-line.is-new {
+  font-size: 19px;
+  padding: 8px 20px 8px 8px;
+}
+
+.cap-bright .cap-line.tone-good.is-new {
+  background: #e6f8ec;
+}
+
+.cap-bright .cap-line.tone-bad.is-new {
+  background: #fde8e5;
+}
+
+.cap-bright .cap-line.tone-big.is-new,
+.cap-bright .cap-line.tone-turn.is-new {
+  background: #fff4d6;
+  color: #5b3a00;
+}
+
+.cap-bright .cap-narrator {
+  top: 14px;
+}
+
+/* La bulle d'une case, au survol */
+.cap-tip {
+  position: fixed;
+  z-index: 70;
+  width: 270px;
+  transform: translate(18px, 14px);
+  border-radius: 14px;
+  background: var(--card, #fff);
+  color: var(--card-ink, #22313a);
+  box-shadow: 0 16px 34px -14px rgba(20, 40, 60, 0.6);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cap-tip.is-left {
+  transform: translate(calc(-100% - 18px), 14px);
+}
+
+.cap-tip-band {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.cap-tip-band span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.cap-tip-band strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 20px;
+}
+
+.cap-tip p {
+  margin: 8px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cap-tip-figure {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.cap-tip-figure b {
+  font-family: var(--font-card);
+  font-size: 24px;
+}
+
+.cap-tip-extra {
+  color: #6a7b85;
+  font-size: 13px !important;
+}
+
+/* Les fenêtres du milieu */
+.cap-pop-back {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(30, 50, 70, 0.28);
+}
+
+.cap-pop {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 0 0 16px;
+  border-radius: 22px;
+  background: #fff;
+  color: #22313a;
+  box-shadow: 0 30px 60px -20px rgba(10, 30, 50, 0.6);
+}
+
+.cap-pop.is-wide {
+  width: min(100%, 560px);
+}
+
+.cap-pop-close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #22313a;
+  cursor: pointer;
+}
+
+.cap-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 16px 48px 14px;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.cap-band.is-light {
+  color: #22313a;
+  text-shadow: none;
+}
+
+.cap-band span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.cap-band strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.cap-band-owner {
+  margin-top: 4px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #22313a;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 13px;
+  text-shadow: none;
+  box-shadow: 0 0 0 3px var(--owner);
+}
+
+.cap-pop-title {
+  margin: 18px 20px 6px;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 26px;
+}
+
+.cap-pop-ask {
+  margin: 14px 20px 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.cap-pop-text {
+  margin: 10px 20px 0;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #3d4d57;
+}
+
+.cap-pop-text b,
+.cap-pop-figure b {
+  font-family: var(--font-card);
+  font-size: 18px;
+  color: #22313a;
+}
+
+.cap-pop-figure {
+  margin: 10px 20px 0;
+  text-align: center;
+  font-weight: 700;
+}
+
+.cap-pop-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 18px 20px 0;
+}
+
+.cap-cta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 18px;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.cap-cta b {
+  font-family: var(--font-card);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.cap-cta em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.cap-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.cap-cta:disabled {
+  filter: grayscale(0.9);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cap-cta.is-green {
+  background: linear-gradient(180deg, #48c47c, #22955a);
+  box-shadow: 0 5px 0 #17703f;
+}
+
+.cap-cta.is-grey {
+  background: #e7ecef;
+  color: #22313a;
+  box-shadow: 0 5px 0 #c3ccd2;
+}
+
+.cap-why {
+  margin: 10px 20px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #fff1df;
+  color: #8a4a00;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cap-pop .hint {
+  margin: 10px 20px 0;
+  color: #6a7b85;
+  text-align: center;
+}
+
+/* La fiche d'une rue : le loyer en grand, les cinq niveaux */
+.cap-city-rent {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px 20px 0;
+}
+
+.cap-city-rent span {
+  font-weight: 800;
+  color: #6a7b85;
+}
+
+.cap-city-rent b {
+  font-family: var(--font-card);
+  font-size: 44px;
+  line-height: 1;
+}
+
+.cap-city-rent em {
+  font-style: normal;
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.cap-levels {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cap-levels li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 12px;
+  background: #f2f5f7;
+  opacity: 0.6;
+}
+
+.cap-levels li.is-done {
+  opacity: 1;
+  background: #e6f8ec;
+  box-shadow: inset 0 0 0 2px #48c47c;
+}
+
+.cap-levels li.is-next {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px #f0a63a;
+  background: #fff6e4;
+}
+
+.cap-level-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.cap-levels b {
+  font-family: var(--font-card);
+  font-size: 16px;
+}
+
+.cap-city-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.cap-city-actions .cap-cta {
+  min-width: 220px;
+}
+
+.cap-city-small {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.cap-pop .btn {
+  color: #22313a;
+  background: #eef2f4;
+  border-color: #d5dde2;
+}
+
+.cap-pop .btn-ghost {
+  background: transparent;
+}
+
+.cap-specials {
+  margin: 16px 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid #e5eaee;
+}
+
+.cap-specials h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #6a7b85;
+}
+
+.cap-special-list {
+  display: grid;
+  gap: 6px;
+}
+
+.cap-special {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px 6px 6px;
+  border: none;
+  border-radius: 14px;
+  background: #f4f7f9;
+  color: #22313a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cap-special img {
+  flex: none;
+}
+
+.cap-special > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.cap-special strong b {
+  font-family: var(--font-card);
+  font-size: 17px;
+  color: #22955a;
+}
+
+.cap-special .hint {
+  margin: 0;
+  text-align: left;
+  font-size: 13px;
+}
+
+.cap-special:hover:not(:disabled) {
+  background: #e9f7ef;
+}
+
+.cap-special:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cap-special.is-nuisance strong b {
+  color: #b3261e;
+}
+
+.cap-special.is-on {
+  background: #f4f7f9;
+  cursor: default;
+}
+
+/* Mes villes */
+.cap-cities {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 6px 16px 0;
+}
+
+.cap-cities h4 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 4px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--group);
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.cap-city-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 4px 5px 10px;
+  border-bottom: 1px solid #edf1f3;
+}
+
+.cap-city-row.is-mortgaged {
+  opacity: 0.55;
+}
+
+.cap-city-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: #22313a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cap-city-name strong {
+  font-size: 16px;
+}
+
+.cap-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.cap-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #dfe5e9;
+}
+
+.cap-dots i.is-on {
+  background: #22955a;
+}
+
+.cap-city-rentcell {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.cap-mini-cta {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #48c47c, #22955a);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cap-mini-cta .num {
+  font-family: var(--font-card);
+  font-size: 15px;
+}
+
+.cap-mini-cta:disabled {
+  background: #e3e8eb;
+  color: #8a98a0;
+  cursor: default;
+}
+
+/* L'enchère */
+.cap-auction-high {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 20px 0;
+}
+
+.cap-auction-high span {
+  font-weight: 700;
+  color: #6a7b85;
+}
+
+.cap-auction-high b {
+  font-family: var(--font-card);
+  font-size: 52px;
+  line-height: 1;
+}
+
+.cap-timebar {
+  position: relative;
+  display: block;
+  height: 18px;
+  margin: 12px 24px 0;
+  border-radius: 999px;
+  background: #e7ecef;
+  overflow: hidden;
+}
+
+.cap-timebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: calc(var(--left) * 100%);
+  background: linear-gradient(90deg, #e2453c, #f0a63a);
+  transition: width 1s linear;
+}
+
+.cap-timebar .num {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.cap-bid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 14px;
+  background: #f2f5f7;
+  color: #22313a;
+  cursor: pointer;
+}
+
+.cap-bid .num {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.cap-bid:hover:not(:disabled) {
+  background: #e9f7ef;
+}
+
+.cap-bid:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* La carte tirée : une vraie carte au milieu, retournée */
+.cap-cardshow {
+  position: fixed;
+  left: 50%;
+  top: 46%;
+  z-index: 55;
+  width: min(86vw, 330px);
+  margin-left: max(-43vw, -165px);
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 20px;
+  border-radius: 22px;
+  background: #fffaf0;
+  color: #22313a;
+  text-align: center;
+  box-shadow:
+    0 0 0 6px #fff,
+    0 0 0 9px var(--deck),
+    0 30px 60px -20px rgba(10, 30, 50, 0.6);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cap-cardshow.deck-hasard {
+  --deck: #e07a2c;
+}
+
+.cap-cardshow.deck-courrier {
+  --deck: #2f6fb8;
+}
+
+.cap-cardshow-top {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 0 12px;
+  background: var(--deck);
+  color: #fff;
+}
+
+.cap-cardshow-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-family: var(--font-title);
+  font-size: 34px;
+}
+
+.cap-cardshow-top strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+
+.cap-cardshow p {
+  margin: 0 22px;
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.cap-cardshow-chip {
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.cap-cardshow-chip.tone-good {
+  background: #e6f8ec;
+  color: #17703f;
+}
+
+.cap-cardshow-chip.tone-bad {
+  background: #fde8e5;
+  color: #b3261e;
+}
+
+.cap-cardshow-chip.tone-move {
+  background: #e7f0fb;
+  color: #1f4f8a;
+}
+
+.cap-cardshow-who {
+  font-size: 13px;
+  color: #6a7b85;
+}
+
+/* Les offres d'échange, posées en bas à gauche */
+.cap-bright .cap-offers {
+  position: absolute;
+  left: 50%;
+  bottom: 120px;
+  z-index: 12;
+  translate: -50% 0;
+  width: min(92%, 420px);
+}
+
+/* Le téléphone : les joueurs en haut, le plateau, la barre en bas */
+.cap-bright.is-phone .cap-board-zone {
+  inset: 96px 0 150px;
+}
+
+.cap-bright.is-phone .cap-bar {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.cap-bright.is-phone .cap-go {
+  min-width: 220px;
+  padding: 12px 20px;
+  font-size: 19px;
+}
+
+.cap-bright.is-phone .cap-narrator {
+  top: 4px;
+}
+
+@media (max-width: 1200px) {
+  .cap-corner {
+    width: 200px;
+  }
+
+  .cap-corner-cash {
+    font-size: 24px;
+  }
+
+  .cap-bar {
+    padding: 0 220px 12px;
+  }
 }

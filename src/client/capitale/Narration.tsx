@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { BUILDINGS, SQUARES } from "../../shared/games/capitale/board.ts";
+import { LEVEL_NAMES, SPECIALS, SQUARES } from "../../shared/games/capitale/board.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
@@ -96,8 +96,17 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       return e.winner
         ? { text: `${say(e.winner, "remporte", "remportes")} ${sq(e.square)} pour ${money(e.amount)}`, tone: "big", who: e.winner }
         : { text: `Personne ne veut de ${sq(e.square)}`, tone: "info", who: null };
-    case "build": {
-      const info = BUILDINGS[e.kind];
+    case "upgrade":
+      return {
+        text:
+          e.level === 5
+            ? `${say(e.player, "élève", "élèves")} un gratte-ciel à ${sq(e.square)} !`
+            : `${say(e.player, "améliore", "améliores")} ${sq(e.square)} : ${LEVEL_NAMES[e.level]!.toLowerCase()}`,
+        tone: e.level === 5 ? "big" : "info",
+        who: e.player,
+      };
+    case "special": {
+      const info = SPECIALS[e.kind];
       const owner = g.deeds[e.square]?.owner ?? null;
       if (info.nuisance) {
         const at = isMe(owner) ? "chez toi" : `chez ${owner ? name(owner) : "?"}`;
@@ -107,20 +116,21 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
           who: e.player,
         };
       }
-      if (e.upgrade)
-        return { text: `${say(e.player, "agrandit", "agrandis")} : un immeuble à ${sq(e.square)}`, tone: "info", who: e.player };
-      return {
-        text: `${say(e.player, "bâtit", "bâtis")} ${info.one} à ${sq(e.square)}`,
-        tone: info.special ? "big" : "info",
-        who: e.player,
-      };
+      return { text: `${say(e.player, "construit", "construis")} ${info.one} à ${sq(e.square)}`, tone: "big", who: e.player };
     }
     case "sell":
-      return { text: `${say(e.player, "revend", "revends")} ${BUILDINGS[e.kind].the} de ${sq(e.square)}`, tone: "info", who: e.player };
+      return { text: `${say(e.player, "revend", "revends")} un niveau de ${sq(e.square)}`, tone: "info", who: e.player };
     case "raze":
-      return e.how === "pay"
-        ? { text: `${say(e.player, "fait", "fais")} raser ${BUILDINGS[e.kind].the} de ${sq(e.square)}`, tone: "info", who: e.player }
-        : null;
+      return e.how === "auto"
+        ? null
+        : {
+            text:
+              e.how === "pay"
+                ? `${say(e.player, "fait", "fais")} raser ${SPECIALS[e.kind].the} de ${sq(e.square)}`
+                : `${say(e.player, "revend", "revends")} ${SPECIALS[e.kind].the} de ${sq(e.square)}`,
+            tone: "info",
+            who: e.player,
+          };
     case "mortgage":
       return { text: `${say(e.player, "hypothèque", "hypothèques")} ${sq(e.square)}`, tone: "info", who: e.player };
     case "unmortgage":
@@ -182,7 +192,7 @@ export function Narrator({ lines, g, seat }: { lines: Line[]; g: CapitaleView; s
   }, []);
   const shown = lines
     .filter((l) => now - (l.at ?? now) < 7000)
-    .slice(-2)
+    .slice(-1)
     .reverse();
   return (
     <div className="cap-narrator" aria-live="polite">

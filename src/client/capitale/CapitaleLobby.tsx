@@ -10,8 +10,8 @@ import { tokenThumbnails } from "./scene/tokens.ts";
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Prudent jusqu'à l'excès : il garde son argent et bâtit peu.",
-  moyen: "Achète raisonnablement, bâtit, pose parfois une nuisance, accepte les échanges équitables.",
-  fort: "Rafle les terrains, remplit ses parcelles, pose ses nuisances chez le plus riche et négocie.",
+  moyen: "Achète raisonnablement, améliore ses rues, pose parfois une nuisance, accepte les échanges équitables.",
+  fort: "Rafle les terrains, monte vite ses rues, pose ses nuisances chez le plus riche et négocie.",
 };
 
 type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart" | "specials";
@@ -20,7 +20,7 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   {
     key: "specials",
     label: "Bâtiments spéciaux",
-    desc: "Gratte-ciel (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
+    desc: "Monument (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
   },
   {
     key: "freeParking",
@@ -116,8 +116,8 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
               ))}
             </div>
             <p className="hint" style={{ margin: 0 }}>
-              La ville : chaque rue a sa parcelle de 4 cases. Maisons (1 étage) et immeubles (2 étages) se posent où l'on veut dès le
-              premier terrain, 3 étages par tour au plus. Le reste suit la règle : enchères, prison, hypothèques.
+              La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au gratte-ciel. Au-delà de l'immeuble, il faut
+              tout le quartier. Le reste suit la règle : enchères, prison, hypothèques.
             </p>
           </div>
 

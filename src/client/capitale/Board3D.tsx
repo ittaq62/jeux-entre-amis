@@ -5,7 +5,7 @@ import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { Icon } from "../components/Icon.tsx";
 import { colorOf } from "./boardUi.ts";
-import { CapitaleScene, type BuildMode } from "./scene/CapitaleScene.ts";
+import { CapitaleScene } from "./scene/CapitaleScene.ts";
 
 interface Props {
   g: CapitaleView;
@@ -21,39 +21,24 @@ interface Props {
   phone: boolean;
   reduced: boolean;
   onSquare: (index: number) => void;
-  /** Le chantier : les cases à allumer, et ce qu'on fait d'un clic ou d'un survol */
-  buildMode: BuildMode | null;
-  onCell: (square: number, cell: number) => void;
-  onHoverCell: (at: { square: number; cell: number } | null) => void;
+  /** La case sous la souris, pour la bulle qui l'explique */
+  onHover: (square: number | null, x: number, y: number) => void;
+  /** L'étiquette au-dessus de chaque case achetable */
+  tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean };
   /** Le pion de chaque joueur */
   tokens: Record<string, TokenId | undefined>;
 }
 
 /** Le plateau en 3D : la scène three.js, ses repères pour les billets, et le bouton pour le faire tourner */
-export function Board3D({
-  g,
-  shown,
-  deeds,
-  turn,
-  dice,
-  card,
-  highlight,
-  phone,
-  reduced,
-  onSquare,
-  buildMode,
-  onCell,
-  onHoverCell,
-  tokens,
-}: Props) {
+export function Board3D({ g, shown, deeds, turn, dice, card, highlight, phone, reduced, onSquare, onHover, tagOf, tokens }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const bank = useRef<HTMLSpanElement>(null);
   const pot = useRef<HTMLSpanElement>(null);
   const scene = useRef<CapitaleScene | null>(null);
   const [version, setVersion] = useState(0);
   const [failed, setFailed] = useState(false);
-  const click = useRef({ onSquare, onCell, onHoverCell });
-  click.current = { onSquare, onCell, onHoverCell };
+  const click = useRef({ onSquare, onHover, tagOf });
+  click.current = { onSquare, onHover, tagOf };
   const lastDice = useRef(dice);
   const thrown = useRef(dice.rollId);
 
@@ -65,8 +50,8 @@ export function Board3D({
         phone,
         reduced,
         onSquare: (i) => click.current.onSquare(i),
-        onCell: (sq, c) => click.current.onCell(sq, c),
-        onHoverCell: (at) => click.current.onHoverCell(at),
+        onHover: (i, x, y) => click.current.onHover(i, x, y),
+        tagOf: (i) => click.current.tagOf(i),
       });
     } catch {
       setFailed(true);
@@ -100,14 +85,6 @@ export function Board3D({
       pot: g.settings.freeParking ? g.pot : null,
     });
   }, [g, shown, deeds, turn, highlight, version, tokens]);
-
-  // Le chantier : une clé stable, pour ne pas tout rallumer à chaque image
-  const buildKey = buildMode ? `${buildMode.kind}|${buildMode.cells.map((c) => `${c.square}:${c.cell}`).join(",")}` : "";
-  const build = useRef(buildMode);
-  build.current = buildMode;
-  useEffect(() => {
-    scene.current?.setBuildMode(build.current);
-  }, [buildKey, version]);
 
   useEffect(() => {
     lastDice.current = dice;
