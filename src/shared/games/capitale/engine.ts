@@ -12,11 +12,15 @@ import {
   GROUPS,
   groupOf,
   HOTEL,
+  isSpecialKind,
   JAIL_FINE,
   JAIL_SQUARE,
   mortgageInterest,
   mortgageValue,
+  specialPrice,
+  SPECIALS,
   SQUARES,
+  STADIUM_TICKET,
   START_CASH,
   STATION_RENTS,
   STATIONS,
@@ -24,6 +28,7 @@ import {
   UTILITIES,
   type DeckId,
   type GroupId,
+  type SpecialKind,
 } from "./board.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -44,6 +49,8 @@ export interface CapitaleSettings {
   doubleGo: boolean;
   noRentInJail: boolean;
   quickStart: boolean;
+  /** Bâtiments spéciaux : nuisances chez les autres, parc, tour, stade */
+  specials: boolean;
   botLevel: BotLevel;
 }
 
@@ -55,6 +62,7 @@ export const DEFAULT_SETTINGS: CapitaleSettings = {
   doubleGo: false,
   noRentInJail: false,
   quickStart: false,
+  specials: false,
   botLevel: "moyen",
 };
 
@@ -63,6 +71,13 @@ export interface Deed {
   /** 0 à 4 maisons, 5 = l'hôtel */
   houses: number;
   mortgaged: boolean;
+  /** Le bâtiment spécial posé sur le terrain, et qui l'a posé (règle maison) */
+  special?: Special;
+}
+
+export interface Special {
+  kind: SpecialKind;
+  by: string;
 }
 
 export interface CapitaleStats {
@@ -113,7 +128,9 @@ export type MoneyReason =
   | "go"
   | "pot"
   | "trade"
-  | "bankrupt";
+  | "bankrupt"
+  | "special"
+  | "ticket";
 
 export interface Offer {
   cash: number;
@@ -173,6 +190,8 @@ export interface CapitaleState {
   debts: Debt[];
   trades: Trade[];
   tradeSeq: number;
+  /** Le tour où un bâtiment spécial a été posé : un seul par tour */
+  specialTurn?: number;
   lastCard: { deck: DeckId; card: number; player: string } | null;
   round: number;
   timeUp: boolean;
@@ -198,6 +217,8 @@ export type CapitaleEvent =
   | { type: "sell"; player: string; square: number; houses: number }
   | { type: "mortgage"; player: string; square: number }
   | { type: "unmortgage"; player: string; square: number }
+  | { type: "special"; player: string; square: number; kind: SpecialKind }
+  | { type: "raze"; player: string; square: number; kind: SpecialKind; how: "pay" | "sell" | "bankrupt" }
   | { type: "card"; player: string; deck: DeckId; card: number }
   | { type: "jail"; player: string; reason: "square" | "card" | "doubles" }
   | { type: "leaveJail"; player: string; how: "pay" | "card" | "doubles" | "forced" }
@@ -219,6 +240,8 @@ export type CapitaleAction =
   | { type: "sell"; square: number }
   | { type: "mortgage"; square: number }
   | { type: "unmortgage"; square: number }
+  | { type: "special"; square: number; kind: SpecialKind }
+  | { type: "raze"; square: number }
   | { type: "propose"; to: string; give: Offer; get: Offer; replaces?: number }
   | { type: "accept"; trade: number }
   | { type: "reject"; trade: number }
@@ -353,6 +376,12 @@ export function ownedBy(s: CapitaleState, playerId: string): number[] {
   return BUYABLE.filter((i) => s.deeds[i]!.owner === playerId);
 }
 
+/** Le bâtiment spécial d'un terrain s'il appartient au propriétaire (parc, tour, stade), pas une nuisance subie */
+export function ownSpecial(s: CapitaleState, index: number): SpecialKind | null {
+  const kind = s.deeds[index]?.special?.kind;
+  return kind && !SPECIALS[kind].nuisance ? kind : null;
+}
+
 /** La fortune : argent, titres (moitié s'ils sont hypothéqués) et constructions au prix coûtant */
 export function netWorth(s: CapitaleState, playerId: string): number {
   const p = playerOf(s, playerId);
@@ -363,6 +392,8 @@ export function netWorth(s: CapitaleState, playerId: string): number {
     total += d.mortgaged ? mortgageValue(i) : SQUARES[i]!.price!;
     const g = groupOf(i);
     if (g) total += d.houses * g.houseCost;
+    const own = ownSpecial(s, i);
+    if (own) total += specialPrice(own, i);
   }
   return total;
 }
@@ -376,6 +407,8 @@ export function liquidity(s: CapitaleState, playerId: string): number {
     const d = s.deeds[i]!;
     const g = groupOf(i);
     if (g) total += (d.houses * g.houseCost) / 2;
+    const own = ownSpecial(s, i);
+    if (own) total += Math.floor(specialPrice(own, i) / 2);
     if (!d.mortgaged) total += mortgageValue(i);
   }
   return Math.floor(total);
@@ -397,8 +430,8 @@ export function rentFor(s: CapitaleState, index: number, ctx: RentContext): numb
   if (!owner || owner.bankrupt) return 0;
   if (s.settings.noRentInJail && owner.inJail) return 0;
   if (sq.kind === "property") {
-    if (deed.houses > 0) return sq.rents![deed.houses]!;
-    return sq.rents![0] * (ownsGroup(s, deed.owner, sq.group!) ? 2 : 1);
+    const rent = deed.houses > 0 ? sq.rents![deed.houses]! : sq.rents![0] * (ownsGroup(s, deed.owner, sq.group!) ? 2 : 1);
+    return districtRent(s, sq.group!, rent);
   }
   if (sq.kind === "station") {
     const n = STATIONS.filter((i) => s.deeds[i]!.owner === deed.owner).length;
@@ -409,6 +442,26 @@ export function rentFor(s: CapitaleState, index: number, ctx: RentContext): numb
     return ctx.diceTotal * (ctx.utilityTimes ?? (n === 2 ? 10 : 4));
   }
   return 0;
+}
+
+/** Les bâtiments spéciaux d'un quartier sur un loyer : la centrale le coupe, la tour le double, la décharge le divise par deux */
+function districtRent(s: CapitaleState, group: GroupId, rent: number): number {
+  const deeds = GROUPS[group].squares.map((i) => s.deeds[i]!);
+  if (deeds.some((d) => d.special?.kind === "centrale")) return 0;
+  let r = rent;
+  const tower = deeds.find((d) => d.special?.kind === "tour");
+  // La tour ne compte que tant que son propriétaire a tout le quartier
+  if (tower?.owner && ownsGroup(s, tower.owner, group)) r *= 2;
+  if (deeds.some((d) => d.special?.kind === "decharge")) r = Math.floor(r / 2);
+  return r;
+}
+
+/** Les bâtiments spéciaux d'un quartier */
+export function specialsIn(s: CapitaleState, group: GroupId): SpecialKind[] {
+  return GROUPS[group].squares.flatMap((i) => {
+    const k = s.deeds[i]!.special?.kind;
+    return k ? [k] : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +543,19 @@ function moveBy(s: CapitaleState, p: CapitalePlayer, steps: number, events: Capi
   if (passGo) {
     pay(s, "bank", p.id, GO_SALARY, "go", events);
     p.stats.passGo += 1;
+  }
+  if (steps > 0 && s.settings.specials) payTickets(s, p, from, steps, events);
+}
+
+/** Les stades sur le chemin (case d'arrivée comprise) : un billet pour chacun, au propriétaire */
+function payTickets(s: CapitaleState, p: CapitalePlayer, from: number, steps: number, events: CapitaleEvent[]) {
+  for (let k = 1; k <= steps; k++) {
+    const i = (from + k) % 40;
+    const d = s.deeds[i];
+    if (d?.special?.kind !== "stade" || !d.owner || d.owner === p.id || d.mortgaged) continue;
+    const owner = playerOf(s, d.owner);
+    if (!owner || owner.bankrupt || (s.settings.noRentInJail && owner.inJail)) continue;
+    charge(s, p, owner.id, STADIUM_TICKET, "ticket", events, i);
   }
 }
 
@@ -766,6 +832,46 @@ export function canMortgage(s: CapitaleState, playerId: string, index: number): 
   if (deed.mortgaged) return "Déjà hypothéqué.";
   const g = groupOf(index);
   if (g && g.squares.some((i) => s.deeds[i]!.houses > 0)) return "Vends d'abord les constructions du groupe.";
+  const own = ownSpecial(s, index);
+  if (own) return `Revends d'abord ${SPECIALS[own].the}.`;
+  return null;
+}
+
+/** Peut-on poser ce bâtiment spécial sur ce terrain ? Une nuisance chez un adversaire, le reste chez soi */
+export function canPlaceSpecial(s: CapitaleState, playerId: string, index: number, kind: SpecialKind): string | null {
+  if (!s.settings.specials) return "Les bâtiments spéciaux ne sont pas de la partie.";
+  const sq = SQUARES[index];
+  const deed = s.deeds[index];
+  if (!isSpecialKind(kind) || !sq || sq.kind !== "property" || !deed) return "Les bâtiments spéciaux se posent sur un terrain.";
+  const info = SPECIALS[kind];
+  if (s.specialTurn === s.turnId) return "Un seul bâtiment spécial par tour.";
+  if (deed.special) return "Il y a déjà un bâtiment spécial sur ce terrain.";
+  if (deed.mortgaged) return "Ce terrain est hypothéqué.";
+  const here = specialsIn(s, sq.group!);
+  if (info.nuisance) {
+    if (!deed.owner || deed.owner === playerId) return "Une nuisance se pose chez un adversaire.";
+    if (here.includes("parc")) return "Un parc protège ce quartier.";
+    if (here.some((k) => SPECIALS[k].nuisance)) return "Ce quartier a déjà sa nuisance.";
+  } else {
+    if (deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
+    if (kind === "parc" && here.some((k) => SPECIALS[k].nuisance)) return "Fais d'abord raser la nuisance du quartier.";
+    if (kind === "tour" && !ownsGroup(s, playerId, sq.group!)) return "Il faut tout le quartier pour la tour.";
+    if (here.includes(kind)) return `Ce quartier a déjà ${SPECIALS[kind].one}.`;
+    if (kind === "stade" && ownedBy(s, playerId).some((i) => s.deeds[i]!.special?.kind === "stade")) return "Tu as déjà un stade.";
+  }
+  const price = specialPrice(kind, index);
+  if (playerOf(s, playerId)!.cash < price) return `Il faut ${price}.`;
+  return null;
+}
+
+/** Peut-on se débarrasser du bâtiment spécial de son terrain ? Raser une nuisance se paie, revendre le sien rapporte la moitié */
+export function canRaze(s: CapitaleState, playerId: string, index: number): string | null {
+  const deed = s.deeds[index];
+  const sp = deed?.special;
+  if (!deed || !sp) return "Il n'y a pas de bâtiment spécial ici.";
+  if (deed.owner !== playerId) return "Ce terrain n'est pas à toi.";
+  const cost = specialPrice(sp.kind, index);
+  if (SPECIALS[sp.kind].nuisance && playerOf(s, playerId)!.cash < cost) return `Il faut ${cost} pour faire raser ${SPECIALS[sp.kind].the}.`;
   return null;
 }
 
@@ -804,6 +910,24 @@ function sellOne(s: CapitaleState, p: CapitalePlayer, index: number, events: Cap
   events.push({ type: "sell", player: p.id, square: index, houses: deed.houses });
 }
 
+function placeSpecial(s: CapitaleState, p: CapitalePlayer, index: number, kind: SpecialKind, events: CapitaleEvent[]) {
+  pay(s, p.id, "bank", specialPrice(kind, index), "special", events, index);
+  s.deeds[index]!.special = { kind, by: p.id };
+  s.specialTurn = s.turnId;
+  events.push({ type: "special", player: p.id, square: index, kind });
+}
+
+/** Raser le bâtiment spécial d'un terrain : une nuisance aux frais du propriétaire, le sien revendu à moitié prix */
+function raze(s: CapitaleState, p: CapitalePlayer, index: number, how: "pay" | "sell" | "bankrupt", events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  const kind = deed.special!.kind;
+  const price = specialPrice(kind, index);
+  if (how === "pay") pay(s, p.id, "bank", price, "special", events, index);
+  else if (!SPECIALS[kind].nuisance) pay(s, "bank", p.id, Math.floor(price / 2), "sell", events, index);
+  delete deed.special;
+  events.push({ type: "raze", player: p.id, square: index, kind, how });
+}
+
 // ---------------------------------------------------------------------------
 // Échanges
 // ---------------------------------------------------------------------------
@@ -814,17 +938,27 @@ const sanitizeOffer = (o: Offer): Offer => ({
   jailCards: Math.max(0, Math.floor(Number(o?.jailCards) || 0)),
 });
 
+/** Ce qui empêche de céder un titre : des maisons dans son groupe, son parc ou son stade, une tour dans son quartier */
+export function tradeProblem(s: CapitaleState, playerId: string, index: number): string | null {
+  const deed = s.deeds[index];
+  if (!deed || deed.owner !== playerId) return `${SQUARES[index]?.name ?? "Ce titre"} n'appartient pas à ce joueur.`;
+  const name = SQUARES[index]!.name;
+  const g = groupOf(index);
+  if (g && g.squares.some((x) => s.deeds[x]!.houses > 0)) return `Il y a des constructions dans le groupe de ${name} : il faut les vendre avant.`;
+  const own = ownSpecial(s, index);
+  if (own) return `Il faut d'abord revendre ${SPECIALS[own].the} de ${name}.`;
+  if (g && specialsIn(s, g.id).includes("tour")) return `Il y a une tour Capitale dans le quartier de ${name} : il faut la revendre avant.`;
+  return null;
+}
+
 export function offerProblem(s: CapitaleState, playerId: string, offer: Offer): string | null {
   const p = playerOf(s, playerId);
   if (!p || p.bankrupt) return "Ce joueur n'est plus dans la partie.";
   if (offer.cash > p.cash) return `${offer.cash} demandés, mais il n'y a que ${p.cash} en caisse.`;
   if (offer.jailCards > p.jailCards.length) return "Pas assez de cartes « sortie de prison ».";
   for (const i of offer.squares) {
-    const deed = s.deeds[i];
-    if (!deed || deed.owner !== playerId) return `${SQUARES[i]?.name ?? "Ce titre"} n'appartient pas à ce joueur.`;
-    const g = groupOf(i);
-    if (g && g.squares.some((x) => s.deeds[x]!.houses > 0))
-      return `Il y a des constructions dans le groupe de ${SQUARES[i]!.name} : il faut les vendre avant.`;
+    const problem = tradeProblem(s, playerId, i);
+    if (problem) return problem;
   }
   return null;
 }
@@ -864,6 +998,8 @@ function executeTrade(s: CapitaleState, t: Trade, events: CapitaleEvent[]) {
 
 function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, events: CapitaleEvent[]) {
   const wasCurrent = currentPlayer(s) === p;
+  // Les bâtiments spéciaux sont rasés : la banque rachète à moitié prix ceux du joueur, les nuisances disparaissent
+  for (const i of ownedBy(s, p.id)) if (s.deeds[i]!.special) raze(s, p, i, "bankrupt", events);
   // Les constructions sont rachetées par la banque à moitié prix
   for (const i of ownedBy(s, p.id)) {
     const d = s.deeds[i]!;
@@ -1074,6 +1210,23 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       pay(s, p.id, "bank", cost, "unmortgage", events, action.square);
       deed.mortgaged = false;
       events.push({ type: "unmortgage", player: p.id, square: action.square });
+      break;
+    }
+    case "special": {
+      if (manageRight(s, playerId) !== "full") return fail("Tu poses un bâtiment spécial pendant ton tour.");
+      const problem = canPlaceSpecial(s, playerId, action.square, action.kind);
+      if (problem) return fail(problem);
+      placeSpecial(s, p, action.square, action.kind, events);
+      break;
+    }
+    case "raze": {
+      // Revendre son bâtiment aide à payer une dette ; faire raser une nuisance attend son tour
+      const right = manageRight(s, playerId);
+      const nuisance = ownSpecial(s, action.square) === null;
+      if (!right || (nuisance && right !== "full")) return fail("Tu fais raser pendant ton tour.");
+      const problem = canRaze(s, playerId, action.square);
+      if (problem) return fail(problem);
+      raze(s, p, action.square, nuisance ? "pay" : "sell", events);
       break;
     }
     case "propose": {
