@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { GroupId } from "../../../shared/games/capitale/board.ts";
+import type { GroupId, SpecialKind } from "../../../shared/games/capitale/board.ts";
 import { facadeTexture, mix, signTexture, type FacadeLook } from "./textures.ts";
 
 // Les bâtiments de la ville, en petits volumes de jouet. Repère local : le sol au centre de l'emprise, la façade vers +z.
@@ -592,6 +592,291 @@ export function fountain(): { group: THREE.Group; jet: THREE.Mesh } {
   jet.castShadow = false;
   g.add(jet);
   return { group: bake(g), jet };
+}
+
+// ---------------------------------------------------------------------------
+// Les bâtiments spéciaux, dans l'avant-cour d'une parcelle : 0,6 de large sur 0,3 de profondeur
+// ---------------------------------------------------------------------------
+
+/** Un fanion à la couleur de celui qui a posé la nuisance */
+function pennant(color: string, x: number, z: number, h = 0.16): THREE.Group {
+  const g = new THREE.Group();
+  g.add(cyl(0.004, 0.005, h, mat("#e9e9e4", { metal: 0.5, rough: 0.3 }), 6, x, 0, z));
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(0.07, -0.022);
+  shape.lineTo(0, -0.045);
+  shape.closePath();
+  const cloth = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide }));
+  cloth.position.set(x, h, z);
+  g.add(cloth);
+  return g;
+}
+
+/** La décharge : un tas d'ordures derrière une palissade, une benne, des sacs */
+export function landfill(by: string): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(0.6, 0.012, 0.3, mat("#8f7f60", { rough: 1 })));
+  // Le tas : des blocs aux couleurs passées, de plus en plus petits vers le haut
+  const colors = ["#6f735c", "#8c7e62", "#5d6b72", "#a39a7a", "#7a6a55", "#6b5d4a"];
+  const heap: [number, number, number, number][] = [
+    [-0.12, 0.0, 0.0, 0.085],
+    [-0.02, -0.03, 0.0, 0.07],
+    [-0.2, 0.03, 0.0, 0.06],
+    [-0.08, 0.05, 0.0, 0.06],
+    [-0.1, -0.02, 0.06, 0.06],
+    [-0.04, 0.02, 0.05, 0.045],
+    [-0.14, 0.0, 0.1, 0.04],
+  ];
+  heap.forEach(([x, z, y, r], n) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat(colors[n % colors.length]!, { flat: true, rough: 1 }));
+    m.position.set(x, 0.012 + y + r * 0.55, z);
+    m.scale.y = 0.7;
+    m.rotation.set(n * 0.7, n * 1.3, 0);
+    g.add(m);
+  });
+  // Des sacs, des cartons et quelques déchets de couleur qui dépassent
+  g.add(box(0.035, 0.03, 0.03, mat("#2e3238", { rough: 0.6 }), 0.01, 0.012, 0.07));
+  g.add(box(0.03, 0.026, 0.03, mat("#3b6fa8", { rough: 0.6 }), -0.24, 0.012, 0.08));
+  g.add(box(0.04, 0.03, 0.035, mat("#c9a76b"), -0.06, 0.1, 0.0));
+  g.add(box(0.022, 0.014, 0.03, mat("#d6433a", { rough: 0.6 }), -0.15, 0.115, 0.02));
+  g.add(box(0.026, 0.012, 0.018, mat("#f1ece0", { rough: 0.6 }), -0.02, 0.085, -0.04));
+  g.add(cyl(0.012, 0.012, 0.03, mat("#e8b12f", { rough: 0.5, metal: 0.3 }), 8, -0.2, 0.07, -0.02));
+  g.add(box(0.03, 0.03, 0.03, mat("#2e3238", { rough: 0.6 }), 0.07, 0.012, -0.09));
+  // La benne verte, au couvercle entrouvert
+  const bin = mat("#3f7a4a", { rough: 0.6, metal: 0.2 });
+  g.add(box(0.13, 0.075, 0.085, bin, 0.17, 0.012, 0.02));
+  const lid = box(0.135, 0.008, 0.09, mat("#2f5c38", { rough: 0.6 }));
+  lid.rotation.x = -0.25;
+  lid.position.set(0.17, 0.087, 0.0);
+  g.add(lid);
+  // La palissade grise, sur trois côtés
+  const panel = mat("#9aa09a", { rough: 0.8, metal: 0.2 });
+  g.add(box(0.6, 0.06, 0.01, panel, 0, 0.012, -0.145));
+  g.add(box(0.01, 0.06, 0.29, panel, -0.295, 0.012, 0));
+  g.add(box(0.01, 0.06, 0.29, panel, 0.295, 0.012, 0));
+  g.add(pennant(by, 0.27, 0.13));
+  return bake(shadowed(g));
+}
+
+/** La centrale : une tour de refroidissement, l'usine, la cheminée rayée ; la vapeur monte (userData.steam) */
+export function powerPlant(by: string): { group: THREE.Group; steam: THREE.Object3D[] } {
+  const g = new THREE.Group();
+  const concrete = mat("#d8d2c4", { rough: 0.85 });
+  g.add(box(0.6, 0.012, 0.3, mat("#a9a59b", { rough: 0.9 })));
+  // La tour de refroidissement : un col resserré, comme un diabolo
+  const profile = [
+    [0, 0],
+    [0.11, 0],
+    [0.1, 0.06],
+    [0.078, 0.2],
+    [0.08, 0.27],
+    [0.09, 0.32],
+    [0.084, 0.32],
+    [0.074, 0.27],
+    [0.072, 0.2],
+    [0, 0.2],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  const tower = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), concrete);
+  tower.position.set(-0.15, 0.012, 0);
+  g.add(tower);
+  // La bande de celui qui l'a posée, en haut de la tour (ouverte : on voit la vapeur sortir)
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.087, 0.086, 0.024, 20, 1, true),
+    new THREE.MeshStandardMaterial({ color: by, roughness: 0.5, side: THREE.DoubleSide }),
+  );
+  band.position.set(-0.15, 0.318, 0);
+  g.add(band);
+  // L'usine et sa cheminée rouge et blanche
+  g.add(box(0.2, 0.12, 0.17, mat("#bdb5a6"), 0.1, 0.012, 0.0));
+  g.add(box(0.21, 0.02, 0.18, mat("#7d7a74", { rough: 0.6 }), 0.1, 0.132, 0.0));
+  g.add(box(0.2, 0.025, 0.004, mat("#4c5a66", { rough: 0.3, metal: 0.3 }), 0.1, 0.07, 0.087));
+  const stripes = ["#d0352c", "#f4f2ec", "#d0352c", "#f4f2ec", "#d0352c"];
+  stripes.forEach((c, n) => g.add(cyl(0.02, 0.022, 0.08, mat(c, { rough: 0.6 }), 10, 0.21, 0.012 + n * 0.08, -0.07)));
+  // Les pylônes de la ligne électrique
+  g.add(cyl(0.004, 0.006, 0.16, mat("#7b8288", { metal: 0.6, rough: 0.4 }), 6, 0.27, 0.012, 0.11));
+  g.add(box(0.06, 0.005, 0.005, mat("#7b8288", { metal: 0.6, rough: 0.4 }), 0.27, 0.15, 0.11));
+  shadowed(g);
+  // La vapeur : quelques boules blanches qui montent de la tour, et de la fumée au-dessus de la cheminée
+  const puff = new THREE.MeshStandardMaterial({ color: "#f4f6f7", roughness: 1, transparent: true, opacity: 0.8 });
+  const steam: THREE.Object3D[] = [];
+  const puffs: [number, THREE.Vector3, number, number][] = [
+    ...[0, 1, 2, 3].map((k): [number, THREE.Vector3, number, number] => [k / 4, new THREE.Vector3(-0.15, 0.34, 0), 0.32, 1]),
+    ...[0, 1].map((k): [number, THREE.Vector3, number, number] => [k / 2, new THREE.Vector3(0.21, 0.42, -0.07), 0.16, 0.5]),
+  ];
+  for (const [phase, base, rise, size] of puffs) {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 1), puff);
+    m.userData = { keep: true, base, phase, rise, size };
+    placeSteam(m, phase);
+    m.castShadow = false;
+    steam.push(m);
+    g.add(m);
+  }
+  return { group: bake(g), steam };
+}
+
+/** Une bouffée de vapeur à l'instant t (0 à 1) de sa montée : elle grossit, ondule, puis s'efface */
+export function placeSteam(m: THREE.Object3D, time: number) {
+  const u = m.userData as { base: THREE.Vector3; phase: number; rise: number; size: number };
+  const t = (((time + u.phase) % 1) + 1) % 1;
+  m.position.set(u.base.x + Math.sin(t * 5 + u.phase * 9) * 0.015, u.base.y + t * u.rise, u.base.z);
+  m.scale.setScalar(Math.max(0.001, u.size * (0.5 + t * 1.1) * (t > 0.75 ? (1 - t) / 0.25 : 1)));
+}
+
+/** Le modèle d'un bâtiment spécial ; seule la vapeur de la centrale bouge */
+export function specialBuilding(kind: SpecialKind, owner: string, by: string): { group: THREE.Group; steam: THREE.Object3D[] } {
+  switch (kind) {
+    case "decharge":
+      return { group: landfill(by), steam: [] };
+    case "centrale":
+      return powerPlant(by);
+    case "parc":
+      return { group: park(), steam: [] };
+    case "tour":
+      return { group: capitalTower(owner), steam: [] };
+    case "stade":
+      return { group: stadium(owner), steam: [] };
+  }
+}
+
+/** Le parc : une pelouse, une allée, un kiosque à musique, des arbres et un bassin */
+export function park(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(0.62, 0.016, 0.3, mat("#7cb357", { rough: 1 })));
+  g.add(box(0.62, 0.004, 0.05, mat("#e6dcc4", { rough: 1 }), 0, 0.016, 0.06));
+  // Le kiosque : un socle, six colonnettes, un toit vert en pointe
+  const white = mat("#f3efe5", { rough: 0.6 });
+  g.add(cyl(0.085, 0.09, 0.03, mat("#d6ccb6"), 8, 0.02, 0.016, -0.03));
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    g.add(cyl(0.006, 0.006, 0.1, white, 6, 0.02 + Math.cos(a) * 0.07, 0.046, -0.03 + Math.sin(a) * 0.07));
+  }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.08, 8), mat("#3f7a6a", { flat: true, rough: 0.7 }));
+  roof.position.set(0.02, 0.186, -0.03);
+  g.add(roof);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), mat("#d8c58a", { metal: 0.7, rough: 0.3 })).translateX(0.02).translateY(0.232).translateZ(-0.03));
+  // Les arbres
+  for (const [x, z, s] of [
+    [-0.23, -0.06, 1],
+    [0.24, -0.07, 0.9],
+    [0.2, 0.1, 0.75],
+  ] as const) {
+    g.add(cyl(0.012 * s, 0.016 * s, 0.09 * s, mat("#7a5a3c"), 6, x, 0.016, z));
+    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.065 * s, 0), mat(s > 0.8 ? "#5f9a45" : "#7cb357", { flat: true, rough: 0.9 }));
+    crown.position.set(x, 0.016 + 0.12 * s, z);
+    g.add(crown);
+  }
+  // Le bassin
+  const pond = cyl(0.06, 0.06, 0.008, mat("#58a6d6", { rough: 0.1, metal: 0.3 }), 16, -0.17, 0.016, 0.07);
+  pond.scale.set(1.3, 1, 0.8);
+  g.add(pond);
+  g.add(bench().translateX(-0.06).translateY(0.016).translateZ(0.11).rotateY(Math.PI));
+  return bake(shadowed(g));
+}
+
+let capitalTex: THREE.CanvasTexture | null = null;
+/** La tour Capitale : une flèche dorée en gradins, une couronne, l'enseigne et le liseré du propriétaire */
+export function capitalTower(accent: string): THREE.Group {
+  const g = new THREE.Group();
+  const look: FacadeLook = { wall: "#e2c06a", curtain: true, glass: "#c49a3c", frame: "#f6e7b8" };
+  const gold = mat("#d9b24c", { metal: 0.75, rough: 0.3 });
+  const top = mat("#b8923a", { metal: 0.5, rough: 0.4 });
+  // Le socle en pierre claire, avec l'enseigne
+  g.add(facadeBox(0.26, 0.16, 0.24, { wall: "#efe6d2", glass: "#5a6a76", frame: "#efe6d2", narrow: true }, mat("#d6cbb2")));
+  capitalTex ??= signTexture("CAPITALE", "#1f2a44", "#e8c766", 256, 56);
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.2, 0.045),
+    new THREE.MeshStandardMaterial({ map: capitalTex, emissive: "#ffffff", emissiveMap: capitalTex, emissiveIntensity: 0.45, roughness: 0.4 }),
+  );
+  sign.position.set(0, 0.11, 0.122);
+  g.add(sign);
+  // Trois étages de verre doré, de plus en plus fins
+  const levels = [
+    [0.2, 0.62],
+    [0.16, 0.38],
+    [0.12, 0.24],
+  ] as const;
+  let y = 0.16;
+  for (const [w, h] of levels) {
+    const t = facadeBox(w, h, w, look, top);
+    t.position.y = y;
+    g.add(t);
+    g.add(box(w + 0.016, 0.014, w + 0.016, gold, 0, y + h - 0.007, 0));
+    y += h;
+  }
+  // Le liseré du propriétaire, qui brille un peu, en haut du socle
+  g.add(box(0.27, 0.022, 0.25, mat(accent, { emissive: mix(accent, "#000000", 0.35) }), 0, 0.15, 0));
+  // La couronne : une pyramide d'or et une flèche
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.14, 4), gold);
+  crown.rotation.y = Math.PI / 4;
+  crown.position.y = y + 0.07;
+  g.add(crown);
+  g.add(cyl(0.004, 0.012, 0.3, mat("#f3e3a2", { metal: 0.8, rough: 0.2 }), 6, 0, y + 0.12, 0));
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), mat("#fff1b8", { emissive: "#ffd45a" })).translateY(y + 0.43));
+  return bake(shadowed(g));
+}
+
+/** Le stade : une cuvette ovale aux tribunes de la couleur du propriétaire, la pelouse, quatre pylônes d'éclairage */
+export function stadium(accent: string): THREE.Group {
+  const g = new THREE.Group();
+  const SX = 0.29;
+  const SZ = 0.145;
+  // Le mur extérieur, puis les gradins en pente vers la pelouse
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(1, 1, 0.075, 32, 1, true),
+    new THREE.MeshStandardMaterial({ color: "#ece7dc", roughness: 0.7, side: THREE.DoubleSide }),
+  );
+  wall.scale.set(SX, 1, SZ);
+  wall.position.y = 0.0375;
+  g.add(wall);
+  const stands = new THREE.Mesh(
+    new THREE.CylinderGeometry(1, 0.7, 0.07, 32, 1, true),
+    new THREE.MeshStandardMaterial({ color: mix(accent, "#ffffff", 0.2), roughness: 0.6, side: THREE.DoubleSide }),
+  );
+  stands.scale.set(SX * 0.98, 1, SZ * 0.98);
+  stands.position.y = 0.04;
+  g.add(stands);
+  g.add(wallRing(SX, SZ, accent));
+  // La pelouse et ses lignes
+  const pitch = new THREE.Mesh(new THREE.CircleGeometry(1, 32), mat("#4f9a3f", { rough: 1 }));
+  pitch.rotation.x = -Math.PI / 2;
+  pitch.scale.set(SX * 0.7, SZ * 0.7, 1);
+  pitch.position.y = 0.008;
+  g.add(pitch);
+  const line = mat("#f4f6f0", { rough: 0.8 });
+  g.add(box(0.004, 0.002, SZ * 1.1, line, 0, 0.009, 0));
+  const circle = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.002, 4, 20), line);
+  circle.rotation.x = Math.PI / 2;
+  circle.position.y = 0.011;
+  g.add(circle);
+  // Les pylônes d'éclairage aux quatre coins
+  const iron = mat("#5f666d", { metal: 0.6, rough: 0.4 });
+  const light = mat("#fff6d8", { emissive: "#ffe9a8" });
+  for (const [x, z] of [
+    [-0.27, -0.13],
+    [0.27, -0.13],
+    [-0.27, 0.13],
+    [0.27, 0.13],
+  ] as const) {
+    g.add(cyl(0.004, 0.006, 0.2, iron, 6, x, 0, z));
+    const lamp = box(0.04, 0.025, 0.01, light);
+    lamp.position.set(x, 0.19, z);
+    lamp.lookAt(0, 0.1, 0);
+    g.add(lamp);
+  }
+  return bake(shadowed(g));
+}
+
+/** Le haut du mur du stade : un anneau plat à la couleur du propriétaire */
+function wallRing(sx: number, sz: number, accent: string): THREE.Mesh {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.93, 1.02, 32),
+    new THREE.MeshStandardMaterial({ color: mix(accent, "#000000", 0.2), roughness: 0.6, side: THREE.DoubleSide }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.scale.set(sx, sz, 1);
+  ring.position.y = 0.076;
+  return ring;
 }
 
 /** Une pile de pièces d'or : la cagnotte */
