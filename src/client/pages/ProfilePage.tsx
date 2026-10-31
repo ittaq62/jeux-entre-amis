@@ -272,8 +272,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <LedgerRow label="Loyers touchés" value={ct.rentEarned} strong />
                   <LedgerRow label="Plus belle fortune" value={ct.bestWorth} />
                   <LedgerRow label="Titres achetés" value={ct.bought} />
-                  <LedgerRow label="Maisons construites" value={ct.houses} />
-                  <LedgerRow label="Hôtels construits" value={ct.hotels} />
+                  <LedgerRow label="Étages bâtis" value={ct.houses} />
+                  <LedgerRow label="Gratte-ciel bâtis" value={ct.hotels} />
                   <LedgerRow label="Échanges conclus" value={ct.trades} />
                   <LedgerRow label="Séjours en prison" value={ct.jail} />
                 </dl>

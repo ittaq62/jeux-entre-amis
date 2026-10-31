@@ -250,8 +250,8 @@ export function HomePage() {
                 </p>
               )}
               <p className="game-desc">
-                Achète les villes de France, de Guéret à Paris, bâtis maisons et hôtels, négocie avec les autres et ruine-les à coups de
-                loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.
+                Achète les villes de France, de Guéret à Paris, bâtis ta ville case par case jusqu'aux gratte-ciel, pose une décharge chez
+                les autres et ruine-les à coups de loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.
               </p>
               <div className="game-actions">
                 <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("capitale")} disabled={busy !== null}>
