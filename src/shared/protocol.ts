@@ -2,6 +2,7 @@ import type { AvatarConfig } from "./avatar.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
 import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
+import type { TokenId } from "./games/capitale/tokens.ts";
 import type { CapitaleView } from "./games/capitale/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
 import type { NavalView } from "./games/naval/view.ts";
@@ -151,6 +152,8 @@ export interface SeatView {
   admin: boolean;
   /** Bataille navale en équipes : 0 bâbord, 1 tribord */
   team?: 0 | 1;
+  /** Capitale : le pion choisi */
+  token?: TokenId;
 }
 
 export interface SpectatorView {
@@ -384,7 +387,7 @@ export interface CapitaleRoomView {
   seats: SeatView[];
   spectators: SpectatorView[];
   hostId: string;
-  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean; capitaleWins: number };
   capitale: CapitaleView | null;
   /** Fin du temps laissé à la décision en cours */
   deadline: number | null;
@@ -413,7 +416,9 @@ export type CapitaleClientMessage =
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }
-  | { t: "close" };
+  | { t: "close" }
+  /** Choisir son pion, avant la partie (seulement ceux que ses victoires ont débloqués) */
+  | { t: "token"; token: TokenId };
 
 export type CapitaleServerMessage =
   | { t: "room"; room: CapitaleRoomView; events: CapitaleEvent[] }

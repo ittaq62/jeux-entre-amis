@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid } from "../shared/games/capitale/bot.ts";
-import { SQUARES } from "../shared/games/capitale/board.ts";
+import { SQUARES, type BuildingKind } from "../shared/games/capitale/board.ts";
 import {
   actorOf,
   applyAction,
@@ -20,6 +20,8 @@ import {
   type CapitaleState,
   type Offer,
 } from "../shared/games/capitale/engine.ts";
+import { batchMs } from "../shared/games/capitale/timing.ts";
+import { FREE_TOKENS, isTokenId, TOKEN_BY_ID, type TokenId } from "../shared/games/capitale/tokens.ts";
 import { viewFor } from "../shared/games/capitale/view.ts";
 import {
   CAPITALE_MAX_PLAYERS,
@@ -70,6 +72,9 @@ interface Seat {
   autoplay: false | "away" | "afk";
   missed: number;
   disconnectedAt: number | null;
+  /** Le pion choisi, et les victoires à Capitale qui ouvrent les autres */
+  token?: TokenId;
+  wins?: number;
 }
 
 type TimerKind =
@@ -115,6 +120,8 @@ interface CapitaleData {
   endsAt: number | null;
   /** Compte les coups joués : un bot attend le suivant avant de rejouer */
   actionSeq: number;
+  /** Quand les écrans auront fini de montrer le dernier coup (dés, pas des pions, billets) : la suite attend jusque-là */
+  animUntil?: number;
   botKey: string;
   /** Dernier tour où chaque bot a proposé un échange (un par tour au plus) */
   botTraded: Record<string, number>;
@@ -193,7 +200,7 @@ export class CapitaleRoom extends DurableObject<Env> {
       const d = this.data;
       d.seats = [
         ...opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now })),
-        ...opts.tour.bots.map((b) => ({
+        ...opts.tour.bots.map((b, k) => ({
           id: b.id,
           kind: "bot" as const,
           userId: null,
@@ -203,6 +210,7 @@ export class CapitaleRoom extends DurableObject<Env> {
           autoplay: false as const,
           missed: 0,
           disconnectedAt: null,
+          token: FREE_TOKENS[(k + 1) % FREE_TOKENS.length],
         })),
       ];
       d.settings.maxPlayers = Math.min(CAPITALE_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
@@ -280,6 +288,7 @@ export class CapitaleRoom extends DurableObject<Env> {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} s'installe à la table.`);
     }
+    if (seat && seat.wins === undefined) seat.wins = await this.capitaleWins(user.id);
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
@@ -302,7 +311,26 @@ export class CapitaleRoom extends DurableObject<Env> {
       autoplay: false,
       missed: 0,
       disconnectedAt: null,
+      token: "pion",
     };
+  }
+
+  /** Les victoires d'un joueur à Capitale : elles ouvrent les pions */
+  private async capitaleWins(userId: string): Promise<number> {
+    try {
+      const row = await this.env.DB.prepare("SELECT won FROM user_stats WHERE user_id = ? AND game = 'capitale'")
+        .bind(userId)
+        .first<{ won: number }>();
+      return row?.won ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Un pion pour un bot : parmi les pions libres, un que personne n'a encore à la table si possible */
+  private botToken(): TokenId {
+    const used = new Set(this.data!.seats.map((s) => s.token));
+    return FREE_TOKENS.find((t) => !used.has(t)) ?? FREE_TOKENS[this.data!.botCounter % FREE_TOKENS.length]!;
   }
 
   private seatHuman(user: PublicUser): Seat | null {
@@ -451,6 +479,16 @@ export class CapitaleRoom extends DurableObject<Env> {
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
       }
 
+      case "token": {
+        if (!seat || d.status === "playing") return;
+        const info = isTokenId(msg.token) ? TOKEN_BY_ID.get(msg.token) : undefined;
+        if (!info) return;
+        if (info.wins > (seat.wins ?? 0))
+          return error(`${info.name} s'ouvre à ${info.wins} victoire${info.wins > 1 ? "s" : ""} à Capitale.`);
+        seat.token = info.id;
+        return this.afterChange([], now);
+      }
+
       case "sit": {
         if (seat || d.status === "playing") return;
         if (!this.seatHuman(att.user)) return error("La table est complète.");
@@ -535,6 +573,7 @@ export class CapitaleRoom extends DurableObject<Env> {
           autoplay: false,
           missed: 0,
           disconnectedAt: null,
+          token: this.botToken(),
         });
         return this.afterChange([], now);
       }
@@ -671,6 +710,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     let finished = false;
     const g = d.capitale;
     if (g && d.status === "playing") {
+      if (events.length > 0) d.animUntil = Math.max(d.animUntil ?? 0, now) + batchMs(events);
       this.narrate(events);
       if (g.step === "over") {
         d.status = "finished";
@@ -725,6 +765,8 @@ export class CapitaleRoom extends DurableObject<Env> {
     const d = this.data!;
     const g = d.capitale;
     const decisionKinds: TimerKind[] = ["bot", "timeout", "auction", "botBid", "answer", "tradeExpiry"];
+    // Rien ne repart avant que les écrans aient montré le coup précédent
+    const ready = Math.max(now, d.animUntil ?? 0);
     if (!g || d.status !== "playing" || g.step === "over") {
       d.timers = d.timers.filter((t) => !decisionKinds.includes(t.kind) && t.kind !== "timeUp");
       d.deadline = null;
@@ -738,10 +780,10 @@ export class CapitaleRoom extends DurableObject<Env> {
       if (d.auctionKey !== key) {
         d.auctionKey = key;
         d.timers = d.timers.filter((t) => t.kind !== "auction" && t.kind !== "botBid");
-        d.auctionDeadline = now + (g.auction.bids === 0 ? AUCTION_FIRST_MS : AUCTION_BID_MS);
+        d.auctionDeadline = ready + (g.auction.bids === 0 ? AUCTION_FIRST_MS : AUCTION_BID_MS);
         this.addTimer({ at: d.auctionDeadline + 200, kind: "auction", key });
         for (const id of auctionBidders(g)) {
-          if (this.plays(this.seatById(id))) this.addTimer({ at: now + 900 + random(d) * 1800, kind: "botBid", seatId: id, key });
+          if (this.plays(this.seatById(id))) this.addTimer({ at: ready + 900 + random(d) * 1800, kind: "botBid", seatId: id, key });
         }
       }
     } else if (d.auctionKey) {
@@ -767,8 +809,8 @@ export class CapitaleRoom extends DurableObject<Env> {
         d.botKey = key;
         d.timers = d.timers.filter((t) => t.kind !== "bot");
         // Une suite de constructions va vite ; lancer les dés ou acheter prend un instant de réflexion
-        const delay = g.step === "manage" || g.step === "debt" ? 650 : 1100 + random(d) * 700;
-        this.addTimer({ at: now + delay, kind: "bot", seatId: seat.id, key });
+        const delay = g.step === "manage" || g.step === "debt" ? 700 : 900 + random(d) * 600;
+        this.addTimer({ at: ready + delay, kind: "bot", seatId: seat.id, key });
       }
     } else {
       d.timers = d.timers.filter((t) => t.kind !== "bot");
@@ -780,7 +822,7 @@ export class CapitaleRoom extends DurableObject<Env> {
         d.deadline = null;
         const seconds = d.settings.capitale.turnSeconds;
         if (seconds > 0) {
-          d.deadline = now + seconds * 1000;
+          d.deadline = ready + seconds * 1000;
           this.addTimer({ at: d.deadline + 300, kind: "timeout", seatId: seat.id, key });
         }
       }
@@ -791,7 +833,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     d.timers = d.timers.filter((t) => (t.kind !== "answer" && t.kind !== "tradeExpiry") || live.has(t.trade!));
     for (const t of g.trades) {
       if (d.timers.some((x) => (x.kind === "answer" || x.kind === "tradeExpiry") && x.trade === t.id)) continue;
-      if (this.plays(this.seatById(t.to))) this.addTimer({ at: now + 1500 + random(d) * 2000, kind: "answer", trade: t.id });
+      if (this.plays(this.seatById(t.to))) this.addTimer({ at: ready + 1500 + random(d) * 2000, kind: "answer", trade: t.id });
       else this.addTimer({ at: now + TRADE_EXPIRES_MS, kind: "tradeExpiry", trade: t.id });
     }
   }
@@ -1091,10 +1133,17 @@ export class CapitaleRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
+        token: s.token ?? "pion",
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
-      you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
+      you: {
+        userId,
+        seatId: seat?.id ?? null,
+        isHost: userId === d.hostId,
+        isAdmin: Boolean(connected.get(userId)?.admin),
+        capitaleWins: seat?.wins ?? 0,
+      },
       capitale: d.capitale ? viewFor(d.capitale, seat?.id ?? null) : null,
       deadline: d.deadline,
       auctionDeadline: d.auctionDeadline,
@@ -1222,7 +1271,10 @@ function sanitizeAction(raw: unknown): CapitaleAction | null {
     case "bid":
       return { type: "bid", amount: Number(a.amount) };
     case "build":
+      return { type: "build", square: Number(a.square), cell: Number(a.cell), kind: String(a.kind) as BuildingKind };
     case "sell":
+    case "raze":
+      return { type: a.type, square: Number(a.square), cell: Number(a.cell) };
     case "mortgage":
     case "unmortgage":
       return { type: a.type, square: Number(a.square) };
@@ -1248,7 +1300,7 @@ function mergeSettings(current: CapitaleSettings, patch: Partial<CapitaleSetting
   if (patch.end === "timed" || patch.end === "bankrupt") next.end = patch.end;
   if ((GAME_MINUTES as readonly number[]).includes(patch.minutes as number)) next.minutes = patch.minutes!;
   if ((TURN_SECONDS as readonly number[]).includes(patch.turnSeconds as number)) next.turnSeconds = patch.turnSeconds!;
-  for (const key of ["freeParking", "doubleGo", "noRentInJail", "quickStart"] as const) {
+  for (const key of ["freeParking", "doubleGo", "noRentInJail", "quickStart", "specials"] as const) {
     if (typeof patch[key] === "boolean") next[key] = patch[key];
   }
   if (patch.botLevel === "facile" || patch.botLevel === "moyen" || patch.botLevel === "fort") next.botLevel = patch.botLevel;
