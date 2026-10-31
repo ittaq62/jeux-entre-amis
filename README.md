@@ -16,13 +16,13 @@ Tout tourne sur l'offre gratuite de Cloudflare, sans carte bancaire.
 
 ## Comment c'est construit
 
-| Rôle            | Outil                                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| Interface       | React 19, TypeScript, Vite, Motion pour les animations, cartes et avatars dessinés en SVG |
-| Serveur         | Cloudflare Workers (API Hono)                                                             |
-| Temps réel      | Durable Objects : un objet par salon, qui fait autorité sur la partie (WebSocket)         |
-| Base de données | Cloudflare D1 (SQLite) : comptes, sessions, amis, parties, statistiques                   |
-| Emails          | SMTP depuis le Worker (un compte Gmail dédié avec un mot de passe d'application)          |
+| Rôle            | Outil                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Interface       | React 19, TypeScript, Vite, Motion pour les animations, cartes et avatars dessinés en SVG, three.js pour le plateau 3D de Capitale |
+| Serveur         | Cloudflare Workers (API Hono)                                                                                                      |
+| Temps réel      | Durable Objects : un objet par salon, qui fait autorité sur la partie (WebSocket)                                                  |
+| Base de données | Cloudflare D1 (SQLite) : comptes, sessions, amis, parties, statistiques                                                            |
+| Emails          | SMTP depuis le Worker (un compte Gmail dédié avec un mot de passe d'application)                                                   |
 
 Les règles du jeu vivent dans `src/shared/games/uno` et sont partagées entre le serveur et l'interface. Le serveur valide chaque coup et
 n'envoie à chaque joueur que sa propre main : impossible de tricher en fouillant le navigateur.

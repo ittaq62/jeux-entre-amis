@@ -239,7 +239,7 @@ export function HomePage() {
         {games.includes("capitale") && (
           <section className="home-game home-game-capitale panel" aria-label="Capitale">
             <div className="game-stage is-map" aria-hidden="true">
-              <CapitalePreview px={250} />
+              <CapitalePreview px={360} />
             </div>
             <div className="game-sheet">
               <h2 className="game-name is-capitale">Capitale</h2>
