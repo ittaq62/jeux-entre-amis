@@ -150,14 +150,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Agent immobilier",
     description: "Jouer 25 parties de Capitale.",
   },
-  { id: "capitale-hotel", game: "capitale", chip: "H", tone: "red", title: "Palace", description: "Construire un hôtel." },
+  { id: "capitale-hotel", game: "capitale", chip: "G", tone: "red", title: "Gratte-ciel", description: "Bâtir un gratte-ciel." },
   {
     id: "capitale-builder",
     game: "capitale",
     chip: "10",
     tone: "green",
     title: "Promoteur",
-    description: "Construire 10 maisons dans une même partie.",
+    description: "Bâtir 10 étages dans une même partie.",
   },
   {
     id: "capitale-landlord",

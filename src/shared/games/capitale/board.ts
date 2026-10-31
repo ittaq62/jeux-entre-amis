@@ -1,5 +1,5 @@
-// Capitale : le plateau (40 cases sur les villes de France), les groupes de couleur et les cartes.
-// La structure, les prix et les loyers sont ceux de la règle classique ; les noms et les textes sont à nous.
+// Capitale : le plateau (40 cases sur les villes de France), les groupes de couleur, les bâtiments et les cartes.
+// La structure, les prix et les loyers de base sont ceux de la règle classique ; la ville, les noms et les textes sont à nous.
 
 export type GroupId = "brun" | "ciel" | "rose" | "orange" | "rouge" | "jaune" | "vert" | "bleu";
 export type DeckId = "hasard" | "courrier";
@@ -13,7 +13,7 @@ export interface Square {
   /** Prix d'achat (terrains, gares, réseaux) */
   price?: number;
   group?: GroupId;
-  /** Terrain : loyer nu, puis avec 1 à 4 maisons, puis avec l'hôtel */
+  /** Terrain : loyer nu, puis les paliers de la règle classique (étirés sur 8 étages, voir floorRents) */
   rents?: [number, number, number, number, number, number];
   /** Impôts et péage */
   tax?: number;
@@ -24,7 +24,7 @@ export interface Group {
   id: GroupId;
   name: string;
   color: string;
-  /** Prix d'une maison (et de l'hôtel) dans ce groupe */
+  /** Le prix de référence des constructions du quartier : un étage en coûte la moitié */
   houseCost: number;
   squares: number[];
 }
@@ -33,10 +33,6 @@ export const GO_SALARY = 200;
 export const START_CASH = 1500;
 export const JAIL_SQUARE = 10;
 export const JAIL_FINE = 50;
-export const BANK_HOUSES = 32;
-export const BANK_HOTELS = 12;
-/** 5 « maisons » sur un terrain : c'est l'hôtel */
-export const HOTEL = 5;
 export const STATION_RENTS = [25, 50, 100, 200] as const;
 
 const prop = (
@@ -119,6 +115,157 @@ export const unmortgageCost = (index: number) => Math.ceil(mortgageValue(index) 
 export const mortgageInterest = (index: number) => unmortgageCost(index) - mortgageValue(index);
 
 // ---------------------------------------------------------------------------
+// La ville : chaque rue a sa parcelle de 4 cases, où son propriétaire bâtit où il veut
+// ---------------------------------------------------------------------------
+
+/** Les cases d'une parcelle : deux rangs de deux, 0 et 1 côté rue, 2 et 3 au fond */
+export const LOT_CELLS = 4;
+/** Le chantier d'un tour : pas plus de 3 étages, et un seul bâtiment spécial */
+export const FLOORS_PER_TURN = 3;
+/** Quatre immeubles : le plus haut qu'une rue puisse monter */
+export const MAX_FLOORS = 8;
+/** Ce que paie chaque adversaire qui passe sur la case d'un stade */
+export const STADIUM_TICKET = 50;
+
+export type BuildingKind = "maison" | "immeuble" | "gratte" | "parc" | "stade" | "decharge" | "centrale";
+
+export interface BuildingInfo {
+  name: string;
+  /** Le nom avec son article, pour les phrases : « une décharge », « le parc » */
+  one: string;
+  the: string;
+  /** Ce que compte le bâtiment pour le loyer de la rue (les maisons et les immeubles seulement) */
+  floors: number;
+  /** Bâtiment spécial : un par tour, et seulement si la règle est de la partie */
+  special: boolean;
+  /** Une nuisance se pose chez un adversaire, le reste chez soi */
+  nuisance: boolean;
+  /** Où il se pose, puis ce qu'il fait, chacun en une phrase */
+  where: string;
+  effect: string;
+}
+
+export const BUILDINGS: Record<BuildingKind, BuildingInfo> = {
+  maison: {
+    name: "Maison",
+    one: "une maison",
+    the: "la maison",
+    floors: 1,
+    special: false,
+    nuisance: false,
+    where: "Sur une case libre de ta rue.",
+    effect: "Compte pour 1 étage dans le loyer de la rue.",
+  },
+  immeuble: {
+    name: "Immeuble",
+    one: "un immeuble",
+    the: "l'immeuble",
+    floors: 2,
+    special: false,
+    nuisance: false,
+    where: "Sur une case libre, ou à la place d'une maison.",
+    effect: "Compte pour 2 étages dans le loyer de la rue.",
+  },
+  gratte: {
+    name: "Gratte-ciel",
+    one: "un gratte-ciel",
+    the: "le gratte-ciel",
+    floors: 0,
+    special: true,
+    nuisance: false,
+    where: "Dans un quartier complet à toi, un seul par quartier.",
+    effect: "Tous les loyers du quartier sont doublés.",
+  },
+  parc: {
+    name: "Parc",
+    one: "un parc",
+    the: "le parc",
+    floors: 0,
+    special: true,
+    nuisance: false,
+    where: "Chez toi, un seul par quartier.",
+    effect: "Aucune nuisance ne peut entrer dans le quartier.",
+  },
+  stade: {
+    name: "Stade",
+    one: "un stade",
+    the: "le stade",
+    floors: 0,
+    special: true,
+    nuisance: false,
+    where: "Chez toi, un seul par joueur.",
+    effect: `Chaque adversaire qui passe sur la case paie un billet de ${STADIUM_TICKET}.`,
+  },
+  decharge: {
+    name: "Décharge",
+    one: "une décharge",
+    the: "la décharge",
+    floors: 0,
+    special: true,
+    nuisance: true,
+    where: "Sur une case libre chez un adversaire.",
+    effect: "Le loyer de cette rue est divisé par deux.",
+  },
+  centrale: {
+    name: "Centrale",
+    one: "une centrale",
+    the: "la centrale",
+    floors: 0,
+    special: true,
+    nuisance: true,
+    where: "Sur une case libre chez un adversaire.",
+    effect: "Les étages de cette rue ne rapportent plus rien : loyer du terrain nu.",
+  },
+};
+
+export const RESIDENTIAL: BuildingKind[] = ["maison", "immeuble"];
+export const SPECIAL_ORDER: BuildingKind[] = ["gratte", "parc", "stade", "decharge", "centrale"];
+export const isBuildingKind = (k: unknown): k is BuildingKind => typeof k === "string" && Object.hasOwn(BUILDINGS, k);
+
+/** Un étage : la moitié du prix de référence du quartier */
+export const floorCost = (index: number) => Math.round((groupOf(index)?.houseCost ?? 50) / 2);
+
+/** Le prix d'un bâtiment sur une rue ; le gratte-ciel vaut huit étages du quartier */
+export function buildingPrice(kind: BuildingKind, index: number): number {
+  switch (kind) {
+    case "maison":
+      return floorCost(index);
+    case "immeuble":
+      return 2 * floorCost(index);
+    case "gratte":
+      return 8 * floorCost(index);
+    case "parc":
+      return 100;
+    case "stade":
+      return 200;
+    case "decharge":
+      return 100;
+    case "centrale":
+      return 200;
+  }
+}
+
+const rentCache = new Map<number, number[]>();
+
+/**
+ * Le loyer d'une rue selon ses étages, de 0 à 8 : la courbe classique (nu, 1 à 4 maisons, hôtel) étirée sur 8 étages.
+ * Huit étages valent l'hôtel ; le loyer nu (doublé avec tout le quartier) se calcule à part.
+ */
+export function floorRents(index: number): number[] {
+  const hit = rentCache.get(index);
+  if (hit) return hit;
+  const r = SQUARES[index]!.rents ?? [0, 0, 0, 0, 0, 0];
+  const out = Array.from({ length: MAX_FLOORS + 1 }, (_, e) => {
+    const h = (e * 5) / MAX_FLOORS;
+    const lo = Math.floor(h);
+    const v = lo >= 5 ? r[5]! : r[lo]! + (r[lo + 1]! - r[lo]!) * (h - lo);
+    return v >= 50 ? Math.round(v / 5) * 5 : Math.round(v);
+  });
+  rentCache.set(index, out);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Les cartes : « Hasard » fait surtout bouger, « Courrier » surtout payer ou encaisser
 // ---------------------------------------------------------------------------
 
@@ -132,8 +279,8 @@ export type CardEffect =
   | { kind: "nearest"; target: "station" | "utility" }
   | { kind: "jail" }
   | { kind: "jailFree" }
-  /** Réparations : tant par maison, tant par hôtel */
-  | { kind: "repairs"; house: number; hotel: number }
+  /** Travaux : tant par étage, tant par gratte-ciel */
+  | { kind: "repairs"; floor: number; tower: number }
   /** Chaque joueur vous donne (positif), ou vous donnez à chacun (négatif) */
   | { kind: "eachPlayer"; amount: number };
 
@@ -164,7 +311,7 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Libéré de prison ! Gardez cette carte jusqu'à ce que vous en ayez besoin.", effect: { kind: "jailFree" } },
     { text: "Vous avez oublié vos clés : reculez de 3 cases.", effect: { kind: "moveBy", steps: -3 } },
     { text: "Contrôle de police : allez en prison, sans passer par Départ.", effect: { kind: "jail" } },
-    { text: "Travaux dans vos logements : 25 par maison et 100 par hôtel.", effect: { kind: "repairs", house: 25, hotel: 100 } },
+    { text: "Travaux dans vos logements : 15 par étage et 100 par gratte-ciel.", effect: { kind: "repairs", floor: 15, tower: 100 } },
     { text: "Excès de vitesse : amende de 15.", effect: { kind: "money", amount: -15 } },
     { text: "Prenez le TGV Atlantique. Si vous passez par Départ, touchez 200.", effect: { kind: "moveTo", square: 5 } },
     { text: "Vous voilà élu maire : offrez 50 à chaque joueur.", effect: { kind: "eachPlayer", amount: -50 } },
@@ -183,7 +330,7 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Facture d'hôpital : payez 100.", effect: { kind: "money", amount: -100 } },
     { text: "Frais de scolarité : payez 50.", effect: { kind: "money", amount: -50 } },
     { text: "Vous conseillez un voisin pour sa déco : recevez 25.", effect: { kind: "money", amount: 25 } },
-    { text: "Ravalement de façade : 40 par maison et 115 par hôtel.", effect: { kind: "repairs", house: 40, hotel: 115 } },
+    { text: "Ravalement de façade : 20 par étage et 115 par gratte-ciel.", effect: { kind: "repairs", floor: 20, tower: 115 } },
     { text: "Deuxième prix au concours de pétanque : recevez 10.", effect: { kind: "money", amount: 10 } },
     { text: "Héritage d'une tante éloignée : recevez 100.", effect: { kind: "money", amount: 100 } },
     { text: "La fête du village a bien marché : recevez 100.", effect: { kind: "money", amount: 100 } },

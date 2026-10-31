@@ -1,34 +1,49 @@
 // Capitale : les bots. Facile achète un peu au hasard et garde peu de réserve ; Moyen est raisonnable ;
-// Fort valorise les groupes complets, bloque ceux des autres, construit vite et négocie.
+// Fort valorise les groupes complets, bloque ceux des autres, bâtit vite, pose ses nuisances chez le plus riche et négocie.
 // Aucune décision ne tire sur le hasard de la partie : le doute de Facile vient d'un calcul sur l'état.
 
 import {
+  BUILDINGS,
+  buildingPrice,
   BUYABLE,
   GROUP_ORDER,
   GROUPS,
   groupOf,
-  HOTEL,
   mortgageInterest,
   mortgageValue,
   SQUARES,
   STATIONS,
   unmortgageCost,
+  type BuildingKind,
 } from "./board.ts";
 import {
+  buildCost,
   canBuild,
   canMortgage,
-  canSell,
+  canRaze,
+  districtBuildings,
+  floorsLeft,
+  floorsOf,
+  hasStadium,
   liquidity,
+  nuisanceOn,
+  ownBuildings,
   ownedBy,
   ownsGroup,
   playerOf,
   rentFor,
+  specialUsed,
+  tradeProblem,
   type BotLevel,
   type CapitaleAction,
   type CapitaleState,
   type Offer,
   type Trade,
 } from "./engine.ts";
+
+/** L'ordre des cases où les bots posent : les maisons devant, les grands bâtiments au fond */
+const FRONT_FIRST = [0, 1, 2, 3];
+const BACK_FIRST = [2, 3, 0, 1];
 
 /** Un nombre entre 0 et 1 propre à la situation, sans toucher au hasard de la partie */
 function doubt(s: CapitaleState, salt: number): number {
@@ -55,8 +70,7 @@ function reserve(s: CapitaleState, playerId: string, level: BotLevel): number {
   // Ce que coûterait la pire carte de travaux : sans cette marge, on revend à moitié prix puis on rebâtit
   let repairs = 0;
   for (const i of ownedBy(s, playerId)) {
-    const h = s.deeds[i]!.houses;
-    repairs += h === HOTEL ? 115 : h * 40;
+    for (const b of ownBuildings(s, i)) repairs += b.kind === "gratte" ? 115 : BUILDINGS[b.kind].floors * 20;
   }
   if (level === "moyen") return Math.min(400, 80 + risk * 0.4) + repairs * 0.5;
   return Math.min(500, 40 + risk * 0.6) + repairs * 0.6;
@@ -159,35 +173,23 @@ export function botAction(s: CapitaleState, playerId: string, level: BotLevel, o
   }
 }
 
-/** Gestion de fin de tour : lever des hypothèques, construire, éventuellement proposer un échange */
+/** Gestion de fin de tour : lever des hypothèques, bâtir, poser un bâtiment spécial, éventuellement proposer un échange */
 function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   const keep = reserve(s, playerId, level);
-  // D'abord les hypothèques des groupes complets : sans elles, pas de construction
+  // D'abord les hypothèques des groupes complets : un quartier complet rapporte le double
   for (const i of ownedBy(s, playerId)) {
     const d = s.deeds[i]!;
     const g = groupOf(i);
     if (d.mortgaged && g && ownsGroup(s, playerId, g.id) && p.cash - unmortgageCost(i) >= keep) return { type: "unmortgage", square: i };
   }
-  // Construire : Fort monte d'abord tout à 3 maisons (le palier qui rapporte le plus), les autres groupe par groupe
-  const groups = GROUP_ORDER.filter((g) => ownsGroup(s, playerId, g));
-  const tiers = level === "fort" ? [3, HOTEL] : [level === "facile" ? 2 : HOTEL];
-  const minCash = level === "facile" ? 400 : 0;
-  for (const cap of tiers) {
-    for (const g of groups) {
-      const squares = [...GROUPS[g].squares].sort((a, b) => s.deeds[a]!.houses - s.deeds[b]!.houses || b - a);
-      for (const i of squares) {
-        if (s.deeds[i]!.houses >= cap || canBuild(s, playerId, i) !== null) continue;
-        if (p.cash - GROUPS[g].houseCost >= keep && p.cash >= minCash) return { type: "build", square: i };
-        // Fort hypothèque ses titres isolés pour atteindre 3 maisons
-        if (level === "fort" && cap === 3) {
-          const m = looseToMortgage(s, playerId, level);
-          if (m !== null) return { type: "mortgage", square: m };
-        }
-      }
-    }
+  if (level !== "facile" || p.cash >= 400) {
+    const special = s.settings.specials && !specialUsed(s) ? specialMove(s, playerId, level, keep) : null;
+    if (special) return special;
+    const floor = bestFloor(s, playerId, level, keep);
+    if (floor) return floor;
   }
-  // Riche et sans rien à construire : lever les autres hypothèques
+  // Riche et sans rien à bâtir : lever les autres hypothèques
   for (const i of ownedBy(s, playerId)) {
     if (s.deeds[i]!.mortgaged && p.cash - unmortgageCost(i) >= keep * 2) return { type: "unmortgage", square: i };
   }
@@ -195,31 +197,131 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
   return null;
 }
 
-/** Trouver de quoi payer : vendre des constructions, puis hypothéquer le moins utile, sinon la faillite */
+/** Le loyer qu'aurait la rue avec ce bâtiment en plus (essayé puis retiré) */
+function rentWith(s: CapitaleState, index: number, cell: number, kind: BuildingKind, by: string): number {
+  const lots = s.deeds[index]!.lots!;
+  const was = lots[cell] ?? null;
+  lots[cell] = { kind, by };
+  const rent = rentFor(s, index, { diceTotal: 8 });
+  lots[cell] = was;
+  return rent;
+}
+
+/** L'étage qui rapporte le plus de loyer pour son prix, sur ses rues ; Fort remplit d'abord les cases libres (une case libre attire les nuisances) */
+function bestFloor(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
+  if (floorsLeft(s) <= 0) return null;
+  const p = playerOf(s, playerId)!;
+  let best: { action: CapitaleAction; score: number } | null = null;
+  for (const i of ownedBy(s, playerId)) {
+    const d = s.deeds[i]!;
+    if (!d.lots || d.mortgaged || nuisanceOn(s, i)?.kind === "centrale") continue;
+    const free = FRONT_FIRST.find((c) => !d.lots![c]);
+    const house = BACK_FIRST.find((c) => d.lots![c]?.kind === "maison");
+    const options: { cell: number; kind: BuildingKind }[] = [];
+    if (free !== undefined) options.push({ cell: free, kind: "maison" });
+    if (house !== undefined && level !== "facile") options.push({ cell: house, kind: "immeuble" });
+    const before = rentFor(s, i, { diceTotal: 8 });
+    for (const o of options) {
+      if (canBuild(s, playerId, i, o.cell, o.kind) !== null) continue;
+      const cost = buildCost(s, i, o.cell, o.kind);
+      if (p.cash - cost < keep) continue;
+      let score = (rentWith(s, i, o.cell, o.kind, playerId) - before) / cost;
+      if (level === "fort" && o.kind === "maison") score *= 1.2;
+      if (score > 0 && (!best || score > best.score)) best = { action: { type: "build", square: i, cell: o.cell, kind: o.kind }, score };
+    }
+  }
+  return best?.action ?? null;
+}
+
+/** Une case libre d'une rue, du fond vers l'avant */
+const freeCell = (s: CapitaleState, index: number) => BACK_FIRST.find((c) => s.deeds[index]!.lots && !s.deeds[index]!.lots![c]);
+
+/** Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un gratte-ciel, une nuisance chez le meilleur loyer adverse, un parc, un stade */
+function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
+  const p = playerOf(s, playerId)!;
+  const affordable = (price: number, margin = 1) => p.cash - price >= keep * margin;
+  const mine = ownedBy(s, playerId).filter((i) => s.deeds[i]!.lots);
+  // Une nuisance chez soi : on la fait raser si elle coûte plus que son prix en trois passages
+  for (const i of mine) {
+    const lots = s.deeds[i]!.lots!;
+    const cell = lots.findIndex((b) => b !== null && BUILDINGS[b.kind].nuisance);
+    if (cell < 0 || canRaze(s, playerId, i, cell) !== null) continue;
+    const nuisance = lots[cell]!;
+    const price = buildingPrice(nuisance.kind, i);
+    const now = rentFor(s, i, { diceTotal: 8 });
+    lots[cell] = null;
+    const clean = rentFor(s, i, { diceTotal: 8 });
+    lots[cell] = nuisance;
+    if ((clean - now) * 3 >= price && affordable(price)) return { type: "raze", square: i, cell };
+  }
+  if (level === "facile") return null;
+  const tryBuild = (index: number, kind: BuildingKind): CapitaleAction | null => {
+    const cell = freeCell(s, index);
+    if (cell === undefined || canBuild(s, playerId, index, cell, kind) !== null) return null;
+    return { type: "build", square: index, cell, kind };
+  };
+  // Le gratte-ciel, dès qu'un quartier complet le permet : sur la rue la plus chère
+  for (const g of GROUP_ORDER) {
+    if (!ownsGroup(s, playerId, g) || !affordable(buildingPrice("gratte", GROUPS[g].squares[0]!), 1.2)) continue;
+    for (const i of [...GROUPS[g].squares].reverse()) {
+      const a = tryBuild(i, "gratte");
+      if (a) return a;
+    }
+  }
+  // Une nuisance sur la rue adverse qui rapporte le plus
+  const targets = BUYABLE.filter((i) => {
+    const d = s.deeds[i]!;
+    return d.lots && d.owner && d.owner !== playerId && !d.mortgaged;
+  }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }));
+  const target = targets[0];
+  if (target !== undefined) {
+    const rent = rentFor(s, target, { diceTotal: 8 });
+    const kind: BuildingKind | null =
+      floorsOf(s, target) >= 3 && rent >= 300 ? "centrale" : rent >= (level === "fort" ? 100 : 160) ? "decharge" : null;
+    if (kind && affordable(buildingPrice(kind, target), level === "fort" ? 1 : 1.5)) {
+      const a = tryBuild(target, kind);
+      if (a) return a;
+    }
+  }
+  // Un parc pour protéger un quartier où l'on a bâti
+  for (const i of mine) {
+    const g = groupOf(i);
+    if (!g || floorsOf(s, i) < 3 || districtBuildings(s, g.id).some((b) => b.kind === "parc")) continue;
+    if (!affordable(buildingPrice("parc", i), 1.5)) continue;
+    const a = tryBuild(i, "parc");
+    if (a) return a;
+  }
+  // Un stade sur la rue la plus passante (celles qui suivent la prison)
+  if (!hasStadium(s, playerId) && affordable(buildingPrice("stade", 0), level === "fort" ? 1.3 : 2)) {
+    const busy = [...mine].sort((a, b) => Math.abs(a - 19) - Math.abs(b - 19));
+    for (const i of busy) {
+      const a = tryBuild(i, "stade");
+      if (a) return a;
+    }
+  }
+  return null;
+}
+
+/** Trouver de quoi payer : hypothéquer ce qui est hors des groupes complets, vendre des bâtiments, sinon la faillite */
 function raiseMoney(s: CapitaleState, playerId: string, level: BotLevel): CapitaleAction {
   const owed = s.debts.filter((d) => d.debtor === playerId).reduce((n, d) => n + d.amount, 0);
   if (liquidity(s, playerId) < owed) return { type: "bankrupt" };
   const mine = ownedBy(s, playerId);
-  // Hypothéquer d'abord ce qui ne fait pas partie d'un groupe complet, du moins cher au plus cher
+  const full = (i: number) => {
+    const g = groupOf(i);
+    return g && ownsGroup(s, playerId, g.id) ? 1 : 0;
+  };
+  // Hypothéquer d'abord ce qui ne fait pas partie d'un groupe complet, du moins utile au plus utile
   const loose = mine
     .filter((i) => canMortgage(s, playerId, i) === null)
-    .sort((a, b) => {
-      const ga = groupOf(a);
-      const gb = groupOf(b);
-      const fullA = ga && ownsGroup(s, playerId, ga.id) ? 1 : 0;
-      const fullB = gb && ownsGroup(s, playerId, gb.id) ? 1 : 0;
-      return fullA - fullB || valueFor(s, playerId, a, level) - valueFor(s, playerId, b, level);
-    });
+    .sort((a, b) => full(a) - full(b) || valueFor(s, playerId, a, level) - valueFor(s, playerId, b, level));
   const first = loose[0];
-  if (first !== undefined) {
-    const g = groupOf(first);
-    // Avant d'hypothéquer un groupe complet, on vend ses maisons (le moteur l'exige)
-    if (!(g && ownsGroup(s, playerId, g.id))) return { type: "mortgage", square: first };
-  }
-  const sellable = mine
-    .filter((i) => canSell(s, playerId, i) === null)
-    .sort((a, b) => (groupOf(a)?.houseCost ?? 0) - (groupOf(b)?.houseCost ?? 0));
-  if (sellable.length > 0) return { type: "sell", square: sellable[0]! };
+  if (first !== undefined && !full(first)) return { type: "mortgage", square: first };
+  // Puis revendre des bâtiments, les moins chers d'abord
+  const sales = mine
+    .flatMap((i) => ownBuildings(s, i).map((b) => ({ square: i, cell: b.cell, price: buildingPrice(b.kind, i) })))
+    .sort((a, b) => a.price - b.price);
+  if (sales.length > 0) return { type: "sell", square: sales[0]!.square, cell: sales[0]!.cell };
   if (first !== undefined) return { type: "mortgage", square: first };
   return { type: "bankrupt" };
 }
@@ -274,7 +376,7 @@ function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): Capi
     if (missing.length !== 1) continue;
     const target = missing[0]!;
     const owner = s.deeds[target]!.owner;
-    if (!owner || s.deeds[target]!.houses > 0) continue;
+    if (!owner || tradeProblem(s, owner, target) !== null) continue;
     const other = playerOf(s, owner);
     if (!other || other.bankrupt) continue;
     // Assez pour que l'autre (s'il raisonne comme un bot moyen) y trouve son compte
