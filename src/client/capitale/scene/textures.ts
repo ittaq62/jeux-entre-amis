@@ -2,22 +2,26 @@ import * as THREE from "three";
 import { GROUPS, SQUARES } from "../../../shared/games/capitale/board.ts";
 import {
   ARENA,
-  BAND_IN,
-  BAND_OUT,
+  AVENUE,
   bandRect,
+  BLOCK,
   BOARD,
   C,
   CELL,
+  CELL_D,
+  CELL_W,
+  cellCenter,
+  CITY,
   DECK_SPOT,
   HALF,
   INNER,
-  INNER_ROAD,
-  LANDMARKS,
+  lotPoint,
   LOTS,
   OUTER_ROAD,
   PLAZA,
-  PLAZA_CORNER,
+  ROAD,
   squareRect,
+  STRIP,
   type Lot,
   type WRect,
 } from "./layout.ts";
@@ -333,19 +337,19 @@ function drawSquare(p: Pen, i: number) {
       const bottom = fh / 2 - pad;
       switch (sq.kind) {
         case "property":
-          nameBlock(p, sq.name, top + 0.2 * k, 0.15 * k, maxW);
-          price(p, `${sq.price} ₣`, bottom - 0.1 * k, 0.17 * k, maxW);
+          nameBlock(p, sq.name, top + 0.2 * k, 0.17 * k, maxW);
+          price(p, `${sq.price} ₣`, bottom - 0.11 * k, 0.2 * k, maxW);
           break;
         case "station":
-          nameBlock(p, sq.name, top + 0.2 * k, 0.13 * k, maxW);
+          nameBlock(p, sq.name, top + 0.2 * k, 0.145 * k, maxW);
           trainIcon(p, 0, 0.06 * k, Math.min(maxW, 0.62 * k));
-          price(p, `${sq.price} ₣`, bottom - 0.1 * k, 0.17 * k, maxW);
+          price(p, `${sq.price} ₣`, bottom - 0.11 * k, 0.2 * k, maxW);
           break;
         case "utility":
-          nameBlock(p, sq.name, top + 0.2 * k, 0.13 * k, maxW);
+          nameBlock(p, sq.name, top + 0.2 * k, 0.145 * k, maxW);
           if (i === 12) dropIcon(p, 0, 0.06 * k, 0.5 * k);
           else turbineIcon(p, 0, 0.04 * k, 0.5 * k);
-          price(p, `${sq.price} ₣`, bottom - 0.1 * k, 0.17 * k, maxW);
+          price(p, `${sq.price} ₣`, bottom - 0.11 * k, 0.2 * k, maxW);
           break;
         case "card":
           if (sq.deck === "hasard") questionIcon(p, 0, -0.08 * k, 0.6 * k);
@@ -460,7 +464,7 @@ function drawCorner(p: Pen, i: number, x: number, y: number, w: number, h: numbe
   });
 }
 
-/** Le texte d'une parcelle, sur sa bordure côté place, dans le sens où il se lit le mieux */
+/** Un texte posé dans un rectangle du monde, dans le sens où il se lit le mieux face à la caméra */
 function stripText(p: Pen, text: string, r: WRect, size: number, color: string) {
   const { ctx, k } = p;
   const [x, y, w, h] = rectPx(p, r);
@@ -475,12 +479,39 @@ function stripText(p: Pen, text: string, r: WRect, size: number, color: string) 
   ctx.restore();
 }
 
-/** La bordure d'une parcelle, côté place */
+/** La bande d'un lieu le long de sa rue de devant */
 export function frontStrip(l: Lot, depth: number): WRect {
-  if (l.side === "bottom") return { x: l.x, z: l.z, w: l.w, d: depth };
-  if (l.side === "left") return { x: l.x + l.w - depth, z: l.z, w: depth, d: l.d };
-  if (l.side === "top") return { x: l.x, z: l.z + l.d - depth, w: l.w, d: depth };
+  const fx = Math.round(Math.sin(l.facing));
+  const fz = Math.round(Math.cos(l.facing));
+  if (fz === 1) return { x: l.x, z: l.z + l.d - depth, w: l.w, d: depth };
+  if (fz === -1) return { x: l.x, z: l.z, w: l.w, d: depth };
+  if (fx === 1) return { x: l.x + l.w - depth, z: l.z, w: depth, d: l.d };
   return { x: l.x, z: l.z, w: depth, d: l.d };
+}
+
+/** Le rectangle du monde d'une case de parcelle (les lieux ne tournent que par quarts de tour) */
+export function cellRect(l: Lot, cell: number): WRect {
+  const c = cellCenter(l, cell);
+  const odd = Math.abs(Math.sin(l.facing)) > 0.5;
+  const w = odd ? CELL_D : CELL_W;
+  const d = odd ? CELL_W : CELL_D;
+  return { x: c.x - w / 2, z: c.z - d / 2, w, d };
+}
+
+function fillRound(p: Pen, r: WRect, radius: number, fill: string) {
+  const { ctx, k } = p;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(...rectPx(p, r), radius * k);
+  ctx.fill();
+}
+
+/** Un nom de lieu sur sa bande, côté rue */
+function placeName(p: Pen, l: Lot, text: string, bg: string, fg = INK) {
+  const strip = frontStrip(l, STRIP);
+  p.ctx.fillStyle = bg;
+  p.ctx.fillRect(...rectPx(p, strip));
+  stripText(p, text, strip, 0.115, fg);
 }
 
 function drawLot(p: Pen, l: Lot) {
@@ -488,129 +519,165 @@ function drawLot(p: Pen, l: Lot) {
   const [x, y, w, h] = rectPx(p, l);
   if (l.kind === "property") {
     const color = GROUPS[l.group!].color;
-    ctx.fillStyle = mix(color, "#ffffff", 0.74);
-    ctx.fillRect(x, y, w, h);
-    const strip = frontStrip(l, 0.24);
-    ctx.fillStyle = color;
-    ctx.fillRect(...rectPx(p, strip));
+    fillRound(p, l, 0.05, mix(color, "#ffffff", 0.7));
+    // Les 4 cases à bâtir : des dalles claires, bien marquées
+    for (let c = 0; c < 4; c++) {
+      const r = cellRect(l, c);
+      fillRound(p, r, 0.045, "#fbf7ec");
+      ctx.strokeStyle = mix(color, INK, 0.3);
+      ctx.lineWidth = 0.014 * k;
+      ctx.setLineDash([0.05 * k, 0.03 * k]);
+      ctx.beginPath();
+      ctx.roundRect(...rectPx(p, { x: r.x + 0.02, z: r.z + 0.02, w: r.w - 0.04, d: r.d - 0.04 }), 0.035 * k);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     const light = l.group === "jaune" || l.group === "ciel";
-    stripText(p, SQUARES[l.square]!.name.replace("Clermont-Ferrand", "Clermont"), strip, 0.13, light ? INK : "#ffffff");
-    ctx.strokeStyle = mix(color, INK, 0.25);
+    placeName(p, l, SQUARES[l.square]!.name.replace("Clermont-Ferrand", "Clermont"), color, light ? INK : "#ffffff");
+    ctx.strokeStyle = mix(color, INK, 0.3);
     ctx.lineWidth = 0.022 * k;
-    ctx.strokeRect(x, y, w, h);
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 0.05 * k);
+    ctx.stroke();
     return;
   }
   if (l.kind === "station") {
-    ctx.fillStyle = "#cdc5b4";
-    ctx.fillRect(x, y, w, h);
-    // Deux voies le long de la bande, côté rocade ; le quai côté place
-    const strip = frontStrip(l, 0.3);
-    ctx.fillStyle = "#e4ded2";
-    ctx.fillRect(...rectPx(p, strip));
-    stripText(p, SQUARES[l.square]!.name.toUpperCase(), strip, 0.11, INK);
-    for (const off of [0.3, 0.6]) {
-      ctx.save();
-      // Les voies vont dans le sens de la bande (le long du côté du plateau)
-      const along = l.side === "bottom" || l.side === "top";
-      const depthAt =
-        l.side === "bottom" ? l.z + l.d - off : l.side === "top" ? l.z + off : l.side === "left" ? l.x + off : l.x + l.w - off;
+    fillRound(p, l, 0.05, "#cdc5b4");
+    // Deux voies le long du lieu, au fond ; le quai et le nom côté rue
+    for (const off of [-0.18, -0.42]) {
+      const a = lotPoint(l, -0.62, off);
+      const b = lotPoint(l, 0.62, off);
       ctx.strokeStyle = "#7a5a3a";
       ctx.lineWidth = 0.05 * k;
       ctx.setLineDash([0.025 * k, 0.045 * k]);
       ctx.beginPath();
-      if (along) {
-        ctx.moveTo(x, px(p, depthAt));
-        ctx.lineTo(x + w, px(p, depthAt));
-      } else {
-        ctx.moveTo(px(p, depthAt), y);
-        ctx.lineTo(px(p, depthAt), y + h);
-      }
+      ctx.moveTo(px(p, a.x), px(p, a.z));
+      ctx.lineTo(px(p, b.x), px(p, b.z));
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.strokeStyle = "#8c9196";
       ctx.lineWidth = 0.01 * k;
       for (const s of [-0.03, 0.03]) {
+        const a2 = lotPoint(l, -0.62, off + s);
+        const b2 = lotPoint(l, 0.62, off + s);
         ctx.beginPath();
-        if (along) {
-          ctx.moveTo(x, px(p, depthAt + s));
-          ctx.lineTo(x + w, px(p, depthAt + s));
-        } else {
-          ctx.moveTo(px(p, depthAt + s), y);
-          ctx.lineTo(px(p, depthAt + s), y + h);
-        }
+        ctx.moveTo(px(p, a2.x), px(p, a2.z));
+        ctx.lineTo(px(p, b2.x), px(p, b2.z));
         ctx.stroke();
       }
-      ctx.restore();
     }
-    ctx.strokeStyle = "#8f8676";
-    ctx.lineWidth = 0.02 * k;
-    ctx.strokeRect(x, y, w, h);
+    placeName(p, l, SQUARES[l.square]!.name.toUpperCase(), "#e4ded2");
     return;
   }
-  if (l.kind === "tax") {
-    ctx.fillStyle = "#ddd6c6";
+  if (l.kind === "utility") {
+    if (l.square === 12) {
+      // Le barrage : un lac dans l'herbe
+      fillRound(p, l, 0.05, "#9cc27a");
+      const c = lotPoint(l, 0, -0.08);
+      ctx.fillStyle = "#4f97c4";
+      ctx.beginPath();
+      ctx.ellipse(px(p, c.x), px(p, c.z), 0.42 * k, 0.36 * k, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Les éoliennes : des champs en bandes
+      const stripes = ["#c3d48f", "#b2c97f", "#d3d99a", "#a9c37a"];
+      for (let n = 0; n < 6; n++) {
+        ctx.fillStyle = stripes[n % stripes.length]!;
+        ctx.fillRect(x, y + (n * h) / 6, w, h / 6 + 1);
+      }
+    }
+    placeName(p, l, SQUARES[l.square]!.name.toUpperCase(), "#e4ded2");
+    return;
+  }
+  if (l.kind === "toll") {
+    // Le péage : trois voies sous l'auvent
+    ctx.fillStyle = ASPHALT;
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = "#c9c1ae";
-    ctx.fillRect(...rectPx(p, frontStrip(l, 0.24)));
-    stripText(p, "IMPÔTS", frontStrip(l, 0.24), 0.12, INK);
+    ctx.strokeStyle = "#f4f1e8";
+    ctx.lineWidth = 0.02 * k;
+    ctx.setLineDash([0.08 * k, 0.06 * k]);
+    for (const t of [-0.14, 0.14]) {
+      const a = lotPoint(l, t, -0.62);
+      const b = lotPoint(l, t, 0.45);
+      ctx.beginPath();
+      ctx.moveTo(px(p, a.x), px(p, a.z));
+      ctx.lineTo(px(p, b.x), px(p, b.z));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    placeName(p, l, "PÉAGE", "#c9c1ae");
     return;
   }
-  // Le péage : trois voies sous l'auvent
-  ctx.fillStyle = ASPHALT;
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#f4f1e8";
-  ctx.lineWidth = 0.02 * k;
-  ctx.setLineDash([0.08 * k, 0.06 * k]);
-  for (const t of [1 / 3, 2 / 3]) {
-    ctx.beginPath();
-    ctx.moveTo(x + w * t, y);
-    ctx.lineTo(x + w * t, y + h);
-    ctx.stroke();
+  if (l.kind === "kiosk") {
+    // Le kiosque : un parvis pavé, l'emplacement des deux paquets de cartes
+    fillRound(p, l, 0.05, PAVING);
+    for (const s of Object.values(DECK_SPOT)) {
+      ctx.fillStyle = "rgba(90, 70, 40, 0.16)";
+      ctx.beginPath();
+      ctx.arc(px(p, s.x), px(p, s.z), 0.3 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    placeName(p, l, "CARTES", "#d8ccb2");
+    return;
   }
-  ctx.setLineDash([]);
-  ctx.fillStyle = "#c9c1ae";
-  ctx.fillRect(...rectPx(p, frontStrip(l, 0.24)));
-  stripText(p, "PÉAGE", frontStrip(l, 0.24), 0.12, INK);
+  // Les impôts et la banque : un parvis de pierre
+  fillRound(p, l, 0.05, l.kind === "bank" ? "#e2d8c2" : "#ddd6c6");
+  placeName(p, l, l.kind === "bank" ? "BANQUE" : "IMPÔTS", "#c9c1ae");
 }
 
-/** Un anneau de route : asphalte, trottoirs, ligne blanche pointillée */
-function roadRing(p: Pen, outer: number, inner: number, mid: number) {
+/** Une ligne pointillée au milieu d'une rue, d'un point à un autre du monde */
+function laneLine(p: Pen, x0: number, z0: number, x1: number, z1: number) {
   const { ctx, k } = p;
-  ctx.fillStyle = ASPHALT;
-  ctx.beginPath();
-  ctx.rect(px(p, -outer), px(p, -outer), 2 * outer * k, 2 * outer * k);
-  ctx.rect(px(p, inner), px(p, -inner), -2 * inner * k, 2 * inner * k);
-  ctx.fill("evenodd");
   ctx.strokeStyle = "rgba(244, 241, 232, 0.9)";
   ctx.lineWidth = 0.014 * k;
   ctx.setLineDash([0.09 * k, 0.07 * k]);
   ctx.beginPath();
-  ctx.roundRect(px(p, -mid), px(p, -mid), 2 * mid * k, 2 * mid * k, 0.2 * k);
+  ctx.moveTo(px(p, x0), px(p, z0));
+  ctx.lineTo(px(p, x1), px(p, z1));
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
 function drawCity(p: Pen) {
   const { ctx, k } = p;
-  // La bande des quartiers : un trottoir, sous les parcelles (les allées entre elles restent pavées)
-  ctx.fillStyle = SIDEWALK;
+  // Tout est rue, sauf les pâtés de maisons posés dessus
+  ctx.fillStyle = ASPHALT;
   ctx.fillRect(px(p, -INNER), px(p, -INNER), 2 * INNER * k, 2 * INNER * k);
-  roadRing(p, INNER, BAND_OUT, OUTER_ROAD);
-  roadRing(p, BAND_IN, PLAZA, INNER_ROAD);
-  // Des passages piétons au milieu de chaque côté de la rue intérieure
+  ctx.strokeStyle = "rgba(244, 241, 232, 0.9)";
+  ctx.lineWidth = 0.014 * k;
+  ctx.setLineDash([0.09 * k, 0.07 * k]);
+  ctx.beginPath();
+  ctx.roundRect(px(p, -OUTER_ROAD), px(p, -OUTER_ROAD), 2 * OUTER_ROAD * k, 2 * OUTER_ROAD * k, 0.2 * k);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (const s of [-1, 1]) {
+    laneLine(p, s * AVENUE, -CITY, s * AVENUE, CITY);
+    laneLine(p, -CITY, s * AVENUE, CITY, s * AVENUE);
+  }
+  // Les passages piétons autour de la place
   ctx.fillStyle = "rgba(244, 241, 232, 0.92)";
   for (const s of [-1, 1]) {
     for (let n = -2; n <= 2; n++) {
       const a = n * 0.07;
-      ctx.fillRect(px(p, a - 0.022), px(p, s * INNER_ROAD - 0.1), 0.044 * k, 0.2 * k);
-      ctx.fillRect(px(p, s * INNER_ROAD - 0.1), px(p, a - 0.022), 0.2 * k, 0.044 * k);
+      ctx.fillRect(px(p, a - 0.022), px(p, s * AVENUE - ROAD * 0.4), 0.044 * k, ROAD * 0.8 * k);
+      ctx.fillRect(px(p, s * AVENUE - ROAD * 0.4), px(p, a - 0.022), ROAD * 0.8 * k, 0.044 * k);
+    }
+  }
+  // Les pâtés : un trottoir, puis leurs quatre lieux
+  const step = BLOCK + ROAD;
+  for (const col of [-1, 0, 1]) {
+    for (const row of [-1, 0, 1]) {
+      const r = { x: col * step - BLOCK / 2 - 0.02, z: row * step - BLOCK / 2 - 0.02, w: BLOCK + 0.04, d: BLOCK + 0.04 };
+      fillRound(p, r, 0.1, col === 0 && row === 0 ? PAVING : SIDEWALK);
     }
   }
   for (const l of LOTS) drawLot(p, l);
 
-  // La place : un dallage clair
-  ctx.fillStyle = PAVING;
-  ctx.fillRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k);
+  // La place : un dallage clair, la rose des vents où roulent les dés
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k, 0.1 * k);
+  ctx.clip();
   ctx.strokeStyle = "rgba(160, 140, 105, 0.22)";
   ctx.lineWidth = 0.006 * k;
   for (let v = -PLAZA; v <= PLAZA + 1e-6; v += 0.2) {
@@ -621,19 +688,13 @@ function drawCity(p: Pen) {
     ctx.lineTo(px(p, PLAZA), px(p, v));
     ctx.stroke();
   }
+  ctx.restore();
   ctx.strokeStyle = "#b9a988";
   ctx.lineWidth = 0.03 * k;
-  ctx.strokeRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k);
+  ctx.beginPath();
+  ctx.roundRect(px(p, -PLAZA), px(p, -PLAZA), 2 * PLAZA * k, 2 * PLAZA * k, 0.1 * k);
+  ctx.stroke();
   drawArena(p);
-  drawPlazaCorners(p);
-  // Les paquets de cartes : leur emplacement, et leur nom
-  for (const s of Object.values(DECK_SPOT)) {
-    const [w, h] = [0.62, 0.42];
-    ctx.fillStyle = "rgba(90, 70, 40, 0.16)";
-    ctx.beginPath();
-    ctx.roundRect(px(p, s.x - w / 2 - 0.05), px(p, s.z - h / 2 - 0.05), (w + 0.1) * k, (h + 0.1) * k, 0.05 * k);
-    ctx.fill();
-  }
 }
 
 function drawArena(p: Pen) {
@@ -692,38 +753,6 @@ function drawArena(p: Pen) {
     ctx.restore();
   });
   ctx.restore();
-}
-
-function drawPlazaCorners(p: Pen) {
-  const { ctx, k } = p;
-  const s = PLAZA_CORNER.size;
-  const sq = (c: { x: number; z: number }) => [px(p, c.x - s / 2), px(p, c.z - s / 2), s * k, s * k] as const;
-  // La banque : un parvis de pierre
-  ctx.fillStyle = "#e2d8c2";
-  ctx.fillRect(...sq(LANDMARKS.bank));
-  // Le barrage : un lac dans l'herbe
-  ctx.fillStyle = "#9cc27a";
-  ctx.fillRect(...sq(LANDMARKS.dam));
-  ctx.fillStyle = "#4f97c4";
-  ctx.beginPath();
-  ctx.ellipse(px(p, LANDMARKS.dam.x - 0.05), px(p, LANDMARKS.dam.z - 0.05), 0.4 * k, 0.34 * k, 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  // Le parc : de l'herbe et des allées en croix
-  ctx.fillStyle = "#97c173";
-  ctx.fillRect(...sq(LANDMARKS.park));
-  ctx.fillStyle = "#e4d7b5";
-  ctx.fillRect(px(p, LANDMARKS.park.x - 0.05), px(p, LANDMARKS.park.z - s / 2), 0.1 * k, s * k);
-  ctx.fillRect(px(p, LANDMARKS.park.x - s / 2), px(p, LANDMARKS.park.z - 0.05), s * k, 0.1 * k);
-  ctx.beginPath();
-  ctx.arc(px(p, LANDMARKS.park.x), px(p, LANDMARKS.park.z), 0.17 * k, 0, Math.PI * 2);
-  ctx.fill();
-  // Les éoliennes : des champs en bandes
-  const [wx, wy] = sq(LANDMARKS.wind);
-  const stripes = ["#c3d48f", "#b2c97f", "#d3d99a", "#a9c37a"];
-  for (let n = 0; n < 6; n++) {
-    ctx.fillStyle = stripes[n % stripes.length]!;
-    ctx.fillRect(wx, wy + (n * s * k) / 6, s * k, (s * k) / 6 + 1);
-  }
 }
 
 /** Le plateau entier : les cases tout autour, le sol de la ville au milieu. rot = quarts de tour de la caméra. */

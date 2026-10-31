@@ -1,7 +1,9 @@
 import { GROUPS, SQUARES, type GroupId } from "../../../shared/games/capitale/board.ts";
 
 // Le plateau en 3D : 12 unités de côté, centré sur l'origine, Départ en bas à droite (x > 0, z > 0).
-// Les cases font le tour ; au centre, la ville : une rocade, quatre bandes de quartiers, une rue intérieure et la place.
+// Les cases font le tour ; au centre, la ville : une rocade, puis neuf pâtés de maisons séparés par des avenues.
+// La place des dés au milieu, et autour un pâté par quartier de couleur, partagé en quatre : les parcelles des rues
+// (chacune avec ses 4 cases à bâtir) et un lieu (gare, barrage, impôts…).
 
 export const BOARD = 12;
 export const HALF = BOARD / 2;
@@ -136,155 +138,146 @@ export function jailSpot(inside: boolean, slot: number): { x: number; z: number 
 // ---------------------------------------------------------------------------
 
 export const ROAD = 0.25;
-/** La profondeur d'une bande de quartiers */
-export const DEPTH = 1.5;
-/** Les bords des rues : la rocade (contre les cases), la rue intérieure (autour de la place) */
+/** Le milieu de la rocade, le long des cases */
 export const OUTER_ROAD = INNER - ROAD / 2;
-export const BAND_OUT = INNER - ROAD;
-export const BAND_IN = BAND_OUT - DEPTH;
-export const INNER_ROAD = BAND_IN - ROAD / 2;
-export const PLAZA = BAND_IN - ROAD;
-/** L'arène où roulent les dés, au milieu de la place */
-export const ARENA = 1.35;
+/** La moitié du côté de la ville bâtie (sans la rocade) */
+export const CITY = INNER - ROAD;
+/** Le côté d'un pâté de maisons : trois pâtés et deux avenues par côté */
+export const BLOCK = (2 * CITY - 2 * ROAD) / 3;
+/** Le milieu des avenues qui entourent la place */
+export const AVENUE = BLOCK / 2 + ROAD / 2;
+/** La place des dés : le pâté du milieu */
+export const PLAZA = BLOCK / 2;
+/** Les murs invisibles où rebondissent les dés */
+export const ARENA = PLAZA - 0.1;
+/** L'allée entre les quatre lieux d'un pâté, et le côté d'un lieu */
+export const ALLEY = 0.08;
+export const QUAD = (BLOCK - ALLEY) / 2;
 
-/** Un repère par bande : son départ (dans un coin), le long de la bande, vers le centre */
-const FRAMES: Record<Side, { o: [number, number]; u: [number, number]; v: [number, number] }> = {
-  bottom: { o: [BAND_OUT, BAND_OUT], u: [-1, 0], v: [0, -1] },
-  left: { o: [-BAND_OUT, BAND_OUT], u: [0, -1], v: [1, 0] },
-  top: { o: [-BAND_OUT, -BAND_OUT], u: [1, 0], v: [0, 1] },
-  right: { o: [BAND_OUT, -BAND_OUT], u: [0, 1], v: [-1, 0] },
-};
+// Une parcelle de rue, dans son propre repère (la rue devant, vers +z) : la bande au nom de la rue, puis 2 rangs de 2 cases
+export const STRIP = 0.17;
+const LOT_MARGIN = 0.06;
+const CELL_GAP = 0.05;
+export const CELL_W = (QUAD - 2 * LOT_MARGIN - CELL_GAP) / 2;
+export const CELL_D = (QUAD - STRIP - LOT_MARGIN - CELL_GAP) / 2;
+const frontRow = QUAD / 2 - STRIP - CELL_D / 2;
+/** Le centre de chaque case dans le repère de la parcelle : 0 et 1 devant (côté rue), 2 et 3 au fond */
+export const CELL_POS: { x: number; z: number }[] = [
+  { x: -(CELL_GAP + CELL_W) / 2, z: frontRow },
+  { x: (CELL_GAP + CELL_W) / 2, z: frontRow },
+  { x: -(CELL_GAP + CELL_W) / 2, z: frontRow - CELL_D - CELL_GAP },
+  { x: (CELL_GAP + CELL_W) / 2, z: frontRow - CELL_D - CELL_GAP },
+];
 
-/** Ce qui occupe une parcelle de la ville */
-export type LotKind = "property" | "station" | "tax" | "toll";
+/** Ce qui occupe un lieu de la ville */
+export type LotKind = "property" | "station" | "utility" | "tax" | "toll" | "bank" | "kiosk";
 
 export interface Lot extends WRect {
   kind: LotKind;
-  /** La case du plateau qu'elle représente */
+  /** La case du plateau qu'il représente (-1 pour la banque et le kiosque) */
   square: number;
-  side: Side;
-  /** L'angle (autour de y) qui tourne la façade vers la place */
+  /** L'angle (autour de y) qui tourne la façade vers la rue de devant */
   facing: number;
   group?: GroupId;
 }
 
-/** Le rectangle du monde qui va de (u0, v0) à (u1, v1) dans le repère d'une bande */
-function frameRect(side: Side, u0: number, u1: number, v0: number, v1: number): WRect {
-  const f = FRAMES[side];
-  const pts = [
-    [u0, v0],
-    [u1, v1],
-  ].map(([u, v]) => [f.o[0] + f.u[0] * u! + f.v[0] * v!, f.o[1] + f.u[1] * u! + f.v[1] * v!]);
-  const x0 = Math.min(pts[0]![0]!, pts[1]![0]!);
-  const z0 = Math.min(pts[0]![1]!, pts[1]![1]!);
-  return { x: x0, z: z0, w: Math.abs(pts[0]![0]! - pts[1]![0]!), d: Math.abs(pts[0]![1]! - pts[1]![1]!) };
-}
+/** Un pâté par quartier : sa place dans la grille, le côté du plateau qu'il longe, et ses quatre lieux dans l'ordre */
+const BLOCKS: { col: number; row: number; side: Side; items: (number | "bank" | "kiosk")[] }[] = [
+  { col: 1, row: 1, side: "bottom", items: [1, 3, "kiosk", 4] },
+  { col: 0, row: 1, side: "bottom", items: [5, 6, 8, 9] },
+  { col: -1, row: 1, side: "left", items: [11, 13, 12, 14] },
+  { col: -1, row: 0, side: "left", items: [15, 16, 18, 19] },
+  { col: -1, row: -1, side: "top", items: [21, 23, 24, 25] },
+  { col: 0, row: -1, side: "top", items: [26, 27, 28, 29] },
+  { col: 1, row: -1, side: "right", items: [31, 32, 34, 35] },
+  { col: 1, row: 0, side: "right", items: [37, 39, 38, "bank"] },
+];
 
-/** La façade regarde vers le centre : vers -z en bas, +x à gauche, +z en haut, -x à droite */
-const FACING: Record<Side, number> = { bottom: Math.PI, left: Math.PI / 2, top: 0, right: -Math.PI / 2 };
-
-const LOT_W = 0.84;
-const LOT_GAP = 0.05;
-const ITEM_GAP = 0.2;
-const BIG_W = 1.0;
-const SMALL_W = 0.9;
-
-type Item = { kind: LotKind; squares: number[]; width: number };
-
-/** Ce qu'il y a le long de chaque bande, dans l'ordre des cases */
-const BANDS: Record<Side, Item[]> = {
-  bottom: [
-    { kind: "property", squares: [1, 3], width: 0 },
-    { kind: "tax", squares: [4], width: SMALL_W },
-    { kind: "station", squares: [5], width: BIG_W },
-    { kind: "property", squares: [6, 8, 9], width: 0 },
-  ],
-  left: [
-    { kind: "property", squares: [11, 13, 14], width: 0 },
-    { kind: "station", squares: [15], width: BIG_W },
-    { kind: "property", squares: [16, 18, 19], width: 0 },
-  ],
-  top: [
-    { kind: "property", squares: [21, 23, 24], width: 0 },
-    { kind: "station", squares: [25], width: BIG_W },
-    { kind: "property", squares: [26, 27, 29], width: 0 },
-  ],
-  right: [
-    { kind: "property", squares: [31, 32, 34], width: 0 },
-    { kind: "station", squares: [35], width: BIG_W },
-    { kind: "property", squares: [37, 39], width: 0 },
-    { kind: "toll", squares: [38], width: SMALL_W },
-  ],
+/** Le repère d'un pâté : son coin de départ, le long du côté du plateau (u), vers la place (v) */
+const FRAMES: Record<Side, { corner: [number, number]; u: [number, number]; v: [number, number] }> = {
+  bottom: { corner: [1, 1], u: [-1, 0], v: [0, -1] },
+  left: { corner: [-1, 1], u: [0, -1], v: [1, 0] },
+  top: { corner: [-1, -1], u: [1, 0], v: [0, 1] },
+  right: { corner: [1, -1], u: [0, 1], v: [-1, 0] },
 };
 
-/** La longueur d'une bande : d'un coin de la rocade jusqu'à la rue intérieure d'en face */
-const BAND_LEN = BAND_OUT + BAND_IN;
+const KIND_OF: Record<string, LotKind> = { station: "station", utility: "utility", tax: "tax", property: "property" };
 
 function buildLots(): Lot[] {
   const lots: Lot[] = [];
-  for (const side of Object.keys(BANDS) as Side[]) {
-    const items = BANDS[side];
-    const widthOf = (it: Item) => (it.kind === "property" ? it.squares.length * LOT_W + (it.squares.length - 1) * LOT_GAP : it.width);
-    const used = items.reduce((s, it) => s + widthOf(it), 0) + ITEM_GAP * (items.length - 1);
-    let u = (BAND_LEN - used) / 2;
-    for (const it of items) {
-      if (it.kind === "property") {
-        for (const sq of it.squares) {
-          lots.push({
-            ...frameRect(side, u, u + LOT_W, 0, DEPTH),
-            kind: "property",
-            square: sq,
-            side,
-            facing: FACING[side],
-            group: SQUARES[sq]!.group,
-          });
-          u += LOT_W + LOT_GAP;
-        }
-        u -= LOT_GAP;
-      } else {
-        lots.push({ ...frameRect(side, u, u + it.width, 0, DEPTH), kind: it.kind, square: it.squares[0]!, side, facing: FACING[side] });
-        u += it.width;
+  const step = BLOCK + ROAD;
+  for (const b of BLOCKS) {
+    const f = FRAMES[b.side];
+    const ox = b.col * step + (f.corner[0] * BLOCK) / 2;
+    const oz = b.row * step + (f.corner[1] * BLOCK) / 2;
+    b.items.forEach((item, n) => {
+      const a = n % 2;
+      const r = Math.floor(n / 2);
+      // Le centre du lieu, puis sa rue de devant : vers l'extérieur au premier rang, vers la place au second
+      const cu = a * (QUAD + ALLEY) + QUAD / 2;
+      const cv = r * (QUAD + ALLEY) + QUAD / 2;
+      const cx = ox + f.u[0] * cu + f.v[0] * cv;
+      const cz = oz + f.u[1] * cu + f.v[1] * cv;
+      const front = r === 0 ? [-f.v[0], -f.v[1]] : f.v;
+      const facing = Math.atan2(front[0]!, front[1]!);
+      const rect = { x: cx - QUAD / 2, z: cz - QUAD / 2, w: QUAD, d: QUAD };
+      if (item === "bank" || item === "kiosk") {
+        lots.push({ ...rect, kind: item, square: -1, facing });
+        return;
       }
-      u += ITEM_GAP;
-    }
+      const sq = SQUARES[item]!;
+      const kind: LotKind = sq.index === 38 ? "toll" : (KIND_OF[sq.kind] ?? "tax");
+      lots.push({ ...rect, kind, square: item, facing, ...(sq.group ? { group: sq.group } : {}) });
+    });
   }
   return lots;
 }
 
 export const LOTS: Lot[] = buildLots();
-export const LOT_OF: Record<number, Lot> = Object.fromEntries(LOTS.map((l) => [l.square, l]));
+export const LOT_OF: Record<number, Lot> = Object.fromEntries(LOTS.filter((l) => l.square >= 0).map((l) => [l.square, l]));
+export const BANK_LOT = LOTS.find((l) => l.kind === "bank")!;
+export const KIOSK_LOT = LOTS.find((l) => l.kind === "kiosk")!;
 
-/** Les grands lieux de la place, chacun dans un coin */
-export const PLAZA_CORNER = { size: PLAZA - ARENA - 0.12, from: ARENA + 0.1 };
 export interface Spot {
   x: number;
   z: number;
 }
-const corner = (sx: number, sz: number): Spot => ({
-  x: sx * (PLAZA_CORNER.from + PLAZA_CORNER.size / 2),
-  z: sz * (PLAZA_CORNER.from + PLAZA_CORNER.size / 2),
-});
-export const LANDMARKS = {
-  bank: corner(1, 1),
-  dam: corner(-1, 1),
-  park: corner(-1, -1),
-  wind: corner(1, -1),
-};
-/** Le barrage et le parc éolien sont des cases qu'on achète : on les touche pour voir leur fiche */
-export const UTILITY_SPOT: Record<number, Spot> = { 12: LANDMARKS.dam, 28: LANDMARKS.wind };
 
-/** Les deux paquets de cartes, posés au bord de la place */
+/** Un point du repère d'un lieu (façade vers +z), dans le monde */
+export function lotPoint(l: Lot, x: number, z: number): Spot {
+  const c = Math.cos(l.facing);
+  const s = Math.sin(l.facing);
+  return { x: l.x + l.w / 2 + x * c + z * s, z: l.z + l.d / 2 - x * s + z * c };
+}
+
+/** Un point du monde, dans le repère d'un lieu */
+export function toLot(l: Lot, x: number, z: number): Spot {
+  const dx = x - (l.x + l.w / 2);
+  const dz = z - (l.z + l.d / 2);
+  const c = Math.cos(l.facing);
+  const s = Math.sin(l.facing);
+  return { x: dx * c - dz * s, z: dx * s + dz * c };
+}
+
+export const cellCenter = (l: Lot, cell: number): Spot => lotPoint(l, CELL_POS[cell]!.x, CELL_POS[cell]!.z);
+
+/** Les deux paquets de cartes, côte à côte sur le kiosque */
 export const DECK_SPOT: Record<"hasard" | "courrier", Spot> = {
-  hasard: { x: 0, z: -(ARENA + 0.1 + PLAZA_CORNER.size / 2) },
-  courrier: { x: 0, z: ARENA + 0.1 + PLAZA_CORNER.size / 2 },
+  hasard: lotPoint(KIOSK_LOT, -0.26, -0.08),
+  courrier: lotPoint(KIOSK_LOT, 0.26, -0.08),
 };
+/** La banque, et la cagnotte de l'aire de repos posée sur son parvis */
+export const BANK_SPOT: Spot = lotPoint(BANK_LOT, 0, -0.1);
+export const POT_SPOT: Spot = lotPoint(BANK_LOT, 0.38, 0.4);
 
-/** Ce qu'on touche dans la ville : une parcelle, ou un coin de la place qui est une case */
-export function citySquareAt(x: number, z: number): number | null {
-  for (const l of LOTS) if (x >= l.x && x <= l.x + l.w && z >= l.z && z <= l.z + l.d) return l.square;
-  const half = PLAZA_CORNER.size / 2;
-  for (const [sq, s] of Object.entries(UTILITY_SPOT)) {
-    if (Math.abs(x - s.x) <= half && Math.abs(z - s.z) <= half) return Number(sq);
+/** Ce qu'on touche dans la ville : la case d'une parcelle (et laquelle), ou un lieu qui est une case du plateau */
+export function cityAt(x: number, z: number): { square: number; cell: number | null } | null {
+  for (const l of LOTS) {
+    if (l.square < 0 || x < l.x || x > l.x + l.w || z < l.z || z > l.z + l.d) continue;
+    if (l.kind !== "property") return { square: l.square, cell: null };
+    const p = toLot(l, x, z);
+    const cell = CELL_POS.findIndex((c) => Math.abs(p.x - c.x) <= CELL_W / 2 && Math.abs(p.z - c.z) <= CELL_D / 2);
+    return { square: l.square, cell: cell >= 0 ? cell : null };
   }
   return null;
 }

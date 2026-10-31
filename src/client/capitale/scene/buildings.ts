@@ -306,84 +306,82 @@ function roofFor(style: Style, w: number, d: number, h: number): THREE.Object3D 
   }
 }
 
-/** La k-ième maison d'une parcelle (1 à 4) : de la petite maison à l'immeuble */
-const LEVELS = [
-  { w: 0.27, d: 0.3, storeys: 1, roof: 0.13 },
-  { w: 0.31, d: 0.36, storeys: 2, roof: 0.14 },
-  { w: 0.33, d: 0.44, storeys: 3, roof: 0.14 },
-  { w: 0.35, d: 0.5, storeys: 5, roof: 0.15 },
-];
+// ---------------------------------------------------------------------------
+// Les bâtiments des parcelles : chacun tient sur une case (environ 0,55 × 0,5), façade vers +z
+// ---------------------------------------------------------------------------
 
-export function houseBuilding(group: GroupId, level: number, accent: string): THREE.Group {
+/** Un bâtiment d'habitation dans le style du quartier : une porte à la couleur du propriétaire */
+function dwelling(group: GroupId, accent: string, w: number, d: number, storeys: number, roofH: number, chimney: boolean): THREE.Group {
   const style = STYLES[group];
-  const L = LEVELS[Math.max(0, Math.min(3, level - 1))]!;
-  const h = L.storeys * STOREY * style.scale;
+  const h = storeys * STOREY * style.scale;
   const g = new THREE.Group();
   const top = mat(style.roof, { rough: 0.8 });
-  g.add(facadeBox(L.w, h, L.d, style.look, top));
-  // Un soubassement plus sombre, une porte à la couleur du propriétaire
-  g.add(box(L.w + 0.008, 0.035, L.d + 0.008, mat(mix(style.look.wall, "#000000", 0.25))));
-  g.add(box(0.06, 0.1, 0.012, mat(accent, { rough: 0.5 }), 0, 0, L.d / 2 + 0.004));
-  const roof = roofFor(style, L.w, L.d, L.roof);
+  g.add(facadeBox(w, h, d, style.look, top));
+  // Un soubassement plus sombre, une porte et un auvent à la couleur du propriétaire
+  g.add(box(w + 0.008, 0.035, d + 0.008, mat(mix(style.look.wall, "#000000", 0.25))));
+  g.add(box(0.07, 0.11, 0.012, mat(accent, { rough: 0.5 }), 0, 0, d / 2 + 0.004));
+  g.add(box(0.11, 0.012, 0.04, mat(accent, { rough: 0.5 }), 0, 0.12, d / 2 + 0.02));
+  const roof = roofFor(style, w, d, roofH);
   if (roof) {
     roof.position.y = h;
     g.add(roof);
   }
-  if (style.roofKind !== "flat" && level <= 2) {
-    // Une cheminée
-    g.add(box(0.04, 0.1, 0.04, mat(mix(style.look.wall, "#000000", 0.2)), L.w * 0.28, h + L.roof * 0.3, -L.d * 0.12));
+  if (chimney && style.roofKind !== "flat") {
+    g.add(box(0.045, 0.12, 0.045, mat(mix(style.look.wall, "#000000", 0.2)), w * 0.28, h + roofH * 0.3, -d * 0.12));
   }
-  if (level >= 3 && style.roofKind === "flat") {
-    g.add(box(L.w * 0.6, 0.012, 0.03, mat(accent, { rough: 0.4, emissive: mix(accent, "#000000", 0.6) }), 0, h * 0.94, L.d / 2 + 0.006));
+  if (style.roofKind === "flat") {
+    g.add(box(w * 0.6, 0.014, 0.03, mat(accent, { rough: 0.4, emissive: mix(accent, "#000000", 0.6) }), 0, h * 0.94, d / 2 + 0.006));
   }
-  return bake(shadowed(g));
+  return g;
 }
 
-/** L'hôtel : un gratte-ciel qui remplace les maisons, plus haut dans les quartiers chers */
-export function skyscraper(group: GroupId, accent: string, paris: boolean): THREE.Group {
+/** La maison : deux niveaux, un jardinet devant */
+export function maison(group: GroupId, accent: string): THREE.Group {
+  const g = dwelling(group, accent, 0.36, 0.3, 2, 0.15, true);
+  g.position.z = -0.05;
+  const root = new THREE.Group();
+  root.add(g);
+  root.add(box(0.4, 0.04, 0.03, mat("#6f9a4c", { rough: 1 }), 0, 0, 0.17));
+  return bake(shadowed(root));
+}
+
+/** L'immeuble : cinq niveaux, plus large, le toit du quartier */
+export function immeuble(group: GroupId, accent: string): THREE.Group {
+  return bake(shadowed(dwelling(group, accent, 0.44, 0.4, 4, 0.15, false)));
+}
+
+/** Le gratte-ciel : une tour sur un socle, plus haute dans les quartiers chers */
+export function gratteCiel(group: GroupId, accent: string, paris: boolean): THREE.Group {
   const style = STYLES[group];
   const g = new THREE.Group();
-  const H = style.towerHeight * (paris ? 1.12 : 1);
+  const H = style.towerHeight * (paris ? 1.12 : 1) * 0.78;
   const top = mat(mix(style.tower.wall, "#000000", 0.15), { rough: 0.7 });
-  // Le socle, avec l'enseigne de l'hôtel
-  g.add(facadeBox(0.68, 0.2, 0.9, { ...style.tower, wall: mix(style.tower.wall, "#000000", 0.08) }, top));
-  const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.34, 0.075),
-    new THREE.MeshStandardMaterial({
-      map: hotelSign(),
-      emissive: "#ffffff",
-      emissiveMap: hotelSign(),
-      emissiveIntensity: 0.6,
-      roughness: 0.4,
-    }),
-  );
-  sign.position.set(0, 0.13, 0.452);
-  g.add(sign);
-  const W = 0.46;
+  const base = 0.14;
+  g.add(facadeBox(0.48, base, 0.44, { ...style.tower, wall: mix(style.tower.wall, "#000000", 0.08) }, top));
+  g.add(box(0.5, 0.02, 0.46, mat(accent, { rough: 0.45 }), 0, base, 0));
+  const W = 0.36;
   if (style.crown === "stepped" || style.crown === "deco") {
     // Une tour en gradins
     const h1 = H * 0.55;
     const h2 = H * 0.28;
     const h3 = H * 0.17;
     const t1 = facadeBox(W, h1, W, style.tower, top);
-    t1.position.y = 0.2;
+    t1.position.y = base;
     const t2 = facadeBox(W * 0.8, h2, W * 0.8, style.tower, top);
-    t2.position.y = 0.2 + h1;
+    t2.position.y = base + h1;
     const t3 = facadeBox(W * 0.58, h3, W * 0.58, style.tower, top);
-    t3.position.y = 0.2 + h1 + h2;
+    t3.position.y = base + h1 + h2;
     g.add(t1, t2, t3);
-    if (style.crown === "deco") {
-      g.add(cyl(0.012, 0.03, 0.32, mat("#d8c58a", { metal: 0.7, rough: 0.3 }), 8, 0, 0.2 + H, 0));
-    }
-    g.add(box(W * 0.6, 0.02, W * 0.6, mat(accent, { emissive: mix(accent, "#000000", 0.4) }), 0, 0.2 + H - 0.04, 0));
+    if (style.crown === "deco") g.add(cyl(0.012, 0.03, 0.3, mat("#d8c58a", { metal: 0.7, rough: 0.3 }), 8, 0, base + H, 0));
+    g.add(box(W * 0.6, 0.02, W * 0.6, mat(accent, { emissive: mix(accent, "#000000", 0.4) }), 0, base + H - 0.04, 0));
   } else if (style.crown === "pyramid") {
     const t = facadeBox(W, H, W, style.tower, top);
-    t.position.y = 0.2;
+    t.position.y = base;
     g.add(t);
-    const roof = hipRoof(W, W, 0.32, style.roof);
-    roof.position.y = 0.2 + H;
+    const roof = hipRoof(W, W, 0.28, style.roof);
+    roof.position.y = base + H;
     g.add(roof);
-    g.add(box(W + 0.02, 0.03, W + 0.02, mat(accent), 0, 0.2 + H - 0.03, 0));
+    g.add(box(W + 0.02, 0.03, W + 0.02, mat(accent), 0, base + H - 0.03, 0));
   } else {
     // Du verre : une tour aux angles coupés, une antenne (et une flèche pour Paris)
     const geo = new THREE.CylinderGeometry(W * 0.62, W * 0.7, H, 8, 1);
@@ -391,19 +389,163 @@ export function skyscraper(group: GroupId, accent: string, paris: boolean): THRE
     const uv = geo.attributes.uv as THREE.BufferAttribute;
     for (let n = 0; n < uv.count; n++) uv.setXY(n, uv.getX(n) * 14, uv.getY(n) * Math.round(H / STOREY));
     const glass = new THREE.Mesh(geo, [wallMat(style.tower), top, top]);
-    glass.position.y = 0.2;
+    glass.position.y = base;
     g.add(glass);
-    g.add(cyl(W * 0.5, W * 0.62, 0.12, mat("#c9d3dc", { metal: 0.6, rough: 0.3 }), 8, 0, 0.2 + H, 0));
-    g.add(cyl(0.008, 0.016, paris ? 0.7 : 0.35, mat("#e8ecef", { metal: 0.8, rough: 0.2 }), 6, 0, 0.32 + H, 0));
-    g.add(box(W * 1.1, 0.02, 0.02, mat(accent, { emissive: mix(accent, "#000000", 0.3) }), 0, 0.2 + H * 0.5, W * 0.6));
+    g.add(cyl(W * 0.5, W * 0.62, 0.1, mat("#c9d3dc", { metal: 0.6, rough: 0.3 }), 8, 0, base + H, 0));
+    g.add(cyl(0.008, 0.016, paris ? 0.7 : 0.35, mat("#e8ecef", { metal: 0.8, rough: 0.2 }), 6, 0, base + 0.1 + H, 0));
+    g.add(box(W * 1.1, 0.02, 0.02, mat(accent, { emissive: mix(accent, "#000000", 0.3) }), 0, base + H * 0.5, W * 0.6));
   }
   return bake(shadowed(g));
 }
 
-let hotelTex: THREE.CanvasTexture | null = null;
-function hotelSign() {
-  hotelTex ??= signTexture("HÔTEL", "#b8261c", "#fff3d6", 256, 56);
-  return hotelTex;
+/** Le parc : une pelouse, trois arbres, une fontaine et un banc */
+export function parc(): { group: THREE.Group; jet: THREE.Mesh } {
+  const g = new THREE.Group();
+  g.add(box(0.5, 0.025, 0.45, mat("#86b85f", { rough: 1 })));
+  g.add(box(0.07, 0.027, 0.45, mat("#e4d7b5", { rough: 1 })));
+  const leaves = ["#5f9a45", "#4f8a3d", "#6eaa4c"];
+  for (const [x, z, s, k] of [
+    [-0.15, -0.12, 1.15, 0],
+    [0.16, -0.13, 1, 1],
+    [-0.16, 0.13, 0.9, 2],
+  ] as const) {
+    g.add(cyl(0.02, 0.028, 0.14 * s, mat("#7a5a3c"), 6, x, 0.02, z));
+    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1 * s, 0), mat(leaves[k]!, { flat: true, rough: 0.9 }));
+    crown.position.set(x, 0.02 + 0.2 * s, z);
+    g.add(crown);
+  }
+  g.add(cyl(0.08, 0.085, 0.04, mat("#d6ccb6"), 16, 0.13, 0.02, 0.12));
+  g.add(cyl(0.068, 0.068, 0.01, mat("#58a6d6", { rough: 0.1, metal: 0.3 }), 16, 0.13, 0.055, 0.12));
+  const b = bench();
+  b.position.set(0, 0.025, 0.17);
+  g.add(b);
+  const jet = cyl(
+    0.01,
+    0.022,
+    0.13,
+    new THREE.MeshStandardMaterial({ color: "#bfe3f7", transparent: true, opacity: 0.75, roughness: 0.1 }),
+  );
+  jet.position.set(0.13, 0.06, 0.12);
+  shadowed(g);
+  jet.castShadow = false;
+  jet.userData.keep = true;
+  g.add(jet);
+  return { group: bake(g), jet };
+}
+
+/** Le stade : une pelouse dans un anneau de tribunes, quatre pylônes d'éclairage */
+export function stade(accent: string): THREE.Group {
+  const g = new THREE.Group();
+  const ring = (rx: number, rz: number, h: number, inset: number, color: string) => {
+    const outer = new THREE.Shape();
+    outer.absellipse(0, 0, rx, rz, 0, Math.PI * 2, false, 0);
+    const hole = new THREE.Path();
+    hole.absellipse(0, 0, rx - inset, rz - inset, 0, Math.PI * 2, true, 0);
+    outer.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(outer, { depth: h, bevelEnabled: false, curveSegments: 28 });
+    geo.rotateX(-Math.PI / 2);
+    return new THREE.Mesh(geo, mat(color, { rough: 0.7 }));
+  };
+  g.add(ring(0.25, 0.22, 0.07, 0.06, "#d9d4c8"));
+  const upper = ring(0.25, 0.22, 0.05, 0.035, accent);
+  upper.position.y = 0.07;
+  g.add(upper);
+  const field = new THREE.Mesh(new THREE.CircleGeometry(1, 28), mat("#5ea347", { rough: 1 }));
+  field.rotation.x = -Math.PI / 2;
+  field.scale.set(0.19, 0.16, 1);
+  field.position.y = 0.012;
+  g.add(field);
+  g.add(box(0.005, 0.002, 0.3, mat("#f4f4ee"), 0, 0.013, 0));
+  for (const [x, z] of [
+    [-0.22, -0.18],
+    [0.22, -0.18],
+    [-0.22, 0.18],
+    [0.22, 0.18],
+  ] as const) {
+    g.add(cyl(0.006, 0.008, 0.3, mat("#9aa1a8", { metal: 0.6, rough: 0.35 }), 6, x, 0, z));
+    g.add(box(0.05, 0.03, 0.012, mat("#fff8dc", { emissive: "#fff2c0" }), x, 0.3, z));
+  }
+  return bake(shadowed(g));
+}
+
+/** La décharge : des tas d'ordures, une benne, une palissade ; des mouettes tournent au-dessus */
+export function decharge(): { group: THREE.Group; birds: THREE.Group } {
+  const g = new THREE.Group();
+  g.add(box(0.5, 0.012, 0.45, mat("#8b7d62", { rough: 1 })));
+  const heaps: [number, number, number, string][] = [
+    [-0.1, -0.06, 0.15, "#6f6656"],
+    [0.1, 0.02, 0.12, "#857a63"],
+    [-0.02, 0.12, 0.1, "#5f5a4f"],
+  ];
+  for (const [x, z, r, c] of heaps) {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat(c, { flat: true, rough: 1 }));
+    m.scale.y = 0.55;
+    m.position.set(x, 0.02, z);
+    g.add(m);
+  }
+  const bits = ["#d6433a", "#2f6fb8", "#e8b12f", "#f2f2ee", "#2fa864"];
+  for (let k = 0; k < 9; k++)
+    g.add(box(0.03, 0.02, 0.025, mat(bits[k % bits.length]!), -0.16 + (k % 5) * 0.08, 0.05 + (k % 3) * 0.02, -0.1 + (k % 4) * 0.07));
+  g.add(box(0.14, 0.07, 0.08, mat("#3f7d4e", { rough: 0.6, metal: 0.3 }), 0.16, 0, -0.15));
+  const fenceM = mat("#9aa1a8", { metal: 0.5, rough: 0.5 });
+  g.add(box(0.5, 0.06, 0.008, fenceM, 0, 0, 0.22), box(0.008, 0.06, 0.45, fenceM, -0.25, 0, 0), box(0.008, 0.06, 0.45, fenceM, 0.25, 0, 0));
+  shadowed(g);
+  const birds = new THREE.Group();
+  for (let k = 0; k < 3; k++) {
+    const bird = new THREE.Group();
+    const wing = mat("#f4f4f0");
+    const left = box(0.05, 0.004, 0.018, wing, -0.024, 0, 0);
+    left.rotation.z = 0.35;
+    const right = box(0.05, 0.004, 0.018, wing, 0.024, 0, 0);
+    right.rotation.z = -0.35;
+    bird.add(left, right);
+    const a = (k * Math.PI * 2) / 3;
+    bird.position.set(Math.cos(a) * 0.16, 0.42 + k * 0.05, Math.sin(a) * 0.16);
+    bird.rotation.y = -a;
+    birds.add(bird);
+  }
+  birds.userData.keep = true;
+  g.add(birds);
+  return { group: bake(g), birds };
+}
+
+/** La centrale : deux tours de refroidissement, la salle des machines, une cheminée rayée ; de la vapeur sort des tours */
+export function centrale(): { group: THREE.Group; steam: THREE.Group } {
+  const g = new THREE.Group();
+  g.add(box(0.5, 0.012, 0.45, mat("#a7a194", { rough: 1 })));
+  const pts = [
+    [0.12, 0],
+    [0.1, 0.08],
+    [0.075, 0.2],
+    [0.08, 0.26],
+    [0.09, 0.3],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  const towerGeo = new THREE.LatheGeometry(pts, 20);
+  const concrete = mat("#d8d4ca", { rough: 0.85 });
+  (concrete as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+  for (const x of [-0.12, 0.12]) {
+    const t = new THREE.Mesh(towerGeo, concrete);
+    t.position.set(x, 0.012, -0.08);
+    g.add(t);
+  }
+  g.add(box(0.3, 0.12, 0.12, mat("#c4bcae"), 0, 0.012, 0.13));
+  g.add(box(0.3, 0.015, 0.12, mat("#6a6f75"), 0, 0.132, 0.13));
+  for (let k = 0; k < 5; k++) g.add(cyl(0.022, 0.024, 0.07, mat(k % 2 ? "#f4f4ee" : "#d0352c"), 10, 0.19, 0.012 + k * 0.07, 0.15));
+  shadowed(g);
+  const steam = new THREE.Group();
+  const puff = new THREE.MeshStandardMaterial({ color: "#f4f6f8", transparent: true, opacity: 0.8, roughness: 1, depthWrite: false });
+  for (const x of [-0.12, 0.12]) {
+    for (let k = 0; k < 3; k++) {
+      const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 1), puff);
+      p.position.set(x, 0.34, -0.08);
+      p.userData.phase = k / 3;
+      p.userData.x = x;
+      steam.add(p);
+    }
+  }
+  steam.userData.keep = true;
+  g.add(steam);
+  return { group: bake(g), steam };
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +708,19 @@ export function tollBooth(): THREE.Group {
     bar.position.x = x - 0.1;
     g.add(bar);
   }
+  return bake(shadowed(g));
+}
+
+/** Le kiosque à journaux : un pavillon rond sous un toit vert */
+export function kiosk(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(cyl(0.15, 0.15, 0.03, mat("#d6ccb6"), 16));
+  g.add(cyl(0.12, 0.12, 0.16, mat("#2f6b4f", { rough: 0.6 }), 8, 0, 0.03, 0));
+  g.add(box(0.14, 0.07, 0.01, mat("#f6efdc"), 0, 0.09, 0.12));
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.12, 8), mat("#2f6b4f", { rough: 0.5, metal: 0.2 }));
+  roof.position.y = 0.25;
+  g.add(roof);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), mat("#d8c58a", { metal: 0.7, rough: 0.3 })).translateY(0.32));
   return bake(shadowed(g));
 }
 

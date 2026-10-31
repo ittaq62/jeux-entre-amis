@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { HOTEL, SQUARES, UTILITIES, type DeckId } from "../../../shared/games/capitale/board.ts";
+import { SQUARES, type BuildingKind, type DeckId, type GroupId } from "../../../shared/games/capitale/board.ts";
 import { play } from "../../lib/sound.ts";
+import type { TokenId } from "../../../shared/games/capitale/tokens.ts";
 import * as B from "./buildings.ts";
+import { tokenModel } from "./tokens.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
 import * as L from "./layout.ts";
 import { drawBoard, fontsReady, hatchTexture, makeCanvas, signTexture } from "./textures.ts";
@@ -13,6 +15,8 @@ import { drawBoard, fontsReady, hatchTexture, makeCanvas, signTexture } from "./
 export interface ScenePlayer {
   id: string;
   color: string;
+  /** Le pion choisi (le pion classique par défaut) */
+  token?: TokenId;
   position: number;
   inJail: boolean;
   bankrupt: boolean;
@@ -20,8 +24,16 @@ export interface ScenePlayer {
 
 export interface SceneDeed {
   owner: string | null;
-  houses: number;
   mortgaged: boolean;
+  /** Les 4 cases de la parcelle (terrains seulement) */
+  lots?: ({ kind: BuildingKind; by: string } | null)[];
+}
+
+/** Le mode chantier : les cases où le bâtiment choisi peut se poser, montrées en vert, avec un aperçu sous la souris */
+export interface BuildMode {
+  kind: BuildingKind;
+  cells: { square: number; cell: number }[];
+  color: string;
 }
 
 export interface SceneState {
@@ -38,6 +50,9 @@ export interface SceneOptions {
   phone: boolean;
   reduced: boolean;
   onSquare: (index: number) => void;
+  /** Une case de parcelle choisie en mode chantier, ou survolée */
+  onCell: (square: number, cell: number) => void;
+  onHoverCell?: (at: { square: number; cell: number } | null) => void;
 }
 
 /** Une petite animation : t va de 0 à 1 sur dur secondes */
@@ -73,13 +88,22 @@ interface PawnObj {
 interface LotObj {
   lot: L.Lot;
   root: THREE.Group;
-  houses: THREE.Group[];
-  tower: THREE.Group | null;
+  /** Le bâtiment de chaque case, et ce qu'il représente ("maison:a"), tel qu'affiché */
+  cells: (THREE.Object3D | null)[];
+  keys: string[];
+  /** Les dalles de couleur du mode chantier */
+  marks: THREE.Mesh[];
   flag: THREE.Group | null;
   sale: THREE.Group | null;
   fence: THREE.Group | null;
   outline: THREE.Mesh | null;
-  shown: SceneDeed;
+  shown: { owner: string | null; mortgaged: boolean };
+}
+
+/** Ce qui vit dans un bâtiment : le jet d'eau du parc, les mouettes de la décharge, la vapeur de la centrale */
+interface Living {
+  kind: "jet" | "birds" | "steam";
+  obj: THREE.Object3D;
 }
 
 const HOP_SECONDS = 0.17;
@@ -103,6 +127,9 @@ export class CapitaleScene {
   /** Quelque chose a changé depuis la dernière image (en mode sobre, on ne redessine que dans ce cas) */
   private dirty = true;
   private frames = 0;
+  /** La finesse du rendu : sur PC on dessine plus fin que l'écran (moins de flou), et on redescend si la machine peine */
+  private ratio = 1;
+  private slow = { time: 0, frames: 0 };
   private pending = 0;
 
   private boardCanvas: HTMLCanvasElement;
@@ -127,13 +154,17 @@ export class CapitaleScene {
   private lots = new Map<number, LotObj>();
   private ringOwner = new Map<number, THREE.Mesh>();
   private ringHatch = new Map<number, THREE.Mesh>();
-  private utilityFlags = new Map<number, THREE.Group>();
   private highlightFrame: THREE.Group;
   private highlightLot: THREE.Group;
   private hoverFrame: THREE.Group;
   private highlightAt: number | null = null;
   private marker: THREE.Mesh;
-  private hover: { square: number; rect: L.WRect } | null = null;
+  private hover: { square: number; rect: L.WRect; cell: number | null } | null = null;
+  private build: BuildMode | null = null;
+  /** En mode chantier, la caméra s'approche des cases possibles (sur téléphone surtout, pour pouvoir les toucher) */
+  private buildFocus: THREE.Vector3 | null = null;
+  private ghost: { key: string; obj: THREE.Object3D } | null = null;
+  private living: Living[] = [];
 
   private dice: THREE.Mesh[];
   private diceThrow: { data: Throw; t0: number; values: [number, number]; sounded: number } | null = null;
@@ -153,7 +184,6 @@ export class CapitaleScene {
   private rotors: { obj: THREE.Group; speed: number }[] = [];
   private flags: THREE.Object3D[] = [];
   private water: THREE.Mesh | null = null;
-  private jet: THREE.Mesh | null = null;
   private siren: THREE.Mesh | null = null;
 
   private anchors: Record<string, HTMLElement | null> = {};
@@ -166,14 +196,17 @@ export class CapitaleScene {
   constructor(container: HTMLElement, opts: SceneOptions) {
     this.container = container;
     this.opts = opts;
-    this.pitch = opts.phone ? 1.08 : 0.94;
+    // Assez plongeant pour que le texte du plateau reste lisible jusqu'au fond
+    this.pitch = opts.phone ? 1.12 : 1.02;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const dpr = window.devicePixelRatio || 1;
+    this.ratio = opts.phone ? Math.min(dpr, 2) : Math.min(2, Math.max(dpr, 1.5));
+    this.renderer.setPixelRatio(this.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.className = "cap-canvas";
     container.appendChild(this.renderer.domElement);
 
@@ -187,7 +220,7 @@ export class CapitaleScene {
     this.addLights();
 
     // Le plateau : une toile en haute définition, filtrée de biais pour rester nette même vue de loin
-    const size = Math.min(this.renderer.capabilities.maxTextureSize, opts.phone ? 2048 : 3072);
+    const size = Math.min(this.renderer.capabilities.maxTextureSize, opts.phone ? 2048 : 4096);
     [this.boardCanvas] = makeCanvas(size, size);
     drawBoard(this.boardCanvas, 0);
     this.boardTex = new THREE.CanvasTexture(this.boardCanvas);
@@ -278,10 +311,7 @@ export class CapitaleScene {
     slab.receiveShadow = true;
     slab.castShadow = true;
     this.scene.add(slab);
-    const top = new THREE.Mesh(
-      new THREE.PlaneGeometry(L.BOARD, L.BOARD),
-      new THREE.MeshStandardMaterial({ map: this.boardTex, roughness: 0.82, metalness: 0 }),
-    );
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(L.BOARD, L.BOARD), sharpMaterial(this.boardTex));
     top.rotation.x = -Math.PI / 2;
     top.receiveShadow = true;
     top.name = "board";
@@ -360,83 +390,103 @@ export class CapitaleScene {
   }
 
   private addCity() {
+    const markGeo = new THREE.PlaneGeometry(L.CELL_W - 0.03, L.CELL_D - 0.03);
+    markGeo.rotateX(-Math.PI / 2);
     for (const lot of L.LOTS) {
       const root = new THREE.Group();
       root.position.set(lot.x + lot.w / 2, 0, lot.z + lot.d / 2);
       root.rotation.y = lot.facing;
-      root.userData.square = lot.square;
+      if (lot.square >= 0) root.userData.square = lot.square;
       this.scene.add(root);
-      if (lot.kind === "station") root.add(B.station(LIVERIES[lot.square] ?? "#2f5bb8"));
-      else if (lot.kind === "tax") root.add(B.taxOffice());
-      else if (lot.kind === "toll") root.add(B.tollBooth());
-      this.pickables.push(root);
-      if (lot.kind === "property" || lot.kind === "station") {
+      if (lot.square >= 0) this.pickables.push(root);
+      switch (lot.kind) {
+        case "station": {
+          root.add(B.station(LIVERIES[lot.square] ?? "#2f5bb8"));
+          break;
+        }
+        case "tax":
+          root.add(B.taxOffice());
+          break;
+        case "toll":
+          root.add(B.tollBooth());
+          break;
+        case "bank": {
+          const bank = B.bank();
+          bank.scale.setScalar(1.25);
+          bank.position.z = -0.1;
+          root.add(bank);
+          break;
+        }
+        case "kiosk": {
+          // Un kiosque à journaux au fond ; les deux paquets de cartes devant
+          const k = B.kiosk();
+          k.position.z = -0.42;
+          root.add(k);
+          break;
+        }
+        case "utility": {
+          if (lot.square === 12) {
+            const dam = B.dam();
+            dam.group.position.z = -0.06;
+            dam.group.scale.setScalar(1.15);
+            this.water = dam.water;
+            root.add(dam.group);
+          } else {
+            for (const [x, z, h] of [
+              [-0.3, 0.12, 0.85],
+              [0.22, -0.08, 1],
+              [-0.12, -0.38, 0.75],
+            ] as const) {
+              const t = B.turbine(h);
+              t.group.position.set(x, 0, z);
+              t.group.rotation.y = Math.PI * 0.8 - lot.facing;
+              root.add(t.group);
+              this.rotors.push({ obj: t.rotor, speed: 1.4 + h * 0.6 });
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      if (lot.kind === "property" || lot.kind === "station" || lot.kind === "utility") {
         const obj: LotObj = {
           lot,
           root,
-          houses: [],
-          tower: null,
+          cells: [null, null, null, null],
+          keys: ["", "", "", ""],
+          marks: [],
           flag: null,
           sale: null,
           fence: null,
           outline: null,
-          shown: { owner: null, houses: 0, mortgaged: false },
+          shown: { owner: null, mortgaged: false },
         };
         this.lots.set(lot.square, obj);
         if (lot.kind === "property") {
           obj.sale = B.forSale();
-          obj.sale.position.set(0, 0, 0.05);
+          obj.sale.position.set(0, 0, -0.06);
           root.add(obj.sale);
+          for (const c of L.CELL_POS) {
+            const m = new THREE.Mesh(
+              markGeo,
+              new THREE.MeshBasicMaterial({ color: "#19c25a", transparent: true, opacity: 0.6, depthWrite: false }),
+            );
+            m.position.set(c.x, 0.012, c.z);
+            m.visible = false;
+            root.add(m);
+            obj.marks.push(m);
+          }
         }
       }
     }
 
-    // La place : la banque, le barrage, le parc, les éoliennes
-    const bank = B.bank();
-    bank.position.set(L.LANDMARKS.bank.x, 0, L.LANDMARKS.bank.z);
-    bank.rotation.y = Math.atan2(-L.LANDMARKS.bank.x, -L.LANDMARKS.bank.z);
-    this.decor.add(bank);
-    const dam = B.dam();
-    dam.group.position.set(L.LANDMARKS.dam.x, 0, L.LANDMARKS.dam.z);
-    dam.group.userData.square = 12;
-    this.water = dam.water;
-    this.scene.add(dam.group);
-    this.pickables.push(dam.group);
-    const wind = new THREE.Group();
-    wind.position.set(L.LANDMARKS.wind.x, 0, L.LANDMARKS.wind.z);
-    wind.userData.square = 28;
-    for (const [x, z, h] of [
-      [-0.25, 0.22, 0.85],
-      [0.18, -0.05, 1],
-      [-0.12, -0.3, 0.75],
-    ] as const) {
-      const t = B.turbine(h);
-      t.group.position.set(x, 0, z);
-      t.group.rotation.y = Math.PI * 0.8;
-      wind.add(t.group);
-      this.rotors.push({ obj: t.rotor, speed: 1.4 + h * 0.6 });
-    }
-    this.scene.add(wind);
-    this.pickables.push(wind);
-    const f = B.fountain();
-    f.group.position.set(L.LANDMARKS.park.x, 0, L.LANDMARKS.park.z);
-    this.jet = f.jet;
-    this.decor.add(f.group);
-    for (const sq of UTILITIES) {
-      const spot = L.UTILITY_SPOT[sq]!;
-      const fl = B.flag("#ffffff");
-      fl.position.set(spot.x + 0.36 * Math.sign(spot.x), 0, spot.z + 0.36 * Math.sign(spot.z));
-      fl.visible = false;
-      this.scene.add(fl);
-      this.utilityFlags.set(sq, fl);
-      this.flags.push(fl.getObjectByName("cloth")!);
-    }
-
-    // Les deux paquets de cartes
+    // Les deux paquets de cartes, sur le kiosque
     for (const deck of ["hasard", "courrier"] as DeckId[]) {
       const g = new THREE.Group();
       const spot = L.DECK_SPOT[deck];
       g.position.set(spot.x, 0, spot.z);
+      g.rotation.y = L.KIOSK_LOT.facing;
       const face = new THREE.MeshStandardMaterial({
         map: signTexture(
           deck === "hasard" ? "HASARD" : "COURRIER",
@@ -449,7 +499,7 @@ export class CapitaleScene {
         roughness: 0.55,
       });
       const edge = new THREE.MeshStandardMaterial({ color: "#f3ecdc", roughness: 0.8 });
-      const geo = new THREE.BoxGeometry(0.58, 0.012, 0.38);
+      const geo = new THREE.BoxGeometry(0.44, 0.012, 0.3);
       const mats = [edge, edge, face, edge, edge, edge];
       this.cardParts[deck] = { geo, mats };
       for (let n = 0; n < 8; n++) {
@@ -463,83 +513,63 @@ export class CapitaleScene {
       this.decor.add(g);
     }
 
-    // Les arbres : autour de la place, dans le parc, au bord du lac
+    // La place : des arbres et des réverbères dans les coins, des bancs le long des bords
     const spots: { x: number; z: number; s: number; kind: number }[] = [];
-    const edge = L.ARENA + 0.1 + L.PLAZA_CORNER.size / 2;
-    for (const t of [-1.12, -0.72, 0.72, 1.12]) {
-      spots.push({ x: t, z: edge + 0.18, s: 0.8, kind: 0 }, { x: t, z: -edge - 0.18, s: 0.8, kind: 0 });
-    }
-    for (const t of [-1.05, -0.35, 0.35, 1.05]) {
-      spots.push({ x: edge + 0.18, z: t, s: 0.8, kind: 0 }, { x: -edge - 0.18, z: t, s: 0.8, kind: 0 });
-    }
-    // Des massifs de fleurs, des réverbères et des bancs autour de la rose des vents
-    let seed = 1;
-    const inner = edge - 0.28;
-    for (const a of [-0.95, 0.95]) {
-      for (const b of [-inner, inner]) {
-        const across = B.flowerBed(0.42, 0.16, seed++);
-        across.position.set(a, 0, b);
-        const along = B.flowerBed(0.16, 0.42, seed++);
-        along.position.set(b, 0, a);
-        this.decor.add(across, along);
+    const corner = L.PLAZA - 0.2;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        spots.push(
+          { x: sx * corner, z: sz * corner, s: 1.1, kind: 0 },
+          { x: sx * (corner - 0.28), z: sz * corner, s: 0.85, kind: 0 },
+          { x: sx * corner, z: sz * (corner - 0.28), s: 0.85, kind: 0 },
+        );
+        const l = B.lamp();
+        l.position.set(sx * (corner - 0.2), 0, sz * (corner - 0.2));
+        this.decor.add(l);
       }
     }
-    for (const [x, z] of [
-      [-1.42, -1.42],
-      [1.42, -1.42],
-      [-1.42, 1.42],
-      [1.42, 1.42],
-      [-edge + 0.05, 0],
-      [edge - 0.05, 0],
-    ] as const) {
-      const l = B.lamp();
-      l.position.set(x, 0, z);
-      this.decor.add(l);
-    }
     for (const [x, z, r] of [
-      [-0.45, edge - 0.3, 0],
-      [0.45, edge - 0.3, 0],
-      [-0.45, -edge + 0.3, Math.PI],
-      [0.45, -edge + 0.3, Math.PI],
-      [edge - 0.3, -0.45, -Math.PI / 2],
-      [edge - 0.3, 0.45, -Math.PI / 2],
-      [-edge + 0.3, -0.45, Math.PI / 2],
-      [-edge + 0.3, 0.45, Math.PI / 2],
+      [0, L.PLAZA - 0.08, 0],
+      [0, -L.PLAZA + 0.08, Math.PI],
+      [L.PLAZA - 0.08, 0, -Math.PI / 2],
+      [-L.PLAZA + 0.08, 0, Math.PI / 2],
     ] as const) {
       const bn = B.bench();
       bn.position.set(x, 0, z);
       bn.rotation.y = r;
       this.decor.add(bn);
     }
-    const p = L.LANDMARKS.park;
-    for (const [dx, dz] of [
-      [-0.32, -0.32],
-      [0.32, -0.32],
-      [-0.32, 0.32],
-      [0.32, 0.32],
-      [0, -0.38],
+    // Quelques arbres sur le parvis de la banque et autour du kiosque
+    for (const [l, pts] of [
+      [
+        L.BANK_LOT,
+        [
+          [-0.5, 0.35],
+          [0.5, -0.45],
+        ],
+      ],
+      [
+        L.KIOSK_LOT,
+        [
+          [-0.5, -0.45],
+          [0.5, -0.45],
+        ],
+      ],
     ] as const) {
-      spots.push({ x: p.x + dx, z: p.z + dz, s: 1.15, kind: 0 });
+      for (const [x, z] of pts) {
+        const p = L.lotPoint(l, x, z);
+        spots.push({ x: p.x, z: p.z, s: 0.95, kind: 0 });
+      }
     }
-    const d = L.LANDMARKS.dam;
-    for (const [dx, dz] of [
-      [-0.38, 0.3],
-      [0.32, -0.36],
-      [-0.4, -0.25],
-    ] as const) {
-      spots.push({ x: d.x + dx, z: d.z + dz, s: 1.1, kind: 1 });
-    }
-    const b = L.LANDMARKS.bank;
-    spots.push({ x: b.x + 0.38, z: b.z - 0.36, s: 0.9, kind: 0 }, { x: b.x - 0.36, z: b.z + 0.38, s: 0.9, kind: 0 });
     this.decor.add(B.trees(spots));
 
-    // La circulation : la rocade et la rue intérieure, dans les deux sens
+    // La circulation : la rocade et le tour de la place, dans les deux sens
     const colors = ["#d6433a", "#f2f2ee", "#2f5bb8", "#e8b12f", "#3c3f44", "#2fa864", "#e07a3a", "#9fb4c4"];
     const lanes = [
       { half: L.OUTER_ROAD + 0.055, n: 6, reverse: false },
       { half: L.OUTER_ROAD - 0.055, n: 5, reverse: true },
-      { half: L.INNER_ROAD + 0.055, n: 3, reverse: false },
-      { half: L.INNER_ROAD - 0.055, n: 3, reverse: true },
+      { half: L.AVENUE + 0.055, n: 3, reverse: false },
+      { half: L.AVENUE - 0.055, n: 2, reverse: true },
     ];
     let k = 0;
     const fleetColors: string[] = [];
@@ -631,7 +661,7 @@ export class CapitaleScene {
     for (const p of s.players) {
       let obj = this.pawns.get(p.id);
       if (!obj) {
-        const group = B.pawn(p.color);
+        const group = tokenModel(p.token ?? "pion", p.color);
         this.scene.add(group);
         obj = {
           id: p.id,
@@ -694,22 +724,17 @@ export class CapitaleScene {
       }
       const hatch = this.ringHatch.get(i);
       if (hatch) hatch.visible = d.mortgaged;
-      const uf = this.utilityFlags.get(i);
-      if (uf) {
-        uf.visible = d.owner !== null;
-        if (d.owner) ((uf.getObjectByName("cloth") as THREE.Mesh).material as THREE.MeshStandardMaterial).color.set(colorOf(d.owner));
-      }
       const lot = this.lots.get(i);
-      if (lot) this.syncLot(lot, d, colorOf(d.owner), first);
+      if (lot) this.syncLot(lot, d, colorOf, first);
     }
   }
 
-  private syncLot(o: LotObj, d: SceneDeed, color: string, first: boolean) {
+  private syncLot(o: LotObj, d: SceneDeed, colorOf: (id: string | null) => string, first: boolean) {
     const prev = o.shown;
     const animate = !first && !this.opts.reduced;
-    const property = o.lot.kind === "property";
-    const halfW = (o.lot.side === "bottom" || o.lot.side === "top" ? o.lot.w : o.lot.d) / 2;
-    // Le propriétaire : son drapeau, le liseré de la parcelle ; le panneau « à vendre » s'en va
+    const half = L.QUAD / 2;
+    const color = colorOf(d.owner);
+    // Le propriétaire : son drapeau au fond, le liseré du lieu ; le panneau « à vendre » s'en va
     if (d.owner !== prev.owner) {
       if (o.flag) this.removeObj(o.flag, animate);
       if (o.outline) {
@@ -720,11 +745,11 @@ export class CapitaleScene {
       o.outline = null;
       if (d.owner) {
         o.flag = B.flag(color);
-        o.flag.position.set(halfW - 0.07, 0, L.DEPTH / 2 - 0.3);
+        o.flag.position.set(half - 0.07, 0, -half + 0.07);
         o.root.add(o.flag);
         this.flags.push(o.flag.getObjectByName("cloth")!);
         if (animate) this.popIn(o.flag);
-        o.outline = this.outline(halfW * 2, L.DEPTH, color);
+        o.outline = this.outline(L.QUAD, L.QUAD, color);
         o.root.add(o.outline);
       }
       if (o.sale) o.sale.visible = d.owner === null;
@@ -735,50 +760,136 @@ export class CapitaleScene {
       if (o.fence) this.removeObj(o.fence, animate);
       o.fence = null;
       if (d.mortgaged) {
-        o.fence = B.fence(halfW * 2 - 0.08, L.DEPTH - 0.32);
-        o.fence.position.z = -0.12;
+        o.fence = B.fence(L.QUAD - 0.12, L.QUAD - L.STRIP - 0.1);
+        o.fence.position.z = -L.STRIP / 2 + 0.02;
         o.root.add(o.fence);
         if (animate) this.popIn(o.fence);
       }
     }
-    // Les constructions
-    if (property && d.houses !== prev.houses) {
-      const group = o.lot.group!;
-      if (d.houses === HOTEL) {
-        o.houses.forEach((h, k) => this.removeObj(h, animate, k * 0.06));
-        o.houses = [];
-        if (!o.tower) {
-          o.tower = B.skyscraper(group, color, o.lot.square === 39);
-          o.tower.position.set(0, 0, -0.1);
-          o.root.add(o.tower);
-          if (animate) {
-            this.rise(o.tower, 1.1, 0.35);
-            this.dust(o.root, 0, -0.1, 0.55);
-            this.lookAtSoon(o.root.position.clone());
-          }
+    // Les bâtiments, case par case
+    const lots = d.lots ?? [];
+    for (let c = 0; c < o.cells.length; c++) {
+      const b = lots[c] ?? null;
+      const key = b ? `${b.kind}:${b.by}` : "";
+      if (key === o.keys[c]) continue;
+      o.keys[c] = key;
+      const old = o.cells[c];
+      if (old) {
+        this.living = this.living.filter((x) => !isDescendant(x.obj, old));
+        this.removeObj(old, animate);
+      }
+      o.cells[c] = null;
+      if (!b) continue;
+      const obj = this.buildingFor(b.kind, o.lot.group!, colorOf(b.by), o.lot.square);
+      const at = L.CELL_POS[c]!;
+      obj.position.set(at.x, 0, at.z);
+      o.root.add(obj);
+      o.cells[c] = obj;
+      if (animate) {
+        const tall = b.kind === "gratte" ? 1.1 : b.kind === "immeuble" ? 0.7 : 0.5;
+        if (b.kind === "maison" || b.kind === "immeuble" || b.kind === "gratte") this.rise(obj, tall);
+        else {
+          this.popIn(obj);
+          play("capBuild", { volume: 0.7 });
         }
-      } else {
-        if (o.tower) {
-          this.removeObj(o.tower, animate);
-          o.tower = null;
-        }
-        while (o.houses.length > d.houses) this.removeObj(o.houses.pop()!, animate);
-        while (o.houses.length < d.houses) {
-          const k = o.houses.length + 1;
-          const h = B.houseBuilding(group, k, color);
-          const slot = HOUSE_SLOTS[k - 1]!;
-          h.position.set(slot[0] * (halfW / 0.42), 0, slot[1]);
-          o.root.add(h);
-          o.houses.push(h);
-          if (animate) {
-            this.rise(h, 0.55, (o.houses.length - prev.houses - 1) * 0.12);
-            this.dust(o.root, h.position.x, h.position.z, 0.3);
-            this.lookAtSoon(o.root.position.clone());
-          }
-        }
+        this.dust(o.root, at.x, at.z, 0.3);
+        const p = L.cellCenter(o.lot, c);
+        this.lookAtSoon(new THREE.Vector3(p.x, 0, p.z));
       }
     }
-    o.shown = { ...d };
+    o.shown = { owner: d.owner, mortgaged: d.mortgaged };
+  }
+
+  /** Le modèle d'un bâtiment, avec ce qui bouge dedans */
+  private buildingFor(kind: BuildingKind, group: GroupId, color: string, square: number): THREE.Object3D {
+    switch (kind) {
+      case "maison":
+        return B.maison(group, color);
+      case "immeuble":
+        return B.immeuble(group, color);
+      case "gratte":
+        return B.gratteCiel(group, color, square === 39);
+      case "parc": {
+        const p = B.parc();
+        this.living.push({ kind: "jet", obj: p.jet });
+        return p.group;
+      }
+      case "stade":
+        return B.stade(color);
+      case "decharge": {
+        const p = B.decharge();
+        this.living.push({ kind: "birds", obj: p.birds });
+        return p.group;
+      }
+      case "centrale": {
+        const p = B.centrale();
+        this.living.push({ kind: "steam", obj: p.steam });
+        return p.group;
+      }
+    }
+  }
+
+  /** Le mode chantier : les cases possibles en vert, un aperçu du bâtiment sous la souris */
+  setBuildMode(mode: BuildMode | null) {
+    this.build = mode;
+    this.dirty = true;
+    const ok = new Set((mode?.cells ?? []).map((c) => `${c.square}:${c.cell}`));
+    for (const o of this.lots.values()) {
+      o.marks.forEach((m, c) => (m.visible = ok.has(`${o.lot.square}:${c}`)));
+    }
+    if (!mode) this.setGhost(null);
+    // On s'approche des cases possibles, sans perdre de vue les plus éloignées
+    this.buildFocus = null;
+    if (mode && mode.cells.length > 0) {
+      const sum = new THREE.Vector3();
+      for (const c of mode.cells) {
+        const p = L.cellCenter(L.LOT_OF[c.square]!, c.cell);
+        sum.add(new THREE.Vector3(p.x, 0, p.z));
+      }
+      sum.divideScalar(mode.cells.length);
+      let spread = 0;
+      for (const c of mode.cells) {
+        const p = L.cellCenter(L.LOT_OF[c.square]!, c.cell);
+        spread = Math.max(spread, Math.hypot(p.x - sum.x, p.z - sum.z));
+      }
+      sum.y = spread;
+      this.buildFocus = sum;
+    }
+    this.updateFrames();
+  }
+
+  /** L'aperçu translucide du bâtiment choisi, sur la case survolée */
+  private setGhost(at: { square: number; cell: number } | null) {
+    const key = at && this.build ? `${this.build.kind}:${at.square}:${at.cell}` : "";
+    if ((this.ghost?.key ?? "") === key) return;
+    this.opts.onHoverCell?.(at);
+    if (this.ghost) {
+      this.ghost.obj.parent?.remove(this.ghost.obj);
+      this.living = this.living.filter((x) => !isDescendant(x.obj, this.ghost!.obj));
+    }
+    this.ghost = null;
+    if (!at || !this.build) return;
+    const lot = L.LOT_OF[at.square]!;
+    const obj = this.buildingFor(this.build.kind, lot.group!, this.build.color, at.square);
+    const glass = new THREE.MeshStandardMaterial({
+      color: "#5be38d",
+      emissive: "#1b8a45",
+      transparent: true,
+      opacity: 0.72,
+      roughness: 0.3,
+      depthWrite: false,
+    });
+    obj.traverse((m) => {
+      const mesh = m as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.material = glass;
+        mesh.castShadow = false;
+      }
+    });
+    const p = L.CELL_POS[at.cell]!;
+    obj.position.set(p.x, 0.01, p.z);
+    this.lots.get(at.square)!.root.add(obj);
+    this.ghost = { key, obj };
   }
 
   /** Un liseré à plat autour de la parcelle */
@@ -816,7 +927,7 @@ export class CapitaleScene {
     this.potStack = null;
     if (count > 0) {
       this.potStack = B.coinStack(count);
-      this.potStack.position.set(L.LANDMARKS.park.x + 0.28, 0, L.LANDMARKS.park.z + 0.05);
+      this.potStack.position.set(L.POT_SPOT.x, 0, L.POT_SPOT.z);
       this.scene.add(this.potStack);
     }
   }
@@ -833,9 +944,13 @@ export class CapitaleScene {
       this.placeFrame(this.highlightLot, lot);
       this.marker.position.set(lot.x + lot.w / 2, 1, lot.z + lot.d / 2);
     }
-    const hv = this.hover && this.hover.square !== h ? this.hover.rect : null;
+    const hv = this.hover && this.hover.square !== h && !this.build ? this.hover.rect : null;
     this.hoverFrame.visible = hv !== null;
     if (hv) this.placeFrame(this.hoverFrame, hv);
+    // En mode chantier : la case survolée s'allume et montre le bâtiment
+    const over = this.build && this.hover?.cell != null ? { square: this.hover.square, cell: this.hover.cell } : null;
+    const valid = over && this.build!.cells.some((c) => c.square === over.square && c.cell === over.cell) ? over : null;
+    this.setGhost(valid);
   }
 
   // -------------------------------------------------------------------------
@@ -1086,7 +1201,23 @@ export class CapitaleScene {
       const m = this.water.material as THREE.MeshStandardMaterial;
       m.color.setHSL(0.56, 0.52, 0.5 + Math.sin(this.time * 1.3) * 0.03);
     }
-    if (this.jet) this.jet.scale.y = 0.75 + Math.sin(this.time * 3.1) * 0.25 + Math.sin(this.time * 7.7) * 0.06;
+    for (const l of this.living) {
+      if (l.kind === "jet") l.obj.scale.y = 0.75 + Math.sin(this.time * 3.1) * 0.25 + Math.sin(this.time * 7.7) * 0.06;
+      else if (l.kind === "birds") l.obj.rotation.y = this.time * 0.9;
+      else {
+        // La vapeur monte, grossit et s'efface, en boucle
+        for (const p of l.obj.children) {
+          const t = (this.time * 0.35 + (p.userData.phase as number)) % 1;
+          p.position.y = 0.32 + t * 0.35;
+          p.scale.setScalar(0.6 + t * 1.2);
+        }
+      }
+    }
+    // Le mode chantier : les cases possibles respirent
+    if (this.build) {
+      const a = 0.62 + Math.sin(this.time * 4) * 0.2;
+      for (const o of this.lots.values()) for (const m of o.marks) if (m.visible) (m.material as THREE.MeshBasicMaterial).opacity = a;
+    }
     if (this.siren) {
       const m = this.siren.material as THREE.MeshStandardMaterial;
       const on = Math.floor(this.time * 3) % 2 === 0;
@@ -1192,7 +1323,13 @@ export class CapitaleScene {
     const focusing = this.focus && this.time < this.focus.until;
     const goal = this.baseTarget.clone();
     let dist = this.distance * this.zoom;
-    if (focusing && this.focus) {
+    if (this.buildFocus) {
+      // Plus les cases sont groupées, plus on s'approche
+      const spread = this.buildFocus.y;
+      const near = THREE.MathUtils.clamp(0.42 + spread / 9, 0.5, 1) * (this.opts.phone ? 1 : 1.25);
+      goal.lerp(new THREE.Vector3(this.buildFocus.x, 0, this.buildFocus.z), this.opts.phone ? 0.7 : 0.45);
+      dist *= Math.min(1, near);
+    } else if (focusing && this.focus) {
       goal.lerp(this.focus.point, 0.08);
       dist *= 0.97;
     }
@@ -1248,10 +1385,25 @@ export class CapitaleScene {
     this.pointer.down = false;
     if (!wasClick) return;
     const hit = this.pick(e.clientX, e.clientY);
-    if (hit) this.opts.onSquare(hit.square);
+    if (!hit) return;
+    if (this.build) {
+      if (hit.cell === null || !this.build.cells.some((c) => c.square === hit.square && c.cell === hit.cell)) return;
+      // Au doigt, pas de survol : un premier toucher montre le bâtiment et son prix, le second le pose
+      const key = `${this.build.kind}:${hit.square}:${hit.cell}`;
+      if (e.pointerType !== "mouse" && this.ghost?.key !== key) {
+        this.hover = hit;
+        this.updateFrames();
+        return;
+      }
+      this.opts.onCell(hit.square, hit.cell);
+      return;
+    }
+    this.opts.onSquare(hit.square);
   };
 
-  private onLeave = () => {
+  private onLeave = (e: PointerEvent) => {
+    // Au doigt, le pointeur « sort » à chaque fin de toucher : on garde la case choisie
+    if (e.pointerType !== "mouse") return;
     this.hoverRay = null;
     if (this.hover) {
       this.hover = null;
@@ -1266,7 +1418,7 @@ export class CapitaleScene {
     this.dirty = true;
   };
 
-  private pick(clientX: number, clientY: number): { square: number; rect: L.WRect } | null {
+  private pick(clientX: number, clientY: number): { square: number; rect: L.WRect; cell: number | null } | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -1276,13 +1428,15 @@ export class CapitaleScene {
       while (o && o.userData.square === undefined && o.name !== "board") o = o.parent;
       if (!o) continue;
       if (o.userData.square !== undefined) {
+        // Un bâtiment : sa case, d'après le point touché au sol sous lui
         const square = o.userData.square as number;
-        return { square, rect: cityRect(square) ?? L.squareRect(square) };
+        const city = L.cityAt(h.point.x, h.point.z);
+        return { square, rect: cityRect(square) ?? L.squareRect(square), cell: city?.square === square ? city.cell : null };
       }
       const ring = L.squareAt(h.point.x, h.point.z);
-      if (ring !== null) return { square: ring, rect: L.squareRect(ring) };
-      const city = L.citySquareAt(h.point.x, h.point.z);
-      if (city !== null) return { square: city, rect: cityRect(city)! };
+      if (ring !== null) return { square: ring, rect: L.squareRect(ring), cell: null };
+      const city = L.cityAt(h.point.x, h.point.z);
+      if (city !== null) return { square: city.square, rect: cityRect(city.square)!, cell: city.cell };
       return null;
     }
     return null;
@@ -1293,7 +1447,7 @@ export class CapitaleScene {
     const hit = this.pick(this.hoverRay.x, this.hoverRay.y);
     this.hoverRay = null;
     this.renderer.domElement.style.cursor = hit ? "pointer" : "";
-    const same = hit && this.hover && hit.square === this.hover.square && hit.rect === this.hover.rect;
+    const same = hit && this.hover && hit.square === this.hover.square && hit.rect === this.hover.rect && hit.cell === this.hover.cell;
     if (!same && (hit || this.hover)) {
       this.hover = hit;
       this.updateFrames();
@@ -1312,6 +1466,14 @@ export class CapitaleScene {
     return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
   }
 
+  /** Où se trouve une case de parcelle à l'écran */
+  screenOfCell(square: number, cell: number): { x: number; y: number } {
+    const c = L.cellCenter(L.LOT_OF[square]!, cell);
+    const p = new THREE.Vector3(c.x, 0.05, c.z).project(this.camera);
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+  }
+
   setAnchors(anchors: Record<string, HTMLElement | null>) {
     this.anchors = anchors;
   }
@@ -1320,8 +1482,8 @@ export class CapitaleScene {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     const spots: Record<string, THREE.Vector3> = {
-      bank: new THREE.Vector3(L.LANDMARKS.bank.x, 0.45, L.LANDMARKS.bank.z),
-      pot: new THREE.Vector3(L.LANDMARKS.park.x + 0.28, 0.12, L.LANDMARKS.park.z),
+      bank: new THREE.Vector3(L.BANK_SPOT.x, 0.5, L.BANK_SPOT.z),
+      pot: new THREE.Vector3(L.POT_SPOT.x, 0.12, L.POT_SPOT.z),
     };
     for (const [name, el] of Object.entries(this.anchors)) {
       const at = spots[name];
@@ -1337,7 +1499,7 @@ export class CapitaleScene {
 
   /** Ce qui demande une image à chaque passage : une animation, un lancer, un pion en route, la caméra qui tourne */
   private busy() {
-    if (this.tweens.length > 0 || this.diceThrow) return true;
+    if (this.tweens.length > 0 || this.diceThrow || this.build) return true;
     for (const o of this.pawns.values()) if (o.hop || o.queue.length > 0) return true;
     return Math.abs(this.targetYaw() - this.yaw) > 0.002 || (this.focus !== null && this.time < this.focus.until + 1);
   }
@@ -1346,6 +1508,7 @@ export class CapitaleScene {
     // Le temps des images sautées n'est pas perdu : les voitures gardent leur vitesse à 30 images par seconde
     this.pending += this.clock.getDelta();
     this.frames++;
+    this.watchSpeed();
     const busy = this.busy();
     // Mode sobre : rien ne vit tout seul, on ne redessine que ce qui change.
     // Téléphone : la vie de la ville à 30 images par seconde, le reste à 60.
@@ -1375,6 +1538,22 @@ export class CapitaleScene {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Si les images tardent (moins de 40 par seconde pendant 3 s), on rend à la finesse de l'écran */
+  private watchSpeed() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.opts.phone || this.ratio <= dpr) return;
+    const dt = this.clock.elapsedTime - this.slow.time;
+    this.slow.frames++;
+    if (dt < 3) return;
+    const fps = this.slow.frames / dt;
+    this.slow = { time: this.clock.elapsedTime, frames: 0 };
+    if (fps < 40 && !this.opts.reduced) {
+      this.ratio = dpr;
+      this.renderer.setPixelRatio(dpr);
+      this.resize();
+    }
+  }
+
   dispose() {
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
@@ -1398,22 +1577,21 @@ export class CapitaleScene {
 
 const L_JAIL = 10;
 
-/** Où se posent les quatre maisons d'une parcelle (repère de la parcelle, façade vers +z) : devant les petites, derrière les grandes */
-const HOUSE_SLOTS: [number, number][] = [
-  [-0.21, 0.24],
-  [0.21, 0.22],
-  [-0.2, -0.33],
-  [0.2, -0.36],
-];
+/** La matière du plateau : le texte imprimé lu un cran plus net que ce que choisirait la carte graphique */
+function sharpMaterial(map: THREE.Texture): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ map, roughness: 0.82, metalness: 0 });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "vec4 sampledDiffuseColor = texture2D( map, vMapUv );",
+      "vec4 sampledDiffuseColor = texture2D( map, vMapUv, -0.6 );",
+    );
+  };
+  return m;
+}
 
-/** La parcelle de la ville qui représente une case (ou le coin de la place pour le barrage et les éoliennes) */
+/** Le lieu de la ville qui représente une case */
 function cityRect(square: number): L.WRect | null {
-  const lot = L.LOT_OF[square];
-  if (lot) return lot;
-  const spot = L.UTILITY_SPOT[square];
-  if (!spot) return null;
-  const s = L.PLAZA_CORNER.size;
-  return { x: spot.x - s / 2, z: spot.z - s / 2, w: s, d: s };
+  return L.LOT_OF[square] ?? null;
 }
 
 function isDescendant(o: THREE.Object3D, root: THREE.Object3D): boolean {
