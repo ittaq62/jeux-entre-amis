@@ -47,11 +47,11 @@ export function useCapitaleRoom(code: string) {
     if (!g || !seat) return;
     // C'est à moi : un petit signal, une seule fois par décision
     if (g.actor === seat && prev?.capitale?.decision !== g.decision && prev?.capitale?.actor !== seat) {
-      play("yourTurn", { delay: 400 });
+      play("capTurn", { delay: 400, volume: 0.8 });
       vibrate([25, 40, 25]);
     }
     if (prev?.status === "playing" && next.status === "finished" && g.ranks) {
-      play(g.ranks[seat] === 1 ? "win" : "lose", { delay: 1200 });
+      play(g.ranks[seat] === 1 ? "tourApplause" : "capLose", { delay: 1200 });
     }
   }, []);
 

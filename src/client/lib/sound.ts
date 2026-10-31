@@ -73,7 +73,12 @@ export type SoundName =
   | "capRent"
   | "capCoins"
   | "capJail"
-  | "capBigMoney";
+  | "capBigMoney"
+  | "capAuction"
+  | "capDeal"
+  | "capTurn"
+  | "capBankrupt"
+  | "capLose";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -148,6 +153,12 @@ const FILES: Record<SoundName, string[]> = {
   capCoins: ["cap-coins.mp3"],
   capJail: ["cap-jail.mp3"],
   capBigMoney: ["cap-big-money.mp3"],
+  // Sans cuivres : la cloche de l'enchère, la signature d'un marché, la sonnette du tour, le coup sourd de la faillite
+  capAuction: ["cap-auction.wav"],
+  capDeal: ["cap-deal.wav"],
+  capTurn: ["cap-turn.wav"],
+  capBankrupt: ["cap-bankrupt.wav"],
+  capLose: ["cap-lose.wav"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
