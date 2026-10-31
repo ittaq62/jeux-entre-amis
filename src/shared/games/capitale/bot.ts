@@ -1,5 +1,7 @@
 // Capitale : les bots. Facile achète un peu au hasard et garde peu de réserve ; Moyen est raisonnable ;
 // Fort valorise les groupes complets, bloque ceux des autres, construit vite et négocie.
+// Avec les bâtiments spéciaux : Facile pose des parcs et rase les nuisances, Moyen élève des tours et vise le joueur en tête,
+// Fort met ses nuisances là où elles coûtent le plus, bâtit tôt un stade et se protège quand on peut l'attaquer.
 // Aucune décision ne tire sur le hasard de la partie : le doute de Facile vient d'un calcul sur l'état.
 
 import {
@@ -10,23 +12,33 @@ import {
   HOTEL,
   mortgageInterest,
   mortgageValue,
+  specialPrice,
+  SPECIALS,
   SQUARES,
   STATIONS,
   unmortgageCost,
+  type GroupId,
+  type SpecialKind,
 } from "./board.ts";
 import {
   canBuild,
   canMortgage,
+  canPlaceSpecial,
+  canRaze,
   canSell,
   liquidity,
+  netWorth,
   ownedBy,
+  ownSpecial,
   ownsGroup,
   playerOf,
   rentFor,
+  tradeProblem,
   type BotLevel,
   type CapitaleAction,
   type CapitaleState,
   type Offer,
+  type Special,
   type Trade,
 } from "./engine.ts";
 
@@ -114,7 +126,12 @@ function costOfGiving(s: CapitaleState, from: string, to: string, index: number,
 // Le coup à jouer quand c'est au bot de décider
 // ---------------------------------------------------------------------------
 
-export function botAction(s: CapitaleState, playerId: string, level: BotLevel, opts: { allowTrade?: boolean } = {}): CapitaleAction | null {
+export function botAction(
+  s: CapitaleState,
+  playerId: string,
+  level: BotLevel,
+  opts: { allowTrade?: boolean; allowAttack?: boolean } = {},
+): CapitaleAction | null {
   const p = playerOf(s, playerId);
   if (!p || p.bankrupt) return null;
   if (s.step === "debt") return s.debts[0]?.debtor === playerId ? raiseMoney(s, playerId, level) : null;
@@ -153,16 +170,19 @@ export function botAction(s: CapitaleState, playerId: string, level: BotLevel, o
       return buy ? { type: "buy" } : { type: "decline" };
     }
     case "manage":
-      return manage(s, playerId, level, opts.allowTrade ?? false) ?? { type: "endTurn" };
+      return manage(s, playerId, level, opts.allowTrade ?? false, opts.allowAttack ?? false) ?? { type: "endTurn" };
     default:
       return null;
   }
 }
 
 /** Gestion de fin de tour : lever des hypothèques, construire, éventuellement proposer un échange */
-function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean): CapitaleAction | null {
+function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean, allowAttack: boolean): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   const keep = reserve(s, playerId, level);
+  // Une nuisance chez soi qui coûte plus qu'elle ne vaut : on la fait raser
+  const clean = s.settings.specials ? razeNuisance(s, playerId, level, keep) : null;
+  if (clean) return clean;
   // D'abord les hypothèques des groupes complets : sans elles, pas de construction
   for (const i of ownedBy(s, playerId)) {
     const d = s.deeds[i]!;
@@ -186,6 +206,11 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
         }
       }
     }
+    // Les bâtiments spéciaux : pour Fort, entre les 3 maisons et les hôtels ; pour les autres, une fois tout bâti
+    if (cap === tiers[0] && s.settings.specials) {
+      const special = specialMove(s, playerId, level, keep, allowAttack);
+      if (special) return special;
+    }
   }
   // Riche et sans rien à construire : lever les autres hypothèques
   for (const i of ownedBy(s, playerId)) {
@@ -193,6 +218,107 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
   }
   if (allowTrade && level !== "facile") return proposeTrade(s, playerId, level);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Les bâtiments spéciaux
+// ---------------------------------------------------------------------------
+
+/** L'état avec un autre bâtiment spécial (ou aucun) sur une case : pour comparer les loyers, sans toucher à la partie */
+function withSpecial(s: CapitaleState, index: number, special: Special | undefined): CapitaleState {
+  return { ...s, deeds: s.deeds.map((d, k) => (k === index && d ? { ...d, special } : d)) };
+}
+
+/** Ce que rapportent à un joueur ses terrains d'un quartier, à chaque passage d'un adversaire */
+function districtIncome(s: CapitaleState, playerId: string, group: GroupId): number {
+  return GROUPS[group].squares.filter((i) => s.deeds[i]!.owner === playerId).reduce((n, i) => n + rentFor(s, i, { diceTotal: 8 }), 0);
+}
+
+/** Une nuisance sur ses terrains : la faire raser si les loyers perdus valent plus que la démolition */
+function razeNuisance(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
+  const p = playerOf(s, playerId)!;
+  for (const i of ownedBy(s, playerId)) {
+    const sp = s.deeds[i]!.special;
+    if (!sp || !SPECIALS[sp.kind].nuisance || canRaze(s, playerId, i) !== null) continue;
+    const cost = specialPrice(sp.kind, i);
+    if (p.cash - cost < keep) continue;
+    const group = groupOf(i)!.id;
+    const lost = districtIncome(withSpecial(s, i, undefined), playerId, group) - districtIncome(s, playerId, group);
+    const factor = level === "fort" ? 0.5 : level === "moyen" ? 0.8 : 0.3;
+    if (lost > 0 && lost >= cost * factor) return { type: "raze", square: i };
+  }
+  return null;
+}
+
+/** Un terrain libre d'un quartier où poser son bâtiment, s'il y en a un */
+function spotIn(s: CapitaleState, playerId: string, group: GroupId, kind: SpecialKind): number | null {
+  return GROUPS[group].squares.find((i) => canPlaceSpecial(s, playerId, i, kind) === null) ?? null;
+}
+
+/** Un bâtiment spécial à poser : la tour, un parc, un stade, puis une nuisance chez un adversaire */
+function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number, allowAttack: boolean): CapitaleAction | null {
+  if (s.specialTurn === s.turnId) return null;
+  const p = playerOf(s, playerId)!;
+  const affords = (kind: SpecialKind, at: number, margin = 1) => p.cash - specialPrice(kind, at) >= keep * margin;
+  const full = GROUP_ORDER.filter((g) => ownsGroup(s, playerId, g));
+  const others = s.players.filter((x) => x.id !== playerId && !x.bankrupt);
+
+  // La tour Capitale, sur le quartier où elle rapporte le plus
+  if (level !== "facile") {
+    let best: { at: number; gain: number } | null = null;
+    for (const g of full) {
+      const at = spotIn(s, playerId, g, "tour");
+      if (at === null || !affords("tour", at)) continue;
+      const gain = districtIncome(withSpecial(s, at, { kind: "tour", by: playerId }), playerId, g) - districtIncome(s, playerId, g);
+      if (gain >= specialPrice("tour", at) * (level === "fort" ? 0.4 : 0.6) && (!best || gain > best.gain)) best = { at, gain };
+    }
+    if (best) return { type: "special", square: best.at, kind: "tour" };
+  }
+
+  // Le parc, sur le quartier qui a le plus à perdre ; Fort ne s'en soucie que si quelqu'un peut l'attaquer
+  const threat = others.some((x) => x.cash >= specialPrice("decharge", 0) + 100);
+  if (level !== "fort" || threat) {
+    const minIncome = level === "facile" ? 1 : level === "moyen" ? 300 : 400;
+    let best: { at: number; income: number } | null = null;
+    for (const g of full) {
+      const at = spotIn(s, playerId, g, "parc");
+      const income = districtIncome(s, playerId, g);
+      if (at === null || income < minIncome || !affords("parc", at)) continue;
+      if (level === "facile" && p.cash < 500) continue;
+      if (!best || income > best.income) best = { at, income };
+    }
+    if (best) return { type: "special", square: best.at, kind: "parc" };
+  }
+
+  // Fort bâtit tôt son stade, sur un terrain déjà lié à un groupe complet s'il peut (il bloque les échanges du terrain)
+  if (level === "fort") {
+    const spots = ownedBy(s, playerId)
+      .filter((i) => canPlaceSpecial(s, playerId, i, "stade") === null && affords("stade", i))
+      .sort((a, b) => Number(ownsGroup(s, playerId, groupOf(b)!.id)) - Number(ownsGroup(s, playerId, groupOf(a)!.id)) || a - b);
+    if (spots[0] !== undefined) return { type: "special", square: spots[0], kind: "stade" };
+  }
+
+  // Les nuisances : Moyen vise le plus riche, Fort cherche le quartier où elle fait le plus de dégâts
+  if (!allowAttack || level === "facile" || others.length === 0) return null;
+  const leader = others.reduce((a, b) => (netWorth(s, b.id) > netWorth(s, a.id) ? b : a));
+  let best: { at: number; kind: SpecialKind; score: number } | null = null;
+  for (const victim of level === "fort" ? others : [leader]) {
+    for (const g of GROUP_ORDER) {
+      if (!GROUPS[g].squares.some((i) => s.deeds[i]!.owner === victim.id)) continue;
+      for (const kind of ["centrale", "decharge"] as const) {
+        const at = GROUPS[g].squares.find((i) => s.deeds[i]!.owner === victim.id && canPlaceSpecial(s, playerId, i, kind) === null);
+        if (at === undefined || !affords(kind, at, level === "fort" ? 1 : 1.3)) continue;
+        const after = withSpecial(s, at, { kind, by: playerId });
+        // Les dégâts chez la victime, moins ce qu'on y perd soi-même si on a un terrain dans le quartier
+        const damage =
+          districtIncome(s, victim.id, g) - districtIncome(after, victim.id, g) - (districtIncome(s, playerId, g) - districtIncome(after, playerId, g));
+        const price = specialPrice(kind, at);
+        const score = (damage - price) * (victim === leader ? 1.3 : 1);
+        if (damage >= price * 2 && (!best || score > best.score)) best = { at, kind, score };
+      }
+    }
+  }
+  return best ? { type: "special", square: best.at, kind: best.kind } : null;
 }
 
 /** Trouver de quoi payer : vendre des constructions, puis hypothéquer le moins utile, sinon la faillite */
@@ -216,10 +342,15 @@ function raiseMoney(s: CapitaleState, playerId: string, level: BotLevel): Capita
     // Avant d'hypothéquer un groupe complet, on vend ses maisons (le moteur l'exige)
     if (!(g && ownsGroup(s, playerId, g.id))) return { type: "mortgage", square: first };
   }
+  // Ses bâtiments spéciaux se revendent à moitié prix : le parc et le stade d'abord, la tour après les maisons
+  const specials = mine.filter((i) => ownSpecial(s, i) !== null);
+  const light = specials.find((i) => ownSpecial(s, i) !== "tour");
+  if (light !== undefined) return { type: "raze", square: light };
   const sellable = mine
     .filter((i) => canSell(s, playerId, i) === null)
     .sort((a, b) => (groupOf(a)?.houseCost ?? 0) - (groupOf(b)?.houseCost ?? 0));
   if (sellable.length > 0) return { type: "sell", square: sellable[0]! };
+  if (specials[0] !== undefined) return { type: "raze", square: specials[0] };
   if (first !== undefined) return { type: "mortgage", square: first };
   return { type: "bankrupt" };
 }
@@ -274,7 +405,7 @@ function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): Capi
     if (missing.length !== 1) continue;
     const target = missing[0]!;
     const owner = s.deeds[target]!.owner;
-    if (!owner || s.deeds[target]!.houses > 0) continue;
+    if (!owner || tradeProblem(s, owner, target) !== null) continue;
     const other = playerOf(s, owner);
     if (!other || other.bankrupt) continue;
     // Assez pour que l'autre (s'il raisonne comme un bot moyen) y trouve son compte
