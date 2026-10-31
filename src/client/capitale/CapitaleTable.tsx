@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BUYABLE, JAIL_FINE, SQUARES, type DeckId } from "../../shared/games/capitale/board.ts";
-import type { CapitaleAction, CapitaleEvent, Trade } from "../../shared/games/capitale/engine.ts";
+import type { CapitaleAction, CapitaleEvent, Deed, Trade } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { CapitaleClientMessage, CapitaleRoomView, SeatView } from "../../shared/protocol.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -17,10 +17,11 @@ import { preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { MusicToggle } from "../tour/TourParts.tsx";
-import { Board } from "./Board.tsx";
+import { Board3D } from "./Board3D.tsx";
 import { colorOf, money } from "./boardUi.ts";
 import { CapitaleGameOver } from "./CapitaleGameOver.tsx";
 import { CAPITALE_SOUNDS, eventTimes, HOP_MS } from "./fx.ts";
+import { breakdown, Note, Wallet } from "./Money.tsx";
 import { CardReveal, DeedSheet, Offers, TitlesSheet, TradeModal, type TradeDraft } from "./Panels.tsx";
 import type { EventBatch } from "./useCapitaleRoom.ts";
 
@@ -40,8 +41,11 @@ interface Bill {
   id: number;
   from: { x: number; y: number };
   to: { x: number; y: number };
-  amount: number;
+  value: number;
 }
+
+/** Ce qui change les titres : on les montre changer à ce moment-là, pas avant */
+const DEED_EVENTS = new Set<CapitaleEvent["type"]>(["buy", "auctionEnd", "build", "sell", "mortgage", "unmortgage", "trade", "bankrupt"]);
 
 let billSeq = 0;
 
@@ -55,10 +59,9 @@ function useViewport() {
   return size;
 }
 
-/** Le centre d'un repère à l'écran : l'avatar d'un joueur, ou la banque au milieu du plateau */
+/** Le centre d'un repère à l'écran : la liasse d'un joueur, la banque ou la cagnotte sur le plateau */
 function anchorOf(account: string): { x: number; y: number } | null {
-  const id = account === "pot" ? "bank" : account;
-  const el = document.querySelector(`[data-cap-anchor="${CSS.escape(id)}"]`);
+  const el = document.querySelector(`[data-cap-anchor="${CSS.escape(account)}"]`);
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -123,7 +126,11 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [cash, setCash] = useState<Record<string, number>>(() => Object.fromEntries(g.players.map((p) => [p.id, p.cash])));
   const [dice, setDice] = useState<{ values: [number, number] | null; rollId: number }>({ values: g.dice, rollId: 0 });
   const [card, setCard] = useState<{ deck: DeckId; card: number; player: string } | null>(null);
+  const [drawn, setDrawn] = useState<{ deck: DeckId; id: number } | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [deeds, setDeeds] = useState<(Deed | null)[]>(() => g.deeds);
+  const [turn, setTurn] = useState<string | null>(() => g.players[g.turn]?.id ?? null);
+  const deedsPending = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const lastBatch = useRef(0);
@@ -136,6 +143,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       const now = truth.current;
       setShown(Object.fromEntries(now.players.map((p) => [p.id, p.position])));
       setCash(Object.fromEntries(now.players.map((p) => [p.id, p.cash])));
+      setDeeds(now.deeds);
+      setTurn(now.players[now.turn]?.id ?? null);
+      deedsPending.current = false;
     };
     if (reduced || document.visibilityState !== "visible") {
       sync();
@@ -144,6 +154,20 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       return;
     }
     const times = eventTimes(batch.events);
+    // Les titres et le tour changent au moment de l'événement, pas à l'arrivée du lot
+    const deedAt = batch.events.findIndex((e) => DEED_EVENTS.has(e.type) && (e.type !== "trade" || e.status === "accepted"));
+    if (deedAt >= 0) {
+      deedsPending.current = true;
+      later(() => {
+        deedsPending.current = false;
+        setDeeds(truth.current.deeds);
+      }, times[deedAt]!);
+    } else setDeeds(truth.current.deeds);
+    const turnAt = batch.events.findLastIndex((e) => e.type === "turn");
+    if (turnAt >= 0) {
+      const ev = batch.events[turnAt]!;
+      if (ev.type === "turn") later(() => setTurn(ev.player), times[turnAt]!);
+    } else setTurn(truth.current.players[truth.current.turn]?.id ?? null);
     batch.events.forEach((e: CapitaleEvent, i) => {
       const t = times[i]!;
       if (e.type === "dice") later(() => setDice((d) => ({ values: e.dice, rollId: d.rollId + 1 })), t);
@@ -167,19 +191,30 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           const from = anchorOf(e.from);
           const to = anchorOf(e.to);
           if (from && to && e.amount > 0) {
-            const id = ++billSeq;
-            setBills((b) => [...b.slice(-8), { id, from, to, amount: e.amount }]);
-            later(() => setBills((b) => b.filter((x) => x.id !== id)), 900);
+            // De vrais billets, un par un : 350 ₣, ce sont trois billets de 100 et un de 50
+            breakdown(e.amount, 8).forEach((value, k) => {
+              later(() => {
+                const id = ++billSeq;
+                setBills((b) => [...b.slice(-16), { id, from, to, value }]);
+                later(() => setBills((b) => b.filter((x) => x.id !== id)), 1000);
+              }, k * 75);
+            });
           }
         }, t);
       } else if (e.type === "card") {
-        later(() => setCard({ deck: e.deck, card: e.card, player: e.player }), t);
-        later(() => setCard((c) => (c && c.deck === e.deck && c.card === e.card ? null : c)), t + 3200);
+        later(() => setDrawn({ deck: e.deck, id: batch.id * 100 + i }), t);
+        later(() => setCard({ deck: e.deck, card: e.card, player: e.player }), t + 380);
+        later(() => setCard((c) => (c && c.deck === e.deck && c.card === e.card ? null : c)), t + 3600);
       }
     });
     // À la fin du lot, on se cale sur l'état (au cas où un détail aurait échappé)
-    later(sync, Math.max(0, ...times) + 1400);
+    later(sync, Math.max(0, ...times) + 1600);
   }, [batch, reduced]);
+
+  // Une mise à jour sans événement (une reconnexion) : les titres suivent tout de suite
+  useEffect(() => {
+    if (!deedsPending.current) setDeeds(g.deeds);
+  }, [g.deeds]);
 
   // ---------------------------------------------------------------------------
   // La situation
@@ -192,7 +227,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const timeLeft = useCountdown(room.endsAt, serverOffset);
   const auctionLeft = useCountdown(room.auctionDeadline, serverOffset);
   const highlight = g.auction ? g.auction.square : g.step === "buy" ? g.pendingBuy : null;
-  const boardPx = phone ? Math.min(w - 12, 620) : Math.max(420, Math.min(h - 96, w - 440, 860));
+  const boardW = phone ? w - 12 : Math.max(420, w - 440);
+  const boardH = phone ? Math.round((w - 12) * 0.95) : Math.max(420, h - 84);
 
   const startCounter = (t: Trade) => setDraft({ partner: t.from, give: t.get, get: t.give, replaces: t.id });
 
@@ -264,23 +300,36 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
 
       <main className={`cap-stage ${phone ? "is-phone" : ""}`}>
         {phone && <Players g={g} room={room} seat={seat} cash={cash} serverOffset={serverOffset} compact />}
-        <div className="cap-board-area" style={{ width: boardPx, height: phone ? boardPx : undefined }}>
-          <div className="cap-board-box" style={{ width: boardPx, height: boardPx }}>
-            <Board
-              g={g}
-              shown={shown}
-              dice={dice}
-              tilted={!phone && !reduced}
-              compact={boardPx < 560}
-              seat={seat}
-              highlight={highlight}
-              onSquare={setDeed}
-            />
-            <AnimatePresence>{card && <CardReveal card={card} who={card.player === me ? null : name(card.player)} />}</AnimatePresence>
-          </div>
+        <div className="cap-board-area" style={{ width: boardW, height: boardH }}>
+          <Board3D
+            g={g}
+            shown={shown}
+            deeds={deeds}
+            turn={turn}
+            dice={dice}
+            card={drawn}
+            highlight={highlight}
+            phone={phone}
+            reduced={reduced}
+            onSquare={setDeed}
+          />
+          <p className="cap-board-info">
+            Banque : {g.bankHouses} maison{g.bankHouses > 1 ? "s" : ""} · {g.bankHotels} hôtel{g.bankHotels > 1 ? "s" : ""}
+            {g.settings.freeParking && g.pot > 0 && <> · cagnotte {money(g.pot)}</>}
+          </p>
+          <AnimatePresence>{card && <CardReveal card={card} who={card.player === me ? null : name(card.player)} />}</AnimatePresence>
         </div>
         <aside className="cap-side">
           {!phone && <Players g={g} room={room} seat={seat} cash={cash} serverOffset={serverOffset} />}
+          {phone && meP && !meP.bankrupt && (
+            <div className="cap-my-wallet panel" data-cap-anchor={me ?? undefined}>
+              <span className="hint">Ton argent</span>
+              <strong className="num">
+                <Rolling value={cash[me!] ?? meP.cash} />
+              </strong>
+              <Wallet cash={cash[me!] ?? meP.cash} />
+            </div>
+          )}
           <Offers g={g} me={me} seat={seat} act={act} onCounter={startCounter} />
           <ActionBar
             g={g}
@@ -308,18 +357,19 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             <motion.span
               key={b.id}
               className="cap-bill"
-              initial={{ x: b.from.x, y: b.from.y, scale: 0.6, opacity: 0, rotate: -12 }}
+              initial={{ x: b.from.x, y: b.from.y, scale: 0.5, opacity: 0, rotate: -18 }}
               animate={{
-                x: [b.from.x, (b.from.x + b.to.x) / 2, b.to.x],
-                y: [b.from.y, Math.min(b.from.y, b.to.y) - 60, b.to.y],
-                scale: [0.6, 1, 0.8],
-                opacity: [0, 1, 0.9],
-                rotate: [-12, 6, 0],
+                x: [b.from.x, (b.from.x + b.to.x) / 2 + ((b.id % 5) - 2) * 14, b.to.x],
+                y: [b.from.y, Math.min(b.from.y, b.to.y) - 70 - (b.id % 3) * 16, b.to.y],
+                scale: [0.5, 1.15, 0.75],
+                opacity: [0, 1, 0.85],
+                rotate: [-18, 8 + (b.id % 4) * 6, -4],
+                scaleX: [1, 0.55, 1],
               }}
               exit={{ opacity: 0, scale: 0.4 }}
-              transition={{ duration: 0.75, ease: "easeInOut" }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
             >
-              {b.amount}
+              <Note value={b.value} size="lg" />
             </motion.span>
           ))}
         </AnimatePresence>
@@ -414,7 +464,7 @@ function Players({
             className={`cap-player ${acting ? "is-acting" : ""} ${g.players[g.turn]?.id === p.id ? "is-turn" : ""} ${p.bankrupt ? "is-out" : ""} ${p.id === g.you ? "is-me" : ""}`}
             style={{ ["--pawn" as string]: colorOf(g, p.id) }}
           >
-            <span className="cap-player-avatar" data-cap-anchor={p.id}>
+            <span className="cap-player-avatar" data-cap-anchor={compact && p.id === g.you ? undefined : p.id}>
               {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={compact ? 30 : 38} />}
               {acting && room.deadline && (
                 <span className="cap-player-timer">
@@ -441,6 +491,7 @@ function Players({
                         .join(" · ")}
                 </span>
               )}
+              {!compact && !p.bankrupt && <Wallet cash={cash[p.id] ?? p.cash} />}
               {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
             </span>
             {!compact && (
