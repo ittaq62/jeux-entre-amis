@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BUYABLE, JAIL_FINE, SQUARES, type DeckId } from "../../shared/games/capitale/board.ts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BUYABLE, RESIDENTIAL, SPECIAL_ORDER, SQUARES, type BuildingKind, type DeckId } from "../../shared/games/capitale/board.ts";
 import type { CapitaleAction, CapitaleEvent, Deed, Trade } from "../../shared/games/capitale/engine.ts";
+import { batchMs } from "../../shared/games/capitale/timing.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { CapitaleClientMessage, CapitaleRoomView, SeatView } from "../../shared/protocol.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -17,12 +18,15 @@ import { preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { MusicToggle } from "../tour/TourParts.tsx";
+import { ActionDock } from "./ActionDock.tsx";
 import { Board3D } from "./Board3D.tsx";
 import { colorOf, money } from "./boardUi.ts";
+import { BuildTray, validCells, type CellRef } from "./BuildTray.tsx";
 import { CapitaleGameOver } from "./CapitaleGameOver.tsx";
 import { CAPITALE_SOUNDS, eventTimes, HOP_MS } from "./fx.ts";
-import { breakdown, Note, Wallet } from "./Money.tsx";
-import { CardReveal, DeedSheet, Offers, TitlesSheet, TradeModal, type TradeDraft } from "./Panels.tsx";
+import { breakdown, Hand, Note, Wallet } from "./Money.tsx";
+import { describe, Journal, Narrator, pushLine, type Line } from "./Narration.tsx";
+import { CardReveal, DeedSheet, manageRights, Offers, TitlesSheet, TradeModal, type TradeDraft } from "./Panels.tsx";
 import type { EventBatch } from "./useCapitaleRoom.ts";
 
 interface Props {
@@ -45,9 +49,20 @@ interface Bill {
 }
 
 /** Ce qui change les titres : on les montre changer à ce moment-là, pas avant */
-const DEED_EVENTS = new Set<CapitaleEvent["type"]>(["buy", "auctionEnd", "build", "sell", "mortgage", "unmortgage", "trade", "bankrupt"]);
+const DEED_EVENTS = new Set<CapitaleEvent["type"]>([
+  "buy",
+  "auctionEnd",
+  "build",
+  "sell",
+  "raze",
+  "mortgage",
+  "unmortgage",
+  "trade",
+  "bankrupt",
+]);
 
 let billSeq = 0;
+let lineSeq = 0;
 
 function useViewport() {
   const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
@@ -102,8 +117,12 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
   const [deed, setDeed] = useState<number | null>(null);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
+  /** Le chantier : le bâtiment choisi, et la rue visée si on vient de sa fiche */
+  const [building, setBuilding] = useState<{ kind: BuildingKind; focus: number | null } | null>(null);
+  const [hoverCell, setHoverCell] = useState<CellRef | null>(null);
   const seat = useCallback((id: string) => room.seats.find((s) => s.id === id), [room.seats]);
   const act = useCallback((action: CapitaleAction) => send({ t: "action", action }), [send]);
 
@@ -130,10 +149,18 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [bills, setBills] = useState<Bill[]>([]);
   const [deeds, setDeeds] = useState<(Deed | null)[]>(() => g.deeds);
   const [turn, setTurn] = useState<string | null>(() => g.players[g.turn]?.id ?? null);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [deltas, setDeltas] = useState<{ id: number; player: string; amount: number }[]>([]);
+  /** Le plateau montre encore un coup : les boutons attendent la fin */
+  const [busy, setBusy] = useState(false);
+  const [busyTick, setBusyTick] = useState(0);
+  const busyUntil = useRef(0);
   const deedsPending = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const lastBatch = useRef(0);
+  const nameRef = useRef<(id: string) => string>(() => "?");
+  nameRef.current = (id: string) => (id === g.you ? "toi" : (room.seats.find((s) => s.id === id)?.name ?? "?"));
 
   useEffect(() => {
     if (batch.id === 0 || batch.id === lastBatch.current) return;
@@ -147,13 +174,25 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       setTurn(now.players[now.turn]?.id ?? null);
       deedsPending.current = false;
     };
+    const say = (ev: CapitaleEvent) => {
+      const line = describe(ev, { g: truth.current, name: (id) => nameRef.current(id) });
+      if (line) setLines((l) => pushLine(l, line, ++lineSeq));
+    };
     if (reduced || document.visibilityState !== "visible") {
       sync();
+      batch.events.forEach(say);
       const lastDice = batch.events.findLast((e) => e.type === "dice");
       if (lastDice?.type === "dice") setDice((d) => ({ values: lastDice.dice, rollId: d.rollId }));
       return;
     }
-    const times = eventTimes(batch.events);
+    // Un lot qui arrive pendant qu'on montre le précédent attend son tour : jamais deux coups à la fois à l'écran
+    const now = Date.now();
+    const offset = Math.max(0, busyUntil.current - now);
+    const end = now + offset + batchMs(batch.events) + 250;
+    busyUntil.current = end;
+    setBusy(true);
+    setBusyTick((n) => n + 1);
+    const times = eventTimes(batch.events).map((t) => t + offset);
     // Les titres et le tour changent au moment de l'événement, pas à l'arrivée du lot
     const deedAt = batch.events.findIndex((e) => DEED_EVENTS.has(e.type) && (e.type !== "trade" || e.status === "accepted"));
     if (deedAt >= 0) {
@@ -170,6 +209,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
     } else setTurn(truth.current.players[truth.current.turn]?.id ?? null);
     batch.events.forEach((e: CapitaleEvent, i) => {
       const t = times[i]!;
+      // La phrase arrive avec l'événement ; pour les dés, quand ils se sont posés
+      later(() => say(e), e.type === "dice" ? t + 1250 : t);
       if (e.type === "dice") later(() => setDice((d) => ({ values: e.dice, rollId: d.rollId + 1 })), t);
       else if (e.type === "move") {
         if (e.jump || e.steps === 0) later(() => setShown((s) => ({ ...s, [e.player]: e.to })), t);
@@ -188,6 +229,15 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             if (e.to in next) next[e.to] = (next[e.to] ?? 0) + e.amount;
             return next;
           });
+          // + et − qui montent des portraits
+          const pops = [
+            ...(e.from !== "bank" && e.from !== "pot" ? [{ player: e.from, amount: -e.amount }] : []),
+            ...(e.to !== "bank" && e.to !== "pot" ? [{ player: e.to, amount: e.amount }] : []),
+          ].map((x) => ({ ...x, id: ++billSeq }));
+          if (pops.length > 0) {
+            setDeltas((d) => [...d.slice(-8), ...pops]);
+            later(() => setDeltas((d) => d.filter((x) => !pops.includes(x))), 1800);
+          }
           const from = anchorOf(e.from);
           const to = anchorOf(e.to);
           if (from && to && e.amount > 0) {
@@ -208,8 +258,18 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       }
     });
     // À la fin du lot, on se cale sur l'état (au cas où un détail aurait échappé)
-    later(sync, Math.max(0, ...times) + 1600);
+    later(sync, end - now + 400);
   }, [batch, reduced]);
+
+  // La fin du coup à l'écran : les boutons reviennent (un nouveau lot repousse l'échéance)
+  useEffect(() => {
+    if (!busy) return;
+    const t = setTimeout(
+      () => (busyUntil.current <= Date.now() + 20 ? setBusy(false) : setBusyTick((n) => n + 1)),
+      Math.max(0, busyUntil.current - Date.now()) + 30,
+    );
+    return () => clearTimeout(t);
+  }, [busy, busyTick]);
 
   // Une mise à jour sans événement (une reconnexion) : les titres suivent tout de suite
   useEffect(() => {
@@ -222,13 +282,31 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const mySeat = me ? seat(me) : undefined;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
   const myTurn = g.actor !== null && g.actor === me;
-  const turnPlayer = g.players[g.turn];
   const name = (id: string | null | undefined) => (id ? (seat(id)?.name ?? "?") : "?");
   const timeLeft = useCountdown(room.endsAt, serverOffset);
   const auctionLeft = useCountdown(room.auctionDeadline, serverOffset);
   const highlight = g.auction ? g.auction.square : g.step === "buy" ? g.pendingBuy : null;
   const boardW = phone ? w - 12 : Math.max(420, w - 440);
-  const boardH = phone ? Math.round((w - 12) * 0.95) : Math.max(420, h - 84);
+  // Sur PC, une bande sous le plateau pour les billets en main
+  const boardH = phone ? Math.round((w - 12) * 0.95) : Math.max(400, h - 84 - 104);
+  const canBuild = Boolean(me && myTurn && manageRights(g, me) === "full" && !g.auction);
+  const tokenKey = room.seats.map((s) => `${s.id}:${s.token ?? ""}`).join(",");
+  const tokens = useMemo(() => Object.fromEntries(room.seats.map((s) => [s.id, s.token])), [tokenKey]);
+
+  // Le chantier : il se ferme quand ce n'est plus le moment de bâtir
+  useEffect(() => {
+    if (!canBuild) setBuilding(null);
+  }, [canBuild]);
+  const kindsInPlay = g.settings.specials ? [...RESIDENTIAL, ...SPECIAL_ORDER] : RESIDENTIAL;
+  const openBuild = (focus: number | null = null) => {
+    if (!me) return;
+    const firstKind = kindsInPlay.find((k) => validCells(g, me, k).some((c) => focus === null || c.square === focus)) ?? "maison";
+    setBuilding({ kind: firstKind, focus });
+    setDeed(null);
+    setTitlesOpen(false);
+  };
+  const buildCells =
+    building && me ? validCells(g, me, building.kind).filter((c) => building.focus === null || c.square === building.focus) : [];
 
   const startCounter = (t: Trade) => setDraft({ partner: t.from, give: t.get, get: t.give, replaces: t.id });
 
@@ -252,6 +330,14 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           </span>
         </div>
         <div className="table-top-actions">
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setJournalOpen(true)}
+            aria-label="Le journal de la partie"
+            title="Journal"
+          >
+            <Icon name="list" />
+          </button>
           <MusicToggle />
           <button
             className="btn btn-ghost btn-icon"
@@ -299,55 +385,77 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       </header>
 
       <main className={`cap-stage ${phone ? "is-phone" : ""}`}>
-        {phone && <Players g={g} room={room} seat={seat} cash={cash} serverOffset={serverOffset} compact />}
-        <div className="cap-board-area" style={{ width: boardW, height: boardH }}>
-          <Board3D
-            g={g}
-            shown={shown}
-            deeds={deeds}
-            turn={turn}
-            dice={dice}
-            card={drawn}
-            highlight={highlight}
-            phone={phone}
-            reduced={reduced}
-            onSquare={setDeed}
-          />
-          <p className="cap-board-info">
-            Banque : {g.bankHouses} maison{g.bankHouses > 1 ? "s" : ""} · {g.bankHotels} hôtel{g.bankHotels > 1 ? "s" : ""}
-            {g.settings.freeParking && g.pot > 0 && <> · cagnotte {money(g.pot)}</>}
-          </p>
-          <AnimatePresence>{card && <CardReveal card={card} who={card.player === me ? null : name(card.player)} />}</AnimatePresence>
+        {phone && <Players g={g} room={room} seat={seat} cash={cash} deltas={deltas} serverOffset={serverOffset} compact />}
+        <div className="cap-board-col">
+          <div className="cap-board-area" style={{ width: boardW, height: boardH }}>
+            <Board3D
+              g={g}
+              shown={shown}
+              deeds={deeds}
+              turn={turn}
+              dice={dice}
+              card={drawn}
+              highlight={building ? null : highlight}
+              phone={phone}
+              reduced={reduced}
+              onSquare={setDeed}
+              buildMode={building && me ? { kind: building.kind, cells: buildCells, color: colorOf(g, me) } : null}
+              onCell={(square, cell) => building && act({ type: "build", square, cell, kind: building.kind })}
+              onHoverCell={setHoverCell}
+              tokens={tokens}
+            />
+            <Narrator lines={lines} g={g} seat={seat} />
+            {g.settings.freeParking && g.pot > 0 && <p className="cap-board-info">Cagnotte {money(g.pot)}</p>}
+            <AnimatePresence>{card && <CardReveal card={card} who={card.player === me ? null : name(card.player)} />}</AnimatePresence>
+          </div>
+          {!phone && meP && !meP.bankrupt && (
+            <Hand cash={cash[me!] ?? meP.cash} anchor={me!}>
+              <span className="cap-hand-total num">
+                <Rolling value={cash[me!] ?? meP.cash} />
+              </span>
+            </Hand>
+          )}
         </div>
         <aside className="cap-side">
-          {!phone && <Players g={g} room={room} seat={seat} cash={cash} serverOffset={serverOffset} />}
+          {!phone && <Players g={g} room={room} seat={seat} cash={cash} deltas={deltas} serverOffset={serverOffset} />}
           {phone && meP && !meP.bankrupt && (
-            <div className="cap-my-wallet panel" data-cap-anchor={me ?? undefined}>
-              <span className="hint">Ton argent</span>
-              <strong className="num">
+            <Hand cash={cash[me!] ?? meP.cash} anchor={me!}>
+              <span className="cap-hand-total num">
                 <Rolling value={cash[me!] ?? meP.cash} />
-              </strong>
-              <Wallet cash={cash[me!] ?? meP.cash} />
-            </div>
+              </span>
+            </Hand>
           )}
           <Offers g={g} me={me} seat={seat} act={act} onCounter={startCounter} />
-          <ActionBar
-            g={g}
-            room={room}
-            me={me}
-            myTurn={myTurn}
-            meCash={meP?.cash ?? 0}
-            name={name}
-            auctionLeft={auctionLeft}
-            serverOffset={serverOffset}
-            act={act}
-            onTitles={() => setTitlesOpen(true)}
-            onTrade={() =>
-              setDraft({ partner: null, give: { cash: 0, squares: [], jailCards: 0 }, get: { cash: 0, squares: [], jailCards: 0 } })
-            }
-            onTakeBack={mySeat?.autoplay ? () => send({ t: "takeBack" }) : undefined}
-            turnName={name(turnPlayer?.id)}
-          />
+          {building && me ? (
+            <BuildTray
+              g={g}
+              me={me}
+              kind={building.kind}
+              hover={hoverCell}
+              onKind={(kind) => setBuilding({ kind, focus: building.focus })}
+              onClose={() => setBuilding(null)}
+            />
+          ) : (
+            <ActionDock
+              g={g}
+              room={room}
+              me={me}
+              myTurn={myTurn}
+              meCash={meP?.cash ?? 0}
+              busy={busy}
+              name={name}
+              seat={seat}
+              auctionLeft={auctionLeft}
+              serverOffset={serverOffset}
+              act={act}
+              onTitles={() => setTitlesOpen(true)}
+              onTrade={() =>
+                setDraft({ partner: null, give: { cash: 0, squares: [], jailCards: 0 }, get: { cash: 0, squares: [], jailCards: 0 } })
+              }
+              onBuild={() => (building ? setBuilding(null) : openBuild())}
+              onTakeBack={mySeat?.autoplay ? () => send({ t: "takeBack" }) : undefined}
+            />
+          )}
         </aside>
       </main>
 
@@ -411,8 +519,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
         </div>
       )}
 
-      <DeedSheet g={g} index={deed} seat={seat} onClose={() => setDeed(null)} />
-      {me && <TitlesSheet g={g} me={me} open={titlesOpen} onClose={() => setTitlesOpen(false)} act={act} />}
+      <DeedSheet g={g} index={deed} seat={seat} me={me} act={act} onClose={() => setDeed(null)} onBuild={(sq) => openBuild(sq)} />
+      {me && <TitlesSheet g={g} me={me} open={titlesOpen} onClose={() => setTitlesOpen(false)} onOpen={(sq) => setDeed(sq)} />}
+      <Journal open={journalOpen} onClose={() => setJournalOpen(false)} lines={lines} />
       {me && <TradeModal g={g} me={me} seat={seat} draft={draft} onClose={() => setDraft(null)} act={act} />}
 
       {g.step === "over" && !resultsHidden && (
@@ -442,6 +551,7 @@ function Players({
   room,
   seat,
   cash,
+  deltas,
   serverOffset,
   compact = false,
 }: {
@@ -449,6 +559,7 @@ function Players({
   room: CapitaleRoomView;
   seat: (id: string) => SeatView | undefined;
   cash: Record<string, number>;
+  deltas: { id: number; player: string; amount: number }[];
   serverOffset: number;
   compact?: boolean;
 }) {
@@ -464,13 +575,30 @@ function Players({
             className={`cap-player ${acting ? "is-acting" : ""} ${g.players[g.turn]?.id === p.id ? "is-turn" : ""} ${p.bankrupt ? "is-out" : ""} ${p.id === g.you ? "is-me" : ""}`}
             style={{ ["--pawn" as string]: colorOf(g, p.id) }}
           >
-            <span className="cap-player-avatar" data-cap-anchor={compact && p.id === g.you ? undefined : p.id}>
+            <span className="cap-player-avatar" data-cap-anchor={p.id === g.you ? undefined : p.id}>
               {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={compact ? 30 : 38} />}
               {acting && room.deadline && (
                 <span className="cap-player-timer">
                   <TimerRing size={compact ? 38 : 46} deadline={room.deadline} total={g.settings.turnSeconds} offset={serverOffset} />
                 </span>
               )}
+              <AnimatePresence>
+                {deltas
+                  .filter((d) => d.player === p.id)
+                  .map((d) => (
+                    <motion.span
+                      key={d.id}
+                      className={`cap-delta ${d.amount > 0 ? "is-plus" : "is-minus"}`}
+                      initial={{ y: 6, opacity: 0, scale: 0.7 }}
+                      animate={{ y: -26, opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      {d.amount > 0 ? "+" : "−"}
+                      {money(Math.abs(d.amount))}
+                    </motion.span>
+                  ))}
+              </AnimatePresence>
             </span>
             <span className="cap-player-text">
               <strong>
@@ -491,7 +619,7 @@ function Players({
                         .join(" · ")}
                 </span>
               )}
-              {!compact && !p.bankrupt && <Wallet cash={cash[p.id] ?? p.cash} />}
+              {!compact && !p.bankrupt && p.id !== g.you && <Wallet cash={cash[p.id] ?? p.cash} />}
               {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
             </span>
             {!compact && (
@@ -509,162 +637,5 @@ function Players({
         );
       })}
     </ul>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// La barre d'action : ce qu'on peut faire, selon le moment
-// ---------------------------------------------------------------------------
-
-function ActionBar({
-  g,
-  room,
-  me,
-  myTurn,
-  meCash,
-  name,
-  auctionLeft,
-  serverOffset,
-  act,
-  onTitles,
-  onTrade,
-  onTakeBack,
-  turnName,
-}: {
-  g: CapitaleView;
-  room: CapitaleRoomView;
-  me: string | null;
-  myTurn: boolean;
-  meCash: number;
-  name: (id: string | null | undefined) => string;
-  auctionLeft: number | null;
-  serverOffset: number;
-  act: (a: CapitaleAction) => void;
-  onTitles: () => void;
-  onTrade: () => void;
-  onTakeBack?: () => void;
-  turnName: string;
-}) {
-  const meP = me ? g.players.find((p) => p.id === me) : undefined;
-  const playing = Boolean(meP && !meP.bankrupt) && g.step !== "over";
-  const debt = g.debts[0];
-  const a = g.auction;
-  const canBid = a && me && g.bidders.includes(me) && a.high?.player !== me;
-  const creditor = (c: string) => (c === "bank" ? "à la banque" : c === "pot" ? "à la cagnotte" : `à ${name(c)}`);
-
-  let text: string;
-  if (g.step === "over") text = "La partie est terminée.";
-  else if (onTakeBack) text = "Un bot gère tes affaires en attendant.";
-  else if (a) {
-    const sq = SQUARES[a.square]!;
-    text = `Enchère sur ${sq.name} (valeur ${money(sq.price!)}) : ${a.high ? `${money(a.high.amount)} par ${a.high.player === me ? "toi" : name(a.high.player)}` : "personne n'a encore misé"}`;
-  } else if (debt) {
-    text =
-      debt.debtor === me
-        ? `Tu dois ${money(debt.amount)} ${creditor(debt.creditor)} : vends ou hypothèque.`
-        : `${name(debt.debtor)} doit trouver ${money(debt.amount)}.`;
-  } else if (g.step === "buy" && g.pendingBuy !== null) {
-    const sq = SQUARES[g.pendingBuy]!;
-    text = myTurn ? `${sq.name} est libre : l'acheter ${money(sq.price!)} ?` : `${turnName} hésite devant ${sq.name}.`;
-  } else if (g.step === "roll") {
-    if (!myTurn) text = `Au tour de ${turnName}.`;
-    else if (meP?.inJail) text = `Tu es en prison (${meP.jailTurns + 1}e tour) : tente un double, paie ${JAIL_FINE} ou utilise une carte.`;
-    else text = g.rollAgain ? "Double ! Relance les dés." : "À toi de lancer les dés.";
-  } else text = myTurn ? "Construis, échange, puis finis ton tour." : `${turnName} gère ses affaires.`;
-
-  const bid = (inc: number) => (a?.high?.amount ?? 0) + inc;
-
-  return (
-    <div className={`cap-actions panel ${myTurn || canBid ? "is-mine" : ""}`}>
-      <p className="cap-action-text">
-        {myTurn && room.deadline && (
-          <span className="cap-action-timer">
-            <TimerRing size={26} deadline={room.deadline} total={g.settings.turnSeconds} offset={serverOffset} />
-          </span>
-        )}
-        {text}
-        {a && auctionLeft !== null && <span className="cap-auction-clock num">{auctionLeft} s</span>}
-      </p>
-      <div className="cap-action-buttons">
-        {onTakeBack && (
-          <button className="btn btn-primary" onClick={onTakeBack}>
-            Reprendre la main
-          </button>
-        )}
-        {!onTakeBack && myTurn && g.step === "roll" && (
-          <>
-            <button className="btn btn-primary btn-lg" onClick={() => act({ type: "roll" })}>
-              Lancer les dés
-            </button>
-            {meP?.inJail && (
-              <>
-                <button className="btn" disabled={meCash < JAIL_FINE} onClick={() => act({ type: "payJail" })}>
-                  Payer {JAIL_FINE}
-                </button>
-                {meP.jailCards.length > 0 && (
-                  <button className="btn" onClick={() => act({ type: "useJailCard" })}>
-                    Utiliser la carte
-                  </button>
-                )}
-              </>
-            )}
-          </>
-        )}
-        {!onTakeBack && myTurn && g.step === "buy" && g.pendingBuy !== null && (
-          <>
-            <button
-              className="btn btn-primary btn-lg"
-              disabled={meCash < SQUARES[g.pendingBuy]!.price!}
-              onClick={() => act({ type: "buy" })}
-            >
-              Acheter {money(SQUARES[g.pendingBuy]!.price!)}
-            </button>
-            <button className="btn" onClick={() => act({ type: "decline" })}>
-              Aux enchères
-            </button>
-          </>
-        )}
-        {!onTakeBack && canBid && (
-          <>
-            {[10, 50, 100].map((inc) => (
-              <button
-                key={inc}
-                className="btn btn-primary"
-                disabled={bid(inc) > meCash}
-                onClick={() => act({ type: "bid", amount: bid(inc) })}
-              >
-                {money(bid(inc))}
-              </button>
-            ))}
-            <button className="btn btn-ghost" onClick={() => act({ type: "pass" })}>
-              Passer
-            </button>
-          </>
-        )}
-        {!onTakeBack && a && me && a.high?.player === me && <span className="hint">Tu mènes l'enchère.</span>}
-        {!onTakeBack && debt?.debtor === me && (
-          <ConfirmButton className="btn btn-ghost" confirm="Tout abandonner ?" onConfirm={() => act({ type: "bankrupt" })}>
-            Faire faillite
-          </ConfirmButton>
-        )}
-        {!onTakeBack && myTurn && g.step === "manage" && (
-          <button className="btn btn-primary btn-lg" onClick={() => act({ type: "endTurn" })}>
-            Finir le tour
-          </button>
-        )}
-        {playing && !onTakeBack && (
-          <>
-            <button className={`btn ${debt?.debtor === me ? "btn-primary" : ""}`} onClick={onTitles}>
-              Mes titres
-            </button>
-            {!a && (
-              <button className="btn" onClick={onTrade}>
-                Échanger
-              </button>
-            )}
-          </>
-        )}
-      </div>
-    </div>
   );
 }

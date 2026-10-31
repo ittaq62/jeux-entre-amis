@@ -40,6 +40,10 @@ const PATHS = {
   camera: "M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   trash: "M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
   info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 16v-4M12 8h.01",
+  build: "M3 21h18M5 21V11l7-5 7 5v10M9 21v-6h6v6M12 6V3M15 3h-6",
+  swap: "M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13",
+  list: "M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01",
+  cards: "M8 3h11a2 2 0 0 1 2 2v12M4 7h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z",
 } as const;
 
 export type IconName = keyof typeof PATHS;

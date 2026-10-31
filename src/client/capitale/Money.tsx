@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 // Les billets de Capitale : sept coupures, chacune sa couleur. Les liasses des joueurs et ceux qui volent d'un joueur à l'autre.
 
 export const DENOMS = [500, 100, 50, 20, 10, 5, 1] as const;
@@ -15,14 +17,45 @@ export function breakdown(amount: number, max = Infinity): number[] {
   return out;
 }
 
-/** Un billet */
-export function Note({ value, size = "md" }: { value: number; size?: "sm" | "md" | "lg" }) {
+/** Un billet : la valeur aux coins et au centre, un médaillon, la banque de Capitale */
+export function Note({ value, size = "md" }: { value: number; size?: "sm" | "md" | "lg" | "xl" }) {
   return (
     <span className={`cap-note v-${value} is-${size}`} aria-hidden="true">
       <span className="cap-note-corner">{value}</span>
       <span className="cap-note-mark">₣</span>
+      {size === "xl" && <span className="cap-note-bank">BANQUE DE CAPITALE</span>}
+      {size === "xl" && <span className="cap-note-seal" />}
       <span className="cap-note-value">{value}</span>
     </span>
+  );
+}
+
+/** Mes billets en main, en éventail comme des cartes : une liasse par coupure, le total en dessous */
+export function Hand({ cash, anchor, children }: { cash: number; anchor: string; children?: ReactNode }) {
+  const notes = breakdown(cash);
+  const stacks = DENOMS.map((d) => [d, notes.filter((n) => n === d).length] as const).filter(([, n]) => n > 0);
+  const mid = (stacks.length - 1) / 2;
+  return (
+    <div className="cap-hand" data-cap-anchor={anchor}>
+      <div className="cap-hand-fan" aria-hidden="true">
+        {stacks.map(([d, n], k) => (
+          <span
+            key={d}
+            className="cap-hand-stack"
+            style={{ ["--a" as string]: `${(k - mid) * 8}deg`, ["--y" as string]: `${Math.abs(k - mid) * 4}px`, zIndex: k }}
+          >
+            {Array.from({ length: Math.min(n, 4) }, (_, j) => (
+              <span key={j} className="cap-hand-note" style={{ ["--j" as string]: j }}>
+                <Note value={d} size="xl" />
+              </span>
+            ))}
+            {n > 1 && <span className="cap-hand-count">×{n}</span>}
+          </span>
+        ))}
+        {stacks.length === 0 && <span className="cap-hand-empty">Plus un sou</span>}
+      </div>
+      {children}
+    </div>
   );
 }
 

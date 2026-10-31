@@ -1,17 +1,27 @@
+import { useMemo } from "react";
 import type { BotLevel, CapitaleSettings, EndMode } from "../../shared/games/capitale/engine.ts";
+import { TOKENS } from "../../shared/games/capitale/tokens.ts";
 import { CAPITALE_MAX_PLAYERS, type CapitaleClientMessage, type CapitaleRoomView } from "../../shared/protocol.ts";
+import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { PAWN_COLORS } from "./boardUi.ts";
+import { tokenThumbnails } from "./scene/tokens.ts";
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Prudent jusqu'à l'excès : il garde son argent et bâtit peu.",
-  moyen: "Achète raisonnablement, construit, et accepte les échanges équitables.",
-  fort: "Rafle les terrains, monte vite à trois maisons et négocie pour compléter ses groupes.",
+  moyen: "Achète raisonnablement, bâtit, pose parfois une nuisance, accepte les échanges équitables.",
+  fort: "Rafle les terrains, remplit ses parcelles, pose ses nuisances chez le plus riche et négocie.",
 };
 
-type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart";
+type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart" | "specials";
 
 const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
+  {
+    key: "specials",
+    label: "Bâtiments spéciaux",
+    desc: "Gratte-ciel (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
+  },
   {
     key: "freeParking",
     label: "Cagnotte de l'Aire de repos",
@@ -36,6 +46,8 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
   const s = room.settings.capitale;
   const isHost = room.you.isHost;
   const update = (patch: Partial<CapitaleSettings>) => send({ t: "settings", settings: patch });
+  const seatIndex = room.seats.findIndex((x) => x.id === room.you.seatId);
+  const mine = seatIndex >= 0 ? room.seats[seatIndex] : undefined;
 
   return (
     <TableLobby
@@ -48,6 +60,15 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          {mine && (
+            <TokenPicker
+              color={PAWN_COLORS[seatIndex % PAWN_COLORS.length]!}
+              current={mine.token ?? "pion"}
+              wins={room.you.capitaleWins}
+              onPick={(token) => send({ t: "token", token })}
+            />
+          )}
 
           <div className="field">
             <span className="field-label">Fin de la partie</span>
@@ -95,8 +116,8 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
               ))}
             </div>
             <p className="hint" style={{ margin: 0 }}>
-              Le reste suit la règle : enchères quand on refuse d'acheter, prison, hypothèques, constructions égales, 32 maisons et 12
-              hôtels à la banque.
+              La ville : chaque rue a sa parcelle de 4 cases. Maisons (1 étage) et immeubles (2 étages) se posent où l'on veut dès le
+              premier terrain, 3 étages par tour au plus. Le reste suit la règle : enchères, prison, hypothèques.
             </p>
           </div>
 
@@ -140,5 +161,58 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
         </section>
       }
     />
+  );
+}
+
+/** Le choix du pion : quatre pour commencer, les autres s'ouvrent avec les victoires à Capitale */
+function TokenPicker({
+  color,
+  current,
+  wins,
+  onPick,
+}: {
+  color: string;
+  current: string;
+  wins: number;
+  onPick: (token: (typeof TOKENS)[number]["id"]) => void;
+}) {
+  const thumbs = useMemo(() => tokenThumbnails(color), [color]);
+  const next = TOKENS.find((t) => t.wins > wins);
+  return (
+    <div className="field">
+      <span className="field-label">Ton pion</span>
+      <div className="cap-tokens" role="radiogroup" aria-label="Ton pion">
+        {TOKENS.map((t) => {
+          const locked = t.wins > wins;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`cap-token ${current === t.id ? "is-on" : ""} ${locked ? "is-locked" : ""}`}
+              aria-pressed={current === t.id}
+              disabled={locked}
+              onClick={() => onPick(t.id)}
+              title={locked ? `${t.name} : ${t.wins} victoire${t.wins > 1 ? "s" : ""} à Capitale` : t.name}
+            >
+              {thumbs[t.id] ? (
+                <img src={thumbs[t.id]} alt="" width={64} height={64} draggable={false} />
+              ) : (
+                <span className="cap-token-blank" />
+              )}
+              <span className="cap-token-name">{t.name}</span>
+              {locked && (
+                <span className="cap-token-lock">
+                  <Icon name="lock" size={12} /> {t.wins}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="hint" style={{ margin: 0 }}>
+        {wins > 0 ? `${wins} victoire${wins > 1 ? "s" : ""} à Capitale. ` : ""}
+        {next ? `Prochain pion : ${next.name}, à ${next.wins} victoire${next.wins > 1 ? "s" : ""}.` : "Tous les pions sont à toi."}
+      </p>
+    </div>
   );
 }

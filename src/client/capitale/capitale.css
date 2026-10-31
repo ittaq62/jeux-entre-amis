@@ -234,26 +234,6 @@
   box-shadow: 0 0 0 1px var(--line-soft);
 }
 
-.cap-my-wallet {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 2px 10px;
-  padding: 10px 14px;
-}
-
-.cap-my-wallet .num {
-  justify-self: end;
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 20px;
-  color: var(--gold-light);
-}
-
-.cap-my-wallet .cap-wallet {
-  grid-column: 1 / -1;
-}
-
 /* La carte tirée */
 .cap-card {
   position: absolute;
@@ -451,51 +431,6 @@
   opacity: 0.35;
 }
 
-.cap-actions {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cap-actions.is-mine {
-  box-shadow:
-    0 0 0 1px var(--gold),
-    var(--shadow-panel);
-}
-
-.cap-action-text {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  line-height: 1.35;
-}
-
-.cap-action-timer {
-  flex: none;
-}
-
-.cap-auction-clock {
-  flex: none;
-  white-space: nowrap;
-  margin-left: auto;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--gold-tint);
-  color: var(--gold-light);
-  font-family: var(--font-card);
-  font-weight: 800;
-}
-
-.cap-action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
 .cap-react {
   bottom: calc(14px + var(--safe-bottom));
 }
@@ -543,72 +478,6 @@
   align-items: center;
 }
 
-/* La fiche d'une case */
-.cap-deed {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.cap-deed-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px;
-  border-radius: 8px;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-}
-
-.cap-deed-head strong {
-  font-family: var(--font-title);
-  font-weight: 400;
-  font-size: 24px;
-}
-
-.cap-deed-head .hint {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.cap-rents {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.cap-rents td {
-  padding: 5px 4px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.cap-rents td.num {
-  text-align: right;
-  font-family: var(--font-card);
-  font-weight: 700;
-  font-size: 16px;
-}
-
-.cap-rents tr.is-now td {
-  color: var(--gold-light);
-  font-weight: 700;
-}
-
-.cap-deed-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 14px;
-  margin: 0;
-}
-
-.cap-deed-facts dt {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.cap-deed-facts dd {
-  margin: 0;
-  font-weight: 600;
-}
-
 .cap-owner-tag {
   padding: 1px 8px;
   border-radius: 999px;
@@ -640,40 +509,15 @@
 }
 
 .cap-titles-group {
-  border-left: 4px solid var(--group);
-  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .cap-titles-group h3 {
   margin: 0 0 4px;
   font-size: 14px;
   color: var(--text-soft);
-}
-
-.cap-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.cap-title-row.is-mortgaged .cap-title-name strong {
-  opacity: 0.6;
-}
-
-.cap-title-name {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.cap-title-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: flex-end;
 }
 
 /* L'échange */
@@ -772,11 +616,1048 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .cap-action-text {
-    font-size: 15px;
-  }
-
   .cap-card p {
     font-size: 14px;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Ce qui se passe : le fil des annonces en haut du plateau             */
+/* ------------------------------------------------------------------ */
+
+.cap-narrator {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 12;
+  width: min(92%, 560px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.cap-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  padding: 5px 14px 5px 6px;
+  border-radius: 999px;
+  background: rgba(8, 26, 18, 0.86);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.8);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  backdrop-filter: blur(4px);
+}
+
+.cap-line.is-new {
+  padding: 7px 18px 7px 7px;
+  font-size: 17px;
+  border-color: color-mix(in srgb, var(--pawn) 70%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--pawn) 35%, transparent),
+    0 12px 26px -10px rgba(0, 0, 0, 0.85);
+}
+
+.cap-line.tone-good.is-new {
+  background: rgba(16, 70, 42, 0.92);
+}
+
+.cap-line.tone-bad.is-new {
+  background: rgba(96, 24, 20, 0.92);
+}
+
+.cap-line.tone-big.is-new,
+.cap-line.tone-turn.is-new {
+  background: linear-gradient(180deg, rgba(64, 48, 16, 0.94), rgba(36, 26, 8, 0.94));
+  color: var(--gold-light);
+}
+
+.cap-line-times {
+  color: var(--gold-light);
+}
+
+.cap-line-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex: none;
+}
+
+.cap-journal {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cap-journal li {
+  padding: 5px 10px;
+  border-left: 3px solid var(--line-strong);
+  font-size: 14px;
+}
+
+.cap-journal li.tone-good {
+  border-color: var(--ok);
+}
+
+.cap-journal li.tone-bad {
+  border-color: var(--danger);
+}
+
+.cap-journal li.tone-big,
+.cap-journal li.tone-turn {
+  border-color: var(--gold);
+}
+
+/* + et − qui montent d'un portrait */
+.cap-delta {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  z-index: 4;
+  translate: -50% 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.cap-delta.is-plus {
+  background: #1f8a52;
+  color: #fff;
+}
+
+.cap-delta.is-minus {
+  background: #b3261e;
+  color: #fff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Les billets en main                                                  */
+/* ------------------------------------------------------------------ */
+
+.cap-note.is-xl {
+  width: 112px;
+  height: 58px;
+  border-radius: 5px;
+  background:
+    radial-gradient(circle at 72% 50%, rgba(255, 255, 255, 0.55) 0 13px, transparent 14px),
+    radial-gradient(circle at 72% 50%, color-mix(in srgb, var(--note) 70%, #000) 0 15px, transparent 16px),
+    repeating-radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.18) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0 2px, transparent 2px 6px),
+    linear-gradient(160deg, color-mix(in srgb, var(--note) 78%, #fff), var(--note));
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--note) 55%, #000),
+    inset 0 0 0 5px color-mix(in srgb, var(--note) 88%, #fff),
+    inset 0 0 0 6px color-mix(in srgb, var(--note) 65%, #000),
+    0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.cap-note.is-xl .cap-note-value {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  translate: 0 -50%;
+  font-size: 27px;
+  letter-spacing: -0.5px;
+}
+
+.cap-note.is-xl .cap-note-corner {
+  left: auto;
+  right: 9px;
+  top: 6px;
+  font-size: 11px;
+}
+
+.cap-note.is-xl .cap-note-mark {
+  right: 33px;
+  bottom: auto;
+  top: 50%;
+  translate: 50% -50%;
+  font-size: 16px;
+  opacity: 0.85;
+}
+
+.cap-note-bank {
+  position: absolute;
+  left: 11px;
+  bottom: 6px;
+  font-size: 6.5px;
+  letter-spacing: 0.6px;
+  opacity: 0.75;
+}
+
+.cap-note-seal {
+  position: absolute;
+  left: 9px;
+  top: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0.5;
+}
+
+.cap-board-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cap-hand {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: -18px;
+  pointer-events: none;
+}
+
+.cap-hand-fan {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 76px;
+  padding: 0 44px 0 34px;
+}
+
+.cap-hand-stack {
+  position: relative;
+  width: 112px;
+  height: 58px;
+  margin: 0 -30px;
+  transform-origin: 50% 320%;
+  transform: rotate(var(--a)) translateY(var(--y));
+  transition: transform 0.25s ease;
+  pointer-events: auto;
+}
+
+.cap-hand-stack:hover {
+  transform: rotate(var(--a)) translateY(calc(var(--y) - 16px));
+}
+
+.cap-hand-note {
+  position: absolute;
+  left: calc(var(--j) * 2px);
+  top: calc(var(--j) * -3px);
+  line-height: 0;
+}
+
+.cap-hand-count {
+  position: absolute;
+  right: -6px;
+  top: -14px;
+  z-index: 3;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #12251b;
+  color: var(--gold-light);
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.cap-hand-empty {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(8, 26, 18, 0.8);
+  color: var(--text-soft);
+}
+
+.cap-hand-total {
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: rgba(8, 26, 18, 0.86);
+  border: 1px solid var(--line);
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--gold-light);
+}
+
+.is-phone .cap-hand {
+  margin-top: 0;
+  padding: 6px 0 2px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.is-phone .cap-hand-fan {
+  min-height: 60px;
+  scale: 0.72;
+  margin: -6px 0 -12px;
+}
+
+.is-phone .cap-hand-total {
+  position: relative;
+  z-index: 5;
+  font-size: 19px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Le panneau d'action                                                  */
+/* ------------------------------------------------------------------ */
+
+.cap-dock {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cap-dock.is-mine {
+  box-shadow:
+    0 0 0 1px var(--gold),
+    var(--shadow-panel);
+}
+
+.cap-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cap-dock-head > :first-child {
+  box-shadow: 0 0 0 3px var(--pawn);
+  border-radius: 50%;
+}
+
+.cap-dock-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cap-dock-who strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 19px;
+}
+
+.cap-dock-wait {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.cap-dock-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.cap-dock-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cap-dock-buttons .btn-lg {
+  flex: 1 1 auto;
+}
+
+.cap-roll {
+  min-height: 56px;
+  font-size: 18px;
+}
+
+.cap-dock-links {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.cap-dock.is-busy .cap-dock-buttons,
+.cap-dock.is-busy .cap-manage {
+  opacity: 0.55;
+}
+
+.cap-manage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cap-big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 78px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.cap-big:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--gold);
+}
+
+.cap-big:disabled {
+  cursor: default;
+}
+
+.cap-big.is-build {
+  background: linear-gradient(180deg, #2f7a4f, #1d5537);
+  border-color: #4cc38a;
+}
+
+.cap-big.is-end {
+  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
+  border-color: var(--gold-edge);
+  color: var(--gold-ink);
+}
+
+.cap-buy,
+.cap-debt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cap-buy-group {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.cap-buy-btn .num {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 19px;
+}
+
+.cap-auction {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.cap-auction-live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cap-auction-high {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 1;
+  color: var(--gold-light);
+}
+
+.cap-auction-by {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.cap-auction-bar {
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  overflow: hidden;
+}
+
+.cap-auction-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: calc(var(--left) * 100%);
+  background: linear-gradient(90deg, #d6433a, var(--gold));
+  transition: width 1s linear;
+}
+
+.cap-auction-bar .num {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.cap-bids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cap-bid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cap-bid:hover:not(:disabled) {
+  border-color: var(--gold);
+}
+
+.cap-bid:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cap-bid .num {
+  font-family: var(--font-card);
+  font-weight: 800;
+}
+
+.cap-warn {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ */
+/* Le titre de propriété                                                */
+/* ------------------------------------------------------------------ */
+
+.cap-deedcard {
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 1px var(--paper-line),
+    0 10px 24px -14px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.cap-deedcard.is-mortgaged {
+  filter: grayscale(0.6);
+}
+
+.cap-deedcard-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin: 8px 8px 0;
+  padding: 8px 10px 9px;
+  border-radius: 6px;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.cap-deedcard-head.is-light {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+.cap-deedcard-head > span:first-child {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.cap-deedcard-head strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.cap-deedcard.is-compact .cap-deedcard-head strong {
+  font-size: 18px;
+}
+
+.cap-deedcard-owner {
+  margin-top: 3px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: 0 0 0 2px var(--owner);
+}
+
+.cap-deedcard-body {
+  padding: 6px 12px 0;
+}
+
+.cap-floors {
+  margin: 0;
+  padding: 6px 12px 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 14px;
+}
+
+.cap-deedcard-body .cap-floors {
+  padding: 0;
+}
+
+.cap-floors li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 4px;
+  border-bottom: 1px dotted var(--paper-line);
+  font-size: 13px;
+}
+
+.cap-floors li:first-child {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+}
+
+.cap-floors li b {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.cap-floors li em {
+  width: 100%;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.cap-floors li.is-now {
+  border-radius: 4px;
+  background: #ffe9a8;
+  font-weight: 700;
+}
+
+.cap-deedcard.is-compact .cap-floors li {
+  font-size: 12px;
+  padding: 1px 3px;
+}
+
+.cap-deedcard-note {
+  margin: 8px 12px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.cap-deedcard-body .cap-deedcard-note {
+  margin: 8px 0 0;
+}
+
+.cap-deedcard-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 7px 12px 9px;
+  border-top: 1px solid var(--paper-line);
+  font-size: 13px;
+}
+
+.cap-deedcard-foot b {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 16px;
+}
+
+/* La parcelle et ses 4 cases, vue d'en haut */
+.cap-parcel {
+  display: inline-grid;
+  grid-template-columns: repeat(2, var(--cell));
+  gap: 3px;
+  padding: 4px 4px 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--group) 28%, #fff);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--group) 70%, #000);
+}
+
+.cap-parcel-cell {
+  width: var(--cell);
+  height: var(--cell);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  border: 1.5px dashed color-mix(in srgb, var(--group) 60%, #000);
+  background: #fbf7ec;
+  overflow: hidden;
+}
+
+button.cap-parcel-cell {
+  cursor: pointer;
+}
+
+.cap-parcel-cell.is-built {
+  border-style: solid;
+}
+
+.cap-parcel-cell.is-nuisance {
+  border-color: #b3261e;
+  background: #f5d9d4;
+}
+
+.cap-parcel-cell.is-active {
+  outline: 3px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.cap-parcel-street {
+  grid-column: 1 / -1;
+  margin: 2px -4px 0;
+  padding: 2px 4px;
+  background: var(--group);
+  border-radius: 0 0 5px 5px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cap-bicon {
+  display: block;
+  object-fit: contain;
+}
+
+.cap-bicon.is-text {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  color: var(--ink);
+}
+
+/* La fiche d'une case */
+.cap-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cap-sheet-owner {
+  margin: 0;
+}
+
+.cap-sheet-parcel {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.cap-sheet-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+.cap-sheet-cell p {
+  margin: 0 0 6px;
+}
+
+.cap-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Mes titres : des cartes en main */
+.cap-hand-deeds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cap-mini-deed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 132px;
+  padding: 6px 6px 8px;
+  border-radius: 9px;
+  border: none;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.9);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.cap-mini-deed:hover {
+  transform: translateY(-3px) rotate(-1deg);
+}
+
+.cap-mini-deed.is-mortgaged {
+  filter: grayscale(0.7);
+  opacity: 0.8;
+}
+
+.cap-mini-deed-head {
+  align-self: stretch;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: #fff;
+  font-family: var(--font-title);
+  font-size: 14px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cap-mini-deed-head.is-light {
+  color: var(--ink);
+}
+
+.cap-mini-deed-kind {
+  padding: 20px 0;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.cap-mini-deed-foot {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/* Le chantier                                                          */
+/* ------------------------------------------------------------------ */
+
+.cap-tray {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow:
+    0 0 0 1px #19c25a,
+    var(--shadow-panel);
+}
+
+.cap-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cap-tray-head strong {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 19px;
+}
+
+.cap-tray-site {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--gold-light);
+}
+
+.cap-tray-site .is-done {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.cap-tray-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.cap-kind {
+  display: grid;
+  grid-template-columns: auto;
+  justify-items: center;
+  padding: 4px 4px 6px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.cap-kind img {
+  width: 58px;
+  height: 58px;
+}
+
+.cap-kind:hover:not(:disabled) {
+  transform: translateY(-3px);
+}
+
+.cap-kind.is-on {
+  border-color: #19c25a;
+  box-shadow:
+    0 0 0 3px rgba(25, 194, 90, 0.45),
+    0 8px 16px -8px rgba(0, 0, 0, 0.8);
+  transform: translateY(-3px);
+}
+
+.cap-kind:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cap-kind-name {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.cap-kind-price {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.cap-kind-tag {
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e8e1cf;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cap-kind.is-special .cap-kind-tag {
+  background: #f4dd94;
+}
+
+.cap-kind.is-nuisance .cap-kind-tag {
+  background: #f1c3bc;
+  color: #7a1b14;
+}
+
+.cap-tray-help {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.cap-tray-help strong,
+.cap-tray-help b {
+  color: var(--text);
+}
+
+.cap-tray-help .num {
+  font-family: var(--font-card);
+  font-size: 16px;
+  color: var(--gold-light);
+}
+
+@media (max-width: 600px) {
+  .cap-auction {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cap-line.is-new {
+    font-size: 15px;
+  }
+
+  .cap-tray-kinds {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  }
+}
+
+/* Le choix du pion, au salon */
+.cap-tokens {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.cap-token {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px 6px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cap-token img {
+  width: 64px;
+  height: 64px;
+}
+
+.cap-token-blank {
+  width: 64px;
+  height: 64px;
+}
+
+.cap-token.is-on {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-tint);
+}
+
+.cap-token.is-locked {
+  cursor: default;
+}
+
+.cap-token.is-locked img {
+  filter: grayscale(1) brightness(0.45);
+}
+
+.cap-token-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cap-token-lock {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--gold-light);
+  font-size: 11px;
+  font-weight: 800;
 }
