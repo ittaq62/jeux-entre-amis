@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BANK_HOTELS, BANK_HOUSES, BUYABLE, DECKS, GROUPS, SQUARES } from "./board.ts";
+import { BANK_HOTELS, BANK_HOUSES, BUYABLE, DECKS, GROUPS, HOTEL, SQUARES } from "./board.ts";
 import { botAction, botAnswer, botBid } from "./bot.ts";
 import {
   actorOf,
@@ -418,6 +418,177 @@ describe("cartes", () => {
   });
 });
 
+describe("bâtiments spéciaux (règle maison)", () => {
+  /** Orange (16, 18, 19) à « a », trois maisons partout ; c'est au tour de « who » */
+  const district = (who = "b") => {
+    const s = game(2, { specials: true });
+    own(s, "a", 16, 18, 19);
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = 3;
+    s.turn = s.players.findIndex((p) => p.id === who);
+    return s;
+  };
+  /** Un nouveau tour, avant de lancer les dés : on peut reposer un bâtiment */
+  const nextTurnOf = (s: CapitaleState, who: string) => {
+    Object.assign(s, { step: "roll", dice: null, pendingBuy: null, rollAgain: false, turnId: s.turnId + 1 });
+    s.turn = s.players.findIndex((p) => p.id === who);
+  };
+
+  it("rien sans la règle", () => {
+    const s = game();
+    own(s, "a", 16);
+    expect(applyAction(s, "a", { type: "special", square: 16, kind: "parc" })).toEqual({
+      ok: false,
+      error: "Les bâtiments spéciaux ne sont pas de la partie.",
+    });
+  });
+
+  it("la décharge divise par deux les loyers du quartier ; le propriétaire la fait raser à ses frais", () => {
+    const s = district();
+    act(s, "b", { type: "special", square: 18, kind: "decharge" });
+    expect(P(s, "b").cash).toBe(1400);
+    expect(s.deeds[18]!.special).toEqual({ kind: "decharge", by: "b" });
+    expect(rentFor(s, 16, { diceTotal: 7 })).toBe(275);
+    expect(rentFor(s, 19, { diceTotal: 7 })).toBe(300);
+    nextTurnOf(s, "a");
+    const events = act(s, "a", { type: "raze", square: 18 });
+    expect(events).toContainEqual({ type: "raze", player: "a", square: 18, kind: "decharge", how: "pay" });
+    expect(P(s, "a").cash).toBe(1400);
+    expect(s.deeds[18]!.special).toBeUndefined();
+    expect(rentFor(s, 16, { diceTotal: 7 })).toBe(550);
+  });
+
+  it("la centrale coupe tous les loyers du quartier, même ceux des autres propriétaires", () => {
+    const s = district();
+    s.deeds[19]!.owner = "b";
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = 0;
+    act(s, "b", { type: "special", square: 16, kind: "centrale" });
+    expect(P(s, "b").cash).toBe(1250);
+    expect([16, 18, 19].map((i) => rentFor(s, i, { diceTotal: 7 }))).toEqual([0, 0, 0]);
+  });
+
+  it("une nuisance se pose chez un adversaire, une seule par quartier, jamais là où il y a un parc", () => {
+    const s = district();
+    expect(() => act(s, "b", { type: "special", square: 1, kind: "decharge" })).toThrow("Une nuisance se pose chez un adversaire.");
+    act(s, "b", { type: "special", square: 16, kind: "decharge" });
+    nextTurnOf(s, "b");
+    expect(() => act(s, "b", { type: "special", square: 18, kind: "centrale" })).toThrow("Ce quartier a déjà sa nuisance.");
+    own(s, "a", 6, 8, 9);
+    nextTurnOf(s, "a");
+    expect(() => act(s, "a", { type: "special", square: 18, kind: "parc" })).toThrow("Fais d'abord raser la nuisance du quartier.");
+    act(s, "a", { type: "special", square: 6, kind: "parc" });
+    nextTurnOf(s, "b");
+    expect(() => act(s, "b", { type: "special", square: 8, kind: "decharge" })).toThrow("Un parc protège ce quartier.");
+    expect(() => act(s, "b", { type: "special", square: 6, kind: "decharge" })).toThrow(
+      "Il y a déjà un bâtiment spécial sur ce terrain.",
+    );
+  });
+
+  it("la tour double les loyers d'un quartier complet ; une décharge l'annule", () => {
+    const s = district("a");
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = 0;
+    s.deeds[19]!.owner = null;
+    expect(() => act(s, "a", { type: "special", square: 16, kind: "tour" })).toThrow("Il faut tout le quartier pour la tour.");
+    s.deeds[19]!.owner = "a";
+    const before = netWorth(s, "a");
+    act(s, "a", { type: "special", square: 16, kind: "tour" });
+    expect(P(s, "a").cash).toBe(1100);
+    expect(netWorth(s, "a")).toBe(before);
+    expect(rentFor(s, 18, { diceTotal: 7 })).toBe(56);
+    nextTurnOf(s, "b");
+    act(s, "b", { type: "special", square: 18, kind: "decharge" });
+    expect(rentFor(s, 18, { diceTotal: 7 })).toBe(28);
+  });
+
+  it("le stade fait payer un billet à chaque adversaire qui passe sur la case, en plus du loyer s'il s'y arrête", () => {
+    const s = district("a");
+    own(s, "a", 6);
+    act(s, "a", { type: "special", square: 6, kind: "stade" });
+    expect(P(s, "a").cash).toBe(1300);
+    // Son propre stade ne coûte rien
+    P(s, "a").position = 4;
+    rollAs(s, "a", [3, 4]);
+    expect(P(s, "a").cash).toBe(1300);
+    nextTurnOf(s, "b");
+    P(s, "b").position = 4;
+    const events = rollAs(s, "b", [3, 4]);
+    expect(events).toContainEqual({ type: "money", from: "b", to: "a", amount: 50, reason: "ticket", square: 6 });
+    expect(P(s, "b").cash).toBe(1450);
+    nextTurnOf(s, "b");
+    P(s, "b").position = 1;
+    rollAs(s, "b", [2, 3]);
+    expect(P(s, "b").position).toBe(6);
+    expect(P(s, "b").cash).toBe(1450 - 50 - 6);
+    expect(P(s, "a").cash).toBe(1300 + 50 + 56);
+  });
+
+  it("un seul bâtiment spécial par tour, un seul stade par joueur", () => {
+    const s = district("a");
+    act(s, "a", { type: "special", square: 16, kind: "parc" });
+    expect(() => act(s, "a", { type: "special", square: 18, kind: "stade" })).toThrow("Un seul bâtiment spécial par tour.");
+    nextTurnOf(s, "a");
+    act(s, "a", { type: "special", square: 18, kind: "stade" });
+    nextTurnOf(s, "a");
+    own(s, "a", 6);
+    expect(() => act(s, "a", { type: "special", square: 6, kind: "stade" })).toThrow("Tu as déjà un stade.");
+    expect(() => act(s, "a", { type: "special", square: 19, kind: "parc" })).toThrow("Ce quartier a déjà un parc.");
+  });
+
+  it("son bâtiment se revend à moitié prix, même pendant une dette ; une nuisance attend son tour pour être rasée", () => {
+    const s = district("b");
+    own(s, "a", 6);
+    act(s, "b", { type: "special", square: 6, kind: "decharge" });
+    nextTurnOf(s, "a");
+    act(s, "a", { type: "special", square: 16, kind: "parc" });
+    Object.assign(P(s, "a"), { cash: 10, position: 1 });
+    rollAs(s, "a", [1, 2]);
+    expect(s.step).toBe("debt");
+    expect(() => act(s, "a", { type: "special", square: 18, kind: "tour" })).toThrow("Tu poses un bâtiment spécial pendant ton tour.");
+    expect(() => act(s, "a", { type: "raze", square: 6 })).toThrow("Tu fais raser pendant ton tour.");
+    const events = act(s, "a", { type: "raze", square: 16 });
+    expect(events).toContainEqual({ type: "money", from: "bank", to: "a", amount: 75, reason: "sell", square: 16 });
+    expect(P(s, "a").cash).toBe(85);
+    expect(s.deeds[16]!.special).toBeUndefined();
+  });
+
+  it("ses bâtiments empêchent d'échanger ou d'hypothéquer le terrain, pas une nuisance subie", () => {
+    const s = district("a");
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = 0;
+    own(s, "a", 1, 6);
+    act(s, "a", { type: "special", square: 6, kind: "stade" });
+    nextTurnOf(s, "a");
+    act(s, "a", { type: "special", square: 19, kind: "tour" });
+    nextTurnOf(s, "b");
+    act(s, "b", { type: "special", square: 1, kind: "decharge" });
+    nextTurnOf(s, "a");
+    expect(() => act(s, "a", { type: "mortgage", square: 6 })).toThrow("Revends d'abord le stade.");
+    const offer = (squares: number[]) => ({ type: "propose" as const, to: "b", give: { cash: 0, squares, jailCards: 0 }, get: { cash: 10, squares: [], jailCards: 0 } });
+    expect(() => act(s, "a", offer([6]))).toThrow("Il faut d'abord revendre le stade de Mende.");
+    expect(() => act(s, "a", offer([18]))).toThrow("Il y a une tour Capitale dans le quartier de Brest : il faut la revendre avant.");
+    act(s, "a", offer([1]));
+    act(s, "a", { type: "mortgage", square: 1 });
+    expect(s.deeds[1]!.mortgaged).toBe(true);
+  });
+
+  it("la faillite rase tout : la banque rachète à moitié prix ce qui était au joueur", () => {
+    const s = district("a");
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = 0;
+    own(s, "a", 1, 6);
+    act(s, "a", { type: "special", square: 6, kind: "stade" });
+    nextTurnOf(s, "a");
+    act(s, "a", { type: "special", square: 16, kind: "parc" });
+    nextTurnOf(s, "b");
+    act(s, "b", { type: "special", square: 1, kind: "decharge" });
+    nextTurnOf(s, "a");
+    Object.assign(P(s, "a"), { cash: 0, position: 1 });
+    rollAs(s, "a", [1, 2]);
+    const events = act(s, "a", { type: "bankrupt" });
+    expect(events.filter((e) => e.type === "raze").map((e) => e.type === "raze" && e.kind)).toEqual(["decharge", "stade", "parc"]);
+    expect(events).toContainEqual({ type: "money", from: "bank", to: "a", amount: 100, reason: "sell", square: 6 });
+    expect(events).toContainEqual({ type: "money", from: "bank", to: "a", amount: 75, reason: "sell", square: 16 });
+    expect([1, 6, 16].map((i) => s.deeds[i]!.special)).toEqual([undefined, undefined, undefined]);
+  });
+});
+
 describe("fin de partie", () => {
   it("à l'heure, le tour se termine et le plus riche gagne", () => {
     const s = game(3, { end: "timed" });
@@ -457,6 +628,8 @@ function simulate(levels: BotLevel[], seed: number, settings: Partial<CapitaleSe
   const level = (id: string) => levels[ids.indexOf(id)]!;
   let tradedTurn = -1;
   let actions = 0;
+  /** Les bâtiments spéciaux posés, par sorte, et les nuisances rasées */
+  const placed: Record<string, number> = {};
   for (let guard = 0; guard < 80_000 && s.step !== "over"; guard++) {
     const t = s.trades[0];
     if (t && s.step !== "auction") {
@@ -478,15 +651,19 @@ function simulate(levels: BotLevel[], seed: number, settings: Partial<CapitaleSe
       continue;
     }
     const actor = actorOf(s)!;
-    const a = botAction(s, actor, level(actor), { allowTrade: s.turnId !== tradedTurn });
+    const a = botAction(s, actor, level(actor), { allowTrade: s.turnId !== tradedTurn, allowAttack: true });
     if (!a) throw new Error(`aucun coup pour ${actor} à l'étape ${s.step}`);
     if (a.type === "propose") tradedTurn = s.turnId;
     const r = applyAction(s, actor, a);
     if (!r.ok) throw new Error(`${a.type} à l'étape ${s.step} : ${r.error}`);
+    for (const e of r.events) {
+      if (e.type === "special") placed[e.kind] = (placed[e.kind] ?? 0) + 1;
+      if (e.type === "raze" && e.how === "pay") placed.razed = (placed.razed ?? 0) + 1;
+    }
     actions += 1;
     checkInvariants(s);
   }
-  return { s, actions };
+  return { s, actions, placed };
 }
 
 describe("bots", () => {
@@ -516,6 +693,39 @@ describe("bots", () => {
     }
     expect(wins).toBeGreaterThanOrEqual(13);
   }, 60_000);
+
+  it("avec les bâtiments spéciaux, les bots s'en servent tous et vont au bout sans coup refusé", () => {
+    const total: Record<string, number> = {};
+    const mixes: BotLevel[][] = [
+      ["facile", "moyen", "fort"],
+      ["fort", "fort", "moyen", "facile"],
+      ["moyen", "moyen"],
+    ];
+    let seed = 900;
+    for (const mix of mixes) {
+      for (let k = 0; k < 3; k++) {
+        const { s, placed } = simulate(mix, seed++, { specials: true, quickStart: k % 2 === 1 });
+        expect(s.step).toBe("over");
+        for (const [kind, n] of Object.entries(placed)) total[kind] = (total[kind] ?? 0) + n;
+      }
+    }
+    for (const kind of ["parc", "tour", "stade", "razed"]) expect(total[kind]).toBeGreaterThan(0);
+    expect((total.decharge ?? 0) + (total.centrale ?? 0)).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("le bot d'un joueur absent se défend mais ne pose pas de nuisance à sa place", () => {
+    const s = game(2, { specials: true });
+    own(s, "b", 16, 18, 19);
+    for (const i of [16, 18, 19]) s.deeds[i]!.houses = HOTEL;
+    Object.assign(s, { step: "manage", dice: [1, 2] });
+    P(s, "a").cash = 3000;
+    expect(botAction(s, "a", "fort", { allowAttack: true })).toMatchObject({ type: "special", kind: "centrale" });
+    expect(botAction(s, "a", "fort", { allowAttack: false })).toEqual({ type: "endTurn" });
+    // Le propriétaire touché fait raser la centrale dès qu'il le peut
+    act(s, "a", { type: "special", square: 18, kind: "centrale" });
+    Object.assign(s, { step: "manage", turn: 1, turnId: s.turnId + 1 });
+    expect(botAction(s, "b", "moyen")).toEqual({ type: "raze", square: 18 });
+  });
 
   it("le bot n'achète pas au-delà de ses moyens et paie ses dettes", () => {
     const s = game();
