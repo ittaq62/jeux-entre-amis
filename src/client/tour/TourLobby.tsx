@@ -1,6 +1,7 @@
 import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import {
   END_CHOICES,
+  gameModifiers,
   gameVariants,
   RULES_MODES,
   TOUR_BOT_LEVELS,
@@ -250,6 +251,15 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
                     {gameVariants(g)
                       .map((v) => v.name)
                       .join(", ")}
+                    {gameModifiers(g).length > 0 && s.rules === "random" && (
+                      <span className="hint">
+                        {" "}
+                        · tiré à part :{" "}
+                        {gameModifiers(g)
+                          .map((m) => m.name)
+                          .join(", ")}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

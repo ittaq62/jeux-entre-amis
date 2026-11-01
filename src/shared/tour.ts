@@ -231,13 +231,37 @@ const NAVAL_VARIANTS: VariantOf<NavalSettings>[] = [
     blurb: "Grande grille 12 × 12, et couler un navire rapporte une arme : radar, torpille ou barrage.",
     settings: { grid: 12, arsenal: true },
   },
-  {
-    id: "eclair",
-    name: "Éclair",
-    blurb: "Petite grille 8 × 8 et navires collés : ça va très vite.",
-    settings: { grid: 8, touching: true },
-  },
+  { id: "eclair", name: "Éclair", blurb: "Petite grille 8 × 8 : ça va très vite.", settings: { grid: 8 } },
 ];
+
+/**
+ * Les règles à part, tirées chacune de leur côté par-dessus la variante : à la bataille navale, les navires collés.
+ * Une variante tirée s'écrit alors « salve+colles ».
+ */
+const MODIFIERS: Partial<Record<GameId, (VariantOf<object> & { chance: number })[]>> = {
+  naval: [
+    {
+      id: "colles",
+      name: "navires collés",
+      blurb: "Les navires peuvent se toucher.",
+      settings: { touching: true } satisfies Partial<NavalSettings>,
+      chance: 0.5,
+    },
+  ],
+};
+
+/** Les règles à part d'un jeu, sans leurs réglages */
+export function gameModifiers(game: GameId): TourVariant[] {
+  return (MODIFIERS[game] ?? []).map(({ id, name, blurb }) => ({ id, name, blurb }));
+}
+
+/** Une variante et ses règles à part : « salve+colles » */
+function splitVariant(game: GameId, id: string | null | undefined) {
+  const [baseId, ...mods] = (id ?? "").split("+");
+  const base = VARIANTS[game].find((v) => v.id === baseId);
+  const extra = mods.map((m) => (MODIFIERS[game] ?? []).find((x) => x.id === m));
+  return { base, extra: extra.every(Boolean) ? (extra as VariantOf<object>[]) : null };
+}
 
 const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
   { id: "survie", name: "Dernier debout", blurb: "Une seule vie ; après 3 minutes, la marée de lignes grises monte.", settings: {} },
@@ -295,8 +319,13 @@ export function baseVariant(game: GameId): string {
 }
 
 export function findVariant(game: GameId, id: string | null | undefined): TourVariant | null {
-  const v = VARIANTS[game].find((x) => x.id === id);
-  return v ? { id: v.id, name: v.name, blurb: v.blurb } : null;
+  const { base, extra } = splitVariant(game, id);
+  if (!base || !extra) return null;
+  return {
+    id: id!,
+    name: [base.name, ...extra.map((m) => m.name)].join(", "),
+    blurb: [base.blurb, ...extra.map((m) => m.blurb)].join(" "),
+  };
 }
 
 /** Les réglages à appliquer à la table pour cette variante (rien si elle est inconnue) */
@@ -305,12 +334,17 @@ export function variantSettings(game: "naval", id: string | null | undefined): P
 export function variantSettings(game: "bricks", id: string | null | undefined): Partial<BricksSettings>;
 export function variantSettings(game: "capitale", id: string | null | undefined): Partial<CapitaleSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
-  return { ...(VARIANTS[game].find((v) => v.id === id)?.settings ?? {}) };
+  const { base, extra } = splitVariant(game, id);
+  if (!base || !extra) return {};
+  return Object.assign({}, base.settings, ...extra.map((m) => m.settings));
 }
 
+/** Une variante au hasard, puis chaque règle à part tirée de son côté */
 export function drawVariant(game: GameId, random: () => number): string {
   const all = VARIANTS[game];
-  return all[Math.min(all.length - 1, Math.floor(random() * all.length))]!.id;
+  const base = all[Math.min(all.length - 1, Math.floor(random() * all.length))]!.id;
+  const mods = (MODIFIERS[game] ?? []).filter((m) => random() < m.chance).map((m) => m.id);
+  return [base, ...mods].join("+");
 }
 
 /** Voix nécessaires : la moitié des votants, au moins une */

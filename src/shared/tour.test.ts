@@ -197,10 +197,17 @@ describe("règles des jeux", () => {
     expect(findVariant("bricks", "chrono")?.name).toBe("K.O. au chrono");
   });
 
-  it("tire toutes les variantes au hasard", () => {
+  it("tire toutes les variantes au hasard, et les navires collés à part", () => {
     const seen = new Set<string>();
-    for (let i = 0; i < 200; i++) seen.add(drawVariant("naval", rand));
-    expect(seen.size).toBe(gameVariants("naval").length);
+    for (let i = 0; i < 400; i++) seen.add(drawVariant("naval", rand));
+    // Chaque variante, avec ou sans navires collés
+    expect(seen.size).toBe(gameVariants("naval").length * 2);
+    expect(findVariant("naval", "salve+colles")?.name).toBe("Salve, navires collés");
+    expect(variantSettings("naval", "eclair+colles")).toEqual({ grid: 8, touching: true });
+    expect(variantSettings("naval", "eclair")).toEqual({ grid: 8 });
+    expect(findVariant("naval", "salve+inconnue")).toBeNull();
+    // Les autres jeux n'ont pas de règle à part
+    for (let i = 0; i < 50; i++) expect(drawVariant("uno", rand)).not.toContain("+");
   });
 
   it("adopte une variante dès la moitié des voix des joueurs présents", () => {
