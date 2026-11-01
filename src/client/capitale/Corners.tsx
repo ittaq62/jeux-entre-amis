@@ -44,6 +44,7 @@ export function Corners({
   serverOffset,
   turn,
   phone,
+  onPick,
 }: {
   g: CapitaleView;
   room: CapitaleRoomView;
@@ -54,6 +55,8 @@ export function Corners({
   /** Le joueur dont c'est le tour, tel qu'on le montre */
   turn: string | null;
   phone: boolean;
+  /** Un clic sur un joueur : la caméra va voir son pion */
+  onPick: (id: string) => void;
 }) {
   return (
     <div className={`cap-corners ${phone ? "is-phone" : ""}`}>
@@ -67,6 +70,11 @@ export function Corners({
             key={p.id}
             className={`cap-corner at-${SPOTS[k % SPOTS.length]} ${turn === p.id ? "is-turn" : ""} ${p.bankrupt ? "is-out" : ""} ${p.id === g.you ? "is-me" : ""}`}
             style={{ ["--pawn" as string]: color }}
+            role="button"
+            tabIndex={0}
+            title={p.bankrupt ? undefined : `Voir le pion de ${p.id === g.you ? "toi" : (s?.name ?? "ce joueur")} sur le plateau`}
+            onClick={() => !p.bankrupt && onPick(p.id)}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && !p.bankrupt && onPick(p.id)}
           >
             <span className="cap-corner-avatar" data-cap-anchor={p.id}>
               {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 34 : 52} />}

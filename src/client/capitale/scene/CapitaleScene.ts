@@ -49,7 +49,20 @@ export interface SceneOptions {
   onHover?: (square: number | null, x: number, y: number) => void;
   /** Ce qu'affiche l'étiquette d'une case achetable : le prix, ou le loyer chez son propriétaire */
   tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean };
+  /** La vue a été déplacée à la main (ou remise en place) : le bouton « Recentrer » apparaît ou s'en va */
+  onView?: (moved: boolean) => void;
 }
+
+/** Les gros plans automatiques, au choix du joueur */
+export interface CloseUps {
+  /** La caméra s'approche des dés à chaque lancer */
+  dice: boolean;
+  /** La caméra suit le pion qui avance */
+  follow: boolean;
+}
+
+/** Les villes qu'on veut voir : celles des propriétaires retenus restent en couleur, les autres passent en maquette */
+export type OwnerFilter = ((owner: string) => boolean) | null;
 
 /** Une petite animation : t va de 0 à 1 sur dur secondes */
 interface Tween {
@@ -104,6 +117,12 @@ interface Living {
 
 const HOP_SECONDS = 0.17;
 const JUMP_SECONDS = 0.55;
+/** Le zoom permis : de tout près (une rue) jusqu'à un peu plus loin que le plateau entier */
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 1.15;
+/** La distance des gros plans, en part de la vue d'ensemble */
+const DICE_CLOSE = 0.27;
+const FOLLOW_CLOSE = 0.48;
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
 /** Un ressort : dépasse un peu, puis se pose */
@@ -144,6 +163,30 @@ export class CapitaleScene {
   private camTarget = new THREE.Vector3();
   private camDist = 20;
   private placed = false;
+  /** Ce que le joueur a fait de la vue : la cible glissée sur le plateau (le zoom est dans zoom) */
+  private pan = new THREE.Vector3();
+  private viewMoved = false;
+  /** Le dernier geste du joueur sur la vue : les gros plans automatiques le laissent faire un moment */
+  private grabbedAt = -10;
+  /** Les gros plans demandés, et celui en cours (sur les dés, sur un pion) */
+  private closeUps: CloseUps = { dice: false, follow: false };
+  private closeUp: { point: THREE.Vector3; dist: number; until: number; pawn?: string; dice?: boolean } | null = null;
+  /** La caméra est encore en route vers sa place : on redessine */
+  private settling = false;
+  /** Les doigts (ou la souris) posés sur le plateau, et le pincement en cours */
+  private touches = new Map<number, { x: number; y: number }>();
+  private pinch: { spread: number; zoom: number; mid: { x: number; y: number } } | null = null;
+  private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  /** Le filtre des villes, la matière « maquette » des autres, et les contours des villes retenues */
+  private filter: OwnerFilter = null;
+  private filterKey = "";
+  private filterRings: THREE.Mesh[] = [];
+  private ghostMat = new THREE.MeshStandardMaterial({ color: "#dfe1da", roughness: 0.95, metalness: 0 });
+  /** Un voile clair sur les parcelles et les cases qu'on ne regarde pas : seules les villes retenues gardent leurs couleurs */
+  private veils = new Map<string, THREE.Mesh>();
+  private veilMat = new THREE.MeshBasicMaterial({ color: "#f4f5f0", transparent: true, opacity: 0.74, depthWrite: false });
+  /** Le pion à suivre dès que le gros plan sur les dés aura laissé lire le résultat */
+  private pendingFollow: { id: string; seconds: number } | null = null;
 
   private pawns = new Map<string, PawnObj>();
   private turnRing: THREE.Mesh;
@@ -685,6 +728,7 @@ export class CapitaleScene {
         obj.square = p.position;
         obj.target.copy(to);
         this.lookAtSoon(to);
+        if (this.closeUps.follow) this.followPawn(p.id, jump ? JUMP_SECONDS + 1.1 : 1);
       } else if (!obj.target.equals(to)) {
         // Même case, autre place (quelqu'un arrive ou s'en va)
         if (obj.queue.length > 0) obj.queue[obj.queue.length - 1]!.to = to;
@@ -721,6 +765,7 @@ export class CapitaleScene {
       if (lot) this.syncLot(lot, d, colorOf, first);
     }
     this.syncTags();
+    if (this.filter) this.applyFilter();
   }
 
   private syncLot(o: LotObj, d: SceneDeed, colorOf: (id: string | null) => string, first: boolean) {
@@ -951,6 +996,9 @@ export class CapitaleScene {
     for (const g of this.diceGlow) (g.material as THREE.MeshBasicMaterial).opacity = 0;
     play("capDiceShake", { volume: 0.7 });
     this.focus = { point: new THREE.Vector3(0, 0, 0), until: this.time + data.duration + 0.4 };
+    // Gros plan : la caméra plonge vers les dés et les garde le temps de lire le résultat
+    if (this.closeUps.dice && this.time - this.grabbedAt > 2)
+      this.closeUp = { point: new THREE.Vector3(), dist: DICE_CLOSE, until: this.time + data.duration + 1.2, dice: true };
   }
 
   /** Les dés posés, sans lancer (à l'arrivée à la table, ou en mode sobre) */
@@ -1005,6 +1053,12 @@ export class CapitaleScene {
       d.position.copy(f.p);
       d.quaternion.copy(f.q);
     });
+    if (this.closeUp?.dice)
+      this.closeUp.point.set(
+        (this.dice[0]!.position.x + this.dice[1]!.position.x) / 2,
+        0,
+        (this.dice[0]!.position.z + this.dice[1]!.position.z) / 2,
+      );
     // Le bruit des dés : chaque choc, plus ou moins fort
     while (th.sounded < th.data.hits.length && th.data.hits[th.sounded]!.t <= t) {
       const h = th.data.hits[th.sounded]!;
@@ -1211,6 +1265,7 @@ export class CapitaleScene {
       this.marker.rotation.y = this.time * 1.5;
     }
     if (this.highlightRing) (this.highlightRing.material as THREE.MeshBasicMaterial).opacity = 0.55 + glow * 0.45;
+    for (const r of this.filterRings) (r.material as THREE.MeshBasicMaterial).opacity = 0.6 + glow * 0.4;
     for (const f of [this.highlightFrame]) {
       for (const bar of f.children) {
         const m = (bar as THREE.Mesh).material as THREE.MeshBasicMaterial;
@@ -1249,6 +1304,8 @@ export class CapitaleScene {
     for (const x of [-e, e]) for (const z of [-e, e]) for (const y of [-0.3, 0.25]) corners.push(new THREE.Vector3(x, y, z));
     let target = new THREE.Vector3();
     let dist = 20;
+    // L'annonce du coup passe en haut du plateau (sur téléphone, sous les boutons de la vue) : on le descend un peu
+    const lift = this.opts.phone ? 0.1 : 0.06;
     for (let iter = 0; iter < 3; iter++) {
       let lo = 5;
       let hi = 80;
@@ -1257,7 +1314,7 @@ export class CapitaleScene {
         this.placeCamera(this.yaw, this.pitch, mid, target);
         const fits = corners.every((c) => {
           const p = c.clone().project(this.camera);
-          return Math.abs(p.x) <= 0.93 && Math.abs(p.y) <= 0.92;
+          return Math.abs(p.x) <= 0.93 && Math.abs(p.y + lift) <= (this.opts.phone ? 0.92 : 0.895);
         });
         if (fits) hi = mid;
         else lo = mid;
@@ -1272,7 +1329,7 @@ export class CapitaleScene {
         maxY = Math.max(maxY, p.y);
       }
       // Recentrer : déplacer la cible vers le fond du plateau si l'image penche vers le bas
-      const off = (minY + maxY) / 2;
+      const off = (minY + maxY) / 2 + lift;
       const away = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       target = target.clone().addScaledVector(away, off * dist * 0.28);
     }
@@ -1302,14 +1359,38 @@ export class CapitaleScene {
     }
     if (rotating) this.fit();
     const focusing = this.focus && this.time < this.focus.until;
-    const goal = this.baseTarget.clone();
+    // La vue du joueur : la cible glissée, le zoom choisi
+    const goal = this.baseTarget.clone().add(this.pan);
     let dist = this.distance * this.zoom;
-    if (focusing && this.focus) {
+    // Un léger regard vers l'action, seulement quand la vue est à sa place
+    if (focusing && this.focus && !this.viewMoved) {
       goal.lerp(this.focus.point, 0.08);
       dist *= 0.97;
     }
-    this.camTarget.lerp(goal, k * 0.6);
-    this.camDist += (dist - this.camDist) * k * 0.6;
+    // Un gros plan en cours (les dés, le pion qui avance, un joueur montré) : la caméra y va, puis revient
+    let speed = k * 0.6;
+    const cu = this.closeUp;
+    if (cu && this.time < cu.until) {
+      if (cu.pawn) {
+        const o = this.pawns.get(cu.pawn);
+        if (o) cu.point.set(o.pos.x, 0, o.pos.z);
+      }
+      goal.copy(cu.point);
+      dist = this.distance * Math.min(cu.dist, this.zoom);
+      speed = k * 0.9;
+    } else if (cu) {
+      this.closeUp = null;
+      // Les dés sont lus : la caméra rejoint le pion s'il est encore en route
+      const next = this.pendingFollow;
+      this.pendingFollow = null;
+      const o = next ? this.pawns.get(next.id) : undefined;
+      if (next && o && (o.hop || o.queue.length > 0)) this.followPawn(next.id, next.seconds);
+    }
+    // Sous le doigt, la vue suit sans retard
+    if (this.touches.size > 0 && this.pointer.moved && !cu) speed = 1;
+    this.settling = this.camTarget.distanceToSquared(goal) > 1e-6 || Math.abs(dist - this.camDist) > 1e-3;
+    this.camTarget.lerp(goal, speed);
+    this.camDist += (dist - this.camDist) * speed;
     const sway = this.opts.reduced ? 0 : 1;
     this.placeCamera(
       this.yaw + Math.sin(this.time * 0.21) * 0.012 * sway,
@@ -1342,26 +1423,267 @@ export class CapitaleScene {
     el.addEventListener("pointerdown", this.onDown);
     el.addEventListener("pointermove", this.onMove);
     el.addEventListener("pointerup", this.onUp);
+    el.addEventListener("pointercancel", this.onCancel);
     el.addEventListener("pointerleave", this.onLeave);
-    if (!this.opts.phone) el.addEventListener("wheel", this.onWheel, { passive: false });
+    el.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
   private onDown = (e: PointerEvent) => {
-    this.pointer = { down: true, x: e.clientX, y: e.clientY, moved: false };
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try {
+      this.renderer.domElement.setPointerCapture(e.pointerId);
+    } catch {
+      // le pointeur est déjà parti
+    }
+    if (this.touches.size === 1) this.pointer = { down: true, x: e.clientX, y: e.clientY, moved: false };
+    else {
+      // Deux doigts : on pince pour zoomer, on glisse pour déplacer ; ce n'est plus un appui sur une case
+      this.pointer.moved = true;
+      this.pinch = { spread: this.spread(), zoom: this.zoom, mid: this.middle() };
+    }
   };
 
   private onMove = (e: PointerEvent) => {
-    if (this.pointer.down && Math.hypot(e.clientX - this.pointer.x, e.clientY - this.pointer.y) > 6) this.pointer.moved = true;
-    if (e.pointerType === "mouse") this.hoverRay = { x: e.clientX, y: e.clientY };
+    const prev = this.touches.get(e.pointerId);
+    if (!prev) {
+      if (e.pointerType === "mouse") this.hoverRay = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pinch && this.touches.size >= 2) {
+      const mid = this.middle();
+      this.zoomTo((this.pinch.zoom * this.pinch.spread) / Math.max(1, this.spread()), mid);
+      this.panBy(this.pinch.mid, mid);
+      this.pinch.mid = mid;
+      return;
+    }
+    if (!this.pointer.moved && Math.hypot(e.clientX - this.pointer.x, e.clientY - this.pointer.y) > 6) {
+      this.pointer.moved = true;
+      // On glisse : la bulle de la case survolée s'en va
+      this.hoverRay = null;
+      if (this.hover) {
+        this.hover = null;
+        this.updateFrames();
+        this.opts.onHover?.(null, 0, 0);
+      }
+    }
+    if (this.pointer.moved) {
+      this.panBy(prev, { x: e.clientX, y: e.clientY });
+      this.renderer.domElement.style.cursor = "grabbing";
+    }
   };
 
   private onUp = (e: PointerEvent) => {
+    if (!this.touches.delete(e.pointerId)) return;
+    if (this.touches.size < 2) this.pinch = null;
+    if (this.touches.size > 0) return;
     const wasClick = this.pointer.down && !this.pointer.moved;
     this.pointer.down = false;
+    this.renderer.domElement.style.cursor = "";
     if (!wasClick) return;
     const hit = this.pick(e.clientX, e.clientY);
     if (hit) this.opts.onSquare(hit.square);
   };
+
+  private onCancel = (e: PointerEvent) => {
+    this.touches.delete(e.pointerId);
+    if (this.touches.size < 2) this.pinch = null;
+    if (this.touches.size === 0) this.pointer.down = false;
+  };
+
+  private spread(): number {
+    const [a, b] = [...this.touches.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 1;
+  }
+
+  private middle(): { x: number; y: number } {
+    const [a, b] = [...this.touches.values()];
+    return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : (a ?? { x: 0, y: 0 });
+  }
+
+  /** Le point du plateau sous un point de l'écran */
+  private groundAt(clientX: number, clientY: number): THREE.Vector3 | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.raycaster.ray.intersectPlane(this.ground, new THREE.Vector3());
+  }
+
+  /** Glisse la vue : le point du plateau sous le doigt reste sous le doigt */
+  private panBy(from: { x: number; y: number }, to: { x: number; y: number }) {
+    const a = this.groundAt(from.x, from.y);
+    const b = this.groundAt(to.x, to.y);
+    if (!a || !b) return;
+    const delta = a.sub(b);
+    delta.y = 0;
+    this.pan.add(delta);
+    this.clampPan();
+    this.camTarget.copy(this.baseTarget).add(this.pan);
+    this.closeUp = null;
+    this.pendingFollow = null;
+    this.grabbedAt = this.time;
+    this.viewChanged();
+  }
+
+  /** Zoome vers un point de l'écran (la souris, le milieu des deux doigts) */
+  private zoomTo(zoom: number, at?: { x: number; y: number }) {
+    const next = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+    const ratio = next / this.zoom;
+    if (Math.abs(ratio - 1) < 1e-4) return;
+    const point = at ? this.groundAt(at.x, at.y) : null;
+    if (point) {
+      const target = this.baseTarget.clone().add(this.pan);
+      const shift = point.sub(target).multiplyScalar(1 - ratio);
+      shift.y = 0;
+      this.pan.add(shift);
+      this.clampPan();
+    }
+    this.zoom = next;
+    this.camDist = this.distance * this.zoom;
+    this.camTarget.copy(this.baseTarget).add(this.pan);
+    this.closeUp = null;
+    this.grabbedAt = this.time;
+    this.viewChanged();
+  }
+
+  /** La vue ne quitte pas le plateau */
+  private clampPan() {
+    const lim = L.HALF * 0.92;
+    this.pan.x = THREE.MathUtils.clamp(this.pan.x, -lim - this.baseTarget.x, lim - this.baseTarget.x);
+    this.pan.z = THREE.MathUtils.clamp(this.pan.z, -lim - this.baseTarget.z, lim - this.baseTarget.z);
+  }
+
+  private viewChanged() {
+    this.dirty = true;
+    const moved = this.pan.lengthSq() > 0.0025 || Math.abs(this.zoom - 1) > 0.02;
+    if (moved === this.viewMoved) return;
+    this.viewMoved = moved;
+    this.opts.onView?.(moved);
+  }
+
+  /** Remet la vue d'ensemble : tout le plateau, bien centré */
+  resetView() {
+    this.pan.set(0, 0, 0);
+    this.zoom = 1;
+    this.closeUp = null;
+    this.viewChanged();
+  }
+
+  /** Les gros plans automatiques que le joueur a choisis */
+  setCloseUps(c: CloseUps) {
+    this.closeUps = c;
+    if (!c.follow) this.pendingFollow = null;
+    if (!c.dice && this.closeUp?.dice) this.closeUp = null;
+    if (!c.follow && this.closeUp?.pawn) this.closeUp = null;
+  }
+
+  /** La caméra va voir un pion quelques secondes (un clic sur le portrait d'un joueur) */
+  showPawn(id: string) {
+    if (!this.pawns.has(id)) return;
+    this.grabbedAt = -10;
+    this.followPawn(id, 2.6, 0.42);
+  }
+
+  private followPawn(id: string, seconds: number, dist = FOLLOW_CLOSE) {
+    if (this.opts.reduced || this.time - this.grabbedAt < 2) return;
+    if (this.closeUp?.dice && this.time < this.closeUp.until) {
+      this.pendingFollow = { id, seconds };
+      return;
+    }
+    const o = this.pawns.get(id);
+    if (!o || o.out) return;
+    this.dirty = true;
+    const until = this.time + seconds;
+    if (this.closeUp?.pawn === id) this.closeUp.until = Math.max(this.closeUp.until, until);
+    else this.closeUp = { point: new THREE.Vector3(o.pos.x, 0, o.pos.z), dist, until, pawn: id };
+  }
+
+  // -------------------------------------------------------------------------
+  // Le filtre des villes
+  // -------------------------------------------------------------------------
+
+  /** Montre ou cache le voile d'une parcelle (p12) ou d'une case du tour (s12), créé à la première demande */
+  private setVeil(key: string, on: boolean, shape: () => THREE.BufferGeometry) {
+    let v = this.veils.get(key);
+    if (!v) {
+      if (!on) return;
+      v = new THREE.Mesh(shape(), this.veilMat);
+      v.position.y = 0.009;
+      v.renderOrder = 1;
+      this.scene.add(v);
+      this.veils.set(key, v);
+    }
+    v.visible = on;
+  }
+
+  /** Ne garder en couleur que les villes de certains propriétaires (null : toutes) */
+  setFilter(f: OwnerFilter) {
+    this.filter = f;
+    this.filterKey = "";
+    this.applyFilter();
+  }
+
+  private applyFilter() {
+    this.dirty = true;
+    const s = this.state;
+    const ownerOf = (i: number) => s?.deeds[i]?.owner ?? null;
+    const kept = (i: number) => {
+      const owner = ownerOf(i);
+      return this.filter === null || (owner !== null && this.filter(owner));
+    };
+    for (const [i, lot] of this.lots) {
+      const on = kept(i);
+      lot.root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (!on && m.userData.mat0 === undefined) {
+          m.userData.mat0 = m.material;
+          m.material = this.ghostMat;
+        } else if (on && m.userData.mat0 !== undefined) {
+          m.material = m.userData.mat0 as THREE.Material;
+          delete m.userData.mat0;
+        }
+      });
+      if (lot.outline) lot.outline.visible = on;
+      this.setVeil(`p${i}`, this.filter !== null && !on, () => {
+        const shape = new THREE.Shape(lot.parcel.poly.map((q) => new THREE.Vector2(q.x, -q.z)));
+        const geo = new THREE.ShapeGeometry(shape);
+        geo.rotateX(-Math.PI / 2);
+        return geo;
+      });
+    }
+    for (const [i, tint] of this.ringOwner) {
+      tint.visible = ownerOf(i) !== null && kept(i);
+      const r = L.squareRect(i);
+      this.setVeil(`s${i}`, this.filter !== null && !kept(i), () => {
+        const geo = new THREE.PlaneGeometry(r.w, r.d);
+        geo.rotateX(-Math.PI / 2);
+        geo.translate(r.x + r.w / 2, 0, r.z + r.d / 2);
+        return geo;
+      });
+    }
+    for (const [i, t] of this.tags) t.sprite.material.opacity = kept(i) ? 1 : 0.25;
+    // Les contours brillants des villes retenues : refaits seulement si les propriétaires ont changé
+    const key = this.filter ? [...this.lots.keys()].map((i) => (kept(i) ? `${i}:${ownerOf(i)}` : "")).join(",") : "";
+    if (key === this.filterKey) return;
+    this.filterKey = key;
+    for (const r of this.filterRings) {
+      this.scene.remove(r);
+      r.geometry.dispose();
+      (r.material as THREE.Material).dispose();
+    }
+    this.filterRings = [];
+    if (!this.filter || !s) return;
+    for (const [i, lot] of this.lots) {
+      const owner = ownerOf(i);
+      if (!owner || !kept(i)) continue;
+      const ring = this.parcelRing(lot.parcel, s.players.find((p) => p.id === owner)?.color ?? "#ffffff", 0.11, 0.95);
+      ring.position.y = 0.012;
+      this.scene.add(ring);
+      this.filterRings.push(ring);
+    }
+  }
 
   private onLeave = (e: PointerEvent) => {
     if (e.pointerType !== "mouse") return;
@@ -1376,8 +1698,9 @@ export class CapitaleScene {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.zoom = THREE.MathUtils.clamp(this.zoom * (e.deltaY > 0 ? 1.06 : 0.94), 0.62, 1.12);
-    this.dirty = true;
+    // Un cran de molette, ou le pincement du pavé tactile (deltaY fin, ctrlKey)
+    const step = e.ctrlKey ? Math.exp(e.deltaY * 0.01) : e.deltaY > 0 ? 1.1 : 1 / 1.1;
+    this.zoomTo(this.zoom * step, { x: e.clientX, y: e.clientY });
   };
 
   private pick(clientX: number, clientY: number): { square: number; rect: L.WRect } | null {
@@ -1454,7 +1777,7 @@ export class CapitaleScene {
 
   /** Ce qui demande une image à chaque passage : une animation, un lancer, un pion en route, la caméra qui tourne */
   private busy() {
-    if (this.tweens.length > 0 || this.diceThrow) return true;
+    if (this.tweens.length > 0 || this.diceThrow || this.settling || this.closeUp) return true;
     for (const o of this.pawns.values()) if (o.hop || o.queue.length > 0) return true;
     return Math.abs(this.targetYaw() - this.yaw) > 0.002 || (this.focus !== null && this.time < this.focus.until + 1);
   }
@@ -1517,8 +1840,11 @@ export class CapitaleScene {
     el.removeEventListener("pointerdown", this.onDown);
     el.removeEventListener("pointermove", this.onMove);
     el.removeEventListener("pointerup", this.onUp);
+    el.removeEventListener("pointercancel", this.onCancel);
     el.removeEventListener("pointerleave", this.onLeave);
     el.removeEventListener("wheel", this.onWheel);
+    this.ghostMat.dispose();
+    this.veilMat.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) m.geometry?.dispose();

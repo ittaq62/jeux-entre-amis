@@ -27,7 +27,9 @@
   width: 100%;
   height: 100%;
   display: block;
-  touch-action: manipulation;
+  /* Les gestes sur le plateau sont pour la vue : glisser, pincer */
+  touch-action: none;
+  cursor: grab;
 }
 
 .cap-board3d.is-failed {
@@ -48,11 +50,256 @@
   pointer-events: none;
 }
 
-.cap-rotate {
+/* Les boutons de la vue : sur PC une colonne au bord droit, entre les joueurs ; sur téléphone une ligne sous l'annonce */
+.cap-tools {
   position: absolute;
-  right: 10px;
-  top: 10px;
-  z-index: 2;
+  right: 16px;
+  top: 50%;
+  z-index: 10;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-tools.is-crowded {
+  top: 132px;
+  translate: none;
+  flex-direction: row-reverse;
+}
+
+.cap-tool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.86);
+  color: #2b3d48;
+  box-shadow: 0 6px 16px -8px rgba(20, 40, 60, 0.6);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.cap-tool:hover {
+  transform: scale(1.07);
+}
+
+.cap-tool.is-on {
+  background: #ffcf4a;
+  border-color: #fff;
+  color: #3a2a00;
+  box-shadow:
+    0 0 0 3px rgba(255, 207, 74, 0.45),
+    0 6px 16px -8px rgba(20, 40, 60, 0.6);
+}
+
+.cap-tool.is-recenter {
+  background: #2f6fb8;
+  color: #fff;
+}
+
+/* Le nom du bouton au survol, à gauche de la colonne */
+.cap-tool[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  translate: 0 -50%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(20, 34, 44, 0.92);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.cap-tools.is-crowded .cap-tool[data-tip]:hover::after {
+  right: auto;
+  left: 50%;
+  top: calc(100% + 8px);
+  translate: -50% 0;
+}
+
+.cap-tool-wrap {
+  position: relative;
+  display: grid;
+}
+
+.cap-filter-menu {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #fff;
+  color: #22313a;
+  box-shadow: 0 18px 40px -14px rgba(20, 40, 60, 0.55);
+  transform-origin: right center;
+}
+
+.cap-tools.is-crowded .cap-filter-menu {
+  right: 0;
+  top: calc(100% + 8px);
+  translate: none;
+  transform-origin: top right;
+}
+
+.cap-filter-menu strong {
+  padding: 2px 8px 6px;
+  font-size: 13px;
+  color: #6a7b85;
+}
+
+.cap-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cap-filter-item:hover {
+  background: #f0f4f6;
+}
+
+.cap-filter-item.is-on {
+  background: #fff3cf;
+}
+
+.cap-filter-item em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7b85;
+}
+
+.cap-filter-dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px rgba(0, 0, 0, 0.15);
+}
+
+.cap-filter-dot.is-all {
+  background: conic-gradient(#d6433a 0 25%, #2f5bb8 0 50%, #2e9d59 0 75%, #f0c93b 0);
+}
+
+.cap-filter-dot.is-others {
+  background: repeating-linear-gradient(45deg, #8a97a0 0 3px, #c9d1d6 3px 6px);
+}
+
+/* Ce qu'on regarde en ce moment, en bas du plateau : un clic pour tout revoir */
+.cap-filter-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 10;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(20, 34, 44, 0.9);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+}
+
+.cap-filter-chip-x {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* L'astuce pour bouger la vue, la première fois (au-dessus de l'étiquette du filtre) */
+.cap-view-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  z-index: 10;
+  translate: -50% 0;
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(20, 34, 44, 0.88);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.is-phone .cap-tools {
+  top: 6px;
+  right: 8px;
+  translate: none;
+  flex-direction: row-reverse;
+  gap: 6px;
+}
+
+.is-phone .cap-tool {
+  width: 38px;
+  height: 38px;
+}
+
+.is-phone .cap-tool[data-tip]:hover::after {
+  display: none;
+}
+
+.is-phone .cap-filter-menu {
+  right: 0;
+  top: calc(100% + 8px);
+  translate: none;
+  transform-origin: top right;
+}
+
+/* Sur téléphone, le bas du plateau passe sous les billets : l'étiquette et l'astuce restent au-dessus */
+.is-phone .cap-filter-chip,
+.is-phone .cap-view-hint {
+  bottom: 60px;
+  font-size: 13px;
+}
+
+.is-phone .cap-view-hint {
+  bottom: 104px;
 }
 
 .cap-board-info {
@@ -822,6 +1069,14 @@
 .cap-corner.at-mr {
   right: 14px;
   top: 42%;
+}
+
+.cap-corners:not(.is-phone) .cap-corner {
+  cursor: pointer;
+}
+
+.cap-corners:not(.is-phone) .cap-corner:not(.is-turn):hover {
+  transform: translateY(-2px);
 }
 
 .cap-corner.is-turn {
@@ -1840,7 +2095,7 @@
 }
 
 .cap-bright.is-phone .cap-narrator {
-  top: 4px;
+  top: 52px;
 }
 
 @media (max-width: 1200px) {
@@ -1897,3 +2152,4 @@
   width: 44px;
   height: 44px;
 }
+/* Les boutons de la vue tout en haut, l'annonce juste en dessous */

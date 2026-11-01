@@ -9,6 +9,10 @@ interface Prefs {
   reducedEffects: boolean;
   /** Musique d'entracte de la tournée */
   tourMusic: boolean;
+  /** Capitale : la caméra s'approche des dés, suit le pion qui avance ; l'astuce pour bouger la vue a été vue */
+  capDiceZoom: boolean;
+  capFollow: boolean;
+  capViewHint: boolean;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -29,6 +33,9 @@ export const usePrefs = create<Prefs>((set, get) => ({
   colorblind: false,
   reducedEffects: false,
   tourMusic: true,
+  capDiceZoom: false,
+  capFollow: false,
+  capViewHint: false,
   ...load(),
   set: (patch) => {
     set(patch);

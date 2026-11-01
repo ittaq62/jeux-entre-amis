@@ -100,6 +100,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [city, setCity] = useState<number | null>(null);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
   const [tip, setTip] = useState<{ square: number; x: number; y: number } | null>(null);
+  /** Le joueur dont on veut voir le pion (un clic sur son portrait) */
+  const [look, setLook] = useState<{ id: string; n: number } | null>(null);
   const seat = useCallback((id: string) => room.seats.find((s) => s.id === id), [room.seats]);
   const act = useCallback((action: CapitaleAction) => send({ t: "action", action }), [send]);
 
@@ -442,7 +444,19 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           <Narrator lines={lines} g={g} seat={seat} />
           {g.settings.freeParking && g.pot > 0 && <p className="cap-board-info">Cagnotte {money(g.pot)}</p>}
         </div>
-        <Corners g={g} room={room} seat={seat} cash={cash} deltas={deltas} serverOffset={serverOffset} turn={turn} phone={phone} />
+            name={(id) => (id === me ? "toi" : name(id))}
+            look={look}
+        <Corners
+          g={g}
+          room={room}
+          seat={seat}
+          cash={cash}
+          deltas={deltas}
+          serverOffset={serverOffset}
+          turn={turn}
+          phone={phone}
+          onPick={(id) => setLook((l) => ({ id, n: (l?.n ?? 0) + 1 }))}
+        />
 
         <div className="cap-bar">
           {meP && !meP.bankrupt && (
