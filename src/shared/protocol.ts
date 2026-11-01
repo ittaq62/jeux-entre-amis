@@ -3,6 +3,7 @@ import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement,
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
 import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
 import type { TokenId } from "./games/capitale/tokens.ts";
+import type { SkinId } from "./games/naval/skins.ts";
 import type { CapitaleView } from "./games/capitale/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
 import type { NavalView } from "./games/naval/view.ts";
@@ -154,6 +155,8 @@ export interface SeatView {
   team?: 0 | 1;
   /** Capitale : le pion choisi */
   token?: TokenId;
+  /** Bataille navale : le thème de la flotte */
+  skin?: SkinId;
 }
 
 export interface SpectatorView {
@@ -261,7 +264,7 @@ export interface NavalRoomView {
   seats: SeatView[];
   spectators: SpectatorView[];
   hostId: string;
-  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean; navalWins: number };
   naval: NavalView | null;
   /** Fin du chrono du tir en cours */
   turnDeadline: number | null;
@@ -297,6 +300,8 @@ export type NavalClientMessage =
   | { t: "start" }
   /** Changer d'équipe : soi-même, ou n'importe qui pour l'hôte */
   | { t: "team"; seatId: string; team: 0 | 1 }
+  /** Le thème de sa flotte (seulement ceux que ses victoires ont débloqués), à tout moment */
+  | { t: "skin"; skin: SkinId }
   | { t: "action"; action: NavalAction }
   | { t: "takeBack" }
   | { t: "chat"; text: string }
@@ -393,6 +398,9 @@ export interface CapitaleRoomView {
   deadline: number | null;
   /** Fin de l'enchère en cours (le chrono repart à chaque offre) */
   auctionDeadline: number | null;
+  /** Tournée : le choix des pions avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
   /** Partie à durée fixe : l'heure à laquelle le tour en cours devient le dernier */
   endsAt: number | null;
   serverNow: number;
@@ -418,7 +426,9 @@ export type CapitaleClientMessage =
   | { t: "leave" }
   | { t: "close" }
   /** Choisir son pion, avant la partie (seulement ceux que ses victoires ont débloqués) */
-  | { t: "token"; token: TokenId };
+  | { t: "token"; token: TokenId }
+  /** Tournée : prêt à jouer, sans attendre la fin du choix des pions */
+  | { t: "ready" };
 
 export type CapitaleServerMessage =
   | { t: "room"; room: CapitaleRoomView; events: CapitaleEvent[] }

@@ -451,7 +451,13 @@ function Battle({
                 <FleetPips total={FLEETS[size].length} afloat={myBoard.afloat} />
               </div>
             )}
-            <Board board={myBoard} mode="sea" px={phone ? radarPx : mateBoard ? Math.round(fleetPx * 0.8) : fleetPx} label="Ta flotte" />
+            <Board
+              board={myBoard}
+              mode="sea"
+              px={phone ? radarPx : mateBoard ? Math.round(fleetPx * 0.8) : fleetPx}
+              label="Ta flotte"
+              skin={seat(myBoard.owner)?.skin}
+            />
             {mateBoard && mate && (
               <>
                 <div className="naval-fleet-head">
@@ -464,6 +470,7 @@ function Battle({
                   mode="sea"
                   px={Math.round(fleetPx * (phone ? 0.7 : 0.5))}
                   label={`Flotte de ${seat(mate.id)?.name ?? "ton équipier"}`}
+                  skin={seat(mate.id)?.skin}
                 />
               </>
             )}

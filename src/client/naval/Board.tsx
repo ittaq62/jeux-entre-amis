@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as React
 import { cellIndex, cellX, cellY, shipCells, type Placement } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView } from "../../shared/games/naval/view.ts";
 import { useNavalFx, type FxItem } from "./fx.ts";
-import { CELL, ShipOutline, ShipShape, shipTransform } from "./ships.tsx";
+import type { SkinId } from "../../shared/games/naval/skins.ts";
+import { CELL, hullFill, ShipOutline, ShipShape, SkinDefs, shipTransform } from "./ships.tsx";
 
 const LETTERS = "ABCDEFGHIJKL";
 const MARGIN = 7;
@@ -31,10 +32,26 @@ interface BoardProps {
   onHover?: (cell: number | null) => void;
   onPointer?: (p: BoardPointer) => void;
   className?: string;
+  /** Le thème de la flotte dessinée sur la mer */
+  skin?: SkinId;
 }
 
 /** Cases d'un plateau : la flotte sur la mer, ou le radar sur une flotte adverse. */
-export function Board({ board, mode, px, label, fleet, selectedShip, preview, aiming, onCell, onHover, onPointer, className }: BoardProps) {
+export function Board({
+  board,
+  mode,
+  px,
+  label,
+  fleet,
+  selectedShip,
+  preview,
+  aiming,
+  onCell,
+  onHover,
+  onPointer,
+  className,
+  skin = "marine",
+}: BoardProps) {
   const n = board.size;
   const span = n * CELL;
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -174,6 +191,7 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
               <stop offset="0%" stopColor="#9aa8ad" />
               <stop offset="100%" stopColor="#5b686d" />
             </linearGradient>
+            <SkinDefs id={`skin${uid}`} />
           </>
         ) : (
           <>
@@ -260,9 +278,9 @@ export function Board({ board, mode, px, label, fleet, selectedShip, preview, ai
                   className={`ship-wrap ${isSunk ? "is-sunk" : ""} ${selectedShip === i ? "is-selected" : ""}`}
                   data-ship={i}
                   transform={shipTransform(p)}
-                  style={{ ["--hull" as string]: `url(#hull${uid})` }}
+                  style={{ ["--hull" as string]: hullFill(`skin${uid}`, skin, `url(#hull${uid})`) }}
                 >
-                  <ShipShape kind={p.kind} />
+                  <ShipShape kind={p.kind} skin={skin} />
                 </g>
               );
             })}

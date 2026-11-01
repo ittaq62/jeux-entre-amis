@@ -1,4 +1,5 @@
 import { SHIP_LENGTH, type Placement, type ShipKind } from "../../shared/games/naval/engine.ts";
+import type { SkinId } from "../../shared/games/naval/skins.ts";
 
 /** Une case du plateau mesure 10 unités dans les SVG. */
 export const CELL = 10;
@@ -24,12 +25,92 @@ function Turret({ x, dir = 1 }: { x: number; dir?: 1 | -1 }) {
   );
 }
 
-/** Le dessin d'un navire, vu du ciel. */
-export function ShipShape({ kind }: { kind: ShipKind }) {
+/** Les teintes et les motifs des coques de chaque thème ; leurs identifiants sont propres au plateau qui les porte */
+export function SkinDefs({ id }: { id: string }) {
+  return (
+    <>
+      <linearGradient id={`${id}-jouet`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#ffe066" />
+        <stop offset="100%" stopColor="#f2a600" />
+      </linearGradient>
+      <pattern id={`${id}-pirate`} width={6} height={2} patternUnits="userSpaceOnUse">
+        <rect width={6} height={2} fill="#7a4b26" />
+        <path d="M0 1.9 H6" stroke="#4e2e14" strokeWidth={0.25} />
+        <path d="M3 0 V1.9" stroke="#5c3719" strokeWidth={0.2} />
+      </pattern>
+      <pattern id={`${id}-camo`} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+        <rect width={8} height={8} fill="#dfe3e6" />
+        <rect width={8} height={2.6} fill="#1f2a33" />
+        <rect y={4.3} width={8} height={1.3} fill="#5b7184" />
+      </pattern>
+      <linearGradient id={`${id}-glace`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f7fcff" />
+        <stop offset="100%" stopColor="#a9d3ea" />
+      </linearGradient>
+      <linearGradient id={`${id}-royal`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#2f55a3" />
+        <stop offset="100%" stopColor="#13234b" />
+      </linearGradient>
+      <linearGradient id={`${id}-neon`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#262840" />
+        <stop offset="100%" stopColor="#0b0c16" />
+      </linearGradient>
+      <pattern id={`${id}-lave`} width={10} height={10} patternUnits="userSpaceOnUse">
+        <rect width={10} height={10} fill="#2a1d19" />
+        <path d="M0 3 L3 4 L5 2 L8 5 L10 4 M2 10 L4 7 L7 8 L9 6" stroke="#ff7a1a" strokeWidth={0.5} fill="none" />
+      </pattern>
+    </>
+  );
+}
+
+/** Le remplissage des coques d'un thème (la Marine garde le dégradé gris du plateau) */
+export const hullFill = (defs: string, skin: SkinId, marine: string) => (skin === "marine" ? marine : `url(#${defs}-${skin})`);
+
+/** Ce que chaque thème ajoute sur le pont : voiles et pavillon du pirate, liseré du jouet, neige de la banquise */
+function SkinExtras({ kind, skin, w }: { kind: ShipKind; skin: SkinId; w: number }) {
+  if (skin === "pirate" && kind !== "sous-marin") {
+    const masts = SHIP_LENGTH[kind] >= 4 ? [0.3, 0.55, 0.8] : [0.35, 0.7];
+    return (
+      <g className="ship-extras">
+        {masts.map((t) => (
+          <g key={t}>
+            <rect className="ship-sail" x={w * t - 0.9} y={0.4} width={1.8} height={9.2} rx={0.6} />
+            <circle className="ship-mast" cx={w * t} cy={5} r={0.7} />
+          </g>
+        ))}
+        <rect className="ship-flag" x={0.4} y={3.9} width={2.6} height={1.8} rx={0.2} />
+        <circle className="ship-flag-skull" cx={1.7} cy={4.8} r={0.45} />
+      </g>
+    );
+  }
+  if (skin === "jouet") {
+    return (
+      <g className="ship-extras">
+        <rect className="ship-stripe" x={2.6} y={4.35} width={w - 8} height={1.3} rx={0.65} />
+        {[0.25, 0.5, 0.75].map((t) => (
+          <circle key={t} className="ship-porthole" cx={w * t} cy={2.9} r={0.55} />
+        ))}
+      </g>
+    );
+  }
+  if (skin === "glace") {
+    return (
+      <g className="ship-extras">
+        {[0.18, 0.46, 0.7, 0.86].map((t, k) => (
+          <circle key={t} className="ship-snow" cx={w * t} cy={k % 2 ? 6.6 : 3.3} r={k % 2 ? 0.7 : 0.95} />
+        ))}
+      </g>
+    );
+  }
+  return null;
+}
+
+/** Le dessin d'un navire, vu du ciel, dans le thème de sa flotte. */
+export function ShipShape({ kind, skin = "marine" }: { kind: ShipKind; skin?: SkinId }) {
   const len = SHIP_LENGTH[kind];
   const w = len * CELL;
   return (
-    <g className={`ship ship-${kind}`}>
+    <g className={`ship ship-${kind} skin-${skin}`}>
       <path className="ship-shadow" d={hullPath(kind, w)} transform="translate(0.6 0.9)" />
       <path className="ship-hull" d={hullPath(kind, w)} />
       {kind === "porte-avions" ? (
@@ -73,6 +154,7 @@ export function ShipShape({ kind }: { kind: ShipKind }) {
           )}
         </g>
       )}
+      <SkinExtras kind={kind} skin={skin} w={w} />
     </g>
   );
 }

@@ -974,3 +974,203 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Les thèmes de la flotte                                              */
+/* ------------------------------------------------------------------ */
+
+.ship.skin-jouet .ship-deck rect {
+  fill: rgba(255, 255, 255, 0.55);
+}
+
+.ship.skin-jouet .ship-deck .ship-island,
+.ship.skin-jouet .ship-stripe {
+  fill: #e2453c;
+}
+
+.ship.skin-jouet .ship-turret circle,
+.ship.skin-jouet .ship-turret rect {
+  fill: #3f7fd8;
+}
+
+.ship.skin-jouet .ship-funnel {
+  fill: #e2453c;
+  stroke: #fff;
+}
+
+.ship-porthole {
+  fill: #ffffff;
+  stroke: #3f7fd8;
+  stroke-width: 0.3;
+}
+
+.ship.skin-pirate .ship-deck rect {
+  fill: rgba(60, 35, 15, 0.35);
+}
+
+.ship.skin-pirate .ship-turret circle,
+.ship.skin-pirate .ship-turret rect {
+  fill: #2b2b2b;
+}
+
+.ship-sail {
+  fill: #f3ecd9;
+  stroke: #8a7a5c;
+  stroke-width: 0.25;
+}
+
+.ship-mast {
+  fill: #4e2e14;
+}
+
+.ship-flag {
+  fill: #151515;
+}
+
+.ship-flag-skull {
+  fill: #f4f4f0;
+}
+
+.ship.skin-camo .ship-deck rect {
+  fill: rgba(20, 30, 40, 0.28);
+}
+
+.ship.skin-glace .ship-hull {
+  stroke: #7fb6d4;
+}
+
+.ship.skin-glace .ship-deck rect {
+  fill: rgba(120, 180, 210, 0.35);
+}
+
+.ship.skin-glace .ship-turret circle,
+.ship.skin-glace .ship-deck .ship-island {
+  fill: #7fb6d4;
+}
+
+.ship-snow {
+  fill: #ffffff;
+  opacity: 0.92;
+}
+
+.ship.skin-royal .ship-hull {
+  stroke: #d8b24a;
+  stroke-width: 0.6;
+}
+
+.ship.skin-royal .ship-funnel,
+.ship.skin-royal .ship-turret circle {
+  fill: #d8b24a;
+  stroke: #fff3c4;
+}
+
+.ship.skin-royal .ship-deck .ship-island {
+  fill: #f3ecd9;
+}
+
+.ship.skin-neon .ship-hull {
+  stroke: #3ef0ff;
+  stroke-width: 0.6;
+  filter: drop-shadow(0 0 1.2px #3ef0ff);
+}
+
+.ship.skin-neon .ship-deck rect {
+  fill: rgba(255, 60, 200, 0.35);
+}
+
+.ship.skin-neon .ship-runway {
+  stroke: #ff4fd8;
+}
+
+.ship.skin-neon .ship-turret circle,
+.ship.skin-neon .ship-funnel {
+  fill: #ff4fd8;
+}
+
+.ship.skin-neon .ship-deck .ship-island {
+  fill: #3ef0ff;
+}
+
+.ship.skin-lave .ship-hull {
+  stroke: #ff7a1a;
+  stroke-width: 0.5;
+  filter: drop-shadow(0 0 1px #ff5a00);
+}
+
+.ship.skin-lave .ship-turret circle {
+  fill: #3a2a24;
+}
+
+.ship.skin-lave .ship-deck .ship-island,
+.ship.skin-lave .ship-funnel {
+  fill: #ff7a1a;
+}
+
+/* Le choix du thème, au salon et pendant le placement */
+.skin-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+}
+
+.skin-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.skin-option.is-on {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-tint);
+}
+
+.skin-option.is-locked {
+  cursor: default;
+}
+
+.skin-option.is-locked .skin-preview {
+  filter: grayscale(1) brightness(0.5);
+}
+
+.skin-preview {
+  width: 100%;
+  height: auto;
+}
+
+.skin-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.skin-lock {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--gold-light);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.skin-field.is-compact {
+  width: 100%;
+  max-width: 560px;
+  margin-top: 6px;
+}
+
+.skin-field.is-compact .skin-list {
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+}

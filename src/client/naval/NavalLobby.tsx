@@ -9,6 +9,7 @@ import {
 } from "../../shared/games/naval/engine.ts";
 import { NAVAL_MAX_PLAYERS, type NavalClientMessage, type NavalRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
+import { SkinPicker } from "./SkinPicker.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
 
@@ -77,6 +78,14 @@ export function NavalLobby({ room, send, ...rest }: Props) {
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          {room.you.seatId && (
+            <SkinPicker
+              current={room.seats.find((s) => s.id === room.you.seatId)?.skin ?? "marine"}
+              wins={room.you.navalWins}
+              onPick={(skin) => send({ t: "skin", skin })}
+            />
+          )}
 
           <div className="field">
             <span className="field-label">Grille</span>

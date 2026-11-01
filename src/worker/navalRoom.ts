@@ -17,6 +17,7 @@ import {
   type NavalState,
   type Placement,
 } from "../shared/games/naval/engine.ts";
+import { isSkinId, SKIN_BY_ID, type SkinId } from "../shared/games/naval/skins.ts";
 import { eventsFor, viewFor } from "../shared/games/naval/view.ts";
 import {
   CHAT_MAX,
@@ -63,6 +64,9 @@ interface Seat {
   disconnectedAt: number | null;
   /** Équipe choisie au salon pour le 2 contre 2 : 0 bâbord, 1 tribord */
   team: 0 | 1;
+  /** Le thème de la flotte, et les victoires à la bataille navale qui ouvrent les autres */
+  skin?: SkinId;
+  wins?: number;
 }
 
 /** L'équipe la moins remplie, bâbord en cas d'égalité : on y place chaque nouvel arrivant. */
@@ -254,6 +258,7 @@ export class NavalRoom extends DurableObject<Env> {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} monte à bord.`);
     }
+    if (seat && seat.wins === undefined) seat.wins = await this.navalWins(user.id);
     if (!seat) this.systemChat(`${user.pseudo} observe la bataille.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
@@ -278,6 +283,18 @@ export class NavalRoom extends DurableObject<Env> {
       disconnectedAt: null,
       team,
     };
+  }
+
+  /** Les victoires d'un joueur à la bataille navale : elles ouvrent les thèmes de flotte */
+  private async navalWins(userId: string): Promise<number> {
+    try {
+      const row = await this.env.DB.prepare("SELECT won FROM user_stats WHERE user_id = ? AND game = 'naval'")
+        .bind(userId)
+        .first<{ won: number }>();
+      return row?.won ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   private seatHuman(user: PublicUser): Seat | null {
@@ -453,6 +470,16 @@ export class NavalRoom extends DurableObject<Env> {
         this.ensureHost();
         void this.setPresence(userId, null).catch(() => {});
         return this.afterChange([], now, ws);
+      }
+
+      case "skin": {
+        if (!seat) return;
+        const info = isSkinId(msg.skin) ? SKIN_BY_ID.get(msg.skin) : undefined;
+        if (!info) return;
+        if (info.wins > (seat.wins ?? 0))
+          return error(`${info.name} s'ouvre à ${info.wins} victoire${info.wins > 1 ? "s" : ""} à la bataille navale.`);
+        seat.skin = info.id;
+        return this.afterChange([], now);
       }
 
       case "team": {
@@ -972,10 +999,17 @@ export class NavalRoom extends DurableObject<Env> {
             : null,
         isHost: s.userId === d.hostId,
         team: s.team,
+        skin: s.skin ?? "marine",
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
-      you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
+      you: {
+        userId,
+        seatId: seat?.id ?? null,
+        isHost: userId === d.hostId,
+        isAdmin: Boolean(connected.get(userId)?.admin),
+        navalWins: seat?.wins ?? 0,
+      },
       naval: d.naval ? viewFor(d.naval, seat?.id ?? null) : null,
       turnDeadline: d.turnDeadline,
       placementDeadline: d.placementDeadline,
