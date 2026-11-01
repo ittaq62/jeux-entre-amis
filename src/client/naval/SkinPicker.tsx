@@ -22,17 +22,18 @@ export function SkinPicker({
   current,
   wins,
   onPick,
-  compact = false,
+  side = false,
 }: {
   current: SkinId;
   wins: number;
   onPick: (skin: SkinId) => void;
-  compact?: boolean;
+  /** Au placement : une colonne à côté de la flotte, une bande au-dessus sur téléphone */
+  side?: boolean;
 }) {
   const defs = `skins${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const next = SKINS.find((s) => s.wins > wins);
   return (
-    <div className={`field skin-field ${compact ? "is-compact" : ""}`}>
+    <div className={`field skin-field ${side ? "is-side" : ""}`}>
       <span className="field-label">Thème de ta flotte</span>
       <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden="true">
         <defs>
@@ -63,7 +64,7 @@ export function SkinPicker({
           );
         })}
       </div>
-      {!compact && (
+      {!side && (
         <p className="hint" style={{ margin: 0 }}>
           {wins > 0 ? `${wins} victoire${wins > 1 ? "s" : ""} à la bataille navale. ` : ""}
           {next ? `Prochain thème : ${next.name}, à ${next.wins} victoire${next.wins > 1 ? "s" : ""}.` : "Tous les thèmes sont à toi."}

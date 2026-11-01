@@ -132,18 +132,27 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
         {left !== null && <span className={`placement-clock num ${left <= 10 ? "is-urgent" : ""}`}>{formatClock(left)}</span>}
       </div>
       <p className="hint placement-help">Glisse un navire pour le déplacer, touche-le pour le tourner.</p>
-      <div className={`placement-board ${shake !== null ? "is-shaking" : ""}`}>
-        <Board
-          board={{ ...board, ships: null, hits: [], misses: [], sunk: [], scans: [] }}
-          mode="sea"
-          px={px}
-          label="Ta flotte, en cours de placement"
-          fleet={shown}
-          selectedShip={selected}
-          preview={ghost ? { cells: shipCells(size, ghost.p) ?? [], ok: ghost.ok } : null}
-          onPointer={onPointer}
-          className="is-placing"
-          skin={room.seats.find((s) => s.id === me)?.skin}
+      <div className="placement-main">
+        <div className={`placement-board ${shake !== null ? "is-shaking" : ""}`}>
+          <Board
+            board={{ ...board, ships: null, hits: [], misses: [], sunk: [], scans: [] }}
+            mode="sea"
+            px={px}
+            label="Ta flotte, en cours de placement"
+            fleet={shown}
+            selectedShip={selected}
+            preview={ghost ? { cells: shipCells(size, ghost.p) ?? [], ok: ghost.ok } : null}
+            onPointer={onPointer}
+            className="is-placing"
+            skin={room.seats.find((s) => s.id === me)?.skin}
+          />
+        </div>
+        {/* Les thèmes à côté de la flotte (au-dessus sur téléphone) : on voit tout de suite le résultat */}
+        <SkinPicker
+          current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
+          wins={room.you.navalWins}
+          onPick={(skin) => send({ t: "skin", skin })}
+          side
         />
       </div>
       <div className="placement-actions">
@@ -161,12 +170,6 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
           Prêt au combat
         </button>
       </div>
-      <SkinPicker
-        current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
-        wins={room.you.navalWins}
-        onPick={(skin) => send({ t: "skin", skin })}
-        compact
-      />
       {waiting.length > 0 && (
         <ul className="placement-crew" aria-label="Joueurs qui placent encore leur flotte">
           {g.players

@@ -1165,12 +1165,76 @@
   font-weight: 800;
 }
 
-.skin-field.is-compact {
-  width: 100%;
-  max-width: 560px;
-  margin-top: 6px;
+/* Au placement : les thèmes en colonne à droite de la flotte */
+.placement-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
 }
 
-.skin-field.is-compact .skin-list {
-  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+.skin-field.is-side {
+  width: 196px;
+  gap: 8px;
+}
+
+.skin-field.is-side .skin-list {
+  grid-template-columns: 1fr 1fr;
+}
+
+.skin-field.is-side .skin-option {
+  padding: 5px 4px;
+}
+
+.skin-field.is-side .skin-name {
+  font-size: 11px;
+}
+
+/* Sur téléphone : les thèmes juste au-dessus de la grille */
+@media (max-width: 760px) {
+  .naval-placement {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .placement-actions {
+    max-width: 100%;
+  }
+
+  .placement-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .placement-main .placement-board {
+    align-self: center;
+  }
+
+  .skin-field.is-side {
+    order: -1;
+    width: 100%;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  /* Quatre par ligne : les huit thèmes d'un coup d'œil, sans rien faire défiler */
+  .skin-field.is-side .skin-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .skin-field.is-side .skin-option {
+    gap: 2px;
+    padding: 4px 3px;
+  }
+
+  .skin-field.is-side .skin-name {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
 }
