@@ -1,8 +1,51 @@
+import { DECKS, type DeckId } from "../../shared/games/capitale/board.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
 import { eventTimes } from "../../shared/games/capitale/timing.ts";
 import { play, type SoundName } from "../lib/sound.ts";
+import { cardArt, type CardArtKey } from "./CardArt.tsx";
 
-export { CARD_MS, DICE_MS, eventTimes, HOP_MS, JUMP_MS } from "../../shared/games/capitale/timing.ts";
+export { cardReadMs, DICE_MS, eventTimes, HOP_MS, JUMP_MS } from "../../shared/games/capitale/timing.ts";
+
+type Cue = { name: SoundName; rate?: number; volume?: number; at?: number };
+
+/**
+ * Ce que raconte chaque carte, en son, au moment où elle se retourne. L'argent gagné ou payé sonne ensuite de
+ * lui-même, quand il bouge ; ici, c'est l'histoire : la fête, le dentiste, les travaux, le train qui part.
+ */
+const CARD_CUES: Partial<Record<CardArtKey, Cue[]>> = {
+  party: [{ name: "tourApplause", volume: 0.85 }],
+  gift: [{ name: "tourApplause", volume: 0.6 }],
+  mayor: [{ name: "tourApplause", volume: 0.7 }],
+  tooth: [{ name: "capLose" }],
+  cross: [{ name: "capLose" }],
+  gradcap: [{ name: "capLose" }],
+  speed: [{ name: "capLose" }],
+  police: [{ name: "buzzer", volume: 0.55 }],
+  tools: [{ name: "capBuildBig" }],
+  bulb: [{ name: "buzzer", rate: 0.7, volume: 0.4 }],
+  boules: [
+    { name: "capDiceHit", rate: 0.72 },
+    { name: "capDiceHit", rate: 0.8, at: 190 },
+  ],
+  train: [{ name: "wild", volume: 0.5 }],
+  start: [{ name: "wild", volume: 0.45 }],
+  heart: [{ name: "wild", volume: 0.4 }],
+  pin: [{ name: "wild", volume: 0.4 }],
+  chart: [{ name: "capBigMoney", volume: 0.7 }],
+  bank: [{ name: "capBigMoney", volume: 0.7 }],
+  chest: [{ name: "capBigMoney", volume: 0.7 }],
+  umbrella: [{ name: "capBigMoney", volume: 0.6 }],
+};
+
+function cardCues(deck: DeckId, card: number): Cue[] {
+  const art = cardArt(deck, card);
+  // La clé : sortie de prison gardée (bonne nouvelle), ou clés oubliées (on recule)
+  if (art === "key") return DECKS[deck][card]?.effect.kind === "jailFree" ? [{ name: "capDeal" }] : [{ name: "capLose" }];
+  return CARD_CUES[art] ?? [];
+}
+
+/** La carte apparaît, se retourne : on entend son histoire à ce moment-là */
+const CARD_FLIP_MS = 1100;
 
 /** Les sons de la table, préchargés à l'arrivée */
 export const CAPITALE_SOUNDS: SoundName[] = [
@@ -77,6 +120,8 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
         return;
       case "card":
         play("tourFlip", { delay });
+        for (const c of cardCues(e.deck, e.card))
+          play(c.name, { delay: delay + CARD_FLIP_MS + (c.at ?? 0), rate: c.rate, volume: c.volume });
         return;
       case "jail":
         // Le saut vers la cellule est juste avant : la porte claque quand le pion arrive

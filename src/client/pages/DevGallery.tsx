@@ -1,5 +1,9 @@
 import { useState } from "react";
+import { DECKS, type DeckId } from "../../shared/games/capitale/board.ts";
+import { cardReadMs } from "../../shared/games/capitale/timing.ts";
 import { buildClassicDeck } from "../../shared/games/uno/cards.ts";
+import { CardShow } from "../capitale/Prompts.tsx";
+import "../capitale/capitale.css";
 import { buildNoMercyDeck } from "../../shared/games/uno/nomercy.ts";
 import { randomAvatar } from "../../shared/avatar.ts";
 import { CardBack, CardFace } from "../components/Card.tsx";
@@ -40,6 +44,21 @@ export function DevGallery() {
         {classic.slice(0, 12).map((c) => (
           <CardFace key={c.id} card={c} width={46} />
         ))}
+      </div>
+      <h2 style={{ margin: "28px 0 16px" }}>Capitale : les cartes Hasard et Courrier</h2>
+      <div className="dev-cap-cards" style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+        {(["hasard", "courrier"] as DeckId[]).flatMap((deck) =>
+          DECKS[deck].map((_, i) => (
+            <CardShow
+              key={`${deck}-${i}`}
+              card={{ deck, card: i, read: cardReadMs(deck, i) }}
+              seat={undefined}
+              mine={i % 2 === 0}
+              onClose={() => {}}
+              still
+            />
+          )),
+        )}
       </div>
     </div>
   );

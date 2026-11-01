@@ -1969,101 +1969,274 @@
 }
 
 /* La carte tirée : une vraie carte au milieu, retournée */
-.cap-cardshow {
+.cap-card {
+  --card-w: min(78vw, 300px);
   position: fixed;
   left: 50%;
-  top: 46%;
+  top: 48%;
   z-index: 55;
-  width: min(86vw, 330px);
-  margin-left: max(-43vw, -165px);
+  width: var(--card-w);
+  margin-left: calc(var(--card-w) / -2);
   translate: 0 -50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 0 0 20px;
-  border-radius: 22px;
-  background: #fffaf0;
-  color: #22313a;
-  text-align: center;
-  box-shadow:
-    0 0 0 6px #fff,
-    0 0 0 9px var(--deck),
-    0 30px 60px -20px rgba(10, 30, 50, 0.6);
-  overflow: hidden;
-  pointer-events: none;
+  perspective: 1400px;
+  cursor: pointer;
 }
 
-.cap-cardshow.deck-hasard {
+.cap-card.is-still {
+  position: relative;
+  left: auto;
+  top: auto;
+  margin: 0;
+  translate: none;
+}
+
+.cap-card.deck-hasard {
   --deck: #e07a2c;
+  --deck-deep: #a9501a;
+  --deck-soft: #fdebd9;
 }
 
-.cap-cardshow.deck-courrier {
+.cap-card.deck-courrier {
   --deck: #2f6fb8;
+  --deck-deep: #1d4a80;
+  --deck-soft: #e1edf9;
 }
 
-.cap-cardshow-top {
-  align-self: stretch;
+.cap-card-inner {
+  position: relative;
+  aspect-ratio: 5 / 7;
+  transform-style: preserve-3d;
+}
+
+.cap-card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.08),
+    0 34px 60px -22px rgba(10, 30, 50, 0.65);
+}
+
+/* Le dos : la couleur du paquet, des rayures fines, le signe au milieu */
+.cap-card-face.is-back {
+  transform: rotateY(180deg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 14px 0 12px;
-  background: var(--deck);
-  color: #fff;
+  justify-content: center;
+  gap: 14px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.22), transparent 55%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.09) 0 6px, transparent 6px 14px), var(--deck);
+  box-shadow:
+    inset 0 0 0 8px var(--deck),
+    inset 0 0 0 10px rgba(255, 250, 240, 0.85),
+    0 34px 60px -22px rgba(10, 30, 50, 0.65);
+  color: #fffaf0;
 }
 
-.cap-cardshow-icon {
+.cap-card-back-mark {
   display: grid;
   place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #fffaf0;
+  color: var(--deck);
+  box-shadow: 0 0 0 6px rgba(255, 250, 240, 0.35);
+}
+
+.cap-card-back-mark .cap-card-mark-q {
+  font-size: 60px;
+}
+
+.cap-card-back-mark .cap-card-mark-env {
   width: 54px;
   height: 54px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-  font-family: var(--font-title);
-  font-size: 34px;
 }
 
-.cap-cardshow-top strong {
+.cap-card-face.is-back strong {
   font-family: var(--font-title);
   font-weight: 400;
-  font-size: 26px;
-  letter-spacing: 1px;
+  font-size: 30px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
 }
 
-.cap-cardshow p {
-  margin: 0 22px;
-  font-size: 19px;
-  line-height: 1.4;
+/* La face : un carton crème, un double liseré à la couleur du paquet, les signes dans les coins */
+.cap-card-face.is-front {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 22px 26px;
+  background: radial-gradient(120% 80% at 50% 0%, #fffdf7, #fbf3e2 70%, #f4e8d0), #fffaf0;
+  box-shadow:
+    inset 0 0 0 7px #fffaf0,
+    inset 0 0 0 9px var(--deck),
+    inset 0 0 0 12px #fffaf0,
+    inset 0 0 0 13px color-mix(in srgb, var(--deck) 45%, transparent),
+    0 2px 0 rgba(0, 0, 0, 0.08),
+    0 34px 60px -22px rgba(10, 30, 50, 0.65);
+  color: #22313a;
+  text-align: center;
+}
+
+.cap-card-corner {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--deck);
+}
+
+.cap-card-corner.is-tl {
+  left: 18px;
+  top: 16px;
+}
+
+.cap-card-corner.is-br {
+  right: 18px;
+  bottom: 16px;
+  rotate: 180deg;
+}
+
+.cap-card-corner .cap-card-mark-q {
+  font-size: 24px;
+}
+
+.cap-card-corner .cap-card-mark-env {
+  width: 22px;
+  height: 22px;
+}
+
+.cap-card-mark-q {
+  font-family: var(--font-title);
+  line-height: 1;
+}
+
+.cap-card-deck {
+  margin-top: 4px;
+  font-family: var(--font-title);
+  font-size: 22px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--deck-deep);
+}
+
+/* Le dessin, dans un médaillon */
+.cap-card-art {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff, var(--deck-soft) 70%);
+  box-shadow:
+    inset 0 0 0 3px color-mix(in srgb, var(--deck) 35%, transparent),
+    0 6px 14px -8px rgba(60, 40, 10, 0.45);
+}
+
+.cap-card-art-svg {
+  width: 78px;
+  height: 78px;
+  filter: drop-shadow(0 2px 1px rgba(60, 40, 10, 0.18));
+}
+
+.cap-card-text {
+  margin: 0;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
   font-weight: 600;
+  line-height: 1.38;
+  text-wrap: balance;
 }
 
-.cap-cardshow-chip {
-  padding: 5px 16px;
+.cap-card-chip {
+  padding: 5px 18px;
   border-radius: 999px;
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 22px;
+  font-size: 24px;
+  line-height: 1.15;
 }
 
-.cap-cardshow-chip.tone-good {
-  background: #e6f8ec;
+.cap-card-chip.tone-good {
+  background: #dff5e6;
   color: #17703f;
+  box-shadow: inset 0 0 0 2px #b5e6c6;
 }
 
-.cap-cardshow-chip.tone-bad {
-  background: #fde8e5;
+.cap-card-chip.tone-bad {
+  background: #fde4e0;
   color: #b3261e;
+  box-shadow: inset 0 0 0 2px #f6c3bb;
 }
 
-.cap-cardshow-chip.tone-move {
-  background: #e7f0fb;
+.cap-card-chip.tone-move {
+  background: #e3eefb;
   color: #1f4f8a;
+  box-shadow: inset 0 0 0 2px #c3d8f2;
 }
 
-.cap-cardshow-who {
+.cap-card-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 13px;
+  font-weight: 700;
   color: #6a7b85;
+}
+
+/* Le temps qu'il reste avant que la carte agisse */
+.cap-card-time {
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 15px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--deck) 55%, transparent);
+  transform-origin: left;
+  animation-name: cap-card-time;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes cap-card-time {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-height: 640px) {
+  .cap-card {
+    --card-w: min(70vw, 260px);
+  }
+
+  .cap-card-art {
+    width: 88px;
+    height: 88px;
+  }
+
+  .cap-card-art-svg {
+    width: 62px;
+    height: 62px;
+  }
+
+  .cap-card-text {
+    font-size: 15px;
+  }
 }
 
 /* Les offres d'échange, posées en bas à gauche */
@@ -2094,6 +2267,7 @@
   font-size: 19px;
 }
 
+/* Les boutons de la vue tout en haut, l'annonce juste en dessous */
 .cap-bright.is-phone .cap-narrator {
   top: 52px;
 }
@@ -2152,4 +2326,3 @@
   width: 44px;
   height: 44px;
 }
-/* Les boutons de la vue tout en haut, l'annonce juste en dessous */

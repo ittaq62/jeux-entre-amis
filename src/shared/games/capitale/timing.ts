@@ -1,3 +1,4 @@
+import { DECKS, type DeckId } from "./board.ts";
 import type { CapitaleEvent } from "./engine.ts";
 
 // Le rythme de ce qu'on voit à l'écran : le salon s'y cale pour ne pas faire rejouer un bot (ni partir un chrono)
@@ -7,7 +8,12 @@ import type { CapitaleEvent } from "./engine.ts";
 export const DICE_MS = 1400;
 export const HOP_MS = 180;
 export const JUMP_MS = 650;
-export const CARD_MS = 900;
+
+/** Le temps de lire une carte avant qu'elle agisse : plus le texte est long, plus elle reste à l'écran */
+export function cardReadMs(deck: DeckId, card: number): number {
+  const length = DECKS[deck][card]?.text.length ?? 40;
+  return Math.min(4200, Math.max(2600, 1500 + length * 22));
+}
 
 /** Le temps que prend un événement à l'écran */
 function durationOf(e: CapitaleEvent): number {
@@ -17,7 +23,7 @@ function durationOf(e: CapitaleEvent): number {
     case "move":
       return e.jump ? JUMP_MS : Math.abs(e.steps) * HOP_MS + 160;
     case "card":
-      return CARD_MS;
+      return cardReadMs(e.deck, e.card);
     case "money":
       return 260;
     case "upgrade":

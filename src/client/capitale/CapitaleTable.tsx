@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SQUARES, type DeckId } from "../../shared/games/capitale/board.ts";
 import { canUpgrade, rentFor, type CapitaleAction, type CapitaleEvent, type Deed, type Trade } from "../../shared/games/capitale/engine.ts";
-import { batchMs } from "../../shared/games/capitale/timing.ts";
+import { batchMs, cardReadMs } from "../../shared/games/capitale/timing.ts";
 import type { CapitaleClientMessage, CapitaleRoomView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
@@ -123,7 +123,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [shown, setShown] = useState<Record<string, number>>(() => Object.fromEntries(g.players.map((p) => [p.id, p.position])));
   const [cash, setCash] = useState<Record<string, number>>(() => Object.fromEntries(g.players.map((p) => [p.id, p.cash])));
   const [dice, setDice] = useState<{ values: [number, number] | null; rollId: number }>({ values: g.dice, rollId: 0 });
-  const [card, setCard] = useState<{ deck: DeckId; card: number; player: string } | null>(null);
+  /** La carte tirée, au milieu : le temps de la lire (read), puis elle s'en va quand elle agit */
+  const [card, setCard] = useState<{ deck: DeckId; card: number; player: string; key: number; read: number } | null>(null);
   const [drawn, setDrawn] = useState<{ deck: DeckId; id: number } | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [deeds, setDeeds] = useState<(Deed | null)[]>(() => g.deeds);
@@ -240,9 +241,12 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           }
         }, t);
       } else if (e.type === "card") {
-        later(() => setDrawn({ deck: e.deck, id: batch.id * 100 + i }), t);
-        later(() => setCard({ deck: e.deck, card: e.card, player: e.player }), t + 380);
-        later(() => setCard((c) => (c && c.deck === e.deck && c.card === e.card ? null : c)), t + 3800);
+        const key = batch.id * 100 + i;
+        const read = cardReadMs(e.deck, e.card);
+        later(() => setDrawn({ deck: e.deck, id: key }), t);
+        later(() => setCard({ deck: e.deck, card: e.card, player: e.player, key, read }), t + 380);
+        // Elle reste jusqu'à ce qu'elle agisse (le pion part, l'argent bouge), un peu plus pour voir l'effet
+        later(() => setCard((c) => (c?.key === key ? null : c)), t + read + 700);
       }
     });
     // À la fin du lot, on se cale sur l'état (au cas où un détail aurait échappé)
@@ -440,12 +444,12 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             onHover={(i, x, y) => setTip(i === null ? null : { square: i, x, y })}
             tagOf={tagOf}
             tokens={tokens}
+            name={(id) => (id === me ? "toi" : name(id))}
+            look={look}
           />
           <Narrator lines={lines} g={g} seat={seat} />
           {g.settings.freeParking && g.pot > 0 && <p className="cap-board-info">Cagnotte {money(g.pot)}</p>}
         </div>
-            name={(id) => (id === me ? "toi" : name(id))}
-            look={look}
         <Corners
           g={g}
           room={room}
@@ -508,7 +512,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           />
         )}
       </AnimatePresence>
-      <AnimatePresence>{card && <CardShow card={card} who={card.player === me ? null : name(card.player)} />}</AnimatePresence>
+      <AnimatePresence>
+        {card && <CardShow key={card.key} card={card} seat={seat(card.player)} mine={card.player === me} onClose={() => setCard(null)} />}
+      </AnimatePresence>
       {facts && tip && !phone && <SquareTip facts={facts} x={tip.x} y={tip.y} />}
 
       <div className="cap-bills" aria-hidden="true">
