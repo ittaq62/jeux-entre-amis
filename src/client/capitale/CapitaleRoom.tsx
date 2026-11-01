@@ -5,6 +5,7 @@ import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { CapitaleLobby } from "./CapitaleLobby.tsx";
 import { CapitaleTable } from "./CapitaleTable.tsx";
+import { TourPick } from "./TourPick.tsx";
 import { useCapitaleRoom } from "./useCapitaleRoom.ts";
 import "./capitale.css";
 
@@ -57,7 +58,11 @@ export function CapitaleRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
-        bridge.waiting
+        view.status === "lobby" ? (
+          <TourPick room={view} send={send} serverOffset={serverOffset} />
+        ) : (
+          bridge.waiting
+        )
       ) : (
         <CapitaleLobby
           room={view}

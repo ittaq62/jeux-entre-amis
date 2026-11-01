@@ -60,6 +60,8 @@ const TRADE_EXPIRES_MS = 60_000;
 /** La version de la tournée dure 20 minutes */
 const TOUR_MINUTES = 20;
 const CHAT_KEEP = 80;
+/** Tournée : le temps de choisir son pion une fois tout le monde arrivé */
+const PICK_MS = 12_000;
 
 interface Seat {
   id: string;
@@ -122,6 +124,9 @@ interface CapitaleData {
   actionSeq: number;
   /** Quand les écrans auront fini de montrer le dernier coup (dés, pas des pions, billets) : la suite attend jusque-là */
   animUntil?: number;
+  /** Tournée : tout le monde est là, on choisit son pion jusqu'à cette heure (ou jusqu'à ce que tous soient prêts) */
+  pickUntil?: number | null;
+  ready?: string[];
   botKey: string;
   /** Dernier tour où chaque bot a proposé un échange (un par tour au plus) */
   botTraded: Record<string, number>;
@@ -292,8 +297,11 @@ export class CapitaleRoom extends DurableObject<Env> {
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      return this.startTourGame(now);
+    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId)) && !d.pickUntil) {
+      // Tout le monde est là : quelques secondes pour choisir son pion, puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + PICK_MS;
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
@@ -479,6 +487,14 @@ export class CapitaleRoom extends DurableObject<Env> {
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
       }
 
+      case "ready": {
+        if (!d.tour || d.status !== "lobby" || !seat) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        const humans = d.seats.filter((s) => s.kind === "human");
+        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        return this.afterChange([], now);
+      }
+
       case "token": {
         if (!seat || d.status === "playing") return;
         const info = isTokenId(msg.token) ? TOKEN_BY_ID.get(msg.token) : undefined;
@@ -652,6 +668,8 @@ export class CapitaleRoom extends DurableObject<Env> {
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
       await abortToTour(this.env, d.tour!.code, d.code);
@@ -1147,6 +1165,8 @@ export class CapitaleRoom extends DurableObject<Env> {
       capitale: d.capitale ? viewFor(d.capitale, seat?.id ?? null) : null,
       deadline: d.deadline,
       auctionDeadline: d.auctionDeadline,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
       endsAt: d.endsAt,
       serverNow: Date.now(),
       rematch: d.rematch,

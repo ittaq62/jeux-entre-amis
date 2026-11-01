@@ -165,7 +165,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
 }
 
 /** Le choix du pion : quatre pour commencer, les autres s'ouvrent avec les victoires à Capitale */
-function TokenPicker({
+export function TokenPicker({
   color,
   current,
   wins,
