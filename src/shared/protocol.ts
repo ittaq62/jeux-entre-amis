@@ -496,7 +496,12 @@ export type HubServerMessage =
   | { t: "lobby"; rooms: RoomSummary[] }
   | { t: "friendsChanged" }
   | { t: "invite"; from: PublicUser; code: string; game: TableGame }
+  /** La réponse d'un ami à une invitation : il arrive, ou pas maintenant */
+  | { t: "inviteReply"; from: PublicUser; code: string; accepted: boolean }
   | { t: "announce"; announcement: Announcement }
   | { t: "signedOut"; reason: string };
 
-export type HubClientMessage = { t: "watchLobby"; on: boolean } | { t: "invite"; to: string; code: string };
+export type HubClientMessage =
+  | { t: "watchLobby"; on: boolean }
+  | { t: "invite"; to: string; code: string }
+  | { t: "inviteReply"; to: string; code: string; accepted: boolean };

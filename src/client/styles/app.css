@@ -1454,6 +1454,157 @@
   margin: 0 auto;
 }
 
+/* Les amis en ligne, à inviter d'un clic depuis le salon */
+.lobby-friends {
+  padding-bottom: 12px;
+}
+
+.lobby-friends-empty {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.friend-invites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.friend-invite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.friend-invite:last-child {
+  border-bottom: 0;
+}
+
+.friend-invite .btn {
+  flex: none;
+  min-width: 92px;
+  gap: 5px;
+}
+
+.friend-invite-ok {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(76, 195, 138, 0.16);
+  color: var(--ok);
+}
+
+/* En faire un ami, depuis la liste des joueurs */
+.seat-friend {
+  flex: none;
+  gap: 4px;
+  color: var(--text-soft);
+}
+
+.seat-friend-note {
+  flex: none;
+  font-size: 13px;
+}
+
+/* Une invitation reçue : elle attend la réponse, en haut de l'écran */
+.invite-card {
+  pointer-events: auto;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(380px, 100%);
+  padding: 14px 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1a3b2d, var(--panel-raised));
+  border: 1px solid rgba(226, 189, 110, 0.6);
+  color: var(--text);
+  box-shadow:
+    0 0 0 4px rgba(226, 189, 110, 0.12),
+    var(--shadow-float);
+}
+
+.invite-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invite-card-top .game-ticket {
+  flex: none;
+}
+
+.invite-card-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.invite-card-text strong {
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--gold-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invite-card-text span {
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.invite-card-tour {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--gold-light), var(--gold-deep));
+  color: var(--gold-ink);
+}
+
+.invite-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.invite-card-actions .btn-primary {
+  flex: 1;
+}
+
+.invite-card-time {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--gold);
+  transform-origin: left;
+  animation-name: invite-time;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes invite-time {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @media (max-width: 860px) {
   .lobby-body {
     grid-template-columns: 1fr;

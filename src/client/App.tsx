@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
 import { CardDefs } from "./components/Card.tsx";
+import { InviteCards } from "./components/InviteCards.tsx";
 import { Loading, Toasts } from "./components/ui.tsx";
 import { unlockAudio } from "./lib/sound.ts";
 import { HomePage } from "./pages/HomePage.tsx";
@@ -84,7 +85,7 @@ export function App() {
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>
-      <Toasts />
+      <Toasts>{user && <InviteCards />}</Toasts>
     </>
   );
 }

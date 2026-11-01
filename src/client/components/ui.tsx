@@ -88,10 +88,12 @@ export function Modal({
   );
 }
 
-export function Toasts() {
+/** Les messages passagers en haut de l'écran ; `children` passe devant (les invitations reçues) */
+export function Toasts({ children }: { children?: ReactNode }) {
   const { toasts, dismiss } = useToasts();
   return (
     <div className="toasts" aria-live="polite">
+      {children}
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <motion.div

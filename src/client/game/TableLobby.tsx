@@ -1,13 +1,12 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useState, type ReactNode } from "react";
-import { Link } from "wouter";
+import { useMemo, useState, type ReactNode } from "react";
 import { MIN_PLAYERS, type LobbyClientMessage, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ConfirmButton, Modal, Options } from "../components/ui.tsx";
 import { toast } from "../lib/toast.ts";
-import { useHub } from "../stores/hub.ts";
+import { FriendButton, FriendsInvite } from "./FriendsInvite.tsx";
 
 export interface TableLobbyProps {
   room: LobbyRoom;
@@ -65,6 +64,11 @@ export function TableLobby({
   const finished = room.status === "finished";
   const seated = room.you.seatId !== null;
   const host = room.seats.find((x) => x.isHost);
+  // Ceux qui sont déjà là, assis ou spectateurs : pas besoin de les inviter
+  const here = useMemo(
+    () => new Set([...room.seats.map((x) => x.userId), ...room.spectators.map((x) => x.userId)].filter((id): id is string => Boolean(id))),
+    [room.seats, room.spectators],
+  );
 
   async function share() {
     try {
@@ -129,10 +133,12 @@ export function TableLobby({
                 Envoyer le lien
               </button>
               <button className="btn" onClick={() => setInviteOpen(true)}>
-                Inviter un ami
+                QR code
               </button>
             </div>
           </section>
+
+          <FriendsInvite code={room.code} here={here} />
 
           <section className="lobby-section panel">
             <h2>
@@ -166,6 +172,9 @@ export function TableLobby({
                             .join(", ") || " "}
                         </span>
                       </span>
+                      {seat.kind === "human" && seat.userId && seat.userId !== room.you.userId && (
+                        <FriendButton userId={seat.userId} pseudo={seat.name} />
+                      )}
                       {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
                         <button
                           className="btn btn-ghost btn-sm"
@@ -245,7 +254,7 @@ export function TableLobby({
           ))}
       </footer>
 
-      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} code={room.code} link={link} tour={tour} />
+      <QrModal open={inviteOpen} onClose={() => setInviteOpen(false)} code={room.code} link={link} tour={tour} />
     </div>
   );
 }
@@ -309,30 +318,14 @@ export function TableSize({ room, send, max }: { room: LobbyRoom; send: (msg: Lo
   );
 }
 
-function InviteModal({
-  open,
-  onClose,
-  code,
-  link,
-  tour,
-}: {
-  open: boolean;
-  onClose: () => void;
-  code: string;
-  link: string;
-  tour: boolean;
-}) {
-  const friends = useHub((s) => s.friends);
-  const online = useHub((s) => s.online);
-  const invite = useHub((s) => s.invite);
+/** Le QR code du salon, à scanner avec le téléphone, et le lien à copier */
+function QrModal({ open, onClose, code, link, tour }: { open: boolean; onClose: () => void; code: string; link: string; tour: boolean }) {
   const [qr, setQr] = useState<string | null>(null);
-  const [sent, setSent] = useState<Set<string>>(new Set());
   if (open && !qr) {
     void import("qrcode").then((QRCode) =>
       QRCode.toDataURL(link, { margin: 1, width: 360, color: { dark: "#1d1b18", light: "#f2ecdf" } }).then(setQr),
     );
   }
-  const available = friends.filter((f) => f.status === "accepted" && f.user.id in online && online[f.user.id]?.code !== code);
   return (
     <Modal open={open} onClose={onClose} title={tour ? "Inviter à la tournée" : "Inviter à la table"}>
       <div className="invite-modal">
@@ -348,36 +341,6 @@ function InviteModal({
         >
           Copier le lien
         </button>
-        <hr className="divider" />
-        <p className="field-label" style={{ margin: 0 }}>
-          Amis en ligne
-        </p>
-        {available.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>
-            Aucun ami disponible pour l'instant. <Link href="/amis">Ajouter des amis</Link>
-          </p>
-        ) : (
-          <ul className="rows">
-            {available.map((f) => (
-              <li key={f.user.id} className="row">
-                <span className="row-who">
-                  <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={34} />
-                  <strong>{f.user.pseudo}</strong>
-                </span>
-                <button
-                  className="btn btn-sm"
-                  disabled={sent.has(f.user.id)}
-                  onClick={() => {
-                    invite(f.user.id, code);
-                    setSent(new Set(sent).add(f.user.id));
-                  }}
-                >
-                  {sent.has(f.user.id) ? "Invité" : "Inviter"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </Modal>
   );

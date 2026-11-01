@@ -85,12 +85,19 @@ export class Hub extends DurableObject<Env> {
         ws.serializeAttachment(att);
         if (att.lobby) this.send(ws, { t: "lobby", rooms: this.publicRooms() });
         break;
-      case "invite":
+      case "invite": {
         if (typeof msg.to !== "string" || typeof msg.code !== "string" || !att.friends.includes(msg.to)) return;
         const room = this.rooms.get(msg.code);
         if (!room) return;
         for (const target of this.ctx.getWebSockets(msg.to)) {
           this.send(target, { t: "invite", from: att.user, code: msg.code, game: room.summary.game });
+        }
+        break;
+      }
+      case "inviteReply":
+        if (typeof msg.to !== "string" || typeof msg.code !== "string" || !att.friends.includes(msg.to)) return;
+        for (const target of this.ctx.getWebSockets(msg.to)) {
+          this.send(target, { t: "inviteReply", from: att.user, code: msg.code, accepted: Boolean(msg.accepted) });
         }
         break;
     }
