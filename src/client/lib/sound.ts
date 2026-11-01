@@ -61,6 +61,8 @@ export type SoundName =
   | "tourFanfare"
   | "tourApplause"
   | "tourMusic"
+  | "tourTrophy"
+  | "tourTrophyMine"
   | "capDiceShake"
   | "capDiceHit"
   | "capHop"
@@ -138,6 +140,9 @@ const FILES: Record<SoundName, string[]> = {
   tourVote: ["tour-vote.wav"],
   tourFanfare: ["tour-fanfare.wav"],
   tourApplause: ["tour-applause.mp3"],
+  // Les trophées : un jeton posé sur la table, et un tintement de verre en plus pour les siens
+  tourTrophy: ["tour-trophy.wav"],
+  tourTrophyMine: ["tour-trophy-mine.wav"],
   tourMusic: ["tour-music.mp3"],
   // Capitale : les dés qui roulent, les pions de bois, le marteau, les billets, la sonnette, la porte de la prison
   capDiceShake: ["cap-dice-shake.wav"],
@@ -227,6 +232,8 @@ export const TOUR_SOUNDS: SoundName[] = [
   "tourFanfare",
   "tourApplause",
   "tourMusic",
+  "tourTrophy",
+  "tourTrophyMine",
   "tick",
   "join",
   "click",
@@ -284,6 +291,8 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   tourFanfare: 0.6,
   tourApplause: 0.55,
   tourMusic: 0.25,
+  tourTrophy: 0.5,
+  tourTrophyMine: 0.6,
   capDiceShake: 0.4,
   capDiceHit: 0.55,
   capHop: 0.45,

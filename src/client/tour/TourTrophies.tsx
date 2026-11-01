@@ -123,11 +123,11 @@ const STEP_MS = 420;
 export function TourTrophies({ titles, members, meId }: { titles: TourTitle[]; members: TourMemberView[]; meId: string }) {
   const reduced = usePrefs((s) => s.reducedEffects);
 
-  // Un petit son à chaque remise, plus fort quand c'est la sienne
+  // Un jeton posé sur la table à chaque remise, un peu plus aigu à chaque fois ; un tintement en plus pour les siens
   useEffect(() => {
     if (reduced) return;
     const timers = titles.map((t, i) =>
-      setTimeout(() => play(t.userId === meId ? "achievement" : "pop", { volume: t.userId === meId ? 0.8 : 0.5 }), FIRST_MS + i * STEP_MS),
+      setTimeout(() => play(t.userId === meId ? "tourTrophyMine" : "tourTrophy", { rate: 0.94 + i * 0.05 }), FIRST_MS + i * STEP_MS),
     );
     return () => timers.forEach(clearTimeout);
   }, [titles, meId, reduced]);
