@@ -350,26 +350,203 @@
   height: 70px;
 }
 
-.tour-titles {
+/* Les trophées : une médaille par exploit, le chiffre en grand, le visage du gagnant */
+.tour-trophies {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.tour-trophies-title {
+  font-size: 26px;
+  color: var(--gold-light);
+}
+
+.tour-trophies-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 14px;
+  gap: 16px;
+  width: 100%;
 }
 
-.title-card {
+.trophy {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 190px;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 6px;
+  width: 204px;
+  padding: 18px 14px 14px;
+  border-radius: 18px;
+  text-align: center;
+  background:
+    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--medal) 34%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--panel-raised), var(--panel));
+  border: 1px solid color-mix(in srgb, var(--medal) 45%, transparent);
   box-shadow: var(--shadow-float);
 }
 
-.title-label {
+.trophy.is-mine {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 3px var(--gold-tint),
+    0 0 30px -6px color-mix(in srgb, var(--gold) 60%, transparent),
+    var(--shadow-float);
+}
+
+.trophy-me {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--gold-ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* La médaille : un disque de couleur, son ruban, un reflet qui passe une fois */
+.trophy-medal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  overflow: hidden;
+  color: #fff8ea;
+  background: radial-gradient(
+    circle at 34% 28%,
+    color-mix(in srgb, var(--medal) 55%, #fff),
+    var(--medal) 55%,
+    color-mix(in srgb, var(--medal) 70%, #000)
+  );
+  box-shadow:
+    inset 0 0 0 4px rgba(255, 255, 255, 0.22),
+    inset 0 -6px 10px rgba(0, 0, 0, 0.25),
+    0 8px 18px -6px color-mix(in srgb, var(--medal) 70%, #000);
+}
+
+.trophy-medal svg {
+  width: 46px;
+  height: 46px;
+  fill: currentColor;
+  filter: drop-shadow(0 1.5px 0 rgba(0, 0, 0, 0.25));
+}
+
+.trophy-medal::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%);
+  transform: translateX(-120%);
+  animation: trophy-shine 0.9s ease-out var(--shine-delay, 1.5s) both;
+}
+
+@keyframes trophy-shine {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+.trophy-name {
+  margin: 0;
   font-family: var(--font-title);
-  font-size: 19px;
-  color: var(--red-deep);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.trophy-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.trophy-stat strong {
+  font-family: var(--font-card);
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: color-mix(in srgb, var(--medal) 75%, #fff);
+}
+
+.trophy-stat span {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.trophy-who {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  font-weight: 700;
+  font-size: 15px;
+  min-width: 0;
+}
+
+.trophy-who > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sur téléphone : deux par ligne */
+@media (max-width: 520px) {
+  .tour-trophies-list {
+    gap: 12px 10px;
+  }
+
+  .trophy {
+    width: calc(50% - 5px);
+    padding: 16px 10px 12px;
+  }
+
+  .trophy-medal {
+    width: 62px;
+    height: 62px;
+  }
+
+  .trophy-medal svg {
+    width: 38px;
+    height: 38px;
+  }
+
+  .trophy-name {
+    font-size: 17px;
+  }
+
+  .trophy-stat strong {
+    font-size: 34px;
+  }
+
+  .trophy-stat span {
+    font-size: 12px;
+  }
+
+  .trophy-who {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trophy-medal::after {
+    animation: none;
+  }
 }
 
 .tour-finale-columns {

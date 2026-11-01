@@ -388,6 +388,9 @@ export interface TourTitle {
   userId: string;
   name: string;
   detail: string;
+  /** Le chiffre qui le vaut, en gros (« +6 », « 62 % ») et ce qu'il compte ; absents des anciennes tournées */
+  stat?: string;
+  unit?: string;
 }
 
 /** Ce qu'un joueur a fait à un jeu de la tournée */
@@ -407,8 +410,8 @@ export interface TitleCandidate {
 interface TitleRule {
   id: string;
   label: string;
-  /** La valeur qui départage, et le texte qui l'explique ; null si le joueur n'y prétend pas */
-  score: (c: TitleCandidate) => { value: number; detail: string } | null;
+  /** La valeur qui départage, le chiffre affiché et ce qu'il compte ; null si le joueur n'y prétend pas */
+  score: (c: TitleCandidate) => { value: number; stat: string; unit: string } | null;
 }
 
 const sum = (c: TitleCandidate, game: GameId, key: string) =>
@@ -420,7 +423,7 @@ const TITLE_RULES: TitleRule[] = [
     label: "Le collectionneur",
     score: (c) => {
       const wins = c.lines.filter((l) => l.rank === 1).length;
-      return wins >= 2 ? { value: wins, detail: `${wins} jeux gagnés` } : null;
+      return wins >= 2 ? { value: wins, stat: `${wins}`, unit: "jeux gagnés" } : null;
     },
   },
   {
@@ -428,7 +431,7 @@ const TITLE_RULES: TitleRule[] = [
     label: "Le roi du +4",
     score: (c) => {
       const n = sum(c, "uno", "plusGiven");
-      return n >= 4 ? { value: n, detail: `${n} cartes données à piocher` } : null;
+      return n >= 4 ? { value: n, stat: `+${n}`, unit: "cartes données à piocher" } : null;
     },
   },
   {
@@ -436,7 +439,7 @@ const TITLE_RULES: TitleRule[] = [
     label: "Le maçon",
     score: (c) => {
       const n = sum(c, "bricks", "lines");
-      return n >= 10 ? { value: n, detail: `${n} lignes faites` } : null;
+      return n >= 10 ? { value: n, stat: `${n}`, unit: "lignes complétées" } : null;
     },
   },
   {
@@ -444,7 +447,23 @@ const TITLE_RULES: TitleRule[] = [
     label: "Le démolisseur",
     score: (c) => {
       const n = sum(c, "bricks", "sent");
-      return n >= 6 ? { value: n, detail: `${n} lignes grises envoyées` } : null;
+      return n >= 6 ? { value: n, stat: `${n}`, unit: "lignes grises envoyées" } : null;
+    },
+  },
+  {
+    id: "tycoon",
+    label: "Le magnat",
+    score: (c) => {
+      const n = sum(c, "capitale", "rentEarned");
+      return n >= 300 ? { value: n, stat: `${n.toLocaleString("fr-FR")} ₣`, unit: "de loyers encaissés" } : null;
+    },
+  },
+  {
+    id: "builder",
+    label: "Le promoteur",
+    score: (c) => {
+      const n = sum(c, "capitale", "houses");
+      return n >= 6 ? { value: n, stat: `${n}`, unit: "étages bâtis en ville" } : null;
     },
   },
   {
@@ -455,7 +474,7 @@ const TITLE_RULES: TitleRule[] = [
       const hits = sum(c, "naval", "hits");
       if (shots < 8) return null;
       const pct = Math.round((hits / shots) * 100);
-      return { value: pct, detail: `${pct} % de tirs au but` };
+      return { value: pct, stat: `${pct} %`, unit: "de tirs au but" };
     },
   },
   {
@@ -465,7 +484,7 @@ const TITLE_RULES: TitleRule[] = [
       if (c.lines.length < 3) return null;
       const worst = Math.max(...c.lines.map((l) => l.rank));
       // Toujours sur le podium ou presque : plus la pire place est haute, mieux c'est
-      return worst <= 3 ? { value: 10 - worst, detail: `jamais plus bas que ${worst === 1 ? "1er" : `${worst}e`}` } : null;
+      return worst <= 3 ? { value: 10 - worst, stat: worst === 1 ? "1er" : `${worst}e`, unit: "au pire, à chaque jeu" } : null;
     },
   },
   {
@@ -473,7 +492,7 @@ const TITLE_RULES: TitleRule[] = [
     label: "Le courageux",
     score: (c) => {
       const lasts = c.lines.filter((l) => l.players > 2 && l.rank === l.players).length;
-      return lasts >= 2 ? { value: lasts, detail: `${lasts} fois dernier, toujours là` } : null;
+      return lasts >= 2 ? { value: lasts, stat: `${lasts}×`, unit: "dernier, et toujours là" } : null;
     },
   },
 ];
@@ -483,14 +502,15 @@ export function tourTitles(candidates: TitleCandidate[]): TourTitle[] {
   const out: TourTitle[] = [];
   const count = new Map<string, number>();
   for (const rule of TITLE_RULES) {
-    let best: { c: TitleCandidate; value: number; detail: string } | null = null;
+    let best: { c: TitleCandidate; value: number; stat: string; unit: string } | null = null;
     for (const c of candidates) {
       if ((count.get(c.userId) ?? 0) >= 2) continue;
       const s = rule.score(c);
       if (s && (!best || s.value > best.value)) best = { c, ...s };
     }
     if (!best) continue;
-    out.push({ id: rule.id, label: rule.label, userId: best.c.userId, name: best.c.name, detail: best.detail });
+    const { stat, unit } = best;
+    out.push({ id: rule.id, label: rule.label, userId: best.c.userId, name: best.c.name, detail: `${stat} ${unit}`, stat, unit });
     count.set(best.c.userId, (count.get(best.c.userId) ?? 0) + 1);
     if (out.length >= 5) break;
   }

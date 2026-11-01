@@ -148,6 +148,17 @@ describe("titres", () => {
     expect(titles.length).toBeLessThanOrEqual(5);
   });
 
+  it("affiche le chiffre à part, et récompense aussi Capitale", () => {
+    const titles = tourTitles([
+      { userId: "a", name: "Alice", lines: [line("uno", 2, { plusGiven: 6 }), line("capitale", 1, { rentEarned: 1250, houses: 9 })] },
+    ]);
+    const by = Object.fromEntries(titles.map((t) => [t.id, t]));
+    expect(by["plus-four"]).toMatchObject({ stat: "+6", unit: "cartes données à piocher", detail: "+6 cartes données à piocher" });
+    expect(by.tycoon?.stat?.replace(/\s/g, " ")).toBe("1 250 ₣");
+    // Deux titres au plus par joueur : le promoteur passe son tour
+    expect(by.builder).toBeUndefined();
+  });
+
   it("ne donne rien sans exploit", () => {
     expect(tourTitles([{ userId: "a", name: "Alice", lines: [line("uno", 2)] }])).toEqual([]);
   });

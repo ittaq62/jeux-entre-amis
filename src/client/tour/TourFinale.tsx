@@ -6,6 +6,7 @@ import { teamScores, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourClientMessage, type 
 import { Avatar } from "../components/Avatar.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { GameTicket, playedGames, rulesName, Standings, standingsOf, TeamScore, TourTop } from "./TourParts.tsx";
+import { TourTrophies } from "./TourTrophies.tsx";
 
 interface Props {
   view: TourView;
@@ -77,23 +78,7 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
           </div>
         )}
 
-        {view.titles && view.titles.length > 0 && (
-          <section className="tour-titles" aria-label="Les titres de la tournée">
-            {view.titles.map((t, i) => (
-              <motion.div
-                key={t.id}
-                className="title-card paper"
-                initial={{ rotate: 0, y: 16, opacity: 0 }}
-                animate={{ rotate: i % 2 ? 1.4 : -1.4, y: 0, opacity: 1 }}
-                transition={{ delay: 1.1 + i * 0.15 }}
-              >
-                <span className="title-label">{t.label}</span>
-                <strong>{t.name}</strong>
-                <span className="hint">{t.detail}</span>
-              </motion.div>
-            ))}
-          </section>
-        )}
+        {view.titles && view.titles.length > 0 && <TourTrophies titles={view.titles} members={view.members} meId={view.you.userId} />}
 
         <div className="tour-finale-columns">
           <section className="tour-standings panel" aria-label="Classement final">
