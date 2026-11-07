@@ -46,23 +46,49 @@ const SPIN_MS = 2000;
 const MATCH_MS = 1250;
 const MATCH_STRIKE_MS = 950;
 
-/** La taille visible de l'écran : sur téléphone, le clavier en prend la moitié et la table doit rester au-dessus */
+/** La partie de l'écran que l'on voit vraiment : sur téléphone, le clavier en cache la moitié */
+function readVisibleArea() {
+  const v = window.visualViewport;
+  return {
+    w: window.innerWidth,
+    h: Math.round(v?.height ?? window.innerHeight),
+    // Le navigateur a pu décaler la vue pour montrer le champ : la table suit ce décalage
+    top: Math.round(v?.offsetTop ?? 0),
+  };
+}
+
+/** La taille visible de l'écran : sur téléphone, la table doit rester tout entière au-dessus du clavier */
 function useVisibleArea() {
-  const [area, setArea] = useState(() => ({ w: window.innerWidth, h: window.visualViewport?.height ?? window.innerHeight, top: 0 }));
+  const [area, setArea] = useState(readVisibleArea);
   useEffect(() => {
-    const v = window.visualViewport;
+    let frame = 0;
+    let until = 0;
     const update = () => {
-      setArea({ w: window.innerWidth, h: v?.height ?? window.innerHeight, top: v?.offsetTop ?? 0 });
-      // Le navigateur fait défiler la page pour montrer le champ : ici tout tient déjà à l'écran
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      const next = readVisibleArea();
+      setArea((a) => (a.w === next.w && a.h === next.h && a.top === next.top ? a : next));
     };
-    window.addEventListener("resize", update);
-    v?.addEventListener("resize", update);
-    v?.addEventListener("scroll", update);
+    // Le clavier s'ouvre et se ferme en glissant, et tous les navigateurs ne préviennent pas quand il s'arrête :
+    // on suit la vue image par image pendant un moment
+    const follow = () => {
+      until = performance.now() + 900;
+      cancelAnimationFrame(frame);
+      const step = () => {
+        update();
+        if (performance.now() < until) frame = requestAnimationFrame(step);
+      };
+      step();
+    };
+    const v = window.visualViewport;
+    const targets: EventTarget[] = v ? [window, v] : [window];
+    const kinds = ["resize", "scroll"];
+    for (const t of targets) for (const k of kinds) t.addEventListener(k, follow);
+    window.addEventListener("focusin", follow);
+    window.addEventListener("focusout", follow);
     return () => {
-      window.removeEventListener("resize", update);
-      v?.removeEventListener("resize", update);
-      v?.removeEventListener("scroll", update);
+      cancelAnimationFrame(frame);
+      for (const t of targets) for (const k of kinds) t.removeEventListener(k, follow);
+      window.removeEventListener("focusin", follow);
+      window.removeEventListener("focusout", follow);
     };
   }, []);
   return area;
@@ -590,8 +616,20 @@ export function MecheTable({
               </div>
               {canType && (
                 <form className="meche-form" onSubmit={submit}>
+                  {/* Toute la table ouvre le clavier ; le champ lui-même, invisible, reste petit et en haut : le
+                      téléphone n'a pas à faire défiler la page pour le montrer au-dessus du clavier */}
+                  <label
+                    className="meche-tap"
+                    htmlFor="meche-mot"
+                    aria-hidden="true"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      input.current?.focus({ preventScroll: true });
+                    }}
+                  />
                   <input
                     ref={input}
+                    id="meche-mot"
                     className="meche-input"
                     value={mine ? text : ""}
                     onChange={(e) => onInput(e.target.value)}
