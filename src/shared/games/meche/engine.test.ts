@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { botPlan } from "./bot.ts";
 import {
+  bankFor,
   checkWord,
   DEFAULT_SETTINGS,
   explode,
   fuseTimes,
+  ropeEnd,
+  ropeLeft,
+  ropeLength,
   holderOf,
   lightFuse,
   MAX_PASSES,
@@ -17,7 +21,7 @@ import {
   type MecheSettings,
 } from "./engine.ts";
 import { LETTRES } from "./lettres.ts";
-import { mecheView } from "./view.ts";
+import { fuseProgress, mecheView } from "./view.ts";
 import { cleanShown, Dictionary, normalizeWord, promptRange, Vocabulary } from "./words.ts";
 
 // Les vraies listes, lues sur le disque : le dossier src/shared ne connaît pas les types de Node, d'où l'import par une variable
@@ -322,6 +326,106 @@ describe("le Marabout", () => {
   });
 });
 
+describe("la mèche à rallonge", () => {
+  it("s'allume à sa longueur et saute au bout, à l'instant que tout le monde voit", () => {
+    const g = lit({ mode: "rallonge" });
+    const start = NOW + START_MS;
+    expect(g.rope).toMatchObject({ at: start, left: ropeLength("normal", 0), speed: 1 });
+    expect(g.boomAt).toBe(Math.round(ropeEnd(g.rope!)));
+    // Elle accélère : elle saute avant d'avoir brûlé sa longueur à la vitesse de départ
+    expect(g.boomAt - start).toBeLessThan(ropeLength("normal", 0));
+    const view = mecheView(g).burning!;
+    expect(fuseProgress(view, start)).toBe(0);
+    expect(fuseProgress(view, g.boomAt)).toBeCloseTo(1, 3);
+  });
+
+  it("recule à chaque mot, sans dépasser sa longueur, et garde sa vitesse", () => {
+    const g = lit({ mode: "rallonge" }, 2);
+    const start = NOW + START_MS;
+    const at = start + 6000;
+    const before = ropeLeft(g.rope!, at);
+    playWord(g, "maison", at);
+    expect(g.rope!.left).toBeCloseTo(before + 3000, 0);
+    expect(g.rope!.speed).toBeCloseTo(1.3, 5);
+    // Tout de suite après l'allumage, un mot ne la rallonge pas au-delà de sa longueur
+    const fresh = lit({ mode: "rallonge" }, 2);
+    playWord(fresh, "maison", start + 100);
+    expect(fresh.rope!.left).toBe(fresh.rope!.length);
+  });
+
+  it("une passe ne la fait pas reculer", () => {
+    const g = lit({ mode: "rallonge" }, 2);
+    g.players[0]!.passes = 1;
+    const at = NOW + START_MS + 5000;
+    const before = ropeLeft(g.rope!, at);
+    usePass(g, at);
+    expect(g.rope!.left).toBeCloseTo(before, 3);
+  });
+
+  it("laisse toujours au suivant le temps de lire", () => {
+    const g = lit({ mode: "rallonge" }, 2);
+    g.players[0]!.passes = 1;
+    const late = g.boomAt - 200;
+    usePass(g, late);
+    expect(g.boomAt - late).toBeGreaterThanOrEqual(MIN_TURN_MS - 1);
+  });
+
+  it("repart neuve et plus courte après une explosion", () => {
+    const g = lit({ mode: "rallonge" });
+    explode(g, g.boomAt);
+    expect(g.rope).toBeNull();
+    lightFuse(g, g.breakUntil);
+    expect(g.rope!.length).toBe(ropeLength("normal", 1));
+    expect(ropeLength("normal", 1)).toBeLessThan(ropeLength("normal", 0));
+  });
+});
+
+describe("chacun sa mèche", () => {
+  it("chacun a la sienne, qui ne brûle que pendant son tour", () => {
+    const g = lit({ mode: "chacun" }, 3);
+    const start = NOW + START_MS;
+    const full = bankFor("normal", 0);
+    expect(g.boomAt).toBe(start + full);
+    playWord(g, "maison", start + 4000);
+    expect(g.players[0]!.bank).toBe(full - 4000);
+    expect(g.players[1]!.bank).toBe(full);
+    // Le suivant part de sa propre mèche, pleine
+    expect(g.boomAt).toBe(start + 4000 + full);
+    playWord(g, "cheval", start + 5000);
+    playWord(g, "bateau", start + 6000);
+    // Le premier reprend où il en était
+    expect(g.boomAt).toBe(start + 6000 + full - 4000);
+  });
+
+  it("une passe arrête sa mèche aussi", () => {
+    const g = lit({ mode: "chacun" }, 2);
+    g.players[0]!.passes = 1;
+    usePass(g, NOW + START_MS + 2500);
+    expect(g.players[0]!.bank).toBe(bankFor("normal", 0) - 2500);
+  });
+
+  it("celui qui saute en reçoit une neuve, un peu plus courte ; les autres gardent la leur", () => {
+    const g = lit({ mode: "chacun" }, 3);
+    const start = NOW + START_MS;
+    playWord(g, "maison", start + 3000);
+    explode(g, g.boomAt);
+    expect(g.players[1]!.bank).toBe(bankFor("normal", 1));
+    expect(g.players[1]!.bankMax).toBe(bankFor("normal", 1));
+    expect(g.players[0]!.bank).toBe(bankFor("normal", 0) - 3000);
+    expect(bankFor("normal", 1)).toBeLessThan(bankFor("normal", 0));
+  });
+
+  it("dessine la mèche de celui qui la tient, déjà entamée s'il l'a déjà utilisée", () => {
+    const g = lit({ mode: "chacun" }, 2);
+    const start = NOW + START_MS;
+    playWord(g, "maison", start + 5000);
+    playWord(g, "cheval", start + 6000);
+    const view = mecheView(g).burning!;
+    expect(view.length).toBe(bankFor("normal", 0));
+    expect(fuseProgress(view, start + 6000)).toBeCloseTo(5000 / bankFor("normal", 0), 5);
+  });
+});
+
 describe("les bots", () => {
   /** Une partie entière entre bots : tous leurs mots doivent être bons, et elle doit finir */
   function simulate(settings: Partial<MecheSettings>, players: number, seed: number) {
@@ -370,6 +474,17 @@ describe("les bots", () => {
         expect(g.phase).toBe("over");
         expect(words).toBeGreaterThan(0);
         expect(new Set(Object.values(g.ranks!)).size).toBe(4);
+      }
+    }
+  });
+
+  it("finissent aussi les parties à rallonge et chacun sa mèche, en quelques minutes", () => {
+    for (const mode of ["rallonge", "chacun"] as const) {
+      for (const seed of [4, 9]) {
+        const { g, minutes } = simulate({ mode, botLevel: "moyen" }, 4, seed);
+        expect(g.phase, `${mode} ${seed}`).toBe("over");
+        expect(minutes, `${mode} ${seed}`).toBeGreaterThan(1);
+        expect(minutes, `${mode} ${seed}`).toBeLessThan(9);
       }
     }
   });

@@ -322,6 +322,13 @@ const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
   },
   { id: "courte", name: "Courte mèche", blurb: "La mèche brûle bien plus vite.", settings: { pace: "nerveux" } },
   { id: "corsee", name: "Lettres corsées", blurb: "Des lettres difficiles dès la première mèche.", settings: { difficulty: "corse" } },
+  {
+    id: "rallonge",
+    name: "Mèche à rallonge",
+    blurb: "Chaque mot fait reculer la mèche, mais elle brûle de plus en plus vite.",
+    settings: { mode: "rallonge" },
+  },
+  { id: "chacun", name: "Chacun sa mèche", blurb: "Chacun a la sienne, qui ne brûle que pendant son tour.", settings: { mode: "chacun" } },
 ];
 
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {

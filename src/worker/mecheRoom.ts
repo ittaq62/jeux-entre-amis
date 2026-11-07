@@ -5,6 +5,7 @@ import {
   checkWord,
   DEFAULT_SETTINGS,
   explode,
+  FUSE_MODES,
   holderOf,
   lightFuse,
   LIVES_CHOICES,
@@ -13,6 +14,7 @@ import {
   usePass,
   type BotLevel,
   type MecheEvent,
+  type FuseMode,
   type MecheGame,
   type MecheSettings,
 } from "../shared/games/meche/engine.ts";
@@ -640,7 +642,7 @@ export class MecheRoom extends DurableObject<Env> {
     }
     d.game = newGame(
       d.seats.map((s) => s.id),
-      d.settings.meche,
+      { ...DEFAULT_SETTINGS, ...d.settings.meche },
       now,
       randomSeed(),
     );
@@ -910,7 +912,7 @@ export class MecheRoom extends DurableObject<Env> {
       }
       const { unlocked, elo } = await recordGame(this.env.DB, {
         game: "meche",
-        mode: g.settings.source,
+        mode: g.settings.mode,
         roomCode: d.code,
         settings: g.settings,
         startedAt: d.startedAt ?? now,
@@ -962,7 +964,8 @@ export class MecheRoom extends DurableObject<Env> {
       code: d.code,
       game: "meche",
       status: d.status,
-      settings: d.settings,
+      // Une table ouverte avant les modes de jeu n'a pas tous les réglages
+      settings: { ...d.settings, meche: { ...DEFAULT_SETTINGS, ...d.settings.meche } },
       seats: d.seats.map((s) => ({
         id: s.id,
         kind: s.kind,
@@ -1048,7 +1051,7 @@ export class MecheRoom extends DurableObject<Env> {
     return {
       code: d.code,
       game: "meche",
-      variant: d.game?.settings.source ?? d.settings.meche.source,
+      variant: d.game?.settings.mode ?? d.settings.meche.mode ?? "commune",
       status: d.status,
       visibility: d.settings.visibility,
       hostName: host?.name ?? "",
@@ -1080,7 +1083,9 @@ export class MecheRoom extends DurableObject<Env> {
 }
 
 function mergeSettings(current: MecheSettings, patch: Partial<MecheSettings>): MecheSettings {
-  const next = { ...current };
+  // Une table ouverte avant les modes de jeu n'en a pas encore
+  const next = { ...DEFAULT_SETTINGS, ...current };
+  if (FUSE_MODES.includes(patch.mode as FuseMode)) next.mode = patch.mode!;
   if ((LIVES_CHOICES as readonly number[]).includes(patch.lives as number)) next.lives = patch.lives!;
   if (patch.pace === "pose" || patch.pace === "normal" || patch.pace === "nerveux") next.pace = patch.pace;
   if (patch.difficulty === "simple" || patch.difficulty === "normal" || patch.difficulty === "corse") next.difficulty = patch.difficulty;

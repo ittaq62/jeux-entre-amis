@@ -1,4 +1,6 @@
 // Mèche : une mèche allumée passe de joueur en joueur à chaque mot trouvé, et saute chez celui qui la tient.
+// Trois façons de la faire brûler : une mèche commune qui saute au hasard dans sa zone rouge, une mèche à rallonge
+// que chaque mot fait reculer mais qui brûle de plus en plus vite, ou une mèche à soi qui ne brûle que pendant son tour.
 // Tout se décide ici, sans réseau ni horloge : l'heure est passée en paramètre, le hasard vient de la partie.
 
 import { random } from "../../rng.ts";
@@ -10,8 +12,13 @@ export type Pace = "pose" | "normal" | "nerveux";
 export type Difficulty = "simple" | "normal" | "corse";
 /** D'où viennent les lettres à placer : du hasard, ou de la fin du mot d'avant */
 export type LetterSource = "hasard" | "marabout";
+/** Comment brûle la mèche */
+export type FuseMode = "commune" | "rallonge" | "chacun";
+
+export const FUSE_MODES: FuseMode[] = ["commune", "rallonge", "chacun"];
 
 export interface MecheSettings {
+  mode: FuseMode;
   /** Allumettes de chaque joueur au départ */
   lives: number;
   pace: Pace;
@@ -23,6 +30,7 @@ export interface MecheSettings {
 }
 
 export const DEFAULT_SETTINGS: MecheSettings = {
+  mode: "commune",
   lives: 3,
   pace: "normal",
   difficulty: "normal",
@@ -57,6 +65,54 @@ export function fuseTimes(pace: Pace, index: number): { safe: number; max: numbe
     safe: Math.round(Math.max(7000, 14000 - 600 * index) * PACE[pace]),
     max: Math.round(Math.max(13000, 26000 - 1200 * index) * PACE[pace]),
   };
+}
+
+/** Mèche à rallonge : sa longueur (en millisecondes de corde à la vitesse de départ), plus courte à chaque explosion */
+export function ropeLength(pace: Pace, index: number): number {
+  return Math.round(Math.max(10000, 16000 - 800 * index) * PACE[pace]);
+}
+
+/** Mèche à rallonge : la vitesse gagnée chaque seconde (elle double en 20 s), et la corde rendue par un mot */
+const ROPE_ACCEL = 0.05;
+const ROPE_REWIND_MS = 3000;
+/** Chacun sa mèche : ce que dure la sienne, plus courte à chaque explosion de la partie */
+export function bankFor(pace: Pace, index: number): number {
+  return Math.round(Math.max(8000, 15000 - 600 * index) * PACE[pace]);
+}
+
+/**
+ * Une mèche qui brûle à vitesse croissante : ce qu'il restait de corde à l'instant `at` (en millisecondes de corde
+ * à la vitesse 1), sa longueur entière, sa vitesse à cet instant, et la vitesse qu'elle gagne chaque seconde.
+ */
+export interface Rope {
+  at: number;
+  left: number;
+  length: number;
+  speed: number;
+  accel: number;
+}
+
+/** La corde brûlée en `ms` millisecondes */
+function burnt(speed: number, accel: number, ms: number): number {
+  const s = ms / 1000;
+  return 1000 * (speed * s + (accel * s * s) / 2);
+}
+
+/** Le temps qu'il faut pour brûler `left` de corde */
+function burnTime(left: number, speed: number, accel: number): number {
+  const l = left / 1000;
+  if (accel <= 0) return (1000 * l) / speed;
+  return (1000 * (-speed + Math.sqrt(speed * speed + 2 * accel * l))) / accel;
+}
+
+/** Ce qui reste de corde à cet instant */
+export function ropeLeft(r: Rope, now: number): number {
+  return Math.max(0, r.left - burnt(r.speed, r.accel, Math.max(0, now - r.at)));
+}
+
+/** L'instant où la corde arrive au bout */
+export function ropeEnd(r: Rope): number {
+  return r.at + burnTime(r.left, r.speed, r.accel);
 }
 
 type Band = keyof typeof LETTRES;
@@ -107,6 +163,9 @@ export interface MechePlayer {
   id: string;
   lives: number;
   passes: number;
+  /** Chacun sa mèche : ce qui reste de la sienne (au moment où il l'a reçue, s'il la tient), et sa longueur */
+  bank: number;
+  bankMax: number;
   /** Sa place finale, dès qu'elle est connue */
   place: number | null;
   /** Son plus long mot, tel qu'il l'a écrit */
@@ -136,6 +195,8 @@ export interface MecheGame {
   heldSince: number;
   /** Sursis déjà accordés à cette mèche */
   graces: number;
+  /** Mèche à rallonge : la corde en train de brûler */
+  rope: Rope | null;
   used: string[];
   /** Les derniers mots joués, et comment ils ont été écrits (accents compris) */
   log: { word: string; by: string; shown?: string }[];
@@ -164,9 +225,10 @@ export const REFUSALS: Record<Refusal, string> = {
 };
 
 export function newGame(ids: string[], settings: MecheSettings, now: number, seed: number): MecheGame {
+  const bank = bankFor(settings.pace, 0);
   const g: MecheGame = {
     settings: { ...settings },
-    players: ids.map((id) => ({ id, lives: settings.lives, passes: 0, place: null, best: "", stats: emptyStats() })),
+    players: ids.map((id) => ({ id, lives: settings.lives, passes: 0, bank, bankMax: bank, place: null, best: "", stats: emptyStats() })),
     holder: 0,
     letters: "",
     turn: 0,
@@ -179,6 +241,7 @@ export function newGame(ids: string[], settings: MecheSettings, now: number, see
     boomAt: 0,
     heldSince: now,
     graces: 0,
+    rope: null,
     used: [],
     log: [],
     recent: [],
@@ -229,18 +292,36 @@ function drawLetters(g: MecheGame): string {
 /** La mèche suivante s'allume */
 export function lightFuse(g: MecheGame, now: number): MecheEvent[] {
   if (g.phase !== "break") return [];
-  const { safe, max } = fuseTimes(g.settings.pace, g.fuse);
+  const index = g.fuse;
+  const pace = g.settings.pace;
   g.phase = "lit";
   g.letters = drawLetters(g);
   g.fuse += 1;
   g.turn += 1;
   g.litAt = now;
-  g.safeUntil = now + safe;
-  g.maxUntil = now + max;
-  g.boomAt = now + safe + Math.floor(random(g) * (max - safe));
   g.heldSince = now;
   g.graces = 0;
+  g.rope = null;
+  if (g.settings.mode === "rallonge") {
+    const length = ropeLength(pace, index);
+    g.rope = { at: now, left: length, length, speed: 1, accel: ROPE_ACCEL / PACE[pace] };
+    setBoom(g, ropeEnd(g.rope));
+  } else if (g.settings.mode === "chacun") {
+    setBoom(g, now + holderOf(g).bank);
+  } else {
+    const { safe, max } = fuseTimes(pace, index);
+    g.safeUntil = now + safe;
+    g.maxUntil = now + max;
+    g.boomAt = now + safe + Math.floor(random(g) * (max - safe));
+  }
   return [{ type: "lit", fuse: g.fuse, holder: holderOf(g).id, letters: g.letters }];
+}
+
+/** Une mèche qui saute au bout, à l'instant connu de tous */
+function setBoom(g: MecheGame, at: number) {
+  g.boomAt = Math.round(at);
+  g.safeUntil = g.boomAt;
+  g.maxUntil = g.boomAt;
 }
 
 /**
@@ -254,15 +335,39 @@ export function checkWord(g: MecheGame, word: string, known: (word: string) => b
   return known(word) ? null : "inconnu";
 }
 
-/** La mèche passe au suivant. Il aura toujours le temps de lire ses lettres, quitte à accorder un sursis. */
-function handOver(g: MecheGame, now: number, letters: string | null) {
+/**
+ * La mèche passe au suivant (`rewarded` : grâce à un mot, pas une passe). Une mèche partagée lui laisse toujours
+ * le temps de lire ses lettres, quitte à accorder un sursis ; une mèche à soi reprend où elle en était.
+ */
+function handOver(g: MecheGame, now: number, letters: string | null, rewarded: boolean) {
+  const mode = g.settings.mode;
+  const from = holderOf(g);
+  if (mode === "chacun") from.bank = Math.max(0, from.bank - (now - g.heldSince));
   g.holder = nextAlive(g, g.holder);
   g.letters = letters ?? drawLetters(g);
   g.turn += 1;
   g.heldSince = now;
-  const least = now + Math.max(MIN_TURN_FLOOR_MS, MIN_TURN_MS - g.graces * MIN_TURN_STEP_MS);
-  if (g.boomAt < least) {
-    g.boomAt = least;
+  if (mode === "chacun") {
+    setBoom(g, now + holderOf(g).bank);
+    return;
+  }
+  const least = Math.max(MIN_TURN_FLOOR_MS, MIN_TURN_MS - g.graces * MIN_TURN_STEP_MS);
+  if (mode === "rallonge" && g.rope) {
+    // La corde recule pour un mot, jamais au-delà de sa longueur ; elle garde la vitesse prise
+    const r = g.rope;
+    const speed = r.speed + (r.accel * Math.max(0, now - r.at)) / 1000;
+    let left = ropeLeft(r, now);
+    if (rewarded) left = Math.min(r.length, left + ROPE_REWIND_MS * PACE[g.settings.pace]);
+    if (burnTime(left, speed, r.accel) < least) {
+      left = Math.min(r.length, burnt(speed, r.accel, least));
+      g.graces += 1;
+    }
+    g.rope = { ...r, at: now, left, speed };
+    setBoom(g, ropeEnd(g.rope));
+    return;
+  }
+  if (g.boomAt < now + least) {
+    g.boomAt = now + least;
     g.graces += 1;
   }
   g.maxUntil = Math.max(g.maxUntil, g.boomAt);
@@ -287,7 +392,7 @@ export function playWord(g: MecheGame, word: string, now: number, shown = word):
   g.log.push({ word, by: p.id, shown });
   if (g.log.length > 24) g.log.shift();
   g.lastWord = word;
-  handOver(g, now, null);
+  handOver(g, now, null, true);
   return [{ type: "word", id: p.id, word, shown, long, earned, next: holderOf(g).id, ms }];
 }
 
@@ -297,7 +402,7 @@ export function usePass(g: MecheGame, now: number): MecheEvent[] {
   if (g.phase !== "lit" || p.passes <= 0) return [];
   p.passes -= 1;
   p.stats.passesUsed += 1;
-  handOver(g, now, g.letters);
+  handOver(g, now, g.letters, false);
   return [{ type: "pass", id: p.id, next: holderOf(g).id }];
 }
 
@@ -305,6 +410,7 @@ export function usePass(g: MecheGame, now: number): MecheEvent[] {
 export function explode(g: MecheGame, now: number): MecheEvent[] {
   if (g.phase !== "lit") return [];
   const p = holderOf(g);
+  if (g.settings.mode === "chacun") p.bank = 0;
   p.lives -= 1;
   p.stats.booms += 1;
   const left = g.players.filter(isAlive);
@@ -312,10 +418,16 @@ export function explode(g: MecheGame, now: number): MecheEvent[] {
   const events: MecheEvent[] = [{ type: "boom", id: p.id, lives: p.lives, place: p.place }];
   g.letters = "";
   g.lastWord = null;
+  g.rope = null;
   if (left.length === 1) {
     finish(g, left[0]!);
     events.push({ type: "over", winner: left[0]!.id });
     return events;
+  }
+  // Chacun sa mèche : celui qui a sauté en reçoit une neuve, un peu plus courte
+  if (g.settings.mode === "chacun" && p.lives > 0) {
+    p.bank = bankFor(g.settings.pace, g.fuse);
+    p.bankMax = p.bank;
   }
   g.holder = nextAlive(g, g.holder);
   g.phase = "break";

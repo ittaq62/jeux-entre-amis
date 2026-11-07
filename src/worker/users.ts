@@ -8,7 +8,7 @@ import {
   earnedTourAchievements,
 } from "../shared/achievements.ts";
 import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/capitale/engine.ts";
-import type { LetterSource, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
+import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
 import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
@@ -232,7 +232,7 @@ export type GameRecord = {
   | { game: "naval"; settings: NavalSettings; mode: NavalMode }
   | { game: "bricks"; settings: BricksSettings; mode: BricksMode }
   | { game: "capitale"; settings: CapitaleSettings; mode: EndMode }
-  | { game: "meche"; settings: MecheSettings; mode: LetterSource }
+  | { game: "meche"; settings: MecheSettings; mode: FuseMode }
 );
 
 /** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
