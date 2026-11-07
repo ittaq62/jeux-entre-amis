@@ -102,7 +102,7 @@
 /* L'aiguille : elle part du centre et montre celui qui tient la mèche */
 .meche-needle {
   position: absolute;
-  z-index: 1;
+  z-index: 4;
   left: 50%;
   top: 50%;
   height: 28px;
@@ -111,6 +111,11 @@
   transition: rotate 0.65s cubic-bezier(0.3, 1.45, 0.5, 1);
   filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.55));
   pointer-events: none;
+}
+
+/* Le tirage au sort du début : deux tours, puis l'aiguille ralentit jusqu'à celui qui commence */
+.meche-needle.is-spinning {
+  transition: rotate 2s cubic-bezier(0.12, 0.65, 0.12, 1);
 }
 
 .meche-needle svg {
@@ -144,7 +149,7 @@
 /* Le médaillon au centre : une étiquette de papier, les lettres à l'encre */
 .meche-medal {
   position: absolute;
-  z-index: 2;
+  z-index: 5;
   left: 50%;
   top: 50%;
   width: var(--m);
@@ -312,25 +317,98 @@
   }
 }
 
-.meche-intro {
+/* Entre deux mèches : celui qui rallume, ou le point d'interrogation du tirage */
+.meche-draw {
+  font-size: calc(var(--m) * 0.4);
+  color: var(--label-red);
+}
+
+.meche-starter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--m) * 0.03);
   max-width: 100%;
 }
 
-.meche-intro-rule {
-  margin: 6px 0 0;
-  font-size: max(11px, calc(var(--m) * 0.047));
-  line-height: 1.35;
-  color: var(--label-ink);
+.meche-starter .avatar {
+  box-shadow:
+    0 0 0 3px var(--spark),
+    0 6px 14px -6px rgba(0, 0, 0, 0.6);
 }
 
-.meche-intro-rule.is-soft {
-  color: var(--label-soft);
+/* L'allumette qui part de celui qui commence et vient gratter le bout de la corde */
+.meche-match-fly {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 64px;
+  margin-left: -8px;
+  margin-top: -10px;
+  transform-origin: 8px 10px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.55));
+}
+
+.meche-match-fly svg {
+  display: block;
+}
+
+.meche-match-flame {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 18px;
+  height: 26px;
+  margin: -24px 0 0 -9px;
+  border-radius: 50% 50% 45% 45% / 62% 62% 38% 38%;
+  background: radial-gradient(ellipse at 50% 70%, #fff6d6 0%, #ffd36b 30%, #ff8a3c 62%, rgba(255, 90, 40, 0) 75%);
+  transform-origin: 50% 90%;
+  scale: 0;
+  animation: meche-match-flame 0.5s ease-out forwards;
+}
+
+@keyframes meche-match-flame {
+  0% {
+    scale: 0;
+  }
+  45% {
+    scale: 1.5;
+  }
+  70% {
+    scale: 0.95;
+  }
+  100% {
+    scale: 1.1;
+  }
+}
+
+/* Le bout de la corde qui prend feu, en attendant que la mèche s'allume */
+.meche-strike-flare {
+  position: absolute;
+  z-index: 7;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6d6 0%, #ffd36b 28%, rgba(255, 138, 60, 0.75) 50%, rgba(255, 90, 40, 0) 72%);
+  pointer-events: none;
+  animation: meche-flare 0.12s ease-in-out infinite alternate;
+}
+
+@keyframes meche-flare {
+  to {
+    filter: brightness(1.25);
+    transform: scale(1.12);
+  }
 }
 
 /* Le champ est invisible, posé sur la table : on voit ce qu'on tape en grand, et le toucher ouvre le clavier */
 .meche-form {
   position: absolute;
-  z-index: 4;
+  z-index: 6;
   inset: 0;
   border-radius: 50%;
   overflow: hidden;
@@ -482,13 +560,75 @@
   }
 }
 
+/* La bombe : trois bâtons ficelés posés sur le rebord, en haut de la table */
 .meche-rope svg.meche-dynamite {
   inset: auto;
   position: absolute;
-  top: -8px;
+  top: -6px;
   left: 50%;
+  width: 100px;
+  height: auto;
   translate: -50% 0;
-  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.6));
+  transform-origin: 50% 80%;
+  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.6));
+  transition:
+    opacity 0.25s ease,
+    scale 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+  animation: meche-bomb-idle 2.4s ease-in-out infinite;
+}
+
+.meche-rope svg.meche-dynamite.is-hot {
+  animation: meche-bomb-hot 0.16s linear infinite;
+}
+
+.meche-rope svg.meche-dynamite.is-gone {
+  opacity: 0;
+  scale: 0.3;
+  animation: none;
+}
+
+@keyframes meche-bomb-idle {
+  50% {
+    transform: translateY(-2px) rotate(-1.5deg);
+  }
+}
+
+@keyframes meche-bomb-hot {
+  25% {
+    transform: rotate(-3deg) translateX(-1px);
+  }
+  75% {
+    transform: rotate(3deg) translateX(1px);
+  }
+}
+
+/* Les braises qui s'échappent de l'étincelle */
+.spark-ember {
+  fill: #ffd36b;
+  animation: meche-ember 0.7s ease-out infinite;
+}
+
+.spark-ember.is-b {
+  animation-delay: 0.23s;
+  --ex: -9px;
+  --ey: -11px;
+}
+
+.spark-ember.is-c {
+  animation-delay: 0.46s;
+  --ex: 8px;
+  --ey: -13px;
+}
+
+@keyframes meche-ember {
+  from {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--ex, 11px), var(--ey, -8px));
+    opacity: 0;
+  }
 }
 
 /* Les joueurs en rond autour de la table */
@@ -667,6 +807,98 @@
 
 .meche-seat-word.is-long {
   background: var(--spark);
+}
+
+/* Un grand mot rapporte une passe : elle se voit sous le mot */
+.meche-seat-earned {
+  display: block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--spark-hot);
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+/* Chacun sa mèche : la sienne, en petit, sous ses allumettes */
+.meche-ownfuse {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 170, 0.18);
+  overflow: hidden;
+}
+
+.meche-ownfuse > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--rope) 0 4px, var(--rope-dark) 4px 6px);
+}
+
+.meche-ownfuse > span.is-low {
+  background: repeating-linear-gradient(90deg, #e5442c 0 4px, #8f2219 4px 6px);
+}
+
+.meche-ownfuse.is-burning {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 220, 170, 0.18),
+    0 0 10px rgba(255, 170, 70, 0.6);
+}
+
+/* Noirci par l'explosion, le temps de s'en remettre */
+.meche-seat.is-sooty .meche-seat-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 35%, rgba(20, 16, 12, 0.85) 0 18%, transparent 19%),
+    radial-gradient(circle at 68% 60%, rgba(20, 16, 12, 0.75) 0 22%, transparent 23%),
+    radial-gradient(circle at 45% 75%, rgba(20, 16, 12, 0.7) 0 15%, transparent 16%), rgba(30, 22, 16, 0.45);
+  pointer-events: none;
+  animation: meche-soot 2.6s ease-in forwards;
+}
+
+@keyframes meche-soot {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* L'allumette perdue flambe un instant avant de rester noire */
+.meche-match-fire {
+  fill: #ffb347;
+  transform-box: fill-box;
+  transform-origin: 50% 80%;
+  animation: meche-match-fire 1.2s ease-out forwards;
+}
+
+@keyframes meche-match-fire {
+  0% {
+    opacity: 1;
+    transform: scale(1.4);
+    fill: #fff1a8;
+  }
+  60% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
 }
 
 .meche-seat .emote-bubble {
@@ -866,6 +1098,53 @@
   color: #4a2c12;
 }
 
+/* L'explosion chez celui qui tenait la mèche : la bombe lui saute dessus, une onde de choc, de la fumée */
+.meche-blast {
+  position: absolute;
+  z-index: 19;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.meche-blast-bomb {
+  position: absolute;
+  width: 70px;
+  margin: -22px 0 0 -35px;
+}
+
+.meche-blast-bomb svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.meche-shock {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 210, 140, 0.95);
+  box-shadow:
+    0 0 24px rgba(255, 160, 60, 0.8),
+    inset 0 0 18px rgba(255, 160, 60, 0.6);
+}
+
+.meche-shock.is-inner {
+  border: 0;
+  background: radial-gradient(circle, #fff6d6 0%, #ffd36b 30%, rgba(255, 120, 40, 0.8) 55%, rgba(255, 90, 40, 0) 72%);
+  box-shadow: none;
+}
+
+.meche-smoke {
+  position: absolute;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(70, 62, 56, 0.9) 0%, rgba(50, 44, 40, 0.6) 45%, rgba(40, 36, 32, 0) 72%);
+  filter: blur(1px);
+}
+
 /* La fin de partie */
 .meche-sheet-stats {
   margin-left: auto;
@@ -951,6 +1230,28 @@
   scale: 0.8;
 }
 
+.is-phone .meche-rope svg.meche-dynamite {
+  top: -5px;
+  width: 66px;
+}
+
+.is-phone .meche-blast-bomb {
+  width: 48px;
+  margin: -15px 0 0 -24px;
+}
+
+.is-phone .meche-shock {
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-width: 4px;
+}
+
+.is-phone .meche-ownfuse {
+  width: 46px;
+  height: 5px;
+}
+
 .is-phone .meche-needle {
   height: 24px;
   margin-top: -12px;
@@ -1011,11 +1312,35 @@
   .meche-table.is-hot,
   .meche-seat.is-holder.is-hot .meche-seat-avatar,
   .spark-glow,
-  .meche-rope .spark-rays {
+  .spark-ember,
+  .meche-rope .spark-rays,
+  .meche-rope svg.meche-dynamite {
     animation: none;
   }
 
   .meche-needle {
     transition: none;
   }
+}
+
+/* Sur téléphone, une allumette à la taille des joueurs */
+.is-phone .meche-match-fly {
+  width: 11px;
+  height: 44px;
+  margin-left: -5.5px;
+  margin-top: -7px;
+  transform-origin: 5.5px 7px;
+}
+
+.is-phone .meche-match-fly svg {
+  width: 11px;
+  height: 44px;
+}
+
+.is-phone .meche-match-flame {
+  left: 5.5px;
+  top: 4px;
+  width: 13px;
+  height: 19px;
+  margin: -17px 0 0 -6.5px;
 }

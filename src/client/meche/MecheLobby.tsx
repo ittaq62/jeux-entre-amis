@@ -3,6 +3,7 @@ import {
   LIVES_CHOICES,
   type BotLevel,
   type Difficulty,
+  type FuseMode,
   type LetterSource,
   type MecheSettings,
   type Pace,
@@ -11,9 +12,28 @@ import { MECHE_MAX_PLAYERS, type MecheClientMessage, type MecheRoomView } from "
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 
+/** Les trois façons de faire brûler la mèche, et ce qu'on lit sous le choix */
+const MODES: { value: FuseMode; label: string; rule: string }[] = [
+  {
+    value: "commune",
+    label: "Commune",
+    rule: "Une seule mèche pour tous. Personne ne sait quand elle va sauter : ça peut arriver à tout moment dès que l'étincelle entre dans la zone rouge.",
+  },
+  {
+    value: "rallonge",
+    label: "À rallonge",
+    rule: "Une seule mèche pour tous. Chaque bon mot la fait reculer un peu, mais elle brûle de plus en plus vite : elle saute quand l'étincelle arrive à la bombe.",
+  },
+  {
+    value: "chacun",
+    label: "Chacun la sienne",
+    rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : quand la tienne arrive au bout, boum, et tu en reçois une neuve, un peu plus courte.",
+  },
+];
+
 const PACE_HINTS: Record<Pace, string> = {
   pose: "La mèche brûle lentement : le temps de chercher, idéal pour découvrir.",
-  normal: "De 14 à 26 secondes pour la première mèche, puis de moins en moins.",
+  normal: "Le rythme habituel, de plus en plus serré au fil des explosions.",
   nerveux: "Tout va plus vite : il faut trouver du premier coup.",
 };
 
@@ -47,6 +67,7 @@ interface Props {
 export function MecheLobby({ room, send, ...rest }: Props) {
   const s = room.settings.meche;
   const isHost = room.you.isHost;
+  const mode = MODES.find((m) => m.value === s.mode) ?? MODES[0]!;
   const update = (patch: Partial<MecheSettings>) => send({ t: "settings", settings: patch });
 
   return (
@@ -66,9 +87,20 @@ export function MecheLobby({ room, send, ...rest }: Props) {
               <strong>La mèche passe de main en main.</strong> Quand elle est chez toi, écris un mot qui contient les lettres affichées :
               elle part chez le voisin. Si elle saute dans tes mains, tu perds une allumette. Le dernier à en avoir gagne.
             </p>
-            <p className="hint">
-              Personne ne sait quand elle va sauter : ça peut arriver à tout moment dès que l'étincelle entre dans la zone rouge. Les
-              accents ne comptent pas.
+            <p className="hint">Les accents ne comptent pas.</p>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Mode de jeu</span>
+            <Options<FuseMode>
+              label="Mode de jeu"
+              value={mode.value}
+              disabled={!isHost}
+              onChange={(next) => update({ mode: next })}
+              options={MODES.map(({ value, label }) => ({ value, label }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {mode.rule}
             </p>
           </div>
 

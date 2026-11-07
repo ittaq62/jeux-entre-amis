@@ -1,8 +1,8 @@
 import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { LONG_WORD, REFUSALS } from "../../shared/games/meche/engine.ts";
-import type { MechePlayerView } from "../../shared/games/meche/view.ts";
+import { LONG_WORD, REFUSALS, type FuseMode } from "../../shared/games/meche/engine.ts";
+import { fuseProgress, type MechePlayerView } from "../../shared/games/meche/view.ts";
 import { cleanShown, normalizeWord, promptRange } from "../../shared/games/meche/words.ts";
 import type { MecheClientMessage, MecheRoomView, SeatView } from "../../shared/protocol.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -15,7 +15,7 @@ import type { EmoteBubble } from "../game/useRoom.ts";
 import { MECHE_SOUNDS, play, preloadSounds, startLoop, stopLoop, vibrate } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import { FuseRope } from "./FuseRope.tsx";
+import { Dynamite, FuseRope, ropeStart } from "./FuseRope.tsx";
 import { MecheGameOver } from "./MecheGameOver.tsx";
 import { useTyping, type EventBatch, type RefusedWord } from "./useMecheRoom.ts";
 
@@ -32,6 +32,19 @@ interface Props {
   onShowLobby: () => void;
   onLeave: () => void;
 }
+
+/** Ce que rappelle le médaillon pendant les premières mèches, selon le mode */
+const MODE_TIPS: Record<FuseMode, string | null> = {
+  commune: null,
+  rallonge: "Chaque mot fait reculer la mèche",
+  chacun: "Ta mèche ne brûle que pendant ton tour",
+};
+
+/** Le tirage de celui qui commence : l'aiguille fait deux tours avant de s'arrêter */
+const SPIN_MS = 2000;
+/** L'allumette : elle part du joueur, arrive sur la corde et la gratte à ce moment-là */
+const MATCH_MS = 1250;
+const MATCH_STRIKE_MS = 950;
 
 /** La taille visible de l'écran : sur téléphone, le clavier en prend la moitié et la table doit rester au-dessus */
 function useVisibleArea() {
@@ -71,9 +84,12 @@ function useSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
-interface SeatSpot {
+interface Spot {
   x: number;
   y: number;
+}
+
+interface SeatSpot extends Spot {
   /** L'angle depuis le centre de la table, en degrés, dans le sens des aiguilles d'une montre (90 : en bas) */
   angle: number;
   /** Dans la moitié haute : son nom passe au-dessus de l'avatar, pour ne pas mordre sur la table */
@@ -112,14 +128,38 @@ function tableLayout(w: number, h: number, count: number, phone: boolean, short:
   return { cx, cy, tableR, avatar, seats, bottom: cy + R + avatar / 2 + info };
 }
 
-/** L'aiguille tourne toujours dans le sens de la mèche, jamais à rebours, même pour sauter des éliminés */
-function useClockwise(target: number | null): number {
-  const angle = useRef<number | null>(null);
-  if (target !== null) {
-    if (angle.current === null) angle.current = target;
-    else angle.current += (((target - angle.current) % 360) + 360) % 360;
-  }
-  return angle.current ?? 90;
+/**
+ * L'aiguille tourne toujours dans le sens de la mèche, jamais à rebours. Au début d'une partie (`draw`), elle tire
+ * au sort celui qui commence : deux tours complets avant de s'arrêter sur lui.
+ */
+function useNeedle(target: number | null, draw: boolean) {
+  const [angle, setAngle] = useState(90);
+  // La fin du tirage, en heure de l'appareil : un minuteur la fait tomber, recréé à chaque fois que l'effet repasse
+  const [spinUntil, setSpinUntil] = useState(0);
+  const [, wake] = useState(0);
+  const drawn = useRef(false);
+  useEffect(() => {
+    if (target === null) return;
+    const turn = (a: number) => a + ((((target - a) % 360) + 360) % 360);
+    if (draw && !drawn.current) {
+      drawn.current = true;
+      setSpinUntil(Date.now() + SPIN_MS);
+      // Deux images plus tard : l'aiguille est déjà dessinée à son point de départ, la rotation se voit
+      requestAnimationFrame(() => requestAnimationFrame(() => setAngle((a) => turn(a) + 720)));
+      return;
+    }
+    // La partie suivante tirera de nouveau au sort
+    if (!draw) drawn.current = false;
+    setAngle(turn);
+  }, [target, draw]);
+  useEffect(() => {
+    const left = spinUntil - Date.now();
+    if (left <= 0) return;
+    const t = setTimeout(() => wake((n) => n + 1), left + 20);
+    return () => clearTimeout(t);
+  }, [spinUntil]);
+  const spinning = spinUntil > Date.now();
+  return { angle, spinning };
 }
 
 let fxSeq = 0;
@@ -134,6 +174,13 @@ interface SeatWord {
   key: number;
   shown: string;
   long: boolean;
+  earned: boolean;
+}
+
+interface Blast extends Spot {
+  key: number;
+  /** D'où part la bombe qui saute jusqu'à lui (le rebord de la table) */
+  from: Spot;
 }
 
 export function MecheTable({
@@ -163,14 +210,20 @@ export function MecheTable({
   const [resultsHidden, setResultsHidden] = useState(false);
   const [hot, setHot] = useState(false);
   const [boom, setBoom] = useState<{ key: number; id: string; out: boolean } | null>(null);
+  const [blast, setBlast] = useState<Blast | null>(null);
+  const [scorched, setScorched] = useState<{ id: string; match: number } | null>(null);
   const [trails, setTrails] = useState<Trail[]>([]);
   const [words, setWords] = useState<Record<string, SeatWord | undefined>>({});
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState("");
   const [rejected, setRejected] = useState<RefusedWord | null>(null);
+  /** L'allumette qui rallume la mèche entre deux explosions (et au tout début, après le tirage) : décidée en entrant dans la pause */
+  const [matchFor, setMatchFor] = useState<{ key: string; delay: number } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const lastBatch = useRef(batch.id);
   const lastTyped = useRef({ at: 0, timer: 0 as ReturnType<typeof setTimeout> | 0 });
+  /** La mèche que l'allumette a déjà allumée à l'écran (pour ne pas rejouer le grattement au démarrage) */
+  const struck = useRef(-1);
 
   const meId = room.you.seatId;
   const me = g.players.find((p) => p.id === meId);
@@ -179,16 +232,23 @@ export function MecheTable({
   const mine = lit && g.holder === meId;
   const canType = me?.alive === true && g.phase !== "over";
   const holderName = seat(g.holder)?.name ?? "";
+  const mode = g.settings.mode ?? "commune";
   // Soi en bas de la table, puis les autres dans l'ordre où la mèche passe
   const myIndex = g.players.findIndex((p) => p.id === meId);
   const order = myIndex > 0 ? [...g.players.slice(myIndex), ...g.players.slice(0, myIndex)] : g.players;
   const layout = tableLayout(stage.w, stage.h, order.length, phone, short);
+  const spotOf = (id: string) => layout.seats[order.findIndex((p) => p.id === id)];
   // L'aiguille montre qui tient la mèche ; à la fin, le gagnant
   const pointed = g.phase === "over" ? (g.ranking?.[0] ?? g.holder) : g.holder;
-  const pointedIndex = order.findIndex((p) => p.id === pointed);
-  const needle = useClockwise(pointedIndex >= 0 ? layout.seats[pointedIndex]!.angle : null);
+  const pointedSpot = spotOf(pointed);
+  // Rien avant que la table soit dessinée : le tirage doit se voir tourner
+  const needle = useNeedle(stage.w > 0 && pointedSpot ? pointedSpot.angle : null, g.phase === "break" && g.fuse === 0);
   const medal = Math.round(layout.tableR * (phone ? 1.28 : 1.24));
   const mySpot = myIndex >= 0 ? layout.seats[0] : undefined;
+  // Le rebord de la table où la corde commence, et celui où se pose la bombe, dans la scène
+  const start = ropeStart(layout.tableR);
+  const ropeHead = { x: layout.cx - layout.tableR + start.x, y: layout.cy - layout.tableR + start.y };
+  const bombSpot = { x: layout.cx, y: layout.cy - layout.tableR + 14 };
 
   useEffect(() => preloadSounds(MECHE_SOUNDS), []);
   useEffect(() => () => stopLoop(), []);
@@ -200,22 +260,33 @@ export function MecheTable({
   }, [lit, sound]);
 
   // Le tic-tac : de plus en plus serré à mesure que l'étincelle avance
+  const burning = g.burning;
   useEffect(() => {
-    if (!lit) return;
+    if (!burning) return;
     let timer: ReturnType<typeof setTimeout>;
     let flip = false;
-    const span = Math.max(1, g.maxUntil - g.litAt);
     const beat = () => {
-      const now = Date.now() + serverOffset;
-      const p = Math.min(1, (now - g.litAt) / span);
-      const inRed = now >= g.safeUntil;
+      const p = fuseProgress(burning, Date.now() + serverOffset);
+      const inRed = p >= burning.risk;
       flip = !flip;
       play("mecheTick", { rate: flip ? 1 : 0.82, volume: inRed ? 1 : 0.45 + p * 0.4 });
       timer = setTimeout(beat, inRed ? Math.max(140, 300 - (p - 0.5) * 300) : 950 - p * 620);
     };
     timer = setTimeout(beat, 500);
     return () => clearTimeout(timer);
-  }, [lit, g.litAt, g.maxUntil, g.safeUntil, serverOffset]);
+  }, [burning, serverOffset]);
+
+  // Le tirage au sort : l'aiguille cliquette en ralentissant
+  useEffect(() => {
+    if (!needle.spinning) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let at = 0;
+    for (let k = 0, gap = 45; k < 12; k++, gap *= 1.2) {
+      at += gap;
+      timers.push(setTimeout(() => play("mecheTick", { rate: 1.25, volume: 0.6 }), at));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [needle.spinning]);
 
   // Les événements de la partie : les sons, les mots qui s'affichent sur les joueurs, l'explosion
   useEffect(() => {
@@ -223,12 +294,13 @@ export function MecheTable({
     lastBatch.current = batch.id;
     for (const e of batch.events) {
       if (e.type === "lit") {
-        play("mecheStrike");
+        // L'allumette l'a déjà grattée à l'écran ; sinon (arrivé en cours, effets réduits), on l'entend ici
+        if (struck.current !== e.fuse - 1) play("mecheStrike");
         if (e.holder === meId) myTurn();
       } else if (e.type === "word") {
         play("mecheWord", { rate: e.long ? 0.86 : 1 });
         if (e.earned) play("tourTrophyMine", { delay: 90, volume: e.id === meId ? 1 : 0.5 });
-        showWord(e.id, e.shown ?? e.word, e.long);
+        showWord(e.id, e.shown ?? e.word, e.long, e.earned);
         flyTo(e.id, e.next);
         if (e.next === meId) myTurn();
       } else if (e.type === "pass") {
@@ -236,7 +308,7 @@ export function MecheTable({
         flyTo(e.id, e.next);
         if (e.next === meId) myTurn();
       } else if (e.type === "boom") {
-        explode(e.id, e.lives === 0);
+        explode(e.id, e.lives);
       } else if (e.type === "over") {
         play(e.winner === meId ? "tourApplause" : "capLose", { delay: 1300 });
       }
@@ -249,9 +321,9 @@ export function MecheTable({
     vibrate([25, 40, 25]);
   }
 
-  function showWord(id: string, shown: string, long: boolean) {
+  function showWord(id: string, shown: string, long: boolean, earned: boolean) {
     const key = ++fxSeq;
-    setWords((prev) => ({ ...prev, [id]: { key, shown, long } }));
+    setWords((prev) => ({ ...prev, [id]: { key, shown, long, earned } }));
     setTimeout(() => setWords((prev) => (prev[id]?.key === key ? { ...prev, [id]: undefined } : prev)), 2600);
   }
 
@@ -265,7 +337,8 @@ export function MecheTable({
     setTimeout(() => setTrails((prev) => prev.filter((t) => t.id !== id)), 420);
   }
 
-  function explode(id: string, out: boolean) {
+  function explode(id: string, lives: number) {
+    const out = lives === 0;
     stopLoop("mecheFuse");
     play("mecheBoom");
     if (out) play("capBankrupt", { delay: 500 });
@@ -273,17 +346,25 @@ export function MecheTable({
     const key = ++fxSeq;
     setBoom({ key, id, out });
     setTimeout(() => setBoom((b) => (b?.key === key ? null : b)), 1500);
+    // L'allumette perdue brûle, et le joueur reste noirci de suie un moment
+    setScorched({ id, match: lives });
+    setTimeout(() => setScorched((s) => (s?.id === id ? null : s)), 2600);
     if (usePrefs.getState().reducedEffects) return;
+    const spot = spotOf(id);
+    if (spot) {
+      setBlast({ key, x: spot.x, y: spot.y, from: bombSpot });
+      setTimeout(() => setBlast((b) => (b?.key === key ? null : b)), 1600);
+    }
     const at = document.querySelector(`[data-seat="${id}"] .meche-seat-avatar`)?.getBoundingClientRect();
     if (at) {
       void confetti({
-        particleCount: 46,
+        particleCount: 54,
         spread: 360,
-        startVelocity: 26,
+        startVelocity: 28,
         gravity: 0.9,
-        ticks: 90,
-        scalar: 0.8,
-        colors: ["#2a211a", "#ff9a3c", "#ffd36b", "#7a6a5c"],
+        ticks: 95,
+        scalar: 0.85,
+        colors: ["#2a211a", "#ff9a3c", "#ffd36b", "#7a6a5c", "#e5442c"],
         origin: { x: (at.left + at.width / 2) / window.innerWidth, y: (at.top + at.height / 2) / window.innerHeight },
       });
     }
@@ -330,6 +411,14 @@ export function MecheTable({
     if (!g.ranking) setResultsHidden(false);
   }, [g.ranking]);
 
+  // En entrant dans une pause : l'allumette partira pour arriver juste avant que la mèche s'allume (pas si on arrive trop tard)
+  useEffect(() => {
+    if (g.phase !== "break" || reduced) return setMatchFor(null);
+    const delay = g.breakUntil - (Date.now() + serverOffset) - MATCH_MS - 100;
+    setMatchFor(delay > 150 - MATCH_STRIKE_MS ? { key: `${g.fuse}-${g.breakUntil}`, delay: Math.max(0, delay) } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g.phase, g.breakUntil, g.fuse, reduced]);
+
   function onInput(raw: string) {
     if (!mine) {
       if (input.current) input.current.value = "";
@@ -362,7 +451,14 @@ export function MecheTable({
   }
 
   const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h } as CSSProperties) : undefined;
-  const firstFuses = g.fuse <= 3;
+  // Les rappels des premières mèches : les accents d'abord, puis ce qui fait le mode (ou les passes)
+  const tip =
+    g.fuse <= 1
+      ? "Accents libres"
+      : g.fuse <= 3
+        ? (MODE_TIPS[mode] ?? (g.settings.passes && medal >= 300 ? `${LONG_WORD} lettres ou plus : une passe` : null))
+        : null;
+  const starterSpot = g.phase === "break" ? spotOf(g.holder) : undefined;
 
   return (
     <div
@@ -446,14 +542,17 @@ export function MecheTable({
               }}
             >
               <FuseRope
-                litAt={g.litAt}
-                safeUntil={g.safeUntil}
-                maxUntil={g.maxUntil}
-                lit={lit}
+                fuse={burning}
                 serverOffset={serverOffset}
                 onHot={setHot}
+                hot={hot}
+                bombGone={(g.phase === "break" && g.fuse > 0) || g.phase === "over"}
               />
-              <div className="meche-needle" style={{ width: layout.tableR - 16, rotate: `${needle}deg` }} aria-hidden="true">
+              <div
+                className={`meche-needle ${needle.spinning ? "is-spinning" : ""}`}
+                style={{ width: layout.tableR - 16, rotate: `${needle.angle}deg` }}
+                aria-hidden="true"
+              >
                 <svg viewBox="0 0 100 24" preserveAspectRatio="none">
                   <path d="M0 8.5 L74 9.5 L74 2 L100 12 L74 22 L74 14.5 L0 15.5 Z" className="needle-body" />
                   <path d="M2 10.5 L74 11 L74 5 L94 12" className="needle-shine" />
@@ -474,19 +573,11 @@ export function MecheTable({
                       turn={g.turn}
                       rejected={rejected}
                       medal={medal}
-                      hint={
-                        phone && canType && !focused
-                          ? "Touche ici pour écrire"
-                          : firstFuses
-                            ? g.settings.passes && medal >= 300
-                              ? `Accents libres · ${LONG_WORD} lettres = une passe`
-                              : "Accents libres"
-                            : null
-                      }
+                      hint={phone && canType && !focused ? "Touche ici pour écrire" : tip}
                     />
                   </>
                 ) : g.phase === "break" ? (
-                  <BreakNote fuse={g.fuse} name={holderName} mine={g.holder === meId} seated={me !== undefined} phone={phone} />
+                  <Starter seat={seat(g.holder)} isMe={g.holder === meId} drawing={needle.spinning} medal={medal} />
                 ) : (
                   <p className="meche-who">C'est fini !</p>
                 )}
@@ -540,6 +631,8 @@ export function MecheTable({
                   spot={spot}
                   avatar={layout.avatar}
                   blown={boom?.id === p.id}
+                  scorched={scorched?.id === p.id ? scorched.match : null}
+                  ownFuse={mode === "chacun" ? { burning: lit && g.holder === p.id, since: g.heldSince } : null}
                 />
               );
             })}
@@ -573,6 +666,21 @@ export function MecheTable({
                   ))}
               </ol>
             )}
+
+            {starterSpot && matchFor && (
+              <MatchStrike
+                key={matchFor.key}
+                from={starterSpot}
+                to={ropeHead}
+                delay={matchFor.delay}
+                onStrike={() => {
+                  struck.current = g.fuse;
+                  play("mecheStrike");
+                }}
+              />
+            )}
+
+            <AnimatePresence>{blast && <BlastFx key={blast.key} blast={blast} phone={phone} />}</AnimatePresence>
 
             <AnimatePresence>
               {boom && (
@@ -758,32 +866,141 @@ function LiveWord({
   );
 }
 
-/** Entre deux mèches : avant la première, la règle en une ou deux lignes ; ensuite, qui s'y colle */
-function BreakNote({ fuse, name, mine, seated, phone }: { fuse: number; name: string; mine: boolean; seated: boolean; phone: boolean }) {
-  if (fuse === 0) {
-    return (
-      <div className="meche-intro">
-        <p className="meche-who">Ça va s'allumer</p>
-        <p className="meche-intro-rule">Écris un mot qui contient les lettres, puis Entrée : la mèche passe au suivant.</p>
-        {!phone && <p className="meche-intro-rule is-soft">Elle peut sauter dès que l'étincelle entre dans le rouge.</p>}
-      </div>
-    );
-  }
+/** Entre deux mèches, au centre : celui qui va allumer la suivante. Au tout début, un point d'interrogation pendant le tirage. */
+function Starter({ seat, isMe, drawing, medal }: { seat: SeatView | undefined; isMe: boolean; drawing: boolean; medal: number }) {
   return (
-    <div className="meche-intro">
-      <p className="meche-who">{mine ? "Tu repars en premier" : seated ? `${name} repart en premier` : `${name} repart`}</p>
-      <p className="meche-intro-rule is-soft">La mèche est un peu plus courte.</p>
-    </div>
+    <AnimatePresence mode="wait">
+      {drawing || !seat ? (
+        <motion.div key="tirage" className="meche-letters meche-draw" exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.18 }}>
+          ?
+        </motion.div>
+      ) : (
+        <motion.div
+          key={seat.id}
+          className="meche-starter"
+          initial={{ scale: 0.4, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 420, damping: 20 }}
+        >
+          <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={Math.round(medal * 0.36)} />
+          <span className="meche-who is-mine">{isMe ? "Toi" : seat.name}</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
-function Match({ burnt }: { burnt: boolean }) {
+/** L'allumette : elle part de celui qui commence, file vers le bout de la corde, la gratte et l'enflamme */
+function MatchStrike({ from, to, delay, onStrike }: { from: Spot; to: Spot; delay: number; onStrike: () => void }) {
+  const strike = useRef(onStrike);
+  strike.current = onStrike;
+  useEffect(() => {
+    const t = setTimeout(() => strike.current(), delay + MATCH_STRIKE_MS);
+    return () => clearTimeout(t);
+  }, [delay]);
+  const mid = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 70 };
+  const d = delay / 1000;
+  const flameAt = `${(delay + MATCH_STRIKE_MS - 60) / 1000}s`;
   return (
-    <svg className={`meche-match ${burnt ? "is-burnt" : ""}`} viewBox="0 0 10 30" width="10" height="30" aria-hidden="true">
+    <>
+      <motion.div
+        className="meche-match-fly"
+        initial={{ x: from.x, y: from.y, opacity: 0, scale: 0.5, rotate: -60 }}
+        animate={{
+          x: [from.x, from.x, mid.x, to.x, to.x + 16],
+          y: [from.y, from.y - 14, mid.y, to.y, to.y + 6],
+          opacity: [0, 1, 1, 1, 0],
+          scale: [0.5, 1, 1.1, 1, 0.9],
+          rotate: [-60, -45, -15, 25, 40],
+        }}
+        transition={{ delay: d, duration: MATCH_MS / 1000, times: [0, 0.14, 0.5, 0.76, 1], ease: "easeInOut" }}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 16 64" width="16" height="64">
+          <rect x="6" y="14" width="4.4" height="48" rx="1.6" fill="#e6c78f" stroke="#8d6a3e" strokeWidth="0.8" />
+          <ellipse cx="8.2" cy="10" rx="6" ry="8" fill="#d8402f" />
+          <ellipse cx="6.6" cy="7.4" rx="2" ry="2.6" fill="#f08a78" />
+        </svg>
+        <span className="meche-match-flame" style={{ animationDelay: flameAt }} />
+      </motion.div>
+      <motion.span
+        className="meche-strike-flare"
+        style={{ left: to.x, top: to.y }}
+        initial={{ opacity: 0, scale: 0.2 }}
+        animate={{ opacity: [0, 1, 0.85], scale: [0.2, 1.5, 1] }}
+        transition={{ delay: d + MATCH_STRIKE_MS / 1000, duration: 0.45 }}
+        aria-hidden="true"
+      />
+    </>
+  );
+}
+
+/** L'explosion chez celui qui tenait la mèche : la bombe lui saute dessus, une onde de choc, de la fumée */
+function BlastFx({ blast, phone }: { blast: Blast; phone: boolean }) {
+  const puffs = useRef(
+    Array.from({ length: 8 }, (_, i) => ({
+      dx: Math.cos((i / 8) * Math.PI * 2 + Math.random()) * (phone ? 34 : 60),
+      dy: Math.sin((i / 8) * Math.PI * 2 + Math.random()) * (phone ? 26 : 44) - (phone ? 26 : 40),
+      size: (phone ? 34 : 54) * (0.7 + Math.random() * 0.6),
+      delay: 0.12 + Math.random() * 0.18,
+    })),
+  ).current;
+  return (
+    <motion.div
+      className="meche-blast"
+      style={{ left: blast.x, top: blast.y }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      aria-hidden="true"
+    >
+      <motion.div
+        className="meche-blast-bomb"
+        initial={{ x: blast.from.x - blast.x, y: blast.from.y - blast.y, scale: 0.8, opacity: 1 }}
+        animate={{ x: 0, y: 0, scale: [0.8, 1, 1.5], opacity: [1, 1, 0] }}
+        transition={{ duration: 0.32, times: [0, 0.6, 1], ease: "easeIn" }}
+      >
+        <Dynamite />
+      </motion.div>
+      <motion.span
+        className="meche-shock"
+        initial={{ scale: 0.15, opacity: 0.95 }}
+        animate={{ scale: phone ? 2.2 : 3.2, opacity: 0 }}
+        transition={{ delay: 0.12, duration: 0.7, ease: "easeOut" }}
+      />
+      <motion.span
+        className="meche-shock is-inner"
+        initial={{ scale: 0.1, opacity: 1 }}
+        animate={{ scale: phone ? 1.4 : 2, opacity: 0 }}
+        transition={{ delay: 0.16, duration: 0.5, ease: "easeOut" }}
+      />
+      {puffs.map((p, i) => (
+        <motion.span
+          key={i}
+          className="meche-smoke"
+          style={{ width: p.size, height: p.size }}
+          initial={{ x: 0, y: 0, scale: 0.3, opacity: 0 }}
+          animate={{ x: p.dx, y: p.dy, scale: [0.3, 1, 1.5], opacity: [0, 0.85, 0] }}
+          transition={{ delay: p.delay, duration: 1.3, ease: "easeOut" }}
+        />
+      ))}
+    </motion.div>
+  );
+}
+
+function Match({ burnt, burning }: { burnt: boolean; burning: boolean }) {
+  return (
+    <svg
+      className={`meche-match ${burnt ? "is-burnt" : ""} ${burning ? "is-burning" : ""}`}
+      viewBox="0 0 10 30"
+      width="10"
+      height="30"
+      aria-hidden="true"
+    >
       {burnt ? (
         <>
           <path d="M5 29V15c0-3 2-4 1.5-7S4 5 5 2" fill="none" stroke="#6d6158" strokeWidth="2.4" strokeLinecap="round" />
           <circle cx="5" cy="2.5" r="1.6" fill="#a8a095" />
+          {burning && <ellipse className="meche-match-fire" cx="5" cy="3" rx="3.6" ry="5.6" />}
         </>
       ) : (
         <>
@@ -793,6 +1010,42 @@ function Match({ burnt }: { burnt: boolean }) {
         </>
       )}
     </svg>
+  );
+}
+
+/** Chacun sa mèche : la sienne, en petit sous son nom, qui brûle pendant qu'il la tient */
+function OwnFuse({
+  bank,
+  bankMax,
+  burning,
+  since,
+  serverOffset,
+}: {
+  bank: number;
+  bankMax: number;
+  burning: boolean;
+  since: number;
+  serverOffset: number;
+}) {
+  const fill = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    let frame = 0;
+    const draw = () => {
+      const left = burning ? Math.max(0, bank - (Date.now() + serverOffset - since)) : bank;
+      const p = Math.max(0, Math.min(1, left / Math.max(1, bankMax)));
+      if (fill.current) {
+        fill.current.style.width = `${p * 100}%`;
+        fill.current.classList.toggle("is-low", p < 0.25);
+      }
+      if (burning) frame = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(frame);
+  }, [bank, bankMax, burning, since, serverOffset]);
+  return (
+    <span className={`meche-ownfuse ${burning ? "is-burning" : ""}`} title="Sa mèche">
+      <span ref={fill} />
+    </span>
   );
 }
 
@@ -809,6 +1062,8 @@ function MecheSeat({
   spot,
   avatar,
   blown,
+  scorched,
+  ownFuse,
 }: {
   seat: SeatView;
   player: MechePlayerView;
@@ -822,10 +1077,13 @@ function MecheSeat({
   spot: SeatSpot;
   avatar: number;
   blown: boolean;
+  /** L'allumette qui vient de brûler, quand la mèche lui a sauté au nez */
+  scorched: number | null;
+  ownFuse: { burning: boolean; since: number } | null;
 }) {
   return (
     <div
-      className={`meche-seat ${spot.up ? "is-up" : ""} ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""}`}
+      className={`meche-seat ${spot.up ? "is-up" : ""} ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""} ${scorched !== null ? "is-sooty" : ""}`}
       style={{ left: spot.x, top: spot.y, "--a": `${avatar}px` } as CSSProperties}
       data-seat={player.id}
     >
@@ -858,6 +1116,7 @@ function MecheSeat({
               transition={{ type: "spring", stiffness: 520, damping: 26 }}
             >
               {word.shown.toUpperCase()}
+              {word.earned && <span className="meche-seat-earned">+1 passe</span>}
             </motion.span>
           )}
         </AnimatePresence>
@@ -883,7 +1142,7 @@ function MecheSeat({
         </div>
         <div className="meche-matches" aria-label={`${player.lives} allumette${player.lives > 1 ? "s" : ""} sur ${total}`}>
           {Array.from({ length: total }, (_, i) => (
-            <Match key={i} burnt={i >= player.lives} />
+            <Match key={i} burnt={i >= player.lives} burning={scorched === i} />
           ))}
           {player.passes > 0 && (
             <span className="meche-seat-passes num" title={`${player.passes} passe${player.passes > 1 ? "s" : ""}`}>
@@ -891,6 +1150,15 @@ function MecheSeat({
             </span>
           )}
         </div>
+        {ownFuse && player.alive && (
+          <OwnFuse
+            bank={player.bank}
+            bankMax={player.bankMax}
+            burning={ownFuse.burning}
+            since={ownFuse.since}
+            serverOffset={serverOffset}
+          />
+        )}
         <AwayNote seat={seat} serverOffset={serverOffset} compact />
       </div>
     </div>

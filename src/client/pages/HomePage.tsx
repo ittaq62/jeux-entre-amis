@@ -282,7 +282,7 @@ export function HomePage() {
               )}
               <p className="game-desc">
                 La mèche brûle et passe de main en main : écris vite un mot avec les lettres imposées pour t'en débarrasser. Si elle saute
-                chez toi, tu perds une allumette. De 2 à 8 joueurs, en quelques minutes.
+                chez toi, tu perds une allumette. Mèche commune, à rallonge ou chacun la sienne, de 2 à 8 joueurs.
               </p>
               <div className="game-actions">
                 <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("meche")} disabled={busy !== null}>
@@ -448,8 +448,9 @@ const NAVAL_MODES: Record<string, string> = {
   melee: "mêlée",
   teams: "en équipes",
   sprint: "solo 40 lignes",
-  hasard: "lettres au hasard",
-  marabout: "au Marabout",
+  commune: "mèche commune",
+  rallonge: "mèche à rallonge",
+  chacun: "chacun sa mèche",
 };
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {

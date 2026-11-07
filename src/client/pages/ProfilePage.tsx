@@ -447,7 +447,8 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "naval") return `bataille navale ${NAVAL_MODES[g.variant] ?? ""}`.trim();
   if (g.game === "bricks") return `Briques ${NAVAL_MODES[g.variant] ?? ""}`.trim();
   if (g.game === "capitale") return g.variant === "bankrupt" ? "Capitale jusqu'à la faillite" : "Capitale en partie rapide";
-  if (g.game === "meche") return g.variant === "marabout" ? "Mèche au Marabout" : "Mèche";
+  if (g.game === "meche")
+    return g.variant === "rallonge" ? "Mèche à rallonge" : g.variant === "chacun" ? "Mèche, chacun la sienne" : "Mèche";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }
 

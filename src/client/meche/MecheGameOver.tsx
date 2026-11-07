@@ -49,6 +49,10 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
   const earned = mine ? rankingPoints(placed, mine) : null;
   const voted = room.rematch.includes(room.you.userId);
   const title = won ? "Dernier debout !" : `${winner?.name ?? "?"} remporte la partie.`;
+  const modeName = g.settings.mode === "rallonge" ? "Mèche à rallonge" : g.settings.mode === "chacun" ? "Chacun sa mèche" : "Mèche";
+  const summary = `${modeName}, ${g.fuse} explosion${g.fuse > 1 ? "s" : ""} et ${g.wordsPlayed} mot${g.wordsPlayed > 1 ? "s" : ""}${
+    g.settings.source === "marabout" ? ", au Marabout" : ""
+  }`;
 
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}>
@@ -58,8 +62,7 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
           <div>
             <h2>{title}</h2>
             <p className="hint" style={{ margin: "4px 0 0" }}>
-              Mèche, {g.fuse} explosion{g.fuse > 1 ? "s" : ""} et {g.wordsPlayed} mot{g.wordsPlayed > 1 ? "s" : ""}
-              {g.settings.source === "marabout" ? ", au Marabout" : ""}
+              {summary}
             </p>
             {earned !== null &&
               (earned > 0 ? (
