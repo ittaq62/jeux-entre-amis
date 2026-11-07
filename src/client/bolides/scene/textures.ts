@@ -348,3 +348,190 @@ export function sparkTexture(): THREE.CanvasTexture {
   g.fillRect(0, 0, 64, 64);
   return toTexture(c, false);
 }
+
+/** Un conteneur : des nervures, des rails en haut et en bas, des coins plus sombres (teinté par la matière) */
+export function containerTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 128);
+  g.fillStyle = "#e9e9e9";
+  g.fillRect(0, 0, 256, 128);
+  for (let x = 0; x < 256; x += 12) {
+    g.fillStyle = "rgba(0,0,0,0.13)";
+    g.fillRect(x, 10, 5, 108);
+    g.fillStyle = "rgba(255,255,255,0.35)";
+    g.fillRect(x + 5, 10, 2, 108);
+  }
+  g.fillStyle = "rgba(0,0,0,0.3)";
+  g.fillRect(0, 0, 256, 10);
+  g.fillRect(0, 118, 256, 10);
+  g.fillRect(0, 0, 8, 128);
+  g.fillRect(248, 0, 8, 128);
+  speckle(g, 256, 128, 500, ["rgba(110,60,30,0.12)", "rgba(0,0,0,0.06)"], 3, 17);
+  return toTexture(c, false);
+}
+
+/** Une façade : deux étages de fenêtres à volets, une porte, un soubassement (teintée par la matière) */
+export function houseTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  g.fillStyle = "#f4f1ea";
+  g.fillRect(0, 0, 256, 256);
+  speckle(g, 256, 256, 1200, ["rgba(0,0,0,0.04)", "rgba(255,255,255,0.2)"], 3, 23);
+  g.fillStyle = "rgba(0,0,0,0.16)";
+  g.fillRect(0, 226, 256, 30);
+  const window = (x: number, y: number) => {
+    g.fillStyle = "#5b7d99";
+    g.fillRect(x, y, 44, 56);
+    g.fillStyle = "rgba(255,255,255,0.35)";
+    g.fillRect(x + 4, y + 4, 14, 22);
+    g.strokeStyle = "#f8f6f0";
+    g.lineWidth = 5;
+    g.strokeRect(x, y, 44, 56);
+    g.beginPath();
+    g.moveTo(x + 22, y);
+    g.lineTo(x + 22, y + 56);
+    g.moveTo(x, y + 26);
+    g.lineTo(x + 44, y + 26);
+    g.stroke();
+    // Les volets
+    g.fillStyle = "rgba(60,90,60,0.85)";
+    g.fillRect(x - 16, y, 13, 56);
+    g.fillRect(x + 47, y, 13, 56);
+    g.fillStyle = "rgba(0,0,0,0.18)";
+    g.fillRect(x - 4, y + 58, 52, 6);
+  };
+  window(42, 40);
+  window(170, 40);
+  window(170, 140);
+  g.fillStyle = "#7a4b2c";
+  g.fillRect(40, 140, 50, 86);
+  g.fillStyle = "rgba(255,255,255,0.18)";
+  g.fillRect(46, 146, 16, 74);
+  g.fillStyle = "#d7b25c";
+  g.fillRect(80, 182, 5, 5);
+  return toTexture(c, false);
+}
+
+/** Un nuage : des boules blanches qui se chevauchent, un peu grises en dessous */
+export function cloudTexture(seed: number): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 128);
+  const r = rng(seed);
+  for (let i = 0; i < 16; i++) {
+    const x = 40 + r() * 176;
+    const y = 54 + r() * 34 - Math.sin(((x - 40) / 176) * Math.PI) * 18;
+    const rad = 22 + r() * 26;
+    const grad = g.createRadialGradient(x, y - rad * 0.2, 0, x, y, rad);
+    grad.addColorStop(0, "rgba(255,255,255,0.95)");
+    grad.addColorStop(0.6, "rgba(250,252,255,0.75)");
+    grad.addColorStop(1, "rgba(235,242,250,0)");
+    g.fillStyle = grad;
+    g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  // Le dessous, plus gris
+  const shade = g.createLinearGradient(0, 70, 0, 128);
+  shade.addColorStop(0, "rgba(160,175,195,0)");
+  shade.addColorStop(1, "rgba(160,175,195,0.35)");
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = shade;
+  g.fillRect(0, 0, 256, 128);
+  g.globalCompositeOperation = "source-over";
+  return toTexture(c, false);
+}
+
+/** Le panneau d'un virage : des chevrons blancs sur rouge, qui pointent vers la gauche */
+export function chevronTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 64);
+  g.fillStyle = "#d8352a";
+  g.fillRect(0, 0, 256, 64);
+  g.fillStyle = "#fff8ee";
+  for (let x = 14; x < 256; x += 60) {
+    g.beginPath();
+    g.moveTo(x, 32);
+    g.lineTo(x + 26, 6);
+    g.lineTo(x + 46, 6);
+    g.lineTo(x + 20, 32);
+    g.lineTo(x + 46, 58);
+    g.lineTo(x + 26, 58);
+    g.closePath();
+    g.fill();
+  }
+  g.strokeStyle = "#fff8ee";
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, 250, 58);
+  return toTexture(c, false);
+}
+
+/** Des gradins pleins de monde : des rangées de têtes et de maillots de toutes les couleurs */
+export function crowdTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(512, 128);
+  const r = rng(31);
+  const shirts = ["#d8352a", "#2f80ed", "#27ae60", "#f2c94c", "#9b51e0", "#f2994a", "#ffffff", "#2fc4c4", "#eb5ea8"];
+  const skins = ["#ffdbb4", "#f1c27d", "#e0ac69", "#c68642", "#8d5524"];
+  for (let row = 0; row < 4; row++) {
+    const y = row * 32;
+    g.fillStyle = row % 2 === 0 ? "#5b6170" : "#4c5160";
+    g.fillRect(0, y, 512, 32);
+    for (let x = 4 + (row % 2) * 6; x < 512; x += 12 + r() * 4) {
+      if (r() < 0.12) continue;
+      g.fillStyle = shirts[Math.floor(r() * shirts.length)]!;
+      g.fillRect(x - 5, y + 16, 10, 14);
+      g.fillStyle = skins[Math.floor(r() * skins.length)]!;
+      g.beginPath();
+      g.arc(x, y + 11, 5, 0, Math.PI * 2);
+      g.fill();
+      // Quelques bras levés
+      if (r() < 0.25) {
+        g.fillStyle = skins[Math.floor(r() * skins.length)]!;
+        g.fillRect(x + 4, y + 2, 3, 12);
+      }
+    }
+  }
+  return toTexture(c);
+}
+
+/** Les panneaux le long des murets : des mots sur des couleurs vives, à la suite */
+export function boardsTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(1024, 64);
+  const words: [string, string, string][] = [
+    ["LA TABLÉE", "#2b2f36", "#ffd23a"],
+    ["BOLIDES", "#d8352a", "#ffffff"],
+    ["MINI-TURBO", "#2f80ed", "#ffffff"],
+    ["VROUM !", "#f2c94c", "#2b2f36"],
+  ];
+  words.forEach(([text, bg, fg], i) => {
+    g.fillStyle = bg;
+    g.fillRect(i * 256, 0, 256, 64);
+    g.fillStyle = fg;
+    g.font = "900 40px 'Big Shoulders Display Variable', 'Arial Black', sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, i * 256 + 128, 35, 236);
+    g.fillStyle = "rgba(0,0,0,0.25)";
+    g.fillRect(i * 256 + 252, 0, 4, 64);
+  });
+  return toTexture(c);
+}
+
+/** Une case de la grille de départ : un crochet blanc peint au sol */
+export function gridMarkTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 128);
+  g.strokeStyle = "rgba(245,242,234,0.92)";
+  g.lineWidth = 9;
+  g.beginPath();
+  g.moveTo(10, 60);
+  g.lineTo(10, 8);
+  g.lineTo(118, 8);
+  g.lineTo(118, 60);
+  g.stroke();
+  return toTexture(c, false);
+}
+
+/** Une ombre douce et ronde, sous un kart */
+export function blobTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(64, 64);
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(0,0,0,0.6)");
+  grad.addColorStop(0.55, "rgba(0,0,0,0.35)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return toTexture(c, false, false);
+}

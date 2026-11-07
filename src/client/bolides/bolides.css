@@ -52,6 +52,44 @@
   gap: 6px;
 }
 
+/* Les lignes de vitesse pendant un turbo : des traits blancs qui filent vers les bords de l'écran */
+.hud-speedlines {
+  position: absolute;
+  z-index: 5;
+  inset: -25%;
+  pointer-events: none;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(255, 255, 255, 0) 0deg 4deg,
+    rgba(255, 255, 255, 0.5) 4.3deg 4.6deg,
+    rgba(255, 255, 255, 0) 5deg 11deg
+  );
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 30%, #000 62%);
+  mask-image: radial-gradient(circle at 50% 50%, transparent 30%, #000 62%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: hud-speedlines 0.3s steps(3) infinite;
+}
+
+.hud-speedlines.is-on {
+  opacity: 0.5;
+}
+
+@keyframes hud-speedlines {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  to {
+    transform: rotate(3deg) scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-speedlines {
+    display: none;
+  }
+}
+
 /* L'affichage tête haute */
 .bolides-hud {
   position: absolute;

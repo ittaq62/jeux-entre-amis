@@ -5,7 +5,7 @@
 import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
 import { BOX_RADIUS, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
 import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
-import { COUNTDOWN_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
+import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
 import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
 import type { BolidesClientMessage } from "../../shared/protocol.ts";
@@ -34,6 +34,8 @@ export interface Hud {
   wrongWay: boolean;
   stuck: boolean;
   speed: number;
+  /** Un turbo en cours (les lignes de vitesse) */
+  boosting: boolean;
   /** Une annonce en grand au milieu de l'écran (« Dernier tour ! »), et sa clé pour la rejouer */
   banner: { text: string; key: number } | null;
   /** Les karts sur la petite carte : x, z, couleur, le sien */
@@ -189,6 +191,7 @@ export class RaceRuntime {
           if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard");
           if (e.id === meId) {
             this.driver?.hit();
+            this.scene.shake(0.7);
             play("bigHit", { volume: 0.8 });
             vibrate([60, 40, 120]);
           } else this.near(e.id, "hit", 0.6);
@@ -302,7 +305,7 @@ export class RaceRuntime {
       } else {
         if (!this.launched) {
           this.launched = true;
-          if (d.launch(v.goAt)) play("wild", { volume: 0.7 });
+          if (d.launch(v.goAt)) play("bolidesTurbo", { volume: 0.9 });
         }
         // Arrivé : le kart roule tout seul, le temps que les autres finissent (en développement, les tests peuvent aussi le lâcher)
         const auto = import.meta.env.DEV && Boolean((window as unknown as { __bolidesAuto?: boolean }).__bolidesAuto);
@@ -317,7 +320,8 @@ export class RaceRuntime {
         if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
-            play("wild", { volume: 0.8 });
+            play("bolidesTurbo", { volume: 1, rate: 0.95 });
+            this.scene.punch(8);
           }
           this.opts.send({ t: "use" });
         }
@@ -336,15 +340,36 @@ export class RaceRuntime {
         this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls] });
       }
     }
-    // Les sons de la conduite, et ce qu'on compte pour les succès
+    // Les sons et les effets de la conduite, et ce qu'on compte pour les succès
+    const mine = this.driver?.kart;
     for (const e of events) {
+      if (mine) {
+        if (e === "turbo1" || e === "turbo2" || e === "turbo3") {
+          const level = e === "turbo3" ? 3 : e === "turbo2" ? 2 : 1;
+          this.scene.turboBurst(mine, level);
+          this.scene.punch(3 + level * 2);
+        } else if (e === "pad") this.scene.punch(5);
+        else if (e === "wall") {
+          this.scene.wallSparks(mine);
+          this.scene.shake(0.3);
+        } else if (e === "land") {
+          this.scene.landDust(mine);
+          this.scene.shake(0.25);
+        } else if (e === "trick") this.scene.trickSparkle(mine);
+      }
       if (e === "turbo1" || e === "turbo2" || e === "turbo3") this.turbos += 1;
       else if (e === "wall") this.walls += 1;
       if (e === "wall") play("capDiceHit", { volume: 0.7 });
-      else if (e === "pad") play("wild", { volume: 0.7 });
+      else if (e === "pad") play("bolidesTurbo", { volume: 0.8, rate: 1.2 });
       else if (e === "turbo1" || e === "turbo2" || e === "turbo3")
-        play("brickHold", { volume: 0.6, rate: e === "turbo3" ? 1.3 : e === "turbo2" ? 1.15 : 1 });
-      else if (e === "drift") play("click", { volume: 0.5 });
+        play("bolidesTurbo", {
+          volume: e === "turbo3" ? 1 : e === "turbo2" ? 0.85 : 0.7,
+          rate: e === "turbo3" ? 1.15 : e === "turbo2" ? 1.07 : 1,
+        });
+      else if (e === "drift") play("click", { volume: 0.4 });
+      else if (e === "jump") play("bolidesJump");
+      else if (e === "land") play("bolidesLand");
+      else if (e === "trick") play("bolidesTrick");
     }
     // Le bip du compte à rebours
     const left = v.goAt - now;
@@ -377,6 +402,7 @@ export class RaceRuntime {
       })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
+      introT: (now - (v.goAt - COUNTDOWN_MS - INTRO_MS)) / INTRO_MS,
       serverNow: now,
       dt,
     });
@@ -423,6 +449,7 @@ export class RaceRuntime {
       wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
       stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
       speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
+      boosting: Boolean(mk && mk.boost > 0 && mk.spin === 0),
       banner: this.banner,
       map: this.shown.map((k, i) => ({ x: k.x, z: k.z, color: this.colors[i]!, me: i === this.mine })),
     };

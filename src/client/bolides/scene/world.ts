@@ -3,22 +3,28 @@
 
 import * as THREE from "three";
 import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
-import { pointAt, STEP, type Theme, type Track } from "../../../shared/games/bolides/track.ts";
+import { pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
+import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
+import { Sky, SKY_COLORS } from "./sky.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
 export interface World {
   group: THREE.Group;
+  /** Le ciel, qui suit la caméra */
+  dome: THREE.Group;
   /** La hauteur du sol à cet endroit */
   heightAt: (x: number, z: number) => number;
-  /** À appeler à chaque image (l'eau, les accélérateurs) */
-  update: (t: number) => void;
+  /** À appeler à chaque image, une fois la caméra placée (l'eau, les accélérateurs, les drapeaux, le ciel) */
+  update: (t: number, camera: THREE.Vector3) => void;
+  /** La couleur de l'horizon (le fond et le brouillard) */
   sky: THREE.Color;
   fog: THREE.Fog;
   dispose: () => void;
 }
 
-const SKY: Record<Theme, number> = { port: 0x8cc8ef, vignes: 0xa9d4f0, col: 0xb8cfe4 };
+/** D'où vient la lumière du soleil (la scène place sa lumière ainsi) */
+export const SUN_DIR = new THREE.Vector3(50, 110, 30).normalize();
 
 /** Un hasard qui donne toujours le même décor */
 function rng(seed: number) {
@@ -245,6 +251,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     disposables.push(x);
     return x;
   };
+  const sky = keep(new Sky(theme, SUN_DIR, opts.phone));
   const field = new Field(t, 170);
   const hilly = t.def.hills.some(([, y]) => y !== 0);
 
@@ -373,7 +380,9 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
 
   // Le décor
   const r = rng(t.n * 31 + t.def.width);
-  const free = (x: number, z: number, min: number) => field.distAt(x, z) > min;
+  // Au port, l'eau commence au quai, le long de la ligne droite
+  const quay = -t.wall - 9;
+  const free = (x: number, z: number, min: number) => field.distAt(x, z) > min && (theme !== "port" || z > quay + 5);
   const scatter = (count: number, min: number, max: number, test?: (x: number, z: number) => boolean) => {
     const out: [number, number][] = [];
     const w = (field.nx - 1) * field.cell;
@@ -390,6 +399,15 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   };
   const shadows = opts.shadows;
   const few = opts.phone ? 0.55 : 1;
+  /** Ce qui flotte doucement dans le ciel (les montgolfières) */
+  const floaters: THREE.Object3D[] = [];
+
+  // L'habillage de la piste : panneaux de virage, pneus, panneaux, drapeaux, tribune, grille
+  const ctx: DecorContext = { group, t, keep, heightAt, shadows, free };
+  addBendDressing(ctx);
+  addWallBoards(ctx);
+  const waveFlags = addFlags(ctx);
+  addGrandstand(ctx);
 
   // Des montagnes ou des collines tout autour, pour l'horizon
   {
@@ -422,7 +440,6 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     // L'eau, au-delà du quai qui longe la ligne droite
     waterTex = keep(TX.waterTexture());
     waterTex.repeat.set(60, 30);
-    const quay = -t.wall - 9;
     const water = new THREE.Mesh(keep(new THREE.PlaneGeometry(3000, 1500)), keep(lambert(0xffffff, waterTex)));
     water.rotation.x = -Math.PI / 2;
     // Juste au-dessus du sol, qu'elle recouvre de ce côté du quai
@@ -431,20 +448,39 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     const edge = new THREE.Mesh(keep(new THREE.BoxGeometry(3000, 1.2, 1.6)), keep(lambert(0x9a958c)));
     edge.position.set(0, -0.1, quay);
     group.add(edge);
-    // Les bateaux sur l'eau
-    const hull = keep(new THREE.BoxGeometry(1, 1, 1));
+    // Les bateaux sur l'eau : une coque pointue à l'avant, une bande de couleur, une cabine, un mât
+    const hullShape = new THREE.Shape();
+    hullShape.moveTo(-0.5, -0.5);
+    hullShape.lineTo(0.5, -0.5);
+    hullShape.lineTo(0.5, 0.2);
+    hullShape.quadraticCurveTo(0.45, 0.42, 0, 0.5);
+    hullShape.quadraticCurveTo(-0.45, 0.42, -0.5, 0.2);
+    hullShape.closePath();
+    const hull = keep(new THREE.ExtrudeGeometry(hullShape, { depth: 1, bevelEnabled: false, curveSegments: 6 }));
+    // Couchée : la forme dans le plan (x, z), la hauteur le long de y (de 0 à 1)
+    hull.rotateX(Math.PI / 2);
+    hull.translate(0, 1, 0);
+    const boatBox = keep(new THREE.BoxGeometry(1, 1, 1));
+    const mast = keep(new THREE.CylinderGeometry(0.06, 0.08, 1, 5));
     const hulls: THREE.Matrix4[] = [];
+    const bands: THREE.Matrix4[] = [];
     const cabins: THREE.Matrix4[] = [];
+    const masts: THREE.Matrix4[] = [];
     for (let i = 0; i < 14; i++) {
       const x = -260 + r() * 520;
       const z = quay - 14 - r() * 90;
       const len = 8 + r() * 14;
-      const rot = (r() - 0.5) * 0.5;
-      hulls.push(place(x, 0, z, rot, len * 0.38, 1.8, len));
-      cabins.push(place(x, 1.6, z + len * 0.1, rot, len * 0.26, 1.6, len * 0.3));
+      const rot = r() * Math.PI * 2;
+      hulls.push(place(x, -0.6, z, rot, len * 0.36, 1.9, len));
+      bands.push(place(x, 0.95, z, rot, len * 0.365, 0.35, len * 1.005));
+      const off = -len * 0.12;
+      cabins.push(place(x + Math.sin(rot) * off, 1.9, z + Math.cos(rot) * off, rot, len * 0.24, 1.5, len * 0.3));
+      if (i % 2 === 0) masts.push(place(x, 1.3 + len * 0.35, z, 0, 1, len * 0.7, 1));
     }
-    group.add(instances(hull, keep(lambert(0xe9e3d6)), hulls, false));
-    group.add(instances(hull, keep(lambert(0x2f5d8a)), cabins, false));
+    group.add(instances(hull, keep(lambert(0xf2eee6)), hulls, false));
+    group.add(instances(hull, keep(lambert(0x2f5d8a)), bands, false));
+    group.add(instances(boatBox, keep(lambert(0xffffff)), cabins, false));
+    group.add(instances(mast, keep(lambert(0xc9c2b4)), masts, false));
     // Les grues du quai
     const crane = new THREE.Group();
     const steel = keep(lambert(0xe0a32e));
@@ -468,14 +504,34 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     group.add(crane);
     // Les conteneurs empilés et les maisons du port, à l'intérieur du circuit
     const box = keep(new THREE.BoxGeometry(1, 1, 1));
-    const colors = [0xc0392b, 0x2e86c1, 0x27ae60, 0xd68910, 0x7d3c98];
+    const containerTex = keep(TX.containerTexture());
+    const colors = [0xc0392b, 0x2e86c1, 0x27ae60, 0xd68910, 0x7d3c98, 0x5d6d7e];
     const byColor = colors.map(() => [] as THREE.Matrix4[]);
-    for (const [x, z] of scatter(Math.round(70 * few), t.wall + 6, 70, (_x, cz) => cz > quay + 6)) {
-      const stack = 1 + Math.floor(r() * 3);
+    const pads: THREE.Matrix4[] = [];
+    for (const [x, z] of scatter(Math.round(10 * few), t.wall + 14, 75, (_x, cz) => cz > quay + 10)) {
+      // Un parc : des rangées de piles alignées, sur une dalle de béton
       const rot = Math.round(r() * 2) * (Math.PI / 2);
-      for (let k = 0; k < stack; k++) byColor[Math.floor(r() * colors.length)]!.push(place(x, 1.3 + k * 2.6, z, rot, 2.4, 2.6, 6));
+      const rows = 2 + Math.floor(r() * 2);
+      const cols = 3 + Math.floor(r() * 4);
+      const ca = Math.cos(rot);
+      const sa = Math.sin(rot);
+      let placed = 0;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const lx = (col - (cols - 1) / 2) * 2.9;
+          const lz = (row - (rows - 1) / 2) * 6.8;
+          const ox = x + lx * ca + lz * sa;
+          const oz = z - lx * sa + lz * ca;
+          if (!free(ox, oz, t.wall + 6)) continue;
+          placed++;
+          const stack = 1 + Math.floor(r() * 3);
+          for (let k = 0; k < stack; k++) byColor[Math.floor(r() * colors.length)]!.push(place(ox, 1.3 + k * 2.6, oz, rot, 2.4, 2.6, 6));
+        }
+      }
+      if (placed > 0) pads.push(place(x, 0.03, z, rot, cols * 2.9 + 3, 0.1, rows * 6.8 + 3));
     }
-    byColor.forEach((spots, i) => group.add(instances(box, keep(lambert(colors[i]!)), spots, shadows)));
+    byColor.forEach((spots, i) => group.add(instances(box, keep(lambert(colors[i]!, containerTex)), spots, shadows)));
+    group.add(instances(box, keep(lambert(0x9d9b94)), pads, false));
     addHouses(
       group,
       scatter(Math.round(26 * few), 30, 140, (_x, z) => z > quay + 10),
@@ -539,6 +595,38 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     for (const [x, z] of scatter(Math.round(40 * few), t.wall + 1.5, t.wall + 6)) barrels.push(place(x, heightAt(x, z) + 0.65, z, r() * 3));
     group.add(instances(barrel, keep(lambert(0x7a4b28)), barrels, shadows));
     addHouses(group, scatter(Math.round(10 * few), 40, 160), r, keep, shadows, [0xf3e1c3, 0xe9d2a8], heightAt);
+    // Des montgolfières qui dérivent au loin
+    const stripes = [
+      ["#d8352a", "#f2c94c"],
+      ["#2f80ed", "#ffffff"],
+      ["#27ae60", "#f2994a"],
+    ];
+    stripes.forEach(([a, b], i) => {
+      const c = document.createElement("canvas");
+      c.width = 128;
+      c.height = 16;
+      const g = c.getContext("2d")!;
+      for (let k = 0; k < 8; k++) {
+        g.fillStyle = k % 2 === 0 ? a! : b!;
+        g.fillRect(k * 16, 0, 16, 16);
+      }
+      const tex = keep(new THREE.CanvasTexture(c));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const balloon = new THREE.Group();
+      const env = new THREE.Mesh(keep(new THREE.SphereGeometry(7, 16, 12)), keep(lambert(0xffffff, tex)));
+      env.scale.set(1, 1.2, 1);
+      balloon.add(env);
+      const basket = new THREE.Mesh(keep(new THREE.BoxGeometry(2.2, 1.6, 2.2)), keep(lambert(0x7a5230)));
+      basket.position.y = -11.5;
+      balloon.add(basket);
+      const a0 = (i / 3) * Math.PI * 2 + 0.6;
+      const cx = field.x0 + ((field.nx - 1) * field.cell) / 2;
+      const cz = field.z0 + ((field.nz - 1) * field.cell) / 2;
+      balloon.position.set(cx + Math.cos(a0) * (230 + i * 50), 70 + i * 22, cz + Math.sin(a0) * (230 + i * 50));
+      balloon.userData.base = balloon.position.clone();
+      group.add(balloon);
+      floaters.push(balloon);
+    });
   } else {
     // Les sapins enneigés
     const cone = keep(new THREE.ConeGeometry(1, 1, 7));
@@ -567,16 +655,62 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     group.add(instances(rock, keep(lambert(0x8a8d93)), rocks, shadows));
     // Les chalets du village
     addHouses(group, scatter(Math.round(14 * few), 28, 120), r, keep, shadows, [0x8a5a33, 0x9c6a3f], heightAt, 0xf4f7fa);
+    // Des bonshommes de neige au bord de la route, avec leur nez en carotte
+    const snowBall = keep(new THREE.SphereGeometry(1, 12, 10));
+    const snowMat = keep(lambert(0xffffff));
+    const carrot = keep(new THREE.ConeGeometry(0.12, 0.6, 6));
+    carrot.rotateX(Math.PI / 2);
+    const carrotMat = keep(lambert(0xf2803a));
+    const coal = keep(lambert(0x222428));
+    for (const [x, z] of scatter(8, t.wall + 3, t.wall + 12)) {
+      const y = heightAt(x, z);
+      const man = new THREE.Group();
+      for (const [ry, rr] of [
+        [0.75, 0.8],
+        [1.85, 0.58],
+        [2.7, 0.42],
+      ] as const) {
+        const ball = new THREE.Mesh(snowBall, snowMat);
+        ball.position.y = ry;
+        ball.scale.setScalar(rr);
+        ball.castShadow = shadows;
+        man.add(ball);
+      }
+      const nose = new THREE.Mesh(carrot, carrotMat);
+      nose.position.set(0, 2.72, 0.5);
+      man.add(nose);
+      for (const ex of [-0.15, 0.15]) {
+        const eye = new THREE.Mesh(snowBall, coal);
+        eye.scale.setScalar(0.06);
+        eye.position.set(ex, 2.85, 0.37);
+        man.add(eye);
+      }
+      man.rotation.y = r() * Math.PI * 2;
+      man.position.set(x, y, z);
+      group.add(man);
+    }
   }
 
+  const horizon = SKY_COLORS[theme].horizon;
   return {
     group,
+    dome: sky.group,
     heightAt,
-    sky: new THREE.Color(SKY[theme]),
-    fog: new THREE.Fog(SKY[theme], 160, 620),
-    update(time: number) {
+    sky: new THREE.Color(horizon),
+    fog: new THREE.Fog(horizon, 230, 1050),
+    update(time: number, camera: THREE.Vector3) {
       boostTex.offset.y = -((time * 1.6) % 1);
       if (waterTex) waterTex.offset.set((time * 0.01) % 1, (time * 0.02) % 1);
+      waveFlags(time);
+      sky.update(camera, time);
+      floaters.forEach((f, i) => {
+        const base = f.userData.base as THREE.Vector3;
+        f.position.set(
+          base.x + Math.sin(time * 0.05 + i) * 30,
+          base.y + Math.sin(time * 0.3 + i * 2) * 3,
+          base.z + Math.cos(time * 0.04 + i) * 30,
+        );
+      });
     },
     dispose() {
       for (const d of disposables) d.dispose();
@@ -598,6 +732,7 @@ function addHouses(
   roofColor = 0xb24a33,
 ) {
   const box = keep(new THREE.BoxGeometry(1, 1, 1));
+  const facade = keep(TX.houseTexture());
   const roof = keep(new THREE.ConeGeometry(0.75, 1, 4));
   roof.rotateY(Math.PI / 4);
   const byWall = walls.map(() => [] as THREE.Matrix4[]);
@@ -611,7 +746,7 @@ function addHouses(
     byWall[Math.floor(r() * walls.length)]!.push(place(x, y + h / 2, z, rot, w, h, d));
     roofs.push(place(x, y + h + 1.6, z, rot, w * 1.25, 3.2, d * 1.25));
   }
-  byWall.forEach((s, i) => group.add(instances(box, keep(lambert(walls[i]!)), s, shadows)));
+  byWall.forEach((s, i) => group.add(instances(box, keep(lambert(walls[i]!, facade)), s, shadows)));
   group.add(instances(roof, keep(lambert(roofColor)), roofs, shadows));
 }
 

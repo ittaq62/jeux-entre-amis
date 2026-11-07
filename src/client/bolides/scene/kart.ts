@@ -7,7 +7,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import { driftLevel, SPIN_TIME, TOP_SPEED, type Kart } from "../../../shared/games/bolides/physics.ts";
 import { PilotModel, WHEEL_AT, WHEEL_TILT } from "./pilot.ts";
-import { sparkTexture } from "./textures.ts";
+import { blobTexture, sparkTexture } from "./textures.ts";
 
 export interface KartLook {
   color: string;
@@ -34,6 +34,7 @@ const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
 /** La hauteur du pivot autour duquel le kart penche, tangue et fait ses figures */
 const PIVOT = 0.6;
 let sharedSpark: THREE.Texture | null = null;
+let sharedBlob: THREE.Texture | null = null;
 
 /** L'étiquette au-dessus d'un kart : son visage dans un rond, et son nom */
 function tagCanvas(look: KartLook): HTMLCanvasElement {
@@ -155,6 +156,10 @@ export class KartModel {
   private flames: THREE.Mesh[] = [];
   private flameMat: THREE.MeshBasicMaterial;
   private shield: THREE.Mesh;
+  /** L'ombre douce posée sous le kart (elle reste au sol quand il saute) */
+  private blob: THREE.Mesh;
+  private blobMat: THREE.MeshBasicMaterial;
+  private blobAlpha: number;
   private tag: THREE.Sprite | null = null;
   private disposables: { dispose: () => void }[] = [];
   private roll = 0;
@@ -167,6 +172,9 @@ export class KartModel {
   private lastAir = 0;
   private trickT = -1;
   private wasTrick = false;
+  /** L'effacement en cours, et l'état d'origine de chaque matière */
+  private alpha = 1;
+  private solid = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
 
   constructor(look: KartLook, shadows: boolean) {
     const keep = <T extends { dispose: () => void }>(x: T): T => {
@@ -311,6 +319,13 @@ export class KartModel {
     this.body.position.y = -PIVOT;
     this.tilt.add(this.body);
     this.group.add(this.tilt);
+    sharedBlob ??= blobTexture();
+    this.blobAlpha = shadows ? 0.4 : 0.7;
+    this.blobMat = keep(new THREE.MeshBasicMaterial({ map: sharedBlob, transparent: true, depthWrite: false, opacity: this.blobAlpha }));
+    this.blob = new THREE.Mesh(keep(new THREE.PlaneGeometry(2.4, 3.3)), this.blobMat);
+    this.blob.rotation.x = -Math.PI / 2;
+    this.blob.renderOrder = 1;
+    this.group.add(this.blob);
     if (!look.me) {
       const tex = keep(new THREE.CanvasTexture(tagCanvas(look)));
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -326,6 +341,10 @@ export class KartModel {
   update(k: Kart, dt: number, x: KartExtras, time: number) {
     this.group.position.set(k.x, k.y + k.air + 0.02, k.z);
     this.group.rotation.y = k.h;
+    // L'ombre reste sur la route, plus petite et plus pâle quand le kart est haut
+    this.blob.position.y = -k.air + 0.07;
+    this.blob.scale.setScalar(1 / (1 + k.air * 0.22));
+    this.blobMat.opacity = this.blobAlpha / (1 + k.air * 0.6);
     const step = Math.max(1e-3, dt);
     // Le tangage : le nez se lève quand on accélère, plonge au freinage
     const accel = (k.v - this.lastV) / step;
@@ -399,6 +418,25 @@ export class KartModel {
       speed: Math.abs(k.v) / TOP_SPEED,
       time,
       dt,
+    });
+  }
+
+  /** Le kart s'efface (1 : bien là, 0 : invisible) quand il est collé à la caméra */
+  fade(alpha: number) {
+    const a = Math.round(alpha * 20) / 20;
+    if (a === this.alpha) return;
+    this.alpha = a;
+    this.group.visible = a > 0;
+    this.group.traverse((o) => {
+      const mats = (o as THREE.Mesh).material;
+      if (!mats || o === this.blob || o === this.shield || o instanceof THREE.Points || o instanceof THREE.Sprite) return;
+      for (const m of Array.isArray(mats) ? mats : [mats]) {
+        if (!this.solid.has(m)) this.solid.set(m, { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
+        const base = this.solid.get(m)!;
+        m.transparent = a < 1 || base.transparent;
+        m.opacity = base.opacity * a;
+        m.depthWrite = a >= 1 && base.depthWrite;
+      }
     });
   }
 

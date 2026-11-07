@@ -21,6 +21,8 @@ export interface Frame {
   /** Le kart suivi par la caméra (-1 : aucun, la caméra survole la ligne de départ) */
   follow: number;
   camera: "intro" | "chase" | "orbit";
+  /** Où en est le survol d'avant la course, de 0 à 1 */
+  introT: number;
   serverNow: number;
   /** Le temps réel écoulé depuis l'image précédente, en secondes */
   dt: number;
@@ -34,7 +36,15 @@ interface Puff {
   life: number;
   max: number;
   grow: number;
+  /** Elle retombe (étincelles) ou monte doucement (fumée) */
+  heavy: boolean;
+  /** Son opacité au départ */
+  alpha: number;
 }
+
+/** Les couleurs des mini-turbos, du plus petit au plus gros */
+const TURBO_COLORS = [0x45c8ff, 0xff9a2e, 0xc77dff];
+const MAX_PUFFS = 220;
 
 export class RaceScene {
   readonly renderer: THREE.WebGLRenderer;
@@ -52,7 +62,12 @@ export class RaceScene {
   private petardGeo: THREE.BufferGeometry;
   private petardMat: THREE.MeshLambertMaterial;
   private puffs: Puff[] = [];
+  private spare: THREE.Sprite[] = [];
   private puffTex: THREE.Texture;
+  /** La secousse de la caméra et le coup de zoom, qui s'amortissent */
+  private shakeAmp = 0;
+  private fovKick = 0;
+  private smokeTick = 0;
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
   private camReady = false;
@@ -75,6 +90,9 @@ export class RaceScene {
     this.renderer = new THREE.WebGLRenderer({ antialias: !opts.phone, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.phone ? 1.5 : 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Des couleurs franches, sans blancs brûlés au soleil
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = this.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -124,7 +142,7 @@ export class RaceScene {
   build(track: Track, looks: KartLook[]) {
     this.track = track;
     this.world = buildWorld(track, { phone: this.opts.phone, shadows: this.shadows });
-    this.scene.add(this.world.group);
+    this.scene.add(this.world.group, this.world.dome);
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
     this.karts = looks.map((look) => {
@@ -227,13 +245,122 @@ export class RaceScene {
     );
   }
 
-  private puff(x: number, y: number, z: number, color: number, vx: number, vy: number, vz: number, life: number, grow: number) {
-    if (this.puffs.length > 160) return;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffTex, color, transparent: true, depthWrite: false }));
+  private puff(
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    vx: number,
+    vy: number,
+    vz: number,
+    life: number,
+    grow: number,
+    alpha = 1,
+    heavy = grow < 1,
+  ) {
+    if (this.puffs.length >= MAX_PUFFS) return;
+    let sprite = this.spare.pop();
+    if (!sprite) {
+      sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffTex, transparent: true, depthWrite: false }));
+      this.scene.add(sprite);
+    }
+    sprite.material.color.setHex(color);
+    sprite.material.opacity = alpha;
+    sprite.visible = true;
     sprite.position.set(x, y, z);
-    sprite.scale.setScalar(0.6);
-    this.scene.add(sprite);
-    this.puffs.push({ sprite, vx, vy, vz, life, max: life, grow });
+    sprite.scale.setScalar(0.5);
+    this.puffs.push({ sprite, vx, vy, vz, life, max: life, grow, heavy, alpha });
+  }
+
+  /** La fumée des pneus pendant un dérapage (pour tous les karts proches de la caméra) */
+  private driftSmoke(k: Kart) {
+    if (this.opts.reduced) return;
+    const fx = Math.sin(k.h);
+    const fz = Math.cos(k.h);
+    for (const side of [-1, 1]) {
+      const x = k.x - fx * 1.1 - fz * side * 0.85;
+      const z = k.z - fz * 1.1 + fx * side * 0.85;
+      this.puff(
+        x,
+        k.y + 0.25,
+        z,
+        0xe9e6e0,
+        (Math.random() - 0.5) * 1.2,
+        0.6 + Math.random() * 0.6,
+        (Math.random() - 0.5) * 1.2,
+        0.55,
+        2.2,
+        0.5,
+        false,
+      );
+    }
+  }
+
+  /** Un mini-turbo lâché : une gerbe à sa couleur derrière le kart */
+  turboBurst(k: Kart, level: 1 | 2 | 3) {
+    const color = TURBO_COLORS[level - 1]!;
+    const fx = Math.sin(k.h);
+    const fz = Math.cos(k.h);
+    const n = this.opts.reduced ? 5 : 8 + level * 5;
+    for (let i = 0; i < n; i++) {
+      const s = 3 + Math.random() * 4;
+      this.puff(
+        k.x - fx * 1.6,
+        k.y + 0.7,
+        k.z - fz * 1.6,
+        i % 3 === 0 ? 0xffffff : color,
+        -fx * s + (Math.random() - 0.5) * 3,
+        1 + Math.random() * 2.5,
+        -fz * s + (Math.random() - 0.5) * 3,
+        0.45,
+        0.9,
+      );
+    }
+  }
+
+  /** Des étincelles contre un mur */
+  wallSparks(k: Kart) {
+    this.burst({ x: k.x, y: k.y + 0.5, z: k.z }, 0xffd27a, 9, 5);
+  }
+
+  /** La poussière (ou la neige) qui vole à l'atterrissage d'un saut */
+  landDust(k: Kart) {
+    if (this.opts.reduced) return;
+    const color = this.track?.def.theme === "col" ? 0xf4f7fa : 0xcfc4ad;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      this.puff(
+        k.x + Math.cos(a) * 1.2,
+        k.y + 0.2,
+        k.z + Math.sin(a) * 1.2,
+        color,
+        Math.cos(a) * 4,
+        0.8,
+        Math.sin(a) * 4,
+        0.6,
+        2.4,
+        0.8,
+        false,
+      );
+    }
+  }
+
+  /** Une figure réussie : une couronne d'étoiles autour du kart */
+  trickSparkle(k: Kart) {
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      this.puff(k.x, k.y + k.air + 1, k.z, i % 2 ? 0xffe066 : 0xffffff, Math.cos(a) * 6, 1.5, Math.sin(a) * 6, 0.5, 0.7);
+    }
+  }
+
+  /** Une secousse de la caméra (un choc), et un petit coup de zoom (un turbo) */
+  shake(amount: number) {
+    if (this.opts.reduced) return;
+    this.shakeAmp = Math.min(1, this.shakeAmp + amount);
+  }
+
+  punch(fov: number) {
+    this.fovKick = Math.min(14, this.fovKick + fov);
   }
 
   /** Une image */
@@ -241,8 +368,15 @@ export class RaceScene {
     const t = this.track;
     if (!t || !this.world) return;
     this.time += f.dt;
-    this.world.update(this.time);
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
+    // La fumée des dérapages, une image sur deux, pour les karts pas trop loin
+    this.smokeTick = (this.smokeTick + 1) % 2;
+    if (this.smokeTick === 0) {
+      for (const { kart } of f.karts) {
+        if (kart.drift === 0 || kart.air > 0.2 || kart.spin > 0) continue;
+        if (Math.hypot(kart.x - this.camPos.x, kart.z - this.camPos.z) < 70) this.driftSmoke(kart);
+      }
+    }
     // Les caisses tournent et flottent ; celles qui reviennent grossissent
     this.crates.forEach((c, i) => {
       c.rotation.y = this.time * 1.4 + i;
@@ -265,29 +399,34 @@ export class RaceScene {
       mesh.rotation.y = p.h;
       if (Math.random() < 0.7) this.puff(p.x, p.y + 0.7, p.z, Math.random() < 0.5 ? 0xffd27a : 0xb0aaa4, 0, 0.6, 0, 0.5, 1.6);
     }
-    // Les particules
+    // Les particules : elles bougent, grossissent, pâlissent, puis retournent dans la réserve
     for (let i = this.puffs.length - 1; i >= 0; i--) {
       const p = this.puffs[i]!;
       p.life -= f.dt;
       if (p.life <= 0) {
-        this.scene.remove(p.sprite);
-        p.sprite.material.dispose();
+        p.sprite.visible = false;
+        this.spare.push(p.sprite);
         this.puffs.splice(i, 1);
         continue;
       }
-      p.vy -= 6 * f.dt * (p.grow < 1 ? 1 : 0.1);
+      p.vy -= 6 * f.dt * (p.heavy ? 1 : 0.1);
+      const drag = p.heavy ? 1 : Math.exp(-f.dt * 2.5);
+      p.vx *= drag;
+      p.vz *= drag;
       p.sprite.position.x += p.vx * f.dt;
       p.sprite.position.y += p.vy * f.dt;
       p.sprite.position.z += p.vz * f.dt;
       const age = 1 - p.life / p.max;
       p.sprite.scale.setScalar(0.5 + age * p.grow);
-      p.sprite.material.opacity = 1 - age;
+      p.sprite.material.opacity = p.alpha * (1 - age);
     }
     this.moveCamera(f);
-    // Les étiquettes des autres : ni trop près ni trop loin
+    this.world.update(this.time, this.camera.position);
+    // Les étiquettes des autres : ni trop près ni trop loin ; un kart collé à la caméra s'efface pour ne pas boucher la vue
     f.karts.forEach((k, i) => {
-      const d = this.camPos.distanceTo(new THREE.Vector3(k.kart.x, k.kart.y, k.kart.z));
+      const d = this.camPos.distanceTo(new THREE.Vector3(k.kart.x, k.kart.y + 0.8, k.kart.z));
       this.karts[i]?.showTag(d > 10 && d < 90);
+      this.karts[i]?.fade(i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6)));
     });
     this.renderer.render(this.scene, this.camera);
   }
@@ -301,11 +440,15 @@ export class RaceScene {
     let fov = portrait ? 74 : 62;
     const target = f.follow >= 0 ? f.karts[f.follow]?.kart : undefined;
     if (f.camera === "intro" || !target) {
-      // Le survol : on tourne autour de la ligne de départ
-      const p = pointAt(t, -18, 0);
-      const a = this.time * 0.35 + 2;
-      pos = new THREE.Vector3(p.x + Math.cos(a) * 34, p.y + 13, p.z + Math.sin(a) * 34);
-      look = new THREE.Vector3(p.x, p.y + 1, p.z);
+      // Le survol : on arrive de loin, haut au-dessus de la route, vers la grille, et on finit derrière elle
+      const u = Math.max(0, Math.min(1, f.introT));
+      const e = u * u * (3 - 2 * u);
+      const s = 150 - e * 205;
+      const side = 16 * (1 - e);
+      const p = pointAt(t, s, side);
+      const grid = pointAt(t, -16, 0);
+      pos = new THREE.Vector3(p.x, p.y + 30 - e * 23, p.z);
+      look = new THREE.Vector3(grid.x, grid.y + 1, grid.z);
     } else if (f.camera === "orbit") {
       const a = this.time * 0.3;
       pos = new THREE.Vector3(target.x + Math.cos(a) * 9, target.y + 4, target.z + Math.sin(a) * 9);
@@ -318,9 +461,10 @@ export class RaceScene {
         this.camY = target.y;
       }
       this.camYaw += wrapAngle(target.h - this.camYaw) * (1 - Math.exp(-dt * 5));
-      this.camY += (target.y + target.air * 0.6 - this.camY) * (1 - Math.exp(-dt * 6));
-      const back = portrait ? 7.4 : 6.3;
-      const up = portrait ? 3.1 : 2.55;
+      this.camY += (target.y + target.air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
+      // En l'air, elle prend un peu de recul et de hauteur pour bien montrer le saut
+      const back = (portrait ? 7.4 : 6.3) + target.air * 0.6;
+      const up = (portrait ? 3.1 : 2.55) + target.air * 0.5;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       pos = new THREE.Vector3(target.x - fx * back, this.camY + up, target.z - fz * back);
@@ -343,7 +487,16 @@ export class RaceScene {
     const ground = this.world!.heightAt(this.camPos.x, this.camPos.z);
     if (this.camPos.y < ground + 1.2) this.camPos.y = ground + 1.2;
     this.camera.position.copy(this.camPos);
+    this.shakeAmp *= Math.exp(-dt * 7);
+    this.fovKick *= Math.exp(-dt * 3);
+    if (this.shakeAmp > 0.01) {
+      const a = this.shakeAmp * 0.32;
+      this.camera.position.x += (Math.random() - 0.5) * a;
+      this.camera.position.y += (Math.random() - 0.5) * a;
+      this.camera.position.z += (Math.random() - 0.5) * a;
+    }
     this.camera.lookAt(this.camLook);
+    fov += this.fovKick;
     this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 4);
     this.camera.updateProjectionMatrix();
     // L'ombre suit la caméra
@@ -369,6 +522,7 @@ export class RaceScene {
     this.puffTex.dispose();
     this.envTex.dispose();
     for (const p of this.puffs) p.sprite.material.dispose();
+    for (const s of this.spare) s.material.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

@@ -54,6 +54,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const [resultsHidden, setResultsHidden] = useState(false);
   const [phone] = useState(() => window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760);
   const sound = usePrefs((s) => s.sound);
+  const engineOn = usePrefs((s) => s.bolidesEngine);
   const setPrefs = usePrefs((s) => s.set);
   const reduced = usePrefs((s) => s.reducedEffects);
   const me = room.you.seatId && g.racers.some((r) => r.id === room.you.seatId) ? room.you.seatId : null;
@@ -181,6 +182,10 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <button className="menu-item" onClick={() => setPrefs({ bolidesEngine: !engineOn })}>
+                  <Icon name={engineOn ? "volume" : "mute"} size={18} />{" "}
+                  {engineOn ? "Couper le bruit du moteur" : "Remettre le bruit du moteur"}
+                </button>
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la course"}
                 </button>
@@ -199,6 +204,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </AnimatePresence>
       </header>
 
+      {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : ""}`} aria-hidden="true" />}
       {h && (
         <div className="bolides-hud" aria-live="polite">
           {me && (
