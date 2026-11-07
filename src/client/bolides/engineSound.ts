@@ -21,6 +21,8 @@ export class EngineSound {
   private starting = false;
   private stopped = false;
   private t0 = performance.now();
+  /** L'effort du moteur, lissé : fort quand on prend de la vitesse, faible quand on file à vitesse constante */
+  private effort = 0;
 
   start() {
     if (this.nodes || this.starting || !usePrefs.getState().sound) return;
@@ -93,7 +95,11 @@ export class EngineSound {
     n.engine.playbackRate.setTargetAtTime(rate, t, 0.09);
     n.engineFilter.frequency.setTargetAtTime(420 + gear * 1500 + (gas ? 450 : 0) + (boosting ? 500 : 0), t, 0.12);
     const engineOn = prefs.bolidesEngine ? 1 : 0;
-    n.engineGain.gain.setTargetAtTime(volume * engineOn * (0.07 + (gas ? 0.06 : 0.025) + v * 0.035), t, 0.15);
+    // On l'entend surtout quand il pousse (au départ, en sortie de virage, pendant un turbo) ; à vitesse de croisière il
+    // se fait discret, sous la musique : il ne lasse pas
+    const want = boosting ? 1 : gas ? Math.max(0.15, Math.min(1, (1 - v) * 1.6)) : 0;
+    this.effort += (want - this.effort) * 0.06;
+    n.engineGain.gain.setTargetAtTime(volume * engineOn * (0.03 + 0.075 * this.effort + v * 0.02), t, 0.15);
     n.skidGain.gain.setTargetAtTime(volume * (drifting && v > 0.3 ? 0.06 : 0), t, drifting ? 0.05 : 0.12);
     n.skid.playbackRate.setTargetAtTime(0.9 + v * 0.2, t, 0.2);
     n.rushGain.gain.setTargetAtTime(volume * (boosting ? 0.07 : 0), t, 0.1);

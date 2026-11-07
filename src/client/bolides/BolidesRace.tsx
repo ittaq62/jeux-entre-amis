@@ -55,6 +55,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const [phone] = useState(() => window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760);
   const sound = usePrefs((s) => s.sound);
   const engineOn = usePrefs((s) => s.bolidesEngine);
+  const musicOn = usePrefs((s) => s.bolidesMusic);
   const setPrefs = usePrefs((s) => s.set);
   const reduced = usePrefs((s) => s.reducedEffects);
   const me = room.you.seatId && g.racers.some((r) => r.id === room.you.seatId) ? room.you.seatId : null;
@@ -182,6 +183,9 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <button className="menu-item" onClick={() => setPrefs({ bolidesMusic: !musicOn })}>
+                  <Icon name={musicOn ? "volume" : "mute"} size={18} /> {musicOn ? "Couper la musique" : "Remettre la musique"}
+                </button>
                 <button className="menu-item" onClick={() => setPrefs({ bolidesEngine: !engineOn })}>
                   <Icon name={engineOn ? "volume" : "mute"} size={18} />{" "}
                   {engineOn ? "Couper le bruit du moteur" : "Remettre le bruit du moteur"}

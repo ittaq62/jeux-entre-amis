@@ -13,6 +13,7 @@ import { play, vibrate, type SoundName } from "../lib/sound.ts";
 import { Controls } from "./controls.ts";
 import { LocalDriver } from "./driver.ts";
 import { EngineSound, honk } from "./engineSound.ts";
+import { RaceMusic } from "./music.ts";
 import type { KartLook } from "./scene/kart.ts";
 import { RaceScene } from "./scene/RaceScene.ts";
 
@@ -68,6 +69,7 @@ export class RaceRuntime {
   private scene: RaceScene;
   readonly controls: Controls;
   private engine = new EngineSound();
+  private music = new RaceMusic();
   private track: Track;
   private view: BolidesView;
   private serverOffset = 0;
@@ -176,7 +178,7 @@ export class RaceRuntime {
         case "box":
           if (e.id === meId && e.item) {
             this.rollingUntil = performance.now() + 1100;
-            play("tourChip", { volume: 0.7 });
+            play("bolidesBox");
           }
           break;
         case "use": {
@@ -397,6 +399,14 @@ export class RaceRuntime {
           this.scene.landDust(mine);
           this.scene.shake(0.25);
         } else if (e === "trick") this.scene.trickSparkle(mine);
+        else if (e === "bump") {
+          this.scene.shake(0.2);
+          play("bolidesBump");
+        } else if (e === "spark1" || e === "spark2" || e === "spark3") {
+          const level = e === "spark3" ? 3 : e === "spark2" ? 2 : 1;
+          this.scene.sparkFlash(mine, level);
+          play("bolidesCharge", { volume: 0.6 + level * 0.15, rate: level === 3 ? 1.5 : level === 2 ? 1.25 : 1 });
+        }
       }
       if (e === "turbo1" || e === "turbo2" || e === "turbo3") this.turbos += 1;
       else if (e === "wall") this.walls += 1;
@@ -414,6 +424,13 @@ export class RaceRuntime {
     }
     // Le bip du compte à rebours
     const left = v.goAt - now;
+    // La musique : dès les feux, plus vite au dernier tour, plus discrète une fois arrivé
+    if (left <= COUNTDOWN_MS && v.phase !== "over") this.music.start();
+    const myLap =
+      this.mine >= 0 && this.shown[this.mine] ? Math.floor(Math.max(0, this.shown[this.mine]!.dist) / this.track.length) + 1 : 1;
+    this.music.setFast(me?.finish == null && myLap >= v.settings.laps && v.settings.laps > 1 && now > v.goAt);
+    this.music.setQuiet(me?.finish != null || v.phase === "over");
+    this.music.update();
     if (v.phase === "start" && left <= COUNTDOWN_MS && left > 0) {
       const n = Math.ceil(left / 1000);
       if (n !== this.beep) {
@@ -505,6 +522,7 @@ export class RaceRuntime {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.engine.stop();
+    this.music.stop();
     this.controls.dispose();
     this.scene.dispose();
   }

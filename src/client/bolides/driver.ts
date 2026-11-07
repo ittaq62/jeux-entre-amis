@@ -39,7 +39,7 @@ export class LocalDriver {
       Object.assign(this.prev, this.kart);
       const s0 = this.kart.s;
       step(this.kart, input, this.track, { top: this.top }, events);
-      for (const o of others) bump(this.kart, o, true, false);
+      for (const o of others) if (bump(this.kart, o, true, false) > 4) events.push("bump");
       // Le mauvais sens : on recule le long de la route en roulant vraiment
       const moved = deltaS(this.track, s0, this.kart.s);
       this.backward = Math.max(0, this.backward * 0.995 - moved);
