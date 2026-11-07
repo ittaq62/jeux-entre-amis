@@ -86,7 +86,11 @@ export type SoundName =
   | "mecheFuse"
   | "mecheWord"
   | "mecheRefused"
-  | "mecheBoom";
+  | "mecheBoom"
+  | "bolidesJump"
+  | "bolidesLand"
+  | "bolidesTrick"
+  | "bolidesTurbo";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -177,6 +181,10 @@ const FILES: Record<SoundName, string[]> = {
   mecheWord: ["meche-word.wav"],
   mecheRefused: ["meche-refused.wav"],
   mecheBoom: ["meche-boom.wav"],
+  bolidesJump: ["bolides-jump.wav"],
+  bolidesLand: ["bolides-land.wav"],
+  bolidesTrick: ["bolides-trick.wav"],
+  bolidesTurbo: ["bolides-turbo.wav"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -267,7 +275,10 @@ export const BOLIDES_SOUNDS: SoundName[] = [
   "tourApplause",
   "tourTrophyMine",
   "capLose",
-  "brickHold",
+  "bolidesJump",
+  "bolidesLand",
+  "bolidesTrick",
+  "bolidesTurbo",
 ];
 
 export const TOUR_SOUNDS: SoundName[] = [
@@ -361,6 +372,10 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   mecheWord: 0.55,
   mecheRefused: 0.55,
   mecheBoom: 0.85,
+  bolidesJump: 0.42,
+  bolidesLand: 0.5,
+  bolidesTrick: 0.4,
+  bolidesTurbo: 0.45,
 };
 
 let ctx: AudioContext | null = null;
@@ -394,6 +409,11 @@ async function load(file: string): Promise<AudioBuffer | null> {
     });
   loading.set(file, p);
   return p;
+}
+
+/** Un son chargé (depuis /sounds), pour le jouer soi-même en boucle (le moteur d'un kart) */
+export function soundBuffer(file: string): Promise<AudioBuffer | null> {
+  return load(file);
 }
 
 /** Le contexte audio et la sortie générale, pour les sons fabriqués à la volée (le moteur d'un kart) */

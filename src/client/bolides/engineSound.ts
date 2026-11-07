@@ -1,67 +1,78 @@
-// Le bruit du moteur, fabriqué à la volée : deux ondes qui montent avec la vitesse, plus fortes quand on accélère,
-// un sifflement de pneus pendant les dérapages, et un souffle pendant les turbos. Le klaxon aussi.
+// Le bruit du kart : un vrai son de moteur enregistré en boucle (fabriqué pour le jeu), joué plus ou moins vite
+// selon le régime, plus ouvert quand on accélère, avec de petites irrégularités pour ne jamais sonner pareil ;
+// le crissement des pneus pendant les dérapages, et un souffle pendant les turbos. Le klaxon aussi.
+// Le moteur peut se couper à part (préférence « bolidesEngine »).
 
-import { audioOut } from "../lib/sound.ts";
+import { audioOut, soundBuffer } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
+interface Nodes {
+  engine: AudioBufferSourceNode;
+  engineFilter: BiquadFilterNode;
+  engineGain: GainNode;
+  skid: AudioBufferSourceNode;
+  skidGain: GainNode;
+  rush: AudioBufferSourceNode;
+  rushGain: GainNode;
+}
+
 export class EngineSound {
-  private nodes: {
-    low: OscillatorNode;
-    high: OscillatorNode;
-    filter: BiquadFilterNode;
-    gain: GainNode;
-    skid: AudioBufferSourceNode;
-    skidGain: GainNode;
-    skidFilter: BiquadFilterNode;
-    rush: GainNode;
-  } | null = null;
+  private nodes: Nodes | null = null;
+  private starting = false;
+  private stopped = false;
+  private t0 = performance.now();
 
   start() {
-    if (this.nodes || !usePrefs.getState().sound) return;
+    if (this.nodes || this.starting || !usePrefs.getState().sound) return;
     const audio = audioOut();
     if (!audio) return;
-    const { ctx, out } = audio;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 700;
-    filter.Q.value = 3;
-    const low = ctx.createOscillator();
-    low.type = "sawtooth";
-    low.frequency.value = 50;
-    const high = ctx.createOscillator();
-    high.type = "square";
-    high.frequency.value = 100;
-    const highGain = ctx.createGain();
-    highGain.gain.value = 0.25;
-    low.connect(filter);
-    high.connect(highGain).connect(filter);
-    filter.connect(gain).connect(out);
-    // Un bruit blanc filtré : les pneus qui crissent, et le souffle du turbo
-    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const skid = ctx.createBufferSource();
-    skid.buffer = buffer;
-    skid.loop = true;
-    const skidFilter = ctx.createBiquadFilter();
-    skidFilter.type = "bandpass";
-    skidFilter.frequency.value = 2400;
-    skidFilter.Q.value = 6;
-    const skidGain = ctx.createGain();
-    skidGain.gain.value = 0;
-    skid.connect(skidFilter).connect(skidGain).connect(out);
-    const rushFilter = ctx.createBiquadFilter();
-    rushFilter.type = "lowpass";
-    rushFilter.frequency.value = 900;
-    const rush = ctx.createGain();
-    rush.gain.value = 0;
-    skid.connect(rushFilter).connect(rush).connect(out);
-    low.start();
-    high.start();
-    skid.start();
-    this.nodes = { low, high, filter, gain, skid, skidGain, skidFilter, rush };
+    this.starting = true;
+    this.stopped = false;
+    void Promise.all([soundBuffer("bolides-engine.wav"), soundBuffer("bolides-skid.wav")]).then(([engineBuf, skidBuf]) => {
+      this.starting = false;
+      if (this.stopped || this.nodes || !engineBuf || !skidBuf) return;
+      const { ctx, out } = audio;
+      const t = ctx.currentTime;
+      // Le moteur : la boucle, un filtre doux (pas de résonance qui siffle), un volume qui monte en douceur
+      const engine = ctx.createBufferSource();
+      engine.buffer = engineBuf;
+      engine.loop = true;
+      engine.playbackRate.value = 0.6;
+      const engineFilter = ctx.createBiquadFilter();
+      engineFilter.type = "lowpass";
+      engineFilter.frequency.value = 700;
+      engineFilter.Q.value = 0.5;
+      const engineGain = ctx.createGain();
+      engineGain.gain.setValueAtTime(0, t);
+      engine.connect(engineFilter).connect(engineGain).connect(out);
+      // Les pneus
+      const skid = ctx.createBufferSource();
+      skid.buffer = skidBuf;
+      skid.loop = true;
+      const skidFilter = ctx.createBiquadFilter();
+      skidFilter.type = "lowpass";
+      skidFilter.frequency.value = 3200;
+      const skidGain = ctx.createGain();
+      skidGain.gain.value = 0;
+      skid.connect(skidFilter).connect(skidGain).connect(out);
+      // Le souffle du turbo : du bruit grave
+      const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = noise.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const rush = ctx.createBufferSource();
+      rush.buffer = noise;
+      rush.loop = true;
+      const rushFilter = ctx.createBiquadFilter();
+      rushFilter.type = "lowpass";
+      rushFilter.frequency.value = 800;
+      const rushGain = ctx.createGain();
+      rushGain.gain.value = 0;
+      rush.connect(rushFilter).connect(rushGain).connect(out);
+      engine.start(t, Math.random() * 1.5);
+      skid.start(t, Math.random() * 0.8);
+      rush.start(t);
+      this.nodes = { engine, engineFilter, engineGain, skid, skidGain, rush, rushGain };
+    });
   }
 
   /** `speed` : la vitesse en part de la vitesse de pointe ; le reste dit ce que fait le kart */
@@ -71,28 +82,34 @@ export class EngineSound {
     const n = this.nodes;
     if (!n) return;
     const prefs = usePrefs.getState();
-    const t = n.low.context.currentTime;
+    const t = n.engine.context.currentTime;
     const volume = prefs.sound ? prefs.volume : 0;
     const v = Math.max(0, Math.min(1.5, speed));
-    // Le moteur monte par paliers, comme s'il passait les vitesses
+    // Le régime monte par paliers, comme s'il passait les vitesses, avec un léger tremblement
     const gear = v < 0.35 ? v / 0.35 : v < 0.7 ? 0.55 + ((v - 0.35) / 0.35) * 0.45 : 0.75 + ((v - 0.7) / 0.8) * 0.6;
-    const base = 46 + gear * 70 + (boosting ? 18 : 0);
-    n.low.frequency.setTargetAtTime(base, t, 0.06);
-    n.high.frequency.setTargetAtTime(base * 2.01, t, 0.06);
-    n.filter.frequency.setTargetAtTime(500 + gear * 900 + (gas ? 300 : 0), t, 0.08);
-    n.gain.gain.setTargetAtTime(volume * (0.05 + (gas ? 0.05 : 0.02) + v * 0.03), t, 0.1);
-    n.skidGain.gain.setTargetAtTime(volume * (drifting ? 0.05 : 0), t, 0.05);
-    n.skidFilter.frequency.setTargetAtTime(2000 + v * 900, t, 0.1);
-    n.rush.gain.setTargetAtTime(volume * (boosting ? 0.09 : 0), t, 0.08);
+    const s = (performance.now() - this.t0) / 1000;
+    const jitter = 1 + 0.006 * Math.sin(s * 7.3) + 0.004 * Math.sin(s * 13.9 + 1);
+    const rate = (0.55 + gear * 0.82 + (boosting ? 0.1 : 0) + (gas ? 0.03 : 0)) * jitter;
+    n.engine.playbackRate.setTargetAtTime(rate, t, 0.09);
+    n.engineFilter.frequency.setTargetAtTime(420 + gear * 1500 + (gas ? 450 : 0) + (boosting ? 500 : 0), t, 0.12);
+    const engineOn = prefs.bolidesEngine ? 1 : 0;
+    n.engineGain.gain.setTargetAtTime(volume * engineOn * (0.07 + (gas ? 0.06 : 0.025) + v * 0.035), t, 0.15);
+    n.skidGain.gain.setTargetAtTime(volume * (drifting && v > 0.3 ? 0.06 : 0), t, drifting ? 0.05 : 0.12);
+    n.skid.playbackRate.setTargetAtTime(0.9 + v * 0.2, t, 0.2);
+    n.rushGain.gain.setTargetAtTime(volume * (boosting ? 0.07 : 0), t, 0.1);
   }
 
   stop() {
+    this.stopped = true;
     const n = this.nodes;
     if (!n) return;
     this.nodes = null;
-    const t = n.low.context.currentTime;
-    for (const g of [n.gain, n.skidGain, n.rush]) g.gain.setTargetAtTime(0, t, 0.08);
-    for (const node of [n.low, n.high, n.skid]) node.stop(t + 0.4);
+    const t = n.engine.context.currentTime;
+    for (const g of [n.engineGain, n.skidGain, n.rushGain]) {
+      g.gain.cancelScheduledValues(t);
+      g.gain.setTargetAtTime(0, t, 0.08);
+    }
+    for (const node of [n.engine, n.skid, n.rush]) node.stop(t + 0.5);
   }
 }
 

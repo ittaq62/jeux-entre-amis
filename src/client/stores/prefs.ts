@@ -13,6 +13,8 @@ interface Prefs {
   capDiceZoom: boolean;
   capFollow: boolean;
   capViewHint: boolean;
+  /** Bolides : le bruit du moteur de son kart */
+  bolidesEngine: boolean;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -36,6 +38,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   capDiceZoom: false,
   capFollow: false,
   capViewHint: false,
+  bolidesEngine: true,
   ...load(),
   set: (patch) => {
     set(patch);
