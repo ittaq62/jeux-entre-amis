@@ -369,7 +369,12 @@ export class RaceRuntime {
     const follow = this.mine >= 0 ? this.mine : this.leader();
     const finishedLong = me?.finish != null && now - v.goAt - me.finish > 4000;
     this.scene.render({
-      karts: this.shown.map((kart, i) => ({ kart, steer: this.steers[i]!, shield: v.racers[i]!.shieldUntil > now })),
+      karts: this.shown.map((kart, i) => ({
+        kart,
+        steer: this.steers[i]!,
+        shield: v.racers[i]!.shieldUntil > now,
+        done: v.racers[i]!.finish !== null,
+      })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
       serverNow: now,

@@ -24,6 +24,7 @@ const AccountPage = lazy(() => import("./pages/AccountPage.tsx").then((m) => ({ 
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage.tsx").then((m) => ({ default: m.PrivacyPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx").then((m) => ({ default: m.AdminPage })));
 const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ default: m.DevGallery })));
+const DevGarage = lazy(() => import("./bolides/DevGarage.tsx").then((m) => ({ default: m.DevGarage })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -82,6 +83,7 @@ export function App() {
           <Route path="/compte" component={AccountPage} />
           <Route path="/admin" component={AdminPage} />
           {import.meta.env.DEV && <Route path="/dev/galerie" component={DevGallery} />}
+          {import.meta.env.DEV && <Route path="/dev/garage" component={DevGarage} />}
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>

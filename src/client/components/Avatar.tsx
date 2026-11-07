@@ -71,6 +71,21 @@ export function AvatarDrawing({ avatar, size = 48, className, title }: Omit<Prop
   );
 }
 
+/**
+ * Le visage seul (yeux, bouche, lunettes, joues), sans fond, tête, cheveux ni chapeau : de quoi le peindre sur une
+ * tête en 3D. Le carré montré est centré sur le milieu de la tête dessinée.
+ */
+export function AvatarFace({ avatar, size = 128 }: { avatar: AvatarConfig; size?: number }) {
+  return (
+    <svg viewBox="20 25 60 60" width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+      <Extra kind={avatar.extra} under />
+      <Eyes kind={avatar.eyes} />
+      <Mouth kind={avatar.mouth} />
+      <Extra kind={avatar.extra} />
+    </svg>
+  );
+}
+
 function Eyes({ kind }: { kind: number }) {
   switch (kind) {
     case 1: // contents

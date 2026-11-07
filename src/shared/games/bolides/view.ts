@@ -10,7 +10,7 @@ import type { TrackId } from "./track.ts";
 
 /**
  * Un kart en petit : x, z, cap, vitesse, glissement, hauteur, distance, dérapage, charge, turbo, tête-à-queue, saut,
- * écart, et la hauteur en l'air
+ * écart, la hauteur en l'air, et une figure en cours (1)
  */
 export type KartNet = number[];
 
@@ -33,6 +33,7 @@ export function encodeKart(k: Kart): KartNet {
     r2(k.hop),
     r2(k.d),
     r2(k.air),
+    k.trick ? 1 : 0,
   ];
 }
 
@@ -61,7 +62,7 @@ export function decodeKart(n: KartNet, base?: Kart): Kart | null {
     // La hauteur au-dessus de la route ; la vitesse verticale ne voyage pas (le serveur fait retomber un absent)
     air: n.length > 13 ? at(13, 0, 5) : 0,
     vy: 0,
-    trick: false,
+    trick: n.length > 14 ? n[14]! > 0 : false,
     held: base?.held ?? false,
   };
 }

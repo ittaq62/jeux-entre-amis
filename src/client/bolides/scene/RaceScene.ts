@@ -2,10 +2,11 @@
 // Elle ne décide de rien : on lui dit où sont les karts et ce qui vient d'arriver, elle le dessine.
 
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
-import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
-import { KartModel, type KartLook } from "./kart.ts";
+import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
+import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
 
@@ -16,7 +17,7 @@ export interface SceneOptions {
 
 /** Ce qu'il faut dessiner à cette image */
 export interface Frame {
-  karts: { kart: Kart; steer: number; shield: boolean }[];
+  karts: ({ kart: Kart } & KartExtras)[];
   /** Le kart suivi par la caméra (-1 : aucun, la caméra survole la ligne de départ) */
   follow: number;
   camera: "intro" | "chase" | "orbit";
@@ -55,9 +56,16 @@ export class RaceScene {
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
   private camReady = false;
+  /** La caméra de poursuite : son cap et sa hauteur, lissés (la position suit le kart sans retard) */
+  private camYaw = 0;
+  private camY = 0;
+  private chasing = false;
+  /** Depuis combien de temps elle poursuit (elle arrive du survol en douceur) */
+  private chaseT = 0;
   private time = 0;
   private resize: ResizeObserver;
   private shadows: boolean;
+  private envTex: THREE.Texture;
 
   constructor(
     private container: HTMLElement,
@@ -86,6 +94,12 @@ export class RaceScene {
     sc.near = 10;
     sc.far = 300;
     this.scene.add(this.sun, this.sun.target);
+    // Un reflet de pièce éclairée pour les karts (peinture, chromes), sans rien télécharger
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.environment = this.envTex;
+    this.scene.environmentIntensity = 0.55;
 
     this.oilMat = new THREE.MeshBasicMaterial({ map: TX.oilTexture(), transparent: true, depthWrite: false });
     this.petardGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.1, 10);
@@ -228,7 +242,7 @@ export class RaceScene {
     if (!t || !this.world) return;
     this.time += f.dt;
     this.world.update(this.time);
-    f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k.steer, k.shield, this.time));
+    f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
     // Les caisses tournent et flottent ; celles qui reviennent grossissent
     this.crates.forEach((c, i) => {
       c.rotation.y = this.time * 1.4 + i;
@@ -297,21 +311,32 @@ export class RaceScene {
       pos = new THREE.Vector3(target.x + Math.cos(a) * 9, target.y + 4, target.z + Math.sin(a) * 9);
       look = new THREE.Vector3(target.x, target.y + 1, target.z);
     } else {
-      // Derrière le kart, un peu au-dessus ; plus large quand il file
-      const back = portrait ? 8.4 : 7.2;
-      const up = portrait ? 3.6 : 3.0;
-      const fx = Math.sin(target.h);
-      const fz = Math.cos(target.h);
-      pos = new THREE.Vector3(target.x - fx * back, target.y + up, target.z - fz * back);
-      look = new THREE.Vector3(target.x + fx * 5, target.y + 1.3, target.z + fz * 5);
+      // Derrière le kart, assez près et assez bas pour bien le voir : le cap de la caméra suit celui du kart en
+      // douceur, sa hauteur aussi (les bosses, les sauts), mais elle ne prend pas de retard quand il file
+      if (!this.chasing) {
+        this.camYaw = target.h;
+        this.camY = target.y;
+      }
+      this.camYaw += wrapAngle(target.h - this.camYaw) * (1 - Math.exp(-dt * 5));
+      this.camY += (target.y + target.air * 0.6 - this.camY) * (1 - Math.exp(-dt * 6));
+      const back = portrait ? 7.4 : 6.3;
+      const up = portrait ? 3.1 : 2.55;
+      const fx = Math.sin(this.camYaw);
+      const fz = Math.cos(this.camYaw);
+      pos = new THREE.Vector3(target.x - fx * back, this.camY + up, target.z - fz * back);
+      look = new THREE.Vector3(target.x + fx * 6, this.camY + 1.25, target.z + fz * 6);
       fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0);
     }
+    const chase = f.camera === "chase" && Boolean(target);
     if (!this.camReady) {
       this.camPos.copy(pos);
       this.camLook.copy(look);
       this.camReady = true;
     }
-    const k = 1 - Math.exp(-dt * (f.camera === "chase" ? 7 : 2.5));
+    // En poursuite, la caméra colle à sa place (un léger lissage seulement) ; sinon elle glisse doucement
+    this.chaseT = chase ? this.chaseT + dt : 0;
+    const k = 1 - Math.exp(-dt * (chase ? 3 + 21 * Math.min(1, this.chaseT / 1.2) ** 2 : 2.5));
+    this.chasing = chase;
     this.camPos.lerp(pos, k);
     this.camLook.lerp(look, Math.min(1, k * 1.6));
     // Jamais sous le terrain
@@ -342,6 +367,7 @@ export class RaceScene {
     this.petardGeo.dispose();
     this.petardMat.dispose();
     this.puffTex.dispose();
+    this.envTex.dispose();
     for (const p of this.puffs) p.sprite.material.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

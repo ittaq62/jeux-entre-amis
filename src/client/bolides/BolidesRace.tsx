@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { seededAvatar } from "../../shared/avatar.ts";
 import { ITEM_NAMES } from "../../shared/games/bolides/items.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
@@ -11,7 +12,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
 import { ItemIcon } from "./ItemIcon.tsx";
 import { placeLabel, RaceRuntime, type Hud } from "./runtime.ts";
-import { faceCanvas } from "./scene/faces.ts";
+import { faceCanvas, headCanvas } from "./scene/faces.ts";
 import { KART_COLORS } from "./scene/kart.ts";
 import type { RaceListeners } from "./useBolidesRoom.ts";
 
@@ -64,12 +65,19 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   useEffect(() => {
     let cancelled = false;
     const seats = g.racers.map((r) => room.seats.find((s) => s.id === r.id));
-    void Promise.all(seats.map((s) => (s ? faceCanvas(s, 96) : Promise.resolve(null)))).then((faces) => {
+    // Pour chaque pilote : son visage pour l'étiquette, et la peau de sa tête en 3D (d'après son avatar)
+    const avatars = g.racers.map((r, i) => seats[i]?.avatar ?? seededAvatar(r.id));
+    void Promise.all([
+      Promise.all(seats.map((s) => (s ? faceCanvas(s, 96) : Promise.resolve(null)))),
+      Promise.all(avatars.map((a) => headCanvas(a).catch(() => null))),
+    ]).then(([faces, heads]) => {
       if (cancelled || !box.current) return;
       const looks = g.racers.map((r, i) => ({
         color: kartColor(room, r.id),
         name: seats[i]?.name ?? "?",
         face: faces[i] ?? null,
+        avatar: avatars[i]!,
+        head: heads[i] ?? null,
         me: r.id === me,
       }));
       const rt = new RaceRuntime(box.current, g, looks, serverOffset, { phone, reduced, me, send, onHud: setHud });
