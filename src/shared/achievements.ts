@@ -1,3 +1,4 @@
+import type { RacerStats } from "./games/bolides/race.ts";
 import type { BricksMode } from "./games/bricks/engine.ts";
 import type { BricksStats } from "./games/bricks/view.ts";
 import type { CapitaleStats } from "./games/capitale/engine.ts";
@@ -203,6 +204,63 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "capitale-ruin", game: "capitale", chip: "0", tone: "black", title: "Sur la paille", description: "Faire faillite." },
 
   // Tournée
+  // Bolides
+  {
+    id: "bolides-first-win",
+    game: "bolides",
+    chip: "1er",
+    tone: "red",
+    title: "Premier sur la ligne",
+    description: "Gagner une course de Bolides.",
+  },
+  {
+    id: "bolides-regular",
+    game: "bolides",
+    chip: "25",
+    tone: "blue",
+    title: "Pilote du dimanche",
+    description: "Courir 25 courses de Bolides.",
+  },
+  {
+    id: "bolides-clean",
+    game: "bolides",
+    chip: "0",
+    tone: "green",
+    title: "Sans une égratignure",
+    description: "Gagner une course avec objets sans jamais être touché.",
+  },
+  {
+    id: "bolides-sniper",
+    game: "bolides",
+    chip: "3",
+    tone: "red",
+    title: "Fine gâchette",
+    description: "Toucher 3 karts ou plus dans une même course.",
+  },
+  {
+    id: "bolides-drifter",
+    game: "bolides",
+    chip: "15",
+    tone: "blue",
+    title: "Roi du dérapage",
+    description: "Gagner 15 mini-turbos ou plus en dérapant dans une même course.",
+  },
+  {
+    id: "bolides-pure",
+    game: "bolides",
+    chip: "∅",
+    tone: "ivory",
+    title: "Pilotage pur",
+    description: "Gagner une course sans objets.",
+  },
+  {
+    id: "bolides-wall",
+    game: "bolides",
+    chip: "10",
+    tone: "black",
+    title: "Auto-tamponneuse",
+    description: "Taper 10 fois le mur dans une même course.",
+  },
   // Mèche
   { id: "meche-first-win", game: "meche", chip: "1re", tone: "red", title: "Artificier", description: "Gagner une partie de Mèche." },
   { id: "meche-regular", game: "meche", chip: "25", tone: "blue", title: "Sent la poudre", description: "Jouer 25 parties de Mèche." },
@@ -299,6 +357,28 @@ export interface CapitaleOutcome {
   played: number;
   bankrupt: boolean;
   stats: CapitaleStats;
+}
+
+export interface BolidesOutcome {
+  won: boolean;
+  played: number;
+  /** Les caisses d'objets étaient sur la route */
+  items: boolean;
+  stats: RacerStats;
+}
+
+export function earnedBolidesAchievements(o: BolidesOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  const s = o.stats;
+  add("bolides-first-win", o.won);
+  add("bolides-regular", o.played >= 25);
+  add("bolides-clean", o.won && o.items && s.hitsTaken === 0);
+  add("bolides-sniper", s.hitsGiven >= 3);
+  add("bolides-drifter", s.turbos >= 15);
+  add("bolides-pure", o.won && !o.items);
+  add("bolides-wall", s.walls >= 10);
+  return out;
 }
 
 export interface MecheOutcome {

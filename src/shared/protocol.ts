@@ -1,4 +1,6 @@
 import type { AvatarConfig } from "./avatar.ts";
+import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
+import type { BolidesView, KartNet } from "./games/bolides/view.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
 import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
@@ -12,7 +14,7 @@ import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche";
+export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
@@ -23,11 +25,12 @@ export const GAME_NAMES: Record<GameId, string> = {
   bricks: "Briques",
   capitale: "Capitale",
   meche: "Mèche",
+  bolides: "Bolides",
 };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
 /** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche"] as const satisfies readonly TableGame[];
+export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche", "bolides"] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -497,6 +500,62 @@ export type MecheServerMessage =
   | { t: "typing"; id: string; text: string; turn: number }
   /** Un mot refusé : la table le voit passer */
   | { t: "refused"; id: string; word: string; reason: Refusal; turn: number }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
+
+export interface BolidesRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  bolides: BolidesSettings;
+}
+
+export const BOLIDES_MAX_PLAYERS = 8;
+
+export interface BolidesRoomView {
+  code: string;
+  game: "bolides";
+  status: RoomStatus;
+  settings: BolidesRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  bolides: BolidesView | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
+}
+
+export type BolidesClientMessage =
+  | { t: "settings"; settings: Partial<BolidesSettings>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  /** Où en est son kart, plusieurs fois par seconde */
+  | { t: "kart"; k: KartNet }
+  /** Se servir de son objet */
+  | { t: "use" }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type BolidesServerMessage =
+  | { t: "room"; room: BolidesRoomView; events: BolidesEvent[] }
+  /** Tous les karts, plusieurs fois par seconde (dans l'ordre des pilotes de la course), à l'heure du serveur */
+  | { t: "tick"; now: number; k: KartNet[] }
+  /** Ce qui arrive entre deux états complets (objets, coups, tours) */
+  | { t: "fx"; events: BolidesEvent[]; now: number }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
   | { t: "emote"; seatId: string | null; userId: string; emote: string }
   | { t: "achievements"; unlocks: AchievementUnlock[] }

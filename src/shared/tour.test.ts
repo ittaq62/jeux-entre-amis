@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SETTINGS as BOLIDES_DEFAULTS } from "./games/bolides/race.ts";
 import { DEFAULT_SETTINGS as MECHE_DEFAULTS } from "./games/meche/engine.ts";
 import { random } from "./rng.ts";
 import { DEFAULT_SETTINGS as BRICKS_DEFAULTS } from "./games/bricks/engine.ts";
@@ -174,6 +175,7 @@ describe("règles des jeux", () => {
     bricks: BRICKS_DEFAULTS,
     capitale: CAPITALE_DEFAULTS,
     meche: MECHE_DEFAULTS,
+    bolides: BOLIDES_DEFAULTS,
   };
 
   it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {

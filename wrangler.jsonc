@@ -7,7 +7,7 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
   "durable_objects": {
     "bindings": [
@@ -16,9 +16,10 @@
       { "name": "BRICKS", "class_name": "BricksRoom" },
       { "name": "CAPITALE", "class_name": "CapitaleRoom" },
       { "name": "MECHE", "class_name": "MecheRoom" },
+      { "name": "BOLIDES", "class_name": "BolidesRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
-      { "name": "HUB", "class_name": "Hub" }
-    ]
+      { "name": "HUB", "class_name": "Hub" },
+    ],
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["GameRoom", "Hub"] },
@@ -26,20 +27,21 @@
     { "tag": "v3", "new_sqlite_classes": ["BricksRoom"] },
     { "tag": "v4", "new_sqlite_classes": ["TourRoom"] },
     { "tag": "v5", "new_sqlite_classes": ["CapitaleRoom"] },
-    { "tag": "v6", "new_sqlite_classes": ["MecheRoom"] }
+    { "tag": "v6", "new_sqlite_classes": ["MecheRoom"] },
+    { "tag": "v7", "new_sqlite_classes": ["BolidesRoom"] },
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "jeux-entre-amis",
       "database_id": "90954a63-3798-432d-b625-b0a9f7a2e11d",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "vars": {
     "EMAIL_MODE": "smtp",
     "SMTP_HOST": "smtp.gmail.com",
-    "SMTP_PORT": "465"
+    "SMTP_PORT": "465",
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 }

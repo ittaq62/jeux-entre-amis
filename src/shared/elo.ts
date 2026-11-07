@@ -19,6 +19,7 @@ export const BOT_ELO = {
   bricks: { apprenti: 800, confirme: 1000, expert: 1200 },
   capitale: { facile: 800, moyen: 1000, fort: 1200 },
   meche: { facile: 800, moyen: 1000, fort: 1200 },
+  bolides: { facile: 800, moyen: 1000, fort: 1200 },
 } as const;
 
 export function botElo(game: GameId, botLevel?: string): number {
@@ -26,6 +27,7 @@ export function botElo(game: GameId, botLevel?: string): number {
   if (game === "bricks") return BOT_ELO.bricks[botLevel as keyof typeof BOT_ELO.bricks] ?? BOT_ELO.bricks.confirme;
   if (game === "capitale") return BOT_ELO.capitale[botLevel as keyof typeof BOT_ELO.capitale] ?? BOT_ELO.capitale.moyen;
   if (game === "meche") return BOT_ELO.meche[botLevel as keyof typeof BOT_ELO.meche] ?? BOT_ELO.meche.moyen;
+  if (game === "bolides") return BOT_ELO.bolides[botLevel as keyof typeof BOT_ELO.bolides] ?? BOT_ELO.bolides.moyen;
   return BOT_ELO.uno;
 }
 

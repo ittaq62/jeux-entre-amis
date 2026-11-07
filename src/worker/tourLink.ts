@@ -22,6 +22,7 @@ export function gameStub(env: Env, game: GameId, code: string) {
   if (game === "bricks") return env.BRICKS.get(env.BRICKS.idFromName(code));
   if (game === "capitale") return env.CAPITALE.get(env.CAPITALE.idFromName(code));
   if (game === "meche") return env.MECHE.get(env.MECHE.idFromName(code));
+  if (game === "bolides") return env.BOLIDES.get(env.BOLIDES.idFromName(code));
   return env.ROOMS.get(env.ROOMS.idFromName(code));
 }
 

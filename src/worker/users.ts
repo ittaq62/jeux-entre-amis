@@ -4,11 +4,14 @@ import {
   earnedBricksAchievements,
   earnedCapitaleAchievements,
   earnedMecheAchievements,
+  earnedBolidesAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
 } from "../shared/achievements.ts";
 import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/capitale/engine.ts";
 import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
+import type { BolidesSettings, RacerStats } from "../shared/games/bolides/race.ts";
+import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
 import { botElo, ELO_START, eloChanges } from "../shared/elo.ts";
@@ -212,11 +215,14 @@ export interface GameRecordPlayer {
   eliminated: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
-  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats;
+  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats | BolidesRecordStats;
 }
 
 /** Elo de chaque joueur humain après la partie, et ce qu'il a gagné ou perdu */
 export type EloResults = Record<string, { elo: number; delta: number }>;
+
+/** Stats d'une course de Bolides, avec son temps (0 : pas arrivé) */
+export type BolidesRecordStats = RacerStats & { time: number };
 
 /** Stats d'une bataille navale, avec les navires restés à flot */
 export type NavalRecordStats = NavalStats & { afloat: number };
@@ -233,6 +239,7 @@ export type GameRecord = {
   | { game: "bricks"; settings: BricksSettings; mode: BricksMode }
   | { game: "capitale"; settings: CapitaleSettings; mode: EndMode }
   | { game: "meche"; settings: MecheSettings; mode: FuseMode }
+  | { game: "bolides"; settings: BolidesSettings; mode: TrackId }
 );
 
 /** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
@@ -292,6 +299,28 @@ function mergeMecheTotals(raw: string | null, stats: MecheStats): Record<string,
   for (const key of ["words", "letters", "passesEarned", "passesUsed", "booms"] as const) totals[key] = (totals[key] ?? 0) + stats[key];
   totals.longest = Math.max(totals.longest ?? 0, stats.longest);
   if (stats.fastest > 0) totals.fastest = totals.fastest ? Math.min(totals.fastest, stats.fastest) : stats.fastest;
+  return totals;
+}
+
+/** Cumul des stats de Bolides : on additionne, sauf les records (meilleur tour, course la plus rapide par circuit). */
+function mergeBolidesTotals(raw: string | null, stats: BolidesRecordStats, track: TrackId, laps: number): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of ["boxes", "itemsUsed", "hitsGiven", "hitsTaken", "turbos", "walls"] as const)
+    totals[key] = (totals[key] ?? 0) + stats[key];
+  // Les records par circuit : le meilleur tour, et la meilleure course en trois tours
+  if (stats.bestLap > 0) {
+    const key = `lap_${track}`;
+    totals[key] = totals[key] ? Math.min(totals[key], stats.bestLap) : stats.bestLap;
+  }
+  if (stats.time > 0 && laps === 3) {
+    const key = `race_${track}`;
+    totals[key] = totals[key] ? Math.min(totals[key], stats.time) : stats.time;
+  }
   return totals;
 }
 
@@ -414,6 +443,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as MecheStats;
       totals = mergeMecheTotals(prev?.totals ?? null, stats);
       earnedIds = earnedMecheAchievements({ won, played, lives: rec.settings.lives, stats });
+    } else if (rec.game === "bolides") {
+      const stats = p.stats as BolidesRecordStats;
+      totals = mergeBolidesTotals(prev?.totals ?? null, stats, rec.mode, rec.settings.laps);
+      earnedIds = earnedBolidesAchievements({ won, played, items: rec.settings.items, stats });
     } else {
       const stats = p.stats as NavalRecordStats;
       totals = mergeNavalTotals(prev?.totals ?? null, stats);
@@ -769,6 +802,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const bricks = statRows.results.find((r) => r.game === "bricks");
   const capitale = statRows.results.find((r) => r.game === "capitale");
   const meche = statRows.results.find((r) => r.game === "meche");
+  const bolides = statRows.results.find((r) => r.game === "bolides");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -784,6 +818,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     bricks: { ...statsSummary(bricks), totals: totalsOf(bricks) },
     capitale: { ...statsSummary(capitale), totals: totalsOf(capitale) },
     meche: { ...statsSummary(meche), totals: totalsOf(meche) },
+    bolides: { ...statsSummary(bolides), totals: totalsOf(bolides) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

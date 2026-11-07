@@ -2,6 +2,8 @@
 // La place à chaque jeu rapporte des points, cumulés jusqu'au podium.
 
 import type { AvatarConfig } from "./avatar.ts";
+import type { BotLevel as BolidesBotLevel } from "./games/bolides/bot.ts";
+import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
@@ -10,12 +12,12 @@ import type { UnoSettings } from "./games/uno/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche"];
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides"];
 /**
- * Capitale dure 20 minutes dans une tournée, et Mèche se découvre encore :
- * l'hôte les coche s'il veut, elles ne le sont pas d'office
+ * Capitale dure 20 minutes dans une tournée, Mèche et Bolides se découvrent encore :
+ * l'hôte les coche s'il veut, ils ne le sont pas d'office
  */
-const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche");
+const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche" && g !== "bolides");
 
 /** Nombre de joueurs qu'accueille chaque jeu */
 export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
@@ -24,6 +26,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   bricks: { min: 2, max: 6 },
   capitale: { min: 2, max: 6 },
   meche: { min: 2, max: 8 },
+  bolides: { min: 2, max: 8 },
 };
 
 export const TOUR_MIN_PLAYERS = 2;
@@ -47,11 +50,18 @@ export type TourBotLevel = "easy" | "normal" | "hard";
 
 export const TOUR_BOT_LEVELS: Record<
   TourBotLevel,
-  { label: string; naval: NavalBotLevel; bricks: BricksBotLevel; capitale: CapitaleBotLevel; meche: MecheBotLevel }
+  {
+    label: string;
+    naval: NavalBotLevel;
+    bricks: BricksBotLevel;
+    capitale: CapitaleBotLevel;
+    meche: MecheBotLevel;
+    bolides: BolidesBotLevel;
+  }
 > = {
-  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile" },
-  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen" },
-  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort" },
+  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile", bolides: "facile" },
+  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen", bolides: "moyen" },
+  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort", bolides: "fort" },
 };
 
 /** Comment se choisissent les règles de chaque jeu */
@@ -336,12 +346,20 @@ const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
   },
 ];
 
+const BOLIDES_VARIANTS: VariantOf<BolidesSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "Trois tours, et des caisses d'objets sur la route.", settings: {} },
+  { id: "pure", name: "Course pure", blurb: "Pas de caisses d'objets : rien que le pilotage.", settings: { items: false } },
+  { id: "vitesse", name: "Grande vitesse", blurb: "Les karts vont bien plus vite.", settings: { speed: "bolide" } },
+  { id: "sprint", name: "Sprint", blurb: "Deux tours seulement : pas le droit à l'erreur.", settings: { laps: 2 } },
+];
+
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
   bricks: BRICKS_VARIANTS,
   capitale: CAPITALE_VARIANTS,
   meche: MECHE_VARIANTS,
+  bolides: BOLIDES_VARIANTS,
 };
 
 /** Les variantes d'un jeu, sans leurs réglages */
@@ -369,6 +387,7 @@ export function variantSettings(game: "naval", id: string | null | undefined): P
 export function variantSettings(game: "bricks", id: string | null | undefined): Partial<BricksSettings>;
 export function variantSettings(game: "capitale", id: string | null | undefined): Partial<CapitaleSettings>;
 export function variantSettings(game: "meche", id: string | null | undefined): Partial<MecheSettings>;
+export function variantSettings(game: "bolides", id: string | null | undefined): Partial<BolidesSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);
   if (!base || !extra) return {};
