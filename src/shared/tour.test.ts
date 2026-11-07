@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SETTINGS as MECHE_DEFAULTS } from "./games/meche/engine.ts";
 import { random } from "./rng.ts";
 import { DEFAULT_SETTINGS as BRICKS_DEFAULTS } from "./games/bricks/engine.ts";
 import { DEFAULT_SETTINGS as CAPITALE_DEFAULTS } from "./games/capitale/engine.ts";
@@ -167,7 +168,13 @@ describe("titres", () => {
 describe("règles des jeux", () => {
   const rng = { rng: 7 };
   const rand = () => random(rng);
-  const defaults = { uno: UNO_DEFAULTS, naval: NAVAL_DEFAULTS, bricks: BRICKS_DEFAULTS, capitale: CAPITALE_DEFAULTS };
+  const defaults = {
+    uno: UNO_DEFAULTS,
+    naval: NAVAL_DEFAULTS,
+    bricks: BRICKS_DEFAULTS,
+    capitale: CAPITALE_DEFAULTS,
+    meche: MECHE_DEFAULTS,
+  };
 
   it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {
     for (const game of TOUR_GAMES) {

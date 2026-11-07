@@ -5,13 +5,17 @@ import type { AvatarConfig } from "./avatar.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
+import type { BotLevel as MecheBotLevel, MecheSettings } from "./games/meche/engine.ts";
 import type { UnoSettings } from "./games/uno/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale"];
-/** Capitale dure 20 minutes dans une tournée : l'hôte la coche s'il veut, elle ne l'est pas d'office */
-const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale");
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche"];
+/**
+ * Capitale dure 20 minutes dans une tournée, et Mèche se découvre encore :
+ * l'hôte les coche s'il veut, elles ne le sont pas d'office
+ */
+const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche");
 
 /** Nombre de joueurs qu'accueille chaque jeu */
 export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
@@ -19,6 +23,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   naval: { min: 2, max: 6 },
   bricks: { min: 2, max: 6 },
   capitale: { min: 2, max: 6 },
+  meche: { min: 2, max: 8 },
 };
 
 export const TOUR_MIN_PLAYERS = 2;
@@ -42,11 +47,11 @@ export type TourBotLevel = "easy" | "normal" | "hard";
 
 export const TOUR_BOT_LEVELS: Record<
   TourBotLevel,
-  { label: string; naval: NavalBotLevel; bricks: BricksBotLevel; capitale: CapitaleBotLevel }
+  { label: string; naval: NavalBotLevel; bricks: BricksBotLevel; capitale: CapitaleBotLevel; meche: MecheBotLevel }
 > = {
-  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile" },
-  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen" },
-  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort" },
+  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile" },
+  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen" },
+  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort" },
 };
 
 /** Comment se choisissent les règles de chaque jeu */
@@ -302,11 +307,29 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
   },
 ];
 
+const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
+  {
+    id: "classique",
+    name: "Classique",
+    blurb: "Trois allumettes, des lettres tirées au sort, et un grand mot rapporte une passe.",
+    settings: {},
+  },
+  {
+    id: "marabout",
+    name: "Marabout",
+    blurb: "Les lettres à placer sont les deux dernières du mot d'avant : choisis bien comment tu finis.",
+    settings: { source: "marabout" },
+  },
+  { id: "courte", name: "Courte mèche", blurb: "La mèche brûle bien plus vite.", settings: { pace: "nerveux" } },
+  { id: "corsee", name: "Lettres corsées", blurb: "Des lettres difficiles dès la première mèche.", settings: { difficulty: "corse" } },
+];
+
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
   bricks: BRICKS_VARIANTS,
   capitale: CAPITALE_VARIANTS,
+  meche: MECHE_VARIANTS,
 };
 
 /** Les variantes d'un jeu, sans leurs réglages */
@@ -333,6 +356,7 @@ export function variantSettings(game: "uno", id: string | null | undefined): Par
 export function variantSettings(game: "naval", id: string | null | undefined): Partial<NavalSettings>;
 export function variantSettings(game: "bricks", id: string | null | undefined): Partial<BricksSettings>;
 export function variantSettings(game: "capitale", id: string | null | undefined): Partial<CapitaleSettings>;
+export function variantSettings(game: "meche", id: string | null | undefined): Partial<MecheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);
   if (!base || !extra) return {};
@@ -464,6 +488,22 @@ const TITLE_RULES: TitleRule[] = [
     score: (c) => {
       const n = sum(c, "capitale", "houses");
       return n >= 6 ? { value: n, stat: `${n}`, unit: "étages bâtis en ville" } : null;
+    },
+  },
+  {
+    id: "wordsmith",
+    label: "Le dico vivant",
+    score: (c) => {
+      const n = sum(c, "meche", "words");
+      return n >= 12 ? { value: n, stat: `${n}`, unit: "mots trouvés sous la mèche" } : null;
+    },
+  },
+  {
+    id: "singed",
+    label: "Le roussi",
+    score: (c) => {
+      const n = sum(c, "meche", "booms");
+      return n >= 3 ? { value: n, stat: `${n}×`, unit: "la mèche lui a sauté au nez" } : null;
     },
   },
   {

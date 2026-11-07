@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
@@ -14,6 +15,7 @@
       { "name": "NAVAL", "class_name": "NavalRoom" },
       { "name": "BRICKS", "class_name": "BricksRoom" },
       { "name": "CAPITALE", "class_name": "CapitaleRoom" },
+      { "name": "MECHE", "class_name": "MecheRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" }
     ]
@@ -23,7 +25,8 @@
     { "tag": "v2", "new_sqlite_classes": ["NavalRoom"] },
     { "tag": "v3", "new_sqlite_classes": ["BricksRoom"] },
     { "tag": "v4", "new_sqlite_classes": ["TourRoom"] },
-    { "tag": "v5", "new_sqlite_classes": ["CapitaleRoom"] }
+    { "tag": "v5", "new_sqlite_classes": ["CapitaleRoom"] },
+    { "tag": "v6", "new_sqlite_classes": ["MecheRoom"] }
   ],
   "d1_databases": [
     {

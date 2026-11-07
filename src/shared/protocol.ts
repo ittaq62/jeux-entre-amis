@@ -5,21 +5,29 @@ import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/ca
 import type { TokenId } from "./games/capitale/tokens.ts";
 import type { SkinId } from "./games/naval/skins.ts";
 import type { CapitaleView } from "./games/capitale/view.ts";
+import type { MecheEvent, MecheSettings, Refusal } from "./games/meche/engine.ts";
+import type { MecheView } from "./games/meche/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
 import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno" | "naval" | "bricks" | "capitale";
+export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
 
-export const GAME_NAMES: Record<GameId, string> = { uno: "UNO", naval: "Bataille navale", bricks: "Briques", capitale: "Capitale" };
+export const GAME_NAMES: Record<GameId, string> = {
+  uno: "UNO",
+  naval: "Bataille navale",
+  bricks: "Briques",
+  capitale: "Capitale",
+  meche: "Mèche",
+};
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
 /** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks", "tour", "capitale"] as const satisfies readonly TableGame[];
+export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche"] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -432,6 +440,63 @@ export type CapitaleClientMessage =
 
 export type CapitaleServerMessage =
   | { t: "room"; room: CapitaleRoomView; events: CapitaleEvent[] }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
+
+export interface MecheRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  meche: MecheSettings;
+}
+
+export const MECHE_MAX_PLAYERS = 8;
+
+export interface MecheRoomView {
+  code: string;
+  game: "meche";
+  status: RoomStatus;
+  settings: MecheRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  meche: MecheView | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+  /** Table d'une tournée : le code de la tournée */
+  tour?: string | null;
+}
+
+export type MecheClientMessage =
+  | { t: "settings"; settings: Partial<MecheSettings>; visibility?: Visibility; maxPlayers?: number }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  /** Ce que tape celui qui tient la mèche, au fil des lettres */
+  | { t: "typing"; text: string; turn: number }
+  | { t: "word"; word: string; turn: number }
+  /** Se débarrasser de la mèche avec une passe */
+  | { t: "pass"; turn: number }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type MecheServerMessage =
+  | { t: "room"; room: MecheRoomView; events: MecheEvent[] }
+  /** Les lettres tapées par celui qui tient la mèche, jamais enregistrées */
+  | { t: "typing"; id: string; text: string; turn: number }
+  /** Un mot refusé : la table le voit passer */
+  | { t: "refused"; id: string; word: string; reason: Refusal; turn: number }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
   | { t: "emote"; seatId: string | null; userId: string; emote: string }
   | { t: "achievements"; unlocks: AchievementUnlock[] }

@@ -1,6 +1,7 @@
 import type { BricksMode } from "./games/bricks/engine.ts";
 import type { BricksStats } from "./games/bricks/view.ts";
 import type { CapitaleStats } from "./games/capitale/engine.ts";
+import type { MecheStats } from "./games/meche/engine.ts";
 import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
 import type { TableGame } from "./protocol.ts";
@@ -202,6 +203,58 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "capitale-ruin", game: "capitale", chip: "0", tone: "black", title: "Sur la paille", description: "Faire faillite." },
 
   // Tournée
+  // Mèche
+  { id: "meche-first-win", game: "meche", chip: "1re", tone: "red", title: "Artificier", description: "Gagner une partie de Mèche." },
+  { id: "meche-regular", game: "meche", chip: "25", tone: "blue", title: "Sent la poudre", description: "Jouer 25 parties de Mèche." },
+  {
+    id: "meche-flawless",
+    game: "meche",
+    chip: "3",
+    tone: "green",
+    title: "Sans une brûlure",
+    description: "Gagner sans perdre une allumette, en partant d'au moins trois.",
+  },
+  {
+    id: "meche-close",
+    game: "meche",
+    chip: "1",
+    tone: "black",
+    title: "Dernière allumette",
+    description: "Gagner avec une seule allumette, en partant d'au moins trois.",
+  },
+  {
+    id: "meche-long",
+    game: "meche",
+    chip: "15",
+    tone: "ivory",
+    title: "Grand format",
+    description: "Placer un mot de 15 lettres ou plus.",
+  },
+  {
+    id: "meche-words",
+    game: "meche",
+    chip: "30",
+    tone: "blue",
+    title: "Dictionnaire ambulant",
+    description: "Trouver 30 mots en une partie.",
+  },
+  {
+    id: "meche-quick",
+    game: "meche",
+    chip: "1s",
+    tone: "green",
+    title: "Du tac au tac",
+    description: "Placer un mot en moins d'une seconde.",
+  },
+  {
+    id: "meche-dud",
+    game: "meche",
+    chip: "0",
+    tone: "black",
+    title: "Pétard mouillé",
+    description: "Finir une partie sans avoir placé un seul mot.",
+  },
+
   { id: "tour-first", game: "tour", chip: "1re", tone: "ivory", title: "Premier acte", description: "Terminer une tournée." },
   { id: "tour-win", game: "tour", chip: "1er", tone: "red", title: "Tête d'affiche", description: "Gagner une tournée." },
   {
@@ -246,6 +299,29 @@ export interface CapitaleOutcome {
   played: number;
   bankrupt: boolean;
   stats: CapitaleStats;
+}
+
+export interface MecheOutcome {
+  won: boolean;
+  played: number;
+  /** Allumettes au départ de la partie */
+  lives: number;
+  stats: MecheStats;
+}
+
+export function earnedMecheAchievements(o: MecheOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  const s = o.stats;
+  add("meche-first-win", o.won);
+  add("meche-regular", o.played >= 25);
+  add("meche-flawless", o.won && o.lives >= 3 && s.booms === 0);
+  add("meche-close", o.won && o.lives >= 3 && s.livesLeft === 1);
+  add("meche-long", s.longest >= 15);
+  add("meche-words", s.words >= 30);
+  add("meche-quick", s.fastest > 0 && s.fastest < 1000);
+  add("meche-dud", s.words === 0);
+  return out;
 }
 
 export function earnedCapitaleAchievements(o: CapitaleOutcome): string[] {
