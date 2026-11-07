@@ -10,28 +10,20 @@ interface Props {
   onHot?: (hot: boolean) => void;
 }
 
-const RADIUS = 28;
-const MARGIN = 9;
+/** La corde court sur le rebord de la table */
+const MARGIN = 7;
 /** La place laissée en haut pour le pétard, où la corde finit */
 const GAP = 34;
 
-/** La corde fait le tour de la caisse dans le sens des aiguilles d'une montre, du pétard jusqu'au pétard */
+/** La corde fait le tour de la table ronde dans le sens des aiguilles d'une montre, du pétard jusqu'au pétard */
 function ropePath(w: number, h: number): string {
-  const m = MARGIN;
-  const r = RADIUS;
+  const r = Math.min(w, h) / 2 - MARGIN;
   const cx = w / 2;
-  return [
-    `M${cx + GAP} ${m}`,
-    `H${w - m - r}`,
-    `A${r} ${r} 0 0 1 ${w - m} ${m + r}`,
-    `V${h - m - r}`,
-    `A${r} ${r} 0 0 1 ${w - m - r} ${h - m}`,
-    `H${m + r}`,
-    `A${r} ${r} 0 0 1 ${m} ${h - m - r}`,
-    `V${m + r}`,
-    `A${r} ${r} 0 0 1 ${m + r} ${m}`,
-    `H${cx - GAP}`,
-  ].join(" ");
+  const cy = h / 2;
+  const phi = Math.min(0.5, GAP / r);
+  const x = r * Math.sin(phi);
+  const y = cy - r * Math.cos(phi);
+  return `M${cx + x} ${y} A${r} ${r} 0 1 1 ${cx - x} ${y}`;
 }
 
 /**

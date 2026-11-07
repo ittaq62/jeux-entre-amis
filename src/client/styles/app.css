@@ -868,8 +868,7 @@
 }
 
 .meche-preview {
-  width: min(340px, 92%);
-  rotate: -2deg;
+  width: min(400px, 96%);
   filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
 }
 
@@ -1165,6 +1164,11 @@
     scale: 0.8;
   }
 
+  /* La table ronde tient dans la hauteur du cadre (230 px) */
+  .meche-preview {
+    width: 290px;
+  }
+
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1196,6 +1200,10 @@
 
   .capitale-preview {
     scale: 0.7;
+  }
+
+  .meche-preview {
+    width: 250px;
   }
 
   .bricks-preview {

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { LONG_WORD, REFUSALS } from "../../shared/games/meche/engine.ts";
 import type { MechePlayerView } from "../../shared/games/meche/view.ts";
-import { normalizeWord } from "../../shared/games/meche/words.ts";
+import { cleanShown, normalizeWord, promptRange } from "../../shared/games/meche/words.ts";
 import type { MecheClientMessage, MecheRoomView, SeatView } from "../../shared/protocol.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
@@ -55,13 +55,74 @@ function useVisibleArea() {
   return area;
 }
 
-/** La place de chaque joueur autour de la caisse : soi en bas, puis les autres dans le sens de la mèche */
-function seatPlace(index: number, count: number): CSSProperties {
-  const angle = Math.PI / 2 + (index / count) * Math.PI * 2;
-  return { left: `${50 + 42 * Math.cos(angle)}%`, top: `${50 + 40.5 * Math.sin(angle)}%` };
+/** La taille de la scène, mesurée : tout le cercle se calcule dessus */
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
 }
 
-let trailSeq = 0;
+interface SeatSpot {
+  x: number;
+  y: number;
+  /** L'angle depuis le centre de la table, en degrés, dans le sens des aiguilles d'une montre (90 : en bas) */
+  angle: number;
+  /** Dans la moitié haute : son nom passe au-dessus de l'avatar, pour ne pas mordre sur la table */
+  up: boolean;
+}
+
+interface Layout {
+  cx: number;
+  cy: number;
+  tableR: number;
+  avatar: number;
+  seats: SeatSpot[];
+  /** Le bas du cercle des joueurs : la place en dessous sert aux derniers mots, sur téléphone */
+  bottom: number;
+}
+
+/** Les joueurs en rond autour d'une table ronde, soi en bas puis les autres dans le sens où passe la mèche */
+function tableLayout(w: number, h: number, count: number, phone: boolean, short: boolean): Layout {
+  // Un écran d'ordinateur peu haut (portable) : des joueurs un peu plus petits, pour laisser de la place à la table
+  const low = !phone && h < 640;
+  const avatar = short ? 32 : phone ? 42 : low ? 52 : 64;
+  // La place du nom et des allumettes, au-dessus ou au-dessous de l'avatar
+  const info = short ? 14 : phone ? 32 : low ? 44 : 50;
+  const halfWidth = phone ? 34 : 64;
+  const R = Math.max(70, Math.min(w / 2 - halfWidth - 4, h / 2 - avatar / 2 - info - 6, 420));
+  const tableR = R - avatar / 2 - (phone ? 10 : 20);
+  const cx = w / 2;
+  // Sur un grand téléphone, le cercle et les derniers mots en dessous sont centrés ensemble dans la hauteur
+  const ring = R + avatar / 2 + info;
+  const cy = phone && !short ? Math.max(ring + 8, Math.min(h / 2, (h - 2 * ring - 70) / 2 + ring)) : h / 2;
+  const seats = Array.from({ length: count }, (_, i) => {
+    const angle = 90 + (i * 360) / count;
+    const rad = (angle * Math.PI) / 180;
+    return { x: cx + R * Math.cos(rad), y: cy + R * Math.sin(rad), angle, up: Math.sin(rad) < -0.35 };
+  });
+  return { cx, cy, tableR, avatar, seats, bottom: cy + R + avatar / 2 + info };
+}
+
+/** L'aiguille tourne toujours dans le sens de la mèche, jamais à rebours, même pour sauter des éliminés */
+function useClockwise(target: number | null): number {
+  const angle = useRef<number | null>(null);
+  if (target !== null) {
+    if (angle.current === null) angle.current = target;
+    else angle.current += (((target - angle.current) % 360) + 360) % 360;
+  }
+  return angle.current ?? 90;
+}
+
+let fxSeq = 0;
 
 interface Trail {
   id: number;
@@ -71,7 +132,7 @@ interface Trail {
 
 interface SeatWord {
   key: number;
-  word: string;
+  shown: string;
   long: boolean;
 }
 
@@ -92,10 +153,11 @@ export function MecheTable({
   const g = room.meche!;
   const { w, h, top } = useVisibleArea();
   const phone = w < 760;
-  const short = h < 480;
+  const short = phone && h < 520;
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const reduced = usePrefs((s) => s.reducedEffects);
+  const [stageRef, stage] = useSize<HTMLElement>();
   const [menuOpen, setMenuOpen] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
@@ -120,6 +182,13 @@ export function MecheTable({
   // Soi en bas de la table, puis les autres dans l'ordre où la mèche passe
   const myIndex = g.players.findIndex((p) => p.id === meId);
   const order = myIndex > 0 ? [...g.players.slice(myIndex), ...g.players.slice(0, myIndex)] : g.players;
+  const layout = tableLayout(stage.w, stage.h, order.length, phone, short);
+  // L'aiguille montre qui tient la mèche ; à la fin, le gagnant
+  const pointed = g.phase === "over" ? (g.ranking?.[0] ?? g.holder) : g.holder;
+  const pointedIndex = order.findIndex((p) => p.id === pointed);
+  const needle = useClockwise(pointedIndex >= 0 ? layout.seats[pointedIndex]!.angle : null);
+  const medal = Math.round(layout.tableR * (phone ? 1.28 : 1.24));
+  const mySpot = myIndex >= 0 ? layout.seats[0] : undefined;
 
   useEffect(() => preloadSounds(MECHE_SOUNDS), []);
   useEffect(() => () => stopLoop(), []);
@@ -159,7 +228,7 @@ export function MecheTable({
       } else if (e.type === "word") {
         play("mecheWord", { rate: e.long ? 0.86 : 1 });
         if (e.earned) play("tourTrophyMine", { delay: 90, volume: e.id === meId ? 1 : 0.5 });
-        showWord(e.id, e.word, e.long);
+        showWord(e.id, e.shown ?? e.word, e.long);
         flyTo(e.id, e.next);
         if (e.next === meId) myTurn();
       } else if (e.type === "pass") {
@@ -180,18 +249,18 @@ export function MecheTable({
     vibrate([25, 40, 25]);
   }
 
-  function showWord(id: string, word: string, long: boolean) {
-    const key = ++trailSeq;
-    setWords((prev) => ({ ...prev, [id]: { key, word, long } }));
+  function showWord(id: string, shown: string, long: boolean) {
+    const key = ++fxSeq;
+    setWords((prev) => ({ ...prev, [id]: { key, shown, long } }));
     setTimeout(() => setWords((prev) => (prev[id]?.key === key ? { ...prev, [id]: undefined } : prev)), 2600);
   }
 
   function flyTo(from: string, to: string) {
     if (usePrefs.getState().reducedEffects) return;
-    const a = document.querySelector(`[data-seat="${from}"]`)?.getBoundingClientRect();
-    const b = document.querySelector(`[data-seat="${to}"]`)?.getBoundingClientRect();
+    const a = document.querySelector(`[data-seat="${from}"] .meche-seat-avatar`)?.getBoundingClientRect();
+    const b = document.querySelector(`[data-seat="${to}"] .meche-seat-avatar`)?.getBoundingClientRect();
     if (!a || !b) return;
-    const id = ++trailSeq;
+    const id = ++fxSeq;
     setTrails((prev) => [...prev.slice(-4), { id, from: a, to: b }]);
     setTimeout(() => setTrails((prev) => prev.filter((t) => t.id !== id)), 420);
   }
@@ -201,11 +270,11 @@ export function MecheTable({
     play("mecheBoom");
     if (out) play("capBankrupt", { delay: 500 });
     if (id === meId) vibrate([120, 50, 200]);
-    const key = ++trailSeq;
+    const key = ++fxSeq;
     setBoom({ key, id, out });
     setTimeout(() => setBoom((b) => (b?.key === key ? null : b)), 1500);
     if (usePrefs.getState().reducedEffects) return;
-    const at = document.querySelector(`[data-seat="${id}"]`)?.getBoundingClientRect();
+    const at = document.querySelector(`[data-seat="${id}"] .meche-seat-avatar`)?.getBoundingClientRect();
     if (at) {
       void confetti({
         particleCount: 46,
@@ -274,7 +343,7 @@ export function MecheTable({
     const flush = () => {
       typed.at = Date.now();
       typed.timer = 0;
-      send({ t: "typing", text: normalizeWord(value), turn: g.turn });
+      send({ t: "typing", text: cleanShown(value), turn: g.turn });
     };
     const wait = 45 - (Date.now() - typed.at);
     if (wait <= 0) flush();
@@ -293,6 +362,7 @@ export function MecheTable({
   }
 
   const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h } as CSSProperties) : undefined;
+  const firstFuses = g.fuse <= 3;
 
   return (
     <div
@@ -362,91 +432,186 @@ export function MecheTable({
         </AnimatePresence>
       </header>
 
-      <main className={`meche-stage ${boom && !reduced ? "is-shaking" : ""}`}>
-        <div className="meche-seats">
-          {order.map((p, i) => {
-            const s = seat(p.id);
-            if (!s) return null;
-            return (
-              <MecheSeat
-                key={p.id}
-                seat={s}
-                player={p}
-                total={g.settings.lives}
-                holder={g.holder === p.id && g.phase !== "over"}
-                hot={hot && g.holder === p.id}
-                isMe={p.id === meId}
-                word={words[p.id]}
-                emotes={emotes.filter((e) => e.seatId === p.id || e.userId === s.userId)}
-                serverOffset={serverOffset}
-                style={phone ? undefined : seatPlace(i, order.length)}
-                blown={boom?.id === p.id}
-              />
-            );
-          })}
-        </div>
-
-        <section className={`meche-crate ${mine ? "is-mine" : ""} ${hot ? "is-hot" : ""}`} aria-label="La mèche">
-          <FuseRope litAt={g.litAt} safeUntil={g.safeUntil} maxUntil={g.maxUntil} lit={lit} serverOffset={serverOffset} onHot={setHot} />
-          <div className="meche-crate-inner">
-            {lit ? (
-              <>
-                <p className={`meche-who ${mine ? "is-mine" : ""}`}>{mine ? "À toi !" : `À ${holderName}`}</p>
-                <div className="meche-letters" aria-label={`Lettres à placer : ${g.letters}`}>
-                  {g.letters.toUpperCase()}
-                </div>
-                <LiveWord mine={mine} myText={text} letters={g.letters} holder={g.holder} turn={g.turn} rejected={rejected} />
-              </>
-            ) : g.phase === "break" ? (
-              <BreakNote fuse={g.fuse} name={holderName} mine={g.holder === meId} seated={me !== undefined} />
-            ) : (
-              <p className="meche-who">C'est fini !</p>
-            )}
-          </div>
-          {canType && (
-            <form className="meche-form" onSubmit={submit}>
-              <input
-                ref={input}
-                className="meche-input"
-                value={mine ? text : ""}
-                onChange={(e) => onInput(e.target.value)}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && mine && me && me.passes > 0) {
-                    e.preventDefault();
-                    passNow();
-                  }
-                }}
-                type="text"
-                name="mot"
-                aria-label="Ton mot"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                enterKeyHint="send"
-                data-form-type="other"
-                data-lpignore="true"
-              />
-            </form>
-          )}
-          {mine && me && me.passes > 0 && (
-            <motion.button
-              className="btn meche-pass"
-              type="button"
-              onClick={passNow}
-              initial={{ y: 8, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
+      <main ref={stageRef} className={`meche-stage ${boom && !reduced ? "is-shaking" : ""}`}>
+        {stage.w > 0 && (
+          <>
+            <section
+              className={`meche-table ${mine ? "is-mine" : ""} ${hot ? "is-hot" : ""}`}
+              aria-label="La table"
+              style={{
+                left: layout.cx - layout.tableR,
+                top: layout.cy - layout.tableR,
+                width: layout.tableR * 2,
+                height: layout.tableR * 2,
+              }}
             >
-              Passer{phone ? "" : " (Tab)"} <span className="meche-pass-count num">{me.passes}</span>
-            </motion.button>
-          )}
-          {phone && canType && !focused && <p className="meche-tap">Touche ici pour écrire</p>}
-          {g.settings.passes && mine && me && me.passes === 0 && !phone && g.fuse <= 2 && (
-            <p className="meche-tip">{LONG_WORD} lettres ou plus : tu gagnes une passe</p>
-          )}
-        </section>
+              <FuseRope
+                litAt={g.litAt}
+                safeUntil={g.safeUntil}
+                maxUntil={g.maxUntil}
+                lit={lit}
+                serverOffset={serverOffset}
+                onHot={setHot}
+              />
+              <div className="meche-needle" style={{ width: layout.tableR - 16, rotate: `${needle}deg` }} aria-hidden="true">
+                <svg viewBox="0 0 100 24" preserveAspectRatio="none">
+                  <path d="M0 8.5 L74 9.5 L74 2 L100 12 L74 22 L74 14.5 L0 15.5 Z" className="needle-body" />
+                  <path d="M2 10.5 L74 11 L74 5 L94 12" className="needle-shine" />
+                </svg>
+              </div>
+              <div className={`meche-medal ${mine ? "is-mine" : ""}`} style={{ "--m": `${medal}px` } as CSSProperties}>
+                {lit ? (
+                  <>
+                    <p className={`meche-who ${mine ? "is-mine" : ""}`}>{mine ? "À toi !" : `À ${holderName}`}</p>
+                    <div className="meche-letters" aria-label={`Lettres à placer : ${g.letters}`}>
+                      {g.letters.toUpperCase()}
+                    </div>
+                    <LiveWord
+                      mine={mine}
+                      myText={text}
+                      letters={g.letters}
+                      holder={g.holder}
+                      turn={g.turn}
+                      rejected={rejected}
+                      medal={medal}
+                      hint={
+                        phone && canType && !focused
+                          ? "Touche ici pour écrire"
+                          : firstFuses
+                            ? g.settings.passes && medal >= 300
+                              ? `Accents libres · ${LONG_WORD} lettres = une passe`
+                              : "Accents libres"
+                            : null
+                      }
+                    />
+                  </>
+                ) : g.phase === "break" ? (
+                  <BreakNote fuse={g.fuse} name={holderName} mine={g.holder === meId} seated={me !== undefined} phone={phone} />
+                ) : (
+                  <p className="meche-who">C'est fini !</p>
+                )}
+              </div>
+              {canType && (
+                <form className="meche-form" onSubmit={submit}>
+                  <input
+                    ref={input}
+                    className="meche-input"
+                    value={mine ? text : ""}
+                    onChange={(e) => onInput(e.target.value)}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && mine && me && me.passes > 0) {
+                        e.preventDefault();
+                        passNow();
+                      }
+                    }}
+                    type="text"
+                    name="mot"
+                    aria-label="Ton mot"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    enterKeyHint="send"
+                    data-form-type="other"
+                    data-lpignore="true"
+                  />
+                </form>
+              )}
+            </section>
+
+            {order.map((p, i) => {
+              const s = seat(p.id);
+              const spot = layout.seats[i];
+              if (!s || !spot) return null;
+              return (
+                <MecheSeat
+                  key={p.id}
+                  seat={s}
+                  player={p}
+                  total={g.settings.lives}
+                  holder={g.holder === p.id && g.phase !== "over"}
+                  hot={hot && g.holder === p.id}
+                  isMe={p.id === meId}
+                  word={words[p.id]}
+                  emotes={emotes.filter((e) => e.seatId === p.id || e.userId === s.userId)}
+                  serverOffset={serverOffset}
+                  spot={spot}
+                  avatar={layout.avatar}
+                  blown={boom?.id === p.id}
+                />
+              );
+            })}
+
+            <AnimatePresence>
+              {mine && me && me.passes > 0 && mySpot && (
+                <motion.button
+                  className="btn meche-pass"
+                  type="button"
+                  onClick={passNow}
+                  style={{ left: mySpot.x + layout.avatar / 2 + (phone ? 40 : 66), top: mySpot.y }}
+                  initial={{ x: -8, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  Passer{phone ? "" : " (Tab)"} <span className="meche-pass-count num">{me.passes}</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            {phone && !short && g.log.length > 0 && stage.h - layout.bottom > 56 && (
+              <ol className="meche-recent" style={{ top: layout.bottom + 14 }} aria-label="Les derniers mots">
+                {[...g.log]
+                  .reverse()
+                  .slice(0, 4)
+                  .map((l) => (
+                    <li key={l.word}>
+                      <strong>{(l.shown ?? l.word).toUpperCase()}</strong>
+                      <span>{seat(l.by)?.name}</span>
+                    </li>
+                  ))}
+              </ol>
+            )}
+
+            <AnimatePresence>
+              {boom && (
+                <motion.div
+                  key={boom.key}
+                  className="meche-burst"
+                  aria-live="polite"
+                  style={{ left: layout.cx, top: layout.cy, width: Math.min(layout.tableR * 1.9, 430) }}
+                  initial={{ scale: 0.3, rotate: -14 }}
+                  animate={{ scale: 1, rotate: -4 }}
+                  exit={{ opacity: 0, scale: 1.1 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 16 }}
+                >
+                  <svg viewBox="0 0 200 200" aria-hidden="true">
+                    <path
+                      d="M100 4l15 41 34-29-8 44 44-11-29 35 40 15-41 12 28 34-44-8 8 44-34-29-15 42-13-42-36 29 9-44-44 8 29-34-41-12 40-15-29-35 44 11-8-44 34 29z"
+                      fill="#f4a13a"
+                      stroke="#2a1a0e"
+                      strokeWidth="5"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M100 32l10 29 24-20-6 31 31-8-20 25 28 10-29 9 20 24-31-6 6 31-24-20-10 29-9-29-25 20 6-31-31 6 20-24-29-9 28-10-20-25 31 8-6-31 25 20z"
+                      fill="#ffe08a"
+                    />
+                  </svg>
+                  <strong>BOUM !</strong>
+                  <span>
+                    {boom.id === meId
+                      ? boom.out
+                        ? "Plus d'allumette pour toi"
+                        : "Une allumette de moins"
+                      : `${seat(boom.id)?.name} ${boom.out ? "n'a plus d'allumette" : "perd une allumette"}`}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
 
         {!phone && g.log.length > 0 && (
           <aside className="meche-log" aria-label="Les mots déjà joués">
@@ -457,7 +622,7 @@ export function MecheTable({
                 .slice(0, 7)
                 .map((l) => (
                   <li key={l.word}>
-                    <span className="meche-log-word">{l.word.toUpperCase()}</span>
+                    <span className="meche-log-word">{(l.shown ?? l.word).toUpperCase()}</span>
                     <span className="meche-log-who">{seat(l.by)?.name}</span>
                   </li>
                 ))}
@@ -465,7 +630,7 @@ export function MecheTable({
           </aside>
         )}
 
-        {me && (
+        {me && !phone && (
           <div className="meche-react">
             <button className="round-btn" onClick={() => setEmoteOpen(!emoteOpen)} aria-label="Réagir">
               <Icon name="smile" size={20} />
@@ -494,48 +659,7 @@ export function MecheTable({
         ))}
       </div>
 
-      <AnimatePresence>
-        {boom && (
-          <motion.div
-            key={boom.key}
-            className="meche-boom"
-            aria-live="polite"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {!reduced && <span className="meche-flash" />}
-            <motion.div
-              className="meche-burst"
-              initial={{ scale: 0.3, rotate: -14 }}
-              animate={{ scale: 1, rotate: -4 }}
-              transition={{ type: "spring", stiffness: 520, damping: 16 }}
-            >
-              <svg viewBox="0 0 200 200" aria-hidden="true">
-                <path
-                  d="M100 4l15 41 34-29-8 44 44-11-29 35 40 15-41 12 28 34-44-8 8 44-34-29-15 42-13-42-36 29 9-44-44 8 29-34-41-12 40-15-29-35 44 11-8-44 34 29z"
-                  fill="#f4a13a"
-                  stroke="#2a1a0e"
-                  strokeWidth="5"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M100 32l10 29 24-20-6 31 31-8-20 25 28 10-29 9 20 24-31-6 6 31-24-20-10 29-9-29-25 20 6-31-31 6 20-24-29-9 28-10-20-25 31 8-6-31 25 20z"
-                  fill="#ffe08a"
-                />
-              </svg>
-              <strong>BOUM !</strong>
-              <span>
-                {boom.id === meId
-                  ? boom.out
-                    ? "Plus d'allumette pour toi"
-                    : "Une allumette de moins"
-                  : `${seat(boom.id)?.name} ${boom.out ? "n'a plus d'allumette" : "perd une allumette"}`}
-              </span>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {boom && !reduced && <span key={boom.key} className="meche-flash" aria-hidden="true" />}
 
       {g.ranking && !resultsHidden && (
         <MecheGameOver
@@ -555,7 +679,7 @@ export function MecheTable({
   );
 }
 
-/** Le mot en train de s'écrire, les lettres imposées en couleur dès qu'elles y sont */
+/** Le mot en train de s'écrire, tel qu'il est tapé (accents compris), les lettres imposées en couleur dès qu'elles y sont */
 function LiveWord({
   mine,
   myText,
@@ -563,6 +687,8 @@ function LiveWord({
   holder,
   turn,
   rejected,
+  medal,
+  hint,
 }: {
   mine: boolean;
   myText: string;
@@ -570,9 +696,11 @@ function LiveWord({
   holder: string;
   turn: number;
   rejected: RefusedWord | null;
+  medal: number;
+  hint: string | null;
 }) {
   const typing = useTyping();
-  const text = mine ? normalizeWord(myText) : typing.id === holder && typing.turn === turn ? typing.text : "";
+  const text = mine ? cleanShown(myText) : typing.id === holder && typing.turn === turn ? typing.text : "";
   const last = useRef(text);
 
   // Les autres entendent les touches, tout doucement
@@ -581,53 +709,63 @@ function LiveWord({
     last.current = text;
   }, [text, mine]);
 
+  // Les longs mots rapetissent pour tenir dans le médaillon
+  const fit = (chars: number) => ({ fontSize: Math.round(Math.min(medal * 0.13, (medal * 0.8) / Math.max(1, chars) / 0.52)) });
+
   if (rejected && text.length === 0) {
     return (
       <div className="meche-word is-refused" key={rejected.key}>
-        <span className="meche-word-text">{rejected.word.toUpperCase()}</span>
+        <span className="meche-word-text" style={fit(rejected.word.length)}>
+          {rejected.word.toUpperCase()}
+        </span>
         <span className="meche-word-why">{REFUSALS[rejected.reason]}</span>
       </div>
     );
   }
-  const at = text.indexOf(letters);
+  const range = promptRange(text, letters);
+  const shown = text.toUpperCase();
   return (
-    <div className={`meche-word ${at >= 0 ? "has-letters" : ""}`}>
-      <span className="meche-word-text">
-        {text.length === 0 ? (
-          mine ? (
-            <span className="meche-word-hint">Écris un mot avec ces lettres</span>
-          ) : (
-            <span className="meche-word-dots">
-              <i />
-              <i />
-              <i />
-            </span>
-          )
-        ) : at >= 0 ? (
-          <>
-            {text.slice(0, at).toUpperCase()}
-            <mark>{letters.toUpperCase()}</mark>
-            {text.slice(at + letters.length).toUpperCase()}
-          </>
+    <div className={`meche-word ${range ? "has-letters" : ""}`}>
+      {text.length === 0 ? (
+        mine ? (
+          <span className="meche-word-hint">
+            {medal < 240 ? "Un mot avec ces lettres" : "Écris un mot avec ces lettres"}
+            <span className="meche-caret" />
+          </span>
         ) : (
-          text.toUpperCase()
-        )}
-        {mine && <span className="meche-caret" />}
-      </span>
+          <span className="meche-word-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+        )
+      ) : (
+        <span className="meche-word-text" style={fit(text.length)}>
+          {range ? (
+            <>
+              {shown.slice(0, range[0])}
+              <mark>{shown.slice(range[0], range[1])}</mark>
+              {shown.slice(range[1])}
+            </>
+          ) : (
+            shown
+          )}
+          {mine && <span className="meche-caret" />}
+        </span>
+      )}
+      {hint && text.length === 0 && <span className="meche-word-tip">{hint}</span>}
     </div>
   );
 }
 
-/** Entre deux mèches : avant la première, la règle en deux lignes ; ensuite, qui s'y colle */
-function BreakNote({ fuse, name, mine, seated }: { fuse: number; name: string; mine: boolean; seated: boolean }) {
+/** Entre deux mèches : avant la première, la règle en une ou deux lignes ; ensuite, qui s'y colle */
+function BreakNote({ fuse, name, mine, seated, phone }: { fuse: number; name: string; mine: boolean; seated: boolean; phone: boolean }) {
   if (fuse === 0) {
     return (
       <div className="meche-intro">
         <p className="meche-who">Ça va s'allumer</p>
         <p className="meche-intro-rule">Écris un mot qui contient les lettres, puis Entrée : la mèche passe au suivant.</p>
-        <p className="meche-intro-rule is-soft">
-          Elle peut sauter dès que l'étincelle entre dans le rouge. Chez toi, c'est une allumette de moins.
-        </p>
+        {!phone && <p className="meche-intro-rule is-soft">Elle peut sauter dès que l'étincelle entre dans le rouge.</p>}
       </div>
     );
   }
@@ -668,7 +806,8 @@ function MecheSeat({
   word,
   emotes,
   serverOffset,
-  style,
+  spot,
+  avatar,
   blown,
 }: {
   seat: SeatView;
@@ -680,17 +819,18 @@ function MecheSeat({
   word: SeatWord | undefined;
   emotes: EmoteBubble[];
   serverOffset: number;
-  style: CSSProperties | undefined;
+  spot: SeatSpot;
+  avatar: number;
   blown: boolean;
 }) {
   return (
     <div
-      className={`meche-seat ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""}`}
-      style={style}
+      className={`meche-seat ${spot.up ? "is-up" : ""} ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""}`}
+      style={{ left: spot.x, top: spot.y, "--a": `${avatar}px` } as CSSProperties}
       data-seat={player.id}
     >
       <div className="meche-seat-avatar">
-        <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={64} title={seat.name} />
+        <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={avatar} title={seat.name} />
         {seat.kind === "bot" && (
           <span className="seat-tag" title="Bot">
             <Icon name="bot" size={12} />
@@ -707,50 +847,52 @@ function MecheSeat({
           </span>
         )}
         {player.place !== null && <span className="rank-badge num">{player.place}</span>}
+        <AnimatePresence>
+          {word && (
+            <motion.span
+              key={word.key}
+              className={`meche-seat-word ${word.long ? "is-long" : ""}`}
+              initial={{ y: spot.up ? -6 : 6, opacity: 0, scale: 0.8 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: "spring", stiffness: 520, damping: 26 }}
+            >
+              {word.shown.toUpperCase()}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {emotes.map((e) => (
+            <motion.div
+              key={e.id}
+              className={`emote-bubble ${e.emote.length <= 2 ? "is-emoji" : ""}`}
+              initial={{ y: 10, scale: 0.4, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: -16, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 22 }}
+            >
+              {e.emote}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
-      <div className="meche-seat-name">
-        <span>{isMe ? "Toi" : seat.name}</span>
-        {seat.admin && <AdminBadge />}
+      <div className="meche-seat-info">
+        <div className="meche-seat-name">
+          <span>{isMe ? "Toi" : seat.name}</span>
+          {seat.admin && <AdminBadge />}
+        </div>
+        <div className="meche-matches" aria-label={`${player.lives} allumette${player.lives > 1 ? "s" : ""} sur ${total}`}>
+          {Array.from({ length: total }, (_, i) => (
+            <Match key={i} burnt={i >= player.lives} />
+          ))}
+          {player.passes > 0 && (
+            <span className="meche-seat-passes num" title={`${player.passes} passe${player.passes > 1 ? "s" : ""}`}>
+              {player.passes}
+            </span>
+          )}
+        </div>
+        <AwayNote seat={seat} serverOffset={serverOffset} compact />
       </div>
-      <div className="meche-matches" aria-label={`${player.lives} allumette${player.lives > 1 ? "s" : ""} sur ${total}`}>
-        {Array.from({ length: total }, (_, i) => (
-          <Match key={i} burnt={i >= player.lives} />
-        ))}
-        {player.passes > 0 && (
-          <span className="meche-seat-passes num" title={`${player.passes} passe${player.passes > 1 ? "s" : ""}`}>
-            {player.passes}
-          </span>
-        )}
-      </div>
-      <AwayNote seat={seat} serverOffset={serverOffset} compact />
-      <AnimatePresence>
-        {word && (
-          <motion.span
-            key={word.key}
-            className={`meche-seat-word ${word.long ? "is-long" : ""}`}
-            initial={{ y: 8, opacity: 0, scale: 0.8 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ type: "spring", stiffness: 520, damping: 26 }}
-          >
-            {word.word.toUpperCase()}
-          </motion.span>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {emotes.map((e) => (
-          <motion.div
-            key={e.id}
-            className={`emote-bubble ${e.emote.length <= 2 ? "is-emoji" : ""}`}
-            initial={{ y: 10, scale: 0.4, opacity: 0 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={{ y: -16, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 500, damping: 22 }}
-          >
-            {e.emote}
-          </motion.div>
-        ))}
-      </AnimatePresence>
     </div>
   );
 }
