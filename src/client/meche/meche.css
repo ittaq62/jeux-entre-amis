@@ -531,6 +531,14 @@
   transform-origin: center;
 }
 
+/* L'éclat quand une autre mèche s'allume (tour suivant, joueur suivant) */
+.spark-flash {
+  fill: rgba(255, 214, 140, 0.85);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .spark-flame {
   fill: var(--spark);
 }
@@ -826,31 +834,55 @@
 
 /* Chacun sa mèche : la sienne, en petit, sous ses allumettes */
 .meche-ownfuse {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.meche-ownfuse-bar {
   position: relative;
   display: block;
-  width: 64px;
-  height: 6px;
-  border-radius: 3px;
+  width: 58px;
+  height: 7px;
+  border-radius: 4px;
   background: rgba(0, 0, 0, 0.55);
   box-shadow: inset 0 0 0 1px rgba(255, 220, 170, 0.18);
   overflow: hidden;
 }
 
-.meche-ownfuse > span {
+.meche-ownfuse-bar > span {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: repeating-linear-gradient(90deg, var(--rope) 0 4px, var(--rope-dark) 4px 6px);
 }
 
-.meche-ownfuse > span.is-low {
+.meche-ownfuse-bar > span.is-low {
   background: repeating-linear-gradient(90deg, #e5442c 0 4px, #8f2219 4px 6px);
 }
 
-.meche-ownfuse.is-burning {
+.meche-ownfuse.is-burning .meche-ownfuse-bar {
   box-shadow:
     inset 0 0 0 1px rgba(255, 220, 170, 0.18),
     0 0 10px rgba(255, 170, 70, 0.6);
+}
+
+.meche-ownfuse-secs {
+  min-width: 2.2em;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(255, 236, 205, 0.75);
+}
+
+.meche-ownfuse-secs::after {
+  content: " s";
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.meche-ownfuse.is-burning .meche-ownfuse-secs {
+  color: var(--spark);
 }
 
 /* Noirci par l'explosion, le temps de s'en remettre */
@@ -1248,8 +1280,17 @@
 }
 
 .is-phone .meche-ownfuse {
-  width: 46px;
+  gap: 3px;
+}
+
+.is-phone .meche-ownfuse-bar {
+  width: 38px;
   height: 5px;
+}
+
+.is-phone .meche-ownfuse-secs {
+  min-width: 2em;
+  font-size: 10.5px;
 }
 
 .is-phone .meche-needle {
@@ -1305,6 +1346,16 @@
 
 .is-short .meche-seat-word {
   font-size: 11px;
+}
+
+.is-short .meche-ownfuse-bar {
+  width: 28px;
+  height: 4px;
+}
+
+.is-short .meche-ownfuse-secs {
+  min-width: 1.8em;
+  font-size: 9.5px;
 }
 
 @media (prefers-reduced-motion: reduce) {

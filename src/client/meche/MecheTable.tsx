@@ -34,10 +34,10 @@ interface Props {
 }
 
 /** Ce que rappelle le médaillon pendant les premières mèches, selon le mode */
-const MODE_TIPS: Record<FuseMode, string | null> = {
-  commune: null,
+const MODE_TIPS: Record<FuseMode, string> = {
+  commune: "Une mèche neuve à chaque tour",
   rallonge: "Chaque mot fait reculer la mèche",
-  chacun: "Ta mèche ne brûle que pendant ton tour",
+  chacun: "Ta mèche ne brûle qu'à ton tour",
 };
 
 /** Le tirage de celui qui commence : l'aiguille fait deux tours avant de s'arrêter */
@@ -106,13 +106,16 @@ interface Layout {
   bottom: number;
 }
 
-/** Les joueurs en rond autour d'une table ronde, soi en bas puis les autres dans le sens où passe la mèche */
-function tableLayout(w: number, h: number, count: number, phone: boolean, short: boolean): Layout {
+/**
+ * Les joueurs en rond autour d'une table ronde, soi en bas puis les autres dans le sens où passe la mèche.
+ * `ownFuse` : chacun a sa mèche, en petit sous ses allumettes, et il lui faut sa place.
+ */
+function tableLayout(w: number, h: number, count: number, phone: boolean, short: boolean, ownFuse: boolean): Layout {
   // Un écran d'ordinateur peu haut (portable) : des joueurs un peu plus petits, pour laisser de la place à la table
   const low = !phone && h < 640;
   const avatar = short ? 32 : phone ? 42 : low ? 52 : 64;
-  // La place du nom et des allumettes, au-dessus ou au-dessous de l'avatar
-  const info = short ? 14 : phone ? 32 : low ? 44 : 50;
+  // La place du nom et des allumettes (et de sa mèche), au-dessus ou au-dessous de l'avatar
+  const info = (short ? 14 : phone ? 32 : low ? 44 : 50) + (ownFuse ? (short ? 9 : phone ? 11 : 15) : 0);
   const halfWidth = phone ? 34 : 64;
   const R = Math.max(70, Math.min(w / 2 - halfWidth - 4, h / 2 - avatar / 2 - info - 6, 420));
   const tableR = R - avatar / 2 - (phone ? 10 : 20);
@@ -236,7 +239,7 @@ export function MecheTable({
   // Soi en bas de la table, puis les autres dans l'ordre où la mèche passe
   const myIndex = g.players.findIndex((p) => p.id === meId);
   const order = myIndex > 0 ? [...g.players.slice(myIndex), ...g.players.slice(0, myIndex)] : g.players;
-  const layout = tableLayout(stage.w, stage.h, order.length, phone, short);
+  const layout = tableLayout(stage.w, stage.h, order.length, phone, short, mode === "chacun");
   const spotOf = (id: string) => layout.seats[order.findIndex((p) => p.id === id)];
   // L'aiguille montre qui tient la mèche ; à la fin, le gagnant
   const pointed = g.phase === "over" ? (g.ranking?.[0] ?? g.holder) : g.holder;
@@ -451,13 +454,15 @@ export function MecheTable({
   }
 
   const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h } as CSSProperties) : undefined;
-  // Les rappels des premières mèches : les accents d'abord, puis ce qui fait le mode (ou les passes)
+  // Les rappels des premières mèches : ce qui fait le mode d'abord, puis les accents, puis les passes
   const tip =
     g.fuse <= 1
-      ? "Accents libres"
-      : g.fuse <= 3
-        ? (MODE_TIPS[mode] ?? (g.settings.passes && medal >= 300 ? `${LONG_WORD} lettres ou plus : une passe` : null))
-        : null;
+      ? MODE_TIPS[mode]
+      : g.fuse === 2
+        ? "Accents libres"
+        : g.fuse === 3 && g.settings.passes && medal >= 300
+          ? `${LONG_WORD} lettres ou plus : une passe`
+          : null;
   const starterSpot = g.phase === "break" ? spotOf(g.holder) : undefined;
 
   return (
@@ -543,6 +548,7 @@ export function MecheTable({
             >
               <FuseRope
                 fuse={burning}
+                glide={mode === "rallonge"}
                 serverOffset={serverOffset}
                 onHot={setHot}
                 hot={hot}
@@ -1013,7 +1019,7 @@ function Match({ burnt, burning }: { burnt: boolean; burning: boolean }) {
   );
 }
 
-/** Chacun sa mèche : la sienne, en petit sous son nom, qui brûle pendant qu'il la tient */
+/** Chacun sa mèche : la sienne, en petit sous son nom, qui brûle pendant qu'il la tient, et les secondes qui lui restent */
 function OwnFuse({
   bank,
   bankMax,
@@ -1028,6 +1034,7 @@ function OwnFuse({
   serverOffset: number;
 }) {
   const fill = useRef<HTMLSpanElement>(null);
+  const secs = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     let frame = 0;
     const draw = () => {
@@ -1037,14 +1044,19 @@ function OwnFuse({
         fill.current.style.width = `${p * 100}%`;
         fill.current.classList.toggle("is-low", p < 0.25);
       }
+      const s = String(Math.ceil(left / 1000));
+      if (secs.current && secs.current.textContent !== s) secs.current.textContent = s;
       if (burning) frame = requestAnimationFrame(draw);
     };
     draw();
     return () => cancelAnimationFrame(frame);
   }, [bank, bankMax, burning, since, serverOffset]);
   return (
-    <span className={`meche-ownfuse ${burning ? "is-burning" : ""}`} title="Sa mèche">
-      <span ref={fill} />
+    <span className={`meche-ownfuse ${burning ? "is-burning" : ""}`} title="Sa mèche : les secondes qui lui restent">
+      <span className="meche-ownfuse-bar">
+        <span ref={fill} />
+      </span>
+      <span ref={secs} className="meche-ownfuse-secs num" />
     </span>
   );
 }

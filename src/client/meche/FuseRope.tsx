@@ -3,6 +3,8 @@ import { fuseProgress, type FuseView } from "../../shared/games/meche/view.ts";
 
 interface Props {
   fuse: FuseView | null;
+  /** La même corde qui recule (mèche à rallonge) : elle repart en arrière en glissant. Sinon, c'est une autre mèche. */
+  glide: boolean;
   serverOffset: number;
   /** L'étincelle vient d'entrer dans la zone rouge (ou d'en sortir, à la mèche suivante) */
   onHot?: (hot: boolean) => void;
@@ -36,15 +38,17 @@ function ropePath(w: number, h: number): string {
 
 /**
  * La mèche : une corde claire qui finit rouge. L'étincelle y avance toute seule, image par image, sans passer par
- * React ; quand un mot la fait reculer (mèche à rallonge), elle repart en arrière en glissant.
+ * React ; quand un mot la fait reculer (mèche à rallonge), elle repart en arrière en glissant. Quand c'est une autre
+ * mèche (le tour suivant à la classique, le joueur suivant à chacun la sienne), elle y saute d'un coup, avec un éclat.
  * Les pointillés ont toujours un vide plus long que la corde : jamais un bout de motif ne repasse au bout de la corde.
  */
-export function FuseRope({ fuse, serverOffset, onHot, bombGone, hot }: Props) {
+export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const line = useRef<SVGPathElement>(null);
   const burnt = useRef<SVGPathElement>(null);
   const burntCore = useRef<SVGPathElement>(null);
   const spark = useRef<SVGGElement>(null);
+  const flash = useRef<SVGCircleElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const hotRef = useRef(false);
   const onHotRef = useRef(onHot);
@@ -80,6 +84,17 @@ export function FuseRope({ fuse, serverOffset, onHot, bombGone, hot }: Props) {
       const dt = (t - last) / 1000;
       last = t;
       const target = fuseProgress(fuse, Date.now() + serverOffset);
+      if (target < drawn.current - 0.01 && !glide) {
+        // Une autre mèche : on y saute, et l'étincelle jaillit de nouveau
+        drawn.current = target;
+        flash.current?.animate(
+          [
+            { opacity: 0.95, transform: "scale(0.35)" },
+            { opacity: 0, transform: "scale(1.9)" },
+          ],
+          { duration: 480, easing: "ease-out" },
+        );
+      }
       // En avant, on suit ; en arrière, on glisse (toute la corde en 0,7 s au plus vite)
       drawn.current = target < drawn.current ? Math.max(target, drawn.current - dt * 1.4) : target;
       const p = drawn.current;
@@ -100,7 +115,7 @@ export function FuseRope({ fuse, serverOffset, onHot, bombGone, hot }: Props) {
     };
     draw();
     return () => cancelAnimationFrame(frame);
-  }, [fuse, serverOffset, size.w, size.h]);
+  }, [fuse, glide, serverOffset, size.w, size.h]);
 
   const d = size.w > 0 ? ropePath(size.w, size.h) : "";
   const risk = fuse ? Math.min(1, Math.max(0, fuse.risk)) : 1;
@@ -118,6 +133,7 @@ export function FuseRope({ fuse, serverOffset, onHot, bombGone, hot }: Props) {
           <path ref={burntCore} d={d} className="rope-burnt-core" pathLength={1000} strokeDasharray="0 3000" />
           {fuse && (
             <g ref={spark} className="rope-spark">
+              <circle ref={flash} r={22} className="spark-flash" />
               <circle r={15} className="spark-glow" />
               <circle r={6.5} className="spark-flame" />
               <circle r={3} className="spark-core" />
