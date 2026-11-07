@@ -365,7 +365,8 @@ export class BolidesRoom extends DurableObject<Env> {
         if (!r || r.bot) return;
         const k = decodeKart(msg.k, r.kart);
         if (!k) return;
-        const events = reportKart(race, seat.id, k, now);
+        const n = Array.isArray(msg.n) && msg.n.every((x) => typeof x === "number" && Number.isFinite(x)) ? msg.n : null;
+        const events = reportKart(race, seat.id, k, now, n ? { turbos: n[0], walls: n[1] } : undefined);
         if (events.length > 0) this.onEvents(events);
         return;
       }

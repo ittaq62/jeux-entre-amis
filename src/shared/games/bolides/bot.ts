@@ -102,12 +102,17 @@ export function botDrive(
   // Tourner à droite fait baisser le cap : un point à droite (err < 0) demande un volant positif
   let steer = clamp(-err * 2.6 + Math.sin(mem.wobble) * style.wobble, -1, 1);
 
-  // Coincé contre un mur : il recule un moment en braquant dans l'autre sens
+  // Coincé contre un mur : il recule un moment en braquant dans l'autre sens, puis retente d'avancer
+  const reverse = { input: { steer: -steer, gas: false, brake: true, drift: false }, use: false };
+  if (now < mem.reverseUntil) return reverse;
   if (k.v < 2 && k.spin === 0) {
     if (mem.slowSince === 0) mem.slowSince = now;
-    else if (now - mem.slowSince > 1500 && mem.reverseUntil < now) mem.reverseUntil = now + 900;
-  } else if (k.v > 4) mem.slowSince = 0;
-  if (now < mem.reverseUntil) return { input: { steer: -steer, gas: false, brake: true, drift: false }, use: false };
+    else if (now - mem.slowSince > 1500) {
+      mem.reverseUntil = now + 900;
+      mem.slowSince = 0;
+      return reverse;
+    }
+  } else mem.slowSince = 0;
 
   // Dérapage dans les longs virages, jusqu'au niveau de turbo qu'il sait atteindre
   const curve = bendAhead(t, k.s, 30);

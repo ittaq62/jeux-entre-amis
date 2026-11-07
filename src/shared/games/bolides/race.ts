@@ -242,8 +242,11 @@ function pickups(race: Race, r: Racer, ax: number, az: number, now: number, even
   }
 }
 
-/** Un joueur envoie où en est son kart : on le croit, dans la limite de ce qu'un kart peut parcourir */
-export function reportKart(race: Race, id: string, k: Kart, now: number): BolidesEvent[] {
+/**
+ * Un joueur envoie où en est son kart : on le croit, dans la limite de ce qu'un kart peut parcourir. `counts` : ce
+ * qu'il a compté chez lui depuis le départ (mini-turbos, chocs contre le mur), qui ne peut que monter, et pas trop vite.
+ */
+export function reportKart(race: Race, id: string, k: Kart, now: number, counts?: { turbos: number; walls: number }): BolidesEvent[] {
   const r = racerOf(race, id);
   const events: BolidesEvent[] = [];
   if (!r || r.bot || race.phase === "over") return events;
@@ -257,6 +260,10 @@ export function reportKart(race: Race, id: string, k: Kart, now: number): Bolide
   const dist = Math.max(before.dist - reach, Math.min(before.dist + reach, k.dist));
   r.kart = { ...k, dist };
   r.seen = now;
+  if (counts && r.finish === null) {
+    r.stats.turbos = Math.max(r.stats.turbos, Math.min(r.stats.turbos + 2, Math.floor(counts.turbos)));
+    r.stats.walls = Math.max(r.stats.walls, Math.min(r.stats.walls + 2, Math.floor(counts.walls)));
+  }
   pickups(race, r, before.x, before.z, now, events);
   progress(race, r, now, events);
   return events;

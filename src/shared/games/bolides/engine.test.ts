@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
+import { botDrive, newBotMemory } from "./bot.ts";
 import { bump, DRIFT_LEVELS, DT, driftLevel, newKart, NO_INPUT, SPIN_TIME, step, TOP_SPEED, type Input, type Kart } from "./physics.ts";
 import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
 import { closeLayout, deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceLayout, wrapS } from "./track.ts";
@@ -259,6 +260,35 @@ describe("la course", () => {
     const { events } = botRace({ track: "vignes", laps: 1, items: false }, 4);
     expect(events).not.toContain("box");
     expect(events).not.toContain("use");
+  });
+
+  it("un bot planté face au mur recule, puis repart dans le bon sens", () => {
+    const t = getTrack("col");
+    const k = kartAt("col", 300, t.wall - 0.3);
+    // Face au mur, à l'arrêt
+    k.h += k.d > 0 ? -Math.PI / 2 : Math.PI / 2;
+    const mem = newBotMemory({ rng: 5 });
+    const h = { rng: 9 };
+    const start = k.dist;
+    let now = 0;
+    for (let i = 0; i < 60 * 12; i++) {
+      now += DT * 1000;
+      step(k, botDrive(t, k, null, [], [], "fort", mem, now, h).input, t, { top: 1 });
+    }
+    expect(k.dist).toBeGreaterThan(start + 60);
+    expect(Math.abs(k.d)).toBeLessThan(t.roadEdge);
+  });
+
+  it("garde ce qu'un joueur a compté chez lui (mini-turbos, murs), sans le laisser grimper d'un coup", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const me = racerOf(race, "a")!;
+    reportKart(race, "a", { ...me.kart }, race.goAt + 100, { turbos: 1, walls: 0 });
+    reportKart(race, "a", { ...me.kart }, race.goAt + 200, { turbos: 50, walls: 30 });
+    expect(me.stats.turbos).toBe(3);
+    expect(me.stats.walls).toBe(2);
+    reportKart(race, "a", { ...me.kart }, race.goAt + 300, { turbos: 0, walls: 0 });
+    expect(me.stats.turbos).toBe(3);
   });
 
   it("croit un joueur sur sa position, mais pas sur un bond impossible", () => {

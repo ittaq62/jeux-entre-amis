@@ -539,8 +539,8 @@ export type BolidesClientMessage =
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
   | { t: "start" }
-  /** Où en est son kart, plusieurs fois par seconde */
-  | { t: "kart"; k: KartNet }
+  /** Où en est son kart, plusieurs fois par seconde, et ce qu'il a compté depuis le départ : mini-turbos, chocs contre le mur */
+  | { t: "kart"; k: KartNet; n?: [number, number] }
   /** Se servir de son objet */
   | { t: "use" }
   | { t: "chat"; text: string }
