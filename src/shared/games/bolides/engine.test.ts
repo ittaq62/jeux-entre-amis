@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
+import { COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
 import { botDrive, newBotMemory } from "./bot.ts";
 import {
   bump,
@@ -16,7 +16,7 @@ import {
   type Kart,
 } from "./physics.ts";
 import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
-import { deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceCorners, wrapS } from "./track.ts";
+import { crosserAt, deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceCorners, wrapS } from "./track.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
 
 const GAS: Input = { steer: 0, gas: true, brake: false, drift: false };
@@ -232,6 +232,67 @@ describe("la conduite", () => {
     expect(back.vy).toBe(0);
   });
 
+  it("des pièces sur la route, à l'intérieur des virages et sur les lignes droites, loin des tremplins et des passages", () => {
+    for (const id of TRACK_IDS) {
+      const t = getTrack(id);
+      expect(t.coins.length, id).toBeGreaterThanOrEqual(25);
+      for (const c of t.coins) {
+        expect(Math.abs(c.d), id).toBeLessThan(t.half);
+        for (const j of t.jumps) expect(Math.abs(deltaS(t, j, c.s)), id).toBeGreaterThan(20);
+        for (const x of t.crossers) expect(Math.abs(deltaS(t, x.s, c.s)), id).toBeGreaterThan(10);
+      }
+      expect(new Set(t.coins.map((c) => c.index)).size, id).toBe(t.coins.length);
+    }
+  });
+
+  it("l'engin d'un passage va et vient d'un bas-côté à l'autre, et attend entre deux traversées", () => {
+    for (const id of TRACK_IDS) {
+      const t = getTrack(id);
+      for (const c of t.crossers) {
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let time = 0; time < c.period; time += 0.05) {
+          const p = crosserAt(c, time);
+          lo = Math.min(lo, p.d);
+          hi = Math.max(hi, p.d);
+          // Il recommence pareil une période plus tard
+          expect(crosserAt(c, time + c.period * 3).d, id).toBeCloseTo(p.d, 6);
+        }
+        expect(lo, id).toBeCloseTo(-c.reach, 1);
+        expect(hi, id).toBeCloseTo(c.reach, 1);
+        // Il attend hors de la route, entre la route et le mur
+        expect(c.reach, id).toBeGreaterThan(t.roadEdge);
+        expect(c.reach + 2.4, id).toBeLessThan(t.wall);
+        // Le passage est sur une ligne droite
+        expect(Math.abs(t.bend[locate(t, pointAt(t, c.s, 0).x, pointAt(t, c.s, 0).z).i]!), id).toBeLessThan(0.006);
+      }
+    }
+  });
+
+  it("foncer dans l'engin qui traverse fait rebondir et tourner le kart ; passer quand il est garé de l'autre côté, non", () => {
+    const t = getTrack("port");
+    const c = t.crossers[0]!;
+    // Un instant où l'engin est au milieu de la route (il traverse) : à 20 % de sa période
+    const mid = ((0.2 - c.offset + 10) % 1) * c.period;
+    expect(Math.abs(crosserAt(c, mid).d)).toBeLessThan(1.5);
+    const k = kartAt("port", c.s - 25, crosserAt(c, mid).d);
+    k.v = TOP_SPEED;
+    const events: string[] = [];
+    for (let i = 0; i < 70; i++) step(k, GAS, t, { top: 1, time: mid }, events as never);
+    expect(events).toContain("crash");
+    expect(deltaS(t, c.s, k.s)).toBeLessThan(0);
+    // Garé sur le bas-côté droit (de 40 à 50 % de sa période) : on passe à gauche sans rien toucher
+    const parked = ((0.45 - c.offset + 10) % 1) * c.period;
+    expect(crosserAt(c, parked).d).toBeGreaterThan(t.roadEdge);
+    const free = kartAt("port", c.s - 25, -3);
+    free.v = TOP_SPEED;
+    const ev2: string[] = [];
+    for (let i = 0; i < 70; i++) step(free, GAS, t, { top: 1, time: parked }, ev2 as never);
+    expect(ev2).not.toContain("crash");
+    expect(ev2).not.toContain("bump");
+    expect(deltaS(t, c.s, free.s)).toBeGreaterThan(3);
+  });
+
   it("un accélérateur au sol donne un coup de turbo", () => {
     const t = getTrack("port");
     const pad = t.boosts[0]!;
@@ -441,6 +502,33 @@ describe("la course", () => {
     }
     expect(hits).toEqual([]);
     expect(race.hazards.some((h) => h.kind === "huile")).toBe(true);
+  });
+
+  it("ramasse les pièces (dix au plus), en perd trois quand il est touché, et elles reviennent", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "vignes", items: false }, 0, 1);
+    const t = getTrack("vignes");
+    worldTick(race, race.goAt);
+    const a = racerOf(race, "a")!;
+    let now = race.goAt + 100;
+    // On le pose sur chaque pièce, l'une après l'autre
+    for (const c of t.coins.slice(0, 14)) {
+      now += 100;
+      const k = { ...a.kart, x: c.x, z: c.z, s: c.s, d: c.d, dist: a.kart.dist };
+      reportKart(race, "a", k, now);
+    }
+    expect(a.coins).toBe(COIN_MAX);
+    expect(race.coins.filter((at) => at > now).length).toBeGreaterThanOrEqual(14);
+    // Touché par un pétard : trois de moins
+    a.item = null;
+    const b = racerOf(race, "b")!;
+    b.item = "klaxon";
+    b.uses = 1;
+    Object.assign(b.kart, { x: a.kart.x + 2, z: a.kart.z });
+    useItem(race, "b", now);
+    expect(a.coins).toBe(COIN_MAX - COIN_LOSS);
+    // Plus tard, les pièces sont revenues
+    worldTick(race, now + 9000);
+    expect(race.coins.every((at) => at <= now + 9000)).toBe(true);
   });
 
   it("le pétard d'un joueur touche le kart de devant, le bouclier arrête un coup", () => {

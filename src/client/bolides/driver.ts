@@ -31,14 +31,15 @@ export class LocalDriver {
   }
 
   /** Avance de `dt` secondes ; `others` : les autres karts tels qu'on les voit (on ne pousse que le sien) */
-  update(dt: number, input: Input, others: Kart[]): KartEvent[] {
+  /** `time` : l'heure du serveur en secondes (les engins qui traversent la route en dépendent) */
+  update(dt: number, input: Input, others: Kart[], time?: number): KartEvent[] {
     const events: KartEvent[] = [];
     this.acc = Math.min(this.acc + dt, 0.25);
     while (this.acc >= DT) {
       this.acc -= DT;
       Object.assign(this.prev, this.kart);
       const s0 = this.kart.s;
-      step(this.kart, input, this.track, { top: this.top }, events);
+      step(this.kart, input, this.track, { top: this.top, time }, events);
       for (const o of others) if (bump(this.kart, o, true, false) > 4) events.push("bump");
       // Le mauvais sens : on recule le long de la route en roulant vraiment
       const moved = deltaS(this.track, s0, this.kart.s);

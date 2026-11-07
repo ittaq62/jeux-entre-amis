@@ -554,9 +554,10 @@ export type BolidesServerMessage =
   | { t: "room"; room: BolidesRoomView; events: BolidesEvent[] }
   /**
    * Tous les karts, plusieurs fois par seconde (dans l'ordre des pilotes de la course), à l'heure du serveur ; `a` :
-   * l'âge de chaque position en millisecondes (elle date de `now - a[i]`)
+   * l'âge de chaque position en millisecondes (elle date de `now - a[i]`) ; `c` : les pièces de chacun ; `ct` : les
+   * pièces ramassées qui ne sont pas encore revenues
    */
-  | { t: "tick"; now: number; k: KartNet[]; a?: number[] }
+  | { t: "tick"; now: number; k: KartNet[]; a?: number[]; c?: number[]; ct?: number[] }
   /** Ce qui arrive entre deux états complets (objets, coups, tours) */
   | { t: "fx"; events: BolidesEvent[]; now: number }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }

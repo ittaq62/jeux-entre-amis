@@ -633,6 +633,8 @@ export class BolidesRoom extends DurableObject<Env> {
       now,
       k: race.racers.map((r) => encodeKart(r.kart)),
       a: race.racers.map((r) => Math.max(0, Math.min(1000, Math.round(now - r.stateAt)))),
+      c: race.racers.map((r) => r.coins ?? 0),
+      ct: (race.coins ?? []).flatMap((at, i) => (at > now ? [i] : [])),
     });
     if (events.length > 0) this.onEvents(events);
     if (race.phase === "over" && d.status === "playing") await this.finishGame(now);

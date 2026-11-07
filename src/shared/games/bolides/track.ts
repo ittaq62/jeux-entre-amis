@@ -34,6 +34,11 @@ export interface TrackDef {
   boosts: [number, number][];
   /** Les tremplins, en part du tour : toute la largeur de la route */
   jumps: number[];
+  /**
+   * Les passages : un engin (chariot élévateur, tracteur, chasse-neige) traverse la route à cet endroit (part du
+   * tour), aller et retour, toutes les `period` secondes ; `offset` décale son horaire
+   */
+  crossers: { frac: number; period: number; offset: number }[];
 }
 
 export const TRACK_IDS: TrackId[] = ["port", "vignes", "col"];
@@ -65,6 +70,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.97, -0.25],
     ],
     jumps: [0.636],
+    crossers: [{ frac: 0.879, period: 9, offset: 0 }],
   },
   vignes: {
     id: "vignes",
@@ -97,6 +103,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.842, 0.3],
     ],
     jumps: [0.645],
+    crossers: [{ frac: 0.336, period: 10, offset: 0.3 }],
   },
   col: {
     id: "col",
@@ -130,6 +137,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.872, -0.3],
     ],
     jumps: [0.615],
+    crossers: [{ frac: 0.263, period: 9.5, offset: 0.6 }],
   },
 };
 
@@ -161,6 +169,116 @@ export interface Track {
   boosts: BoostPad[];
   /** Le bord de chaque tremplin, en distance depuis la ligne */
   jumps: number[];
+  /** Les pièces : des lignes à l'intérieur des virages et le long des lignes droites */
+  coins: CoinSpot[];
+  /** Les passages : où l'engin traverse (distance depuis la ligne), son horaire, et jusqu'où il va de chaque côté */
+  crossers: Crosser[];
+}
+
+export interface CoinSpot {
+  index: number;
+  x: number;
+  z: number;
+  s: number;
+  d: number;
+}
+
+export interface Crosser {
+  s: number;
+  period: number;
+  offset: number;
+  /** Il va et vient entre -reach et +reach (il attend sur le bas-côté, de chaque côté) */
+  reach: number;
+}
+
+/** La taille d'un engin qui traverse, pour les chocs : deux cercles, devant et derrière, dans le sens où il roule */
+export const CROSSER_RADIUS = 1.3;
+export const CROSSER_HALF = 1.1;
+
+/**
+ * Où est l'engin d'un passage à l'heure `time` (en secondes) : son écart au milieu de la route, et sa vitesse de
+ * côté. Il traverse en 40 % de la période, attend 10 % sur le bas-côté, revient, attend encore.
+ */
+export function crosserAt(c: Crosser, time: number): { d: number; vd: number } {
+  const u = (((time / c.period + c.offset) % 1) + 1) % 1;
+  const span = 2 * c.reach;
+  const speed = span / (0.4 * c.period);
+  if (u < 0.4) return { d: -c.reach + (u / 0.4) * span, vd: speed };
+  if (u < 0.5) return { d: c.reach, vd: 0 };
+  if (u < 0.9) return { d: c.reach - ((u - 0.5) / 0.4) * span, vd: -speed };
+  return { d: -c.reach, vd: 0 };
+}
+
+/** Les virages du circuit : les suites d'échantillons qui tournent assez, du même côté (1 : à gauche) */
+export function trackBends(t: Track, minCurve = 1 / 80): { from: number; to: number; side: 1 | -1; turn: number }[] {
+  const out: { from: number; to: number; side: 1 | -1; turn: number }[] = [];
+  const step = t.length / t.n;
+  let start = 0;
+  while (start < t.n && Math.abs(t.bend[start]!) >= minCurve) start++;
+  let cur: { from: number; to: number; side: 1 | -1; turn: number } | null = null;
+  for (let k = 0; k <= t.n; k++) {
+    const i = (start + k) % t.n;
+    const b = t.bend[i]!;
+    const side = b > 0 ? 1 : -1;
+    const turning = Math.abs(b) >= minCurve && k < t.n;
+    if (turning && cur && cur.side === side) {
+      cur.to = i;
+      cur.turn += Math.abs(b) * step;
+    } else {
+      if (cur && cur.turn > 0.6) out.push(cur);
+      cur = turning ? { from: i, to: i, side, turn: Math.abs(b) * step } : null;
+    }
+  }
+  return out;
+}
+
+/**
+ * Les pièces : une ligne de cinq à l'intérieur de chaque virage (la bonne trajectoire paie), et une ligne de quatre
+ * sur un côté de chaque longue ligne droite, loin des caisses, des tremplins et des passages
+ */
+function placeCoins(t: Track): CoinSpot[] {
+  const out: CoinSpot[] = [];
+  const step = t.length / t.n;
+  const near = (s: number, list: number[], gap: number) => list.some((x) => Math.abs(deltaS(t, x, s)) < gap);
+  const busy = (s: number) =>
+    near(s, t.jumps, 26) ||
+    near(
+      s,
+      t.boxes.map((b) => b.s),
+      9,
+    ) ||
+    near(
+      s,
+      t.crossers.map((c) => c.s),
+      14,
+    ) ||
+    Math.abs(deltaS(t, 0, s)) < 30;
+  const line = (s0: number, d: number, count: number) => {
+    for (let k = 0; k < count; k++) {
+      const s = wrapS(t, s0 + (k - (count - 1) / 2) * 3.6);
+      if (busy(s)) continue;
+      const p = pointAt(t, s, d);
+      out.push({ index: out.length, x: p.x, z: p.z, s, d });
+    }
+  };
+  const bends = trackBends(t);
+  for (const b of bends) {
+    const len = (((b.to - b.from + t.n) % t.n) + 1) * step;
+    // L'intérieur d'un virage à gauche est à gauche (d < 0)
+    line(b.from * step + len / 2, -b.side * t.half * 0.55, 5);
+  }
+  // Les lignes droites : entre deux virages, assez longues
+  let side = 1;
+  for (let k = 0; k < bends.length; k++) {
+    const a = bends[k]!;
+    const b = bends[(k + 1) % bends.length]!;
+    const from = (a.to + 1) * step;
+    const gap = deltaS(t, from, b.from * step);
+    if (gap < 70) continue;
+    line(from + gap * 0.4, side * t.half * 0.6, 4);
+    side = -side;
+  }
+  return out;
 }
 
 export interface BoxSpot {
@@ -386,6 +504,8 @@ export function buildTrack(def: TrackDef): Track {
     boxes: [],
     boosts: [],
     jumps: def.jumps.map((f) => f * total),
+    coins: [],
+    crossers: def.crossers.map((c) => ({ s: c.frac * total, period: c.period, offset: c.offset, reach: half + CURB + 3 })),
   };
   // Les caisses : cinq par rangée, en travers de la route
   let index = 0;
@@ -397,6 +517,7 @@ export function buildTrack(def: TrackDef): Track {
     }
   }
   track.boosts = def.boosts.map(([frac, lane]) => ({ s: frac * total, d: lane * half, length: 7, halfWidth: 1.9 }));
+  track.coins = placeCoins(track);
   return track;
 }
 

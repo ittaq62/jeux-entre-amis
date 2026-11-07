@@ -4,8 +4,8 @@
 
 import { random, type RngHolder } from "../../rng.ts";
 import type { Hazard, ItemKind } from "./items.ts";
-import { driftLevel, type Input, type Kart } from "./physics.ts";
-import { bendAhead, deltaS, pointAt, wrapAngle, type Track } from "./track.ts";
+import { driftLevel, KART_RADIUS, type Input, type Kart } from "./physics.ts";
+import { bendAhead, CROSSER_HALF, CROSSER_RADIUS, crosserAt, deltaS, pointAt, wrapAngle, type Track } from "./track.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
 
@@ -44,6 +44,9 @@ export interface BotMemory {
   /** Coincé : depuis quand il n'avance plus, et jusqu'à quand il recule */
   slowSince: number;
   reverseUntil: number;
+  /** La ligne de pièces qu'il a décidé d'aller chercher (ou de laisser), jusqu'à quel endroit du tour */
+  coinLane: number | null;
+  coinUntil: number;
 }
 
 export function newBotMemory(h: RngHolder): BotMemory {
@@ -56,6 +59,8 @@ export function newBotMemory(h: RngHolder): BotMemory {
     holdUntil: 0,
     slowSince: 0,
     reverseUntil: 0,
+    coinLane: null,
+    coinUntil: -1,
   };
 }
 
@@ -78,6 +83,8 @@ export function botDrive(
   mem: BotMemory,
   now: number,
   h: RngHolder,
+  /** Chaque pièce : l'heure où elle revient (0 : elle est là) */
+  coins?: number[],
 ): { input: Input; use: boolean } {
   const style = BOT_STYLE[level];
   const half = t.half;
@@ -90,12 +97,45 @@ export function botDrive(
   // À l'intérieur du virage qui vient (la courbure positive tourne à gauche, et la gauche est du côté négatif)
   const bend = bendAhead(t, k.s + 6, 24);
   let lane = mem.lane - Math.sign(bend) * Math.min(1, Math.abs(bend) * 30) * half * 0.4 * style.line;
+  // Une ligne de pièces devant : il décide une fois s'il va la chercher (selon son niveau), puis s'y tient
+  if (coins && style.drift > 0) {
+    // La ligne dépassée : on oublie la décision
+    if (mem.coinUntil >= 0 && deltaS(t, k.s, mem.coinUntil) < 0) {
+      mem.coinUntil = -1;
+      mem.coinLane = null;
+    }
+    if (mem.coinUntil < 0) {
+      for (const c of t.coins) {
+        const ahead = deltaS(t, k.s, c.s);
+        if (ahead < 15 || ahead > 40 || (coins[c.index] ?? 0) > now) continue;
+        mem.coinLane = random(h) < style.aim ? c.d : null;
+        mem.coinUntil = c.s + 12;
+        break;
+      }
+    }
+    if (mem.coinLane !== null) lane = mem.coinLane;
+  }
   // Une flaque sur sa route : il s'en écarte
   for (const hz of hazards) {
     if (hz.kind !== "huile") continue;
     const at = hazardSpot(hz);
     const ahead = deltaS(t, k.s, at.s);
     if (ahead > 2 && ahead < 32 && Math.abs(at.d - lane) < 3.2) lane = at.d + (at.d > lane ? -3.6 : 3.6);
+  }
+  // Un engin qui traverse devant : il vise le côté où l'engin ne sera pas quand il passera
+  for (const c of t.crossers) {
+    const ahead = deltaS(t, k.s, c.s);
+    if (ahead < 1 || ahead > 50) continue;
+    const pos = crosserAt(c, now / 1000 + ahead / Math.max(8, k.v));
+    const margin = CROSSER_HALF + CROSSER_RADIUS + KART_RADIUS + 0.9;
+    const lo = pos.d - margin;
+    const hi = pos.d + margin;
+    if (lane > lo && lane < hi) {
+      // Le côté le plus proche, s'il reste de la route ; sinon l'autre
+      const left = lo > -half + 1.6;
+      const right = hi < half - 1.6;
+      lane = left && (!right || lane - lo < hi - lane) ? lo : right ? hi : lane;
+    }
   }
   // Pas trop près du bord : en coupant vers le point visé, il passerait sur le vibreur et dans l'herbe
   lane = clamp(lane, -half + 2.6, half - 2.6);

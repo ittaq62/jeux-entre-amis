@@ -45,6 +45,12 @@ export const PETARD_SAFE_MS = 600;
 export const KLAXON_RADIUS = 10;
 /** Une caisse prise revient au bout de ce temps */
 export const BOX_RESPAWN_MS = 3000;
+/** Les pièces : dix au plus, chacune donne un peu de vitesse de pointe ; on en perd trois quand on est touché */
+export const COIN_MAX = 10;
+export const COIN_SPEED = 0.008;
+export const COIN_LOSS = 3;
+export const COIN_RADIUS = 0.9;
+export const COIN_RESPAWN_MS = 8000;
 export const BOX_RADIUS = 1.5;
 
 // Les chances de chaque objet, selon qu'on est en tête, au milieu ou derrière

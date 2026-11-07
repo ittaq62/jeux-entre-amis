@@ -3,7 +3,7 @@
 // l'affichage tête haute. Une boucle par image, en dehors de React.
 
 import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
-import { BOX_RADIUS, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
+import { BOX_RADIUS, COIN_RADIUS, COIN_SPEED, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
 import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
 import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
@@ -35,6 +35,8 @@ export interface Hud {
   wrongWay: boolean;
   stuck: boolean;
   speed: number;
+  /** Ses pièces (dix au plus) */
+  coins: number;
   /** Un turbo en cours (les lignes de vitesse) */
   boosting: boolean;
   /** Une annonce en grand au milieu de l'écran (« Dernier tour ! »), et sa clé pour la rejouer */
@@ -79,6 +81,10 @@ export class RaceRuntime {
   private views: Kart[] = [];
   /** La part de l'avance montrée pour chaque kart (elle s'efface en douceur pendant un tête-à-queue) */
   private leads: number[] = [];
+  /** Les pièces : celles de chacun (selon le serveur), celles qui sont ramassées, et celles qu'on vient de prendre */
+  private coinCounts: number[] = [];
+  private coinTaken = new Set<number>();
+  private coinMine = new Map<number, number>();
   private ids: string[];
   private colors: string[];
   private mine: number;
@@ -157,7 +163,9 @@ export class RaceRuntime {
   }
 
   /** Les positions de tous les karts, reçues du serveur */
-  onTick(now: number, karts: KartNet[], ages?: number[]) {
+  onTick(now: number, karts: KartNet[], ages?: number[], coins?: { counts?: number[]; taken?: number[] }) {
+    if (coins?.counts) this.coinCounts = coins.counts;
+    if (coins?.taken) this.coinTaken = new Set(coins.taken);
     // Le décalage d'horloge : le plus grand vu récemment (un message en retard le ferait croire plus petit). L'heure
     // utilisée le rejoint petit à petit, à chaque image : jamais de saut, donc des karts qui glissent sans à-coups.
     const est = now - Date.now();
@@ -359,7 +367,9 @@ export class RaceRuntime {
         const input = pilot ? pilot.input : pad;
         if (auto && pilot?.use) pad.item = true;
         const others = this.shown.filter((_, i) => i !== this.mine);
-        events = d.update(dt, input, others);
+        // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur)
+        d.top = CLASS_SPEED[v.settings.speed] * (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0));
+        events = d.update(dt, input, others, now / 1000);
         if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
@@ -369,6 +379,17 @@ export class RaceRuntime {
           this.opts.send({ t: "use" });
         }
         if (pad.respawn && d.stuck) d.respawn();
+        // Les pièces traversées disparaissent tout de suite (le serveur, lui, les compte)
+        if (me.finish === null && d.kart.air < 1.2) {
+          this.track.coins.forEach((c, i) => {
+            if (this.coinTaken.has(i) || (this.coinMine.get(i) ?? -1e9) > now - 1500) return;
+            if (Math.hypot(c.x - d.kart.x, c.z - d.kart.z) < COIN_RADIUS + KART_RADIUS * 0.6) {
+              this.coinMine.set(i, now);
+              this.scene.coinSparkle(c.x, d.kart.y + 1, c.z);
+              play("bolidesCoin", { rate: 0.95 + Math.min(10, this.coinCounts[this.mine] ?? 0) * 0.03 });
+            }
+          });
+        }
         // Les caisses traversées éclatent tout de suite, sans attendre le serveur
         if (v.settings.items) {
           this.track.boxes.forEach((b, i) => {
@@ -383,6 +404,8 @@ export class RaceRuntime {
         this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls], at: Math.round(now) });
       }
     }
+    // Les pièces montrées : ni ramassées selon le serveur, ni prises à l'instant par soi
+    this.scene.setCoins((i) => !this.coinTaken.has(i) && (this.coinMine.get(i) ?? -1e9) <= now - 1500);
     // Les sons et les effets de la conduite, et ce qu'on compte pour les succès
     const mine = this.driver?.kart;
     for (const e of events) {
@@ -402,6 +425,10 @@ export class RaceRuntime {
         else if (e === "bump") {
           this.scene.shake(0.2);
           play("bolidesBump");
+        } else if (e === "crash") {
+          this.scene.shake(0.7);
+          play("bigHit", { volume: 0.7 });
+          vibrate([50, 30, 80]);
         } else if (e === "spark1" || e === "spark2" || e === "spark3") {
           const level = e === "spark3" ? 3 : e === "spark2" ? 2 : 1;
           this.scene.sparkFlash(mine, level);
@@ -507,6 +534,7 @@ export class RaceRuntime {
       wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
       stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
       speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
+      coins: this.mine >= 0 ? (this.coinCounts[this.mine] ?? me?.coins ?? 0) : 0,
       boosting: Boolean(mk && mk.boost > 0 && mk.spin === 0),
       banner: this.banner,
       map: this.shown.map((k, i) => ({ x: k.x, z: k.z, color: this.colors[i]!, me: i === this.mine })),

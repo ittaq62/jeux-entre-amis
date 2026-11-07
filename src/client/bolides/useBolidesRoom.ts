@@ -16,7 +16,7 @@ let emoteSeq = 0;
 
 /** Ce que la course écoute directement, sans passer par React : les positions et les évènements */
 export interface RaceListeners {
-  onTick?: (now: number, karts: KartNet[], ages?: number[]) => void;
+  onTick?: (now: number, karts: KartNet[], ages?: number[], coins?: { counts?: number[]; taken?: number[] }) => void;
   onEvents?: (events: BolidesEvent[]) => void;
 }
 
@@ -61,7 +61,7 @@ export function useBolidesRoom(code: string) {
                 onRoom(msg.room, msg.events);
                 break;
               case "tick":
-                listeners.current.onTick?.(msg.now, msg.k, msg.a);
+                listeners.current.onTick?.(msg.now, msg.k, msg.a, { counts: msg.c, taken: msg.ct });
                 break;
               case "fx":
                 listeners.current.onEvents?.(msg.events);

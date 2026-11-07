@@ -6,6 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
+import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
@@ -55,6 +56,9 @@ export class RaceScene {
   private track: Track | null = null;
   private karts: KartModel[] = [];
   private crates: THREE.Mesh[] = [];
+  private coins: CoinField | null = null;
+  private crossers: Crossers | null = null;
+  private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
   private crateMat: THREE.MeshLambertMaterial | null = null;
   private hazards = new Map<number, { hz: Hazard; mesh: THREE.Object3D }>();
@@ -191,6 +195,25 @@ export class RaceScene {
       return m;
     });
     this.crateShown = track.boxes.map(() => true);
+    // Les pièces et les engins qui traversent
+    const keep = <T extends { dispose: () => void }>(x: T): T => {
+      this.featureKeep.push(x);
+      return x;
+    };
+    this.coins = new CoinField(track, keep);
+    this.scene.add(this.coins.mesh);
+    this.crossers = new Crossers(track, track.def.theme, keep, this.shadows, this.world.heightAt);
+    this.scene.add(this.crossers.group);
+  }
+
+  /** Les pièces présentes (les autres sont ramassées) */
+  setCoins(available: (i: number) => boolean) {
+    this.coins?.set(available);
+  }
+
+  /** Une pièce ramassée : une petite gerbe dorée */
+  coinSparkle(x: number, y: number, z: number) {
+    this.burst({ x, y, z }, 0xffd84a, 6, 3);
   }
 
   /** Les caisses présentes ou prises (une caisse prise éclate) */
@@ -424,6 +447,8 @@ export class RaceScene {
     this.time += f.dt;
     this.adaptResolution(f.dt);
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
+    this.coins?.update(this.time, f.dt);
+    this.crossers?.update(f.serverNow / 1000);
     // La fumée des dérapages, une image sur deux, pour les karts pas trop loin
     this.smokeTick = (this.smokeTick + 1) % 2;
     if (this.smokeTick === 0) {
@@ -576,6 +601,7 @@ export class RaceScene {
     this.petardMat.dispose();
     this.puffTex.dispose();
     this.envTex.dispose();
+    for (const d of this.featureKeep) d.dispose();
     for (const p of this.puffs) p.sprite.material.dispose();
     for (const s of this.spare) s.material.dispose();
     this.renderer.dispose();

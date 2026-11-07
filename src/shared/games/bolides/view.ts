@@ -79,6 +79,7 @@ export interface RacerView {
   finish: number | null;
   /** Conduit par le serveur (un bot, ou le relais d'un absent) */
   bot: boolean;
+  coins: number;
   stats: RacerStats;
 }
 
@@ -115,6 +116,7 @@ export function bolidesView(race: Race): BolidesView {
       lapStart: r.lapStart,
       finish: r.finish,
       bot: r.bot,
+      coins: r.coins ?? 0,
       stats: r.stats,
     })),
     karts: race.racers.map((r) => encodeKart(r.kart)),

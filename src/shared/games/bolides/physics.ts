@@ -3,7 +3,7 @@
 // dérapage), l'herbe qui freine, les murs qui renvoient. Le pas de temps est fixe (1/60 s) pour que tout le monde
 // conduise pareil.
 
-import { deltaS, locate, wrapAngle, type Track } from "./track.ts";
+import { CROSSER_HALF, CROSSER_RADIUS, crosserAt, deltaS, locate, pointAt, wrapAngle, type Track } from "./track.ts";
 
 export type SpeedClass = "balade" | "normal" | "bolide";
 export const SPEED_CLASSES: SpeedClass[] = ["balade", "normal", "bolide"];
@@ -81,8 +81,10 @@ export interface Input {
 export const NO_INPUT: Input = { steer: 0, gas: false, brake: false, drift: false };
 
 export interface StepMods {
-  /** La vitesse de pointe, en part de TOP_SPEED (cylindrée, niveau du bot…) */
+  /** La vitesse de pointe, en part de TOP_SPEED (cylindrée, niveau du bot, pièces…) */
   top: number;
+  /** L'heure du serveur, en secondes (pour les engins qui traversent la route) ; sans elle, pas d'engins */
+  time?: number;
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
@@ -101,8 +103,9 @@ export type KartEvent =
   | "jump"
   | "trick"
   | "land"
-  /** Un choc contre un autre kart */
-  | "bump";
+  /** Un choc contre un autre kart, ou contre un engin qui traverse (en douceur, ou fort : un tête-à-queue) */
+  | "bump"
+  | "crash";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -253,6 +256,43 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
       }
     }
     at = locate(t, k.x, k.z, at.i);
+  }
+  // Les engins qui traversent la route : un obstacle qui bouge ; on rebondit dessus, et trop vite c'est le tête-à-queue
+  if (mods.time !== undefined && k.air < 1) {
+    for (const c of t.crossers) {
+      if (Math.abs(deltaS(t, c.s, at.s)) > 7) continue;
+      const pos = crosserAt(c, mods.time);
+      // Le cercle de l'engin le plus proche du kart (l'avant ou l'arrière)
+      const near = Math.max(pos.d - CROSSER_HALF, Math.min(pos.d + CROSSER_HALF, at.d));
+      const p = pointAt(t, c.s, near);
+      const dx = k.x - p.x;
+      const dz = k.z - p.z;
+      const dist = Math.hypot(dx, dz);
+      const min = CROSSER_RADIUS + KART_RADIUS;
+      if (dist >= min || dist < 1e-6) continue;
+      const nx = dx / dist;
+      const nz = dz / dist;
+      k.x += nx * (min - dist);
+      k.z += nz * (min - dist);
+      // Les vitesses : celle du kart, et celle de l'engin (de côté, le long de la droite de la route)
+      const vx = fx * k.v + rx * k.slip - -p.tz * pos.vd;
+      const vz = fz * k.v + rz * k.slip - p.tx * pos.vd;
+      const closing = -(vx * nx + vz * nz);
+      if (closing > 0) {
+        const bx = fx * k.v + rx * k.slip + nx * closing * 1.5;
+        const bz = fz * k.v + rz * k.slip + nz * closing * 1.5;
+        k.v = (bx * fx + bz * fz) * 0.85;
+        k.slip = (bx * rx + bz * rz) * 0.5;
+        if (closing > 9 && k.spin === 0) {
+          k.spin = SPIN_TIME * 0.6;
+          k.drift = 0;
+          k.charge = 0;
+          k.boost = 0;
+          events?.push("crash");
+        } else if (closing > 2) events?.push("bump");
+      }
+      at = locate(t, k.x, k.z, at.i);
+    }
   }
   k.i = at.i;
   k.s = at.s;

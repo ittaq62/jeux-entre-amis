@@ -130,6 +130,34 @@
   opacity: 0.75;
 }
 
+/* Les pièces : une pièce dorée et le compte (doré quand il est plein) */
+.hud-coins {
+  position: absolute;
+  top: calc(138px + var(--safe-top, 0px));
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-card);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.hud-coin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3b0 0 18%, #ffd23a 19% 55%, #c98a10 56% 100%);
+  box-shadow:
+    0 0 0 2px #7a4b00,
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.hud-coins.is-full .num {
+  color: #ffd23a;
+}
+
 .hud-lap {
   position: absolute;
   top: calc(10px + var(--safe-top, 0px));
@@ -511,6 +539,17 @@
 
 .is-phone .hud-place strong {
   font-size: 54px;
+}
+
+.is-phone .hud-coins {
+  top: calc(104px + var(--safe-top, 0px));
+  left: 14px;
+  font-size: 21px;
+}
+
+.is-phone .hud-coin {
+  width: 18px;
+  height: 18px;
 }
 
 .is-phone .hud-place span {

@@ -8,6 +8,11 @@ import { BOT_STYLE, botDrive, newBotMemory, type BotLevel, type BotMemory } from
 import {
   BOX_RADIUS,
   BOX_RESPAWN_MS,
+  COIN_LOSS,
+  COIN_MAX,
+  COIN_RADIUS,
+  COIN_RESPAWN_MS,
+  COIN_SPEED,
   drawItem,
   hazardPos,
   ITEM_USES,
@@ -98,6 +103,8 @@ export interface Racer {
   laps: number;
   /** Son temps de course à l'arrivée */
   finish: number | null;
+  /** Les pièces ramassées (dix au plus) */
+  coins: number;
   stats: RacerStats;
 }
 
@@ -115,6 +122,8 @@ export interface Race {
   racers: Racer[];
   /** Chaque caisse : l'heure où elle revient (0 : elle est là) */
   boxes: number[];
+  /** Chaque pièce : l'heure où elle revient (0 : elle est là) */
+  coins: number[];
   hazards: Hazard[];
   seq: number;
   ranking: string[] | null;
@@ -149,6 +158,7 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
     allHumansAt: null,
     racers: [],
     boxes: [],
+    coins: [],
     hazards: [],
     seq: 0,
     ranking: null,
@@ -158,6 +168,7 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
   race.track = settings.track === "hasard" ? TRACK_IDS[Math.floor(random(race) * TRACK_IDS.length)]! : settings.track;
   const t = getTrack(race.track);
   race.boxes = t.boxes.map(() => 0);
+  race.coins = t.coins.map(() => 0);
   // L'ordre sur la grille est tiré au sort
   const order = [...ids];
   for (let i = order.length - 1; i > 0; i--) {
@@ -181,6 +192,7 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
       lapStart: race.goAt,
       laps: 0,
       finish: null,
+      coins: 0,
       stats: emptyStats(),
     };
   });
@@ -229,8 +241,19 @@ function progress(race: Race, r: Racer, now: number, events: BolidesEvent[]) {
 
 /** Les caisses traversées entre (ax, az) et la position actuelle du kart */
 function pickups(race: Race, r: Racer, ax: number, az: number, now: number, events: BolidesEvent[]) {
-  if (!race.settings.items || race.phase !== "racing" || r.finish !== null) return;
+  if (race.phase !== "racing" || r.finish !== null) return;
   const t = trackOf(race);
+  // Les pièces (même sans objets) : comptées ici, elles voyagent avec les positions, sans évènement
+  race.coins ??= t.coins.map(() => 0);
+  if (r.kart.air < 1.2) {
+    for (const coin of t.coins) {
+      if (race.coins[coin.index]! > now) continue;
+      if (!sweptHit(ax, az, r.kart.x, r.kart.z, coin.x, coin.z, COIN_RADIUS + KART_RADIUS * 0.6)) continue;
+      race.coins[coin.index] = now + COIN_RESPAWN_MS;
+      r.coins = Math.min(COIN_MAX, (r.coins ?? 0) + 1);
+    }
+  }
+  if (!race.settings.items) return;
   for (const box of t.boxes) {
     if (race.boxes[box.index]! > now) continue;
     if (!sweptHit(ax, az, r.kart.x, r.kart.z, box.x, box.z, BOX_RADIUS + KART_RADIUS * 0.6)) continue;
@@ -322,13 +345,13 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
         continue;
       }
       const rivals = race.racers.filter((o) => o !== r);
-      const plan = botDrive(t, r.kart, r.item, rivals, race.hazards, race.settings.botLevel, mem, at, race);
+      const plan = botDrive(t, r.kart, r.item, rivals, race.hazards, race.settings.botLevel, mem, at, race, race.coins);
       const x0 = r.kart.x;
       const z0 = r.kart.z;
       const kev: KartEvent[] = [];
       // Arrivé, un bot lève le pied
-      const top = r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r);
-      step(r.kart, plan.input, t, { top }, kev);
+      const top = (r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r)) * (1 + COIN_SPEED * (r.coins ?? 0));
+      step(r.kart, plan.input, t, { top, time: at / 1000 }, kev);
       for (const e of kev) {
         if (e === "turbo1" || e === "turbo2" || e === "turbo3") r.stats.turbos += 1;
         else if (e === "wall") r.stats.walls += 1;
@@ -366,6 +389,7 @@ function hit(race: Race, victim: Racer, by: string | null, kind: "huile" | "peta
     victim.kart.charge = 0;
   }
   victim.stats.hitsTaken += 1;
+  victim.coins = Math.max(0, (victim.coins ?? 0) - COIN_LOSS);
   if (by && by !== victim.id) {
     const from = racerOf(race, by);
     if (from) from.stats.hitsGiven += 1;

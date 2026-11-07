@@ -85,7 +85,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
       const rt = new RaceRuntime(box.current, g, looks, serverOffset, { phone, reduced, me, send, onHud: setHud });
       runtime.current = rt;
       if (import.meta.env.DEV) (window as unknown as { __bolides?: RaceRuntime }).__bolides = rt;
-      listeners.current.onTick = (now, k, a) => rt.onTick(now, k, a);
+      listeners.current.onTick = (now, k, a, c) => rt.onTick(now, k, a, c);
       listeners.current.onEvents = (events) => rt.onEvents(events);
     });
     return () => {
@@ -216,6 +216,12 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
               <strong className="num">{h.place === 1 ? "1" : h.place}</strong>
               <span>{h.place === 1 ? "er" : "e"}</span>
               <small className="num">/{h.total}</small>
+            </div>
+          )}
+          {me && (
+            <div className={`hud-coins ${h.coins >= 10 ? "is-full" : ""}`} aria-label={`${h.coins} pièces`}>
+              <span className="hud-coin" aria-hidden="true" />
+              <span className="num">{h.coins}</span>
             </div>
           )}
           <div className="hud-lap">
