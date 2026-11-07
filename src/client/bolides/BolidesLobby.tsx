@@ -80,12 +80,13 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
 
           <div className="bolides-howto">
             <p>
-              <strong>Trois tours, le premier sur la ligne gagne.</strong> Dérape dans les virages pour charger un turbo, passe sur les
-              flèches, et casse les caisses pour gagner des objets.
+              <strong>Le premier sur la ligne gagne.</strong> Dérape dans les virages : plus tu tiens, plus le turbo est gros (étincelles
+              bleues, puis orange, puis violettes). Au tremplin, appuie sur déraper en l'air pour une figure : encore un turbo à
+              l'atterrissage. Passe sur les flèches, et casse les caisses pour gagner des objets.
             </p>
             <p className="hint">
-              Au clavier : <kbd>↑</kbd> accélérer, <kbd>←</kbd> <kbd>→</kbd> tourner, <kbd>Espace</kbd> déraper, <kbd>E</kbd> se servir de
-              l'objet (ZQSD marche aussi). Sur téléphone, le kart accélère tout seul. Une manette marche aussi.
+              Au clavier : <kbd>↑</kbd> accélérer, <kbd>←</kbd> <kbd>→</kbd> tourner, <kbd>Espace</kbd> déraper (et figure en l'air),{" "}
+              <kbd>E</kbd> se servir de l'objet (ZQSD marche aussi). Sur téléphone, le kart accélère tout seul. Une manette marche aussi.
             </p>
           </div>
 

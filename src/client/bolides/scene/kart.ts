@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import { driftLevel, SPIN_TIME, TOP_SPEED, type Kart } from "../../../shared/games/bolides/physics.ts";
+import { mergeStatic } from "./merge.ts";
 import { PilotModel, WHEEL_AT, WHEEL_TILT } from "./pilot.ts";
 import { blobTexture, sparkTexture } from "./textures.ts";
 
@@ -200,12 +201,12 @@ export class KartModel {
     // Le plancher, la coque, les pontons de chaque côté, les pare-chocs
     add(new RoundedBoxGeometry(1.36, 0.12, 2.6, 2, 0.05), dark, 0, 0.24, 0.05);
     add(hullGeometry(), paint, 0, 0, 0);
+    const white = keep(new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: 0.4 }));
     for (const side of [-1, 1]) {
       const pod = add(new THREE.CapsuleGeometry(0.17, 0.55, 4, 12), paintDark, side * 0.66, 0.42, 0);
       pod.rotation.x = Math.PI / 2;
       pod.scale.set(1, 1, 0.85);
       // Une bande blanche sur le ponton
-      const white = keep(new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: 0.4 }));
       const stripe = add(new THREE.CapsuleGeometry(0.172, 0.5, 4, 12), white, side * 0.66, 0.42, 0.05, false);
       stripe.rotation.x = Math.PI / 2;
       stripe.scale.set(1.02, 0.35, 0.87);
@@ -248,6 +249,8 @@ export class KartModel {
     const columnAt = WHEEL_AT.clone().addScaledVector(axis, 0.22);
     const column = add(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 8), dark, columnAt.x, columnAt.y, columnAt.z, false);
     column.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
+    // Toutes ces pièces bougent ensemble : une forme par matière (les flammes restent à part, elles s'allument)
+    mergeStatic(this.body, keep, this.flames);
 
     // Le pilote et son volant
     this.pilot = new PilotModel(look.avatar, look.head, look.color, keep, shadows);

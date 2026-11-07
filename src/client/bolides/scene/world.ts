@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
 import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
+import { mergeDeep } from "./merge.ts";
 import { Sky, SKY_COLORS } from "./sky.ts";
 import * as TX from "./textures.ts";
 
@@ -501,6 +502,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
       arm.position.set(x, 18.5, quay - 6);
       crane.add(arm);
     }
+    mergeDeep(crane, keep);
     group.add(crane);
     // Les conteneurs empilés et les maisons du port, à l'intérieur du circuit
     const box = keep(new THREE.BoxGeometry(1, 1, 1));
@@ -662,7 +664,8 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     carrot.rotateX(Math.PI / 2);
     const carrotMat = keep(lambert(0xf2803a));
     const coal = keep(lambert(0x222428));
-    for (const [x, z] of scatter(8, t.wall + 3, t.wall + 12)) {
+    const snowmen = new THREE.Group();
+    for (const [x, z] of scatter(Math.round(8 * few), t.wall + 3, t.wall + 12)) {
       const y = heightAt(x, z);
       const man = new THREE.Group();
       for (const [ry, rr] of [
@@ -687,8 +690,10 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
       }
       man.rotation.y = r() * Math.PI * 2;
       man.position.set(x, y, z);
-      group.add(man);
+      snowmen.add(man);
     }
+    mergeDeep(snowmen, keep);
+    group.add(snowmen);
   }
 
   const horizon = SKY_COLORS[theme].horizon;
@@ -792,6 +797,7 @@ function addChateau(group: THREE.Group, x: number, y: number, z: number, keep: K
   g.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = shadows;
   });
+  mergeDeep(g, keep);
   g.position.set(x, y, z);
   group.add(g);
 }

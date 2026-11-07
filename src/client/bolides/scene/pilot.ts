@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { AVATAR_BACKGROUNDS, AVATAR_HAIR_COLORS, AVATAR_SKINS, type AvatarConfig } from "../../../shared/avatar.ts";
+import { mergeStatic } from "./merge.ts";
 
 type Keep = <T extends { dispose: () => void }>(x: T) => T;
 
@@ -342,7 +343,11 @@ export class PilotModel {
       this.head.add(hair);
     }
     const hat = hatGroup(avatar.hat, keep, shadows);
-    if (hat) this.head.add(hat);
+    if (hat) {
+      mergeStatic(hat, keep);
+      this.head.add(hat);
+    }
+    mergeStatic(this.head, keep);
 
     // Les étoiles de la tête qui tourne, au-dessus d'elle
     const starMat = keep(new THREE.MeshBasicMaterial({ color: 0xffd84a, side: THREE.DoubleSide }));
@@ -366,6 +371,7 @@ export class PilotModel {
     this.wheel.add(hub);
     const spoke = new THREE.Mesh(keep(new THREE.BoxGeometry(WHEEL_R * 2, 0.03, 0.02)), dark);
     this.wheel.add(spoke);
+    mergeStatic(this.wheel, keep);
     this.group.add(this.wheel);
 
     // Les bras : épaule, coude, gant

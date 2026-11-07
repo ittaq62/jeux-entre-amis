@@ -252,11 +252,13 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 {!phone && me && (
                   <span className="hud-keys">
                     <kbd>↑</kbd> accélérer · <kbd>←</kbd>
-                    <kbd>→</kbd> tourner · <kbd>Espace</kbd> déraper · <kbd>E</kbd> objet
+                    <kbd>→</kbd> tourner · <kbd>Espace</kbd> déraper, figure en l'air · <kbd>E</kbd> objet
                   </span>
                 )}
                 {phone && me && (
-                  <span className="hud-keys">Le kart accélère tout seul : tourne, dérape, et touche l'objet pour t'en servir</span>
+                  <span className="hud-keys">
+                    Le kart accélère tout seul : tourne, dérape (et fais une figure en l'air), touche l'objet pour t'en servir
+                  </span>
                 )}
               </motion.div>
             )}

@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { gridSlot, pointAt, type Track } from "../../../shared/games/bolides/track.ts";
 import { KART_COLORS } from "./kart.ts";
+import { mergeDeep } from "./merge.ts";
 import * as TX from "./textures.ts";
 
 type Keep = <T extends { dispose: () => void }>(x: T) => T;
@@ -85,6 +86,8 @@ export function addBendDressing(ctx: DecorContext) {
   const dark = keep(new THREE.MeshLambertMaterial({ color: 0x3a3d44 }));
   const posts: THREE.Matrix4[] = [];
   const backs: THREE.Matrix4[] = [];
+  const faces: Record<1 | -1, THREE.Matrix4[]> = { 1: [], [-1]: [] };
+  const dummy = new THREE.Object3D();
   const tyreSpots: THREE.Matrix4[] = [];
   const whiteSpots: THREE.Matrix4[] = [];
   for (const b of findBends(t)) {
@@ -97,11 +100,11 @@ export function addBendDressing(ctx: DecorContext) {
       const back = pointAt(t, s - 30, 0);
       const rot = Math.atan2(back.x - p.x, back.z - p.z);
       const y = heightAt(p.x, p.z) + 1.5;
-      const board = new THREE.Mesh(boardGeo, b.side > 0 ? left : right);
-      board.position.set(p.x, y, p.z);
-      board.rotation.y = rot;
-      board.translateZ(0.07);
-      group.add(board);
+      dummy.position.set(p.x, y, p.z);
+      dummy.rotation.set(0, rot, 0);
+      dummy.translateZ(0.07);
+      dummy.updateMatrix();
+      faces[b.side].push(dummy.matrix.clone());
       backs.push(place(p.x, y, p.z, rot));
       for (const dx of [-1.6, 1.6]) {
         posts.push(place(p.x + Math.cos(rot) * dx, y - 0.9, p.z - Math.sin(rot) * dx));
@@ -119,6 +122,8 @@ export function addBendDressing(ctx: DecorContext) {
       }
     }
   }
+  group.add(instanced(boardGeo, left, faces[1], false));
+  group.add(instanced(boardGeo, right, faces[-1], false));
   group.add(instanced(backGeo, dark, backs, false));
   group.add(instanced(postGeo, dark, posts, false));
   const tyre = keep(new THREE.TorusGeometry(0.42, 0.19, 6, 12));
@@ -170,34 +175,40 @@ export function addFlags(ctx: DecorContext): (time: number) => void {
   shape.lineTo(0, -1.1);
   shape.closePath();
   const flagGeo = keep(new THREE.ShapeGeometry(shape));
-  const flags: THREE.Mesh[] = [];
-  let k = 0;
+  const spots: { x: number; y: number; z: number; rot: number }[] = [];
+  const poles: THREE.Matrix4[] = [];
   for (let s = -70; s <= 70; s += 14) {
     if (Math.abs(s) < 10) continue;
     for (const side of [-1, 1]) {
       const p = pointAt(t, s, side * (t.wall + 1.9));
       if (!ctx.free(p.x, p.z, t.wall + 1)) continue;
       const y = heightAt(p.x, p.z);
-      const m = new THREE.Mesh(pole, poleMat);
-      m.position.set(p.x, y + 3.5, p.z);
-      m.castShadow = shadows;
-      group.add(m);
-      const flag = new THREE.Mesh(
-        flagGeo,
-        keep(new THREE.MeshLambertMaterial({ color: KART_COLORS[k++ % KART_COLORS.length], side: THREE.DoubleSide })),
-      );
-      flag.position.set(p.x, y + 6.9, p.z);
+      poles.push(place(p.x, y + 3.5, p.z));
       // Le drapeau flotte vers l'arrière de la course (le vent de la course)
-      flag.rotation.y = Math.atan2(-p.tx, -p.tz) - Math.PI / 2;
-      flag.userData.base = flag.rotation.y;
-      group.add(flag);
-      flags.push(flag);
+      spots.push({ x: p.x, y: y + 6.9, z: p.z, rot: Math.atan2(-p.tx, -p.tz) - Math.PI / 2 });
     }
   }
+  group.add(instanced(pole, poleMat, poles, shadows));
+  const flags = new THREE.InstancedMesh(
+    flagGeo,
+    keep(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide })),
+    Math.max(1, spots.length),
+  );
+  flags.count = spots.length;
+  spots.forEach((_, i) => flags.setColorAt(i, new THREE.Color(KART_COLORS[i % KART_COLORS.length])));
+  if (flags.instanceColor) flags.instanceColor.needsUpdate = true;
+  group.add(flags);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const one = new THREE.Vector3(1, 1, 1);
+  const at = new THREE.Vector3();
   return (time: number) => {
-    flags.forEach((f, i) => {
-      f.rotation.y = (f.userData.base as number) + Math.sin(time * 3 + i * 1.3) * 0.25;
+    spots.forEach((s, i) => {
+      q.setFromAxisAngle(up, s.rot + Math.sin(time * 3 + i * 1.3) * 0.25);
+      flags.setMatrixAt(i, m.compose(at.set(s.x, s.y, s.z), q, one));
     });
+    flags.instanceMatrix.needsUpdate = true;
   };
 }
 
@@ -252,6 +263,7 @@ export function addGrandstand(ctx: DecorContext) {
       post.position.set(x, 4.3, 9);
       stand.add(post);
     }
+    mergeDeep(stand, keep);
     // Tournée vers la route : son z local s'éloigne du milieu de la route
     const c = pointAt(t, along, 0);
     stand.rotation.y = Math.atan2(p.x - c.x, p.z - c.z);
