@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ropeLeft } from "../../shared/games/meche/engine.ts";
 import { fuseProgress, type FuseView } from "../../shared/games/meche/view.ts";
 
 interface Props {
@@ -49,12 +50,15 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
   const burntCore = useRef<SVGPathElement>(null);
   const spark = useRef<SVGGElement>(null);
   const flash = useRef<SVGCircleElement>(null);
+  const gain = useRef<HTMLSpanElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const hotRef = useRef(false);
   const onHotRef = useRef(onHot);
   onHotRef.current = onHot;
   // Ce qui est dessiné : il rattrape l'avancée réelle, en glissant quand la mèche recule
   const drawn = useRef(0);
+  // La mèche d'avant, pour savoir ce qu'un mot a fait gagner
+  const previous = useRef<FuseView | null>(null);
 
   useEffect(() => {
     const el = box.current;
@@ -67,6 +71,8 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
   }, []);
 
   useEffect(() => {
+    const before = previous.current;
+    previous.current = fuse;
     if (!fuse || size.w === 0) {
       burnt.current?.setAttribute("stroke-dasharray", "0 3000");
       burntCore.current?.setAttribute("stroke-dasharray", "0 3000");
@@ -76,6 +82,27 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
         onHotRef.current?.(false);
       }
       return;
+    }
+    // La même corde qui recule : ce que le mot a fait gagner s'envole de l'étincelle, en secondes à la vitesse du moment
+    if (glide && before && before !== fuse) {
+      const now = Date.now() + serverOffset;
+      const won = (ropeLeft(fuse, now) - ropeLeft(before, now)) / Math.max(0.1, fuse.speed) / 1000;
+      const path = line.current;
+      if (won >= 0.5 && path && gain.current) {
+        const at = path.getPointAtLength(drawn.current * path.getTotalLength());
+        const half = Math.round(won * 2) / 2;
+        gain.current.textContent = `+${String(half).replace(".", ",")} s`;
+        gain.current.style.left = `${at.x}px`;
+        gain.current.style.top = `${at.y}px`;
+        gain.current.animate(
+          [
+            { opacity: 0, transform: "translate(-50%, -30%) scale(0.7)" },
+            { opacity: 1, transform: "translate(-50%, -110%) scale(1.05)", offset: 0.2 },
+            { opacity: 0, transform: "translate(-50%, -260%) scale(1)" },
+          ],
+          { duration: 1300, easing: "ease-out" },
+        );
+      }
     }
     let frame = 0;
     let last = performance.now();
@@ -145,6 +172,7 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
           )}
         </svg>
       )}
+      <span ref={gain} className="rope-gain" />
       <Dynamite gone={bombGone} hot={hot} />
     </div>
   );
