@@ -70,6 +70,10 @@ export class RaceScene {
   private smokeTick = 0;
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
+  /** Des vecteurs de travail, réutilisés d'une image à l'autre */
+  private tmpPos = new THREE.Vector3();
+  private tmpLook = new THREE.Vector3();
+  private tmp = new THREE.Vector3();
   private camReady = false;
   /** La caméra de poursuite : son cap et sa hauteur, lissés (la position suit le kart sans retard) */
   private camYaw = 0;
@@ -81,6 +85,12 @@ export class RaceScene {
   private resize: ResizeObserver;
   private shadows: boolean;
   private envTex: THREE.Texture;
+  /** La finesse de l'image : elle baisse un peu si l'appareil peine (moins de 45 images par seconde), et remonte */
+  private ratio: number;
+  private maxRatio: number;
+  private frameAvg = 1 / 60;
+  private resTimer = 0;
+  private goodFor = 0;
 
   constructor(
     private container: HTMLElement,
@@ -88,7 +98,9 @@ export class RaceScene {
   ) {
     this.shadows = !opts.phone;
     this.renderer = new THREE.WebGLRenderer({ antialias: !opts.phone, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.phone ? 1.5 : 2));
+    this.maxRatio = Math.min(window.devicePixelRatio || 1, opts.phone ? 1.5 : 2);
+    this.ratio = this.maxRatio;
+    this.renderer.setPixelRatio(this.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // Des couleurs franches, sans blancs brûlés au soleil
     this.renderer.toneMapping = THREE.NeutralToneMapping;
@@ -127,6 +139,24 @@ export class RaceScene {
 
     this.resize = new ResizeObserver(() => this.fit());
     this.resize.observe(container);
+    this.fit();
+  }
+
+  private adaptResolution(dt: number) {
+    if (dt <= 0) return;
+    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    this.resTimer += dt;
+    this.goodFor = this.frameAvg < 1 / 56 ? this.goodFor + dt : 0;
+    if (this.resTimer < 2) return;
+    this.resTimer = 0;
+    const min = this.opts.phone ? 0.7 : 1;
+    let next = this.ratio;
+    if (this.frameAvg > 1 / 45) next = Math.max(min, this.ratio * 0.85);
+    else if (this.goodFor > 8) next = Math.min(this.maxRatio, this.ratio * 1.1);
+    if (Math.abs(next - this.ratio) < 0.01) return;
+    this.ratio = next;
+    this.goodFor = 0;
+    this.renderer.setPixelRatio(next);
     this.fit();
   }
 
@@ -368,6 +398,7 @@ export class RaceScene {
     const t = this.track;
     if (!t || !this.world) return;
     this.time += f.dt;
+    this.adaptResolution(f.dt);
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
     // La fumée des dérapages, une image sur deux, pour les karts pas trop loin
     this.smokeTick = (this.smokeTick + 1) % 2;
@@ -424,7 +455,7 @@ export class RaceScene {
     this.world.update(this.time, this.camera.position);
     // Les étiquettes des autres : ni trop près ni trop loin ; un kart collé à la caméra s'efface pour ne pas boucher la vue
     f.karts.forEach((k, i) => {
-      const d = this.camPos.distanceTo(new THREE.Vector3(k.kart.x, k.kart.y + 0.8, k.kart.z));
+      const d = this.camPos.distanceTo(this.tmp.set(k.kart.x, k.kart.y + 0.8, k.kart.z));
       this.karts[i]?.showTag(d > 10 && d < 90);
       this.karts[i]?.fade(i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6)));
     });
@@ -447,12 +478,12 @@ export class RaceScene {
       const side = 16 * (1 - e);
       const p = pointAt(t, s, side);
       const grid = pointAt(t, -16, 0);
-      pos = new THREE.Vector3(p.x, p.y + 30 - e * 23, p.z);
-      look = new THREE.Vector3(grid.x, grid.y + 1, grid.z);
+      pos = this.tmpPos.set(p.x, p.y + 30 - e * 23, p.z);
+      look = this.tmpLook.set(grid.x, grid.y + 1, grid.z);
     } else if (f.camera === "orbit") {
       const a = this.time * 0.3;
-      pos = new THREE.Vector3(target.x + Math.cos(a) * 9, target.y + 4, target.z + Math.sin(a) * 9);
-      look = new THREE.Vector3(target.x, target.y + 1, target.z);
+      pos = this.tmpPos.set(target.x + Math.cos(a) * 9, target.y + 4, target.z + Math.sin(a) * 9);
+      look = this.tmpLook.set(target.x, target.y + 1, target.z);
     } else {
       // Derrière le kart, assez près et assez bas pour bien le voir : le cap de la caméra suit celui du kart en
       // douceur, sa hauteur aussi (les bosses, les sauts), mais elle ne prend pas de retard quand il file
@@ -467,8 +498,8 @@ export class RaceScene {
       const up = (portrait ? 3.1 : 2.55) + target.air * 0.5;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
-      pos = new THREE.Vector3(target.x - fx * back, this.camY + up, target.z - fz * back);
-      look = new THREE.Vector3(target.x + fx * 6, this.camY + 1.25, target.z + fz * 6);
+      pos = this.tmpPos.set(target.x - fx * back, this.camY + up, target.z - fz * back);
+      look = this.tmpLook.set(target.x + fx * 6, this.camY + 1.25, target.z + fz * 6);
       fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0);
     }
     const chase = f.camera === "chase" && Boolean(target);

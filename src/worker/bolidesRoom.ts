@@ -366,7 +366,8 @@ export class BolidesRoom extends DurableObject<Env> {
         const k = decodeKart(msg.k, r.kart);
         if (!k) return;
         const n = Array.isArray(msg.n) && msg.n.every((x) => typeof x === "number" && Number.isFinite(x)) ? msg.n : null;
-        const events = reportKart(race, seat.id, k, now, n ? { turbos: n[0], walls: n[1] } : undefined);
+        const at = typeof msg.at === "number" ? msg.at : undefined;
+        const events = reportKart(race, seat.id, k, now, n ? { turbos: n[0], walls: n[1] } : undefined, at);
         if (events.length > 0) this.onEvents(events);
         return;
       }
@@ -627,7 +628,12 @@ export class BolidesRoom extends DurableObject<Env> {
     }
     const now = Date.now();
     const events = [...driveBots(race, now, this.memory), ...worldTick(race, now)];
-    this.broadcastRaw({ t: "tick", now, k: race.racers.map((r) => encodeKart(r.kart)) });
+    this.broadcastRaw({
+      t: "tick",
+      now,
+      k: race.racers.map((r) => encodeKart(r.kart)),
+      a: race.racers.map((r) => Math.max(0, Math.min(1000, Math.round(now - r.stateAt)))),
+    });
     if (events.length > 0) this.onEvents(events);
     if (race.phase === "over" && d.status === "playing") await this.finishGame(now);
     else if (this.dirty) {

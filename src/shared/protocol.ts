@@ -540,7 +540,7 @@ export type BolidesClientMessage =
   | { t: "kick"; userId: string }
   | { t: "start" }
   /** Où en est son kart, plusieurs fois par seconde, et ce qu'il a compté depuis le départ : mini-turbos, chocs contre le mur */
-  | { t: "kart"; k: KartNet; n?: [number, number] }
+  | { t: "kart"; k: KartNet; n?: [number, number]; at?: number }
   /** Se servir de son objet */
   | { t: "use" }
   | { t: "chat"; text: string }
@@ -552,8 +552,11 @@ export type BolidesClientMessage =
 
 export type BolidesServerMessage =
   | { t: "room"; room: BolidesRoomView; events: BolidesEvent[] }
-  /** Tous les karts, plusieurs fois par seconde (dans l'ordre des pilotes de la course), à l'heure du serveur */
-  | { t: "tick"; now: number; k: KartNet[] }
+  /**
+   * Tous les karts, plusieurs fois par seconde (dans l'ordre des pilotes de la course), à l'heure du serveur ; `a` :
+   * l'âge de chaque position en millisecondes (elle date de `now - a[i]`)
+   */
+  | { t: "tick"; now: number; k: KartNet[]; a?: number[] }
   /** Ce qui arrive entre deux états complets (objets, coups, tours) */
   | { t: "fx"; events: BolidesEvent[]; now: number }
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }

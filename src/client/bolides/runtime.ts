@@ -54,12 +54,14 @@ export interface RuntimeOptions {
 interface Tick {
   now: number;
   karts: (Kart | null)[];
+  /** L'heure (du serveur) de chaque position */
+  at: number[];
 }
 
 /** Le délai avec lequel on montre les autres karts : de quoi avoir toujours deux positions encadrantes */
-const INTERP_MS = 110;
+const INTERP_MS = 120;
 /** Ce dont on les avance ensuite, à leur vitesse, pour les montrer à peu près où ils sont vraiment */
-const LEAD_S = 0.13;
+const LEAD_S = 0.14;
 const SEND_MS = 50;
 
 export class RaceRuntime {
@@ -69,6 +71,12 @@ export class RaceRuntime {
   private track: Track;
   private view: BolidesView;
   private serverOffset = 0;
+  /** Le décalage d'horloge estimé d'après les positions reçues ; serverOffset le rejoint en douceur */
+  private offsetTarget = 0;
+  /** Les autres karts tels qu'on les montre (réutilisés d'une image à l'autre) */
+  private views: Kart[] = [];
+  /** La part de l'avance montrée pour chaque kart (elle s'efface en douceur pendant un tête-à-queue) */
+  private leads: number[] = [];
   private ids: string[];
   private colors: string[];
   private mine: number;
@@ -101,6 +109,7 @@ export class RaceRuntime {
   ) {
     this.view = view;
     this.serverOffset = serverOffset;
+    this.offsetTarget = serverOffset;
     this.track = getTrack(view.track);
     this.ids = view.racers.map((r) => r.id);
     this.colors = looks.map((l) => l.color);
@@ -108,6 +117,7 @@ export class RaceRuntime {
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
     this.scene.build(this.track, looks);
     this.shown = view.karts.map((n) => decodeKart(n)!);
+    this.views = this.shown.map((k) => ({ ...k }));
     this.steers = this.shown.map(() => 0);
     this.controls = new Controls(() => this.mine >= 0);
     this.controls.autoGas = opts.phone;
@@ -129,7 +139,7 @@ export class RaceRuntime {
   private takeView(view: BolidesView, serverOffset: number) {
     this.view = view;
     // L'heure du serveur s'estime mieux avec les positions, reçues bien plus souvent
-    if (this.ticks.length === 0) this.serverOffset = serverOffset;
+    if (this.ticks.length === 0) this.serverOffset = this.offsetTarget = serverOffset;
     const now = this.serverNow;
     this.scene.setCrates(view.boxes.map((at) => at <= now));
     this.scene.setHazards(view.hazards);
@@ -145,11 +155,13 @@ export class RaceRuntime {
   }
 
   /** Les positions de tous les karts, reçues du serveur */
-  onTick(now: number, karts: KartNet[]) {
-    // Le décalage d'horloge : le plus grand vu récemment (un message en retard le ferait croire plus petit)
+  onTick(now: number, karts: KartNet[], ages?: number[]) {
+    // Le décalage d'horloge : le plus grand vu récemment (un message en retard le ferait croire plus petit). L'heure
+    // utilisée le rejoint petit à petit, à chaque image : jamais de saut, donc des karts qui glissent sans à-coups.
     const est = now - Date.now();
-    this.serverOffset = this.ticks.length === 0 ? est : Math.max(est, this.serverOffset - 2);
-    this.ticks.push({ now, karts: karts.map((n) => decodeKart(n)) });
+    if (this.ticks.length === 0) this.serverOffset = this.offsetTarget = est;
+    else this.offsetTarget = Math.max(est, this.offsetTarget - 2);
+    this.ticks.push({ now, karts: karts.map((n) => decodeKart(n)), at: karts.map((_, i) => now - (ages?.[i] ?? 0)) });
     if (this.ticks.length > 30) this.ticks.shift();
   }
 
@@ -242,46 +254,71 @@ export class RaceRuntime {
     return this.driver?.kart ?? (this.mine >= 0 ? (this.shown[this.mine] ?? null) : null);
   }
 
-  /** Les autres karts à l'instant montré : entre les deux positions reçues qui l'encadrent */
+  /**
+   * Les autres karts à l'instant montré : entre les deux positions reçues qui l'encadrent. Chaque position a sa
+   * propre heure (un bot est simulé jusqu'à un instant, un joueur a envoyé la sienne un peu avant le tic) : on s'en
+   * sert, sinon ils avanceraient par saccades.
+   */
   private interpolate(renderAt: number) {
     const ticks = this.ticks;
     if (ticks.length === 0) return;
-    let a = ticks[0]!;
-    let b = ticks[ticks.length - 1]!;
-    for (let i = ticks.length - 1; i > 0; i--) {
-      if (ticks[i - 1]!.now <= renderAt) {
-        a = ticks[i - 1]!;
-        b = ticks[i]!;
-        break;
-      }
-    }
-    const span = Math.max(1, b.now - a.now);
-    const f = Math.max(0, Math.min(1.6, (renderAt - a.now) / span));
     this.ids.forEach((_, i) => {
       if (i === this.mine && this.driver) return;
-      const ka = a.karts[i];
+      // La dernière position d'avant l'instant montré, et la suivante (une position répétée par deux tics ne compte qu'une fois)
+      let ia = -1;
+      for (let j = ticks.length - 1; j >= 0; j--) {
+        if (ticks[j]!.at[i]! <= renderAt && ticks[j]!.karts[i]) {
+          ia = j;
+          break;
+        }
+      }
+      if (ia < 0) ia = 0;
+      const a = ticks[ia]!;
+      let b = a;
+      for (let j = ia + 1; j < ticks.length; j++) {
+        if (ticks[j]!.at[i]! > a.at[i]! && ticks[j]!.karts[i]) {
+          b = ticks[j]!;
+          break;
+        }
+      }
+      // Pas de position plus récente : on part de l'avant-dernière, et on prolonge un peu
+      let from = a;
+      if (b === a) {
+        for (let j = ia - 1; j >= 0; j--) {
+          if (ticks[j]!.at[i]! < a.at[i]! && ticks[j]!.karts[i]) {
+            from = ticks[j]!;
+            break;
+          }
+        }
+        b = a;
+      }
+      const ka = from.karts[i];
       const kb = b.karts[i];
       if (!ka || !kb) return;
+      const span = Math.max(1, b.at[i]! - from.at[i]!);
+      const f = from === b ? 1 : Math.max(0, Math.min(1.6, (renderAt - from.at[i]!) / span));
       const prev = this.shown[i]!;
+      const prevH = prev.h;
       const h = ka.h + wrapAngle(kb.h - ka.h) * f;
       const v = ka.v + (kb.v - ka.v) * f;
       const slip = ka.slip + (kb.slip - ka.slip) * f;
       // On les montre là où ils sont sans doute maintenant : la position lissée, avancée de ce retard à leur vitesse
       // (sans cela, deux karts côte à côte se voient chacun un peu devant l'autre)
-      const lead = kb.spin > 0 ? 0 : LEAD_S;
-      const next: Kart = {
-        ...kb,
-        x: ka.x + (kb.x - ka.x) * f + (Math.sin(h) * v - Math.cos(h) * slip) * lead,
-        z: ka.z + (kb.z - ka.z) * f + (Math.cos(h) * v + Math.sin(h) * slip) * lead,
-        y: ka.y + (kb.y - ka.y) * f,
-        air: Math.max(0, ka.air + (kb.air - ka.air) * f),
-        h,
-        v,
-        slip,
-        dist: ka.dist + (kb.dist - ka.dist) * f + v * lead,
-      };
+      const want = kb.spin > 0 ? 0 : 1;
+      const share = (this.leads[i] ?? 1) + (want - (this.leads[i] ?? 1)) * 0.12;
+      this.leads[i] = share;
+      const lead = LEAD_S * share;
+      const next = Object.assign(this.views[i]!, kb);
+      next.x = ka.x + (kb.x - ka.x) * f + (Math.sin(h) * v - Math.cos(h) * slip) * lead;
+      next.z = ka.z + (kb.z - ka.z) * f + (Math.cos(h) * v + Math.sin(h) * slip) * lead;
+      next.y = ka.y + (kb.y - ka.y) * f;
+      next.air = Math.max(0, ka.air + (kb.air - ka.air) * f);
+      next.h = h;
+      next.v = v;
+      next.slip = slip;
+      next.dist = ka.dist + (kb.dist - ka.dist) * f + v * lead;
       // Le volant des autres : deviné d'après leur façon de tourner
-      const turn = wrapAngle(h - prev.h);
+      const turn = wrapAngle(h - prevH);
       this.steers[i] = this.steers[i]! + (Math.max(-1, Math.min(1, -turn * 18)) - this.steers[i]!) * 0.3;
       this.shown[i] = next;
     });
@@ -292,7 +329,11 @@ export class RaceRuntime {
     this.frame = requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, Math.max(0, (t - this.last) / 1000));
     this.last = t;
-    const now = this.serverNow;
+    // L'heure du serveur avance avec l'image, et rattrape l'estimation sans à-coup (2 ms par image au plus)
+    const gap = this.offsetTarget - this.serverOffset;
+    this.serverOffset += Math.abs(gap) > 400 ? gap : Math.max(-2, Math.min(2, gap * 0.1));
+    // L'heure de cette image (et non celle où ce code tourne, parfois en retard) : les karts avancent avec l'image
+    const now = performance.timeOrigin + t + this.serverOffset;
     const v = this.view;
     this.interpolate(now - INTERP_MS);
     const pad = this.controls.read(dt);
@@ -333,11 +374,11 @@ export class RaceRuntime {
           });
         }
       }
-      this.shown[this.mine] = d.kart;
+      this.shown[this.mine] = d.view();
       this.steers[this.mine] = pad.steer;
       if (t - this.sentAt >= SEND_MS) {
         this.sentAt = t;
-        this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls] });
+        this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls], at: Math.round(now) });
       }
     }
     // Les sons et les effets de la conduite, et ce qu'on compte pour les succès

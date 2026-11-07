@@ -261,10 +261,12 @@ function bone(radius: number, mat: THREE.Material, keep: Keep, shadows: boolean)
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+/** Des vecteurs de travail, réutilisés à chaque image (rien à ramasser pour le ramasse-miettes) */
+const V = Array.from({ length: 7 }, () => new THREE.Vector3());
 
 /** Place un os de `a` à `b` */
 function stretch(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
-  const dir = new THREE.Vector3().subVectors(b, a);
+  const dir = V[6]!.subVectors(b, a);
   const len = dir.length();
   m.position.copy(a);
   m.quaternion.setFromUnitVectors(UP, dir.divideScalar(len || 1));
@@ -434,20 +436,29 @@ export class PilotModel {
     this.torso.updateMatrix();
     this.wheel.updateMatrix();
     for (const arm of this.arms) {
-      const shoulder = arm.shoulder.clone().applyMatrix4(this.torso.matrix);
+      const [shoulder, hand, up, along, perp, elbow] = V as [
+        THREE.Vector3,
+        THREE.Vector3,
+        THREE.Vector3,
+        THREE.Vector3,
+        THREE.Vector3,
+        THREE.Vector3,
+      ];
+      shoulder.copy(arm.shoulder).applyMatrix4(this.torso.matrix);
       // Les mains tiennent le volant à « 9 h 15 », et tournent avec lui
-      const grip = new THREE.Vector3(arm.side * WHEEL_R, 0.02, 0).applyMatrix4(this.wheel.matrix);
+      hand.set(arm.side * WHEEL_R, 0.02, 0).applyMatrix4(this.wheel.matrix);
       const wave = s.celebrate ? Math.sin(s.time * 9 + arm.side) * 0.1 : 0;
-      const up = new THREE.Vector3(arm.side * 0.45 + wave, HEAD_Y + 0.25, -0.05);
-      const hand = grip.lerp(up, this.cheer);
+      up.set(arm.side * 0.45 + wave, HEAD_Y + 0.25, -0.05);
+      hand.lerp(up, this.cheer);
       const d = Math.min(UPPER + FORE - 0.01, shoulder.distanceTo(hand));
-      const along = new THREE.Vector3().subVectors(hand, shoulder).normalize();
+      along.subVectors(hand, shoulder).normalize();
       // Le coude : du côté extérieur et un peu vers le bas
-      const hint = new THREE.Vector3(arm.side, -0.6, -0.2);
-      const perp = hint.sub(along.clone().multiplyScalar(hint.dot(along))).normalize();
+      perp.set(arm.side, -0.6, -0.2);
+      const dot = perp.dot(along);
+      perp.addScaledVector(along, -dot).normalize();
       const x = (UPPER * UPPER - FORE * FORE + d * d) / (2 * d);
       const h = Math.sqrt(Math.max(0, UPPER * UPPER - x * x));
-      const elbow = shoulder.clone().addScaledVector(along, x).addScaledVector(perp, h);
+      elbow.copy(shoulder).addScaledVector(along, x).addScaledVector(perp, h);
       stretch(arm.upper, shoulder, elbow);
       stretch(arm.fore, elbow, hand);
       arm.elbow.position.copy(elbow);
