@@ -34,6 +34,8 @@ export const TURBO_TIME = 1.3;
 export const SHIELD_MS = 8000;
 export const OIL_RADIUS = 1.7;
 export const OIL_MS = 40_000;
+/** Celui qui pose une flaque ne glisse pas dessus en la posant (au tour suivant, si) */
+export const OIL_SAFE_MS = 1500;
 /** Le pétard : sa vitesse le long de la route (plus vite que n'importe quel kart), sa durée, sa taille */
 export const PETARD_SPEED = 44;
 export const PETARD_MS = 3500;

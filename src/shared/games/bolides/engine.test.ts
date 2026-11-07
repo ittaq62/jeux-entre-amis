@@ -416,6 +416,33 @@ describe("la course", () => {
     expect(me.finish).toBe(now - race.goAt);
   });
 
+  it("celui qui pose une flaque d'huile en roulant vite ne glisse pas dessus", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    const t = getTrack("port");
+    worldTick(race, race.goAt);
+    const a = racerOf(race, "a")!;
+    const at = (s: number) => {
+      const p = pointAt(t, s, 0);
+      Object.assign(a.kart, { x: p.x, z: p.z, s, d: 0, h: Math.atan2(p.tx, p.tz), v: 35 });
+    };
+    // Il file à 35 m/s : à chaque instant du serveur (50 ms), il avance de 1,75 m
+    at(98.25);
+    worldTick(race, race.goAt + 950);
+    at(100);
+    a.item = "huile";
+    a.uses = 1;
+    let now = race.goAt + 1000;
+    useItem(race, "a", now);
+    const hits: string[] = [];
+    for (let k = 1; k <= 20; k++) {
+      now += 50;
+      at(100 + k * 1.75);
+      for (const e of worldTick(race, now)) if (e.type === "hit") hits.push(e.id);
+    }
+    expect(hits).toEqual([]);
+    expect(race.hazards.some((h) => h.kind === "huile")).toBe(true);
+  });
+
   it("le pétard d'un joueur touche le kart de devant, le bouclier arrête un coup", () => {
     const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
     worldTick(race, race.goAt);

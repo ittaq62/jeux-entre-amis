@@ -13,6 +13,7 @@ import {
   ITEM_USES,
   KLAXON_RADIUS,
   OIL_RADIUS,
+  OIL_SAFE_MS,
   PETARD_RADIUS,
   PETARD_SAFE_MS,
   PETARD_SPEED,
@@ -378,8 +379,8 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
     // Chez un joueur, son navigateur l'a déjà appliqué en appuyant
     if (r.bot) k.boost = Math.max(k.boost, TURBO_TIME);
   } else if (kind === "huile") {
-    const x = k.x - Math.sin(k.h) * 2.8;
-    const z = k.z - Math.cos(k.h) * 2.8;
+    const x = k.x - Math.sin(k.h) * 3.4;
+    const z = k.z - Math.cos(k.h) * 3.4;
     const at = locate(t, x, z, k.i);
     const hazard: Hazard = { id: ++race.seq, kind: "huile", x, z, s: at.s, d: at.d, owner: id, at: now };
     race.hazards.push(hazard);
@@ -433,6 +434,7 @@ export function worldTick(race: Race, now: number): BolidesEvent[] {
     for (const r of race.racers) {
       if (r.finish !== null || r.kart.spin > 0) continue;
       if (hz.kind === "petard" && r.id === hz.owner && now - hz.at < PETARD_SAFE_MS) continue;
+      if (hz.kind === "huile" && r.id === hz.owner && now - hz.at < OIL_SAFE_MS) continue;
       // On passe par-dessus une flaque en sautant d'un tremplin
       if (hz.kind === "huile" && r.kart.air > 0.8) continue;
       const touched =
