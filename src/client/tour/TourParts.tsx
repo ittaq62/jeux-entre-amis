@@ -55,6 +55,8 @@ export function GameTicket({
             <CapitaleArt />
           ) : game === "meche" ? (
             <MecheArt />
+          ) : game === "bolides" ? (
+            <BolidesArt />
           ) : (
             <NavalArt />
           )}
@@ -62,6 +64,31 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Un kart lancé, et le drapeau à damier */
+function BolidesArt() {
+  return (
+    <>
+      <ellipse cx="50" cy="60" rx="32" ry="4" fill="rgba(0,0,0,0.25)" />
+      <rect x="66" y="10" width="2.4" height="34" fill="#fbf5e6" />
+      <g transform="translate(68.4 11)">
+        <rect width="20" height="13" fill="#fbf5e6" />
+        <rect width="5" height="4.33" fill="#1a1a1a" />
+        <rect x="10" width="5" height="4.33" fill="#1a1a1a" />
+        <rect x="5" y="4.33" width="5" height="4.33" fill="#1a1a1a" />
+        <rect x="15" y="4.33" width="5" height="4.33" fill="#1a1a1a" />
+        <rect y="8.66" width="5" height="4.33" fill="#1a1a1a" />
+        <rect x="10" y="8.66" width="5" height="4.33" fill="#1a1a1a" />
+      </g>
+      <circle cx="30" cy="54" r="7" fill="#1b1b1e" />
+      <circle cx="64" cy="54" r="6" fill="#1b1b1e" />
+      <path d="M18 50c1-9 8-13 20-13h12c10 0 18 5 22 13z" fill="#e2483d" stroke="#fbf5e6" strokeWidth="2" />
+      <circle cx="42" cy="32" r="7" fill="#fbf5e6" />
+      <path d="M42 28.5c4 0 6.5 2 7 5H43z" fill="#1d2430" />
+      <path d="M6 40h10M2 46h12M8 52h8" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
+    </>
   );
 }
 

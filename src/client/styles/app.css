@@ -920,6 +920,63 @@
   }
 }
 
+.game-stage.is-circuit {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(120, 190, 255, 0.18), transparent 70%),
+    radial-gradient(ellipse 90% 85% at 50% 45%, #33435c 0%, #1c2638 55%, #0d121b 100%);
+}
+
+.bolides-preview {
+  width: min(410px, 96%);
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+}
+
+.bolides-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.bolides-preview-crate {
+  animation: bolides-preview-float 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes bolides-preview-float {
+  to {
+    translate: 0 -5px;
+  }
+}
+
+.bolides-preview-sparks {
+  animation: bolides-preview-sparks 0.16s ease-in-out infinite alternate;
+}
+
+@keyframes bolides-preview-sparks {
+  to {
+    opacity: 0.55;
+    translate: -3px 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bolides-preview-crate,
+  .bolides-preview-sparks {
+    animation: none;
+  }
+}
+
+.game-name.is-bolides {
+  color: #f4f7fb;
+  text-shadow:
+    1px 1px 0 #e2483d,
+    2px 2px 0 #c93a30,
+    3px 3px 0 #ae2f26,
+    4px 4px 0 #93251d,
+    5px 5px 0 #781c15,
+    6px 6px 0 #5e140e,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
 .game-name.is-meche {
   color: #f6ecd6;
   text-shadow:
@@ -1201,6 +1258,10 @@
     width: 290px;
   }
 
+  .bolides-preview {
+    width: 300px;
+  }
+
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1236,6 +1297,10 @@
 
   .meche-preview {
     width: 250px;
+  }
+
+  .bolides-preview {
+    width: 260px;
   }
 
   .bricks-preview {
@@ -2751,6 +2816,10 @@ h3 .hint {
 
 .game-ticket.is-capitale {
   --art: linear-gradient(165deg, #3b8a5f 0%, #17422d 100%);
+}
+
+.game-ticket.is-bolides {
+  --art: linear-gradient(165deg, #3a4a63 0%, #151d2b 100%);
 }
 
 .game-ticket.is-meche {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
+import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
 import { TABLE_NAMES, type GameId, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
@@ -33,6 +34,7 @@ interface Profile {
   bricks: GameStats;
   capitale: GameStats;
   meche: GameStats;
+  bolides: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   achievements: { id: string; at: number }[];
@@ -106,14 +108,27 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const meche = profile.meche;
   const mt = meche.totals;
   const showMeche = games.includes("meche") || meche.played > 0;
+  const bolides = profile.bolides ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const bot = bolides.totals;
+  const showBolides = games.includes("bolides") || bolides.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
-  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "tour"] as TableGame[]).filter(
+  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "bolides", "tour"] as TableGame[]).filter(
     (g) =>
       g === "uno" ||
-      (g === "naval" ? showNaval : g === "bricks" ? showBricks : g === "capitale" ? showCapitale : g === "meche" ? showMeche : showTour),
+      (g === "naval"
+        ? showNaval
+        : g === "bricks"
+          ? showBricks
+          : g === "capitale"
+            ? showCapitale
+            : g === "meche"
+              ? showMeche
+              : g === "bolides"
+                ? showBolides
+                : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -144,7 +159,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 {((showNaval && naval.played > 0) ||
                   (showBricks && bricks.played > 0) ||
                   (showCapitale && capitale.played > 0) ||
-                  (showMeche && meche.played > 0)) &&
+                  (showMeche && meche.played > 0) ||
+                  (showBolides && bolides.played > 0)) &&
                   " de UNO"}
                 <span className="profile-elo">
                   Elo <strong className="num">{stats.elo}</strong>
@@ -180,6 +196,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{meche.points.toLocaleString("fr-FR")}</strong> points à Mèche
                 <span className="profile-elo">
                   Elo <strong className="num">{meche.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showBolides && bolides.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{bolides.points.toLocaleString("fr-FR")}</strong> points à Bolides
+                <span className="profile-elo">
+                  Elo <strong className="num">{bolides.elo}</strong>
                 </span>
               </p>
             )}
@@ -310,6 +334,29 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <LedgerRow label="Plus long mot" value={mt.longest} unit=" lettres" />
                   <LedgerRow label="Passes gagnées" value={mt.passesEarned} />
                   <LedgerRow label="Explosions encaissées" value={mt.booms} />
+                </dl>
+              </section>
+            )}
+
+            {showBolides && (
+              <section className="carnet panel">
+                <h2>Le garage</h2>
+                <p className="carnet-summary">
+                  {bolides.played === 0
+                    ? "Aucune course de Bolides pour l'instant."
+                    : `${bolides.played} course${bolides.played > 1 ? "s" : ""}, ${bolides.won} gagnée${bolides.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Mini-turbos en dérapant" value={bot.turbos} strong />
+                  <LedgerRow label="Karts touchés" value={bot.hitsGiven} />
+                  <LedgerRow label="Coups encaissés" value={bot.hitsTaken} />
+                  <LedgerRow label="Caisses cassées" value={bot.boxes} />
+                  {TRACK_IDS.filter((id) => bot[`lap_${id}`]).map((id) => (
+                    <div key={id} className="ledger-row">
+                      <dt>Meilleur tour, {TRACKS[id].name}</dt>
+                      <dd className="num">{(bot[`lap_${id}`]! / 1000).toFixed(1).replace(".", ",")} s</dd>
+                    </div>
+                  ))}
                 </dl>
               </section>
             )}
@@ -449,6 +496,7 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "capitale") return g.variant === "bankrupt" ? "Capitale jusqu'à la faillite" : "Capitale en partie rapide";
   if (g.game === "meche")
     return g.variant === "rallonge" ? "Mèche à rallonge" : g.variant === "chacun" ? "Mèche, chacun la sienne" : "Mèche";
+  if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }
 

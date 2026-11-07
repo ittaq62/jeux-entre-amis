@@ -13,6 +13,7 @@ import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
+import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
 import { GameTicket } from "../tour/TourParts.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -297,6 +298,36 @@ export function HomePage() {
           </section>
         )}
 
+        {games.includes("bolides") && (
+          <section className="home-game home-game-bolides panel" aria-label="Bolides">
+            <div className="game-stage is-circuit" aria-hidden="true">
+              <BolidesPreview />
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-bolides">Bolides</h2>
+              {beta.includes("bolides") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                Des courses de karts en 3D, de 2 à 8 pilotes : dérape dans les virages pour charger un turbo, casse les caisses pour gagner
+                des objets, et passe la ligne en tête. Trois circuits, au clavier, à la manette ou sur téléphone.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bolides")} disabled={busy !== null}>
+                  {busy === "quick-bolides" && <span className="spinner" />} Course rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("bolides")} disabled={busy !== null}>
+                  Ouvrir une table
+                </button>
+              </div>
+              <JoinCode id="join-code-bolides" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
@@ -379,7 +410,9 @@ export function HomePage() {
                   ? "Ouvrir une table de Capitale"
                   : createFor === "meche"
                     ? "Ouvrir une table de Mèche"
-                    : "Ouvrir une table"
+                    : createFor === "bolides"
+                      ? "Ouvrir une table de Bolides"
+                      : "Ouvrir une table"
         }
       >
         <div className="create-options">
@@ -451,6 +484,10 @@ const NAVAL_MODES: Record<string, string> = {
   commune: "mèche classique",
   rallonge: "mèche à rallonge",
   chacun: "chacun sa mèche",
+  port: "au Port",
+  vignes: "aux Vignes",
+  col: "au Col",
+  hasard: "circuit au hasard",
 };
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
