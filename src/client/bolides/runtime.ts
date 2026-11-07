@@ -56,6 +56,8 @@ interface Tick {
 
 /** Le délai avec lequel on montre les autres karts : de quoi avoir toujours deux positions encadrantes */
 const INTERP_MS = 110;
+/** Ce dont on les avance ensuite, à leur vitesse, pour les montrer à peu près où ils sont vraiment */
+const LEAD_S = 0.13;
 const SEND_MS = 50;
 
 export class RaceRuntime {
@@ -259,14 +261,20 @@ export class RaceRuntime {
       if (!ka || !kb) return;
       const prev = this.shown[i]!;
       const h = ka.h + wrapAngle(kb.h - ka.h) * f;
+      const v = ka.v + (kb.v - ka.v) * f;
+      const slip = ka.slip + (kb.slip - ka.slip) * f;
+      // On les montre là où ils sont sans doute maintenant : la position lissée, avancée de ce retard à leur vitesse
+      // (sans cela, deux karts côte à côte se voient chacun un peu devant l'autre)
+      const lead = kb.spin > 0 ? 0 : LEAD_S;
       const next: Kart = {
         ...kb,
-        x: ka.x + (kb.x - ka.x) * f,
-        z: ka.z + (kb.z - ka.z) * f,
+        x: ka.x + (kb.x - ka.x) * f + (Math.sin(h) * v - Math.cos(h) * slip) * lead,
+        z: ka.z + (kb.z - ka.z) * f + (Math.cos(h) * v + Math.sin(h) * slip) * lead,
         y: ka.y + (kb.y - ka.y) * f,
         h,
-        v: ka.v + (kb.v - ka.v) * f,
-        dist: ka.dist + (kb.dist - ka.dist) * f,
+        v,
+        slip,
+        dist: ka.dist + (kb.dist - ka.dist) * f + v * lead,
       };
       // Le volant des autres : deviné d'après leur façon de tourner
       const turn = wrapAngle(h - prev.h);

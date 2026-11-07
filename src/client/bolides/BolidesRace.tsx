@@ -74,6 +74,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
       }));
       const rt = new RaceRuntime(box.current, g, looks, serverOffset, { phone, reduced, me, send, onHud: setHud });
       runtime.current = rt;
+      if (import.meta.env.DEV) (window as unknown as { __bolides?: RaceRuntime }).__bolides = rt;
       listeners.current.onTick = (now, k) => rt.onTick(now, k);
       listeners.current.onEvents = (events) => rt.onEvents(events);
     });

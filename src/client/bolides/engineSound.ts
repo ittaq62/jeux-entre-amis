@@ -66,6 +66,8 @@ export class EngineSound {
 
   /** `speed` : la vitesse en part de la vitesse de pointe ; le reste dit ce que fait le kart */
   update(speed: number, gas: boolean, drifting: boolean, boosting: boolean) {
+    // Le son remis en route en pleine course : le moteur démarre à ce moment-là
+    if (!this.nodes && usePrefs.getState().sound) this.start();
     const n = this.nodes;
     if (!n) return;
     const prefs = usePrefs.getState();
