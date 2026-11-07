@@ -879,12 +879,44 @@
 }
 
 .meche-preview-spark {
-  animation: meche-preview-spark 0.5s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: meche-preview-spark 0.18s ease-in-out infinite alternate;
 }
 
 @keyframes meche-preview-spark {
   to {
-    opacity: 0.72;
+    opacity: 0.82;
+    scale: 0.9;
+  }
+}
+
+/* Les braises montent et s'éteignent, chacune à son rythme */
+.meche-preview-ember {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: meche-preview-ember 1.1s ease-out infinite;
+}
+
+@keyframes meche-preview-ember {
+  0% {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 -10px;
+    scale: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meche-preview-spark,
+  .meche-preview-ember {
+    animation: none;
   }
 }
 
