@@ -213,7 +213,17 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         <div className="bolides-hud" aria-live="polite">
           {me && (
             <div className="hud-place">
-              <strong className="num">{h.place === 1 ? "1" : h.place}</strong>
+              {/* La place rebondit quand elle change (on double, ou on se fait doubler) */}
+              <motion.strong
+                key={h.place}
+                className="num"
+                initial={reduced ? false : { scale: 1.7 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 420, damping: 13 }}
+                style={{ display: "inline-block", transformOrigin: "left bottom" }}
+              >
+                {h.place}
+              </motion.strong>
               <span>{h.place === 1 ? "er" : "e"}</span>
               <small className="num">/{h.total}</small>
             </div>

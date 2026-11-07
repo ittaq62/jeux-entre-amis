@@ -370,7 +370,18 @@ export class RaceRuntime {
         const auto = import.meta.env.DEV && Boolean((window as unknown as { __bolidesAuto?: boolean }).__bolidesAuto);
         const pilot =
           me.finish !== null || auto
-            ? botDrive(this.track, d.kart, me.item, [], v.hazards, auto ? "fort" : "moyen", this.autopilot, now, this.autoRng)
+            ? botDrive(
+                this.track,
+                d.kart,
+                me.item,
+                [],
+                v.hazards,
+                auto ? "fort" : "moyen",
+                this.autopilot,
+                now,
+                this.autoRng,
+                this.track.coins.map((_, i) => (this.coinTaken.has(i) ? now + 1000 : 0)),
+              )
             : null;
         const input = pilot ? pilot.input : pad;
         if (auto && pilot?.use) pad.item = true;

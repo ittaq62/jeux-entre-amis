@@ -593,3 +593,26 @@ export function stripesTexture(colors: string[]): THREE.CanvasTexture {
   });
   return toTexture(c);
 }
+
+/** Une caisse-mystère : un verre clair aux bords plus vifs, et un gros point d'interrogation au milieu */
+export function mysteryTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 128);
+  const grad = g.createRadialGradient(64, 64, 10, 64, 64, 90);
+  grad.addColorStop(0, "rgba(255,255,255,0.95)");
+  grad.addColorStop(0.7, "rgba(230,240,255,0.75)");
+  grad.addColorStop(1, "rgba(255,255,255,1)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = "rgba(255,255,255,1)";
+  g.lineWidth = 10;
+  g.strokeRect(5, 5, 118, 118);
+  g.font = "900 96px 'Big Shoulders Display Variable', 'Arial Black', sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.lineWidth = 8;
+  g.strokeStyle = "#2b1d14";
+  g.strokeText("?", 64, 70);
+  g.fillStyle = "#ffd23a";
+  g.fillText("?", 64, 70);
+  return toTexture(c, false);
+}

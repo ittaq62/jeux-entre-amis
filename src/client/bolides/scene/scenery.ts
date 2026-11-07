@@ -403,6 +403,7 @@ function windmills(ctx: SceneryContext): (time: number) => void {
       arm.add(sail);
       hub.add(arm);
     }
+    mergeDeep(hub, keep);
     mill.add(hub);
     // Face au centre du circuit
     mill.rotation.y = Math.atan2(-x, -z);
@@ -441,17 +442,19 @@ function cableCar(ctx: SceneryContext): (time: number) => void {
   if (!start) return () => {};
   const steel = keep(lambert(0x5f6670));
   const tops: THREE.Vector3[] = [];
+  // Les pylônes et les câbles ne bougent pas : une forme par matière
+  const fixed = new THREE.Group();
   for (let k = 0; k < 4; k++) {
     const base = start.clone().addScaledVector(dir, k * 85);
     base.y = heightAt(base.x, base.z);
     const h = 14 + k * 9;
     const pylon = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.5, 0.9, h, 6)), steel);
     pylon.position.set(base.x, base.y + h / 2, base.z);
-    group.add(pylon);
+    fixed.add(pylon);
     const bar = new THREE.Mesh(keep(new THREE.BoxGeometry(6, 0.4, 0.4)), steel);
     bar.position.set(base.x, base.y + h, base.z);
     bar.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI / 2;
-    group.add(bar);
+    fixed.add(bar);
     tops.push(new THREE.Vector3(base.x, base.y + h, base.z));
   }
   const side = new THREE.Vector3(dir.z, 0, -dir.x).multiplyScalar(2.6);
@@ -464,9 +467,11 @@ function cableCar(ctx: SceneryContext): (time: number) => void {
       const cable = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.06, len, 4)), cableMat);
       cable.position.copy(a).lerp(b, 0.5);
       cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-      group.add(cable);
+      fixed.add(cable);
     }
   }
+  mergeDeep(fixed, keep);
+  group.add(fixed);
   // Les cabines : rouges, accrochées par une tige, elles montent d'un côté et descendent de l'autre
   const cabins: { mesh: THREE.Group; up: boolean; phase: number }[] = [];
   const red = keep(lambert(0xc8302b));
@@ -482,6 +487,7 @@ function cableCar(ctx: SceneryContext): (time: number) => void {
     const rod = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 4)), cableMat);
     rod.position.y = -0.6;
     g.add(rod);
+    mergeDeep(g, keep);
     group.add(g);
     cabins.push({ mesh: g, up: k % 2 === 0, phase: k * 0.5 });
   }

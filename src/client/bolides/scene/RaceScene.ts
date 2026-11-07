@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
@@ -61,12 +62,20 @@ export class RaceScene {
   private world: World | null = null;
   private track: Track | null = null;
   private karts: KartModel[] = [];
-  private crates: THREE.Mesh[] = [];
+  /** Les caisses-mystère : une seule forme répétée ; leur place, et leur taille (elles rétrécissent quand on les prend) */
+  private crates: THREE.InstancedMesh | null = null;
+  private cratePos: THREE.Vector3[] = [];
+  private crateScale: number[] = [];
+  private crateM = new THREE.Matrix4();
+  private crateQ = new THREE.Quaternion();
+  private crateE = new THREE.Euler();
+  private crateS = new THREE.Vector3();
   private coins: CoinField | null = null;
   private crossers: Crossers | null = null;
   private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
-  private crateMat: THREE.MeshLambertMaterial | null = null;
+  private crateMat: THREE.MeshStandardMaterial | null = null;
+  private crateGeo: THREE.BufferGeometry | null = null;
   private hazards = new Map<number, { hz: Hazard; mesh: THREE.Object3D }>();
   private oilMat: THREE.MeshBasicMaterial;
   private petardGeo: THREE.BufferGeometry;
@@ -191,16 +200,23 @@ export class RaceScene {
       this.scene.add(m.group);
       return m;
     });
-    // Les caisses d'objets
-    this.crateMat = new THREE.MeshLambertMaterial({ map: TX.crateTexture(), emissive: 0x2a1600 });
-    const geo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
-    this.crates = track.boxes.map((b) => {
-      const m = new THREE.Mesh(geo, this.crateMat!);
-      m.position.set(b.x, pointAt(track, b.s, b.d).y + 1, b.z);
-      m.castShadow = this.shadows;
-      this.scene.add(m);
-      return m;
+    // Les caisses-mystère : un cube de verre aux couleurs qui changent, un point d'interrogation sur chaque face
+    this.crateMat = new THREE.MeshStandardMaterial({
+      map: TX.mysteryTexture(),
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.15,
+      metalness: 0.1,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.35,
     });
+    this.crateGeo = new RoundedBoxGeometry(1.4, 1.4, 1.4, 2, 0.14);
+    this.crates = new THREE.InstancedMesh(this.crateGeo, this.crateMat, Math.max(1, track.boxes.length));
+    this.crates.count = track.boxes.length;
+    this.crates.frustumCulled = false;
+    this.scene.add(this.crates);
+    this.cratePos = track.boxes.map((b) => new THREE.Vector3(b.x, pointAt(track, b.s, b.d).y + 1.1, b.z));
+    this.crateScale = track.boxes.map(() => 1);
     this.crateShown = track.boxes.map(() => true);
     // Les pièces et les engins qui traversent
     const keep = <T extends { dispose: () => void }>(x: T): T => {
@@ -226,9 +242,12 @@ export class RaceScene {
   /** Les caisses présentes ou prises (une caisse prise éclate) */
   setCrates(available: boolean[]) {
     available.forEach((on, i) => {
-      const crate = this.crates[i];
-      if (!crate) return;
-      if (this.crateShown[i] && !on) this.burst(crate.position, 0xffd23a, 10);
+      const at = this.cratePos[i];
+      if (!at) return;
+      if (this.crateShown[i] && !on) {
+        this.burst(at, 0xffd23a, 8);
+        this.burst(at, 0x7fd9ff, 6);
+      }
       this.crateShown[i] = on;
     });
   }
@@ -504,15 +523,20 @@ export class RaceScene {
         if (Math.hypot(kart.x - this.camPos.x, kart.z - this.camPos.z) < 70) this.driftSmoke(kart);
       }
     }
-    // Les caisses tournent et flottent ; celles qui reviennent grossissent
-    this.crates.forEach((c, i) => {
-      c.rotation.y = this.time * 1.4 + i;
-      c.rotation.x = Math.sin(this.time + i) * 0.2;
-      const target = this.crateShown[i] ? 1 : 0;
-      const s = c.scale.x + (target - c.scale.x) * Math.min(1, f.dt * (target ? 3 : 14));
-      c.scale.setScalar(Math.max(0.001, s));
-      c.visible = s > 0.02;
-    });
+    // Les caisses tournent et flottent ; celles qui reviennent grossissent ; leur lueur passe par toutes les couleurs
+    if (this.crates && this.crateMat) {
+      this.crateMat.emissive.setHSL((this.time * 0.25) % 1, 0.9, 0.5);
+      this.cratePos.forEach((p, i) => {
+        const target = this.crateShown[i] ? 1 : 0;
+        const s = this.crateScale[i]! + (target - this.crateScale[i]!) * Math.min(1, f.dt * (target ? 3 : 14));
+        this.crateScale[i] = s;
+        this.crateQ.setFromEuler(this.crateE.set(Math.sin(this.time + i) * 0.25, this.time * 1.4 + i, 0.3));
+        this.crateS.setScalar(Math.max(0.001, s));
+        this.tmp.set(p.x, p.y + Math.sin(this.time * 2 + i) * 0.15, p.z);
+        this.crates!.setMatrixAt(i, this.crateM.compose(this.tmp, this.crateQ, this.crateS));
+      });
+      this.crates.instanceMatrix.needsUpdate = true;
+    }
     // Les pétards filent le long de la route ; les fusées volent au-dessus, en fumant
     for (const { hz, mesh } of this.hazards.values()) {
       if (hz.kind === "fusee") {
@@ -675,7 +699,9 @@ export class RaceScene {
     this.resize.disconnect();
     for (const k of this.karts) k.dispose();
     this.world?.dispose();
+    this.crateMat?.map?.dispose();
     this.crateMat?.dispose();
+    this.crateGeo?.dispose();
     this.oilMat.dispose();
     this.petardGeo.dispose();
     this.petardMat.dispose();
