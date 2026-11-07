@@ -250,6 +250,26 @@ export const MECHE_SOUNDS: SoundName[] = [
   "wild",
 ];
 
+export const BOLIDES_SOUNDS: SoundName[] = [
+  "brickCount",
+  "brickGo",
+  "capDiceHit",
+  "hit",
+  "bigHit",
+  "wild",
+  "pop",
+  "click",
+  "torpedo",
+  "mecheBoom",
+  "splash",
+  "tourChip",
+  "capTurn",
+  "tourApplause",
+  "tourTrophyMine",
+  "capLose",
+  "brickHold",
+];
+
 export const TOUR_SOUNDS: SoundName[] = [
   "tourShake",
   "tourThrow",
@@ -374,6 +394,13 @@ async function load(file: string): Promise<AudioBuffer | null> {
     });
   loading.set(file, p);
   return p;
+}
+
+/** Le contexte audio et la sortie générale, pour les sons fabriqués à la volée (le moteur d'un kart) */
+export function audioOut(): { ctx: AudioContext; out: GainNode } | null {
+  const ac = context();
+  if (!ac || !master) return null;
+  return { ctx: ac, out: master };
 }
 
 /** A appeler sur un premier geste de l'utilisateur (les navigateurs bloquent le son avant). */

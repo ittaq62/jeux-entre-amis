@@ -1,0 +1,433 @@
+// Ce qui fait tourner une course dans le navigateur : le kart du joueur conduit chez lui, les autres karts reçus du
+// serveur et lissés entre deux positions, les objets et les coups, les sons, la caméra, et de quoi remplir
+// l'affichage tête haute. Une boucle par image, en dehors de React.
+
+import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
+import { BOX_RADIUS, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
+import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
+import { COUNTDOWN_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
+import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
+import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
+import type { BolidesClientMessage } from "../../shared/protocol.ts";
+import { play, vibrate, type SoundName } from "../lib/sound.ts";
+import { Controls } from "./controls.ts";
+import { LocalDriver } from "./driver.ts";
+import { EngineSound, honk } from "./engineSound.ts";
+import type { KartLook } from "./scene/kart.ts";
+import { RaceScene } from "./scene/RaceScene.ts";
+
+/** Ce que l'affichage tête haute montre, rafraîchi une dizaine de fois par seconde */
+export interface Hud {
+  /** 3, 2, 1, 0 (« Partez ! ») pendant le départ, null sinon ; le survol du circuit avant */
+  countdown: number | null;
+  intro: boolean;
+  lap: number;
+  laps: number;
+  place: number;
+  total: number;
+  item: ItemKind | null;
+  uses: number;
+  /** La roue des objets tourne encore (on vient de prendre une caisse) */
+  rolling: boolean;
+  raceMs: number;
+  finished: { place: number; ms: number } | null;
+  wrongWay: boolean;
+  stuck: boolean;
+  speed: number;
+  /** Une annonce en grand au milieu de l'écran (« Dernier tour ! »), et sa clé pour la rejouer */
+  banner: { text: string; key: number } | null;
+  /** Les karts sur la petite carte : x, z, couleur, le sien */
+  map: { x: number; z: number; color: string; me: boolean }[];
+}
+
+export interface RuntimeOptions {
+  phone: boolean;
+  reduced: boolean;
+  /** Son id de pilote (null : on regarde la course) */
+  me: string | null;
+  send: (msg: BolidesClientMessage) => void;
+  onHud: (hud: Hud) => void;
+}
+
+interface Tick {
+  now: number;
+  karts: (Kart | null)[];
+}
+
+/** Le délai avec lequel on montre les autres karts : de quoi avoir toujours deux positions encadrantes */
+const INTERP_MS = 110;
+const SEND_MS = 50;
+
+export class RaceRuntime {
+  private scene: RaceScene;
+  readonly controls: Controls;
+  private engine = new EngineSound();
+  private track: Track;
+  private view: BolidesView;
+  private serverOffset = 0;
+  private ids: string[];
+  private colors: string[];
+  private mine: number;
+  private driver: LocalDriver | null = null;
+  private ticks: Tick[] = [];
+  private shown: Kart[];
+  private steers: number[];
+  private frame = 0;
+  private last = performance.now();
+  private sentAt = 0;
+  private hudAt = 0;
+  private beep: number | null = null;
+  private rollingUntil = 0;
+  private banner: Hud["banner"] = null;
+  private bannerSeq = 0;
+  private autoRng = { rng: 77 };
+  private autopilot: BotMemory = newBotMemory(this.autoRng);
+  private launched = false;
+  /** Ce que son kart a fait depuis le départ, envoyé au serveur avec sa position */
+  private turbos = 0;
+  private walls = 0;
+  private disposed = false;
+
+  constructor(
+    container: HTMLElement,
+    view: BolidesView,
+    looks: KartLook[],
+    serverOffset: number,
+    private opts: RuntimeOptions,
+  ) {
+    this.view = view;
+    this.serverOffset = serverOffset;
+    this.track = getTrack(view.track);
+    this.ids = view.racers.map((r) => r.id);
+    this.colors = looks.map((l) => l.color);
+    this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
+    this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
+    this.scene.build(this.track, looks);
+    this.shown = view.karts.map((n) => decodeKart(n)!);
+    this.steers = this.shown.map(() => 0);
+    this.controls = new Controls(() => this.mine >= 0);
+    this.controls.autoGas = opts.phone;
+    this.takeView(view, serverOffset);
+    this.engine.start();
+    this.frame = requestAnimationFrame(this.loop);
+  }
+
+  private get serverNow() {
+    return Date.now() + this.serverOffset;
+  }
+
+  /** La table à jour (à chaque évènement) */
+  setView(view: BolidesView, serverOffset: number) {
+    if (view.track !== this.view.track) return;
+    this.takeView(view, serverOffset);
+  }
+
+  private takeView(view: BolidesView, serverOffset: number) {
+    this.view = view;
+    // L'heure du serveur s'estime mieux avec les positions, reçues bien plus souvent
+    if (this.ticks.length === 0) this.serverOffset = serverOffset;
+    const now = this.serverNow;
+    this.scene.setCrates(view.boxes.map((at) => at <= now));
+    this.scene.setHazards(view.hazards);
+    const me = this.mine >= 0 ? view.racers[this.mine] : undefined;
+    // Son kart revient entre ses mains (au départ, ou de retour après une coupure) : on repart de la dernière position connue
+    if (me && !me.bot && !this.driver) {
+      const k = decodeKart(view.karts[this.mine]!);
+      if (k) {
+        const at = locate(this.track, k.x, k.z);
+        this.driver = new LocalDriver(this.track, { ...k, i: at.i, s: at.s, d: at.d, y: at.y }, CLASS_SPEED[view.settings.speed]);
+      }
+    } else if (me?.bot && this.driver) this.driver = null;
+  }
+
+  /** Les positions de tous les karts, reçues du serveur */
+  onTick(now: number, karts: KartNet[]) {
+    // Le décalage d'horloge : le plus grand vu récemment (un message en retard le ferait croire plus petit)
+    const est = now - Date.now();
+    this.serverOffset = this.ticks.length === 0 ? est : Math.max(est, this.serverOffset - 2);
+    this.ticks.push({ now, karts: karts.map((n) => decodeKart(n)) });
+    if (this.ticks.length > 30) this.ticks.shift();
+  }
+
+  /** Ce qui vient d'arriver dans la course */
+  onEvents(events: BolidesEvent[]) {
+    const meId = this.opts.me;
+    for (const e of events) {
+      switch (e.type) {
+        case "go":
+          play("brickGo");
+          break;
+        case "box":
+          if (e.id === meId && e.item) {
+            this.rollingUntil = performance.now() + 1100;
+            play("tourChip", { volume: 0.7 });
+          }
+          break;
+        case "use": {
+          const at = this.kartOf(e.id);
+          if (e.item === "klaxon") {
+            honk();
+            if (at) this.scene.ring(at.x, at.y, at.z);
+          } else if (e.item === "petard") this.near(e.id, "torpedo", 0.8);
+          else if (e.item === "huile") this.near(e.id, "splash", 0.6);
+          else if (e.item === "bouclier") this.near(e.id, "pop", 0.8);
+          else if (e.id !== meId) this.near(e.id, "wild", 0.5);
+          break;
+        }
+        case "gone":
+          if (e.why === "hit" || e.why === "klaxon") {
+            const hz = this.view.hazards.find((h) => h.id === e.hazard);
+            if (hz?.kind === "petard") {
+              this.near(null, "mecheBoom", 0.7);
+            }
+          }
+          break;
+        case "hit": {
+          const at = this.kartOf(e.id);
+          if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard");
+          if (e.id === meId) {
+            this.driver?.hit();
+            play("bigHit", { volume: 0.8 });
+            vibrate([60, 40, 120]);
+          } else this.near(e.id, "hit", 0.6);
+          break;
+        }
+        case "shield": {
+          const at = this.kartOf(e.id);
+          if (at) this.scene.burst({ x: at.x, y: at.y + 1, z: at.z }, 0x7fe3ff, 14);
+          this.near(e.id, "pop", 1);
+          break;
+        }
+        case "lap":
+          if (e.id === meId) {
+            const left = this.view.settings.laps - e.lap;
+            if (left === 1) this.announce("Dernier tour !");
+            play(left === 1 ? "tourChip" : "capTurn");
+          }
+          break;
+        case "finish":
+          if (e.id === meId) {
+            this.announce(e.place === 1 ? "Victoire !" : `Arrivé ${placeLabel(e.place)} !`);
+            play(e.place === 1 ? "tourTrophyMine" : "tourApplause");
+          }
+          break;
+      }
+    }
+  }
+
+  private announce(text: string) {
+    this.banner = { text, key: ++this.bannerSeq };
+  }
+
+  /** Un son, plus faible si ça se passe loin de soi */
+  private near(id: string | null, name: SoundName, volume: number) {
+    const me = this.myKart();
+    const at = id ? this.kartOf(id) : null;
+    const d = me && at ? Math.hypot(me.x - at.x, me.z - at.z) : 0;
+    const v = volume * Math.max(0.15, 1 - d / 90);
+    play(name, { volume: v });
+  }
+
+  private kartOf(id: string): Kart | null {
+    const i = this.ids.indexOf(id);
+    return i >= 0 ? (this.shown[i] ?? null) : null;
+  }
+
+  private myKart(): Kart | null {
+    return this.driver?.kart ?? (this.mine >= 0 ? (this.shown[this.mine] ?? null) : null);
+  }
+
+  /** Les autres karts à l'instant montré : entre les deux positions reçues qui l'encadrent */
+  private interpolate(renderAt: number) {
+    const ticks = this.ticks;
+    if (ticks.length === 0) return;
+    let a = ticks[0]!;
+    let b = ticks[ticks.length - 1]!;
+    for (let i = ticks.length - 1; i > 0; i--) {
+      if (ticks[i - 1]!.now <= renderAt) {
+        a = ticks[i - 1]!;
+        b = ticks[i]!;
+        break;
+      }
+    }
+    const span = Math.max(1, b.now - a.now);
+    const f = Math.max(0, Math.min(1.6, (renderAt - a.now) / span));
+    this.ids.forEach((_, i) => {
+      if (i === this.mine && this.driver) return;
+      const ka = a.karts[i];
+      const kb = b.karts[i];
+      if (!ka || !kb) return;
+      const prev = this.shown[i]!;
+      const h = ka.h + wrapAngle(kb.h - ka.h) * f;
+      const next: Kart = {
+        ...kb,
+        x: ka.x + (kb.x - ka.x) * f,
+        z: ka.z + (kb.z - ka.z) * f,
+        y: ka.y + (kb.y - ka.y) * f,
+        h,
+        v: ka.v + (kb.v - ka.v) * f,
+        dist: ka.dist + (kb.dist - ka.dist) * f,
+      };
+      // Le volant des autres : deviné d'après leur façon de tourner
+      const turn = wrapAngle(h - prev.h);
+      this.steers[i] = this.steers[i]! + (Math.max(-1, Math.min(1, -turn * 18)) - this.steers[i]!) * 0.3;
+      this.shown[i] = next;
+    });
+  }
+
+  private loop = (t: number) => {
+    if (this.disposed) return;
+    this.frame = requestAnimationFrame(this.loop);
+    const dt = Math.min(0.05, Math.max(0, (t - this.last) / 1000));
+    this.last = t;
+    const now = this.serverNow;
+    const v = this.view;
+    this.interpolate(now - INTERP_MS);
+    const pad = this.controls.read(dt);
+    const me = this.mine >= 0 ? v.racers[this.mine] : undefined;
+    const d = this.driver;
+    let events: KartEvent[] = [];
+    if (d && me && v.phase !== "over") {
+      if (now < v.goAt) {
+        d.waiting(pad.gas, now, v.goAt);
+      } else {
+        if (!this.launched) {
+          this.launched = true;
+          if (d.launch(v.goAt)) play("wild", { volume: 0.7 });
+        }
+        // Arrivé : le kart roule tout seul, le temps que les autres finissent (en développement, les tests peuvent aussi le lâcher)
+        const auto = import.meta.env.DEV && Boolean((window as unknown as { __bolidesAuto?: boolean }).__bolidesAuto);
+        const pilot =
+          me.finish !== null || auto
+            ? botDrive(this.track, d.kart, me.item, [], v.hazards, auto ? "fort" : "moyen", this.autopilot, now, this.autoRng)
+            : null;
+        const input = pilot ? pilot.input : pad;
+        if (auto && pilot?.use) pad.item = true;
+        const others = this.shown.filter((_, i) => i !== this.mine);
+        events = d.update(dt, input, others);
+        if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
+          if (me.item === "turbo" || me.item === "turbo3") {
+            d.boost(TURBO_TIME);
+            play("wild", { volume: 0.8 });
+          }
+          this.opts.send({ t: "use" });
+        }
+        if (pad.respawn && d.stuck) d.respawn();
+        // Les caisses traversées éclatent tout de suite, sans attendre le serveur
+        if (v.settings.items) {
+          this.track.boxes.forEach((b, i) => {
+            if (v.boxes[i]! <= now && Math.hypot(b.x - d.kart.x, b.z - d.kart.z) < BOX_RADIUS + KART_RADIUS * 0.6) this.scene.takeCrate(i);
+          });
+        }
+      }
+      this.shown[this.mine] = d.kart;
+      this.steers[this.mine] = pad.steer;
+      if (t - this.sentAt >= SEND_MS) {
+        this.sentAt = t;
+        this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls] });
+      }
+    }
+    // Les sons de la conduite, et ce qu'on compte pour les succès
+    for (const e of events) {
+      if (e === "turbo1" || e === "turbo2" || e === "turbo3") this.turbos += 1;
+      else if (e === "wall") this.walls += 1;
+      if (e === "wall") play("capDiceHit", { volume: 0.7 });
+      else if (e === "pad") play("wild", { volume: 0.7 });
+      else if (e === "turbo1" || e === "turbo2" || e === "turbo3")
+        play("brickHold", { volume: 0.6, rate: e === "turbo3" ? 1.3 : e === "turbo2" ? 1.15 : 1 });
+      else if (e === "drift") play("click", { volume: 0.5 });
+    }
+    // Le bip du compte à rebours
+    const left = v.goAt - now;
+    if (v.phase === "start" && left <= COUNTDOWN_MS && left > 0) {
+      const n = Math.ceil(left / 1000);
+      if (n !== this.beep) {
+        this.beep = n;
+        play("brickCount");
+      }
+    }
+    const mk = this.myKart();
+    if (mk) {
+      this.engine.update(mk.v / TOP_SPEED, pad.gas || mk.boost > 0, mk.drift !== 0, mk.boost > 0);
+      if (mk.offroad && mk.v > 6) this.scene.dust(mk);
+    }
+    for (let i = 0; i < this.shown.length; i++) {
+      const k = this.shown[i]!;
+      if (i !== this.mine && k.offroad && k.v > 6) this.scene.dust(k);
+    }
+    // La caméra : le survol avant le compte à rebours, puis derrière son kart (ou celui de tête, si on regarde)
+    const intro = v.phase === "start" && left > COUNTDOWN_MS;
+    const follow = this.mine >= 0 ? this.mine : this.leader();
+    const finishedLong = me?.finish != null && now - v.goAt - me.finish > 4000;
+    this.scene.render({
+      karts: this.shown.map((kart, i) => ({ kart, steer: this.steers[i]!, shield: v.racers[i]!.shieldUntil > now })),
+      follow,
+      camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
+      serverNow: now,
+      dt,
+    });
+    if (t - this.hudAt > 100) {
+      this.hudAt = t;
+      this.opts.onHud(this.hud(now, intro));
+    }
+  };
+
+  /** Le kart de tête (pour qui regarde sans courir) */
+  private leader(): number {
+    let best = 0;
+    this.shown.forEach((k, i) => {
+      if (k.dist > this.shown[best]!.dist) best = i;
+    });
+    return best;
+  }
+
+  private hud(now: number, intro: boolean): Hud {
+    const v = this.view;
+    const me = this.mine >= 0 ? v.racers[this.mine] : undefined;
+    const mk = this.myKart();
+    const L = this.track.length;
+    // La place en direct : les arrivés d'abord, puis la distance parcourue
+    const order = v.racers
+      .map((r, i) => ({ i, fin: r.finish, dist: this.shown[i]!.dist }))
+      .sort((a, b) => (a.fin !== null && b.fin !== null ? a.fin - b.fin : a.fin !== null ? -1 : b.fin !== null ? 1 : b.dist - a.dist));
+    const place = this.mine >= 0 ? order.findIndex((o) => o.i === this.mine) + 1 : 0;
+    const left = v.goAt - now;
+    const lap = mk ? Math.min(v.settings.laps, Math.max(1, Math.floor(Math.max(0, mk.dist) / L) + 1)) : 1;
+    return {
+      countdown:
+        v.phase === "start" && left <= COUNTDOWN_MS ? Math.max(0, Math.ceil(left / 1000)) : now - v.goAt < 900 && now >= v.goAt ? 0 : null,
+      intro,
+      lap,
+      laps: v.settings.laps,
+      place,
+      total: v.racers.length,
+      item: me?.item ?? null,
+      uses: me?.uses ?? 0,
+      rolling: performance.now() < this.rollingUntil,
+      raceMs: me?.finish ?? (v.phase === "start" ? 0 : Math.max(0, now - v.goAt)),
+      finished: me?.finish != null ? { place: v.ranks?.[me.id] ?? place, ms: me.finish } : null,
+      wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
+      stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
+      speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
+      banner: this.banner,
+      map: this.shown.map((k, i) => ({ x: k.x, z: k.z, color: this.colors[i]!, me: i === this.mine })),
+    };
+  }
+
+  /** Repartir quand on est coincé (le bouton du téléphone, comme la touche R) */
+  respawnNow() {
+    if (this.driver?.stuck) this.driver.respawn();
+  }
+
+  dispose() {
+    this.disposed = true;
+    cancelAnimationFrame(this.frame);
+    this.engine.stop();
+    this.controls.dispose();
+    this.scene.dispose();
+  }
+}
+
+export function placeLabel(place: number): string {
+  return place === 1 ? "1er" : `${place}e`;
+}
