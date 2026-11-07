@@ -40,20 +40,30 @@ const MODE_TIPS: Record<FuseMode, string> = {
   chacun: "Ta mèche ne brûle qu'à ton tour",
 };
 
+/** Ce qui se touche pour lui-même : toucher ailleurs rend la main au champ du mot */
+const INTERACTIVE = "button, a, input, textarea, .table-menu, .emote-picker, .emote-catcher, .overlay";
+
 /** Le tirage de celui qui commence : l'aiguille fait deux tours avant de s'arrêter */
 const SPIN_MS = 2000;
 /** L'allumette : elle part du joueur, arrive sur la corde et la gratte à ce moment-là */
 const MATCH_MS = 1250;
 const MATCH_STRIKE_MS = 950;
 
-/** La partie de l'écran que l'on voit vraiment : sur téléphone, le clavier en cache la moitié */
+/**
+ * La partie de l'écran que l'on voit vraiment : sur téléphone, le clavier en cache la moitié. Le clavier n'est ouvert
+ * que si un champ a la main : sinon, on prend tout l'écran (certains iPhone gardent une vue réduite ou décalée une
+ * fois le clavier refermé).
+ */
 function readVisibleArea() {
   const v = window.visualViewport;
+  const field = document.activeElement;
+  const typing = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement;
+  const vh = v?.height ?? window.innerHeight;
   return {
     w: window.innerWidth,
-    h: Math.round(v?.height ?? window.innerHeight),
+    h: Math.round(typing ? vh : Math.max(vh, window.innerHeight)),
     // Le navigateur a pu décaler la vue pour montrer le champ : la table suit ce décalage
-    top: Math.round(v?.offsetTop ?? 0),
+    top: Math.round(typing ? (v?.offsetTop ?? 0) : 0),
   };
 }
 
@@ -468,10 +478,14 @@ export function MecheTable({
     else typed.timer = setTimeout(flush, wait);
   }
 
+  /** Envoie le mot écrit, s'il y en a un et que c'est à soi */
+  function sendTyped() {
+    if (mine && normalizeWord(text)) send({ t: "word", word: text, turn: g.turn });
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!mine || !normalizeWord(text)) return;
-    send({ t: "word", word: text, turn: g.turn });
+    sendTyped();
   }
 
   function passNow() {
@@ -479,7 +493,14 @@ export function MecheTable({
     input.current?.focus({ preventScroll: true });
   }
 
-  const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h } as CSSProperties) : undefined;
+  /** Toucher la table : le mot écrit part (le réflexe de beaucoup), et le clavier reste ouvert */
+  function tapTable() {
+    sendTyped();
+    input.current?.focus({ preventScroll: true });
+  }
+
+  // Sur téléphone, la table tient dans ce qu'on voit au-dessus du clavier (et rien ne l'oblige à prendre tout l'écran)
+  const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h, minHeight: 0 } as CSSProperties) : undefined;
   // Les rappels des premières mèches : ce qui fait le mode d'abord, puis les accents, puis les passes
   const tip =
     g.fuse <= 1
@@ -496,11 +517,20 @@ export function MecheTable({
       className={`table-root felt meche-root ${phone ? "is-phone" : ""} ${short ? "is-short" : ""}`}
       style={area}
       onPointerDown={(e) => {
-        // Toucher la table rend la main au clavier
+        // À la souris : cliquer à côté rend la main au clavier
         const el = e.target as HTMLElement;
-        if (canType && !el.closest("button, a, input, textarea, .table-menu, .emote-picker")) {
+        if (e.pointerType === "mouse" && canType && !el.closest(INTERACTIVE)) {
           setTimeout(() => input.current?.focus({ preventScroll: true }), 0);
         }
+      }}
+      onTouchEnd={(e) => {
+        // Au doigt : toucher la table ou un joueur ne ferme pas le clavier (et l'ouvre s'il était fermé). Le champ
+        // reprend la main dans le geste même, sans quoi l'iPhone n'ouvrirait pas le clavier.
+        const el = e.target as HTMLElement;
+        if (!canType || el.closest(INTERACTIVE)) return;
+        e.preventDefault();
+        if (el.closest(".meche-table")) tapTable();
+        else input.current?.focus({ preventScroll: true });
       }}
     >
       <header className="table-top">
@@ -605,7 +635,9 @@ export function MecheTable({
                       turn={g.turn}
                       rejected={rejected}
                       medal={medal}
-                      hint={phone && canType && !focused ? "Touche ici pour écrire" : tip}
+                      hint={phone && canType && !focused ? "Touche la table pour écrire" : tip}
+                      call={phone && canType && !focused}
+                      sendHint={phone}
                     />
                   </>
                 ) : g.phase === "break" ? (
@@ -616,15 +648,16 @@ export function MecheTable({
               </div>
               {canType && (
                 <form className="meche-form" onSubmit={submit}>
-                  {/* Toute la table ouvre le clavier ; le champ lui-même, invisible, reste petit et en haut : le
-                      téléphone n'a pas à faire défiler la page pour le montrer au-dessus du clavier */}
+                  {/* Toute la table ouvre le clavier (et envoie le mot écrit) ; le champ lui-même, invisible, reste
+                      petit et en haut : le téléphone n'a pas à faire défiler la page pour le montrer au-dessus du clavier */}
                   <label
                     className="meche-tap"
                     htmlFor="meche-mot"
                     aria-hidden="true"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.preventDefault();
-                      input.current?.focus({ preventScroll: true });
+                      tapTable();
                     }}
                   />
                   <input
@@ -687,6 +720,12 @@ export function MecheTable({
                   className="btn meche-pass"
                   type="button"
                   onClick={passNow}
+                  // Le clavier reste ouvert : le champ garde la main pendant le geste
+                  onMouseDown={(e) => e.preventDefault()}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    passNow();
+                  }}
                   style={{ left: mySpot.x + layout.avatar / 2 + (phone ? 40 : 66), top: mySpot.y }}
                   initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
@@ -841,6 +880,8 @@ function LiveWord({
   rejected,
   medal,
   hint,
+  call,
+  sendHint,
 }: {
   mine: boolean;
   myText: string;
@@ -850,6 +891,10 @@ function LiveWord({
   rejected: RefusedWord | null;
   medal: number;
   hint: string | null;
+  /** Le rappel invite à toucher la table : le clavier est fermé, il faut le voir */
+  call: boolean;
+  /** Sur téléphone : rappeler que toucher la table envoie le mot écrit */
+  sendHint: boolean;
 }) {
   const typing = useTyping();
   const text = mine ? cleanShown(myText) : typing.id === holder && typing.turn === turn ? typing.text : "";
@@ -905,7 +950,8 @@ function LiveWord({
           {mine && <span className="meche-caret" />}
         </span>
       )}
-      {hint && text.length === 0 && <span className="meche-word-tip">{hint}</span>}
+      {hint && text.length === 0 && <span className={`meche-word-tip ${call ? "is-call" : ""}`}>{hint}</span>}
+      {sendHint && mine && text.length > 0 && <span className="meche-word-tip is-send">Touche la table pour envoyer</span>}
     </div>
   );
 }

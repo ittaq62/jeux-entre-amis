@@ -242,6 +242,34 @@
   color: #9a7d5c;
 }
 
+/* Le clavier est fermé : l'invitation à toucher la table se voit et bat doucement */
+.meche-word-tip.is-call {
+  margin-top: 6px;
+  padding: 3px 10px 4px;
+  border-radius: 999px;
+  background: var(--label-red);
+  color: #fff4e2;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(120, 40, 10, 0.35);
+  animation: meche-call 1.3s ease-in-out infinite;
+}
+
+@keyframes meche-call {
+  50% {
+    scale: 1.06;
+  }
+}
+
+.meche-word-tip.is-send {
+  color: var(--label-red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meche-word-tip.is-call {
+    animation: none;
+  }
+}
+
 .meche-word-dots {
   display: inline-flex;
   gap: 6px;
@@ -436,6 +464,8 @@
   /* 16 px au moins : en dessous, les iPhone zooment sur la page */
   font-size: 16px;
   cursor: text;
+  /* Les touchers vont à la table, qui donne la main au champ (et envoie le mot écrit) */
+  pointer-events: none;
 }
 
 /* La passe, à côté de soi */
