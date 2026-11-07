@@ -232,12 +232,15 @@ export class RaceRuntime {
             play(left === 1 ? "tourChip" : "capTurn");
           }
           break;
-        case "finish":
+        case "finish": {
+          const at = this.kartOf(e.id);
+          if (at) this.scene.confetti(at.x, at.y, at.z);
           if (e.id === meId) {
             this.announce(e.place === 1 ? "Victoire !" : `Arrivé ${placeLabel(e.place)} !`);
             play(e.place === 1 ? "tourTrophyMine" : "tourApplause");
           }
           break;
+        }
       }
     }
   }
@@ -488,6 +491,8 @@ export class RaceRuntime {
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
       introT: (now - (v.goAt - COUNTDOWN_MS - INTRO_MS)) / INTRO_MS,
+      // Les feux : un rouge de plus chaque seconde du compte à rebours, puis verts deux secondes
+      lights: left > COUNTDOWN_MS ? 0 : left > 0 ? Math.min(3, 4 - Math.ceil(left / 1000)) : now - v.goAt < 2000 ? 4 : 0,
       serverNow: now,
       dt,
     });

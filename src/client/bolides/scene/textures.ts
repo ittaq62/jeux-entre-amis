@@ -535,3 +535,61 @@ export function blobTexture(): THREE.CanvasTexture {
   g.fillRect(0, 0, 64, 64);
   return toTexture(c, false, false);
 }
+
+/** L'intérieur d'un tunnel : des plaques de béton au port, des pierres aux vignes, de la roche au col */
+export function tunnelTexture(theme: Theme): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  const r = rng(theme === "port" ? 41 : theme === "vignes" ? 43 : 47);
+  if (theme === "port") {
+    g.fillStyle = "#a9a6a0";
+    g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 64) {
+      for (let x = 0; x < 256; x += 128) {
+        const l = 150 + Math.floor(r() * 30);
+        g.fillStyle = `rgb(${l},${l - 3},${l - 8})`;
+        g.fillRect(x + 2, y + 2, 124, 60);
+      }
+    }
+    g.fillStyle = "#e0b52c";
+    g.fillRect(0, 232, 256, 24);
+  } else if (theme === "vignes") {
+    g.fillStyle = "#8f7c62";
+    g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 32) {
+      for (let x = (y / 32) % 2 === 0 ? 0 : -24; x < 256; x += 48) {
+        const l = 150 + Math.floor(r() * 50);
+        g.fillStyle = `rgb(${l},${l - 18},${l - 45})`;
+        g.beginPath();
+        g.roundRect(x + 2, y + 2, 44, 28, 6);
+        g.fill();
+      }
+    }
+  } else {
+    g.fillStyle = "#6f6a66";
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 90; i++) {
+      const l = 80 + Math.floor(r() * 60);
+      g.fillStyle = `rgb(${l},${l - 4},${l - 8})`;
+      g.beginPath();
+      const x = r() * 256;
+      const y = r() * 256;
+      g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) g.lineTo(x + (r() - 0.5) * 60, y + (r() - 0.5) * 40);
+      g.closePath();
+      g.fill();
+    }
+  }
+  speckle(g, 256, 256, 1500, ["rgba(0,0,0,0.08)", "rgba(255,255,255,0.06)"], 2, 53);
+  return toTexture(c);
+}
+
+/** Des bandes de couleurs côte à côte (les ailes des moulins, les cabines…) */
+export function stripesTexture(colors: string[]): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 16);
+  const w = 128 / colors.length;
+  colors.forEach((col, i) => {
+    g.fillStyle = col;
+    g.fillRect(i * w, 0, w, 16);
+  });
+  return toTexture(c);
+}

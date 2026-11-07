@@ -24,6 +24,8 @@ export interface Frame {
   camera: "intro" | "chase" | "orbit";
   /** Où en est le survol d'avant la course, de 0 à 1 */
   introT: number;
+  /** Les feux de départ sur l'arche (0 : éteints, 1 à 3 rouges, 4 : verts) */
+  lights: number;
   serverNow: number;
   /** Le temps réel écoulé depuis l'image précédente, en secondes */
   dt: number;
@@ -52,6 +54,10 @@ export class RaceScene {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(62, 1, 0.3, 1400);
   private sun: THREE.DirectionalLight;
+  private hemi: THREE.HemisphereLight;
+  /** La lumière du jour (1), plus faible dans un tunnel */
+  private daylight = 1;
+  private lightsShown = -1;
   private world: World | null = null;
   private track: Track | null = null;
   private karts: KartModel[] = [];
@@ -114,8 +120,8 @@ export class RaceScene {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.className = "bolides-canvas";
 
-    const hemi = new THREE.HemisphereLight(0xdfefff, 0x5a6a3a, 1.35);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xdfefff, 0x5a6a3a, 1.35);
+    this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
     this.sun.position.set(60, 120, 40);
     this.sun.castShadow = this.shadows;
@@ -395,6 +401,16 @@ export class RaceScene {
     }
   }
 
+  /** Des confettis de toutes les couleurs, qui retombent doucement (une arrivée) */
+  confetti(x: number, y: number, z: number) {
+    const colors = [0xd8352a, 0x2f80ed, 0x27ae60, 0xf2c94c, 0x9b51e0, 0xf2994a, 0xffffff, 0xeb5ea8];
+    for (let i = 0; i < (this.opts.reduced ? 12 : 40); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 2 + Math.random() * 5;
+      this.puff(x, y + 5, z, colors[i % colors.length]!, Math.cos(a) * s, 3 + Math.random() * 4, Math.sin(a) * s, 2.2, 0.15, 1, false);
+    }
+  }
+
   /** Des étincelles contre un mur */
   wallSparks(k: Kart) {
     this.burst({ x: k.x, y: k.y + 0.5, z: k.z }, 0xffd27a, 9, 5);
@@ -501,7 +517,19 @@ export class RaceScene {
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
     this.moveCamera(f);
-    this.world.update(this.time, this.camera.position);
+    this.world.update(this.time, this.camera.position, this.daylight);
+    if (f.lights !== this.lightsShown) {
+      this.lightsShown = f.lights;
+      this.world.setLights(f.lights);
+    }
+    // Dans un tunnel, le jour baisse (les lampes, elles, brillent toujours)
+    const followed = f.follow >= 0 ? f.karts[f.follow]?.kart : undefined;
+    const inside =
+      f.camera === "chase" && followed !== undefined && this.world.tunnels.some(([a, b]) => followed.s > a + 4 && followed.s < b - 2);
+    this.daylight += ((inside ? 0.38 : 1) - this.daylight) * Math.min(1, f.dt * 4);
+    this.hemi.intensity = 1.35 * this.daylight;
+    this.sun.intensity = 1.9 * this.daylight;
+    this.scene.environmentIntensity = 0.55 * (0.5 + 0.5 * this.daylight);
     // Les étiquettes des autres : ni trop près ni trop loin ; un kart collé à la caméra s'efface pour ne pas boucher la vue
     f.karts.forEach((k, i) => {
       const d = this.camPos.distanceTo(this.tmp.set(k.kart.x, k.kart.y + 0.8, k.kart.z));

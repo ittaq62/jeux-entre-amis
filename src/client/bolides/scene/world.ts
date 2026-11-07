@@ -6,6 +6,7 @@ import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
 import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
 import { mergeDeep } from "./merge.ts";
+import { buildScenery, PLACES } from "./scenery.ts";
 import { Sky, SKY_COLORS } from "./sky.ts";
 import * as TX from "./textures.ts";
 
@@ -17,9 +18,13 @@ export interface World {
   /** La hauteur du sol à cet endroit */
   heightAt: (x: number, z: number) => number;
   /** À appeler à chaque image, une fois la caméra placée (l'eau, les accélérateurs, les drapeaux, le ciel) */
-  update: (t: number, camera: THREE.Vector3) => void;
+  update: (t: number, camera: THREE.Vector3, daylight: number) => void;
   /** La couleur de l'horizon (le fond et le brouillard) */
   sky: THREE.Color;
+  /** Les tunnels (de quelle à quelle distance du tour) : la lumière y baisse */
+  tunnels: [number, number][];
+  /** Les trois feux de départ sur l'arche (0 : éteints, 1 à 3 : autant de rouges, 4 : tous verts) */
+  setLights: (n: number) => void;
   fog: THREE.Fog;
   dispose: () => void;
 }
@@ -320,6 +325,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   }
 
   // La ligne d'arrivée : le damier au sol et l'arche
+  const startLamps: THREE.MeshStandardMaterial[] = [];
   {
     const p = pointAt(t, 0, 0);
     const h = Math.atan2(p.tx, p.tz);
@@ -352,6 +358,18 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     ]);
     beam.position.y = 5.8;
     arch.add(beam);
+    // Les feux de départ, sous la banderole, tournés vers la grille
+    const housing = new THREE.Mesh(keep(new THREE.BoxGeometry(4.6, 1.3, 0.6)), postMat);
+    housing.position.set(0, 4.45, 0.3);
+    arch.add(housing);
+    const lampGeo = keep(new THREE.SphereGeometry(0.42, 14, 10));
+    for (let k = 0; k < 3; k++) {
+      const mat = keep(new THREE.MeshStandardMaterial({ color: 0x3a1210, emissive: 0x000000, roughness: 0.3 }));
+      const lamp = new THREE.Mesh(lampGeo, mat);
+      lamp.position.set((k - 1) * 1.4, 4.45, 0.62);
+      arch.add(lamp);
+      startLamps.push(mat);
+    }
     // En travers de la route : son axe x local suit la droite de la route (-cos h, sin h), la banderole fait face aux karts
     arch.position.set(p.x, p.y, p.z);
     arch.rotation.y = h + Math.PI;
@@ -381,9 +399,14 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
 
   // Le décor
   const r = rng(t.n * 31 + t.def.width);
-  // Au port, l'eau commence au quai, le long de la ligne droite
+  // Au port, l'eau commence au quai, le long de la ligne droite ; et rien ne pousse à travers un tunnel ou un pont
   const quay = -t.wall - 9;
-  const free = (x: number, z: number, min: number) => field.distAt(x, z) > min && (theme !== "port" || z > quay + 5);
+  const place0 = PLACES[theme];
+  const keepOut: { x: number; z: number }[] = [];
+  for (let s = place0.tunnel[0] - 12; s <= place0.tunnel[1] + 12; s += 4) keepOut.push(pointAt(t, s, 0));
+  for (let s = place0.bridge - 6; s <= place0.bridge + 6; s += 3) for (const d of [-1, 1]) keepOut.push(pointAt(t, s, d * (t.wall + 2)));
+  const blocked = (x: number, z: number) => keepOut.some((p) => Math.hypot(p.x - x, p.z - z) < t.wall + 10);
+  const free = (x: number, z: number, min: number) => field.distAt(x, z) > min && (theme !== "port" || z > quay + 5) && !blocked(x, z);
   const scatter = (count: number, min: number, max: number, test?: (x: number, z: number) => boolean) => {
     const out: [number, number][] = [];
     const w = (field.nx - 1) * field.cell;
@@ -393,6 +416,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
       const z = field.z0 + r() * h;
       const d = field.distAt(x, z);
       if (d < min || d > max) continue;
+      if (blocked(x, z)) continue;
       if (test && !test(x, z)) continue;
       out.push([x, z]);
     }
@@ -409,6 +433,8 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   addWallBoards(ctx);
   const waveFlags = addFlags(ctx);
   addGrandstand(ctx);
+  // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
+  const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
 
   // Des montagnes ou des collines tout autour, pour l'horizon
   {
@@ -702,12 +728,22 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     dome: sky.group,
     heightAt,
     sky: new THREE.Color(horizon),
+    tunnels: scenery.tunnels,
+    setLights(n: number) {
+      startLamps.forEach((m, k) => {
+        const on = n === 4 || k < n;
+        m.color.setHex(n === 4 ? 0x1f8f3a : on ? 0xd8352a : 0x3a1210);
+        m.emissive.setHex(n === 4 ? 0x36ff6a : on ? 0xff2a1a : 0x000000);
+        m.emissiveIntensity = on ? 1.6 : 0;
+      });
+    },
     fog: new THREE.Fog(horizon, 230, 1050),
-    update(time: number, camera: THREE.Vector3) {
+    update(time: number, camera: THREE.Vector3, daylight: number) {
       boostTex.offset.y = -((time * 1.6) % 1);
       if (waterTex) waterTex.offset.set((time * 0.01) % 1, (time * 0.02) % 1);
       waveFlags(time);
       sky.update(camera, time);
+      scenery.update(time, camera, daylight);
       floaters.forEach((f, i) => {
         const base = f.userData.base as THREE.Vector3;
         f.position.set(
