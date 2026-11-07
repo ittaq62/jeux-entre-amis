@@ -372,7 +372,9 @@ export class KartModel {
     }
     // Le tête-à-queue : deux tours complets ; le dérapage : le kart pivote vers l'intérieur, en douceur
     const spinAngle = k.spin > 0 ? (1 - k.spin / SPIN_TIME) * Math.PI * 4 : 0;
-    this.yawOff += ((k.drift !== 0 ? -k.drift * 0.36 : 0) - this.yawOff) * Math.min(1, dt * 9);
+    // Plus on serre le dérapage, plus le kart se met en travers
+    const into = Math.max(-1, Math.min(1, x.steer * k.drift));
+    this.yawOff += ((k.drift !== 0 ? -k.drift * (0.34 + 0.14 * into) : 0) - this.yawOff) * Math.min(1, dt * 9);
     const hop = k.hop > 0 ? Math.sin((1 - k.hop / 0.22) * Math.PI) * 0.32 : 0;
     this.tilt.position.y = PIVOT + Math.max(0, hop) + this.squash;
     this.tilt.rotation.set(

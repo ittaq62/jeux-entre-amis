@@ -86,7 +86,23 @@ export interface StepMods {
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
-export type KartEvent = "wall" | "pad" | "drift" | "turbo1" | "turbo2" | "turbo3" | "grass" | "jump" | "trick" | "land";
+export type KartEvent =
+  | "wall"
+  | "pad"
+  | "drift"
+  /** Un palier de mini-turbo atteint pendant le dérapage (les étincelles changent de couleur) */
+  | "spark1"
+  | "spark2"
+  | "spark3"
+  | "turbo1"
+  | "turbo2"
+  | "turbo3"
+  | "grass"
+  | "jump"
+  | "trick"
+  | "land"
+  /** Un choc contre un autre kart */
+  | "bump";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -183,9 +199,18 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   let yaw: number;
   if (k.drift !== 0) {
     // En dérapage, le kart tourne toujours du côté du dérapage : braquer dedans serre, braquer dehors élargit
+    // Au neutre, un arc moyen (44 m à pleine vitesse, la taille des grands virages) ; braquer dedans le serre (27 m,
+    // les épingles), dehors l'élargit (73 m) sans jamais aller tout droit : au clavier comme au doigt, on suit un
+    // virage en restant presque toujours sur une seule touche
     const into = clamp(ctl.steer * k.drift, -1, 1);
-    yaw = -k.drift * TURN * (0.6 + 0.45 * into) * speedF;
-    if (!flying) k.charge += dt * (0.9 + 0.55 * Math.max(0, into));
+    yaw = -k.drift * TURN * (0.4 + (into >= 0 ? 0.26 : 0.16) * into) * speedF;
+    if (!flying) {
+      const before = driftLevel(k.charge);
+      // Serrer charge plus vite, élargir plus lentement
+      k.charge += dt * (1 + 0.5 * into);
+      const after = driftLevel(k.charge);
+      if (after > before) events?.push(after === 3 ? "spark3" : after === 2 ? "spark2" : "spark1");
+    }
   } else {
     yaw = -ctl.steer * TURN * speedF * Math.sign(k.v || 1);
   }

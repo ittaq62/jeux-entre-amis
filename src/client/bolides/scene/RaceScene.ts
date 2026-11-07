@@ -348,6 +348,30 @@ export class RaceScene {
     }
   }
 
+  /** Un palier de mini-turbo atteint : un éclat d'étincelles à sa couleur sous les roues arrière */
+  sparkFlash(k: Kart, level: 1 | 2 | 3) {
+    const color = TURBO_COLORS[level - 1]!;
+    const fx = Math.sin(k.h);
+    const fz = Math.cos(k.h);
+    for (const side of [-1, 1]) {
+      const x = k.x - fx * 1.1 - fz * side * 0.85;
+      const z = k.z - fz * 1.1 + fx * side * 0.85;
+      for (let i = 0; i < (this.opts.reduced ? 2 : 5); i++) {
+        this.puff(
+          x,
+          k.y + 0.3,
+          z,
+          i % 2 ? 0xffffff : color,
+          (Math.random() - 0.5) * 5,
+          2 + Math.random() * 3,
+          (Math.random() - 0.5) * 5,
+          0.35,
+          0.5,
+        );
+      }
+    }
+  }
+
   /** Des étincelles contre un mur */
   wallSparks(k: Kart) {
     this.burst({ x: k.x, y: k.y + 0.5, z: k.z }, 0xffd27a, 9, 5);
