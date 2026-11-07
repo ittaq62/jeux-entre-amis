@@ -38,6 +38,29 @@ export function ItemIcon({ item, size = 48 }: { item: ItemKind; size?: number })
           <path d="M24 11l10 4v7c0 7-4 12-10 14z" fill="#7fc3ff" />
         </>
       )}
+      {item === "fusee" && (
+        <g transform="rotate(40 24 24)">
+          <path d="M20 34c-2 6 1 9 4 11 3-2 6-5 4-11z" fill="#ff9a2e" />
+          <path d="M24 3c6 5 8 12 8 20v12H16V23c0-8 2-15 8-20z" fill="#f2f0ea" stroke="#5e1610" strokeWidth="2" />
+          <path d="M24 3c6 5 8 12 8 15H16c0-3 2-10 8-15z" fill="#d8352a" />
+          <circle cx="24" cy="22" r="3.4" fill="#7fc3ff" stroke="#5e1610" strokeWidth="1.5" />
+          <path d="M16 26l-6 9h6zM32 26l6 9h-6z" fill="#d8352a" stroke="#5e1610" strokeWidth="1.5" strokeLinejoin="round" />
+        </g>
+      )}
+      {item === "arc" && (
+        <>
+          {["#e23b3f", "#f2994a", "#f2c94c", "#27ae60", "#2f80ed", "#9b51e0"].map((c, i) => (
+            <path
+              key={c}
+              d={`M${6 + i * 2.6} 38a${18 - i * 2.6} ${18 - i * 2.6} 0 0 1 ${36 - i * 5.2} 0`}
+              stroke={c}
+              strokeWidth="2.8"
+              fill="none"
+            />
+          ))}
+          <path d="M24 12l2.2 4.6 5 .6-3.7 3.4 1 5-4.5-2.5-4.5 2.5 1-5-3.7-3.4 5-.6z" fill="#fff6c8" stroke="#a87b16" strokeWidth="1" />
+        </>
+      )}
       {item === "klaxon" && (
         <>
           <path d="M8 20h7l14-9v26l-14-9H8z" fill="#f2c94c" stroke="#5c3d0a" strokeWidth="2" strokeLinejoin="round" />

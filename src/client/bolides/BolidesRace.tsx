@@ -27,7 +27,7 @@ interface Props {
   onLeave: () => void;
 }
 
-const ITEM_ORDER = ["turbo", "huile", "petard", "bouclier", "klaxon", "turbo3"] as const;
+const ITEM_ORDER = ["turbo", "huile", "petard", "bouclier", "fusee", "klaxon", "turbo3", "arc"] as const;
 
 /** Un temps de course : 1:23.4 */
 export function raceTime(ms: number): string {
@@ -298,6 +298,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           </AnimatePresence>
 
           {h.wrongWay && <div className="hud-warning">Mauvais sens !</div>}
+          {h.rocket && !h.wrongWay && <div className="hud-warning is-rocket">Une fusée arrive sur toi !</div>}
           {h.stuck && !h.wrongWay && (
             <div className="hud-hint">{phone ? "Coincé ? Touche Repartir" : "Coincé ? Appuie sur R pour repartir"}</div>
           )}

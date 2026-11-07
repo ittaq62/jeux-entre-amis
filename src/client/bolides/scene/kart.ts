@@ -29,6 +29,8 @@ export interface KartExtras {
   shield: boolean;
   /** Arrivé : le pilote fête ça */
   done: boolean;
+  /** Sous l'arc-en-ciel */
+  star?: boolean;
 }
 
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
@@ -176,6 +178,10 @@ export class KartModel {
   /** L'effacement en cours, et l'état d'origine de chaque matière */
   private alpha = 1;
   private solid = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
+  /** La peinture, et sa couleur d'origine (l'arc-en-ciel la fait changer) */
+  private paint!: THREE.MeshStandardMaterial;
+  private baseColor!: THREE.Color;
+  private starShown = false;
 
   constructor(look: KartLook, shadows: boolean) {
     const keep = <T extends { dispose: () => void }>(x: T): T => {
@@ -183,6 +189,8 @@ export class KartModel {
       return x;
     };
     const paint = keep(new THREE.MeshStandardMaterial({ color: look.color, roughness: 0.32, metalness: 0.15 }));
+    this.paint = paint;
+    this.baseColor = new THREE.Color(look.color);
     const paintDark = keep(
       new THREE.MeshStandardMaterial({ color: new THREE.Color(look.color).multiplyScalar(0.72), roughness: 0.4, metalness: 0.1 }),
     );
@@ -409,6 +417,16 @@ export class KartModel {
       }
       p.geometry.attributes.position!.needsUpdate = true;
     }
+    // L'arc-en-ciel : toutes les couleurs, très vite, et une lueur
+    const star = Boolean(x.star);
+    if (star) {
+      this.paint.color.setHSL((time * 1.8) % 1, 0.85, 0.55);
+      this.paint.emissive.setHSL((time * 1.8 + 0.5) % 1, 0.9, 0.25);
+    } else if (this.starShown) {
+      this.paint.color.copy(this.baseColor);
+      this.paint.emissive.setHex(0x000000);
+    }
+    this.starShown = star;
     this.shield.visible = x.shield;
     if (x.shield) (this.shield.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(time * 6) * 0.06;
     // Le pilote : penché dans le virage, plus fort en dérapage

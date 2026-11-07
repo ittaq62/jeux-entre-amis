@@ -291,6 +291,8 @@ export const BOLIDES_SOUNDS: SoundName[] = [
   "bolidesCoin",
   "bolidesBox",
   "bolidesBump",
+  "tourFanfare",
+  "tick",
 ];
 
 export const TOUR_SOUNDS: SoundName[] = [

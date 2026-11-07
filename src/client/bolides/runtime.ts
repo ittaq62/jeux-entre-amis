@@ -3,7 +3,7 @@
 // l'affichage tête haute. Une boucle par image, en dehors de React.
 
 import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
-import { BOX_RADIUS, COIN_RADIUS, COIN_SPEED, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
+import { ARC_SPEED, BOX_RADIUS, COIN_RADIUS, COIN_SPEED, fuseeDist, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
 import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
 import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
@@ -33,6 +33,8 @@ export interface Hud {
   raceMs: number;
   finished: { place: number; ms: number } | null;
   wrongWay: boolean;
+  /** Une fusée vient vers soi */
+  rocket: boolean;
   stuck: boolean;
   speed: number;
   /** Ses pièces (dix au plus) */
@@ -97,6 +99,8 @@ export class RaceRuntime {
   private sentAt = 0;
   private hudAt = 0;
   private beep: number | null = null;
+  /** Le bip d'alerte d'une fusée qui arrive : la prochaine fois qu'il sonne */
+  private rocketBeepAt = 0;
   private rollingUntil = 0;
   private banner: Hud["banner"] = null;
   private bannerSeq = 0;
@@ -194,7 +198,8 @@ export class RaceRuntime {
           if (e.item === "klaxon") {
             honk();
             if (at) this.scene.ring(at.x, at.y, at.z);
-          } else if (e.item === "petard") this.near(e.id, "torpedo", 0.8);
+          } else if (e.item === "petard" || e.item === "fusee") this.near(e.id, "torpedo", e.item === "fusee" ? 1 : 0.8);
+          else if (e.item === "arc") this.near(e.id, "tourFanfare", 0.6);
           else if (e.item === "huile") this.near(e.id, "splash", 0.6);
           else if (e.item === "bouclier") this.near(e.id, "pop", 0.8);
           else if (e.id !== meId) this.near(e.id, "wild", 0.5);
@@ -210,7 +215,7 @@ export class RaceRuntime {
           break;
         case "hit": {
           const at = this.kartOf(e.id);
-          if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard");
+          if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard" || e.kind === "fusee");
           if (e.id === meId) {
             this.driver?.hit();
             this.scene.shake(0.7);
@@ -370,9 +375,10 @@ export class RaceRuntime {
         const input = pilot ? pilot.input : pad;
         if (auto && pilot?.use) pad.item = true;
         const others = this.shown.filter((_, i) => i !== this.mine);
-        // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur)
-        d.top = CLASS_SPEED[v.settings.speed] * (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0));
-        events = d.update(dt, input, others, now / 1000);
+        // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur), l'arc-en-ciel beaucoup
+        const star = (me.starUntil ?? 0) > now;
+        d.top = CLASS_SPEED[v.settings.speed] * (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0)) * (star ? ARC_SPEED : 1);
+        events = d.update(dt, input, others, now / 1000, star);
         if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
@@ -452,6 +458,16 @@ export class RaceRuntime {
       else if (e === "land") play("bolidesLand");
       else if (e === "trick") play("bolidesTrick");
     }
+    // Une fusée vient sur soi : un bip, de plus en plus pressant à mesure qu'elle approche
+    if (me && me.finish === null) {
+      const mine = this.shown[this.mine];
+      let gap = Infinity;
+      for (const h of v.hazards) if (h.kind === "fusee" && h.target === me.id && mine) gap = Math.min(gap, mine.dist - fuseeDist(h, now));
+      if (gap < Infinity && now >= this.rocketBeepAt) {
+        play("tick", { volume: 1, rate: 1.6 });
+        this.rocketBeepAt = now + Math.max(110, Math.min(600, gap * 2.2));
+      }
+    }
     // Le bip du compte à rebours
     const left = v.goAt - now;
     // La musique : dès les feux, plus vite au dernier tour, plus discrète une fois arrivé
@@ -487,6 +503,7 @@ export class RaceRuntime {
         steer: this.steers[i]!,
         shield: v.racers[i]!.shieldUntil > now,
         done: v.racers[i]!.finish !== null,
+        star: (v.racers[i]!.starUntil ?? 0) > now,
       })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
@@ -537,6 +554,7 @@ export class RaceRuntime {
       raceMs: me?.finish ?? (v.phase === "start" ? 0 : Math.max(0, now - v.goAt)),
       finished: me?.finish != null ? { place: v.ranks?.[me.id] ?? place, ms: me.finish } : null,
       wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
+      rocket: Boolean(me && me.finish === null && v.hazards.some((h) => h.kind === "fusee" && h.target === me.id)),
       stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
       speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
       coins: this.mine >= 0 ? (this.coinCounts[this.mine] ?? me?.coins ?? 0) : 0,

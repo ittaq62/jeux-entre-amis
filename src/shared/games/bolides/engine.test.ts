@@ -342,6 +342,10 @@ describe("les objets", () => {
     const first = count(0);
     const last = count(1);
     expect(first.turbo3 ?? 0).toBe(0);
+    expect(first.fusee ?? 0).toBe(0);
+    expect(first.arc ?? 0).toBe(0);
+    expect(last.fusee ?? 0).toBeGreaterThan(150);
+    expect(last.arc ?? 0).toBeGreaterThan(150);
     expect(last.turbo3 ?? 0).toBeGreaterThan(600);
     expect(last.huile ?? 0).toBe(0);
     for (const k of Object.keys({ ...first, ...last })) expect(ITEM_KINDS).toContain(k);
@@ -529,6 +533,77 @@ describe("la course", () => {
     // Plus tard, les pièces sont revenues
     worldTick(race, now + 9000);
     expect(race.coins.every((at) => at <= now + 9000)).toBe(true);
+  });
+
+  it("la fusée file au-dessus de tout le monde et va frapper le premier ; le bouclier l'arrête", () => {
+    const race = newRace(["a", "b", "c"], new Set(["b", "c"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const t = getTrack("port");
+    const a = racerOf(race, "a")!;
+    const b = racerOf(race, "b")!;
+    const c = racerOf(race, "c")!;
+    const put = (k: Kart, s: number, d = 0) => {
+      const p = pointAt(t, s, d);
+      Object.assign(k, { x: p.x, z: p.z, s, d, dist: s, h: Math.atan2(p.tx, p.tz) });
+    };
+    // a derrière, c au milieu (sur la route de la fusée), b loin devant
+    put(a.kart, 50);
+    put(c.kart, 120);
+    put(b.kart, 400);
+    a.item = "fusee";
+    a.uses = 1;
+    const now = race.goAt + 1000;
+    expect(useItem(race, "a", now).map((e) => e.type)).toEqual(["use", "hazard"]);
+    const hz = race.hazards.find((h) => h.kind === "fusee")!;
+    expect(hz.kind === "fusee" && hz.target).toBe("b");
+    const hits: string[] = [];
+    for (let ms = 50; ms < 9000; ms += 50) for (const e of worldTick(race, now + ms)) if (e.type === "hit") hits.push(`${e.id}:${e.kind}`);
+    expect(hits).toEqual(["b:fusee"]);
+    expect(b.kart.spin).toBeGreaterThan(0);
+    expect(c.kart.spin).toBe(0);
+    // Une deuxième, sur un premier protégé : rien
+    b.kart.spin = 0;
+    b.shieldUntil = now + 60_000;
+    a.item = "fusee";
+    a.uses = 1;
+    useItem(race, "a", now + 10_000);
+    const later: string[] = [];
+    for (let ms = 50; ms < 9000; ms += 50) for (const e of worldTick(race, now + 10_000 + ms)) later.push(e.type);
+    expect(later).toContain("shield");
+    expect(b.kart.spin).toBe(0);
+  });
+
+  it("sous l'arc-en-ciel : intouchable, l'herbe ne freine pas, et ceux qu'on touche partent en tête-à-queue", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const a = racerOf(race, "a")!;
+    const b = racerOf(race, "b")!;
+    a.item = "arc";
+    a.uses = 1;
+    const now = race.goAt + 1000;
+    useItem(race, "a", now);
+    expect(a.starUntil).toBeGreaterThan(now);
+    // Un klaxon de b à côté ne lui fait rien
+    Object.assign(b.kart, { x: a.kart.x + 6, z: a.kart.z });
+    b.item = "klaxon";
+    b.uses = 1;
+    useItem(race, "b", now + 100);
+    expect(a.kart.spin).toBe(0);
+    // Il fonce dans b : b part en tête-à-queue
+    Object.assign(b.kart, { x: a.kart.x + 1.5, z: a.kart.z, spin: 0 });
+    const ev = worldTick(race, now + 200);
+    expect(ev.some((e) => e.type === "hit" && e.id === "b" && e.kind === "arc")).toBe(true);
+    // Dans l'herbe, il garde sa vitesse
+    const t = getTrack("port");
+    const k = kartAt("port", 20, t.half + 3);
+    k.v = TOP_SPEED;
+    drive(k, GAS, 0.1);
+    const grassy = { ...k };
+    for (let i = 0; i < 60; i++) step(grassy, GAS, t, { top: 1 });
+    for (let i = 0; i < 60; i++) step(k, GAS, t, { top: 1, star: true });
+    expect(k.offroad).toBe(true);
+    expect(k.v).toBeGreaterThan(TOP_SPEED * 0.95);
+    expect(grassy.v).toBeLessThan(TOP_SPEED * 0.8);
   });
 
   it("le pétard d'un joueur touche le kart de devant, le bouclier arrête un coup", () => {

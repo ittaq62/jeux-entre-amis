@@ -394,6 +394,12 @@
   -webkit-text-stroke: 2px #2a1c11;
 }
 
+.hud-warning.is-rocket {
+  top: 30%;
+  background: #e8731c;
+  font-size: 24px;
+}
+
 .hud-warning {
   position: absolute;
   top: 42%;

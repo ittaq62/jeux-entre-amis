@@ -197,6 +197,9 @@ export function botDrive(
     else if (item === "huile") use = (behind && aim) || patience;
     else if (item === "petard") use = (ahead && aim) || patience;
     else if (item === "klaxon") use = (near && aim) || patience;
+    // La fusée : tout de suite (elle va seule chercher le premier) ; l'arc-en-ciel : quand il y a du monde devant ou à côté
+    else if (item === "fusee") use = true;
+    else if (item === "arc") use = ((ahead || near) && aim) || patience;
     else use = patience;
     // Pas deux objets dans la même seconde
     if (use) mem.holdUntil = now + 1000;

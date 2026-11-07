@@ -159,8 +159,8 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
                 <span>
                   <strong>Les caisses d'objets</strong>
                   <span className="hint">
-                    Turbo, flaque d'huile, pétard, bouclier, klaxon : plus on est loin, meilleurs sont les objets. Sans elles, c'est une
-                    course pure.
+                    Turbo, flaque d'huile, pétard, bouclier, klaxon, fusée, arc-en-ciel : plus on est loin, meilleurs sont les objets. Sans
+                    elles, c'est une course pure.
                   </span>
                 </span>
               </div>

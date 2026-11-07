@@ -71,6 +71,7 @@ export class RaceScene {
   private oilMat: THREE.MeshBasicMaterial;
   private petardGeo: THREE.BufferGeometry;
   private petardMat: THREE.MeshLambertMaterial;
+  private rocketParts: { geo: THREE.BufferGeometry; mat: THREE.Material }[] = [];
   private puffs: Puff[] = [];
   private spare: THREE.Sprite[] = [];
   private puffTex: THREE.Texture;
@@ -253,12 +254,42 @@ export class RaceScene {
         mesh.rotation.x = -Math.PI / 2;
         const y = this.track ? pointAt(this.track, hz.s, hz.d).y : 0;
         mesh.position.set(hz.x, y + 0.1, hz.z);
+      } else if (hz.kind === "fusee") {
+        mesh = this.rocket();
       } else {
         mesh = new THREE.Mesh(this.petardGeo, this.petardMat);
       }
       this.scene.add(mesh);
       this.hazards.set(hz.id, { hz, mesh });
     }
+  }
+
+  /** Une fusée : rouge et blanche, son nez, ses ailerons, sa flamme (les formes servent à toutes les fusées) */
+  private rocket(): THREE.Group {
+    if (this.rocketParts.length === 0) {
+      const body = new THREE.CylinderGeometry(0.32, 0.32, 1.6, 12);
+      body.rotateX(Math.PI / 2);
+      const nose = new THREE.ConeGeometry(0.32, 0.6, 12);
+      nose.rotateX(Math.PI / 2);
+      nose.translate(0, 0, 1.1);
+      const fins = new THREE.BoxGeometry(1.2, 0.08, 0.5);
+      fins.translate(0, 0, -0.65);
+      const fins2 = fins.clone().rotateZ(Math.PI / 2);
+      const flame = new THREE.ConeGeometry(0.28, 1.0, 10);
+      flame.rotateX(-Math.PI / 2);
+      flame.translate(0, 0, -1.3);
+      this.rocketParts = [
+        { geo: body, mat: new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.4 }) },
+        { geo: nose, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
+        { geo: fins, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
+        { geo: fins2, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
+        { geo: flame, mat: new THREE.MeshBasicMaterial({ color: 0xffb347 }) },
+      ];
+    }
+    const g = new THREE.Group();
+    for (const p of this.rocketParts) g.add(new THREE.Mesh(p.geo, p.mat));
+    g.scale.setScalar(1.3);
+    return g;
   }
 
   /** Une gerbe de particules (une caisse qui éclate, une explosion) */
@@ -482,8 +513,29 @@ export class RaceScene {
       c.scale.setScalar(Math.max(0.001, s));
       c.visible = s > 0.02;
     });
-    // Les pétards filent le long de la route
+    // Les pétards filent le long de la route ; les fusées volent au-dessus, en fumant
     for (const { hz, mesh } of this.hazards.values()) {
+      if (hz.kind === "fusee") {
+        const p = hazardPos(t, hz, f.serverNow);
+        mesh.visible = Boolean(p);
+        if (!p) continue;
+        mesh.position.set(p.x, p.y + Math.sin(this.time * 9) * 0.15, p.z);
+        mesh.rotation.set(0, p.h, Math.sin(this.time * 14) * 0.3);
+        this.puff(
+          p.x,
+          p.y,
+          p.z,
+          Math.random() < 0.3 ? 0xffc46b : 0xd9d4cc,
+          (Math.random() - 0.5) * 0.6,
+          0.4,
+          (Math.random() - 0.5) * 0.6,
+          0.9,
+          2.2,
+          0.7,
+          false,
+        );
+        continue;
+      }
       if (hz.kind !== "petard") continue;
       const p = hazardPos(t, hz, f.serverNow);
       if (!p) {
@@ -627,6 +679,10 @@ export class RaceScene {
     this.oilMat.dispose();
     this.petardGeo.dispose();
     this.petardMat.dispose();
+    for (const p of this.rocketParts) {
+      p.geo.dispose();
+      p.mat.dispose();
+    }
     this.puffTex.dispose();
     this.envTex.dispose();
     for (const d of this.featureKeep) d.dispose();

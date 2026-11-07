@@ -85,6 +85,8 @@ export interface StepMods {
   top: number;
   /** L'heure du serveur, en secondes (pour les engins qui traversent la route) ; sans elle, pas d'engins */
   time?: number;
+  /** L'arc-en-ciel : l'herbe ne freine pas */
+  star?: boolean;
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
@@ -163,10 +165,11 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   k.offroad = Math.abs(k.d) > t.roadEdge && !flying;
   if (k.offroad && !wasOff && k.v > 8) events?.push("grass");
 
-  // La vitesse visée : moins dans l'herbe, plus avec un turbo
-  let max = top * (k.offroad ? GRASS : 1);
+  // La vitesse visée : moins dans l'herbe (sauf sous l'arc-en-ciel), plus avec un turbo
+  const grass = k.offroad && !mods.star;
+  let max = top * (grass ? GRASS : 1);
   if (k.boost > 0) {
-    max = top * BOOST_SPEED * (k.offroad ? 0.85 : 1);
+    max = top * BOOST_SPEED * (grass ? 0.85 : 1);
     k.boost = Math.max(0, k.boost - dt);
   }
   const push = ctl.gas || k.boost > 0;

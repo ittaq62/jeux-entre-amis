@@ -1,12 +1,13 @@
 // Les objets de Bolides, tirés dans les caisses : de quoi filer (turbo), se défendre (bouclier), ou gêner les autres
-// (flaque d'huile derrière soi, pétard qui file droit devant le long de la route, klaxon qui fait tourner les voisins).
+// (flaque d'huile derrière soi, pétard qui file droit devant le long de la route, klaxon qui fait tourner les voisins,
+// fusée qui va chercher le premier, arc-en-ciel qui rend intouchable et renverse tout sur son passage).
 // Plus on est loin dans la course, meilleurs sont les objets.
 
 import { pointAt, type Track } from "./track.ts";
 
-export type ItemKind = "turbo" | "turbo3" | "huile" | "petard" | "bouclier" | "klaxon";
+export type ItemKind = "turbo" | "turbo3" | "huile" | "petard" | "bouclier" | "klaxon" | "fusee" | "arc";
 
-export const ITEM_KINDS: ItemKind[] = ["turbo", "turbo3", "huile", "petard", "bouclier", "klaxon"];
+export const ITEM_KINDS: ItemKind[] = ["turbo", "turbo3", "huile", "petard", "bouclier", "klaxon", "fusee", "arc"];
 
 export const ITEM_NAMES: Record<ItemKind, string> = {
   turbo: "Turbo",
@@ -15,6 +16,8 @@ export const ITEM_NAMES: Record<ItemKind, string> = {
   petard: "Pétard",
   bouclier: "Bouclier",
   klaxon: "Klaxon",
+  fusee: "Fusée",
+  arc: "Arc-en-ciel",
 };
 
 export const ITEM_HINTS: Record<ItemKind, string> = {
@@ -24,10 +27,12 @@ export const ITEM_HINTS: Record<ItemKind, string> = {
   petard: "File droit devant le long de la route et fait tourner le premier qu'il touche",
   bouclier: "Te protège du prochain coup pendant quelques secondes",
   klaxon: "Fait tourner tous les karts autour de toi et balaie les pièges",
+  fusee: "File le long de la route, au-dessus de tout le monde, et va frapper le premier",
+  arc: "Quelques secondes plus vite, sans craindre l'herbe ni les coups ; ceux que tu touches partent en tête-à-queue",
 };
 
 /** Le nombre d'utilisations d'un objet */
-export const ITEM_USES: Record<ItemKind, number> = { turbo: 1, turbo3: 3, huile: 1, petard: 1, bouclier: 1, klaxon: 1 };
+export const ITEM_USES: Record<ItemKind, number> = { turbo: 1, turbo3: 3, huile: 1, petard: 1, bouclier: 1, klaxon: 1, fusee: 1, arc: 1 };
 
 /** Le turbo d'un objet, en secondes */
 export const TURBO_TIME = 1.3;
@@ -43,6 +48,13 @@ export const PETARD_RADIUS = 1.3;
 /** Son lanceur ne peut pas être touché tout de suite */
 export const PETARD_SAFE_MS = 600;
 export const KLAXON_RADIUS = 10;
+/** La fusée : sa vitesse le long de la course, le temps qu'elle a pour rattraper le premier */
+export const FUSEE_SPEED = 62;
+export const FUSEE_MS = 22_000;
+/** L'arc-en-ciel : sa durée, la vitesse de pointe en plus, et la distance à laquelle on renverse les autres */
+export const ARC_MS = 6000;
+export const ARC_SPEED = 1.18;
+export const ARC_RADIUS = 2.4;
 /** Une caisse prise revient au bout de ce temps */
 export const BOX_RESPAWN_MS = 3000;
 /** Les pièces : dix au plus, chacune donne un peu de vitesse de pointe ; on en perd trois quand on est touché */
@@ -56,8 +68,8 @@ export const BOX_RADIUS = 1.5;
 // Les chances de chaque objet, selon qu'on est en tête, au milieu ou derrière
 const TABLES: [number, Partial<Record<ItemKind, number>>][] = [
   [0.25, { huile: 36, bouclier: 26, petard: 24, turbo: 14 }],
-  [0.7, { petard: 30, turbo: 26, huile: 14, bouclier: 14, klaxon: 16 }],
-  [1.01, { turbo3: 30, turbo: 18, petard: 26, klaxon: 26 }],
+  [0.7, { petard: 28, turbo: 24, huile: 12, bouclier: 12, klaxon: 14, arc: 6, fusee: 4 }],
+  [1.01, { turbo3: 24, turbo: 14, petard: 18, klaxon: 18, arc: 14, fusee: 12 }],
 ];
 
 /** L'objet tiré dans une caisse ; `rank` : 0 en tête, 1 dernier */
@@ -72,8 +84,17 @@ export function drawItem(rank: number, rand: () => number): ItemKind {
   return entries[0]![0];
 }
 
-/** Un piège sur la route : une flaque posée, ou un pétard qui file */
+/** Un piège sur la route : une flaque posée, un pétard qui file, ou une fusée lancée vers le premier */
 export type Hazard =
+  | {
+      id: number;
+      kind: "fusee";
+      /** D'où elle part, en distance de course (comme celle des karts), et le pilote qu'elle va chercher */
+      dist0: number;
+      target: string;
+      owner: string;
+      at: number;
+    }
   /** Une flaque : où elle est, et où ça tombe le long de la route */
   | { id: number; kind: "huile"; x: number; z: number; s: number; d: number; owner: string; at: number }
   | {
@@ -90,9 +111,21 @@ export type Hazard =
 /** Où est un piège à cet instant (null : il a fini sa course) */
 export function hazardPos(t: Track, hz: Hazard, now: number): { x: number; z: number; y: number; h: number } | null {
   if (hz.kind === "huile") return now - hz.at > OIL_MS ? null : { x: hz.x, z: hz.z, y: 0, h: 0 };
+  if (hz.kind === "fusee") {
+    const age = Math.max(0, now - hz.at);
+    if (age > FUSEE_MS) return null;
+    const p = posOf(t, fuseeDist(hz, now), 0);
+    // Elle vole au-dessus des karts
+    return { ...p, y: p.y + 3 };
+  }
   const age = now - hz.at;
   if (age > PETARD_MS || age < 0) return age < 0 ? { ...posOf(t, hz.s0, hz.d) } : null;
   return posOf(t, hz.s0 + (hz.speed * age) / 1000, hz.d);
+}
+
+/** Où en est une fusée, en distance de course */
+export function fuseeDist(hz: Extract<Hazard, { kind: "fusee" }>, now: number): number {
+  return hz.dist0 + (FUSEE_SPEED * Math.max(0, now - hz.at)) / 1000;
 }
 
 function posOf(t: Track, s: number, d: number) {
