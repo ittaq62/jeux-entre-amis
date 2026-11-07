@@ -80,7 +80,13 @@ export type SoundName =
   | "capDeal"
   | "capTurn"
   | "capBankrupt"
-  | "capLose";
+  | "capLose"
+  | "mecheTick"
+  | "mecheStrike"
+  | "mecheFuse"
+  | "mecheWord"
+  | "mecheRefused"
+  | "mecheBoom";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -164,6 +170,13 @@ const FILES: Record<SoundName, string[]> = {
   capTurn: ["cap-turn.wav"],
   capBankrupt: ["cap-bankrupt.wav"],
   capLose: ["cap-lose.wav"],
+  // Mèche : un tic-tac de bois, l'allumette, la corde qui grésille, et le boum
+  mecheTick: ["meche-tick.wav"],
+  mecheStrike: ["meche-strike.wav"],
+  mecheFuse: ["meche-fuse.wav"],
+  mecheWord: ["meche-word.wav"],
+  mecheRefused: ["meche-refused.wav"],
+  mecheBoom: ["meche-boom.wav"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -219,6 +232,22 @@ export const BRICKS_SOUNDS: SoundName[] = [
   "brickMusic",
   "win",
   "lose",
+];
+
+export const MECHE_SOUNDS: SoundName[] = [
+  "mecheTick",
+  "mecheStrike",
+  "mecheFuse",
+  "mecheWord",
+  "mecheRefused",
+  "mecheBoom",
+  "brickMove",
+  "capTurn",
+  "capBankrupt",
+  "capLose",
+  "tourApplause",
+  "tourTrophyMine",
+  "wild",
 ];
 
 export const TOUR_SOUNDS: SoundName[] = [
@@ -306,6 +335,12 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   capCoins: 0.45,
   capJail: 0.5,
   capBigMoney: 0.5,
+  mecheTick: 0.42,
+  mecheStrike: 0.5,
+  mecheFuse: 0.2,
+  mecheWord: 0.55,
+  mecheRefused: 0.55,
+  mecheBoom: 0.85,
 };
 
 let ctx: AudioContext | null = null;

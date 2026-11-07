@@ -12,6 +12,7 @@ import { Modal } from "../components/ui.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
+import { MechePreview } from "../meche/MechePreview.tsx";
 import { GameTicket } from "../tour/TourParts.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -266,6 +267,36 @@ export function HomePage() {
           </section>
         )}
 
+        {games.includes("meche") && (
+          <section className="home-game home-game-meche panel" aria-label="Mèche">
+            <div className="game-stage is-workshop" aria-hidden="true">
+              <MechePreview />
+            </div>
+            <div className="game-sheet">
+              <h2 className="game-name is-meche">Mèche</h2>
+              {beta.includes("meche") && (
+                <p className="beta-note">
+                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
+                  depuis la page Admin.
+                </p>
+              )}
+              <p className="game-desc">
+                La mèche brûle et passe de main en main : écris vite un mot avec les lettres imposées pour t'en débarrasser. Si elle saute
+                chez toi, tu perds une allumette. De 2 à 8 joueurs, en quelques minutes.
+              </p>
+              <div className="game-actions">
+                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("meche")} disabled={busy !== null}>
+                  {busy === "quick-meche" && <span className="spinner" />} Partie rapide
+                </button>
+                <button className="btn btn-lg" onClick={() => setCreateFor("meche")} disabled={busy !== null}>
+                  Ouvrir une table
+                </button>
+              </div>
+              <JoinCode id="join-code-meche" busy={busy !== null} onJoin={join} />
+            </div>
+          </section>
+        )}
+
         <div className="home-columns">
           <section className="home-list">
             <h2>Tables ouvertes</h2>
@@ -346,7 +377,9 @@ export function HomePage() {
                 ? "Ouvrir une table de Briques"
                 : createFor === "capitale"
                   ? "Ouvrir une table de Capitale"
-                  : "Ouvrir une table"
+                  : createFor === "meche"
+                    ? "Ouvrir une table de Mèche"
+                    : "Ouvrir une table"
         }
       >
         <div className="create-options">
@@ -410,7 +443,14 @@ function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (co
   );
 }
 
-const NAVAL_MODES: Record<string, string> = { duel: "duel", melee: "mêlée", teams: "en équipes", sprint: "solo 40 lignes" };
+const NAVAL_MODES: Record<string, string> = {
+  duel: "duel",
+  melee: "mêlée",
+  teams: "en équipes",
+  sprint: "solo 40 lignes",
+  hasard: "lettres au hasard",
+  marabout: "au Marabout",
+};
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
   const seats = room.humans + room.bots;

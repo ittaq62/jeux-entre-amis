@@ -359,9 +359,11 @@ function GameLine({ game }: { game: AdminGame }) {
               ? "Briques"
               : game.game === "capitale"
                 ? "Capitale"
-                : game.variant === "nomercy"
-                  ? "UNO No Mercy"
-                  : "UNO classique"}
+                : game.game === "meche"
+                  ? "Mèche"
+                  : game.variant === "nomercy"
+                    ? "UNO No Mercy"
+                    : "UNO classique"}
           {game.rounds > 1 ? `, ${game.rounds} manches` : ""}
         </strong>
         <span className="hint">contre {others.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ") || "personne"}</span>

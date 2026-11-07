@@ -856,6 +856,51 @@
     8px 10px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* Mèche : l'établi de l'artificier, et un titre en lettres de feu */
+.home-game-meche {
+  margin-top: 24px;
+}
+
+.game-stage.is-workshop {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(255, 170, 90, 0.2), transparent 70%),
+    radial-gradient(ellipse 90% 85% at 50% 45%, #4a3524 0%, #2b1e14 55%, #150e09 100%);
+}
+
+.meche-preview {
+  width: min(340px, 92%);
+  rotate: -2deg;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+}
+
+.meche-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.meche-preview-spark {
+  animation: meche-preview-spark 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes meche-preview-spark {
+  to {
+    opacity: 0.72;
+  }
+}
+
+.game-name.is-meche {
+  color: #f6ecd6;
+  text-shadow:
+    1px 1px 0 #e0812e,
+    2px 2px 0 #c96f25,
+    3px 3px 0 #b15e1e,
+    4px 4px 0 #994e17,
+    5px 5px 0 #813f11,
+    6px 6px 0 #69310c,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
 .beta-tag {
   display: inline-block;
   margin-right: 6px;
@@ -2666,6 +2711,10 @@ h3 .hint {
 
 .game-ticket.is-capitale {
   --art: linear-gradient(165deg, #3b8a5f 0%, #17422d 100%);
+}
+
+.game-ticket.is-meche {
+  --art: linear-gradient(165deg, #5a3d26 0%, #24170e 100%);
 }
 
 .game-ticket.is-naval {

@@ -108,3 +108,7 @@ Largement suffisantes pour une bande d'amis :
 Les effets sonores viennent de [Kenney](https://kenney.nl) (domaine public, CC0) et de [Mixkit](https://mixkit.co) (licence libre
 Mixkit), comme la musique de Briques et celle des entractes de la tournée (Mixkit, licence libre Mixkit). Polices : Young Serif, Libre Franklin, Big Shoulders et Great Vibes (licence OFL). UNO est une marque de Mattel : ce projet est un jeu amateur entre amis, sans lien avec Mattel, et ses cartes sont dessinées à la
 main.
+
+Les mots de Mèche (`public/meche/`) sont tirés du [lexique des formes fléchies de Grammalecte](https://grammalecte.net) (Olivier R.,
+licence [MPL 2.0](https://www.mozilla.org/MPL/2.0/)) : en minuscules sans accents, sans noms propres ni sigles. Pour les refaire à partir
+du lexique, `node --experimental-strip-types scripts/meche-mots.ts chemin/vers/lexique-grammalecte-fr-v7.7.txt`.

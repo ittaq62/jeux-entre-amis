@@ -47,11 +47,39 @@ export function GameTicket({
     >
       <span className="ticket-art" aria-hidden="true">
         <svg viewBox="0 0 100 72">
-          {game === "uno" ? <UnoArt /> : game === "bricks" ? <BricksArt /> : game === "capitale" ? <CapitaleArt /> : <NavalArt />}
+          {game === "uno" ? (
+            <UnoArt />
+          ) : game === "bricks" ? (
+            <BricksArt />
+          ) : game === "capitale" ? (
+            <CapitaleArt />
+          ) : game === "meche" ? (
+            <MecheArt />
+          ) : (
+            <NavalArt />
+          )}
         </svg>
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Un pétard et sa mèche qui brûle */
+function MecheArt() {
+  return (
+    <>
+      <ellipse cx="50" cy="62" rx="30" ry="4" fill="rgba(0,0,0,0.25)" />
+      <g transform="rotate(-14 46 44)">
+        <rect x="20" y="33" width="52" height="20" rx="4" fill="#c63a2e" stroke="#fbf5e6" strokeWidth="2" />
+        <rect x="29" y="33" width="5" height="20" fill="#7d211a" />
+        <rect x="58" y="33" width="5" height="20" fill="#7d211a" />
+      </g>
+      <path d="M72 30c6-4 9-11 15-13" fill="none" stroke="#e6c78f" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="88" cy="16" r="7" fill="#ff9a3c" opacity="0.45" />
+      <circle cx="88" cy="16" r="3.6" fill="#ffd36b" />
+      <circle cx="88" cy="16" r="1.6" fill="#fff6d6" />
+    </>
   );
 }
 

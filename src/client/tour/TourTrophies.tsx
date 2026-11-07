@@ -85,6 +85,23 @@ const MEDALS: Record<string, { color: string; art: ReactNode }> = {
       </>
     ),
   },
+  wordsmith: {
+    color: "#ff9a3c",
+    art: (
+      <>
+        <path d="M8 12c6-2 12-2 15 1v25c-3-3-9-3-15-1zM40 12c-6-2-12-2-15 1v25c3-3 9-3 15-1z" />
+      </>
+    ),
+  },
+  singed: {
+    color: "#8a7a6c",
+    art: (
+      <>
+        <rect x={22.4} y={19} width={3.2} height={22} rx={1.2} />
+        <path d="M24 5c5 5 7.5 8.5 7.5 12.5a7.5 7.5 0 0 1-15 0c0-2.6 1.4-4.6 3-6.4.3 2 1.2 3 2.4 3.6-.3-3.4.2-6.6 2.1-9.7z" />
+      </>
+    ),
+  },
   admiral: {
     color: "#3f7fd8",
     art: (

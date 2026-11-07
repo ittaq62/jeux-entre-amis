@@ -32,6 +32,7 @@ interface Profile {
   naval: GameStats;
   bricks: GameStats;
   capitale: GameStats;
+  meche: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   achievements: { id: string; at: number }[];
@@ -102,12 +103,17 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const capitale = profile.capitale;
   const ct = capitale.totals;
   const showCapitale = games.includes("capitale") || capitale.played > 0;
+  const meche = profile.meche;
+  const mt = meche.totals;
+  const showMeche = games.includes("meche") || meche.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
-  const shelfGames = (["uno", "naval", "bricks", "capitale", "tour"] as TableGame[]).filter(
-    (g) => g === "uno" || (g === "naval" ? showNaval : g === "bricks" ? showBricks : g === "capitale" ? showCapitale : showTour),
+  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "tour"] as TableGame[]).filter(
+    (g) =>
+      g === "uno" ||
+      (g === "naval" ? showNaval : g === "bricks" ? showBricks : g === "capitale" ? showCapitale : g === "meche" ? showMeche : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -135,7 +141,10 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             {stats.played > 0 && (
               <p className="profile-points">
                 <strong className="num">{stats.points.toLocaleString("fr-FR")}</strong> points au classement
-                {((showNaval && naval.played > 0) || (showBricks && bricks.played > 0) || (showCapitale && capitale.played > 0)) &&
+                {((showNaval && naval.played > 0) ||
+                  (showBricks && bricks.played > 0) ||
+                  (showCapitale && capitale.played > 0) ||
+                  (showMeche && meche.played > 0)) &&
                   " de UNO"}
                 <span className="profile-elo">
                   Elo <strong className="num">{stats.elo}</strong>
@@ -163,6 +172,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{capitale.points.toLocaleString("fr-FR")}</strong> points à Capitale
                 <span className="profile-elo">
                   Elo <strong className="num">{capitale.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showMeche && meche.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{meche.points.toLocaleString("fr-FR")}</strong> points à Mèche
+                <span className="profile-elo">
+                  Elo <strong className="num">{meche.elo}</strong>
                 </span>
               </p>
             )}
@@ -276,6 +293,23 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <LedgerRow label="Gratte-ciel bâtis" value={ct.hotels} />
                   <LedgerRow label="Échanges conclus" value={ct.trades} />
                   <LedgerRow label="Séjours en prison" value={ct.jail} />
+                </dl>
+              </section>
+            )}
+
+            {showMeche && (
+              <section className="carnet panel">
+                <h2>L'atelier</h2>
+                <p className="carnet-summary">
+                  {meche.played === 0
+                    ? "Aucune partie de Mèche pour l'instant."
+                    : `${meche.played} partie${meche.played > 1 ? "s" : ""}, ${meche.won} gagnée${meche.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Mots trouvés" value={mt.words} strong />
+                  <LedgerRow label="Plus long mot" value={mt.longest} unit=" lettres" />
+                  <LedgerRow label="Passes gagnées" value={mt.passesEarned} />
+                  <LedgerRow label="Explosions encaissées" value={mt.booms} />
                 </dl>
               </section>
             )}
@@ -413,6 +447,7 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "naval") return `bataille navale ${NAVAL_MODES[g.variant] ?? ""}`.trim();
   if (g.game === "bricks") return `Briques ${NAVAL_MODES[g.variant] ?? ""}`.trim();
   if (g.game === "capitale") return g.variant === "bankrupt" ? "Capitale jusqu'à la faillite" : "Capitale en partie rapide";
+  if (g.game === "meche") return g.variant === "marabout" ? "Mèche au Marabout" : "Mèche";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }
 

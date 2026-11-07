@@ -1,0 +1,1020 @@
+/* ------------------------------------------------------------------ */
+/* Mèche : l'atelier de l'artificier, une caisse de bois et sa corde   */
+/* ------------------------------------------------------------------ */
+
+.meche-root {
+  --spark: #ffb347;
+  --spark-hot: #ff6a3c;
+  --wood-dark: #2a1c11;
+  --wood: #3b2818;
+  --wood-light: #553a23;
+  --rope: #c9a06a;
+  --rope-dark: #8d6a3e;
+  --cream: #f7e9d2;
+}
+
+.meche-root.felt::before {
+  background:
+    radial-gradient(ellipse 60% 44% at 50% 46%, rgba(255, 176, 90, 0.13), transparent 72%),
+    radial-gradient(ellipse 110% 90% at 50% 44%, #3a2c20 0%, #241a13 48%, #120d09 100%);
+}
+
+.meche-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.meche-stage.is-shaking {
+  animation: meche-shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes meche-shake {
+  10% {
+    transform: translate(-6px, 3px) rotate(-0.4deg);
+  }
+  25% {
+    transform: translate(9px, -5px) rotate(0.5deg);
+  }
+  40% {
+    transform: translate(-8px, 5px) rotate(-0.4deg);
+  }
+  60% {
+    transform: translate(5px, -3px);
+  }
+  80% {
+    transform: translate(-2px, 1px);
+  }
+}
+
+/* La caisse au milieu de la table */
+.meche-crate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(48vw, 640px);
+  height: min(50%, 400px);
+  min-height: 250px;
+  border-radius: 34px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0, transparent 58px, rgba(0, 0, 0, 0.28) 58px, rgba(0, 0, 0, 0.28) 60px),
+    linear-gradient(180deg, var(--wood-light) 0%, var(--wood) 55%, var(--wood-dark) 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 220, 170, 0.16),
+    inset 0 -6px 18px rgba(0, 0, 0, 0.4),
+    0 24px 50px -18px rgba(0, 0, 0, 0.85);
+  transition: box-shadow 0.25s ease;
+}
+
+.meche-crate.is-mine {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 220, 170, 0.18),
+    inset 0 -6px 18px rgba(0, 0, 0, 0.4),
+    0 0 0 3px var(--spark),
+    0 0 44px -4px rgba(255, 179, 71, 0.6),
+    0 24px 50px -18px rgba(0, 0, 0, 0.85);
+}
+
+.meche-crate.is-hot {
+  animation: meche-crate-hot 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes meche-crate-hot {
+  to {
+    box-shadow:
+      inset 0 2px 0 rgba(255, 220, 170, 0.18),
+      inset 0 -6px 18px rgba(0, 0, 0, 0.4),
+      0 0 0 3px var(--spark-hot),
+      0 0 70px 2px rgba(255, 90, 50, 0.65),
+      0 24px 50px -18px rgba(0, 0, 0, 0.85);
+  }
+}
+
+.meche-crate-inner {
+  position: absolute;
+  inset: 26px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  color: var(--cream);
+}
+
+.meche-who {
+  margin: 0;
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(247, 233, 210, 0.75);
+}
+
+.meche-who.is-mine {
+  color: var(--spark);
+}
+
+.meche-letters {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: clamp(76px, 9vw, 118px);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  margin-right: -0.08em;
+  color: var(--cream);
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.45),
+    0 0 26px rgba(255, 200, 130, 0.25);
+}
+
+.meche-crate.is-mine .meche-letters {
+  color: #fff3d6;
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.45),
+    0 0 34px rgba(255, 179, 71, 0.55);
+}
+
+/* Le mot en train de s'écrire */
+.meche-word {
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.meche-word-text {
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: var(--cream);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.meche-word-text mark {
+  background: none;
+  color: var(--spark);
+}
+
+.meche-word-hint {
+  font-family: var(--font-text);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: rgba(247, 233, 210, 0.6);
+}
+
+.meche-word-dots {
+  display: inline-flex;
+  gap: 7px;
+  height: 1em;
+  align-items: center;
+}
+
+.meche-word-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(247, 233, 210, 0.5);
+  animation: meche-dots 1.1s ease-in-out infinite;
+}
+
+.meche-word-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.meche-word-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes meche-dots {
+  30% {
+    translate: 0 -5px;
+    background: var(--spark);
+  }
+}
+
+.meche-caret {
+  display: inline-block;
+  width: 3px;
+  height: 0.85em;
+  margin-left: 4px;
+  vertical-align: -0.06em;
+  background: var(--spark);
+  animation: meche-caret 1s steps(2) infinite;
+}
+
+@keyframes meche-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.meche-word.is-refused {
+  animation: meche-refused 0.34s ease;
+}
+
+.meche-word.is-refused .meche-word-text {
+  color: #ff8d7e;
+  text-decoration: line-through;
+  text-decoration-thickness: 3px;
+}
+
+.meche-word-why {
+  margin-top: 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ffb2a6;
+}
+
+@keyframes meche-refused {
+  20% {
+    transform: translateX(-9px);
+  }
+  45% {
+    transform: translateX(8px);
+  }
+  70% {
+    transform: translateX(-5px);
+  }
+}
+
+/* Le champ est invisible, posé sur la caisse : on voit ce qu'on tape en grand, et le toucher ouvre le clavier */
+.meche-form {
+  position: absolute;
+  inset: 0;
+}
+
+.meche-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  /* 16 px au moins : en dessous, les iPhone zooment sur la page */
+  font-size: 16px;
+  cursor: text;
+}
+
+.meche-pass {
+  position: absolute;
+  z-index: 2;
+  bottom: -20px;
+  left: 50%;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff3d6;
+  color: #2a1c11;
+  border-color: #2a1c11;
+  font-weight: 700;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.8);
+}
+
+.meche-pass:hover {
+  background: #ffe7b4;
+  color: #2a1c11;
+}
+
+.meche-pass-count {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--spark-hot);
+  color: #fff;
+  font-size: 13px;
+}
+
+.meche-tap {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--spark);
+  pointer-events: none;
+  animation: meche-tap 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes meche-tap {
+  to {
+    opacity: 0.55;
+  }
+}
+
+.meche-tip {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: rgba(247, 233, 210, 0.55);
+  pointer-events: none;
+}
+
+.meche-intro {
+  max-width: 440px;
+}
+
+.meche-intro-rule {
+  margin: 10px 0 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--cream);
+}
+
+.meche-intro-rule.is-soft {
+  font-size: 14px;
+  color: rgba(247, 233, 210, 0.65);
+}
+
+/* La corde */
+.meche-rope {
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.meche-rope svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.meche-rope path {
+  fill: none;
+  stroke-linecap: butt;
+}
+
+.rope-shadow {
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 10;
+  translate: 0 1.5px;
+}
+
+.rope-body {
+  stroke: var(--rope);
+  stroke-width: 7;
+}
+
+.rope-strand {
+  stroke: var(--rope-dark);
+  stroke-width: 7;
+  stroke-dasharray: 2.5 6;
+}
+
+.rope-red {
+  stroke: #d8402f;
+  stroke-width: 7;
+}
+
+.rope-red-strand {
+  stroke: #8f2219;
+  stroke-width: 7;
+  opacity: 0.55;
+}
+
+.rope-burnt {
+  stroke: #1b1613;
+  stroke-width: 7.5;
+}
+
+.rope-burnt-core {
+  stroke: #4a4039;
+  stroke-width: 2;
+  opacity: 0.8;
+}
+
+.rope-spark {
+  filter: drop-shadow(0 0 6px rgba(255, 170, 70, 0.95));
+}
+
+.spark-glow {
+  fill: rgba(255, 150, 60, 0.3);
+  animation: meche-spark 0.16s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.spark-flame {
+  fill: var(--spark);
+}
+
+.spark-core {
+  fill: #fff6d6;
+}
+
+.meche-rope .spark-rays {
+  stroke: #ffe08a;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  animation: meche-rays 0.22s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes meche-spark {
+  to {
+    transform: scale(1.35);
+  }
+}
+
+@keyframes meche-rays {
+  to {
+    transform: rotate(45deg);
+  }
+}
+
+.meche-rope svg.meche-dynamite {
+  inset: auto;
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  translate: -50% 0;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.6));
+}
+
+/* Les joueurs autour de la caisse */
+.meche-seats {
+  position: absolute;
+  inset: 0;
+}
+
+.meche-seat {
+  position: absolute;
+  translate: -50% -50%;
+  width: 124px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: scale 0.18s ease;
+}
+
+.meche-seat-avatar {
+  position: relative;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.14),
+    0 8px 14px -6px rgba(0, 0, 0, 0.8);
+  transition: box-shadow 0.18s ease;
+}
+
+.meche-seat.is-holder {
+  scale: 1.1;
+  z-index: 3;
+}
+
+.meche-seat.is-holder .meche-seat-avatar {
+  box-shadow:
+    0 0 0 3.5px var(--spark),
+    0 0 26px 3px rgba(255, 179, 71, 0.65);
+}
+
+.meche-seat.is-holder.is-hot .meche-seat-avatar {
+  box-shadow:
+    0 0 0 3.5px var(--spark-hot),
+    0 0 34px 6px rgba(255, 90, 50, 0.8);
+  animation: meche-seat-hot 0.32s ease-in-out infinite alternate;
+}
+
+@keyframes meche-seat-hot {
+  to {
+    scale: 1.06;
+  }
+}
+
+.meche-seat.is-out {
+  filter: grayscale(0.9) brightness(0.6);
+}
+
+.meche-seat.is-blown .meche-seat-avatar {
+  animation: meche-blown 0.5s ease;
+}
+
+@keyframes meche-blown {
+  15% {
+    transform: scale(1.3) rotate(-8deg);
+    filter: brightness(0.25);
+  }
+  50% {
+    transform: scale(0.92) rotate(5deg);
+    filter: brightness(0.4);
+  }
+}
+
+.meche-seat-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.meche-seat-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meche-matches {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 24px;
+}
+
+.meche-match {
+  display: block;
+  height: 22px;
+  width: auto;
+  rotate: 4deg;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.meche-match:nth-child(even) {
+  rotate: -3deg;
+}
+
+.meche-match.is-burnt {
+  opacity: 0.8;
+}
+
+.meche-seat-passes {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 2px dashed #fff3d6;
+  background: var(--spark-hot);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.meche-seat-word {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 5;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  box-shadow: 0 6px 12px -6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.meche-seat-word.is-long {
+  background: var(--spark);
+}
+
+.meche-seat .emote-bubble {
+  z-index: 6;
+}
+
+/* La flamme qui saute d'un joueur à l'autre */
+.meche-trail {
+  position: fixed;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6d6 0%, var(--spark) 45%, rgba(255, 120, 40, 0) 72%);
+  box-shadow: 0 0 18px 6px rgba(255, 160, 60, 0.7);
+}
+
+/* Les mots déjà joués */
+.meche-log {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  width: 190px;
+  padding: 8px 12px 10px;
+  border-radius: 10px;
+  background: rgba(10, 7, 4, 0.45);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.meche-log h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(247, 233, 210, 0.55);
+}
+
+.meche-log ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meche-log li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.3;
+}
+
+.meche-log li:nth-child(n + 5) {
+  opacity: 0.55;
+}
+
+.meche-log-word {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: var(--cream);
+}
+
+.meche-log-who {
+  flex: none;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: rgba(247, 233, 210, 0.5);
+}
+
+.meche-react {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 4;
+}
+
+.meche-results-back {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  translate: -50% 0;
+  z-index: 30;
+}
+
+/* L'explosion */
+.meche-boom {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.meche-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff1cf;
+  animation: meche-flash 0.42s ease-out forwards;
+}
+
+@keyframes meche-flash {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.meche-burst {
+  position: relative;
+  width: min(62vmin, 430px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.meche-burst svg {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.6));
+}
+
+.meche-burst strong {
+  position: relative;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: clamp(54px, 12vmin, 88px);
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: #2a1a0e;
+}
+
+.meche-burst span {
+  position: relative;
+  max-width: 60%;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #4a2c12;
+}
+
+/* La fin de partie */
+.meche-sheet-stats {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.meche-sheet-best {
+  font-family: var(--font-card);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Le salon */
+.meche-howto {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 179, 71, 0.08);
+  border: 1px solid rgba(255, 179, 71, 0.25);
+}
+
+.meche-howto p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.meche-howto p + p {
+  margin-top: 6px;
+}
+
+.meche-credit {
+  margin: 0;
+  font-size: 12px;
+}
+
+.meche-credit a {
+  color: inherit;
+}
+
+/* Sur téléphone : les joueurs en haut, la caisse dessous, et le clavier prend le reste */
+.is-phone .meche-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 22px;
+}
+
+.is-phone .meche-seats {
+  position: relative;
+  inset: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 2px;
+  flex: none;
+}
+
+.is-phone .meche-seat {
+  position: relative;
+  translate: none;
+  width: calc(25% - 2px);
+  max-width: 88px;
+  gap: 0;
+}
+
+.is-phone .meche-seat.is-holder {
+  scale: 1.04;
+}
+
+.is-phone .meche-seat-avatar .avatar {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.is-phone .meche-seat-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.is-phone .meche-seat-avatar svg.avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.is-phone .meche-seat-name {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.is-phone .meche-seat-name .admin-badge {
+  display: none;
+}
+
+.is-phone .meche-matches {
+  height: 16px;
+  gap: 2px;
+}
+
+.is-phone .meche-match {
+  height: 15px;
+}
+
+.is-phone .meche-seat-passes {
+  width: 15px;
+  height: 15px;
+  font-size: 9px;
+  border-width: 1px;
+  margin-left: 2px;
+}
+
+.is-phone .meche-seat-word {
+  font-size: 13px;
+  padding: 1px 6px;
+  bottom: auto;
+  top: 42px;
+}
+
+.is-phone .meche-crate {
+  position: relative;
+  left: auto;
+  top: auto;
+  translate: none;
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 150px;
+  /* Clavier fermé, la caisse ne s'étire pas jusqu'en bas de l'écran */
+  max-height: 460px;
+  margin-block: auto;
+  border-radius: 28px;
+}
+
+.is-phone .meche-crate-inner {
+  inset: 20px 18px;
+}
+
+.is-phone .meche-who {
+  font-size: 16px;
+}
+
+.is-phone .meche-letters {
+  font-size: clamp(54px, 18vw, 84px);
+}
+
+.is-phone .meche-word {
+  min-height: 42px;
+}
+
+.is-phone .meche-word-text {
+  font-size: clamp(24px, 7.4vw, 34px);
+}
+
+.is-phone .meche-word-hint {
+  font-size: 13.5px;
+}
+
+.is-phone .meche-intro-rule {
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.is-phone .meche-intro-rule.is-soft {
+  font-size: 12.5px;
+}
+
+.is-phone .meche-pass {
+  bottom: -14px;
+  padding-block: 4px;
+}
+
+.is-phone .meche-react {
+  display: none;
+}
+
+/* Clavier ouvert : il faut tout faire tenir dans le peu de hauteur qui reste */
+.is-short .table-top {
+  padding-block: 2px;
+}
+
+.is-short .table-title .hint {
+  display: none;
+}
+
+.is-short .meche-stage {
+  gap: 4px;
+  padding-bottom: 16px;
+}
+
+/* Tous les joueurs sur une seule ligne, sans les petites pastilles */
+.is-short .meche-seats {
+  flex-wrap: nowrap;
+}
+
+.is-short .meche-seat {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 64px;
+}
+
+.is-short .meche-seat .seat-tag,
+.is-short .meche-seat .away-note {
+  display: none;
+}
+
+.is-short .meche-seat .rank-badge {
+  scale: 0.6;
+  translate: 25% -25%;
+}
+
+.is-short .meche-seat-name {
+  display: none;
+}
+
+.is-short .meche-seat-word {
+  top: 20px;
+  font-size: 11px;
+}
+
+.is-short .meche-tap,
+.is-short .meche-who {
+  font-size: 13px;
+}
+
+.is-short .meche-seat-avatar,
+.is-short .meche-seat-avatar svg.avatar,
+.is-short .meche-seat-avatar .avatar {
+  width: 30px !important;
+  height: 30px !important;
+}
+
+.is-short .meche-matches {
+  height: 13px;
+}
+
+.is-short .meche-match {
+  height: 12px;
+}
+
+.is-short .meche-letters {
+  font-size: 50px;
+}
+
+.is-short .meche-word {
+  min-height: 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meche-stage.is-shaking,
+  .meche-crate.is-hot,
+  .meche-seat.is-holder.is-hot .meche-seat-avatar,
+  .spark-glow,
+  .meche-rope .spark-rays {
+    animation: none;
+  }
+}
