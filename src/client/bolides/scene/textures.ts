@@ -254,6 +254,36 @@ export function boostTexture(): THREE.CanvasTexture {
   return toTexture(c);
 }
 
+/** Le dessus d'un tremplin : des planches, des flèches jaunes vers le bord, et une bande rayée au bord */
+export function rampTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 128);
+  const r = rng(21);
+  for (let x = 0; x < 256; x += 32) {
+    g.fillStyle = `hsl(${26 + r() * 8}, ${48 + r() * 10}%, ${36 + r() * 8}%)`;
+    g.fillRect(x, 0, 32, 128);
+    g.fillStyle = "rgba(0,0,0,0.25)";
+    g.fillRect(x, 0, 2, 128);
+  }
+  // Les flèches pointent vers le haut de la toile (le bord du tremplin)
+  g.fillStyle = "#ffd23a";
+  for (const cx of [64, 192]) {
+    g.beginPath();
+    g.moveTo(cx - 34, 92);
+    g.lineTo(cx, 44);
+    g.lineTo(cx + 34, 92);
+    g.lineTo(cx + 18, 92);
+    g.lineTo(cx, 66);
+    g.lineTo(cx - 18, 92);
+    g.closePath();
+    g.fill();
+  }
+  for (let x = 0; x < 256; x += 32) {
+    g.fillStyle = (x / 32) % 2 === 0 ? "#1d1d1d" : "#ffd23a";
+    g.fillRect(x, 0, 32, 16);
+  }
+  return toTexture(c, false);
+}
+
 /** L'eau du port */
 export function waterTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(256, 256);

@@ -433,6 +433,8 @@ export function worldTick(race: Race, now: number): BolidesEvent[] {
     for (const r of race.racers) {
       if (r.finish !== null || r.kart.spin > 0) continue;
       if (hz.kind === "petard" && r.id === hz.owner && now - hz.at < PETARD_SAFE_MS) continue;
+      // On passe par-dessus une flaque en sautant d'un tremplin
+      if (hz.kind === "huile" && r.kart.air > 0.8) continue;
       const touched =
         hz.kind === "huile"
           ? sweptHit(r.px, r.pz, r.kart.x, r.kart.z, hz.x, hz.z, OIL_RADIUS + KART_RADIUS * 0.5)

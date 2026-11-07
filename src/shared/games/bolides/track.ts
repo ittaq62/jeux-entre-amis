@@ -8,22 +8,20 @@
 export type TrackId = "port" | "vignes" | "col";
 export type Theme = "port" | "vignes" | "col";
 
-/**
- * Le tracé, comme le lirait un pilote : une ligne droite de tant de mètres, un virage à gauche ou à droite de tant
- * de degrés sur tel rayon. Il part de la ligne d'arrivée vers +x et doit faire un tour complet.
- */
-export type Leg = ["S", number] | ["L" | "R", number, number];
-
 export interface TrackDef {
   id: TrackId;
   name: string;
   /** Ce qu'on en dit dans le salon */
   blurb: string;
   theme: Theme;
-  layout: Leg[];
   /**
-   * Où est la ligne d'arrivée sur le tracé, en mètres depuis son début (négatif : avant sa fin) : au milieu d'une
-   * ligne droite, pour que toute la grille de départ y tienne
+   * Les coins du circuit, dans le sens de la course : x, z, et le rayon du virage qui l'arrondit. Entre deux coins,
+   * une ligne droite.
+   */
+  corners: [number, number, number][];
+  /**
+   * Où est la ligne d'arrivée sur le tracé, en mètres depuis la sortie du premier coin : au milieu de la ligne droite
+   * qui suit, pour que toute la grille de départ y tienne
    */
   start: number;
   /** Le relief : la hauteur de la route à différents endroits du tour (part du tour, hauteur en mètres) */
@@ -34,67 +32,56 @@ export interface TrackDef {
   boxes: number[];
   /** Les accélérateurs au sol : part du tour, et décalage depuis le milieu en part de la demi-largeur (+ : à droite) */
   boosts: [number, number][];
+  /** Les tremplins, en part du tour : toute la largeur de la route */
+  jumps: number[];
 }
 
 export const TRACK_IDS: TrackId[] = ["port", "vignes", "col"];
 
+// Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 export const TRACKS: Record<TrackId, TrackDef> = {
   port: {
     id: "port",
     name: "Le Port",
-    blurb: "Le long des quais, entre les grues et les bateaux : une longue ligne droite, une épingle serrée et une chicane.",
+    blurb: "Le long des quais, entre les grues et les bateaux : une grande courbe à glisser, une épingle, un tremplin et une chicane.",
     theme: "port",
-    width: 14,
-    start: 50,
-    layout: [
-      ["S", 110],
-      ["R", 90, 35],
-      ["S", 30],
-      ["R", 45, 25],
-      ["L", 45, 25],
-      ["S", 25],
-      ["R", 180, 18],
-      ["S", 20],
-      ["L", 90, 25],
-      ["S", 40],
-      ["R", 30, 22],
-      ["L", 60, 22],
-      ["R", 30, 22],
-      ["S", 30],
-      ["R", 90, 30],
-      ["S", 20],
-      ["R", 90, 30],
+    width: 18,
+    start: 60,
+    corners: [
+      [-170, 0, 45],
+      [190, 0, 60],
+      [250, 160, 40],
+      [130, 230, 30],
+      [70, 120, 30],
+      [-30, 170, 50],
+      [-150, 250, 45],
+      [-260, 150, 55],
     ],
     hills: [[0, 0]],
-    boxes: [0.16, 0.5, 0.79],
+    boxes: [0.13, 0.46, 0.76],
     boosts: [
-      [0.04, -0.35],
-      [0.4, 0.3],
-      [0.94, 0.25],
+      [0.245, -0.3],
+      [0.55, 0.3],
+      [0.97, -0.25],
     ],
+    jumps: [0.636],
   },
   vignes: {
     id: "vignes",
     name: "Les Vignes",
-    blurb: "Des virages en lacet entre les rangs de vigne, une montée vers le château et une longue descente.",
+    blurb: "De longs lacets entre les rangs de vigne, une montée en courbe vers le château, un tremplin et une descente à glisser.",
     theme: "vignes",
-    width: 13,
-    start: -80,
-    layout: [
-      ["S", 80],
-      ["L", 70, 40],
-      ["S", 30],
-      ["R", 50, 30],
-      ["L", 100, 30],
-      ["S", 40],
-      ["R", 60, 25],
-      ["L", 120, 22],
-      ["S", 50],
-      ["L", 60, 45],
-      ["R", 40, 30],
-      ["L", 80, 35],
-      ["S", 40],
-      ["L", 80, 40],
+    width: 17,
+    start: 60,
+    corners: [
+      [-140, 0, 50],
+      [150, 0, 55],
+      [220, -110, 40],
+      [130, -200, 45],
+      [20, -150, 35],
+      [-40, -260, 32],
+      [-170, -230, 45],
+      [-230, -110, 50],
     ],
     hills: [
       [0, 0],
@@ -103,37 +90,31 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.55, 11],
       [0.8, 1],
     ],
-    boxes: [0.13, 0.42, 0.72],
+    boxes: [0.12, 0.43, 0.735],
     boosts: [
-      [0.06, 0.3],
-      [0.3, -0.3],
-      [0.57, 0.35],
-      [0.86, -0.25],
+      [0.24, 0.3],
+      [0.52, -0.3],
+      [0.842, 0.3],
     ],
+    jumps: [0.645],
   },
   col: {
     id: "col",
     name: "Le Col",
-    blurb: "Une route de montagne enneigée, plus étroite, qui grimpe en épingles entre les sapins avant de plonger vers le village.",
+    blurb: "Une route de montagne enneigée qui grimpe en larges épingles entre les sapins, saute une crête et plonge vers le village.",
     theme: "col",
-    width: 12,
-    start: 45,
-    layout: [
-      ["S", 90],
-      ["R", 70, 30],
-      ["S", 40],
-      ["L", 160, 18],
-      ["S", 40],
-      ["R", 160, 18],
-      ["S", 50],
-      ["R", 60, 30],
-      ["S", 60],
-      ["R", 90, 28],
-      ["S", 40],
-      ["L", 40, 40],
-      ["R", 80, 35],
-      ["S", 30],
-      ["R", 100, 30],
+    width: 16,
+    start: 60,
+    corners: [
+      [-110, 0, 45],
+      [130, 0, 50],
+      [175, 85, 38],
+      [-20, 85, 32],
+      [-20, 155, 32],
+      [165, 155, 32],
+      [165, 225, 32],
+      [-60, 225, 50],
+      [-175, 115, 55],
     ],
     hills: [
       [0, 0],
@@ -142,13 +123,13 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.6, 16],
       [0.9, 1],
     ],
-    boxes: [0.14, 0.45, 0.74],
+    boxes: [0.11, 0.43, 0.745],
     boosts: [
-      [0.05, -0.3],
-      [0.33, 0.25],
-      [0.62, -0.3],
-      [0.9, 0.3],
+      [0.212, -0.3],
+      [0.39, 0.3],
+      [0.872, -0.3],
     ],
+    jumps: [0.615],
   },
 };
 
@@ -157,7 +138,7 @@ export const STEP = 2;
 /** La largeur du vibreur, de part et d'autre de la route */
 export const CURB = 1.2;
 /** L'herbe entre la route et le mur */
-export const VERGE = 7;
+export const VERGE = 6;
 
 export interface Track {
   def: TrackDef;
@@ -178,6 +159,8 @@ export interface Track {
   wall: number;
   boxes: BoxSpot[];
   boosts: BoostPad[];
+  /** Le bord de chaque tremplin, en distance depuis la ligne */
+  jumps: number[];
 }
 
 export interface BoxSpot {
@@ -250,112 +233,83 @@ export function hillAt(def: TrackDef, frac: number): number {
   return keys[0]![1];
 }
 
-/** Où mène le tracé, et dans quelle direction part chaque ligne droite */
-function walk(layout: Leg[]): { x: number; z: number; dirs: [number, number][] } {
-  let x = 0;
-  let z = 0;
-  let h = Math.PI / 2;
-  const dirs: [number, number][] = [];
-  for (const leg of layout) {
-    if (leg[0] === "S") {
-      dirs.push([Math.sin(h), Math.cos(h)]);
-      x += Math.sin(h) * leg[1];
-      z += Math.cos(h) * leg[1];
-    } else {
-      const [dir, deg, r] = leg;
-      const a = ((dir === "L" ? 1 : -1) * deg * Math.PI) / 180;
-      // La corde de l'arc, dans la direction du milieu du virage
-      const chord = 2 * r * Math.sin(Math.abs(a) / 2);
-      x += Math.sin(h + a / 2) * chord;
-      z += Math.cos(h + a / 2) * chord;
-      h += a;
-    }
-  }
-  return { x, z, dirs };
+/** Un coin du tracé, arrondi : son sommet, son rayon, et où commence et finit l'arc */
+interface Fillet {
+  r: number;
+  /** Le centre de l'arc, l'angle de départ et l'angle parcouru (signé) */
+  cx: number;
+  cz: number;
+  a0: number;
+  sweep: number;
+  /** Le début et la fin de l'arc */
+  start: [number, number];
+  end: [number, number];
 }
 
 /**
- * Le tracé refermé : deux lignes droites (pas parallèles) s'allongent ou raccourcissent juste assez pour que la
- * route revienne exactement à son point de départ, en changeant le moins possible.
+ * Le tracé : des lignes droites d'un coin au suivant, chaque coin arrondi par un arc de son rayon. Il se referme
+ * forcément. Un rayon trop grand pour la place qu'il a est réduit : `fit` dit de combien au pire (1 : tout tient).
  */
-export function closeLayout(layout: Leg[]): Leg[] {
-  const { x, z, dirs } = walk(layout);
-  const straights = layout.flatMap((leg, i) => (leg[0] === "S" ? [i] : []));
-  let best: { i: number; j: number; a: number; b: number } | null = null;
-  for (let p = 0; p < straights.length; p++) {
-    for (let q = p + 1; q < straights.length; q++) {
-      const [ux, uz] = dirs[p]!;
-      const [vx, vz] = dirs[q]!;
-      const det = ux * vz - uz * vx;
-      if (Math.abs(det) < 0.3) continue;
-      // a·u + b·v = -(x, z)
-      const a = (-x * vz + z * vx) / det;
-      const b = (-z * ux + x * uz) / det;
-      const i = straights[p]!;
-      const j = straights[q]!;
-      const li = (layout[i] as ["S", number])[1] + a;
-      const lj = (layout[j] as ["S", number])[1] + b;
-      if (li < 12 || lj < 12) continue;
-      if (!best || Math.max(Math.abs(a), Math.abs(b)) < Math.max(Math.abs(best.a), Math.abs(best.b))) best = { i, j, a, b };
+export function traceCorners(def: TrackDef): { points: [number, number, number][]; fit: number; turn: number } {
+  const c = def.corners;
+  const n = c.length;
+  let fit = 1;
+  let turn = 0;
+  const fillets: Fillet[] = c.map(([px, pz, r0], i) => {
+    const [ax, az] = c[(i - 1 + n) % n]!;
+    const [bx, bz] = c[(i + 1) % n]!;
+    const lin = Math.hypot(px - ax, pz - az);
+    const lout = Math.hypot(bx - px, bz - pz);
+    const din: [number, number] = [(px - ax) / lin, (pz - az) / lin];
+    const dout: [number, number] = [(bx - px) / lout, (bz - pz) / lout];
+    const cross = din[0] * dout[1] - din[1] * dout[0];
+    const theta = Math.acos(Math.max(-1, Math.min(1, din[0] * dout[0] + din[1] * dout[1])));
+    turn += Math.sign(cross) * theta;
+    const want = r0 * Math.tan(theta / 2);
+    const room = Math.min(lin, lout) / 2;
+    let r = r0;
+    if (want > room) {
+      fit = Math.min(fit, room / want);
+      r = room / Math.tan(theta / 2);
     }
-  }
-  if (!best) return layout;
-  return layout.map((leg, k): Leg => {
-    if (k === best.i) return ["S", (leg as ["S", number])[1] + best.a];
-    if (k === best.j) return ["S", (leg as ["S", number])[1] + best.b];
-    return leg;
+    const t = r * Math.tan(theta / 2);
+    const start: [number, number] = [px - din[0] * t, pz - din[1] * t];
+    const end: [number, number] = [px + dout[0] * t, pz + dout[1] * t];
+    // Le centre est du côté où l'on tourne
+    const side = cross >= 0 ? 1 : -1;
+    const cx = start[0] - din[1] * r * side;
+    const cz = start[1] + din[0] * r * side;
+    return { r, cx, cz, a0: Math.atan2(start[1] - cz, start[0] - cx), sweep: side * theta, start, end };
   });
-}
-
-/**
- * Le tracé déroulé en points tous les 3 m environ, refermé (voir `closeLayout`) ; ce qui reste d'écart (`gap`,
- * quelques centimètres) est réparti le long du tour. `turn` : le total des virages, en degrés (±360 attendus).
- */
-export function traceLayout(def: TrackDef): { points: [number, number, number][]; gap: number; turn: number } {
-  let x = 0;
-  let z = 0;
-  let h = Math.PI / 2;
-  const flat: [number, number][] = [[0, 0]];
-  for (const leg of closeLayout(def.layout)) {
-    if (leg[0] === "S") {
-      const n = Math.max(1, Math.round(leg[1] / 3));
-      for (let k = 0; k < n; k++) {
-        x += (Math.sin(h) * leg[1]) / n;
-        z += (Math.cos(h) * leg[1]) / n;
-        flat.push([x, z]);
-      }
-    } else {
-      const [dir, deg, r] = leg;
-      const total = (deg * Math.PI) / 180;
-      const n = Math.max(2, Math.round((total * r) / 3));
-      // À gauche, le cap augmente ; on avance par cordes de l'arc
-      const turn = ((dir === "L" ? 1 : -1) * total) / n;
-      const chord = 2 * r * Math.sin(total / n / 2);
-      for (let k = 0; k < n; k++) {
-        h += turn / 2;
-        x += Math.sin(h) * chord;
-        z += Math.cos(h) * chord;
-        h += turn / 2;
-        flat.push([x, z]);
-      }
+  // De la fin du premier coin : la ligne droite vers le suivant, son arc, et ainsi de suite jusqu'au premier coin
+  const flat: [number, number][] = [];
+  const line = (from: [number, number], to: [number, number]) => {
+    const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const k = Math.max(1, Math.round(len / 3));
+    for (let j = 0; j < k; j++) flat.push([from[0] + ((to[0] - from[0]) * j) / k, from[1] + ((to[1] - from[1]) * j) / k]);
+  };
+  const arc = (f: Fillet) => {
+    const k = Math.max(2, Math.round((Math.abs(f.sweep) * f.r) / 3));
+    for (let j = 0; j < k; j++) {
+      const a = f.a0 + (f.sweep * j) / k;
+      flat.push([f.cx + Math.cos(a) * f.r, f.cz + Math.sin(a) * f.r]);
     }
+  };
+  for (let i = 0; i < n; i++) {
+    const next = fillets[(i + 1) % n]!;
+    line(fillets[i]!.end, next.start);
+    arc(next);
   }
-  const gap = Math.hypot(x, z);
-  const turn = ((h - Math.PI / 2) * 180) / Math.PI;
-  flat.pop();
   const cum = [0];
   for (let i = 1; i < flat.length; i++) cum.push(cum[i - 1]! + Math.hypot(flat[i]![0] - flat[i - 1]![0], flat[i]![1] - flat[i - 1]![1]));
-  const total = cum[cum.length - 1]! + Math.hypot(flat[0]![0] - x, flat[0]![1] - z);
-  const points = flat.map(([px, pz], i): [number, number, number] => {
-    const f = cum[i]! / total;
-    return [px - x * f, pz - z * f, hillAt(def, f)];
-  });
-  return { points, gap, turn };
+  const total = cum[cum.length - 1]! + Math.hypot(flat[0]![0] - flat[flat.length - 1]![0], flat[0]![1] - flat[flat.length - 1]![1]);
+  const points = flat.map(([px, pz], i): [number, number, number] => [px, pz, hillAt(def, cum[i]! / total)]);
+  return { points, fit, turn: (turn * 180) / Math.PI };
 }
 
 export function buildTrack(def: TrackDef): Track {
   // Les points sont donnés en (x, z, y) : on lisse en (x, y, z)
-  const pts: P3[] = traceLayout(def).points.map(([x, z, y]) => [x, y, z]);
+  const pts: P3[] = traceCorners(def).points.map(([x, z, y]) => [x, y, z]);
   const m = pts.length;
   const dense: P3[] = [];
   const SUB = 6;
@@ -431,11 +385,12 @@ export function buildTrack(def: TrackDef): Track {
     wall: half + CURB + VERGE,
     boxes: [],
     boosts: [],
+    jumps: def.jumps.map((f) => f * total),
   };
-  // Les caisses : quatre par rangée, en travers de la route
+  // Les caisses : cinq par rangée, en travers de la route
   let index = 0;
   for (const frac of def.boxes) {
-    for (const lane of [-0.62, -0.21, 0.21, 0.62]) {
+    for (const lane of [-0.64, -0.32, 0, 0.32, 0.64]) {
       const s = frac * total;
       const p = pointAt(track, s, lane * half);
       track.boxes.push({ index: index++, x: p.x, z: p.z, s, d: lane * half });

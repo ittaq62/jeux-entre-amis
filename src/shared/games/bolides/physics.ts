@@ -12,22 +12,27 @@ export const CLASS_SPEED: Record<SpeedClass, number> = { balade: 0.82, normal: 1
 
 /** Le pas de la simulation */
 export const DT = 1 / 60;
-/** La vitesse de pointe (m/s, environ 90 km/h) en cylindrée normale */
-export const TOP_SPEED = 25;
+/** La vitesse de pointe (m/s, environ 97 km/h) en cylindrée normale */
+export const TOP_SPEED = 27;
 export const KART_RADIUS = 1.15;
 const ACCEL = 11;
 const BRAKE = 28;
 const COAST = 5;
 const REVERSE = 7;
 /** Le cap gagné par seconde, braquage à fond */
-const TURN = 2.1;
+const TURN = 2.2;
 /** Un accélérateur ou un turbo : la vitesse de pointe en plus */
 const BOOST_SPEED = 1.32;
 /** Dans l'herbe, ce qu'il reste de la vitesse de pointe */
 const GRASS = 0.55;
 /** Le dérapage : le temps qu'il faut tenir pour chaque niveau de mini-turbo, et ce que dure le turbo gagné */
-export const DRIFT_LEVELS = [0.9, 1.8, 2.8] as const;
-const DRIFT_BOOST = [0.6, 1.0, 1.5] as const;
+export const DRIFT_LEVELS = [0.7, 1.4, 2.2] as const;
+const DRIFT_BOOST = [0.7, 1.1, 1.6] as const;
+/** Les tremplins : la longueur et la hauteur de la rampe, la pesanteur, et le turbo d'une figure réussie en l'air */
+export const RAMP_LEN = 7;
+export const RAMP_H = 1;
+const GRAVITY = 24;
+const TRICK_BOOST = 0.8;
 /** Le temps où le kart tourne sur lui-même après un coup */
 export const SPIN_TIME = 1.1;
 
@@ -55,6 +60,13 @@ export interface Kart {
   /** La distance parcourue depuis le départ, le long de la route (négative derrière la ligne, au départ) */
   dist: number;
   offroad: boolean;
+  /** La hauteur au-dessus de la route (sur une rampe ou en l'air) et la vitesse verticale (0 quand on roule) */
+  air: number;
+  vy: number;
+  /** Une figure faite pendant ce saut : un turbo à l'atterrissage */
+  trick: boolean;
+  /** Le bouton de dérapage était tenu au pas d'avant (pour savoir quand on l'enfonce) */
+  held: boolean;
 }
 
 export interface Input {
@@ -74,7 +86,7 @@ export interface StepMods {
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
-export type KartEvent = "wall" | "pad" | "drift" | "turbo1" | "turbo2" | "turbo3" | "grass";
+export type KartEvent = "wall" | "pad" | "drift" | "turbo1" | "turbo2" | "turbo3" | "grass" | "jump" | "trick" | "land";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -97,6 +109,10 @@ export function newKart(t: Track, x: number, z: number, h: number): Kart {
     y: at.y,
     dist: behind,
     offroad: false,
+    air: 0,
+    vy: 0,
+    trick: false,
+    held: false,
   };
 }
 
@@ -121,8 +137,11 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     k.charge = 0;
   }
   if (k.hop > 0) k.hop = Math.max(0, k.hop - dt);
+  const flying = k.vy !== 0;
+  const pressed = ctl.drift && !k.held;
+  k.held = ctl.drift;
   const wasOff = k.offroad;
-  k.offroad = Math.abs(k.d) > t.roadEdge;
+  k.offroad = Math.abs(k.d) > t.roadEdge && !flying;
   if (k.offroad && !wasOff && k.v > 8) events?.push("grass");
 
   // La vitesse visée : moins dans l'herbe, plus avec un turbo
@@ -141,11 +160,13 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   // Au-dessus de la vitesse visée (fin de turbo, herbe), le kart ralentit vite mais sans à-coup
   if (k.v > max) k.v = Math.max(max, k.v - (k.v - max) * 2.4 * dt - 2 * dt);
 
-  // Le dérapage : il commence en braquant avec le bouton tenu, il charge un mini-turbo, il le lâche à la fin
-  if (k.drift === 0 && ctl.drift && Math.abs(ctl.steer) > 0.3 && k.v > 11 && !k.offroad && k.spin === 0) {
+  // Le dérapage : un petit saut quand on enfonce le bouton ; il commence dès qu'on braque un peu, bouton tenu, il
+  // charge un mini-turbo, et il le lâche quand on relâche le bouton
+  if (pressed && !flying && k.spin === 0) k.hop = Math.max(k.hop, 0.22);
+  if (k.drift === 0 && ctl.drift && Math.abs(ctl.steer) > 0.15 && k.v > 9 && !k.offroad && k.spin === 0 && !flying) {
     k.drift = ctl.steer > 0 ? 1 : -1;
     k.charge = 0;
-    k.hop = 0.22;
+    k.hop = Math.max(k.hop, 0.15);
     events?.push("drift");
   } else if (k.drift !== 0 && (!ctl.drift || k.v < 7 || k.offroad)) {
     const level = driftLevel(k.charge);
@@ -157,14 +178,14 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     k.charge = 0;
   }
 
-  // Le braquage : nul à l'arrêt, un peu moins fort à pleine vitesse, inversé en marche arrière
-  const speedF = clamp(Math.abs(k.v) / 7, 0, 1) * (1 - 0.3 * clamp(k.v / top, 0, 1.3));
+  // Le braquage : nul à l'arrêt, un peu moins fort à pleine vitesse, inversé en marche arrière, à peine en l'air
+  const speedF = clamp(Math.abs(k.v) / 6, 0, 1) * (1 - 0.3 * clamp(k.v / top, 0, 1.3)) * (flying ? 0.3 : 1);
   let yaw: number;
   if (k.drift !== 0) {
     // En dérapage, le kart tourne toujours du côté du dérapage : braquer dedans serre, braquer dehors élargit
     const into = clamp(ctl.steer * k.drift, -1, 1);
-    yaw = -k.drift * TURN * (0.62 + 0.42 * into) * speedF;
-    k.charge += dt * (0.75 + 0.5 * Math.max(0, into));
+    yaw = -k.drift * TURN * (0.6 + 0.45 * into) * speedF;
+    if (!flying) k.charge += dt * (0.9 + 0.55 * Math.max(0, into));
   } else {
     yaw = -ctl.steer * TURN * speedF * Math.sign(k.v || 1);
   }
@@ -214,7 +235,39 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   k.y = at.y;
   k.dist += deltaS(t, oldS, at.s);
 
-  // Les accélérateurs au sol
+  // Les tremplins : on monte la rampe, on décolle au bord ; une figure en l'air donne un turbo à l'atterrissage
+  let ramp = -1;
+  if (k.vy === 0 && Math.abs(k.d) <= t.half) {
+    for (const lip of t.jumps) {
+      const along = deltaS(t, lip, k.s);
+      if (along >= -RAMP_LEN && along < 0) ramp = RAMP_H * (1 + along / RAMP_LEN);
+      else if (along >= 0 && along < 4 && deltaS(t, lip, oldS) < 0 && k.air > RAMP_H * 0.5 && k.v > 6) {
+        k.vy = 3 + k.v * 0.22;
+        k.trick = false;
+        events?.push("jump");
+      }
+    }
+  }
+  if (k.vy !== 0 || (k.air > 0 && ramp < 0)) {
+    // En l'air (ou tombé du côté de la rampe) : la pesanteur, jusqu'à retoucher la route
+    if (k.vy === 0) k.vy = -0.01;
+    k.vy -= GRAVITY * dt;
+    k.air += k.vy * dt;
+    if (pressed && !k.trick && k.air > 0.3 && k.spin === 0) {
+      k.trick = true;
+      events?.push("trick");
+    }
+    if (k.air <= 0) {
+      k.air = 0;
+      k.vy = 0;
+      events?.push("land");
+      if (k.trick && k.spin === 0) k.boost = Math.max(k.boost, TRICK_BOOST);
+      k.trick = false;
+    }
+  } else k.air = Math.max(0, ramp);
+
+  // Les accélérateurs au sol (pas en l'air)
+  if (k.air > 0.2) return;
   for (const pad of t.boosts) {
     const along = deltaS(t, pad.s, k.s);
     if (along >= 0 && along <= pad.length && Math.abs(k.d - pad.d) <= pad.halfWidth) {

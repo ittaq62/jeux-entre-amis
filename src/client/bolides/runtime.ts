@@ -271,6 +271,7 @@ export class RaceRuntime {
         x: ka.x + (kb.x - ka.x) * f + (Math.sin(h) * v - Math.cos(h) * slip) * lead,
         z: ka.z + (kb.z - ka.z) * f + (Math.cos(h) * v + Math.sin(h) * slip) * lead,
         y: ka.y + (kb.y - ka.y) * f,
+        air: Math.max(0, ka.air + (kb.air - ka.air) * f),
         h,
         v,
         slip,

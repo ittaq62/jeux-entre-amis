@@ -1,7 +1,8 @@
 // Le monde autour de la course : la route, ses vibreurs et ses murets, le terrain qui épouse le relief, l'arche
-// d'arrivée, les accélérateurs, et le décor de chaque circuit (le port, les vignes, le col).
+// d'arrivée, les accélérateurs, les tremplins, et le décor de chaque circuit (le port, les vignes, le col).
 
 import * as THREE from "three";
+import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, STEP, type Theme, type Track } from "../../../shared/games/bolides/track.ts";
 import * as TX from "./textures.ts";
 
@@ -164,6 +165,53 @@ function wallRibbon(t: Track, d: number, height: number, ground: (x: number, z: 
   return g;
 }
 
+/**
+ * Un tremplin : le dessus en pente de `RAMP_LEN` m, de la route jusqu'à `RAMP_H` m au bord (comme la conduite le
+ * calcule), avec ses deux flancs et sa face avant
+ */
+function rampMesh(t: Track, lip: number, top: THREE.Material, side: THREE.Material, keep: Keep): THREE.Group {
+  const g = new THREE.Group();
+  const lift = 0.07;
+  const w = t.half + 0.3;
+  // Les points du bas et du haut, au début et au bord de la rampe, à gauche et à droite
+  const at = (s: number, d: number, up: number) => {
+    const p = pointAt(t, s, d);
+    return new THREE.Vector3(p.x, p.y + lift + up, p.z);
+  };
+  const s0 = lip - RAMP_LEN;
+  const a = at(s0, -w, 0);
+  const b = at(s0, w, 0);
+  const c = at(lip, -w, RAMP_H);
+  const d = at(lip, w, RAMP_H);
+  const cb = at(lip, -w, 0);
+  const db = at(lip, w, 0);
+  const tri = (pts: THREE.Vector3[], uvs: number[], mat: THREE.Material) => {
+    const geo = keep(new THREE.BufferGeometry());
+    geo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        pts.flatMap((v) => [v.x, v.y, v.z]),
+        3,
+      ),
+    );
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+  };
+  // Le dessus : deux triangles qui regardent vers le ciel (la gauche de la route est du côté d négatif). Le haut de
+  // la toile (v = 1) est au bord.
+  const up = new THREE.Vector3().subVectors(c, a).cross(new THREE.Vector3().subVectors(b, a)).y > 0;
+  tri(up ? [a, c, b, b, c, d] : [a, b, c, b, d, c], up ? [0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1] : [0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1], top);
+  // Les flancs et la face avant (une matière vue des deux côtés, sans texture)
+  const noUv = new Array(12).fill(0);
+  tri([a, cb, c, b, db, d], noUv, side);
+  tri([cb, db, c, db, d, c], noUv, side);
+  return g;
+}
+
 function lambert(color: number | string, map?: THREE.Texture): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({ color, map: map ?? null });
 }
@@ -312,6 +360,15 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     mesh.rotation.z = Math.atan2(p.tx, p.tz) + Math.PI;
     mesh.position.set(p.x, p.y + 0.09, p.z);
     group.add(mesh);
+  }
+
+  // Les tremplins : une rampe en planches sur toute la largeur de la route, qui monte jusqu'au bord
+  {
+    const top = keep(lambert(0xffffff, keep(TX.rampTexture())));
+    const sideMat = keep(new THREE.MeshLambertMaterial({ color: 0x6b4a2e, side: THREE.DoubleSide }));
+    for (const lip of t.jumps) {
+      group.add(rampMesh(t, lip, top, sideMat, keep));
+    }
   }
 
   // Le décor

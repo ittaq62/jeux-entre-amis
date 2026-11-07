@@ -209,7 +209,7 @@ export class KartModel {
 
   /** Le kart à cet instant : sa place, et ses effets. `steer` : son volant (estimé pour les autres) */
   update(k: Kart, dt: number, steer: number, shielded: boolean, time: number) {
-    this.group.position.set(k.x, k.y + 0.02, k.z);
+    this.group.position.set(k.x, k.y + k.air + 0.02, k.z);
     this.group.rotation.y = k.h;
     // Le tête-à-queue : deux tours complets sur la durée, le saut au début d'un dérapage, la pente dans les virages
     const spinAngle = k.spin > 0 ? (1 - k.spin / 1.1) * Math.PI * 4 : 0;

@@ -8,7 +8,10 @@ import type { BolidesSettings, Race, RacerStats } from "./race.ts";
 import { standings } from "./race.ts";
 import type { TrackId } from "./track.ts";
 
-/** Un kart en petit : x, z, cap, vitesse, glissement, hauteur, distance, dérapage, charge, turbo, tête-à-queue, saut, écart */
+/**
+ * Un kart en petit : x, z, cap, vitesse, glissement, hauteur, distance, dérapage, charge, turbo, tête-à-queue, saut,
+ * écart, et la hauteur en l'air
+ */
 export type KartNet = number[];
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -29,6 +32,7 @@ export function encodeKart(k: Kart): KartNet {
     r2(k.spin),
     r2(k.hop),
     r2(k.d),
+    r2(k.air),
   ];
 }
 
@@ -54,6 +58,11 @@ export function decodeKart(n: KartNet, base?: Kart): Kart | null {
     i: base?.i ?? -1,
     s: base?.s ?? 0,
     offroad: base?.offroad ?? false,
+    // La hauteur au-dessus de la route ; la vitesse verticale ne voyage pas (le serveur fait retomber un absent)
+    air: n.length > 13 ? at(13, 0, 5) : 0,
+    vy: 0,
+    trick: false,
+    held: base?.held ?? false,
   };
 }
 

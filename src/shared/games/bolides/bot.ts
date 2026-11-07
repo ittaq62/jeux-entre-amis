@@ -16,7 +16,10 @@ interface BotStyle {
   line: number;
   /** Le tremblement du volant */
   wobble: number;
-  /** Le niveau de mini-turbo qu'il vise en dérapant (0 : il ne dérape pas) */
+  /**
+   * Le plus gros mini-turbo qu'il charge en dérapant (0 : il ne dérape pas). Il lâche le dérapage à ce niveau, ou
+   * avant si le virage finit.
+   */
   drift: 0 | 1 | 2 | 3;
   /** Le temps qu'il garde un objet avant de s'en servir, au plus, et la chance qu'il vise juste */
   hold: [number, number];
@@ -26,7 +29,7 @@ interface BotStyle {
 export const BOT_STYLE: Record<BotLevel, BotStyle> = {
   facile: { top: 0.86, line: 0.3, wobble: 0.3, drift: 0, hold: [3000, 9000], aim: 0.3 },
   moyen: { top: 0.94, line: 0.7, wobble: 0.12, drift: 1, hold: [1500, 6000], aim: 0.65 },
-  fort: { top: 1, line: 1, wobble: 0.04, drift: 2, hold: [600, 3500], aim: 0.95 },
+  fort: { top: 1, line: 1, wobble: 0.04, drift: 3, hold: [600, 3500], aim: 0.95 },
 };
 
 /** Ce dont un bot se souvient d'un instant à l'autre (jamais enregistré) */
@@ -86,7 +89,7 @@ export function botDrive(
   mem.lane += (mem.laneTarget - mem.lane) * 0.03;
   // À l'intérieur du virage qui vient (la courbure positive tourne à gauche, et la gauche est du côté négatif)
   const bend = bendAhead(t, k.s + 6, 24);
-  let lane = mem.lane - Math.sign(bend) * Math.min(1, Math.abs(bend) * 30) * half * 0.5 * style.line;
+  let lane = mem.lane - Math.sign(bend) * Math.min(1, Math.abs(bend) * 30) * half * 0.4 * style.line;
   // Une flaque sur sa route : il s'en écarte
   for (const hz of hazards) {
     if (hz.kind !== "huile") continue;
@@ -94,7 +97,8 @@ export function botDrive(
     const ahead = deltaS(t, k.s, at.s);
     if (ahead > 2 && ahead < 32 && Math.abs(at.d - lane) < 3.2) lane = at.d + (at.d > lane ? -3.6 : 3.6);
   }
-  lane = clamp(lane, -half + 1.6, half - 1.6);
+  // Pas trop près du bord : en coupant vers le point visé, il passerait sur le vibreur et dans l'herbe
+  lane = clamp(lane, -half + 2.6, half - 2.6);
   const look = 8 + Math.max(0, k.v) * 0.48;
   const p = pointAt(t, k.s + look, lane);
   const err = wrapAngle(Math.atan2(p.x - k.x, p.z - k.z) - k.h);
@@ -119,9 +123,13 @@ export function botDrive(
   let drift = false;
   if (style.drift > 0 && k.v > 14 && !k.offroad) {
     if (k.drift !== 0) drift = Math.abs(curve) > 0.008 && driftLevel(k.charge) < style.drift;
-    else drift = Math.abs(curve) > 0.02 && Math.abs(steer) > 0.35;
+    // Seulement du côté où tourne le virage (une courbure positive tourne à gauche, le volant à gauche est négatif) :
+    // en contre-braquant au moment de relâcher, il partirait sinon dans l'autre sens
+    else drift = Math.abs(curve) > 0.015 && Math.abs(steer) > 0.3 && steer * curve < 0;
   }
   if (k.drift !== 0 && drift) steer = clamp(steer + k.drift * 0.3, -1, 1);
+  // En l'air après un tremplin : une figure (le bouton enfoncé), pour le turbo à l'atterrissage
+  if (k.vy !== 0 && !k.trick && style.drift > 0) drift = !k.held;
   // Un virage trop serré pris trop vite : le bot facile freine un peu
   const brake = level === "facile" && Math.abs(err) > 0.85 && k.v > 13;
   const input: Input = { steer, gas: !brake, brake, drift };

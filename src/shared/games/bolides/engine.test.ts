@@ -1,9 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
 import { botDrive, newBotMemory } from "./bot.ts";
-import { bump, DRIFT_LEVELS, DT, driftLevel, newKart, NO_INPUT, SPIN_TIME, step, TOP_SPEED, type Input, type Kart } from "./physics.ts";
+import {
+  bump,
+  DRIFT_LEVELS,
+  DT,
+  driftLevel,
+  newKart,
+  NO_INPUT,
+  RAMP_LEN,
+  SPIN_TIME,
+  step,
+  TOP_SPEED,
+  type Input,
+  type Kart,
+} from "./physics.ts";
 import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
-import { closeLayout, deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceLayout, wrapS } from "./track.ts";
+import { deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceCorners, wrapS } from "./track.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
 
 const GAS: Input = { steer: 0, gas: true, brake: false, drift: false };
@@ -23,13 +36,18 @@ function drive(k: Kart, input: Input, seconds: number, id: (typeof TRACK_IDS)[nu
 }
 
 describe("les circuits", () => {
-  it("se referment exactement, en faisant un tour complet", () => {
+  it("se referment, en faisant un tour complet, avec des virages presque tous au rayon voulu", () => {
     for (const id of TRACK_IDS) {
-      const tr = traceLayout(TRACKS[id]);
-      expect(tr.gap, id).toBeLessThan(0.01);
+      const tr = traceCorners(TRACKS[id]);
       expect(Math.abs(Math.abs(tr.turn) - 360), id).toBeLessThan(0.01);
-      // Les lignes droites ajustées pour refermer restent des lignes droites
-      for (const leg of closeLayout(TRACKS[id].layout)) if (leg[0] === "S") expect(leg[1], id).toBeGreaterThanOrEqual(12);
+      expect(tr.fit, id).toBeGreaterThan(0.7);
+      // D'un point du tracé au suivant, jamais de trou (le dernier rejoint le premier)
+      const pts = tr.points;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i]!;
+        const b = pts[(i + 1) % pts.length]!;
+        expect(Math.hypot(b[0] - a[0], b[1] - a[1]), `${id} ${i}`).toBeLessThan(4.5);
+      }
     }
   });
 
@@ -45,9 +63,11 @@ describe("les circuits", () => {
       }
       let tight = 0;
       for (let i = 0; i < t.n; i++) tight = Math.max(tight, Math.abs(t.bend[i]!));
-      expect(1 / tight, id).toBeGreaterThan(15);
-      expect(t.length, id).toBeGreaterThan(550);
-      expect(t.length, id).toBeLessThan(1000);
+      // Des virages assez larges pour y tenir un dérapage, une route assez large pour s'y croiser
+      expect(1 / tight, id).toBeGreaterThan(25);
+      expect(t.half * 2, id).toBeGreaterThanOrEqual(16);
+      expect(t.length, id).toBeGreaterThan(900);
+      expect(t.length, id).toBeLessThan(1400);
     }
   });
 
@@ -77,11 +97,19 @@ describe("les circuits", () => {
     expect(wrapS(t, -1)).toBeCloseTo(t.length - 1, 6);
   });
 
-  it("posent quatre caisses par rangée sur la route", () => {
+  it("posent cinq caisses par rangée sur la route, et un tremplin sur une ligne droite", () => {
     for (const id of TRACK_IDS) {
       const t = getTrack(id);
-      expect(t.boxes.length, id).toBe(TRACKS[id].boxes.length * 4);
+      expect(t.boxes.length, id).toBe(TRACKS[id].boxes.length * 5);
       for (const b of t.boxes) expect(Math.abs(b.d), id).toBeLessThan(t.half);
+      expect(t.jumps.length, id).toBeGreaterThan(0);
+      for (const lip of t.jumps) {
+        // De l'élan avant la rampe jusqu'à l'atterrissage : tout droit
+        for (let s = lip - 35; s < lip + 32; s += 2) {
+          const at = locate(t, pointAt(t, s, 0).x, pointAt(t, s, 0).z);
+          expect(Math.abs(t.bend[at.i]!), `${id} ${s}`).toBeLessThan(0.006);
+        }
+      }
     }
   });
 });
@@ -138,14 +166,82 @@ describe("la conduite", () => {
     expect(driftLevel(DRIFT_LEVELS[1])).toBe(2);
   });
 
+  it("un dérapage se lance même en braquant peu, et charge plus vite en serrant le virage", () => {
+    const soft = kartAt("vignes", 10);
+    drive(soft, GAS, 2, "vignes");
+    expect(drive(soft, { steer: 0.2, gas: true, brake: false, drift: true }, 0.2, "vignes")).toContain("drift");
+    const tight = kartAt("vignes", 10);
+    drive(tight, GAS, 2, "vignes");
+    drive(tight, { steer: 1, gas: true, brake: false, drift: true }, 0.5, "vignes");
+    const wide = kartAt("vignes", 10);
+    drive(wide, GAS, 2, "vignes");
+    drive(wide, { steer: 0.2, gas: true, brake: false, drift: true }, 0.5, "vignes");
+    expect(tight.charge).toBeGreaterThan(wide.charge);
+    // Le premier mini-turbo vient en moins d'une seconde, même sans serrer
+    expect(DRIFT_LEVELS[0] / 0.9).toBeLessThan(1);
+  });
+
+  it("un tremplin fait décoller le kart, et une figure en l'air donne un turbo à l'atterrissage", () => {
+    for (const id of TRACK_IDS) {
+      const t = getTrack(id);
+      const lip = t.jumps[0]!;
+      const jump = (trick: boolean) => {
+        const k = kartAt(id, lip - 30, 0);
+        k.v = TOP_SPEED;
+        const events: string[] = [];
+        let top = 0;
+        let flying = 0;
+        let pressedAt = -1;
+        for (let i = 0; i < 60 * 4 && !events.includes("land"); i++) {
+          const press = trick && k.vy !== 0 && k.air > 0.6 && pressedAt < 0;
+          if (press) pressedAt = i;
+          step(k, { ...GAS, drift: press }, t, { top: 1 }, events as never);
+          top = Math.max(top, k.air);
+          if (k.vy !== 0) flying++;
+        }
+        return { k, events, top, flying: flying * DT };
+      };
+      const plain = jump(false);
+      expect(plain.events, id).toContain("jump");
+      expect(plain.events, id).toContain("land");
+      expect(plain.events, id).not.toContain("trick");
+      expect(plain.top, id).toBeGreaterThan(1.8);
+      expect(plain.flying, id).toBeGreaterThan(0.5);
+      expect(plain.flying, id).toBeLessThan(1.4);
+      expect(plain.k.air, id).toBe(0);
+      expect(plain.k.boost, id).toBe(0);
+      const trick = jump(true);
+      expect(trick.events, id).toContain("trick");
+      expect(trick.k.boost, id).toBeGreaterThan(0.5);
+    }
+  });
+
+  it("à côté de la rampe, on ne décolle pas ; et à reculons on en redescend", () => {
+    const t = getTrack("port");
+    const lip = t.jumps[0]!;
+    const k = kartAt("port", lip - 50, t.half + 1.5);
+    const events = drive(k, GAS, 3);
+    expect(events).not.toContain("jump");
+    expect(k.air).toBe(0);
+    // Arrêté au milieu de la rampe, puis en marche arrière : il reste au sol
+    const back = kartAt("port", lip - RAMP_LEN / 2, 0);
+    drive(back, { ...NO_INPUT, brake: true }, 0.05);
+    expect(back.air).toBeGreaterThan(0.3);
+    drive(back, { ...NO_INPUT, brake: true }, 3);
+    expect(back.air).toBe(0);
+    expect(back.vy).toBe(0);
+  });
+
   it("un accélérateur au sol donne un coup de turbo", () => {
     const t = getTrack("port");
     const pad = t.boosts[0]!;
-    const k = kartAt("port", pad.s - 30, pad.d);
+    // Lancé juste avant (l'accélérateur est à la sortie d'un virage)
+    const k = kartAt("port", pad.s - 10, pad.d);
+    k.v = 22;
     let events: string[] = [];
     for (let i = 0; i < 40 && !events.includes("pad"); i++) events = drive(k, GAS, 0.1);
     expect(events).toContain("pad");
-    drive(k, GAS, 0.5);
+    drive(k, GAS, 0.6);
     expect(k.v).toBeGreaterThan(TOP_SPEED);
   });
 
@@ -362,6 +458,9 @@ describe("ce que voient les joueurs", () => {
     expect(back.h).toBeCloseTo(k.h, 2);
     expect(back.dist).toBeCloseTo(k.dist, 1);
     expect(decodeKart([1, 2, "x"] as never)).toBeNull();
+    // La hauteur en l'air voyage aussi ; un ancien message sans elle reste lisible
+    expect(decodeKart(encodeKart({ ...k, air: 2.345 }))!.air).toBeCloseTo(2.35, 2);
+    expect(decodeKart(encodeKart(k).slice(0, 13))!.air).toBe(0);
   });
 
   it("la vue donne le classement en cours et tous les karts", () => {
