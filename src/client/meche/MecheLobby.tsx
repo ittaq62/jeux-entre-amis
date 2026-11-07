@@ -16,24 +16,24 @@ import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 const MODES: { value: FuseMode; label: string; rule: string }[] = [
   {
     value: "commune",
-    label: "Commune",
-    rule: "Une seule mèche pour tous. Personne ne sait quand elle va sauter : ça peut arriver à tout moment dès que l'étincelle entre dans la zone rouge.",
+    label: "Classique",
+    rule: "Chaque joueur reçoit une mèche neuve, dont personne ne connaît la longueur : elle peut sauter à tout moment dès que l'étincelle entre dans la zone rouge. Elle raccourcit à chaque mot, et ce qu'un joueur traîne ne retombe jamais sur le suivant.",
   },
   {
     value: "rallonge",
     label: "À rallonge",
-    rule: "Une seule mèche pour tous. Chaque bon mot la fait reculer un peu, mais elle brûle de plus en plus vite : elle saute quand l'étincelle arrive à la bombe.",
+    rule: "Une seule mèche pour tous, qui brûle de plus en plus vite. Chaque bon mot la fait reculer, et personne ne peut la refiler presque finie : le suivant en reçoit toujours au moins les quatre cinquièmes de ce que tu avais reçu.",
   },
   {
     value: "chacun",
     label: "Chacun la sienne",
-    rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : quand la tienne arrive au bout, boum, et tu en reçois une neuve, un peu plus courte.",
+    rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : le premier qui arrive au bout perd une allumette, puis tout le monde repart avec une mèche neuve.",
   },
 ];
 
 const PACE_HINTS: Record<Pace, string> = {
   pose: "La mèche brûle lentement : le temps de chercher, idéal pour découvrir.",
-  normal: "Le rythme habituel, de plus en plus serré au fil des explosions.",
+  normal: "Le rythme habituel, de plus en plus serré au fil de la partie.",
   nerveux: "Tout va plus vite : il faut trouver du premier coup.",
 };
 

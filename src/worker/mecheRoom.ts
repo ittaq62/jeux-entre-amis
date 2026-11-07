@@ -137,6 +137,8 @@ export class MecheRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.data = (await ctx.storage.get<MecheData>("room")) ?? null;
+      // Une partie commencée avant que la mèche compte ses mots
+      if (this.data?.game) this.data.game.chain ??= 0;
     });
   }
 
@@ -654,7 +656,7 @@ export class MecheRoom extends DurableObject<Env> {
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.addTimer({ at: d.game.breakUntil, kind: "light" });
     this.stopBot();
-    this.systemChat("La mèche va s'allumer !");
+    this.systemChat("La partie commence !");
     return this.afterChange([], now);
   }
 

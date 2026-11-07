@@ -46,7 +46,10 @@ export interface MecheView {
   ranks: Record<string, number> | null;
 }
 
-/** La mèche à dessiner : à la mèche commune, l'heure de l'explosion reste secrète, seule la zone rouge se voit */
+/**
+ * La mèche à dessiner : à la mèche à rallonge, la corde de tous ; à chacun sa mèche, celle de qui la tient ; à la
+ * classique, celle de cette main, dont l'heure de l'explosion reste secrète : seule la zone rouge se voit.
+ */
 function burningView(g: MecheGame): FuseView | null {
   if (g.phase !== "lit") return null;
   if (g.settings.mode === "rallonge" && g.rope) return { ...g.rope, risk: 0.75 };
@@ -54,8 +57,8 @@ function burningView(g: MecheGame): FuseView | null {
     const p = holderOf(g);
     return { at: g.heldSince, left: p.bank, length: p.bankMax, speed: 1, accel: 0, risk: 0.75 };
   }
-  const length = Math.max(1, g.maxUntil - g.litAt);
-  return { at: g.litAt, left: length, length, speed: 1, accel: 0, risk: (g.safeUntil - g.litAt) / length };
+  const length = Math.max(1, g.maxUntil - g.heldSince);
+  return { at: g.heldSince, left: length, length, speed: 1, accel: 0, risk: (g.safeUntil - g.heldSince) / length };
 }
 
 export function mecheView(g: MecheGame): MecheView {

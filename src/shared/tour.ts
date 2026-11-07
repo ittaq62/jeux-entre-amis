@@ -328,7 +328,12 @@ const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
     blurb: "Chaque mot fait reculer la mèche, mais elle brûle de plus en plus vite.",
     settings: { mode: "rallonge" },
   },
-  { id: "chacun", name: "Chacun sa mèche", blurb: "Chacun a la sienne, qui ne brûle que pendant son tour.", settings: { mode: "chacun" } },
+  {
+    id: "chacun",
+    name: "Chacun sa mèche",
+    blurb: "Chacun a la sienne, qui ne brûle que pendant son tour : le premier au bout perd une allumette.",
+    settings: { mode: "chacun" },
+  },
 ];
 
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {

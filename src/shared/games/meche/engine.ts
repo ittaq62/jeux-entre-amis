@@ -1,6 +1,7 @@
 // Mèche : une mèche allumée passe de joueur en joueur à chaque mot trouvé, et saute chez celui qui la tient.
-// Trois façons de la faire brûler : une mèche commune qui saute au hasard dans sa zone rouge, une mèche à rallonge
-// que chaque mot fait reculer mais qui brûle de plus en plus vite, ou une mèche à soi qui ne brûle que pendant son tour.
+// Trois façons de la faire brûler : la classique, rallumée pour chaque joueur avec une longueur que personne ne
+// connaît ; la mèche à rallonge, partagée, que chaque mot fait reculer mais qui brûle de plus en plus vite ; ou chacun
+// la sienne, qui ne brûle que pendant son tour. Dans tous les cas, celui qui traîne ne fait jamais sauter le suivant.
 // Tout se décide ici, sans réseau ni horloge : l'heure est passée en paramètre, le hasard vient de la partie.
 
 import { random } from "../../rng.ts";
@@ -49,35 +50,65 @@ export const MAX_PASSES = 2;
 export const START_MS = 4500;
 /** Le temps de voir l'explosion avant la mèche suivante */
 export const BREAK_MS = 3200;
-/** Personne ne saute sans avoir eu le temps de lire ses lettres : le sursis raccourcit à chaque fois, pour que la mèche finisse par sauter */
+/** Mèche à rallonge : celui qui la reçoit a toujours au moins ce temps-là pour chercher (au rythme normal) */
 export const MIN_TURN_MS = 3000;
-const MIN_TURN_STEP_MS = 400;
-const MIN_TURN_FLOOR_MS = 1000;
 
 const PACE: Record<Pace, number> = { pose: 1.4, normal: 1, nerveux: 0.7 };
 
+// Mèche classique : la longueur de la mèche de chaque main, au rythme normal (de quoi ne jamais sauter, puis le bout
+// de la zone rouge), d'abord, puis au plus court ; et le nombre de mots qui la raccourcissent de moitié
+const TURN_SAFE = 7000;
+const TURN_MAX = 12000;
+const TURN_SAFE_MIN = 2500;
+const TURN_MAX_MIN = 4500;
+const TURN_HALF_WORDS = 3.5;
+const TURN_HALF_SPREAD = 9.5;
+
 /**
- * Combien de temps brûle la mèche : jamais avant `safe` (la partie claire de la corde), au plus tard à `max`
- * (le bout de la zone rouge). Chaque mèche est un peu plus courte que la précédente.
+ * Mèche classique : la longueur cachée de la mèche de chaque main. Elle ne saute jamais avant `safe` (la partie
+ * claire de la corde), au plus tard à `max` (le bout de la zone rouge). Elle raccourcit à chaque mot de la mèche,
+ * d'autant plus vite que la table est grande pour que les grandes tables ne s'éternisent pas, et un peu à chaque
+ * explosion de la partie.
  */
-export function fuseTimes(pace: Pace, index: number): { safe: number; max: number } {
+export function turnWindow(pace: Pace, index: number, words: number, alive: number): { safe: number; max: number } {
+  const half = TURN_HALF_WORDS + TURN_HALF_SPREAD / Math.max(1, alive - 1);
+  const k = Math.max(0.55, 1 - 0.03 * index) * 0.5 ** (words / half);
   return {
-    safe: Math.round(Math.max(7000, 14000 - 600 * index) * PACE[pace]),
-    max: Math.round(Math.max(13000, 26000 - 1200 * index) * PACE[pace]),
+    safe: Math.round(Math.max(TURN_SAFE_MIN, TURN_SAFE * k) * PACE[pace]),
+    max: Math.round(Math.max(TURN_MAX_MIN, TURN_MAX * k) * PACE[pace]),
   };
 }
 
 /** Mèche à rallonge : sa longueur (en millisecondes de corde à la vitesse de départ), plus courte à chaque explosion */
 export function ropeLength(pace: Pace, index: number): number {
-  return Math.round(Math.max(10000, 16000 - 800 * index) * PACE[pace]);
+  return Math.round(Math.max(12000, 20000 - 600 * index) * PACE[pace]);
 }
 
-/** Mèche à rallonge : la vitesse gagnée chaque seconde (elle double en 20 s), et la corde rendue par un mot */
-const ROPE_ACCEL = 0.05;
+// Mèche à rallonge : la vitesse gagnée chaque seconde, et en plus pour chaque joueur au-delà de deux
+const ROPE_ACCEL = 0.018;
+const ROPE_ACCEL_PER_PLAYER = 0.009;
+/** La corde rendue par un mot */
 const ROPE_REWIND_MS = 3000;
-/** Chacun sa mèche : ce que dure la sienne, plus courte à chaque explosion de la partie */
-export function bankFor(pace: Pace, index: number): number {
-  return Math.round(Math.max(8000, 15000 - 600 * index) * PACE[pace]);
+/** La part de la corde reçue qu'on rend au moins au suivant : celui qui traîne ne peut pas la lui laisser presque finie */
+export const ROPE_KEEP = 0.8;
+
+/** Mèche à rallonge : la vitesse gagnée chaque seconde, plus vite à une grande table pour qu'elle ne s'éternise pas */
+export function ropeAccel(pace: Pace, alive: number): number {
+  return (ROPE_ACCEL + ROPE_ACCEL_PER_PLAYER * Math.max(0, alive - 2)) / PACE[pace];
+}
+
+// Chacun sa mèche : le temps partagé entre les joueurs, et ce que dure la sienne au moins et au plus
+const BANK_TOTAL = 44000;
+const BANK_MIN = 5000;
+const BANK_MAX = 22000;
+
+/**
+ * Chacun sa mèche : ce que dure la sienne. Partagé entre les joueurs encore en jeu pour qu'une manche dure à peu près
+ * autant à deux qu'à huit, un peu plus court à chaque explosion de la partie, jamais sous le minimum.
+ */
+export function bankFor(pace: Pace, index: number, alive: number): number {
+  const share = Math.min(BANK_MAX, BANK_TOTAL / Math.max(2, alive));
+  return Math.round(Math.max(BANK_MIN, share * Math.max(0.6, 1 - 0.025 * index)) * PACE[pace]);
 }
 
 /**
@@ -186,15 +217,17 @@ export interface MecheGame {
   fuse: number;
   phase: "break" | "lit" | "over";
   breakUntil: number;
+  /** L'heure où la mèche s'est allumée */
   litAt: number;
+  /** Mèche classique : la mèche de cette main ne saute pas avant `safeUntil`, au plus tard à `maxUntil` */
   safeUntil: number;
   maxUntil: number;
   /** L'heure de l'explosion : jamais envoyée aux joueurs */
   boomAt: number;
   /** Depuis quand le joueur actuel tient la mèche */
   heldSince: number;
-  /** Sursis déjà accordés à cette mèche */
-  graces: number;
+  /** Les mots joués depuis que la mèche s'est allumée */
+  chain: number;
   /** Mèche à rallonge : la corde en train de brûler */
   rope: Rope | null;
   used: string[];
@@ -225,7 +258,7 @@ export const REFUSALS: Record<Refusal, string> = {
 };
 
 export function newGame(ids: string[], settings: MecheSettings, now: number, seed: number): MecheGame {
-  const bank = bankFor(settings.pace, 0);
+  const bank = bankFor(settings.pace, 0, ids.length);
   const g: MecheGame = {
     settings: { ...settings },
     players: ids.map((id) => ({ id, lives: settings.lives, passes: 0, bank, bankMax: bank, place: null, best: "", stats: emptyStats() })),
@@ -240,7 +273,7 @@ export function newGame(ids: string[], settings: MecheSettings, now: number, see
     maxUntil: 0,
     boomAt: 0,
     heldSince: now,
-    graces: 0,
+    chain: 0,
     rope: null,
     used: [],
     log: [],
@@ -256,6 +289,7 @@ export function newGame(ids: string[], settings: MecheSettings, now: number, see
 
 export const holderOf = (g: MecheGame): MechePlayer => g.players[g.holder]!;
 export const isAlive = (p: MechePlayer) => p.lives > 0;
+const aliveCount = (g: MecheGame) => g.players.filter(isAlive).length;
 
 /** Le joueur suivant encore en jeu, dans le sens de la table */
 function nextAlive(g: MecheGame, from: number): number {
@@ -300,19 +334,16 @@ export function lightFuse(g: MecheGame, now: number): MecheEvent[] {
   g.turn += 1;
   g.litAt = now;
   g.heldSince = now;
-  g.graces = 0;
+  g.chain = 0;
   g.rope = null;
   if (g.settings.mode === "rallonge") {
     const length = ropeLength(pace, index);
-    g.rope = { at: now, left: length, length, speed: 1, accel: ROPE_ACCEL / PACE[pace] };
+    g.rope = { at: now, left: length, length, speed: 1, accel: ropeAccel(pace, aliveCount(g)) };
     setBoom(g, ropeEnd(g.rope));
   } else if (g.settings.mode === "chacun") {
     setBoom(g, now + holderOf(g).bank);
   } else {
-    const { safe, max } = fuseTimes(pace, index);
-    g.safeUntil = now + safe;
-    g.maxUntil = now + max;
-    g.boomAt = now + safe + Math.floor(random(g) * (max - safe));
+    armTurn(g, now);
   }
   return [{ type: "lit", fuse: g.fuse, holder: holderOf(g).id, letters: g.letters }];
 }
@@ -322,6 +353,14 @@ function setBoom(g: MecheGame, at: number) {
   g.boomAt = Math.round(at);
   g.safeUntil = g.boomAt;
   g.maxUntil = g.boomAt;
+}
+
+/** Mèche classique : celui qui reçoit la mèche en reçoit une neuve, dont personne ne connaît la longueur */
+function armTurn(g: MecheGame, now: number) {
+  const { safe, max } = turnWindow(g.settings.pace, g.fuse - 1, g.chain, aliveCount(g));
+  g.safeUntil = now + safe;
+  g.maxUntil = now + max;
+  g.boomAt = now + safe + Math.floor(random(g) * (max - safe));
 }
 
 /**
@@ -336,41 +375,37 @@ export function checkWord(g: MecheGame, word: string, known: (word: string) => b
 }
 
 /**
- * La mèche passe au suivant (`rewarded` : grâce à un mot, pas une passe). Une mèche partagée lui laisse toujours
- * le temps de lire ses lettres, quitte à accorder un sursis ; une mèche à soi reprend où elle en était.
+ * La mèche passe au suivant (`rewarded` : grâce à un mot, pas une passe). Ce que le joueur a traîné ne retombe
+ * jamais sur le suivant : la classique repart neuve pour lui, la mèche à rallonge lui laisse au moins une bonne part
+ * de ce que le joueur avait reçu, et chacun sa mèche reprend la sienne où il l'avait laissée.
  */
 function handOver(g: MecheGame, now: number, letters: string | null, rewarded: boolean) {
   const mode = g.settings.mode;
   const from = holderOf(g);
   if (mode === "chacun") from.bank = Math.max(0, from.bank - (now - g.heldSince));
+  if (rewarded) g.chain += 1;
   g.holder = nextAlive(g, g.holder);
   g.letters = letters ?? drawLetters(g);
   g.turn += 1;
   g.heldSince = now;
   if (mode === "chacun") {
     setBoom(g, now + holderOf(g).bank);
-    return;
-  }
-  const least = Math.max(MIN_TURN_FLOOR_MS, MIN_TURN_MS - g.graces * MIN_TURN_STEP_MS);
-  if (mode === "rallonge" && g.rope) {
-    // La corde recule pour un mot, jamais au-delà de sa longueur ; elle garde la vitesse prise
+  } else if (mode === "rallonge" && g.rope) {
+    // La corde recule pour un mot, jamais au-delà de sa longueur, et garde la vitesse prise
     const r = g.rope;
+    const pace = PACE[g.settings.pace];
     const speed = r.speed + (r.accel * Math.max(0, now - r.at)) / 1000;
-    let left = ropeLeft(r, now);
-    if (rewarded) left = Math.min(r.length, left + ROPE_REWIND_MS * PACE[g.settings.pace]);
-    if (burnTime(left, speed, r.accel) < least) {
-      left = Math.min(r.length, burnt(speed, r.accel, least));
-      g.graces += 1;
-    }
-    g.rope = { ...r, at: now, left, speed };
+    const left = Math.max(
+      ropeLeft(r, now) + (rewarded ? ROPE_REWIND_MS * pace : 0),
+      // `r.left` : ce qu'il restait quand le joueur l'a reçue
+      r.left * ROPE_KEEP,
+      burnt(speed, r.accel, MIN_TURN_MS * pace),
+    );
+    g.rope = { ...r, at: now, left: Math.min(r.length, left), speed };
     setBoom(g, ropeEnd(g.rope));
-    return;
+  } else {
+    armTurn(g, now);
   }
-  if (g.boomAt < now + least) {
-    g.boomAt = now + least;
-    g.graces += 1;
-  }
-  g.maxUntil = Math.max(g.maxUntil, g.boomAt);
 }
 
 /** Un mot bon (vérifié par `checkWord`, déjà réduit à ses lettres) ; `shown` : comment il a été écrit */
@@ -424,10 +459,13 @@ export function explode(g: MecheGame, now: number): MecheEvent[] {
     events.push({ type: "over", winner: left[0]!.id });
     return events;
   }
-  // Chacun sa mèche : celui qui a sauté en reçoit une neuve, un peu plus courte
-  if (g.settings.mode === "chacun" && p.lives > 0) {
-    p.bank = bankFor(g.settings.pace, g.fuse);
-    p.bankMax = p.bank;
+  // Chacun sa mèche : une manche est finie, tout le monde repart avec une mèche neuve, un peu plus courte
+  if (g.settings.mode === "chacun") {
+    const bank = bankFor(g.settings.pace, g.fuse, left.length);
+    for (const q of left) {
+      q.bank = bank;
+      q.bankMax = bank;
+    }
   }
   g.holder = nextAlive(g, g.holder);
   g.phase = "break";

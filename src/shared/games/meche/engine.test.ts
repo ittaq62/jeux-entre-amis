@@ -5,7 +5,7 @@ import {
   checkWord,
   DEFAULT_SETTINGS,
   explode,
-  fuseTimes,
+  ropeAccel,
   ropeEnd,
   ropeLeft,
   ropeLength,
@@ -15,7 +15,9 @@ import {
   MIN_TURN_MS,
   newGame,
   playWord,
+  ROPE_KEEP,
   START_MS,
+  turnWindow,
   usePass,
   type MecheGame,
   type MecheSettings,
@@ -124,59 +126,65 @@ describe("la mèche", () => {
     expect(ev[0]).toMatchObject({ type: "lit", fuse: 1, holder: "p0" });
   });
 
-  it("explose dans la zone rouge, jamais avant", () => {
+  it("explose dans la zone rouge de la main, jamais avant", () => {
     for (let seed = 1; seed < 200; seed++) {
       const g = newGame(["a", "b"], DEFAULT_SETTINGS, NOW, seed);
       lightFuse(g, NOW);
       expect(g.boomAt).toBeGreaterThanOrEqual(g.safeUntil);
       expect(g.boomAt).toBeLessThanOrEqual(g.maxUntil);
-    }
-  });
-
-  it("raccourcit à chaque explosion, sans tomber sous un minimum, et suit le rythme choisi", () => {
-    const first = fuseTimes("normal", 0);
-    expect(fuseTimes("normal", 5).max).toBeLessThan(first.max);
-    expect(fuseTimes("normal", 200)).toEqual({ safe: 7000, max: 13000 });
-    expect(fuseTimes("pose", 0).max).toBeGreaterThan(first.max);
-    expect(fuseTimes("nerveux", 0).max).toBeLessThan(first.max);
-  });
-
-  it("ne dévoile jamais l'heure de l'explosion aux joueurs", () => {
-    const g = lit();
-    expect(JSON.stringify(mecheView(g))).not.toContain("boomAt");
-    expect(JSON.stringify(mecheView(g))).not.toContain(String(g.boomAt));
-  });
-
-  it("laisse au suivant le temps de lire, même au tout dernier moment", () => {
-    const g = lit();
-    g.letters = "ou";
-    const late = g.boomAt - 100;
-    playWord(g, "maison", late);
-    expect(g.boomAt).toBeGreaterThanOrEqual(late + MIN_TURN_MS);
-    expect(g.maxUntil).toBeGreaterThanOrEqual(g.boomAt);
-  });
-
-  it("accorde des sursis de plus en plus courts : même très rapides, les joueurs finissent par sauter", () => {
-    const g = lit({}, 2);
-    let now = g.boomAt - 100;
-    const gaps: number[] = [];
-    for (let i = 0; i < 12; i++) {
       g.letters = "ou";
-      playWord(g, `mot${i}`, now);
-      gaps.push(g.boomAt - now);
-      now = g.boomAt - 100;
+      playWord(g, "maison", NOW + 2000);
+      expect(g.boomAt).toBeGreaterThanOrEqual(g.safeUntil);
+      expect(g.boomAt).toBeLessThanOrEqual(g.maxUntil);
     }
-    expect(gaps[0]).toBe(MIN_TURN_MS);
-    expect(gaps[1]).toBeLessThan(gaps[0]!);
-    expect(gaps.at(-1)).toBe(1000);
   });
 
-  it("ne touche pas au temps quand il en reste assez", () => {
+  it("repart neuve pour celui qui la reçoit : jouer au tout dernier moment ne la fait pas sauter chez le suivant", () => {
+    for (let seed = 1; seed < 100; seed++) {
+      const g = newGame(["a", "b", "c"], DEFAULT_SETTINGS, NOW, seed);
+      lightFuse(g, NOW);
+      g.letters = "ou";
+      const late = g.boomAt - 1;
+      playWord(g, "maison", late);
+      const fresh = turnWindow("normal", 0, 1, 3);
+      expect(g.heldSince).toBe(late);
+      expect(g.safeUntil - late).toBe(fresh.safe);
+      expect(g.boomAt - late).toBeGreaterThanOrEqual(fresh.safe);
+    }
+  });
+
+  it("raccourcit à chaque mot, plus vite à une grande table, un peu à chaque explosion, sans tomber sous un minimum", () => {
+    const first = turnWindow("normal", 0, 0, 2);
+    expect(first).toEqual({ safe: 7000, max: 12000 });
+    expect(turnWindow("normal", 0, 6, 2).max).toBeLessThan(first.max);
+    expect(turnWindow("normal", 0, 6, 8).max).toBeLessThan(turnWindow("normal", 0, 6, 2).max);
+    expect(turnWindow("normal", 5, 0, 2).max).toBeLessThan(first.max);
+    expect(turnWindow("normal", 30, 200, 8)).toEqual({ safe: 2500, max: 4500 });
+    expect(turnWindow("pose", 0, 0, 2).max).toBeGreaterThan(first.max);
+    expect(turnWindow("nerveux", 0, 0, 2).max).toBeLessThan(first.max);
+  });
+
+  it("même très rapides, les joueurs finissent par n'avoir que quelques secondes", () => {
+    const g = lit({}, 2);
+    for (let i = 0; i < 60; i++) {
+      g.letters = "ou";
+      playWord(g, `mot${i}`, g.heldSince + 200);
+    }
+    expect(g.safeUntil - g.heldSince).toBe(2500);
+    expect(g.maxUntil - g.heldSince).toBe(4500);
+  });
+
+  it("dessine la mèche de la main, sa zone rouge comprise, sans jamais dévoiler l'heure de l'explosion", () => {
     const g = lit();
-    const boomAt = g.boomAt;
     g.letters = "ou";
-    playWord(g, "bouteille", g.litAt + 1000);
-    expect(g.boomAt).toBe(boomAt);
+    playWord(g, "maison", g.litAt + 3000);
+    const view = mecheView(g);
+    expect(view.burning!.at).toBe(g.heldSince);
+    expect(fuseProgress(view.burning!, g.heldSince)).toBe(0);
+    expect(fuseProgress(view.burning!, g.maxUntil)).toBe(1);
+    expect(view.burning!.risk).toBeCloseTo((g.safeUntil - g.heldSince) / (g.maxUntil - g.heldSince), 6);
+    expect(JSON.stringify(view)).not.toContain("boomAt");
+    expect(JSON.stringify(view)).not.toContain(String(g.boomAt));
   });
 });
 
@@ -346,26 +354,45 @@ describe("la mèche à rallonge", () => {
     const before = ropeLeft(g.rope!, at);
     playWord(g, "maison", at);
     expect(g.rope!.left).toBeCloseTo(before + 3000, 0);
-    expect(g.rope!.speed).toBeCloseTo(1.3, 5);
+    expect(g.rope!.speed).toBeCloseTo(1 + ropeAccel("normal", 2) * 6, 5);
     // Tout de suite après l'allumage, un mot ne la rallonge pas au-delà de sa longueur
     const fresh = lit({ mode: "rallonge" }, 2);
     playWord(fresh, "maison", start + 100);
     expect(fresh.rope!.left).toBe(fresh.rope!.length);
   });
 
+  it("brûle plus vite à une grande table", () => {
+    expect(ropeAccel("normal", 8)).toBeGreaterThan(ropeAccel("normal", 2));
+    expect(lit({ mode: "rallonge" }, 6).rope!.accel).toBe(ropeAccel("normal", 6));
+  });
+
   it("une passe ne la fait pas reculer", () => {
     const g = lit({ mode: "rallonge" }, 2);
     g.players[0]!.passes = 1;
-    const at = NOW + START_MS + 5000;
+    const at = NOW + START_MS + 2000;
     const before = ropeLeft(g.rope!, at);
     usePass(g, at);
     expect(g.rope!.left).toBeCloseTo(before, 3);
   });
 
-  it("laisse toujours au suivant le temps de lire", () => {
+  it("celui qui traîne ne peut pas la laisser presque finie au suivant", () => {
+    for (const how of ["mot", "passe"] as const) {
+      const g = lit({ mode: "rallonge" }, 3);
+      g.players[0]!.passes = 1;
+      const received = g.rope!.left;
+      const late = g.boomAt - 50;
+      if (how === "mot") playWord(g, "maison", late);
+      else usePass(g, late);
+      expect(g.rope!.left, how).toBeCloseTo(received * ROPE_KEEP, 0);
+      expect(g.boomAt - late, how).toBeGreaterThan(MIN_TURN_MS);
+    }
+  });
+
+  it("laisse toujours au suivant le temps de chercher, même quand elle brûle très vite", () => {
     const g = lit({ mode: "rallonge" }, 2);
     g.players[0]!.passes = 1;
-    const late = g.boomAt - 200;
+    const late = NOW + 60_000;
+    g.rope = { ...g.rope!, at: late, left: 600, speed: 3 };
     usePass(g, late);
     expect(g.boomAt - late).toBeGreaterThanOrEqual(MIN_TURN_MS - 1);
   });
@@ -384,7 +411,7 @@ describe("chacun sa mèche", () => {
   it("chacun a la sienne, qui ne brûle que pendant son tour", () => {
     const g = lit({ mode: "chacun" }, 3);
     const start = NOW + START_MS;
-    const full = bankFor("normal", 0);
+    const full = bankFor("normal", 0, 3);
     expect(g.boomAt).toBe(start + full);
     playWord(g, "maison", start + 4000);
     expect(g.players[0]!.bank).toBe(full - 4000);
@@ -401,28 +428,54 @@ describe("chacun sa mèche", () => {
     const g = lit({ mode: "chacun" }, 2);
     g.players[0]!.passes = 1;
     usePass(g, NOW + START_MS + 2500);
-    expect(g.players[0]!.bank).toBe(bankFor("normal", 0) - 2500);
+    expect(g.players[0]!.bank).toBe(bankFor("normal", 0, 2) - 2500);
   });
 
-  it("celui qui saute en reçoit une neuve, un peu plus courte ; les autres gardent la leur", () => {
+  it("ce que l'un a brûlé de la sienne ne touche jamais la mèche des autres", () => {
+    const g = lit({ mode: "chacun" }, 2);
+    const start = NOW + START_MS;
+    const full = bankFor("normal", 0, 2);
+    // Le premier joue à la toute fin de la sienne : le second reçoit la sienne, intacte
+    playWord(g, "maison", start + full - 20);
+    expect(g.players[0]!.bank).toBe(20);
+    expect(g.players[1]!.bank).toBe(full);
+    expect(g.boomAt).toBe(start + full - 20 + full);
+    const view = mecheView(g);
+    expect(fuseProgress(view.burning!, start + full - 20)).toBe(0);
+    expect(view.players[1]!.bank).toBe(full);
+  });
+
+  it("après une explosion, tout le monde repart avec une mèche neuve, un peu plus courte", () => {
     const g = lit({ mode: "chacun" }, 3);
     const start = NOW + START_MS;
     playWord(g, "maison", start + 3000);
     explode(g, g.boomAt);
-    expect(g.players[1]!.bank).toBe(bankFor("normal", 1));
-    expect(g.players[1]!.bankMax).toBe(bankFor("normal", 1));
-    expect(g.players[0]!.bank).toBe(bankFor("normal", 0) - 3000);
-    expect(bankFor("normal", 1)).toBeLessThan(bankFor("normal", 0));
+    for (const p of g.players) {
+      expect(p.bank).toBe(bankFor("normal", 1, 3));
+      expect(p.bankMax).toBe(bankFor("normal", 1, 3));
+    }
+    expect(bankFor("normal", 1, 3)).toBeLessThan(bankFor("normal", 0, 3));
+  });
+
+  it("partage le temps entre ceux qui restent : à moins nombreux, la mèche de chacun est plus longue", () => {
+    expect(bankFor("normal", 0, 8)).toBeLessThan(bankFor("normal", 0, 2));
+    expect(bankFor("normal", 40, 8)).toBe(5000);
+    const g = lit({ mode: "chacun", lives: 1 }, 3);
+    explode(g, g.boomAt);
+    expect(g.players[0]!.lives).toBe(0);
+    expect(g.players[1]!.bank).toBe(bankFor("normal", 1, 2));
+    expect(bankFor("normal", 1, 2)).toBeGreaterThan(bankFor("normal", 0, 3));
   });
 
   it("dessine la mèche de celui qui la tient, déjà entamée s'il l'a déjà utilisée", () => {
     const g = lit({ mode: "chacun" }, 2);
     const start = NOW + START_MS;
+    const full = bankFor("normal", 0, 2);
     playWord(g, "maison", start + 5000);
     playWord(g, "cheval", start + 6000);
     const view = mecheView(g).burning!;
-    expect(view.length).toBe(bankFor("normal", 0));
-    expect(fuseProgress(view, start + 6000)).toBeCloseTo(5000 / bankFor("normal", 0), 5);
+    expect(view.length).toBe(full);
+    expect(fuseProgress(view, start + 6000)).toBeCloseTo(5000 / full, 5);
   });
 });
 
@@ -478,13 +531,16 @@ describe("les bots", () => {
     }
   });
 
-  it("finissent aussi les parties à rallonge et chacun sa mèche, en quelques minutes", () => {
-    for (const mode of ["rallonge", "chacun"] as const) {
-      for (const seed of [4, 9]) {
-        const { g, minutes } = simulate({ mode, botLevel: "moyen" }, 4, seed);
-        expect(g.phase, `${mode} ${seed}`).toBe("over");
-        expect(minutes, `${mode} ${seed}`).toBeGreaterThan(1);
-        expect(minutes, `${mode} ${seed}`).toBeLessThan(9);
+  it("finissent les parties de chaque mode en quelques minutes, à deux comme à quatre", () => {
+    for (const mode of ["commune", "rallonge", "chacun"] as const) {
+      for (const players of [2, 4]) {
+        for (const seed of [4, 9]) {
+          const label = `${mode}, ${players} joueurs, ${seed}`;
+          const { g, minutes } = simulate({ mode, botLevel: "moyen" }, players, seed);
+          expect(g.phase, label).toBe("over");
+          expect(minutes, label).toBeGreaterThan(1);
+          expect(minutes, label).toBeLessThan(10);
+        }
       }
     }
   });
