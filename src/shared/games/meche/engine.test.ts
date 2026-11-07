@@ -18,7 +18,7 @@ import {
 } from "./engine.ts";
 import { LETTRES } from "./lettres.ts";
 import { mecheView } from "./view.ts";
-import { Dictionary, normalizeWord, Vocabulary } from "./words.ts";
+import { cleanShown, Dictionary, normalizeWord, promptRange, Vocabulary } from "./words.ts";
 
 // Les vraies listes, lues sur le disque : le dossier src/shared ne connaît pas les types de Node, d'où l'import par une variable
 const fsModule = "node:fs";
@@ -58,6 +58,22 @@ describe("les mots", () => {
     expect(normalizeWord(" maïs 12 ")).toBe("mais");
   });
 
+  it("garde les accents à l'écran, sans rien laisser passer d'autre", () => {
+    expect(cleanShown("Nié")).toBe("nié");
+    expect(cleanShown(" Cœur-de-lion ! 42")).toBe("cœur-de-lion");
+    expect(cleanShown("maisonЖЖ<b>")).toBe("maisonb");
+    expect(cleanShown(12)).toBe("");
+    // Réduit à ses lettres, l'affichage redonne le mot vérifié
+    expect(normalizeWord(cleanShown("Éléphant"))).toBe("elephant");
+  });
+
+  it("souligne les lettres imposées dans le mot écrit avec ses accents", () => {
+    expect(promptRange("nié", "nie")).toEqual([0, 3]);
+    expect(promptRange("élève", "lev")).toEqual([1, 4]);
+    expect(promptRange("cœur", "oe")).toEqual([1, 2]);
+    expect(promptRange("maison", "ou")).toBeNull();
+  });
+
   it("trouve les mots du dictionnaire, conjugués ou au pluriel", () => {
     for (const w of ["maison", "ecole", "mangeons", "chevaux", "xylophone", "kayak", "oeuf", "aujourdhui", "portemonnaie", "zythums"]) {
       expect(dico.has(w), w).toBe(true);
@@ -76,7 +92,11 @@ describe("les mots", () => {
     let seed = 1;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const w = vocab.pick("ou", 1, rnd, () => true);
-    expect(w).toContain("ou");
+    expect(w?.word).toContain("ou");
+    expect(normalizeWord(w!.shown)).toBe(w!.word);
+    // Les bots écrivent avec les accents
+    const accented = vocab.pick("ecol", 1, rnd, (x) => x === "ecole");
+    expect(accented).toEqual({ word: "ecole", shown: "école" });
     expect(vocab.pick("ou", 1, rnd, () => false)).toBeNull();
     expect(vocab.pick("qqq", 3, rnd, () => true)).toBeNull();
   });
@@ -165,16 +185,24 @@ describe("les mots joués", () => {
     expect(checkWord(g, "ami", known)).toBe("lettres");
   });
 
-  it("refuse le trop court, l'inconnu et le déjà joué", () => {
+  it("accepte les lettres seules quand elles font un mot (« nié » pour NIE), pas en dessous de trois lettres", () => {
+    const g = lit();
+    g.letters = "nie";
+    expect(checkWord(g, normalizeWord("nié"), known)).toBeNull();
+    g.letters = "on";
+    expect(checkWord(g, "on", known)).toBe("court");
+  });
+
+  it("refuse l'inconnu et le déjà joué", () => {
     const g = lit();
     g.letters = "eau";
-    expect(checkWord(g, "eau", known)).toBe("court");
     expect(checkWord(g, "ea", known)).toBe("lettres");
     expect(checkWord(g, "eauxqsd", known)).toBe("inconnu");
     expect(checkWord(g, "bateau", known)).toBeNull();
     playWord(g, "bateau", NOW + START_MS + 500);
     g.letters = "eau";
     expect(checkWord(g, "bateau", known)).toBe("grille");
+    expect(checkWord(g, "eau", known)).toBeNull();
   });
 
   it("passe la mèche au suivant avec de nouvelles lettres, sur un autre tour", () => {
@@ -184,17 +212,21 @@ describe("les mots joués", () => {
     expect(holderOf(g).id).toBe("p1");
     expect(g.turn).toBe(turn + 1);
     expect(g.letters.length).toBeGreaterThanOrEqual(2);
-    expect(ev[0]).toMatchObject({ type: "word", id: "p0", word: "maison", next: "p1", ms: 2000, long: false });
+    expect(ev[0]).toMatchObject({ type: "word", id: "p0", word: "maison", shown: "maison", next: "p1", ms: 2000, long: false });
   });
 
-  it("garde le souvenir du plus long mot et du plus rapide", () => {
+  it("garde le souvenir du plus long mot, tel qu'il a été écrit, et du plus rapide", () => {
     const g = lit({}, 2);
+    playWord(g, "eleve", NOW + START_MS + 2000, "élève");
+    expect(g.log.at(-1)).toEqual({ word: "eleve", by: "p0", shown: "élève" });
+    expect(g.players[0]!.best).toBe("élève");
+    g.holder = 0;
     playWord(g, "maison", NOW + START_MS + 3000);
     playWord(g, "ami", NOW + START_MS + 4000);
     playWord(g, "cheval", NOW + START_MS + 4500);
     const p0 = g.players[0]!;
     expect(p0.best).toBe("maison");
-    expect(p0.stats).toMatchObject({ words: 2, letters: 12, longest: 6, fastest: 500 });
+    expect(p0.stats).toMatchObject({ words: 3, letters: 17, longest: 6, fastest: 500 });
   });
 });
 
@@ -310,7 +342,7 @@ describe("les bots", () => {
         continue;
       }
       const plan = botPlan(g, settings.botLevel ?? "moyen", vocab, h);
-      const at = now + plan.thinkMs + (plan.word?.length ?? 0) * plan.letterMs;
+      const at = now + plan.thinkMs + (plan.word?.shown.length ?? 0) * plan.letterMs;
       if (at >= g.boomAt) {
         now = g.boomAt;
         explode(g, now);
@@ -318,9 +350,10 @@ describe("les bots", () => {
         now = at;
         usePass(g, now);
       } else if (plan.word) {
-        expect(checkWord(g, plan.word, known), `${plan.word} pour ${g.letters}`).toBeNull();
+        expect(checkWord(g, plan.word.word, known), `${plan.word.word} pour ${g.letters}`).toBeNull();
+        expect(normalizeWord(plan.word.shown)).toBe(plan.word.word);
         now = at;
-        playWord(g, plan.word, now);
+        playWord(g, plan.word.word, now, plan.word.shown);
         words++;
       } else {
         now = g.boomAt;

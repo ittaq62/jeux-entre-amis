@@ -3,7 +3,7 @@
 
 import { random, type RngHolder } from "../../rng.ts";
 import { HARD_TAILS, holderOf, LONG_WORD, type BotLevel, type MecheGame } from "./engine.ts";
-import type { Vocabulary } from "./words.ts";
+import type { VocabWord, Vocabulary } from "./words.ts";
 
 interface BotStyle {
   /** Combien de niveaux du vocabulaire il connaît */
@@ -27,8 +27,8 @@ export const BOT_STYLE: Record<BotLevel, BotStyle> = {
 const BLANK_MS: [number, number] = [3000, 8000];
 
 export interface BotPlan {
-  /** Le mot à taper ; null : il n'en trouve aucun */
-  word: string | null;
+  /** Le mot à taper, et son écriture accentuée ; null : il n'en trouve aucun */
+  word: VocabWord | null;
   /** Le temps avant la première lettre (ou avant d'utiliser sa passe) */
   thinkMs: number;
   letterMs: number;
@@ -47,7 +47,7 @@ export function botPlan(g: MecheGame, level: BotLevel, vocab: Vocabulary, h: Rng
   const rnd = () => random(h);
   const blank = random(h) < style.blank;
   let thinkMs = between(h, style.think);
-  let word: string | null = null;
+  let word: VocabWord | null = null;
   if (g.settings.source === "marabout" && random(h) < style.nasty) {
     word = vocab.pick(g.letters, style.depth, rnd, (w) => fine(w) && HARD_TAILS.has(w.slice(-2)));
   }

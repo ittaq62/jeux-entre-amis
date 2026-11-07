@@ -11,6 +11,33 @@ export function normalizeWord(text: string): string {
     .replace(/[^a-z]/g, "");
 }
 
+/** Les lettres qu'on garde à l'écran, accents compris */
+const SHOWN = /[^a-zàâäæçéèêëîïôöœùûüÿñ'’-]/g;
+
+/**
+ * Ce que tape un joueur, tel qu'on l'affiche : en minuscules, avec ses accents, sans rien d'autre que des lettres,
+ * des tirets et des apostrophes. Réduit à ses lettres, il redonne toujours le mot vérifié.
+ */
+export function cleanShown(raw: unknown): string {
+  return typeof raw === "string" ? raw.slice(0, 80).toLowerCase().normalize("NFC").replace(SHOWN, "").slice(0, 40) : "";
+}
+
+/** Où se trouvent les lettres imposées dans ce qui est affiché, pour les souligner (indices dans le texte affiché) */
+export function promptRange(shown: string, letters: string): [number, number] | null {
+  if (letters.length === 0) return null;
+  // La position, dans le texte affiché, de chaque lettre du mot réduit (« œ » en donne deux)
+  const owners: number[] = [];
+  let reduced = "";
+  [...shown].forEach((ch, i) => {
+    const n = normalizeWord(ch);
+    for (let k = 0; k < n.length; k++) owners.push(i);
+    reduced += n;
+  });
+  const at = reduced.indexOf(letters);
+  if (at < 0) return null;
+  return [owners[at]!, owners[at + letters.length - 1]! + 1];
+}
+
 /**
  * La liste complète, triée, gardée telle quelle en mémoire : un mot par ligne, en octets.
  * On y cherche par dichotomie : pas besoin de bâtir un index de 400 000 entrées à chaque réveil de la salle.
@@ -54,9 +81,17 @@ function compare(b: Uint8Array, start: number, end: number, word: string): numbe
   return end - start - word.length;
 }
 
+/** Un mot du vocabulaire des bots : réduit à ses lettres, et tel qu'il s'écrit */
+export interface VocabWord {
+  word: string;
+  shown: string;
+}
+
 /**
  * Les mots que connaissent les bots, du plus courant au moins courant, chaque niveau sous un repère « =N ».
- * Tout est gardé d'un seul tenant : chercher un groupe de lettres revient à un `indexOf`.
+ * Une ligne donne le mot réduit, puis son écriture accentuée si elle diffère. Tout est gardé d'un seul tenant :
+ * chercher un groupe de lettres revient à un `indexOf` (une suite de lettres sans accent de l'écriture se retrouve
+ * toujours dans le mot réduit, qui est donc bien celui qui la contient).
  */
 export class Vocabulary {
   private levels: string[];
@@ -72,7 +107,7 @@ export class Vocabulary {
    * Un mot contenant ces lettres, au hasard, dans les `depth` premiers niveaux ;
    * `accept` écarte ceux qui ne conviennent pas (déjà joués, trop courts…).
    */
-  pick(letters: string, depth: number, random: () => number, accept: (word: string) => boolean): string | null {
+  pick(letters: string, depth: number, random: () => number, accept: (word: string) => boolean): VocabWord | null {
     const levels = this.levels.slice(0, depth);
     // Les plus courants d'abord, en commençant quelque part au hasard
     for (const text of levels) {
@@ -83,9 +118,9 @@ export class Vocabulary {
         while (at >= 0 && (start === from || at < from) && tries < 40) {
           const begin = text.lastIndexOf("\n", at) + 1;
           const end = text.indexOf("\n", at);
-          const word = text.slice(begin, end < 0 ? undefined : end);
+          const [word, shown] = text.slice(begin, end < 0 ? undefined : end).split(" ");
           // Un groupe de lettres ne passe jamais d'une ligne à l'autre : il ne contient pas de retour à la ligne
-          if (word && accept(word)) return word;
+          if (word && word.includes(letters) && accept(word)) return { word, shown: shown ?? word };
           at = text.indexOf(letters, end < 0 ? text.length : end);
           tries++;
         }

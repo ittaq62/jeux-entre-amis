@@ -109,7 +109,7 @@ export interface MechePlayer {
   passes: number;
   /** Sa place finale, dès qu'elle est connue */
   place: number | null;
-  /** Son plus long mot */
+  /** Son plus long mot, tel qu'il l'a écrit */
   best: string;
   stats: MecheStats;
 }
@@ -137,8 +137,8 @@ export interface MecheGame {
   /** Sursis déjà accordés à cette mèche */
   graces: number;
   used: string[];
-  /** Les derniers mots joués */
-  log: { word: string; by: string }[];
+  /** Les derniers mots joués, et comment ils ont été écrits (accents compris) */
+  log: { word: string; by: string; shown?: string }[];
   /** Les groupes de lettres déjà sortis récemment */
   recent: string[];
   lastWord: string | null;
@@ -149,7 +149,7 @@ export interface MecheGame {
 
 export type MecheEvent =
   | { type: "lit"; fuse: number; holder: string; letters: string }
-  | { type: "word"; id: string; word: string; long: boolean; earned: boolean; next: string; ms: number }
+  | { type: "word"; id: string; word: string; shown: string; long: boolean; earned: boolean; next: string; ms: number }
   | { type: "pass"; id: string; next: string }
   | { type: "boom"; id: string; lives: number; place: number | null }
   | { type: "over"; winner: string };
@@ -243,10 +243,13 @@ export function lightFuse(g: MecheGame, now: number): MecheEvent[] {
   return [{ type: "lit", fuse: g.fuse, holder: holderOf(g).id, letters: g.letters }];
 }
 
-/** Ce qui ne va pas dans ce mot, ou null s'il est bon (`known` dit s'il est au dictionnaire) */
+/**
+ * Ce qui ne va pas dans ce mot, ou null s'il est bon (`known` dit s'il est au dictionnaire).
+ * Les lettres seules comptent si elles font un mot : « nié » pour NIE.
+ */
 export function checkWord(g: MecheGame, word: string, known: (word: string) => boolean): Refusal | null {
-  if (word.length < MIN_LETTERS || word.length <= g.letters.length) return word.includes(g.letters) ? "court" : "lettres";
   if (!word.includes(g.letters)) return "lettres";
+  if (word.length < MIN_LETTERS) return "court";
   if (g.used.includes(word)) return "grille";
   return known(word) ? null : "inconnu";
 }
@@ -265,8 +268,8 @@ function handOver(g: MecheGame, now: number, letters: string | null) {
   g.maxUntil = Math.max(g.maxUntil, g.boomAt);
 }
 
-/** Un mot bon (vérifié par `checkWord`, déjà réduit à ses lettres) */
-export function playWord(g: MecheGame, word: string, now: number): MecheEvent[] {
+/** Un mot bon (vérifié par `checkWord`, déjà réduit à ses lettres) ; `shown` : comment il a été écrit */
+export function playWord(g: MecheGame, word: string, now: number, shown = word): MecheEvent[] {
   const p = holderOf(g);
   const ms = now - g.heldSince;
   const long = word.length >= LONG_WORD;
@@ -275,17 +278,17 @@ export function playWord(g: MecheGame, word: string, now: number): MecheEvent[] 
   p.stats.letters += word.length;
   p.stats.longest = Math.max(p.stats.longest, word.length);
   if (p.stats.fastest === 0 || ms < p.stats.fastest) p.stats.fastest = ms;
-  if (word.length > p.best.length) p.best = word;
+  if (word.length > normalizeWord(p.best).length) p.best = shown;
   if (earned) {
     p.passes += 1;
     p.stats.passesEarned += 1;
   }
   g.used.push(word);
-  g.log.push({ word, by: p.id });
+  g.log.push({ word, by: p.id, shown });
   if (g.log.length > 24) g.log.shift();
   g.lastWord = word;
   handOver(g, now, null);
-  return [{ type: "word", id: p.id, word, long, earned, next: holderOf(g).id, ms }];
+  return [{ type: "word", id: p.id, word, shown, long, earned, next: holderOf(g).id, ms }];
 }
 
 /** Une passe : la mèche va au suivant sans mot, avec les mêmes lettres */
@@ -327,9 +330,4 @@ function finish(g: MecheGame, winner: MechePlayer) {
   const ordered = [...g.players].sort((a, b) => a.place! - b.place!);
   g.ranking = ordered.map((p) => p.id);
   g.ranks = Object.fromEntries(ordered.map((p) => [p.id, p.place!]));
-}
-
-/** Ce que tape quelqu'un, réduit à ses lettres et de longueur raisonnable */
-export function cleanTyping(raw: unknown): string {
-  return typeof raw === "string" ? normalizeWord(raw.slice(0, 80)).slice(0, 40) : "";
 }

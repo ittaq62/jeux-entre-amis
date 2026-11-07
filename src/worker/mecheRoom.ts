@@ -3,7 +3,6 @@ import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botPlan } from "../shared/games/meche/bot.ts";
 import {
   checkWord,
-  cleanTyping,
   DEFAULT_SETTINGS,
   explode,
   holderOf,
@@ -18,7 +17,7 @@ import {
   type MecheSettings,
 } from "../shared/games/meche/engine.ts";
 import { mecheView } from "../shared/games/meche/view.ts";
-import { Dictionary, Vocabulary } from "../shared/games/meche/words.ts";
+import { cleanShown, Dictionary, normalizeWord, Vocabulary } from "../shared/games/meche/words.ts";
 import {
   CHAT_MAX,
   MECHE_MAX_PLAYERS,
@@ -380,7 +379,7 @@ export class MecheRoom extends DurableObject<Env> {
         const g = d.game;
         if (!seat || !g || g.phase !== "lit" || holderOf(g).id !== seat.id || msg.turn !== g.turn) return;
         if (!this.allowMessage(`typing:${userId}`, 35)) return;
-        return this.relayTyping(seat.id, cleanTyping(msg.text), g.turn, ws);
+        return this.relayTyping(seat.id, cleanShown(msg.text), g.turn, ws);
       }
 
       case "word":
@@ -537,14 +536,16 @@ export class MecheRoom extends DurableObject<Env> {
     const g = d?.game;
     const now = Date.now();
     if (!g || !this.isHolding(seat, msg.turn, now)) return;
-    const word = cleanTyping(msg.word);
+    // Vérifié sans accents, montré tel qu'il a été écrit
+    const shown = cleanShown(msg.word);
+    const word = normalizeWord(shown);
     if (word.length === 0) return;
     const refusal = checkWord(g, word, (w) => words.has(w));
     if (refusal) {
       holderOf(g).stats.refused += 1;
-      return this.broadcastRaw({ t: "refused", id: seat.id, word, reason: refusal, turn: g.turn });
+      return this.broadcastRaw({ t: "refused", id: seat.id, word: shown, reason: refusal, turn: g.turn });
     }
-    await this.afterMove(playWord(g, word, now), now);
+    await this.afterMove(playWord(g, word, now, shown), now);
   }
 
   private async kickUser(target: string, now: number) {
@@ -734,13 +735,13 @@ export class MecheRoom extends DurableObject<Env> {
       return;
     }
     if (!plan.word) return;
-    const word = plan.word;
+    const { word, shown } = plan.word;
     let at = plan.thinkMs;
-    for (let i = 1; i <= word.length; i++) {
+    for (let i = 1; i <= shown.length; i++) {
       at += plan.letterMs * (0.7 + random(d) * 0.6);
-      this.botTimers.push(setTimeout(() => this.relayTyping(seat.id, word.slice(0, i), turn), at));
+      this.botTimers.push(setTimeout(() => this.relayTyping(seat.id, shown.slice(0, i), turn), at));
     }
-    this.botTimers.push(setTimeout(() => void this.botWord(seat.id, word, turn), at + plan.letterMs * 1.5));
+    this.botTimers.push(setTimeout(() => void this.botWord(seat.id, word, shown, turn), at + plan.letterMs * 1.5));
   }
 
   private async botPass(id: string, turn: number) {
@@ -752,12 +753,12 @@ export class MecheRoom extends DurableObject<Env> {
     if (events.length > 0) await this.afterMove(events, now);
   }
 
-  private async botWord(id: string, word: string, turn: number) {
+  private async botWord(id: string, word: string, shown: string, turn: number) {
     const g = this.data?.game;
     if (!g || g.phase !== "lit" || g.turn !== turn || holderOf(g).id !== id) return;
     const now = Date.now();
     if (now >= g.boomAt) return;
-    await this.afterMove(playWord(g, word, now), now);
+    await this.afterMove(playWord(g, word, now, shown), now);
   }
 
   // -------------------------------------------------------------------------

@@ -6,7 +6,8 @@
 //
 // Écrit :
 //   public/meche/mots.txt             tous les mots acceptés, triés, pour vérifier ce que tapent les joueurs
-//   public/meche/courants.txt         les mots que les bots connaissent, du plus courant au moins courant
+//   public/meche/courants.txt         les mots que les bots connaissent, du plus courant au moins courant,
+//                                     suivis de leur forme accentuée quand elle diffère (« ecole école »)
 //   src/shared/games/meche/lettres.ts les groupes de lettres à imposer, classés par difficulté
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -64,8 +65,8 @@ const TAGS = col("Étiquettes");
 const INDEX = col("Indice de fréquence");
 
 const all = new Set<string>();
-/** Le meilleur indice de fréquence de chaque mot, sous sa forme naturelle */
-const natural = new Map<string, number>();
+/** Chaque mot sous sa forme naturelle : son meilleur indice de fréquence, et l'écriture qui le porte (avec ses accents) */
+const natural = new Map<string, { index: number; shown: string }>();
 
 for (const line of lines.slice(start + 1)) {
   const parts = line.split("\t");
@@ -73,7 +74,7 @@ for (const line of lines.slice(start + 1)) {
   const form = parts[FLEX]!;
   // Une majuscule : un nom propre ou un sigle ; autre chose que des lettres, un tiret ou une apostrophe : une unité, une formule
   if (form !== form.toLowerCase() || !/^[\p{L}’'-]+$/u.test(form)) continue;
-  if (/[Ͱ-Ͽᴀ-ᶿ]/.test(form)) continue;
+  if (/[\u0370-\u03ff\u1d00-\u1dbf]/.test(form)) continue;
   const tags = parts[TAGS]!.split(" ");
   if (BANNED_TAGS.has(tags[0]!) || BANNED_TAGS.has(tags[1]!)) continue;
   const word = normalizeWord(form);
@@ -82,7 +83,7 @@ for (const line of lines.slice(start + 1)) {
   all.add(word);
   if (isNatural(tags) && !form.includes("-") && !form.includes("’") && !isRude(word)) {
     const index = Number(parts[INDEX]);
-    if (index > (natural.get(word) ?? -1)) natural.set(word, index);
+    if (index > (natural.get(word)?.index ?? -1)) natural.set(word, { index, shown: form.normalize("NFC") });
   }
 }
 
@@ -90,9 +91,13 @@ const sorted = [...all].sort();
 writeFileSync("public/meche/mots.txt", [...NOTICE, ...sorted].join("\n") + "\n");
 
 // Les mots des bots : quatre niveaux de vocabulaire, chacun sur sa ligne de séparation « = »
-const level = (min: number, max: number) => [...natural].filter(([, i]) => i >= min && i <= max).map(([w]) => w);
+const level = (min: number, max: number) => [...natural].filter(([, n]) => n.index >= min && n.index <= max).map(([w]) => w);
 const tiers = [level(7, 9), level(6, 6), level(5, 5)];
-const common = tiers.flatMap((t, i) => [`=${i}`, ...t.sort()]);
+const line = (w: string) => {
+  const shown = natural.get(w)!.shown;
+  return shown === w ? w : `${w} ${shown}`;
+};
+const common = tiers.flatMap((t, i) => [`=${i}`, ...t.sort().map(line)]);
 writeFileSync("public/meche/courants.txt", [...NOTICE, ...common].join("\n") + "\n");
 
 // Les groupes de lettres : combien de mots courants les contiennent ?
