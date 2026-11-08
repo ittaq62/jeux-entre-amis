@@ -106,6 +106,8 @@ export const LAP_CHOICES = [2, 3, 5] as const;
 /** Le survol du circuit avant les feux, puis les trois feux */
 export const INTRO_MS = 3500;
 export const COUNTDOWN_MS = 3000;
+/** Le temps laissé à chacun pour charger la course : au-delà, les feux s'allument quand même */
+export const LOAD_MAX_MS = 25_000;
 /** Après le premier arrivé, les autres ont encore ce temps pour finir */
 export const FINISH_GRACE_MS = 30_000;
 /** Un bot qui n'a presque pas avancé pendant ce temps appelle le drone */
@@ -176,9 +178,16 @@ export interface Racer {
 export interface Race {
   settings: BolidesSettings;
   track: TrackId;
-  phase: "start" | "racing" | "over";
-  /** Le feu vert */
+  /** `loading` : on attend que le jeu de chacun ait fini de charger, les feux ne sont pas encore partis */
+  phase: "loading" | "start" | "racing" | "over";
+  /** Le feu vert (pendant le chargement : au plus tard) */
   goAt: number;
+  /** Ce qui distingue cette course d'une revanche : le feu vert, lui, n'est connu qu'une fois tout le monde prêt */
+  createdAt: number;
+  /** Les pilotes dont le jeu a fini de charger */
+  loaded: string[];
+  /** Au-delà, on n'attend plus personne */
+  loadUntil: number;
   /** Jusqu'où les bots ont été conduits */
   simAt: number;
   /** Après le premier arrivé, la fin de la course */
@@ -232,6 +241,9 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
     track: "port",
     phase: "start",
     goAt: now + INTRO_MS + COUNTDOWN_MS,
+    createdAt: now,
+    loaded: [],
+    loadUntil: now,
     simAt: now,
     endAt: null,
     allHumansAt: null,
@@ -290,6 +302,39 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
 }
 
 export const racerOf = (race: Race, id: string): Racer | undefined => race.racers.find((r) => r.id === id);
+
+/** Personne ne part tant que le jeu de chacun n'a pas fini de charger : les feux attendront */
+export function holdForLoading(race: Race, now: number) {
+  race.phase = "loading";
+  race.loaded = [];
+  race.loadUntil = now + LOAD_MAX_MS;
+  race.goAt = race.loadUntil + INTRO_MS + COUNTDOWN_MS;
+}
+
+/** Le jeu de ce pilote a fini de charger ; vrai si c'est nouveau */
+export function markLoaded(race: Race, id: string): boolean {
+  if (race.phase !== "loading" || !racerOf(race, id) || race.loaded.includes(id)) return false;
+  race.loaded.push(id);
+  return true;
+}
+
+/** Tout le monde est prêt, ou on a assez attendu (un pilote parti ou déconnecté trop longtemps est passé aux mains d'un bot) */
+export function loadingOver(race: Race, now: number): boolean {
+  return race.phase === "loading" && (now >= race.loadUntil || race.racers.every((r) => r.bot || race.loaded.includes(r.id)));
+}
+
+/** C'est parti : le survol du circuit, puis les feux, à partir de maintenant */
+export function releaseStart(race: Race, now: number) {
+  if (race.phase !== "loading") return;
+  race.phase = "start";
+  race.goAt = now + INTRO_MS + COUNTDOWN_MS;
+  race.simAt = now;
+  for (const r of race.racers) {
+    r.lapStart = race.goAt;
+    r.seen = now;
+    r.stateAt = now;
+  }
+}
 
 /** Le classement en cours : les arrivés par temps, puis les autres par distance parcourue */
 export function standings(race: Race): Racer[] {
@@ -405,7 +450,7 @@ export function reportKart(
   const r = racerOf(race, id);
   const events: BolidesEvent[] = [];
   if (!r || r.bot || race.phase === "over") return events;
-  if (race.phase === "start") {
+  if (race.phase === "start" || race.phase === "loading") {
     r.seen = now;
     return events;
   }

@@ -11,6 +11,7 @@ import { BOLIDES_SOUNDS, preloadSounds, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
+import { BolidesLoading } from "./BolidesLoading.tsx";
 import { ItemIcon } from "./ItemIcon.tsx";
 import { placeLabel, RaceRuntime, type Hud } from "./runtime.ts";
 import { faceCanvas, headCanvas } from "./scene/faces.ts";
@@ -60,6 +61,16 @@ export function kartColor(room: BolidesRoomView, id: string): string {
   return KART_COLORS[(i < 0 ? 0 : i) % KART_COLORS.length]!;
 }
 
+/** Au-delà, les pilotes dont la photo n'arrive pas gardent une étiquette sans visage */
+const FACES_LIMIT_MS = 5000;
+/** Tant que le serveur n'a pas noté qu'on est prêt, on le lui répète à ce rythme */
+const LOADED_AGAIN_MS = 1500;
+
+/** Ne pas attendre plus que ça : passé ce délai, on continue avec `fallback` */
+function withLimit<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([work, new Promise<T>((resolve) => window.setTimeout(() => resolve(fallback), ms))]);
+}
+
 /** Le temps de la cérémonie, et celui du fondu qui nous y emmène */
 const PODIUM_MS = 7000;
 const PODIUM_FADE_MS = 650;
@@ -97,7 +108,13 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const reduced = usePrefs((s) => s.reducedEffects);
   const me = room.you.seatId && g.racers.some((r) => r.id === room.you.seatId) ? room.you.seatId : null;
   // Une nouvelle course (revanche) : on reconstruit tout
-  const raceKey = `${g.track}-${g.goAt}`;
+  const raceKey = `${g.track}-${g.createdAt}`;
+  // Où en est le chargement de cette course-ci (une revanche repart de zéro)
+  const [loadState, setLoadState] = useState({ key: raceKey, share: 0, done: false, failed: false });
+  const load = loadState.key === raceKey ? loadState : { key: raceKey, share: 0, done: false, failed: false };
+  // Ce que la table est devenue pendant le chargement
+  const latest = useRef({ g, serverOffset });
+  latest.current = { g, serverOffset };
 
   useEffect(() => preloadSounds(BOLIDES_SOUNDS), []);
 
@@ -119,14 +136,22 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
 
   useEffect(() => {
     let cancelled = false;
+    let built: RaceRuntime | null = null;
+    const report = (share: number) => {
+      if (!cancelled) setLoadState({ key: raceKey, share, done: false, failed: false });
+    };
+    setHud(null);
+    report(0);
     const seats = g.racers.map((r) => room.seats.find((s) => s.id === r.id));
     // Pour chaque pilote : son visage pour l'étiquette, et la peau de sa tête en 3D (d'après son avatar)
     const avatars = g.racers.map((r, i) => seats[i]?.avatar ?? seededAvatar(r.id));
-    void Promise.all([
-      Promise.all(seats.map((s) => (s ? faceCanvas(s, 96) : Promise.resolve(null)))),
-      Promise.all(avatars.map((a) => headCanvas(a).catch(() => null))),
-    ]).then(([faces, heads]) => {
+    const prepare = async () => {
+      const [faces, heads] = await Promise.all([
+        withLimit(Promise.all(seats.map((s) => (s ? faceCanvas(s, 96) : Promise.resolve(null)))), FACES_LIMIT_MS, []),
+        Promise.all(avatars.map((a) => headCanvas(a).catch(() => null))),
+      ]);
       if (cancelled || !box.current) return;
+      report(0.06);
       const looks = g.racers.map((r, i) => ({
         color: kartColor(room, r.id),
         name: seats[i]?.name ?? "?",
@@ -137,15 +162,25 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         skin: r.skin ?? "usine",
         me: r.id === me,
       }));
-      const rt = new RaceRuntime(box.current, g, looks, serverOffset, { phone, reduced, me, send, onHud: setHud });
+      const rt = new RaceRuntime(box.current, g, looks, latest.current.serverOffset, { phone, reduced, me, send, onHud: setHud });
+      built = rt;
+      await rt.prepare((share) => report(0.06 + share * 0.94));
+      if (cancelled) return;
       runtime.current = rt;
       if (import.meta.env.DEV) (window as unknown as { __bolides?: RaceRuntime }).__bolides = rt;
+      rt.setView(latest.current.g, latest.current.serverOffset);
       listeners.current.onTick = (now, k, a, c) => rt.onTick(now, k, a, c);
       listeners.current.onEvents = (events) => rt.onEvents(events);
+      setLoadState({ key: raceKey, share: 1, done: true, failed: false });
+    };
+    prepare().catch((err: unknown) => {
+      if (cancelled) return;
+      console.error("Course impossible à préparer", err);
+      setLoadState({ key: raceKey, share: 1, done: true, failed: true });
     });
     return () => {
       cancelled = true;
-      runtime.current?.dispose();
+      built?.dispose();
       runtime.current = null;
       listeners.current = {};
     };
@@ -155,6 +190,17 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   useEffect(() => {
     runtime.current?.setView(g, serverOffset);
   }, [g, serverOffset]);
+
+  // Le jeu est prêt : on le dit au serveur, qui allume les feux quand tout le monde l'est (et on le redit au cas où le
+  // message se perdrait dans une coupure)
+  const tellLoaded = g.phase === "loading" && load.done && me !== null && !g.loaded.includes(me);
+  useEffect(() => {
+    if (!tellLoaded) return;
+    const tell = () => send({ t: "loaded", race: g.createdAt });
+    tell();
+    const again = window.setInterval(tell, LOADED_AGAIN_MS);
+    return () => window.clearInterval(again);
+  }, [tellLoaded, g.createdAt, send]);
 
   // Une seule fois par course : `g.ranking` change d'objet à chaque nouvelle de la table, pas ce booléen
   const finished = g.ranking != null;
@@ -296,7 +342,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   };
 
   const over = g.phase === "over";
-  const h = hud;
+  const loading = !over && (!load.done || load.failed || g.phase === "loading");
+  const h = loading ? null : hud;
   const showItem = g.settings.items && me !== null;
   const rollingItem = h?.rolling ? ITEM_ORDER[Math.floor(performance.now() / 90) % ITEM_ORDER.length]! : null;
 
@@ -331,7 +378,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
-                {!inTour && (
+                {/* Pas pendant le chargement : les feux attendraient quelqu'un parti regarder le salon */}
+                {!inTour && !loading && (
                   <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
@@ -367,6 +415,24 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           )}
         </AnimatePresence>
       </header>
+
+      <AnimatePresence>
+        {loading && (
+          <BolidesLoading
+            key={raceKey}
+            room={room}
+            share={load.share}
+            done={load.done}
+            failed={load.failed}
+            phone={phone}
+            me={me}
+            serverOffset={serverOffset}
+            reduced={reduced}
+            map={map}
+            onLeave={onLeave}
+          />
+        )}
+      </AnimatePresence>
 
       {g.ranking && !sheetReady && !inTour && (
         <>
@@ -569,7 +635,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </div>
       )}
 
-      {phone && me && !over && (
+      {phone && me && !over && !loading && (
         <div className="bolides-pads">
           <div className="pads-steer">
             <button

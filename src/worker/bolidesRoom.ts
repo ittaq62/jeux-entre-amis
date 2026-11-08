@@ -18,9 +18,13 @@ import {
   cupPoints,
   DEFAULT_SETTINGS,
   driveBots,
+  holdForLoading,
   LAP_CHOICES,
+  loadingOver,
+  markLoaded,
   newRace,
   racerOf,
+  releaseStart,
   reportKart,
   useItem,
   worldTick,
@@ -418,6 +422,14 @@ export class BolidesRoom extends DurableObject<Env> {
         return;
       }
 
+      case "loaded": {
+        // Son jeu est prêt : tout le monde le voit, et le prochain tic allume les feux si c'était le dernier
+        const race = d.race;
+        if (!seat || !race || d.status !== "playing" || msg.race !== race.createdAt || !markLoaded(race, seat.id)) return;
+        this.dirty = true;
+        return this.broadcast([]);
+      }
+
       case "use": {
         const race = d.race;
         if (!seat || !race || d.status !== "playing" || !this.allowMessage(`use:${userId}`, 150)) return;
@@ -677,6 +689,7 @@ export class BolidesRoom extends DurableObject<Env> {
       r.vehicle = seat?.vehicle ?? bot?.vehicle ?? "kart";
       r.skin = seat?.skin ?? bot?.skin ?? "usine";
     }
+    holdForLoading(d.race, now);
     this.memory.clear();
     d.status = "playing";
     d.startedAt = now;
@@ -708,6 +721,16 @@ export class BolidesRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    if (race.phase === "loading") {
+      if (loadingOver(race, now)) {
+        releaseStart(race, now);
+        await this.afterChange([], now);
+      } else if (this.dirty) {
+        this.dirty = false;
+        await this.persist();
+      }
+      return;
+    }
     const events = [...driveBots(race, now, this.memory), ...worldTick(race, now)];
     this.broadcastRaw({
       t: "tick",

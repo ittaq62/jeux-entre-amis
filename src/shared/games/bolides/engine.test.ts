@@ -21,8 +21,15 @@ import {
 } from "./physics.ts";
 import {
   cupPoints,
+  COUNTDOWN_MS,
   DEFAULT_SETTINGS,
   driveBots,
+  holdForLoading,
+  INTRO_MS,
+  LOAD_MAX_MS,
+  loadingOver,
+  markLoaded,
+  releaseStart,
   itemRank,
   newRace,
   racerOf,
@@ -1526,6 +1533,68 @@ describe("le drone de dépannage", () => {
       done = b.kart.rescue > 0;
     }
     expect(done).toBe(true);
+  });
+});
+
+describe("le chargement avant les feux", () => {
+  const start = () => {
+    const race = newRace(["a", "b", "bot"], new Set(["bot"]), { ...DEFAULT_SETTINGS, track: "port" }, 1000, 42);
+    holdForLoading(race, 1000);
+    return race;
+  };
+
+  it("n'allume pas les feux tant que tous les joueurs n'ont pas chargé", () => {
+    const race = start();
+    expect(race.phase).toBe("loading");
+    expect(loadingOver(race, 2000)).toBe(false);
+    expect(markLoaded(race, "a")).toBe(true);
+    expect(loadingOver(race, 2000)).toBe(false);
+    expect(markLoaded(race, "b")).toBe(true);
+    expect(loadingOver(race, 2000)).toBe(true);
+  });
+
+  it("ne compte chacun qu'une fois, et seulement les pilotes de la course", () => {
+    const race = start();
+    expect(markLoaded(race, "a")).toBe(true);
+    expect(markLoaded(race, "a")).toBe(false);
+    expect(markLoaded(race, "inconnu")).toBe(false);
+    expect(race.loaded).toEqual(["a"]);
+  });
+
+  it("n'attend pas un pilote passé aux mains d'un bot, ni personne au-delà de la limite", () => {
+    const race = start();
+    markLoaded(race, "a");
+    expect(loadingOver(race, 2000)).toBe(false);
+    racerOf(race, "b")!.bot = true;
+    expect(loadingOver(race, 2000)).toBe(true);
+    const late = start();
+    expect(loadingOver(late, 1000 + LOAD_MAX_MS - 1)).toBe(false);
+    expect(loadingOver(late, 1000 + LOAD_MAX_MS)).toBe(true);
+  });
+
+  it("donne tout le temps du survol et des feux une fois lancé, et personne n'a bougé avant", () => {
+    const race = start();
+    const mem = new Map();
+    const grid = race.racers.map((r) => ({ x: r.kart.x, z: r.kart.z }));
+    driveBots(race, 5000, mem);
+    expect(worldTick(race, 5000)).toEqual([]);
+    const moved = { ...racerOf(race, "a")!.kart, x: 999, dist: 500 };
+    reportKart(race, "a", moved, 5000);
+    expect(race.racers.map((r) => ({ x: r.kart.x, z: r.kart.z }))).toEqual(grid);
+    releaseStart(race, 8000);
+    expect(race.phase).toBe("start");
+    expect(race.goAt).toBe(8000 + INTRO_MS + COUNTDOWN_MS);
+    expect(race.racers.every((r) => r.lapStart === race.goAt)).toBe(true);
+    expect(worldTick(race, race.goAt - 1)).toEqual([]);
+    expect(worldTick(race, race.goAt).map((e) => e.type)).toContain("go");
+  });
+
+  it("garde le même numéro de course du chargement à l'arrivée", () => {
+    const race = start();
+    const id = race.createdAt;
+    releaseStart(race, 8000);
+    expect(race.createdAt).toBe(id);
+    expect(bolidesView(race).createdAt).toBe(id);
   });
 });
 

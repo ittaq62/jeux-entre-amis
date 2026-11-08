@@ -66,6 +66,19 @@ interface Puff {
 /** Les couleurs des mini-turbos, du plus petit au plus gros */
 const TURBO_COLORS = [0x45c8ff, 0xff9a2e, 0xc77dff];
 const MAX_PUFFS = 220;
+/** Au-delà, on n'attend plus la compilation des shaders */
+const COMPILE_LIMIT_MS = 6000;
+
+/** La scène a été jetée pendant qu'elle se construisait (on a quitté la course) */
+export class SceneStopped extends Error {}
+
+/** Rendre la main au navigateur, le temps d'afficher l'écran de chargement (sans attendre une image si l'onglet est caché) */
+function breathe(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+    setTimeout(resolve, 150);
+  });
+}
 
 export class RaceScene {
   readonly renderer: THREE.WebGLRenderer;
@@ -157,6 +170,7 @@ export class RaceScene {
   private frameAvg = 1 / 60;
   private resTimer = 0;
   private goodFor = 0;
+  private disposed = false;
 
   constructor(
     private container: HTMLElement,
@@ -172,7 +186,7 @@ export class RaceScene {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = this.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.className = "bolides-canvas";
 
@@ -245,14 +259,27 @@ export class RaceScene {
     this.camera.updateProjectionMatrix();
   }
 
-  /** Le circuit et les karts (dans l'ordre des pilotes de la course) */
-  build(track: Track, looks: KartLook[]) {
+  /**
+   * Le circuit et les karts (dans l'ordre des pilotes de la course), par morceaux : l'écran de chargement continue de
+   * vivre pendant ce temps. `progress` : où on en est, de 0 à 1.
+   */
+  async build(track: Track, looks: KartLook[], progress: (share: number) => void) {
+    const step = async (share: number) => {
+      progress(share);
+      await breathe();
+      if (this.disposed) throw new SceneStopped();
+    };
+    await step(0);
     this.track = track;
-    this.world = buildWorld(track, {
-      phone: this.opts.phone,
-      shadows: this.shadows,
-      anisotropy: Math.min(this.opts.phone ? 4 : 16, this.renderer.capabilities.getMaxAnisotropy()),
-    });
+    this.world = await buildWorld(
+      track,
+      {
+        phone: this.opts.phone,
+        shadows: this.shadows,
+        anisotropy: Math.min(this.opts.phone ? 4 : 16, this.renderer.capabilities.getMaxAnisotropy()),
+      },
+      (share) => step(share * 0.55),
+    );
     const mood = this.world.mood;
     this.hemi.color.setHex(mood.hemiSky);
     this.hemi.groundColor.setHex(mood.hemiGround);
@@ -262,6 +289,7 @@ export class RaceScene {
     this.scene.add(this.world.group, this.world.dome);
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
+    await step(0.6);
     this.karts = looks.map((look) => {
       const m = new KartModel({ ...look, night: Boolean(mood.stars) }, this.shadows);
       this.scene.add(m.group);
@@ -285,6 +313,7 @@ export class RaceScene {
     this.cratePos = track.boxes.map((b) => new THREE.Vector3(b.x, pointAt(track, b.s, b.d).y + 1.1, b.z));
     this.crateScale = track.boxes.map(() => 1);
     this.crateShown = track.boxes.map(() => true);
+    await step(0.68);
     // Les pièces et les engins qui traversent
     const keep = <T extends { dispose: () => void }>(x: T): T => {
       this.featureKeep.push(x);
@@ -301,26 +330,59 @@ export class RaceScene {
     this.marks = new DriftMarks(keep, this.opts.phone ? 260 : 620);
     this.trails = new TurboTrails(keep, looks.length);
     this.scene.add(this.marks.mesh, this.trails.mesh);
+    await step(0.76);
+    await this.compileShaders();
+    await step(0.92);
     this.warmUp();
+    await step(1);
   }
 
   /**
-   * Préparer tout de suite ce qui n'apparaît qu'en course (l'aile, la visée, l'hélice…) : sinon la carte graphique
-   * le découvre au pire moment, et l'image saute une fraction de seconde.
+   * Compiler d'avance tous les shaders, sans bloquer la page : sans le halo (il s'efface si l'appareil peine), puis
+   * avec. L'image ne sautera pas en découvrant une nouvelle matière pendant le survol.
+   */
+  private async compileShaders() {
+    const targets = this.composer ? [null, this.composer.renderTarget1] : [null];
+    for (const target of targets) {
+      this.renderer.setRenderTarget(target);
+      try {
+        await Promise.race([
+          this.renderer.compileAsync(this.scene, this.camera),
+          new Promise((resolve) => setTimeout(resolve, COMPILE_LIMIT_MS)),
+        ]);
+      } catch {
+        // Tant pis : ça se préparera à la première image
+      }
+      if (this.disposed) throw new SceneStopped();
+    }
+    this.renderer.setRenderTarget(null);
+  }
+
+  /**
+   * Une image de tout le circuit d'un coup, y compris ce qui n'apparaît qu'en course (l'aile, la visée, l'hélice…) :
+   * la carte graphique reçoit maintenant toutes les formes et les textures, plutôt qu'au pire moment.
    */
   private warmUp() {
     const hidden: THREE.Object3D[] = [];
+    const culled: THREE.Object3D[] = [];
     this.scene.traverse((o) => {
-      if (o.visible) return;
-      hidden.push(o);
-      o.visible = true;
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+      if (o.frustumCulled) {
+        culled.push(o);
+        o.frustumCulled = false;
+      }
     });
     try {
-      this.renderer.compile(this.scene, this.camera);
+      if (this.composer) this.composer.render(0);
+      else this.renderer.render(this.scene, this.camera);
     } catch {
       // Tant pis : ça se préparera à la première image
     }
     for (const o of hidden) o.visible = false;
+    for (const o of culled) o.frustumCulled = true;
   }
 
   /** La caméra passe sous la surface : tout devient bleu, on ne voit plus loin, et le ciel disparaît */
@@ -1320,6 +1382,7 @@ export class RaceScene {
   }
 
   dispose() {
+    this.disposed = true;
     this.resize.disconnect();
     for (const k of this.karts) k.dispose();
     this.world?.dispose();

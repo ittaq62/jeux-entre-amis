@@ -1314,3 +1314,281 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* L'écran de chargement : le circuit se dessine pendant que le jeu se prépare, et on voit qui est prêt */
+.bolides-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px calc(20px + var(--safe-bottom, 0px));
+  overflow: hidden;
+  color: #fff4dc;
+  text-align: center;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(8, 10, 22, 0.1) 20%, rgba(8, 10, 22, 0.68)),
+    linear-gradient(180deg, var(--load-top), var(--load-mid) 56%, var(--load-low));
+}
+
+.bolides-loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 640px);
+}
+
+.bolides-loading-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.bolides-loading-map {
+  flex: none;
+  width: min(30vh, 220px);
+  height: min(30vh, 220px);
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+}
+
+.bolides-loading-road {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.26);
+  stroke-width: 6;
+  stroke-linejoin: round;
+}
+
+.bolides-loading-drawn {
+  fill: none;
+  stroke: #fff4dc;
+  stroke-width: 6;
+  stroke-linejoin: round;
+  transition: stroke-dashoffset 0.3s ease-out;
+}
+
+.bolides-loading-dot {
+  fill: #e2483d;
+  stroke: #fff;
+  stroke-width: 1.8;
+  transition:
+    cx 0.3s ease-out,
+    cy 0.3s ease-out;
+}
+
+.bolides-loading-kicker {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.bolides-loading-title {
+  margin: 0;
+  font-family: var(--font-card);
+  font-size: clamp(38px, 7.6vw, 72px);
+  font-weight: 900;
+  line-height: 1;
+  color: #fff4dc;
+  -webkit-text-stroke: 2px #2a1c11;
+}
+
+.bolides-loading-bar {
+  width: min(100%, 360px);
+  height: 10px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 12, 10, 0.5);
+}
+
+.bolides-loading-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffc65a, #ff6a3d);
+  transform-origin: left;
+  transition: transform 0.3s ease-out;
+}
+
+.bolides-loading-status {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.bolides-loading-limit {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffd98a;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.bolides-loading-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bolides-loading-grid li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 4px 11px 4px 4px;
+  border-radius: 999px;
+  background: rgba(15, 12, 10, 0.55);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bolides-loading-grid li.is-ready svg:not(.avatar) {
+  color: #8dffa8;
+}
+
+.bolides-loading-grid li.is-gone {
+  opacity: 0.5;
+}
+
+.bolides-loading-grid li.is-bots {
+  padding: 4px 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.bolides-loading-name {
+  max-width: 130px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bolides-loading-wait {
+  width: 14px;
+  height: 14px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: bolides-loading-spin 0.8s linear infinite;
+}
+
+@keyframes bolides-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bolides-loading-tip {
+  max-width: 480px;
+  margin: 4px 0 0;
+  padding: 7px 14px;
+  border-radius: 12px;
+  background: rgba(15, 12, 10, 0.5);
+  font-size: 14px;
+  font-weight: 600;
+  animation: bolides-loading-tip 0.35s ease-out both;
+}
+
+@keyframes bolides-loading-tip {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.bolides-loading.is-still .bolides-loading-tip,
+.bolides-loading.is-still .bolides-loading-wait {
+  animation: none;
+}
+
+.bolides-loading.is-still .bolides-loading-drawn,
+.bolides-loading.is-still .bolides-loading-dot,
+.bolides-loading.is-still .bolides-loading-bar i {
+  transition: none;
+}
+
+/* Un téléphone couché : la carte à gauche, le reste à droite */
+@media (max-height: 480px) {
+  .bolides-loading {
+    padding: 12px 64px calc(10px + var(--safe-bottom, 0px));
+  }
+
+  .bolides-loading-inner {
+    flex-direction: row;
+    gap: 20px;
+    width: min(100%, 720px);
+  }
+
+  .bolides-loading-map {
+    width: min(58vh, 190px);
+    height: min(58vh, 190px);
+  }
+
+  .bolides-loading-text {
+    gap: 5px;
+  }
+
+  .bolides-loading-title {
+    font-size: 36px;
+    -webkit-text-stroke-width: 1.5px;
+  }
+
+  .bolides-loading-kicker,
+  .bolides-loading-tip,
+  .bolides-loading-grid li {
+    font-size: 12px;
+  }
+
+  .bolides-loading-status {
+    font-size: 15px;
+  }
+
+  .bolides-loading-grid li {
+    min-height: 32px;
+    padding: 3px 9px 3px 3px;
+  }
+
+  .bolides-loading-tip {
+    padding: 5px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bolides-loading-tip,
+  .bolides-loading-wait {
+    animation: none;
+  }
+}
+
+/* Un téléphone debout : tout doit tenir, même à huit avec de longs pseudos */
+@media (max-width: 560px) and (min-height: 481px) {
+  .bolides-loading-map {
+    width: min(20vh, 140px);
+    height: min(20vh, 140px);
+  }
+
+  .bolides-loading-grid li {
+    min-height: 32px;
+    padding: 3px 9px 3px 3px;
+    font-size: 12px;
+  }
+
+  .bolides-loading-name {
+    max-width: 88px;
+  }
+
+  .bolides-loading-tip {
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+}

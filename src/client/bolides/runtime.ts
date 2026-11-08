@@ -35,7 +35,7 @@ import { VEHICLES } from "../../shared/games/bolides/garage.ts";
 import { getTrack, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
 import type { BolidesClientMessage } from "../../shared/protocol.ts";
-import { play, vibrate, type SoundName } from "../lib/sound.ts";
+import { BOLIDES_SOUNDS, play, soundsLoaded, vibrate, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Controls } from "./controls.ts";
 import { LocalDriver } from "./driver.ts";
@@ -47,6 +47,10 @@ import { RaceScene } from "./scene/RaceScene.ts";
 
 /** Le temps que tourne la roue des objets */
 const ROLL_MS = 850;
+/** Ce que la course joue en continu : à charger avant les feux, comme les autres sons */
+const RACE_AUDIO = ["bolides-music.mp3", "bolides-engine.wav", "bolides-skid.wav"];
+/** Un réseau très lent ne retient pas la course à cause des sons : ils arriveront pendant le survol */
+const SOUNDS_LIMIT_MS = 6000;
 
 /** Ce que l'affichage tête haute montre, rafraîchi une dizaine de fois par seconde */
 export interface Hud {
@@ -179,13 +183,15 @@ export class RaceRuntime {
   private turbos = 0;
   private walls = 0;
   private disposed = false;
+  /** Le moteur tourne (pas avant que la course démarre) */
+  private engineOn = false;
   /** La cérémonie : chaque kart à sa place sur le podium, et sa place au classement (null : pas encore de cérémonie) */
   private podium: { kart: Kart; place: number }[] | null = null;
 
   constructor(
     container: HTMLElement,
     view: BolidesView,
-    looks: KartLook[],
+    private looks: KartLook[],
     serverOffset: number,
     private opts: RuntimeOptions,
   ) {
@@ -198,7 +204,6 @@ export class RaceRuntime {
     this.names = looks.map((l) => l.name);
     this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
-    this.scene.build(this.track, looks);
     this.scene.onLife = (sound, volume) =>
       play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : sound === "dive" ? "bolidesDive" : "bolidesFirework", {
         volume,
@@ -208,8 +213,28 @@ export class RaceRuntime {
     this.steers = this.shown.map(() => 0);
     this.controls = new Controls(() => this.mine >= 0);
     this.controls.autoGas = opts.phone;
-    this.takeView(view, serverOffset);
-    this.engine.start();
+  }
+
+  /** Tout préparer sans geler l'écran de chargement (le circuit, les karts, les sons), puis lancer la boucle. `progress` : de 0 à 1 */
+  async prepare(progress: (share: number) => void) {
+    let built = 0;
+    let heard = false;
+    const report = () => progress(built * 0.92 + (heard ? 0.08 : 0));
+    const sounds = Promise.race([
+      soundsLoaded(BOLIDES_SOUNDS, RACE_AUDIO),
+      new Promise((resolve) => setTimeout(resolve, SOUNDS_LIMIT_MS)),
+    ]).then(() => {
+      heard = true;
+      report();
+    });
+    await this.scene.build(this.track, this.looks, (share) => {
+      built = share;
+      report();
+    });
+    await sounds;
+    if (this.disposed) return;
+    this.takeView(this.view, this.serverOffset);
+    this.last = performance.now();
     this.frame = requestAnimationFrame(this.loop);
   }
 
@@ -520,6 +545,12 @@ export class RaceRuntime {
     // L'heure de cette image (et non celle où ce code tourne, parfois en retard) : les karts avancent avec l'image
     const now = performance.timeOrigin + t + this.serverOffset;
     const v = this.view;
+    // Tout le monde n'a pas fini de charger : rien ne bouge encore, l'écran de chargement couvre la scène
+    if (v.phase === "loading") return;
+    if (!this.engineOn) {
+      this.engineOn = true;
+      this.engine.start();
+    }
     this.interpolate(now - INTERP_MS);
     const pad = this.controls.read(dt);
     const me = this.mine >= 0 ? v.racers[this.mine] : undefined;

@@ -546,6 +546,8 @@ export type BolidesClientMessage =
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
   | { t: "start" }
+  /** Son jeu a fini de charger cette course (`race` : son `createdAt`) */
+  | { t: "loaded"; race: number }
   /** Où en est son kart, plusieurs fois par seconde, et ce qu'il a compté depuis le départ : mini-turbos, chocs contre le mur */
   | { t: "kart"; k: KartNet; n?: [number, number]; at?: number }
   /** Se servir de son objet */

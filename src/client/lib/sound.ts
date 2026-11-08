@@ -503,6 +503,11 @@ export function preloadSounds(names: SoundName[] = Object.keys(FILES) as SoundNa
   for (const name of names) for (const f of FILES[name]) void load(f);
 }
 
+/** Prêt quand ces sons et ces fichiers sont chargés (ou n'ont pas pu l'être) */
+export function soundsLoaded(names: SoundName[], files: string[] = []): Promise<void> {
+  return Promise.all([...names.flatMap((name) => FILES[name]), ...files].map((file) => load(file))).then(() => undefined);
+}
+
 let loop: { name: SoundName; source: AudioBufferSourceNode; gain: GainNode } | null = null;
 /** La boucle demandée : si on l'a coupée pendant son chargement, elle ne part pas une fois chargée */
 let wanted: SoundName | null = null;

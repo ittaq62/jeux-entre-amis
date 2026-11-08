@@ -285,7 +285,12 @@ function place(x: number, y: number, z: number, rot = 0, sx = 1, sy = 1, sz = 1)
   return m;
 }
 
-export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; anisotropy: number }): World {
+/** Le monde d'un circuit, construit par morceaux : `pause` rend la main entre deux (`share` : où on en est, de 0 à 1) */
+export async function buildWorld(
+  t: Track,
+  opts: { phone: boolean; shadows: boolean; anisotropy: number },
+  pause: (share: number) => Promise<void>,
+): Promise<World> {
   const theme = t.def.theme;
   const group = new THREE.Group();
   const disposables: { dispose: () => void }[] = [];
@@ -413,6 +418,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     group.add(new THREE.Mesh(far, groundMat));
   }
 
+  await pause(0.25);
   // La route, ses vibreurs, l'herbe du bord, le muret
   const roadTex = keep(TX.roadTexture(theme));
   roadTex.anisotropy = opts.anisotropy;
@@ -483,6 +489,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, t.gaps)), side > 0 ? footLeft : footRight));
   }
 
+  await pause(0.4);
   // La ligne d'arrivée : le damier au sol et l'arche
   const startLamps: THREE.MeshStandardMaterial[] = [];
   {
@@ -559,6 +566,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     }
   }
 
+  await pause(0.5);
   // Le décor
   const r = rng(t.n * 31 + t.def.width);
   // Au port, l'eau commence au quai, le long de la ligne droite ; et rien ne pousse à travers un tunnel ou un pont
@@ -595,8 +603,10 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   addWallBoards(ctx);
   const waveFlags = addFlags(ctx);
   addGrandstand(ctx);
+  await pause(0.6);
   // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
   const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
+  await pause(0.75);
 
   // Les montagnes tout autour, pour l'horizon (au port, le large reste ouvert)
   {
@@ -609,6 +619,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   const open = (s: number) => s < place0.tunnel[0] - 4 || s > place0.tunnel[1] + 4;
   addRunoffs(group, keep, t, theme, open);
   addSkidMarks(group, keep, t, theme, open);
+  await pause(0.88);
 
   let sea: THREE.ShaderMaterial | null = null;
   if (theme === "port") {

@@ -114,6 +114,11 @@ export interface BolidesView {
   track: TrackId;
   phase: Race["phase"];
   goAt: number;
+  /** Ce qui distingue cette course d'une revanche */
+  createdAt: number;
+  /** Pendant le chargement : ceux qui ont fini, et l'heure à laquelle on n'attend plus */
+  loaded: string[];
+  loadUntil: number;
   endAt: number | null;
   racers: RacerView[];
   /** Les karts dans l'ordre de `racers` */
@@ -131,6 +136,9 @@ export function bolidesView(race: Race): BolidesView {
     track: race.track,
     phase: race.phase,
     goAt: race.goAt,
+    createdAt: race.createdAt ?? race.goAt,
+    loaded: race.loaded ?? [],
+    loadUntil: race.loadUntil ?? 0,
     endAt: race.endAt,
     racers: race.racers.map((r) => ({
       id: r.id,
