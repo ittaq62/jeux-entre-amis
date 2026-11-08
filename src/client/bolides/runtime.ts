@@ -21,7 +21,15 @@ import {
   TURBO_TIME,
   type ItemKind,
 } from "../../shared/games/bolides/items.ts";
-import { assistSteer, CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
+import {
+  assistSteer,
+  CLASS_SPEED,
+  KART_RADIUS,
+  newKart,
+  TOP_SPEED,
+  type Kart,
+  type KartEvent,
+} from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent, type HitKind } from "../../shared/games/bolides/race.ts";
 import { VEHICLES } from "../../shared/games/bolides/garage.ts";
 import { getTrack, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
@@ -171,6 +179,8 @@ export class RaceRuntime {
   private turbos = 0;
   private walls = 0;
   private disposed = false;
+  /** La cérémonie : chaque kart à sa place sur le podium, et sa place au classement (null : pas encore de cérémonie) */
+  private podium: { kart: Kart; place: number }[] | null = null;
 
   constructor(
     container: HTMLElement,
@@ -744,7 +754,8 @@ export class RaceRuntime {
       }
     }
     const mk = this.myKart();
-    if (mk) {
+    if (this.podium) this.engine.update(0, false, false, false);
+    else if (mk) {
       this.engine.update(mk.v / TOP_SPEED, pad.gas || mk.boost > 0, mk.drift !== 0, mk.boost > 0);
       if (mk.offroad && mk.v > 6) this.scene.dust(mk);
     }
@@ -756,26 +767,32 @@ export class RaceRuntime {
     const intro = v.phase === "start" && left > COUNTDOWN_MS;
     const follow = this.mine >= 0 ? this.mine : this.leader();
     const finishedLong = me?.finish != null && now - v.goAt - me.finish > 4000;
+    const podium = this.podium;
     this.scene.render({
-      karts: this.shown.map((kart, i) => ({
-        kart,
-        steer: this.steers[i]!,
-        shield: v.racers[i]!.shieldUntil > now,
-        done: v.racers[i]!.finish !== null,
-        star: (v.racers[i]!.starUntil ?? 0) > now,
-        giant: (v.racers[i]!.giantUntil ?? 0) > now,
-        magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
-        safe: (v.racers[i]!.safeUntil ?? 0) > now,
-        under: this.track.water !== null && kart.y + kart.air < this.track.water - 0.3,
-      })),
+      karts: podium
+        ? // Sur le podium, seuls les trois premiers font la fête
+          podium.map(({ kart, place }) => ({ kart, steer: 0, shield: false, done: place < 3 }))
+        : this.shown.map((kart, i) => ({
+            kart,
+            steer: this.steers[i]!,
+            shield: v.racers[i]!.shieldUntil > now,
+            done: v.racers[i]!.finish !== null,
+            star: (v.racers[i]!.starUntil ?? 0) > now,
+            giant: (v.racers[i]!.giantUntil ?? 0) > now,
+            magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
+            safe: (v.racers[i]!.safeUntil ?? 0) > now,
+            under: this.track.water !== null && kart.y + kart.air < this.track.water - 0.3,
+          })),
       follow,
-      camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
+      camera: podium ? "podium" : intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
       introT: (now - (v.goAt - COUNTDOWN_MS - INTRO_MS)) / INTRO_MS,
       // Les feux : un rouge de plus chaque seconde du compte à rebours, puis verts deux secondes
       lights: left > COUNTDOWN_MS ? 0 : left > 0 ? Math.min(3, 4 - Math.ceil(left / 1000)) : now - v.goAt < 2000 ? 4 : 0,
       serverNow: now,
       dt,
-      fireworks: v.phase !== "start" && now > v.goAt && (me?.finish != null || (myLap >= v.settings.laps && v.settings.laps > 1)),
+      fireworks:
+        podium !== null ||
+        (v.phase !== "start" && now > v.goAt && (me?.finish != null || (myLap >= v.settings.laps && v.settings.laps > 1))),
       aim: this.aimNow(rolling),
       draft: Math.max(0, this.driver?.kart.draft ?? 0),
       lookBack: pad.look && !intro && this.mine >= 0,
@@ -785,6 +802,22 @@ export class RaceRuntime {
       this.opts.onHud(this.hud(now, intro));
     }
   };
+
+  /** La cérémonie : `order`, les pilotes du premier au dernier */
+  startPodium(order: string[]) {
+    if (this.podium || this.disposed) return;
+    const spots = this.scene.startPodium(order.length);
+    this.podium = this.view.racers.map((r, i) => {
+      const place = order.indexOf(r.id);
+      const spot = spots[place];
+      if (!spot) return { kart: this.shown[i]!, place: 99 };
+      const kart = newKart(this.track, spot.x, spot.z, spot.h);
+      kart.y = spot.y;
+      return { kart, place };
+    });
+    play("tourFanfare");
+    play("tourApplause", { volume: 0.55 });
+  }
 
   /** Où partira l'objet qu'on tient : ce que la scène montre sur la route */
   private aimNow(rolling: boolean): Aim | null {

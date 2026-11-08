@@ -110,7 +110,10 @@ function RearKart({
       <path d="M-56 -100C-54 -142-30-156 0-156S54-142 56-100Z" fill={suit} />
       <path d="M-8 -156H8L10-104H-10Z" fill="#fff" opacity={0.9} />
       <path d="M-16 -150C-10 -158 10-158 16-150L14-140H-14Z" fill="#14151b" />
-      <path d="M-36 -176C-36 -204-20-220 0-220S36-204 36-176C36-158 26-144 12-142H-12C-26-144-36-158-36-176Z" fill={`url(#bp-helmet-${id})`} />
+      <path
+        d="M-36 -176C-36 -204-20-220 0-220S36-204 36-176C36-158 26-144 12-142H-12C-26-144-36-158-36-176Z"
+        fill={`url(#bp-helmet-${id})`}
+      />
       <path d="M-12 -219.4C-13 -196-13-166-10-142.4H-3C-5-168-5-198-4-220Z" fill={stripe} />
       <path d="M12 -219.4C13 -196 13-166 10-142.4H3C5-168 5-198 4-220Z" fill={stripe} />
       <path d="M-35.4 -184C-29 -176-28-166-30-155C-34-161-36-168-36-176Z" fill="#14151b" opacity={0.9} />
@@ -161,10 +164,7 @@ function RearKart({
               d={`M${px - 10} -44C${px - 17} -22 ${px - 8} -2 ${px} 12C${px + 8} -2 ${px + 17} -22 ${px + 10} -44C${px + 5} -38 ${px - 5} -38 ${px - 10} -44Z`}
               fill="url(#bp-flame)"
             />
-            <path
-              d={`M${px - 5} -43C${px - 8} -30 ${px - 3} -20 ${px} -12C${px + 3} -20 ${px + 8} -30 ${px + 5} -43Z`}
-              fill="#fffbe6"
-            />
+            <path d={`M${px - 5} -43C${px - 8} -30 ${px - 3} -20 ${px} -12C${px + 3} -20 ${px + 8} -30 ${px + 5} -43Z`} fill="#fffbe6" />
           </g>
         </g>
       ))}
@@ -312,7 +312,14 @@ export function BolidesPreview() {
           fill="#8a4a70"
           opacity="0.92"
         />
-        <path d="M92 128c-6-14 2-22-4-34M100 126c4-12-4-20 4-32" stroke="#d8a58c" strokeWidth="5" strokeLinecap="round" fill="none" opacity="0.35" />
+        <path
+          d="M92 128c-6-14 2-22-4-34M100 126c4-12-4-20 4-32"
+          stroke="#d8a58c"
+          strokeWidth="5"
+          strokeLinecap="round"
+          fill="none"
+          opacity="0.35"
+        />
         <path d="M84 130l8-3 9 1 7 4-6 5-6-3-8 3z" fill="#ffb24a" />
         <path d="M0 216v-14l40-10 44 8 54-14 46 18 66-10 58 14 54-16 46 12 40-10 32 8v14z" fill="#54305b" />
 
@@ -427,7 +434,13 @@ export function BolidesPreview() {
           <path d="M46 154c32-4 58 12 72 48-20-24-44-40-72-48z" />
           <path d="M46 154C18 160-4 182-10 216c14-26 32-46 56-62z" />
         </g>
-        <path d="M46 154C30 116 2 96-34 92M46 154C52 112 84 86 126 88M46 154c30-26 66-30 98-6" stroke="#ffae72" strokeWidth="1.4" fill="none" opacity="0.7" />
+        <path
+          d="M46 154C30 116 2 96-34 92M46 154C52 112 84 86 126 88M46 154c30-26 66-30 98-6"
+          stroke="#ffae72"
+          strokeWidth="1.4"
+          fill="none"
+          opacity="0.7"
+        />
       </svg>
     </div>
   );

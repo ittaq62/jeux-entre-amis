@@ -52,23 +52,17 @@ function Ticket({ x, y, rot, scale, slow }: { x: number; y: number; rot: number;
   return (
     <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${scale})`}>
       <g className={slow ? "tour-preview-ticket is-slow" : "tour-preview-ticket"}>
-        <path
-          d="M-52-30H52V-11A11 11 0 0 0 52 11V30H-52V11A11 11 0 0 0-52-11Z"
-          fill="url(#tp-ticket)"
-          stroke="#8f6a2a"
-          strokeWidth="1.5"
-        />
+        <path d="M-52-30H52V-11A11 11 0 0 0 52 11V30H-52V11A11 11 0 0 0-52-11Z" fill="url(#tp-ticket)" stroke="#8f6a2a" strokeWidth="1.5" />
         <path d="M-27-25V25" stroke="#b08a48" strokeWidth="1.8" strokeDasharray="3 4" />
-        <path d="M-44-22H44V-11A11 11 0 0 0 44 11V22H-44V11A11 11 0 0 0-44-11Z" fill="none" stroke="#c9a15a" strokeWidth="1.1" opacity="0.8" />
+        <path
+          d="M-44-22H44V-11A11 11 0 0 0 44 11V22H-44V11A11 11 0 0 0-44-11Z"
+          fill="none"
+          stroke="#c9a15a"
+          strokeWidth="1.1"
+          opacity="0.8"
+        />
         <path d={badge(-35, 0, 6.5)} fill="#c8362e" />
-        <text
-          x="11"
-          y="17"
-          textAnchor="middle"
-          fontSize="48"
-          fill="#c8362e"
-          style={{ fontFamily: "var(--font-title)" }}
-        >
+        <text x="11" y="17" textAnchor="middle" fontSize="48" fill="#c8362e" style={{ fontFamily: "var(--font-title)" }}>
           ?
         </text>
       </g>
@@ -99,7 +93,12 @@ function Step({ x, w, top, n, shade }: { x: number; w: number; top: number; n: n
 export function TourPreview() {
   return (
     <div className="tour-preview">
-      <svg viewBox="0 0 480 440" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Un trophée sur un podium, au milieu d'une scène de théâtre">
+      <svg
+        viewBox="0 0 480 440"
+        preserveAspectRatio="xMidYMid slice"
+        role="img"
+        aria-label="Un trophée sur un podium, au milieu d'une scène de théâtre"
+      >
         <defs>
           <linearGradient id="tp-fold" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stopColor="#3f0a16" />
@@ -196,7 +195,10 @@ export function TourPreview() {
           <path d="M186 72H294C294 124 276 168 240 174C204 168 186 124 186 72Z" fill="url(#tp-gold)" />
           <ellipse cx="240" cy="72" rx="54" ry="10" fill="#8c5c10" />
           <ellipse cx="240" cy="72" rx="54" ry="10" fill="none" stroke="#ffeeb4" strokeWidth="2.4" />
-          <path d="M240 74.6C222 74.6 208 73.4 199 71.2C208 69 222 67.6 240 67.6S272 69 281 71.2C272 73.4 258 74.6 240 74.6Z" fill="#5c3a08" />
+          <path
+            d="M240 74.6C222 74.6 208 73.4 199 71.2C208 69 222 67.6 240 67.6S272 69 281 71.2C272 73.4 258 74.6 240 74.6Z"
+            fill="#5c3a08"
+          />
           <path d="M201 86C203 118 212 146 226 160C214 158 196 124 196 86Z" fill="#fff6d0" opacity="0.7" />
           <path d={badge(240, 118, 25)} fill="#c8862a" />
           <path d={badge(240, 118, 25)} fill="none" stroke="#fff0bc" strokeWidth="2" strokeLinejoin="round" />
@@ -234,10 +236,25 @@ export function TourPreview() {
               <path key={k} d={fold(k, mirror)} fill="url(#tp-fold)" />
             ))}
             <g transform={mirror ? "translate(480 0) scale(-1 1)" : undefined}>
-              <path d={`M-4 296C20 306 40 302 ${curtainEdge(300) + 6} 290`} stroke="#7d5310" strokeWidth="9" fill="none" strokeLinecap="round" />
-              <path d={`M-4 296C20 306 40 302 ${curtainEdge(300) + 6} 290`} stroke="url(#tp-gold-v)" strokeWidth="5.5" fill="none" strokeLinecap="round" />
+              <path
+                d={`M-4 296C20 306 40 302 ${curtainEdge(300) + 6} 290`}
+                stroke="#7d5310"
+                strokeWidth="9"
+                fill="none"
+                strokeLinecap="round"
+              />
+              <path
+                d={`M-4 296C20 306 40 302 ${curtainEdge(300) + 6} 290`}
+                stroke="url(#tp-gold-v)"
+                strokeWidth="5.5"
+                fill="none"
+                strokeLinecap="round"
+              />
               <circle cx={curtainEdge(300) + 6} cy="291" r="7.5" fill="url(#tp-gold-v)" />
-              <path d={`M${curtainEdge(300) + 1} 297L${curtainEdge(300) - 2} 322H${curtainEdge(300) + 14}L${curtainEdge(300) + 11} 297Z`} fill="url(#tp-gold-v)" />
+              <path
+                d={`M${curtainEdge(300) + 1} 297L${curtainEdge(300) - 2} 322H${curtainEdge(300) + 14}L${curtainEdge(300) + 11} 297Z`}
+                fill="url(#tp-gold-v)"
+              />
             </g>
           </g>
         ))}

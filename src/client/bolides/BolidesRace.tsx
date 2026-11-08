@@ -60,6 +60,21 @@ export function kartColor(room: BolidesRoomView, id: string): string {
   return KART_COLORS[(i < 0 ? 0 : i) % KART_COLORS.length]!;
 }
 
+/** Le temps de la cérémonie, et celui du fondu qui nous y emmène */
+const PODIUM_MS = 7000;
+const PODIUM_FADE_MS = 650;
+
+/** Ce qu'on annonce pendant la cérémonie */
+function podiumTitle(room: BolidesRoomView): string {
+  const g = room.bolides!;
+  const me = room.you.seatId;
+  const cup = room.cup?.over ? room.cup : null;
+  const first = cup ? Object.entries(cup.points).sort((a, b) => b[1] - a[1])[0]?.[0] : g.ranking?.[0];
+  const name = room.seats.find((s) => s.id === first)?.name ?? "?";
+  if (first === me) return cup ? "Tu remportes le Grand Prix !" : "Victoire !";
+  return `${name} ${cup ? "remporte le Grand Prix" : "gagne la course"} !`;
+}
+
 /** La course : la scène 3D, l'affichage tête haute, les boutons sur téléphone, et les résultats à la fin. */
 export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
   const inTour = useTourBridge() !== null;
@@ -69,6 +84,9 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const [hud, setHud] = useState<Hud | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
+  // Les résultats attendent la fin de la cérémonie (sauf si on arrive alors que la course est déjà finie)
+  const [sheetReady, setSheetReady] = useState(() => g.ranking != null);
+  const canSkip = useRef(0);
   const [phone] = useState(() => window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760);
   const sound = usePrefs((s) => s.sound);
   const engineOn = usePrefs((s) => s.bolidesEngine);
@@ -138,9 +156,47 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
     runtime.current?.setView(g, serverOffset);
   }, [g, serverOffset]);
 
+  // Une seule fois par course : `g.ranking` change d'objet à chaque nouvelle de la table, pas ce booléen
+  const finished = g.ranking != null;
   useEffect(() => {
-    if (!g.ranking) setResultsHidden(false);
-  }, [g.ranking]);
+    if (!g.ranking) {
+      setResultsHidden(false);
+      setSheetReady(false);
+      return;
+    }
+    // Arrivé alors que tout était fini (page rechargée) : pas de cérémonie. Dans une tournée non plus, elle a la sienne
+    if (sheetReady) return;
+    if (inTour) {
+      setSheetReady(true);
+      return;
+    }
+    // La cérémonie du Grand Prix suit le classement général, celle d'une course l'arrivée
+    const cupOver = room.cup?.over === true;
+    const order = cupOver
+      ? Object.entries(room.cup!.points)
+          .sort((a, b) => b[1] - a[1])
+          .map(([id]) => id)
+      : g.ranking;
+    canSkip.current = performance.now() + PODIUM_FADE_MS + 900;
+    const start = window.setTimeout(() => runtime.current?.startPodium(order), PODIUM_FADE_MS);
+    const sheet = window.setTimeout(() => setSheetReady(true), PODIUM_MS);
+    return () => {
+      window.clearTimeout(start);
+      window.clearTimeout(sheet);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
+
+  // Passer la cérémonie : une touche ou un clic, mais pas ceux qu'on donnait encore en finissant la course
+  const skipPodium = () => {
+    if (performance.now() >= canSkip.current) setSheetReady(true);
+  };
+  useEffect(() => {
+    if (!g.ranking || sheetReady) return;
+    window.addEventListener("keydown", skipPodium);
+    return () => window.removeEventListener("keydown", skipPodium);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g.ranking, sheetReady]);
 
   // La petite carte : le tracé, ramené dans un carré
   const track = getTrack(g.track);
@@ -312,10 +368,19 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </AnimatePresence>
       </header>
 
+      {g.ranking && !sheetReady && !inTour && (
+        <>
+          <div className="bolides-podium-fade" aria-hidden="true" />
+          <button className="bolides-podium" onClick={skipPodium}>
+            <span className="bolides-podium-title">{podiumTitle(room)}</span>
+            <small>{phone ? "Touche l'écran pour voir les résultats" : "Clique pour voir les résultats"}</small>
+          </button>
+        </>
+      )}
       {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : h.drafting ? "is-draft" : ""}`} aria-hidden="true" />}
       {h && <div className={`hud-pie ${h.pie ? "is-on" : ""}`} aria-hidden="true" />}
       {h && h.flash > 0 && !reduced && <div key={h.flash} className="hud-flash" aria-hidden="true" />}
-      {h && (
+      {h && !over && (
         <div className="bolides-hud" aria-live="polite">
           {me && (
             <div className="hud-place">
@@ -579,7 +644,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </div>
       )}
 
-      {g.ranking && !resultsHidden && (
+      {g.ranking && sheetReady && !resultsHidden && (
         <BolidesGameOver
           room={room}
           onRematch={() => send(room.you.isHost ? { t: "start" } : { t: "rematch" })}
@@ -589,7 +654,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           unlocks={unlocks}
         />
       )}
-      {g.ranking && resultsHidden && (
+      {g.ranking && sheetReady && resultsHidden && (
         <button className="btn btn-primary bolides-results-back" onClick={() => setResultsHidden(false)}>
           Revoir les résultats
         </button>

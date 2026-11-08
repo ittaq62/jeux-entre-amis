@@ -3,16 +3,7 @@ import { COLS, emptyGrid, ROWS, type Active } from "../../shared/games/bricks/en
 import { boardSize, drawBoard } from "./draw.ts";
 
 // Un duel, figé : à gauche, une ligne complète s'en va ; à droite, l'adversaire voit monter les lignes grises
-const MINE_BOTTOM_UP = [
-  "734411526.",
-  "655243317.",
-  "1122667541",
-  "4455.32114",
-  ".331..6625",
-  "221....425",
-  "27.....42.",
-  "2......4..",
-];
+const MINE_BOTTOM_UP = ["734411526.", "655243317.", "1122667541", "4455.32114", ".331..6625", "221....425", "27.....42.", "2......4.."];
 const THEIRS_BOTTOM_UP = [
   "88888.8888",
   "8888888.88",
@@ -39,19 +30,7 @@ function gridOf(rows: string[]) {
   return g;
 }
 
-function Board({
-  rows,
-  piece,
-  ghost,
-  cell,
-  flash,
-}: {
-  rows: string[];
-  piece: Active;
-  ghost: Active | null;
-  cell: number;
-  flash?: number;
-}) {
+function Board({ rows, piece, ghost, cell, flash }: { rows: string[]; piece: Active; ghost: Active | null; cell: number; flash?: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const { width, height } = boardSize(cell);

@@ -49,6 +49,7 @@ import {
   wrapS,
   mirrorOf,
 } from "./track.ts";
+import { raceTitles } from "./titles.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
 import { botGarage, SKIN_IDS, skinUnlocked, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "./garage.ts";
 
@@ -1572,6 +1573,50 @@ describe("le niveau des bots", () => {
       return b.kart.dist;
     };
     expect(run(true)).toBeLessThan(run(false) * 0.93);
+  });
+});
+
+describe("les titres de fin de course", () => {
+  const base = { boxes: 0, hitsGiven: 0, hitsTaken: 0, turbos: 0, walls: 0 };
+  it("donne un titre à celui qui a le plus tiré, à partir d'un minimum", () => {
+    const titles = raceTitles([
+      { id: "a", human: true, stats: { ...base, hitsGiven: 5 } },
+      { id: "b", human: true, stats: { ...base, hitsGiven: 1 } },
+    ]);
+    expect(titles).toEqual([{ id: "a", title: "Fine gâchette", detail: "5 touches" }]);
+  });
+  it("personne n'a rien fait : pas de titre", () => {
+    expect(raceTitles([{ id: "a", human: true, stats: base }])).toEqual([]);
+  });
+  it("un seul titre par pilote, le suivant va au deuxième de la catégorie", () => {
+    const titles = raceTitles([
+      { id: "a", human: true, stats: { ...base, hitsGiven: 5, turbos: 20 } },
+      { id: "b", human: true, stats: { ...base, turbos: 9 } },
+    ]);
+    expect(titles.map((t) => [t.id, t.title])).toEqual([
+      ["a", "Fine gâchette"],
+      ["b", "Roi du dérapage"],
+    ]);
+  });
+  it("trois titres au plus, et les joueurs passent avant les bots", () => {
+    const titles = raceTitles([
+      { id: "bot1", human: false, stats: { ...base, hitsGiven: 9 } },
+      { id: "bot2", human: false, stats: { ...base, turbos: 30 } },
+      { id: "bot3", human: false, stats: { ...base, hitsTaken: 8 } },
+      { id: "moi", human: true, stats: { ...base, walls: 7 } },
+    ]);
+    expect(titles).toHaveLength(3);
+    expect(titles[0]).toEqual({ id: "moi", title: "Ami des murs", detail: "7 chocs" });
+  });
+  it("à égalité, un joueur plutôt qu'un bot, et le singulier quand il faut", () => {
+    const titles = raceTitles(
+      [
+        { id: "bot", human: false, stats: { ...base, hitsTaken: 3 } },
+        { id: "moi", human: true, stats: { ...base, hitsTaken: 3 } },
+      ],
+      1,
+    );
+    expect(titles[0]?.id).toBe("moi");
   });
 });
 

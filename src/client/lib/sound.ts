@@ -337,6 +337,7 @@ export const BOLIDES_SOUNDS: SoundName[] = [
   "bolidesDive",
   "bolidesRescue",
   "tourFanfare",
+  "tourApplause",
   "tick",
 ];
 

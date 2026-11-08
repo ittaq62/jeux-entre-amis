@@ -309,7 +309,8 @@ export function HomePage() {
               )}
               <p className="game-desc">
                 Des courses de karts en 3D, de 2 à 8 pilotes : dérape dans les virages pour charger un turbo, casse les caisses pour gagner
-                des objets, vole en deltaplane et plonge sous la mer. Six circuits et des Grands Prix, au clavier, à la manette ou sur téléphone.
+                des objets, vole en deltaplane et plonge sous la mer. Six circuits et des Grands Prix, au clavier, à la manette ou sur
+                téléphone.
               </p>
               <div className="game-actions">
                 <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bolides")} disabled={busy !== null}>

@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect } from "react";
+import { raceTitles } from "../../shared/games/bolides/titles.ts";
 import { TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesRoomView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
@@ -26,7 +27,7 @@ const SPEED_NAMES = { balade: "en balade", normal: "", bolide: "à grande vitess
 const sheetIn = {
   initial: { y: 24, opacity: 0, rotate: -1.5 },
   animate: { y: 0, opacity: 1, rotate: -0.6 },
-  transition: { duration: 0.35, ease: [0.2, 0.8, 0.3, 1] as const, delay: 1.2 },
+  transition: { duration: 0.35, ease: [0.2, 0.8, 0.3, 1] as const, delay: 0.1 },
 };
 
 /** L'arrivée : le podium, les temps et le meilleur tour de chacun */
@@ -48,7 +49,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
     const t = setTimeout(() => {
       const colors = ["#e2483d", "#f2c94c", "#2f80ed", "#ffffff"];
       void confetti({ particleCount: 120, spread: 80, startVelocity: 42, origin: { y: 0.35 }, colors, scalar: 0.9 });
-    }, 1300);
+    }, 300);
     return () => clearTimeout(t);
   }, [won, cupWon, reduced]);
 
@@ -72,10 +73,11 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
       : `${winner?.name ?? "?"} remporte la course.`;
   const best = Math.min(...g.racers.map((r) => r.stats.bestLap || Infinity));
   const speed = SPEED_NAMES[g.settings.speed];
+  const titles = raceTitles(g.racers.map((r) => ({ id: r.id, human: seatOf(r.id)?.kind === "human", stats: r.stats })));
   const summary = `${TRACKS[g.track].name}, ${g.settings.laps} tours${speed ? ` ${speed}` : ""}${g.settings.items ? "" : ", sans objets"}`;
 
   return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>
+    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       <motion.div className="score-sheet paper gameover bolides-sheet" {...sheetIn}>
         {unlocks.length > 0 && <p className="bolides-unlocks">Nouveau dans ton garage : {unlocks.join(", ")} !</p>}
         <div className="gameover-head">
@@ -101,6 +103,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
           {ranking.map((id) => {
             const seat = seatOf(id);
             const r = racerOf(id);
+            const title = titles.find((t) => t.id === id);
             return (
               <li key={id} className={`${ranks[id] === 1 ? "is-winner" : ""} ${id === me ? "is-me" : ""}`}>
                 <span className="score-rank num">{ranks[id]}</span>
@@ -109,6 +112,11 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
                 <span className="score-name">
                   {seat?.name}
                   {seat?.admin && <AdminBadge />}
+                  {title && (
+                    <small className="bolides-title">
+                      {title.title} · {title.detail}
+                    </small>
+                  )}
                 </span>
                 <span className="bolides-sheet-stats">
                   <span className="num">{r?.finish != null ? raceTime(r.finish) : `${r?.laps ?? 0}/${g.settings.laps} tours`}</span>

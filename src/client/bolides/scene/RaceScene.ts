@@ -15,6 +15,7 @@ import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import { AimGuide, type Aim } from "./aim.ts";
 import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
+import { Podium, type PodiumSpot } from "./podium.ts";
 import { DriftMarks, TurboTrails } from "./trails.ts";
 import type { Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
@@ -30,7 +31,7 @@ export interface Frame {
   karts: ({ kart: Kart } & KartExtras)[];
   /** Le kart suivi par la caméra (-1 : aucun, la caméra survole la ligne de départ) */
   follow: number;
-  camera: "intro" | "chase" | "orbit";
+  camera: "intro" | "chase" | "orbit" | "podium";
   /** Où en est le survol d'avant la course, de 0 à 1 */
   introT: number;
   /** Les feux de départ sur l'arche (0 : éteints, 1 à 3 rouges, 4 : verts) */
@@ -106,6 +107,10 @@ export class RaceScene {
   private cameraUnder = false;
   private bubbleTick = 0;
   private fireworkIn = 0;
+  /** La cérémonie : le podium, depuis combien de temps il est là, et quand tombe la prochaine pluie de confettis */
+  private podium: Podium | null = null;
+  private podiumT = 0;
+  private confettiIn = 0;
   private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
   private crateMat: THREE.MeshStandardMaterial | null = null;
@@ -1089,6 +1094,17 @@ export class RaceScene {
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
     if (f.fireworks) this.launchFireworks(f.dt);
+    if (f.camera === "podium" && this.podium) {
+      this.podiumT += f.dt;
+      this.podium.update(this.time);
+      this.confettiIn -= f.dt;
+      if (this.confettiIn <= 0) {
+        this.confettiIn = 0.55;
+        const p = this.podium;
+        const across = (Math.random() - 0.5) * 11;
+        this.confetti(p.x + p.sx * across, p.y + 2.2, p.z + p.sz * across);
+      }
+    }
     // Des bulles derrière ceux qui roulent sous l'eau
     if (t.water !== null && !this.opts.reduced) {
       this.bubbleTick = (this.bubbleTick + 1) % 3;
@@ -1193,6 +1209,18 @@ export class RaceScene {
       const a = this.time * 0.3;
       pos = this.tmpPos.set(target.x + Math.cos(a) * 9, target.y + 4, target.z + Math.sin(a) * 9);
       look = this.tmpLook.set(target.x, target.y + 1, target.z);
+    } else if (f.camera === "podium" && this.podium) {
+      // Face au podium : on s'approche en glissant de côté, puis on continue de bouger un peu
+      const p = this.podium;
+      const u = Math.min(1, this.podiumT / 6);
+      const e = u * u * (3 - 2 * u);
+      const a = -0.6 + e * 0.92 + Math.sin(Math.max(0, this.podiumT - 6) * 0.28) * 0.16;
+      const r = (portrait ? 27 : 20) - e * (portrait ? 4 : 3);
+      const out = Math.cos(a) * r;
+      const across = Math.sin(a) * r;
+      pos = this.tmpPos.set(p.x + p.fx * out + p.sx * across, p.y + 3.7 - e * 1.1, p.z + p.fz * out + p.sz * across);
+      look = this.tmpLook.set(p.x, p.y + 2.4, p.z);
+      fov = portrait ? 58 : 40;
     } else {
       // Derrière le kart, assez près et assez bas pour bien le voir : le cap de la caméra suit celui du kart en
       // douceur, sa hauteur aussi (les bosses, les sauts), mais elle ne prend pas de retard quand il file
@@ -1236,6 +1264,10 @@ export class RaceScene {
     this.chasing = chase;
     this.camPos.lerp(pos, k);
     this.camLook.lerp(look, Math.min(1, k * 1.6));
+    if (f.camera === "podium") {
+      this.camPos.copy(pos);
+      this.camLook.copy(look);
+    }
     // Jamais sous le terrain
     const ground = this.world!.heightAt(this.camPos.x, this.camPos.z);
     if (this.camPos.y < ground + 1.2) this.camPos.y = ground + 1.2;
@@ -1256,6 +1288,28 @@ export class RaceScene {
     const sunAt = this.world!.mood.dir;
     this.sun.position.set(this.camLook.x + sunAt.x * 130, this.camLook.y + sunAt.y * 130, this.camLook.z + sunAt.z * 130);
     this.sun.target.position.copy(this.camLook);
+  }
+
+  /** La cérémonie commence : le podium apparaît, la route se vide. Rend la place de chacun, du premier au dernier */
+  startPodium(count: number): PodiumSpot[] {
+    const t = this.track;
+    if (!t) return [];
+    if (!this.podium) {
+      this.podium = new Podium(
+        t,
+        <T extends { dispose: () => void }>(x: T): T => {
+          this.featureKeep.push(x);
+          return x;
+        },
+        this.shadows,
+      );
+      this.scene.add(this.podium.group);
+    }
+    this.podiumT = 0;
+    this.confettiIn = 0;
+    if (this.crates) this.crates.visible = false;
+    if (this.coins) this.coins.mesh.visible = false;
+    return this.podium.spots(count);
   }
 
   /** Où est un point de la scène à l'écran (en pixels du conteneur), ou null s'il est derrière la caméra */
