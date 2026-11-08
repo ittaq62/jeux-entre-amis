@@ -494,6 +494,26 @@ export function sparkTexture(): THREE.CanvasTexture {
   return toTexture(c, false);
 }
 
+/** Une bouffée de fumée : plusieurs volutes douces, jamais un rond parfait */
+export function smokeTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 128);
+  const r = rng(29);
+  for (let i = 0; i < 26; i++) {
+    const a = r() * Math.PI * 2;
+    const d = r() * 30;
+    const x = 64 + Math.cos(a) * d;
+    const y = 64 + Math.sin(a) * d;
+    const rad = 14 + r() * 26;
+    const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+    const o = 0.16 + r() * 0.18;
+    grad.addColorStop(0, `rgba(255,255,255,${o})`);
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+  }
+  return toTexture(c, false);
+}
+
 /** Un conteneur : des nervures, des rails en haut et en bas, des coins plus sombres (teinté par la matière) */
 export function containerTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(256, 128);

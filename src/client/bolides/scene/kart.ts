@@ -26,6 +26,8 @@ export interface KartLook {
   skin: SkinId;
   /** Le kart du joueur lui-même : pas d'étiquette au-dessus */
   me: boolean;
+  /** C'est la nuit : les phares sont allumés */
+  night?: boolean;
 }
 
 /** Ce qu'on sait d'un kart à cette image, en plus de sa conduite */
@@ -172,6 +174,7 @@ export class KartModel {
   private droneOpen = 0;
   private droneRotors: THREE.Mesh | null = null;
   private droneBase = 3;
+  private beam: THREE.Mesh | null = null;
   /** La taille du véhicule (la potion géante le fait grandir, en douceur) */
   private growth = 1;
 
@@ -320,6 +323,7 @@ export class KartModel {
     this.buildWing(look.color, spec.tag + 0.15, keep);
     this.buildPropeller(spec.flames[0] ?? [0, 0.55, -1.45], keep);
     this.buildDrone(spec.tag + 1.15, keep);
+    if (look.night) this.buildLights(spec.flames[0]?.[2] ?? -1.4, keep);
     sharedBlob ??= blobTexture();
     this.blobAlpha = shadows ? 0.4 : 0.7;
     this.blobMat = keep(new THREE.MeshBasicMaterial({ map: sharedBlob, transparent: true, depthWrite: false, opacity: this.blobAlpha }));
@@ -418,6 +422,45 @@ export class KartModel {
     this.drone.position.y = y;
     this.drone.visible = false;
     this.group.add(this.drone);
+  }
+
+  /** La nuit : deux phares devant, deux feux rouges derrière, et le pinceau de lumière sur la route */
+  private buildLights(rear: number, keep: <T extends { dispose: () => void }>(x: T) => T) {
+    const lamp = keep(new THREE.SphereGeometry(0.1, 8, 6));
+    const white = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.2, 1.6) }));
+    const red = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 0.08, 0.06) }));
+    const front = Math.abs(rear) + 0.1;
+    for (const side of [-1, 1]) {
+      const a = new THREE.Mesh(lamp, white);
+      a.position.set(side * 0.45, 0.55, front);
+      const b = new THREE.Mesh(lamp, red);
+      b.position.set(side * 0.48, 0.6, rear);
+      this.tilt.add(a, b);
+    }
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 128;
+    const g = c.getContext("2d")!;
+    const grad = g.createLinearGradient(0, 128, 0, 0);
+    grad.addColorStop(0, "rgba(255,226,170,0.26)");
+    grad.addColorStop(1, "rgba(255,226,170,0)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(24, 128);
+    g.lineTo(40, 128);
+    g.lineTo(64, 0);
+    g.lineTo(0, 0);
+    g.closePath();
+    g.fill();
+    const tex = keep(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const beam = new THREE.Mesh(
+      keep(new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2).translate(0, 0.1, front + 5.5)),
+      keep(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })),
+    );
+    // Sa toile a le pied en bas : le pied doit être près du kart
+    this.group.add(beam);
+    this.beam = beam;
   }
 
   /** L'hélice, à l'arrière : elle ne sort que sous l'eau */
@@ -525,6 +568,7 @@ export class KartModel {
       this.wing.scale.set(this.wingOpen, 0.5 + 0.5 * this.wingOpen, 0.4 + 0.6 * this.wingOpen);
       this.wing.rotation.set(Math.sin(time * 5) * 0.03 + 0.32, 0, -x.steer * 0.28);
     }
+    if (this.beam) this.beam.visible = k.air < 0.6;
     // Le drone descend du ciel, porte le kart, puis repart
     const called = k.rescue > 0 ? 1 : 0;
     this.droneOpen += (called - this.droneOpen) * Math.min(1, dt * (called ? 9 : 5));

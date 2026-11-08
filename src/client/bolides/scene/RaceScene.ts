@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { BOMBE_RADIUS, hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
@@ -14,6 +15,7 @@ import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import { AimGuide, type Aim } from "./aim.ts";
 import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
+import { DriftMarks, TurboTrails } from "./trails.ts";
 import type { Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
@@ -88,6 +90,12 @@ export class RaceScene {
   private crossers: Crossers | null = null;
   private life: TrackLife | null = null;
   private aim: AimGuide | null = null;
+  private marks: DriftMarks | null = null;
+  private trails: TurboTrails | null = null;
+  /** L'image finale : le flou de vitesse (sur ordinateur) */
+  private finish: ShaderPass | null = null;
+  private speedBlur = 0;
+  private smokeTex: THREE.Texture;
   private lookingBack = false;
   /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
   private drowned: boolean[] = [];
@@ -188,6 +196,7 @@ export class RaceScene {
     this.petardGeo.rotateX(Math.PI / 2);
     this.petardMat = new THREE.MeshLambertMaterial({ color: 0xd8352a, emissive: 0x401008 });
     this.puffTex = TX.sparkTexture();
+    this.smokeTex = TX.smokeTexture();
 
     this.resize = new ResizeObserver(() => this.fit());
     this.resize.observe(container);
@@ -209,6 +218,7 @@ export class RaceScene {
       this.composer = null;
       this.bloom?.dispose();
       this.bloom = null;
+      this.finish = null;
       return;
     }
     if (this.frameAvg > 1 / 45) next = Math.max(min, this.ratio * 0.85);
@@ -248,7 +258,7 @@ export class RaceScene {
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
     this.karts = looks.map((look) => {
-      const m = new KartModel(look, this.shadows);
+      const m = new KartModel({ ...look, night: Boolean(mood.stars) }, this.shadows);
       this.scene.add(m.group);
       return m;
     });
@@ -283,6 +293,9 @@ export class RaceScene {
     this.scene.add(this.life.group);
     this.aim = new AimGuide(track, keep);
     this.scene.add(this.aim.group);
+    this.marks = new DriftMarks(keep, this.opts.phone ? 260 : 620);
+    this.trails = new TurboTrails(keep, looks.length);
+    this.scene.add(this.marks.mesh, this.trails.mesh);
     this.warmUp();
   }
 
@@ -378,6 +391,33 @@ export class RaceScene {
     const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.42, 0.55, 1.3);
     composer.addPass(bloom);
     composer.addPass(new OutputPass());
+    // La touche finale : des couleurs un peu plus franches, et l'image qui file sur les bords à grande vitesse
+    const finish = new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, uBlur: { value: 0 } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tDiffuse;
+        uniform float uBlur;
+        varying vec2 vUv;
+        void main() {
+          vec2 d = vUv - vec2(0.5, 0.52);
+          float amount = uBlur * smoothstep(0.14, 0.66, length(d));
+          vec3 color = vec3(0.0);
+          for (int i = 0; i < 8; i++) color += texture2D(tDiffuse, vUv - d * amount * (float(i) / 7.0)).rgb;
+          color /= 8.0;
+          float grey = dot(color, vec3(0.2126, 0.7152, 0.0722));
+          color = mix(vec3(grey), color, 1.09);
+          color = (color - 0.5) * 1.05 + 0.5;
+          gl_FragColor = vec4(color, 1.0);
+        }`,
+    });
+    composer.addPass(finish);
+    this.finish = finish;
     composer.setPixelRatio(this.ratio);
     composer.setSize(size.x, size.y);
     this.composer = composer;
@@ -769,6 +809,8 @@ export class RaceScene {
       sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffTex, transparent: true, depthWrite: false }));
       this.scene.add(sprite);
     }
+    // Les étincelles restent nettes ; la fumée et la poussière sont des volutes
+    sprite.material.map = heavy ? this.puffTex : this.smokeTex;
     sprite.material.color.setHex(color);
     sprite.material.opacity = alpha;
     sprite.visible = true;
@@ -1117,6 +1159,14 @@ export class RaceScene {
       this.karts[i]?.fade(blink * (i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6))));
     });
     this.setUnderwater(t.water !== null && this.camera.position.y < t.water);
+    this.marks?.update(f.karts, this.time, this.camPos);
+    this.trails?.update(f.karts, this.time, this.camPos);
+    if (this.finish) {
+      const k = f.follow >= 0 ? f.karts[f.follow]?.kart : undefined;
+      const want = !k || f.camera !== "chase" ? 0 : (k.boost > 0 ? 0.075 : 0) + Math.max(0, k.v - 24) * 0.0016 + (k.glide ? 0.02 : 0);
+      this.speedBlur += (want - this.speedBlur) * Math.min(1, f.dt * 7);
+      this.finish.uniforms.uBlur!.value = this.speedBlur;
+    }
     if (this.composer) this.composer.render(f.dt);
     else this.renderer.render(this.scene, this.camera);
   }
@@ -1231,6 +1281,7 @@ export class RaceScene {
     }
     for (const d of this.thrownParts) d.dispose();
     this.puffTex.dispose();
+    this.smokeTex.dispose();
     this.envTex?.dispose();
     this.composer?.dispose();
     this.bloom?.dispose();

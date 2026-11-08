@@ -606,40 +606,54 @@ export function addSkidMarks(group: THREE.Group, keep: Keep, t: Track, theme: Th
   group.add(new THREE.Mesh(geo, keep(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }))));
 }
 
-/** Les reflets de lumière au fond de l'eau, ajoutés au sol et à la route sous le niveau de la mer */
-export function addCaustics(mat: THREE.Material, level: number, time: { value: number }) {
+/**
+ * Ce qui se joue sur le sol et la route : l'ombre des nuages qui passent, et les reflets de lumière au fond de l'eau
+ * (sous le niveau de la mer, s'il y en a une)
+ */
+export function addSurfaceLight(mat: THREE.Material, opts: { water?: number; clouds: boolean }, time: { value: number }) {
+  const water = opts.water !== undefined;
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uCausticLevel = { value: level };
-    shader.uniforms.uCausticTime = time;
+    shader.uniforms.uSurfaceLevel = { value: opts.water ?? 0 };
+    shader.uniforms.uSurfaceTime = time;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vCausticW;")
-      .replace("#include <project_vertex>", "#include <project_vertex>\nvCausticW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSurfaceW;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvSurfaceW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
         `#include <common>
-        varying vec3 vCausticW;
-        uniform float uCausticLevel;
-        uniform float uCausticTime;
+        varying vec3 vSurfaceW;
+        uniform float uSurfaceLevel;
+        uniform float uSurfaceTime;
         float causticAt(vec2 p, float t) {
           float a = sin(p.x * 1.3 + t) + sin(p.y * 1.1 - t * 0.8);
           float b = sin((p.x + p.y) * 0.9 + t * 1.3) + sin((p.x - p.y) * 1.2 - t);
           return pow(max(1.0 - abs(a + b) * 0.5, 0.0), 4.0);
+        }
+        float cloudAt(vec2 p, float t) {
+          vec2 q = p * 0.011 + vec2(t * 0.016, t * 0.007);
+          float n = sin(q.x * 3.1 + sin(q.y * 2.3)) * sin(q.y * 2.7 + sin(q.x * 1.9));
+          return smoothstep(0.12, 0.62, n);
         }`,
       )
       .replace(
         "#include <map_fragment>",
         `#include <map_fragment>
-        if (vCausticW.y < uCausticLevel) {
-          float depthFade = clamp((uCausticLevel - vCausticW.y) / 4.0, 0.0, 1.0);
+        ${opts.clouds ? "diffuseColor.rgb *= 1.0 - 0.24 * cloudAt(vSurfaceW.xz, uSurfaceTime);" : ""}
+        ${
+          water
+            ? `if (vSurfaceW.y < uSurfaceLevel) {
+          float depthFade = clamp((uSurfaceLevel - vSurfaceW.y) / 4.0, 0.0, 1.0);
           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.72, 0.92, 1.0), depthFade);
-          float lightA = causticAt(vCausticW.xz * 1.5, uCausticTime * 1.1);
-          float lightB = causticAt(vCausticW.xz * 2.7 + 3.1, -uCausticTime * 0.8);
+          float lightA = causticAt(vSurfaceW.xz * 1.5, uSurfaceTime * 1.1);
+          float lightB = causticAt(vSurfaceW.xz * 2.7 + 3.1, -uSurfaceTime * 0.8);
           diffuseColor.rgb += (lightA * 0.11 + lightB * 0.07) * depthFade;
+        }`
+            : ""
         }`,
       );
   };
-  mat.customProgramCacheKey = () => "caustics";
+  mat.customProgramCacheKey = () => `surface-${opts.clouds}-${water}`;
 }
 
 /** La mer du lagon : turquoise là où c'est peu profond, bleue au large, de l'écume sur les plages, transparente */

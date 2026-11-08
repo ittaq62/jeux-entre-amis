@@ -9,7 +9,7 @@ import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorCont
 import { mergeDeep } from "./merge.ts";
 import { buildScenery, PLACES } from "./scenery.ts";
 import {
-  addCaustics,
+  addSurfaceLight,
   addGrass,
   addGroundShadows,
   addMountains,
@@ -416,7 +416,15 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   // La route, ses vibreurs, l'herbe du bord, le muret
   const roadTex = keep(TX.roadTexture(theme));
   roadTex.anisotropy = opts.anisotropy;
-  const road = new THREE.Mesh(keep(ribbon(t, -t.half, t.half, 0.06, 8, 1, t.gaps)), keep(lambert(0xffffff, roadTex)));
+  // Sur ordinateur, le bitume accroche un peu la lumière du soleil
+  const road = new THREE.Mesh(
+    keep(ribbon(t, -t.half, t.half, 0.06, 8, 1, t.gaps)),
+    keep(
+      opts.phone
+        ? lambert(0xffffff, roadTex)
+        : new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.78, metalness: 0, envMapIntensity: 0.2 }),
+    ),
+  );
   road.receiveShadow = opts.shadows;
   group.add(road);
   const curbTex = keep(TX.curbTexture(theme));
@@ -427,13 +435,52 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     const b = side * (t.half + 1.2);
     group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3, 1, t.gaps)), curbMat));
   }
+  const wallHeight = theme === "col" ? 1.1 : 0.9;
+  const capMat = keep(
+    lambert(
+      theme === "col"
+        ? 0xf4f7fa
+        : theme === "vignes"
+          ? 0x6b4426
+          : theme === "dunes"
+            ? 0xdcb98a
+            : theme === "lagon"
+              ? 0xc9ab66
+              : theme === "volcan"
+                ? 0xff7a1f
+                : 0xdad9d4,
+    ),
+  );
+  const footShade = (toRight: boolean) => {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 4;
+    const g = c.getContext("2d")!;
+    const grad = g.createLinearGradient(0, 0, 64, 0);
+    grad.addColorStop(toRight ? 0 : 1, "rgba(0,0,0,0)");
+    grad.addColorStop(toRight ? 1 : 0, "rgba(0,0,0,0.42)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 4);
+    const tex = keep(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return keep(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  };
+  const footLeft = footShade(true);
+  const footRight = footShade(false);
   const wallTex = keep(TX.wallTexture(theme));
   wallTex.wrapT = THREE.RepeatWrapping;
   const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide }));
   for (const side of [-1, 1]) {
-    const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), theme === "col" ? 1.1 : 0.9, heightAt)), wallMat);
+    const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), wallHeight, heightAt)), wallMat);
     wall.castShadow = false;
     group.add(wall);
+    // Le dessus du muret, pour qu'il ait de l'épaisseur
+    const at = side * (t.wall + 0.4);
+    group.add(new THREE.Mesh(keep(ribbon(t, at - 0.32, at + 0.32, wallHeight, 3, 1, t.gaps)), capMat));
+    // Et l'ombre douce à son pied : le muret se pose vraiment sur le sol
+    const inner = side > 0 ? at - 2.4 : at;
+    const outer = side > 0 ? at : at + 2.4;
+    group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, t.gaps)), side > 0 ? footLeft : footRight));
   }
 
   // La ligne d'arrivée : le damier au sol et l'arche
@@ -876,13 +923,18 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     sea.position.y = t.water;
     sea.renderOrder = 2;
     group.add(sea);
-    for (const m of [groundMat, road.material as THREE.Material, curbMat, wallMat]) addCaustics(m, t.water, caustic);
   } else if (theme === "volcan") {
     liquid = lavaMaterial(keep);
     const lava = new THREE.Mesh(keep(new THREE.PlaneGeometry(3400, 3400)), liquid);
     lava.rotation.x = -Math.PI / 2;
     lava.position.y = -1.2;
     group.add(lava);
+  }
+
+  // L'ombre des nuages sur le sol et la route, les reflets de lumière au fond de l'eau
+  const surface = { water: t.water ?? undefined, clouds: !mood.stars };
+  if (surface.clouds || surface.water !== undefined) {
+    for (const m of [groundMat, road.material as THREE.Material, curbMat]) addSurfaceLight(m, surface, caustic);
   }
 
   const horizon = mood.horizon;
