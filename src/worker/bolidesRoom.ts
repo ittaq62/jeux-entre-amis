@@ -46,7 +46,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
-import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { TOUR_BOT_LEVELS, TOUR_GUEST_PREFIX, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -877,16 +877,21 @@ export class BolidesRoom extends DurableObject<Env> {
         };
       });
       if (d.tour) {
+        // Les bots invités pour ce seul jeu courent, mais ne prennent la place de personne au classement de la tournée
+        const counted = race.racers
+          .map((r, i) => ({ r, p: players[i]! }))
+          .filter(({ r }) => !r.id.startsWith(TOUR_GUEST_PREFIX))
+          .sort((a, b) => a.p.rank - b.p.rank);
         await reportToTour(this.env, d.tour.code, {
           code: d.code,
           index: d.tour.index,
           game: "bolides",
-          seats: players.length,
-          // Un bot de la tournée se reconnaît à son id de siège
-          players: race.racers.map((r, i) => ({
-            userId: players[i]!.userId ?? r.id,
-            rank: players[i]!.rank,
-            stats: { ...players[i]!.stats },
+          seats: counted.length,
+          // Un bot de la tournée se reconnaît à son id de siège ; les places se comptent entre membres de la tournée
+          players: counted.map(({ r, p }, i) => ({
+            userId: p.userId ?? r.id,
+            rank: i === 0 || counted[i - 1]!.p.rank !== p.rank ? i + 1 : counted.findIndex((c) => c.p.rank === p.rank) + 1,
+            stats: { ...p.stats },
           })),
         });
       }

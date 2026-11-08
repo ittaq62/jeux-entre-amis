@@ -29,6 +29,8 @@ import {
   teamScores,
   TOUR_BOT_NAMES,
   TOUR_GAMES,
+  TOUR_GUEST_PREFIX,
+  drawBolidesBots,
   TOUR_MAX_PLAYERS,
   TOUR_MIN_PLAYERS,
   TOUR_TEAMS,
@@ -135,6 +137,22 @@ interface Attachment {
   userId: string;
   user: PublicUser;
 }
+
+const BOLIDES_GUEST_NAMES = [
+  "Paulette",
+  "Fernand",
+  "Germaine",
+  "Odette",
+  "Roger",
+  "Yvette",
+  "Maurice",
+  "Lucette",
+  "Albert",
+  "Mireille",
+  "Gaston",
+  "Marcel",
+  "Simone",
+];
 
 /** Une tournée : la bande, le programme tiré au hasard, les points, et une table de jeu créée pour chaque jeu. */
 export class TourRoom extends DurableObject<Env> {
@@ -907,6 +925,7 @@ export class TourRoom extends DurableObject<Env> {
         return await this.afterChange();
       }
       let game = d.next.game;
+      let botNote = "";
       // Les règles : déjà retenues, ou la plus votée au moment du départ
       let variant =
         d.next.variant ??
@@ -931,6 +950,28 @@ export class TourRoom extends DurableObject<Env> {
           this.systemChat(`${extra.map((m) => m.name).join(", ")} regarde ce jeu-ci et jouera le suivant en priorité.`);
         }
       }
+      // Bolides en règles tirées au sort : le nombre de bots aussi. On prend d'abord ceux de la tournée (au hasard), puis
+      // des invités d'un soir, qui courent mais ne comptent pas au classement de la tournée
+      let guests: { id: string; name: string; avatar: AvatarConfig }[] = [];
+      if (game === "bolides" && d.settings.rules === "random") {
+        const humans = players.filter((m) => m.kind === "human");
+        const own = players.filter((m) => m.kind === "bot");
+        for (let i = own.length - 1; i > 0; i--) {
+          const j = Math.floor(random(d) * (i + 1));
+          [own[i], own[j]] = [own[j]!, own[i]!];
+        }
+        const count = drawBolidesBots(humans.length, GAME_SEATS.bolides.max, () => random(d));
+        players = [...humans, ...own.slice(0, count)];
+        const used = new Set(d.members.map((m) => m.name));
+        const names = BOLIDES_GUEST_NAMES.filter((n) => !used.has(n));
+        guests = names.slice(0, Math.max(0, count - own.length)).map((name, i) => ({
+          id: `${TOUR_GUEST_PREFIX}${d.games.length + 1}-${i}`,
+          name,
+          avatar: seededAvatar(`${name}-${d.code}-${d.games.length}`),
+        }));
+        const total = players.length - humans.length + guests.length;
+        botNote = total === 0 ? ", sans aucun bot" : total === 1 ? ", avec un bot" : `, avec ${total} bots`;
+      }
       const index = d.games.length + 1;
       const code = await this.hub.allocateCode();
       // Le 2 contre 2 de la bataille navale et de Briques se joue avec les équipes de la tournée
@@ -948,7 +989,7 @@ export class TourRoom extends DurableObject<Env> {
           photo: m.photo,
           ...(m.admin ? { admin: true as const } : {}),
         }));
-      const bots = players.filter((m) => m.kind === "bot").map((m) => ({ id: m.userId, name: m.name, avatar: m.avatar }));
+      const bots = [...players.filter((m) => m.kind === "bot").map((m) => ({ id: m.userId, name: m.name, avatar: m.avatar })), ...guests];
       await gameStub(this.env, game, code).init({
         code,
         host: users[0]!,
@@ -979,7 +1020,7 @@ export class TourRoom extends DurableObject<Env> {
       this.systemChat(
         d.settings.rules === "base" || !rulesName
           ? `Jeu ${index} : ${GAME_NAMES[game]} !`
-          : `Jeu ${index} : ${GAME_NAMES[game]}, règles « ${rulesName} » !`,
+          : `Jeu ${index} : ${GAME_NAMES[game]}, règles « ${rulesName} »${botNote} !`,
       );
       await this.afterChange();
     } catch (err) {

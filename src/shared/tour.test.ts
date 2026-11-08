@@ -25,6 +25,7 @@ import {
   tourPoints,
   tourTitles,
   type TitleCandidate,
+  drawBolidesBots,
 } from "./tour.ts";
 
 describe("barème", () => {
@@ -253,5 +254,35 @@ describe("règles des jeux", () => {
     for (let i = 0; i < 40; i++) {
       expect(["pioche", "sept-zero"]).toContain(resolveVariant("uno", { a: "pioche", b: "sept-zero" }, ["a", "b"], rand));
     }
+  });
+});
+
+describe("Bolides en règles tirées au sort", () => {
+  const seq = (...v: number[]) => {
+    let i = 0;
+    return () => v[i++ % v.length]!;
+  };
+
+  it("ne dépasse jamais la grille, et laisse parfois la course sans bot", () => {
+    for (let humans = 1; humans <= 8; humans++) {
+      const seen = new Set<number>();
+      for (let k = 0; k < 400; k++) {
+        const n = drawBolidesBots(humans, 8, Math.random);
+        expect(n).toBeGreaterThanOrEqual(humans >= 2 ? 0 : 1);
+        expect(humans + n).toBeLessThanOrEqual(8);
+        seen.add(n);
+      }
+      if (humans >= 2 && humans < 8) expect(seen.has(0)).toBe(true);
+      if (humans <= 5) expect(seen.size).toBeGreaterThan(2);
+    }
+  });
+
+  it("un joueur seul a toujours au moins un adversaire", () => {
+    expect(drawBolidesBots(1, 8, seq(0))).toBe(1);
+    expect(drawBolidesBots(1, 8, seq(0.999))).toBe(7);
+  });
+
+  it("une grille déjà pleine n'en prend aucun", () => {
+    expect(drawBolidesBots(8, 8, seq(0.5))).toBe(0);
   });
 });

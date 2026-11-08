@@ -102,6 +102,21 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
 /** Les bots de la tournée : ils gardent leur nom d'un jeu à l'autre */
 export const TOUR_BOT_NAMES = ["Gaston", "Ginette", "Marcel", "Josiane", "Raymond", "Huguette", "Lucien", "Simone"];
 
+/** Les bots invités d'un seul jeu : ils ne sont pas membres de la tournée et n'y marquent aucun point */
+export const TOUR_GUEST_PREFIX = "invite-";
+
+/**
+ * Bolides en règles tirées au sort : le nombre de bots aussi. Parfois aucun (s'il y a au moins deux joueurs), sinon
+ * de un jusqu'à remplir la grille.
+ */
+export function drawBolidesBots(humans: number, maxSeats: number, random: () => number): number {
+  const room = Math.max(0, maxSeats - humans);
+  const least = humans >= 2 ? 0 : 1;
+  if (room <= least) return Math.min(room, least);
+  if (least === 0 && random() < 0.3) return 0;
+  return 1 + Math.floor(random() * room);
+}
+
 export const TOUR_TEAMS = ["Rouges", "Bleus"] as const;
 export const TOUR_TEAM_COLORS = ["#d4453c", "#3f7fd8"] as const;
 
