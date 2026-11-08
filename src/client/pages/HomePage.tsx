@@ -207,7 +207,7 @@ export function HomePage() {
         {games.includes("bricks") && (
           <section className="home-game home-game-bricks panel" aria-label="Briques">
             <div className="game-stage is-lacquer" aria-hidden="true">
-              <BricksPreview cell={14} />
+              <BricksPreview cell={17} />
             </div>
             <div className="game-sheet">
               <h2 className="game-name is-bricks">Briques</h2>
