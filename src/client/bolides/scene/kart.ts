@@ -36,6 +36,9 @@ export interface KartExtras {
   done: boolean;
   /** Sous l'arc-en-ciel */
   star?: boolean;
+  /** La potion géante, l'aimant */
+  giant?: boolean;
+  magnet?: boolean;
 }
 
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
@@ -154,6 +157,9 @@ export class KartModel {
   private spinner: THREE.Group | null = null;
   private radii: number[] = [];
   private leanNow = 0;
+  private magnetRing!: THREE.Mesh;
+  /** La taille du véhicule (la potion géante le fait grandir, en douceur) */
+  private growth = 1;
 
   constructor(look: KartLook, shadows: boolean) {
     const keep = <T extends { dispose: () => void }>(x: T): T => {
@@ -278,6 +284,22 @@ export class KartModel {
     this.shield.position.y = spec.shield[1];
     this.shield.visible = false;
     this.body.add(this.shield);
+    // L'aimant : un anneau bleu qui tourne autour du véhicule
+    this.magnetRing = new THREE.Mesh(
+      keep(new THREE.TorusGeometry(spec.shield[0] * 0.95, 0.07, 8, 40)),
+      keep(
+        new THREE.MeshBasicMaterial({
+          color: 0x58c6ff,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      ),
+    );
+    this.magnetRing.position.y = spec.shield[1];
+    this.magnetRing.visible = false;
+    this.body.add(this.magnetRing);
     this.body.position.y = -spec.pivot;
     this.tilt.add(this.body);
     this.group.add(this.tilt);
@@ -379,6 +401,10 @@ export class KartModel {
     if (star) this.paint.emissive.setHSL((time * 1.8) % 1, 0.95, 0.42);
     else if (this.starShown) this.paint.emissive.setHex(0x000000);
     this.starShown = star;
+    this.growth += ((x.giant ? 1.8 : 1) - this.growth) * Math.min(1, dt * 5);
+    this.group.scale.setScalar(this.growth);
+    this.magnetRing.visible = Boolean(x.magnet);
+    if (x.magnet) this.magnetRing.rotation.set(Math.PI / 2 + Math.sin(time * 3) * 0.3, Math.cos(time * 2) * 0.3, time * 4);
     this.shield.visible = x.shield;
     if (x.shield) (this.shield.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(time * 6) * 0.06;
     // Le pilote : penché dans le virage, plus fort en dérapage

@@ -94,7 +94,13 @@ export type SoundName =
   | "bolidesCharge"
   | "bolidesCoin"
   | "bolidesBox"
-  | "bolidesBump";
+  | "bolidesBump"
+  | "bolidesStrike"
+  | "bolidesSplat"
+  | "bolidesThunder"
+  | "bolidesGrow"
+  | "bolidesMagnet"
+  | "bolidesThrow";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -193,6 +199,12 @@ const FILES: Record<SoundName, string[]> = {
   bolidesCoin: ["bolides-coin.wav"],
   bolidesBox: ["bolides-box.wav"],
   bolidesBump: ["bolides-bump.wav"],
+  bolidesStrike: ["bolides-strike.wav"],
+  bolidesSplat: ["bolides-splat.wav"],
+  bolidesThunder: ["bolides-thunder.wav"],
+  bolidesGrow: ["bolides-grow.wav"],
+  bolidesMagnet: ["bolides-magnet.wav"],
+  bolidesThrow: ["bolides-throw.wav"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -291,6 +303,12 @@ export const BOLIDES_SOUNDS: SoundName[] = [
   "bolidesCoin",
   "bolidesBox",
   "bolidesBump",
+  "bolidesStrike",
+  "bolidesSplat",
+  "bolidesThunder",
+  "bolidesGrow",
+  "bolidesMagnet",
+  "bolidesThrow",
   "tourFanfare",
   "tick",
 ];
@@ -394,6 +412,12 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   bolidesCoin: 0.4,
   bolidesBox: 0.45,
   bolidesBump: 0.5,
+  bolidesStrike: 0.6,
+  bolidesSplat: 0.6,
+  bolidesThunder: 0.7,
+  bolidesGrow: 0.5,
+  bolidesMagnet: 0.4,
+  bolidesThrow: 0.45,
 };
 
 let ctx: AudioContext | null = null;

@@ -7,9 +7,23 @@ import { random } from "../../rng.ts";
 import { VEHICLES, type SkinId, type VehicleId } from "./garage.ts";
 import { BOT_STYLE, botDrive, newBotMemory, type BotLevel, type BotMemory } from "./bot.ts";
 import {
+  AIMANT_MS,
+  AIMANT_RADIUS,
+  AIMANT_STEAL,
   ARC_MS,
   ARC_RADIUS,
   ARC_SPEED,
+  BOMBE_AHEAD,
+  BOMBE_RADIUS,
+  BOWLING_RADIUS,
+  BOWLING_SPEED,
+  GEANT_MS,
+  GEANT_RADIUS,
+  GEANT_SPEED,
+  PIE_MS,
+  RESSORT_VY,
+  TARTE_RANGE,
+  tarteDist,
   BOX_RADIUS,
   BOX_RESPAWN_MS,
   fuseeDist,
@@ -46,7 +60,7 @@ import {
   type KartEvent,
   type SpeedClass,
 } from "./physics.ts";
-import { getTrack, gridSlot, locate, TRACK_IDS, type Track, type TrackId } from "./track.ts";
+import { getTrack, gridSlot, locate, pointAt, TRACK_IDS, type Track, type TrackId } from "./track.ts";
 
 export interface BolidesSettings {
   /** Le circuit, ou un tirage au sort à chaque course */
@@ -112,6 +126,12 @@ export interface Racer {
   coins: number;
   /** L'arc-en-ciel : jusqu'à quand */
   starUntil: number;
+  /** La potion géante, l'aimant, la crème sur l'écran : jusqu'à quand */
+  giantUntil: number;
+  magnetUntil: number;
+  pieUntil: number;
+  /** Le dernier moment où l'aimant a volé une pièce */
+  stoleAt: number;
   /** Son véhicule et son skin */
   vehicle: VehicleId;
   skin: SkinId;
@@ -142,7 +162,7 @@ export interface Race {
 }
 
 /** Ce qui peut faire partir un kart en tête-à-queue */
-export type HitKind = "huile" | "petard" | "klaxon" | "fusee" | "arc";
+export type HitKind = "huile" | "petard" | "klaxon" | "fusee" | "arc" | "bowling" | "geant" | "orage" | "bombe";
 
 export type BolidesEvent =
   | { type: "go" }
@@ -152,6 +172,12 @@ export type BolidesEvent =
   | { type: "gone"; hazard: number; why: "hit" | "time" | "klaxon" }
   | { type: "hit"; id: string; by: string | null; kind: HitKind }
   | { type: "shield"; id: string }
+  /** Une tarte en pleine figure */
+  | { type: "pie"; id: string; by: string | null }
+  /** Une bombe qui saute, ici */
+  | { type: "blast"; x: number; z: number; by: string }
+  /** La foudre tombe sur ce pilote */
+  | { type: "bolt"; id: string }
   | { type: "lap"; id: string; lap: number; ms: number }
   | { type: "finish"; id: string; place: number; ms: number }
   | { type: "over" };
@@ -207,6 +233,10 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
       finish: null,
       coins: 0,
       starUntil: 0,
+      giantUntil: 0,
+      magnetUntil: 0,
+      pieUntil: 0,
+      stoleAt: 0,
       vehicle: "kart",
       skin: "usine",
       stats: emptyStats(),
@@ -262,9 +292,10 @@ function pickups(race: Race, r: Racer, ax: number, az: number, now: number, even
   // Les pièces (même sans objets) : comptées ici, elles voyagent avec les positions, sans évènement
   race.coins ??= t.coins.map(() => 0);
   if (r.kart.air < 1.2) {
+    const reach = (r.magnetUntil ?? 0) > now ? AIMANT_RADIUS : COIN_RADIUS + KART_RADIUS * 0.6;
     for (const coin of t.coins) {
       if (race.coins[coin.index]! > now) continue;
-      if (!sweptHit(ax, az, r.kart.x, r.kart.z, coin.x, coin.z, COIN_RADIUS + KART_RADIUS * 0.6)) continue;
+      if (!sweptHit(ax, az, r.kart.x, r.kart.z, coin.x, coin.z, reach)) continue;
       race.coins[coin.index] = now + COIN_RESPAWN_MS;
       r.coins = Math.min(COIN_MAX, (r.coins ?? 0) + 1);
     }
@@ -372,6 +403,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
         (r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r)) *
         (1 + COIN_SPEED * (r.coins ?? 0)) *
         (star ? ARC_SPEED : 1) *
+        ((r.giantUntil ?? 0) > at ? GEANT_SPEED : 1) *
         stats.top;
       step(r.kart, plan.input, t, { top, time: at / 1000, star, vehicle: stats }, kev);
       for (const e of kev) {
@@ -389,7 +421,14 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
         const ra = race.racers[a]!;
         const rb = race.racers[b]!;
         if (ra.bot || rb.bot)
-          bump(ra.kart, rb.kart, ra.bot, rb.bot, VEHICLES[ra.vehicle ?? "kart"].stats.weight, VEHICLES[rb.vehicle ?? "kart"].stats.weight);
+          bump(
+            ra.kart,
+            rb.kart,
+            ra.bot,
+            rb.bot,
+            VEHICLES[ra.vehicle ?? "kart"].stats.weight * ((ra.giantUntil ?? 0) > race.simAt ? 4 : 1),
+            VEHICLES[rb.vehicle ?? "kart"].stats.weight * ((rb.giantUntil ?? 0) > race.simAt ? 4 : 1),
+          );
       }
     }
   }
@@ -399,8 +438,8 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
 /** Un coup : le bouclier l'arrête, sinon le kart part en tête-à-queue (chez un joueur, c'est son navigateur qui l'applique) */
 function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: number, events: BolidesEvent[]) {
   if (victim.finish !== null) return;
-  // Sous l'arc-en-ciel, rien ne touche
-  if ((victim.starUntil ?? 0) > now) return;
+  // Sous l'arc-en-ciel ou la potion géante, rien ne touche
+  if ((victim.starUntil ?? 0) > now || (victim.giantUntil ?? 0) > now) return;
   if (victim.shieldUntil > now) {
     victim.shieldUntil = 0;
     events.push({ type: "shield", id: victim.id });
@@ -462,6 +501,80 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
     }
   } else if (kind === "arc") {
     r.starUntil = now + ARC_MS;
+  } else if (kind === "bowling") {
+    const hazard: Hazard = {
+      id: ++race.seq,
+      kind: "bowling",
+      s0: k.s + 4,
+      d0: Math.max(-t.half + 1.3, Math.min(t.half - 1.3, k.d)),
+      speed: Math.max(BOWLING_SPEED, k.v + 10),
+      side: random(race) < 0.5 ? -1 : 1,
+      owner: id,
+      at: now,
+      struck: [],
+    };
+    race.hazards.push(hazard);
+    events.push({ type: "hazard", hazard });
+  } else if (kind === "tarte") {
+    // Le kart le plus proche devant, sinon derrière, à portée
+    let best: Racer | null = null;
+    let bestGap = Infinity;
+    for (const o of race.racers) {
+      if (o === r || o.finish !== null) continue;
+      const gap = o.kart.dist - k.dist;
+      const score = gap > 0 ? gap : -gap + 60;
+      if (Math.abs(gap) <= TARTE_RANGE && score < bestGap) {
+        best = o;
+        bestGap = score;
+      }
+    }
+    if (best) {
+      const hazard: Hazard = {
+        id: ++race.seq,
+        kind: "tarte",
+        dist0: k.dist,
+        dir: best.kart.dist >= k.dist ? 1 : -1,
+        target: best.id,
+        owner: id,
+        at: now,
+      };
+      race.hazards.push(hazard);
+      events.push({ type: "hazard", hazard });
+    }
+  } else if (kind === "ressort") {
+    // Chez un joueur, son navigateur l'a déjà fait sauter
+    if (r.bot) {
+      k.vy = RESSORT_VY;
+      k.air = Math.max(k.air, 0.05);
+      k.trick = false;
+    }
+  } else if (kind === "geant") {
+    r.giantUntil = now + GEANT_MS;
+  } else if (kind === "orage") {
+    // Tous ceux qui sont devant
+    for (const o of race.racers) {
+      if (o === r || o.finish !== null || o.kart.dist <= k.dist) continue;
+      events.push({ type: "bolt", id: o.id });
+      hit(race, o, id, "orage", now, events);
+    }
+  } else if (kind === "aimant") {
+    r.magnetUntil = now + AIMANT_MS;
+  } else if (kind === "bombe") {
+    const landS = k.s + BOMBE_AHEAD;
+    const landD = Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d));
+    const hazard: Hazard = {
+      id: ++race.seq,
+      kind: "bombe",
+      x0: k.x,
+      z0: k.z,
+      y0: k.y + k.air + 1.2,
+      s: landS,
+      d: landD,
+      owner: id,
+      at: now,
+    };
+    race.hazards.push(hazard);
+    events.push({ type: "hazard", hazard });
   } else if (kind === "bouclier") {
     r.shieldUntil = now + SHIELD_MS;
   } else if (kind === "klaxon") {
@@ -495,20 +608,74 @@ export function worldTick(race: Race, now: number): BolidesEvent[] {
   }
   if (race.phase !== "racing") return events;
   const t = trackOf(race);
-  // Sous l'arc-en-ciel, on renverse ceux qu'on touche
   for (const r of race.racers) {
-    if ((r.starUntil ?? 0) <= now || r.finish !== null) continue;
-    for (const o of race.racers) {
-      if (o === r || o.finish !== null || o.kart.spin > 0) continue;
-      if (Math.hypot(o.kart.x - r.kart.x, o.kart.z - r.kart.z) > ARC_RADIUS) continue;
-      hit(race, o, r.id, "arc", now, events);
+    if (r.finish !== null) continue;
+    // Sous l'arc-en-ciel on renverse ceux qu'on touche, avec la potion géante on les écrase
+    const star = (r.starUntil ?? 0) > now;
+    const giant = (r.giantUntil ?? 0) > now;
+    if (star || giant) {
+      for (const o of race.racers) {
+        if (o === r || o.finish !== null || o.kart.spin > 0) continue;
+        if (Math.hypot(o.kart.x - r.kart.x, o.kart.z - r.kart.z) > (giant ? GEANT_RADIUS : ARC_RADIUS)) continue;
+        hit(race, o, r.id, giant ? "geant" : "arc", now, events);
+      }
+    }
+    // L'aimant vole une pièce à celui qu'on frôle, une fois par seconde
+    if ((r.magnetUntil ?? 0) > now && now - (r.stoleAt ?? 0) > 1000) {
+      for (const o of race.racers) {
+        if (o === r || (o.coins ?? 0) <= 0 || Math.hypot(o.kart.x - r.kart.x, o.kart.z - r.kart.z) > AIMANT_STEAL) continue;
+        o.coins -= 1;
+        r.coins = Math.min(COIN_MAX, (r.coins ?? 0) + 1);
+        r.stoleAt = now;
+        break;
+      }
     }
   }
   // Les pièges : chacun touche le premier kart qui passe dessus, puis disparaît
   race.hazards = race.hazards.filter((hz) => {
     const pos = hazardPos(t, hz, now);
     if (!pos) {
+      // La bombe saute à la fin de sa mèche : tout ce qui est autour part en tête-à-queue
+      if (hz.kind === "bombe") {
+        const at = pointAt(t, hz.s, hz.d);
+        events.push({ type: "blast", x: at.x, z: at.z, by: hz.owner });
+        for (const r of race.racers) {
+          if (r.finish === null && r.kart.air < 2 && Math.hypot(r.kart.x - at.x, r.kart.z - at.z) <= BOMBE_RADIUS)
+            hit(race, r, hz.owner, "bombe", now, events);
+        }
+      }
       events.push({ type: "gone", hazard: hz.id, why: "time" });
+      return false;
+    }
+    // La bombe attend de sauter (elle ne touche personne avant)
+    if (hz.kind === "bombe") return true;
+    if (hz.kind === "bowling") {
+      // Elle ne s'arrête pas : chacun n'est renversé qu'une fois
+      for (const r of race.racers) {
+        if (r.finish !== null || r.kart.spin > 0 || r.kart.air > 1.4 || hz.struck.includes(r.id)) continue;
+        if (r.id === hz.owner && now - hz.at < 1200) continue;
+        if (Math.hypot(r.kart.x - pos.x, r.kart.z - pos.z) > BOWLING_RADIUS + KART_RADIUS) continue;
+        hz.struck.push(r.id);
+        hit(race, r, hz.owner, "bowling", now, events);
+      }
+      return true;
+    }
+    if (hz.kind === "tarte") {
+      const target = racerOf(race, hz.target);
+      if (!target || target.finish !== null) {
+        events.push({ type: "gone", hazard: hz.id, why: "time" });
+        return false;
+      }
+      if (hz.dir * (tarteDist(hz, now) - target.kart.dist) < 0) return true;
+      if (target.shieldUntil > now) {
+        target.shieldUntil = 0;
+        events.push({ type: "shield", id: target.id });
+      } else if ((target.starUntil ?? 0) <= now && (target.giantUntil ?? 0) <= now) {
+        target.pieUntil = now + PIE_MS;
+        target.kart.v *= 0.7;
+        events.push({ type: "pie", id: target.id, by: hz.owner });
+      }
+      events.push({ type: "gone", hazard: hz.id, why: "hit" });
       return false;
     }
     if (hz.kind === "fusee") {

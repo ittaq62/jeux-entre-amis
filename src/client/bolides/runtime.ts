@@ -3,9 +3,20 @@
 // l'affichage tête haute. Une boucle par image, en dehors de React.
 
 import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
-import { ARC_SPEED, BOX_RADIUS, COIN_RADIUS, COIN_SPEED, fuseeDist, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
+import {
+  AIMANT_RADIUS,
+  ARC_SPEED,
+  BOMBE_RADIUS,
+  BOX_RADIUS,
+  COIN_RADIUS,
+  COIN_SPEED,
+  fuseeDist,
+  GEANT_SPEED,
+  TURBO_TIME,
+  type ItemKind,
+} from "../../shared/games/bolides/items.ts";
 import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
-import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
+import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent, type HitKind } from "../../shared/games/bolides/race.ts";
 import { VEHICLES } from "../../shared/games/bolides/garage.ts";
 import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
@@ -36,6 +47,12 @@ export interface Hud {
   wrongWay: boolean;
   /** Une fusée vient vers soi */
   rocket: boolean;
+  /** De la crème sur l'écran */
+  pie: boolean;
+  /** Le fil de la course : ce qui vient de se passer, en quelques mots */
+  feed: { key: number; text: string; mine: boolean }[];
+  /** Un flash blanc à l'écran (la foudre) : change de numéro à chaque éclair */
+  flash: number;
   stuck: boolean;
   speed: number;
   /** Ses pièces (dix au plus) */
@@ -102,6 +119,12 @@ export class RaceRuntime {
   private beep: number | null = null;
   /** Le bip d'alerte d'une fusée qui arrive : la prochaine fois qu'il sonne */
   private rocketBeepAt = 0;
+  /** Le fil de la course, le nom de chacun, le premier actuel (pour annoncer qui prend la tête) */
+  private feed: { key: number; text: string; mine: boolean; until: number }[] = [];
+  private feedSeq = 0;
+  private names: string[] = [];
+  private leaderNow: number | null = null;
+  private flash = 0;
   private rollingUntil = 0;
   private banner: Hud["banner"] = null;
   private bannerSeq = 0;
@@ -126,6 +149,7 @@ export class RaceRuntime {
     this.track = getTrack(view.track);
     this.ids = view.racers.map((r) => r.id);
     this.colors = looks.map((l) => l.color);
+    this.names = looks.map((l) => l.name);
     this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
     this.scene.build(this.track, looks);
@@ -207,6 +231,15 @@ export class RaceRuntime {
             if (at) this.scene.ring(at.x, at.y, at.z);
           } else if (e.item === "petard" || e.item === "fusee") this.near(e.id, "torpedo", e.item === "fusee" ? 1 : 0.8);
           else if (e.item === "arc") this.near(e.id, "tourFanfare", 0.6);
+          else if (e.item === "geant") {
+            this.near(e.id, "bolidesGrow", 1);
+            this.tell(e.id === meId ? "Tu deviens énorme !" : `${this.nameOf(e.id)} devient énorme !`, e.id === meId);
+          } else if (e.item === "aimant") this.near(e.id, "bolidesMagnet", 0.8);
+          else if (e.item === "bowling" || e.item === "tarte" || e.item === "bombe") this.near(e.id, "bolidesThrow", 0.9);
+          else if (e.item === "orage") {
+            play("bolidesThunder");
+            this.tell(e.id === meId ? "Tu déchaînes l'orage !" : `${this.nameOf(e.id)} déchaîne l'orage !`, e.id === meId);
+          } else if (e.item === "ressort" && e.id !== meId) this.near(e.id, "bolidesJump", 0.6);
           else if (e.item === "huile") this.near(e.id, "splash", 0.6);
           else if (e.item === "bouclier") this.near(e.id, "pop", 0.8);
           else if (e.id !== meId) this.near(e.id, "wild", 0.5);
@@ -220,9 +253,39 @@ export class RaceRuntime {
             }
           }
           break;
+        case "pie": {
+          if (e.id === meId) {
+            if (this.driver) this.driver.kart.v *= 0.7;
+            play("bolidesSplat");
+            vibrate(40);
+          } else this.near(e.id, "bolidesSplat", 0.6);
+          this.tell(
+            e.by === meId
+              ? `Tarte en pleine figure pour ${this.nameOf(e.id)} !`
+              : e.id === meId
+                ? `${this.nameOf(e.by)} t'a entarté !`
+                : `${this.nameOf(e.by)} entarte ${this.nameOf(e.id)}`,
+            e.id === meId || e.by === meId,
+          );
+          break;
+        }
+        case "blast": {
+          const y = locate(this.track, e.x, e.z).y;
+          this.scene.explosion(e.x, y, e.z, BOMBE_RADIUS);
+          this.nearAt(e.x, e.z, "mecheBoom", 1);
+          break;
+        }
+        case "bolt": {
+          const at = this.kartOf(e.id);
+          if (at) this.scene.bolt(at.x, at.y + at.air, at.z);
+          if (e.id === meId) this.flash++;
+          break;
+        }
         case "hit": {
+          this.tellHit(e.id, e.by, e.kind);
           const at = this.kartOf(e.id);
           if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard" || e.kind === "fusee");
+          if (e.kind === "bowling") this.near(e.id, "bolidesStrike", 1);
           if (e.id === meId) {
             this.driver?.hit();
             this.scene.shake(0.7);
@@ -257,6 +320,37 @@ export class RaceRuntime {
     }
   }
 
+  private nameOf(id: string | null): string {
+    const i = id ? this.ids.indexOf(id) : -1;
+    return i >= 0 ? this.names[i]! : "Quelqu'un";
+  }
+
+  /** Une ligne de plus dans le fil de la course */
+  private tell(text: string, mine: boolean) {
+    this.feed.push({ key: ++this.feedSeq, text, mine, until: performance.now() + 4200 });
+    if (this.feed.length > 4) this.feed.shift();
+  }
+
+  private tellHit(id: string, by: string | null, kind: HitKind) {
+    const meId = this.opts.me;
+    const how: Record<HitKind, string> = {
+      huile: "dans sa flaque",
+      petard: "au pétard",
+      klaxon: "au klaxon",
+      fusee: "à la fusée",
+      arc: "à l'arc-en-ciel",
+      bowling: "au bowling",
+      geant: "en l'écrasant",
+      orage: "à la foudre",
+      bombe: "à la bombe",
+    };
+    if (!by || by === id)
+      this.tell(id === meId ? "Tu glisses sur ta propre flaque !" : `${this.nameOf(id)} se piège tout seul`, id === meId);
+    else if (id === meId) this.tell(`${this.nameOf(by)} t'a eu ${how[kind]}`, true);
+    else if (by === meId) this.tell(`Tu as eu ${this.nameOf(id)} ${how[kind]}`, true);
+    else this.tell(`${this.nameOf(by)} a eu ${this.nameOf(id)} ${how[kind]}`, false);
+  }
+
   private announce(text: string) {
     this.banner = { text, key: ++this.bannerSeq };
   }
@@ -268,6 +362,13 @@ export class RaceRuntime {
     const d = me && at ? Math.hypot(me.x - at.x, me.z - at.z) : 0;
     const v = volume * Math.max(0.15, 1 - d / 90);
     play(name, { volume: v });
+  }
+
+  /** Un son qui vient d'un endroit précis : plus faible s'il est loin */
+  private nearAt(x: number, z: number, name: SoundName, volume: number) {
+    const me = this.myKart();
+    const d = me ? Math.hypot(me.x - x, me.z - z) : 0;
+    play(name, { volume: volume * Math.max(0.2, 1 - d / 110) });
   }
 
   private kartOf(id: string): Kart | null {
@@ -395,18 +496,25 @@ export class RaceRuntime {
         const others = this.shown.filter((_, i) => i !== this.mine);
         // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur), l'arc-en-ciel beaucoup
         const star = (me.starUntil ?? 0) > now;
+        const giant = (me.giantUntil ?? 0) > now;
         d.top =
           CLASS_SPEED[v.settings.speed] *
           (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0)) *
           (star ? ARC_SPEED : 1) *
+          (giant ? GEANT_SPEED : 1) *
           VEHICLES[me.vehicle ?? "kart"].stats.top;
-        const weights = v.racers.filter((_, i) => i !== this.mine).map((r) => VEHICLES[r.vehicle ?? "kart"].stats.weight);
-        events = d.update(dt, input, others, now / 1000, star, weights);
+        const weights = v.racers
+          .filter((_, i) => i !== this.mine)
+          .map((r) => VEHICLES[r.vehicle ?? "kart"].stats.weight * ((r.giantUntil ?? 0) > now ? 4 : 1));
+        events = d.update(dt, input, others, now / 1000, star, weights, giant ? 4 : 1);
         if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
             play("bolidesTurbo", { volume: 1, rate: 0.95 });
             this.scene.punch(8);
+          } else if (me.item === "ressort") {
+            d.spring();
+            play("bolidesJump", { rate: 0.85 });
           }
           this.opts.send({ t: "use" });
         }
@@ -415,7 +523,8 @@ export class RaceRuntime {
         if (me.finish === null && d.kart.air < 1.2) {
           this.track.coins.forEach((c, i) => {
             if (this.coinTaken.has(i) || (this.coinMine.get(i) ?? -1e9) > now - 1500) return;
-            if (Math.hypot(c.x - d.kart.x, c.z - d.kart.z) < COIN_RADIUS + KART_RADIUS * 0.6) {
+            const reach = (me.magnetUntil ?? 0) > now ? AIMANT_RADIUS : COIN_RADIUS + KART_RADIUS * 0.6;
+            if (Math.hypot(c.x - d.kart.x, c.z - d.kart.z) < reach) {
               this.coinMine.set(i, now);
               this.scene.coinSparkle(c.x, d.kart.y + 1, c.z);
               play("bolidesCoin", { rate: 0.95 + Math.min(10, this.coinCounts[this.mine] ?? 0) * 0.03 });
@@ -527,6 +636,8 @@ export class RaceRuntime {
         shield: v.racers[i]!.shieldUntil > now,
         done: v.racers[i]!.finish !== null,
         star: (v.racers[i]!.starUntil ?? 0) > now,
+        giant: (v.racers[i]!.giantUntil ?? 0) > now,
+        magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
       })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
@@ -561,6 +672,13 @@ export class RaceRuntime {
       .map((r, i) => ({ i, fin: r.finish, dist: this.shown[i]!.dist }))
       .sort((a, b) => (a.fin !== null && b.fin !== null ? a.fin - b.fin : a.fin !== null ? -1 : b.fin !== null ? 1 : b.dist - a.dist));
     const place = this.mine >= 0 ? order.findIndex((o) => o.i === this.mine) + 1 : 0;
+    // Qui mène : on l'annonce quand ça change (une fois la course lancée)
+    const leader = order[0]?.i ?? null;
+    if (leader !== null && leader !== this.leaderNow) {
+      if (this.leaderNow !== null && now - v.goAt > 6000)
+        this.tell(leader === this.mine ? "Tu prends la tête !" : `${this.names[leader]} prend la tête !`, leader === this.mine);
+      this.leaderNow = leader;
+    }
     const left = v.goAt - now;
     const lap = mk ? Math.min(v.settings.laps, Math.max(1, Math.floor(Math.max(0, mk.dist) / L) + 1)) : 1;
     return {
@@ -578,6 +696,9 @@ export class RaceRuntime {
       finished: me?.finish != null ? { place: v.ranks?.[me.id] ?? place, ms: me.finish } : null,
       wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
       rocket: Boolean(me && me.finish === null && v.hazards.some((h) => h.kind === "fusee" && h.target === me.id)),
+      pie: Boolean(me && (me.pieUntil ?? 0) > now),
+      feed: this.feed.filter((l) => l.until > performance.now()),
+      flash: this.flash,
       stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
       speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
       coins: this.mine >= 0 ? (this.coinCounts[this.mine] ?? me?.coins ?? 0) : 0,

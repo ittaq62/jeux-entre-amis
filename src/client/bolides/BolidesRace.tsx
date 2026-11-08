@@ -28,7 +28,23 @@ interface Props {
   onLeave: () => void;
 }
 
-const ITEM_ORDER = ["turbo", "huile", "petard", "bouclier", "fusee", "klaxon", "turbo3", "arc"] as const;
+const ITEM_ORDER = [
+  "turbo",
+  "tarte",
+  "huile",
+  "bowling",
+  "petard",
+  "bombe",
+  "bouclier",
+  "fusee",
+  "klaxon",
+  "ressort",
+  "turbo3",
+  "aimant",
+  "arc",
+  "geant",
+  "orage",
+] as const;
 
 /** Un temps de course : 1:23.4 */
 export function raceTime(ms: number): string {
@@ -228,6 +244,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
       </header>
 
       {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : ""}`} aria-hidden="true" />}
+      {h && <div className={`hud-pie ${h.pie ? "is-on" : ""}`} aria-hidden="true" />}
+      {h && h.flash > 0 && !reduced && <div key={h.flash} className="hud-flash" aria-hidden="true" />}
       {h && (
         <div className="bolides-hud" aria-live="polite">
           {me && (
@@ -251,6 +269,15 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
             <div className={`hud-coins ${h.coins >= 10 ? "is-full" : ""}`} aria-label={`${h.coins} pièces`}>
               <span className="hud-coin" aria-hidden="true" />
               <span className="num">{h.coins}</span>
+            </div>
+          )}
+          {h.feed.length > 0 && (
+            <div className="hud-feed">
+              {h.feed.map((l) => (
+                <div key={l.key} className={`hud-feed-line ${l.mine ? "is-mine" : ""}`}>
+                  {l.text}
+                </div>
+              ))}
             </div>
           )}
           <div className="hud-lap">

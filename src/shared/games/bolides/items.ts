@@ -5,9 +5,40 @@
 
 import { pointAt, type Track } from "./track.ts";
 
-export type ItemKind = "turbo" | "turbo3" | "huile" | "petard" | "bouclier" | "klaxon" | "fusee" | "arc";
+export type ItemKind =
+  | "turbo"
+  | "turbo3"
+  | "huile"
+  | "petard"
+  | "bouclier"
+  | "klaxon"
+  | "fusee"
+  | "arc"
+  | "bowling"
+  | "tarte"
+  | "ressort"
+  | "geant"
+  | "orage"
+  | "aimant"
+  | "bombe";
 
-export const ITEM_KINDS: ItemKind[] = ["turbo", "turbo3", "huile", "petard", "bouclier", "klaxon", "fusee", "arc"];
+export const ITEM_KINDS: ItemKind[] = [
+  "turbo",
+  "turbo3",
+  "huile",
+  "petard",
+  "bouclier",
+  "klaxon",
+  "fusee",
+  "arc",
+  "bowling",
+  "tarte",
+  "ressort",
+  "geant",
+  "orage",
+  "aimant",
+  "bombe",
+];
 
 export const ITEM_NAMES: Record<ItemKind, string> = {
   turbo: "Turbo",
@@ -18,6 +49,13 @@ export const ITEM_NAMES: Record<ItemKind, string> = {
   klaxon: "Klaxon",
   fusee: "Fusée",
   arc: "Arc-en-ciel",
+  bowling: "Boule de bowling",
+  tarte: "Tarte à la crème",
+  ressort: "Ressort",
+  geant: "Potion géante",
+  orage: "Orage",
+  aimant: "Aimant",
+  bombe: "Bombe",
 };
 
 export const ITEM_HINTS: Record<ItemKind, string> = {
@@ -29,10 +67,33 @@ export const ITEM_HINTS: Record<ItemKind, string> = {
   klaxon: "Fait tourner tous les karts autour de toi et balaie les pièges",
   fusee: "File le long de la route, au-dessus de tout le monde, et va frapper le premier",
   arc: "Quelques secondes plus vite, sans craindre l'herbe ni les coups ; ceux que tu touches partent en tête-à-queue",
+  bowling: "Roule devant toi en zigzag et renverse tout le monde sur son passage",
+  tarte: "Vole vers le kart le plus proche et lui couvre l'écran de crème",
+  ressort: "Un grand saut quand tu veux, par-dessus les pièges (et une figure en l'air !)",
+  geant: "Te rend énorme quelques secondes : tu écrases tout ce que tu touches",
+  orage: "La foudre frappe tous ceux qui sont devant toi",
+  aimant: "Attire les pièces autour de toi et en vole à ceux que tu frôles",
+  bombe: "Se lance devant toi et explose peu après : gare à qui se trouve autour",
 };
 
 /** Le nombre d'utilisations d'un objet */
-export const ITEM_USES: Record<ItemKind, number> = { turbo: 1, turbo3: 3, huile: 1, petard: 1, bouclier: 1, klaxon: 1, fusee: 1, arc: 1 };
+export const ITEM_USES: Record<ItemKind, number> = {
+  turbo: 1,
+  turbo3: 3,
+  huile: 1,
+  petard: 1,
+  bouclier: 1,
+  klaxon: 1,
+  fusee: 1,
+  arc: 1,
+  bowling: 1,
+  tarte: 1,
+  ressort: 1,
+  geant: 1,
+  orage: 1,
+  aimant: 1,
+  bombe: 1,
+};
 
 /** Le turbo d'un objet, en secondes */
 export const TURBO_TIME = 1.3;
@@ -55,6 +116,31 @@ export const FUSEE_MS = 22_000;
 export const ARC_MS = 6000;
 export const ARC_SPEED = 1.18;
 export const ARC_RADIUS = 2.4;
+/** La boule de bowling : sa vitesse le long de la route, de côté (elle rebondit d'un bord à l'autre), sa durée, sa taille */
+export const BOWLING_SPEED = 38;
+export const BOWLING_SIDE = 7;
+export const BOWLING_MS = 5000;
+export const BOWLING_RADIUS = 1.5;
+/** La tarte : sa vitesse, sa portée (en mètres de course), et ce qu'elle dure sur l'écran de celui qu'elle touche */
+export const TARTE_SPEED = 62;
+export const TARTE_RANGE = 110;
+export const TARTE_MS = 4500;
+export const PIE_MS = 4000;
+/** La vitesse de décollage du ressort */
+export const RESSORT_VY = 12;
+/** La potion géante : sa durée, la vitesse en plus, la distance à laquelle elle écrase */
+export const GEANT_MS = 7000;
+export const GEANT_SPEED = 1.08;
+export const GEANT_RADIUS = 3.4;
+/** L'aimant : sa durée, le rayon où il attire les pièces, et la distance à laquelle il en vole */
+export const AIMANT_MS = 8000;
+export const AIMANT_RADIUS = 9;
+export const AIMANT_STEAL = 6;
+/** La bombe : où elle retombe devant le kart, le temps en l'air, le moment où elle saute, et le rayon de l'explosion */
+export const BOMBE_AHEAD = 32;
+export const BOMBE_FLY_MS = 800;
+export const BOMBE_MS = 2000;
+export const BOMBE_RADIUS = 8.5;
 /** Une caisse prise revient au bout de ce temps */
 export const BOX_RESPAWN_MS = 3000;
 /** Les pièces : dix au plus, chacune donne un peu de vitesse de pointe ; on en perd trois quand on est touché */
@@ -67,9 +153,12 @@ export const BOX_RADIUS = 1.5;
 
 // Les chances de chaque objet, selon qu'on est en tête, au milieu ou derrière
 const TABLES: [number, Partial<Record<ItemKind, number>>][] = [
-  [0.25, { huile: 36, bouclier: 26, petard: 24, turbo: 14 }],
-  [0.7, { petard: 28, turbo: 24, huile: 12, bouclier: 12, klaxon: 14, arc: 6, fusee: 4 }],
-  [1.01, { turbo3: 24, turbo: 14, petard: 18, klaxon: 18, arc: 14, fusee: 12 }],
+  [0.25, { huile: 24, bouclier: 18, petard: 16, turbo: 10, tarte: 14, bombe: 10, aimant: 8 }],
+  [
+    0.7,
+    { petard: 14, turbo: 14, huile: 6, bouclier: 8, klaxon: 8, tarte: 12, bowling: 10, bombe: 8, ressort: 6, aimant: 6, arc: 4, fusee: 4 },
+  ],
+  [1.01, { turbo3: 20, turbo: 8, petard: 6, klaxon: 8, bowling: 12, tarte: 4, ressort: 4, arc: 12, geant: 12, fusee: 10, orage: 6 }],
 ];
 
 /** L'objet tiré dans une caisse ; `rank` : 0 en tête, 1 dernier */
@@ -84,8 +173,43 @@ export function drawItem(rank: number, rand: () => number): ItemKind {
   return entries[0]![0];
 }
 
-/** Un piège sur la route : une flaque posée, un pétard qui file, ou une fusée lancée vers le premier */
+/** Un piège sur la route : une flaque posée, un pétard qui file, une fusée lancée vers le premier, une boule qui roule, une tarte qui vole, une bombe */
 export type Hazard =
+  | {
+      id: number;
+      kind: "bowling";
+      s0: number;
+      d0: number;
+      /** Sa vitesse le long de la route, et de quel côté elle part */
+      speed: number;
+      side: number;
+      owner: string;
+      at: number;
+      /** Ceux qu'elle a déjà renversés (elle ne s'arrête pas pour autant) */
+      struck: string[];
+    }
+  | {
+      id: number;
+      kind: "tarte";
+      dist0: number;
+      /** Vers l'avant (1) ou l'arrière (-1) de la course */
+      dir: number;
+      target: string;
+      owner: string;
+      at: number;
+    }
+  | {
+      id: number;
+      kind: "bombe";
+      /** D'où elle part, et où elle retombe */
+      x0: number;
+      z0: number;
+      y0: number;
+      s: number;
+      d: number;
+      owner: string;
+      at: number;
+    }
   | {
       id: number;
       kind: "fusee";
@@ -111,6 +235,30 @@ export type Hazard =
 /** Où est un piège à cet instant (null : il a fini sa course) */
 export function hazardPos(t: Track, hz: Hazard, now: number): { x: number; z: number; y: number; h: number } | null {
   if (hz.kind === "huile") return now - hz.at > OIL_MS ? null : { x: hz.x, z: hz.z, y: 0, h: 0 };
+  if (hz.kind === "bowling") {
+    const age = Math.max(0, now - hz.at);
+    if (age > BOWLING_MS) return null;
+    return posOf(t, hz.s0 + (hz.speed * age) / 1000, bounceBetween(hz.d0 + (hz.side * BOWLING_SIDE * age) / 1000, t.half - 1.3));
+  }
+  if (hz.kind === "tarte") {
+    const age = Math.max(0, now - hz.at);
+    if (age > TARTE_MS) return null;
+    const p = posOf(t, tarteDist(hz, now), 0);
+    return { ...p, y: p.y + 2.4 };
+  }
+  if (hz.kind === "bombe") {
+    const age = Math.max(0, now - hz.at);
+    if (age > BOMBE_MS) return null;
+    const land = pointAt(t, hz.s, hz.d);
+    if (age >= BOMBE_FLY_MS) return { x: land.x, z: land.z, y: land.y + 0.55, h: 0 };
+    const f = age / BOMBE_FLY_MS;
+    return {
+      x: hz.x0 + (land.x - hz.x0) * f,
+      z: hz.z0 + (land.z - hz.z0) * f,
+      y: hz.y0 + (land.y + 0.55 - hz.y0) * f + Math.sin(f * Math.PI) * 7,
+      h: f * 9,
+    };
+  }
   if (hz.kind === "fusee") {
     const age = Math.max(0, now - hz.at);
     if (age > FUSEE_MS) return null;
@@ -121,6 +269,18 @@ export function hazardPos(t: Track, hz: Hazard, now: number): { x: number; z: nu
   const age = now - hz.at;
   if (age > PETARD_MS || age < 0) return age < 0 ? { ...posOf(t, hz.s0, hz.d) } : null;
   return posOf(t, hz.s0 + (hz.speed * age) / 1000, hz.d);
+}
+
+/** Une valeur qui rebondit entre -edge et +edge (la boule de bowling d'un bord à l'autre de la route) */
+export function bounceBetween(v: number, edge: number): number {
+  const span = edge * 4;
+  const u = (((v + edge) % span) + span) % span;
+  return u <= 2 * edge ? u - edge : 3 * edge - u;
+}
+
+/** Où en est une tarte, en distance de course */
+export function tarteDist(hz: Extract<Hazard, { kind: "tarte" }>, now: number): number {
+  return hz.dist0 + (hz.dir * TARTE_SPEED * Math.max(0, now - hz.at)) / 1000;
 }
 
 /** Où en est une fusée, en distance de course */

@@ -90,6 +90,82 @@
   }
 }
 
+/* La crème sur l'écran : de gros paquets blancs, qui s'en vont doucement */
+.hud-pie {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1s ease;
+  background:
+    radial-gradient(ellipse 34% 30% at 30% 40%, #fffaf0 62%, transparent 66%),
+    radial-gradient(ellipse 30% 36% at 66% 34%, #fff6e6 60%, transparent 64%),
+    radial-gradient(ellipse 26% 24% at 52% 66%, #fffaf0 60%, transparent 64%),
+    radial-gradient(ellipse 18% 22% at 14% 72%, #fff3df 60%, transparent 64%),
+    radial-gradient(ellipse 16% 18% at 86% 70%, #fffaf0 60%, transparent 64%);
+}
+
+.hud-pie.is-on {
+  opacity: 0.93;
+  transition: opacity 0.08s ease;
+}
+
+/* L'éclair : un flash blanc, très court */
+.hud-flash {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  pointer-events: none;
+  background: #eef6ff;
+  animation: hud-flash 0.4s ease-out forwards;
+}
+
+@keyframes hud-flash {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Le fil de la course : ce qui vient de se passer */
+.hud-feed {
+  position: absolute;
+  top: calc(176px + var(--safe-top, 0px));
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: min(46vw, 420px);
+}
+
+.hud-feed-line {
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(15, 12, 10, 0.55);
+  font-size: 15px;
+  font-weight: 600;
+  animation: hud-feed-in 0.25s ease-out;
+}
+
+.hud-feed-line.is-mine {
+  background: rgba(216, 53, 42, 0.82);
+}
+
+@keyframes hud-feed-in {
+  from {
+    opacity: 0;
+    translate: -14px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
 /* L'affichage tête haute */
 .bolides-hud {
   position: absolute;
@@ -556,6 +632,17 @@
 .is-phone .hud-coin {
   width: 18px;
   height: 18px;
+}
+
+.is-phone .hud-feed {
+  top: calc(132px + var(--safe-top, 0px));
+  left: 12px;
+  max-width: 52vw;
+}
+
+.is-phone .hud-feed-line {
+  font-size: 12px;
+  padding: 3px 9px;
 }
 
 .is-phone .hud-place span {

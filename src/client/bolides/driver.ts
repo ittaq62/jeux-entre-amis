@@ -4,6 +4,7 @@
 // retard, le ferait avancer par à-coups.
 
 import { VEHICLES, type VehicleStats } from "../../shared/games/bolides/garage.ts";
+import { RESSORT_VY } from "../../shared/games/bolides/items.ts";
 import { bump, DT, newKart, SPIN_TIME, step, type Input, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
 import { deltaS, pointAt, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 
@@ -34,7 +35,7 @@ export class LocalDriver {
 
   /** Avance de `dt` secondes ; `others` : les autres karts tels qu'on les voit (on ne pousse que le sien) */
   /** `time` : l'heure du serveur en secondes (les engins qui traversent la route en dépendent) */
-  update(dt: number, input: Input, others: Kart[], time?: number, star = false, weights?: number[]): KartEvent[] {
+  update(dt: number, input: Input, others: Kart[], time?: number, star = false, weights?: number[], myWeight = 1): KartEvent[] {
     const events: KartEvent[] = [];
     this.acc = Math.min(this.acc + dt, 0.25);
     while (this.acc >= DT) {
@@ -43,7 +44,7 @@ export class LocalDriver {
       const s0 = this.kart.s;
       step(this.kart, input, this.track, { top: this.top, time, star, vehicle: this.vehicle }, events);
       others.forEach((o, i) => {
-        if (bump(this.kart, o, true, false, this.vehicle.weight, weights?.[i] ?? 1) > 4) events.push("bump");
+        if (bump(this.kart, o, true, false, this.vehicle.weight * myWeight, weights?.[i] ?? 1) > 4) events.push("bump");
       });
       // Le mauvais sens : on recule le long de la route en roulant vraiment
       const moved = deltaS(this.track, s0, this.kart.s);
@@ -107,6 +108,13 @@ export class LocalDriver {
     this.kart.boost = 0;
     this.kart.drift = 0;
     this.kart.charge = 0;
+  }
+
+  /** Le ressort : un grand saut, tout de suite */
+  spring() {
+    this.kart.vy = RESSORT_VY;
+    this.kart.air = Math.max(this.kart.air, 0.05);
+    this.kart.trick = false;
   }
 
   boost(seconds: number) {

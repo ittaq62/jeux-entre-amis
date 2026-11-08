@@ -76,8 +76,11 @@ export interface RacerView {
   item: ItemKind | null;
   uses: number;
   shieldUntil: number;
-  /** L'arc-en-ciel : jusqu'à quand */
+  /** L'arc-en-ciel, la potion géante, l'aimant, la crème sur l'écran : jusqu'à quand */
   starUntil: number;
+  giantUntil: number;
+  magnetUntil: number;
+  pieUntil: number;
   lapStart: number;
   finish: number | null;
   /** Conduit par le serveur (un bot, ou le relais d'un absent) */
@@ -119,6 +122,9 @@ export function bolidesView(race: Race): BolidesView {
       uses: r.uses,
       shieldUntil: r.shieldUntil,
       starUntil: r.starUntil ?? 0,
+      giantUntil: r.giantUntil ?? 0,
+      magnetUntil: r.magnetUntil ?? 0,
+      pieUntil: r.pieUntil ?? 0,
       lapStart: r.lapStart,
       finish: r.finish,
       bot: r.bot,

@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
+import { BOMBE_RADIUS, hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
 import { CoinField, Crossers } from "./features.ts";
@@ -81,6 +81,9 @@ export class RaceScene {
   private petardGeo: THREE.BufferGeometry;
   private petardMat: THREE.MeshLambertMaterial;
   private rocketParts: { geo: THREE.BufferGeometry; mat: THREE.Material }[] = [];
+  /** Les formes des objets lancés (libérées à la fin), et les ondes d'explosion et éclairs en cours */
+  private thrownParts: { dispose: () => void }[] = [];
+  private pulses: { mesh: THREE.Mesh; life: number; max: number; radius: number }[] = [];
   private puffs: Puff[] = [];
   private spare: THREE.Sprite[] = [];
   private puffTex: THREE.Texture;
@@ -275,6 +278,8 @@ export class RaceScene {
         mesh.position.set(hz.x, y + 0.1, hz.z);
       } else if (hz.kind === "fusee") {
         mesh = this.rocket();
+      } else if (hz.kind === "bowling" || hz.kind === "tarte" || hz.kind === "bombe") {
+        mesh = this.thrown(hz.kind);
       } else {
         mesh = new THREE.Mesh(this.petardGeo, this.petardMat);
       }
@@ -309,6 +314,157 @@ export class RaceScene {
     for (const p of this.rocketParts) g.add(new THREE.Mesh(p.geo, p.mat));
     g.scale.setScalar(1.3);
     return g;
+  }
+
+  /** Ce qu'on lance : une boule de bowling, une tarte à la crème, une bombe et sa mèche */
+  private thrown(kind: "bowling" | "tarte" | "bombe"): THREE.Group {
+    const g = new THREE.Group();
+    const make = (geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0) => {
+      this.thrownParts.push(geo, mat);
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = this.shadows;
+      g.add(m);
+      return m;
+    };
+    if (kind === "bowling") {
+      make(
+        new THREE.SphereGeometry(1.15, 24, 18),
+        new THREE.MeshStandardMaterial({ color: 0x2a1a7a, roughness: 0.12, metalness: 0.35, emissive: 0x120a40 }),
+      );
+      const hole = new THREE.MeshStandardMaterial({ color: 0x07060f, roughness: 0.9 });
+      for (const [x, y] of [
+        [-0.26, 0.5],
+        [0.26, 0.5],
+        [0, 0.08],
+      ] as const)
+        make(new THREE.SphereGeometry(0.16, 10, 8), hole, x, y, 1.02);
+    } else if (kind === "tarte") {
+      make(new THREE.CylinderGeometry(0.72, 0.52, 0.24, 20), new THREE.MeshStandardMaterial({ color: 0xd9a35c, roughness: 0.8 }));
+      const cream = make(
+        new THREE.SphereGeometry(0.66, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.5 }),
+        0,
+        0.18,
+        0,
+      );
+      cream.scale.y = 0.55;
+      make(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ color: 0xc8202c, roughness: 0.3 }), 0, 0.56, 0);
+    } else {
+      make(new THREE.SphereGeometry(0.72, 18, 14), new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.3, metalness: 0.4 }));
+      make(
+        new THREE.CylinderGeometry(0.2, 0.26, 0.24, 12),
+        new THREE.MeshStandardMaterial({ color: 0x4a4d55, roughness: 0.5 }),
+        0,
+        0.76,
+        0,
+      );
+      make(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0xc9b98a, roughness: 0.9 }),
+        0.12,
+        1.08,
+        0,
+      ).rotation.z = -0.5;
+      make(new THREE.SphereGeometry(0.14, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd36b }), 0.26, 1.34, 0);
+      // Le cercle du danger, au sol, là où elle va sauter
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(BOMBE_RADIUS - 0.35, BOMBE_RADIUS, 40),
+        new THREE.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      this.thrownParts.push(ring.geometry, ring.material as THREE.Material);
+      ring.rotation.x = -Math.PI / 2;
+      ring.name = "danger";
+      g.add(ring);
+    }
+    return g;
+  }
+
+  /** Une explosion : une boule de feu, une onde qui s'étend au sol, de la fumée */
+  explosion(x: number, y: number, z: number, radius: number) {
+    this.boom(x, y, z, true);
+    this.burst({ x, y: y + 1.5, z }, 0xffd27a, this.opts.reduced ? 8 : 26, 13);
+    // La boule de feu : de grosses bouffées qui gonflent vite
+    for (let i = 0; i < (this.opts.reduced ? 3 : 9); i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.puff(
+        x + Math.cos(a) * 2,
+        y + 1 + Math.random() * 2,
+        z + Math.sin(a) * 2,
+        i % 2 ? 0xffe9a0 : 0xff8a2a,
+        Math.cos(a) * 3,
+        2.5,
+        Math.sin(a) * 3,
+        0.5,
+        11,
+        1,
+        false,
+      );
+    }
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.75, 1, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0xffb347,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 0.2, z);
+    this.scene.add(ring);
+    this.pulses.push({ mesh: ring, life: 0.5, max: 0.5, radius });
+    this.shakeNear(x, z, 26, 0.8);
+  }
+
+  /** La foudre : un éclair qui tombe du ciel sur ce point */
+  bolt(x: number, y: number, z: number) {
+    const pos: number[] = [];
+    const index: number[] = [];
+    let px = x;
+    let pz = z;
+    const steps = 12;
+    const top = y + 46;
+    for (let i = 0; i <= steps; i++) {
+      const f = i / steps;
+      const py = top + (y + 0.6 - top) * f;
+      const w = 0.75 * (1 - f * 0.6);
+      // Deux rubans croisés : l'éclair se voit sous tous les angles
+      pos.push(px - w, py, pz, px + w, py, pz, px, py, pz - w, px, py, pz + w);
+      if (i < steps) {
+        const a = i * 4;
+        index.push(a, a + 1, a + 4, a + 1, a + 5, a + 4, a + 2, a + 3, a + 6, a + 3, a + 7, a + 6);
+      }
+      const jag = i === steps - 1 ? 0 : 3.2;
+      px = i === steps - 1 ? x : x + (Math.random() - 0.5) * jag;
+      pz = i === steps - 1 ? z : z + (Math.random() - 0.5) * jag;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(index);
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({
+        color: 0xffffd8,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        fog: false,
+        toneMapped: false,
+      }),
+    );
+    mesh.rotation.y = 0;
+    this.scene.add(mesh);
+    this.pulses.push({ mesh, life: 0.28, max: 0.28, radius: 0 });
+    this.burst({ x, y: y + 1, z }, 0xbfe2ff, this.opts.reduced ? 5 : 16, 8);
+  }
+
+  /** Une secousse plus forte si ça se passe près de la caméra */
+  private shakeNear(x: number, z: number, range: number, amount: number) {
+    const d = Math.hypot(x - this.camPos.x, z - this.camPos.z);
+    if (d < range) this.shake(amount * (1 - d / range));
   }
 
   /** Une gerbe de particules (une caisse qui éclate, une explosion) */
@@ -539,6 +695,29 @@ export class RaceScene {
     }
     // Les pétards filent le long de la route ; les fusées volent au-dessus, en fumant
     for (const { hz, mesh } of this.hazards.values()) {
+      if (hz.kind === "bowling" || hz.kind === "tarte" || hz.kind === "bombe") {
+        const p = hazardPos(t, hz, f.serverNow);
+        mesh.visible = Boolean(p);
+        if (!p) continue;
+        if (hz.kind === "bowling") {
+          mesh.position.set(p.x, p.y + 1.25, p.z);
+          mesh.rotation.set((f.serverNow - hz.at) * 0.018, p.h, 0, "YXZ");
+        } else if (hz.kind === "tarte") {
+          mesh.position.set(p.x, p.y, p.z);
+          mesh.rotation.set(Math.sin(this.time * 11) * 0.4, this.time * 8, 0);
+        } else {
+          mesh.position.set(p.x, p.y, p.z);
+          const age = f.serverNow - hz.at;
+          const ring = mesh.getObjectByName("danger");
+          if (ring) {
+            ring.visible = age > 500;
+            ring.position.y = 0.2 - (p.y - (pointAt(t, hz.s, hz.d).y + 0.55));
+            const mat = (ring as THREE.Mesh).material as THREE.MeshBasicMaterial;
+            mat.opacity = 0.35 + 0.35 * Math.abs(Math.sin(age * 0.012));
+          }
+        }
+        continue;
+      }
       if (hz.kind === "fusee") {
         const p = hazardPos(t, hz, f.serverNow);
         mesh.visible = Boolean(p);
@@ -570,6 +749,22 @@ export class RaceScene {
       mesh.position.set(p.x, p.y + 0.7, p.z);
       mesh.rotation.y = p.h;
       if (Math.random() < 0.7) this.puff(p.x, p.y + 0.7, p.z, Math.random() < 0.5 ? 0xffd27a : 0xb0aaa4, 0, 0.6, 0, 0.5, 1.6);
+    }
+    // Les ondes d'explosion s'étendent ; les éclairs s'éteignent
+    for (let i = this.pulses.length - 1; i >= 0; i--) {
+      const p = this.pulses[i]!;
+      p.life -= f.dt;
+      const mat = p.mesh.material as THREE.MeshBasicMaterial;
+      if (p.life <= 0) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        mat.dispose();
+        this.pulses.splice(i, 1);
+        continue;
+      }
+      const age = 1 - p.life / p.max;
+      if (p.radius > 0) p.mesh.scale.setScalar(1 + age * p.radius);
+      mat.opacity = 1 - age;
     }
     // Les particules : elles bougent, grossissent, pâlissent, puis retournent dans la réserve
     for (let i = this.puffs.length - 1; i >= 0; i--) {
@@ -709,6 +904,7 @@ export class RaceScene {
       p.geo.dispose();
       p.mat.dispose();
     }
+    for (const d of this.thrownParts) d.dispose();
     this.puffTex.dispose();
     this.envTex.dispose();
     for (const d of this.featureKeep) d.dispose();

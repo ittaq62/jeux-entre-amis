@@ -198,7 +198,13 @@ export function botDrive(
     else if (item === "petard") use = (ahead && aim) || patience;
     else if (item === "klaxon") use = (near && aim) || patience;
     // La fusée : tout de suite (elle va seule chercher le premier) ; l'arc-en-ciel : quand il y a du monde devant ou à côté
-    else if (item === "fusee") use = true;
+    else if (item === "fusee" || item === "orage") use = true;
+    else if (item === "bowling" || item === "bombe") use = (ahead && aim) || patience;
+    else if (item === "tarte") use = rivals.some((r) => Math.abs(r.kart.dist - k.dist) < 70) || patience;
+    else if (item === "geant") use = ((ahead || near) && aim) || patience;
+    // Le ressort : pour sauter par-dessus une flaque devant lui, ou quand il en a assez de le garder
+    else if (item === "ressort")
+      use = hazards.some((hz) => hz.kind === "huile" && deltaS(t, k.s, hz.s) > 6 && deltaS(t, k.s, hz.s) < 26) || patience;
     else if (item === "arc") use = ((ahead || near) && aim) || patience;
     else use = patience;
     // Pas deux objets dans la même seconde

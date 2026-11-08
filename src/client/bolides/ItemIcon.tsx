@@ -61,6 +61,86 @@ export function ItemIcon({ item, size = 48 }: { item: ItemKind; size?: number })
           <path d="M24 12l2.2 4.6 5 .6-3.7 3.4 1 5-4.5-2.5-4.5 2.5 1-5-3.7-3.4 5-.6z" fill="#fff6c8" stroke="#a87b16" strokeWidth="1" />
         </>
       )}
+      {item === "bowling" && (
+        <>
+          <circle cx="24" cy="24" r="19" fill="#2a1a7a" stroke="#d9d2ff" strokeWidth="2" />
+          <path d="M12 16c6-7 15-9 23-5" stroke="#6f5fd0" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <circle cx="19" cy="26" r="3" fill="#0b0720" />
+          <circle cx="28" cy="26" r="3" fill="#0b0720" />
+          <circle cx="23.5" cy="34" r="3" fill="#0b0720" />
+        </>
+      )}
+      {item === "tarte" && (
+        <>
+          <ellipse cx="24" cy="34" rx="20" ry="8" fill="#c88a42" stroke="#6e4516" strokeWidth="2" />
+          <path d="M6 31c0-9 8-17 18-17s18 8 18 17c-5 4-31 4-36 0z" fill="#fff8ec" stroke="#d9c9ae" strokeWidth="2" />
+          <path d="M14 24c3-3 5-1 7-3s6-3 9 0 4 3 6 3" stroke="#e6d8c2" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <circle cx="24" cy="12" r="4.4" fill="#d3202e" stroke="#7a0f18" strokeWidth="1.5" />
+        </>
+      )}
+      {item === "ressort" && (
+        <>
+          <rect x="13" y="38" width="22" height="5" rx="2" fill="#5a5f68" />
+          <path
+            d="M16 34h16M16 34c12-1 18-4 16-7s-14-2-16-5 4-6 16-7M32 15H16"
+            stroke="#c9ced6"
+            strokeWidth="3.4"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <rect x="13" y="8" width="22" height="6" rx="2" fill="#d8352a" stroke="#6b1a13" strokeWidth="1.5" />
+        </>
+      )}
+      {item === "geant" && (
+        <>
+          <path
+            d="M19 5h10v9c7 4 11 10 11 17 0 8-7 13-16 13S8 39 8 31c0-7 4-13 11-17z"
+            fill="#8c3fe0"
+            stroke="#dcc6ff"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <rect x="17" y="3" width="14" height="6" rx="2" fill="#b98a4a" stroke="#5e3f17" strokeWidth="1.5" />
+          <circle cx="18" cy="31" r="4" fill="#d6b4ff" />
+          <circle cx="28" cy="26" r="2.6" fill="#d6b4ff" />
+          <circle cx="30" cy="35" r="2" fill="#d6b4ff" />
+        </>
+      )}
+      {item === "orage" && (
+        <>
+          <path
+            d="M13 26a8 8 0 0 1-1-16 11 11 0 0 1 21-2 9 9 0 0 1 2 18z"
+            fill="#59616e"
+            stroke="#dbe2ea"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <path d="M25 18l-9 14h7l-3 12 12-16h-7l4-10z" fill="#ffe066" stroke="#8a6a00" strokeWidth="1.5" strokeLinejoin="round" />
+        </>
+      )}
+      {item === "aimant" && (
+        <>
+          <path
+            d="M9 8h10v16a5 5 0 0 0 10 0V8h10v16a15 15 0 0 1-30 0z"
+            fill="#d8352a"
+            stroke="#6b1a13"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <path d="M9 8h10v8H9zM29 8h10v8H29z" fill="#e8ecf1" stroke="#6b1a13" strokeWidth="2" />
+          <circle cx="24" cy="44" r="3" fill="#ffd23a" stroke="#8a6a00" strokeWidth="1" />
+        </>
+      )}
+      {item === "bombe" && (
+        <>
+          <circle cx="21" cy="29" r="15" fill="#1a1b20" stroke="#e8e2d6" strokeWidth="2" />
+          <path d="M29 17l5-6" stroke="#9a8a5c" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="36" cy="9" r="5" fill="#ffb347" />
+          <circle cx="36" cy="9" r="2.4" fill="#fff4c4" />
+          <circle cx="15" cy="24" r="3.4" fill="#fff" opacity="0.28" />
+        </>
+      )}
       {item === "klaxon" && (
         <>
           <path d="M8 20h7l14-9v26l-14-9H8z" fill="#f2c94c" stroke="#5c3d0a" strokeWidth="2" strokeLinejoin="round" />

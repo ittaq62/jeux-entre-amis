@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
+import { bounceBetween, COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
 import { botDrive, newBotMemory } from "./bot.ts";
 import {
   bump,
@@ -433,7 +433,7 @@ describe("les objets", () => {
     expect(first.arc ?? 0).toBe(0);
     expect(last.fusee ?? 0).toBeGreaterThan(150);
     expect(last.arc ?? 0).toBeGreaterThan(150);
-    expect(last.turbo3 ?? 0).toBeGreaterThan(600);
+    expect(last.turbo3 ?? 0).toBeGreaterThan(400);
     expect(last.huile ?? 0).toBe(0);
     for (const k of Object.keys({ ...first, ...last })) expect(ITEM_KINDS).toContain(k);
   });
@@ -620,6 +620,174 @@ describe("la course", () => {
     // Plus tard, les pièces sont revenues
     worldTick(race, now + 9000);
     expect(race.coins.every((at) => at <= now + 9000)).toBe(true);
+  });
+
+  describe("les nouveaux bonus", () => {
+    const setup = () => {
+      const race = newRace(["a", "b", "c"], new Set(["b", "c"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+      worldTick(race, race.goAt);
+      const t = getTrack("port");
+      const put = (k: Kart, s: number, d = 0) => {
+        const p = pointAt(t, s, d);
+        Object.assign(k, { x: p.x, z: p.z, s, d, dist: s, h: Math.atan2(p.tx, p.tz), spin: 0 });
+      };
+      return { race, t, put, a: racerOf(race, "a")!, b: racerOf(race, "b")!, c: racerOf(race, "c")!, now: race.goAt + 1000 };
+    };
+    const run = (race: Race, from: number, ms: number) => {
+      const out: string[] = [];
+      for (let m = 50; m <= ms; m += 50) {
+        for (const e of worldTick(race, from + m))
+          out.push(e.type === "hit" ? `hit:${e.id}:${e.kind}` : e.type === "pie" ? `pie:${e.id}` : e.type);
+      }
+      return out;
+    };
+
+    it("la boule de bowling renverse tous ceux qu'elle croise, sans s'arrêter, et une seule fois chacun", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 40);
+      a.item = "bowling";
+      a.uses = 1;
+      useItem(race, "a", now);
+      const hz = race.hazards.find((h) => h.kind === "bowling")!;
+      // Là où passera la boule au moment où elle y sera
+      const at = (ms: number) => hazardPos(getTrack("port"), hz, now + ms)!;
+      for (const [r, ms] of [
+        [b, 1000],
+        [c, 2000],
+      ] as const) {
+        const p = at(ms);
+        Object.assign(r.kart, { x: p.x, z: p.z, s: 0, dist: 500 });
+      }
+      const log = run(race, now, 3000);
+      expect(log.filter((l) => l === "hit:b:bowling").length).toBe(1);
+      expect(log.filter((l) => l === "hit:c:bowling").length).toBe(1);
+      expect(race.hazards.length).toBe(1);
+      expect(run(race, now + 3000, 2600)).toContain("gone");
+      expect(race.hazards.length).toBe(0);
+    });
+
+    it("la boule rebondit d'un bord à l'autre sans jamais quitter la route", () => {
+      for (let v = -50; v < 50; v += 0.37) expect(Math.abs(bounceBetween(v, 7.7))).toBeLessThanOrEqual(7.7 + 1e-9);
+      expect(bounceBetween(0, 5)).toBeCloseTo(0, 6);
+      expect(bounceBetween(5, 5)).toBeCloseTo(5, 6);
+      expect(bounceBetween(7, 5)).toBeCloseTo(3, 6);
+    });
+
+    it("la tarte va au kart le plus proche devant, et lui met de la crème plein l'écran", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 100);
+      put(b.kart, 130);
+      put(c.kart, 170);
+      a.item = "tarte";
+      a.uses = 1;
+      useItem(race, "a", now);
+      expect(race.hazards[0]!.kind === "tarte" && race.hazards[0]!.target).toBe("b");
+      b.kart.v = 20;
+      expect(run(race, now, 1500)).toContain("pie:b");
+      expect(b.pieUntil).toBeGreaterThan(now);
+      expect(b.kart.v).toBeLessThan(20);
+      expect(c.pieUntil).toBe(0);
+      expect(race.hazards.length).toBe(0);
+    });
+
+    it("sans personne devant, la tarte part vers celui de derrière", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 300);
+      put(b.kart, 260);
+      put(c.kart, 100);
+      a.item = "tarte";
+      a.uses = 1;
+      useItem(race, "a", now);
+      expect(race.hazards[0]!.kind === "tarte" && race.hazards[0]!.target).toBe("b");
+      expect(run(race, now, 1500)).toContain("pie:b");
+    });
+
+    it("le ressort fait décoller, et on repart du sol", () => {
+      const t = getTrack("port");
+      const k = kartAt("port", 100);
+      k.v = 20;
+      k.vy = 12;
+      k.air = 0.05;
+      const ev: string[] = [];
+      let top = 0;
+      for (let i = 0; i < 150; i++) {
+        step(k, GAS, t, { top: 1 }, ev as never);
+        top = Math.max(top, k.air);
+      }
+      expect(top).toBeGreaterThan(2.5);
+      expect(ev).toContain("land");
+      expect(k.air).toBe(0);
+    });
+
+    it("la potion géante écrase ceux qu'elle touche et rend intouchable", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 200);
+      put(b.kart, 202, 1);
+      put(c.kart, 400);
+      a.item = "geant";
+      a.uses = 1;
+      useItem(race, "a", now);
+      expect(a.giantUntil).toBeGreaterThan(now);
+      const log = run(race, now, 100);
+      expect(log).toContain("hit:b:geant");
+      expect(log).not.toContain("hit:c:geant");
+      // Un klaxon de b ne lui fait rien
+      Object.assign(b.kart, { spin: 0 });
+      b.item = "klaxon";
+      b.uses = 1;
+      useItem(race, "b", now + 200);
+      expect(a.kart.spin).toBe(0);
+    });
+
+    it("l'orage frappe tous ceux qui sont devant, pas ceux de derrière", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 300);
+      put(b.kart, 500);
+      put(c.kart, 100);
+      a.item = "orage";
+      a.uses = 1;
+      const log = useItem(race, "a", now).map((e) => (e.type === "hit" ? `hit:${e.id}` : e.type));
+      expect(log).toContain("hit:b");
+      expect(log).not.toContain("hit:c");
+      expect(log).toContain("bolt");
+      expect(b.kart.spin).toBeGreaterThan(0);
+      expect(c.kart.spin).toBe(0);
+    });
+
+    it("l'aimant attire les pièces de loin et en vole à ceux qu'on frôle", () => {
+      const { race, t, put, a, b, now } = setup();
+      const coin = t.coins[0]!;
+      put(a.kart, coin.s, coin.d + 6.5);
+      a.item = "aimant";
+      a.uses = 1;
+      useItem(race, "a", now);
+      expect(a.magnetUntil).toBeGreaterThan(now);
+      reportKart(race, "a", { ...a.kart }, now + 50);
+      expect(a.coins).toBeGreaterThanOrEqual(1);
+      const before = a.coins;
+      b.coins = 5;
+      Object.assign(b.kart, { x: a.kart.x + 3, z: a.kart.z });
+      run(race, now + 50, 1200);
+      expect(b.coins).toBeLessThan(5);
+      expect(a.coins).toBeGreaterThan(before);
+    });
+
+    it("la bombe retombe devant et explose : tout ce qui est autour part en tête-à-queue", () => {
+      const { race, put, a, b, c, now } = setup();
+      put(a.kart, 100);
+      a.item = "bombe";
+      a.uses = 1;
+      useItem(race, "a", now);
+      const hz = race.hazards.find((h) => h.kind === "bombe")!;
+      expect(hz.kind === "bombe" && Math.abs(hz.s - 132)).toBeLessThan(1);
+      put(b.kart, 134);
+      put(c.kart, 200);
+      const log = run(race, now, 2500);
+      expect(log).toContain("blast");
+      expect(log).toContain("hit:b:bombe");
+      expect(log).not.toContain("hit:c:bombe");
+      expect(race.hazards.length).toBe(0);
+    });
   });
 
   it("la fusée file au-dessus de tout le monde et va frapper le premier ; le bouclier l'arrête", () => {
