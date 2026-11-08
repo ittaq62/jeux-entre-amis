@@ -153,7 +153,8 @@ export class RaceRuntime {
     this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
     this.scene.build(this.track, looks);
-    this.scene.onLife = (sound, volume) => play(sound === "clang" ? "bolidesClang" : "bolidesBaa", { volume });
+    this.scene.onLife = (sound, volume) =>
+      play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : "bolidesFirework", { volume });
     this.shown = view.karts.map((n) => decodeKart(n)!);
     this.views = this.shown.map((k) => ({ ...k }));
     this.steers = this.shown.map(() => 0);
@@ -661,6 +662,7 @@ export class RaceRuntime {
       lights: left > COUNTDOWN_MS ? 0 : left > 0 ? Math.min(3, 4 - Math.ceil(left / 1000)) : now - v.goAt < 2000 ? 4 : 0,
       serverNow: now,
       dt,
+      fireworks: v.phase !== "start" && now > v.goAt && (me?.finish != null || (myLap >= v.settings.laps && v.settings.laps > 1)),
     });
     if (t - this.hudAt > 100) {
       this.hudAt = t;

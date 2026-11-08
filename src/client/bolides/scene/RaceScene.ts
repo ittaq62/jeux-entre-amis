@@ -35,6 +35,8 @@ export interface Frame {
   serverNow: number;
   /** Le temps réel écoulé depuis l'image précédente, en secondes */
   dt: number;
+  /** Des feux d'artifice dans le ciel (le dernier tour, l'arrivée) */
+  fireworks?: boolean;
 }
 
 interface Puff {
@@ -81,7 +83,8 @@ export class RaceScene {
   /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
   private drowned: boolean[] = [];
   /** Le son de ce qui se passe sur la route, plus ou moins fort selon la distance */
-  onLife: ((sound: "clang" | "baa", volume: number) => void) | null = null;
+  onLife: ((sound: "clang" | "baa" | "firework", volume: number) => void) | null = null;
+  private fireworkIn = 0;
   private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
   private crateMat: THREE.MeshStandardMaterial | null = null;
@@ -611,6 +614,32 @@ export class RaceScene {
     this.burst({ x, y: y + 1, z }, 0xbfe2ff, this.opts.reduced ? 5 : 16, 8);
   }
 
+  /** Le ciel s'illumine devant la caméra, une gerbe de temps en temps */
+  private launchFireworks(dt: number) {
+    this.fireworkIn -= dt;
+    if (this.fireworkIn > 0 || !this.camReady) return;
+    this.fireworkIn = 0.8 + Math.random() * 0.9;
+    const yaw = Math.atan2(this.camLook.x - this.camPos.x, this.camLook.z - this.camPos.z) + (Math.random() - 0.5) * 1;
+    const far = 95 + Math.random() * 90;
+    const x = this.camPos.x + Math.sin(yaw) * far;
+    const z = this.camPos.z + Math.cos(yaw) * far;
+    const y = this.camPos.y + 36 + Math.random() * 34;
+    const palette = [0xff5a4f, 0xffd23a, 0x5ad1ff, 0x8affa0, 0xff8ae2, 0xc59bff, 0xffffff];
+    const main = palette[Math.floor(Math.random() * palette.length)]!;
+    const other = palette[Math.floor(Math.random() * palette.length)]!;
+    const n = this.opts.reduced ? 12 : this.opts.phone ? 22 : 42;
+    for (let i = 0; i < n; i++) {
+      // Sur une sphère, à peu près régulièrement
+      const u = (i + 0.5) / n;
+      const up = 1 - 2 * u;
+      const round = Math.sqrt(Math.max(0, 1 - up * up));
+      const a = i * 2.39996;
+      const s = 17 + Math.random() * 7;
+      this.puff(x, y, z, i % 3 === 0 ? other : main, Math.cos(a) * round * s, up * s, Math.sin(a) * round * s, 1.05, 4.2, 1, true);
+    }
+    this.onLife?.("firework", 0.14 + Math.random() * 0.14);
+  }
+
   /** Une secousse plus forte si ça se passe près de la caméra */
   private shakeNear(x: number, z: number, range: number, amount: number) {
     const d = Math.hypot(x - this.camPos.x, z - this.camPos.z);
@@ -943,6 +972,7 @@ export class RaceScene {
       p.sprite.scale.setScalar(0.5 + age * p.grow);
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
+    if (f.fireworks) this.launchFireworks(f.dt);
     this.moveCamera(f);
     this.world.update(this.time, this.camera.position, this.daylight);
     if (f.lights !== this.lightsShown) {

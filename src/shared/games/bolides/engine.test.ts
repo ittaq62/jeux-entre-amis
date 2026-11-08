@@ -1119,6 +1119,43 @@ describe("la vie du circuit", () => {
     expect(onIce).toBeLessThan(onRoad);
   });
 
+  it.each(TRACK_IDS)("%s : une flaque ou une bombe lâchée au-dessus du trou atterrit sur l'autre rive", (id) => {
+    const t = getTrack(id);
+    const gap = t.gaps[0]!;
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: id }, 0, 1);
+    worldTick(race, race.goAt);
+    const a = racerOf(race, "a")!;
+    const inGap = (s: number) => {
+      const along = deltaS(t, gap.from, s);
+      return along >= 0 && along <= gap.to - gap.from;
+    };
+    const flying = (s: number) => {
+      const p = pointAt(t, s, 0);
+      Object.assign(a.kart, {
+        x: p.x,
+        z: p.z,
+        s,
+        d: 0,
+        h: Math.atan2(p.tx, p.tz),
+        air: 2,
+        vy: 1,
+        i: Math.round(s / (t.length / t.n)) % t.n,
+      });
+    };
+    flying(gap.from + 8);
+    a.item = "huile";
+    a.uses = 1;
+    useItem(race, "a", race.goAt + 100);
+    const oil = race.hazards.find((h) => h.kind === "huile");
+    expect(oil && "s" in oil && !inGap(oil.s)).toBe(true);
+    flying(wrapS(t, gap.from - 26));
+    a.item = "bombe";
+    a.uses = 1;
+    useItem(race, "a", race.goAt + 200);
+    const bomb = race.hazards.find((h) => h.kind === "bombe");
+    expect(bomb && "s" in bomb && !inGap(bomb.s)).toBe(true);
+  });
+
   it.each(TRACK_IDS)("%s : les pièces ne sont ni dans le trou, ni sous la grue, ni sur un trampoline", (id) => {
     const t = getTrack(id);
     for (const c of t.coins) {

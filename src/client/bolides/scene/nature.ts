@@ -500,8 +500,7 @@ export function addSkidMarks(group: THREE.Group, keep: Keep, t: Track, theme: Th
     const inside = turn > 0 ? -1 : 1;
     for (const [off, swing] of [
       [0.1, 0.56],
-      [-0.05, 0.42],
-      [0.22, 0.32],
+      [-0.05, 0.4],
     ] as const) {
       const base = inside * t.half * off;
       const reach = inside * t.half * swing;
@@ -521,7 +520,7 @@ export function addSkidMarks(group: THREE.Group, keep: Keep, t: Track, theme: Th
   };
   for (let y = 0; y < 256;) {
     const len = 18 + r() * 40;
-    const a = r() < 0.2 ? 0 : 0.24 + r() * 0.28;
+    const a = r() < 0.3 ? 0 : 0.1 + r() * 0.2;
     g.fillStyle = theme === "col" ? `rgba(40,44,52,${a})` : `rgba(12,12,14,${a})`;
     g.fillRect(2, y, 12, len);
     y += len;

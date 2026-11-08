@@ -60,7 +60,7 @@ import {
   type KartEvent,
   type SpeedClass,
 } from "./physics.ts";
-import { getTrack, gridSlot, locate, pointAt, TRACK_IDS, type Track, type TrackId } from "./track.ts";
+import { getTrack, gridSlot, locate, pointAt, solidGround, TRACK_IDS, wrapS, type Track, type TrackId } from "./track.ts";
 
 export interface BolidesSettings {
   /** Le circuit, ou un tirage au sort à chaque course */
@@ -480,9 +480,17 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
     // Chez un joueur, son navigateur l'a déjà appliqué en appuyant
     if (r.bot) k.boost = Math.max(k.boost, TURBO_TIME);
   } else if (kind === "huile") {
-    const x = k.x - Math.sin(k.h) * 3.4;
-    const z = k.z - Math.cos(k.h) * 3.4;
-    const at = locate(t, x, z, k.i);
+    let x = k.x - Math.sin(k.h) * 3.4;
+    let z = k.z - Math.cos(k.h) * 3.4;
+    let at = locate(t, x, z, k.i);
+    // Pas de flaque dans le vide : au-dessus d'un trou, elle atterrit sur l'autre rive
+    const solid = solidGround(t, at.s);
+    if (solid !== at.s) {
+      const p = pointAt(t, solid, at.d);
+      x = p.x;
+      z = p.z;
+      at = locate(t, x, z);
+    }
     const hazard: Hazard = { id: ++race.seq, kind: "huile", x, z, s: at.s, d: at.d, owner: id, at: now };
     race.hazards.push(hazard);
     events.push({ type: "hazard", hazard });
@@ -560,7 +568,7 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
   } else if (kind === "aimant") {
     r.magnetUntil = now + AIMANT_MS;
   } else if (kind === "bombe") {
-    const landS = k.s + BOMBE_AHEAD;
+    const landS = solidGround(t, wrapS(t, k.s + BOMBE_AHEAD));
     const landD = Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d));
     const hazard: Hazard = {
       id: ++race.seq,

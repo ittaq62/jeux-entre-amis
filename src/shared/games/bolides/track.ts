@@ -256,6 +256,15 @@ export type Mover =
       reach: number;
     };
 
+/** Un endroit où poser quelque chose : si c'est au-dessus d'un trou, juste après l'autre rive */
+export function solidGround(t: Track, s: number): number {
+  for (const g of t.gaps) {
+    const along = deltaS(t, g.from, s);
+    if (along >= -2 && along <= g.to - g.from + 2) return wrapS(t, g.to + 3);
+  }
+  return s;
+}
+
 /** La longueur du trou après un tremplin */
 export const GAP_LEN = 13;
 /** Un trampoline : son rayon */
