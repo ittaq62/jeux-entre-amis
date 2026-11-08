@@ -462,6 +462,22 @@
   box-shadow: 0 -4px 14px rgba(60, 40, 10, 0.16);
 }
 
+/* Sur un téléphone couché : une seule rangée de petits boutons, pour laisser voir le classement */
+@media (max-height: 480px) {
+  .bolides-sheet .overlay-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .bolides-sheet .overlay-actions .btn {
+    min-height: 0;
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
+
 .bolides-cup {
   margin: 12px 0 4px;
   padding: 10px 12px;
