@@ -926,15 +926,16 @@
     radial-gradient(ellipse 90% 85% at 50% 45%, #33435c 0%, #1c2638 55%, #0d121b 100%);
 }
 
+/* L'illustration remplit tout le cadre */
 .bolides-preview {
-  width: min(410px, 96%);
-  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+  position: absolute;
+  inset: 0;
 }
 
 .bolides-preview svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
 .bolides-preview-crate {
@@ -943,7 +944,17 @@
 
 @keyframes bolides-preview-float {
   to {
-    translate: 0 -5px;
+    translate: 0 -6px;
+  }
+}
+
+.bolides-preview-glider {
+  animation: bolides-preview-glide 3.4s ease-in-out infinite alternate;
+}
+
+@keyframes bolides-preview-glide {
+  to {
+    translate: 10px -7px;
   }
 }
 
@@ -953,14 +964,27 @@
 
 @keyframes bolides-preview-sparks {
   to {
-    opacity: 0.55;
+    opacity: 0.6;
     translate: -3px 1px;
+  }
+}
+
+.bolides-preview-flame {
+  animation: bolides-preview-flame 0.11s ease-in-out infinite alternate;
+}
+
+@keyframes bolides-preview-flame {
+  to {
+    scale: 0.86 0.78;
+    opacity: 0.85;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bolides-preview-crate,
-  .bolides-preview-sparks {
+  .bolides-preview-glider,
+  .bolides-preview-sparks,
+  .bolides-preview-flame {
     animation: none;
   }
 }
@@ -1258,10 +1282,6 @@
     width: 290px;
   }
 
-  .bolides-preview {
-    width: 300px;
-  }
-
   .game-sheet {
     padding: 24px 26px 26px;
   }
@@ -1297,10 +1317,6 @@
 
   .meche-preview {
     width: 250px;
-  }
-
-  .bolides-preview {
-    width: 260px;
   }
 
   .bricks-preview {
@@ -2888,27 +2904,86 @@ h3 .hint {
     radial-gradient(ellipse 90% 85% at 50% 45%, #3c1420 0%, #23090f 60%, #120406 100%);
 }
 
-/* Les trois affiches en éventail, celle du milieu un peu devant */
-.tour-programme {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
+/* La scène de la Tournée remplit tout le cadre : aucun jeu n'y figure, on peut en ajouter sans la refaire */
+.tour-preview {
+  position: absolute;
+  inset: 0;
 }
 
-.tour-programme .game-ticket:nth-child(1) {
-  rotate: -7deg;
-  translate: 0 8px;
+.tour-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.tour-programme .game-ticket:nth-child(2) {
-  z-index: 1;
-  translate: 0 -6px;
+.tour-preview-ticket {
+  animation: tour-preview-float 2.4s ease-in-out infinite alternate;
 }
 
-.tour-programme .game-ticket:nth-child(3) {
-  rotate: 7deg;
-  translate: 0 8px;
+.tour-preview-ticket.is-slow {
+  animation-duration: 3.3s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes tour-preview-float {
+  from {
+    translate: 0 -6px;
+    rotate: -3deg;
+  }
+
+  to {
+    translate: 0 7px;
+    rotate: 3deg;
+  }
+}
+
+.tour-preview-glint {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tour-preview-glint 1.9s ease-in-out infinite alternate;
+}
+
+.tour-preview-glint.is-late {
+  animation-delay: 0.9s;
+}
+
+@keyframes tour-preview-glint {
+  from {
+    scale: 0.35;
+    opacity: 0.35;
+  }
+
+  to {
+    scale: 1.1;
+    opacity: 1;
+  }
+}
+
+.tour-preview-confetti {
+  animation: tour-preview-confetti 2.8s ease-in-out infinite alternate;
+}
+
+.tour-preview-confetti.is-late {
+  animation-duration: 3.7s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes tour-preview-confetti {
+  from {
+    translate: -4px -6px;
+  }
+
+  to {
+    translate: 5px 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-preview-ticket,
+  .tour-preview-glint,
+  .tour-preview-confetti {
+    animation: none;
+  }
 }
 
 .game-name.is-tour {
@@ -2925,10 +3000,6 @@ h3 .hint {
 }
 
 @media (max-width: 520px) {
-  .tour-programme .game-ticket {
-    --w: 84px;
-  }
-
   .game-name.is-tour {
     font-size: 48px;
   }

@@ -14,7 +14,7 @@ import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
-import { GameTicket } from "../tour/TourParts.tsx";
+import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -109,11 +109,7 @@ export function HomePage() {
         {tourOn && (
           <section className="home-game home-game-tour panel" aria-label="La Tournée">
             <div className="game-stage is-stage" aria-hidden="true">
-              <div className="tour-programme">
-                <GameTicket game="uno" />
-                <GameTicket game="bricks" />
-                <GameTicket game="naval" />
-              </div>
+              <TourPreview />
             </div>
             <div className="game-sheet">
               <h2 className="game-name is-tour">La Tournée</h2>
@@ -313,7 +309,7 @@ export function HomePage() {
               )}
               <p className="game-desc">
                 Des courses de karts en 3D, de 2 à 8 pilotes : dérape dans les virages pour charger un turbo, casse les caisses pour gagner
-                des objets, et passe la ligne en tête. Trois circuits, au clavier, à la manette ou sur téléphone.
+                des objets, vole en deltaplane et plonge sous la mer. Six circuits et des Grands Prix, au clavier, à la manette ou sur téléphone.
               </p>
               <div className="game-actions">
                 <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bolides")} disabled={busy !== null}>
