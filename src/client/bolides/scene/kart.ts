@@ -167,6 +167,11 @@ export class KartModel {
   private wing = new THREE.Group();
   private wingOpen = 0;
   private propeller!: THREE.Mesh;
+  /** Le drone de dépannage, qui descend chercher le kart ; le câble qui l'y accroche */
+  private drone = new THREE.Group();
+  private droneOpen = 0;
+  private droneRotors: THREE.Mesh | null = null;
+  private droneBase = 3;
   /** La taille du véhicule (la potion géante le fait grandir, en douceur) */
   private growth = 1;
 
@@ -314,6 +319,7 @@ export class KartModel {
     this.group.add(this.tilt);
     this.buildWing(look.color, spec.tag + 0.15, keep);
     this.buildPropeller(spec.flames[0] ?? [0, 0.55, -1.45], keep);
+    this.buildDrone(spec.tag + 1.15, keep);
     sharedBlob ??= blobTexture();
     this.blobAlpha = shadows ? 0.4 : 0.7;
     this.blobMat = keep(new THREE.MeshBasicMaterial({ map: sharedBlob, transparent: true, depthWrite: false, opacity: this.blobAlpha }));
@@ -368,6 +374,50 @@ export class KartModel {
     this.wing.position.y = y;
     this.wing.visible = false;
     this.group.add(this.wing);
+  }
+
+  /** Le drone : un petit châssis jaune à quatre rotors, un gyrophare, et un câble qui descend vers le kart */
+  private buildDrone(y: number, keep: <T extends { dispose: () => void }>(x: T) => T) {
+    const yellow = keep(new THREE.MeshStandardMaterial({ color: 0xf2b51c, roughness: 0.4, metalness: 0.15 }));
+    const dark = keep(new THREE.MeshLambertMaterial({ color: 0x2b2f36 }));
+    const body = new THREE.Mesh(keep(new THREE.BoxGeometry(1.1, 0.34, 1.1)), yellow);
+    this.drone.add(body);
+    const light = new THREE.Mesh(
+      keep(new THREE.SphereGeometry(0.15, 10, 8)),
+      keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.6, 0.2) })),
+    );
+    light.position.y = 0.27;
+    this.drone.add(light);
+    const armGeo = keep(new THREE.BoxGeometry(2.6, 0.08, 0.12));
+    for (const a of [Math.PI / 4, -Math.PI / 4]) {
+      const arm = new THREE.Mesh(armGeo, dark);
+      arm.rotation.y = a;
+      this.drone.add(arm);
+    }
+    // Les quatre rotors : des disques flous, en une seule forme
+    const disc = new THREE.CylinderGeometry(0.62, 0.62, 0.02, 18);
+    const discs = [
+      [-0.92, -0.92],
+      [0.92, -0.92],
+      [-0.92, 0.92],
+      [0.92, 0.92],
+    ].map(([x, z]) => disc.clone().translate(x!, 0.12, z!).toNonIndexed());
+    disc.dispose();
+    const rotors = new THREE.Mesh(
+      keep(mergeGeometries(discs, false)!),
+      keep(new THREE.MeshBasicMaterial({ color: 0xdfe6ee, transparent: true, opacity: 0.42, depthWrite: false })),
+    );
+    this.drone.add(rotors);
+    this.droneRotors = rotors;
+    const cable = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.03, y - 0.8, 5).translate(0, -(y - 0.8) / 2 - 0.15, 0)), dark);
+    this.drone.add(cable);
+    const hook = new THREE.Mesh(keep(new THREE.TorusGeometry(0.16, 0.05, 6, 12)), dark);
+    hook.position.y = -(y - 0.8) - 0.3;
+    this.drone.add(hook);
+    this.droneBase = y;
+    this.drone.position.y = y;
+    this.drone.visible = false;
+    this.group.add(this.drone);
   }
 
   /** L'hélice, à l'arrière : elle ne sort que sous l'eau */
@@ -474,6 +524,15 @@ export class KartModel {
     if (this.wing.visible) {
       this.wing.scale.set(this.wingOpen, 0.5 + 0.5 * this.wingOpen, 0.4 + 0.6 * this.wingOpen);
       this.wing.rotation.set(Math.sin(time * 5) * 0.03 + 0.32, 0, -x.steer * 0.28);
+    }
+    // Le drone descend du ciel, porte le kart, puis repart
+    const called = k.rescue > 0 ? 1 : 0;
+    this.droneOpen += (called - this.droneOpen) * Math.min(1, dt * (called ? 9 : 5));
+    this.drone.visible = this.droneOpen > 0.02;
+    if (this.drone.visible) {
+      this.drone.position.y = this.droneBase + (1 - this.droneOpen) * 12 + Math.sin(time * 7) * 0.05;
+      this.drone.rotation.set(Math.sin(time * 3.1) * 0.05, time * 0.8, Math.cos(time * 2.7) * 0.05);
+      if (this.droneRotors) this.droneRotors.rotation.y = time * 6;
     }
     this.propeller.visible = Boolean(x.under);
     if (x.under) this.propeller.rotation.z = time * 34;

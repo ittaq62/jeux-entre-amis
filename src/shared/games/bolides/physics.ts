@@ -19,6 +19,7 @@ import {
   locate,
   pointAt,
   rollAt,
+  solidGround,
   SPRING_RADIUS,
   wrapAngle,
   wrapS,
@@ -57,7 +58,6 @@ const TRICK_BOOST = 0.8;
 /** La chute dans un trou : combien de temps, et à quelle vitesse on repart sur l'autre rive */
 export const FALL_TIME = 1;
 const RESPAWN_SPEED = 13;
-const RESPAWN_DROP = 2.4;
 /** L'élan minimal au décollage d'un tremplin (assez pour franchir le trou), et la poussée d'un trampoline */
 const RAMP_MIN_SPEED = 21;
 const SPRING_VY = 10;
@@ -125,6 +125,12 @@ export interface Kart {
   /** Depuis combien de temps il charge son saut, et s'il est en l'air à cause d'un saut chargé (pas de figure, alors) */
   jumpCharge: number;
   charged: boolean;
+  /** Le dépannage : le temps qu'il reste (un drone le porte), d'où il part et où il le repose */
+  rescue: number;
+  rescueFrom: [number, number, number, number];
+  rescueTo: [number, number, number];
+  /** Le dernier endroit de la route où il roulait normalement (c'est là que le drone le ramène) */
+  goodS: number;
 }
 
 export interface Input {
@@ -171,6 +177,8 @@ export type KartEvent =
   /** Tombé dans un trou, et revenu sur la route */
   | "fall"
   | "respawn"
+  /** Le drone de dépannage arrive */
+  | "rescue"
   /** Sur un trampoline */
   | "spring"
   /** L'aspiration d'un kart devant vient de nous lancer */
@@ -211,7 +219,61 @@ export function newKart(t: Track, x: number, z: number, h: number): Kart {
     glide: false,
     jumpCharge: 0,
     charged: false,
+    rescue: 0,
+    rescueFrom: [x, z, 0, h],
+    rescueTo: [x, z, h],
+    goodS: at.s,
   };
+}
+
+/** Le dépannage : combien de temps le drone porte le kart, et à quelle hauteur */
+export const RESCUE_TIME = 1.6;
+const RESCUE_LIFT = 5;
+const RESCUE_BACK = 18;
+
+const smoothstep = (a: number, b: number, v: number) => {
+  const u = clamp((v - a) / (b - a), 0, 1);
+  return u * u * (3 - 2 * u);
+};
+
+/** Où reposer un kart : au milieu de la route, jamais sur un tremplin, dans un trou, ni là où quelque chose traverse */
+export function rescueSpot(t: Track, from: number): number {
+  const busy = (s: number) =>
+    t.crossers.some((c) => Math.abs(deltaS(t, c.s, s)) < 9) ||
+    t.movers.some((m) => Math.abs(deltaS(t, m.s, s)) < 10) ||
+    t.jumps.some((lip) => {
+      const along = deltaS(t, lip, s);
+      return along > -RAMP_LEN - 3 && along < 2;
+    });
+  let s = from;
+  for (let i = 0; i < 10 && busy(s); i++) s -= 8;
+  return solidGround(t, wrapS(t, s));
+}
+
+/** Appeler le drone : le kart est soulevé, porté au milieu de la route, et reposé dans le bon sens */
+export function beginRescue(t: Track, k: Kart, events?: KartEvent[], at?: number): void {
+  if (k.rescue > 0) return;
+  // Le dernier endroit où il roulait, mais jamais devant lui, ni trop loin derrière : on ne perd pas un demi-tour
+  const s = at ?? rescueSpot(t, k.s + clamp(deltaS(t, k.s, k.goodS), -RESCUE_BACK, 0));
+  const p = pointAt(t, s, 0);
+  k.rescue = RESCUE_TIME;
+  k.rescueFrom = [k.x, k.z, k.air, k.h];
+  k.rescueTo = [p.x, p.z, Math.atan2(p.tx, p.tz)];
+  k.fall = 0;
+  k.v = 0;
+  k.slip = 0;
+  k.vy = 0;
+  k.boost = 0;
+  k.drift = 0;
+  k.charge = 0;
+  k.spin = 0;
+  k.hop = 0;
+  k.glide = false;
+  k.trick = false;
+  k.charged = false;
+  k.jumpCharge = 0;
+  k.draft = Math.max(0, k.draft);
+  events?.push("rescue");
 }
 
 /** Rester dans le sillage d'un kart : le temps qu'il faut, la distance, la largeur, le coup de turbo, et le repos après */
@@ -229,7 +291,7 @@ export function draftStep(k: Kart, others: readonly Kart[], dt: number, events?:
     return;
   }
   let behind = false;
-  if (k.v > 15 && k.air === 0 && !k.offroad && k.spin === 0 && k.boost === 0 && k.fall === 0) {
+  if (k.v > 15 && k.air === 0 && !k.offroad && k.spin === 0 && k.boost === 0 && k.fall === 0 && k.rescue === 0) {
     const fx = Math.sin(k.h);
     const fz = Math.cos(k.h);
     for (const o of others) {
@@ -330,25 +392,34 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     const f = 1 - k.fall / FALL_TIME;
     k.air = -6 * f * f;
     k.v *= Math.exp(-2.5 * dt);
+    // Au fond : le drone vient le repêcher et le pose sur l'autre rive
     if (k.fall === 0) {
       const gap = t.gaps.find((g) => deltaS(t, g.from, k.s) > -3 && deltaS(t, g.to, k.s) < 3) ?? t.gaps[0];
-      const s = wrapS(t, (gap?.to ?? k.s) + 4);
-      const p = pointAt(t, s, 0);
-      k.dist += deltaS(t, k.s, s);
-      k.x = p.x;
-      k.z = p.z;
-      k.h = Math.atan2(p.tx, p.tz);
+      beginRescue(t, k, events, wrapS(t, (gap?.to ?? k.s) + 4));
+    }
+    return;
+  }
+  if (k.rescue > 0) {
+    k.rescue = Math.max(0, k.rescue - dt);
+    const f = 1 - k.rescue / RESCUE_TIME;
+    const carry = smoothstep(0.25, 0.72, f);
+    const [fx, fz, fa, fh] = k.rescueFrom;
+    const [tx, tz, th] = k.rescueTo;
+    k.x = fx + (tx - fx) * carry;
+    k.z = fz + (tz - fz) * carry;
+    k.h = fh + wrapAngle(th - fh) * carry;
+    k.air = (fa + (RESCUE_LIFT - fa) * smoothstep(0, 0.25, f)) * (1 - smoothstep(0.72, 1, f));
+    const was = k.s;
+    const here = locate(t, k.x, k.z);
+    k.i = here.i;
+    k.s = here.s;
+    k.d = here.d;
+    k.y = here.y;
+    k.dist += deltaS(t, was, here.s);
+    if (k.rescue === 0) {
+      k.air = 0;
       k.v = RESPAWN_SPEED;
-      k.slip = 0;
-      // On le repose d'un peu haut, sur l'autre rive
-      k.air = RESPAWN_DROP;
-      k.vy = 0;
-      k.glide = false;
-      const at = locate(t, k.x, k.z);
-      k.i = at.i;
-      k.s = at.s;
-      k.d = at.d;
-      k.y = at.y;
+      k.goodS = k.s;
       events?.push("respawn");
     }
     return;
@@ -554,6 +625,8 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   k.d = at.d;
   k.y = at.y;
   k.dist += deltaS(t, oldS, at.s);
+  // Le dernier endroit où il roulait normalement sur la route
+  if (Math.abs(k.d) <= t.half && !flying && k.air === 0 && k.spin === 0 && k.v > 6) k.goodS = k.s;
 
   // Les tremplins : on monte la rampe, on décolle au bord ; une figure en l'air donne un turbo à l'atterrissage
   let ramp = -1;
@@ -656,7 +729,7 @@ export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean, weightA =
   const dz = b.z - a.z;
   const dist = Math.hypot(dx, dz);
   const min = KART_RADIUS * 2;
-  if (dist >= min || dist < 1e-6 || (!moveA && !moveB) || a.fall > 0 || b.fall > 0) return 0;
+  if (dist >= min || dist < 1e-6 || (!moveA && !moveB) || a.fall > 0 || b.fall > 0 || a.rescue > 0 || b.rescue > 0) return 0;
   const nx = dx / dist;
   const nz = dz / dist;
   const over = min - dist;

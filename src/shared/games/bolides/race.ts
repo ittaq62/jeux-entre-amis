@@ -50,6 +50,7 @@ import {
   type ItemKind,
 } from "./items.ts";
 import {
+  beginRescue,
   bump,
   CLASS_SPEED,
   draftStep,
@@ -107,6 +108,8 @@ export const INTRO_MS = 3500;
 export const COUNTDOWN_MS = 3000;
 /** Après le premier arrivé, les autres ont encore ce temps pour finir */
 export const FINISH_GRACE_MS = 30_000;
+/** Un bot qui n'a presque pas avancé pendant ce temps appelle le drone */
+const STALL_MS = 3500;
 /** Une fois tous les joueurs arrivés, les bots qui roulent encore sont classés au bout de ce temps */
 export const BOTS_GRACE_MS = 3500;
 /** Au-delà, la course s'arrête quoi qu'il arrive (par tour) */
@@ -466,6 +469,18 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
       const x0 = r.kart.x;
       const z0 = r.kart.z;
       const kev: KartEvent[] = [];
+      // Il n'avance plus depuis trop longtemps : le drone vient le chercher, lui aussi
+      if (r.kart.rescue > 0 || r.kart.fall > 0) {
+        // Le temps qu'il est porté ne compte pas
+        mem.stallAt = at;
+        mem.stallDist = r.kart.dist;
+      } else if (at - mem.stallAt >= STALL_MS) {
+        const k = r.kart;
+        if (mem.stallAt > 0 && r.finish === null && k.spin === 0 && k.fall === 0 && k.rescue === 0 && k.dist - mem.stallDist < 6)
+          beginRescue(t, k, kev);
+        mem.stallAt = at;
+        mem.stallDist = k.dist;
+      }
       // Arrivé, un bot lève le pied
       const star = (r.starUntil ?? 0) > at;
       const stats = VEHICLES[r.vehicle ?? "kart"].stats;
@@ -508,7 +523,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
 
 /** Un coup : le bouclier l'arrête, sinon le kart part en tête-à-queue (chez un joueur, c'est son navigateur qui l'applique) */
 function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: number, events: BolidesEvent[]) {
-  if (victim.finish !== null || victim.kart.fall > 0) return;
+  if (victim.finish !== null || victim.kart.fall > 0 || victim.kart.rescue > 0) return;
   // Sous l'arc-en-ciel ou la potion géante, rien ne touche ; et on ne s'acharne pas sur celui qu'on vient de renverser
   if ((victim.starUntil ?? 0) > now || (victim.giantUntil ?? 0) > now || (victim.safeUntil ?? 0) > now) return;
   if (victim.shieldUntil > now) {

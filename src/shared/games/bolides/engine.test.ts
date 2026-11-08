@@ -3,6 +3,8 @@ import { bounceBetween, COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PE
 import { botDrive, newBotMemory } from "./bot.ts";
 import {
   assistSteer,
+  beginRescue,
+  rescueSpot,
   bump,
   draftStep,
   DRIFT_LEVELS,
@@ -58,6 +60,8 @@ function kartAt(id: (typeof TRACK_IDS)[number], s: number, d = 0): Kart {
   const p = pointAt(t, s, d);
   return newKart(t, p.x, p.z, Math.atan2(p.tx, p.tz));
 }
+
+const t0Wall = (id: (typeof TRACK_IDS)[number]) => getTrack(id).wall;
 
 function drive(k: Kart, input: Input, seconds: number, id: (typeof TRACK_IDS)[number] = "port", top = 1) {
   const t = getTrack(id);
@@ -967,17 +971,19 @@ describe("la vie du circuit", () => {
     for (let n = 0; n < 40; n++) step(k, { steer: 1, gas: true, brake: false, drift: true }, t, { top: 1 }, ev as never);
     expect(k.x).toBe(x);
     expect(k.air).toBeLessThan(-1);
-    for (let n = 0; n < 40 && !ev.includes("respawn"); n++) step(k, GAS, t, { top: 1 }, ev as never);
+    for (let n = 0; n < 160 && !ev.includes("respawn"); n++) step(k, GAS, t, { top: 1 }, ev as never);
+    expect(ev).toContain("rescue");
     expect(ev).toContain("respawn");
     expect(k.fall).toBe(0);
     expect(Math.abs(k.d)).toBeLessThan(0.5);
     expect(deltaS(t, gap.to, k.s)).toBeGreaterThan(0);
     expect(k.dist - before).toBeGreaterThan(gap.to - gap.from);
     expect(k.dist - before).toBeLessThan(gap.to - gap.from + 16);
-    // Reposé d'un peu haut, il retombe sur la route et repart
+    // Reposé sur la route par le drone, il repart
     for (let n = 0; n < 60; n++) step(k, GAS, t, { top: 1 }, ev as never);
-    expect(ev).toContain("land");
     expect(k.air).toBe(0);
+    expect(k.rescue).toBe(0);
+    expect(k.v).toBeGreaterThan(10);
     expect(k.fall).toBe(0);
   });
 
@@ -1380,6 +1386,145 @@ describe("le vol et l'eau", () => {
         expect(Math.abs(deltaS(t, spots[a]!, spots[b]!)), `${spots[a]} et ${spots[b]}`).toBeGreaterThan(10);
       }
     }
+  });
+});
+
+describe("le drone de dépannage", () => {
+  const setRoad = (id: (typeof TRACK_IDS)[number], s: number, d: number) => {
+    const t = getTrack(id);
+    const k = kartAt(id, s, d);
+    k.goodS = k.s;
+    return { t, k };
+  };
+
+  it("soulève le kart, le porte au milieu de la route, et le repose dans le bon sens", () => {
+    const { t, k } = setRoad("port", 400, t0Wall("port") - 0.5);
+    k.h += 2.5;
+    const ev: string[] = [];
+    beginRescue(t, k, ev as never);
+    expect(ev).toContain("rescue");
+    let top = 0;
+    for (let i = 0; i < 200 && k.rescue > 0; i++) {
+      step(k, { ...GAS, steer: 1, drift: true }, t, { top: 1 }, ev as never);
+      top = Math.max(top, k.air);
+    }
+    expect(top).toBeGreaterThan(3);
+    expect(ev).toContain("respawn");
+    expect(k.rescue).toBe(0);
+    expect(k.air).toBe(0);
+    expect(Math.abs(k.d)).toBeLessThan(0.4);
+    const p = pointAt(t, k.s, 0);
+    expect(Math.abs(wrapAngle(k.h - Math.atan2(p.tx, p.tz)))).toBeLessThan(0.05);
+    expect(k.v).toBeGreaterThan(10);
+  });
+
+  it("ramène au dernier endroit où l'on roulait, sans faire gagner de terrain", () => {
+    const { t, k } = setRoad("port", 345, 0);
+    k.goodS = 335;
+    const before = k.dist;
+    beginRescue(t, k);
+    for (let i = 0; i < 200 && k.rescue > 0; i++) step(k, GAS, t, { top: 1 });
+    expect(Math.abs(deltaS(t, 335, k.s))).toBeLessThan(2);
+    expect(k.dist).toBeLessThanOrEqual(before);
+  });
+
+  it("même après un long passage dans l'herbe, on ne perd pas plus de quelques mètres, et on n'en gagne jamais", () => {
+    const { t, k } = setRoad("port", 345, 0);
+    k.goodS = 150;
+    beginRescue(t, k);
+    for (let i = 0; i < 200 && k.rescue > 0; i++) step(k, GAS, t, { top: 1 });
+    expect(deltaS(t, k.s, 345)).toBeGreaterThanOrEqual(0);
+    expect(deltaS(t, k.s, 345)).toBeLessThan(20);
+    const ahead = setRoad("port", 345, 0);
+    ahead.k.goodS = 420;
+    beginRescue(ahead.t, ahead.k);
+    for (let i = 0; i < 200 && ahead.k.rescue > 0; i++) step(ahead.k, GAS, ahead.t, { top: 1 });
+    expect(deltaS(t, ahead.k.s, 345)).toBeGreaterThanOrEqual(-1);
+  });
+
+  it.each(TRACK_IDS)("%s : ne repose jamais sur un tremplin, dans un trou, ni sur un obstacle", (id) => {
+    const t = getTrack(id);
+    for (let s = 0; s < t.length; s += 3) {
+      const spot = rescueSpot(t, s);
+      for (const g of t.gaps) {
+        const along = deltaS(t, g.from, spot);
+        expect(along >= -RAMP_LEN - 2 && along <= g.to - g.from, `${s} -> ${spot}`).toBe(false);
+      }
+      for (const c of t.crossers) expect(Math.abs(deltaS(t, c.s, spot)), `passage ${s} -> ${spot}`).toBeGreaterThan(3);
+      // Toujours tout près d'où l'on était (un drone ne fait pas gagner un demi-tour)
+      expect(Math.abs(deltaS(t, s, spot)), `${s} -> ${spot}`).toBeLessThan(90);
+    }
+  });
+
+  it("personne ne peut toucher un kart porté, et on ne peut pas le bousculer", () => {
+    const race = newRace(["a", "b", "c"], new Set(["b", "c"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const a = racerOf(race, "a")!;
+    const b = racerOf(race, "b")!;
+    const t = getTrack("port");
+    beginRescue(t, b.kart);
+    Object.assign(a.kart, { dist: 0 });
+    Object.assign(b.kart, { dist: 900 });
+    a.item = "orage";
+    a.uses = 1;
+    const out = useItem(race, "a", race.goAt + 2000);
+    expect(out.some((e) => e.type === "hit" && e.id === "b")).toBe(false);
+    const other = { ...b.kart, rescue: 0, x: b.kart.x + 0.4 };
+    expect(bump(b.kart, other, true, true)).toBe(0);
+  });
+
+  it("un bot reposé repart tout droit : il ne recule pas, et le drone ne revient pas le chercher", () => {
+    const t = getTrack("port");
+    const k = kartAt("port", 300, 0);
+    k.goodS = 300;
+    const mem = newBotMemory({ rng: 3 });
+    const h = { rng: 8 };
+    beginRescue(t, k);
+    let now = 10_000;
+    let reversed = false;
+    for (let i = 0; i < 60 * 4; i++) {
+      now += DT * 1000;
+      const plan = botDrive(t, k, null, [], [], "moyen", mem, now, h);
+      if (k.rescue === 0 && plan.input.brake) reversed = true;
+      step(k, plan.input, t, { top: 1 });
+    }
+    expect(reversed).toBe(false);
+    expect(k.dist).toBeGreaterThan(300 + 25);
+  });
+
+  it("le drone se voit chez les autres, et un kart repris par le serveur en plein vol se repose sur place", () => {
+    const { t, k } = setRoad("port", 300, 0);
+    beginRescue(t, k);
+    for (let i = 0; i < 30; i++) step(k, GAS, t, { top: 1 });
+    const out = decodeKart(encodeKart(k))!;
+    expect(out.rescue).toBeGreaterThan(0);
+    for (let i = 0; i < 40; i++) step(out, GAS, t, { top: 1 });
+    expect(out.rescue).toBe(0);
+    expect(out.air).toBe(0);
+    expect(Number.isFinite(out.x)).toBe(true);
+  });
+
+  it("un bot coincé contre un mur finit par être dépanné", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 3);
+    worldTick(race, race.goAt);
+    const b = racerOf(race, "b")!;
+    const a = racerOf(race, "a")!;
+    a.kart.dist = 5000;
+    const mem = new Map();
+    let now = race.goAt;
+    let done = false;
+    for (let i = 0; i < 400 && !done; i++) {
+      now += 50;
+      // On l'empêche d'avancer, comme s'il était coincé
+      const k = b.kart;
+      if (k.rescue === 0) {
+        k.v = 0;
+        k.dist = 10;
+      }
+      driveBots(race, now, mem);
+      done = b.kart.rescue > 0;
+    }
+    expect(done).toBe(true);
   });
 });
 

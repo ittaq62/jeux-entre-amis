@@ -161,6 +161,7 @@ export class RaceRuntime {
   private nudge = 0;
   private flipNow = false;
   private toldGlide = false;
+  private wantRescue = false;
   private banner: Hud["banner"] = null;
   private bannerSeq = 0;
   private autoRng = { rng: 77 };
@@ -597,7 +598,9 @@ export class RaceRuntime {
           }
           this.opts.send({ t: "use", flip });
         }
-        if (pad.respawn && d.stuck) d.respawn();
+        // Bloqué : le drone vient tout seul, ou tout de suite si on le demande
+        if (me.finish === null && (d.rescueDue || ((pad.respawn || this.wantRescue) && d.stuck))) d.rescue(events);
+        this.wantRescue = false;
         // Les pièces traversées disparaissent tout de suite (le serveur, lui, les compte)
         if (me.finish === null && d.kart.air < 1.2) {
           this.track.coins.forEach((c, i) => {
@@ -649,6 +652,9 @@ export class RaceRuntime {
           this.scene.shake(0.3);
           this.tell("Plouf ! Il fallait prendre le tremplin", true);
           vibrate([30, 60, 30]);
+        } else if (e === "rescue") {
+          this.tell("Le drone te remet sur la piste", true);
+          vibrate(30);
         } else if (e === "respawn") {
           this.scene.respawnSparkle(mine);
         } else if (e === "bound") {
@@ -695,6 +701,7 @@ export class RaceRuntime {
       else if (e === "drift") play("click", { volume: 0.4 });
       else if (e === "jump") play("bolidesJump");
       else if (e === "fall") play("bolidesFall");
+      else if (e === "rescue") play("bolidesRescue");
       else if (e === "glide") play("bolidesGlide");
       else if (e === "hoop") play("bolidesHoop");
       else if (e === "spring") play("bolidesSpring");
@@ -910,7 +917,7 @@ export class RaceRuntime {
 
   /** Repartir quand on est coincé (le bouton du téléphone, comme la touche R) */
   respawnNow() {
-    if (this.driver?.stuck) this.driver.respawn();
+    this.wantRescue = true;
   }
 
   dispose() {

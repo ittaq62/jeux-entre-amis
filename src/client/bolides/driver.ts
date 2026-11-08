@@ -6,20 +6,23 @@
 import { VEHICLES, type VehicleStats } from "../../shared/games/bolides/garage.ts";
 import { RESSORT_VY } from "../../shared/games/bolides/items.ts";
 import {
+  beginRescue,
   bump,
   draftStep,
   DT,
-  newKart,
   SPIN_TIME,
   step,
   type Input,
   type Kart,
   type KartEvent,
 } from "../../shared/games/bolides/physics.ts";
-import { deltaS, pointAt, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
+import { deltaS, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 
 /** Accélérer dans cette fenêtre juste avant le feu vert donne un départ canon */
 const ROCKET_WINDOW_MS = 800;
+/** Bloqué : pendant combien de secondes, et en bougeant de moins de combien de mètres, avant que le drone vienne */
+const RESCUE_AFTER = 2.3;
+const RESCUE_MOVED = 3;
 
 export class LocalDriver {
   private acc = 0;
@@ -28,7 +31,10 @@ export class LocalDriver {
   private launched = false;
   /** Ce qu'il a reculé le long de la route ces derniers temps (mauvais sens) */
   private backward = 0;
-  private stuckFor = 0;
+  /** Où il était ces dernières secondes, pour savoir s'il avance encore */
+  private track2: { x: number; z: number; t: number }[] = [];
+  private clock = 0;
+  private wrongFor = 0;
   /** Le kart au pas d'avant, et le kart tel qu'on le montre (entre les deux) */
   private prev: Kart;
   private shown: Kart;
@@ -60,8 +66,8 @@ export class LocalDriver {
       // Le mauvais sens : on recule le long de la route en roulant vraiment
       const moved = deltaS(this.track, s0, this.kart.s);
       this.backward = Math.max(0, this.backward * 0.995 - moved);
-      this.stuckFor = Math.abs(this.kart.v) < 1 && this.kart.spin === 0 ? this.stuckFor + DT : 0;
     }
+    this.watchProgress(dt, input);
     return events;
   }
 
@@ -107,9 +113,38 @@ export class LocalDriver {
     return this.backward > 12;
   }
 
-  /** Coincé depuis un moment : on propose de repartir */
+  /** Il essaie d'avancer, et il ne bouge plus (ou presque) : on garde sa trace sur quelques secondes */
+  private watchProgress(dt: number, input: Input) {
+    this.clock += dt;
+    this.wrongFor = this.wrongWay ? this.wrongFor + dt : 0;
+    const k = this.kart;
+    if ((!input.gas && !input.brake) || k.spin > 0 || k.fall > 0 || k.rescue > 0 || k.air > 0.05) {
+      this.track2.length = 0;
+      return;
+    }
+    const last = this.track2.at(-1);
+    if (!last || this.clock - last.t >= 0.15) this.track2.push({ x: k.x, z: k.z, t: this.clock });
+    while (this.track2.length > 2 && this.clock - this.track2[1]!.t >= RESCUE_AFTER) this.track2.shift();
+  }
+
+  /** Sur combien de temps on l'observe, et de combien il a bougé */
+  private progress(): { span: number; moved: number } {
+    const first = this.track2[0];
+    if (!first) return { span: 0, moved: Infinity };
+    return { span: this.clock - first.t, moved: Math.hypot(this.kart.x - first.x, this.kart.z - first.z) };
+  }
+
+  /** Bloqué depuis un instant : on propose de repartir tout de suite */
   get stuck(): boolean {
-    return this.stuckFor > 2.5;
+    const { span, moved } = this.progress();
+    return span >= 0.9 && moved < 1.6;
+  }
+
+  /** Bloqué pour de bon (ou à contresens depuis trop longtemps) : le drone vient */
+  get rescueDue(): boolean {
+    if (this.kart.rescue > 0 || this.kart.fall > 0) return false;
+    const { span, moved } = this.progress();
+    return (span >= RESCUE_AFTER && moved < RESCUE_MOVED) || this.wrongFor > 6;
   }
 
   /** Touché : le tête-à-queue */
@@ -132,14 +167,11 @@ export class LocalDriver {
     this.kart.boost = Math.max(this.kart.boost, seconds);
   }
 
-  /** Repartir : au milieu de la route, là où l'on était, dans le bon sens, arrêté */
-  respawn() {
-    const k = this.kart;
-    const p = pointAt(this.track, k.s, 0);
-    const fresh = newKart(this.track, p.x, p.z, Math.atan2(p.tx, p.tz));
-    this.kart = { ...fresh, dist: k.dist, boost: 0 };
-    Object.assign(this.prev, this.kart);
+  /** Le drone vient chercher le kart et le repose sur la route */
+  rescue(events?: KartEvent[]) {
+    beginRescue(this.track, this.kart, events);
     this.backward = 0;
-    this.stuckFor = 0;
+    this.wrongFor = 0;
+    this.track2.length = 0;
   }
 }

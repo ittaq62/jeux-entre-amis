@@ -491,7 +491,9 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
             </div>
           )}
           {h.stuck && !h.wrongWay && (
-            <div className="hud-hint">{phone ? "Coincé ? Touche Repartir" : "Coincé ? Appuie sur R pour repartir"}</div>
+            <div className="hud-hint">
+              {phone ? "Bloqué ? Le drone arrive, ou touche Repartir" : "Bloqué ? Le drone arrive, ou appuie sur R"}
+            </div>
           )}
           {h.finished && !over && (
             <div className="hud-finished">

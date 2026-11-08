@@ -59,6 +59,9 @@ export interface BotMemory {
   /** La ligne de pièces qu'il a décidé d'aller chercher (ou de laisser), jusqu'à quel endroit du tour */
   coinLane: number | null;
   coinUntil: number;
+  /** Où il en était à la dernière vérification (pour savoir s'il n'avance plus) */
+  stallAt: number;
+  stallDist: number;
 }
 
 export function newBotMemory(h: RngHolder): BotMemory {
@@ -73,6 +76,8 @@ export function newBotMemory(h: RngHolder): BotMemory {
     reverseUntil: 0,
     coinLane: null,
     coinUntil: -1,
+    stallAt: 0,
+    stallDist: 0,
   };
 }
 
@@ -202,6 +207,11 @@ export function botDrive(
   let steer = clamp(-err * 2.6 + Math.sin(mem.wobble) * style.wobble, -1, 1);
 
   // Coincé contre un mur : il recule un moment en braquant dans l'autre sens, puis retente d'avancer
+  // Porté par le drone, ou en train de tomber : il n'est pas coincé, et il repartira tout droit
+  if (k.rescue > 0 || k.fall > 0) {
+    mem.slowSince = 0;
+    mem.reverseUntil = 0;
+  }
   const reverse = { input: { steer: -steer, gas: false, brake: true, drift: false }, use: false, flip: false };
   if (now < mem.reverseUntil) return reverse;
   if (k.v < 2 && k.spin === 0) {

@@ -36,6 +36,7 @@ export function encodeKart(k: Kart): KartNet {
     r2(k.air),
     k.trick ? 1 : 0,
     k.glide ? 1 : 0,
+    k.rescue > 0 ? 1 : 0,
   ];
 }
 
@@ -72,6 +73,11 @@ export function decodeKart(n: KartNet, base?: Kart): Kart | null {
     glide: n.length > 15 ? n[15]! > 0 : false,
     jumpCharge: base?.jumpCharge ?? 0,
     charged: base?.charged ?? false,
+    // Porté par le drone : ça voyage ; si le serveur reprend le volant à cet instant, il le repose sur place
+    rescue: n.length > 16 && n[16]! > 0 ? 0.2 : 0,
+    rescueFrom: [at(0), at(1), at(13, -7, 16), at(2, -10, 10)],
+    rescueTo: [at(0), at(1), at(2, -10, 10)],
+    goodS: base?.goodS ?? base?.s ?? 0,
   };
 }
 
