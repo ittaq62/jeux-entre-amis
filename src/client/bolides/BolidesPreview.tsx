@@ -59,10 +59,8 @@ function star(x: number, y: number, r: number): string {
 /** Un kart vu de dos ; (0, 0) : le sol, au milieu de l'essieu arrière */
 function RearKart({
   id,
-  body,
   bodyDark,
   suit,
-  helmet,
   helmetDark,
   stripe,
   label,
@@ -73,10 +71,8 @@ function RearKart({
   skew = 0,
 }: {
   id: string;
-  body: string;
   bodyDark: string;
   suit: string;
-  helmet: string;
   helmetDark: string;
   stripe: string;
   label?: string;
@@ -365,10 +361,8 @@ export function BolidesPreview() {
         {/* Le rival, loin devant */}
         <RearKart
           id="rival"
-          body="#3b8ae6"
           bodyDark="#1d57b8"
           suit="#7b3fa0"
-          helmet="#eef0f6"
           helmetDark="#7b8399"
           stripe="#e2483d"
           x={SLICES[10]!.cx + SLICES[10]!.hw * 0.3}
@@ -400,10 +394,8 @@ export function BolidesPreview() {
         {/* Le kart de tête, en plein dérapage */}
         <RearKart
           id="hero"
-          body="#e2483d"
           bodyDark="#8f1d17"
           suit="#20407f"
-          helmet="#ffc83d"
           helmetDark="#8d5a0e"
           stripe="#d8362c"
           label="BOLIDES"
