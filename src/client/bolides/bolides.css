@@ -1015,8 +1015,10 @@
 
 .bolides-track-maps {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  flex: none;
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .track-map {

@@ -283,6 +283,26 @@ export class RaceScene {
     this.scene.add(this.life.group);
     this.aim = new AimGuide(track, keep);
     this.scene.add(this.aim.group);
+    this.warmUp();
+  }
+
+  /**
+   * Préparer tout de suite ce qui n'apparaît qu'en course (l'aile, la visée, l'hélice…) : sinon la carte graphique
+   * le découvre au pire moment, et l'image saute une fraction de seconde.
+   */
+  private warmUp() {
+    const hidden: THREE.Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (o.visible) return;
+      hidden.push(o);
+      o.visible = true;
+    });
+    try {
+      this.renderer.compile(this.scene, this.camera);
+    } catch {
+      // Tant pis : ça se préparera à la première image
+    }
+    for (const o of hidden) o.visible = false;
   }
 
   /** La caméra passe sous la surface : tout devient bleu, on ne voit plus loin, et le ciel disparaît */
