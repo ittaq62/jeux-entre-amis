@@ -450,6 +450,18 @@
   opacity: 0.75;
 }
 
+/* Les boutons restent à portée de pouce, même quand la feuille des résultats dépasse de l'écran */
+.bolides-sheet .overlay-actions {
+  position: sticky;
+  bottom: 6px;
+  z-index: 2;
+  margin: 0 -10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f3ecdc;
+  box-shadow: 0 -4px 14px rgba(60, 40, 10, 0.16);
+}
+
 .bolides-cup {
   margin: 12px 0 4px;
   padding: 10px 12px;
