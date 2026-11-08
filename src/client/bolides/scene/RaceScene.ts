@@ -2,7 +2,10 @@
 // Elle ne décide de rien : on lui dit où sont les karts et ce qui vient d'arriver, elle le dessine.
 
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { BOMBE_RADIUS, hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
@@ -10,6 +13,7 @@ import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/tr
 import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
+import type { Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
 
@@ -113,7 +117,11 @@ export class RaceScene {
   private time = 0;
   private resize: ResizeObserver;
   private shadows: boolean;
-  private envTex: THREE.Texture;
+  private envTex: THREE.Texture | null = null;
+  /** Le halo autour de ce qui brille (sur ordinateur seulement, et il s'efface si l'appareil peine) */
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
+  private vignette: HTMLDivElement;
   /** La finesse de l'image : elle baisse un peu si l'appareil peine (moins de 45 images par seconde), et remonte */
   private ratio: number;
   private maxRatio: number;
@@ -153,12 +161,11 @@ export class RaceScene {
     sc.near = 10;
     sc.far = 300;
     this.scene.add(this.sun, this.sun.target);
-    // Un reflet de pièce éclairée pour les karts (peinture, chromes), sans rien télécharger
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-    this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environmentIntensity = 0.75;
+    // Un voile léger sur les bords de l'image (rien à calculer : c'est un simple dégradé par-dessus)
+    this.vignette = document.createElement("div");
+    this.vignette.className = "bolides-vignette";
+    container.appendChild(this.vignette);
 
     this.oilMat = new THREE.MeshBasicMaterial({ map: TX.oilTexture(), transparent: true, depthWrite: false });
     this.petardGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.1, 10);
@@ -180,6 +187,14 @@ export class RaceScene {
     this.resTimer = 0;
     const min = this.opts.phone ? 0.7 : 1;
     let next = this.ratio;
+    if (this.frameAvg > 1 / 45 && this.composer) {
+      // D'abord le halo : ça se voit moins que perdre en finesse
+      this.composer.dispose();
+      this.composer = null;
+      this.bloom?.dispose();
+      this.bloom = null;
+      return;
+    }
     if (this.frameAvg > 1 / 45) next = Math.max(min, this.ratio * 0.85);
     else if (this.goodFor > 8) next = Math.min(this.maxRatio, this.ratio * 1.1);
     if (Math.abs(next - this.ratio) < 0.01) return;
@@ -193,6 +208,8 @@ export class RaceScene {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.composer?.setPixelRatio(this.ratio);
+    this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -200,7 +217,17 @@ export class RaceScene {
   /** Le circuit et les karts (dans l'ordre des pilotes de la course) */
   build(track: Track, looks: KartLook[]) {
     this.track = track;
-    this.world = buildWorld(track, { phone: this.opts.phone, shadows: this.shadows });
+    this.world = buildWorld(track, {
+      phone: this.opts.phone,
+      shadows: this.shadows,
+      anisotropy: Math.min(this.opts.phone ? 4 : 16, this.renderer.capabilities.getMaxAnisotropy()),
+    });
+    const mood = this.world.mood;
+    this.hemi.color.setHex(mood.hemiSky);
+    this.hemi.groundColor.setHex(mood.hemiGround);
+    this.sun.color.setHex(mood.sun);
+    this.makeEnvironment(mood);
+    if (!this.opts.phone && !this.opts.reduced) this.makeBloom();
     this.scene.add(this.world.group, this.world.dome);
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
@@ -238,6 +265,59 @@ export class RaceScene {
     this.scene.add(this.crossers.group);
     this.life = new TrackLife({ t: track, keep, heightAt: this.world.heightAt, shadows: this.shadows, phone: this.opts.phone });
     this.scene.add(this.life.group);
+  }
+
+  /** Ce que reflètent les carrosseries : le ciel de ce circuit, son sol, son soleil */
+  private makeEnvironment(mood: Mood) {
+    const env = new THREE.Scene();
+    const geo = new THREE.SphereGeometry(10, 32, 16);
+    const p = geo.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(p.count * 3);
+    const top = new THREE.Color(mood.top);
+    const mid = new THREE.Color(mood.mid);
+    const hor = new THREE.Color(mood.horizon);
+    const ground = new THREE.Color(mood.ground);
+    const c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / 10;
+      if (y > 0)
+        c.copy(hor)
+          .lerp(mid, Math.min(1, y / 0.25))
+          .lerp(top, Math.max(0, (y - 0.2) / 0.8));
+      else c.copy(hor).lerp(ground, Math.min(1, -y * 7));
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    const dome = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide }));
+    env.add(dome);
+    const sunGeo = new THREE.SphereGeometry(1, 12, 8);
+    const sunMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(mood.sun).multiplyScalar(30) });
+    const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    sunMesh.position.copy(mood.dir).multiplyScalar(8);
+    env.add(sunMesh);
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envTex = pmrem.fromScene(env, 0.03).texture;
+    pmrem.dispose();
+    geo.dispose();
+    sunGeo.dispose();
+    sunMat.dispose();
+    (dome.material as THREE.Material).dispose();
+    this.scene.environment = this.envTex;
+  }
+
+  private makeBloom() {
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const composer = new EffectComposer(this.renderer, target);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+    // Seul ce qui dépasse le blanc diffuse : les turbos, les pièces, les flammes, le soleil, pas la neige en plein jour
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.42, 0.55, 1.3);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+    composer.setPixelRatio(this.ratio);
+    composer.setSize(size.x, size.y);
+    this.composer = composer;
+    this.bloom = bloom;
   }
 
   /** Ce qui vient de se passer sur la route */
@@ -874,16 +954,18 @@ export class RaceScene {
     const inside =
       f.camera === "chase" && followed !== undefined && this.world.tunnels.some(([a, b]) => followed.s > a + 4 && followed.s < b - 2);
     this.daylight += ((inside ? 0.38 : 1) - this.daylight) * Math.min(1, f.dt * 4);
-    this.hemi.intensity = 1.35 * this.daylight;
-    this.sun.intensity = 1.9 * this.daylight;
-    this.scene.environmentIntensity = 0.55 * (0.5 + 0.5 * this.daylight);
+    const { hemiPower, sunPower } = this.world.mood;
+    this.hemi.intensity = hemiPower * this.daylight;
+    this.sun.intensity = sunPower * this.daylight;
+    this.scene.environmentIntensity = 0.75 * (0.45 + 0.55 * this.daylight);
     // Les étiquettes des autres : ni trop près ni trop loin ; un kart collé à la caméra s'efface pour ne pas boucher la vue
     f.karts.forEach((k, i) => {
       const d = this.camPos.distanceTo(this.tmp.set(k.kart.x, k.kart.y + 0.8, k.kart.z));
       this.karts[i]?.showTag(d > 10 && d < 90);
       this.karts[i]?.fade(i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6)));
     });
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render(f.dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   private moveCamera(f: Frame) {
@@ -958,7 +1040,8 @@ export class RaceScene {
     this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 4);
     this.camera.updateProjectionMatrix();
     // L'ombre suit la caméra
-    this.sun.position.set(this.camLook.x + 50, this.camLook.y + 110, this.camLook.z + 30);
+    const sunAt = this.world!.mood.dir;
+    this.sun.position.set(this.camLook.x + sunAt.x * 130, this.camLook.y + sunAt.y * 130, this.camLook.z + sunAt.z * 130);
     this.sun.target.position.copy(this.camLook);
   }
 
@@ -985,7 +1068,10 @@ export class RaceScene {
     }
     for (const d of this.thrownParts) d.dispose();
     this.puffTex.dispose();
-    this.envTex.dispose();
+    this.envTex?.dispose();
+    this.composer?.dispose();
+    this.bloom?.dispose();
+    this.vignette.remove();
     for (const d of this.featureKeep) d.dispose();
     for (const p of this.puffs) p.sprite.material.dispose();
     for (const s of this.spare) s.material.dispose();

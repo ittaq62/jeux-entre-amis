@@ -35,9 +35,38 @@ export class CoinField {
     const geo = keep(mergeGeometries([body, rim], false)!);
     body.dispose();
     rim.dispose();
-    // Brillante même de loin : un peu de lumière propre
+    // Brillante même de loin : un peu de lumière propre ; une étoile frappée au milieu, pour qu'on la reconnaisse
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const g = c.getContext("2d")!;
+    const grad = g.createRadialGradient(52, 48, 6, 64, 64, 66);
+    grad.addColorStop(0, "#fff0a0");
+    grad.addColorStop(0.6, "#ffcc3a");
+    grad.addColorStop(1, "#d9931a");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    const star = (cx: number, cy: number, r: number, color: string) => {
+      g.fillStyle = color;
+      g.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+        const rad = k % 2 === 0 ? r : r * 0.46;
+        g.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+      }
+      g.closePath();
+      g.fill();
+    };
+    star(66, 67, 40, "#b5700f");
+    star(64, 64, 38, "#fff4b8");
+    g.strokeStyle = "#b5700f";
+    g.lineWidth = 6;
+    g.beginPath();
+    g.arc(64, 64, 57, 0, Math.PI * 2);
+    g.stroke();
+    const tex = keep(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
     const mat = keep(
-      new THREE.MeshStandardMaterial({ color: 0xffcf3f, emissive: 0xc98a00, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.7 }),
+      new THREE.MeshStandardMaterial({ map: tex, emissive: 0x9a6400, emissiveIntensity: 0.4, roughness: 0.34, metalness: 0.35 }),
     );
     this.mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, t.coins.length));
     this.mesh.count = t.coins.length;

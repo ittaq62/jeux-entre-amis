@@ -43,18 +43,74 @@ const ASPHALT: Record<Theme, string> = { port: "#4b4c52", vignes: "#56524d", col
 
 /** Le bitume : le grain, les lignes blanches des bords et les tirets du milieu. Elle se répète tous les 8 m. */
 export function roadTexture(theme: Theme): THREE.CanvasTexture {
-  const [c, g] = canvas(256, 256);
+  const S = 512;
+  const [c, g] = canvas(S, S);
   g.fillStyle = ASPHALT[theme];
-  g.fillRect(0, 0, 256, 256);
-  speckle(g, 256, 256, 5000, ["rgba(255,255,255,0.05)", "rgba(0,0,0,0.12)", "rgba(255,255,255,0.08)"], 2, 7);
-  // Des traces de pneus, plus sombres, au milieu des voies
-  g.fillStyle = "rgba(0,0,0,0.07)";
-  for (const x of [58, 92, 164, 198]) g.fillRect(x, 0, 10, 256);
+  g.fillRect(0, 0, S, S);
+  // De grandes nuances douces, qui se répètent sans se voir
+  const r = rng(5);
+  for (let i = 0; i < 46; i++) {
+    const x = r() * S;
+    const y = r() * S;
+    const rad = 60 + r() * 120;
+    const tone = r() < 0.5 ? "0,0,0" : "255,255,255";
+    for (const oy of [-S, 0, S]) {
+      const grad = g.createRadialGradient(x, y + oy, 0, x, y + oy, rad);
+      grad.addColorStop(0, `rgba(${tone},0.05)`);
+      grad.addColorStop(1, `rgba(${tone},0)`);
+      g.fillStyle = grad;
+      g.fillRect(x - rad, y + oy - rad, rad * 2, rad * 2);
+    }
+  }
+  // Le grain : des gravillons clairs et sombres
+  speckle(g, S, S, 17000, ["rgba(255,255,255,0.07)", "rgba(0,0,0,0.16)", "rgba(255,255,255,0.11)", "rgba(0,0,0,0.09)"], 1.9, 7);
+  // Le sillon des pneus : deux bandes par voie, plus sombres et polies
+  for (const x of [116, 184, 328, 396]) {
+    const grad = g.createLinearGradient(x - 18, 0, x + 18, 0);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(0.5, "rgba(0,0,0,0.13)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.fillRect(x - 18, 0, 36, S);
+  }
+  // Le bas-côté plus sale, contre les lignes
+  for (const [x0, x1] of [
+    [30, 74],
+    [482, 438],
+  ] as const) {
+    const grad = g.createLinearGradient(x0, 0, x1, 0);
+    grad.addColorStop(0, "rgba(40,30,20,0.22)");
+    grad.addColorStop(1, "rgba(40,30,20,0)");
+    g.fillStyle = grad;
+    g.fillRect(Math.min(x0, x1), 0, Math.abs(x1 - x0), S);
+  }
+  // Des joints de goudron et quelques fissures
+  g.strokeStyle = "rgba(10,10,12,0.2)";
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(0, 201);
+  g.lineTo(512, 201);
+  g.stroke();
+  for (let i = 0; i < 3; i++) {
+    let x = 70 + r() * 372;
+    let y = r() * S;
+    g.lineWidth = 1 + r();
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 7; k++) {
+      x += (r() - 0.5) * 34;
+      y += 6 + r() * 16;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // Les lignes de peinture, usées par endroits
   g.fillStyle = "#f2efe6";
-  g.fillRect(8, 0, 7, 256);
-  g.fillRect(241, 0, 7, 256);
+  g.fillRect(16, 0, 14, S);
+  g.fillRect(482, 0, 14, S);
   g.fillStyle = theme === "col" ? "#f2c94c" : "#f2efe6";
-  g.fillRect(124, 0, 8, 120);
+  g.fillRect(248, 0, 16, 240);
+  speckle(g, S, S, 500, [`${ASPHALT[theme]}88`], 3, 91);
   return toTexture(c);
 }
 
@@ -74,7 +130,7 @@ export function curbTexture(): THREE.CanvasTexture {
 export function groundTexture(theme: Theme): THREE.CanvasTexture {
   const size = 512;
   const [c, g] = canvas(size, size);
-  const base = theme === "col" ? "#e9eef3" : theme === "vignes" ? "#7d9a4a" : "#5f9a48";
+  const base = theme === "col" ? "#e9eef3" : theme === "vignes" ? "#7d9a4a" : "#5a8d48";
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   const tones =

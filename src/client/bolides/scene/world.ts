@@ -7,7 +7,21 @@ import { CURB, GAP_LEN, pointAt, STEP, type Track } from "../../../shared/games/
 import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
 import { mergeDeep } from "./merge.ts";
 import { buildScenery, PLACES } from "./scenery.ts";
-import { Sky, SKY_COLORS } from "./sky.ts";
+import {
+  addGrass,
+  addGroundShadows,
+  addMountains,
+  addRunoffs,
+  addSkidMarks,
+  cypressGeometry,
+  foliageGeometry,
+  gableGeometry,
+  groundTint,
+  pineGeometry,
+  pineSnowGeometry,
+  seaMaterial,
+} from "./nature.ts";
+import { MOODS, Sky, type Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
@@ -19,6 +33,8 @@ export interface World {
   heightAt: (x: number, z: number) => number;
   /** À appeler à chaque image, une fois la caméra placée (l'eau, les accélérateurs, les drapeaux, le ciel) */
   update: (t: number, camera: THREE.Vector3, daylight: number) => void;
+  /** L'ambiance du circuit (le soleil, la lumière) */
+  mood: Mood;
   /** La couleur de l'horizon (le fond et le brouillard) */
   sky: THREE.Color;
   /** Les tunnels (de quelle à quelle distance du tour) : la lumière y baisse */
@@ -28,9 +44,6 @@ export interface World {
   fog: THREE.Fog;
   dispose: () => void;
 }
-
-/** D'où vient la lumière du soleil (la scène place sa lumière ainsi) */
-export const SUN_DIR = new THREE.Vector3(50, 110, 30).normalize();
 
 /** Un hasard qui donne toujours le même décor */
 function rng(seed: number) {
@@ -231,6 +244,21 @@ function lambert(color: number | string, map?: THREE.Texture): THREE.MeshLambert
   return new THREE.MeshLambertMaterial({ color, map: map ?? null });
 }
 
+const WHITE = new THREE.Color(1, 1, 1);
+
+/** Les feuillages : une facette par face, la lumière par sommet */
+function foliage(color: number): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({ color, vertexColors: true, flatShading: true });
+}
+
+/** Chaque arbre sa nuance */
+function tintInstances(mesh: THREE.InstancedMesh, r: () => number, colors: number[]) {
+  const c = new THREE.Color();
+  (mesh.material as THREE.MeshLambertMaterial).color.setHex(0xffffff);
+  for (let i = 0; i < mesh.count; i++) mesh.setColorAt(i, c.setHex(colors[Math.floor(r() * colors.length)]!));
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+}
+
 /** Plusieurs exemplaires d'un même objet (arbres, rangs de vigne…), posés d'un coup */
 function instances(geo: THREE.BufferGeometry, mat: THREE.Material, spots: THREE.Matrix4[], shadows: boolean): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, spots.length));
@@ -252,7 +280,7 @@ function place(x: number, y: number, z: number, rot = 0, sx = 1, sy = 1, sz = 1)
   return m;
 }
 
-export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean }): World {
+export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; anisotropy: number }): World {
   const theme = t.def.theme;
   const group = new THREE.Group();
   const disposables: { dispose: () => void }[] = [];
@@ -260,7 +288,8 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     disposables.push(x);
     return x;
   };
-  const sky = keep(new Sky(theme, SUN_DIR, opts.phone));
+  const mood = MOODS[theme];
+  const sky = keep(new Sky(theme, opts.phone));
   const field = new Field(t, 170);
   const hilly = t.def.hills.some(([, y]) => y !== 0);
 
@@ -288,7 +317,8 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
 
   const groundTex = keep(TX.groundTexture(theme));
   groundTex.repeat.set(1, 1);
-  const groundMat = keep(lambert(0xffffff, groundTex));
+  groundTex.anisotropy = opts.anisotropy;
+  const groundMat = keep(new THREE.MeshLambertMaterial({ map: groundTex, vertexColors: true }));
   // Le terrain proche, en relief, puis une grande plaine jusqu'à l'horizon
   {
     const w = (field.nx - 1) * field.cell;
@@ -299,12 +329,20 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     geo.translate(field.x0 + w / 2, 0, field.z0 + h / 2);
     const p = geo.attributes.position as THREE.BufferAttribute;
     const uv = geo.attributes.uv as THREE.BufferAttribute;
+    const tints = new Float32Array(p.count * 3);
+    const tint = new THREE.Color();
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
       const z = p.getZ(i);
       p.setY(i, heightAt(x, z) - 0.02);
       uv.setXY(i, x / 18, z / 18);
+      groundTint(theme, x, z, tint);
+      // Au bord du terrain, la teinte rejoint celle de la plaine
+      const margin = Math.min(x - field.x0, field.x0 + w - x, z - field.z0, field.z0 + h - z);
+      tint.lerp(WHITE, 1 - Math.max(0, Math.min(1, margin / 40)));
+      tints.set([tint.r, tint.g, tint.b], i * 3);
     }
+    geo.setAttribute("color", new THREE.BufferAttribute(tints, 3));
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, groundMat);
     mesh.receiveShadow = opts.shadows;
@@ -333,6 +371,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     const far = keep(new THREE.BufferGeometry());
     far.setAttribute("position", new THREE.Float32BufferAttribute(farPos, 3));
     far.setAttribute("uv", new THREE.Float32BufferAttribute(farUv, 2));
+    far.setAttribute("color", new THREE.Float32BufferAttribute(new Array((farPos.length / 3) * 3).fill(1), 3));
     far.setIndex(farIndex);
     far.computeVertexNormals();
     group.add(new THREE.Mesh(far, groundMat));
@@ -340,10 +379,12 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
 
   // La route, ses vibreurs, l'herbe du bord, le muret
   const roadTex = keep(TX.roadTexture(theme));
+  roadTex.anisotropy = opts.anisotropy;
   const road = new THREE.Mesh(keep(ribbon(t, -t.half, t.half, 0.06, 8, 1, t.gaps)), keep(lambert(0xffffff, roadTex)));
   road.receiveShadow = opts.shadows;
   group.add(road);
   const curbTex = keep(TX.curbTexture());
+  curbTex.anisotropy = opts.anisotropy;
   const curbMat = keep(lambert(0xffffff, curbTex));
   for (const side of [-1, 1]) {
     const a = side * t.half;
@@ -413,7 +454,8 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
 
   // Les accélérateurs : des chevrons qui défilent
   const boostTex = keep(TX.boostTexture());
-  const boostMat = keep(new THREE.MeshBasicMaterial({ map: boostTex }));
+  // Plus lumineux que le blanc : ils diffusent un halo
+  const boostMat = keep(new THREE.MeshBasicMaterial({ map: boostTex, color: new THREE.Color(1.5, 1.5, 1.5) }));
   for (const pad of t.boosts) {
     const p = pointAt(t, pad.s + pad.length / 2, pad.d);
     const mesh = new THREE.Mesh(keep(new THREE.PlaneGeometry(pad.halfWidth * 2, pad.length)), boostMat);
@@ -471,38 +513,23 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
   const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
 
-  // Des montagnes ou des collines tout autour, pour l'horizon
+  // Les montagnes tout autour, pour l'horizon (au port, le large reste ouvert)
   {
-    const cx = field.x0 + ((field.nx - 1) * field.cell) / 2;
-    const cz = field.z0 + ((field.nz - 1) * field.cell) / 2;
-    const geo = keep(new THREE.ConeGeometry(1, 1, 7, 1));
-    const mat = keep(lambert(theme === "col" ? 0x8c98a8 : theme === "vignes" ? 0x7f9a62 : 0x6f8f6a));
-    const capMat = keep(lambert(0xf5f8fb));
-    const spots: THREE.Matrix4[] = [];
-    const caps: THREE.Matrix4[] = [];
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2 + r() * 0.2;
-      const dist = 520 + r() * 160;
-      const hgt = (theme === "col" ? 140 : theme === "vignes" ? 50 : 40) * (0.6 + r() * 0.8);
-      const wid = hgt * (theme === "col" ? 1.1 : 2.6) + 60;
-      const x = cx + Math.cos(a) * dist;
-      const z = cz + Math.sin(a) * dist;
-      spots.push(place(x, hgt / 2 - 2, z, r() * 3, wid, hgt, wid));
-      if (theme === "col") caps.push(place(x, hgt * 0.85 - 2, z, 0, wid * 0.32, hgt * 0.32, wid * 0.32));
-    }
-    group.add(instances(geo, mat, spots, false));
-    if (caps.length > 0) {
-      const cap = instances(geo, capMat, caps, false);
-      group.add(cap);
-    }
+    const w = (field.nx - 1) * field.cell;
+    const h = (field.nz - 1) * field.cell;
+    addMountains(group, keep, theme, field.x0 + w / 2, field.z0 + h / 2, Math.hypot(w, h) / 2 + 40, opts.phone);
   }
+  // Les touffes d'herbe et les fleurs du bord de la route, les traces de pneus dans les virages
+  addGrass(group, keep, t, theme, place0.tunnel, opts.phone);
+  const open = (s: number) => s < place0.tunnel[0] - 4 || s > place0.tunnel[1] + 4;
+  addRunoffs(group, keep, t, theme, open);
+  addSkidMarks(group, keep, t, theme, open);
 
-  let waterTex: THREE.CanvasTexture | null = null;
+  let sea: THREE.ShaderMaterial | null = null;
   if (theme === "port") {
-    // L'eau, au-delà du quai qui longe la ligne droite
-    waterTex = keep(TX.waterTexture());
-    waterTex.repeat.set(60, 30);
-    const water = new THREE.Mesh(keep(new THREE.PlaneGeometry(3000, 1500)), keep(lambert(0xffffff, waterTex)));
+    // La mer, au-delà du quai qui longe la ligne droite
+    sea = seaMaterial(keep, mood.dir, new THREE.Color(mood.horizon));
+    const water = new THREE.Mesh(keep(new THREE.PlaneGeometry(3000, 1500)), sea);
     water.rotation.x = -Math.PI / 2;
     // Juste au-dessus du sol, qu'elle recouvre de ce côté du quai
     water.position.set(0, 0.04, quay - 750);
@@ -629,23 +656,31 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     }
     group.add(instances(row, keep(lambert(0x3f6b2a)), rows, shadows));
     // Les cyprès et les arbres ronds
-    const cone = keep(new THREE.ConeGeometry(1, 1, 7));
-    const ball = keep(new THREE.IcosahedronGeometry(1, 1));
+    const cone = keep(cypressGeometry());
+    const ball = keep(foliageGeometry());
     const trunk = keep(new THREE.CylinderGeometry(0.25, 0.35, 1, 6));
     const cypress: THREE.Matrix4[] = [];
     const balls: THREE.Matrix4[] = [];
     const trunks: THREE.Matrix4[] = [];
-    for (const [x, z] of scatter(Math.round(90 * few), t.wall + 3, 160)) {
+    const blobs: [number, number, number, number][] = [];
+    for (const [x, z] of scatter(Math.round(110 * few), t.wall + 3, 160)) {
       const y = heightAt(x, z);
-      if (r() < 0.5) cypress.push(place(x, y + 4.5, z, 0, 1.3, 9 + r() * 4, 1.3));
-      else {
-        const s = 2.2 + r() * 1.6;
-        balls.push(place(x, y + 2.4 + s * 0.6, z, r() * 3, s, s * 0.9, s));
+      if (r() < 0.5) {
+        const tall = 9 + r() * 4;
+        cypress.push(place(x, y + tall / 2, z, r() * 3, 2.4, tall, 2.4));
+        blobs.push([x, y, z, 2.2]);
+      } else {
+        const s = 2.4 + r() * 1.9;
+        balls.push(place(x, y + 2.4 + s * 0.6, z, r() * 3, s, s * 0.92, s));
         trunks.push(place(x, y + 1.2, z, 0, 1, 2.4, 1));
+        blobs.push([x, y, z, s * 1.25]);
       }
     }
-    group.add(instances(cone, keep(lambert(0x2f5a2c)), cypress, shadows));
-    group.add(instances(ball, keep(lambert(0x5a8a3a)), balls, shadows));
+    addGroundShadows(group, keep, blobs);
+    group.add(instances(cone, keep(foliage(0x35622f)), cypress, shadows));
+    const leaves = instances(ball, keep(foliage(0x6d9d42)), balls, shadows);
+    tintInstances(leaves, r, [0x7aa848, 0x5e9238, 0x8cae4a, 0x6b9a3c]);
+    group.add(leaves);
     group.add(instances(trunk, keep(lambert(0x6b4a2b)), trunks, false));
     // Le château, en haut de la colline
     let top = 0;
@@ -692,21 +727,28 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     });
   } else {
     // Les sapins enneigés
-    const cone = keep(new THREE.ConeGeometry(1, 1, 7));
+    const cone = keep(pineGeometry());
+    const cap = keep(pineSnowGeometry());
     const pines: THREE.Matrix4[] = [];
     const snow: THREE.Matrix4[] = [];
     const trunks: THREE.Matrix4[] = [];
+    const blobs: [number, number, number, number][] = [];
     const trunk = keep(new THREE.CylinderGeometry(0.3, 0.4, 1, 6));
-    for (const [x, z] of scatter(Math.round(180 * few), t.wall + 3, 170)) {
+    for (const [x, z] of scatter(Math.round(200 * few), t.wall + 3, 170)) {
       const y = heightAt(x, z);
       const s = 2.2 + r() * 1.8;
       const h = s * 3.4;
-      pines.push(place(x, y + 1.2 + h / 2, z, r() * 3, s, h, s));
-      snow.push(place(x, y + 1.2 + h * 0.8, z, r() * 3, s * 0.5, h * 0.4, s * 0.5));
+      const rot = r() * 3;
+      pines.push(place(x, y + 1.2 + h / 2, z, rot, s, h, s));
+      snow.push(place(x, y + 1.2 + h / 2 + 0.02, z, rot, s, h, s));
       trunks.push(place(x, y + 0.6, z, 0, 1, 1.2, 1));
+      blobs.push([x, y, z, s * 1.2]);
     }
-    group.add(instances(cone, keep(lambert(0x24502f)), pines, shadows));
-    group.add(instances(cone, keep(lambert(0xf6f9fc)), snow, false));
+    addGroundShadows(group, keep, blobs);
+    const firs = instances(cone, keep(foliage(0x2e5f3a)), pines, shadows);
+    tintInstances(firs, r, [0x2e5f3a, 0x265238, 0x356a40]);
+    group.add(firs);
+    group.add(instances(cap, keep(new THREE.MeshLambertMaterial({ color: 0xf6f9fc, flatShading: true })), snow, false));
     group.add(instances(trunk, keep(lambert(0x5b4030)), trunks, false));
     // Les rochers
     const rock = keep(new THREE.DodecahedronGeometry(1, 0));
@@ -757,10 +799,11 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     group.add(snowmen);
   }
 
-  const horizon = SKY_COLORS[theme].horizon;
+  const horizon = mood.horizon;
   return {
     group,
     dome: sky.group,
+    mood,
     heightAt,
     sky: new THREE.Color(horizon),
     tunnels: scenery.tunnels,
@@ -772,10 +815,10 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
         m.emissiveIntensity = on ? 1.6 : 0;
       });
     },
-    fog: new THREE.Fog(horizon, 230, 1050),
+    fog: new THREE.Fog(horizon, 260, 1320),
     update(time: number, camera: THREE.Vector3, daylight: number) {
       boostTex.offset.y = -((time * 1.6) % 1);
-      if (waterTex) waterTex.offset.set((time * 0.01) % 1, (time * 0.02) % 1);
+      if (sea) sea.uniforms.uTime!.value = time;
       waveFlags(time);
       sky.update(camera, time);
       scenery.update(time, camera, daylight);
@@ -809,8 +852,7 @@ function addHouses(
 ) {
   const box = keep(new THREE.BoxGeometry(1, 1, 1));
   const facade = keep(TX.houseTexture());
-  const roof = keep(new THREE.ConeGeometry(0.75, 1, 4));
-  roof.rotateY(Math.PI / 4);
+  const roof = keep(gableGeometry());
   const byWall = walls.map(() => [] as THREE.Matrix4[]);
   const roofs: THREE.Matrix4[] = [];
   for (const [x, z] of spots) {
@@ -820,10 +862,10 @@ function addHouses(
     const h = 4 + r() * 5;
     const rot = r() * Math.PI;
     byWall[Math.floor(r() * walls.length)]!.push(place(x, y + h / 2, z, rot, w, h, d));
-    roofs.push(place(x, y + h + 1.6, z, rot, w * 1.25, 3.2, d * 1.25));
+    roofs.push(place(x, y + h, z, rot, w * 1.14, 2.6 + w * 0.12, d * 1.1));
   }
   byWall.forEach((s, i) => group.add(instances(box, keep(lambert(walls[i]!, facade)), s, shadows)));
-  group.add(instances(roof, keep(lambert(roofColor)), roofs, shadows));
+  group.add(instances(roof, keep(new THREE.MeshLambertMaterial({ color: roofColor, vertexColors: true })), roofs, shadows));
 }
 
 /** Les réverbères le long de la ligne droite du port */
