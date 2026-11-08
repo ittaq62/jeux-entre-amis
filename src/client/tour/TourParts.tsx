@@ -71,9 +71,9 @@ export function GameTicket({
 function BolidesArt() {
   return (
     <>
-      <ellipse cx="50" cy="60" rx="32" ry="4" fill="rgba(0,0,0,0.25)" />
-      <rect x="66" y="10" width="2.4" height="34" fill="#fbf5e6" />
-      <g transform="translate(68.4 11)">
+      <ellipse cx="46" cy="64" rx="31" ry="3.6" fill="rgba(0,0,0,0.25)" />
+      <rect x="80" y="8" width="2.2" height="32" fill="#fbf5e6" />
+      <g transform="translate(82.2 9) scale(0.75)">
         <rect width="20" height="13" fill="#fbf5e6" />
         <rect width="5" height="4.33" fill="#1a1a1a" />
         <rect x="10" width="5" height="4.33" fill="#1a1a1a" />
@@ -82,12 +82,15 @@ function BolidesArt() {
         <rect y="8.66" width="5" height="4.33" fill="#1a1a1a" />
         <rect x="10" y="8.66" width="5" height="4.33" fill="#1a1a1a" />
       </g>
-      <circle cx="30" cy="54" r="7" fill="#1b1b1e" />
-      <circle cx="64" cy="54" r="6" fill="#1b1b1e" />
-      <path d="M18 50c1-9 8-13 20-13h12c10 0 18 5 22 13z" fill="#e2483d" stroke="#fbf5e6" strokeWidth="2" />
-      <circle cx="42" cy="32" r="7" fill="#fbf5e6" />
-      <path d="M42 28.5c4 0 6.5 2 7 5H43z" fill="#1d2430" />
-      <path d="M6 40h10M2 46h12M8 52h8" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
+      {/* Le kart vu de dos : ses pneus, sa coque, le casque à bandes du pilote, son aileron et ses flammes */}
+      <path d="M31 56c1-11 6-18 15-18s14 7 15 18z" fill="#c9352c" />
+      <path d="M38.5 28c0-6.2 3.1-9.5 7.5-9.5s7.5 3.3 7.5 9.5c0 4.4-3.1 8.5-7.5 8.5s-7.5-4.1-7.5-8.5z" fill="#ffc83d" />
+      <path d="M43.6 18.9v17M48.4 18.9v17" stroke="#d8362c" strokeWidth="1.8" />
+      <rect x="19" y="43" width="14" height="21" rx="4.5" fill="#1b1b1e" />
+      <rect x="59" y="43" width="14" height="21" rx="4.5" fill="#1b1b1e" />
+      <rect x="17" y="35" width="58" height="8" rx="2.4" fill="#e2483d" stroke="#fbf5e6" strokeWidth="1.5" />
+      <path d="M40 54c-2.6 4.4-.6 8 1.6 11 2.2-3 4.2-6.6 1.6-11zM48.8 54c-2.6 4.4-.6 8 1.6 11 2.2-3 4.2-6.6 1.6-11z" fill="#ffb43a" />
+      <path d="M3 34h10M1 42h11M5 50h8" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
     </>
   );
 }
