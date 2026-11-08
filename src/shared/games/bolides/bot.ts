@@ -33,15 +33,59 @@ interface BotStyle {
    * avant si le virage finit.
    */
   drift: 0 | 1 | 2 | 3;
+  /** La courbure à partir de laquelle il ose déraper : plus elle est grande, moins il dérape souvent */
+  driftBend: number;
   /** Le temps qu'il garde un objet avant de s'en servir, au plus, et la chance qu'il vise juste */
   hold: [number, number];
   aim: number;
+  /** La chance qu'il garde un objet redoutable (la fusée, l'orage) quand il en tire un */
+  mean: number;
+  /**
+   * Il lève le pied devant les joueurs : à partir de `from` mètres d'avance sur le premier d'entre eux, de plus en plus
+   * jusqu'à `to` mètres, où sa vitesse est multipliée par `min`
+   */
+  ease: { from: number; to: number; min: number };
+  /** Ce que gagne sa vitesse quand il traîne loin derrière le dernier joueur */
+  chase: number;
 }
 
 export const BOT_STYLE: Record<BotLevel, BotStyle> = {
-  facile: { top: 0.86, line: 0.3, wobble: 0.3, drift: 0, hold: [3000, 9000], aim: 0.3 },
-  moyen: { top: 0.94, line: 0.7, wobble: 0.12, drift: 1, hold: [1500, 6000], aim: 0.65 },
-  fort: { top: 1, line: 1, wobble: 0.04, drift: 3, hold: [600, 3500], aim: 0.95 },
+  facile: {
+    top: 0.8,
+    line: 0.25,
+    wobble: 0.32,
+    drift: 0,
+    driftBend: 1,
+    hold: [4000, 10000],
+    aim: 0.25,
+    mean: 0,
+    ease: { from: 5, to: 60, min: 0.78 },
+    chase: 1,
+  },
+  moyen: {
+    top: 0.87,
+    line: 0.45,
+    wobble: 0.2,
+    drift: 1,
+    driftBend: 0.03,
+    hold: [2500, 8000],
+    aim: 0.4,
+    mean: 0.4,
+    ease: { from: 15, to: 70, min: 0.85 },
+    chase: 1.02,
+  },
+  fort: {
+    top: 1,
+    line: 1,
+    wobble: 0.04,
+    drift: 3,
+    driftBend: 0.015,
+    hold: [600, 3500],
+    aim: 0.95,
+    mean: 1,
+    ease: { from: 50, to: 60, min: 0.95 },
+    chase: 1.05,
+  },
 };
 
 /** Ce dont un bot se souvient d'un instant à l'autre (jamais enregistré) */
@@ -230,7 +274,7 @@ export function botDrive(
     if (k.drift !== 0) drift = Math.abs(curve) > 0.008 && driftLevel(k.charge) < style.drift;
     // Seulement du côté où tourne le virage (une courbure positive tourne à gauche, le volant à gauche est négatif) :
     // en contre-braquant au moment de relâcher, il partirait sinon dans l'autre sens
-    else drift = Math.abs(curve) > 0.015 && Math.abs(steer) > 0.3 && steer * curve < 0;
+    else drift = Math.abs(curve) > style.driftBend && Math.abs(steer) > 0.3 && steer * curve < 0;
   }
   if (k.drift !== 0 && drift) steer = clamp(steer + k.drift * 0.3, -1, 1);
   // En l'air après un tremplin : une figure (le bouton enfoncé), pour le turbo à l'atterrissage

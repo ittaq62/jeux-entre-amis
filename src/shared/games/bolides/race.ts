@@ -322,6 +322,8 @@ function drawFor(race: Race, r: Racer, now: number): ItemKind {
     )
       continue;
     if (kind === "orage" && now - (race.stormAt ?? -1e9) < 25_000) continue;
+    // Plus les bots sont faciles, moins ils ont droit aux objets qui font le plus mal
+    if (r.bot && (kind === "fusee" || kind === "orage") && random(race) >= BOT_STYLE[race.settings.botLevel].mean) continue;
     return kind;
   }
   return "turbo";
@@ -424,16 +426,16 @@ export function reportKart(
   return events;
 }
 
-/** La vitesse d'un bot, un peu retenue s'il caracole devant les joueurs, un peu poussée s'il traîne derrière */
+/** La vitesse d'un bot, retenue s'il prend le large devant les joueurs (selon son niveau), poussée s'il traîne loin derrière */
 function botTop(race: Race, r: Racer): number {
   const level = BOT_STYLE[race.settings.botLevel];
   let top = CLASS_SPEED[race.settings.speed] * level.top;
   const humans = race.racers.filter((o) => !o.bot && o.finish === null);
   if (humans.length > 0) {
-    const best = Math.max(...humans.map((o) => o.kart.dist));
-    const worst = Math.min(...humans.map((o) => o.kart.dist));
-    if (r.kart.dist > best + 60) top *= 0.95;
-    else if (r.kart.dist < worst - 60) top *= 1.05;
+    const lead = r.kart.dist - Math.max(...humans.map((o) => o.kart.dist));
+    const { from, to, min } = level.ease;
+    if (lead > from) top *= 1 - (1 - min) * Math.min(1, (lead - from) / (to - from));
+    else if (r.kart.dist < Math.min(...humans.map((o) => o.kart.dist)) - 60) top *= level.chase;
   }
   return top;
 }

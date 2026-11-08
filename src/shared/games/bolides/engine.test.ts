@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bounceBetween, COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
-import { botDrive, newBotMemory } from "./bot.ts";
+import { botDrive, newBotMemory, type BotLevel } from "./bot.ts";
 import {
   assistSteer,
   beginRescue,
@@ -1525,6 +1525,53 @@ describe("le drone de dépannage", () => {
       done = b.kart.rescue > 0;
     }
     expect(done).toBe(true);
+  });
+});
+
+describe("le niveau des bots", () => {
+  const raceOf = (botLevel: BotLevel, track: "port" | "volcan") => {
+    const ids = ["a", "b", "c", "d"];
+    const race = newRace(ids, new Set(ids), { ...DEFAULT_SETTINGS, track, botLevel }, 0, 5);
+    const mem = new Map();
+    const boxes: (ItemKind | null)[] = [];
+    let now = 0;
+    while (race.phase !== "over" && now < 400_000) {
+      now += 50;
+      for (const e of [...driveBots(race, now, mem), ...worldTick(race, now)]) if (e.type === "box") boxes.push(e.item);
+    }
+    return { best: Math.min(...race.racers.map((r) => r.finish ?? 1e9)), boxes };
+  };
+
+  it.each(["port", "volcan"] as const)("sur %s, les moyens sont nettement moins rapides que les forts", (track) => {
+    const facile = raceOf("facile", track).best;
+    const moyen = raceOf("moyen", track).best;
+    const fort = raceOf("fort", track).best;
+    expect(moyen).toBeGreaterThan(fort * 1.05);
+    expect(facile).toBeGreaterThan(moyen);
+  });
+
+  it("les bots faciles n'ont jamais ni fusée ni orage", () => {
+    const { boxes } = raceOf("facile", "port");
+    expect(boxes.length).toBeGreaterThan(5);
+    expect(boxes.filter((b) => b === "fusee" || b === "orage")).toEqual([]);
+  });
+
+  it("un bot moyen lève le pied quand il prend le large devant le joueur", () => {
+    const run = (humanBehind: boolean) => {
+      const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port", items: false }, 0, 3);
+      worldTick(race, race.goAt);
+      const mem = new Map();
+      const a = racerOf(race, "a")!;
+      const b = racerOf(race, "b")!;
+      let now = race.goAt;
+      for (let i = 0; i < 400; i++) {
+        now += 50;
+        a.kart.dist = humanBehind ? -500 : b.kart.dist + 5;
+        driveBots(race, now, mem);
+      }
+      return b.kart.dist;
+    };
+    expect(run(true)).toBeLessThan(run(false) * 0.93);
   });
 });
 

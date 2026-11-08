@@ -18,7 +18,7 @@ const SPEED_HINTS: Record<SpeedClass, string> = {
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Ils roulent tranquillement et oublient leurs objets.",
-  moyen: "Ils dérapent dans les virages et savent viser.",
+  moyen: "Ils dérapent de temps en temps et visent à peu près : une belle course les bat.",
   fort: "Ils prennent les meilleures trajectoires et ne font pas de cadeau.",
 };
 
