@@ -1139,7 +1139,8 @@ export class RaceScene {
       this.camY += (target.y + air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
       // En l'air, elle prend un peu de recul et de hauteur pour bien montrer le saut
       const back = (portrait ? 7.4 : 6.3) + lift * 0.6;
-      const up = (portrait ? 3.1 : 2.55) + lift * 0.5;
+      // Plus haut sous un deltaplane : on voit l'aile par-dessus, et le vide en dessous
+      const up = (portrait ? 3.1 : 2.55) + lift * 0.5 + (target.glide ? 1.5 : 0);
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       // Regarder derrière soi : la caméra passe devant le kart

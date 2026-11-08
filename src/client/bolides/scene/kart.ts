@@ -473,7 +473,7 @@ export class KartModel {
     this.wing.visible = this.wingOpen > 0.03;
     if (this.wing.visible) {
       this.wing.scale.set(this.wingOpen, 0.5 + 0.5 * this.wingOpen, 0.4 + 0.6 * this.wingOpen);
-      this.wing.rotation.set(Math.sin(time * 5) * 0.03 - 0.1, 0, -x.steer * 0.28);
+      this.wing.rotation.set(Math.sin(time * 5) * 0.03 + 0.32, 0, -x.steer * 0.28);
     }
     this.propeller.visible = Boolean(x.under);
     if (x.under) this.propeller.rotation.z = time * 34;

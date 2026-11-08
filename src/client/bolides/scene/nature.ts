@@ -633,7 +633,9 @@ export function addCaustics(mat: THREE.Material, level: number, time: { value: n
         if (vCausticW.y < uCausticLevel) {
           float depthFade = clamp((uCausticLevel - vCausticW.y) / 4.0, 0.0, 1.0);
           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.72, 0.92, 1.0), depthFade);
-          diffuseColor.rgb += causticAt(vCausticW.xz * 1.05, uCausticTime * 1.1) * 0.13 * depthFade;
+          float lightA = causticAt(vCausticW.xz * 1.5, uCausticTime * 1.1);
+          float lightB = causticAt(vCausticW.xz * 2.7 + 3.1, -uCausticTime * 0.8);
+          diffuseColor.rgb += (lightA * 0.11 + lightB * 0.07) * depthFade;
         }`,
       );
   };
