@@ -6,6 +6,7 @@ import { getTrack, TRACK_IDS, TRACKS, type TrackId } from "../../shared/games/bo
 import { BOLIDES_MAX_PLAYERS, type BolidesClientMessage, type BolidesRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { Garage } from "./Garage.tsx";
 
 const SPEED_HINTS: Record<SpeedClass, string> = {
   balade: "Les karts vont moins vite : idéal pour découvrir les circuits.",
@@ -75,118 +76,121 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
       startLabel="En piste !"
       hostWillStart="va donner le départ"
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
+        <>
+          <Garage room={room} send={send} />
+          <section className="rules-sheet panel">
+            <RulesHeading room={room} />
 
-          <div className="bolides-howto">
-            <p>
-              <strong>Le premier sur la ligne gagne.</strong> Dérape dans les virages : plus tu tiens, plus le turbo est gros (étincelles
-              bleues, puis orange, puis violettes). Au tremplin, appuie sur déraper en l'air pour une figure : encore un turbo à
-              l'atterrissage. Passe sur les flèches, et casse les caisses pour gagner des objets.
-            </p>
-            <p className="hint">
-              Au clavier : <kbd>↑</kbd> accélérer, <kbd>←</kbd> <kbd>→</kbd> tourner, <kbd>Espace</kbd> déraper (et figure en l'air),{" "}
-              <kbd>E</kbd> se servir de l'objet (ZQSD marche aussi). Sur téléphone, le kart accélère tout seul. Une manette marche aussi.
-            </p>
-          </div>
-
-          <div className="field">
-            <span className="field-label">Circuit</span>
-            <Options<TrackId | "hasard">
-              label="Circuit"
-              value={s.track}
-              disabled={!isHost}
-              onChange={(track) => update({ track })}
-              options={[{ value: "hasard", label: "Au hasard" }, ...TRACK_IDS.map((id) => ({ value: id, label: TRACKS[id].name }))]}
-            />
-            <div className="bolides-track">
-              {shown ? (
-                <>
-                  <TrackMap id={shown} />
-                  <p className="hint" style={{ margin: 0 }}>
-                    {TRACKS[shown].blurb}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="bolides-track-maps">
-                    {TRACK_IDS.map((id) => (
-                      <TrackMap key={id} id={id} className="is-small" />
-                    ))}
-                  </div>
-                  <p className="hint" style={{ margin: 0 }}>
-                    Un circuit tiré au sort à chaque course.
-                  </p>
-                </>
-              )}
+            <div className="bolides-howto">
+              <p>
+                <strong>Le premier sur la ligne gagne.</strong> Dérape dans les virages : plus tu tiens, plus le turbo est gros (étincelles
+                bleues, puis orange, puis violettes). Au tremplin, appuie sur déraper en l'air pour une figure : encore un turbo à
+                l'atterrissage. Passe sur les flèches, et casse les caisses pour gagner des objets.
+              </p>
+              <p className="hint">
+                Au clavier : <kbd>↑</kbd> accélérer, <kbd>←</kbd> <kbd>→</kbd> tourner, <kbd>Espace</kbd> déraper (et figure en l'air),{" "}
+                <kbd>E</kbd> se servir de l'objet (ZQSD marche aussi). Sur téléphone, le kart accélère tout seul. Une manette marche aussi.
+              </p>
             </div>
-          </div>
 
-          <div className="field">
-            <span className="field-label">Tours</span>
-            <Options<number>
-              label="Tours"
-              value={s.laps}
-              disabled={!isHost}
-              onChange={(laps) => update({ laps })}
-              options={LAP_CHOICES.map((n) => ({ value: n, label: String(n) }))}
-            />
-          </div>
-
-          <div className="field">
-            <span className="field-label">Vitesse</span>
-            <Options<SpeedClass>
-              label="Vitesse"
-              value={s.speed}
-              disabled={!isHost}
-              onChange={(speed) => update({ speed })}
-              options={[
-                { value: "balade", label: "Balade" },
-                { value: "normal", label: "Normale" },
-                { value: "bolide", label: "Bolide" },
-              ]}
-            />
-            <p className="hint" style={{ margin: 0 }}>
-              {SPEED_HINTS[s.speed]}
-            </p>
-          </div>
-
-          <div className="field">
-            <span className="field-label">Règle maison</span>
-            <div className="rule-list">
-              <div className="rule-row" onClick={() => isHost && update({ items: !s.items })}>
-                <Check label="Les caisses d'objets" checked={s.items} disabled={!isHost} onChange={() => {}} />
-                <span>
-                  <strong>Les caisses d'objets</strong>
-                  <span className="hint">
-                    Turbo, flaque d'huile, pétard, bouclier, klaxon, fusée, arc-en-ciel : plus on est loin, meilleurs sont les objets. Sans
-                    elles, c'est une course pure.
-                  </span>
-                </span>
+            <div className="field">
+              <span className="field-label">Circuit</span>
+              <Options<TrackId | "hasard">
+                label="Circuit"
+                value={s.track}
+                disabled={!isHost}
+                onChange={(track) => update({ track })}
+                options={[{ value: "hasard", label: "Au hasard" }, ...TRACK_IDS.map((id) => ({ value: id, label: TRACKS[id].name }))]}
+              />
+              <div className="bolides-track">
+                {shown ? (
+                  <>
+                    <TrackMap id={shown} />
+                    <p className="hint" style={{ margin: 0 }}>
+                      {TRACKS[shown].blurb}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="bolides-track-maps">
+                      {TRACK_IDS.map((id) => (
+                        <TrackMap key={id} id={id} className="is-small" />
+                      ))}
+                    </div>
+                    <p className="hint" style={{ margin: 0 }}>
+                      Un circuit tiré au sort à chaque course.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
-          </div>
 
-          <div className="field">
-            <span className="field-label">Niveau des bots</span>
-            <Options<BotLevel>
-              label="Niveau des bots"
-              value={s.botLevel}
-              disabled={!isHost}
-              onChange={(botLevel) => update({ botLevel })}
-              options={[
-                { value: "facile", label: "Facile" },
-                { value: "moyen", label: "Moyen" },
-                { value: "fort", label: "Fort" },
-              ]}
-            />
-            <p className="hint" style={{ margin: 0 }}>
-              {BOT_HINTS[s.botLevel]}
-            </p>
-          </div>
+            <div className="field">
+              <span className="field-label">Tours</span>
+              <Options<number>
+                label="Tours"
+                value={s.laps}
+                disabled={!isHost}
+                onChange={(laps) => update({ laps })}
+                options={LAP_CHOICES.map((n) => ({ value: n, label: String(n) }))}
+              />
+            </div>
 
-          <TableSize room={room} send={send} max={BOLIDES_MAX_PLAYERS} />
-        </section>
+            <div className="field">
+              <span className="field-label">Vitesse</span>
+              <Options<SpeedClass>
+                label="Vitesse"
+                value={s.speed}
+                disabled={!isHost}
+                onChange={(speed) => update({ speed })}
+                options={[
+                  { value: "balade", label: "Balade" },
+                  { value: "normal", label: "Normale" },
+                  { value: "bolide", label: "Bolide" },
+                ]}
+              />
+              <p className="hint" style={{ margin: 0 }}>
+                {SPEED_HINTS[s.speed]}
+              </p>
+            </div>
+
+            <div className="field">
+              <span className="field-label">Règle maison</span>
+              <div className="rule-list">
+                <div className="rule-row" onClick={() => isHost && update({ items: !s.items })}>
+                  <Check label="Les caisses d'objets" checked={s.items} disabled={!isHost} onChange={() => {}} />
+                  <span>
+                    <strong>Les caisses d'objets</strong>
+                    <span className="hint">
+                      Turbo, flaque d'huile, pétard, bouclier, klaxon, fusée, arc-en-ciel : plus on est loin, meilleurs sont les objets.
+                      Sans elles, c'est une course pure.
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label">Niveau des bots</span>
+              <Options<BotLevel>
+                label="Niveau des bots"
+                value={s.botLevel}
+                disabled={!isHost}
+                onChange={(botLevel) => update({ botLevel })}
+                options={[
+                  { value: "facile", label: "Facile" },
+                  { value: "moyen", label: "Moyen" },
+                  { value: "fort", label: "Fort" },
+                ]}
+              />
+              <p className="hint" style={{ margin: 0 }}>
+                {BOT_HINTS[s.botLevel]}
+              </p>
+            </div>
+
+            <TableSize room={room} send={send} max={BOLIDES_MAX_PLAYERS} />
+          </section>
+        </>
       }
     />
   );

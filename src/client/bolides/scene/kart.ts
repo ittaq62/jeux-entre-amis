@@ -3,11 +3,13 @@
 // qui bouge : suspension, tangage, roulis, dérapage, figure en l'air, tête-à-queue, étincelles, flammes, bouclier.
 
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
+import type { SkinId, VehicleId } from "../../../shared/games/bolides/garage.ts";
 import { driftLevel, SPIN_TIME, TOP_SPEED, type Kart } from "../../../shared/games/bolides/physics.ts";
 import { mergeStatic } from "./merge.ts";
-import { PilotModel, WHEEL_AT, WHEEL_TILT } from "./pilot.ts";
+import { PilotModel } from "./pilot.ts";
+import { paintFor } from "./skins.ts";
+import { buildVehicle, type VehicleSpec } from "./vehicles.ts";
 import { blobTexture, sparkTexture } from "./textures.ts";
 
 export interface KartLook {
@@ -18,6 +20,9 @@ export interface KartLook {
   /** Son avatar, pour le pilote en 3D, et la peau de sa tête déjà peinte */
   avatar: AvatarConfig;
   head: HTMLCanvasElement | null;
+  /** Le véhicule choisi et son skin */
+  vehicle: VehicleId;
+  skin: SkinId;
   /** Le kart du joueur lui-même : pas d'étiquette au-dessus */
   me: boolean;
 }
@@ -34,8 +39,6 @@ export interface KartExtras {
 }
 
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
-/** La hauteur du pivot autour duquel le kart penche, tangue et fait ses figures */
-const PIVOT = 0.6;
 let sharedSpark: THREE.Texture | null = null;
 let sharedBlob: THREE.Texture | null = null;
 
@@ -92,41 +95,6 @@ function spoilerCanvas(look: KartLook): HTMLCanvasElement {
   return c;
 }
 
-/** La coque : un profil de côté (nez, capot, baquet, plage arrière) étiré sur la largeur, aux bords arrondis */
-function hullGeometry(): THREE.ExtrudeGeometry {
-  // En (z, y) : l'avant vers les z positifs
-  const pts: [number, number][] = [
-    [-1.02, 0.3],
-    [1.22, 0.3],
-    [1.42, 0.4],
-    [1.32, 0.52],
-    [0.62, 0.62],
-    [0.38, 0.64],
-    [0.3, 0.5],
-    [-0.58, 0.48],
-    [-0.66, 0.6],
-    [-0.98, 0.66],
-    [-1.1, 0.52],
-  ];
-  const shape = new THREE.Shape();
-  pts.forEach(([z, y], i) => (i === 0 ? shape.moveTo(z, y) : shape.lineTo(z, y)));
-  shape.closePath();
-  const width = 0.98;
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: width,
-    bevelEnabled: true,
-    bevelThickness: 0.1,
-    bevelSize: 0.07,
-    bevelSegments: 4,
-    curveSegments: 4,
-  });
-  // Le profil est dessiné dans le plan (x, y) et étiré le long de z : on le couche pour que x devienne z
-  geo.translate(0, 0, -width / 2);
-  geo.rotateY(-Math.PI / 2);
-  geo.computeVertexNormals();
-  return geo;
-}
-
 /** Un pneu au profil arrondi (tourné autour de l'axe x) */
 function tyreGeometry(radius: number, width: number): THREE.LatheGeometry {
   const inner = radius * 0.55;
@@ -180,24 +148,32 @@ export class KartModel {
   private solid = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
   /** La peinture, et sa couleur d'origine (l'arc-en-ciel la fait changer) */
   private paint!: THREE.MeshStandardMaterial;
-  private baseColor!: THREE.Color;
+  private tickPaint: (time: number) => void = () => {};
   private starShown = false;
+  private spec!: VehicleSpec;
+  private spinner: THREE.Group | null = null;
+  private radii: number[] = [];
+  private leanNow = 0;
 
   constructor(look: KartLook, shadows: boolean) {
     const keep = <T extends { dispose: () => void }>(x: T): T => {
       this.disposables.push(x);
       return x;
     };
-    const paint = keep(new THREE.MeshStandardMaterial({ color: look.color, roughness: 0.32, metalness: 0.15 }));
+    const set = paintFor(look.skin, look.color);
+    const paint = keep(set.paint);
+    const paintDark = keep(set.paintDark);
     this.paint = paint;
-    this.baseColor = new THREE.Color(look.color);
-    const paintDark = keep(
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(look.color).multiplyScalar(0.72), roughness: 0.4, metalness: 0.1 }),
-    );
+    this.tickPaint = set.tick;
     const dark = keep(new THREE.MeshStandardMaterial({ color: 0x25272c, roughness: 0.6 }));
     const metal = keep(new THREE.MeshStandardMaterial({ color: 0xc5ccd4, roughness: 0.28, metalness: 0.85 }));
     const rubber = keep(new THREE.MeshStandardMaterial({ color: 0x1a1a1d, roughness: 0.92 }));
-    const seatMat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2f2a, roughness: 0.8 }));
+    const seat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2f2a, roughness: 0.8 }));
+    const white = keep(new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: 0.4 }));
+    const glass = keep(
+      new THREE.MeshStandardMaterial({ color: 0xbfe3f5, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.38 }),
+    );
+    const lamp = keep(new THREE.MeshStandardMaterial({ color: 0xfff4cf, emissive: 0xfff0b8, emissiveIntensity: 1.3 }));
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x: number, y: number, z: number, cast = shadows) => {
       const m = new THREE.Mesh(keep(geo), mat);
       m.position.set(x, y, z);
@@ -206,99 +182,74 @@ export class KartModel {
       return m;
     };
 
-    // Le plancher, la coque, les pontons de chaque côté, les pare-chocs
-    add(new RoundedBoxGeometry(1.36, 0.12, 2.6, 2, 0.05), dark, 0, 0.24, 0.05);
-    add(hullGeometry(), paint, 0, 0, 0);
-    const white = keep(new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: 0.4 }));
-    for (const side of [-1, 1]) {
-      const pod = add(new THREE.CapsuleGeometry(0.17, 0.55, 4, 12), paintDark, side * 0.66, 0.42, 0);
-      pod.rotation.x = Math.PI / 2;
-      pod.scale.set(1, 1, 0.85);
-      // Une bande blanche sur le ponton
-      const stripe = add(new THREE.CapsuleGeometry(0.172, 0.5, 4, 12), white, side * 0.66, 0.42, 0.05, false);
-      stripe.rotation.x = Math.PI / 2;
-      stripe.scale.set(1.02, 0.35, 0.87);
-    }
-    const bumper = (z: number, w: number) => {
-      const b = add(new THREE.CapsuleGeometry(0.085, w, 4, 10), dark, 0, 0.3, z);
-      b.rotation.z = Math.PI / 2;
-    };
-    bumper(1.52, 1.1);
-    bumper(-1.28, 1.15);
-    // Le baquet, le moteur et ses deux pots
-    const seat = add(new RoundedBoxGeometry(0.66, 0.62, 0.16, 2, 0.06), seatMat, 0, 0.82, -0.66);
-    seat.rotation.x = 0.22;
-    add(new RoundedBoxGeometry(0.66, 0.12, 0.6, 2, 0.04), seatMat, 0, 0.56, -0.36, false);
-    add(new RoundedBoxGeometry(0.62, 0.34, 0.42, 2, 0.06), metal, 0, 0.78, -1.0);
-    add(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 12), dark, 0, 0.98, -1.0).rotation.z = Math.PI / 2;
-    this.flameMat = keep(new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9, depthWrite: false }));
-    for (const side of [-0.22, 0.22]) {
-      const pipe = add(new THREE.CylinderGeometry(0.075, 0.095, 0.42, 10), metal, side, 0.7, -1.32);
-      pipe.rotation.x = Math.PI / 2 + 0.25;
-      // La flamme du turbo
-      const flame = add(new THREE.ConeGeometry(0.14, 0.8, 10), this.flameMat, side, 0.76, -1.82, false);
-      flame.rotation.x = -Math.PI / 2 + 0.25;
-      flame.visible = false;
-      this.flames.push(flame);
-    }
-    // L'aileron et ses deux montants ; le nom du pilote à l'arrière
+    // Le nom du pilote, à l'arrière
     const nameTex = keep(new THREE.CanvasTexture(spoilerCanvas(look)));
     nameTex.colorSpace = THREE.SRGBColorSpace;
     nameTex.anisotropy = 4;
-    const nameMat = keep(new THREE.MeshStandardMaterial({ map: nameTex, roughness: 0.35 }));
-    // (assez bas pour qu'on voie le pilote de dos, depuis la caméra)
-    add(new THREE.BoxGeometry(1.5, 0.26, 0.07), [paint, paint, paint, paint, paint, nameMat], 0, 0.98, -1.24);
-    for (const side of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.05, 0.08, 0.34), paintDark, side * 0.77, 0.98, -1.22);
-      add(new THREE.BoxGeometry(0.06, 0.2, 0.12), dark, side * 0.42, 0.82, -1.19);
+    const name = keep(new THREE.MeshStandardMaterial({ map: nameTex, roughness: 0.35 }));
+
+    // La carrosserie du véhicule choisi
+    const spec = buildVehicle(look.vehicle, add, { paint, paintDark, dark, metal, seat, white, rubber, glass, lamp, name });
+    this.spec = spec;
+    if (spec.spinner) {
+      this.spinner = spec.spinner;
+      this.spinner.traverse((o) => {
+        if (o instanceof THREE.Mesh) keep(o.geometry);
+      });
+      this.body.add(this.spinner);
     }
-    // La colonne de direction, dans l'axe du volant, jusqu'au tableau de bord
-    const axis = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(1, 0, 0), WHEEL_TILT);
-    const columnAt = WHEEL_AT.clone().addScaledVector(axis, 0.22);
-    const column = add(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 8), dark, columnAt.x, columnAt.y, columnAt.z, false);
-    column.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
+    // Les flammes du turbo, à la sortie des pots
+    this.flameMat = keep(new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9, depthWrite: false }));
+    const flameGeo = keep(new THREE.ConeGeometry(0.14, 0.8, 10));
+    for (const [x, y, z] of spec.flames) {
+      const flame = new THREE.Mesh(flameGeo, this.flameMat);
+      flame.position.set(x, y, z);
+      flame.rotation.x = -Math.PI / 2 + 0.25;
+      flame.visible = false;
+      this.body.add(flame);
+      this.flames.push(flame);
+    }
     // Toutes ces pièces bougent ensemble : une forme par matière (les flammes restent à part, elles s'allument)
-    mergeStatic(this.body, keep, this.flames);
+    mergeStatic(this.body, keep, [...this.flames, ...(this.spinner ? [this.spinner] : [])]);
 
     // Le pilote et son volant
-    this.pilot = new PilotModel(look.avatar, look.head, look.color, keep, shadows);
+    this.pilot = new PilotModel(look.avatar, look.head, look.color, keep, shadows, spec.rig);
     this.body.add(this.pilot.group);
 
     // Les roues : celles de devant braquent
-    const frontTyre = keep(tyreGeometry(0.34, 0.32));
-    const rearTyre = keep(tyreGeometry(0.38, 0.42));
     const rimGeo = keep(new THREE.CylinderGeometry(1, 1, 1, 14));
     rimGeo.rotateZ(Math.PI / 2);
     const capMat = keep(new THREE.MeshStandardMaterial({ color: look.color, roughness: 0.3, metalness: 0.4 }));
-    for (const [x, z, rear] of [
-      [-0.8, 0.9, false],
-      [0.8, 0.9, false],
-      [-0.86, -0.82, true],
-      [0.86, -0.82, true],
-    ] as const) {
-      const r = rear ? 0.38 : 0.34;
-      const w = rear ? 0.42 : 0.32;
+    const tyres = new Map<string, THREE.BufferGeometry>();
+    for (const w of spec.wheels) {
+      const key = `${w.r}-${w.w}`;
+      let tyre = tyres.get(key);
+      if (!tyre) {
+        tyre = keep(tyreGeometry(w.r, w.w));
+        tyres.set(key, tyre);
+      }
       const holder = new THREE.Group();
-      holder.position.set(x, r, z);
+      holder.position.set(w.x, w.r, w.z);
       const spin = new THREE.Group();
-      const t = new THREE.Mesh(rear ? rearTyre : frontTyre, rubber);
+      const t = new THREE.Mesh(tyre, rubber);
       t.castShadow = shadows;
       spin.add(t);
       const rim = new THREE.Mesh(rimGeo, metal);
-      rim.scale.set(w * 0.9, r * 0.55, r * 0.55);
+      rim.scale.set(w.w * 0.9, w.r * 0.55, w.r * 0.55);
       spin.add(rim);
       const cap = new THREE.Mesh(rimGeo, capMat);
-      cap.scale.set(w * 0.94, r * 0.25, r * 0.25);
+      cap.scale.set(w.w * 0.94, w.r * 0.25, w.r * 0.25);
       spin.add(cap);
       holder.add(spin);
       this.body.add(holder);
       this.wheels.push(spin);
-      if (!rear) this.front.push(holder);
+      this.radii.push(w.r);
+      if (w.front) this.front.push(holder);
     }
 
     // Les étincelles du dérapage, derrière chaque roue arrière
     sharedSpark ??= sparkTexture();
-    for (const x of [-0.88, 0.88]) {
+    for (const at of spec.sparks) {
       const geo = keep(new THREE.BufferGeometry());
       geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(10 * 3), 3));
       const pts = new THREE.Points(
@@ -314,20 +265,20 @@ export class KartModel {
           }),
         ),
       );
-      pts.position.set(x, 0.12, -1.05);
+      pts.position.set(at.x, 0.12, at.z);
       pts.visible = false;
       this.body.add(pts);
       this.sparks.push(pts);
     }
     // Le bouclier
     this.shield = new THREE.Mesh(
-      keep(new THREE.SphereGeometry(1.85, 22, 16)),
+      keep(new THREE.SphereGeometry(spec.shield[0], 22, 16)),
       keep(new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.22, depthWrite: false })),
     );
-    this.shield.position.y = 0.85;
+    this.shield.position.y = spec.shield[1];
     this.shield.visible = false;
     this.body.add(this.shield);
-    this.body.position.y = -PIVOT;
+    this.body.position.y = -spec.pivot;
     this.tilt.add(this.body);
     this.group.add(this.tilt);
     sharedBlob ??= blobTexture();
@@ -342,7 +293,7 @@ export class KartModel {
       tex.colorSpace = THREE.SRGBColorSpace;
       this.tag = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true })));
       this.tag.scale.set(3.2, 0.8, 1);
-      this.tag.position.y = 2.75;
+      this.tag.position.y = spec.tag;
       this.tag.renderOrder = 10;
       this.group.add(this.tag);
     }
@@ -384,15 +335,21 @@ export class KartModel {
     const into = Math.max(-1, Math.min(1, x.steer * k.drift));
     this.yawOff += ((k.drift !== 0 ? -k.drift * (0.34 + 0.14 * into) : 0) - this.yawOff) * Math.min(1, dt * 9);
     const hop = k.hop > 0 ? Math.sin((1 - k.hop / 0.22) * Math.PI) * 0.32 : 0;
-    this.tilt.position.y = PIVOT + Math.max(0, hop) + this.squash;
+    const hover = this.spec.hover ? 0.42 + Math.sin(time * 2.6 + this.roll * 0.02) * 0.09 : 0;
+    this.tilt.position.y = this.spec.pivot + Math.max(0, hop) + this.squash + hover;
     this.tilt.rotation.set(
       this.pitch + (k.air > 0.3 ? -0.08 : 0),
       spinAngle + this.yawOff,
-      Math.max(-0.12, Math.min(0.12, k.slip * 0.02)) + barrel,
+      // La moto et la soucoupe se couchent dans les virages (vers la droite : z positif) ; les autres roulent un peu
+      (this.spec.lean > 0
+        ? (this.leanNow += (Math.max(-1.1, Math.min(1.1, x.steer + k.drift * 0.45)) * this.spec.lean - this.leanNow) * Math.min(1, dt * 7))
+        : Math.max(-0.12, Math.min(0.12, k.slip * 0.02))) + barrel,
       "YXZ",
     );
-    this.roll += (k.v * dt) / 0.36;
-    for (const w of this.wheels) w.rotation.x = this.roll;
+    this.roll += k.v * dt;
+    this.wheels.forEach((w, i) => (w.rotation.x = this.roll / this.radii[i]!));
+    if (this.spinner) this.spinner.rotation.y = time * 2.4;
+    this.tickPaint(time);
     for (const f of this.front) f.rotation.y = -x.steer * 0.45;
     // Les flammes du turbo, qui vacillent
     const boosting = k.boost > 0;
@@ -419,13 +376,8 @@ export class KartModel {
     }
     // L'arc-en-ciel : toutes les couleurs, très vite, et une lueur
     const star = Boolean(x.star);
-    if (star) {
-      this.paint.color.setHSL((time * 1.8) % 1, 0.85, 0.55);
-      this.paint.emissive.setHSL((time * 1.8 + 0.5) % 1, 0.9, 0.25);
-    } else if (this.starShown) {
-      this.paint.color.copy(this.baseColor);
-      this.paint.emissive.setHex(0x000000);
-    }
+    if (star) this.paint.emissive.setHSL((time * 1.8) % 1, 0.95, 0.42);
+    else if (this.starShown) this.paint.emissive.setHex(0x000000);
     this.starShown = star;
     this.shield.visible = x.shield;
     if (x.shield) (this.shield.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(time * 6) * 0.06;

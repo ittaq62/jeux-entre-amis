@@ -18,6 +18,7 @@ import {
 import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
 import { crosserAt, deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceCorners, wrapS } from "./track.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
+import { botGarage, SKIN_IDS, skinUnlocked, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "./garage.ts";
 
 const GAS: Input = { steer: 0, gas: true, brake: false, drift: false };
 
@@ -324,6 +325,92 @@ describe("la conduite", () => {
     bump(a, b, true, false);
     expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(2.29);
     expect(b.x).toBe(bx);
+  });
+});
+
+describe("le garage", () => {
+  const P = (won: number, played = won, turbos = 0, hitsGiven = 0) => ({ won, played, turbos, hitsGiven });
+
+  it("le kart et la moto sont là dès le début, les autres se débloquent avec des victoires", () => {
+    expect(vehicleUnlocked("kart", P(0))).toBe(true);
+    expect(vehicleUnlocked("moto", P(0))).toBe(true);
+    expect(vehicleUnlocked("buggy", P(1))).toBe(false);
+    expect(vehicleUnlocked("buggy", P(2))).toBe(true);
+    expect(vehicleUnlocked("soucoupe", P(29))).toBe(false);
+    expect(vehicleUnlocked("soucoupe", P(30))).toBe(true);
+    expect(skinUnlocked("usine", P(0))).toBe(true);
+    expect(skinUnlocked("flammes", P(50, 60, 49))).toBe(false);
+    expect(skinUnlocked("flammes", P(0, 0, 50))).toBe(true);
+    expect(skinUnlocked("neon", P(0, 0, 0, 25))).toBe(true);
+    // Une victoire de plus que le précédent à chaque fois : la liste monte
+    const wins = VEHICLE_IDS.map((id) => VEHICLES[id].wins);
+    expect([...wins].sort((a, b) => a - b)).toEqual(wins);
+  });
+
+  it("chaque véhicule a ses forces : la moto démarre plus vite, le buggy tient l'herbe, le bolide va plus vite", () => {
+    const t = getTrack("port");
+    const launch = (id: keyof typeof VEHICLES, seconds: number) => {
+      const k = kartAt("port", 10);
+      const s = VEHICLES[id].stats;
+      for (let i = 0; i < seconds * 60; i++) step(k, GAS, t, { top: s.top, vehicle: s });
+      return k.v;
+    };
+    expect(launch("moto", 1.5)).toBeGreaterThan(launch("kart", 1.5));
+    expect(launch("bolide", 1.5)).toBeLessThan(launch("kart", 1.5));
+    expect(launch("bolide", 7)).toBeGreaterThan(launch("kart", 7));
+    const grass = (id: keyof typeof VEHICLES) => {
+      const k = kartAt("port", 20, t.half + 3);
+      k.v = TOP_SPEED;
+      const s = VEHICLES[id].stats;
+      for (let i = 0; i < 180; i++) step(k, GAS, t, { top: s.top, vehicle: s });
+      return k.v;
+    };
+    expect(grass("buggy")).toBeGreaterThan(grass("kart") * 1.3);
+    expect(grass("tondeuse")).toBeGreaterThan(grass("buggy"));
+  });
+
+  it("aucun véhicule n'écrase les autres : les tours restent dans un mouchoir sur chaque circuit", () => {
+    for (const id of TRACK_IDS) {
+      const t = getTrack(id);
+      const times = VEHICLE_IDS.map((v) => {
+        const g = gridSlot(t, 0);
+        const k = newKart(t, g.x, g.z, g.h);
+        const mem = newBotMemory({ rng: 3 });
+        const h = { rng: 8 };
+        const s = VEHICLES[v].stats;
+        let now = 0;
+        while (k.dist < t.length * 2 && now < 300_000) {
+          now += DT * 1000;
+          step(k, botDrive(t, k, null, [], [], "fort", mem, now, h).input, t, { top: s.top, vehicle: s });
+        }
+        return now / 1000;
+      });
+      const best = Math.min(...times);
+      const worst = Math.max(...times);
+      expect(worst / best, `${id} : ${times.map((x) => x.toFixed(1)).join(" ")}`).toBeLessThan(1.09);
+    }
+  });
+
+  it("dans un choc, le plus lourd bouge moins que le plus léger", () => {
+    const a = kartAt("port", 30, 0);
+    const b = kartAt("port", 31, 0.3);
+    const ax = a.x;
+    const az = a.z;
+    const bx = b.x;
+    const bz = b.z;
+    bump(a, b, true, true, VEHICLES.monstre.stats.weight, VEHICLES.moto.stats.weight);
+    expect(Math.hypot(b.x - bx, b.z - bz)).toBeGreaterThan(Math.hypot(a.x - ax, a.z - az) * 2);
+  });
+
+  it("les bots prennent des véhicules et des skins variés, toujours valides", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 300; i++) {
+      const g = botGarage(`Pilote ${i}-ABCD`);
+      expect(VEHICLE_IDS).toContain(g.vehicle);
+      expect(SKIN_IDS).toContain(g.skin);
+      seen.add(g.vehicle);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(6);
   });
 });
 

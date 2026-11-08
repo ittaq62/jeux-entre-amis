@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
 interface Prefs {
@@ -16,6 +17,9 @@ interface Prefs {
   /** Bolides : le bruit du moteur de son kart, et la musique de course */
   bolidesEngine: boolean;
   bolidesMusic: boolean;
+  /** Bolides : le dernier véhicule et le dernier skin choisis sur cet appareil */
+  bolidesVehicle: VehicleId | null;
+  bolidesSkin: SkinId | null;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -41,6 +45,8 @@ export const usePrefs = create<Prefs>((set, get) => ({
   capViewHint: false,
   bolidesEngine: true,
   bolidesMusic: true,
+  bolidesVehicle: null,
+  bolidesSkin: null,
   ...load(),
   set: (patch) => {
     set(patch);

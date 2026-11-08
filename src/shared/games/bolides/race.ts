@@ -4,6 +4,7 @@
 // Tout se décide ici, sans réseau : l'heure est passée en paramètre, le hasard vient de la course.
 
 import { random } from "../../rng.ts";
+import { VEHICLES, type SkinId, type VehicleId } from "./garage.ts";
 import { BOT_STYLE, botDrive, newBotMemory, type BotLevel, type BotMemory } from "./bot.ts";
 import {
   ARC_MS,
@@ -111,6 +112,9 @@ export interface Racer {
   coins: number;
   /** L'arc-en-ciel : jusqu'à quand */
   starUntil: number;
+  /** Son véhicule et son skin */
+  vehicle: VehicleId;
+  skin: SkinId;
   stats: RacerStats;
 }
 
@@ -203,6 +207,8 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
       finish: null,
       coins: 0,
       starUntil: 0,
+      vehicle: "kart",
+      skin: "usine",
       stats: emptyStats(),
     };
   });
@@ -361,9 +367,13 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
       const kev: KartEvent[] = [];
       // Arrivé, un bot lève le pied
       const star = (r.starUntil ?? 0) > at;
+      const stats = VEHICLES[r.vehicle ?? "kart"].stats;
       const top =
-        (r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r)) * (1 + COIN_SPEED * (r.coins ?? 0)) * (star ? ARC_SPEED : 1);
-      step(r.kart, plan.input, t, { top, time: at / 1000, star }, kev);
+        (r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r)) *
+        (1 + COIN_SPEED * (r.coins ?? 0)) *
+        (star ? ARC_SPEED : 1) *
+        stats.top;
+      step(r.kart, plan.input, t, { top, time: at / 1000, star, vehicle: stats }, kev);
       for (const e of kev) {
         if (e === "turbo1" || e === "turbo2" || e === "turbo3") r.stats.turbos += 1;
         else if (e === "wall") r.stats.walls += 1;
@@ -378,7 +388,8 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
       for (let b = a + 1; b < race.racers.length; b++) {
         const ra = race.racers[a]!;
         const rb = race.racers[b]!;
-        if (ra.bot || rb.bot) bump(ra.kart, rb.kart, ra.bot, rb.bot);
+        if (ra.bot || rb.bot)
+          bump(ra.kart, rb.kart, ra.bot, rb.bot, VEHICLES[ra.vehicle ?? "kart"].stats.weight, VEHICLES[rb.vehicle ?? "kart"].stats.weight);
       }
     }
   }

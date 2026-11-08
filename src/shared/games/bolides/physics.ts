@@ -3,6 +3,7 @@
 // dérapage), l'herbe qui freine, les murs qui renvoient. Le pas de temps est fixe (1/60 s) pour que tout le monde
 // conduise pareil.
 
+import type { VehicleStats } from "./garage.ts";
 import { CROSSER_HALF, CROSSER_RADIUS, crosserAt, deltaS, locate, pointAt, wrapAngle, type Track } from "./track.ts";
 
 export type SpeedClass = "balade" | "normal" | "bolide";
@@ -87,6 +88,8 @@ export interface StepMods {
   time?: number;
   /** L'arc-en-ciel : l'herbe ne freine pas */
   star?: boolean;
+  /** Le véhicule : son accélération, son braquage, sa tenue dans l'herbe, la charge de ses dérapages (kart par défaut) */
+  vehicle?: Pick<VehicleStats, "accel" | "turn" | "grass" | "charge">;
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
@@ -167,9 +170,11 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
 
   // La vitesse visée : moins dans l'herbe (sauf sous l'arc-en-ciel), plus avec un turbo
   const grass = k.offroad && !mods.star;
-  let max = top * (grass ? GRASS : 1);
+  const grassLeft = mods.vehicle?.grass ?? GRASS;
+  const accel = ACCEL * (mods.vehicle?.accel ?? 1);
+  let max = top * (grass ? grassLeft : 1);
   if (k.boost > 0) {
-    max = top * BOOST_SPEED * (grass ? 0.85 : 1);
+    max = top * BOOST_SPEED * (grass ? Math.max(0.85, grassLeft) : 1);
     k.boost = Math.max(0, k.boost - dt);
   }
   const push = ctl.gas || k.boost > 0;
@@ -177,7 +182,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   else if (ctl.brake) k.v = Math.max(-REVERSE, k.v - ACCEL * 0.6 * dt);
   else if (push && k.v < max) {
     const ratio = clamp(k.v / max, 0, 1);
-    k.v += ACCEL * (k.boost > 0 ? 2.2 : 1) * (1 - ratio * ratio) * dt + (k.v < 0 ? BRAKE * dt : 0);
+    k.v += accel * (k.boost > 0 ? 2.2 : 1) * (1 - ratio * ratio) * dt + (k.v < 0 ? BRAKE * dt : 0);
   } else if (!push) k.v -= Math.sign(k.v) * Math.min(Math.abs(k.v), COAST * dt);
   // Au-dessus de la vitesse visée (fin de turbo, herbe), le kart ralentit vite mais sans à-coup
   if (k.v > max) k.v = Math.max(max, k.v - (k.v - max) * 2.4 * dt - 2 * dt);
@@ -202,6 +207,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
 
   // Le braquage : nul à l'arrêt, un peu moins fort à pleine vitesse, inversé en marche arrière, à peine en l'air
   const speedF = clamp(Math.abs(k.v) / 6, 0, 1) * (1 - 0.3 * clamp(k.v / top, 0, 1.3)) * (flying ? 0.3 : 1);
+  const turn = TURN * (mods.vehicle?.turn ?? 1);
   let yaw: number;
   if (k.drift !== 0) {
     // En dérapage, le kart tourne toujours du côté du dérapage : braquer dedans serre, braquer dehors élargit
@@ -209,16 +215,16 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     // les épingles), dehors l'élargit (73 m) sans jamais aller tout droit : au clavier comme au doigt, on suit un
     // virage en restant presque toujours sur une seule touche
     const into = clamp(ctl.steer * k.drift, -1, 1);
-    yaw = -k.drift * TURN * (0.4 + (into >= 0 ? 0.26 : 0.16) * into) * speedF;
+    yaw = -k.drift * turn * (0.4 + (into >= 0 ? 0.26 : 0.16) * into) * speedF;
     if (!flying) {
       const before = driftLevel(k.charge);
       // Serrer charge plus vite, élargir plus lentement
-      k.charge += dt * (1 + 0.5 * into);
+      k.charge += dt * (1 + 0.5 * into) * (mods.vehicle?.charge ?? 1);
       const after = driftLevel(k.charge);
       if (after > before) events?.push(after === 3 ? "spark3" : after === 2 ? "spark2" : "spark1");
     }
   } else {
-    yaw = -ctl.steer * TURN * speedF * Math.sign(k.v || 1);
+    yaw = -ctl.steer * turn * speedF * Math.sign(k.v || 1);
   }
   k.h = wrapAngle(k.h + yaw * dt);
 
@@ -350,7 +356,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
  * ceux dont on a le droit de changer la position (un joueur ne pousse que son propre kart, chez lui).
  * Renvoie la force du choc (0 s'ils ne se touchaient pas).
  */
-export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean): number {
+export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean, weightA = 1, weightB = 1): number {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
   const dist = Math.hypot(dx, dz);
@@ -359,14 +365,18 @@ export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean): number {
   const nx = dx / dist;
   const nz = dz / dist;
   const over = min - dist;
-  const share = moveA && moveB ? 0.5 : 1;
+  // Le plus lourd bouge moins (et s'il est seul à bouger, il ne se laisse pas repousser autant)
+  const shareA = weightB / (weightA + weightB);
+  const shareB = weightA / (weightA + weightB);
+  const pushA = moveA && moveB ? shareA : 2 * shareA;
+  const pushB = moveA && moveB ? shareB : 2 * shareB;
   if (moveA) {
-    a.x -= nx * over * share;
-    a.z -= nz * over * share;
+    a.x -= nx * over * Math.min(1, pushA);
+    a.z -= nz * over * Math.min(1, pushA);
   }
   if (moveB) {
-    b.x += nx * over * share;
-    b.z += nz * over * share;
+    b.x += nx * over * Math.min(1, pushB);
+    b.z += nz * over * Math.min(1, pushB);
   }
   // Ce qui allait de l'un vers l'autre : le plus lent est poussé, le plus rapide freiné
   const va = Math.sin(a.h) * a.v * nx + Math.cos(a.h) * a.v * nz;
@@ -374,12 +384,12 @@ export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean): number {
   const closing = va - vb;
   if (closing <= 0) return over;
   if (moveA) {
-    a.v -= closing * 0.35 * (Math.sin(a.h) * nx + Math.cos(a.h) * nz);
-    a.slip -= closing * 0.35 * (-Math.cos(a.h) * nx + Math.sin(a.h) * nz);
+    a.v -= closing * 0.7 * shareA * (Math.sin(a.h) * nx + Math.cos(a.h) * nz);
+    a.slip -= closing * 0.7 * shareA * (-Math.cos(a.h) * nx + Math.sin(a.h) * nz);
   }
   if (moveB) {
-    b.v += closing * 0.35 * (Math.sin(b.h) * nx + Math.cos(b.h) * nz);
-    b.slip += closing * 0.35 * (-Math.cos(b.h) * nx + Math.sin(b.h) * nz);
+    b.v += closing * 0.7 * shareB * (Math.sin(b.h) * nx + Math.cos(b.h) * nz);
+    b.slip += closing * 0.7 * shareB * (-Math.cos(b.h) * nx + Math.sin(b.h) * nz);
   }
   return closing;
 }

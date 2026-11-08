@@ -2,6 +2,7 @@
 // et, plusieurs fois par seconde, la position de tous les karts, serrée en petits tableaux de nombres.
 
 import type { BotLevel } from "./bot.ts";
+import type { SkinId, VehicleId } from "./garage.ts";
 import type { Hazard, ItemKind } from "./items.ts";
 import type { Kart } from "./physics.ts";
 import type { BolidesSettings, Race, RacerStats } from "./race.ts";
@@ -82,6 +83,8 @@ export interface RacerView {
   /** Conduit par le serveur (un bot, ou le relais d'un absent) */
   bot: boolean;
   coins: number;
+  vehicle: VehicleId;
+  skin: SkinId;
   stats: RacerStats;
 }
 
@@ -120,6 +123,8 @@ export function bolidesView(race: Race): BolidesView {
       finish: r.finish,
       bot: r.bot,
       coins: r.coins ?? 0,
+      vehicle: r.vehicle ?? "kart",
+      skin: r.skin ?? "usine",
       stats: r.stats,
     })),
     karts: race.racers.map((r) => encodeKart(r.kart)),

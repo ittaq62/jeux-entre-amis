@@ -6,6 +6,7 @@ import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolid
 import { ARC_SPEED, BOX_RADIUS, COIN_RADIUS, COIN_SPEED, fuseeDist, TURBO_TIME, type ItemKind } from "../../shared/games/bolides/items.ts";
 import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent } from "../../shared/games/bolides/race.ts";
+import { VEHICLES } from "../../shared/games/bolides/garage.ts";
 import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
 import type { BolidesClientMessage } from "../../shared/protocol.ts";
@@ -161,7 +162,13 @@ export class RaceRuntime {
       const k = decodeKart(view.karts[this.mine]!);
       if (k) {
         const at = locate(this.track, k.x, k.z);
-        this.driver = new LocalDriver(this.track, { ...k, i: at.i, s: at.s, d: at.d, y: at.y }, CLASS_SPEED[view.settings.speed]);
+        const stats = VEHICLES[me.vehicle ?? "kart"].stats;
+        this.driver = new LocalDriver(
+          this.track,
+          { ...k, i: at.i, s: at.s, d: at.d, y: at.y },
+          CLASS_SPEED[view.settings.speed] * stats.top,
+          stats,
+        );
       }
     } else if (me?.bot && this.driver) this.driver = null;
   }
@@ -388,8 +395,13 @@ export class RaceRuntime {
         const others = this.shown.filter((_, i) => i !== this.mine);
         // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur), l'arc-en-ciel beaucoup
         const star = (me.starUntil ?? 0) > now;
-        d.top = CLASS_SPEED[v.settings.speed] * (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0)) * (star ? ARC_SPEED : 1);
-        events = d.update(dt, input, others, now / 1000, star);
+        d.top =
+          CLASS_SPEED[v.settings.speed] *
+          (1 + COIN_SPEED * (this.coinCounts[this.mine] ?? me.coins ?? 0)) *
+          (star ? ARC_SPEED : 1) *
+          VEHICLES[me.vehicle ?? "kart"].stats.top;
+        const weights = v.racers.filter((_, i) => i !== this.mine).map((r) => VEHICLES[r.vehicle ?? "kart"].stats.weight);
+        events = d.update(dt, input, others, now / 1000, star, weights);
         if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);

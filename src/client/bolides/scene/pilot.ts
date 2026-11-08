@@ -31,15 +31,20 @@ export interface PilotState {
   dt: number;
 }
 
-/** La tête : son rayon, et où est son centre au-dessus du siège */
+/** Comment le pilote est installé dans son véhicule */
+export interface PilotRig {
+  /** Là où pivote son buste (le bassin), et de combien il se penche vers l'avant */
+  hips: THREE.Vector3;
+  pitch: number;
+  /** Ce qu'il tient : un volant, un guidon, ou rien (ses mains posées devant lui) ; sa demi-largeur */
+  steer: { kind: "wheel" | "bar" | "none"; at: THREE.Vector3; tilt: number; half: number };
+  /** Ses jambes, quand elles se voient : le genou et le pied (côté x positif, l'autre est symétrique) */
+  legs: { knee: THREE.Vector3; foot: THREE.Vector3 } | null;
+}
+
+/** La tête : son rayon, et sa hauteur au-dessus du bassin */
 const R = 0.34;
-const HEAD_Y = 1.5;
-const HIPS = new THREE.Vector3(0, 0.56, -0.3);
-/** Le volant, au bout de sa colonne, penché vers le pilote */
-export const WHEEL_AT = new THREE.Vector3(0, 0.98, 0.32);
-/** Le volant regarde le pilote : son axe monte vers lui (vers l'arrière et le haut) */
-export const WHEEL_TILT = 0.52;
-const WHEEL_R = 0.18;
+const HEAD_UP = 0.94;
 const UPPER = 0.34;
 const FORE = 0.34;
 
@@ -287,14 +292,21 @@ export class PilotModel {
   private turn = 0;
   private yaw = 0;
 
-  constructor(avatar: AvatarConfig, head: HTMLCanvasElement | null, scarfColor: string, keep: Keep, shadows: boolean) {
+  constructor(
+    avatar: AvatarConfig,
+    head: HTMLCanvasElement | null,
+    scarfColor: string,
+    keep: Keep,
+    shadows: boolean,
+    private rig: PilotRig,
+  ) {
     const skinColor = AVATAR_SKINS[avatar.skin] ?? AVATAR_SKINS[0]!;
     const shirt = keep(std(AVATAR_BACKGROUNDS[avatar.bg] ?? AVATAR_BACKGROUNDS[0]!, 0.75));
     const glove = keep(std(0xf7f4ee, 0.6));
     const hatCoversTop = [1, 2, 4, 5, 7].includes(avatar.hat);
 
     // Le buste : il pivote aux hanches pour pencher, la tête et les épaules suivent
-    this.torso.position.copy(HIPS);
+    this.torso.position.copy(rig.hips);
     this.group.add(this.torso);
     const body = new THREE.Mesh(keep(new THREE.CapsuleGeometry(0.27, 0.32, 6, 14)), shirt);
     body.position.set(0, 0.38, 0);
@@ -315,7 +327,7 @@ export class PilotModel {
     }
 
     // La tête : la peau dépliée de l'avatar, les oreilles, la coiffure, le chapeau
-    this.head.position.set(0, HEAD_Y - HIPS.y, 0.06);
+    this.head.position.set(0, HEAD_UP, 0.06);
     this.torso.add(this.head);
     let skinMat: THREE.MeshStandardMaterial;
     if (head) {
@@ -362,19 +374,52 @@ export class PilotModel {
     this.stars.visible = false;
     this.head.add(this.stars);
 
-    // Le volant et sa colonne
+    // Ce qu'il tient : un volant, ou un guidon
     const dark = keep(std(0x23252a, 0.5));
-    this.wheel.position.copy(WHEEL_AT);
-    this.wheel.rotation.x = WHEEL_TILT;
-    const rim = new THREE.Mesh(keep(new THREE.TorusGeometry(WHEEL_R, 0.035, 8, 22)), dark);
-    this.wheel.add(rim);
-    const hub = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.06, 0.06, 12)), keep(std(scarfColor, 0.4)));
-    hub.rotation.x = Math.PI / 2;
-    this.wheel.add(hub);
-    const spoke = new THREE.Mesh(keep(new THREE.BoxGeometry(WHEEL_R * 2, 0.03, 0.02)), dark);
-    this.wheel.add(spoke);
+    this.wheel.position.copy(rig.steer.at);
+    this.wheel.rotation.x = rig.steer.tilt;
+    if (rig.steer.kind === "wheel") {
+      const rim = new THREE.Mesh(keep(new THREE.TorusGeometry(rig.steer.half, 0.035, 8, 22)), dark);
+      this.wheel.add(rim);
+      const hub = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.06, 0.06, 12)), keep(std(scarfColor, 0.4)));
+      hub.rotation.x = Math.PI / 2;
+      this.wheel.add(hub);
+      const spoke = new THREE.Mesh(keep(new THREE.BoxGeometry(rig.steer.half * 2, 0.03, 0.02)), dark);
+      this.wheel.add(spoke);
+    } else if (rig.steer.kind === "bar") {
+      const bar = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.03, rig.steer.half * 2, 8)), dark);
+      bar.rotation.z = Math.PI / 2;
+      this.wheel.add(bar);
+      for (const side of [-1, 1]) {
+        const grip = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8)), keep(std(0x151518, 0.9)));
+        grip.rotation.z = Math.PI / 2;
+        grip.position.x = side * (rig.steer.half - 0.06);
+        this.wheel.add(grip);
+      }
+    }
     mergeStatic(this.wheel, keep);
     this.group.add(this.wheel);
+
+    // Les jambes, quand le véhicule les laisse voir
+    if (rig.legs) {
+      const pants = keep(std(0x2c3140, 0.85));
+      const shoe = keep(std(0x1b1b20, 0.7));
+      for (const side of [-1, 1]) {
+        const hip = new THREE.Vector3(side * 0.16, rig.hips.y + 0.08, rig.hips.z);
+        const knee = new THREE.Vector3(side * rig.legs.knee.x, rig.legs.knee.y, rig.legs.knee.z);
+        const foot = new THREE.Vector3(side * rig.legs.foot.x, rig.legs.foot.y, rig.legs.foot.z);
+        const thigh = bone(0.1, pants, keep, shadows);
+        stretch(thigh, hip, knee);
+        const shin = bone(0.085, pants, keep, shadows);
+        stretch(shin, knee, foot);
+        const kneeBall = new THREE.Mesh(keep(new THREE.SphereGeometry(0.1, 10, 8)), pants);
+        kneeBall.position.copy(knee);
+        const boot = new THREE.Mesh(keep(new THREE.SphereGeometry(0.11, 10, 8)), shoe);
+        boot.position.copy(foot);
+        boot.scale.set(0.9, 0.7, 1.5);
+        this.group.add(thigh, shin, kneeBall, boot);
+      }
+    }
 
     // Les bras : épaule, coude, gant
     for (const side of [-1, 1]) {
@@ -392,7 +437,8 @@ export class PilotModel {
     const k = Math.min(1, s.dt * 10);
     // Le volant tourne avec le braquage (plus fort en dérapage)
     this.turn += (s.steer + s.drift * 0.35 - this.turn) * Math.min(1, s.dt * 14);
-    this.wheel.rotation.z = -this.turn * 1.1;
+    if (this.rig.steer.kind === "bar") this.wheel.rotation.y = -this.turn * 0.32;
+    else if (this.rig.steer.kind === "wheel") this.wheel.rotation.z = -this.turn * 1.1;
     // La tête regarde dans le virage ; le buste penche, se cale en arrière pendant un turbo
     const lookTarget = -(s.steer * 0.32 + s.drift * 0.28);
     this.yaw += (lookTarget - this.yaw) * k;
@@ -409,8 +455,8 @@ export class PilotModel {
     );
     // Pencher à droite : le haut part vers -x (la droite du kart)
     this.torso.rotation.z += (s.lean - this.torso.rotation.z) * k;
-    this.torso.rotation.x += ((s.boosting ? -0.16 : 0.04) - this.torso.rotation.x) * Math.min(1, s.dt * 5);
-    this.torso.position.y = HIPS.y + (s.celebrate ? Math.abs(Math.sin(s.time * 6)) * 0.06 : 0);
+    this.torso.rotation.x += (this.rig.pitch + (s.boosting ? -0.16 : 0.04) - this.torso.rotation.x) * Math.min(1, s.dt * 5);
+    this.torso.position.y = this.rig.hips.y + (s.celebrate ? Math.abs(Math.sin(s.time * 6)) * 0.06 : 0);
     // Les étoiles tournent au-dessus de la tête sonnée
     this.stars.visible = this.dizzy > 0;
     if (this.stars.visible) {
@@ -446,9 +492,9 @@ export class PilotModel {
       ];
       shoulder.copy(arm.shoulder).applyMatrix4(this.torso.matrix);
       // Les mains tiennent le volant à « 9 h 15 », et tournent avec lui
-      hand.set(arm.side * WHEEL_R, 0.02, 0).applyMatrix4(this.wheel.matrix);
+      hand.set(arm.side * this.rig.steer.half, 0.02, 0).applyMatrix4(this.wheel.matrix);
       const wave = s.celebrate ? Math.sin(s.time * 9 + arm.side) * 0.1 : 0;
-      up.set(arm.side * 0.45 + wave, HEAD_Y + 0.25, -0.05);
+      up.set(arm.side * 0.45 + wave, this.rig.hips.y + HEAD_UP + 0.25, this.rig.hips.z + 0.25);
       hand.lerp(up, this.cheer);
       const d = Math.min(UPPER + FORE - 0.01, shoulder.distanceTo(hand));
       along.subVectors(hand, shoulder).normalize();

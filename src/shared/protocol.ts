@@ -1,4 +1,5 @@
 import type { AvatarConfig } from "./avatar.ts";
+import type { GarageProgress, SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
@@ -531,10 +532,14 @@ export interface BolidesRoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** Le véhicule et le skin de chaque pilote assis, et ce que ce joueur a déjà débloqué */
+  garage: { choices: Record<string, { vehicle: VehicleId; skin: KartSkinId }>; progress: GarageProgress | null };
 }
 
 export type BolidesClientMessage =
   | { t: "settings"; settings: Partial<BolidesSettings>; visibility?: Visibility; maxPlayers?: number }
+  /** Choisir son véhicule et son skin (s'ils sont débloqués) */
+  | { t: "garage"; vehicle?: VehicleId; skin?: KartSkinId }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }

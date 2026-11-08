@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
+import { SKIN_IDS, skinUnlocked, SKINS, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "../../shared/games/bolides/garage.ts";
 import { ITEM_NAMES } from "../../shared/games/bolides/items.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
@@ -64,6 +65,22 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
 
   useEffect(() => preloadSounds(BOLIDES_SOUNDS), []);
 
+  // Ce que cette course a débloqué : on compare à ce qu'on avait au départ
+  const startProgress = useRef(room.garage?.progress ?? null);
+  useEffect(() => {
+    startProgress.current = room.garage?.progress ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raceKey]);
+  const progressNow = room.garage?.progress ?? null;
+  const unlocks = useMemo(() => {
+    const before = startProgress.current;
+    if (!before || !progressNow) return [];
+    return [
+      ...VEHICLE_IDS.filter((id) => !vehicleUnlocked(id, before) && vehicleUnlocked(id, progressNow)).map((id) => VEHICLES[id].name),
+      ...SKIN_IDS.filter((id) => !skinUnlocked(id, before) && skinUnlocked(id, progressNow)).map((id) => `le skin ${SKINS[id].name}`),
+    ];
+  }, [progressNow]);
+
   useEffect(() => {
     let cancelled = false;
     const seats = g.racers.map((r) => room.seats.find((s) => s.id === r.id));
@@ -80,6 +97,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         face: faces[i] ?? null,
         avatar: avatars[i]!,
         head: heads[i] ?? null,
+        vehicle: r.vehicle ?? "kart",
+        skin: r.skin ?? "usine",
         me: r.id === me,
       }));
       const rt = new RaceRuntime(box.current, g, looks, serverOffset, { phone, reduced, me, send, onHud: setHud });
@@ -392,6 +411,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           onLobby={onShowLobby}
           onLeave={onLeave}
           onInspect={() => setResultsHidden(true)}
+          unlocks={unlocks}
         />
       )}
       {g.ranking && resultsHidden && (

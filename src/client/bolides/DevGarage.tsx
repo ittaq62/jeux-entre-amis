@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { AVATAR_PARTS, type AvatarConfig } from "../../shared/avatar.ts";
+import { SKIN_IDS, VEHICLE_IDS } from "../../shared/games/bolides/garage.ts";
 import { newKart, SPIN_TIME } from "../../shared/games/bolides/physics.ts";
 import { getTrack } from "../../shared/games/bolides/track.ts";
 import { faceCanvas, headCanvas } from "./scene/faces.ts";
@@ -66,7 +67,19 @@ export function DevGarage() {
       (all) => {
         if (disposed) return;
         karts = all.map(([head, face], i) => {
-          const m = new KartModel({ color: KART_COLORS[i]!, name: `Pilote ${i + 1}`, face, avatar: avatars[i]!, head, me: true }, true);
+          const m = new KartModel(
+            {
+              color: KART_COLORS[i]!,
+              name: `Pilote ${i + 1}`,
+              face,
+              avatar: avatars[i]!,
+              head,
+              me: true,
+              vehicle: VEHICLE_IDS[i % VEHICLE_IDS.length]!,
+              skin: SKIN_IDS[(i + Number(q.get("skin") ?? 0)) % SKIN_IDS.length]!,
+            },
+            true,
+          );
           scene.add(m.group);
           return m;
         });
@@ -82,7 +95,7 @@ export function DevGarage() {
             const col = i % 4;
             const row = Math.floor(i / 4);
             const k = newKart(t, 0, 0, 0);
-            Object.assign(k, { x: (col - 1.5) * 3.4, z: row * -5, y: 0, h: 0, v: pose === "cheer" ? 2 : 18, i: 0 });
+            Object.assign(k, { x: (col - 1.5) * 4.6, z: row * -7, y: 0, h: 0, v: pose === "cheer" ? 2 : 18, i: 0 });
             const steer = Math.sin(time * 1.6 + i) * 0.9;
             if (pose === "drift") Object.assign(k, { drift: i % 2 ? 1 : -1, charge: 0.4 + i * 0.3, slip: i % 2 ? -4 : 4 });
             if (pose === "spin") k.spin = SPIN_TIME - ((time * 0.8) % SPIN_TIME);
