@@ -8,6 +8,10 @@ export interface Pad extends Input {
   /** Vrai une seule fois par appui */
   item: boolean;
   respawn: boolean;
+  /** L'objet partira dans l'autre sens (le frein tenu, ou un glissement du doigt) */
+  flip: boolean;
+  /** Regarder derrière soi */
+  look: boolean;
 }
 
 /** Les boutons de l'écran tactile, tenus ou non */
@@ -18,6 +22,8 @@ export interface TouchState {
   brake: boolean;
   /** Des appuis à servir */
   item: number;
+  /** Le prochain objet part dans l'autre sens */
+  flip: boolean;
 }
 
 const KEYS = {
@@ -26,8 +32,9 @@ const KEYS = {
   gas: ["ArrowUp", "KeyW"],
   brake: ["ArrowDown", "KeyS"],
   drift: ["Space", "ShiftLeft", "ShiftRight"],
-  item: ["KeyE", "KeyX", "Enter", "NumpadEnter"],
+  item: ["KeyE", "KeyX", "KeyC", "KeyF", "KeyV", "Enter", "NumpadEnter", "Numpad0"],
   respawn: ["KeyR"],
+  look: ["KeyB"],
 };
 const GAME_KEYS = new Set(Object.values(KEYS).flat());
 
@@ -37,7 +44,7 @@ export class Controls {
   private steer = 0;
   private padItem = false;
   private padRespawn = false;
-  readonly touch: TouchState = { left: false, right: false, drift: false, brake: false, item: 0 };
+  readonly touch: TouchState = { left: false, right: false, drift: false, brake: false, item: 0, flip: false };
   /** Accélérer sans rien tenir (sur téléphone) */
   autoGas = false;
 
@@ -94,6 +101,8 @@ export class Controls {
     const brake = this.any(KEYS.brake) || t.brake || Boolean(pad?.brake);
     const item = this.took(KEYS.item) || t.item > 0 || Boolean(pad?.item);
     if (t.item > 0) t.item -= 1;
+    const flip = brake || t.flip;
+    if (item) t.flip = false;
     return {
       steer: Math.max(-1, Math.min(1, steer)),
       gas: (this.autoGas && !brake) || this.any(KEYS.gas) || Boolean(pad?.gas),
@@ -101,6 +110,8 @@ export class Controls {
       drift: this.any(KEYS.drift) || t.drift || Boolean(pad?.drift),
       item,
       respawn: this.took(KEYS.respawn) || Boolean(pad?.respawn),
+      flip,
+      look: this.any(KEYS.look) || Boolean(pad?.look),
     };
   }
 
@@ -121,6 +132,8 @@ export class Controls {
       drift: b(5),
       item: item && !this.padItem,
       respawn: respawn && !this.padRespawn,
+      flip: b(1) || b(6),
+      look: b(10),
     };
     this.padItem = item;
     this.padRespawn = respawn;

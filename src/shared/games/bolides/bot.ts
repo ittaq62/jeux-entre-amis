@@ -97,7 +97,7 @@ export function botDrive(
   h: RngHolder,
   /** Chaque pièce : l'heure où elle revient (0 : elle est là) */
   coins?: number[],
-): { input: Input; use: boolean } {
+): { input: Input; use: boolean; flip: boolean } {
   const style = BOT_STYLE[level];
   const half = t.half;
   // Son couloir change de temps en temps
@@ -192,7 +192,7 @@ export function botDrive(
   let steer = clamp(-err * 2.6 + Math.sin(mem.wobble) * style.wobble, -1, 1);
 
   // Coincé contre un mur : il recule un moment en braquant dans l'autre sens, puis retente d'avancer
-  const reverse = { input: { steer: -steer, gas: false, brake: true, drift: false }, use: false };
+  const reverse = { input: { steer: -steer, gas: false, brake: true, drift: false }, use: false, flip: false };
   if (now < mem.reverseUntil) return reverse;
   if (k.v < 2 && k.spin === 0) {
     if (mem.slowSince === 0) mem.slowSince = now;
@@ -219,43 +219,64 @@ export function botDrive(
   const brake = level === "facile" && Math.abs(err) > 0.85 && k.v > 13;
   const input: Input = { steer, gas: !brake, brake, drift };
 
-  // Son objet
+  return { input, ...botWantsItem(t, k, item, rivals, hazards, level, mem, now, h) };
+}
+
+/**
+ * Faut-il se servir de son objet maintenant, et dans quel sens ? Ce que fait un bot, et aussi ce que propose l'option
+ * « objets automatiques » aux joueurs.
+ */
+export function botWantsItem(
+  t: Track,
+  k: Kart,
+  item: ItemKind | null,
+  rivals: Rival[],
+  hazards: Hazard[],
+  level: BotLevel,
+  mem: BotMemory,
+  now: number,
+  h: RngHolder,
+): { use: boolean; flip: boolean } {
+  const style = BOT_STYLE[level];
   if (item !== mem.had) {
     mem.had = item;
     mem.holdUntil = now + style.hold[0] * 0.3 + random(h) * style.hold[1];
   }
+  if (!item || k.spin > 0 || k.air > 0.5) return { use: false, flip: false };
+  const aim = random(h) < style.aim;
+  const straight = Math.abs(bendAhead(t, k.s, 40)) < 0.012;
+  const behind = rivals.some((r) => {
+    const gap = r.kart.dist - k.dist;
+    return gap < -3 && gap > -30 && Math.abs(r.kart.d - k.d) < 5;
+  });
+  const ahead = rivals.some((r) => {
+    const gap = r.kart.dist - k.dist;
+    return gap > 5 && gap < 45 && Math.abs(r.kart.d - k.d) < 4;
+  });
+  const near = rivals.some((r) => Math.hypot(r.kart.x - k.x, r.kart.z - k.z) < 8);
+  const patience = now > mem.holdUntil;
+  // Ce qui se lance : devant si quelqu'un y est, sinon derrière
+  const thrown = (ahead && aim) || (behind && aim) || patience;
+  const flip = !ahead && behind;
   let use = false;
-  if (item && k.spin === 0) {
-    const aim = random(h) < style.aim;
-    const straight = Math.abs(bendAhead(t, k.s, 40)) < 0.012;
-    const behind = rivals.some((r) => {
-      const gap = r.kart.dist - k.dist;
-      return gap < -3 && gap > -30;
-    });
-    const ahead = rivals.some((r) => {
-      const gap = r.kart.dist - k.dist;
-      return gap > 5 && gap < 45 && Math.abs(r.kart.d - k.d) < 4;
-    });
-    const near = rivals.some((r) => Math.hypot(r.kart.x - k.x, r.kart.z - k.z) < 8);
-    const patience = now > mem.holdUntil;
-    if (item === "turbo" || item === "turbo3") use = straight && !k.offroad && (patience || aim);
-    else if (item === "huile") use = (behind && aim) || patience;
-    else if (item === "petard") use = (ahead && aim) || patience;
-    else if (item === "klaxon") use = (near && aim) || patience;
-    // La fusée : tout de suite (elle va seule chercher le premier) ; l'arc-en-ciel : quand il y a du monde devant ou à côté
-    else if (item === "fusee" || item === "orage") use = true;
-    else if (item === "bowling" || item === "bombe") use = (ahead && aim) || patience;
-    else if (item === "tarte") use = rivals.some((r) => Math.abs(r.kart.dist - k.dist) < 70) || patience;
-    else if (item === "geant") use = ((ahead || near) && aim) || patience;
-    // Le ressort : pour sauter par-dessus une flaque devant lui, ou quand il en a assez de le garder
-    else if (item === "ressort")
-      use = hazards.some((hz) => hz.kind === "huile" && deltaS(t, k.s, hz.s) > 6 && deltaS(t, k.s, hz.s) < 26) || patience;
-    else if (item === "arc") use = ((ahead || near) && aim) || patience;
-    else use = patience;
-    // Pas deux objets dans la même seconde
-    if (use) mem.holdUntil = now + 1000;
-  }
-  return { input, use };
+  if (item === "turbo" || item === "turbo3") use = straight && !k.offroad && (patience || aim);
+  else if (item === "huile") use = (behind && aim) || patience;
+  else if (item === "petard" || item === "bowling" || item === "bombe") use = thrown;
+  else if (item === "klaxon") use = (near && aim) || patience;
+  // La fusée : tout de suite (elle va seule chercher le premier) ; l'arc-en-ciel : quand il y a du monde devant ou à côté
+  else if (item === "fusee" || item === "orage") use = true;
+  else if (item === "tarte") use = rivals.some((r) => Math.abs(r.kart.dist - k.dist) < 70);
+  else if (item === "geant") use = ((ahead || near) && aim) || patience;
+  // Le ressort : pour sauter par-dessus une flaque devant lui, ou quand il en a assez de le garder
+  else if (item === "ressort")
+    use = hazards.some((hz) => hz.kind === "huile" && deltaS(t, k.s, hz.s) > 6 && deltaS(t, k.s, hz.s) < 26) || patience;
+  else if (item === "arc") use = ((ahead || near) && aim) || patience;
+  else if (item === "bouclier") use = patience && !straight;
+  else use = patience;
+  // Pas deux objets dans la même seconde
+  if (use) mem.holdUntil = now + 1000;
+  const canFlip = item === "petard" || item === "bowling" || item === "bombe";
+  return { use, flip: use && canFlip && flip };
 }
 
 /** Où est une flaque le long de la route (calculé à sa pose) */

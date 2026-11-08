@@ -14,6 +14,7 @@ import {
 } from "../shared/games/bolides/garage.ts";
 import { SPEED_CLASSES } from "../shared/games/bolides/physics.ts";
 import {
+  cupPoints,
   DEFAULT_SETTINGS,
   driveBots,
   LAP_CHOICES,
@@ -26,7 +27,7 @@ import {
   type BolidesSettings,
   type Race,
 } from "../shared/games/bolides/race.ts";
-import { TRACK_IDS, type TrackId } from "../shared/games/bolides/track.ts";
+import { TRACK_IDS, type BaseTrackId } from "../shared/games/bolides/track.ts";
 import { bolidesView, decodeKart, encodeKart } from "../shared/games/bolides/view.ts";
 import {
   BOLIDES_MAX_PLAYERS,
@@ -101,6 +102,8 @@ interface BolidesData {
   kicked: string[];
   recorded: boolean;
   results?: EloResults | null;
+  /** Le Grand Prix en cours : ses circuits, la course où on en est, et les points de chacun */
+  cup?: { tracks: BaseTrackId[]; index: number; points: Record<string, number>; last: Record<string, number> } | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
 }
@@ -419,7 +422,7 @@ export class BolidesRoom extends DurableObject<Env> {
         if (!seat || !race || d.status !== "playing" || !this.allowMessage(`use:${userId}`, 150)) return;
         const r = racerOf(race, seat.id);
         if (!r || r.bot) return;
-        const events = useItem(race, seat.id, now);
+        const events = useItem(race, seat.id, now, msg.flip === true);
         if (events.length > 0) this.onEvents(events);
         return;
       }
@@ -502,6 +505,8 @@ export class BolidesRoom extends DurableObject<Env> {
       case "settings": {
         if (d.status === "playing") return error("On ne change pas les règles en pleine course.");
         d.settings.bolides = mergeSettings(d.settings.bolides, msg.settings ?? {});
+        // De nouvelles règles : le prochain départ recommence un Grand Prix
+        d.cup = null;
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -641,10 +646,26 @@ export class BolidesRoom extends DurableObject<Env> {
       seat.disconnectedAt = null;
     }
     const bots = new Set(d.seats.filter((s) => s.kind === "bot").map((s) => s.id));
+    const settings = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+    if (settings.cup && !d.tour) {
+      // La course suivante du Grand Prix, ou un nouveau Grand Prix (les trois circuits, dans le désordre)
+      if (d.cup && d.status === "finished" && d.cup.index + 1 < d.cup.tracks.length) {
+        d.cup.index += 1;
+        d.cup.last = {};
+      } else {
+        const tracks = [...TRACK_IDS];
+        for (let i = tracks.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [tracks[i], tracks[j]] = [tracks[j]!, tracks[i]!];
+        }
+        d.cup = { tracks, index: 0, points: {}, last: {} };
+      }
+      settings.track = d.cup.tracks[d.cup.index]!;
+    } else d.cup = null;
     d.race = newRace(
       d.seats.map((s) => s.id),
       bots,
-      { ...DEFAULT_SETTINGS, ...d.settings.bolides },
+      settings,
       now,
       randomSeed(),
     );
@@ -719,6 +740,19 @@ export class BolidesRoom extends DurableObject<Env> {
     if (d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
     const winner = d.race?.ranking?.[0];
     if (winner) this.systemChat(`${this.seatById(winner)?.name ?? "?"} remporte la course !`);
+    const cup = d.cup;
+    if (cup && d.race?.ranks) {
+      cup.last = {};
+      for (const [id, rank] of Object.entries(d.race.ranks)) {
+        const won = cupPoints(rank);
+        cup.last[id] = won;
+        cup.points[id] = (cup.points[id] ?? 0) + won;
+      }
+      if (cup.index + 1 >= cup.tracks.length) {
+        const best = Object.entries(cup.points).sort((a, b) => b[1] - a[1])[0];
+        if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte le Grand Prix !`);
+      }
+    }
     await this.afterChange([], now);
   }
 
@@ -932,6 +966,15 @@ export class BolidesRoom extends DurableObject<Env> {
       hostId: d.hostId,
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       bolides: d.race ? bolidesView(d.race) : null,
+      cup: d.cup
+        ? {
+            index: d.cup.index,
+            tracks: d.cup.tracks,
+            points: d.cup.points,
+            last: d.cup.last,
+            over: d.status === "finished" && d.cup.index + 1 >= d.cup.tracks.length,
+          }
+        : null,
       garage: {
         choices: Object.fromEntries(d.seats.map((s) => [s.id, { vehicle: s.vehicle ?? "kart", skin: s.skin ?? "usine" }])),
         progress: this.progress.get(userId) ?? null,
@@ -1020,10 +1063,12 @@ export class BolidesRoom extends DurableObject<Env> {
 
 function mergeSettings(current: BolidesSettings, patch: Partial<BolidesSettings>): BolidesSettings {
   const next = { ...DEFAULT_SETTINGS, ...current };
-  if (patch.track === "hasard" || TRACK_IDS.includes(patch.track as TrackId)) next.track = patch.track!;
+  if (patch.track === "hasard" || (TRACK_IDS as readonly string[]).includes(patch.track as string)) next.track = patch.track!;
   if ((LAP_CHOICES as readonly number[]).includes(patch.laps as number)) next.laps = patch.laps!;
   if (SPEED_CLASSES.includes(patch.speed as never)) next.speed = patch.speed!;
   if (typeof patch.items === "boolean") next.items = patch.items;
   if (patch.botLevel === "facile" || patch.botLevel === "moyen" || patch.botLevel === "fort") next.botLevel = patch.botLevel as BotLevel;
+  if (typeof patch.cup === "boolean") next.cup = patch.cup;
+  if (typeof patch.mirror === "boolean") next.mirror = patch.mirror;
   return next;
 }

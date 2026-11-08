@@ -14,6 +14,7 @@ import {
   ARC_RADIUS,
   ARC_SPEED,
   BOMBE_AHEAD,
+  BOMBE_BACK,
   BOMBE_RADIUS,
   BOWLING_RADIUS,
   BOWLING_SPEED,
@@ -22,8 +23,8 @@ import {
   GEANT_SPEED,
   PIE_MS,
   RESSORT_VY,
-  TARTE_RANGE,
   tarteDist,
+  tarteTarget,
   BOX_RADIUS,
   BOX_RESPAWN_MS,
   fuseeDist,
@@ -36,6 +37,7 @@ import {
   hazardPos,
   ITEM_USES,
   KLAXON_RADIUS,
+  OIL_AHEAD,
   OIL_RADIUS,
   OIL_SAFE_MS,
   PETARD_RADIUS,
@@ -50,6 +52,7 @@ import {
 import {
   bump,
   CLASS_SPEED,
+  draftStep,
   DT,
   KART_RADIUS,
   newKart,
@@ -60,7 +63,7 @@ import {
   type KartEvent,
   type SpeedClass,
 } from "./physics.ts";
-import { getTrack, gridSlot, locate, pointAt, solidGround, TRACK_IDS, wrapS, type Track, type TrackId } from "./track.ts";
+import { getTrack, gridSlot, locate, mirrorOf, pointAt, solidGround, TRACK_IDS, wrapS, type Track, type TrackId } from "./track.ts";
 
 export interface BolidesSettings {
   /** Le circuit, ou un tirage au sort à chaque course */
@@ -70,9 +73,32 @@ export interface BolidesSettings {
   /** Les caisses d'objets (sinon, une course pure) */
   items: boolean;
   botLevel: BotLevel;
+  /** Un Grand Prix : plusieurs courses à la suite, avec des points */
+  cup: boolean;
+  /** Les circuits à l'envers, gauche et droite échangées */
+  mirror: boolean;
 }
 
-export const DEFAULT_SETTINGS: BolidesSettings = { track: "hasard", laps: 3, speed: "normal", items: true, botLevel: "moyen" };
+export const DEFAULT_SETTINGS: BolidesSettings = {
+  track: "hasard",
+  laps: 3,
+  speed: "normal",
+  items: true,
+  botLevel: "moyen",
+  cup: false,
+  mirror: false,
+};
+
+/** Un Grand Prix : le nombre de courses, et les points de chaque place */
+export const CUP_POINTS = [15, 12, 10, 8, 6, 4, 2, 1];
+
+/** Ce qu'on gagne à cette place (1 : le premier) */
+export function cupPoints(rank: number): number {
+  return CUP_POINTS[rank - 1] ?? 0;
+}
+
+/** Après un coup, on est intouchable un petit moment (le temps de repartir) */
+export const SAFE_MS = 2400;
 export const LAP_CHOICES = [2, 3, 5] as const;
 
 /** Le survol du circuit avant les feux, puis les trois feux */
@@ -116,7 +142,12 @@ export interface Racer {
   stateAt: number;
   item: ItemKind | null;
   uses: number;
+  /** Le deuxième objet, qui attend que le premier soit utilisé */
+  item2: ItemKind | null;
+  uses2: number;
   shieldUntil: number;
+  /** Touché il y a un instant : rien ne le retouche jusque-là */
+  safeUntil: number;
   /** Le début du tour en cours, et les tours bouclés */
   lapStart: number;
   laps: number;
@@ -156,6 +187,8 @@ export interface Race {
   coins: number[];
   hazards: Hazard[];
   seq: number;
+  /** Le dernier orage (on en laisse passer un peu entre deux) */
+  stormAt?: number;
   ranking: string[] | null;
   ranks: Record<string, number> | null;
   rng: number;
@@ -166,8 +199,11 @@ export type HitKind = "huile" | "petard" | "klaxon" | "fusee" | "arc" | "bowling
 
 export type BolidesEvent =
   | { type: "go" }
-  | { type: "box"; id: string; box: number; item: ItemKind | null }
+  /** Une caisse prise ; `slot` : la case où va l'objet (1 ou 2, 0 : les deux sont pleines) */
+  | { type: "box"; id: string; box: number; item: ItemKind | null; slot: 0 | 1 | 2 }
   | { type: "use"; id: string; item: ItemKind }
+  /** Personne à viser : l'objet reste */
+  | { type: "noTarget"; id: string; item: ItemKind }
   | { type: "hazard"; hazard: Hazard }
   | { type: "gone"; hazard: number; why: "hit" | "time" | "klaxon" }
   | { type: "hit"; id: string; by: string | null; kind: HitKind }
@@ -204,7 +240,8 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
     ranks: null,
     rng: seed,
   };
-  race.track = settings.track === "hasard" ? TRACK_IDS[Math.floor(random(race) * TRACK_IDS.length)]! : settings.track;
+  const base = settings.track === "hasard" ? TRACK_IDS[Math.floor(random(race) * TRACK_IDS.length)]! : settings.track;
+  race.track = settings.mirror ? mirrorOf(base) : base;
   const t = getTrack(race.track);
   race.boxes = t.boxes.map(() => 0);
   race.coins = t.coins.map(() => 0);
@@ -227,7 +264,10 @@ export function newRace(ids: string[], bots: Set<string>, settings: BolidesSetti
       stateAt: now,
       item: null,
       uses: 0,
+      item2: null,
+      uses2: 0,
       shieldUntil: 0,
+      safeUntil: 0,
       lapStart: race.goAt,
       laps: 0,
       finish: null,
@@ -257,10 +297,30 @@ export function standings(race: Race): Racer[] {
   });
 }
 
-/** 0 en tête, 1 dernier */
-function rankShare(race: Race, id: string): number {
+/** Où on en est pour les objets : 0 en tête, 1 très loin derrière. La place compte, et l'écart avec le premier aussi */
+export function itemRank(race: Race, id: string): number {
   const order = standings(race);
-  return order.findIndex((r) => r.id === id) / Math.max(1, order.length - 1);
+  const i = order.findIndex((r) => r.id === id);
+  if (i <= 0) return 0;
+  const place = i / Math.max(1, order.length - 1);
+  const gap = Math.min(1, Math.max(0, order[0]!.kart.dist - order[i]!.kart.dist) / 180);
+  return 0.55 * place + 0.45 * gap;
+}
+
+/** Tirer un objet, sans deux fusées à la fois ni deux orages coup sur coup */
+function drawFor(race: Race, r: Racer, now: number): ItemKind {
+  const rank = itemRank(race, r.id);
+  for (let tries = 0; tries < 6; tries++) {
+    const kind = drawItem(rank, () => random(race));
+    if (
+      kind === "fusee" &&
+      (race.hazards.some((h) => h.kind === "fusee") || race.racers.some((o) => o.item === "fusee" || o.item2 === "fusee"))
+    )
+      continue;
+    if (kind === "orage" && now - (race.stormAt ?? -1e9) < 25_000) continue;
+    return kind;
+  }
+  return "turbo";
 }
 
 /** Les tours bouclés et l'arrivée */
@@ -307,12 +367,20 @@ function pickups(race: Race, r: Racer, ax: number, az: number, now: number, even
     race.boxes[box.index] = now + BOX_RESPAWN_MS;
     r.stats.boxes += 1;
     let item: ItemKind | null = null;
+    let slot: 0 | 1 | 2 = 0;
     if (!r.item) {
-      item = drawItem(rankShare(race, r.id), () => random(race));
+      item = drawFor(race, r, now);
       r.item = item;
       r.uses = ITEM_USES[item];
+      slot = 1;
+    } else if (!r.item2) {
+      item = drawFor(race, r, now);
+      r.item2 = item;
+      r.uses2 = ITEM_USES[item];
+      slot = 2;
     }
-    events.push({ type: "box", id: r.id, box: box.index, item });
+    if (item === "orage") race.stormAt = now;
+    events.push({ type: "box", id: r.id, box: box.index, item, slot });
   }
 }
 
@@ -378,6 +446,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
     race.simAt += ms;
     const at = race.simAt;
     const racing = race.phase === "racing" && at >= race.goAt;
+    const karts = race.racers.map((o) => o.kart);
     for (const r of race.racers) {
       if (!r.bot) continue;
       let mem = memory.get(r.id);
@@ -399,6 +468,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
       // Arrivé, un bot lève le pied
       const star = (r.starUntil ?? 0) > at;
       const stats = VEHICLES[r.vehicle ?? "kart"].stats;
+      draftStep(r.kart, karts, DT, kev);
       const top =
         (r.finish !== null ? botTop(race, r) * 0.6 : botTop(race, r)) *
         (1 + COIN_SPEED * (r.coins ?? 0)) *
@@ -411,7 +481,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
         else if (e === "wall") r.stats.walls += 1;
       }
       pickups(race, r, x0, z0, at, events);
-      if (plan.use) events.push(...useItem(race, r.id, at));
+      if (plan.use) events.push(...useItem(race, r.id, at, plan.flip));
       progress(race, r, at, events);
       r.stateAt = at;
     }
@@ -438,8 +508,8 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
 /** Un coup : le bouclier l'arrête, sinon le kart part en tête-à-queue (chez un joueur, c'est son navigateur qui l'applique) */
 function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: number, events: BolidesEvent[]) {
   if (victim.finish !== null || victim.kart.fall > 0) return;
-  // Sous l'arc-en-ciel ou la potion géante, rien ne touche
-  if ((victim.starUntil ?? 0) > now || (victim.giantUntil ?? 0) > now) return;
+  // Sous l'arc-en-ciel ou la potion géante, rien ne touche ; et on ne s'acharne pas sur celui qu'on vient de renverser
+  if ((victim.starUntil ?? 0) > now || (victim.giantUntil ?? 0) > now || (victim.safeUntil ?? 0) > now) return;
   if (victim.shieldUntil > now) {
     victim.shieldUntil = 0;
     events.push({ type: "shield", id: victim.id });
@@ -452,6 +522,7 @@ function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: n
     victim.kart.drift = 0;
     victim.kart.charge = 0;
   }
+  victim.safeUntil = now + SAFE_MS;
   victim.stats.hitsTaken += 1;
   victim.coins = Math.max(0, (victim.coins ?? 0) - COIN_LOSS);
   if (by && by !== victim.id) {
@@ -461,20 +532,38 @@ function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: n
   events.push({ type: "hit", id: victim.id, by, kind });
 }
 
-/** Se servir de son objet */
-export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
+/** Se servir de son objet ; `flip` : l'envoyer dans l'autre sens (derrière soi, ou devant pour une flaque) */
+export function useItem(race: Race, id: string, now: number, flip = false): BolidesEvent[] {
   const r = racerOf(race, id);
   const events: BolidesEvent[] = [];
   if (!r || !r.item || race.phase !== "racing" || r.finish !== null || r.kart.spin > 0) return events;
   const kind = r.item;
   const t = trackOf(race);
+  const k = r.kart;
+  // Personne à viser : on ne gâche pas l'objet
+  const pie =
+    kind === "tarte"
+      ? tarteTarget(
+          race.racers.map((o) => ({ id: o.id, dist: o.kart.dist, done: o.finish !== null, racer: o })),
+          id,
+          k.dist,
+          flip,
+        )
+      : null;
+  const prey = kind === "fusee" ? standings(race).find((o) => o.finish === null && o.id !== id) : undefined;
+  if ((kind === "tarte" && !pie) || (kind === "fusee" && !prey)) {
+    events.push({ type: "noTarget", id, item: kind });
+    return events;
+  }
   r.uses -= 1;
   if (r.uses <= 0) {
-    r.item = null;
-    r.uses = 0;
+    // L'objet en réserve prend sa place
+    r.item = r.item2 ?? null;
+    r.uses = r.uses2 ?? 0;
+    r.item2 = null;
+    r.uses2 = 0;
   }
   r.stats.itemsUsed += 1;
-  const k = r.kart;
   events.push({ type: "use", id, item: kind });
   if (kind === "turbo" || kind === "turbo3") {
     // Chez un joueur, son navigateur l'a déjà appliqué en appuyant
@@ -482,7 +571,13 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
   } else if (kind === "huile") {
     let x = k.x - Math.sin(k.h) * 3.4;
     let z = k.z - Math.cos(k.h) * 3.4;
-    let at = locate(t, x, z, k.i);
+    if (flip) {
+      // Lancée devant soi, au milieu de sa voie
+      const p = pointAt(t, k.s + OIL_AHEAD, Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d)));
+      x = p.x;
+      z = p.z;
+    }
+    let at = locate(t, x, z);
     // Pas de flaque dans le vide : au-dessus d'un trou, elle atterrit sur l'autre rive
     const solid = solidGround(t, at.s);
     if (solid !== at.s) {
@@ -496,26 +591,31 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
     events.push({ type: "hazard", hazard });
   } else if (kind === "petard") {
     const d = Math.max(-t.half + 1, Math.min(t.half - 1, k.d));
-    const hazard: Hazard = { id: ++race.seq, kind: "petard", s0: k.s + 3, d, speed: Math.max(PETARD_SPEED, k.v + 14), owner: id, at: now };
+    const hazard: Hazard = {
+      id: ++race.seq,
+      kind: "petard",
+      s0: k.s + (flip ? -3 : 3),
+      d,
+      speed: flip ? -PETARD_SPEED : Math.max(PETARD_SPEED, k.v + 14),
+      owner: id,
+      at: now,
+    };
     race.hazards.push(hazard);
     events.push({ type: "hazard", hazard });
   } else if (kind === "fusee") {
     // Elle va chercher le premier (ou le deuxième, si c'est le lanceur qui mène)
-    const target = standings(race).find((o) => o.finish === null && o.id !== id);
-    if (target) {
-      const hazard: Hazard = { id: ++race.seq, kind: "fusee", dist0: k.dist + 3, target: target.id, owner: id, at: now };
-      race.hazards.push(hazard);
-      events.push({ type: "hazard", hazard });
-    }
+    const hazard: Hazard = { id: ++race.seq, kind: "fusee", dist0: k.dist + 3, target: prey!.id, owner: id, at: now };
+    race.hazards.push(hazard);
+    events.push({ type: "hazard", hazard });
   } else if (kind === "arc") {
     r.starUntil = now + ARC_MS;
   } else if (kind === "bowling") {
     const hazard: Hazard = {
       id: ++race.seq,
       kind: "bowling",
-      s0: k.s + 4,
+      s0: k.s + (flip ? -4 : 4),
       d0: Math.max(-t.half + 1.3, Math.min(t.half - 1.3, k.d)),
-      speed: Math.max(BOWLING_SPEED, k.v + 10),
+      speed: flip ? -BOWLING_SPEED : Math.max(BOWLING_SPEED, k.v + 10),
       side: random(race) < 0.5 ? -1 : 1,
       owner: id,
       at: now,
@@ -524,31 +624,18 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
     race.hazards.push(hazard);
     events.push({ type: "hazard", hazard });
   } else if (kind === "tarte") {
-    // Le kart le plus proche devant, sinon derrière, à portée
-    let best: Racer | null = null;
-    let bestGap = Infinity;
-    for (const o of race.racers) {
-      if (o === r || o.finish !== null) continue;
-      const gap = o.kart.dist - k.dist;
-      const score = gap > 0 ? gap : -gap + 60;
-      if (Math.abs(gap) <= TARTE_RANGE && score < bestGap) {
-        best = o;
-        bestGap = score;
-      }
-    }
-    if (best) {
-      const hazard: Hazard = {
-        id: ++race.seq,
-        kind: "tarte",
-        dist0: k.dist,
-        dir: best.kart.dist >= k.dist ? 1 : -1,
-        target: best.id,
-        owner: id,
-        at: now,
-      };
-      race.hazards.push(hazard);
-      events.push({ type: "hazard", hazard });
-    }
+    const best = pie!.racer;
+    const hazard: Hazard = {
+      id: ++race.seq,
+      kind: "tarte",
+      dist0: k.dist,
+      dir: best.kart.dist >= k.dist ? 1 : -1,
+      target: best.id,
+      owner: id,
+      at: now,
+    };
+    race.hazards.push(hazard);
+    events.push({ type: "hazard", hazard });
   } else if (kind === "ressort") {
     // Chez un joueur, son navigateur l'a déjà fait sauter
     if (r.bot) {
@@ -568,7 +655,7 @@ export function useItem(race: Race, id: string, now: number): BolidesEvent[] {
   } else if (kind === "aimant") {
     r.magnetUntil = now + AIMANT_MS;
   } else if (kind === "bombe") {
-    const landS = solidGround(t, wrapS(t, k.s + BOMBE_AHEAD));
+    const landS = solidGround(t, wrapS(t, k.s + (flip ? -BOMBE_BACK : BOMBE_AHEAD)));
     const landD = Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d));
     const hazard: Hazard = {
       id: ++race.seq,

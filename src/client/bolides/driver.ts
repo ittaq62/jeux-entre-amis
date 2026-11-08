@@ -5,7 +5,17 @@
 
 import { VEHICLES, type VehicleStats } from "../../shared/games/bolides/garage.ts";
 import { RESSORT_VY } from "../../shared/games/bolides/items.ts";
-import { bump, DT, newKart, SPIN_TIME, step, type Input, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
+import {
+  bump,
+  draftStep,
+  DT,
+  newKart,
+  SPIN_TIME,
+  step,
+  type Input,
+  type Kart,
+  type KartEvent,
+} from "../../shared/games/bolides/physics.ts";
 import { deltaS, pointAt, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 
 /** Accélérer dans cette fenêtre juste avant le feu vert donne un départ canon */
@@ -42,6 +52,7 @@ export class LocalDriver {
       this.acc -= DT;
       Object.assign(this.prev, this.kart);
       const s0 = this.kart.s;
+      draftStep(this.kart, others, DT, events);
       step(this.kart, input, this.track, { top: this.top, time, star, vehicle: this.vehicle }, events);
       others.forEach((o, i) => {
         if (bump(this.kart, o, true, false, this.vehicle.weight * myWeight, weights?.[i] ?? 1) > 4) events.push("bump");

@@ -2,32 +2,43 @@
 // serveur et lissés entre deux positions, les objets et les coups, les sons, la caméra, et de quoi remplir
 // l'affichage tête haute. Une boucle par image, en dehors de React.
 
-import { botDrive, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
+import { botDrive, botWantsItem, newBotMemory, type BotMemory } from "../../shared/games/bolides/bot.ts";
 import {
   AIMANT_RADIUS,
   ARC_SPEED,
+  BOMBE_AHEAD,
+  BOMBE_BACK,
   BOMBE_RADIUS,
   BOX_RADIUS,
   COIN_RADIUS,
   COIN_SPEED,
   fuseeDist,
   GEANT_SPEED,
+  KLAXON_RADIUS,
+  OIL_AHEAD,
+  OIL_RADIUS,
+  tarteTarget,
   TURBO_TIME,
   type ItemKind,
 } from "../../shared/games/bolides/items.ts";
-import { CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
+import { assistSteer, CLASS_SPEED, KART_RADIUS, TOP_SPEED, type Kart, type KartEvent } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent, type HitKind } from "../../shared/games/bolides/race.ts";
 import { VEHICLES } from "../../shared/games/bolides/garage.ts";
-import { getTrack, locate, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
+import { getTrack, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
 import type { BolidesClientMessage } from "../../shared/protocol.ts";
 import { play, vibrate, type SoundName } from "../lib/sound.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { Controls } from "./controls.ts";
 import { LocalDriver } from "./driver.ts";
 import { EngineSound, honk } from "./engineSound.ts";
 import { RaceMusic } from "./music.ts";
+import type { Aim } from "./scene/aim.ts";
 import type { KartLook } from "./scene/kart.ts";
 import { RaceScene } from "./scene/RaceScene.ts";
+
+/** Le temps que tourne la roue des objets */
+const ROLL_MS = 850;
 
 /** Ce que l'affichage tête haute montre, rafraîchi une dizaine de fois par seconde */
 export interface Hud {
@@ -40,13 +51,25 @@ export interface Hud {
   total: number;
   item: ItemKind | null;
   uses: number;
-  /** La roue des objets tourne encore (on vient de prendre une caisse) */
+  /** L'objet en réserve */
+  item2: ItemKind | null;
+  uses2: number;
+  /** La roue des objets tourne encore (on vient de prendre une caisse), et dans quelle case */
   rolling: boolean;
+  rollSlot: 1 | 2;
+  /** Ce qu'on affiche en recevant l'objet (`long` : avec l'explication) */
+  tip: { key: number; item: ItemKind; long: boolean } | null;
+  /** Augmente quand on appuie alors qu'il n'y a rien à utiliser (la case tremble) */
+  nudge: number;
+  /** L'aspiration en cours */
+  drafting: boolean;
+  /** Le classement en direct */
+  order: { id: string; name: string; color: string; me: boolean }[];
+  /** Ce qui arrive sur soi */
+  incoming: "fusee" | "tarte" | null;
   raceMs: number;
   finished: { place: number; ms: number } | null;
   wrongWay: boolean;
-  /** Une fusée vient vers soi */
-  rocket: boolean;
   /** De la crème sur l'écran */
   pie: boolean;
   /** Le fil de la course : ce qui vient de se passer, en quelques mots */
@@ -126,6 +149,17 @@ export class RaceRuntime {
   private leaderNow: number | null = null;
   private flash = 0;
   private rollingUntil = 0;
+  private rollSlot: 1 | 2 = 1;
+  private rollTickAt = 0;
+  private wasRolling = false;
+  /** Pas deux objets d'affilée : le serveur n'a pas encore répondu */
+  private useReadyAt = 0;
+  private lastItem: ItemKind | null = null;
+  private tip: Hud["tip"] = null;
+  private tipUntil = 0;
+  private tipSeq = 0;
+  private nudge = 0;
+  private flipNow = false;
   private banner: Hud["banner"] = null;
   private bannerSeq = 0;
   private autoRng = { rng: 77 };
@@ -222,8 +256,15 @@ export class RaceRuntime {
           break;
         case "box":
           if (e.id === meId && e.item) {
-            this.rollingUntil = performance.now() + 1100;
+            this.rollingUntil = performance.now() + ROLL_MS;
+            this.rollSlot = e.slot === 2 ? 2 : 1;
             play("bolidesBox");
+          }
+          break;
+        case "noTarget":
+          if (e.id === meId) {
+            this.tell(e.item === "tarte" ? "Personne à portée de ta tarte" : "Personne à viser", true);
+            this.nudge++;
           }
           break;
         case "use": {
@@ -472,11 +513,17 @@ export class RaceRuntime {
     let events: KartEvent[] = [];
     if (d && me && v.phase !== "over") {
       if (now < v.goAt) {
-        d.waiting(pad.gas, now, v.goAt);
+        // Sur téléphone le kart accélère tout seul : le bouton de dérapage sert au départ canon
+        d.waiting(this.opts.phone ? pad.drift : pad.gas, now, v.goAt);
       } else {
         if (!this.launched) {
           this.launched = true;
-          if (d.launch(v.goAt)) play("bolidesTurbo", { volume: 0.9 });
+          if (d.launch(v.goAt)) {
+            play("bolidesTurbo", { volume: 0.9 });
+            this.scene.turboBurst(d.kart, 2);
+            this.scene.punch(8);
+            this.tell("Départ canon !", true);
+          }
         }
         // Arrivé : le kart roule tout seul, le temps que les autres finissent (en développement, les tests peuvent aussi le lâcher)
         const auto = import.meta.env.DEV && Boolean((window as unknown as { __bolidesAuto?: boolean }).__bolidesAuto);
@@ -495,8 +542,23 @@ export class RaceRuntime {
                 this.track.coins.map((_, i) => (this.coinTaken.has(i) ? now + 1000 : 0)),
               )
             : null;
-        const input = pilot ? pilot.input : pad;
+        const prefs = usePrefs.getState();
+        const steer = !pilot && prefs.bolidesAssist ? assistSteer(this.track, d.kart, pad.steer) : pad.steer;
+        const input = pilot ? pilot.input : { ...pad, steer };
         if (auto && pilot?.use) pad.item = true;
+        const clock = performance.now();
+        const rollingMain = clock < this.rollingUntil && this.rollSlot === 1;
+        // Les objets automatiques : ils partent au bon moment, comme pour un bot
+        let flip = pad.flip;
+        if (prefs.bolidesAutoItem && !auto && !rollingMain && me.finish === null && me.item) {
+          const rivals = v.racers.flatMap((r, i) => (i === this.mine ? [] : [{ id: r.id, kart: this.shown[i]! }]));
+          const wish = botWantsItem(this.track, d.kart, me.item, rivals, v.hazards, "fort", this.autopilot, now, this.autoRng);
+          if (wish.use) {
+            pad.item = true;
+            flip = wish.flip;
+          }
+        }
+        this.flipNow = flip;
         const others = this.shown.filter((_, i) => i !== this.mine);
         // Les pièces donnent un peu de vitesse de pointe (selon le compte du serveur), l'arc-en-ciel beaucoup
         const star = (me.starUntil ?? 0) > now;
@@ -511,7 +573,17 @@ export class RaceRuntime {
           .filter((_, i) => i !== this.mine)
           .map((r) => VEHICLES[r.vehicle ?? "kart"].stats.weight * ((r.giantUntil ?? 0) > now ? 4 : 1));
         events = d.update(dt, input, others, now / 1000, star, weights, giant ? 4 : 1);
-        if (pad.item && me.item && me.finish === null && d.kart.spin === 0) {
+        // Un appui pendant que la roue tourne l'arrête (on ne lance jamais un objet qu'on n'a pas vu)
+        if (pad.item && rollingMain) {
+          this.rollingUntil = clock;
+          pad.item = false;
+        }
+        if (pad.item && (!me.item || d.kart.spin > 0) && me.finish === null) {
+          this.nudge++;
+          if (!me.item) play("click", { volume: 0.3 });
+        }
+        if (pad.item && me.item && me.finish === null && d.kart.spin === 0 && clock >= this.useReadyAt) {
+          this.useReadyAt = clock + 220;
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
             play("bolidesTurbo", { volume: 1, rate: 0.95 });
@@ -520,7 +592,7 @@ export class RaceRuntime {
             d.spring();
             play("bolidesJump", { rate: 0.85 });
           }
-          this.opts.send({ t: "use" });
+          this.opts.send({ t: "use", flip });
         }
         if (pad.respawn && d.stuck) d.respawn();
         // Les pièces traversées disparaissent tout de suite (le serveur, lui, les compte)
@@ -576,6 +648,10 @@ export class RaceRuntime {
           vibrate([30, 60, 30]);
         } else if (e === "respawn") {
           this.scene.respawnSparkle(mine);
+        } else if (e === "draft") {
+          this.scene.punch(5);
+          this.tell("Aspiration !", true);
+          play("bolidesTurbo", { volume: 0.7, rate: 1.25 });
         } else if (e === "spring") {
           this.scene.punch(4);
           this.scene.shake(0.2);
@@ -606,6 +682,15 @@ export class RaceRuntime {
       else if (e === "land") play("bolidesLand");
       else if (e === "trick") play("bolidesTrick");
     }
+    // La roue des objets : un tic à chaque image qui passe, et un petit bruit quand elle s'arrête
+    const clockNow = performance.now();
+    const rolling = clockNow < this.rollingUntil;
+    if (rolling && clockNow >= this.rollTickAt) {
+      this.rollTickAt = clockNow + 90;
+      play("tick", { volume: 0.28, rate: 1.5 });
+    }
+    if (this.wasRolling && !rolling) play("pop", { volume: 0.6 });
+    this.wasRolling = rolling;
     // Une fusée vient sur soi : un bip, de plus en plus pressant à mesure qu'elle approche
     if (me && me.finish === null) {
       const mine = this.shown[this.mine];
@@ -654,6 +739,7 @@ export class RaceRuntime {
         star: (v.racers[i]!.starUntil ?? 0) > now,
         giant: (v.racers[i]!.giantUntil ?? 0) > now,
         magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
+        safe: (v.racers[i]!.safeUntil ?? 0) > now,
       })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
@@ -663,12 +749,64 @@ export class RaceRuntime {
       serverNow: now,
       dt,
       fireworks: v.phase !== "start" && now > v.goAt && (me?.finish != null || (myLap >= v.settings.laps && v.settings.laps > 1)),
+      aim: this.aimNow(rolling),
+      draft: Math.max(0, this.driver?.kart.draft ?? 0),
+      lookBack: pad.look && !intro && this.mine >= 0,
     });
     if (t - this.hudAt > 100) {
       this.hudAt = t;
       this.opts.onHud(this.hud(now, intro));
     }
   };
+
+  /** Où partira l'objet qu'on tient : ce que la scène montre sur la route */
+  private aimNow(rolling: boolean): Aim | null {
+    const me = this.mine >= 0 ? this.view.racers[this.mine] : undefined;
+    const k = this.driver?.kart;
+    if (!me || !k || !me.item || me.finish !== null || (rolling && this.rollSlot === 1) || this.view.phase !== "racing") return null;
+    const t = this.track;
+    const flip = this.flipNow;
+    const lane = Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d));
+    const ring = (s: number, d: number, r: number): Aim => {
+      const p = pointAt(t, s, d);
+      return { kind: "ring", x: p.x, y: p.y, z: p.z, r };
+    };
+    const onKart = (i: number): Aim | null => {
+      const o = this.shown[i];
+      return o ? { kind: "target", x: o.x, y: o.y + o.air, z: o.z } : null;
+    };
+    switch (me.item) {
+      case "petard":
+        return { kind: "road", s: k.s + (flip ? -3 : 3), d: lane, len: flip ? -38 : 58 };
+      case "bowling":
+        return { kind: "road", s: k.s + (flip ? -4 : 4), d: lane, len: flip ? -38 : 58 };
+      case "bombe":
+        return ring(solidGround(t, wrapS(t, k.s + (flip ? -BOMBE_BACK : BOMBE_AHEAD))), lane, BOMBE_RADIUS);
+      case "huile":
+        return flip ? ring(solidGround(t, wrapS(t, k.s + OIL_AHEAD)), lane, OIL_RADIUS + 0.5) : ring(k.s - 3.4, k.d, OIL_RADIUS + 0.5);
+      case "klaxon":
+        return { kind: "ring", x: k.x, y: k.y, z: k.z, r: KLAXON_RADIUS };
+      case "tarte": {
+        const pick = tarteTarget(
+          this.view.racers.map((r, i) => ({ id: r.id, dist: this.shown[i]!.dist, done: r.finish !== null, i })),
+          me.id,
+          k.dist,
+          flip,
+        );
+        return pick ? onKart(pick.i) : null;
+      }
+      case "fusee": {
+        let best = -1;
+        this.view.racers.forEach((r, i) => {
+          if (i === this.mine || r.finish !== null) return;
+          if (best < 0 || this.shown[i]!.dist > this.shown[best]!.dist) best = i;
+        });
+        return best >= 0 ? onKart(best) : null;
+      }
+      default:
+        return null;
+    }
+  }
 
   /** Le kart de tête (pour qui regarde sans courir) */
   private leader(): number {
@@ -698,6 +836,24 @@ export class RaceRuntime {
     }
     const left = v.goAt - now;
     const lap = mk ? Math.min(v.settings.laps, Math.max(1, Math.floor(Math.max(0, mk.dist) / L) + 1)) : 1;
+    // Un nouvel objet : on dit ce que c'est (et à quoi il sert, tant qu'on ne le connaît pas bien)
+    const clock = performance.now();
+    const rolling = clock < this.rollingUntil;
+    const held = me?.item && !(rolling && this.rollSlot === 1) ? me.item : null;
+    if (held !== this.lastItem) {
+      this.lastItem = held;
+      if (held) {
+        const prefs = usePrefs.getState();
+        const seen = prefs.bolidesItemsSeen[held] ?? 0;
+        const long = seen < 4;
+        prefs.set({ bolidesItemsSeen: { ...prefs.bolidesItemsSeen, [held]: seen + 1 } });
+        this.tip = { key: ++this.tipSeq, item: held, long };
+        this.tipUntil = clock + (long ? 3800 : 1500);
+      } else this.tip = null;
+    }
+    if (this.tip && clock > this.tipUntil) this.tip = null;
+    const arriving =
+      me && me.finish === null ? v.hazards.find((h) => (h.kind === "fusee" || h.kind === "tarte") && h.target === me.id) : undefined;
     return {
       countdown:
         v.phase === "start" && left <= COUNTDOWN_MS ? Math.max(0, Math.ceil(left / 1000)) : now - v.goAt < 900 && now >= v.goAt ? 0 : null,
@@ -708,11 +864,18 @@ export class RaceRuntime {
       total: v.racers.length,
       item: me?.item ?? null,
       uses: me?.uses ?? 0,
-      rolling: performance.now() < this.rollingUntil,
+      item2: me?.item2 ?? null,
+      uses2: me?.uses2 ?? 0,
+      rolling,
+      rollSlot: this.rollSlot,
+      tip: this.tip,
+      nudge: this.nudge,
+      drafting: Boolean(this.driver && this.driver.kart.draft > 0.15),
+      order: order.map((o) => ({ id: this.ids[o.i]!, name: this.names[o.i]!, color: this.colors[o.i]!, me: o.i === this.mine })),
+      incoming: arriving?.kind === "fusee" || arriving?.kind === "tarte" ? arriving.kind : null,
       raceMs: me?.finish ?? (v.phase === "start" ? 0 : Math.max(0, now - v.goAt)),
       finished: me?.finish != null ? { place: v.ranks?.[me.id] ?? place, ms: me.finish } : null,
       wrongWay: Boolean(this.driver?.wrongWay) && me?.finish == null,
-      rocket: Boolean(me && me.finish === null && v.hazards.some((h) => h.kind === "fusee" && h.target === me.id)),
       pie: Boolean(me && (me.pieUntil ?? 0) > now),
       feed: this.feed.filter((l) => l.until > performance.now()),
       flash: this.flash,

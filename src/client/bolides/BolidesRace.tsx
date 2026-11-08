@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { SKIN_IDS, skinUnlocked, SKINS, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "../../shared/games/bolides/garage.ts";
-import { ITEM_NAMES } from "../../shared/games/bolides/items.ts";
+import { ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -73,6 +73,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const sound = usePrefs((s) => s.sound);
   const engineOn = usePrefs((s) => s.bolidesEngine);
   const musicOn = usePrefs((s) => s.bolidesMusic);
+  const autoItem = usePrefs((s) => s.bolidesAutoItem);
+  const assist = usePrefs((s) => s.bolidesAssist);
   const setPrefs = usePrefs((s) => s.set);
   const reduced = usePrefs((s) => s.reducedEffects);
   const me = room.you.seatId && g.racers.some((r) => r.id === room.you.seatId) ? room.you.seatId : null;
@@ -171,10 +173,70 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
     const rt = runtime.current;
     if (rt) rt.controls.touch[key] = on;
   };
-  const useItem = (e: ReactPointerEvent) => {
-    e.preventDefault();
+  /** Se servir de l'objet ; `flip` : dans l'autre sens */
+  const fireItem = (flip: boolean) => {
     const rt = runtime.current;
-    if (rt) rt.controls.touch.item += 1;
+    if (!rt) return;
+    rt.controls.touch.item += 1;
+    rt.controls.touch.flip = flip;
+  };
+  // Le bouton Objet : un appui s'en sert, glisser le doigt vers le bas l'envoie de l'autre côté
+  const itemPress = useRef<{ id: number; y: number; done: boolean; timer: number } | null>(null);
+  const itemDown = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    unlockAudio();
+    capture(e);
+    const press = { id: e.pointerId, y: e.clientY, done: false, timer: 0 };
+    press.timer = window.setTimeout(() => {
+      if (press.done) return;
+      press.done = true;
+      fireItem(false);
+    }, 170);
+    itemPress.current = press;
+  };
+  const itemMove = (e: ReactPointerEvent) => {
+    const p = itemPress.current;
+    if (!p || p.done || p.id !== e.pointerId || e.clientY - p.y < 26) return;
+    p.done = true;
+    window.clearTimeout(p.timer);
+    fireItem(true);
+  };
+  const itemUp = (e: ReactPointerEvent) => {
+    const p = itemPress.current;
+    if (!p || p.id !== e.pointerId) return;
+    window.clearTimeout(p.timer);
+    if (!p.done) fireItem(false);
+    itemPress.current = null;
+  };
+  // Pendant un dérapage, le pouce est déjà sur le bouton : le glisser vers le haut sert l'objet sans lâcher le dérapage
+  const driftPress = useRef<{ id: number; y: number; fired: boolean } | null>(null);
+  const driftDown = (e: ReactPointerEvent) => {
+    touch("drift", true)(e);
+    capture(e);
+    driftPress.current = { id: e.pointerId, y: e.clientY, fired: false };
+  };
+  const driftMove = (e: ReactPointerEvent) => {
+    const p = driftPress.current;
+    if (!p || p.id !== e.pointerId) return;
+    const dy = e.clientY - p.y;
+    if (p.fired) {
+      if (Math.abs(dy) < 10) p.fired = false;
+      return;
+    }
+    if (Math.abs(dy) < 30) return;
+    p.fired = true;
+    fireItem(dy > 0);
+  };
+  // Toucher le milieu de l'écran (ou cliquer sur la course, à la souris) sert aussi l'objet
+  const stageDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!me || g.phase === "over" || !g.settings.items || e.button !== 0) return;
+    if (phone) {
+      const box = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - box.left) / box.width;
+      if (x < 0.28 || x > 0.72) return;
+    }
+    fireItem(false);
   };
 
   const over = g.phase === "over";
@@ -184,7 +246,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
 
   return (
     <div className={`bolides-root ${phone ? "is-phone" : ""}`} onPointerDown={() => unlockAudio()}>
-      <div ref={box} className="bolides-stage" />
+      <div ref={box} className="bolides-stage" onPointerDown={stageDown} />
 
       <header className="bolides-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
@@ -218,6 +280,13 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <button className="menu-item" onClick={() => setPrefs({ bolidesAutoItem: !autoItem })}>
+                  <Icon name={autoItem ? "check" : "close"} size={18} />{" "}
+                  {autoItem ? "Objets automatiques : oui" : "Objets automatiques : non"}
+                </button>
+                <button className="menu-item" onClick={() => setPrefs({ bolidesAssist: !assist })}>
+                  <Icon name={assist ? "check" : "close"} size={18} /> {assist ? "Conduite assistée : oui" : "Conduite assistée : non"}
+                </button>
                 <button className="menu-item" onClick={() => setPrefs({ bolidesMusic: !musicOn })}>
                   <Icon name={musicOn ? "volume" : "mute"} size={18} /> {musicOn ? "Couper la musique" : "Remettre la musique"}
                 </button>
@@ -243,7 +312,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </AnimatePresence>
       </header>
 
-      {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : ""}`} aria-hidden="true" />}
+      {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : h.drafting ? "is-draft" : ""}`} aria-hidden="true" />}
       {h && <div className={`hud-pie ${h.pie ? "is-on" : ""}`} aria-hidden="true" />}
       {h && h.flash > 0 && !reduced && <div key={h.flash} className="hud-flash" aria-hidden="true" />}
       {h && (
@@ -287,15 +356,70 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
             <span className="hud-time num">{raceTime(h.raceMs)}</span>
           </div>
           {showItem && (
-            <div className={`hud-item ${h.item || rollingItem ? "is-full" : ""} ${h.rolling ? "is-rolling" : ""}`}>
-              {rollingItem ? (
-                <ItemIcon item={rollingItem} size={phone ? 40 : 52} />
-              ) : h.item ? (
-                <ItemIcon item={h.item} size={phone ? 40 : 52} />
-              ) : null}
-              {h.item && !h.rolling && h.uses > 1 && <span className="hud-item-uses num">×{h.uses}</span>}
-              {h.item && !h.rolling && !phone && <span className="hud-item-name">{ITEM_NAMES[h.item]}</span>}
+            <div className="hud-slots">
+              {(h.item2 || (h.rolling && h.rollSlot === 2)) && (
+                <div className={`hud-item2 ${h.rolling && h.rollSlot === 2 ? "is-rolling" : ""}`} title="En réserve">
+                  {h.rolling && h.rollSlot === 2 && rollingItem ? (
+                    <ItemIcon item={rollingItem} size={phone ? 24 : 30} />
+                  ) : h.item2 ? (
+                    <ItemIcon item={h.item2} size={phone ? 24 : 30} />
+                  ) : null}
+                </div>
+              )}
+              <button
+                key={h.nudge}
+                type="button"
+                className={`hud-item ${h.item || (h.rolling && h.rollSlot === 1) ? "is-full" : ""} ${
+                  h.rolling && h.rollSlot === 1 ? "is-rolling" : ""
+                } ${h.nudge > 0 ? "is-nudged" : ""}`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  unlockAudio();
+                  fireItem(false);
+                }}
+                aria-label={h.item ? `Utiliser : ${ITEM_NAMES[h.item]}` : "Aucun objet"}
+              >
+                {h.rolling && h.rollSlot === 1 && rollingItem ? (
+                  <ItemIcon item={rollingItem} size={phone ? 40 : 52} />
+                ) : h.item ? (
+                  <ItemIcon item={h.item} size={phone ? 40 : 52} />
+                ) : null}
+                {h.item && !(h.rolling && h.rollSlot === 1) && h.uses > 1 && <span className="hud-item-uses num">×{h.uses}</span>}
+                {!phone && h.item && !(h.rolling && h.rollSlot === 1) && <kbd className="hud-item-key">E</kbd>}
+              </button>
             </div>
+          )}
+
+          <AnimatePresence>
+            {h.tip && (
+              <motion.div
+                key={h.tip.key}
+                className="hud-tip"
+                initial={reduced ? false : { y: -10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+              >
+                <ItemIcon item={h.tip.item} size={phone ? 26 : 34} />
+                <span>
+                  <strong>{ITEM_NAMES[h.tip.item]}</strong>
+                  {h.tip.long && <small>{ITEM_TIPS[h.tip.item]}</small>}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {!phone && h.order.length > 1 && (
+            <ol className="hud-order" aria-hidden="true">
+              {h.order.map((o, i) => (
+                <motion.li key={o.id} layout={reduced ? false : "position"} transition={{ duration: 0.2 }} className={o.me ? "is-me" : ""}>
+                  <span className="num">{i + 1}</span>
+                  <i style={{ background: o.color }} />
+                  <span className="hud-order-name">{o.name}</span>
+                </motion.li>
+              ))}
+            </ol>
           )}
 
           <svg className="hud-map" viewBox="-6 -6 112 112" aria-hidden="true">
@@ -318,12 +442,14 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 {!phone && me && (
                   <span className="hud-keys">
                     <kbd>↑</kbd> accélérer · <kbd>←</kbd>
-                    <kbd>→</kbd> tourner · <kbd>Espace</kbd> déraper, figure en l'air · <kbd>E</kbd> objet
+                    <kbd>→</kbd> tourner · <kbd>Espace</kbd> déraper, figure en l'air · <kbd>E</kbd> ou un clic : objet (avec <kbd>↓</kbd> :
+                    derrière toi) · <kbd>B</kbd> regarder derrière
                   </span>
                 )}
                 {phone && me && (
                   <span className="hud-keys">
-                    Le kart accélère tout seul : tourne, dérape (et fais une figure en l'air), touche l'objet pour t'en servir
+                    Le kart accélère tout seul. L'objet : touche le gros bouton ou le milieu de l'écran, ou glisse le pouce vers le haut sur
+                    Dérapage
                   </span>
                 )}
               </motion.div>
@@ -336,6 +462,11 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 <span key={n} className={h.countdown !== null && h.countdown <= n ? "is-on" : ""} />
               ))}
               {h.countdown === 0 && <strong>Partez !</strong>}
+            </div>
+          )}
+          {me && h.countdown !== null && h.countdown > 0 && (
+            <div className="hud-start-hint">
+              {phone ? "Appuie sur Dérapage au dernier feu" : "Accélère au dernier feu"} pour un départ canon !
             </div>
           )}
 
@@ -354,7 +485,11 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           </AnimatePresence>
 
           {h.wrongWay && <div className="hud-warning">Mauvais sens !</div>}
-          {h.rocket && !h.wrongWay && <div className="hud-warning is-rocket">Une fusée arrive sur toi !</div>}
+          {h.incoming && !h.wrongWay && (
+            <div className="hud-warning is-rocket">
+              {h.incoming === "fusee" ? "Une fusée arrive sur toi !" : "Une tarte arrive sur toi !"}
+            </div>
+          )}
           {h.stuck && !h.wrongWay && (
             <div className="hud-hint">{phone ? "Coincé ? Touche Repartir" : "Coincé ? Appuie sur R pour repartir"}</div>
           )}
@@ -414,18 +549,29 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
               </button>
             )}
             {g.settings.items && (
-              <button className={`pad pad-item ${h?.item ? "is-full" : ""}`} onPointerDown={useItem} aria-label="Se servir de l'objet">
-                {h?.item && !h.rolling ? <ItemIcon item={h.item} size={34} /> : <span>Objet</span>}
+              <button
+                className={`pad pad-item ${h?.item && !(h.rolling && h.rollSlot === 1) ? "is-full" : ""}`}
+                onPointerDown={itemDown}
+                onPointerMove={itemMove}
+                onPointerUp={itemUp}
+                onPointerCancel={itemUp}
+                aria-label="Se servir de l'objet"
+              >
+                {h?.item && !(h.rolling && h.rollSlot === 1) ? <ItemIcon item={h.item} size={56} /> : <span>Objet</span>}
               </button>
             )}
             <button
               className="pad pad-drift"
-              onPointerDown={touch("drift", true)}
+              onPointerDown={driftDown}
+              onPointerMove={driftMove}
               onPointerUp={touch("drift", false)}
               onPointerLeave={touch("drift", false)}
               onPointerCancel={touch("drift", false)}
             >
-              Dérapage
+              <span className="pad-drift-label">
+                Dérapage
+                {h?.item && <small>↑ objet</small>}
+              </span>
             </button>
           </div>
         </div>
@@ -448,6 +594,15 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
       )}
     </div>
   );
+}
+
+/** Garder le doigt sur ce bouton même s'il glisse (sans danger si le doigt vient de se lever) */
+function capture(e: ReactPointerEvent) {
+  try {
+    e.currentTarget.setPointerCapture(e.pointerId);
+  } catch {
+    // déjà levé
+  }
 }
 
 /** La flèche d'un bouton pour tourner */

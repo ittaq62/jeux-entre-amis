@@ -42,20 +42,34 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
   const racerOf = (id: string) => g.racers.find((r) => r.id === id);
   const winner = ranking[0] ? seatOf(ranking[0]) : undefined;
 
+  const cupWon = room.cup?.over === true && Object.entries(room.cup.points).sort((a, b) => b[1] - a[1])[0]?.[0] === me;
   useEffect(() => {
-    if (!won || reduced) return;
+    if (!(won || cupWon) || reduced) return;
     const t = setTimeout(() => {
       const colors = ["#e2483d", "#f2c94c", "#2f80ed", "#ffffff"];
       void confetti({ particleCount: 120, spread: 80, startVelocity: 42, origin: { y: 0.35 }, colors, scalar: 0.9 });
     }, 1300);
     return () => clearTimeout(t);
-  }, [won, reduced]);
+  }, [won, cupWon, reduced]);
 
   const placed = ranking.map((id) => ({ id, rank: ranks[id] ?? ranking.length, isBot: seatOf(id)?.kind !== "human" }));
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
   const voted = room.rematch.includes(room.you.userId);
-  const title = won ? "Victoire !" : `${winner?.name ?? "?"} remporte la course.`;
+  const cup = room.cup;
+  const cupOrder = cup
+    ? Object.entries(cup.points)
+        .filter(([id]) => seatOf(id))
+        .sort((a, b) => b[1] - a[1])
+    : [];
+  const cupWinner = cup?.over && cupOrder[0] ? seatOf(cupOrder[0][0]) : undefined;
+  const title = cupWinner
+    ? cupWinner.id === me
+      ? "Tu remportes le Grand Prix !"
+      : `${cupWinner.name} remporte le Grand Prix.`
+    : won
+      ? "Victoire !"
+      : `${winner?.name ?? "?"} remporte la course.`;
   const best = Math.min(...g.racers.map((r) => r.stats.bestLap || Infinity));
   const speed = SPEED_NAMES[g.settings.speed];
   const summary = `${TRACKS[g.track].name}, ${g.settings.laps} tours${speed ? ` ${speed}` : ""}${g.settings.items ? "" : ", sans objets"}`;
@@ -110,6 +124,24 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
           })}
         </ol>
 
+        {cup && (
+          <section className="bolides-cup">
+            <h3>
+              Grand Prix <span className="hint num">{cup.over ? "terminé" : `course ${cup.index + 1}/${cup.tracks.length}`}</span>
+            </h3>
+            <ol>
+              {cupOrder.map(([id, pts], i) => (
+                <li key={id} className={id === me ? "is-me" : ""}>
+                  <span className="score-rank num">{i + 1}</span>
+                  <span className="score-name">{seatOf(id)?.name}</span>
+                  {(cup.last[id] ?? 0) > 0 && <span className="hint num">+{cup.last[id]}</span>}
+                  <strong className="num">{pts}</strong>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         {inTour && (
           <p className="tour-next-note">
             <span className="spinner" /> La tournée continue : le classement arrive.
@@ -118,11 +150,11 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>
-              Rejouer
+              {cup ? (cup.over ? "Nouveau Grand Prix" : "Course suivante") : "Rejouer"}
             </button>
           ) : me ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
-              {voted ? "Revanche demandée" : "Demander la revanche"}
+              {voted ? "C'est demandé" : cup && !cup.over ? "Course suivante" : "Demander la revanche"}
             </button>
           ) : null}
           <button className="btn" onClick={onInspect}>

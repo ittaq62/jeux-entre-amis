@@ -67,6 +67,7 @@ export function decodeKart(n: KartNet, base?: Kart): Kart | null {
     held: base?.held ?? false,
     // En train de tomber : ça se voit à sa hauteur négative ; le serveur le remet en route s'il conduit à sa place
     fall: n.length > 13 && n[13]! < -0.05 ? 0.3 : 0,
+    draft: base?.draft ?? 0,
   };
 }
 
@@ -77,7 +78,12 @@ export interface RacerView {
   laps: number;
   item: ItemKind | null;
   uses: number;
+  /** Le deuxième objet, en réserve */
+  item2: ItemKind | null;
+  uses2: number;
   shieldUntil: number;
+  /** Touché il y a un instant : intouchable jusque-là (il clignote) */
+  safeUntil: number;
   /** L'arc-en-ciel, la potion géante, l'aimant, la crème sur l'écran : jusqu'à quand */
   starUntil: number;
   giantUntil: number;
@@ -122,7 +128,10 @@ export function bolidesView(race: Race): BolidesView {
       laps: r.laps,
       item: r.item,
       uses: r.uses,
+      item2: r.item2 ?? null,
+      uses2: r.uses2 ?? 0,
       shieldUntil: r.shieldUntil,
+      safeUntil: r.safeUntil ?? 0,
       starUntil: r.starUntil ?? 0,
       giantUntil: r.giantUntil ?? 0,
       magnetUntil: r.magnetUntil ?? 0,

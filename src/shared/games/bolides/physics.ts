@@ -98,6 +98,8 @@ export interface Kart {
   held: boolean;
   /** En train de tomber dans un trou : le temps qu'il reste (on repart ensuite sur l'autre rive) */
   fall: number;
+  /** L'aspiration, de 0 à 1 (négative : le temps à attendre avant de pouvoir recommencer) */
+  draft: number;
 }
 
 export interface Input {
@@ -145,7 +147,9 @@ export type KartEvent =
   | "fall"
   | "respawn"
   /** Sur un trampoline */
-  | "spring";
+  | "spring"
+  /** L'aspiration d'un kart devant vient de nous lancer */
+  | "draft";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -173,8 +177,67 @@ export function newKart(t: Track, x: number, z: number, h: number): Kart {
     trick: false,
     held: false,
     fall: 0,
+    draft: 0,
   };
 }
+
+/** Rester dans le sillage d'un kart : le temps qu'il faut, la distance, la largeur, le coup de turbo, et le repos après */
+export const DRAFT_TIME = 1.1;
+const DRAFT_NEAR = 2.5;
+const DRAFT_FAR = 17;
+const DRAFT_SIDE = 1.8;
+export const DRAFT_BOOST = 0.85;
+const DRAFT_REST = 2.5;
+
+/** L'aspiration : qui reste juste derrière un kart assez longtemps est lancé en avant */
+export function draftStep(k: Kart, others: readonly Kart[], dt: number, events?: KartEvent[]): void {
+  if (k.draft < 0) {
+    k.draft = Math.min(0, k.draft + dt);
+    return;
+  }
+  let behind = false;
+  if (k.v > 15 && k.air === 0 && !k.offroad && k.spin === 0 && k.boost === 0 && k.fall === 0) {
+    const fx = Math.sin(k.h);
+    const fz = Math.cos(k.h);
+    for (const o of others) {
+      if (o === k || o.v < 12 || o.air > 0.5) continue;
+      const dx = o.x - k.x;
+      const dz = o.z - k.z;
+      const along = dx * fx + dz * fz;
+      if (along < DRAFT_NEAR || along > DRAFT_FAR || Math.abs(dx * fz - dz * fx) > DRAFT_SIDE) continue;
+      behind = true;
+      break;
+    }
+  }
+  if (!behind) {
+    k.draft = Math.max(0, k.draft - dt * 1.3);
+    return;
+  }
+  k.draft += dt / DRAFT_TIME;
+  if (k.draft >= 1) {
+    k.draft = -DRAFT_REST;
+    k.boost = Math.max(k.boost, DRAFT_BOOST);
+    events?.push("draft");
+  }
+}
+
+/** La conduite assistée : un petit coup de volant pour ne pas sortir de la route (ni rater un tremplin) */
+export function assistSteer(t: Track, k: Kart, steer: number): number {
+  if (k.air > 0.1 || k.spin > 0 || k.v < 8 || k.fall > 0) return steer;
+  const rx = -t.tz[k.i]!;
+  const rz = t.tx[k.i]!;
+  const vd = Math.sin(k.h) * k.v * rx + Math.cos(k.h) * k.v * rz;
+  const future = k.d + vd * 0.7;
+  const nearGap = t.jumps.some((lip) => {
+    const ahead = deltaS(t, k.s, lip);
+    return ahead > 0 && ahead < 45;
+  });
+  const limit = nearGap ? t.half - 1.2 : t.half + 0.3;
+  if (Math.abs(future) <= limit) return steer;
+  return clamp(steer - Math.sign(future) * Math.min(1, (Math.abs(future) - limit) * 0.35), -1, 1);
+}
+
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /** Un choc contre un obstacle rond posé à (s, d), qui se déplace de côté à la vitesse `vd` : on rebondit, et un gros choc fait tourner */
 function hitBlock(
@@ -224,8 +287,6 @@ function hitBlock(
 export function driftLevel(charge: number): 0 | 1 | 2 | 3 {
   return charge >= DRIFT_LEVELS[2] ? 3 : charge >= DRIFT_LEVELS[1] ? 2 : charge >= DRIFT_LEVELS[0] ? 1 : 0;
 }
-
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /** Un pas de conduite : le kart avance d'un DT selon ce qu'on lui demande */
 export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: KartEvent[]): void {

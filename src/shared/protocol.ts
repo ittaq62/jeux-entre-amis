@@ -526,6 +526,8 @@ export interface BolidesRoomView {
   hostId: string;
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   bolides: BolidesView | null;
+  /** Le Grand Prix en cours : la course où on en est, les circuits, les points de chacun et ceux de la dernière course */
+  cup: { index: number; tracks: string[]; points: Record<string, number>; last: Record<string, number>; over: boolean } | null;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
@@ -547,7 +549,7 @@ export type BolidesClientMessage =
   /** Où en est son kart, plusieurs fois par seconde, et ce qu'il a compté depuis le départ : mini-turbos, chocs contre le mur */
   | { t: "kart"; k: KartNet; n?: [number, number]; at?: number }
   /** Se servir de son objet */
-  | { t: "use" }
+  | { t: "use"; flip?: boolean }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

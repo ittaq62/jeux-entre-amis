@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { bounceBetween, COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
 import { botDrive, newBotMemory } from "./bot.ts";
 import {
+  assistSteer,
   bump,
+  draftStep,
   DRIFT_LEVELS,
   DT,
   driftLevel,
@@ -15,7 +17,19 @@ import {
   type Input,
   type Kart,
 } from "./physics.ts";
-import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
+import {
+  cupPoints,
+  DEFAULT_SETTINGS,
+  driveBots,
+  itemRank,
+  newRace,
+  racerOf,
+  reportKart,
+  standings,
+  useItem,
+  worldTick,
+  type Race,
+} from "./race.ts";
 import {
   crosserAt,
   deltaS,
@@ -30,6 +44,7 @@ import {
   TRACKS,
   traceCorners,
   wrapS,
+  mirrorOf,
 } from "./track.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
 import { botGarage, SKIN_IDS, skinUnlocked, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "./garage.ts";
@@ -1166,6 +1181,231 @@ describe("la vie du circuit", () => {
       for (const m of t.movers) expect(Math.abs(deltaS(t, m.s, c.s))).toBeGreaterThanOrEqual(12);
       for (const p of t.springs) expect(Math.abs(deltaS(t, p.s, c.s))).toBeGreaterThanOrEqual(6);
     }
+  });
+});
+
+describe("les bonus, faciles à vivre", () => {
+  const setup = (track: "port" | "col" = "port") => {
+    const race = newRace(["a", "b", "c"], new Set(["b", "c"]), { ...DEFAULT_SETTINGS, track }, 0, 1);
+    worldTick(race, race.goAt);
+    const t = getTrack(track);
+    const put = (k: Kart, s: number, d = 0) => {
+      const p = pointAt(t, s, d);
+      Object.assign(k, { x: p.x, z: p.z, s, d, dist: s, h: Math.atan2(p.tx, p.tz), spin: 0, i: Math.round(s / (t.length / t.n)) % t.n });
+    };
+    return { race, t, put, a: racerOf(race, "a")!, b: racerOf(race, "b")!, c: racerOf(race, "c")!, now: race.goAt + 1000 };
+  };
+
+  it("on peut garder un deuxième objet : il prend la place du premier une fois utilisé", () => {
+    const { race, t, a, now } = setup();
+    const row = t.boxes.filter((b) => b.s === t.boxes[0]!.s);
+    const report = (i: number, at: number) => {
+      const box = row[i]!;
+      Object.assign(a.kart, { x: box.x, z: box.z, s: box.s, d: box.d, dist: box.s });
+      return reportKart(race, "a", { ...a.kart }, at);
+    };
+    const first = report(0, now).find((e) => e.type === "box");
+    expect(first && first.type === "box" && first.slot).toBe(1);
+    expect(a.item).not.toBeNull();
+    a.px = a.kart.x;
+    a.pz = a.kart.z;
+    const second = report(4, now + 300).find((e) => e.type === "box");
+    expect(second && second.type === "box" && second.slot).toBe(2);
+    expect(a.item2).not.toBeNull();
+    const reserve = a.item2;
+    a.item = "bouclier";
+    a.uses = 1;
+    useItem(race, "a", now + 400);
+    expect(a.item).toBe(reserve);
+    expect(a.item2).toBeNull();
+  });
+
+  it("deux objets pleins : la caisse ne donne rien de plus", () => {
+    const { race, t, a, now } = setup();
+    a.item = "turbo";
+    a.uses = 1;
+    a.item2 = "huile";
+    a.uses2 = 1;
+    const box = t.boxes[0]!;
+    Object.assign(a.kart, { x: box.x, z: box.z, s: box.s, d: box.d, dist: box.s });
+    const e = reportKart(race, "a", { ...a.kart }, now).find((x) => x.type === "box");
+    expect(e && e.type === "box" && e.slot).toBe(0);
+    expect(a.item).toBe("turbo");
+    expect(a.item2).toBe("huile");
+  });
+
+  it("on peut lancer derrière soi : le pétard, la boule, la bombe ; et une flaque devant soi", () => {
+    const { race, t, put, a, now } = setup();
+    put(a.kart, 300);
+    for (const kind of ["petard", "bowling"] as const) {
+      a.item = kind;
+      a.uses = 1;
+      useItem(race, "a", now, true);
+      const hz = race.hazards.at(-1)!;
+      const later = hazardPos(t, hz, now + 500)!;
+      expect(deltaS(t, 300, locate(t, later.x, later.z).s)).toBeLessThan(-10);
+    }
+    a.item = "bombe";
+    a.uses = 1;
+    useItem(race, "a", now, true);
+    const bomb = race.hazards.at(-1)!;
+    expect(bomb.kind === "bombe" && deltaS(t, 300, bomb.s)).toBeLessThan(-10);
+    a.item = "huile";
+    a.uses = 1;
+    useItem(race, "a", now, true);
+    const oil = race.hazards.at(-1)!;
+    expect(oil.kind === "huile" && deltaS(t, 300, oil.s)).toBeGreaterThan(15);
+  });
+
+  it("une tarte sans personne à portée n'est pas gâchée", () => {
+    const { race, put, a, b, c, now } = setup();
+    put(a.kart, 100);
+    put(b.kart, 500);
+    put(c.kart, 900);
+    a.item = "tarte";
+    a.uses = 1;
+    const ev = useItem(race, "a", now);
+    expect(ev.map((e) => e.type)).toEqual(["noTarget"]);
+    expect(a.item).toBe("tarte");
+    expect(race.hazards.length).toBe(0);
+  });
+
+  it("tarte lancée en arrière : elle vise derrière d'abord", () => {
+    const { race, put, a, b, c, now } = setup();
+    put(a.kart, 300);
+    put(b.kart, 330);
+    put(c.kart, 260);
+    a.item = "tarte";
+    a.uses = 1;
+    useItem(race, "a", now, true);
+    expect(race.hazards[0]!.kind === "tarte" && race.hazards[0]!.target).toBe("c");
+  });
+
+  it("celui qu'on vient de renverser est intouchable un moment, puis redevient vulnérable", () => {
+    const { race, put, a, b, c, now } = setup();
+    put(a.kart, 300);
+    put(b.kart, 500);
+    put(c.kart, 900);
+    a.item = "orage";
+    a.uses = 1;
+    useItem(race, "a", now);
+    expect(b.safeUntil).toBeGreaterThan(now + 2000);
+    Object.assign(b.kart, { spin: 0 });
+    a.item = "orage";
+    a.uses = 1;
+    const again = useItem(race, "a", now + 500);
+    expect(again.some((e) => e.type === "hit" && e.id === "b")).toBe(false);
+    Object.assign(b.kart, { spin: 0 });
+    a.item = "orage";
+    a.uses = 1;
+    const late = useItem(race, "a", b.safeUntil + 10);
+    expect(late.some((e) => e.type === "hit" && e.id === "b")).toBe(true);
+  });
+
+  it("les objets dépendent de l'écart avec le premier, pas seulement de la place", () => {
+    const { race, put, a, b, c } = setup();
+    put(a.kart, 500);
+    put(b.kart, 490);
+    put(c.kart, 480);
+    const close = itemRank(race, "c");
+    put(c.kart, 100);
+    const far = itemRank(race, "c");
+    expect(itemRank(race, "a")).toBe(0);
+    expect(close).toBeLessThan(0.65);
+    expect(far).toBeGreaterThan(0.9);
+    expect(far).toBeGreaterThan(close);
+  });
+
+  it("jamais deux fusées à la fois", () => {
+    const { race, t, put, a, b, c, now } = setup();
+    put(c.kart, 2);
+    put(a.kart, 900);
+    put(b.kart, 880);
+    race.hazards.push({ id: 99, kind: "fusee", dist0: 0, target: "a", owner: "b", at: now });
+    for (let i = 0; i < 80; i++) {
+      c.item = null;
+      c.item2 = null;
+      race.boxes = race.boxes.map(() => 0);
+      const box = t.boxes[i % t.boxes.length]!;
+      Object.assign(c.kart, { x: box.x, z: box.z, s: box.s, d: box.d });
+      reportKart(race, "c", { ...c.kart, dist: c.kart.dist }, now + i * 50);
+      expect(c.item).not.toBe("fusee");
+      c.seen = now + i * 50;
+    }
+  });
+
+  describe("l'aspiration", () => {
+    const pair = (gap: number, side = 0) => {
+      const t = getTrack("port");
+      const me = kartAt("port", 40, 0);
+      const front = kartAt("port", 40 + gap, side);
+      me.v = 24;
+      front.v = 24;
+      return { t, me, front };
+    };
+
+    it("derrière un kart assez longtemps, on est lancé ; puis il faut attendre", () => {
+      const { me, front } = pair(8);
+      const ev: string[] = [];
+      for (let i = 0; i < 90; i++) draftStep(me, [me, front], DT, ev as never);
+      expect(ev).toEqual(["draft"]);
+      expect(me.boost).toBeGreaterThan(0.5);
+      expect(me.draft).toBeLessThan(0);
+    });
+
+    it("rien si on est à côté, trop loin, ou devant", () => {
+      for (const [gap, side] of [
+        [8, 5],
+        [40, 0],
+        [-8, 0],
+      ] as const) {
+        const { me, front } = pair(gap, side);
+        const ev: string[] = [];
+        for (let i = 0; i < 120; i++) draftStep(me, [front], DT, ev as never);
+        expect(ev).toEqual([]);
+        expect(me.boost).toBe(0);
+      }
+    });
+
+    it("s'écarter fait perdre ce qu'on avait gagné", () => {
+      const { me, front } = pair(8);
+      for (let i = 0; i < 40; i++) draftStep(me, [front], DT);
+      const got = me.draft;
+      expect(got).toBeGreaterThan(0.4);
+      for (let i = 0; i < 20; i++) draftStep(me, [], DT);
+      expect(me.draft).toBeLessThan(got);
+    });
+  });
+
+  it("la conduite assistée ramène vers la route, sans toucher au volant au milieu", () => {
+    const t = getTrack("port");
+    const k = kartAt("port", 40, t.half - 0.5);
+    k.v = 24;
+    // Il file vers la droite : le cap baisse quand on tourne à droite
+    k.h -= 0.5;
+    expect(assistSteer(t, k, 0)).toBeLessThan(0);
+    const mid = kartAt("port", 40, 0);
+    mid.v = 24;
+    expect(assistSteer(t, mid, 0.4)).toBe(0.4);
+  });
+
+  it.each(TRACK_IDS)("%s en miroir : même longueur, virages inversés, sols et trampolines de l'autre côté", (id) => {
+    const a = getTrack(id);
+    const b = getTrack(mirrorOf(id));
+    expect(b.length).toBeCloseTo(a.length, 3);
+    expect(b.def.theme).toBe(a.def.theme);
+    const i = a.bend.reduce((best, v, k, arr) => (Math.abs(v) > Math.abs(arr[best]!) ? k : best), 0);
+    expect(Math.sign(b.bend[i]!)).toBe(-Math.sign(a.bend[i]!));
+    a.springs.forEach((p, k) => expect(b.springs[k]!.d).toBeCloseTo(-p.d, 6));
+    a.zones.forEach((z, k) => expect(b.zones[k]!.d1).toBeCloseTo(-z.d2, 6));
+    // Les pièces suivent : l'intérieur des virages est du bon côté
+    expect(b.coins.length).toBeGreaterThan(0);
+  });
+
+  it("un Grand Prix donne plus de points aux premiers", () => {
+    expect(cupPoints(1)).toBeGreaterThan(cupPoints(2));
+    expect(cupPoints(8)).toBeGreaterThan(0);
+    expect(cupPoints(9)).toBe(0);
   });
 });
 

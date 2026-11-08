@@ -20,6 +20,12 @@ interface Prefs {
   /** Bolides : le dernier véhicule et le dernier skin choisis sur cet appareil */
   bolidesVehicle: VehicleId | null;
   bolidesSkin: SkinId | null;
+  /** Les objets partent tout seuls au bon moment */
+  bolidesAutoItem: boolean;
+  /** Un petit coup de volant pour rester sur la route */
+  bolidesAssist: boolean;
+  /** Combien de fois on a reçu chaque objet (l'explication s'efface quand on le connaît) */
+  bolidesItemsSeen: Record<string, number>;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -47,6 +53,9 @@ export const usePrefs = create<Prefs>((set, get) => ({
   bolidesMusic: true,
   bolidesVehicle: null,
   bolidesSkin: null,
+  bolidesAutoItem: false,
+  bolidesAssist: false,
+  bolidesItemsSeen: {},
   ...load(),
   set: (patch) => {
     set(patch);

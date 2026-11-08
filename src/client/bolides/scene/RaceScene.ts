@@ -12,6 +12,7 @@ import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
 import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
+import { AimGuide, type Aim } from "./aim.ts";
 import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
 import type { Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
@@ -37,6 +38,12 @@ export interface Frame {
   dt: number;
   /** Des feux d'artifice dans le ciel (le dernier tour, l'arrivée) */
   fireworks?: boolean;
+  /** La visée de l'objet qu'on tient */
+  aim?: Aim | null;
+  /** L'aspiration en cours, de 0 à 1 */
+  draft?: number;
+  /** Regarder derrière soi */
+  lookBack?: boolean;
 }
 
 interface Puff {
@@ -80,6 +87,8 @@ export class RaceScene {
   private coins: CoinField | null = null;
   private crossers: Crossers | null = null;
   private life: TrackLife | null = null;
+  private aim: AimGuide | null = null;
+  private lookingBack = false;
   /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
   private drowned: boolean[] = [];
   /** Le son de ce qui se passe sur la route, plus ou moins fort selon la distance */
@@ -268,6 +277,8 @@ export class RaceScene {
     this.scene.add(this.crossers.group);
     this.life = new TrackLife({ t: track, keep, heightAt: this.world.heightAt, shadows: this.shadows, phone: this.opts.phone });
     this.scene.add(this.life.group);
+    this.aim = new AimGuide(track, keep);
+    this.scene.add(this.aim.group);
   }
 
   /** Ce que reflètent les carrosseries : le ciel de ce circuit, son sol, son soleil */
@@ -973,6 +984,30 @@ export class RaceScene {
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
     if (f.fireworks) this.launchFireworks(f.dt);
+    this.aim?.update(f.aim ?? null, this.time, this.camPos);
+    // L'aspiration : l'air qui file autour du kart suivi
+    if ((f.draft ?? 0) > 0.15 && f.follow >= 0 && !this.opts.reduced) {
+      const k = f.karts[f.follow]?.kart;
+      if (k) {
+        const fx = Math.sin(k.h);
+        const fz = Math.cos(k.h);
+        const side = (Math.random() < 0.5 ? -1 : 1) * (0.9 + Math.random() * 1.1);
+        const ahead = 2 + Math.random() * 7;
+        this.puff(
+          k.x + fx * ahead + fz * side,
+          k.y + 0.5 + Math.random() * 1.3,
+          k.z + fz * ahead - fx * side,
+          0xffffff,
+          0,
+          0,
+          0,
+          0.22,
+          0.9,
+          0.55,
+          false,
+        );
+      }
+    }
     this.moveCamera(f);
     this.world.update(this.time, this.camera.position, this.daylight);
     if (f.lights !== this.lightsShown) {
@@ -992,7 +1027,9 @@ export class RaceScene {
     f.karts.forEach((k, i) => {
       const d = this.camPos.distanceTo(this.tmp.set(k.kart.x, k.kart.y + 0.8, k.kart.z));
       this.karts[i]?.showTag(d > 10 && d < 90);
-      this.karts[i]?.fade(i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6)));
+      // Celui qui vient d'être touché clignote : on voit qu'il est intouchable un moment
+      const blink = k.safe && Math.sin(this.time * 24) > 0 ? 0.35 : 1;
+      this.karts[i]?.fade(blink * (i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6))));
     });
     if (this.composer) this.composer.render(f.dt);
     else this.renderer.render(this.scene, this.camera);
@@ -1037,8 +1074,15 @@ export class RaceScene {
       const up = (portrait ? 3.1 : 2.55) + air * 0.5;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
-      pos = this.tmpPos.set(target.x - fx * back, this.camY + up, target.z - fz * back);
-      look = this.tmpLook.set(target.x + fx * 6, this.camY + 1.25 + sink * 0.9, target.z + fz * 6);
+      // Regarder derrière soi : la caméra passe devant le kart
+      const way = f.lookBack ? -1 : 1;
+      pos = this.tmpPos.set(target.x - fx * back * way, this.camY + up, target.z - fz * back * way);
+      look = this.tmpLook.set(target.x + fx * 6 * way, this.camY + 1.25 + sink * 0.9, target.z + fz * 6 * way);
+      if (Boolean(f.lookBack) !== this.lookingBack) {
+        this.lookingBack = Boolean(f.lookBack);
+        this.camPos.copy(pos);
+        this.camLook.copy(look);
+      }
       fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0);
     }
     const chase = f.camera === "chase" && Boolean(target);

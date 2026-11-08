@@ -39,6 +39,8 @@ export interface KartExtras {
   /** La potion géante, l'aimant */
   giant?: boolean;
   magnet?: boolean;
+  /** Touché à l'instant : intouchable un moment (il clignote) */
+  safe?: boolean;
 }
 
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];

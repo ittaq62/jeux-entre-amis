@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import type { BotLevel } from "../../shared/games/bolides/bot.ts";
 import type { SpeedClass } from "../../shared/games/bolides/physics.ts";
+import { ITEM_KINDS, ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
 import { LAP_CHOICES, type BolidesSettings } from "../../shared/games/bolides/race.ts";
 import { getTrack, TRACK_IDS, TRACKS, type TrackId } from "../../shared/games/bolides/track.ts";
 import { BOLIDES_MAX_PLAYERS, type BolidesClientMessage, type BolidesRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { Garage } from "./Garage.tsx";
+import { ItemIcon } from "./ItemIcon.tsx";
 
 const SPEED_HINTS: Record<SpeedClass, string> = {
   balade: "Les karts vont moins vite : idéal pour découvrir les circuits.",
@@ -89,9 +91,30 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
               </p>
               <p className="hint">
                 Au clavier : <kbd>↑</kbd> accélérer, <kbd>←</kbd> <kbd>→</kbd> tourner, <kbd>Espace</kbd> déraper (et figure en l'air),{" "}
-                <kbd>E</kbd> se servir de l'objet (ZQSD marche aussi). Sur téléphone, le kart accélère tout seul. Une manette marche aussi.
+                <kbd>E</kbd> ou un clic pour l'objet (avec <kbd>↓</kbd>, il part derrière toi), <kbd>B</kbd> pour regarder derrière (ZQSD
+                marche aussi). Sur téléphone, le kart accélère tout seul, et l'objet se lance avec le gros bouton, en touchant le milieu de
+                l'écran, ou en glissant le pouce vers le haut sur Dérapage. Une manette marche aussi.
+              </p>
+              <p className="hint">
+                Reste juste derrière un kart : son aspiration finit par te lancer. Tu peux garder deux objets, et le sol te montre où part
+                celui que tu tiens. Dans le menu de la course, les objets peuvent partir tout seuls.
               </p>
             </div>
+
+            <details className="bolides-items">
+              <summary>Les objets, un par un</summary>
+              <ul>
+                {ITEM_KINDS.map((k) => (
+                  <li key={k}>
+                    <ItemIcon item={k} size={34} />
+                    <span>
+                      <strong>{ITEM_NAMES[k]}</strong>
+                      <small>{ITEM_TIPS[k]}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
 
             <div className="field">
               <span className="field-label">Circuit</span>
@@ -165,6 +188,24 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
                       Tarte à la crème, boule de bowling, bombe, fusée, orage, potion géante, aimant, ressort… : plus on est loin, meilleurs
                       sont les objets. Sans elles, c'est une course pure.
                     </span>
+                  </span>
+                </div>
+                {!room.tour && (
+                  <div className="rule-row" onClick={() => isHost && update({ cup: !s.cup })}>
+                    <Check label="Grand Prix" checked={s.cup} disabled={!isHost} onChange={() => {}} />
+                    <span>
+                      <strong>Grand Prix</strong>
+                      <span className="hint">
+                        Les trois circuits à la suite, avec des points à chaque arrivée. Le meilleur total l'emporte.
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <div className="rule-row" onClick={() => isHost && update({ mirror: !s.mirror })}>
+                  <Check label="Circuits en miroir" checked={s.mirror} disabled={!isHost} onChange={() => {}} />
+                  <span>
+                    <strong>Circuits en miroir</strong>
+                    <span className="hint">Les mêmes circuits, gauche et droite échangées : tout est à réapprendre.</span>
                   </span>
                 </div>
               </div>

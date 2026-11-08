@@ -76,6 +76,44 @@ export const ITEM_HINTS: Record<ItemKind, string> = {
   bombe: "Se lance devant toi et explose peu après : gare à qui se trouve autour",
 };
 
+/** Ce qu'on affiche en recevant l'objet : une seule phrase, qui dit quoi en faire */
+export const ITEM_TIPS: Record<ItemKind, string> = {
+  turbo: "Accélère d'un coup : garde-le pour une ligne droite",
+  turbo3: "Trois accélérations : appuie trois fois",
+  huile: "Se pose derrière toi, pour ceux qui te suivent",
+  petard: "Part tout droit : aligne-toi avec un kart",
+  bouclier: "Bloque le prochain coup : garde-le pour te protéger",
+  klaxon: "Renverse tous ceux qui sont autour de toi",
+  fusee: "Part toute seule frapper le premier",
+  arc: "Intouchable et très rapide : fonce dans les autres",
+  bowling: "Roule en zigzag devant toi et renverse tout",
+  tarte: "Vole vers le kart le plus proche",
+  ressort: "Un grand saut, par-dessus les pièges",
+  geant: "Tu deviens énorme et tu écrases ceux que tu touches",
+  orage: "Foudroie tous ceux qui sont devant toi",
+  aimant: "Attire les pièces, et en vole à ceux que tu frôles",
+  bombe: "Retombe loin devant et explose",
+};
+
+/** Le sens où part un objet qu'on lance (null : il ne se lance pas) ; on peut toujours l'envoyer de l'autre côté */
+export const ITEM_AIM: Record<ItemKind, "front" | "back" | null> = {
+  turbo: null,
+  turbo3: null,
+  huile: "back",
+  petard: "front",
+  bouclier: null,
+  klaxon: null,
+  fusee: null,
+  arc: null,
+  bowling: "front",
+  tarte: "front",
+  ressort: null,
+  geant: null,
+  orage: null,
+  aimant: null,
+  bombe: "front",
+};
+
 /** Le nombre d'utilisations d'un objet */
 export const ITEM_USES: Record<ItemKind, number> = {
   turbo: 1,
@@ -102,6 +140,8 @@ export const OIL_RADIUS = 1.7;
 export const OIL_MS = 40_000;
 /** Celui qui pose une flaque ne glisse pas dessus en la posant (au tour suivant, si) */
 export const OIL_SAFE_MS = 1500;
+/** Une flaque lancée devant soi retombe à cette distance */
+export const OIL_AHEAD = 22;
 /** Le pétard : sa vitesse le long de la route (plus vite que n'importe quel kart), sa durée, sa taille */
 export const PETARD_SPEED = 44;
 export const PETARD_MS = 3500;
@@ -138,6 +178,8 @@ export const AIMANT_RADIUS = 9;
 export const AIMANT_STEAL = 6;
 /** La bombe : où elle retombe devant le kart, le temps en l'air, le moment où elle saute, et le rayon de l'explosion */
 export const BOMBE_AHEAD = 32;
+/** Lancée derrière soi, elle retombe moins loin */
+export const BOMBE_BACK = 20;
 export const BOMBE_FLY_MS = 800;
 export const BOMBE_MS = 2000;
 export const BOMBE_RADIUS = 8.5;
@@ -153,15 +195,35 @@ export const BOX_RADIUS = 1.5;
 
 // Les chances de chaque objet, selon qu'on est en tête, au milieu ou derrière
 const TABLES: [number, Partial<Record<ItemKind, number>>][] = [
-  [0.25, { huile: 24, bouclier: 18, petard: 16, turbo: 10, tarte: 14, bombe: 10, aimant: 8 }],
+  // En tête : de quoi se défendre
+  [0.12, { huile: 26, bouclier: 18, petard: 16, tarte: 14, bombe: 10, aimant: 10, turbo: 6 }],
+  // Dans le groupe de tête
+  [0.35, { petard: 18, huile: 12, tarte: 14, bouclier: 12, turbo: 12, bowling: 10, bombe: 10, aimant: 8, klaxon: 4 }],
+  // Au milieu
   [
-    0.7,
-    { petard: 14, turbo: 14, huile: 6, bouclier: 8, klaxon: 8, tarte: 12, bowling: 10, bombe: 8, ressort: 6, aimant: 6, arc: 4, fusee: 4 },
+    0.6,
+    {
+      petard: 12,
+      turbo: 16,
+      tarte: 10,
+      bowling: 12,
+      klaxon: 10,
+      bombe: 8,
+      ressort: 6,
+      bouclier: 6,
+      turbo3: 8,
+      aimant: 6,
+      arc: 3,
+      fusee: 3,
+    },
   ],
-  [1.01, { turbo3: 20, turbo: 8, petard: 6, klaxon: 8, bowling: 12, tarte: 4, ressort: 4, arc: 12, geant: 12, fusee: 10, orage: 6 }],
+  // À la traîne
+  [0.85, { turbo3: 20, turbo: 12, bowling: 12, klaxon: 8, arc: 10, geant: 10, fusee: 10, ressort: 6, petard: 6, orage: 6 }],
+  // Loin derrière : de quoi revenir
+  [1.01, { turbo3: 26, arc: 18, geant: 16, fusee: 14, orage: 10, turbo: 8, klaxon: 8 }],
 ];
 
-/** L'objet tiré dans une caisse ; `rank` : 0 en tête, 1 dernier */
+/** L'objet tiré dans une caisse ; `rank` : 0 en tête, 1 très loin derrière */
 export function drawItem(rank: number, rand: () => number): ItemKind {
   const table = TABLES.find(([upTo]) => rank < upTo)![1];
   const entries = Object.entries(table) as [ItemKind, number][];
@@ -171,6 +233,28 @@ export function drawItem(rank: number, rand: () => number): ItemKind {
     if (roll < 0) return kind;
   }
   return entries[0]![0];
+}
+
+/** Qui la tarte va viser : le plus proche devant (ou derrière si on la lance en arrière), sinon de l'autre côté, à portée */
+export function tarteTarget<T extends { id: string; dist: number; done: boolean }>(
+  list: T[],
+  me: string,
+  myDist: number,
+  flip = false,
+): T | null {
+  let best: T | null = null;
+  let bestScore = Infinity;
+  for (const o of list) {
+    if (o.id === me || o.done) continue;
+    const gap = (o.dist - myDist) * (flip ? -1 : 1);
+    if (Math.abs(gap) > TARTE_RANGE) continue;
+    const score = gap > 0 ? gap : -gap + 60;
+    if (score < bestScore) {
+      best = o;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 /** Un piège sur la route : une flaque posée, un pétard qui file, une fusée lancée vers le premier, une boule qui roule, une tarte qui vole, une bombe */

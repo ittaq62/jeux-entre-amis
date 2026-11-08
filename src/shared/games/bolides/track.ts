@@ -5,7 +5,9 @@
 // Repère : x et z au sol, y vers le haut, en mètres. Un cap h regarde vers (sin h, cos h) ; la droite du pilote
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
-export type TrackId = "port" | "vignes" | "col";
+/** Les circuits de base, et leur version en miroir */
+export type BaseTrackId = "port" | "vignes" | "col";
+export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
 export type Theme = "port" | "vignes" | "col";
 
 export interface TrackDef {
@@ -66,10 +68,10 @@ export type MoverDef =
 /** Ce qui traverse la route : ça roule, ou ça marche */
 export type RollThing = "tonneau" | "boule" | "mouton";
 
-export const TRACK_IDS: TrackId[] = ["port", "vignes", "col"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
-export const TRACKS: Record<TrackId, TrackDef> = {
+const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
   port: {
     id: "port",
     name: "Le Port",
@@ -88,7 +90,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [-260, 150, 55],
     ],
     hills: [[0, 0]],
-    boxes: [0.13, 0.46, 0.76],
+    boxes: [0.13, 0.46, 0.76, 0.85],
     boosts: [
       [0.245, -0.3],
       [0.55, 0.3],
@@ -130,7 +132,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.55, 11],
       [0.8, 1],
     ],
-    boxes: [0.12, 0.43, 0.735],
+    boxes: [0.12, 0.43, 0.735, 0.95],
     boosts: [
       [0.24, 0.3],
       [0.52, -0.3],
@@ -178,7 +180,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
       [0.6, 16],
       [0.9, 1],
     ],
-    boxes: [0.11, 0.43, 0.745],
+    boxes: [0.11, 0.43, 0.59, 0.745],
     boosts: [
       [0.212, -0.3],
       [0.39, 0.3],
@@ -188,7 +190,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
     crossers: [{ frac: 0.263, period: 9.5, offset: 0.6 }],
     movers: [
       { kind: "roll", frac: 0.673, thing: "boule", count: 2, gap: 1.3, period: 7.5, speed: 11, radius: 1.7, offset: 0.5 },
-      { kind: "roll", frac: 0.43, thing: "boule", count: 1, gap: 0, period: 8.5, speed: 8.5, radius: 2.6, offset: 0.15 },
+      { kind: "roll", frac: 0.41, thing: "boule", count: 1, gap: 0, period: 8.5, speed: 8.5, radius: 2.6, offset: 0.15 },
     ],
     springs: [
       [0.458, 0.5],
@@ -200,6 +202,31 @@ export const TRACKS: Record<TrackId, TrackDef> = {
     ],
   },
 };
+
+/** Le même circuit, gauche et droite échangées */
+function mirrored(def: TrackDef): TrackDef {
+  return {
+    ...def,
+    id: `${def.id}-miroir` as TrackId,
+    name: `${def.name} (miroir)`,
+    corners: def.corners.map(([x, z, r]) => [-x, z, r]),
+    boosts: def.boosts.map(([f, d]) => [f, -d]),
+    springs: def.springs.map(([f, d]) => [f, -d]),
+    zones: def.zones.map((z) => ({ ...z, d1: -z.d2, d2: -z.d1 })),
+  };
+}
+
+export const TRACKS: Record<TrackId, TrackDef> = {
+  ...BASE_TRACKS,
+  "port-miroir": mirrored(BASE_TRACKS.port),
+  "vignes-miroir": mirrored(BASE_TRACKS.vignes),
+  "col-miroir": mirrored(BASE_TRACKS.col),
+};
+
+/** La version en miroir d'un circuit (lui-même s'il l'est déjà) */
+export function mirrorOf(id: TrackId): TrackId {
+  return id.endsWith("-miroir") ? id : (`${id}-miroir` as TrackId);
+}
 
 /** L'écart entre deux échantillons de la route, en mètres */
 export const STEP = 2;
