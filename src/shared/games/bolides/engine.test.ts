@@ -16,7 +16,21 @@ import {
   type Kart,
 } from "./physics.ts";
 import { DEFAULT_SETTINGS, driveBots, newRace, racerOf, reportKart, standings, useItem, worldTick, type Race } from "./race.ts";
-import { crosserAt, deltaS, getTrack, gridSlot, locate, pointAt, TRACK_IDS, TRACKS, traceCorners, wrapS } from "./track.ts";
+import {
+  crosserAt,
+  deltaS,
+  DROP_FALL,
+  dropAt,
+  getTrack,
+  gridSlot,
+  locate,
+  pointAt,
+  rollAt,
+  TRACK_IDS,
+  TRACKS,
+  traceCorners,
+  wrapS,
+} from "./track.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
 import { botGarage, SKIN_IDS, skinUnlocked, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "./garage.ts";
 
@@ -891,6 +905,230 @@ describe("la course", () => {
     const ev = useItem(race, "a", now + 3000).map((e) => e.type);
     expect(ev).toContain("shield");
     expect(b.kart.spin).toBe(0);
+  });
+});
+
+describe("la vie du circuit", () => {
+  const runFor = (k: Kart, t: ReturnType<typeof getTrack>, seconds: number, time: number, ev: string[] = [], input = GAS) => {
+    for (let i = 0; i < seconds * 60; i++) step(k, input, t, { top: 1, time: time + i / 60 }, ev as never);
+  };
+
+  it.each(TRACK_IDS)("%s : le tremplin fait franchir le trou, même en arrivant doucement", (id) => {
+    const t = getTrack(id);
+    const gap = t.gaps[0]!;
+    for (const speed of [8, 15, 27]) {
+      const k = kartAt(id, gap.from - 14);
+      k.v = speed;
+      const ev: string[] = [];
+      let seen = false;
+      for (let i = 0; i < 240 && !seen; i++) {
+        step(k, GAS, t, { top: 1 }, ev as never);
+        seen = ev.includes("land");
+      }
+      expect(ev, `à ${speed} m/s`).toContain("jump");
+      expect(ev, `à ${speed} m/s`).toContain("land");
+      expect(ev, `à ${speed} m/s`).not.toContain("fall");
+      expect(deltaS(t, gap.to, k.s)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it.each(TRACK_IDS)("%s : à côté du tremplin, on tombe ; on repart de l'autre rive, sans tricher sur la distance", (id) => {
+    const t = getTrack(id);
+    const gap = t.gaps[0]!;
+    const side = t.half + 3;
+    const k = kartAt(id, gap.from - 2, side);
+    k.v = 20;
+    const before = k.dist;
+    const ev: string[] = [];
+    let i = 0;
+    for (; i < 60 && !ev.includes("fall"); i++) step(k, GAS, t, { top: 1 }, ev as never);
+    expect(ev).toContain("fall");
+    expect(k.fall).toBeGreaterThan(0);
+    // Plus de commandes pendant la chute, et on descend
+    const x = k.x;
+    for (let n = 0; n < 40; n++) step(k, { steer: 1, gas: true, brake: false, drift: true }, t, { top: 1 }, ev as never);
+    expect(k.x).toBe(x);
+    expect(k.air).toBeLessThan(-1);
+    for (let n = 0; n < 40 && !ev.includes("respawn"); n++) step(k, GAS, t, { top: 1 }, ev as never);
+    expect(ev).toContain("respawn");
+    expect(k.fall).toBe(0);
+    expect(Math.abs(k.d)).toBeLessThan(0.5);
+    expect(deltaS(t, gap.to, k.s)).toBeGreaterThan(0);
+    expect(k.dist - before).toBeGreaterThan(gap.to - gap.from);
+    expect(k.dist - before).toBeLessThan(gap.to - gap.from + 16);
+    // Reposé d'un peu haut, il retombe sur la route et repart
+    for (let n = 0; n < 60; n++) step(k, GAS, t, { top: 1 }, ev as never);
+    expect(ev).toContain("land");
+    expect(k.air).toBe(0);
+    expect(k.fall).toBe(0);
+  });
+
+  it("une chute se voit chez les autres, et un kart qui tombe ne cogne personne", () => {
+    const k = kartAt("port", 100);
+    k.fall = 0.5;
+    k.air = -3;
+    const out = decodeKart(encodeKart(k))!;
+    expect(out.air).toBeCloseTo(-3, 1);
+    expect(out.fall).toBeGreaterThan(0);
+    const other = { ...k, fall: 0, air: 0, x: k.x + 0.5 };
+    expect(bump(k, other, true, true)).toBe(0);
+  });
+
+  const drop = (t: ReturnType<typeof getTrack>) =>
+    t.movers.find((m) => m.kind === "drop") as Extract<(typeof t.movers)[number], { kind: "drop" }>;
+
+  it("la grue prévient, lâche son conteneur, et il bloque vraiment la voie tant qu'il est là", () => {
+    const t = getTrack("port");
+    const m = drop(t);
+    // On cherche un moment où il vient d'atterrir
+    let land = 0;
+    for (let time = 0; time < 40; time += 0.01) {
+      if (dropAt(m, t.half, time).phase === "stay") {
+        land = time;
+        break;
+      }
+    }
+    expect(dropAt(m, t.half, land - DROP_FALL - 0.2).phase).toBe("warn");
+    expect(dropAt(m, t.half, land - DROP_FALL - 0.2).solid).toBe(false);
+    expect(dropAt(m, t.half, land + 0.5).solid).toBe(true);
+    const st = dropAt(m, t.half, land + 0.5);
+    expect(Math.abs(st.d)).toBeLessThan(t.half);
+    const k = kartAt("port", m.s - 22, st.d);
+    k.v = 25;
+    const ev: string[] = [];
+    runFor(k, t, 1.6, land + 0.5, ev);
+    expect(ev).toContain("crash");
+    expect(deltaS(t, m.s, k.s)).toBeLessThan(0);
+    // Dans la voie d'à côté, on passe
+    const free = kartAt("port", m.s - 22, st.d + (st.d > 0 ? -6 : 6));
+    free.v = 25;
+    const ok: string[] = [];
+    runFor(free, t, 1.6, land + 0.5, ok);
+    expect(ok).not.toContain("crash");
+    expect(deltaS(t, m.s, free.s)).toBeGreaterThan(5);
+  });
+
+  it("quand le conteneur n'est pas là, la route est libre, et le chariot change bien de voie", () => {
+    const t = getTrack("port");
+    const m = drop(t);
+    const lanes = new Set<number>();
+    let up = 0;
+    for (let time = 0; time < 200; time += m.period) {
+      lanes.add(Math.round(dropAt(m, t.half, time).d * 10));
+    }
+    expect(lanes.size).toBeGreaterThanOrEqual(2);
+    for (let time = 0; time < 40 && !up; time += 0.05) if (dropAt(m, t.half, time).phase === "none") up = time;
+    const k = kartAt("port", m.s - 8, dropAt(m, t.half, up).d);
+    k.v = 25;
+    const ev: string[] = [];
+    runFor(k, t, 0.5, up, ev);
+    expect(ev).not.toContain("crash");
+    expect(ev).not.toContain("bump");
+  });
+
+  it.each(["vignes", "col"] as const)("%s : ce qui traverse renverse celui qui le croise, et passe au large sinon", (id) => {
+    const t = getTrack(id);
+    const m = t.movers.find((x) => x.kind === "roll") as Extract<(typeof t.movers)[number], { kind: "roll" }>;
+    // Le moment où le premier objet est au milieu de la route
+    let at = 0;
+    for (let time = 0; time < 30; time += 0.01) {
+      const d = rollAt(m, 0, time);
+      if (d !== null && Math.abs(d) < 0.2) {
+        at = time;
+        break;
+      }
+    }
+    const k = kartAt(id, m.s - 18, 0);
+    k.v = 26;
+    const ev: string[] = [];
+    runFor(k, t, 1.3, at - 18 / 26, ev);
+    expect(ev.includes("crash") || ev.includes("bump")).toBe(true);
+    // Il n'est sur la route qu'une partie du temps
+    let off = 0;
+    for (let time = 0; time < m.period; time += 0.02) if (rollAt(m, 0, time) === null) off++;
+    expect(off).toBeGreaterThan(0);
+  });
+
+  it("les moutons marchent en file et laissent passer entre eux", () => {
+    const t = getTrack("vignes");
+    const m = t.movers.find((x) => x.kind === "roll" && x.thing === "mouton") as Extract<(typeof t.movers)[number], { kind: "roll" }>;
+    let at = 0;
+    for (let time = 0; time < 40; time += 0.01) {
+      const d = rollAt(m, 2, time);
+      if (d !== null && Math.abs(d) < 0.2) {
+        at = time;
+        break;
+      }
+    }
+    const ds = [0, 1, 2, 3, 4].map((i) => rollAt(m, i, at)).filter((d): d is number => d !== null);
+    expect(ds.length).toBeGreaterThanOrEqual(3);
+    ds.sort((a, b) => a - b);
+    for (let i = 1; i < ds.length; i++) expect(ds[i]! - ds[i - 1]!).toBeGreaterThan(m.radius * 2);
+  });
+
+  it("le trampoline fait sauter, on peut y faire une figure, et il ne se déclenche qu'en passant dessus", () => {
+    const t = getTrack("port");
+    const sp = t.springs[0]!;
+    const k = kartAt("port", sp.s - 6, sp.d);
+    k.v = 25;
+    const ev: string[] = [];
+    let top = 0;
+    for (let i = 0; i < 120; i++) {
+      step(k, { ...GAS, drift: i > 30 && i < 36 }, t, { top: 1 }, ev as never);
+      top = Math.max(top, k.air);
+    }
+    expect(ev).toContain("spring");
+    expect(top).toBeGreaterThan(1.5);
+    expect(ev).toContain("trick");
+    expect(ev).toContain("land");
+    const beside = kartAt("port", sp.s - 6, sp.d + 5);
+    beside.v = 25;
+    const none: string[] = [];
+    for (let i = 0; i < 60; i++) step(beside, GAS, t, { top: 1 }, none as never);
+    expect(none).not.toContain("spring");
+  });
+
+  it("la boue freine (sauf sous l'arc-en-ciel), le verglas fait glisser et charge plus vite", () => {
+    const t = getTrack("vignes");
+    const z = t.zones[0]!;
+    const mid = (z.d1 + z.d2) / 2;
+    const k = kartAt("vignes", z.s + 1, mid);
+    k.v = 27;
+    for (let i = 0; i < 50; i++) {
+      step(k, GAS, t, { top: 1 }, undefined);
+      k.d = mid;
+    }
+    expect(k.v).toBeLessThan(27 * 0.9);
+    const free = kartAt("vignes", z.s + 1, mid);
+    free.v = 27;
+    for (let i = 0; i < 50; i++) step(free, GAS, t, { top: 1, star: true }, undefined);
+    expect(free.v).toBeGreaterThan(26);
+
+    const col = getTrack("col");
+    const ice = col.zones[0]!;
+    const steerRight: Input = { steer: 1, gas: true, brake: false, drift: false };
+    const drive = (s: number) => {
+      const c = kartAt("col", s, 0);
+      c.v = 20;
+      for (let i = 0; i < 20; i++) step(c, steerRight, col, { top: 1 }, undefined);
+      return Math.abs(c.slip);
+    };
+    // Hors du verglas, l'adhérence ramène vite le glissement à sa valeur ; dessus, il part bien moins vite
+    const onIce = drive(ice.s + ice.len / 2);
+    const onRoad = drive(col.boxes[0]!.s);
+    expect(onIce).toBeLessThan(onRoad);
+  });
+
+  it.each(TRACK_IDS)("%s : les pièces ne sont ni dans le trou, ni sous la grue, ni sur un trampoline", (id) => {
+    const t = getTrack(id);
+    for (const c of t.coins) {
+      for (const g of t.gaps) {
+        const along = deltaS(t, g.from, c.s);
+        expect(along < -6 || along > g.to - g.from + 6).toBe(true);
+      }
+      for (const m of t.movers) expect(Math.abs(deltaS(t, m.s, c.s))).toBeGreaterThanOrEqual(12);
+      for (const p of t.springs) expect(Math.abs(deltaS(t, p.s, c.s))).toBeGreaterThanOrEqual(6);
+    }
   });
 });
 

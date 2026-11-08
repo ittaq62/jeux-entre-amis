@@ -5,7 +5,19 @@
 import { random, type RngHolder } from "../../rng.ts";
 import type { Hazard, ItemKind } from "./items.ts";
 import { driftLevel, KART_RADIUS, type Input, type Kart } from "./physics.ts";
-import { bendAhead, CROSSER_HALF, CROSSER_RADIUS, crosserAt, deltaS, pointAt, wrapAngle, type Track } from "./track.ts";
+import {
+  bendAhead,
+  CROSSER_HALF,
+  CROSSER_RADIUS,
+  crosserAt,
+  deltaS,
+  DROP_RADIUS,
+  dropAt,
+  pointAt,
+  rollAt,
+  wrapAngle,
+  type Track,
+} from "./track.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
 
@@ -136,6 +148,39 @@ export function botDrive(
       const right = hi < half - 1.6;
       lane = left && (!right || lane - lo < hi - lane) ? lo : right ? hi : lane;
     }
+  }
+  // Ce qui tombe ou dévale devant lui : même prudence
+  for (const m of t.movers) {
+    const ahead = deltaS(t, k.s, m.s);
+    if (ahead < 1 || ahead > 50) continue;
+    const when = now / 1000 + ahead / Math.max(8, k.v);
+    const dodge = (d: number, r: number) => {
+      const margin = r + KART_RADIUS + 0.9;
+      if (lane > d - margin && lane < d + margin) {
+        const left = d - margin > -half + 1.6;
+        const right = d + margin < half - 1.6;
+        lane = left && (!right || lane - (d - margin) < d + margin - lane) ? d - margin : right ? d + margin : lane;
+      }
+    };
+    if (m.kind === "drop") {
+      const st = dropAt(m, t.half, when);
+      if (st.phase !== "none") dodge(st.d, DROP_RADIUS);
+    } else {
+      for (let i = 0; i < m.count; i++) {
+        const d = rollAt(m, i, when);
+        if (d !== null) dodge(d, m.radius);
+      }
+    }
+  }
+  // La boue : il passe à côté
+  for (const z of t.zones) {
+    if (z.kind !== "boue") continue;
+    const ahead = deltaS(t, k.s, z.s);
+    const inside = deltaS(t, z.s, k.s);
+    if (!(ahead >= 0 && ahead < 34) && !(inside >= 0 && inside <= z.len)) continue;
+    const left = z.d1 - 1.3;
+    const right = z.d2 + 1.3;
+    if (lane > left && lane < right) lane = right < half - 1.6 ? right : left;
   }
   // Pas trop près du bord : en coupant vers le point visé, il passerait sur le vibreur et dans l'herbe
   lane = clamp(lane, -half + 2.6, half - 2.6);

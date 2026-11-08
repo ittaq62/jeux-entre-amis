@@ -100,7 +100,11 @@ export type SoundName =
   | "bolidesThunder"
   | "bolidesGrow"
   | "bolidesMagnet"
-  | "bolidesThrow";
+  | "bolidesThrow"
+  | "bolidesFall"
+  | "bolidesClang"
+  | "bolidesSpring"
+  | "bolidesBaa";
 
 const FILES: Record<SoundName, string[]> = {
   cardPlace: ["card-place-1.mp3", "card-place-2.mp3", "card-place-3.mp3"],
@@ -205,6 +209,10 @@ const FILES: Record<SoundName, string[]> = {
   bolidesGrow: ["bolides-grow.wav"],
   bolidesMagnet: ["bolides-magnet.wav"],
   bolidesThrow: ["bolides-throw.wav"],
+  bolidesFall: ["bolides-fall.wav"],
+  bolidesClang: ["bolides-clang.wav"],
+  bolidesSpring: ["bolides-spring.wav"],
+  bolidesBaa: ["bolides-baa.wav"],
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
@@ -309,6 +317,10 @@ export const BOLIDES_SOUNDS: SoundName[] = [
   "bolidesGrow",
   "bolidesMagnet",
   "bolidesThrow",
+  "bolidesFall",
+  "bolidesClang",
+  "bolidesSpring",
+  "bolidesBaa",
   "tourFanfare",
   "tick",
 ];

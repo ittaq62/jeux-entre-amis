@@ -326,9 +326,10 @@ export class KartModel {
     this.group.position.set(k.x, k.y + k.air + 0.02, k.z);
     this.group.rotation.y = k.h;
     // L'ombre reste sur la route, plus petite et plus pâle quand le kart est haut
+    this.blob.visible = k.air > -0.05;
     this.blob.position.y = -k.air + 0.07;
-    this.blob.scale.setScalar(1 / (1 + k.air * 0.22));
-    this.blobMat.opacity = this.blobAlpha / (1 + k.air * 0.6);
+    this.blob.scale.setScalar(1 / (1 + Math.max(0, k.air) * 0.22));
+    this.blobMat.opacity = this.blobAlpha / (1 + Math.max(0, k.air) * 0.6);
     const step = Math.max(1e-3, dt);
     // Le tangage : le nez se lève quand on accélère, plonge au freinage
     const accel = (k.v - this.lastV) / step;

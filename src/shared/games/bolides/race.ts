@@ -437,7 +437,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
 
 /** Un coup : le bouclier l'arrête, sinon le kart part en tête-à-queue (chez un joueur, c'est son navigateur qui l'applique) */
 function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: number, events: BolidesEvent[]) {
-  if (victim.finish !== null) return;
+  if (victim.finish !== null || victim.kart.fall > 0) return;
   // Sous l'arc-en-ciel ou la potion géante, rien ne touche
   if ((victim.starUntil ?? 0) > now || (victim.giantUntil ?? 0) > now) return;
   if (victim.shieldUntil > now) {

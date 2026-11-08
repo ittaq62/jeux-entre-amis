@@ -4,7 +4,24 @@
 // conduise pareil.
 
 import type { VehicleStats } from "./garage.ts";
-import { CROSSER_HALF, CROSSER_RADIUS, crosserAt, deltaS, locate, pointAt, wrapAngle, type Track } from "./track.ts";
+import {
+  CROSSER_HALF,
+  CROSSER_RADIUS,
+  crosserAt,
+  CURB,
+  deltaS,
+  DROP_HALF,
+  DROP_RADIUS,
+  dropAt,
+  locate,
+  pointAt,
+  rollAt,
+  SPRING_RADIUS,
+  wrapAngle,
+  wrapS,
+  type Track,
+  type ZoneKind,
+} from "./track.ts";
 
 export type SpeedClass = "balade" | "normal" | "bolide";
 export const SPEED_CLASSES: SpeedClass[] = ["balade", "normal", "bolide"];
@@ -34,6 +51,17 @@ export const RAMP_LEN = 7;
 export const RAMP_H = 1;
 const GRAVITY = 24;
 const TRICK_BOOST = 0.8;
+/** La chute dans un trou : combien de temps, et à quelle vitesse on repart sur l'autre rive */
+export const FALL_TIME = 1;
+const RESPAWN_SPEED = 13;
+const RESPAWN_DROP = 2.4;
+/** L'élan minimal au décollage d'un tremplin (assez pour franchir le trou), et la poussée d'un trampoline */
+const RAMP_MIN_SPEED = 21;
+const SPRING_VY = 10;
+/** Dans la boue, ce qu'il reste de la vitesse ; sur le verglas, ce qu'il reste d'adhérence (le dérapage y charge plus vite) */
+const MUD = 0.7;
+const ICE_GRIP = 0.3;
+const ICE_CHARGE = 1.3;
 /** Le temps où le kart tourne sur lui-même après un coup */
 export const SPIN_TIME = 1.1;
 
@@ -68,6 +96,8 @@ export interface Kart {
   trick: boolean;
   /** Le bouton de dérapage était tenu au pas d'avant (pour savoir quand on l'enfonce) */
   held: boolean;
+  /** En train de tomber dans un trou : le temps qu'il reste (on repart ensuite sur l'autre rive) */
+  fall: number;
 }
 
 export interface Input {
@@ -110,7 +140,12 @@ export type KartEvent =
   | "land"
   /** Un choc contre un autre kart, ou contre un engin qui traverse (en douceur, ou fort : un tête-à-queue) */
   | "bump"
-  | "crash";
+  | "crash"
+  /** Tombé dans un trou, et revenu sur la route */
+  | "fall"
+  | "respawn"
+  /** Sur un trampoline */
+  | "spring";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -137,7 +172,52 @@ export function newKart(t: Track, x: number, z: number, h: number): Kart {
     vy: 0,
     trick: false,
     held: false,
+    fall: 0,
   };
+}
+
+/** Un choc contre un obstacle rond posé à (s, d), qui se déplace de côté à la vitesse `vd` : on rebondit, et un gros choc fait tourner */
+function hitBlock(
+  k: Kart,
+  t: Track,
+  at: ReturnType<typeof locate>,
+  s: number,
+  d: number,
+  radius: number,
+  vd: number,
+  events: KartEvent[] | undefined,
+  fx: number,
+  fz: number,
+  rx: number,
+  rz: number,
+): ReturnType<typeof locate> {
+  const p = pointAt(t, s, d);
+  const dx = k.x - p.x;
+  const dz = k.z - p.z;
+  const dist = Math.hypot(dx, dz);
+  const min = radius + KART_RADIUS;
+  if (dist >= min || dist < 1e-6) return at;
+  const nx = dx / dist;
+  const nz = dz / dist;
+  k.x += nx * (min - dist);
+  k.z += nz * (min - dist);
+  const kvx = fx * k.v + rx * k.slip;
+  const kvz = fz * k.v + rz * k.slip;
+  const closing = -((kvx + p.tz * vd) * nx + (kvz - p.tx * vd) * nz);
+  if (closing > 0) {
+    const bx = kvx + nx * closing * 1.5;
+    const bz = kvz + nz * closing * 1.5;
+    k.v = (bx * fx + bz * fz) * 0.85;
+    k.slip = (bx * rx + bz * rz) * 0.5;
+    if (closing > 9 && k.spin === 0) {
+      k.spin = SPIN_TIME * 0.6;
+      k.drift = 0;
+      k.charge = 0;
+      k.boost = 0;
+      events?.push("crash");
+    } else if (closing > 2) events?.push("bump");
+  }
+  return locate(t, k.x, k.z, at.i);
 }
 
 /** Le niveau de mini-turbo atteint par un dérapage tenu `charge` secondes (0 : aucun) */
@@ -150,6 +230,34 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 /** Un pas de conduite : le kart avance d'un DT selon ce qu'on lui demande */
 export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: KartEvent[]): void {
   const dt = DT;
+  // Dans un trou : on tombe, plus de commandes ; puis on repart sur l'autre rive, au milieu de la route
+  if (k.fall > 0) {
+    k.fall = Math.max(0, k.fall - dt);
+    const f = 1 - k.fall / FALL_TIME;
+    k.air = -6 * f * f;
+    k.v *= Math.exp(-2.5 * dt);
+    if (k.fall === 0) {
+      const gap = t.gaps.find((g) => deltaS(t, g.from, k.s) > -3 && deltaS(t, g.to, k.s) < 3) ?? t.gaps[0];
+      const s = wrapS(t, (gap?.to ?? k.s) + 4);
+      const p = pointAt(t, s, 0);
+      k.dist += deltaS(t, k.s, s);
+      k.x = p.x;
+      k.z = p.z;
+      k.h = Math.atan2(p.tx, p.tz);
+      k.v = RESPAWN_SPEED;
+      k.slip = 0;
+      // On le repose d'un peu haut, sur l'autre rive
+      k.air = RESPAWN_DROP;
+      k.vy = 0;
+      const at = locate(t, k.x, k.z);
+      k.i = at.i;
+      k.s = at.s;
+      k.d = at.d;
+      k.y = at.y;
+      events?.push("respawn");
+    }
+    return;
+  }
   const top = TOP_SPEED * mods.top;
   let ctl = input;
   if (k.spin > 0) {
@@ -172,7 +280,15 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   const grass = k.offroad && !mods.star;
   const grassLeft = mods.vehicle?.grass ?? GRASS;
   const accel = ACCEL * (mods.vehicle?.accel ?? 1);
-  let max = top * (grass ? grassLeft : 1);
+  // Les sols spéciaux : la boue freine, le verglas fait glisser
+  let surface: ZoneKind | null = null;
+  if (k.air <= 0.2) {
+    for (const z of t.zones) {
+      const along = deltaS(t, z.s, k.s);
+      if (along >= 0 && along <= z.len && k.d >= z.d1 && k.d <= z.d2) surface = z.kind;
+    }
+  }
+  let max = top * (grass ? grassLeft : 1) * (surface === "boue" && !mods.star ? MUD : 1);
   if (k.boost > 0) {
     max = top * BOOST_SPEED * (grass ? Math.max(0.85, grassLeft) : 1);
     k.boost = Math.max(0, k.boost - dt);
@@ -219,7 +335,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     if (!flying) {
       const before = driftLevel(k.charge);
       // Serrer charge plus vite, élargir plus lentement
-      k.charge += dt * (1 + 0.5 * into) * (mods.vehicle?.charge ?? 1);
+      k.charge += dt * (1 + 0.5 * into) * (mods.vehicle?.charge ?? 1) * (surface === "glace" ? ICE_CHARGE : 1);
       const after = driftLevel(k.charge);
       if (after > before) events?.push(after === 3 ? "spark3" : after === 2 ? "spark2" : "spark1");
     }
@@ -230,7 +346,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
 
   // Le glissement : le kart part vers l'extérieur du virage, beaucoup plus en dérapage
   const slideTarget = yaw * k.v * (k.drift !== 0 ? 0.2 : 0.045);
-  const grip = k.drift !== 0 ? 2.6 : k.offroad ? 5 : 9;
+  const grip = (k.drift !== 0 ? 2.6 : k.offroad ? 5 : 9) * (surface === "glace" ? ICE_GRIP : 1);
   k.slip += (slideTarget - k.slip) * Math.min(1, grip * dt);
 
   const fx = Math.sin(k.h);
@@ -265,6 +381,25 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
       }
     }
     at = locate(t, k.x, k.z, at.i);
+  }
+  // Ce qui tombe ou dévale sur la route : même chose que les engins, avec leurs horaires
+  if (mods.time !== undefined && k.air < 1) {
+    for (const m of t.movers) {
+      if (Math.abs(deltaS(t, m.s, at.s)) > 9) continue;
+      if (m.kind === "drop") {
+        const st = dropAt(m, t.half, mods.time);
+        if (!st.solid) continue;
+        // Le conteneur est couché le long de la route : on cherche son point le plus proche
+        const along = Math.max(-DROP_HALF, Math.min(DROP_HALF, deltaS(t, m.s, at.s)));
+        at = hitBlock(k, t, at, m.s + along, st.d, DROP_RADIUS, 0, events, fx, fz, rx, rz);
+      } else {
+        for (let i = 0; i < m.count; i++) {
+          const d = rollAt(m, i, mods.time);
+          if (d === null) continue;
+          at = hitBlock(k, t, at, m.s, d, m.radius, m.speed, events, fx, fz, rx, rz);
+        }
+      }
+    }
   }
   // Les engins qui traversent la route : un obstacle qui bouge ; on rebondit dessus, et trop vite c'est le tête-à-queue
   if (mods.time !== undefined && k.air < 1) {
@@ -311,11 +446,12 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
 
   // Les tremplins : on monte la rampe, on décolle au bord ; une figure en l'air donne un turbo à l'atterrissage
   let ramp = -1;
-  if (k.vy === 0 && Math.abs(k.d) <= t.half) {
+  if (k.vy === 0 && Math.abs(k.d) <= t.half + CURB) {
     for (const lip of t.jumps) {
       const along = deltaS(t, lip, k.s);
       if (along >= -RAMP_LEN && along < 0) ramp = RAMP_H * (1 + along / RAMP_LEN);
       else if (along >= 0 && along < 4 && deltaS(t, lip, oldS) < 0 && k.air > RAMP_H * 0.5 && k.v > 6) {
+        k.v = Math.max(k.v, RAMP_MIN_SPEED);
         k.vy = 3 + k.v * 0.22;
         k.trick = false;
         events?.push("jump");
@@ -340,8 +476,33 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     }
   } else k.air = Math.max(0, ramp);
 
+  // Au sol dans un trou : on tombe
+  if (k.air <= 0 && k.vy === 0) {
+    for (const g of t.gaps) {
+      const along = deltaS(t, g.from, k.s);
+      if (along >= 0 && along < g.to - g.from) {
+        k.fall = FALL_TIME;
+        k.drift = 0;
+        k.charge = 0;
+        k.boost = 0;
+        k.spin = 0;
+        events?.push("fall");
+        return;
+      }
+    }
+  }
+
   // Les accélérateurs au sol (pas en l'air)
   if (k.air > 0.2) return;
+  // Les trampolines : on rebondit
+  for (const p of t.springs) {
+    if (k.vy !== 0 || Math.abs(deltaS(t, p.s, k.s)) > SPRING_RADIUS || Math.abs(k.d - p.d) > SPRING_RADIUS) continue;
+    k.vy = SPRING_VY;
+    k.air = Math.max(k.air, 0.05);
+    k.trick = false;
+    events?.push("spring");
+    return;
+  }
   for (const pad of t.boosts) {
     const along = deltaS(t, pad.s, k.s);
     if (along >= 0 && along <= pad.length && Math.abs(k.d - pad.d) <= pad.halfWidth) {
@@ -361,7 +522,7 @@ export function bump(a: Kart, b: Kart, moveA: boolean, moveB: boolean, weightA =
   const dz = b.z - a.z;
   const dist = Math.hypot(dx, dz);
   const min = KART_RADIUS * 2;
-  if (dist >= min || dist < 1e-6 || (!moveA && !moveB)) return 0;
+  if (dist >= min || dist < 1e-6 || (!moveA && !moveB) || a.fall > 0 || b.fall > 0) return 0;
   const nx = dx / dist;
   const nz = dz / dist;
   const over = min - dist;

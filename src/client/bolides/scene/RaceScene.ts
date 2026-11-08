@@ -9,6 +9,7 @@ import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
 import { CoinField, Crossers } from "./features.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
+import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
 
@@ -72,6 +73,11 @@ export class RaceScene {
   private crateS = new THREE.Vector3();
   private coins: CoinField | null = null;
   private crossers: Crossers | null = null;
+  private life: TrackLife | null = null;
+  /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
+  private drowned: boolean[] = [];
+  /** Le son de ce qui se passe sur la route, plus ou moins fort selon la distance */
+  onLife: ((sound: "clang" | "baa", volume: number) => void) | null = null;
   private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
   private crateMat: THREE.MeshStandardMaterial | null = null;
@@ -230,6 +236,70 @@ export class RaceScene {
     this.scene.add(this.coins.mesh);
     this.crossers = new Crossers(track, track.def.theme, keep, this.shadows, this.world.heightAt);
     this.scene.add(this.crossers.group);
+    this.life = new TrackLife({ t: track, keep, heightAt: this.world.heightAt, shadows: this.shadows, phone: this.opts.phone });
+    this.scene.add(this.life.group);
+  }
+
+  /** Ce qui vient de se passer sur la route */
+  private lifeEvent(e: LifeEvent) {
+    const far = (range: number) => Math.max(0, 1 - Math.hypot(e.x - this.camPos.x, e.z - this.camPos.z) / range);
+    if (e.kind === "clang") {
+      const near = far(110);
+      if (near > 0) this.onLife?.("clang", 0.25 + 0.75 * near);
+      this.shakeNear(e.x, e.z, 45, 0.7);
+      const n = this.opts.reduced ? 6 : 18;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        this.puff(
+          e.x + Math.cos(a) * 2.5,
+          e.y + 0.4,
+          e.z + Math.sin(a) * 3.6,
+          0xbdb5a4,
+          Math.cos(a) * 7,
+          1.2,
+          Math.sin(a) * 7,
+          0.8,
+          3.4,
+          0.75,
+          false,
+        );
+      }
+    } else if (e.kind === "trail") {
+      if (this.opts.reduced) return;
+      const color = e.thing === "boule" ? 0xf4f8fc : 0xb5a487;
+      this.puff(e.x + (Math.random() - 0.5) * 1.6, e.y + 0.3, e.z + (Math.random() - 0.5) * 1.6, color, 0, 1, 0, 0.5, 1.6, 0.7, false);
+    } else {
+      const near = far(70);
+      if (near > 0) this.onLife?.("baa", 0.15 + 0.75 * near);
+    }
+  }
+
+  /** Un kart touche l'eau : une gerbe, et une onde */
+  private splash(k: Kart) {
+    const y = k.y - WATER_DEPTH + 0.2;
+    const theme = this.track?.def.theme;
+    const color = theme === "col" ? 0xdff4ff : theme === "vignes" ? 0xcdeed5 : 0xc6e6ff;
+    for (let i = 0; i < (this.opts.reduced ? 8 : 26); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 2 + Math.random() * 5;
+      this.puff(k.x, y, k.z, i % 3 === 0 ? 0xffffff : color, Math.cos(a) * s, 6 + Math.random() * 7, Math.sin(a) * s, 0.8, 0.55);
+    }
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.75, 1, 40),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(k.x, y, k.z);
+    this.scene.add(ring);
+    this.pulses.push({ mesh: ring, life: 0.6, max: 0.6, radius: 6 });
+  }
+
+  /** Reposé sur la route, après une chute */
+  respawnSparkle(k: Kart) {
+    for (let i = 0; i < (this.opts.reduced ? 6 : 16); i++) {
+      const a = (i / 16) * Math.PI * 2;
+      this.puff(k.x, k.y + k.air + 0.6, k.z, i % 2 ? 0xffffff : 0x7fd9ff, Math.cos(a) * 5, 2.2, Math.sin(a) * 5, 0.55, 0.6);
+    }
   }
 
   /** Les pièces présentes (les autres sont ramassées) */
@@ -671,6 +741,12 @@ export class RaceScene {
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
     this.coins?.update(this.time, f.dt);
     this.crossers?.update(f.serverNow / 1000);
+    if (this.life) for (const e of this.life.update(f.serverNow / 1000, this.camPos)) this.lifeEvent(e);
+    f.karts.forEach((k, i) => {
+      const under = k.kart.air < -WATER_DEPTH;
+      if (under && !this.drowned[i]) this.splash(k.kart);
+      this.drowned[i] = under;
+    });
     // La fumée des dérapages, une image sur deux, pour les karts pas trop loin
     this.smokeTick = (this.smokeTick + 1) % 2;
     if (this.smokeTick === 0) {
@@ -840,14 +916,17 @@ export class RaceScene {
         this.camY = target.y;
       }
       this.camYaw += wrapAngle(target.h - this.camYaw) * (1 - Math.exp(-dt * 5));
-      this.camY += (target.y + target.air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
+      // Elle ne descend pas dans un trou : elle reste au bord, et regarde le kart tomber
+      const air = Math.max(0, target.air);
+      const sink = Math.min(0, target.air);
+      this.camY += (target.y + air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
       // En l'air, elle prend un peu de recul et de hauteur pour bien montrer le saut
-      const back = (portrait ? 7.4 : 6.3) + target.air * 0.6;
-      const up = (portrait ? 3.1 : 2.55) + target.air * 0.5;
+      const back = (portrait ? 7.4 : 6.3) + air * 0.6;
+      const up = (portrait ? 3.1 : 2.55) + air * 0.5;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       pos = this.tmpPos.set(target.x - fx * back, this.camY + up, target.z - fz * back);
-      look = this.tmpLook.set(target.x + fx * 6, this.camY + 1.25, target.z + fz * 6);
+      look = this.tmpLook.set(target.x + fx * 6, this.camY + 1.25 + sink * 0.9, target.z + fz * 6);
       fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0);
     }
     const chase = f.camera === "chase" && Boolean(target);

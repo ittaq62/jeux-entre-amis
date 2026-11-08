@@ -153,6 +153,7 @@ export class RaceRuntime {
     this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
     this.scene.build(this.track, looks);
+    this.scene.onLife = (sound, volume) => play(sound === "clang" ? "bolidesClang" : "bolidesBaa", { volume });
     this.shown = view.karts.map((n) => decodeKart(n)!);
     this.views = this.shown.map((k) => ({ ...k }));
     this.steers = this.shown.map(() => 0);
@@ -438,7 +439,9 @@ export class RaceRuntime {
       next.x = ka.x + (kb.x - ka.x) * f + (Math.sin(h) * v - Math.cos(h) * slip) * lead;
       next.z = ka.z + (kb.z - ka.z) * f + (Math.cos(h) * v + Math.sin(h) * slip) * lead;
       next.y = ka.y + (kb.y - ka.y) * f;
-      next.air = Math.max(0, ka.air + (kb.air - ka.air) * f);
+      // Une hauteur négative : il tombe dans un trou
+      const air = ka.air + (kb.air - ka.air) * f;
+      next.air = kb.air < -0.05 ? air : Math.max(0, air);
       next.h = h;
       next.v = v;
       next.slip = slip;
@@ -566,6 +569,16 @@ export class RaceRuntime {
         else if (e === "bump") {
           this.scene.shake(0.2);
           play("bolidesBump");
+        } else if (e === "fall") {
+          this.scene.shake(0.3);
+          this.tell("Plouf ! Il fallait prendre le tremplin", true);
+          vibrate([30, 60, 30]);
+        } else if (e === "respawn") {
+          this.scene.respawnSparkle(mine);
+        } else if (e === "spring") {
+          this.scene.punch(4);
+          this.scene.shake(0.2);
+          vibrate(25);
         } else if (e === "crash") {
           this.scene.shake(0.7);
           play("bigHit", { volume: 0.7 });
@@ -587,6 +600,8 @@ export class RaceRuntime {
         });
       else if (e === "drift") play("click", { volume: 0.4 });
       else if (e === "jump") play("bolidesJump");
+      else if (e === "fall") play("bolidesFall");
+      else if (e === "spring") play("bolidesSpring");
       else if (e === "land") play("bolidesLand");
       else if (e === "trick") play("bolidesTrick");
     }

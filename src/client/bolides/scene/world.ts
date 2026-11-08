@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
-import { pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
+import { CURB, GAP_LEN, pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
 import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
 import { mergeDeep } from "./merge.ts";
 import { buildScenery, PLACES } from "./scenery.ts";
@@ -122,7 +122,7 @@ class Field {
 }
 
 /** Un ruban le long de la route, entre deux écarts au milieu (d1 < d2), à une hauteur au-dessus de la route */
-function ribbon(t: Track, d1: number, d2: number, lift: number, vScale: number, uSpan = 1): THREE.BufferGeometry {
+function ribbon(t: Track, d1: number, d2: number, lift: number, vScale: number, uSpan = 1, cuts: Track["gaps"] = []): THREE.BufferGeometry {
   const n = t.n;
   const pos = new Float32Array((n + 1) * 2 * 3);
   const uv = new Float32Array((n + 1) * 2 * 2);
@@ -138,6 +138,8 @@ function ribbon(t: Track, d1: number, d2: number, lift: number, vScale: number, 
   // Dans ce sens, les triangles regardent vers le ciel (la droite de la route est du côté des x négatifs)
   const index: number[] = [];
   for (let i = 0; i < n; i++) {
+    // Pas de route au-dessus des trous
+    if (cuts.some((c) => (i + 1) * step > c.from + 0.01 && i * step < c.to - 0.01)) continue;
     const a = i * 2;
     index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
   }
@@ -162,7 +164,8 @@ function wallRibbon(t: Track, d: number, height: number, ground: (x: number, z: 
     const top = Math.max(t.y[k]!, ground(x, z)) + height;
     pos.set([x, y, z, x, top, z], i * 6);
     const v = (i * (t.length / n)) / 6;
-    uv.set([v, 0, v, 1], i * 4);
+    // La hauteur de l'image reste la même, même là où le muret descend au fond d'un trou
+    uv.set([v, 1 - (top - y) / (height + 0.3), v, 1], i * 4);
   }
   const index: number[] = [];
   for (let i = 0; i < n; i++) {
@@ -184,7 +187,7 @@ function wallRibbon(t: Track, d: number, height: number, ground: (x: number, z: 
 function rampMesh(t: Track, lip: number, top: THREE.Material, side: THREE.Material, keep: Keep): THREE.Group {
   const g = new THREE.Group();
   const lift = 0.07;
-  const w = t.half + 0.3;
+  const w = t.half + CURB;
   // Les points du bas et du haut, au début et au bord de la rampe, à gauche et à droite
   const at = (s: number, d: number, up: number) => {
     const p = pointAt(t, s, d);
@@ -261,8 +264,19 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   const field = new Field(t, 170);
   const hilly = t.def.hills.some(([, y]) => y !== 0);
 
+  // Sous chaque trou, le sol plonge
+  const pits = t.gaps.map((g) => pointAt(t, (g.from + g.to) / 2, 0));
+  const pitAt = (x: number, z: number) =>
+    pits.find((p) => {
+      const along = (x - p.x) * p.tx + (z - p.z) * p.tz;
+      const side = -(x - p.x) * p.tz + (z - p.z) * p.tx;
+      return Math.abs(along) < GAP_LEN / 2 + 4 && Math.abs(side) < t.wall + 3;
+    });
+
   // Le sol : il épouse la route près d'elle, puis redescend doucement à plat
   const heightAt = (x: number, z: number): number => {
+    const pit = pitAt(x, z);
+    if (pit) return pit.y - 12;
     if (!hilly) return 0;
     const d = field.distAt(x, z);
     const road = field.roadAt(x, z);
@@ -295,18 +309,38 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
     const mesh = new THREE.Mesh(geo, groundMat);
     mesh.receiveShadow = opts.shadows;
     group.add(mesh);
-    const far = keep(new THREE.PlaneGeometry(3000, 3000));
-    far.rotateX(-Math.PI / 2);
-    const farUv = far.attributes.uv as THREE.BufferAttribute;
-    for (let i = 0; i < farUv.count; i++) farUv.setXY(i, farUv.getX(i) * 166, farUv.getY(i) * 166);
-    const plain = new THREE.Mesh(far, groundMat);
-    plain.position.y = -0.12;
-    group.add(plain);
+    // La plaine : tout autour du terrain, sans passer dessous (elle boucherait les trous)
+    const x0 = field.x0;
+    const z0 = field.z0;
+    const x1 = x0 + w;
+    const z1 = z0 + h;
+    const R = 1500;
+    const rects = [
+      [-R, -R, R, z0],
+      [-R, z1, R, R],
+      [-R, z0, x0, z1],
+      [x1, z0, R, z1],
+    ] as const;
+    const farPos: number[] = [];
+    const farUv: number[] = [];
+    const farIndex: number[] = [];
+    rects.forEach(([ax, az, bx, bz], i) => {
+      farPos.push(ax, -0.12, az, ax, -0.12, bz, bx, -0.12, bz, bx, -0.12, az);
+      farUv.push(ax / 18, az / 18, ax / 18, bz / 18, bx / 18, bz / 18, bx / 18, az / 18);
+      const v = i * 4;
+      farIndex.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    });
+    const far = keep(new THREE.BufferGeometry());
+    far.setAttribute("position", new THREE.Float32BufferAttribute(farPos, 3));
+    far.setAttribute("uv", new THREE.Float32BufferAttribute(farUv, 2));
+    far.setIndex(farIndex);
+    far.computeVertexNormals();
+    group.add(new THREE.Mesh(far, groundMat));
   }
 
   // La route, ses vibreurs, l'herbe du bord, le muret
   const roadTex = keep(TX.roadTexture(theme));
-  const road = new THREE.Mesh(keep(ribbon(t, -t.half, t.half, 0.06, 8)), keep(lambert(0xffffff, roadTex)));
+  const road = new THREE.Mesh(keep(ribbon(t, -t.half, t.half, 0.06, 8, 1, t.gaps)), keep(lambert(0xffffff, roadTex)));
   road.receiveShadow = opts.shadows;
   group.add(road);
   const curbTex = keep(TX.curbTexture());
@@ -314,9 +348,10 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean })
   for (const side of [-1, 1]) {
     const a = side * t.half;
     const b = side * (t.half + 1.2);
-    group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3)), curbMat));
+    group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3, 1, t.gaps)), curbMat));
   }
   const wallTex = keep(TX.wallTexture(theme));
+  wallTex.wrapT = THREE.RepeatWrapping;
   const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide }));
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), theme === "col" ? 1.1 : 0.9, heightAt)), wallMat);

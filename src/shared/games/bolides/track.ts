@@ -39,7 +39,32 @@ export interface TrackDef {
    * tour), aller et retour, toutes les `period` secondes ; `offset` décale son horaire
    */
   crossers: { frac: number; period: number; offset: number }[];
+  /** Ce qui bouge sur la route : des conteneurs lâchés par une grue, des tonneaux ou des boules de neige qui dévalent */
+  movers: MoverDef[];
+  /** Les trampolines : part du tour, et décalage depuis le milieu en part de la demi-largeur */
+  springs: [number, number][];
+  /** Les sols spéciaux : du début à la fin (parts du tour), d'un bord à l'autre (parts de la demi-largeur) */
+  zones: { from: number; to: number; d1: number; d2: number; kind: ZoneKind }[];
 }
+
+export type ZoneKind = "boue" | "glace";
+
+export type MoverDef =
+  | { kind: "drop"; frac: number; lanes: number[]; period: number; offset: number }
+  | {
+      kind: "roll";
+      frac: number;
+      thing: RollThing;
+      count: number;
+      gap: number;
+      period: number;
+      speed: number;
+      radius: number;
+      offset: number;
+    };
+
+/** Ce qui traverse la route : ça roule, ou ça marche */
+export type RollThing = "tonneau" | "boule" | "mouton";
 
 export const TRACK_IDS: TrackId[] = ["port", "vignes", "col"];
 
@@ -71,6 +96,15 @@ export const TRACKS: Record<TrackId, TrackDef> = {
     ],
     jumps: [0.636],
     crossers: [{ frac: 0.879, period: 9, offset: 0 }],
+    movers: [
+      { kind: "drop", frac: 0.5744, lanes: [-0.55, 0, 0.55], period: 10, offset: 0.1 },
+      { kind: "drop", frac: 0.293, lanes: [-0.55, 0.55], period: 9, offset: 0.62 },
+    ],
+    springs: [
+      [0.2544, 0.5],
+      [0.771, -0.5],
+    ],
+    zones: [],
   },
   vignes: {
     id: "vignes",
@@ -104,6 +138,20 @@ export const TRACKS: Record<TrackId, TrackDef> = {
     ],
     jumps: [0.645],
     crossers: [{ frac: 0.336, period: 10, offset: 0.3 }],
+    movers: [
+      { kind: "roll", frac: 0.875, thing: "tonneau", count: 3, gap: 0.85, period: 8, speed: 13, radius: 1.05, offset: 0.2 },
+      { kind: "roll", frac: 0.749, thing: "mouton", count: 5, gap: 0.6, period: 15, speed: 6, radius: 1, offset: 0 },
+    ],
+    springs: [
+      [0.218, -0.5],
+      [0.449, 0.5],
+      [0.767, 0.5],
+    ],
+    zones: [
+      { from: 0.472, to: 0.5, d1: 0.15, d2: 1, kind: "boue" },
+      { from: 0.57, to: 0.6, d1: -1, d2: -0.15, kind: "boue" },
+      { from: 0.79, to: 0.815, d1: -1, d2: -0.15, kind: "boue" },
+    ],
   },
   col: {
     id: "col",
@@ -138,6 +186,18 @@ export const TRACKS: Record<TrackId, TrackDef> = {
     ],
     jumps: [0.615],
     crossers: [{ frac: 0.263, period: 9.5, offset: 0.6 }],
+    movers: [
+      { kind: "roll", frac: 0.673, thing: "boule", count: 2, gap: 1.3, period: 7.5, speed: 11, radius: 1.7, offset: 0.5 },
+      { kind: "roll", frac: 0.43, thing: "boule", count: 1, gap: 0, period: 8.5, speed: 8.5, radius: 2.6, offset: 0.15 },
+    ],
+    springs: [
+      [0.458, 0.5],
+      [0.892, -0.5],
+    ],
+    zones: [
+      { from: 0.3, to: 0.375, d1: -1, d2: 1, kind: "glace" },
+      { from: 0.81, to: 0.86, d1: -1, d2: 1, kind: "glace" },
+    ],
   },
 };
 
@@ -173,6 +233,76 @@ export interface Track {
   coins: CoinSpot[];
   /** Les passages : où l'engin traverse (distance depuis la ligne), son horaire, et jusqu'où il va de chaque côté */
   crossers: Crosser[];
+  /** Après chaque tremplin, un trou à franchir : du bord du tremplin jusqu'à l'autre rive */
+  gaps: { from: number; to: number }[];
+  /** Ce qui bouge sur la route */
+  movers: Mover[];
+  springs: { s: number; d: number }[];
+  zones: { s: number; len: number; d1: number; d2: number; kind: ZoneKind }[];
+}
+
+export type Mover =
+  | { kind: "drop"; s: number; lanes: number[]; period: number; offset: number }
+  | {
+      kind: "roll";
+      s: number;
+      thing: RollThing;
+      count: number;
+      gap: number;
+      period: number;
+      speed: number;
+      radius: number;
+      offset: number;
+      reach: number;
+    };
+
+/** La longueur du trou après un tremplin */
+export const GAP_LEN = 13;
+/** Un trampoline : son rayon */
+export const SPRING_RADIUS = 2.2;
+
+/** Un conteneur : les temps de l'alerte, de la chute, de sa présence sur la route, de sa remontée (en secondes) */
+/** La hauteur où il attend, sous le portique */
+export const DROP_H = 11;
+export const DROP_WARN = 1.7;
+export const DROP_FALL = 0.45;
+export const DROP_STAY = 4.6;
+export const DROP_LIFT = 1;
+/** Sa moitié de longueur le long de la route, sa demi-largeur */
+export const DROP_HALF = 2.4;
+export const DROP_RADIUS = 1.45;
+
+/** Où en est un conteneur à l'heure `time` : sa voie, sa hauteur au-dessus de la route, et s'il est dangereux */
+export function dropAt(
+  m: Extract<Mover, { kind: "drop" }>,
+  half: number,
+  time: number,
+): { d: number; height: number; phase: "warn" | "fall" | "stay" | "lift" | "none"; solid: boolean; u: number } {
+  const total = time / m.period + m.offset;
+  const cycle = Math.floor(total);
+  const u = (total - cycle) * m.period;
+  const hash = Math.abs(Math.imul(cycle * 2654435 + 1, 40503)) % m.lanes.length;
+  const d = m.lanes[hash]! * half;
+  if (u < DROP_WARN) return { d, height: DROP_H, phase: "warn", solid: false, u };
+  if (u < DROP_WARN + DROP_FALL) {
+    const f = (u - DROP_WARN) / DROP_FALL;
+    return { d, height: DROP_H * (1 - f * f), phase: "fall", solid: f > 0.9, u };
+  }
+  if (u < DROP_WARN + DROP_FALL + DROP_STAY) return { d, height: 0, phase: "stay", solid: true, u };
+  if (u < DROP_WARN + DROP_FALL + DROP_STAY + DROP_LIFT) {
+    const f = (u - DROP_WARN - DROP_FALL - DROP_STAY) / DROP_LIFT;
+    return { d, height: f * f * DROP_H, phase: "lift", solid: f < 0.08, u };
+  }
+  return { d, height: DROP_H, phase: "none", solid: false, u };
+}
+
+/** Chaque objet qui dévale : son écart au milieu de la route à l'heure `time` (null : il n'est pas sur la route en ce moment) */
+export function rollAt(m: Extract<Mover, { kind: "roll" }>, index: number, time: number): number | null {
+  const total = time / m.period + m.offset;
+  const u = (total - Math.floor(total)) * m.period - index * m.gap;
+  const span = (2 * m.reach) / m.speed;
+  if (u < 0 || u > span) return null;
+  return -m.reach + u * m.speed;
 }
 
 export interface CoinSpot {
@@ -251,6 +381,16 @@ function placeCoins(t: Track): CoinSpot[] {
       s,
       t.crossers.map((c) => c.s),
       14,
+    ) ||
+    near(
+      s,
+      t.movers.map((m) => m.s),
+      12,
+    ) ||
+    near(
+      s,
+      t.springs.map((p) => p.s),
+      6,
     ) ||
     Math.abs(deltaS(t, 0, s)) < 30;
   const line = (s0: number, d: number, count: number) => {
@@ -506,6 +646,14 @@ export function buildTrack(def: TrackDef): Track {
     jumps: def.jumps.map((f) => f * total),
     coins: [],
     crossers: def.crossers.map((c) => ({ s: c.frac * total, period: c.period, offset: c.offset, reach: half + CURB + 3 })),
+    gaps: def.jumps.map((f) => ({ from: f * total, to: f * total + GAP_LEN })),
+    movers: def.movers.map((m) =>
+      m.kind === "drop"
+        ? { kind: "drop" as const, s: m.frac * total, lanes: m.lanes, period: m.period, offset: m.offset }
+        : { ...m, s: m.frac * total, reach: half + CURB + 5 },
+    ),
+    springs: def.springs.map(([f, lane]) => ({ s: f * total, d: lane * half })),
+    zones: def.zones.map((z) => ({ s: z.from * total, len: (z.to - z.from) * total, d1: z.d1 * half, d2: z.d2 * half, kind: z.kind })),
   };
   // Les caisses : cinq par rangée, en travers de la route
   let index = 0;
