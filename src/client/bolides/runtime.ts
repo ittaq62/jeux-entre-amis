@@ -38,7 +38,7 @@ import type { BolidesClientMessage } from "../../shared/protocol.ts";
 import { BOLIDES_SOUNDS, play, soundsLoaded, vibrate, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Controls } from "./controls.ts";
-import { LocalDriver } from "./driver.ts";
+import { LocalDriver, type LaunchPress } from "./driver.ts";
 import { EngineSound, honk } from "./engineSound.ts";
 import { RaceMusic } from "./music.ts";
 import type { Aim } from "./scene/aim.ts";
@@ -56,6 +56,8 @@ const SOUNDS_LIMIT_MS = 6000;
 export interface Hud {
   /** 3, 2, 1, 0 (« Partez ! ») pendant le départ, null sinon ; le survol du circuit avant */
   countdown: number | null;
+  /** Ce qu'a donné son premier appui pendant les feux */
+  launch: LaunchPress | null;
   intro: boolean;
   lap: number;
   laps: number;
@@ -559,15 +561,29 @@ export class RaceRuntime {
     if (d && me && v.phase !== "over") {
       if (now < v.goAt) {
         // Sur téléphone le kart accélère tout seul : le bouton de dérapage sert au départ canon
+        const before = d.launchPress;
         d.waiting(this.opts.phone ? pad.drift : pad.gas, now, v.goAt);
+        if (d.launchPress !== before) {
+          if (d.launchPress === "early") play("click", { volume: 0.6, rate: 0.7 });
+          else {
+            play("bolidesCharge", { volume: d.launchPress === "canon" ? 0.9 : 0.6, rate: d.launchPress === "canon" ? 1.3 : 1 });
+            vibrate(20);
+          }
+        }
       } else {
         if (!this.launched) {
           this.launched = true;
-          if (d.launch(v.goAt)) {
+          const start = d.launch();
+          if (start === "canon") {
             play("bolidesTurbo", { volume: 0.9 });
             this.scene.turboBurst(d.kart, 2);
             this.scene.punch(8);
             this.tell("Départ canon !", true);
+          } else if (start === "late") {
+            play("bolidesTurbo", { volume: 0.6, rate: 1.15 });
+            this.scene.turboBurst(d.kart, 1);
+            this.scene.punch(4);
+            this.tell("Bon départ", true);
           }
         }
         // Arrivé : le kart roule tout seul, le temps que les autres finissent (en développement, les tests peuvent aussi le lâcher)
@@ -948,6 +964,7 @@ export class RaceRuntime {
     return {
       countdown:
         v.phase === "start" && left <= COUNTDOWN_MS ? Math.max(0, Math.ceil(left / 1000)) : now - v.goAt < 900 && now >= v.goAt ? 0 : null,
+      launch: this.driver?.launchPress ?? null,
       intro,
       lap,
       laps: v.settings.laps,

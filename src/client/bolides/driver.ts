@@ -16,18 +16,26 @@ import {
   type Kart,
   type KartEvent,
 } from "../../shared/games/bolides/physics.ts";
+import { COUNTDOWN_MS } from "../../shared/games/bolides/race.ts";
 import { deltaS, wrapAngle, type Track } from "../../shared/games/bolides/track.ts";
 
-/** Accélérer dans cette fenêtre juste avant le feu vert donne un départ canon */
-const ROCKET_WINDOW_MS = 800;
+/** Le départ canon : appuyer pendant que le 2e feu est allumé, entre 2 s et 1 s avant le vert */
+export const ROCKET_FROM_MS = 2000;
+export const ROCKET_TO_MS = 1000;
+/** Le turbo du départ canon, et le petit élan de celui qui appuie au dernier feu */
+export const ROCKET_BOOST = 0.9;
+export const LATE_BOOST = 0.35;
+/** Ce qu'a donné le premier appui pendant les feux */
+export type LaunchPress = "early" | "canon" | "late";
 /** Bloqué : pendant combien de secondes, et en bougeant de moins de combien de mètres, avant que le drone vienne */
 const RESCUE_AFTER = 2.3;
 const RESCUE_MOVED = 3;
 
 export class LocalDriver {
   private acc = 0;
-  /** Le premier appui sur l'accélérateur pendant le compte à rebours (heure du serveur) */
-  private gasSince: number | null = null;
+  /** Le premier appui pendant les feux, et le bouton tel qu'il était à l'image d'avant */
+  launchPress: LaunchPress | null = null;
+  private wasPressed = false;
   private launched = false;
   /** Ce qu'il a reculé le long de la route ces derniers temps (mauvais sens) */
   private backward = 0;
@@ -90,23 +98,24 @@ export class LocalDriver {
     return out;
   }
 
-  /** Pendant le compte à rebours : le kart ne bouge pas, mais on note quand l'accélérateur a été enfoncé */
-  waiting(gas: boolean, serverNow: number, goAt: number) {
-    if (!gas) this.gasSince = null;
-    else this.gasSince ??= serverNow;
-    if (serverNow >= goAt && !this.launched) this.launch(goAt);
+  /**
+   * Avant le feu vert, le kart ne bouge pas : on note le premier appui pendant les feux. Lui seul compte (appuyer
+   * dix fois ne sert à rien), et un bouton déjà enfoncé quand les feux commencent n'est pas un appui.
+   */
+  waiting(pressed: boolean, serverNow: number, goAt: number) {
+    const left = goAt - serverNow;
+    if (pressed && !this.wasPressed && this.launchPress === null && left <= COUNTDOWN_MS)
+      this.launchPress = left > ROCKET_FROM_MS ? "early" : left > ROCKET_TO_MS ? "canon" : "late";
+    this.wasPressed = pressed;
   }
 
-  /** Au feu vert : un départ canon si l'accélérateur a été enfoncé juste à temps (ni trop tôt, ni pas du tout) */
-  launch(goAt: number): boolean {
-    if (this.launched) return false;
+  /** Au feu vert : le turbo qu'a mérité le premier appui */
+  launch(): LaunchPress | null {
+    if (this.launched) return null;
     this.launched = true;
-    const since = this.gasSince;
-    if (since !== null && goAt - since <= ROCKET_WINDOW_MS) {
-      this.kart.boost = Math.max(this.kart.boost, 0.9);
-      return true;
-    }
-    return false;
+    if (this.launchPress === "canon") this.boost(ROCKET_BOOST);
+    else if (this.launchPress === "late") this.boost(LATE_BOOST);
+    return this.launchPress;
   }
 
   get wrongWay(): boolean {

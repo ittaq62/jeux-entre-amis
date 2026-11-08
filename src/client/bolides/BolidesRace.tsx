@@ -590,14 +590,23 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           {h.countdown !== null && (
             <div className={`hud-lights ${h.countdown === 0 ? "is-go" : ""}`}>
               {[3, 2, 1].map((n) => (
-                <span key={n} className={h.countdown !== null && h.countdown <= n ? "is-on" : ""} />
+                <span
+                  key={n}
+                  className={`${h.countdown !== null && h.countdown <= n ? "is-on" : ""} ${me && n === 2 && h.countdown! >= 2 ? "is-cue" : ""}`}
+                />
               ))}
               {h.countdown === 0 && <strong>Partez !</strong>}
             </div>
           )}
           {me && h.countdown !== null && h.countdown > 0 && (
-            <div className="hud-start-hint">
-              {phone ? "Appuie sur Dérapage au dernier feu" : "Accélère au dernier feu"} pour un départ canon !
+            <div className={`hud-start-hint ${h.launch ? `is-${h.launch}` : ""}`}>
+              {h.launch === "canon"
+                ? "Départ canon prêt !"
+                : h.launch === "late"
+                  ? "Un peu tard : petit élan"
+                  : h.launch === "early"
+                    ? "Trop tôt !"
+                    : `Au 2e feu, ${phone ? "touche Dérapage" : "accélère"} : départ canon !`}
             </div>
           )}
 

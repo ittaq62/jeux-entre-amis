@@ -564,6 +564,18 @@
   text-shadow: none;
 }
 
+.hud-start-hint.is-canon {
+  background: rgba(24, 120, 62, 0.9);
+}
+
+.hud-start-hint.is-late {
+  background: rgba(168, 108, 18, 0.9);
+}
+
+.hud-start-hint.is-early {
+  background: rgba(170, 40, 30, 0.9);
+}
+
 .hud-map {
   position: absolute;
   left: 14px;
@@ -684,6 +696,12 @@
 .hud-lights span.is-on {
   background: radial-gradient(circle at 40% 35%, #ff8a7d, #e2483d 55%, #8a1d14);
   box-shadow: 0 0 20px rgba(255, 90, 70, 0.8);
+}
+
+/* Le feu à guetter pour le départ canon */
+.hud-lights span.is-cue {
+  outline: 3px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 3px;
 }
 
 .hud-lights.is-go span {

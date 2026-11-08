@@ -31,9 +31,7 @@ const hex = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
 /** Ce qu'on a le temps de lire en attendant */
 function tipsFor(phone: boolean, items: boolean): string[] {
   return [
-    phone
-      ? "Pendant les feux, touche Dérapage juste avant le vert : départ canon !"
-      : "Pendant les feux, accélère juste avant le vert : départ canon !",
+    phone ? "Au 2e feu, touche Dérapage : départ canon !" : "Au 2e feu, accélère : départ canon !",
     "Dérape longtemps : à chaque changement de couleur des étincelles, le turbo devient plus fort.",
     phone
       ? "En l'air, touche Dérapage : une figure, et un turbo en retombant."
