@@ -52,6 +52,15 @@ export function groundTint(theme: Theme, x: number, z: number, out: THREE.Color)
   const b = fbm(x / 26 + 40, z / 26 - 11, 3);
   const dry = smooth(0.45, 0.72, a);
   const dark = smooth(0.58, 0.3, b);
+  if (theme === "dunes") {
+    return out.setRGB(1 + 0.12 * dry - 0.1 * dark, 1 + 0.02 * dry - 0.13 * dark, 1 - 0.14 * dry - 0.18 * dark);
+  }
+  if (theme === "lagon") {
+    return out.setRGB(1 + 0.05 * dry - 0.06 * dark, 1 + 0.03 * dry - 0.05 * dark, 1 - 0.06 * dry - 0.05 * dark);
+  }
+  if (theme === "volcan") {
+    return out.setRGB(1 + 0.45 * dry - 0.25 * dark, 1 + 0.08 * dry - 0.25 * dark, 1 - 0.1 * dry - 0.2 * dark);
+  }
   if (theme === "col") {
     const blue = smooth(0.62, 0.34, a);
     return out.setRGB(1 - 0.12 * blue - 0.05 * dark, 1 - 0.07 * blue - 0.03 * dark, 1);
@@ -69,12 +78,49 @@ export function addMountains(group: THREE.Group, keep: Keep, theme: Theme, cx: n
   const pos: number[] = [];
   const col: number[] = [];
   const index: number[] = [];
-  const H = theme === "col" ? 128 : theme === "vignes" ? 72 : 52;
+  const H =
+    theme === "col" ? 128 : theme === "vignes" ? 72 : theme === "dunes" ? 62 : theme === "lagon" ? 34 : theme === "volcan" ? 96 : 52;
   const c = new THREE.Color();
   const palette = {
-    forest: new THREE.Color(theme === "col" ? 0x3c5a48 : theme === "vignes" ? 0x7a9150 : 0x4f7f50),
-    middle: new THREE.Color(theme === "col" ? 0x566072 : theme === "vignes" ? 0xa79a62 : 0x6e9a6a),
-    top: new THREE.Color(theme === "col" ? 0xf6f9fc : theme === "vignes" ? 0x8d8c5a : 0x88a886),
+    forest: new THREE.Color(
+      theme === "col"
+        ? 0x3c5a48
+        : theme === "vignes"
+          ? 0x7a9150
+          : theme === "dunes"
+            ? 0xb4683c
+            : theme === "lagon"
+              ? 0x3f8a52
+              : theme === "volcan"
+                ? 0x1b1719
+                : 0x4f7f50,
+    ),
+    middle: new THREE.Color(
+      theme === "col"
+        ? 0x566072
+        : theme === "vignes"
+          ? 0xa79a62
+          : theme === "dunes"
+            ? 0xc98448
+            : theme === "lagon"
+              ? 0x57a05a
+              : theme === "volcan"
+                ? 0x2a2224
+                : 0x6e9a6a,
+    ),
+    top: new THREE.Color(
+      theme === "col"
+        ? 0xf6f9fc
+        : theme === "vignes"
+          ? 0x8d8c5a
+          : theme === "dunes"
+            ? 0xe0a668
+            : theme === "lagon"
+              ? 0x7bb46c
+              : theme === "volcan"
+                ? 0x5a2a20
+                : 0x88a886,
+    ),
   };
   const band = (rIn: number, rOut: number, height: number, seed: number) => {
     const start = pos.length / 3;
@@ -92,8 +138,17 @@ export function addMountains(group: THREE.Group, keep: Keep, theme: Theme, cx: n
         const ridge = 1 - Math.abs(2 * n - 1);
         const profile = Math.pow(Math.sin(Math.PI * Math.min(1, p * 1.02)), 0.85);
         // Au port, le large reste ouvert : pas de montagnes du côté de la mer
-        const open = theme === "port" ? smooth(-0.18, 0.2, sa) : 1;
-        const peak = theme === "col" ? Math.pow(ridge, 1.8) : Math.pow(ridge, 1.2);
+        const open =
+          theme === "port" ? smooth(-0.18, 0.2, sa) : theme === "lagon" ? smooth(0.5, 0.64, fbm(ca * 3 + seed, sa * 3 - seed, 3)) : 1;
+        // Les mesas ont le sommet plat, le volcan des crêtes déchirées
+        const peak =
+          theme === "col"
+            ? Math.pow(ridge, 1.8)
+            : theme === "dunes"
+              ? Math.min(0.72, Math.pow(ridge, 0.7) * 0.95)
+              : theme === "volcan"
+                ? Math.pow(ridge, 2.2)
+                : Math.pow(ridge, 1.2);
         const h = height * profile * open * (0.2 + 0.95 * peak);
         pos.push(cx + ca * radius, h - 1.5, cz + sa * radius);
         const t = h / H;
@@ -106,9 +161,15 @@ export function addMountains(group: THREE.Group, keep: Keep, theme: Theme, cx: n
           c.copy(palette.forest)
             .lerp(palette.middle, smooth(0.15, 0.6, t + jitter))
             .lerp(palette.top, smooth(0.65, 1, t));
-          // Des parcelles
-          const patch = fbm(nx * 11, nz * 11, 2);
-          c.multiplyScalar(0.86 + patch * 0.3);
+          if (theme === "dunes") {
+            // Les couches de roche des mesas
+            const band = Math.floor(h / 7);
+            c.multiplyScalar(0.84 + ((band * 37) % 11) * 0.036);
+          } else {
+            // Des parcelles
+            const patch = fbm(nx * 11, nz * 11, 2);
+            c.multiplyScalar(0.86 + patch * 0.3);
+          }
         }
         col.push(c.r, c.g, c.b);
       }
@@ -293,11 +354,15 @@ function tuftTexture(theme: Theme, flowers: boolean, keep: Keep): THREE.CanvasTe
     return (seed % 10000) / 10000;
   };
   const blades =
-    theme === "col"
-      ? ["#8f9a6a", "#a6a878", "#73825a"]
-      : theme === "vignes"
-        ? ["#8ea04e", "#a8ac5a", "#74893f"]
-        : ["#4e9140", "#6aab4c", "#3c7a36"];
+    theme === "dunes"
+      ? ["#b59a5a", "#9c8a4e", "#c9ad6a"]
+      : theme === "lagon"
+        ? ["#7aa84a", "#93b95a", "#5f9140"]
+        : theme === "col"
+          ? ["#8f9a6a", "#a6a878", "#73825a"]
+          : theme === "vignes"
+            ? ["#8ea04e", "#a8ac5a", "#74893f"]
+            : ["#4e9140", "#6aab4c", "#3c7a36"];
   g.lineCap = "round";
   for (let i = 0; i < (flowers ? 16 : 34); i++) {
     const x = 24 + r() * 80;
@@ -333,6 +398,7 @@ function tuftTexture(theme: Theme, flowers: boolean, keep: Keep): THREE.CanvasTe
 
 /** Les touffes d'herbe et les fleurs entre le vibreur et le muret */
 export function addGrass(group: THREE.Group, keep: Keep, t: Track, theme: Theme, tunnel: [number, number], phone: boolean) {
+  if (theme === "volcan") return;
   const geo = keep(crossedQuads());
   let seed = t.n * 7 + 3;
   const r = () => {
@@ -359,7 +425,7 @@ export function addGrass(group: THREE.Group, keep: Keep, t: Track, theme: Theme,
       const d = side * (lo + r() * r() * (hi - lo));
       const p = pointAt(t, s, d);
       const size = 0.34 + r() * 0.34;
-      const isFlower = theme !== "col" && r() < 0.22;
+      const isFlower = theme !== "col" && theme !== "dunes" && r() < 0.22;
       const m = new THREE.Matrix4().compose(
         p3.set(p.x, p.y - 0.06, p.z),
         q.setFromAxisAngle(up, r() * Math.PI),
@@ -422,11 +488,15 @@ export function addRunoffs(group: THREE.Group, keep: Keep, t: Track, theme: Them
   c.height = 512;
   const g = c.getContext("2d")!;
   const tones =
-    theme === "col"
-      ? ["#d8e2ee", "#c9d5e4", "#e6edf5"]
-      : theme === "vignes"
-        ? ["#c8a66c", "#b7935a", "#d6b87e"]
-        : ["#cfc3a3", "#bfb28f", "#ddd2b4"];
+    theme === "dunes" || theme === "lagon"
+      ? ["#d9bf88", "#c8ab72", "#e6cf9e"]
+      : theme === "volcan"
+        ? ["#4a4040", "#3a3232", "#5a4a44"]
+        : theme === "col"
+          ? ["#d8e2ee", "#c9d5e4", "#e6edf5"]
+          : theme === "vignes"
+            ? ["#c8a66c", "#b7935a", "#d6b87e"]
+            : ["#cfc3a3", "#bfb28f", "#ddd2b4"];
   g.fillStyle = tones[0]!;
   g.fillRect(0, 0, 128, 512);
   let seed = 19;
@@ -534,6 +604,180 @@ export function addSkidMarks(group: THREE.Group, keep: Keep, t: Track, theme: Th
   geo.setIndex(index);
   geo.computeVertexNormals();
   group.add(new THREE.Mesh(geo, keep(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }))));
+}
+
+/** Les reflets de lumière au fond de l'eau, ajoutés au sol et à la route sous le niveau de la mer */
+export function addCaustics(mat: THREE.Material, level: number, time: { value: number }) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uCausticLevel = { value: level };
+    shader.uniforms.uCausticTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vCausticW;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvCausticW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying vec3 vCausticW;
+        uniform float uCausticLevel;
+        uniform float uCausticTime;
+        float causticAt(vec2 p, float t) {
+          float a = sin(p.x * 1.3 + t) + sin(p.y * 1.1 - t * 0.8);
+          float b = sin((p.x + p.y) * 0.9 + t * 1.3) + sin((p.x - p.y) * 1.2 - t);
+          return pow(max(1.0 - abs(a + b) * 0.5, 0.0), 4.0);
+        }`,
+      )
+      .replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+        if (vCausticW.y < uCausticLevel) {
+          float depthFade = clamp((uCausticLevel - vCausticW.y) / 4.0, 0.0, 1.0);
+          diffuseColor.rgb *= mix(vec3(1.0), vec3(0.72, 0.92, 1.0), depthFade);
+          diffuseColor.rgb += causticAt(vCausticW.xz * 1.05, uCausticTime * 1.1) * 0.13 * depthFade;
+        }`,
+      );
+  };
+  mat.customProgramCacheKey = () => "caustics";
+}
+
+/** La mer du lagon : turquoise là où c'est peu profond, bleue au large, de l'écume sur les plages, transparente */
+export function lagoonMaterial(
+  keep: Keep,
+  sunDir: THREE.Vector3,
+  sky: THREE.Color,
+  height: THREE.Texture,
+  origin: THREE.Vector2,
+  size: THREE.Vector2,
+  level: number,
+): THREE.ShaderMaterial {
+  const mat = keep(
+    new THREE.ShaderMaterial({
+      fog: true,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uTime: { value: 0 },
+          uDeep: { value: new THREE.Color(0x0f6fa8) },
+          uShallow: { value: new THREE.Color(0x3fe0d8) },
+          uSky: { value: sky.clone() },
+          uSunDir: { value: sunDir.clone() },
+          uHeight: { value: null as THREE.Texture | null },
+          uOrigin: { value: origin.clone() },
+          uSize: { value: size.clone() },
+          uLevel: { value: level },
+        },
+      ]),
+      vertexShader: /* glsl */ `
+        varying vec3 vW;
+        #include <fog_pars_vertex>
+        void main() {
+          vec4 w = modelMatrix * vec4(position, 1.0);
+          vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform vec3 uDeep;
+        uniform vec3 uShallow;
+        uniform vec3 uSky;
+        uniform vec3 uSunDir;
+        uniform sampler2D uHeight;
+        uniform vec2 uOrigin;
+        uniform vec2 uSize;
+        uniform float uLevel;
+        varying vec3 vW;
+        #include <fog_pars_fragment>
+        vec2 wave(vec2 p, vec2 d, float f, float s, float a) {
+          float x = dot(p, d) * f + uTime * s;
+          return d * cos(x) * a * f;
+        }
+        void main() {
+          vec2 p = vW.xz;
+          vec2 g = wave(p, vec2(0.86, 0.5), 0.34, 1.1, 0.14)
+            + wave(p, vec2(-0.6, 0.8), 0.62, 1.6, 0.07)
+            + wave(p, vec2(0.2, -0.98), 1.15, 2.2, 0.04)
+            + wave(p, vec2(-0.93, -0.37), 2.3, 3.1, 0.02);
+          vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
+          vec3 V = normalize(cameraPosition - vW);
+          vec2 uv = clamp((p - uOrigin) / uSize, 0.0, 1.0);
+          float ground = texture2D(uHeight, uv).r * 40.0 - 20.0;
+          float depth = max(0.0, uLevel - ground);
+          float shallow = exp(-depth * 0.28);
+          vec3 color;
+          float alpha;
+          if (gl_FrontFacing) {
+            float F = pow(1.0 - max(dot(N, V), 0.0), 3.5);
+            color = mix(mix(uDeep, uShallow, shallow), uSky, clamp(F * 0.85 + 0.03, 0.0, 1.0));
+            vec3 R = reflect(-V, N);
+            color += vec3(1.0, 0.95, 0.8) * pow(max(dot(R, uSunDir), 0.0), 220.0) * 2.4;
+            // L'écume, là où l'eau touche le sable
+            float lap = 0.5 + 0.5 * sin(depth * 5.0 - uTime * 1.6 + p.x * 0.12 + p.y * 0.09);
+            float foam = smoothstep(1.2, 0.05, depth) * (0.45 + 0.55 * lap);
+            color = mix(color, vec3(1.0), clamp(foam, 0.0, 0.9));
+            alpha = clamp(mix(0.92, 0.45, shallow) + foam, 0.0, 1.0);
+          } else {
+            // Vue d'en dessous : le ciel qui ondule
+            float wobble = 0.5 + 0.5 * sin(p.x * 0.6 + uTime) * sin(p.y * 0.5 - uTime * 0.7);
+            color = mix(vec3(0.25, 0.75, 0.9), vec3(0.85, 1.0, 1.0), wobble);
+            alpha = 0.72;
+          }
+          gl_FragColor = vec4(color, alpha);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`,
+    }),
+  );
+  mat.uniforms.uHeight!.value = height;
+  return mat;
+}
+
+/** La lave : une matière qui coule lentement, très brillante aux endroits les plus chauds */
+export function lavaMaterial(keep: Keep): THREE.ShaderMaterial {
+  return keep(
+    new THREE.ShaderMaterial({
+      fog: true,
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 } }]),
+      vertexShader: /* glsl */ `
+        varying vec3 vW;
+        #include <fog_pars_vertex>
+        void main() {
+          vec4 w = modelMatrix * vec4(position, 1.0);
+          vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        varying vec3 vW;
+        #include <fog_pars_fragment>
+        float flowAt(vec2 p) {
+          float t = uTime * 0.12;
+          vec2 q = p + vec2(sin(p.y * 0.9 + t * 3.0), cos(p.x * 0.8 - t * 2.0)) * 0.9;
+          float a = sin(q.x * 1.1 + t) * sin(q.y * 1.3 - t * 1.2);
+          float b = sin((q.x + q.y) * 0.7 - t * 0.8) * sin((q.x - q.y) * 0.9 + t);
+          return 0.5 + 0.5 * (a * 0.6 + b * 0.4);
+        }
+        void main() {
+          float big = flowAt(vW.xz * 0.05);
+          float small = flowAt(vW.xz * 0.22 + 7.0);
+          float heat = pow(big * 0.65 + small * 0.35, 1.8);
+          // La croûte sombre, les veines qui rougeoient, le cœur presque blanc
+          vec3 color = mix(vec3(0.12, 0.03, 0.02), vec3(1.5, 0.28, 0.04), smoothstep(0.1, 0.42, heat));
+          color = mix(color, vec3(2.6, 1.25, 0.32), smoothstep(0.42, 0.72, heat));
+          gl_FragColor = vec4(color, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`,
+    }),
+  );
 }
 
 /** La mer : de petites vagues qui bougent, le ciel qui s'y reflète au loin, le soleil qui scintille */

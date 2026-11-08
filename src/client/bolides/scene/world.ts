@@ -3,20 +3,25 @@
 
 import * as THREE from "three";
 import { RAMP_H, RAMP_LEN } from "../../../shared/games/bolides/physics.ts";
-import { CURB, GAP_LEN, pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
+import { CURB, pointAt, STEP, type Track } from "../../../shared/games/bolides/track.ts";
+import { buildDunes, buildLagon, buildVolcan, type BiomeContext, type BiomeUpdate } from "./biomes.ts";
 import { addBendDressing, addFlags, addGrandstand, addWallBoards, type DecorContext } from "./decor.ts";
 import { mergeDeep } from "./merge.ts";
 import { buildScenery, PLACES } from "./scenery.ts";
 import {
+  addCaustics,
   addGrass,
   addGroundShadows,
   addMountains,
   addRunoffs,
   addSkidMarks,
   cypressGeometry,
+  fbm,
   foliageGeometry,
   gableGeometry,
   groundTint,
+  lagoonMaterial,
+  lavaMaterial,
   pineGeometry,
   pineSnowGeometry,
   seaMaterial,
@@ -294,25 +299,56 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   const hilly = t.def.hills.some(([, y]) => y !== 0);
 
   // Sous chaque trou, le sol plonge
-  const pits = t.gaps.map((g) => pointAt(t, (g.from + g.to) / 2, 0));
+  const pits = t.gaps.map((g) => ({ ...pointAt(t, (g.from + g.to) / 2, 0), half: (g.to - g.from) / 2 + 4, glide: g.glide }));
   const pitAt = (x: number, z: number) =>
     pits.find((p) => {
       const along = (x - p.x) * p.tx + (z - p.z) * p.tz;
       const side = -(x - p.x) * p.tz + (z - p.z) * p.tx;
-      return Math.abs(along) < GAP_LEN / 2 + 4 && Math.abs(side) < t.wall + 3;
+      return Math.abs(along) < p.half && Math.abs(side) < t.wall + 3;
     });
+
+  // Le sol au loin : plat, ou des dunes, le fond de la mer et ses îles, la roche au-dessus de la lave. Il rejoint la
+  // plaine (plainY) au bord du terrain, pour ne pas laisser de marche
+  const plainY = theme === "lagon" ? -7 : theme === "volcan" ? -2.6 : 0;
+  const farGround = (x: number, z: number, away: number): number => {
+    const edge = Math.min(
+      x - field.x0,
+      field.x0 + (field.nx - 1) * field.cell - x,
+      z - field.z0,
+      field.z0 + (field.nz - 1) * field.cell - z,
+    );
+    const keepShape = Math.max(0, Math.min(1, edge / 70));
+    let h = plainY;
+    if (theme === "dunes") {
+      const ramp = Math.min(1, away / 50);
+      const ridge = 1 - Math.abs(2 * fbm(x / 34 + 9, z / 52 - 3, 2) - 1);
+      h = ramp * (fbm(x / 62 + 3, z / 62 - 5, 3) * 12 + ridge * ridge * 8 - 8);
+    } else if (theme === "lagon") {
+      const land = fbm(x / 110 + 7, z / 110 + 2, 3);
+      const rise = Math.max(0, Math.min(1, (land - 0.56) / 0.14));
+      h = plainY + rise * rise * 12;
+    } else if (theme === "volcan") {
+      h = plainY + Math.max(0, fbm(x / 70 + 1, z / 70 + 4, 3) - 0.44) * 26;
+    } else if (theme === "vignes" || theme === "col") {
+      // Des collines douces, qui donnent de la profondeur au décor
+      const ramp = Math.min(1, away / 70);
+      h = ramp * (fbm(x / 80 + 5, z / 80 - 2, 3) - 0.34) * (theme === "col" ? 34 : 20);
+    }
+    return plainY + (h - plainY) * keepShape;
+  };
 
   // Le sol : il épouse la route près d'elle, puis redescend doucement à plat
   const heightAt = (x: number, z: number): number => {
     const pit = pitAt(x, z);
-    if (pit) return pit.y - 12;
+    if (pit) return pit.y - (pit.glide ? 20 : 12);
     if (!hilly) return 0;
     const d = field.distAt(x, z);
     const road = field.roadAt(x, z);
     const near = t.wall + 2;
     if (d <= near) return road - (d < t.half ? 0.3 : 0.08);
     const f = Math.max(0, 1 - (d - near) / 80);
-    return (road - 0.08) * f * f * (3 - 2 * f);
+    const blend = f * f * (3 - 2 * f);
+    return (road - 0.08) * blend + farGround(x, z, d - near) * (1 - blend);
   };
 
   const groundTex = keep(TX.groundTexture(theme));
@@ -363,7 +399,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     const farUv: number[] = [];
     const farIndex: number[] = [];
     rects.forEach(([ax, az, bx, bz], i) => {
-      farPos.push(ax, -0.12, az, ax, -0.12, bz, bx, -0.12, bz, bx, -0.12, az);
+      farPos.push(ax, plainY - 0.12, az, ax, plainY - 0.12, bz, bx, plainY - 0.12, bz, bx, plainY - 0.12, az);
       farUv.push(ax / 18, az / 18, ax / 18, bz / 18, bx / 18, bz / 18, bx / 18, az / 18);
       const v = i * 4;
       farIndex.push(v, v + 1, v + 2, v, v + 2, v + 3);
@@ -383,7 +419,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   const road = new THREE.Mesh(keep(ribbon(t, -t.half, t.half, 0.06, 8, 1, t.gaps)), keep(lambert(0xffffff, roadTex)));
   road.receiveShadow = opts.shadows;
   group.add(road);
-  const curbTex = keep(TX.curbTexture());
+  const curbTex = keep(TX.curbTexture(theme));
   curbTex.anisotropy = opts.anisotropy;
   const curbMat = keep(lambert(0xffffff, curbTex));
   for (const side of [-1, 1]) {
@@ -469,8 +505,10 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   {
     const top = keep(lambert(0xffffff, keep(TX.rampTexture())));
     const sideMat = keep(new THREE.MeshLambertMaterial({ color: 0x6b4a2e, side: THREE.DoubleSide }));
+    const glideTop = keep(lambert(0xffffff, keep(TX.rampTexture(true))));
     for (const lip of t.jumps) {
-      group.add(rampMesh(t, lip, top, sideMat, keep));
+      // Le tremplin d'un grand vol se reconnaît à sa couleur
+      group.add(rampMesh(t, lip, t.gaps.some((g) => g.glide && g.from === lip) ? glideTop : top, sideMat, keep));
     }
   }
 
@@ -480,7 +518,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
   const quay = -t.wall - 9;
   const place0 = PLACES[theme];
   const keepOut: { x: number; z: number }[] = [];
-  for (let s = place0.tunnel[0] - 12; s <= place0.tunnel[1] + 12; s += 4) keepOut.push(pointAt(t, s, 0));
+  if (place0.tunnel[0] >= 0) for (let s = place0.tunnel[0] - 12; s <= place0.tunnel[1] + 12; s += 4) keepOut.push(pointAt(t, s, 0));
   for (let s = place0.bridge - 6; s <= place0.bridge + 6; s += 3) for (const d of [-1, 1]) keepOut.push(pointAt(t, s, d * (t.wall + 2)));
   const blocked = (x: number, z: number) => keepOut.some((p) => Math.hypot(p.x - x, p.z - z) < t.wall + 10);
   const free = (x: number, z: number, min: number) => field.distAt(x, z) > min && (theme !== "port" || z > quay + 5) && !blocked(x, z);
@@ -725,7 +763,7 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
       group.add(balloon);
       floaters.push(balloon);
     });
-  } else {
+  } else if (theme === "col") {
     // Les sapins enneigés
     const cone = keep(pineGeometry());
     const cap = keep(pineSnowGeometry());
@@ -799,6 +837,54 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
     group.add(snowmen);
   }
 
+  // Le décor des biomes lointains, et ce qui les recouvre : la mer du lagon, la lave du volcan
+  const biomeCtx: BiomeContext = { group, t, keep, heightAt, shadows, phone: opts.phone, scatter, r, few };
+  let biome: BiomeUpdate | null = null;
+  if (theme === "dunes") biome = buildDunes(biomeCtx);
+  else if (theme === "lagon") biome = buildLagon(biomeCtx);
+  else if (theme === "volcan") biome = buildVolcan(biomeCtx);
+  const caustic = { value: 0 };
+  let liquid: THREE.ShaderMaterial | null = null;
+  if (theme === "lagon" && t.water !== null) {
+    // La profondeur de l'eau partout : une petite carte du relief, pour la couleur de la mer et l'écume des plages
+    const w = field.nx;
+    const h = field.nz;
+    const data = new Uint8Array(w * h * 4);
+    for (let gz = 0; gz < h; gz++) {
+      for (let gx = 0; gx < w; gx++) {
+        const y = heightAt(field.x0 + gx * field.cell, field.z0 + gz * field.cell);
+        const v = Math.max(0, Math.min(255, Math.round(((y + 20) / 40) * 255)));
+        data.set([v, v, v, 255], (gz * w + gx) * 4);
+      }
+    }
+    const map = keep(new THREE.DataTexture(data, w, h));
+    map.magFilter = map.minFilter = THREE.LinearFilter;
+    map.needsUpdate = true;
+    const sizeX = (w - 1) * field.cell;
+    const sizeZ = (h - 1) * field.cell;
+    liquid = lagoonMaterial(
+      keep,
+      mood.dir,
+      new THREE.Color(mood.horizon),
+      map,
+      new THREE.Vector2(field.x0, field.z0),
+      new THREE.Vector2(sizeX, sizeZ),
+      t.water,
+    );
+    const sea = new THREE.Mesh(keep(new THREE.PlaneGeometry(3400, 3400)), liquid);
+    sea.rotation.x = -Math.PI / 2;
+    sea.position.y = t.water;
+    sea.renderOrder = 2;
+    group.add(sea);
+    for (const m of [groundMat, road.material as THREE.Material, curbMat, wallMat]) addCaustics(m, t.water, caustic);
+  } else if (theme === "volcan") {
+    liquid = lavaMaterial(keep);
+    const lava = new THREE.Mesh(keep(new THREE.PlaneGeometry(3400, 3400)), liquid);
+    lava.rotation.x = -Math.PI / 2;
+    lava.position.y = -1.2;
+    group.add(lava);
+  }
+
   const horizon = mood.horizon;
   return {
     group,
@@ -815,10 +901,13 @@ export function buildWorld(t: Track, opts: { phone: boolean; shadows: boolean; a
         m.emissiveIntensity = on ? 1.6 : 0;
       });
     },
-    fog: new THREE.Fog(horizon, 260, 1320),
+    fog: new THREE.Fog(horizon, mood.fog[0], mood.fog[1]),
     update(time: number, camera: THREE.Vector3, daylight: number) {
       boostTex.offset.y = -((time * 1.6) % 1);
       if (sea) sea.uniforms.uTime!.value = time;
+      if (liquid) liquid.uniforms.uTime!.value = time;
+      caustic.value = time;
+      biome?.(time, camera);
       waveFlags(time);
       sky.update(camera, time);
       scenery.update(time, camera, daylight);

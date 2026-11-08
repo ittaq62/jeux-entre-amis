@@ -35,6 +35,7 @@ export function encodeKart(k: Kart): KartNet {
     r2(k.d),
     r2(k.air),
     k.trick ? 1 : 0,
+    k.glide ? 1 : 0,
   ];
 }
 
@@ -61,13 +62,16 @@ export function decodeKart(n: KartNet, base?: Kart): Kart | null {
     s: base?.s ?? 0,
     offroad: base?.offroad ?? false,
     // La hauteur au-dessus de la route ; la vitesse verticale ne voyage pas (le serveur fait retomber un absent)
-    air: n.length > 13 ? at(13, -7, 5) : 0,
+    air: n.length > 13 ? at(13, -7, 16) : 0,
     vy: 0,
     trick: n.length > 14 ? n[14]! > 0 : false,
     held: base?.held ?? false,
     // En train de tomber : ça se voit à sa hauteur négative ; le serveur le remet en route s'il conduit à sa place
     fall: n.length > 13 && n[13]! < -0.05 ? 0.3 : 0,
     draft: base?.draft ?? 0,
+    glide: n.length > 15 ? n[15]! > 0 : false,
+    jumpCharge: base?.jumpCharge ?? 0,
+    charged: base?.charged ?? false,
   };
 }
 

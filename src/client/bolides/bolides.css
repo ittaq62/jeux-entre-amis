@@ -23,6 +23,10 @@
   background: radial-gradient(ellipse at 50% 55%, transparent 58%, rgba(10, 14, 30, 0.3) 100%);
 }
 
+.bolides-vignette.is-under {
+  background: radial-gradient(ellipse at 50% 40%, rgba(120, 230, 255, 0.1), rgba(8, 60, 100, 0.34) 100%);
+}
+
 .bolides-canvas {
   display: block;
   width: 100%;

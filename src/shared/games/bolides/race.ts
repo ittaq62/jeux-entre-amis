@@ -90,6 +90,7 @@ export const DEFAULT_SETTINGS: BolidesSettings = {
 };
 
 /** Un Grand Prix : le nombre de courses, et les points de chaque place */
+export const CUP_RACES = 4;
 export const CUP_POINTS = [15, 12, 10, 8, 6, 4, 2, 1];
 
 /** Ce qu'on gagne à cette place (1 : le premier) */

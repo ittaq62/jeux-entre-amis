@@ -167,6 +167,55 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
       add(new THREE.SphereGeometry(0.3, 10, 8), grapes, x, 1.78, -1.45);
     }
     beaconY = 2.75;
+  } else if (theme === "dunes") {
+    // Un dromadaire, qui traverse tranquillement
+    const fur = keep(std(0xc99a5e, 0.9));
+    const hoof = keep(std(0x5a4128, 0.9));
+    add(new THREE.SphereGeometry(0.9, 12, 10).scale(0.85, 0.8, 1.5), fur, 0, 2.05, 0);
+    add(new THREE.SphereGeometry(0.62, 12, 10).scale(1, 1.1, 1.1), fur, 0, 2.85, -0.1);
+    for (const [x, z] of [
+      [-0.42, 0.85],
+      [0.42, 0.85],
+      [-0.42, -0.85],
+      [0.42, -0.85],
+    ] as const)
+      add(new THREE.CylinderGeometry(0.11, 0.14, 1.5, 7), fur, x, 0.8, z);
+    for (const [x, z] of [
+      [-0.42, 0.85],
+      [0.42, 0.85],
+      [-0.42, -0.85],
+      [0.42, -0.85],
+    ] as const)
+      add(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 7), hoof, x, 0.06, z);
+    const neck = add(new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8), fur, 0, 2.75, 1.45);
+    neck.rotation.x = 0.55;
+    add(new THREE.SphereGeometry(0.34, 10, 8).scale(0.85, 0.85, 1.5), fur, 0, 3.45, 1.95);
+    add(new THREE.BoxGeometry(1.3, 0.1, 1.5), keep(std(0xd8352a, 0.7)), 0, 2.72, 0.75);
+  } else if (theme === "lagon") {
+    // Une grande tortue de mer, qui nage au ras de la route
+    const shell = keep(std(0x4f7a4a, 0.6));
+    const skin = keep(std(0x9ac28a, 0.75));
+    add(new THREE.SphereGeometry(1.25, 14, 10).scale(1, 0.55, 1.35), shell, 0, 1.05, 0);
+    add(new THREE.SphereGeometry(0.4, 10, 8).scale(0.9, 0.85, 1.25), skin, 0, 1.05, 1.95);
+    for (const s of [-1, 1]) {
+      const fin = add(new THREE.BoxGeometry(1.5, 0.09, 0.62), skin, s * 1.55, 0.9, 0.7);
+      fin.rotation.z = s * -0.25;
+      fin.rotation.y = s * -0.5;
+      const back = add(new THREE.BoxGeometry(0.85, 0.09, 0.45), skin, s * 1.05, 0.85, -1.4);
+      back.rotation.y = s * 0.5;
+    }
+  } else if (theme === "volcan") {
+    // Un wagonnet de mine, plein de minerai brûlant
+    const iron = keep(std(0x4a4340, 0.5, 0.5));
+    add(new RoundedBoxGeometry(2.1, 1.25, 3, 2, 0.1), iron, 0, 1.2, 0);
+    add(new THREE.BoxGeometry(1.8, 0.45, 2.7), keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.8, 0.16) })), 0, 1.72, 0);
+    add(new THREE.DodecahedronGeometry(0.45, 0), dark, -0.4, 2.05, 0.6);
+    add(new THREE.DodecahedronGeometry(0.5, 0), dark, 0.4, 2.1, -0.5);
+    wheel(-1.0, 1.05, 0.42, 0.26);
+    wheel(1.0, 1.05, 0.42, 0.26);
+    wheel(-1.0, -1.05, 0.42, 0.26);
+    wheel(1.0, -1.05, 0.42, 0.26);
+    beaconY = 2.9;
   } else {
     // Le chasse-neige orange : sa cabine vitrée, sa grosse lame en biais devant
     const orange = keep(std(0xf07a1a, 0.45));
@@ -189,6 +238,8 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     keep(new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff7a00, emissiveIntensity: 1, roughness: 0.3 })),
   );
   beacon.position.set(0, beaconY, 0);
+  // Les animaux n'ont pas de gyrophare
+  beacon.visible = theme !== "dunes" && theme !== "lagon";
   g.add(beacon);
   mergeStatic(g, keep, [beacon]);
   return { group: g, beacon };

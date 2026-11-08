@@ -160,6 +160,7 @@ export class RaceRuntime {
   private tipSeq = 0;
   private nudge = 0;
   private flipNow = false;
+  private toldGlide = false;
   private banner: Hud["banner"] = null;
   private bannerSeq = 0;
   private autoRng = { rng: 77 };
@@ -188,7 +189,9 @@ export class RaceRuntime {
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
     this.scene.build(this.track, looks);
     this.scene.onLife = (sound, volume) =>
-      play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : "bolidesFirework", { volume });
+      play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : sound === "dive" ? "bolidesDive" : "bolidesFirework", {
+        volume,
+      });
     this.shown = view.karts.map((n) => decodeKart(n)!);
     this.views = this.shown.map((k) => ({ ...k }));
     this.steers = this.shown.map(() => 0);
@@ -648,6 +651,20 @@ export class RaceRuntime {
           vibrate([30, 60, 30]);
         } else if (e === "respawn") {
           this.scene.respawnSparkle(mine);
+        } else if (e === "bound") {
+          this.scene.landDust(mine);
+          this.scene.punch(2);
+          play("bolidesJump", { volume: 0.7, rate: 1.2 });
+        } else if (e === "glide") {
+          this.scene.punch(8);
+          if (!this.toldGlide) {
+            this.toldGlide = true;
+            this.tell("Tourne pour viser les anneaux, freine pour plonger", true);
+          }
+        } else if (e === "hoop") {
+          this.scene.punch(5);
+          this.scene.trickSparkle(mine);
+          vibrate(20);
         } else if (e === "draft") {
           this.scene.punch(5);
           this.tell("Aspiration !", true);
@@ -678,6 +695,8 @@ export class RaceRuntime {
       else if (e === "drift") play("click", { volume: 0.4 });
       else if (e === "jump") play("bolidesJump");
       else if (e === "fall") play("bolidesFall");
+      else if (e === "glide") play("bolidesGlide");
+      else if (e === "hoop") play("bolidesHoop");
       else if (e === "spring") play("bolidesSpring");
       else if (e === "land") play("bolidesLand");
       else if (e === "trick") play("bolidesTrick");
@@ -740,6 +759,7 @@ export class RaceRuntime {
         giant: (v.racers[i]!.giantUntil ?? 0) > now,
         magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
         safe: (v.racers[i]!.safeUntil ?? 0) > now,
+        under: this.track.water !== null && kart.y + kart.air < this.track.water - 0.3,
       })),
       follow,
       camera: intro ? "intro" : v.phase === "over" || finishedLong ? "orbit" : "chase",
@@ -870,7 +890,7 @@ export class RaceRuntime {
       rollSlot: this.rollSlot,
       tip: this.tip,
       nudge: this.nudge,
-      drafting: Boolean(this.driver && this.driver.kart.draft > 0.15),
+      drafting: Boolean(this.driver && (this.driver.kart.draft > 0.15 || this.driver.kart.glide)),
       order: order.map((o) => ({ id: this.ids[o.i]!, name: this.names[o.i]!, color: this.colors[o.i]!, me: o.i === this.mine })),
       incoming: arriving?.kind === "fusee" || arriving?.kind === "tarte" ? arriving.kind : null,
       raceMs: me?.finish ?? (v.phase === "start" ? 0 : Math.max(0, now - v.goAt)),

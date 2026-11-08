@@ -15,10 +15,13 @@ import {
   rollAt,
   SPRING_RADIUS,
   type Mover,
+  type RollThing,
   type Theme,
   type Track,
+  type ZoneKind,
 } from "../../../shared/games/bolides/track.ts";
 import { mergeDeep } from "./merge.ts";
+import { HOOP_RADIUS } from "../../../shared/games/bolides/physics.ts";
 import * as TX from "./textures.ts";
 
 type Keep = <T extends { dispose: () => void }>(x: T) => T;
@@ -142,7 +145,47 @@ function signTexture(keep: Keep, draw: (g: CanvasRenderingContext2D) => void): T
   return texture(c, keep);
 }
 
-const SIGN_ICONS: Record<"gap" | "drop" | "tonneau" | "boule" | "mouton", (g: CanvasRenderingContext2D) => void> = {
+const SIGN_ICONS: Record<"gap" | "drop" | RollThing, (g: CanvasRenderingContext2D) => void> = {
+  virevoltant: (g) => {
+    g.lineWidth = 3;
+    for (const [dx, dy, r] of [
+      [0, 0, 19],
+      [-5, 4, 12],
+      [6, -3, 10],
+    ] as const) {
+      g.beginPath();
+      g.arc(64 + dx, 78 + dy, r, 0, Math.PI * 2);
+      g.stroke();
+    }
+  },
+  crabe: (g) => {
+    g.beginPath();
+    g.ellipse(64, 80, 20, 12, 0, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 4;
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(64 + s * 18, 76);
+      g.lineTo(64 + s * 30, 62);
+      g.stroke();
+      g.beginPath();
+      g.arc(64 + s * 31, 58, 5, 0, Math.PI * 2);
+      g.fill();
+    }
+  },
+  meduse: (g) => {
+    g.beginPath();
+    g.arc(64, 74, 19, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.lineWidth = 3;
+    for (const x of [50, 58, 66, 74]) {
+      g.beginPath();
+      g.moveTo(x, 74);
+      g.quadraticCurveTo(x + 5, 86, x - 1, 98);
+      g.stroke();
+    }
+  },
   gap: (g) => {
     // Deux bouts de route, et le vide entre les deux
     g.fillRect(36, 84, 20, 12);
@@ -229,6 +272,8 @@ interface DropItem {
   warnMat: THREE.MeshBasicMaterial;
   lamps: THREE.MeshStandardMaterial;
   phase: string;
+  /** Au volcan : la bombe de lave qui remplace le conteneur */
+  rock?: THREE.Group;
 }
 
 interface RollItem {
@@ -250,6 +295,7 @@ export class TrackLife {
   private rolls: RollItem[] = [];
   private sheep: SheepItem[] = [];
   private springs: { top: THREE.Object3D; i: number }[] = [];
+  private hoops: THREE.Mesh[] = [];
   private water: THREE.CanvasTexture[] = [];
   private tick = 0;
   private baaAt = 0;
@@ -287,6 +333,23 @@ export class TrackLife {
     }
     this.buildSprings();
     this.buildZones();
+    this.buildHoops();
+  }
+
+  /** Les anneaux à traverser en vol */
+  private buildHoops() {
+    const { t, keep } = this.ctx;
+    if (t.hoops.length === 0) return;
+    const geo = keep(new THREE.TorusGeometry(HOOP_RADIUS - 0.25, 0.16, 10, 44));
+    const mat = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.12, 0.3) }));
+    for (const h of t.hoops) {
+      const p = pointAt(t, h.s, h.d);
+      const ring = new THREE.Mesh(geo, mat);
+      ring.position.set(p.x, p.y + h.h, p.z);
+      ring.rotation.y = Math.atan2(p.tx, p.tz);
+      this.group.add(ring);
+      this.hoops.push(ring);
+    }
   }
 
   /** Les panneaux qui préviennent, des deux côtés, tournés vers ceux qui arrivent */
@@ -318,9 +381,14 @@ export class TrackLife {
     const bankMat = keep(new THREE.MeshLambertMaterial({ map: bank }));
     const groundTex = keep(TX.groundTexture(theme));
     const grass = keep(new THREE.MeshLambertMaterial({ map: groundTex }));
-    const rockMat = keep(new THREE.MeshLambertMaterial({ color: theme === "col" ? 0xc7d4e0 : 0x6f7276, flatShading: true }));
+    const rockMat = keep(
+      new THREE.MeshLambertMaterial({
+        color: theme === "col" ? 0xc7d4e0 : theme === "dunes" ? 0xb97a4a : theme === "volcan" ? 0x241f21 : 0x6f7276,
+        flatShading: true,
+      }),
+    );
     const rockGeo = keep(new THREE.DodecahedronGeometry(1, 0));
-    const tint = theme === "col" ? 0xcdeeff : theme === "vignes" ? 0x9ed6ae : 0xffffff;
+    const tint = theme === "col" ? 0xcdeeff : theme === "vignes" ? 0x9ed6ae : theme === "dunes" ? 0x7fe0d0 : 0xffffff;
     const r = rng(t.n);
     for (const g of t.gaps) {
       const far = Math.ceil((g.to - 0.01) / step) * step;
@@ -340,16 +408,24 @@ export class TrackLife {
         this.group.add(wall);
       }
       // L'eau, à mi-hauteur du trou
-      const tex = keep(TX.waterTexture());
-      tex.repeat.set(3, 1.4);
-      this.water.push(tex);
-      const water = new THREE.Mesh(
-        keep(new THREE.PlaneGeometry(wide, far - g.from + 1)),
-        keep(new THREE.MeshLambertMaterial({ map: tex, color: tint })),
-      );
-      water.rotation.set(-Math.PI / 2, 0, h + Math.PI);
-      water.position.set(mid.x, mid.y - WATER_DEPTH, mid.z);
-      this.group.add(water);
+      // (au lagon, c'est la mer ; au volcan, de la lave)
+      if (t.water === null) {
+        const tex = keep(TX.waterTexture());
+        tex.repeat.set(3, 1.4);
+        this.water.push(tex);
+        const water = new THREE.Mesh(
+          keep(new THREE.PlaneGeometry(wide, far - g.from + 1)),
+          keep(
+            theme === "volcan"
+              ? new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(2.4, 0.75, 0.15) })
+              : new THREE.MeshLambertMaterial({ map: tex, color: tint }),
+          ),
+        );
+        water.rotation.set(-Math.PI / 2, 0, h + Math.PI);
+        water.position.set(mid.x, mid.y - WATER_DEPTH, mid.z);
+        this.group.add(water);
+      }
+      const surface = t.water ?? mid.y - WATER_DEPTH;
       const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 9);
       for (let i = 0; i < 9; i++) {
         const along = (r() - 0.5) * (far - g.from - 2);
@@ -357,7 +433,7 @@ export class TrackLife {
         const p = pointAt(t, (g.from + far) / 2 + along, side);
         const sz = 0.9 + r() * 1.5;
         this.m4.compose(
-          this.p.set(p.x, mid.y - WATER_DEPTH + sz * 0.2, p.z),
+          this.p.set(p.x, surface + sz * 0.2, p.z),
           this.q.setFromEuler(this.e.set(r() * 3, r() * 6, 0)),
           this.s.set(sz * 1.2, sz, sz),
         );
@@ -387,7 +463,11 @@ export class TrackLife {
         post.position.set(side * (t.half + 2), 3.1, 0);
         arch.add(post);
       }
-      const label = keep(new THREE.MeshLambertMaterial({ map: keep(TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a")) }));
+      const label = keep(
+        new THREE.MeshLambertMaterial({
+          map: keep(g.glide ? TX.bannerTexture("ENVOL !", "#0f6fa8", "#ffffff") : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a")),
+        }),
+      );
       const beam = new THREE.Mesh(keep(new THREE.BoxGeometry((t.half + 2) * 2 + 0.5, 1.4, 0.4)), [dark, dark, dark, dark, label, label]);
       beam.position.y = 5.6;
       arch.add(beam);
@@ -402,6 +482,44 @@ export class TrackLife {
     const { t, keep, shadows } = this.ctx;
     const base = pointAt(t, m.s, 0);
     const h = Math.atan2(base.tx, base.tz);
+    if (t.def.theme === "volcan") {
+      // Au volcan, pas de grue : une bombe de lave tombe du ciel, reste fumante un moment, puis s'enfonce
+      const rock = new THREE.Group();
+      const body = new THREE.Mesh(
+        keep(new THREE.DodecahedronGeometry(2.6, 1)),
+        keep(new THREE.MeshLambertMaterial({ color: 0x2c2422, emissive: 0xc2380a, emissiveIntensity: 0.75, flatShading: true })),
+      );
+      body.scale.set(1, 0.85, 1.35);
+      body.position.y = 2;
+      body.castShadow = shadows;
+      rock.add(body);
+      rock.visible = false;
+      this.group.add(rock);
+      const warnMat = keep(
+        new THREE.MeshBasicMaterial({
+          color: 0xff4a1a,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          fog: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      const warn = new THREE.Mesh(keep(new THREE.RingGeometry(1.8, 3.8, 32).rotateX(-Math.PI / 2)), warnMat);
+      this.group.add(warn);
+      this.drops.push({
+        m,
+        trolley: new THREE.Group(),
+        box: rock,
+        cable: new THREE.Mesh(),
+        warn,
+        warnMat,
+        lamps: keep(new THREE.MeshStandardMaterial()),
+        phase: "none",
+        rock,
+      });
+      return;
+    }
     const paint = keep(std(0xe8a92c, 0.5, 0.2));
     const dark = keep(std(0x34383f, 0.6, 0.3));
     const frame = new THREE.Group();
@@ -490,9 +608,13 @@ export class TrackLife {
     for (const side of [-1, 1]) {
       const at = pointAt(t, m.s, side * (t.wall + 0.1));
       const y = heightAt(at.x, at.z);
-      if (m.thing === "boule") {
-        // Un gros tas de neige : les boules en sortent, et s'y perdent de l'autre côté
-        const mound = new THREE.Mesh(keep(new THREE.SphereGeometry(4.2, 16, 10)), keep(new THREE.MeshLambertMaterial({ color: 0xf6f9fc })));
+      if (m.thing !== "tonneau" && m.thing !== "mouton") {
+        // Un gros tas (de neige, de sable, de roche) : ils en sortent, et s'y perdent de l'autre côté
+        const moundColor = m.thing === "boule" ? 0xf6f9fc : m.thing === "meduse" ? 0x5f7f88 : 0xd9b67c;
+        const mound = new THREE.Mesh(
+          keep(new THREE.SphereGeometry(4.2, 16, 10)),
+          keep(new THREE.MeshLambertMaterial({ color: moundColor })),
+        );
         mound.scale.set(1, 0.72, 1.3);
         mound.position.set(at.x, y, at.z);
         mound.rotation.y = h;
@@ -538,6 +660,82 @@ export class TrackLife {
       geo = keep(new THREE.CylinderGeometry(m.radius, m.radius, m.radius * 2.1, 16));
       geo.rotateX(Math.PI / 2);
       mat = [keep(new THREE.MeshLambertMaterial({ map: texture(c, keep) })), cap, cap];
+    } else if (m.thing === "virevoltant") {
+      // Une boule de branches sèches : on voit à travers
+      const outer = keep(new THREE.IcosahedronGeometry(m.radius, 1));
+      const inner = keep(new THREE.IcosahedronGeometry(m.radius * 0.66, 1));
+      const twigs = keep(new THREE.MeshBasicMaterial({ color: 0x9c7a4c, wireframe: true }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const spin = new THREE.Mesh(outer, twigs);
+        const core = new THREE.Mesh(inner, twigs);
+        core.rotation.set(0.7, 0.4, 0.2);
+        spin.add(core);
+        group.add(spin);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
+    } else if (m.thing === "crabe") {
+      const shell = BufferMerge([
+        new THREE.SphereGeometry(0.62, 12, 8).scale(1.15, 0.6, 0.9),
+        new THREE.SphereGeometry(0.2, 8, 6).translate(-0.86, 0.1, 0.25),
+        new THREE.SphereGeometry(0.2, 8, 6).translate(0.86, 0.1, 0.25),
+      ]);
+      const legs = BufferMerge([
+        ...[-1, 1].flatMap((side) =>
+          [0.3, 0, -0.3].map((z) => new THREE.BoxGeometry(0.62, 0.07, 0.07).rotateZ(side * 0.7).translate(side * 0.74, -0.32, z)),
+        ),
+        new THREE.SphereGeometry(0.075, 6, 5).translate(-0.17, 0.42, 0.42),
+        new THREE.SphereGeometry(0.075, 6, 5).translate(0.17, 0.42, 0.42),
+      ]);
+      const shellGeo = keep(shell);
+      const legGeo = keep(legs);
+      const red = keep(new THREE.MeshLambertMaterial({ color: 0xe5533a, flatShading: true }));
+      const dark = keep(new THREE.MeshLambertMaterial({ color: 0x3a1a14 }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const spin = new THREE.Mesh(shellGeo, red);
+        spin.castShadow = shadows;
+        spin.add(new THREE.Mesh(legGeo, dark));
+        group.add(spin);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
+    } else if (m.thing === "meduse") {
+      const bell = keep(new THREE.SphereGeometry(m.radius, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2));
+      const strands = keep(
+        BufferMerge(
+          [0, 1, 2, 3, 4, 5, 6].map((k) => {
+            const a = (k / 7) * Math.PI * 2;
+            return new THREE.CylinderGeometry(0.03, 0.06, 1.5, 4).translate(
+              Math.cos(a) * m.radius * 0.55,
+              -0.72,
+              Math.sin(a) * m.radius * 0.55,
+            );
+          }),
+        ),
+      );
+      const pink = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.35, 0.6, 1.5), transparent: true, opacity: 0.85 }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const spin = new THREE.Mesh(bell, pink);
+        spin.add(new THREE.Mesh(strands, pink));
+        group.add(spin);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
     } else {
       // Une boule de neige bosselée : ses facettes montrent qu'elle roule
       const round = new THREE.IcosahedronGeometry(m.radius, phone ? 2 : 3);
@@ -640,11 +838,40 @@ export class TrackLife {
     });
   }
 
-  private zoneTexture(kind: "boue" | "glace", seed: number): THREE.CanvasTexture {
+  private zoneTexture(kind: ZoneKind, seed: number): THREE.CanvasTexture {
     const { keep } = this.ctx;
     const [c, g] = canvas(256, 512);
     const r = rng(seed + 11);
-    if (kind === "boue") {
+    if (kind === "sable" || kind === "cendre" || kind === "algues") {
+      // Du sable qui tourbillonne, des cendres, ou un tapis d'algues : des taches douces, puis ce qui les dessine
+      const tones =
+        kind === "sable" ? ["176,132,78", "150,108,60"] : kind === "cendre" ? ["68,62,62", "44,40,42"] : ["44,120,74", "28,92,60"];
+      for (let i = 0; i < 150; i++) {
+        const x = 26 + r() * 204;
+        const y = 26 + r() * 460;
+        const rad = 18 + r() * 34;
+        const grad = g.createRadialGradient(x, y, 1, x, y, rad);
+        const tone = tones[Math.floor(r() * tones.length)]!;
+        grad.addColorStop(0, `rgba(${tone},0.95)`);
+        grad.addColorStop(0.72, `rgba(${tone},0.82)`);
+        grad.addColorStop(1, `rgba(${tone},0)`);
+        g.fillStyle = grad;
+        g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+      g.lineWidth = 3;
+      g.strokeStyle = kind === "sable" ? "rgba(96,66,34,0.45)" : kind === "cendre" ? "rgba(255,120,40,0.4)" : "rgba(120,220,150,0.5)";
+      for (let i = 0; i < (kind === "algues" ? 60 : 22); i++) {
+        const x = 40 + r() * 176;
+        const y = 40 + r() * 432;
+        g.beginPath();
+        if (kind === "sable") g.arc(x, y, 8 + r() * 22, r() * 6, r() * 6 + 3.6);
+        else {
+          g.moveTo(x, y);
+          g.quadraticCurveTo(x + (r() - 0.5) * 30, y + 20, x + (r() - 0.5) * 20, y + 44);
+        }
+        g.stroke();
+      }
+    } else if (kind === "boue") {
       for (let i = 0; i < 150; i++) {
         const x = 26 + r() * 204;
         const y = 26 + r() * 460;
@@ -728,15 +955,28 @@ export class TrackLife {
         if (d === null) return;
         const p = pointAt(t, m.s, d);
         const grow = Math.max(0.01, Math.min(1, (m.reach - Math.abs(d)) / 1));
-        part.group.position.set(p.x, p.y + 0.06 + m.radius * grow, p.z);
+        const rolls = m.thing === "tonneau" || m.thing === "boule" || m.thing === "virevoltant";
+        const swim =
+          m.thing === "meduse"
+            ? 0.25 + Math.sin(time * 2 + i * 1.7) * 0.32
+            : m.thing === "crabe"
+              ? -0.1 + Math.abs(Math.sin(time * 11 + i)) * 0.09
+              : 0;
+        part.group.position.set(p.x, p.y + 0.06 + m.radius * grow + swim, p.z);
         part.group.rotation.y = h;
         part.group.scale.setScalar(grow);
-        part.spin.rotation.z = d / m.radius;
-        if (this.tick === 0 && grow === 1 && Math.hypot(p.x - camera.x, p.z - camera.z) < 90)
+        if (rolls) part.spin.rotation.z = d / m.radius;
+        else if (m.thing === "meduse") part.spin.scale.set(1, 1 + Math.sin(time * 3.2 + i) * 0.16, 1);
+        else part.spin.rotation.z = Math.sin(time * 11 + i) * 0.07;
+        if (rolls && this.tick === 0 && grow === 1 && Math.hypot(p.x - camera.x, p.z - camera.z) < 90)
           this.events.push({ kind: "trail", x: p.x, y: p.y, z: p.z, thing: m.thing === "boule" ? "boule" : "tonneau" });
       });
     }
     for (const it of this.sheep) this.updateSheep(it, time, camera);
+    this.hoops.forEach((ring, i) => {
+      const beat = 1 + Math.sin(time * 4 + i) * 0.05;
+      ring.scale.set(beat, beat, 1);
+    });
     for (const sp of this.springs) {
       const u = Math.abs(Math.sin(time * 3.2 + sp.i));
       sp.top.position.y = 0.42 + u * u * 0.16;
@@ -757,6 +997,20 @@ export class TrackLife {
       d = st.d + (next.d - st.d) * f * f * (3 - 2 * f);
     }
     const at = pointAt(t, m.s, d);
+    if (it.rock) {
+      // La bombe de lave : elle tombe, reste, puis s'enfonce sur place
+      it.rock.visible = st.phase === "fall" || st.phase === "stay" || st.phase === "lift";
+      const sink = st.phase === "lift" ? (st.u - DROP_WARN - DROP_FALL - DROP_STAY) / DROP_LIFT : 0;
+      it.rock.position.set(at.x, at.y + (st.phase === "fall" ? st.height * 2.2 : 0) - sink * 4.2, at.z);
+      if (st.phase === "warn" || st.phase === "fall") {
+        it.warn.visible = true;
+        it.warn.position.set(at.x, at.y + 0.1, at.z);
+        it.warnMat.opacity = st.phase === "fall" ? 0.95 : 0.3 + 0.6 * Math.abs(Math.sin(st.u * (7 + (st.u / DROP_WARN) * 11)));
+      } else it.warn.visible = false;
+      if (it.phase === "fall" && st.phase === "stay") this.events.push({ kind: "clang", x: at.x, y: at.y, z: at.z });
+      it.phase = st.phase;
+      return;
+    }
     it.trolley.position.set(at.x, at.y, at.z);
     it.box.position.set(at.x, at.y + 0.06 + st.height, at.z);
     // Le câble : tendu sauf pendant la chute ; il redescend chercher le conteneur juste avant de le remonter

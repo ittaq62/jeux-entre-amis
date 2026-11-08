@@ -127,6 +127,16 @@ export function botDrive(
     }
     if (mem.coinLane !== null) lane = mem.coinLane;
   }
+  // En vol : il vise le prochain anneau
+  if (k.glide) {
+    for (const hoop of t.hoops) {
+      const ahead = deltaS(t, k.s, hoop.s);
+      if (ahead > 2 && ahead < 60) {
+        lane = hoop.d;
+        break;
+      }
+    }
+  }
   // Une flaque sur sa route : il s'en écarte
   for (const hz of hazards) {
     if (hz.kind !== "huile") continue;
@@ -174,7 +184,7 @@ export function botDrive(
   }
   // La boue : il passe à côté
   for (const z of t.zones) {
-    if (z.kind !== "boue") continue;
+    if (z.kind === "glace") continue;
     const ahead = deltaS(t, k.s, z.s);
     const inside = deltaS(t, z.s, k.s);
     if (!(ahead >= 0 && ahead < 34) && !(inside >= 0 && inside <= z.len)) continue;

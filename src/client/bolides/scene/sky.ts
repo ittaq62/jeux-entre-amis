@@ -21,6 +21,10 @@ export interface Mood {
   cloud: number;
   glow: number;
   ground: number;
+  /** Le brouillard : où il commence, où il cache tout */
+  fog: [number, number];
+  /** Des étoiles (la nuit) */
+  stars?: boolean;
 }
 
 export const MOODS: Record<Theme, Mood> = {
@@ -38,6 +42,7 @@ export const MOODS: Record<Theme, Mood> = {
     cloud: 0xffffff,
     glow: 0xfff3c8,
     ground: 0x6a8f58,
+    fog: [260, 1320],
   },
   // Les vignes : la fin de l'après-midi, une lumière dorée, rasante, de longues ombres
   vignes: {
@@ -53,6 +58,7 @@ export const MOODS: Record<Theme, Mood> = {
     cloud: 0xfff0dc,
     glow: 0xffc27a,
     ground: 0x94935a,
+    fog: [260, 1320],
   },
   // Le col : le froid sec de la montagne, un ciel profond, une neige qui éclaire d'en bas
   col: {
@@ -68,6 +74,56 @@ export const MOODS: Record<Theme, Mood> = {
     cloud: 0xffffff,
     glow: 0xfff8e8,
     ground: 0xe8eef6,
+    fog: [260, 1320],
+  },
+  // Les dunes : le plein midi, un ciel blanchi par la chaleur
+  dunes: {
+    top: 0x3478c8,
+    mid: 0x9ec6df,
+    horizon: 0xf6dfba,
+    dir: new THREE.Vector3(34, 118, 46).normalize(),
+    sun: 0xfff0d0,
+    sunPower: 2.25,
+    hemiSky: 0xffeacc,
+    hemiGround: 0xb98f5c,
+    hemiPower: 1.15,
+    cloud: 0xfff6e8,
+    glow: 0xffe6b0,
+    ground: 0xc9a368,
+    fog: [240, 1250],
+  },
+  // Le lagon : une lumière tropicale, un ciel turquoise près de l'eau
+  lagon: {
+    top: 0x1f82d6,
+    mid: 0x6ec6ee,
+    horizon: 0xd9f4f6,
+    dir: new THREE.Vector3(40, 108, -44).normalize(),
+    sun: 0xfff4dc,
+    sunPower: 2.1,
+    hemiSky: 0xd6f2ff,
+    hemiGround: 0xcdbd90,
+    hemiPower: 1.25,
+    cloud: 0xffffff,
+    glow: 0xfff6cc,
+    ground: 0x4fb7c7,
+    fog: [280, 1400],
+  },
+  // Le volcan : la nuit, une lune rouge, et tout ce qui vient d'en bas brille
+  volcan: {
+    top: 0x0c0a1c,
+    mid: 0x2a1530,
+    horizon: 0x7c2c1c,
+    dir: new THREE.Vector3(-58, 72, 42).normalize(),
+    sun: 0xffb08a,
+    sunPower: 1.2,
+    hemiSky: 0x6a5a88,
+    hemiGround: 0xff5a20,
+    hemiPower: 1.55,
+    cloud: 0x7a4a48,
+    glow: 0xff8a50,
+    ground: 0x3a2020,
+    fog: [150, 980],
+    stars: true,
   },
 };
 
@@ -113,6 +169,38 @@ export class Sky {
     dome.renderOrder = -10;
     dome.frustumCulled = false;
     this.group.add(dome);
+
+    if (mood.stars) {
+      // Le ciel de nuit
+      const n = phone ? 260 : 620;
+      const pts = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        // Un point sur le haut de la sphère
+        const u = Math.random() * Math.PI * 2;
+        const y = 0.06 + Math.random() * 0.94;
+        const flat = Math.sqrt(1 - y * y);
+        pts.set([Math.cos(u) * flat * R * 0.97, y * R * 0.97, Math.sin(u) * flat * R * 0.97], i * 3);
+      }
+      const starGeo = keep(new THREE.BufferGeometry());
+      starGeo.setAttribute("position", new THREE.BufferAttribute(pts, 3));
+      const stars = new THREE.Points(
+        starGeo,
+        keep(
+          new THREE.PointsMaterial({
+            color: 0xfff4e4,
+            size: 2.2,
+            sizeAttenuation: false,
+            fog: false,
+            depthWrite: false,
+            transparent: true,
+            toneMapped: false,
+          }),
+        ),
+      );
+      stars.renderOrder = -9;
+      stars.frustumCulled = false;
+      this.group.add(stars);
+    }
 
     // Le halo du soleil
     const glowCanvas = document.createElement("canvas");

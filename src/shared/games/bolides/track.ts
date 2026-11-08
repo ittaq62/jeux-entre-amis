@@ -6,9 +6,9 @@
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
 /** Les circuits de base, et leur version en miroir */
-export type BaseTrackId = "port" | "vignes" | "col";
+export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan";
 export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
-export type Theme = "port" | "vignes" | "col";
+export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan";
 
 export interface TrackDef {
   id: TrackId;
@@ -47,9 +47,16 @@ export interface TrackDef {
   springs: [number, number][];
   /** Les sols spéciaux : du début à la fin (parts du tour), d'un bord à l'autre (parts de la demi-largeur) */
   zones: { from: number; to: number; d1: number; d2: number; kind: ZoneKind }[];
+  /**
+   * Les grands vols : un tremplin (part du tour), un vide de `len` mètres qu'on franchit en deltaplane, et des anneaux
+   * à traverser en vol (à combien de mètres du tremplin, sur quelle voie)
+   */
+  glides?: { frac: number; len: number; hoops?: [number, number][] }[];
+  /** Le niveau de la mer : là où la route passe dessous, on roule sous l'eau */
+  water?: number;
 }
 
-export type ZoneKind = "boue" | "glace";
+export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre";
 
 export type MoverDef =
   | { kind: "drop"; frac: number; lanes: number[]; period: number; offset: number }
@@ -66,9 +73,9 @@ export type MoverDef =
     };
 
 /** Ce qui traverse la route : ça roule, ou ça marche */
-export type RollThing = "tonneau" | "boule" | "mouton";
+export type RollThing = "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse";
 
-export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
@@ -186,7 +193,18 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
       [0.39, 0.3],
       [0.872, -0.3],
     ],
-    jumps: [0.615],
+    jumps: [],
+    glides: [
+      {
+        frac: 0.615,
+        len: 45,
+        hoops: [
+          [20, -0.4],
+          [42, 0.35],
+          [66, -0.1],
+        ],
+      },
+    ],
     crossers: [{ frac: 0.263, period: 9.5, offset: 0.6 }],
     movers: [
       { kind: "roll", frac: 0.673, thing: "boule", count: 2, gap: 1.3, period: 7.5, speed: 11, radius: 1.7, offset: 0.5 },
@@ -201,6 +219,187 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
       { from: 0.81, to: 0.86, d1: -1, d2: 1, kind: "glace" },
     ],
   },
+  dunes: {
+    id: "dunes",
+    name: "Les Dunes",
+    blurb: "Une piste brûlante entre les dunes et les mesas : du sable mouvant dans les virages, et un canyon à traverser en deltaplane.",
+    theme: "dunes",
+    width: 18,
+    start: 60,
+    corners: [
+      [-185, 0, 52],
+      [185, 0, 52],
+      [250, 135, 42],
+      [130, 205, 32],
+      [20, 130, 30],
+      [-15, 285, 38],
+      [-215, 285, 46],
+      [-270, 145, 50],
+    ],
+    hills: [
+      [0, 0],
+      [0.3, 3],
+      [0.48, 9],
+      [0.62, 12],
+      [0.72, 12],
+      [0.85, 4],
+      [1, 0],
+    ],
+    boxes: [0.13, 0.346, 0.53, 0.764],
+    boosts: [
+      [0.2307, -0.3],
+      [0.4326, 0.3],
+      [0.872, -0.3],
+    ],
+    jumps: [],
+    glides: [
+      {
+        frac: 0.6244,
+        len: 46,
+        hoops: [
+          [20, 0.4],
+          [42, -0.35],
+          [66, 0.1],
+        ],
+      },
+    ],
+    crossers: [{ frac: 0.7787, period: 9, offset: 0.2 }],
+    movers: [
+      { kind: "roll", frac: 0.263, thing: "virevoltant", count: 3, gap: 1.1, period: 9, speed: 12, radius: 1.15, offset: 0.4 },
+      { kind: "roll", frac: 0.894, thing: "virevoltant", count: 2, gap: 1.4, period: 7.5, speed: 13, radius: 1.15, offset: 0.1 },
+    ],
+    springs: [
+      [0.52, 0.5],
+      [0.858, -0.5],
+    ],
+    zones: [
+      { from: 0.284, to: 0.314, d1: 0.15, d2: 1, kind: "sable" },
+      { from: 0.4585, to: 0.49, d1: -1, d2: -0.15, kind: "sable" },
+      { from: 0.806, to: 0.832, d1: 0.15, d2: 1, kind: "sable" },
+    ],
+  },
+  lagon: {
+    id: "lagon",
+    name: "Le Lagon",
+    blurb:
+      "Des bancs de sable entre les paillotes, puis la route plonge sous la mer, parmi les coraux et les méduses, avant un grand vol au-dessus de la baie.",
+    theme: "lagon",
+    width: 18,
+    start: 60,
+    corners: [
+      [-165, 0, 48],
+      [160, 0, 50],
+      [240, -115, 42],
+      [150, -225, 40],
+      [25, -180, 34],
+      [-55, -275, 34],
+      [-220, -250, 44],
+      [-280, -105, 48],
+    ],
+    hills: [
+      [0, 2],
+      [0.24, 3],
+      [0.36, 3],
+      [0.45, -10],
+      [0.55, -11],
+      [0.64, 6],
+      [0.72, 6],
+      [0.82, 3],
+      [1, 2],
+    ],
+    boxes: [0.12, 0.35, 0.55, 0.83],
+    boosts: [
+      [0.225, -0.3],
+      [0.45, 0.3],
+      [0.9, -0.3],
+    ],
+    jumps: [],
+    glides: [
+      {
+        frac: 0.6274,
+        len: 44,
+        hoops: [
+          [20, -0.35],
+          [42, 0.4],
+          [64, 0],
+        ],
+      },
+    ],
+    crossers: [{ frac: 0.4427, period: 11, offset: 0.1 }],
+    movers: [
+      { kind: "roll", frac: 0.539, thing: "meduse", count: 3, gap: 1.1, period: 12, speed: 4.5, radius: 1.15, offset: 0.3 },
+      { kind: "roll", frac: 0.77, thing: "crabe", count: 4, gap: 0.7, period: 11, speed: 5.5, radius: 0.85, offset: 0.6 },
+    ],
+    springs: [
+      [0.335, 0.5],
+      [0.87, -0.5],
+    ],
+    zones: [
+      { from: 0.378, to: 0.41, d1: -1, d2: -0.15, kind: "algues" },
+      { from: 0.477, to: 0.505, d1: 0.15, d2: 1, kind: "algues" },
+    ],
+    water: 0,
+  },
+  volcan: {
+    id: "volcan",
+    name: "Le Volcan",
+    blurb:
+      "De nuit, sur la roche noire, entre les coulées de lave : les bombes du cratère pleuvent, et il faut voler au-dessus de la caldeira.",
+    theme: "volcan",
+    width: 17,
+    start: 60,
+    corners: [
+      [-145, 0, 44],
+      [135, 0, 48],
+      [220, 100, 38],
+      [115, 175, 30],
+      [170, 275, 34],
+      [-40, 310, 42],
+      [-65, 175, 30],
+      [-225, 210, 44],
+      [-255, 75, 44],
+    ],
+    hills: [
+      [0, 0],
+      [0.2, 4],
+      [0.48, 8],
+      [0.56, 8],
+      [0.78, 2],
+      [1, 0],
+    ],
+    boxes: [0.12, 0.33, 0.605, 0.7],
+    boosts: [
+      [0.195, -0.3],
+      [0.66, 0.3],
+      [0.975, 0.25],
+    ],
+    jumps: [0.899],
+    glides: [
+      {
+        frac: 0.459,
+        len: 42,
+        hoops: [
+          [20, 0.4],
+          [40, -0.35],
+          [62, 0.05],
+        ],
+      },
+    ],
+    crossers: [{ frac: 0.8, period: 9.5, offset: 0.4 }],
+    movers: [
+      { kind: "drop", frac: 0.2, lanes: [-0.55, 0, 0.55], period: 7, offset: 0.25 },
+      { kind: "drop", frac: 0.593, lanes: [-0.55, 0.55], period: 8, offset: 0.7 },
+    ],
+    springs: [
+      [0.21, 0.5],
+      [0.935, -0.5],
+    ],
+    zones: [
+      { from: 0.228, to: 0.262, d1: 0.15, d2: 1, kind: "cendre" },
+      { from: 0.52, to: 0.55, d1: 0.15, d2: 1, kind: "cendre" },
+      { from: 0.73, to: 0.76, d1: 0.15, d2: 1, kind: "cendre" },
+    ],
+  },
 };
 
 /** Le même circuit, gauche et droite échangées */
@@ -213,6 +412,7 @@ function mirrored(def: TrackDef): TrackDef {
     boosts: def.boosts.map(([f, d]) => [f, -d]),
     springs: def.springs.map(([f, d]) => [f, -d]),
     zones: def.zones.map((z) => ({ ...z, d1: -z.d2, d2: -z.d1 })),
+    glides: def.glides?.map((g) => ({ ...g, hoops: g.hoops?.map(([along, lane]) => [along, -lane] as [number, number]) })),
   };
 }
 
@@ -221,6 +421,9 @@ export const TRACKS: Record<TrackId, TrackDef> = {
   "port-miroir": mirrored(BASE_TRACKS.port),
   "vignes-miroir": mirrored(BASE_TRACKS.vignes),
   "col-miroir": mirrored(BASE_TRACKS.col),
+  "dunes-miroir": mirrored(BASE_TRACKS.dunes),
+  "lagon-miroir": mirrored(BASE_TRACKS.lagon),
+  "volcan-miroir": mirrored(BASE_TRACKS.volcan),
 };
 
 /** La version en miroir d'un circuit (lui-même s'il l'est déjà) */
@@ -260,8 +463,12 @@ export interface Track {
   coins: CoinSpot[];
   /** Les passages : où l'engin traverse (distance depuis la ligne), son horaire, et jusqu'où il va de chaque côté */
   crossers: Crosser[];
-  /** Après chaque tremplin, un trou à franchir : du bord du tremplin jusqu'à l'autre rive */
-  gaps: { from: number; to: number }[];
+  /** Après chaque tremplin, un trou à franchir : du bord du tremplin jusqu'à l'autre rive ; `glide` : en deltaplane */
+  gaps: { from: number; to: number; glide: boolean }[];
+  /** Les anneaux à traverser en vol : où ils sont, et à quelle hauteur au-dessus de la route */
+  hoops: { s: number; d: number; h: number }[];
+  /** Le niveau de la mer (null : il n'y en a pas) */
+  water: number | null;
   /** Ce qui bouge sur la route */
   movers: Mover[];
   springs: { s: number; d: number }[];
@@ -291,6 +498,21 @@ export function solidGround(t: Track, s: number): number {
   }
   return s;
 }
+
+/** La hauteur d'un vol en deltaplane, `along` mètres après le tremplin, pour un kart lancé à pleine vitesse */
+export function glideHeight(along: number): number {
+  const v = 27;
+  const t = Math.max(0, along) / v;
+  const sinkAt = (GLIDE_VY + GLIDE_SINK) / GLIDE_G;
+  const rise = (u: number) => RAMP_TOP + GLIDE_VY * u - 0.5 * GLIDE_G * u * u;
+  return t <= sinkAt ? rise(t) : Math.max(0, rise(sinkAt) - GLIDE_SINK * (t - sinkAt));
+}
+
+/** Le deltaplane : la montée au décollage, la pesanteur douce, et la descente la plus rapide (sans plonger) */
+export const GLIDE_VY = 6.5;
+export const GLIDE_G = 4.2;
+export const GLIDE_SINK = 3.2;
+const RAMP_TOP = 1;
 
 /** La longueur du trou après un tremplin */
 export const GAP_LEN = 13;
@@ -408,6 +630,10 @@ function placeCoins(t: Track): CoinSpot[] {
   const near = (s: number, list: number[], gap: number) => list.some((x) => Math.abs(deltaS(t, x, s)) < gap);
   const busy = (s: number) =>
     near(s, t.jumps, 26) ||
+    t.gaps.some((g) => {
+      const along = deltaS(t, g.from, s);
+      return along > -26 && along < g.to - g.from + 12;
+    }) ||
     near(
       s,
       t.boxes.map((b) => b.s),
@@ -679,10 +905,17 @@ export function buildTrack(def: TrackDef): Track {
     wall: half + CURB + VERGE,
     boxes: [],
     boosts: [],
-    jumps: def.jumps.map((f) => f * total),
+    jumps: [...def.jumps, ...(def.glides ?? []).map((g) => g.frac)].map((f) => f * total),
     coins: [],
     crossers: def.crossers.map((c) => ({ s: c.frac * total, period: c.period, offset: c.offset, reach: half + CURB + 3 })),
-    gaps: def.jumps.map((f) => ({ from: f * total, to: f * total + GAP_LEN })),
+    gaps: [
+      ...def.jumps.map((f) => ({ from: f * total, to: f * total + GAP_LEN, glide: false })),
+      ...(def.glides ?? []).map((g) => ({ from: g.frac * total, to: g.frac * total + g.len, glide: true })),
+    ],
+    hoops: (def.glides ?? []).flatMap((g) =>
+      (g.hoops ?? []).map(([along, lane]) => ({ s: g.frac * total + along, d: lane * half, h: glideHeight(along) })),
+    ),
+    water: def.water ?? null,
     movers: def.movers.map((m) =>
       m.kind === "drop"
         ? { kind: "drop" as const, s: m.frac * total, lanes: m.lanes, period: m.period, offset: m.offset }

@@ -14,6 +14,7 @@ import {
 } from "../shared/games/bolides/garage.ts";
 import { SPEED_CLASSES } from "../shared/games/bolides/physics.ts";
 import {
+  CUP_RACES,
   cupPoints,
   DEFAULT_SETTINGS,
   driveBots,
@@ -648,7 +649,7 @@ export class BolidesRoom extends DurableObject<Env> {
     const bots = new Set(d.seats.filter((s) => s.kind === "bot").map((s) => s.id));
     const settings = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
     if (settings.cup && !d.tour) {
-      // La course suivante du Grand Prix, ou un nouveau Grand Prix (les trois circuits, dans le désordre)
+      // La course suivante du Grand Prix, ou un nouveau Grand Prix (quatre circuits tirés au sort)
       if (d.cup && d.status === "finished" && d.cup.index + 1 < d.cup.tracks.length) {
         d.cup.index += 1;
         d.cup.last = {};
@@ -658,7 +659,7 @@ export class BolidesRoom extends DurableObject<Env> {
           const j = Math.floor(Math.random() * (i + 1));
           [tracks[i], tracks[j]] = [tracks[j]!, tracks[i]!];
         }
-        d.cup = { tracks, index: 0, points: {}, last: {} };
+        d.cup = { tracks: tracks.slice(0, CUP_RACES), index: 0, points: {}, last: {} };
       }
       settings.track = d.cup.tracks[d.cup.index]!;
     } else d.cup = null;

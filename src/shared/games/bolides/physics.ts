@@ -10,6 +10,9 @@ import {
   crosserAt,
   CURB,
   deltaS,
+  GLIDE_G,
+  GLIDE_SINK,
+  GLIDE_VY,
   DROP_HALF,
   DROP_RADIUS,
   dropAt,
@@ -60,6 +63,23 @@ const RAMP_MIN_SPEED = 21;
 const SPRING_VY = 10;
 /** Dans la boue, ce qu'il reste de la vitesse ; sur le verglas, ce qu'il reste d'adhérence (le dérapage y charge plus vite) */
 const MUD = 0.7;
+/** Ce qu'il reste de vitesse dans le sable mouvant, les algues, les cendres */
+const SLOW_GROUND: Partial<Record<ZoneKind, number>> = { boue: MUD, sable: 0.66, algues: 0.76, cendre: 0.74 };
+/** En deltaplane : la vitesse au décollage, la part du braquage, le plongeon au frein */
+const GLIDE_MIN_SPEED = 25;
+const GLIDE_TURN = 0.8;
+const GLIDE_DIVE = 16;
+/** Un anneau traversé en vol : sa taille, et le coup de turbo */
+export const HOOP_RADIUS = 2.9;
+const HOOP_BOOST = 0.75;
+/** Sous l'eau : un peu moins vite, un peu moins de reprise, plus maniable, et on retombe doucement */
+const WATER_TOP = 0.93;
+const WATER_ACCEL = 0.82;
+const WATER_TURN = 1.12;
+const WATER_GRAVITY = 0.42;
+/** Le saut chargé : tenir le bouton de dérapage en ligne droite, puis lâcher pour bondir */
+export const JUMP_CHARGE = 0.5;
+const JUMP_VY = 7.5;
 const ICE_GRIP = 0.3;
 const ICE_CHARGE = 1.3;
 /** Le temps où le kart tourne sur lui-même après un coup */
@@ -100,6 +120,11 @@ export interface Kart {
   fall: number;
   /** L'aspiration, de 0 à 1 (négative : le temps à attendre avant de pouvoir recommencer) */
   draft: number;
+  /** En vol, sous son deltaplane */
+  glide: boolean;
+  /** Depuis combien de temps il charge son saut, et s'il est en l'air à cause d'un saut chargé (pas de figure, alors) */
+  jumpCharge: number;
+  charged: boolean;
 }
 
 export interface Input {
@@ -121,7 +146,7 @@ export interface StepMods {
   /** L'arc-en-ciel : l'herbe ne freine pas */
   star?: boolean;
   /** Le véhicule : son accélération, son braquage, sa tenue dans l'herbe, la charge de ses dérapages (kart par défaut) */
-  vehicle?: Pick<VehicleStats, "accel" | "turn" | "grass" | "charge">;
+  vehicle?: Pick<VehicleStats, "top" | "accel" | "turn" | "grass" | "charge">;
 }
 
 /** Ce qui s'est passé pendant le pas, pour les sons et les effets */
@@ -149,7 +174,12 @@ export type KartEvent =
   /** Sur un trampoline */
   | "spring"
   /** L'aspiration d'un kart devant vient de nous lancer */
-  | "draft";
+  | "draft"
+  /** Le deltaplane s'ouvre ; un anneau traversé */
+  | "glide"
+  | "hoop"
+  /** Un saut chargé part */
+  | "bound";
 
 export function newKart(t: Track, x: number, z: number, h: number): Kart {
   const at = locate(t, x, z);
@@ -178,6 +208,9 @@ export function newKart(t: Track, x: number, z: number, h: number): Kart {
     held: false,
     fall: 0,
     draft: 0,
+    glide: false,
+    jumpCharge: 0,
+    charged: false,
   };
 }
 
@@ -310,6 +343,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
       // On le repose d'un peu haut, sur l'autre rive
       k.air = RESPAWN_DROP;
       k.vy = 0;
+      k.glide = false;
       const at = locate(t, k.x, k.z);
       k.i = at.i;
       k.s = at.s;
@@ -340,7 +374,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   // La vitesse visée : moins dans l'herbe (sauf sous l'arc-en-ciel), plus avec un turbo
   const grass = k.offroad && !mods.star;
   const grassLeft = mods.vehicle?.grass ?? GRASS;
-  const accel = ACCEL * (mods.vehicle?.accel ?? 1);
+  const accel = ACCEL * (mods.vehicle?.accel ?? 1) * (t.water !== null && k.y + Math.max(0, k.air) < t.water - 0.3 ? WATER_ACCEL : 1);
   // Les sols spéciaux : la boue freine, le verglas fait glisser
   let surface: ZoneKind | null = null;
   if (k.air <= 0.2) {
@@ -349,7 +383,10 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
       if (along >= 0 && along <= z.len && k.d >= z.d1 && k.d <= z.d2) surface = z.kind;
     }
   }
-  let max = top * (grass ? grassLeft : 1) * (surface === "boue" && !mods.star ? MUD : 1);
+  const under = t.water !== null && k.y + Math.max(0, k.air) < t.water - 0.3;
+  const slow = surface && !mods.star ? (SLOW_GROUND[surface] ?? 1) : 1;
+  // Sous l'eau, les écarts de vitesse entre véhicules se réduisent de moitié
+  let max = top * (grass ? grassLeft : 1) * slow * (under ? WATER_TOP / Math.sqrt(mods.vehicle?.top ?? 1) : 1);
   if (k.boost > 0) {
     max = top * BOOST_SPEED * (grass ? Math.max(0.85, grassLeft) : 1);
     k.boost = Math.max(0, k.boost - dt);
@@ -363,6 +400,19 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   } else if (!push) k.v -= Math.sign(k.v) * Math.min(Math.abs(k.v), COAST * dt);
   // Au-dessus de la vitesse visée (fin de turbo, herbe), le kart ralentit vite mais sans à-coup
   if (k.v > max) k.v = Math.max(max, k.v - (k.v - max) * 2.4 * dt - 2 * dt);
+
+  // Le saut chargé : bouton tenu sans braquer, en roulant ; on le lâche pour bondir (par-dessus une flaque, un obstacle)
+  if (ctl.drift && !flying && k.drift === 0 && k.spin === 0 && Math.abs(ctl.steer) <= 0.15 && k.v > 10 && !k.offroad) k.jumpCharge += dt;
+  else {
+    if (!ctl.drift && k.jumpCharge >= JUMP_CHARGE && !flying && k.drift === 0 && k.spin === 0) {
+      k.vy = JUMP_VY;
+      k.air = Math.max(k.air, 0.05);
+      k.charged = true;
+      k.trick = false;
+      events?.push("bound");
+    }
+    k.jumpCharge = 0;
+  }
 
   // Le dérapage : un petit saut quand on enfonce le bouton ; il commence dès qu'on braque un peu, bouton tenu, il
   // charge un mini-turbo, et il le lâche quand on relâche le bouton
@@ -383,8 +433,8 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
   }
 
   // Le braquage : nul à l'arrêt, un peu moins fort à pleine vitesse, inversé en marche arrière, à peine en l'air
-  const speedF = clamp(Math.abs(k.v) / 6, 0, 1) * (1 - 0.3 * clamp(k.v / top, 0, 1.3)) * (flying ? 0.3 : 1);
-  const turn = TURN * (mods.vehicle?.turn ?? 1);
+  const speedF = clamp(Math.abs(k.v) / 6, 0, 1) * (1 - 0.3 * clamp(k.v / top, 0, 1.3)) * (flying ? (k.glide ? GLIDE_TURN : 0.3) : 1);
+  const turn = TURN * (mods.vehicle?.turn ?? 1) * (under ? WATER_TURN : 1);
   let yaw: number;
   if (k.drift !== 0) {
     // En dérapage, le kart tourne toujours du côté du dérapage : braquer dedans serre, braquer dehors élargit
@@ -512,25 +562,48 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
       const along = deltaS(t, lip, k.s);
       if (along >= -RAMP_LEN && along < 0) ramp = RAMP_H * (1 + along / RAMP_LEN);
       else if (along >= 0 && along < 4 && deltaS(t, lip, oldS) < 0 && k.air > RAMP_H * 0.5 && k.v > 6) {
-        k.v = Math.max(k.v, RAMP_MIN_SPEED);
-        k.vy = 3 + k.v * 0.22;
-        k.trick = false;
-        events?.push("jump");
+        if (t.gaps.some((g) => g.glide && g.from === lip)) {
+          // Un grand vide devant : le deltaplane s'ouvre
+          k.v = Math.max(k.v, GLIDE_MIN_SPEED);
+          k.vy = GLIDE_VY;
+          k.glide = true;
+          k.drift = 0;
+          k.charge = 0;
+          k.trick = false;
+          events?.push("glide");
+        } else {
+          k.v = Math.max(k.v, RAMP_MIN_SPEED);
+          k.vy = 3 + k.v * 0.22;
+          k.trick = false;
+          events?.push("jump");
+        }
       }
     }
   }
   if (k.vy !== 0 || (k.air > 0 && ramp < 0)) {
     // En l'air (ou tombé du côté de la rampe) : la pesanteur, jusqu'à retoucher la route
     if (k.vy === 0) k.vy = -0.01;
-    k.vy -= GRAVITY * dt;
+    if (k.glide) {
+      // Sous le deltaplane : on retombe doucement ; le frein fait plonger, pour se poser plus tôt
+      k.vy -= (ctl.brake ? GLIDE_DIVE : GLIDE_G) * dt;
+      if (!ctl.brake && k.vy < -GLIDE_SINK) k.vy = -GLIDE_SINK;
+      for (const h of t.hoops) {
+        if (deltaS(t, h.s, oldS) >= 0 || deltaS(t, h.s, k.s) < 0 || deltaS(t, h.s, k.s) > 6) continue;
+        if (Math.hypot(k.d - h.d, k.air + k.vy * dt - h.h) > HOOP_RADIUS) continue;
+        k.boost = Math.max(k.boost, HOOP_BOOST);
+        events?.push("hoop");
+      }
+    } else k.vy -= GRAVITY * (under ? WATER_GRAVITY : 1) * dt;
     k.air += k.vy * dt;
-    if (pressed && !k.trick && k.air > 0.3 && k.spin === 0) {
+    if (pressed && !k.trick && !k.charged && k.air > 0.3 && k.spin === 0) {
       k.trick = true;
       events?.push("trick");
     }
     if (k.air <= 0) {
       k.air = 0;
       k.vy = 0;
+      k.glide = false;
+      k.charged = false;
       events?.push("land");
       if (k.trick && k.spin === 0) k.boost = Math.max(k.boost, TRICK_BOOST);
       k.trick = false;

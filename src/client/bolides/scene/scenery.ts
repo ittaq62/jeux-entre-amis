@@ -31,6 +31,10 @@ export const PLACES: Record<Theme, { tunnel: [number, number]; bridge: number }>
   port: { tunnel: [455, 530], bridge: 110 },
   vignes: { tunnel: [586, 648], bridge: 110 },
   col: { tunnel: [912, 1008], bridge: 98 },
+  dunes: { tunnel: [698, 770], bridge: 110 },
+  // Pas de tunnel au lagon (un écart négatif veut dire « aucun »)
+  lagon: { tunnel: [-1, -1], bridge: 110 },
+  volcan: { tunnel: [878, 950], bridge: 110 },
 };
 
 const lambert = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshLambertMaterial({ color, map: map ?? null });
@@ -94,6 +98,7 @@ function portal(t: Track, s: number, w: number, h: number, thick: number, segs: 
 }
 
 function addTunnel(ctx: SceneryContext, theme: Theme, s1: number, s2: number) {
+  if (s1 < 0) return;
   const { group, t, keep } = ctx;
   const w = t.wall + 0.8;
   const h = theme === "port" ? 8.5 : 7.5;
@@ -213,8 +218,16 @@ function addBridge(ctx: SceneryContext, theme: Theme, s: number, crowd: Crowd) {
       ? keep(lambert(0x3d6ea8))
       : theme === "vignes"
         ? keep(lambert(0xd9c7a2, keep(TX.tunnelTexture("vignes"))))
-        : keep(lambert(0x7a5230));
-  const dark = keep(lambert(theme === "port" ? 0x2b3138 : theme === "vignes" ? 0xb39f7a : 0x5b3c22));
+        : theme === "dunes"
+          ? keep(lambert(0xe0c595, keep(TX.tunnelTexture("dunes"))))
+          : theme === "volcan"
+            ? keep(lambert(0x3a3234))
+            : keep(lambert(0x7a5230));
+  const dark = keep(
+    lambert(
+      theme === "port" ? 0x2b3138 : theme === "vignes" ? 0xb39f7a : theme === "dunes" ? 0xb08a58 : theme === "volcan" ? 0x1f1b1d : 0x5b3c22,
+    ),
+  );
   // Le tablier en travers de la route (son x local suit la droite de la route), ses garde-corps, ses deux piles
   const deck = new THREE.Mesh(keep(new THREE.BoxGeometry(span, 0.7, 4)), mat);
   deck.position.y = 7.2;
@@ -227,12 +240,12 @@ function addBridge(ctx: SceneryContext, theme: Theme, s: number, crowd: Crowd) {
   for (const x of [-(t.wall + 2), t.wall + 2]) {
     const ground = heightAt(p.x - p.tz * x, p.z + p.tx * x);
     const h = deckY - ground;
-    const pile = new THREE.Mesh(keep(new THREE.BoxGeometry(2.2, h, 3.4)), theme === "vignes" ? mat : dark);
+    const pile = new THREE.Mesh(keep(new THREE.BoxGeometry(2.2, h, 3.4)), theme === "vignes" || theme === "dunes" ? mat : dark);
     pile.position.set(x, 7.2 - h / 2, 0);
     pile.castShadow = ctx.shadows;
     bridge.add(pile);
   }
-  if (theme === "vignes") {
+  if (theme === "vignes" || theme === "dunes") {
     // Une arche de pierre sous le tablier
     const arch = new THREE.Mesh(keep(new THREE.TorusGeometry(t.wall + 1, 0.8, 6, 24, Math.PI)), mat);
     arch.position.y = 6.4 - (t.wall + 1) * 0.35;
@@ -575,11 +588,11 @@ export function buildScenery(ctx: SceneryContext, theme: Theme): Scenery {
     extras.push(seagulls(ctx), lighthouseBeam(ctx));
   } else if (theme === "vignes") {
     extras.push(windmills(ctx));
-  } else {
+  } else if (theme === "col") {
     extras.push(cableCar(ctx), snowfall(ctx));
   }
   return {
-    tunnels: [place.tunnel],
+    tunnels: place.tunnel[0] >= 0 ? [place.tunnel] : [],
     update(time, camera, daylight) {
       crowd.update(time);
       for (const e of extras) e(time, camera, daylight);

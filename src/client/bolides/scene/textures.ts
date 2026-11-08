@@ -39,7 +39,14 @@ function speckle(g: CanvasRenderingContext2D, w: number, h: number, count: numbe
   }
 }
 
-const ASPHALT: Record<Theme, string> = { port: "#4b4c52", vignes: "#56524d", col: "#5b5f66" };
+const ASPHALT: Record<Theme, string> = {
+  port: "#4b4c52",
+  vignes: "#56524d",
+  col: "#5b5f66",
+  dunes: "#7b6650",
+  lagon: "#8b8171",
+  volcan: "#2d292c",
+};
 
 /** Le bitume : le grain, les lignes blanches des bords et les tirets du milieu. Elle se répète tous les 8 m. */
 export function roadTexture(theme: Theme): THREE.CanvasTexture {
@@ -108,18 +115,38 @@ export function roadTexture(theme: Theme): THREE.CanvasTexture {
   g.fillStyle = "#f2efe6";
   g.fillRect(16, 0, 14, S);
   g.fillRect(482, 0, 14, S);
-  g.fillStyle = theme === "col" ? "#f2c94c" : "#f2efe6";
+  g.fillStyle = theme === "col" ? "#f2c94c" : theme === "volcan" ? "#ff8a3a" : "#f2efe6";
   g.fillRect(248, 0, 16, 240);
+  if (theme === "volcan") {
+    // Des fissures qui rougeoient dans le bitume
+    g.strokeStyle = "#ff6a1f";
+    g.shadowColor = "#ffb347";
+    g.shadowBlur = 8;
+    for (let i = 0; i < 4; i++) {
+      let x = 70 + r() * 372;
+      let y = r() * S;
+      g.lineWidth = 1.4 + r() * 1.4;
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) {
+        x += (r() - 0.5) * 30;
+        y += 8 + r() * 14;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    g.shadowBlur = 0;
+  }
   speckle(g, S, S, 500, [`${ASPHALT[theme]}88`], 3, 91);
   return toTexture(c);
 }
 
 /** Les vibreurs : rouge et blanc */
-export function curbTexture(): THREE.CanvasTexture {
+export function curbTexture(theme?: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(32, 64);
-  g.fillStyle = "#d8352a";
+  g.fillStyle = theme === "lagon" ? "#2fb7d4" : theme === "volcan" ? "#ff7a1f" : "#d8352a";
   g.fillRect(0, 0, 32, 32);
-  g.fillStyle = "#f4f1ea";
+  g.fillStyle = theme === "volcan" ? "#26211f" : "#f4f1ea";
   g.fillRect(0, 32, 32, 32);
   g.fillStyle = "rgba(0,0,0,0.15)";
   g.fillRect(0, 0, 4, 64);
@@ -130,15 +157,32 @@ export function curbTexture(): THREE.CanvasTexture {
 export function groundTexture(theme: Theme): THREE.CanvasTexture {
   const size = 512;
   const [c, g] = canvas(size, size);
-  const base = theme === "col" ? "#e9eef3" : theme === "vignes" ? "#7d9a4a" : "#5a8d48";
+  const base =
+    theme === "col"
+      ? "#e9eef3"
+      : theme === "vignes"
+        ? "#7d9a4a"
+        : theme === "dunes"
+          ? "#d8b47c"
+          : theme === "lagon"
+            ? "#e4d5ae"
+            : theme === "volcan"
+              ? "#37302f"
+              : "#5a8d48";
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   const tones =
     theme === "col"
       ? ["rgba(255,255,255,0.5)", "rgba(196,210,224,0.35)", "rgba(230,238,246,0.5)"]
-      : theme === "vignes"
-        ? ["rgba(150,175,90,0.35)", "rgba(100,130,55,0.3)", "rgba(176,162,106,0.3)"]
-        : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
+      : theme === "dunes"
+        ? ["rgba(240,208,150,0.4)", "rgba(190,140,86,0.3)", "rgba(226,190,130,0.4)"]
+        : theme === "lagon"
+          ? ["rgba(248,238,206,0.45)", "rgba(204,186,140,0.3)", "rgba(236,224,190,0.4)"]
+          : theme === "volcan"
+            ? ["rgba(70,58,58,0.4)", "rgba(24,20,22,0.4)", "rgba(92,60,48,0.3)"]
+            : theme === "vignes"
+              ? ["rgba(150,175,90,0.35)", "rgba(100,130,55,0.3)", "rgba(176,162,106,0.3)"]
+              : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
   // De grandes taches douces, puis un grain fin : rien de carré, de près comme de loin
   const r = rng(11);
   for (let i = 0; i < 260; i++) {
@@ -163,9 +207,13 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
   const dots =
     theme === "col"
       ? ["rgba(255,255,255,0.7)", "rgba(190,205,220,0.5)"]
-      : theme === "vignes"
-        ? ["rgba(60,85,35,0.35)", "rgba(190,180,120,0.3)"]
-        : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
+      : theme === "dunes" || theme === "lagon"
+        ? ["rgba(120,88,50,0.3)", "rgba(255,240,206,0.35)"]
+        : theme === "volcan"
+          ? ["rgba(10,8,10,0.5)", "rgba(120,86,70,0.35)"]
+          : theme === "vignes"
+            ? ["rgba(60,85,35,0.35)", "rgba(190,180,120,0.3)"]
+            : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
   speckle(g, size, size, 7000, dots, 1.4, 13);
   const t = toTexture(c);
   t.anisotropy = 8;
@@ -175,7 +223,46 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
 /** Les murets au bord du circuit, selon le décor */
 export function wallTexture(theme: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(256, 64);
-  if (theme === "port") {
+  if (theme === "dunes") {
+    // Un muret de terre crue, ses blocs irréguliers
+    g.fillStyle = "#c79a64";
+    g.fillRect(0, 0, 256, 64);
+    const r = rng(33);
+    for (let y = 0; y < 64; y += 16) {
+      for (let x = (y / 16) % 2 === 0 ? 0 : -20; x < 256; x += 40) {
+        const l = 34 + Math.floor(r() * 14);
+        g.fillStyle = `hsl(${28 + r() * 8}, 46%, ${l + 22}%)`;
+        g.fillRect(x + 1, y + 1, 38, 14);
+      }
+    }
+    speckle(g, 256, 64, 500, ["rgba(90,60,30,0.14)", "rgba(255,240,210,0.14)"], 2, 5);
+  } else if (theme === "lagon") {
+    // Une palissade de bambou, attachée par des cordes
+    g.fillStyle = "#a8894e";
+    g.fillRect(0, 0, 256, 64);
+    for (let x = 0; x < 256; x += 16) {
+      const grad = g.createLinearGradient(x, 0, x + 15, 0);
+      grad.addColorStop(0, "#c9ab66");
+      grad.addColorStop(0.5, "#e6cf8d");
+      grad.addColorStop(1, "#a68648");
+      g.fillStyle = grad;
+      g.fillRect(x, 0, 15, 64);
+      g.fillStyle = "rgba(70,50,20,0.55)";
+      for (const y of [12 + (x % 3) * 3, 40 - (x % 5) * 2]) g.fillRect(x, y, 15, 2);
+    }
+    g.fillStyle = "#5a4326";
+    g.fillRect(0, 22, 256, 4);
+  } else if (theme === "volcan") {
+    // De la roche noire, veinée d'une ligne de lave
+    g.fillStyle = "#26211f";
+    g.fillRect(0, 0, 256, 64);
+    speckle(g, 256, 64, 1100, ["rgba(70,60,60,0.5)", "rgba(0,0,0,0.5)"], 3, 9);
+    g.fillStyle = "#ff7a1f";
+    g.shadowColor = "#ffb347";
+    g.shadowBlur = 8;
+    g.fillRect(0, 8, 256, 5);
+    g.shadowBlur = 0;
+  } else if (theme === "port") {
     // Des blocs de béton aux bandes jaunes et noires
     g.fillStyle = "#b9bbbd";
     g.fillRect(0, 0, 256, 64);
@@ -311,17 +398,19 @@ export function boostTexture(): THREE.CanvasTexture {
 }
 
 /** Le dessus d'un tremplin : des planches, des flèches jaunes vers le bord, et une bande rayée au bord */
-export function rampTexture(): THREE.CanvasTexture {
+export function rampTexture(glide = false): THREE.CanvasTexture {
   const [c, g] = canvas(256, 128);
   const r = rng(21);
   for (let x = 0; x < 256; x += 32) {
-    g.fillStyle = `hsl(${26 + r() * 8}, ${48 + r() * 10}%, ${36 + r() * 8}%)`;
+    g.fillStyle = glide
+      ? `hsl(${200 + r() * 12}, ${70 + r() * 10}%, ${42 + r() * 8}%)`
+      : `hsl(${26 + r() * 8}, ${48 + r() * 10}%, ${36 + r() * 8}%)`;
     g.fillRect(x, 0, 32, 128);
     g.fillStyle = "rgba(0,0,0,0.25)";
     g.fillRect(x, 0, 2, 128);
   }
   // Les flèches pointent vers le haut de la toile (le bord du tremplin)
-  g.fillStyle = "#ffd23a";
+  g.fillStyle = glide ? "#ffffff" : "#ffd23a";
   for (const cx of [64, 192]) {
     g.beginPath();
     g.moveTo(cx - 34, 92);
@@ -593,7 +682,22 @@ export function blobTexture(): THREE.CanvasTexture {
 }
 
 /** L'intérieur d'un tunnel : des plaques de béton au port, des pierres aux vignes, de la roche au col */
+function strataTexture(colors: string[], seed: number): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  const r = rng(seed);
+  for (let y = 0; y < 256;) {
+    const h = 12 + r() * 30;
+    g.fillStyle = colors[Math.floor(r() * colors.length)]!;
+    g.fillRect(0, y, 256, h);
+    y += h;
+  }
+  speckle(g, 256, 256, 1600, ["rgba(0,0,0,0.12)", "rgba(255,255,255,0.08)"], 3, seed + 1);
+  return toTexture(c);
+}
+
 export function tunnelTexture(theme: Theme): THREE.CanvasTexture {
+  if (theme === "dunes" || theme === "lagon") return strataTexture(["#b8703f", "#c98650", "#a35d36", "#d69a62", "#bd7a48"], 51);
+  if (theme === "volcan") return strataTexture(["#2b2628", "#332c2c", "#231f21", "#3c2d28"], 53);
   const [c, g] = canvas(256, 256);
   const r = rng(theme === "port" ? 41 : theme === "vignes" ? 43 : 47);
   if (theme === "port") {

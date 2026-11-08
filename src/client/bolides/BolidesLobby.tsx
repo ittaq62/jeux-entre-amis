@@ -96,8 +96,10 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
                 l'écran, ou en glissant le pouce vers le haut sur Dérapage. Une manette marche aussi.
               </p>
               <p className="hint">
-                Reste juste derrière un kart : son aspiration finit par te lancer. Tu peux garder deux objets, et le sol te montre où part
-                celui que tu tiens. Dans le menu de la course, les objets peuvent partir tout seuls.
+                Tiens Dérapage sans tourner puis lâche : ton kart bondit par-dessus les obstacles. Sur un tremplin bleu, le deltaplane
+                s'ouvre : tourne pour viser les anneaux, freine pour plonger. Reste juste derrière un kart : son aspiration finit par te
+                lancer. Tu peux garder deux objets, et le sol te montre où part celui que tu tiens. Dans le menu de la course, les objets
+                peuvent partir tout seuls.
               </p>
             </div>
 
@@ -196,7 +198,7 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
                     <span>
                       <strong>Grand Prix</strong>
                       <span className="hint">
-                        Les trois circuits à la suite, avec des points à chaque arrivée. Le meilleur total l'emporte.
+                        Quatre circuits tirés au sort, à la suite, avec des points à chaque arrivée. Le meilleur total l'emporte.
                       </span>
                     </span>
                   </div>

@@ -92,7 +92,11 @@ export class RaceScene {
   /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
   private drowned: boolean[] = [];
   /** Le son de ce qui se passe sur la route, plus ou moins fort selon la distance */
-  onLife: ((sound: "clang" | "baa" | "firework", volume: number) => void) | null = null;
+  onLife: ((sound: "clang" | "baa" | "firework" | "dive", volume: number) => void) | null = null;
+  /** Chaque kart : au-dessus de la mer ou non (pour le plouf quand il la traverse), et la caméra sous l'eau ou non */
+  private aboveSea: boolean[] = [];
+  private cameraUnder = false;
+  private bubbleTick = 0;
   private fireworkIn = 0;
   private featureKeep: { dispose: () => void }[] = [];
   private crateShown: boolean[] = [];
@@ -281,6 +285,32 @@ export class RaceScene {
     this.scene.add(this.aim.group);
   }
 
+  /** La caméra passe sous la surface : tout devient bleu, on ne voit plus loin, et le ciel disparaît */
+  private setUnderwater(under: boolean) {
+    if (under === this.cameraUnder || !this.world) return;
+    this.cameraUnder = under;
+    const fog = this.world.fog;
+    const mood = this.world.mood;
+    if (under) {
+      fog.color.setHex(0x1d8fb0);
+      fog.near = 12;
+      fog.far = 135;
+      this.scene.background = fog.color;
+      this.world.dome.visible = false;
+      this.hemi.color.setHex(0xbdf0ff);
+      this.hemi.groundColor.setHex(0x2a7a90);
+    } else {
+      fog.color.setHex(mood.horizon);
+      fog.near = mood.fog[0];
+      fog.far = mood.fog[1];
+      this.scene.background = this.world.sky;
+      this.world.dome.visible = true;
+      this.hemi.color.setHex(mood.hemiSky);
+      this.hemi.groundColor.setHex(mood.hemiGround);
+    }
+    this.vignette.classList.toggle("is-under", under);
+  }
+
   /** Ce que reflètent les carrosseries : le ciel de ce circuit, son sol, son soleil */
   private makeEnvironment(mood: Mood) {
     const env = new THREE.Scene();
@@ -370,9 +400,9 @@ export class RaceScene {
 
   /** Un kart touche l'eau : une gerbe, et une onde */
   private splash(k: Kart) {
-    const y = k.y - WATER_DEPTH + 0.2;
+    const y = (this.track?.water ?? k.y - WATER_DEPTH) + 0.2;
     const theme = this.track?.def.theme;
-    const color = theme === "col" ? 0xdff4ff : theme === "vignes" ? 0xcdeed5 : 0xc6e6ff;
+    const color = theme === "volcan" ? 0xff7a2a : theme === "col" ? 0xdff4ff : theme === "vignes" ? 0xcdeed5 : 0xc6e6ff;
     for (let i = 0; i < (this.opts.reduced ? 8 : 26); i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 2 + Math.random() * 5;
@@ -686,7 +716,7 @@ export class RaceScene {
   dust(k: Kart) {
     if (this.opts.reduced || Math.random() > 0.5) return;
     const theme = this.track?.def.theme;
-    const color = theme === "col" ? 0xf4f7fa : 0x9b8a6a;
+    const color = theme === "col" ? 0xf4f7fa : theme === "dunes" || theme === "lagon" ? 0xd9bf88 : theme === "volcan" ? 0x4a4040 : 0x9b8a6a;
     this.puff(
       k.x - Math.sin(k.h) * 1.2,
       k.y + 0.3,
@@ -815,7 +845,8 @@ export class RaceScene {
   /** La poussière (ou la neige) qui vole à l'atterrissage d'un saut */
   landDust(k: Kart) {
     if (this.opts.reduced) return;
-    const color = this.track?.def.theme === "col" ? 0xf4f7fa : 0xcfc4ad;
+    const landTheme = this.track?.def.theme;
+    const color = landTheme === "col" ? 0xf4f7fa : landTheme === "volcan" ? 0x5a4a44 : landTheme === "dunes" ? 0xe0c896 : 0xcfc4ad;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
       this.puff(
@@ -863,9 +894,21 @@ export class RaceScene {
     this.crossers?.update(f.serverNow / 1000);
     if (this.life) for (const e of this.life.update(f.serverNow / 1000, this.camPos)) this.lifeEvent(e);
     f.karts.forEach((k, i) => {
-      const under = k.kart.air < -WATER_DEPTH;
+      const under = k.kart.air < (t.water !== null ? Math.min(-0.5, t.water - k.kart.y) : -WATER_DEPTH);
       if (under && !this.drowned[i]) this.splash(k.kart);
       this.drowned[i] = under;
+      // La route qui plonge sous la mer : une gerbe quand on entre, et une autre quand on ressort
+      if (t.water !== null) {
+        const above = k.kart.y + k.kart.air >= t.water;
+        if (this.aboveSea[i] !== undefined && above !== this.aboveSea[i]) {
+          const near = Math.max(0, 1 - Math.hypot(k.kart.x - this.camPos.x, k.kart.z - this.camPos.z) / 70);
+          if (near > 0) {
+            this.splash(k.kart);
+            this.onLife?.("dive", 0.25 + 0.7 * near);
+          }
+        }
+        this.aboveSea[i] = above;
+      }
     });
     // La fumée des dérapages, une image sur deux, pour les karts pas trop loin
     this.smokeTick = (this.smokeTick + 1) % 2;
@@ -984,6 +1027,28 @@ export class RaceScene {
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
     if (f.fireworks) this.launchFireworks(f.dt);
+    // Des bulles derrière ceux qui roulent sous l'eau
+    if (t.water !== null && !this.opts.reduced) {
+      this.bubbleTick = (this.bubbleTick + 1) % 3;
+      if (this.bubbleTick === 0) {
+        for (const { kart } of f.karts) {
+          if (kart.y + kart.air >= t.water - 0.3 || Math.hypot(kart.x - this.camPos.x, kart.z - this.camPos.z) > 50) continue;
+          this.puff(
+            kart.x - Math.sin(kart.h) * 1.5,
+            kart.y + 0.7,
+            kart.z - Math.cos(kart.h) * 1.5,
+            0xffffff,
+            (Math.random() - 0.5) * 1.2,
+            2.6,
+            (Math.random() - 0.5) * 1.2,
+            0.7,
+            0.16,
+            0.7,
+            false,
+          );
+        }
+      }
+    }
     this.aim?.update(f.aim ?? null, this.time, this.camPos);
     // L'aspiration : l'air qui file autour du kart suivi
     if ((f.draft ?? 0) > 0.15 && f.follow >= 0 && !this.opts.reduced) {
@@ -1031,6 +1096,7 @@ export class RaceScene {
       const blink = k.safe && Math.sin(this.time * 24) > 0 ? 0.35 : 1;
       this.karts[i]?.fade(blink * (i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6))));
     });
+    this.setUnderwater(t.water !== null && this.camera.position.y < t.water);
     if (this.composer) this.composer.render(f.dt);
     else this.renderer.render(this.scene, this.camera);
   }
@@ -1068,10 +1134,12 @@ export class RaceScene {
       // Elle ne descend pas dans un trou : elle reste au bord, et regarde le kart tomber
       const air = Math.max(0, target.air);
       const sink = Math.min(0, target.air);
+      // En deltaplane, on prend de la hauteur sans trop s'éloigner
+      const lift = Math.min(target.glide ? 2.6 : 8, air);
       this.camY += (target.y + air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
       // En l'air, elle prend un peu de recul et de hauteur pour bien montrer le saut
-      const back = (portrait ? 7.4 : 6.3) + air * 0.6;
-      const up = (portrait ? 3.1 : 2.55) + air * 0.5;
+      const back = (portrait ? 7.4 : 6.3) + lift * 0.6;
+      const up = (portrait ? 3.1 : 2.55) + lift * 0.5;
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       // Regarder derrière soi : la caméra passe devant le kart
@@ -1083,7 +1151,7 @@ export class RaceScene {
         this.camPos.copy(pos);
         this.camLook.copy(look);
       }
-      fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0);
+      fov += Math.max(0, Math.min(12, (target.v - 20) * 0.6)) + (target.boost > 0 ? 6 : 0) + (target.glide ? 5 : 0);
     }
     const chase = f.camera === "chase" && Boolean(target);
     if (!this.camReady) {

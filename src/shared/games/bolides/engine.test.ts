@@ -43,6 +43,7 @@ import {
   TRACK_IDS,
   TRACKS,
   traceCorners,
+  wrapAngle,
   wrapS,
   mirrorOf,
 } from "./track.ts";
@@ -214,7 +215,9 @@ describe("la conduite", () => {
   it("un tremplin fait décoller le kart, et une figure en l'air donne un turbo à l'atterrissage", () => {
     for (const id of TRACK_IDS) {
       const t = getTrack(id);
-      const lip = t.jumps[0]!;
+      const short = t.gaps.find((g) => !g.glide);
+      if (!short) continue;
+      const lip = short.from;
       const jump = (trick: boolean) => {
         const k = kartAt(id, lip - 30, 0);
         k.v = TOP_SPEED;
@@ -936,11 +939,11 @@ describe("la vie du circuit", () => {
       k.v = speed;
       const ev: string[] = [];
       let seen = false;
-      for (let i = 0; i < 240 && !seen; i++) {
+      for (let i = 0; i < 480 && !seen; i++) {
         step(k, GAS, t, { top: 1 }, ev as never);
         seen = ev.includes("land");
       }
-      expect(ev, `à ${speed} m/s`).toContain("jump");
+      expect(ev, `à ${speed} m/s`).toContain(gap.glide ? "glide" : "jump");
       expect(ev, `à ${speed} m/s`).toContain("land");
       expect(ev, `à ${speed} m/s`).not.toContain("fall");
       expect(deltaS(t, gap.to, k.s)).toBeGreaterThanOrEqual(0);
@@ -1180,6 +1183,202 @@ describe("la vie du circuit", () => {
       }
       for (const m of t.movers) expect(Math.abs(deltaS(t, m.s, c.s))).toBeGreaterThanOrEqual(12);
       for (const p of t.springs) expect(Math.abs(deltaS(t, p.s, c.s))).toBeGreaterThanOrEqual(6);
+    }
+  });
+});
+
+describe("le vol et l'eau", () => {
+  const flyFrom = (id: (typeof TRACK_IDS)[number], speed: number, input: Input = GAS) => {
+    const t = getTrack(id);
+    const g = t.gaps.find((x) => x.glide)!;
+    const k = kartAt(id, g.from - 14);
+    k.v = speed;
+    const ev: string[] = [];
+    let top = 0;
+    for (let i = 0; i < 60 * 12 && !ev.includes("land"); i++) {
+      step(k, input, t, { top: 1 }, ev as never);
+      top = Math.max(top, k.air);
+    }
+    return { t, g, k, ev, top };
+  };
+
+  describe("le saut chargé", () => {
+    const run = (input: (i: number) => Input, frames: number, id: (typeof TRACK_IDS)[number] = "port", s = 20) => {
+      const t = getTrack(id);
+      const k = kartAt(id, s);
+      k.v = 25;
+      const ev: string[] = [];
+      let top = 0;
+      for (let i = 0; i < frames; i++) {
+        step(k, input(i), t, { top: 1 }, ev as never);
+        top = Math.max(top, k.air);
+      }
+      return { k, ev, top };
+    };
+
+    it("tenir le bouton sans braquer, puis lâcher : le kart bondit assez haut pour passer un obstacle", () => {
+      const { ev, top } = run((i) => ({ ...GAS, drift: i < 40 }), 90);
+      expect(ev).toContain("bound");
+      expect(ev).toContain("land");
+      expect(top).toBeGreaterThan(1);
+    });
+
+    it("un appui trop court ne fait pas bondir", () => {
+      const { ev } = run((i) => ({ ...GAS, drift: i < 12 }), 60);
+      expect(ev).not.toContain("bound");
+    });
+
+    it("braquer pendant la charge : c'est un dérapage, pas un saut", () => {
+      const { ev, k } = run((i) => ({ ...GAS, steer: i > 10 ? 0.8 : 0, drift: i < 50 }), 60);
+      expect(ev).toContain("drift");
+      expect(ev).not.toContain("bound");
+      expect(k.jumpCharge).toBe(0);
+    });
+
+    it("pas de figure sur un saut chargé (sinon on aurait un turbo gratuit à l'infini)", () => {
+      const { ev, k } = run((i) => ({ ...GAS, drift: i < 40 || i === 50 }), 110);
+      expect(ev).toContain("bound");
+      expect(ev).not.toContain("trick");
+      expect(k.boost).toBe(0);
+    });
+  });
+
+  it.each(["col", "dunes", "lagon", "volcan"] as const)(
+    "%s : le deltaplane s'ouvre et franchit le vide, même en arrivant doucement",
+    (id) => {
+      for (const speed of [8, 16, 27]) {
+        const { t, g, k, ev, top } = flyFrom(id, speed);
+        expect(ev, `à ${speed} m/s`).toContain("glide");
+        expect(ev, `à ${speed} m/s`).not.toContain("fall");
+        expect(ev, `à ${speed} m/s`).toContain("land");
+        expect(deltaS(t, g.to, k.s), `à ${speed} m/s`).toBeGreaterThan(0);
+        expect(top).toBeGreaterThan(4);
+        expect(k.glide).toBe(false);
+      }
+    },
+  );
+
+  it("le frein fait plonger : on se pose bien plus tôt", () => {
+    const free = flyFrom("dunes", 27);
+    const dive = flyFrom("dunes", 27, { ...GAS, brake: true });
+    expect(deltaS(free.t, dive.k.s, free.k.s)).toBeGreaterThan(20);
+  });
+
+  it("on peut tourner en vol, nettement plus qu'en saut", () => {
+    const t = getTrack("dunes");
+    const g = t.gaps.find((x) => x.glide)!;
+    const k = kartAt("dunes", g.from + 5, 0);
+    Object.assign(k, { v: 27, air: 4, vy: 1, glide: true });
+    const h0 = k.h;
+    for (let i = 0; i < 30; i++) step(k, { ...GAS, steer: 1 }, t, { top: 1 });
+    const glide = Math.abs(wrapAngle(k.h - h0));
+    const j = kartAt("dunes", g.from + 5, 0);
+    Object.assign(j, { v: 27, air: 4, vy: 1, glide: false });
+    for (let i = 0; i < 30; i++) step(j, { ...GAS, steer: 1 }, t, { top: 1 });
+    expect(glide).toBeGreaterThan(Math.abs(wrapAngle(j.h - h0)) * 2);
+  });
+
+  it.each(["col", "dunes", "lagon", "volcan"] as const)(
+    "%s : les anneaux sont sur la trajectoire, et en traverser un donne un turbo",
+    (id) => {
+      const t = getTrack(id);
+      expect(t.hoops.length).toBeGreaterThanOrEqual(3);
+      for (const hoop of t.hoops) {
+        expect(hoop.h).toBeGreaterThan(2.5);
+        expect(Math.abs(hoop.d)).toBeLessThan(t.half);
+      }
+      const hoop = t.hoops[0]!;
+      const k = kartAt(id, hoop.s - 3, hoop.d);
+      Object.assign(k, { v: 27, air: hoop.h, vy: 0.5, glide: true });
+      const ev: string[] = [];
+      for (let i = 0; i < 20; i++) step(k, GAS, t, { top: 1 }, ev as never);
+      expect(ev).toContain("hoop");
+      expect(k.boost).toBeGreaterThan(0.4);
+      // À côté, rien
+      const off = kartAt(id, hoop.s - 3, hoop.d + 6);
+      Object.assign(off, { v: 27, air: hoop.h, vy: 0.5, glide: true });
+      const none: string[] = [];
+      for (let i = 0; i < 20; i++) step(off, GAS, t, { top: 1 }, none as never);
+      expect(none).not.toContain("hoop");
+    },
+  );
+
+  it("le vol voyage avec le kart, et au-dessus de tout", () => {
+    const k = kartAt("dunes", 40);
+    Object.assign(k, { air: 9, vy: 1, glide: true });
+    const out = decodeKart(encodeKart(k))!;
+    expect(out.glide).toBe(true);
+    expect(out.air).toBeCloseTo(9, 1);
+  });
+
+  it("une partie de la route du lagon passe vraiment sous la mer, et elle en ressort", () => {
+    const t = getTrack("lagon");
+    let below = 0;
+    for (let i = 0; i < t.n; i++) if (t.y[i]! < t.water! - 0.3) below += t.length / t.n;
+    expect(below).toBeGreaterThan(120);
+    expect(below).toBeLessThan(t.length * 0.45);
+    expect(t.y[0]!).toBeGreaterThan(t.water!);
+    for (const g of t.gaps) expect(pointAt(t, g.from, 0).y).toBeGreaterThan(t.water! + 2);
+  });
+
+  it("sous l'eau : on va un peu moins vite, on tourne mieux, et on retombe doucement", () => {
+    const t = getTrack("lagon");
+    let deep = 0;
+    let bestY = 0;
+    for (let i = 0; i < t.n; i++) {
+      if (t.y[i]! < bestY && Math.abs(t.bend[i]!) < 0.003) {
+        bestY = t.y[i]!;
+        deep = (i * t.length) / t.n;
+      }
+    }
+    const land = t.boxes[0]!.s;
+    const run = (s: number) => {
+      const k = kartAt("lagon", s);
+      k.v = 27;
+      for (let i = 0; i < 40; i++) step(k, GAS, t, { top: 1 });
+      return k.v;
+    };
+    expect(run(deep)).toBeLessThan(run(land));
+    const fallFrom = (s: number) => {
+      const k = kartAt("lagon", s);
+      Object.assign(k, { air: 3, vy: 0.01, v: 10 });
+      let n = 0;
+      while (k.air > 0 && n < 600) {
+        step(k, GAS, t, { top: 1 });
+        n++;
+      }
+      return n;
+    };
+    expect(fallFrom(deep)).toBeGreaterThan(fallFrom(land) * 1.3);
+  });
+
+  it.each(TRACK_IDS)("%s : rien d'important ne tombe dans un vide", (id) => {
+    const t = getTrack(id);
+    const inside = (s: number) =>
+      t.gaps.some((g) => {
+        const along = deltaS(t, g.from, s);
+        return along >= -8 && along <= g.to - g.from + 2;
+      });
+    for (const b of t.boxes) expect(inside(b.s), `caisse ${b.s}`).toBe(false);
+    for (const p of t.boosts) expect(inside(p.s), `accélérateur ${p.s}`).toBe(false);
+    for (const p of t.springs) expect(inside(p.s), `trampoline ${p.s}`).toBe(false);
+    for (const m of t.movers) expect(inside(m.s), `obstacle ${m.s}`).toBe(false);
+    for (const c of t.crossers) expect(inside(c.s), `passage ${c.s}`).toBe(false);
+    for (const z of t.zones) expect(inside(z.s + z.len / 2), `sol ${z.s}`).toBe(false);
+  });
+
+  it.each(TRACK_IDS)("%s : caisses, obstacles et trampolines ne se marchent pas dessus", (id) => {
+    const t = getTrack(id);
+    const spots = [
+      ...new Set(t.boxes.map((b) => b.s)),
+      ...t.movers.map((m) => m.s),
+      ...t.crossers.map((c) => c.s),
+      ...t.springs.map((p) => p.s),
+    ];
+    for (let a = 0; a < spots.length; a++) {
+      for (let b = a + 1; b < spots.length; b++) {
+        expect(Math.abs(deltaS(t, spots[a]!, spots[b]!)), `${spots[a]} et ${spots[b]}`).toBeGreaterThan(10);
+      }
     }
   });
 });

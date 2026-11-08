@@ -3,6 +3,7 @@
 // qui bouge : suspension, tangage, roulis, dérapage, figure en l'air, tête-à-queue, étincelles, flammes, bouclier.
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import type { SkinId, VehicleId } from "../../../shared/games/bolides/garage.ts";
 import { driftLevel, SPIN_TIME, TOP_SPEED, type Kart } from "../../../shared/games/bolides/physics.ts";
@@ -41,6 +42,8 @@ export interface KartExtras {
   magnet?: boolean;
   /** Touché à l'instant : intouchable un moment (il clignote) */
   safe?: boolean;
+  /** Sous l'eau : l'hélice tourne */
+  under?: boolean;
 }
 
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
@@ -160,6 +163,10 @@ export class KartModel {
   private radii: number[] = [];
   private leanNow = 0;
   private magnetRing!: THREE.Mesh;
+  /** Le deltaplane, replié tant qu'on ne vole pas, et l'hélice sous l'eau */
+  private wing = new THREE.Group();
+  private wingOpen = 0;
+  private propeller!: THREE.Mesh;
   /** La taille du véhicule (la potion géante le fait grandir, en douceur) */
   private growth = 1;
 
@@ -305,6 +312,8 @@ export class KartModel {
     this.body.position.y = -spec.pivot;
     this.tilt.add(this.body);
     this.group.add(this.tilt);
+    this.buildWing(look.color, spec.tag + 0.15, keep);
+    this.buildPropeller(spec.flames[0] ?? [0, 0.55, -1.45], keep);
     sharedBlob ??= blobTexture();
     this.blobAlpha = shadows ? 0.4 : 0.7;
     this.blobMat = keep(new THREE.MeshBasicMaterial({ map: sharedBlob, transparent: true, depthWrite: false, opacity: this.blobAlpha }));
@@ -321,6 +330,57 @@ export class KartModel {
       this.tag.renderOrder = 10;
       this.group.add(this.tag);
     }
+  }
+
+  /** Une aile delta à sa couleur, et sa structure */
+  private buildWing(color: string, y: number, keep: <T extends { dispose: () => void }>(x: T) => T) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const g = c.getContext("2d")!;
+    g.fillStyle = color;
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = "#fff4dc";
+    for (let k = 0; k < 4; k++) g.fillRect(0, 8 + k * 32, 128, 14);
+    const tex = keep(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sail = keep(new THREE.BufferGeometry());
+    const nose = [0, 0.1, 1.75];
+    const left = [-3.1, -0.32, -1.15];
+    const mid = [0, 0.32, -0.6];
+    const right = [3.1, -0.32, -1.15];
+    sail.setAttribute("position", new THREE.Float32BufferAttribute([...nose, ...left, ...mid, ...nose, ...mid, ...right], 3));
+    sail.setAttribute("uv", new THREE.Float32BufferAttribute([0.5, 1, 0, 0, 0.5, 0.2, 0.5, 1, 0.5, 0.2, 1, 0], 2));
+    sail.computeVertexNormals();
+    this.wing.add(new THREE.Mesh(sail, keep(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }))));
+    const frame = keep(new THREE.MeshLambertMaterial({ color: 0x2b2f36 }));
+    const bar = (a: THREE.Vector3, b: THREE.Vector3) => {
+      const len = a.distanceTo(b);
+      const m = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.035, 0.035, len, 5)), frame);
+      m.position.copy(a).lerp(b, 0.5);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      this.wing.add(m);
+    };
+    const hub = new THREE.Vector3(0, 0.1, 0.1);
+    bar(new THREE.Vector3(...(left as [number, number, number])), new THREE.Vector3(...(right as [number, number, number])));
+    bar(new THREE.Vector3(...(nose as [number, number, number])), new THREE.Vector3(...(mid as [number, number, number])));
+    bar(hub, new THREE.Vector3(-0.42, -y * 0.55, 0.2));
+    bar(hub, new THREE.Vector3(0.42, -y * 0.55, 0.2));
+    this.wing.position.y = y;
+    this.wing.visible = false;
+    this.group.add(this.wing);
+  }
+
+  /** L'hélice, à l'arrière : elle ne sort que sous l'eau */
+  private buildPropeller(at: [number, number, number], keep: <T extends { dispose: () => void }>(x: T) => T) {
+    const blade = new THREE.BoxGeometry(0.12, 0.42, 0.03).translate(0, 0.22, 0);
+    const parts = [0, 1, 2].map((k) => blade.clone().rotateZ((k / 3) * Math.PI * 2));
+    const hub = new THREE.SphereGeometry(0.11, 8, 6);
+    const flat = [...parts, hub].map((g) => (g.index ? g.toNonIndexed() : g));
+    const geo = keep(mergeGeometries(flat, false)!);
+    this.propeller = new THREE.Mesh(geo, keep(new THREE.MeshStandardMaterial({ color: 0xf2c94c, metalness: 0.6, roughness: 0.3 })));
+    this.propeller.position.set(0, at[1], at[2] - 0.3);
+    this.propeller.visible = false;
+    this.tilt.add(this.propeller);
   }
 
   /** Le kart à cet instant : sa place, ce qu'il fait, et ses effets */
@@ -363,12 +423,14 @@ export class KartModel {
     const hover = this.spec.hover ? 0.42 + Math.sin(time * 2.6 + this.roll * 0.02) * 0.09 : 0;
     this.tilt.position.y = this.spec.pivot + Math.max(0, hop) + this.squash + hover;
     this.tilt.rotation.set(
-      this.pitch + (k.air > 0.3 ? -0.08 : 0),
+      this.pitch + (k.glide ? -0.14 : k.air > 0.3 ? -0.08 : 0),
       spinAngle + this.yawOff,
       // La moto et la soucoupe se couchent dans les virages (vers la droite : z positif) ; les autres roulent un peu
       (this.spec.lean > 0
         ? (this.leanNow += (Math.max(-1.1, Math.min(1.1, x.steer + k.drift * 0.45)) * this.spec.lean - this.leanNow) * Math.min(1, dt * 7))
-        : Math.max(-0.12, Math.min(0.12, k.slip * 0.02))) + barrel,
+        : Math.max(-0.12, Math.min(0.12, k.slip * 0.02))) +
+        barrel +
+        (k.glide ? x.steer * 0.32 : 0),
       "YXZ",
     );
     this.roll += k.v * dt;
@@ -406,6 +468,15 @@ export class KartModel {
     this.starShown = star;
     this.growth += ((x.giant ? 1.8 : 1) - this.growth) * Math.min(1, dt * 5);
     this.group.scale.setScalar(this.growth);
+    // Le deltaplane s'ouvre d'un coup, puis ondule et penche dans les virages
+    this.wingOpen += ((k.glide ? 1 : 0) - this.wingOpen) * Math.min(1, dt * (k.glide ? 11 : 16));
+    this.wing.visible = this.wingOpen > 0.03;
+    if (this.wing.visible) {
+      this.wing.scale.set(this.wingOpen, 0.5 + 0.5 * this.wingOpen, 0.4 + 0.6 * this.wingOpen);
+      this.wing.rotation.set(Math.sin(time * 5) * 0.03 - 0.1, 0, -x.steer * 0.28);
+    }
+    this.propeller.visible = Boolean(x.under);
+    if (x.under) this.propeller.rotation.z = time * 34;
     this.magnetRing.visible = Boolean(x.magnet);
     if (x.magnet) this.magnetRing.rotation.set(Math.PI / 2 + Math.sin(time * 3) * 0.3, Math.cos(time * 2) * 0.3, time * 4);
     this.shield.visible = x.shield;
