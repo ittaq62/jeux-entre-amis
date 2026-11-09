@@ -1,7 +1,7 @@
 // Moteur de la bataille navale : pur, deterministe (graine), sans notion de temps.
 // La salle de jeu s'occupe des chronos et des bots ; ici on ne fait qu'appliquer les regles.
 
-import { randomInt, type RngHolder } from "../../rng.ts";
+import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 
 export type GridSize = 8 | 10 | 12;
 export type ShotRule = "single" | "replay" | "salvo";
@@ -9,6 +9,8 @@ export type BotLevel = "mousse" | "chasseur" | "amiral";
 export type Weapon = "radar" | "torpedo" | "barrage";
 export type Dir = "h" | "v";
 export type NavalMode = "duel" | "melee" | "teams";
+/** Qui on peut viser : au choix, la flotte tirée au sort, ou celles qui ont le plus de navires à flot */
+export type Targeting = "free" | "random" | "leader";
 
 export interface NavalSettings {
   grid: GridSize;
@@ -19,6 +21,8 @@ export interface NavalSettings {
   arsenal: boolean;
   /** 2 contre 2 (seulement à 4 joueurs) */
   teams: boolean;
+  /** Qui on a le droit de viser (absent des parties d'avant cette règle : au choix) */
+  targeting?: Targeting;
   /** Temps par tir, 0 = illimité */
   turnSeconds: number;
   botLevel: BotLevel;
@@ -30,6 +34,7 @@ export const DEFAULT_SETTINGS: NavalSettings = {
   touching: false,
   arsenal: false,
   teams: false,
+  targeting: "free",
   turnSeconds: 30,
   botLevel: "chasseur",
 };
@@ -128,6 +133,12 @@ export interface NavalState {
   turnId: number;
   /** Tirs restants dans ce tour (salve), sinon 1 */
   shotsLeft: number;
+  /** L'ordre des adversaires pour chaque joueur : pas le même pour tout le monde, sinon tous visent le premier de la liste */
+  orders?: Record<string, string[]>;
+  /** La cible tirée au sort pour ce tour */
+  forced?: string | null;
+  /** La flotte que le tireur vise en ce moment, si on la connaît : les autres regardent au bon endroit */
+  aim?: string | null;
   scans: Scan[];
   /** Ordre des éliminations (joueur ou, en équipes, chaque joueur de l'équipe) */
   eliminated: string[];
@@ -165,6 +176,8 @@ export type NavalAction =
   | { type: "ready"; ships?: Placement[] }
   | { type: "fire"; target: string; cell: number }
   | { type: "weapon"; weapon: Weapon; target: string; cell: number; dir?: Dir };
+
+const targetingOf = (s: Pick<NavalState, "settings">): Targeting => s.settings.targeting ?? "free";
 
 export type ActionResult = { ok: true; events: NavalEvent[] } | { ok: false; error: string };
 
@@ -273,11 +286,38 @@ export function modeOf(s: Pick<NavalState, "settings" | "players">): NavalMode {
   return s.players.length === 2 ? "duel" : "melee";
 }
 
+/**
+ * L'ordre des adversaires de chacun. Tout le monde est placé sur un cercle tiré au sort, et chacun voit en tête son
+ * voisin : personne n'est le premier de la liste pour deux joueurs. Les suivants sont mélangés pour chacun. En équipes,
+ * le cercle alterne les deux camps, on a donc toujours un adversaire en tête.
+ */
+function dealOrders(players: Pick<NavalPlayer, "id" | "team">[], holder: RngHolder): Record<string, string[]> {
+  const idsOf = (team: number) => players.filter((p) => p.team === team).map((p) => p.id);
+  const ring =
+    players[0]?.team !== null && players[0]?.team !== undefined
+      ? (() => {
+          const other = shuffle(holder, idsOf(1));
+          return shuffle(holder, idsOf(0)).flatMap((id, i) => [id, other[i]!]);
+        })()
+      : shuffle(
+          holder,
+          players.map((p) => p.id),
+        );
+  const orders: Record<string, string[]> = {};
+  ring.forEach((id, i) => {
+    const first = ring[(i + 1) % ring.length]!;
+    const me = players.find((p) => p.id === id)!;
+    const rest = players.filter((p) => p.id !== id && p.id !== first && (me.team === null || p.team !== me.team)).map((p) => p.id);
+    orders[id] = [first, ...shuffle(holder, rest)];
+  });
+  return orders;
+}
+
 export function createGame(playerIds: string[], settings: NavalSettings, seed: number): { state: NavalState; events: NavalEvent[] } {
   const holder = { rng: seed };
   const teams = settings.teams && playerIds.length === 4;
   const state: NavalState = {
-    settings: { ...settings, teams },
+    settings: { ...settings, teams, targeting: settings.targeting ?? "free" },
     players: playerIds.map((id, i) => ({
       id,
       team: teams ? i % 2 : null,
@@ -298,6 +338,8 @@ export function createGame(playerIds: string[], settings: NavalSettings, seed: n
     ranks: null,
     rng: holder.rng,
   };
+  // Son propre hasard, pour ne rien changer au reste du tirage
+  state.orders = dealOrders(state.players, { rng: (seed ^ 0x5bd1e995) >>> 0 });
   return { state, events: [] };
 }
 
@@ -319,6 +361,37 @@ export function targetsOf(s: NavalState, shooterId: string): NavalPlayer[] {
   return s.players.filter((p) => !allies(me, p) && !p.out);
 }
 
+/** Les plateaux que le tireur a le droit de viser pour ce tir, selon la règle de la table. */
+export function allowedTargets(s: NavalState, shooterId: string): NavalPlayer[] {
+  const all = targetsOf(s, shooterId);
+  const rule = targetingOf(s);
+  if (all.length <= 1 || rule === "free") return all;
+  if (rule === "random") {
+    const forced = all.find((p) => p.id === s.forced);
+    return forced ? [forced] : all;
+  }
+  const most = Math.max(...all.map((p) => afloat(p.board)));
+  return all.filter((p) => afloat(p.board) === most);
+}
+
+/** Avant chaque tir : la cible tirée au sort tient tant qu'elle flotte ; ce qu'on sait de la visée suit la règle. */
+function settleTarget(s: NavalState, shooter: NavalPlayer) {
+  const all = targetsOf(s, shooter.id);
+  if (targetingOf(s) === "random" && !all.some((p) => p.id === s.forced))
+    s.forced = all.length > 0 ? all[randomInt(s, all.length)]!.id : null;
+  const allowed = allowedTargets(s, shooter.id);
+  if (allowed.length === 1) s.aim = allowed[0]!.id;
+  else if (!allowed.some((p) => p.id === s.aim)) s.aim = null;
+}
+
+/** Le tireur annonce la flotte qu'il vise, pour que les autres regardent au bon endroit. Ce n'est pas un coup. */
+export function setAim(s: NavalState, playerId: string, target: string): boolean {
+  if (s.phase !== "battle" || s.players[s.turn]?.id !== playerId || s.aim === target) return false;
+  if (!allowedTargets(s, playerId).some((p) => p.id === target)) return false;
+  s.aim = target;
+  return true;
+}
+
 function shotsFor(s: NavalState, p: NavalPlayer): number {
   if (s.settings.shots !== "salvo") return 1;
   const side = s.players.filter((q) => allies(p, q));
@@ -333,6 +406,9 @@ function startTurn(s: NavalState, index: number, events: NavalEvent[]) {
   s.turnId += 1;
   const p = s.players[index]!;
   s.shotsLeft = shotsFor(s, p);
+  s.forced = null;
+  s.aim = null;
+  settleTarget(s, p);
   events.push({ type: "turn", player: p.id, shots: s.shotsLeft });
 }
 
@@ -445,6 +521,8 @@ function checkTarget(s: NavalState, shooter: NavalPlayer, targetId: string): Nav
   if (!target) return "Cible introuvable.";
   if (allies(shooter, target)) return "On ne tire pas sur sa propre flotte.";
   if (target.out) return "Cette flotte est déjà au fond.";
+  if (!allowedTargets(s, shooter.id).some((p) => p.id === target.id))
+    return targetingOf(s) === "random" ? "Le hasard t'a désigné une autre flotte." : "Vise d'abord une flotte qui a plus de navires.";
   return target;
 }
 
@@ -486,11 +564,13 @@ export function applyAction(s: NavalState, playerId: string, action: NavalAction
         s.shotsLeft -= 1;
         if (s.shotsLeft > 0 && targetsOf(s, me.id).length > 0) {
           s.turnId += 1;
+          settleTarget(s, me);
           events.push({ type: "turn", player: me.id, shots: s.shotsLeft });
           return { ok: true, events };
         }
       } else if (s.settings.shots === "replay" && result !== "miss") {
         s.turnId += 1;
+        settleTarget(s, me);
         events.push({ type: "turn", player: me.id, shots: 1 });
         return { ok: true, events };
       }

@@ -1,5 +1,6 @@
 import {
   allies,
+  allowedTargets,
   FLEETS,
   fleetAfloat,
   modeOf,
@@ -57,6 +58,12 @@ export interface NavalView {
   turn: string | null;
   turnId: number;
   shotsLeft: number;
+  /** Les flottes que le tireur a le droit de viser pour ce tir (null : personne ne tire) */
+  allowed: string[] | null;
+  /** La flotte qu'il vise, si on la connaît : on la regarde pendant qu'il tire */
+  aim: string | null;
+  /** Tes adversaires, dans ton ordre à toi */
+  order: string[];
   players: NavalPlayerView[];
   boards: NavalBoardView[];
   ranking: string[] | null;
@@ -79,6 +86,9 @@ export function viewFor(s: NavalState, viewerId: string | null): NavalView {
     turn: s.phase === "battle" ? s.players[s.turn]!.id : null,
     turnId: s.turnId,
     shotsLeft: s.shotsLeft,
+    allowed: s.phase === "battle" ? allowedTargets(s, s.players[s.turn]!.id).map((p) => p.id) : null,
+    aim: s.phase === "battle" ? (s.aim ?? null) : null,
+    order: viewer ? (s.orders?.[viewer.id] ?? []) : [],
     players: s.players.map((p) => ({
       id: p.id,
       team: p.team,

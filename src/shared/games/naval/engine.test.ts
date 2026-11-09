@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { botAction, randomShot } from "./bot.ts";
+import { botAction, planBotAim, randomShot } from "./bot.ts";
 import {
+  allowedTargets,
   applyAction,
   cellIndex,
   createGame,
@@ -9,6 +10,7 @@ import {
   forceReady,
   GRID_SIZES,
   randomFleet,
+  setAim,
   shipCells,
   validateFleet,
   type BotLevel,
@@ -342,5 +344,285 @@ describe("bots", () => {
       if (s.ranking![0] === "chasseur") wins++;
     }
     expect(wins).toBeGreaterThanOrEqual(20);
+  });
+});
+
+/** Une partie lancée normalement : c'est le tirage qui dit qui commence et qui il doit viser. */
+function started(ids: string[], patch: Partial<NavalSettings> = {}, seed = 42): NavalState {
+  const { state } = createGame(ids, settings(patch), seed);
+  for (const id of ids) applyAction(state, id, { type: "ready", ships: ROWS });
+  return state;
+}
+
+/** Coule directement des navires d'une flotte, sans passer par les tirs. */
+function sink(s: NavalState, id: string, count: number) {
+  const player = s.players.find((p) => p.id === id)!;
+  for (const ship of player.board.ships.slice(0, count)) {
+    ship.hits = shipCells(10, ship)!;
+    ship.sunk = true;
+    player.board.shots.push(...ship.hits);
+  }
+  if (player.board.ships.every((sh) => sh.sunk)) player.out = true;
+}
+
+const allowedIds = (s: NavalState) => allowedTargets(s, turnOf(s)).map((p) => p.id);
+const SIX = ["a", "b", "c", "d", "e", "f"];
+/** La première case d'un navire encore intacte sur la flotte ROWS */
+function shipCell(s: NavalState, target: string): number {
+  const board = s.players.find((p) => p.id === target)!.board;
+  return cellsOf(ROWS).find((c) => !board.shots.includes(c))!;
+}
+
+describe("l'ordre des adversaires", () => {
+  it("n'est pas le même pour tout le monde : personne n'est en tête de liste pour deux joueurs", () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      for (let n = 2; n <= 6; n++) {
+        const ids = SIX.slice(0, n);
+        const { orders } = createGame(ids, settings(), seed).state;
+        expect(new Set(ids.map((id) => orders![id]![0])).size).toBe(n);
+        for (const id of ids) expect([...orders![id]!].sort()).toEqual(ids.filter((x) => x !== id).sort());
+      }
+    }
+  });
+
+  it("en équipes, on ne voit que ses adversaires, et les deux équipiers n'ont pas le même en tête", () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      const { orders, players } = createGame(["a", "b", "c", "d"], settings({ teams: true }), seed).state;
+      for (const p of players) {
+        expect([...orders![p.id]!].sort()).toEqual(
+          players
+            .filter((q) => q.team !== p.team)
+            .map((q) => q.id)
+            .sort(),
+        );
+      }
+      expect(orders!.a![0]).not.toBe(orders!.c![0]);
+      expect(orders!.b![0]).not.toBe(orders!.d![0]);
+    }
+  });
+
+  it("change d'une partie à l'autre, et chacun ne reçoit que le sien", () => {
+    const firsts = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) firsts.add(createGame(SIX, settings(), seed).state.orders!.a![0]!);
+    expect(firsts.size).toBeGreaterThan(3);
+    const s = started(SIX);
+    expect(viewFor(s, "a").order).toEqual(s.orders!.a);
+    expect(viewFor(s, "b").order).toEqual(s.orders!.b);
+    expect(viewFor(s, null).order).toEqual([]);
+  });
+
+  it("ne change rien au déroulement de la partie", () => {
+    const a = createGame(SIX, settings(), 7).state;
+    const b = createGame(SIX, settings({ targeting: "random" }), 7).state;
+    expect(a.players.map((p) => p.board.ships)).toEqual(b.players.map((p) => p.board.ships));
+    expect(a.rng).toBe(b.rng);
+  });
+});
+
+describe("cible au hasard", () => {
+  it("impose une seule flotte à chaque tour et refuse les autres, pour les tirs comme pour les armes", () => {
+    const s = started(SIX, { targeting: "random", arsenal: true });
+    const shooter = turnOf(s);
+    const allowed = allowedIds(s);
+    expect(allowed).toHaveLength(1);
+    expect(allowed[0]).not.toBe(shooter);
+    const other = SIX.find((id) => id !== shooter && id !== allowed[0])!;
+    const refused = fire(s, shooter, other, 0);
+    expect(refused).toEqual({ ok: false, error: expect.stringMatching(/hasard/) });
+    s.players.find((p) => p.id === shooter)!.arsenal.push("radar");
+    expect(applyAction(s, shooter, { type: "weapon", weapon: "radar", target: other, cell: 11 }).ok).toBe(false);
+    expect(applyAction(s, shooter, { type: "weapon", weapon: "radar", target: allowed[0]!, cell: 11 }).ok).toBe(true);
+  });
+
+  it("garde la même cible quand on rejoue, et en tire une autre si elle est coulée", () => {
+    const s = started(SIX, { targeting: "random", shots: "replay" });
+    const shooter = turnOf(s);
+    const victim = allowedIds(s)[0]!;
+    expect(fire(s, shooter, victim, shipCell(s, victim)).ok).toBe(true);
+    expect(turnOf(s)).toBe(shooter);
+    expect(allowedIds(s)).toEqual([victim]);
+    sink(s, victim, 4);
+    for (const c of [cellIndex(10, 0, 8), cellIndex(10, 1, 8)]) expect(fire(s, shooter, victim, c).ok).toBe(true);
+    expect(s.players.find((p) => p.id === victim)!.out).toBe(true);
+    expect(turnOf(s)).toBe(shooter);
+    expect(allowedIds(s)).toHaveLength(1);
+    expect(allowedIds(s)[0]).not.toBe(victim);
+    expect(allowedIds(s)[0]).not.toBe(shooter);
+  });
+
+  it("tire au sort parmi toutes les flottes encore à flot, à chaque nouveau tour", () => {
+    const s = started(SIX, { targeting: "random", shots: "single" });
+    const seen = new Set<string>();
+    for (let i = 0; i < 90; i++) {
+      const shooter = turnOf(s);
+      const victim = allowedIds(s)[0]!;
+      if (shooter === "a") seen.add(victim);
+      expect(victim).not.toBe(shooter);
+      expect(fire(s, shooter, victim, water(s, victim)).ok).toBe(true);
+    }
+    expect([...seen].sort()).toEqual(["b", "c", "d", "e", "f"]);
+  });
+
+  it("garde la même cible pendant toute une salve", () => {
+    const s = started(SIX, { targeting: "random", shots: "salvo" });
+    const shooter = turnOf(s);
+    const victim = allowedIds(s)[0]!;
+    const left = s.shotsLeft;
+    expect(left).toBeGreaterThan(1);
+    expect(fire(s, shooter, victim, water(s, victim)).ok).toBe(true);
+    expect(turnOf(s)).toBe(shooter);
+    expect(s.shotsLeft).toBe(left - 1);
+    expect(allowedIds(s)).toEqual([victim]);
+  });
+
+  it("à deux, il n'y a de toute façon qu'une flotte", () => {
+    const s = started(["a", "b"], { targeting: "random" });
+    expect(allowedIds(s)).toEqual([turnOf(s) === "a" ? "b" : "a"]);
+  });
+});
+
+describe("priorité à la plus grosse flotte", () => {
+  it("au départ tout le monde est à égalité : on choisit parmi tous", () => {
+    const s = started(SIX, { targeting: "leader" });
+    expect(allowedIds(s).sort()).toEqual(SIX.filter((id) => id !== turnOf(s)).sort());
+  });
+
+  it("n'autorise que les flottes qui ont le plus de navires à flot, ex æquo compris", () => {
+    const s = started(SIX, { targeting: "leader" });
+    const shooter = turnOf(s);
+    const foes = SIX.filter((id) => id !== shooter);
+    sink(s, foes[0]!, 1);
+    sink(s, foes[1]!, 2);
+    sink(s, foes[2]!, 3);
+    expect(allowedIds(s).sort()).toEqual([foes[3]!, foes[4]!].sort());
+    expect(fire(s, shooter, foes[0]!, 99)).toEqual({ ok: false, error: expect.stringMatching(/plus de navires/) });
+    sink(s, foes[4]!, 1);
+    expect(allowedIds(s)).toEqual([foes[3]]);
+  });
+
+  it("ne compte pas la flotte du tireur : la sienne peut être la plus grosse", () => {
+    const s = started(["a", "b", "c"], { targeting: "leader" });
+    const shooter = turnOf(s);
+    const [x, y] = ["a", "b", "c"].filter((id) => id !== shooter);
+    sink(s, x!, 2);
+    expect(allowedIds(s)).toEqual([y]);
+  });
+
+  it("se recalcule quand on rejoue : le navire qu'on vient de couler peut changer la cible", () => {
+    const s = started(["a", "b", "c"], { targeting: "leader", shots: "replay" });
+    const shooter = turnOf(s);
+    const [x, y] = ["a", "b", "c"].filter((id) => id !== shooter) as [string, string];
+    // x n'a plus que son torpilleur en moins que y : le couler fait passer y devant
+    const torpilleur = [cellIndex(10, 0, 8), cellIndex(10, 1, 8)];
+    expect(allowedIds(s).sort()).toEqual([x, y].sort());
+    for (const c of torpilleur) expect(fire(s, shooter, x, c).ok).toBe(true);
+    expect(turnOf(s)).toBe(shooter);
+    expect(allowedIds(s)).toEqual([y]);
+    expect(fire(s, shooter, x, water(s, x)).ok).toBe(false);
+  });
+});
+
+describe("la visée annoncée", () => {
+  it("seul le tireur annonce, seulement une cible permise, et ce n'est pas un coup", () => {
+    const s = started(SIX);
+    const shooter = turnOf(s);
+    const other = SIX.find((id) => id !== shooter)!;
+    const turnId = s.turnId;
+    expect(s.aim).toBeNull();
+    expect(setAim(s, other, shooter)).toBe(false);
+    expect(setAim(s, shooter, shooter)).toBe(false);
+    expect(setAim(s, shooter, other)).toBe(true);
+    expect(viewFor(s, "z").aim).toBe(other);
+    expect(s.turnId).toBe(turnId);
+    expect(turnOf(s)).toBe(shooter);
+    expect(s.players.find((p) => p.id === shooter)!.stats.shots).toBe(0);
+    expect(setAim(s, shooter, other)).toBe(false);
+  });
+
+  it("repart de zéro au tour suivant", () => {
+    const s = started(SIX, { shots: "single" });
+    const shooter = turnOf(s);
+    const other = SIX.find((id) => id !== shooter)!;
+    setAim(s, shooter, other);
+    expect(fire(s, shooter, other, water(s, other)).ok).toBe(true);
+    expect(s.aim).toBeNull();
+  });
+
+  it("reste la même quand on rejoue, sauf si la flotte visée vient de couler", () => {
+    const s = started(SIX, { shots: "replay" });
+    const shooter = turnOf(s);
+    const victim = SIX.find((id) => id !== shooter)!;
+    setAim(s, shooter, victim);
+    expect(fire(s, shooter, victim, shipCell(s, victim)).ok).toBe(true);
+    expect(s.aim).toBe(victim);
+    sink(s, victim, 4);
+    for (const c of [cellIndex(10, 0, 8), cellIndex(10, 1, 8)]) expect(fire(s, shooter, victim, c).ok).toBe(true);
+    expect(s.aim).toBeNull();
+  });
+
+  it("se sait d'avance quand il n'y a qu'une flotte possible", () => {
+    const duel = started(["a", "b"]);
+    expect(duel.aim).toBe(turnOf(duel) === "a" ? "b" : "a");
+    const random = started(SIX, { targeting: "random" });
+    expect(random.aim).toBe(allowedIds(random)[0]);
+  });
+
+  it("n'accepte pas une flotte interdite par la règle", () => {
+    const s = started(SIX, { targeting: "random" });
+    const shooter = turnOf(s);
+    const other = SIX.find((id) => id !== shooter && id !== allowedIds(s)[0])!;
+    expect(setAim(s, shooter, other)).toBe(false);
+  });
+});
+
+describe("les bots et les règles de cible", () => {
+  for (const targeting of ["free", "random", "leader"] as const) {
+    for (const level of ["mousse", "chasseur", "amiral"] as const satisfies readonly BotLevel[]) {
+      it(`${targeting}, ${level} : jusqu'au bout sans coup illégal, et ils tirent sur la flotte annoncée`, () => {
+        const ids = ["a", "b", "c", "d", "e"];
+        const { state: s } = createGame(ids, settings({ targeting, grid: 8, arsenal: true }), 1234);
+        for (const id of ids) forceReady(s, id);
+        for (let i = 0; i < 4000 && s.phase === "battle"; i++) {
+          const shooter = turnOf(s);
+          planBotAim(s, shooter, level);
+          const aimed = s.aim;
+          expect(allowedIds(s)).toContain(aimed);
+          const action = botAction(s, shooter, level)!;
+          expect((action as { target: string }).target).toBe(aimed);
+          const res = applyAction(s, shooter, action);
+          expect(res).toMatchObject({ ok: true });
+        }
+        expect(s.phase).toBe("gameOver");
+      });
+    }
+    it(`${targeting} : le tir de secours respecte la règle et part sur la flotte annoncée`, () => {
+      for (let seed = 1; seed <= 30; seed++) {
+        const s = started(SIX, { targeting }, seed);
+        const shooter = turnOf(s);
+        const action = randomShot(s, shooter) as { target: string };
+        expect(allowedIds(s)).toContain(action.target);
+        const aim = allowedIds(s)[0]!;
+        setAim(s, shooter, aim);
+        expect((randomShot(s, shooter) as { target: string }).target).toBe(aim);
+      }
+    });
+  }
+});
+
+describe("une partie commencée avant ces règles", () => {
+  it("continue au choix, sans ordre ni visée", () => {
+    const s = started(SIX);
+    delete s.settings.targeting;
+    delete s.orders;
+    delete s.forced;
+    delete s.aim;
+    const shooter = turnOf(s);
+    expect(allowedIds(s)).toHaveLength(5);
+    const view = viewFor(s, "a");
+    expect(view.order).toEqual([]);
+    expect(view.aim).toBeNull();
+    expect(view.allowed).toHaveLength(5);
+    const other = SIX.find((id) => id !== shooter)!;
+    expect(fire(s, shooter, other, water(s, other)).ok).toBe(true);
   });
 });

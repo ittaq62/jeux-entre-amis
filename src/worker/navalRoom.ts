@@ -1,9 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { botAction, randomShot } from "../shared/games/naval/bot.ts";
+import { botAction, planBotAim, randomShot } from "../shared/games/naval/bot.ts";
 import {
   applyAction,
   createGame,
+  setAim,
   DEFAULT_SETTINGS,
   fleetAfloat,
   forceReady,
@@ -415,6 +416,15 @@ export class NavalRoom extends DurableObject<Env> {
         return this.afterChange(res.events, now);
       }
 
+      // Pas une action : viser ne prouve pas qu'on est là (la page l'annonce toute seule au début du tour)
+      case "aim": {
+        const g = d.naval;
+        if (d.status !== "playing" || !g || !seat || seat.autoplay || typeof msg.target !== "string") return;
+        if (!this.allowMessage(`aim:${userId}`, 100) || !setAim(g, seat.id, msg.target)) return;
+        await this.persist();
+        return this.broadcast([]);
+      }
+
       case "takeBack": {
         if (!seat || !seat.autoplay) return;
         seat.autoplay = false;
@@ -742,6 +752,7 @@ export class NavalRoom extends DurableObject<Env> {
       // Le temps que l'obus précédent arrive, puis un temps de réflexion
       const delay = current.kind === "bot" ? 1500 + random(d) * 900 : 1100;
       this.addTimer({ at: now + delay, kind: "bot", seatId: current.id, turnId: g.turnId });
+      planBotAim(g, current.id, this.botLevel(current));
     } else if (d.settings.naval.turnSeconds > 0) {
       d.turnDeadline = now + d.settings.naval.turnSeconds * 1000;
       this.addTimer({ at: d.turnDeadline + 400, kind: "timeout", seatId: current.id, turnId: g.turnId });
@@ -1146,5 +1157,6 @@ function mergeSettings(current: NavalSettings, patch: Partial<NavalSettings>): N
   if (typeof patch.turnSeconds === "number" && (TURN_SECONDS as readonly number[]).includes(patch.turnSeconds))
     next.turnSeconds = patch.turnSeconds;
   if (patch.botLevel === "mousse" || patch.botLevel === "chasseur" || patch.botLevel === "amiral") next.botLevel = patch.botLevel;
+  if (patch.targeting === "free" || patch.targeting === "random" || patch.targeting === "leader") next.targeting = patch.targeting;
   return next;
 }

@@ -315,6 +315,8 @@ export type NavalClientMessage =
   /** Le thème de sa flotte (seulement ceux que ses victoires ont débloqués), à tout moment */
   | { t: "skin"; skin: SkinId }
   | { t: "action"; action: NavalAction }
+  /** La flotte qu'on vise pendant son tour : les autres regardent au bon endroit */
+  | { t: "aim"; target: string }
   | { t: "takeBack" }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }

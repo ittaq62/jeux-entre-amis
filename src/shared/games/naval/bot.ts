@@ -4,6 +4,7 @@
 import { random, randomInt, type RngHolder } from "../../rng.ts";
 import {
   allies,
+  allowedTargets,
   cellIndex,
   cellX,
   cellY,
@@ -12,7 +13,6 @@ import {
   playerIndex,
   SHIP_LENGTH,
   shipCells,
-  targetsOf,
   type BotLevel,
   type Dir,
   type NavalAction,
@@ -159,7 +159,8 @@ function huntAround(k: Knowledge): number[] {
 }
 
 function chooseTarget(s: NavalState, bot: NavalPlayer, level: BotLevel): NavalPlayer | null {
-  const targets = targetsOf(s, bot.id);
+  // La règle de la table s'impose aussi aux bots
+  const targets = allowedTargets(s, bot.id);
   if (targets.length === 0) return null;
   if (level === "mousse") return targets[randomInt(s, targets.length)]!;
   // On achève d'abord un navire touché, sinon on s'acharne sur la flotte la plus abîmée
@@ -218,11 +219,18 @@ function bestLine(k: Knowledge, score: Float64Array): { cell: number; dir: Dir }
   return { cell: best.cell, dir: best.dir };
 }
 
+/** Un bot décide dès le début de son tour qui il va viser : les joueurs le voient pendant qu'il réfléchit. */
+export function planBotAim(s: NavalState, botId: string, level: BotLevel) {
+  const bot = s.players[playerIndex(s, botId)];
+  if (!bot || s.phase !== "battle") return;
+  s.aim = chooseTarget(s, bot, level)?.id ?? null;
+}
+
 /** Le coup d'un bot (ou d'un joueur absent) pour son tour. */
 export function botAction(s: NavalState, botId: string, level: BotLevel): NavalAction | null {
   const bot = s.players[playerIndex(s, botId)];
   if (!bot || s.phase !== "battle") return null;
-  const target = chooseTarget(s, bot, level);
+  const target = allowedTargets(s, bot.id).find((p) => p.id === s.aim) ?? chooseTarget(s, bot, level);
   if (!target) return null;
   const k = knowledge(s, bot, target);
   const hunting = huntAround(k);
@@ -280,9 +288,10 @@ function useWeapon(bot: NavalPlayer, target: string, k: Knowledge, score: Float6
 export function randomShot(s: NavalState, playerId: string): NavalAction | null {
   const me = s.players[playerIndex(s, playerId)];
   if (!me) return null;
-  const targets = targetsOf(s, playerId);
+  const targets = allowedTargets(s, playerId);
   if (targets.length === 0) return null;
-  const target = targets[randomInt(s, targets.length)]!;
+  // Le temps est écoulé : le tir part sur la flotte qu'il visait
+  const target = targets.find((p) => p.id === s.aim) ?? targets[randomInt(s, targets.length)]!;
   const shot = new Set(target.board.shots);
   const free = [...Array(target.board.size * target.board.size).keys()].filter((c) => !shot.has(c));
   return { type: "fire", target: target.id, cell: free[randomInt(s, free.length)]! };
