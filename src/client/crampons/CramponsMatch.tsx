@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import confetti from "canvas-confetti";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import type { MatchEvent, RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -6,6 +7,7 @@ import { CRAMPONS_SOUNDS, play, preloadSounds, startLoop, stopLoop } from "../li
 import { usePrefs } from "../stores/prefs.ts";
 import type { GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
+import { HowTo, KeyHints, mainKey, Radar } from "./CramponsHud.tsx";
 import { MatchRuntime, type HudState } from "./runtime.ts";
 import type { MatchListeners } from "./useCramponsRoom.ts";
 
@@ -24,6 +26,18 @@ const RESTART_LABEL: Record<RestartKind, string> = {
   free: "Coup franc",
   penalty: "Penalty",
 };
+
+const RESTART_ACTION: Record<RestartKind, string> = {
+  kickoff: "Donner le coup d'envoi",
+  throw: "Faire la touche",
+  corner: "Tirer le corner",
+  goalkick: "Dégager",
+  free: "Jouer le coup franc",
+  penalty: "Tirer le penalty",
+};
+
+const PERIODS: Record<number, string> = { 1: "1re mi-temps", 2: "2e mi-temps", 3: "Prolong.", 4: "Prolong.", 5: "Tirs au but" };
+const HOWTO_KEY = "crampons-howto-vu";
 
 function formatClock(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -145,6 +159,13 @@ export function CramponsMatch({
   // Un autre format, d'autres clubs ou une autre ambiance : il faut reconstruire le stade et les joueurs
   const matchKey = `${view.teams[0].name}|${view.teams[1].name}|${view.players.length}|${view.config.ambience}|${view.teams[1].kit.shirt}`;
   const [mods, setMods] = useState({ finesse: false, chip: false });
+  // L'aide s'ouvre d'elle-même au tout premier match
+  const [help, setHelp] = useState(() => seatId !== null && !localStorage.getItem(HOWTO_KEY));
+  const closeHelp = () => {
+    localStorage.setItem(HOWTO_KEY, "1");
+    setHelp(false);
+  };
+  const radarColors = useMemo<[string, string]>(() => [view.teams[0].kit.shirt, view.teams[1].kit.shirt], [view.teams]);
   const setMod = (key: "finesse" | "chip") => {
     const pad = runtime.current?.pad.touch;
     if (!pad) return;
@@ -173,7 +194,7 @@ export function CramponsMatch({
         onLocalKick: (kind) =>
           play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
       },
-      reduced,
+      reduced || window.matchMedia("(pointer: coarse)").matches,
     );
     runtime.current = rt;
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
@@ -195,6 +216,8 @@ export function CramponsMatch({
         if (e.k === "shot") setMods({ finesse: false, chip: false });
         if (e.k === "goal") {
           play("footCheer");
+          rt.shakeNet();
+          void confetti({ particleCount: 140, spread: 110, startVelocity: 46, origin: { y: 0.35 }, zIndex: 60 });
           show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
         } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
         else if (e.k === "foul") show({ tone: "info", title: e.penalty ? "Penalty !" : "Faute", sub: nameOf(e.p) }, 1700);
@@ -232,37 +255,49 @@ export function CramponsMatch({
   const shootout = view.shootout;
   const over = view.phase === "over" && room.status === "finished";
 
+  const key = mainKey(hud.scheme);
   return (
     <div className="cr-root">
       <canvas ref={canvas} className="cr-canvas" />
 
-      <div className="cr-top">
-        <button className="cr-mini" onClick={onLeave} aria-label="Quitter le match">
-          <Icon name="back" size={18} />
+      <div className="cr-bug" role="status">
+        <div className="cr-bug-teams">
+          <div className="cr-bug-team">
+            <i style={{ background: left.kit.shirt }} />
+            <b>{left.short}</b>
+            <strong className="num">{score[0]}</strong>
+          </div>
+          <div className="cr-bug-team">
+            <i style={{ background: right.kit.shirt }} />
+            <b>{right.short}</b>
+            <strong className="num">{score[1]}</strong>
+          </div>
+        </div>
+        <div className="cr-bug-clock num">
+          {view.period === 5 ? "T.A.B." : formatClock(hud.clock)}
+          <small>{PERIODS[view.period] ?? ""}</small>
+        </div>
+      </div>
+
+      <div className="cr-tools">
+        <button
+          className="cr-mini"
+          onClick={() => setCamera((c) => (c === "tele" ? "large" : c === "large" ? "pres" : "tele"))}
+          aria-label="Changer de caméra"
+          title="Changer de caméra"
+        >
+          <Icon name="eye" size={18} />
         </button>
-        <div className="cr-score" role="status">
-          <span className="cr-kit" style={{ background: left.kit.shirt }} />
-          <span className="cr-short">{left.short}</span>
-          <strong className="num">
-            {score[0]} - {score[1]}
-          </strong>
-          <span className="cr-short">{right.short}</span>
-          <span className="cr-kit" style={{ background: right.kit.shirt }} />
-          <span className="cr-clock num">{view.period === 5 ? "T.A.B." : formatClock(hud.clock)}</span>
-        </div>
-        <div className="cr-top-right">
-          <button
-            className="cr-mini"
-            onClick={() => setCamera((c) => (c === "tele" ? "large" : c === "large" ? "pres" : "tele"))}
-            aria-label="Changer de caméra"
-          >
-            <Icon name="eye" size={18} />
-          </button>
-          <button className="cr-mini" onClick={onOpenChat} aria-label="Discussion">
-            <Icon name="chat" size={18} />
-            {unread > 0 && <span className="cr-badge">{unread}</span>}
-          </button>
-        </div>
+        <button className="cr-mini" onClick={() => setHelp(true)} aria-label="Comment jouer" title="Comment jouer">
+          ?
+        </button>
+        <button className="cr-mini" onClick={onOpenChat} aria-label="Discussion" title="Discussion">
+          <Icon name="chat" size={18} />
+          {unread > 0 && <span className="cr-badge">{unread}</span>}
+        </button>
+        <button className="cr-mini" onClick={onLeave} aria-label="Quitter le match" title="Quitter le match">
+          <Icon name="close" size={18} />
+        </button>
       </div>
 
       {shootout && (
@@ -284,12 +319,19 @@ export function CramponsMatch({
         </div>
       )}
 
-      {!banner && restart?.ready && view.phase !== "play" && (
-        <div className="cr-restart">
-          {RESTART_LABEL[restart.kind]}
-          {taking ? " : à toi de jouer" : ""}
-        </div>
-      )}
+      {!banner &&
+        restart?.ready &&
+        view.phase !== "play" &&
+        (taking ? (
+          <div className="cr-prompt">
+            <kbd>{key}</kbd> {RESTART_ACTION[restart.kind]}
+          </div>
+        ) : (
+          <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>
+        ))}
+
+      {seatId !== null && !over && !touch && <KeyHints scheme={hud.scheme} defending={hud.defending} />}
+      {!over && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
 
       {seatId !== null && hud.activeName && !over && (
         <div className="cr-player">
@@ -297,11 +339,6 @@ export function CramponsMatch({
           <span className="cr-bar" aria-hidden="true">
             <i style={{ width: `${Math.round(hud.stamina * 100)}%` }} className={hud.stamina < 0.3 ? "is-low" : ""} />
           </span>
-          {hud.charge > 0.04 && (
-            <span className="cr-bar is-power" aria-hidden="true">
-              <i style={{ width: `${Math.round(hud.charge * 100)}%` }} className={hud.charge > 0.86 ? "is-over" : ""} />
-            </span>
-          )}
         </div>
       )}
 
@@ -342,6 +379,8 @@ export function CramponsMatch({
           </div>
         </div>
       )}
+
+      {help && <HowTo touch={touch} onClose={closeHelp} />}
 
       {over && <CramponsGameOver room={room} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />}
     </div>

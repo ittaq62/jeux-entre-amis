@@ -130,6 +130,12 @@ export class MatchRuntime {
   setView(view: CramponsView) {
     this.view = view;
     this.myIndex = view.humans.findIndex((h) => h.id === this.opts.seatId);
+    this.scene.setScoreboard({ left: view.teams[0].short, right: view.teams[1].short, score: view.score });
+  }
+
+  /** Le filet tremble du côté où le ballon est entré */
+  shakeNet() {
+    this.scene.shakeNet(this.shownBall.x > 0 ? 1 : -1);
   }
 
   setCamera(mode: "tele" | "large" | "pres") {
@@ -274,6 +280,10 @@ export class MatchRuntime {
     this.charge = hasBall || taking ? pad.charge : 0;
 
     const kindFor = (button: GameButton): HumanActionKind => {
+      // Un penalty se tire, un coup d'envoi se passe : quelle que soit la touche, on fait ce qui va de soi
+      const restart = this.view.restart?.kind;
+      if (taking && restart === "penalty") return "shot";
+      if (taking && restart === "kickoff") return "pass";
       if (button !== "shoot") return WITH_BALL[button];
       const touch = this.controls.touch;
       const kind = pad.chip ? "chip" : pad.finesse ? "finesse" : "shot";

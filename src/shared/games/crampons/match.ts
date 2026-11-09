@@ -213,7 +213,8 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
       const p = m.players[h.active];
       if (!p) continue;
       if (a.k === "switch") {
-        pickActive(m, h, h.active);
+        // On ne quitte pas un joueur qui a le ballon : on le perdrait aussitôt
+        if (m.owner !== h.active) pickActive(m, h, h.active);
         continue;
       }
       if (m.phase === "restart") {

@@ -293,6 +293,7 @@ describe("les commandes", () => {
     toPlay(m);
     const h = m.humans[0]!;
     const before = h.active;
+    m.owner = -1;
     pushAction(m, "moi", "switch", 0, 0, 0);
     stepMatch(m);
     expect(h.active).not.toBe(before);

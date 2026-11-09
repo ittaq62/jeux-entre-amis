@@ -1,30 +1,81 @@
-// Le stade de Crampons : la pelouse tondue, les lignes, les buts et leurs filets, les panneaux, les tribunes, les projecteurs.
+// Le stade de Crampons : la pelouse, deux étages de tribunes garnies de supporters, les toits, les pylônes, les panneaux
+// lumineux, les écrans géants et les buts. Tout est construit au lancement, sans aucune image à télécharger.
 
 import * as THREE from "three";
-import {
-  BOX_HALF,
-  BOX_L,
-  CIRCLE_R,
-  GOAL_DEPTH,
-  GOAL_H,
-  GOAL_HALF,
-  HALF_L,
-  HALF_W,
-  SIX_HALF,
-  SIX_L,
-  SPOT_L,
-} from "../../../shared/games/crampons/pitch.ts";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { GOAL_DEPTH, GOAL_H, GOAL_HALF, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
+import { Crowd, type Seat } from "./crowd.ts";
+import { buildGrass, type GrassColors } from "./grass.ts";
 
 export type Ambience = "jour" | "soir" | "nuit";
 
-const SKY: Record<Ambience, { top: string; bottom: string; sun: number; hemi: number; sunColor: string; grass: [string, string] }> = {
-  jour: { top: "#4a9fe0", bottom: "#d7eefb", sun: 2.4, hemi: 1.15, sunColor: "#fff4dd", grass: ["#4fa33f", "#45963a"] },
-  soir: { top: "#3a3f7f", bottom: "#ffb37a", sun: 1.9, hemi: 0.95, sunColor: "#ffc891", grass: ["#4a9a3e", "#3f8c37"] },
-  nuit: { top: "#070b1e", bottom: "#1c2a55", sun: 2.1, hemi: 0.75, sunColor: "#e9f1ff", grass: ["#3f8f3a", "#367f33"] },
+interface Theme {
+  skyTop: string;
+  skyBottom: string;
+  haze: string;
+  sun: number;
+  hemi: number;
+  sunColor: string;
+  sunDir: [number, number, number];
+  rim: number;
+  grass: GrassColors;
+  roof: string;
+  concrete: string;
+  glow: number;
+  exposure: number;
+}
+
+export const THEMES: Record<Ambience, Theme> = {
+  jour: {
+    skyTop: "#2f7fd6",
+    skyBottom: "#cbe7f7",
+    haze: "#d9ecf6",
+    sun: 2.9,
+    hemi: 1.15,
+    sunColor: "#fff1d9",
+    sunDir: [-0.45, 1, 0.5],
+    rim: 0.5,
+    grass: { a: "#4fae42", b: "#3f9a38", dirt: "#9a8452", outside: "#2c6b2b" },
+    roof: "#e6e9ee",
+    concrete: "#7c8798",
+    glow: 0,
+    exposure: 1,
+  },
+  soir: {
+    skyTop: "#27347c",
+    skyBottom: "#ffae74",
+    haze: "#f3b98f",
+    sun: 2.7,
+    hemi: 0.95,
+    sunColor: "#ffc690",
+    sunDir: [-0.85, 0.62, 0.32],
+    rim: 0.9,
+    grass: { a: "#4ea440", b: "#3c9036", dirt: "#8f7648", outside: "#2a6329" },
+    roof: "#8f8ba3",
+    concrete: "#5f6680",
+    glow: 0.55,
+    exposure: 1.02,
+  },
+  nuit: {
+    skyTop: "#040713",
+    skyBottom: "#141f47",
+    haze: "#10183a",
+    sun: 2.5,
+    hemi: 0.7,
+    sunColor: "#e9f0ff",
+    sunDir: [-0.2, 1, 0.35],
+    rim: 1.1,
+    grass: { a: "#45a03c", b: "#368a33", dirt: "#7c6a46", outside: "#1f5527" },
+    roof: "#3a4158",
+    concrete: "#3f465e",
+    glow: 1,
+    exposure: 1.08,
+  },
 };
 
-/** La marge d'herbe autour des lignes, en mètres */
 const MARGIN = 9;
+const ROW_H = 0.62;
+const ROW_D = 0.92;
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement("canvas");
@@ -41,74 +92,41 @@ function texture(c: HTMLCanvasElement, repeat = false): THREE.CanvasTexture {
   return t;
 }
 
-/** La pelouse : bandes de tonte, lignes blanches, un peu de grain pour qu'elle ne soit pas lisse comme une table */
-function pitchTexture(a: Ambience): THREE.CanvasTexture {
-  const fullL = (HALF_L + MARGIN) * 2;
-  const fullW = (HALF_W + MARGIN) * 2;
-  const k = 2048 / fullL;
-  const [c, g] = canvas(2048, Math.round(fullW * k));
-  const [g1, g2] = SKY[a].grass;
-  g.fillStyle = g1;
-  g.fillRect(0, 0, c.width, c.height);
-  const band = 105 / 14;
-  for (let i = -2; i < 18; i += 2) {
-    g.fillStyle = g2;
-    g.fillRect((MARGIN + i * band) * k, 0, band * k, c.height);
-  }
-  // Le grain de l'herbe
-  for (let i = 0; i < 26000; i++) {
-    g.fillStyle = i % 2 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.05)";
-    g.fillRect(Math.random() * c.width, Math.random() * c.height, 2, 3);
-  }
-  const X = (x: number) => (x + HALF_L + MARGIN) * k;
-  const Z = (z: number) => (z + HALF_W + MARGIN) * k;
-  g.strokeStyle = "rgba(255,255,255,0.92)";
-  g.fillStyle = "rgba(255,255,255,0.95)";
-  g.lineWidth = Math.max(2.6, 0.16 * k);
-  const rect = (x0: number, z0: number, x1: number, z1: number) => g.strokeRect(X(x0), Z(z0), (x1 - x0) * k, (z1 - z0) * k);
-  rect(-HALF_L, -HALF_W, HALF_L, HALF_W);
-  g.beginPath();
-  g.moveTo(X(0), Z(-HALF_W));
-  g.lineTo(X(0), Z(HALF_W));
-  g.stroke();
-  g.beginPath();
-  g.arc(X(0), Z(0), CIRCLE_R * k, 0, Math.PI * 2);
-  g.stroke();
-  g.beginPath();
-  g.arc(X(0), Z(0), 0.3 * k, 0, Math.PI * 2);
-  g.fill();
-  for (const end of [-1, 1]) {
-    const line = end * HALF_L;
-    const box = end * (HALF_L - BOX_L);
-    const six = end * (HALF_L - SIX_L);
-    rect(Math.min(line, box), -BOX_HALF, Math.max(line, box), BOX_HALF);
-    rect(Math.min(line, six), -SIX_HALF, Math.max(line, six), SIX_HALF);
-    const spot = end * (HALF_L - SPOT_L);
-    g.beginPath();
-    g.arc(X(spot), Z(0), 0.28 * k, 0, Math.PI * 2);
-    g.fill();
-    // L'arc de la surface : seulement la partie à l'extérieur
-    const a0 = Math.acos((BOX_L - SPOT_L) / CIRCLE_R);
-    g.beginPath();
-    if (end > 0) g.arc(X(spot), Z(0), CIRCLE_R * k, Math.PI - a0, Math.PI + a0);
-    else g.arc(X(spot), Z(0), CIRCLE_R * k, -a0, a0);
-    g.stroke();
-    for (const side of [-1, 1]) {
-      g.beginPath();
-      const from = end > 0 ? (side > 0 ? Math.PI : Math.PI / 2) : side > 0 ? -Math.PI / 2 : 0;
-      const start = end > 0 ? (side > 0 ? Math.PI : Math.PI / 2) : side > 0 ? -Math.PI / 2 : 0;
-      void from;
-      g.arc(X(line), Z(side * HALF_W), 1 * k, start + (end > 0 && side > 0 ? 0 : 0), start + Math.PI / 2);
-      g.stroke();
-    }
-  }
-  return texture(c);
+function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(x, y, z);
+  return g.toNonIndexed();
+}
+
+function ledTexture(colors: [string, string]): THREE.CanvasTexture {
+  const [c, g] = canvas(2048, 96);
+  const messages: [string, string, string][] = [
+    ["#0d5c3f", "#f3d68a", "LA TABLÉE"],
+    [colors[0], "#ffffff", "ALLEZ !"],
+    ["#c8362f", "#ffffff", "CRAMPONS"],
+    ["#1a3f8f", "#ffd24d", "ENTRE AMIS"],
+    [colors[1], "#ffffff", "ON JOUE ?"],
+    ["#f4c64e", "#2a1c08", "BUUUT !"],
+  ];
+  const w = 2048 / messages.length;
+  messages.forEach(([bg, fg, text], i) => {
+    g.fillStyle = bg;
+    g.fillRect(i * w, 0, w, 96);
+    g.fillStyle = "rgba(255,255,255,0.09)";
+    for (let x = 0; x < w; x += 6) g.fillRect(i * w + x, 0, 1, 96);
+    g.fillStyle = fg;
+    g.font = "900 46px 'Arial Black', Arial, sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, (i + 0.5) * w, 50);
+  });
+  return texture(c, true);
 }
 
 function netTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(128, 128);
   g.clearRect(0, 0, 128, 128);
-  g.strokeStyle = "rgba(255,255,255,0.75)";
+  g.strokeStyle = "rgba(255,255,255,0.8)";
   g.lineWidth = 3;
   for (let i = 0; i <= 128; i += 32) {
     g.beginPath();
@@ -118,262 +136,469 @@ function netTexture(): THREE.CanvasTexture {
     g.lineTo(128, i);
     g.stroke();
   }
-  const t = texture(c, true);
-  return t;
-}
-
-function crowdTexture(night: boolean): THREE.CanvasTexture {
-  const [c, g] = canvas(1024, 512);
-  g.fillStyle = night ? "#10162b" : "#2e3a52";
-  g.fillRect(0, 0, 1024, 512);
-  // Des couleurs adoucies : de loin, un public trop contrasté scintille
-  const colors = ["#a85a4e", "#b89a58", "#5a7fae", "#b5b0a4", "#6a9a74", "#a57a9a", "#b1835a", "#7d76a8", "#c0bcae", "#3b4656"];
-  const rows = 16;
-  for (let r = 0; r < rows; r++) {
-    const y = (r + 0.5) * (512 / rows);
-    for (let x = (r % 2) * 10; x < 1024; x += 20) {
-      if (Math.random() < 0.08) continue;
-      const col = colors[Math.floor(Math.random() * colors.length)]!;
-      g.fillStyle = col;
-      g.fillRect(x, y - 3, 14, 14);
-      g.fillStyle = ["#f0c9a2", "#d9a077", "#a0704c", "#6e4a31"][Math.floor(Math.random() * 4)]!;
-      g.beginPath();
-      g.arc(x + 7, y - 7, 6, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
-  const t = texture(c, true);
-  return t;
-}
-
-function boardTexture(): THREE.CanvasTexture {
-  const [c, g] = canvas(2048, 128);
-  const messages = [
-    ["#0d5c3f", "#f3d68a", "LA TABLÉE"],
-    ["#c8362f", "#ffffff", "CRAMPONS"],
-    ["#1a3f8f", "#ffd24d", "ENTRE AMIS"],
-    ["#f4c64e", "#2a1c08", "ON JOUE ?"],
-  ] as const;
-  const w = 2048 / messages.length;
-  messages.forEach(([bg, fg, text], i) => {
-    g.fillStyle = bg;
-    g.fillRect(i * w, 0, w, 128);
-    g.fillStyle = fg;
-    g.font = "900 62px 'Arial Black', sans-serif";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText(text, (i + 0.5) * w, 68);
-  });
   return texture(c, true);
 }
 
-/** Une tribune en pente, avec son public et son toit */
-function stand(length: number, crowd: THREE.Material, roof: THREE.Material, wall: THREE.Material): THREE.Group {
-  const group = new THREE.Group();
-  const depth = 34;
-  const slope = 0.58;
-  const seats = new THREE.Mesh(new THREE.PlaneGeometry(length, depth), crowd);
-  seats.rotation.x = -Math.PI / 2 + slope;
-  seats.position.set(0, Math.sin(slope) * depth * 0.5 + 1.5, -Math.cos(slope) * depth * 0.5);
-  group.add(seats);
-  const top = Math.sin(slope) * depth + 1.5;
-  const back = -Math.cos(slope) * depth;
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(length + 4, 1, depth * 0.72), roof);
-  lid.position.set(0, top + 8, back * 0.72);
-  lid.rotation.x = 0.05;
-  group.add(lid);
-  const rear = new THREE.Mesh(new THREE.BoxGeometry(length + 4, top + 9, 1), wall);
-  rear.position.set(0, (top + 9) / 2, back - 0.5);
-  group.add(rear);
-  const front = new THREE.Mesh(new THREE.BoxGeometry(length, 1.6, 0.6), wall);
-  front.position.set(0, 0.8, 0.2);
-  group.add(front);
-  return group;
+interface GoalParts {
+  group: THREE.Group;
+  back: THREE.Mesh;
+  backX: number;
+  end: number;
 }
 
-function goal(end: number, netTex: THREE.Texture): THREE.Group {
+function buildGoal(end: number, netTex: THREE.Texture, shadows: boolean): GoalParts {
   const group = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: "#fbfbf6", roughness: 0.4 });
+  const white = new THREE.MeshStandardMaterial({ color: "#fbfbf6", roughness: 0.35 });
+  const steel = new THREE.MeshStandardMaterial({ color: "#c9ced8", roughness: 0.5 });
   const R = 0.085;
-  const post = (x: number, z: number) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GOAL_H, 12), white);
-    m.position.set(x, GOAL_H / 2, z);
+  const line = end * HALF_L;
+  const addBar = (a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material) => {
+    const len = a.distanceTo(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    m.castShadow = shadows;
     group.add(m);
   };
-  const line = end * HALF_L;
-  post(line, -GOAL_HALF);
-  post(line, GOAL_HALF);
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GOAL_HALF * 2 + 0.15, 12), white);
-  bar.rotation.x = Math.PI / 2;
-  bar.position.set(line, GOAL_H, 0);
-  group.add(bar);
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  addBar(v(line, 0, -GOAL_HALF), v(line, GOAL_H, -GOAL_HALF), R, white);
+  addBar(v(line, 0, GOAL_HALF), v(line, GOAL_H, GOAL_HALF), R, white);
+  addBar(v(line, GOAL_H, -GOAL_HALF - R), v(line, GOAL_H, GOAL_HALF + R), R, white);
+  const backX = line + end * GOAL_DEPTH;
+  const r = 0.03;
+  for (const side of [-1, 1]) {
+    addBar(v(line, GOAL_H, side * GOAL_HALF), v(backX, 1.15, side * GOAL_HALF), r, steel);
+    addBar(v(backX, 1.15, side * GOAL_HALF), v(backX, 0, side * GOAL_HALF), r, steel);
+    addBar(v(line, 0, side * GOAL_HALF), v(backX, 0, side * GOAL_HALF), r, steel);
+  }
+  addBar(v(backX, 1.15, -GOAL_HALF), v(backX, 1.15, GOAL_HALF), r, steel);
 
-  const netMat = new THREE.MeshBasicMaterial({ map: netTex, transparent: true, side: THREE.DoubleSide, depthWrite: false, opacity: 0.8 });
+  const netMat = new THREE.MeshBasicMaterial({ map: netTex, transparent: true, side: THREE.DoubleSide, depthWrite: false, opacity: 0.82 });
   const part = (w: number, h: number, repeatX: number, repeatY: number) => {
     const g = new THREE.PlaneGeometry(w, h);
     const uv = g.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * repeatX, uv.getY(i) * repeatY);
     return new THREE.Mesh(g, netMat);
   };
-  const backX = line + end * GOAL_DEPTH;
-  const back = part(GOAL_HALF * 2, GOAL_H, 18, 6);
+  const back = part(GOAL_HALF * 2, 1.15, 20, 3);
   back.rotation.y = Math.PI / 2;
-  back.position.set(backX, GOAL_H / 2, 0);
+  back.position.set(backX, 0.575, 0);
   group.add(back);
-  const roof = part(GOAL_DEPTH, GOAL_HALF * 2, 5, 18);
+  // Le toit du filet descend de la barre vers l'arrière
+  const roofL = Math.hypot(GOAL_DEPTH, GOAL_H - 1.15);
+  const roof = part(roofL, GOAL_HALF * 2, 6, 20);
   roof.rotation.x = -Math.PI / 2;
-  roof.position.set(line + (end * GOAL_DEPTH) / 2, GOAL_H, 0);
+  roof.rotation.y = end * Math.atan2(GOAL_H - 1.15, GOAL_DEPTH);
+  roof.rotation.order = "YXZ";
+  roof.position.set(line + (end * GOAL_DEPTH) / 2, (GOAL_H + 1.15) / 2, 0);
   group.add(roof);
   for (const side of [-1, 1]) {
-    const s = part(GOAL_DEPTH, GOAL_H, 5, 6);
-    s.position.set(line + (end * GOAL_DEPTH) / 2, GOAL_H / 2, side * GOAL_HALF);
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(end * GOAL_DEPTH, 0);
+    shape.lineTo(end * GOAL_DEPTH, 1.15);
+    shape.lineTo(0, GOAL_H);
+    shape.closePath();
+    const g = new THREE.ShapeGeometry(shape);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uv[i * 2] = pos.getX(i) * 2.6;
+      uv[i * 2 + 1] = pos.getY(i) * 2.6;
+    }
+    g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    const s = new THREE.Mesh(g, netMat);
+    s.position.set(line, 0, side * GOAL_HALF);
     group.add(s);
   }
-  return group;
+  return { group, back, backX, end };
+}
+
+export interface StandColors {
+  home: string[];
+  away: string[];
+}
+
+interface StandBuild {
+  group: THREE.Group;
+  seats: Seat[];
+  frontY: number;
+}
+
+/** Une tribune en deux étages, vue d'en face : l'axe z local regarde le terrain */
+function buildStand(length: number, low: boolean, theme: Theme, led: THREE.Texture, pickColor: (u: number) => THREE.Color): StandBuild {
+  const group = new THREE.Group();
+  const lowerRows = low ? 9 : 15;
+  const upperRows = low ? 0 : 14;
+  const spacing = low ? 1.3 : 0.78;
+  const seats: Seat[] = [];
+  const geos: THREE.BufferGeometry[] = [];
+  const baseY = 1.9;
+  for (let i = 0; i < lowerRows; i++) {
+    const y = baseY + i * ROW_H;
+    geos.push(box(length, y, ROW_D + 0.02, 0, y / 2, -i * ROW_D));
+    for (let x = -length / 2 + 0.5; x < length / 2; x += spacing) {
+      if (Math.random() < 0.05) continue;
+      seats.push({ x: x + Math.random() * 0.14, y, z: -i * ROW_D - 0.06, color: pickColor((x + length / 2) / length) });
+    }
+  }
+  const topLower = baseY + lowerRows * ROW_H;
+  const backLower = -lowerRows * ROW_D;
+  const upperStartY = topLower + 3.3;
+  const upperStartZ = backLower - 0.6;
+  for (let j = 0; j < upperRows; j++) {
+    const y = upperStartY + j * ROW_H * 1.12;
+    const z = upperStartZ - j * ROW_D;
+    geos.push(box(length, 1.4, ROW_D + 0.02, 0, y - 0.7, z));
+    for (let x = -length / 2 + 0.5; x < length / 2; x += spacing) {
+      if (Math.random() < 0.07) continue;
+      seats.push({ x: x + Math.random() * 0.14, y, z: z - 0.06, color: pickColor((x + length / 2) / length) });
+    }
+  }
+  const topY = upperRows ? upperStartY + upperRows * ROW_H * 1.12 : topLower;
+  const backZ = upperRows ? upperStartZ - upperRows * ROW_D : backLower;
+  // Le mur du fond, qui ferme la tribune
+  geos.push(box(length + 4, topY + 8, 1, 0, (topY + 8) / 2, backZ - 0.6));
+  const concrete = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ color: theme.concrete }));
+  group.add(concrete);
+
+  if (upperRows) {
+    // Le bandeau lumineux entre les deux étages
+    const band = new THREE.Mesh(new THREE.BoxGeometry(length, 2.1, 0.3), new THREE.MeshBasicMaterial({ map: led }));
+    band.position.set(0, topLower + 1.5, backLower + 0.2);
+    group.add(band);
+  }
+
+  // Le toit, porté par des poteaux, avec sa rampe de lumière
+  const roofDepth = -backZ + (upperRows ? 3 : 6);
+  const roofMat = new THREE.MeshLambertMaterial({ color: theme.roof });
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(length + 6, 0.7, roofDepth), roofMat);
+  roof.position.set(0, topY + 8.2, backZ + roofDepth / 2 - 0.6);
+  roof.rotation.x = -0.06;
+  group.add(roof);
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(length, 0.22, 0.6),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color("#fff6d8").multiplyScalar(0.4 + theme.glow * 1.1) }),
+  );
+  strip.position.set(0, topY + 7.55, backZ + roofDepth * 0.72);
+  group.add(strip);
+  const columns: THREE.BufferGeometry[] = [];
+  for (let x = -length / 2 + 6; x < length / 2; x += 18) columns.push(box(0.5, topY + 8, 0.5, x, (topY + 8) / 2, backZ + 0.2));
+  const colMesh = new THREE.Mesh(mergeGeometries(columns), roofMat);
+  group.add(colMesh);
+  for (const g of geos) g.dispose();
+  for (const g of columns) g.dispose();
+  return { group, seats, frontY: baseY };
+}
+
+export interface ScoreboardData {
+  left: string;
+  right: string;
+  score: [number, number];
 }
 
 export interface Stadium {
   /** À appeler à chaque image : le public s'agite d'autant plus que `excitement` (de 0 à 1) est grand */
-  update(t: number, excitement: number): void;
+  update(t: number, excitement: number, dt: number): void;
   /** La tribune du premier plan gênerait la caméra de télévision : on la montre seulement quand la vue passe dans l'axe */
   showNearStand(on: boolean): void;
+  /** Le filet qui tremble quand le ballon y entre */
+  shakeNet(end: number): void;
+  setScoreboard(data: ScoreboardData): void;
   dispose(): void;
 }
 
 /** Construit le stade dans `scene` et rend la poignée qui permet de l'animer */
-export function buildStadium(scene: THREE.Scene, ambience: Ambience, lowQuality: boolean): Stadium {
-  const sky = SKY[ambience];
-  const made: (THREE.Texture | THREE.Material | THREE.BufferGeometry)[] = [];
+export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolean, colors: StandColors, shadows: boolean): Stadium {
+  const theme = THEMES[ambience];
+  const root = new THREE.Group();
+  scene.add(root);
+  scene.fog = new THREE.Fog(theme.haze, 220, 620);
 
-  const [skyCanvas, g] = canvas(16, 256);
-  const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, sky.top);
-  grad.addColorStop(1, sky.bottom);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 16, 256);
-  const skyTex = texture(skyCanvas);
-  scene.background = skyTex;
-  made.push(skyTex);
+  // Le ciel : un dôme dégradé
+  const skyGeo = new THREE.SphereGeometry(700, 24, 14);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: { top: { value: new THREE.Color(theme.skyTop) }, bottom: { value: new THREE.Color(theme.skyBottom) } },
+    vertexShader: "varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader:
+      "uniform vec3 top; uniform vec3 bottom; varying vec3 vP; void main(){ float h = clamp(normalize(vP).y * 1.8 + 0.08, 0.0, 1.0); gl_FragColor = vec4(mix(bottom, top, pow(h, 0.8)), 1.0);\n#include <colorspace_fragment>\n}",
+  });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  root.add(sky);
 
-  scene.add(new THREE.HemisphereLight("#ffffff", "#587a4a", sky.hemi));
-  const sun = new THREE.DirectionalLight(sky.sunColor, sky.sun);
-  sun.position.set(-30, 70, 40);
-  scene.add(sun);
+  const grass = buildGrass(theme.grass, shadows);
+  root.add(grass.mesh);
 
-  const grassTex = pitchTexture(ambience);
-  const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry((HALF_L + MARGIN) * 2, (HALF_W + MARGIN) * 2),
-    new THREE.MeshLambertMaterial({ map: grassTex }),
-  );
-  grass.rotation.x = -Math.PI / 2;
-  scene.add(grass);
-  made.push(grassTex, grass.geometry, grass.material as THREE.Material);
-
-  // Tout autour, l'herbe continue jusque sous les tribunes : la caméra ne voit jamais le vide
-  const under = new THREE.Mesh(new THREE.PlaneGeometry(420, 320), new THREE.MeshLambertMaterial({ color: sky.grass[1] }));
+  // Sous les tribunes et tout autour : le sol, pour que la caméra ne voie jamais le vide
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(1200, 900), new THREE.MeshLambertMaterial({ color: theme.grass.outside }));
   under.rotation.x = -Math.PI / 2;
-  under.position.y = -0.02;
-  scene.add(under);
-  made.push(under.geometry, under.material as THREE.Material);
+  under.position.y = -0.05;
+  root.add(under);
 
   const netTex = netTexture();
-  made.push(netTex);
-  scene.add(goal(1, netTex), goal(-1, netTex));
+  const goals = [buildGoal(1, netTex, shadows), buildGoal(-1, netTex, shadows)];
+  for (const g of goals) root.add(g.group);
 
-  const crowdTex = crowdTexture(ambience === "nuit");
-  crowdTex.repeat.set(8, 2);
-  const crowdEnds = crowdTex.clone();
-  crowdEnds.needsUpdate = true;
-  crowdEnds.repeat.set(5, 2);
-  made.push(crowdTex, crowdEnds);
-  const seats = new THREE.MeshLambertMaterial({ map: crowdTex });
-  const seatsEnds = new THREE.MeshLambertMaterial({ map: crowdEnds });
-  const roof = new THREE.MeshLambertMaterial({ color: ambience === "jour" ? "#d8dee8" : "#3c465c" });
-  const wall = new THREE.MeshLambertMaterial({ color: "#39435a" });
-  made.push(seats, seatsEnds, roof, wall);
-  const near = HALF_W + MARGIN + 3;
-  const north = stand(HALF_L * 2 + 40, seats, roof, wall);
-  north.position.set(0, 0, -near);
-  scene.add(north);
-  const south = stand(HALF_L * 2 + 40, seats, roof, wall);
-  south.position.set(0, 0, near);
-  south.rotation.y = Math.PI;
-  scene.add(south);
-  const farX = HALF_L + MARGIN + 3;
-  const west = stand(HALF_W * 2 + 40, seatsEnds, roof, wall);
-  west.position.set(-farX, 0, 0);
-  west.rotation.y = Math.PI / 2;
-  scene.add(west);
-  const east = stand(HALF_W * 2 + 40, seatsEnds, roof, wall);
-  east.position.set(farX, 0, 0);
-  east.rotation.y = -Math.PI / 2;
-  scene.add(east);
-
-  // Le tour du terrain, en panneaux publicitaires
-  const adTex = boardTexture();
-  adTex.repeat.set(3, 1);
-  const adMat = new THREE.MeshBasicMaterial({ map: adTex });
-  made.push(adTex, adMat);
-  const board = (w: number, x: number, z: number, ry: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.1, 0.25), adMat);
-    m.position.set(x, 0.55, z);
-    m.rotation.y = ry;
-    scene.add(m);
+  // Les supporters : chaque côté a ses couleurs
+  const homeColors = colors.home.map((c) => new THREE.Color(c));
+  const awayColors = colors.away.map((c) => new THREE.Color(c));
+  const neutral = ["#d8d4c8", "#6d7f9c", "#a8886a", "#8d9aa8", "#c9b58d"].map((c) => new THREE.Color(c));
+  const pick = (list: THREE.Color[]) => list[Math.floor(Math.random() * list.length)]!.clone().multiplyScalar(0.72 + Math.random() * 0.34);
+  const mixed = (home: number, away: number) => () => {
+    const r = Math.random();
+    return pick(r < home ? homeColors : r < home + away ? awayColors : neutral);
   };
-  board(HALF_L * 2 + 8, 0, -(HALF_W + 4.5), 0);
-  board(HALF_L * 2 + 8, 0, HALF_W + 4.5, Math.PI);
-  for (const side of [-1, 1]) {
-    for (const end of [-1, 1]) board(HALF_W - 6, end * (HALF_L + 5), side * (HALF_W / 2 + 6), (end * Math.PI) / 2);
+
+  const led = ledTexture([colors.home[0]!, colors.away[0]!]);
+  led.repeat.set(5, 1);
+  const crowds: Crowd[] = [];
+  const front = HALF_W + MARGIN + 3;
+  const side = HALF_L + MARGIN + 3;
+  const longLength = HALF_L * 2 + 44;
+  const endLength = HALF_W * 2 + 44;
+  const place = (build: StandBuild, x: number, z: number, ry: number): Crowd => {
+    build.group.position.set(x, 0, z);
+    build.group.rotation.y = ry;
+    root.add(build.group);
+    const c = Math.cos(ry);
+    const s = Math.sin(ry);
+    const world = build.seats.map((p) => ({ ...p, x: x + p.x * c + p.z * s, z: z - p.x * s + p.z * c }));
+    const crowd = new Crowd(world);
+    root.add(crowd.mesh);
+    crowds.push(crowd);
+    return crowd;
+  };
+  const far = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)());
+  place(far, 0, -front, 0);
+  const near = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)());
+  const nearCrowd = place(near, 0, front, Math.PI);
+  const west = buildStand(endLength, low, theme, led, () => mixed(0.9, 0.02)());
+  place(west, -side, 0, Math.PI / 2);
+  const east = buildStand(endLength, low, theme, led, () => mixed(0.02, 0.9)());
+  place(east, side, 0, -Math.PI / 2);
+
+  // Les angles, fermés par des blocs : la tribune fait tout le tour
+  const cornerMat = new THREE.MeshLambertMaterial({ color: theme.concrete });
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(26, 26, 26), cornerMat);
+      m.position.set(sx * (side + 13), 13, sz * (front + 13));
+      root.add(m);
+    }
+  }
+
+  // Le tour du terrain, en panneaux lumineux
+  const adMat = new THREE.MeshBasicMaterial({ map: led });
+  const boardGeo: THREE.BufferGeometry[] = [];
+  const longBoard = HALF_L * 2 + 8;
+  boardGeo.push(box(longBoard, 1.1, 0.25, 0, 0.55, -(HALF_W + 4.5)));
+  boardGeo.push(box(longBoard, 1.1, 0.25, 0, 0.55, HALF_W + 4.5));
+  const boards = new THREE.Mesh(mergeGeometries(boardGeo), adMat);
+  root.add(boards);
+  for (const g of boardGeo) g.dispose();
+  for (const sz of [-1, 1]) {
+    for (const end of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(HALF_W - 6, 1.1, 0.25), adMat);
+      m.position.set(end * (HALF_L + 5), 0.55, sz * (HALF_W / 2 + 6));
+      m.rotation.y = (end * Math.PI) / 2;
+      root.add(m);
+    }
+  }
+
+  // Les bancs de touche
+  const benchMat = new THREE.MeshLambertMaterial({ color: "#22303f" });
+  const benchGlass = new THREE.MeshLambertMaterial({ color: "#7fb2d6", transparent: true, opacity: 0.55 });
+  for (const x of [-11, 11]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 1), benchMat);
+    b.position.set(x, 0.25, -(HALF_W + 2.6));
+    root.add(b);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(8.3, 0.08, 1.5), benchGlass);
+    top.position.set(x, 2, -(HALF_W + 2.6));
+    root.add(top);
+    const backB = new THREE.Mesh(new THREE.BoxGeometry(8.3, 2, 0.08), benchGlass);
+    backB.position.set(x, 1, -(HALF_W + 3.3));
+    root.add(backB);
   }
 
   // Les poteaux de corner
   const flagMat = new THREE.MeshBasicMaterial({ color: "#f8d33c", side: THREE.DoubleSide });
-  const poleMat = new THREE.MeshLambertMaterial({ color: "#f4f4ee" });
-  made.push(flagMat, poleMat);
+  const poleMat = new THREE.MeshStandardMaterial({ color: "#f4f4ee", roughness: 0.5 });
+  const flags: THREE.Mesh[] = [];
   for (const x of [-HALF_L, HALF_L]) {
     for (const z of [-HALF_W, HALF_W]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), poleMat);
-      pole.position.set(x, 0.8, z);
-      scene.add(pole);
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.34), flagMat);
-      flag.position.set(x + 0.25, 1.42, z);
-      scene.add(flag);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.7, 8), poleMat);
+      pole.position.set(x, 0.85, z);
+      pole.castShadow = shadows;
+      root.add(pole);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.4), flagMat);
+      flag.position.set(x + 0.3, 1.5, z);
+      root.add(flag);
+      flags.push(flag);
     }
   }
 
-  // Les pylônes d'éclairage, allumés la nuit et le soir
-  if (!lowQuality) {
-    const mast = new THREE.MeshLambertMaterial({ color: "#6b7388" });
-    const lamp = new THREE.MeshBasicMaterial({ color: ambience === "jour" ? "#cfd5e2" : "#fffbe6" });
-    made.push(mast, lamp);
-    for (const x of [-1, 1]) {
-      for (const z of [-1, 1]) {
-        const px = x * (HALF_L + 22);
-        const pz = z * (HALF_W + 22);
-        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 44, 8), mast);
-        m.position.set(px, 22, pz);
-        scene.add(m);
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 0.6), lamp);
-        panel.position.set(px, 45, pz);
-        panel.lookAt(0, 0, 0);
-        scene.add(panel);
+  // Les pylônes d'éclairage, derrière les coins
+  const mast = new THREE.MeshLambertMaterial({ color: "#6b7388" });
+  const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color("#fff8df").multiplyScalar(ambience === "jour" ? 0.75 : 1.25) });
+  const glowTex = (() => {
+    const [c, g] = canvas(128, 128);
+    const grad = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+    grad.addColorStop(0, "rgba(255,250,230,1)");
+    grad.addColorStop(0.3, "rgba(255,244,210,0.45)");
+    grad.addColorStop(1, "rgba(255,240,200,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    return texture(c);
+  })();
+  for (const x of [-1, 1]) {
+    for (const z of [-1, 1]) {
+      const px = x * (side + 18);
+      const pz = z * (front + 18);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1, 62, 8), mast);
+      m.position.set(px, 31, pz);
+      root.add(m);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 0.8), lamp);
+      panel.position.set(px, 63, pz);
+      panel.lookAt(0, 0, 0);
+      root.add(panel);
+      if (theme.glow > 0) {
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: glowTex,
+            color: "#fff4d6",
+            transparent: true,
+            opacity: theme.glow * 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            fog: false,
+          }),
+        );
+        sprite.scale.setScalar(46);
+        sprite.position.set(px, 63, pz);
+        root.add(sprite);
       }
     }
   }
 
+  // Les nuages, ou les étoiles
+  const cloudTex = (() => {
+    const [c, g] = canvas(256, 128);
+    for (let i = 0; i < 26; i++) {
+      const x = 40 + Math.random() * 176;
+      const y = 44 + Math.random() * 44;
+      const r = 14 + Math.random() * 28;
+      const grad = g.createRadialGradient(x, y, 1, x, y, r);
+      grad.addColorStop(0, "rgba(255,255,255,0.5)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    return texture(c);
+  })();
+  const clouds: THREE.Sprite[] = [];
+  if (ambience !== "nuit") {
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: cloudTex,
+          color: ambience === "soir" ? "#ffd9bd" : "#ffffff",
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+          fog: false,
+        }),
+      );
+      s.scale.set(190 + Math.random() * 160, 70 + Math.random() * 40, 1);
+      s.position.set(Math.cos(a) * 480, 120 + Math.random() * 90, Math.sin(a) * 480);
+      root.add(s);
+      clouds.push(s);
+    }
+  } else {
+    const n = 500;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const h = 0.12 + Math.random() * 0.85;
+      const r = Math.sqrt(1 - h * h) * 620;
+      pos[i * 3] = Math.cos(a) * r;
+      pos[i * 3 + 1] = h * 620;
+      pos[i * 3 + 2] = Math.sin(a) * r;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    root.add(new THREE.Points(g, new THREE.PointsMaterial({ color: "#dfe7ff", size: 1.6, sizeAttenuation: false, fog: false })));
+  }
+
+  // Les écrans géants, au-dessus de chaque virage
+  const [screenCanvas, sg] = canvas(512, 256);
+  const screenTex = texture(screenCanvas);
+  const drawScreen = (d: ScoreboardData) => {
+    sg.fillStyle = "#07120d";
+    sg.fillRect(0, 0, 512, 256);
+    sg.fillStyle = "#f4c64e";
+    sg.font = "900 44px 'Arial Black', Arial, sans-serif";
+    sg.textAlign = "center";
+    sg.textBaseline = "middle";
+    sg.fillText(d.left, 128, 70);
+    sg.fillText(d.right, 384, 70);
+    sg.fillStyle = "#ffffff";
+    sg.font = "900 110px 'Arial Black', Arial, sans-serif";
+    sg.fillText(`${d.score[0]} - ${d.score[1]}`, 256, 170);
+    screenTex.needsUpdate = true;
+  };
+  drawScreen({ left: "", right: "", score: [0, 0] });
+  const frameMat = new THREE.MeshLambertMaterial({ color: "#20252f" });
+  for (const end of [-1, 1]) {
+    const g = new THREE.Group();
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(34, 18, 1.4), frameMat);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(32, 16), new THREE.MeshBasicMaterial({ map: screenTex, fog: false }));
+    screen.position.z = 0.75;
+    g.add(frame, screen);
+    g.position.set(end * (side + (low ? 16 : 34)), low ? 22 : 45, end * 0);
+    g.rotation.y = -end * (Math.PI / 2);
+    root.add(g);
+  }
+
+  let shake = [0, 0];
+  let adScroll = 0;
+  const backBase = goals.map((g) => g.back.position.x);
   return {
-    update(t, excitement) {
-      // Le public qui saute : un petit décalage de l'image, d'autant plus grand que le stade s'enflamme
-      const amp = 0.004 + excitement * 0.03;
-      const y = Math.abs(Math.sin(t * (3 + excitement * 7))) * amp;
-      crowdTex.offset.y = y;
-      crowdEnds.offset.y = y;
+    update(t, excitement, dt) {
+      for (const c of crowds) c.update(t, excitement);
+      adScroll += dt * 0.015;
+      led.offset.x = adScroll;
+      for (let i = 0; i < flags.length; i++) flags[i]!.rotation.y = Math.sin(t * 3 + i) * 0.25;
+      for (let k = 0; k < goals.length; k++) {
+        const g = goals[k]!;
+        if (shake[k]! > 0.001) {
+          shake[k] = shake[k]! * Math.exp(-dt * 3.2);
+          g.back.position.x = backBase[k]! + g.end * Math.sin(t * 30) * shake[k]! * 0.28;
+        } else g.back.position.x = backBase[k]!;
+      }
     },
     showNearStand(on) {
-      south.visible = on;
+      near.group.visible = on;
+      nearCrowd.mesh.visible = on;
     },
+    shakeNet(end) {
+      shake = end > 0 ? [1, shake[1]!] : [shake[0]!, 1];
+    },
+    setScoreboard: drawScreen,
     dispose() {
-      for (const m of made) m.dispose();
+      for (const c of crowds) c.dispose();
+      grass.dispose();
+      root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry && !(m instanceof THREE.InstancedMesh)) m.geometry.dispose();
+        const mat = m.material as THREE.Material | undefined;
+        mat?.dispose?.();
+      });
+      for (const t of [netTex, led, glowTex, cloudTex, screenTex]) t.dispose();
+      root.removeFromParent();
     },
   };
 }

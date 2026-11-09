@@ -236,11 +236,11 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
           </section>
 
           <section className="rules-sheet panel cr-help">
-            <h3>Les commandes au clavier</h3>
+            <h3>Comment jouer</h3>
             <p className="hint">
-              Se déplacer : flèches ou ZQSD (WASD). Sprint : Maj. Passe : J. Tir : K (tenir pour doser). Lob ou centre : L. Passe en
-              profondeur : I. Tir enroulé : H + K. Tir piqué : G + K. Changer de joueur : U. Sans le ballon : J presse le porteur, I tacle,
-              K tente un tacle glissé. Manette et écran tactile fonctionnent aussi.
+              Flèches ou ZQSD pour courir, Maj pour sprinter. Espace (ou clic gauche) pour passer, C (ou clic droit) pour tirer : plus tu
+              tiens, plus c'est fort. Sans le ballon, Espace presse et tacle, C tente un tacle glissé, E change de joueur. X passe en
+              profondeur, V lobe ou centre. Tout est rappelé à l'écran pendant le match, et ça marche aussi à la manette et sur téléphone.
             </p>
           </section>
         </>
