@@ -35,11 +35,21 @@ import { squareFacts } from "./SquareInfo.tsx";
 // « Mes villes » : toutes ses rues d'un coup d'œil, avec le bouton Améliorer sur chaque ligne.
 
 /** Une fenêtre au centre de l'écran, par-dessus le plateau */
-export function Pop({ children, onClose, wide = false }: { children: ReactNode; onClose?: () => void; wide?: boolean }) {
+export function Pop({
+  children,
+  onClose,
+  wide = false,
+  className = "",
+}: {
+  children: ReactNode;
+  onClose?: () => void;
+  wide?: boolean;
+  className?: string;
+}) {
   return (
     <div className="cap-pop-back" onClick={onClose}>
       <motion.div
-        className={`cap-pop ${wide ? "is-wide" : ""}`}
+        className={`cap-pop ${wide ? "is-wide" : ""} ${className}`}
         initial={{ scale: 0.86, opacity: 0, y: 14 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -121,7 +131,7 @@ export function CityPanel({
   const group = GROUPS[sq.group!];
 
   return (
-    <Pop onClose={onClose} wide>
+    <Pop onClose={onClose} wide className="is-city">
       <Band g={g} index={index} name={name} />
       <div className="cap-city-rent">
         <span>{deed?.owner ? "Loyer" : "Prix"}</span>

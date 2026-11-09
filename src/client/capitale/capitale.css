@@ -617,9 +617,69 @@
   font-size: 18px;
 }
 
-@media (max-width: 600px) {
-  .cap-trade-sides {
-    grid-template-columns: minmax(0, 1fr);
+/* Quand la place manque, l'échange se resserre : les deux côtés face à face, les boutons toujours en vue */
+@media (max-height: 800px), (max-width: 600px) {
+  .cap-trade {
+    gap: 8px;
+  }
+
+  .cap-trade-partners {
+    gap: 4px;
+  }
+
+  .cap-partner {
+    padding: 3px 10px 3px 3px;
+    font-size: 14px;
+  }
+
+  .cap-trade-side h3 {
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+
+  .cap-trade-list {
+    min-height: 40px;
+    max-height: min(240px, calc(100dvh - 310px));
+    gap: 3px;
+  }
+
+  .cap-trade-item {
+    gap: 5px;
+    padding: 3px 6px;
+    font-size: 13.5px;
+  }
+
+  .cap-trade-cash {
+    flex-wrap: wrap;
+    gap: 3px 6px;
+    margin-top: 4px;
+    font-size: 13.5px;
+  }
+
+  .cap-trade-cash input {
+    width: 70px;
+  }
+
+  .cap-trade > .hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+}
+
+@media (max-height: 640px) {
+  .cap-trade > .hint {
+    display: none;
+  }
+
+  .cap-trade-list {
+    max-height: min(240px, calc(100dvh - 265px));
+  }
+}
+
+@media (max-height: 460px) {
+  .cap-trade-list {
+    max-height: calc(100dvh - 222px);
   }
 }
 
@@ -1742,6 +1802,7 @@
 
 .cap-special-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
@@ -1890,6 +1951,283 @@
   background: #e3e8eb;
   color: #8a98a0;
   cursor: default;
+}
+
+/* Quand la place manque, les fenêtres se resserrent : tout se voit et les boutons restent à portée, sans défiler */
+@media (max-height: 800px), (max-width: 480px) {
+  .cap-pop-back {
+    padding: 8px;
+  }
+
+  .cap-pop {
+    max-height: calc(100dvh - 16px);
+    padding-bottom: 10px;
+    border-radius: 18px;
+  }
+
+  .cap-band {
+    gap: 0;
+    padding: 8px 44px;
+  }
+
+  .cap-band strong {
+    font-size: 24px;
+  }
+
+  .cap-band-owner {
+    margin-top: 2px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .cap-pop-title {
+    margin: 10px 16px 4px;
+    font-size: 22px;
+  }
+
+  .cap-pop-ask {
+    margin-top: 8px;
+    font-size: 19px;
+  }
+
+  .cap-pop-text {
+    margin: 6px 16px 0;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  .cap-pop-buttons {
+    gap: 8px;
+    margin: 10px 16px 0;
+  }
+
+  .cap-cta {
+    min-width: 120px;
+    padding: 6px 18px;
+    font-size: 16px;
+  }
+
+  .cap-cta b {
+    font-size: 22px;
+  }
+
+  .cap-why {
+    margin: 6px 16px 0;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .cap-pop .hint {
+    margin: 6px 16px 0;
+    font-size: 12px;
+  }
+
+  .cap-city-rent {
+    margin-top: 6px;
+  }
+
+  .cap-city-rent b {
+    font-size: 30px;
+  }
+
+  .cap-levels {
+    gap: 4px;
+    margin: 6px 12px 0;
+  }
+
+  .cap-levels li {
+    padding: 3px 1px;
+    border-radius: 10px;
+  }
+
+  .cap-levels img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .cap-level-name {
+    font-size: 10px;
+  }
+
+  .cap-levels b {
+    font-size: 14px;
+  }
+
+  .cap-city-actions {
+    margin-top: 8px;
+  }
+
+  /* Améliorer tient sur une ligne : l'action, le prix, le nouveau loyer */
+  .cap-city-actions .cap-cta {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px 14px;
+  }
+
+  .cap-city-small {
+    margin-top: 6px;
+  }
+
+  .cap-specials {
+    margin: 8px 12px 0;
+    padding-top: 6px;
+  }
+
+  .cap-specials h4 {
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+
+  .cap-special-list {
+    gap: 4px;
+  }
+
+  .cap-special {
+    gap: 8px;
+    padding: 3px 8px 3px 4px;
+    border-radius: 10px;
+  }
+
+  .cap-special img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .cap-special .hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .cap-cities {
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .cap-cities h4 {
+    margin-bottom: 1px;
+    padding: 2px 10px;
+    font-size: 13px;
+  }
+
+  .cap-city-row {
+    padding: 1px 2px 1px 8px;
+  }
+
+  .cap-city-name {
+    padding: 2px 0;
+  }
+
+  .cap-city-name strong {
+    font-size: 15px;
+  }
+
+  .cap-mini-cta {
+    padding: 4px 10px;
+  }
+}
+
+/* Le plus petit des téléphones : chaque bâtiment spécial sur une seule ligne */
+@media (max-height: 520px) and (max-width: 559px) {
+  .cap-levels img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .cap-city-rent {
+    margin-top: 4px;
+  }
+
+  .cap-city-rent b {
+    font-size: 24px;
+  }
+
+  .cap-special {
+    padding: 2px 6px 2px 3px;
+  }
+
+  .cap-special img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .cap-special > span {
+    min-width: 0;
+  }
+
+  .cap-special .hint {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .cap-city-small {
+    margin-top: 4px;
+  }
+}
+
+/* Téléphone couché : la fiche d'une rue sur deux colonnes, les titres en deux colonnes aussi */
+@media (max-height: 460px) and (min-width: 560px) {
+  .cap-band {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: center;
+    gap: 10px;
+    padding: 4px 44px;
+  }
+
+  .cap-band strong {
+    font-size: 20px;
+  }
+
+  .cap-band-owner {
+    margin-top: 0;
+  }
+
+  .cap-pop.is-city {
+    width: min(100%, 760px);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 4px;
+    align-content: start;
+  }
+
+  .cap-pop.is-city > * {
+    grid-column: 1;
+  }
+
+  .cap-pop.is-city > .cap-band {
+    grid-column: 1 / -1;
+  }
+
+  .cap-pop.is-city > .cap-specials {
+    grid-column: 2;
+    grid-row: 2 / span 3;
+    margin-top: 6px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .cap-pop.is-wide:not(.is-city) {
+    width: min(100%, 760px);
+  }
+
+  .cap-cities {
+    display: block;
+    columns: 2;
+    column-gap: 14px;
+  }
+
+  .cap-cities section {
+    break-inside: avoid;
+    margin-bottom: 6px;
+  }
+
+  .cap-pop > .hint {
+    display: none;
+  }
 }
 
 /* L'enchère */
