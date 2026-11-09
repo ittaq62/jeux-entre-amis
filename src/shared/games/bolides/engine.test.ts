@@ -58,7 +58,7 @@ import {
 } from "./track.ts";
 import { raceTitles } from "./titles.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
-import { botGarage, SKIN_IDS, skinUnlocked, VEHICLE_IDS, vehicleUnlocked, VEHICLES } from "./garage.ts";
+import { botGarage, SKIN_IDS, SKINS as KART_SKINS, VEHICLE_IDS, VEHICLES } from "./garage.ts";
 
 const GAS: Input = { steer: 0, gas: true, brake: false, drift: false };
 
@@ -373,22 +373,14 @@ describe("la conduite", () => {
 });
 
 describe("le garage", () => {
-  const P = (won: number, played = won, turbos = 0, hitsGiven = 0) => ({ won, played, turbos, hitsGiven });
-
-  it("le kart et la moto sont là dès le début, les autres se débloquent avec des victoires", () => {
-    expect(vehicleUnlocked("kart", P(0))).toBe(true);
-    expect(vehicleUnlocked("moto", P(0))).toBe(true);
-    expect(vehicleUnlocked("buggy", P(1))).toBe(false);
-    expect(vehicleUnlocked("buggy", P(2))).toBe(true);
-    expect(vehicleUnlocked("soucoupe", P(29))).toBe(false);
-    expect(vehicleUnlocked("soucoupe", P(30))).toBe(true);
-    expect(skinUnlocked("usine", P(0))).toBe(true);
-    expect(skinUnlocked("flammes", P(50, 60, 49))).toBe(false);
-    expect(skinUnlocked("flammes", P(0, 0, 50))).toBe(true);
-    expect(skinUnlocked("neon", P(0, 0, 0, 25))).toBe(true);
-    // Une victoire de plus que le précédent à chaque fois : la liste monte
-    const wins = VEHICLE_IDS.map((id) => VEHICLES[id].wins);
-    expect([...wins].sort((a, b) => a - b)).toEqual(wins);
+  it("le kart et la moto sont offerts, les autres s'achètent", () => {
+    expect(VEHICLES.kart.price).toBe(0);
+    expect(VEHICLES.moto.price).toBe(0);
+    expect(VEHICLES.buggy.price).toBeGreaterThan(0);
+    expect(KART_SKINS.usine.price).toBe(0);
+    expect(KART_SKINS.flammes.price).toBeGreaterThan(0);
+    const prices = VEHICLE_IDS.map((id) => VEHICLES[id].price);
+    expect([...prices].sort((a, b) => a - b)).toEqual(prices);
   });
 
   it("chaque véhicule a ses forces : la moto démarre plus vite, le buggy tient l'herbe, le bolide va plus vite", () => {

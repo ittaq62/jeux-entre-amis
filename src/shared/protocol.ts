@@ -1,5 +1,5 @@
 import type { AvatarConfig } from "./avatar.ts";
-import type { GarageProgress, SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
+import type { SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
@@ -276,7 +276,7 @@ export interface NavalRoomView {
   seats: SeatView[];
   spectators: SpectatorView[];
   hostId: string;
-  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean; navalWins: number };
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   naval: NavalView | null;
   /** Fin du chrono du tir en cours */
   turnDeadline: number | null;
@@ -312,7 +312,7 @@ export type NavalClientMessage =
   | { t: "start" }
   /** Changer d'équipe : soi-même, ou n'importe qui pour l'hôte */
   | { t: "team"; seatId: string; team: 0 | 1 }
-  /** Le thème de sa flotte (seulement ceux que ses victoires ont débloqués), à tout moment */
+  /** Le thème de sa flotte (seulement ceux qu'il possède), à tout moment */
   | { t: "skin"; skin: SkinId }
   | { t: "action"; action: NavalAction }
   /** La flotte qu'on vise pendant son tour : les autres regardent au bon endroit */
@@ -406,7 +406,7 @@ export interface CapitaleRoomView {
   seats: SeatView[];
   spectators: SpectatorView[];
   hostId: string;
-  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean; capitaleWins: number };
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   capitale: CapitaleView | null;
   /** Fin du temps laissé à la décision en cours */
   deadline: number | null;
@@ -439,7 +439,7 @@ export type CapitaleClientMessage =
   | { t: "sit" }
   | { t: "leave" }
   | { t: "close" }
-  /** Choisir son pion, avant la partie (seulement ceux que ses victoires ont débloqués) */
+  /** Choisir son pion, avant la partie (seulement ceux qu'il possède) */
   | { t: "token"; token: TokenId }
   /** Tournée : prêt à jouer, sans attendre la fin du choix des pions */
   | { t: "ready" };
@@ -536,13 +536,13 @@ export interface BolidesRoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
-  /** Le véhicule et le skin de chaque pilote assis, et ce que ce joueur a déjà débloqué */
-  garage: { choices: Record<string, { vehicle: VehicleId; skin: KartSkinId }>; progress: GarageProgress | null };
+  /** Le véhicule et le skin de chaque pilote assis */
+  garage: { choices: Record<string, { vehicle: VehicleId; skin: KartSkinId }> };
 }
 
 export type BolidesClientMessage =
   | { t: "settings"; settings: Partial<BolidesSettings>; visibility?: Visibility; maxPlayers?: number }
-  /** Choisir son véhicule et son skin (s'ils sont débloqués) */
+  /** Choisir son véhicule et son skin (s'il les possède) */
   | { t: "garage"; vehicle?: VehicleId; skin?: KartSkinId }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }

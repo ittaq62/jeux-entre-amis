@@ -1,30 +1,22 @@
+import "./bolides.css";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
-import {
-  needLabel,
-  NO_PROGRESS,
-  SKIN_IDS,
-  skinUnlocked,
-  SKINS,
-  VEHICLE_IDS,
-  vehicleBars,
-  vehicleUnlocked,
-  VEHICLES,
-  type SkinId,
-  type VehicleId,
-} from "../../shared/games/bolides/garage.ts";
+import { SKIN_IDS, SKINS, VEHICLE_IDS, vehicleBars, VEHICLES, type SkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import { newKart } from "../../shared/games/bolides/physics.ts";
 import { getTrack } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
+import { kartItem, SHOP_BY_ID, vehicleItem, type ShopItem } from "../../shared/shop.ts";
 import { Icon } from "../components/Icon.tsx";
+import { BuyModal } from "../shop/BuyModal.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { headCanvas } from "./scene/faces.ts";
 import { KART_COLORS, KartModel } from "./scene/kart.ts";
 
 /** Le véhicule choisi, en 3D, qui tourne sur son socle */
-function VehiclePreview({
+export function VehiclePreview({
   vehicle,
   skin,
   color,
@@ -141,7 +133,8 @@ export function Garage({ room, send }: Props) {
   const seatId = room.you.seatId;
   const seat = room.seats.find((s) => s.id === seatId);
   const choice = seatId ? room.garage?.choices[seatId] : undefined;
-  const progress = room.garage?.progress ?? NO_PROGRESS;
+  const { balance, has } = useMyItems();
+  const [buying, setBuying] = useState<ShopItem | null>(null);
   const set = usePrefs((s) => s.set);
   const savedVehicle = usePrefs((s) => s.bolidesVehicle);
   const savedSkin = usePrefs((s) => s.bolidesSkin);
@@ -152,7 +145,7 @@ export function Garage({ room, send }: Props) {
   const skin = peek.skin ?? pending.skin ?? choice?.skin ?? "usine";
   const applied = useRef(false);
 
-  // À l'arrivée à la table, on reprend le dernier choix de cet appareil (le serveur vérifie qu'il est débloqué)
+  // À l'arrivée à la table, on reprend le dernier choix de cet appareil (le serveur vérifie qu'on le possède)
   useEffect(() => {
     if (!seatId || applied.current) return;
     applied.current = true;
@@ -173,23 +166,22 @@ export function Garage({ room, send }: Props) {
 
   if (!seatId) return null;
 
-  const pickVehicle = (id: VehicleId) => {
-    if (!vehicleUnlocked(id, progress)) return setPeek((p) => ({ ...p, vehicle: id }));
+  const applyVehicle = (id: VehicleId) => {
     setPeek((p) => ({ ...p, vehicle: undefined }));
     setPending((p) => ({ ...p, vehicle: id }));
     set({ bolidesVehicle: id });
     send({ t: "garage", vehicle: id });
   };
-  const pickSkin = (id: SkinId) => {
-    if (!skinUnlocked(id, progress)) return setPeek((p) => ({ ...p, skin: id }));
+  const applySkin = (id: SkinId) => {
     setPeek((p) => ({ ...p, skin: undefined }));
     setPending((p) => ({ ...p, skin: id }));
     set({ bolidesSkin: id });
     send({ t: "garage", skin: id });
   };
+  const pickVehicle = (id: VehicleId) => (has(vehicleItem(id)) ? applyVehicle(id) : setPeek((p) => ({ ...p, vehicle: id })));
+  const pickSkin = (id: SkinId) => (has(kartItem(id)) ? applySkin(id) : setPeek((p) => ({ ...p, skin: id })));
   const info = VEHICLES[vehicle];
-  const next = VEHICLE_IDS.map((id) => VEHICLES[id]).find((v) => !vehicleUnlocked(v.id, progress));
-  const unlockedSkins = SKIN_IDS.filter((id) => skinUnlocked(id, progress)).length;
+  const ownedSkins = SKIN_IDS.filter((id) => has(kartItem(id))).length;
 
   return (
     <section className="rules-sheet panel garage">
@@ -199,10 +191,14 @@ export function Garage({ room, send }: Props) {
         <div className="garage-info">
           <strong className="garage-name">{info.name}</strong>
           <p className="hint">{info.blurb}</p>
-          {!vehicleUnlocked(vehicle, progress) && (
-            <p className="garage-need">
-              <Icon name="lock" size={13} /> À débloquer : {needLabel("won", info.wins)}
-            </p>
+          {!has(vehicleItem(vehicle)) && (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary garage-buy"
+              onClick={() => setBuying(SHOP_BY_ID.get(vehicleItem(vehicle))!)}
+            >
+              <Icon name="coin" size={15} /> Acheter pour {info.price} points
+            </button>
           )}
           <div className="garage-bars">
             {vehicleBars(vehicle).map((b) => (
@@ -221,14 +217,13 @@ export function Garage({ room, send }: Props) {
         <span className="field-label">
           Véhicule{" "}
           <small className="hint">
-            {progress.won} victoire{progress.won > 1 ? "s" : ""}
-            {next ? `, prochain : ${next.name} à ${next.wins}` : " : tout est débloqué !"}
+            {balance} point{balance > 1 ? "s" : ""} à dépenser
           </small>
         </span>
         <div className="garage-chips">
           {VEHICLE_IDS.map((id) => {
             const v = VEHICLES[id];
-            const open = vehicleUnlocked(id, progress);
+            const open = has(vehicleItem(id));
             return (
               <button
                 key={id}
@@ -236,7 +231,7 @@ export function Garage({ room, send }: Props) {
                 className={`garage-chip ${id === vehicle ? "is-on" : ""} ${open ? "" : "is-locked"}`}
                 onClick={() => pickVehicle(id)}
               >
-                {open ? v.name : <Locked label={v.name} />}
+                {open ? v.name : <Locked label={v.name} price={v.price} />}
               </button>
             );
           })}
@@ -247,14 +242,14 @@ export function Garage({ room, send }: Props) {
         <span className="field-label">
           Skin{" "}
           <small className="hint">
-            {unlockedSkins} sur {SKIN_IDS.length}
+            {ownedSkins} sur {SKIN_IDS.length}
           </small>
         </span>
         <div className="garage-skins">
           {SKIN_IDS.map((id) => {
             const s = SKINS[id];
-            const open = skinUnlocked(id, progress);
-            const label = open ? s.name : `${s.name} : ${progress[s.stat]}/${needLabel(s.stat, s.need)}`;
+            const open = has(kartItem(id));
+            const label = open ? s.name : `${s.name} : ${s.price} points`;
             return (
               <button
                 key={id}
@@ -265,25 +260,36 @@ export function Garage({ room, send }: Props) {
                 onClick={() => pickSkin(id)}
                 style={{ "--a": s.swatch[0], "--b": s.swatch[1] } as CSSProperties}
               >
-                {!open && <Icon name="lock" size={14} />}
+                {!open && <Icon name="coin" size={14} />}
               </button>
             );
           })}
         </div>
         <p className="hint" style={{ margin: 0 }}>
           {SKINS[skin].name}
-          {!skinUnlocked(skin, progress) &&
-            ` : ${progress[SKINS[skin].stat]} sur ${needLabel(SKINS[skin].stat, SKINS[skin].need)} pour le débloquer`}
         </p>
+        {!has(kartItem(skin)) && (
+          <button type="button" className="btn btn-sm btn-primary garage-buy" onClick={() => setBuying(SHOP_BY_ID.get(kartItem(skin))!)}>
+            <Icon name="coin" size={15} /> Acheter pour {SKINS[skin].price} points
+          </button>
+        )}
       </div>
+      <BuyModal
+        item={buying}
+        onClose={() => setBuying(null)}
+        onBought={(item) => (item.kind === "vehicle" ? applyVehicle(item.ref as VehicleId) : applySkin(item.ref as SkinId))}
+      />
     </section>
   );
 }
 
-function Locked({ label }: { label: string }) {
+function Locked({ label, price }: { label: string; price: number }) {
   return (
     <span className="garage-locked">
-      <Icon name="lock" size={13} /> {label}
+      {label}
+      <span className="garage-price num">
+        <Icon name="coin" size={12} /> {price}
+      </span>
     </span>
   );
 }

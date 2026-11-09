@@ -41,6 +41,7 @@ import {
   tourSheet,
   userProfile,
 } from "./users.ts";
+import { buyItem, shopState } from "./shop.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -354,6 +355,20 @@ async function requestedGame(c: Ctx, raw: unknown): Promise<GameId | null> {
   return (await visibleGames(c.env, c.get("user"))).includes(game) ? game : null;
 }
 
+// ---------------------------------------------------------------------------
+// Boutique
+// ---------------------------------------------------------------------------
+
+app.get("/shop", withSession, withProfile, async (c) => c.json(await shopState(c.env.DB, c.get("user").id)));
+
+app.post("/shop/buy", withSession, withProfile, async (c) => {
+  const user = c.get("user");
+  if (!(await rateLimit(c.env.DB, `shop:${user.id}`, 60, 3600_000))) return c.json({ error: "Doucement !" }, 429);
+  const body = await c.req.json<{ item?: unknown }>().catch(() => ({ item: undefined }));
+  const res = await buyItem(c.env.DB, user.id, typeof body.item === "string" ? body.item : "");
+  return "error" in res ? c.json({ error: res.error }, 400) : c.json(res);
+});
+
 app.post("/rooms", withSession, withProfile, async (c) => {
   const body = await c.req.json<{ visibility?: unknown; game?: unknown }>().catch(() => ({}) as { visibility?: unknown; game?: unknown });
   if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
@@ -514,6 +529,7 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
       await db.batch([
         db.prepare("DELETE FROM user_stats WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM achievements WHERE user_id = ?").bind(id),
+        db.prepare("DELETE FROM user_items WHERE user_id = ?").bind(id),
       ]);
       break;
     case "setAdmin":

@@ -1457,12 +1457,9 @@
   box-shadow: 0 0 0 3px var(--gold-tint);
 }
 
-.skin-option.is-locked {
-  cursor: default;
-}
-
+/* Pas encore à soi : on voit quand même à quoi il ressemble avant de l'acheter */
 .skin-option.is-locked .skin-preview {
-  filter: grayscale(1) brightness(0.5);
+  filter: saturate(0.75) brightness(0.72);
 }
 
 .skin-preview {

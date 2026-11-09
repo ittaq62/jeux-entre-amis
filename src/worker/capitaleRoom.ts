@@ -22,6 +22,8 @@ import {
 } from "../shared/games/capitale/engine.ts";
 import { batchMs } from "../shared/games/capitale/timing.ts";
 import { FREE_TOKENS, isTokenId, TOKEN_BY_ID, type TokenId } from "../shared/games/capitale/tokens.ts";
+import { tokenItem } from "../shared/shop.ts";
+import { ownsItem } from "./shop.ts";
 import { viewFor } from "../shared/games/capitale/view.ts";
 import {
   CAPITALE_MAX_PLAYERS,
@@ -74,9 +76,8 @@ interface Seat {
   autoplay: false | "away" | "afk";
   missed: number;
   disconnectedAt: number | null;
-  /** Le pion choisi, et les victoires à Capitale qui ouvrent les autres */
+  /** Le pion choisi */
   token?: TokenId;
-  wins?: number;
 }
 
 type TimerKind =
@@ -293,7 +294,6 @@ export class CapitaleRoom extends DurableObject<Env> {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} s'installe à la table.`);
     }
-    if (seat && seat.wins === undefined) seat.wins = await this.capitaleWins(user.id);
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
@@ -321,18 +321,6 @@ export class CapitaleRoom extends DurableObject<Env> {
       disconnectedAt: null,
       token: "pion",
     };
-  }
-
-  /** Les victoires d'un joueur à Capitale : elles ouvrent les pions */
-  private async capitaleWins(userId: string): Promise<number> {
-    try {
-      const row = await this.env.DB.prepare("SELECT won FROM user_stats WHERE user_id = ? AND game = 'capitale'")
-        .bind(userId)
-        .first<{ won: number }>();
-      return row?.won ?? 0;
-    } catch {
-      return 0;
-    }
   }
 
   /** Un pion pour un bot : parmi les pions libres, un que personne n'a encore à la table si possible */
@@ -496,11 +484,10 @@ export class CapitaleRoom extends DurableObject<Env> {
       }
 
       case "token": {
-        if (!seat || d.status === "playing") return;
+        if (!seat || d.status === "playing" || !this.allowMessage(`token:${userId}`, 150)) return;
         const info = isTokenId(msg.token) ? TOKEN_BY_ID.get(msg.token) : undefined;
         if (!info) return;
-        if (info.wins > (seat.wins ?? 0))
-          return error(`${info.name} s'ouvre à ${info.wins} victoire${info.wins > 1 ? "s" : ""} à Capitale.`);
+        if (!(await ownsItem(this.env.DB, userId, tokenItem(info.id)))) return error(`${info.name} s'achète à la boutique.`);
         seat.token = info.id;
         return this.afterChange([], now);
       }
@@ -1160,7 +1147,6 @@ export class CapitaleRoom extends DurableObject<Env> {
         seatId: seat?.id ?? null,
         isHost: userId === d.hostId,
         isAdmin: Boolean(connected.get(userId)?.admin),
-        capitaleWins: seat?.wins ?? 0,
       },
       capitale: d.capitale ? viewFor(d.capitale, seat?.id ?? null) : null,
       deadline: d.deadline,

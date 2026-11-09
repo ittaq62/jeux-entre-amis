@@ -1,4 +1,4 @@
-// Le garage de Bolides : les véhicules (chacun sa conduite), les skins, et ce qu'il faut pour les débloquer. Aucun
+// Le garage de Bolides : les véhicules (chacun sa conduite), les skins, et leur prix en points. Aucun
 // véhicule n'est simplement « meilleur » : ce qu'il gagne d'un côté, il le perd de l'autre.
 
 export type VehicleId = "kart" | "moto" | "buggy" | "bolide" | "monstre" | "tondeuse" | "soucoupe";
@@ -22,8 +22,8 @@ export interface Vehicle {
   id: VehicleId;
   name: string;
   blurb: string;
-  /** Le nombre de victoires qu'il faut pour le débloquer (0 : dès le début) */
-  wins: number;
+  /** Son prix en points (0 : offert à tous) */
+  price: number;
   stats: VehicleStats;
 }
 
@@ -32,49 +32,49 @@ export const VEHICLES: Record<VehicleId, Vehicle> = {
     id: "kart",
     name: "Kart",
     blurb: "Le plus équilibré : rien à lui reprocher.",
-    wins: 0,
+    price: 0,
     stats: { top: 1, accel: 1, turn: 1, grass: 0.55, weight: 1, charge: 1 },
   },
   moto: {
     id: "moto",
     name: "Moto",
     blurb: "Nerveuse et agile, elle charge ses turbos plus vite, mais on la bouscule facilement.",
-    wins: 0,
+    price: 0,
     stats: { top: 0.985, accel: 1.16, turn: 1.1, grass: 0.5, weight: 0.65, charge: 1.12 },
   },
   buggy: {
     id: "buggy",
     name: "Buggy",
     blurb: "À l'aise dans l'herbe : les raccourcis ne lui font pas peur.",
-    wins: 2,
+    price: 100,
     stats: { top: 0.98, accel: 1.04, turn: 0.97, grass: 0.84, weight: 1.05, charge: 0.97 },
   },
   bolide: {
     id: "bolide",
     name: "Le Bolide",
     blurb: "Le plus rapide en ligne droite, mais long à lancer et mauvais dans l'herbe.",
-    wins: 5,
+    price: 200,
     stats: { top: 1.045, accel: 0.84, turn: 0.93, grass: 0.42, weight: 0.85, charge: 1 },
   },
   monstre: {
     id: "monstre",
     name: "Le Monstre",
     blurb: "Lourd et haut sur roues : il pousse tout le monde, mais tourne comme un camion.",
-    wins: 10,
+    price: 400,
     stats: { top: 0.975, accel: 0.9, turn: 0.88, grass: 0.78, weight: 1.9, charge: 0.92 },
   },
   tondeuse: {
     id: "tondeuse",
     name: "La Tondeuse",
     blurb: "L'herbe, c'est son métier : elle n'y ralentit pas du tout. Sur la route, un peu juste.",
-    wins: 18,
+    price: 700,
     stats: { top: 0.965, accel: 1.08, turn: 1.04, grass: 1, weight: 0.9, charge: 1.04 },
   },
   soucoupe: {
     id: "soucoupe",
     name: "La Soucoupe",
     blurb: "Elle plane au-dessus de l'herbe et tourne sur un mouchoir. Légère : gare aux chocs.",
-    wins: 30,
+    price: 1200,
     stats: { top: 1.01, accel: 1, turn: 1.12, grass: 0.92, weight: 0.6, charge: 1.05 },
   },
 };
@@ -108,61 +108,28 @@ export const SKIN_IDS: SkinId[] = [
   "galaxie",
 ];
 
-/** Ce qui compte pour débloquer : les courses, les victoires, et quelques exploits cumulés */
-export interface GarageProgress {
-  played: number;
-  won: number;
-  turbos: number;
-  hitsGiven: number;
-}
-
-export const NO_PROGRESS: GarageProgress = { played: 0, won: 0, turbos: 0, hitsGiven: 0 };
-
 export interface Skin {
   id: SkinId;
   name: string;
-  /** Ce qu'il faut atteindre (`need` à 0 : dès le début) */
-  stat: keyof GarageProgress;
-  need: number;
+  /** Son prix en points (0 : offert à tous) */
+  price: number;
   /** Une petite pastille pour la choisir : deux couleurs */
   swatch: [string, string];
 }
 
 export const SKINS: Record<SkinId, Skin> = {
-  usine: { id: "usine", name: "D'usine", stat: "played", need: 0, swatch: ["#e2483d", "#b5362d"] },
-  bandes: { id: "bandes", name: "Bandes de course", stat: "played", need: 2, swatch: ["#2f80ed", "#ffffff"] },
-  damier: { id: "damier", name: "Damier", stat: "won", need: 1, swatch: ["#16161a", "#f4f4f4"] },
-  camo: { id: "camo", name: "Camouflage", stat: "played", need: 10, swatch: ["#4d5b35", "#8a8455"] },
-  flammes: { id: "flammes", name: "Flammes", stat: "turbos", need: 50, swatch: ["#1b1b20", "#ff7a1a"] },
-  carbone: { id: "carbone", name: "Carbone", stat: "won", need: 5, swatch: ["#26282d", "#3d4047"] },
-  neon: { id: "neon", name: "Néon", stat: "hitsGiven", need: 25, swatch: ["#120a24", "#22e6ff"] },
-  chrome: { id: "chrome", name: "Chrome", stat: "won", need: 12, swatch: ["#eef2f6", "#8a939d"] },
-  or: { id: "or", name: "Or", stat: "won", need: 25, swatch: ["#ffd76a", "#b98a1e"] },
-  arcenciel: { id: "arcenciel", name: "Arc-en-ciel", stat: "won", need: 40, swatch: ["#ff4d6d", "#4dd2ff"] },
-  galaxie: { id: "galaxie", name: "Galaxie", stat: "played", need: 100, swatch: ["#1a1040", "#b48cff"] },
+  usine: { id: "usine", name: "D'usine", price: 0, swatch: ["#e2483d", "#b5362d"] },
+  bandes: { id: "bandes", name: "Bandes de course", price: 30, swatch: ["#2f80ed", "#ffffff"] },
+  damier: { id: "damier", name: "Damier", price: 50, swatch: ["#16161a", "#f4f4f4"] },
+  camo: { id: "camo", name: "Camouflage", price: 120, swatch: ["#4d5b35", "#8a8455"] },
+  flammes: { id: "flammes", name: "Flammes", price: 200, swatch: ["#1b1b20", "#ff7a1a"] },
+  carbone: { id: "carbone", name: "Carbone", price: 200, swatch: ["#26282d", "#3d4047"] },
+  neon: { id: "neon", name: "Néon", price: 300, swatch: ["#120a24", "#22e6ff"] },
+  chrome: { id: "chrome", name: "Chrome", price: 500, swatch: ["#eef2f6", "#8a939d"] },
+  or: { id: "or", name: "Or", price: 1000, swatch: ["#ffd76a", "#b98a1e"] },
+  arcenciel: { id: "arcenciel", name: "Arc-en-ciel", price: 1500, swatch: ["#ff4d6d", "#4dd2ff"] },
+  galaxie: { id: "galaxie", name: "Galaxie", price: 2000, swatch: ["#1a1040", "#b48cff"] },
 };
-
-const STAT_WORDS: Record<keyof GarageProgress, [string, string]> = {
-  played: ["course", "courses"],
-  won: ["victoire", "victoires"],
-  turbos: ["mini-turbo", "mini-turbos"],
-  hitsGiven: ["coup donné", "coups donnés"],
-};
-
-/** Ce qu'il faut encore faire, en toutes lettres (« 3 victoires ») */
-export function needLabel(stat: keyof GarageProgress, need: number): string {
-  const [one, many] = STAT_WORDS[stat];
-  return `${need} ${need > 1 ? many : one}`;
-}
-
-export function vehicleUnlocked(id: VehicleId, p: GarageProgress): boolean {
-  return p.won >= VEHICLES[id].wins;
-}
-
-export function skinUnlocked(id: SkinId, p: GarageProgress): boolean {
-  const s = SKINS[id];
-  return p[s.stat] >= s.need;
-}
 
 export const isVehicleId = (v: unknown): v is VehicleId => VEHICLE_IDS.includes(v as VehicleId);
 export const isSkinId = (v: unknown): v is SkinId => SKIN_IDS.includes(v as SkinId);

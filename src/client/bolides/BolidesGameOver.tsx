@@ -18,8 +18,6 @@ interface Props {
   onLobby: () => void;
   onLeave: () => void;
   onInspect: () => void;
-  /** Ce que cette course vient de débloquer (des noms de véhicules et de skins) */
-  unlocks?: string[];
 }
 
 const SPEED_NAMES = { balade: "en balade", normal: "", bolide: "à grande vitesse" } as const;
@@ -31,7 +29,7 @@ const sheetIn = {
 };
 
 /** L'arrivée : le podium, les temps et le meilleur tour de chacun */
-export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, unlocks = [] }: Props) {
+export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.bolides!;
   const ranks = g.ranks ?? {};
@@ -79,7 +77,6 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect, 
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       <motion.div className="score-sheet paper gameover bolides-sheet" {...sheetIn}>
-        {unlocks.length > 0 && <p className="bolides-unlocks">Nouveau dans ton garage : {unlocks.join(", ")} !</p>}
         <div className="gameover-head">
           {winner && <Avatar avatar={winner.avatar} userId={winner.userId} photo={winner.photo} size={64} />}
           <div>

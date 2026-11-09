@@ -174,7 +174,6 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
   const skins = (
     <SkinPicker
       current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
-      wins={room.you.navalWins}
       onPick={(skin) => {
         send({ t: "skin", skin });
         setSkinsOpen(false);

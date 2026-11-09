@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { BotLevel, CapitaleSettings, EndMode } from "../../shared/games/capitale/engine.ts";
-import { TOKENS } from "../../shared/games/capitale/tokens.ts";
+import { TOKENS, type TokenId } from "../../shared/games/capitale/tokens.ts";
+import { SHOP_BY_ID, tokenItem } from "../../shared/shop.ts";
 import { CAPITALE_MAX_PLAYERS, type CapitaleClientMessage, type CapitaleRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { BuyModal } from "../shop/BuyModal.tsx";
+import { useMyItems } from "../stores/shop.ts";
 import { PAWN_COLORS } from "./boardUi.ts";
 import { tokenThumbnails } from "./scene/tokens.ts";
 
@@ -65,7 +68,6 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             <TokenPicker
               color={PAWN_COLORS[seatIndex % PAWN_COLORS.length]!}
               current={mine.token ?? "pion"}
-              wins={room.you.capitaleWins}
               onPick={(token) => send({ t: "token", token })}
             />
           )}
@@ -164,35 +166,25 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
   );
 }
 
-/** Le choix du pion : quatre pour commencer, les autres s'ouvrent avec les victoires à Capitale */
-export function TokenPicker({
-  color,
-  current,
-  wins,
-  onPick,
-}: {
-  color: string;
-  current: string;
-  wins: number;
-  onPick: (token: (typeof TOKENS)[number]["id"]) => void;
-}) {
+/** Le choix du pion : quatre pour commencer, les autres s'achètent avec ses points, dans l'ordre qu'on veut */
+export function TokenPicker({ color, current, onPick }: { color: string; current: string; onPick: (token: TokenId) => void }) {
   const thumbs = useMemo(() => tokenThumbnails(color), [color]);
-  const next = TOKENS.find((t) => t.wins > wins);
+  const { balance, has } = useMyItems();
+  const [buying, setBuying] = useState<TokenId | null>(null);
   return (
     <div className="field">
       <span className="field-label">Ton pion</span>
       <div className="cap-tokens" role="radiogroup" aria-label="Ton pion">
         {TOKENS.map((t) => {
-          const locked = t.wins > wins;
+          const locked = !has(tokenItem(t.id));
           return (
             <button
               key={t.id}
               type="button"
               className={`cap-token ${current === t.id ? "is-on" : ""} ${locked ? "is-locked" : ""}`}
               aria-pressed={current === t.id}
-              disabled={locked}
-              onClick={() => onPick(t.id)}
-              title={locked ? `${t.name} : ${t.wins} victoire${t.wins > 1 ? "s" : ""} à Capitale` : t.name}
+              onClick={() => (locked ? setBuying(t.id) : onPick(t.id))}
+              title={locked ? `${t.name} : ${t.price} points` : t.name}
             >
               {thumbs[t.id] ? (
                 <img src={thumbs[t.id]} alt="" width={64} height={64} draggable={false} />
@@ -202,7 +194,7 @@ export function TokenPicker({
               <span className="cap-token-name">{t.name}</span>
               {locked && (
                 <span className="cap-token-lock">
-                  <Icon name="lock" size={12} /> {t.wins}
+                  <Icon name="coin" size={12} /> {t.price}
                 </span>
               )}
             </button>
@@ -210,9 +202,14 @@ export function TokenPicker({
         })}
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        {wins > 0 ? `${wins} victoire${wins > 1 ? "s" : ""} à Capitale. ` : ""}
-        {next ? `Prochain pion : ${next.name}, à ${next.wins} victoire${next.wins > 1 ? "s" : ""}.` : "Tous les pions sont à toi."}
+        Tu as {balance} point{balance > 1 ? "s" : ""}. Touche un pion pour l'acheter, dans l'ordre que tu veux.
       </p>
+      <BuyModal
+        item={buying ? SHOP_BY_ID.get(tokenItem(buying))! : null}
+        preview={buying && thumbs[buying] ? <img src={thumbs[buying]} alt="" width={128} height={128} draggable={false} /> : undefined}
+        onClose={() => setBuying(null)}
+        onBought={() => buying && onPick(buying)}
+      />
     </div>
   );
 }

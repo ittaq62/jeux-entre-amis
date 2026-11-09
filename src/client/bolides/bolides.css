@@ -1561,14 +1561,17 @@
   opacity: 0.72;
 }
 
-.garage-need {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.garage-buy {
+  align-self: flex-start;
   margin: 0 0 8px;
+}
+
+.garage-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: #ffd98a;
-  font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .garage-locked {
@@ -1605,15 +1608,6 @@
 
 .garage-skin.is-locked {
   filter: saturate(0.55) brightness(0.72);
-}
-
-.bolides-unlocks {
-  margin: 10px 0 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(242, 201, 76, 0.2);
-  color: #5c3d0a;
-  font-weight: 700;
 }
 
 @media (max-width: 560px) {

@@ -1,18 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import type { BotLevel, BotMemory } from "../shared/games/bolides/bot.ts";
-import {
-  botGarage,
-  isSkinId,
-  isVehicleId,
-  NO_PROGRESS,
-  skinUnlocked,
-  vehicleUnlocked,
-  type GarageProgress,
-  type SkinId,
-  type VehicleId,
-} from "../shared/games/bolides/garage.ts";
+import { botGarage, isSkinId, isVehicleId, type SkinId, type VehicleId } from "../shared/games/bolides/garage.ts";
 import { SPEED_CLASSES } from "../shared/games/bolides/physics.ts";
+import { canUse, kartItem, vehicleItem } from "../shared/shop.ts";
+import { ownedItems } from "./shop.ts";
 import {
   CUP_RACES,
   cupPoints,
@@ -129,8 +121,6 @@ export class BolidesRoom extends DurableObject<Env> {
   private loop: ReturnType<typeof setInterval> | null = null;
   /** Des changements à enregistrer au prochain tic (on n'écrit pas à chaque position reçue) */
   private dirty = false;
-  /** Ce que chaque joueur a débloqué (lu dans ses statistiques, relu après chaque course) */
-  private progress = new Map<string, GarageProgress>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -232,33 +222,7 @@ export class BolidesRoom extends DurableObject<Env> {
   // Arrivées et départs
   // -------------------------------------------------------------------------
 
-  /** Ses statistiques de Bolides : ce qui débloque véhicules et skins */
-  private async loadProgress(userId: string): Promise<GarageProgress> {
-    try {
-      const row = await this.env.DB.prepare(`SELECT played, won, totals FROM user_stats WHERE user_id = ? AND game = 'bolides'`)
-        .bind(userId)
-        .first<{ played: number; won: number; totals: string | null }>();
-      let totals: Record<string, number> = {};
-      try {
-        totals = row?.totals ? (JSON.parse(row.totals) as Record<string, number>) : {};
-      } catch {
-        totals = {};
-      }
-      const p: GarageProgress = {
-        played: row?.played ?? 0,
-        won: row?.won ?? 0,
-        turbos: totals.turbos ?? 0,
-        hitsGiven: totals.hitsGiven ?? 0,
-      };
-      this.progress.set(userId, p);
-      return p;
-    } catch {
-      return this.progress.get(userId) ?? NO_PROGRESS;
-    }
-  }
-
   private async onJoin(user: PublicUser, ws: WebSocket) {
-    await this.loadProgress(user.id);
     const d = this.data!;
     const now = Date.now();
     d.timers = d.timers.filter((t) => t.kind !== "cleanup");
@@ -457,11 +421,11 @@ export class BolidesRoom extends DurableObject<Env> {
       }
 
       case "garage": {
-        // Son véhicule et son skin : seulement ce qu'il a débloqué, et pas en pleine course
+        // Son véhicule et son skin : seulement ce qu'il possède, et pas en pleine course
         if (!seat || d.status === "playing" || !this.allowMessage(`garage:${userId}`, 80)) return;
-        const p = this.progress.get(userId) ?? (await this.loadProgress(userId));
-        if (isVehicleId(msg.vehicle) && vehicleUnlocked(msg.vehicle, p)) seat.vehicle = msg.vehicle;
-        if (isSkinId(msg.skin) && skinUnlocked(msg.skin, p)) seat.skin = msg.skin;
+        const owned = await ownedItems(this.env.DB, userId);
+        if (isVehicleId(msg.vehicle) && canUse(vehicleItem(msg.vehicle), owned)) seat.vehicle = msg.vehicle;
+        if (isSkinId(msg.skin) && canUse(kartItem(msg.skin), owned)) seat.skin = msg.skin;
         return this.afterChange([], now);
       }
 
@@ -802,8 +766,6 @@ export class BolidesRoom extends DurableObject<Env> {
     d.recorded = true;
     await this.persist();
     await this.recordResults(Date.now());
-    // Une course de plus au compteur : ce qui vient d'être débloqué est disponible tout de suite
-    await Promise.all(d.seats.flatMap((s) => (s.userId ? [this.loadProgress(s.userId)] : [])));
     this.broadcast([]);
   }
 
@@ -1006,7 +968,6 @@ export class BolidesRoom extends DurableObject<Env> {
         : null,
       garage: {
         choices: Object.fromEntries(d.seats.map((s) => [s.id, { vehicle: s.vehicle ?? "kart", skin: s.skin ?? "usine" }])),
-        progress: this.progress.get(userId) ?? null,
       },
       serverNow: Date.now(),
       rematch: d.rematch,

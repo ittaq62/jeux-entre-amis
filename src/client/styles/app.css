@@ -238,6 +238,205 @@
   font-size: 20px;
 }
 
+/* Boutique */
+.nav-shop {
+  color: var(--gold-light);
+}
+
+.nav-shop .num {
+  font-weight: 700;
+}
+
+.shop-balance {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  color: var(--gold);
+}
+
+.shop-balance svg {
+  flex: none;
+}
+
+.shop-balance p {
+  margin: 0;
+}
+
+.shop-balance-line {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.shop-balance-line strong {
+  margin-right: 2px;
+  color: var(--gold-light);
+  font-family: var(--font-card);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.shop-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shop-section h2 {
+  font-size: 21px;
+}
+
+.shop-section h2 small {
+  font-family: var(--font-body, inherit);
+  font-size: 14px;
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.shop-item:hover:not(:disabled) {
+  border-color: rgba(226, 189, 110, 0.55);
+}
+
+.shop-item.is-mine {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.shop-item.is-dear .shop-price {
+  color: var(--text-faint);
+}
+
+.shop-look {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 34px;
+}
+
+.shop-look img {
+  width: 64px;
+  height: 64px;
+}
+
+.shop-swatch,
+.buy-preview .shop-swatch {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--a) 50%, var(--b) 50%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.shop-name {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.shop-blurb {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.25;
+}
+
+.shop-price,
+.shop-mine {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+}
+
+.shop-price {
+  color: var(--gold);
+  font-family: var(--font-card);
+  font-size: 16px;
+}
+
+.shop-mine {
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.buy-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.buy-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.buy-preview .skin-preview {
+  width: min(280px, 100%);
+}
+
+.buy-preview img {
+  width: 128px;
+  height: 128px;
+}
+
+/* Le dessin 3D ne doit pas décider de la taille de la fenêtre : il prend celle qu'on lui donne */
+.buy-preview .garage-preview {
+  position: relative;
+  width: min(320px, 100%);
+}
+
+.buy-preview .garage-preview canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.buy-lines {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+  margin: 0;
+  text-align: center;
+}
+
+.buy-lines dt {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.buy-lines dd {
+  margin: 0;
+  color: var(--gold-light);
+  font-family: var(--font-card);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.buy-missing {
+  margin: 0;
+  text-align: center;
+}
+
 .page-body,
 .narrow {
   width: 100%;
@@ -309,8 +508,23 @@
   }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 440px) {
   .app-header .logo-name {
+    display: none;
+  }
+}
+
+/* Sur téléphone, des icônes à la place des mots : tout l'en-tête tient, même avec la boutique */
+.nav-icon {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .nav-icon {
+    display: block;
+  }
+
+  .nav-text {
     display: none;
   }
 }

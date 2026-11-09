@@ -91,7 +91,6 @@ export function NavalLobby({ room, send, ...rest }: Props) {
           {room.you.seatId && (
             <SkinPicker
               current={room.seats.find((s) => s.id === room.you.seatId)?.skin ?? "marine"}
-              wins={room.you.navalWins}
               onPick={(skin) => send({ t: "skin", skin })}
             />
           )}

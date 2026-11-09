@@ -39,7 +39,6 @@ export function TourPick({
           <TokenPicker
             color={PAWN_COLORS[index % PAWN_COLORS.length]!}
             current={mine.token ?? "pion"}
-            wins={room.you.capitaleWins}
             onPick={(token) => send({ t: "token", token })}
           />
         )}
