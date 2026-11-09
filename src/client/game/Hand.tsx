@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { COLORS, type Card } from "../../shared/games/uno/cards.ts";
 import { CardFace, CARD_RATIO } from "../components/Card.tsx";
 import { anchor } from "./fx.ts";
+import { layoutHand } from "./handLayout.ts";
 import { usePileExtras } from "./pileExtras.ts";
 
 const KIND_ORDER = [
@@ -41,6 +42,8 @@ interface HandProps {
   cardWidth: number;
   onPlay: (card: Card) => void;
   highlight: number | null;
+  /** Combien de rangées la main peut prendre à l'écran quand elle est trop grosse pour une seule */
+  maxRows: number;
 }
 
 /**
@@ -59,7 +62,7 @@ function useCanHover(): boolean {
   return can;
 }
 
-export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: HandProps) {
+export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight, maxRows }: HandProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<number | null>(null);
@@ -78,32 +81,23 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
   const visible = cards.filter((c) => !hidden.has(c.id));
   const n = visible.length;
   const height = cardWidth * CARD_RATIO;
-  // Les cartes du bord de l'eventail sont inclinees : leur coin deborde d'autant sur les cotes
-  const fanAngle = Math.min(4, 36 / Math.max(n, 1));
-  const edgeTilt = (((n - 1) / 2) * fanAngle * Math.PI) / 180;
-  const margin = 10 + Math.sin(edgeTilt) * height * 1.05;
-  const usable = Math.max(cardWidth, width - 2 * margin);
-  let step = n > 1 ? Math.min(cardWidth * 0.68, (usable - cardWidth) / (n - 1)) : 0;
-  const scroll = n > 1 && step < cardWidth * 0.3;
-  if (scroll) step = cardWidth * 0.34;
-  const total = cardWidth + step * Math.max(0, n - 1);
-  const start = scroll ? 12 : (width - total) / 2;
-  const maxAngle = scroll ? 0 : fanAngle;
-  const innerWidth = scroll ? total + 24 : width;
+  const { spots, scroll, innerWidth, extraHeight } = layoutHand(n, width, cardWidth, height, maxRows);
   // Une carte qui arrive part du centre de la main, là où se pose la carte piochée qui vole
   // depuis la pioche : elle glisse jusqu'à sa place au lieu de réapparaître en fondu.
   const arrival = { x: innerWidth / 2 - cardWidth / 2, y: 15, opacity: 1, rotate: 0 };
 
   return (
-    <div className={`hand ${scroll ? "is-scroll" : ""} ${myTurn ? "is-my-turn" : ""}`} ref={ref} style={{ height: height + 34 }}>
-      <div className="hand-inner" ref={anchor("hand")} style={{ width: scroll ? innerWidth : "100%", height: height + 30 }}>
+    <div
+      className={`hand ${scroll ? "is-scroll" : ""} ${myTurn ? "is-my-turn" : ""}`}
+      ref={ref}
+      style={{ height: height + 34 + extraHeight }}
+    >
+      <div className="hand-inner" ref={anchor("hand")} style={{ width: scroll ? innerWidth : "100%", height: height + 30 + extraHeight }}>
         {visible.map((card, i) => {
-          const offset = i - (n - 1) / 2;
-          const angle = offset * maxAngle;
-          const arc = scroll ? 0 : Math.abs(offset) ** 1.5 * (cardWidth / 90);
+          const spot = spots[i]!;
           const canPlay = myTurn && playable.has(card.id);
           const lifted = hover === card.id || highlight === card.id;
-          const y = 12 + arc - (canPlay ? 10 : 0) - (lifted && canPlay ? 16 : lifted ? 6 : 0);
+          const y = spot.y - (canPlay ? 10 : 0) - (lifted && canPlay ? 16 : lifted ? 6 : 0);
           return (
             <motion.button
               key={card.id}
@@ -112,7 +106,7 @@ export function Hand({ cards, playable, myTurn, cardWidth, onPlay, highlight }: 
               className={`hand-card ${canPlay ? "is-playable" : ""} ${myTurn && !canPlay ? "is-dim" : ""} ${highlight === card.id ? "is-highlight" : ""}`}
               style={{ width: cardWidth, height, zIndex: lifted ? 100 : i }}
               initial={arrival}
-              animate={{ x: start + i * step, y, opacity: 1, rotate: angle }}
+              animate={{ x: spot.x, y, opacity: 1, rotate: spot.angle }}
               transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.7 }}
               onPointerEnter={(e) => canHover && e.pointerType === "mouse" && setHover(card.id)}
               onPointerLeave={() => setHover((h) => (h === card.id ? null : h))}

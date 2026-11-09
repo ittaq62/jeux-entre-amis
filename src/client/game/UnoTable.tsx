@@ -380,6 +380,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               cardWidth={handW}
               onPlay={onCardClick}
               highlight={myTurn ? g.drawnCardId : null}
+              maxRows={portrait ? 3 : h < 500 ? 1 : 2}
             />
             {!compact && unoSide}
           </div>
