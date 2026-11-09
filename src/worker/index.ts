@@ -41,6 +41,7 @@ import {
   tourSheet,
   userProfile,
 } from "./users.ts";
+import { albumState, craftCard, openPack, sellDoubles } from "./cards.ts";
 import { buyItem, shopState } from "./shop.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
@@ -369,6 +370,34 @@ app.post("/shop/buy", withSession, withProfile, async (c) => {
   return "error" in res ? c.json({ error: res.error }, 400) : c.json(res);
 });
 
+// ---------------------------------------------------------------------------
+// L'album
+// ---------------------------------------------------------------------------
+
+app.get("/cards", withSession, withProfile, async (c) => c.json(await albumState(c.env.DB, c.get("user").id)));
+
+const cardsLimited = async (c: Ctx) => rateLimit(c.env.DB, `cards:${c.get("user").id}`, 240, 3600_000);
+
+app.post("/cards/pack", withSession, withProfile, async (c) => {
+  if (!(await cardsLimited(c))) return c.json({ error: "Doucement !" }, 429);
+  const res = await openPack(c.env.DB, c.get("user").id);
+  return "error" in res ? c.json({ error: res.error }, 400) : c.json(res);
+});
+
+app.post("/cards/sell", withSession, withProfile, async (c) => {
+  if (!(await cardsLimited(c))) return c.json({ error: "Doucement !" }, 429);
+  const body = await c.req.json<{ card?: unknown }>().catch(() => ({ card: undefined }));
+  const res = await sellDoubles(c.env.DB, c.get("user").id, typeof body.card === "string" ? body.card : null);
+  return "error" in res ? c.json({ error: res.error }, 400) : c.json(res);
+});
+
+app.post("/cards/craft", withSession, withProfile, async (c) => {
+  if (!(await cardsLimited(c))) return c.json({ error: "Doucement !" }, 429);
+  const body = await c.req.json<{ card?: unknown }>().catch(() => ({ card: undefined }));
+  const res = await craftCard(c.env.DB, c.get("user").id, typeof body.card === "string" ? body.card : "");
+  return "error" in res ? c.json({ error: res.error }, 400) : c.json(res);
+});
+
 app.post("/rooms", withSession, withProfile, async (c) => {
   const body = await c.req.json<{ visibility?: unknown; game?: unknown }>().catch(() => ({}) as { visibility?: unknown; game?: unknown });
   if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
@@ -530,6 +559,9 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
         db.prepare("DELETE FROM user_stats WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM achievements WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM user_items WHERE user_id = ?").bind(id),
+        db.prepare("DELETE FROM user_cards WHERE user_id = ?").bind(id),
+        db.prepare("DELETE FROM card_progress WHERE user_id = ?").bind(id),
+        db.prepare("DELETE FROM point_ledger WHERE user_id = ?").bind(id),
       ]);
       break;
     case "setAdmin":

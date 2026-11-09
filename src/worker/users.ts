@@ -21,6 +21,7 @@ import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
 import { rankingPoints } from "../shared/ranking.ts";
 import type { UserRow } from "./auth.ts";
+import { albumSummary } from "./cards.ts";
 import { randomId } from "./util.ts";
 
 export function parseAvatar(raw: string, seed: string): AvatarConfig {
@@ -759,6 +760,7 @@ function statsSummary(row: StatsRow | undefined) {
 }
 
 export async function userProfile(db: D1Database, user: UserRow) {
+  const album = await albumSummary(db, user.id);
   const [statRows, achievements, recent, tours] = await Promise.all([
     db
       .prepare("SELECT game, played, won, points, elo, streak, best_streak, totals FROM user_stats WHERE user_id = ?")
@@ -829,6 +831,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
       points: t.points,
       wins: t.wins,
     })),
+    album,
     achievements: achievements.results.map((a) => ({ id: a.achievement, at: a.unlocked_at })),
     recent: recent.results.map((r) => ({
       id: r.id,

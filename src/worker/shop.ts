@@ -5,10 +5,15 @@ import { canUse, SHOP_BY_ID, type ShopResponse } from "../shared/shop.ts";
 // Les points des jeux, pas ceux de la tournée : chaque jeu d'une tournée a déjà rapporté les siens
 const EARNED = "(SELECT COALESCE(SUM(points), 0) FROM user_stats WHERE user_id = ?1 AND game <> 'tour')";
 const SPENT = "(SELECT COALESCE(SUM(price), 0) FROM user_items WHERE user_id = ?1)";
+// Les paquets de cartes, les doubles revendus, les familles complétées
+const LEDGER = "(SELECT COALESCE(SUM(delta), 0) FROM point_ledger WHERE user_id = ?1)";
+
+/** Les points qu'il reste à dépenser, dans une requête dont ?1 est le joueur */
+export const BALANCE = `(${EARNED} - ${SPENT} + ${LEDGER})`;
 
 export async function shopState(db: D1Database, userId: string): Promise<ShopResponse> {
   const [balance, owned] = await db.batch<{ balance?: number; item?: string }>([
-    db.prepare(`SELECT ${EARNED} - ${SPENT} AS balance`).bind(userId),
+    db.prepare(`SELECT ${BALANCE} AS balance`).bind(userId),
     db.prepare("SELECT item FROM user_items WHERE user_id = ?").bind(userId),
   ]);
   return {
@@ -27,7 +32,7 @@ export async function buyItem(db: D1Database, userId: string, itemId: string): P
   const res = await db
     .prepare(
       `INSERT OR IGNORE INTO user_items (user_id, item, price, bought_at)
-       SELECT ?1, ?2, ?3, ?4 WHERE ${EARNED} - ${SPENT} >= ?3`,
+       SELECT ?1, ?2, ?3, ?4 WHERE ${BALANCE} >= ?3`,
     )
     .bind(userId, item.id, item.price, Date.now())
     .run();
