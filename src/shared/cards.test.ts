@@ -24,6 +24,7 @@ function seeded(seed: number) {
 
 const rarityOf = (id: string): Rarity => CARD_BY_ID.get(id)!.rarity;
 const fresh = { sinceEpic: 0, sinceLegend: 0 };
+const RARITIES_COUNT = (rarity: Rarity) => CARDS.filter((c) => c.rarity === rarity).length;
 
 describe("le catalogue", () => {
   it("chaque carte a un identifiant à elle, un nom et une phrase", () => {
@@ -110,6 +111,26 @@ describe("les paquets", () => {
       worst += RARITIES.reduce((n, r) => n + ((odds[r] ?? 0) / total) * RARITY[r].sell, 0);
     }
     expect(worst).toBeLessThan(PACK_PRICE * 0.75);
+  });
+
+  it("la dernière carte qui manque finit par arriver bien plus vite que par hasard", () => {
+    const missing = CARDS.find((c) => c.rarity === "commune")!.id;
+    const owned = new Set(CARDS.map((c) => c.id).filter((id) => id !== missing));
+    const rand = seeded(5);
+    let found = 0;
+    const packs = 4000;
+    for (let i = 0; i < packs; i++) if (drawPack(fresh, owned, rand).cards.includes(missing)) found++;
+    const byChance = 3 * 0.74 * (1 / RARITIES_COUNT("commune"));
+    expect(found / packs).toBeGreaterThan(byChance * 4);
+  });
+
+  it("un album complet donne toujours cinq cartes différentes", () => {
+    const owned = new Set(CARDS.map((c) => c.id));
+    const rand = seeded(11);
+    for (let i = 0; i < 500; i++) {
+      const { cards } = drawPack({ sinceEpic: PITY_EPIC, sinceLegend: PITY_LEGEND }, owned, rand);
+      expect(new Set(cards).size).toBe(5);
+    }
   });
 
   it("le tirage réel respecte à peu près les chances annoncées", () => {

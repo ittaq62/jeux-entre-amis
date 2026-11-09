@@ -640,7 +640,10 @@ export const PACK_SLOTS: Odds[] = [
 
 /** Au plus tard à ce nombre de paquets, une carte de cette rareté, et une que le joueur n'a pas encore */
 export const PITY_EPIC = 8;
-export const PITY_LEGEND = 25;
+export const PITY_LEGEND = 20;
+
+/** Sur chaque carte, la chance de tomber d'office sur une carte qu'on n'a pas : la fin de l'album reste vivante */
+export const NEW_CARD_BOOST = 0.25;
 
 export interface PackProgress {
   /** Les paquets ouverts depuis la dernière carte épique (ou mieux), et depuis la dernière légendaire */
@@ -685,7 +688,7 @@ export function drawPack(progress: PackProgress, owned: ReadonlySet<string>, ran
     }
     const all = CARDS.filter((c) => c.rarity === rarity && !chosen.includes(c.id));
     const missing = all.filter((c) => !owned.has(c.id));
-    const pool = onlyNew && missing.length > 0 ? missing : all;
+    const pool = (onlyNew || rand() < NEW_CARD_BOOST) && missing.length > 0 ? missing : all;
     const card = pool[Math.floor(rand() * pool.length)]!;
     chosen.push(card.id);
     if (rarity === "epique" || rarity === "legendaire") gotEpic = true;
