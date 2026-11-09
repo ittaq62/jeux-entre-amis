@@ -1003,6 +1003,13 @@
   }
 }
 
+/* Sur les plus petits téléphones, le titre reste dans son bandeau */
+@media (max-width: 360px) {
+  .album-title {
+    font-size: 24px;
+  }
+}
+
 .album-progress {
   display: flex;
   align-items: center;
