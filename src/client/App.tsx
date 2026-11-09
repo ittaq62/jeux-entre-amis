@@ -23,6 +23,7 @@ const FriendsPage = lazy(() => import("./pages/FriendsPage.tsx").then((m) => ({ 
 const AccountPage = lazy(() => import("./pages/AccountPage.tsx").then((m) => ({ default: m.AccountPage })));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage.tsx").then((m) => ({ default: m.PrivacyPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx").then((m) => ({ default: m.AdminPage })));
+const ShopPage = lazy(() => import("./pages/ShopPage.tsx").then((m) => ({ default: m.ShopPage })));
 const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ default: m.DevGallery })));
 const DevGarage = lazy(() => import("./bolides/DevGarage.tsx").then((m) => ({ default: m.DevGarage })));
 const DevItems = lazy(() => import("./bolides/DevItems.tsx").then((m) => ({ default: m.DevItems })));
@@ -80,6 +81,7 @@ export function App() {
           <Route path="/joueur/:pseudo">{(params) => <ProfilePage pseudo={decodeURIComponent(params.pseudo)} />}</Route>
           <Route path="/tournee/:id">{(params) => <TourSheetPage id={params.id} />}</Route>
           <Route path="/classement" component={LeaderboardPage} />
+          <Route path="/boutique" component={ShopPage} />
           <Route path="/amis" component={FriendsPage} />
           <Route path="/compte" component={AccountPage} />
           <Route path="/admin" component={AdminPage} />

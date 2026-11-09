@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useHub } from "../stores/hub.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useSession } from "../stores/session.ts";
+import { useShop } from "../stores/shop.ts";
 import { Avatar } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Logo } from "./ui.tsx";
@@ -14,6 +16,12 @@ export function AppHeader() {
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const requests = friends.filter((f) => f.status === "incoming").length;
+  const balance = useShop((s) => s.balance);
+  const loadShop = useShop((s) => s.load);
+  const signedIn = user !== null;
+  useEffect(() => {
+    if (signedIn) void loadShop();
+  }, [signedIn, loadShop, location]);
   if (!user) return null;
   return (
     <header className="app-header">
@@ -27,11 +35,22 @@ export function AppHeader() {
             <span className="nav-admin-label">Admin</span>
           </Link>
         )}
-        <Link href="/classement" className={`nav-link ${location === "/classement" ? "is-active" : ""}`}>
-          Classement
+        <Link
+          href="/boutique"
+          className={`nav-link nav-shop ${location === "/boutique" ? "is-active" : ""}`}
+          aria-label={`Boutique, ${balance} point${balance > 1 ? "s" : ""}`}
+          title="Boutique"
+        >
+          <Icon name="coin" size={17} />
+          <span className="num">{balance}</span>
         </Link>
-        <Link href="/amis" className={`nav-link ${location === "/amis" ? "is-active" : ""}`}>
-          Amis
+        <Link href="/classement" className={`nav-link ${location === "/classement" ? "is-active" : ""}`} aria-label="Classement">
+          <Icon name="trophy" size={19} className="nav-icon" />
+          <span className="nav-text">Classement</span>
+        </Link>
+        <Link href="/amis" className={`nav-link ${location === "/amis" ? "is-active" : ""}`} aria-label="Amis">
+          <Icon name="users" size={19} className="nav-icon" />
+          <span className="nav-text">Amis</span>
           {requests > 0 && (
             <span className="nav-count" aria-label={`${requests} demande${requests > 1 ? "s" : ""}`}>
               {requests}
