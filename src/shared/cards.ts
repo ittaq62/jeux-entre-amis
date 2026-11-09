@@ -622,8 +622,8 @@ export const cardNumber = (id: string) => CARDS.findIndex((c) => c.id === id) + 
 
 // Les paquets
 
-/** Le prix d'un paquet : environ deux victoires */
-export const PACK_PRICE = 80;
+/** Le prix d'un paquet : deux à trois victoires */
+export const PACK_PRICE = 120;
 
 type Odds = Partial<Record<Rarity, number>>;
 
