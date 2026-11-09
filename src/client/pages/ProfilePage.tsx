@@ -37,6 +37,7 @@ interface Profile {
   capitale: GameStats;
   meche: GameStats;
   bolides: GameStats;
+  crampons: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -114,11 +115,12 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const bolides = profile.bolides ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const bot = bolides.totals;
   const showBolides = games.includes("bolides") || bolides.played > 0;
+  const showCrampons = games.includes("crampons") || (profile.crampons?.played ?? 0) > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
-  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "bolides", "tour"] as TableGame[]).filter(
+  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "tour"] as TableGame[]).filter(
     (g) =>
       g === "uno" ||
       (g === "naval"
@@ -129,9 +131,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             ? showCapitale
             : g === "meche"
               ? showMeche
-              : g === "bolides"
-                ? showBolides
-                : showTour),
+              : g === "crampons"
+                ? showCrampons
+                : g === "bolides"
+                  ? showBolides
+                  : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -514,6 +518,7 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "capitale") return g.variant === "bankrupt" ? "Capitale jusqu'à la faillite" : "Capitale en partie rapide";
   if (g.game === "meche")
     return g.variant === "rallonge" ? "Mèche à rallonge" : g.variant === "chacun" ? "Mèche, chacun la sienne" : "Mèche";
+  if (g.game === "crampons") return `Crampons, ${g.variant} contre ${g.variant}`;
   if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }

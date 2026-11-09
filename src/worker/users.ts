@@ -5,12 +5,14 @@ import {
   earnedCapitaleAchievements,
   earnedMecheAchievements,
   earnedBolidesAchievements,
+  earnedCramponsAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
 } from "../shared/achievements.ts";
 import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/capitale/engine.ts";
 import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
 import type { BolidesSettings, RacerStats } from "../shared/games/bolides/race.ts";
+import type { CramponsConfig } from "../shared/games/crampons/view.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
@@ -216,7 +218,18 @@ export interface GameRecordPlayer {
   eliminated: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
-  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats | BolidesRecordStats;
+  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats | BolidesRecordStats | CramponsRecordStats;
+}
+
+/** Stats d'un match de Crampons pour un joueur : celles de son équipe, et ses propres buts */
+export interface CramponsRecordStats {
+  goals: number;
+  conceded: number;
+  shots: number;
+  onTarget: number;
+  passes: number;
+  passesOk: number;
+  myGoals: number;
 }
 
 /** Elo de chaque joueur humain après la partie, et ce qu'il a gagné ou perdu */
@@ -241,6 +254,7 @@ export type GameRecord = {
   | { game: "capitale"; settings: CapitaleSettings; mode: EndMode }
   | { game: "meche"; settings: MecheSettings; mode: FuseMode }
   | { game: "bolides"; settings: BolidesSettings; mode: TrackId }
+  | { game: "crampons"; settings: CramponsConfig; mode: string }
 );
 
 /** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
@@ -300,6 +314,20 @@ function mergeMecheTotals(raw: string | null, stats: MecheStats): Record<string,
   for (const key of ["words", "letters", "passesEarned", "passesUsed", "booms"] as const) totals[key] = (totals[key] ?? 0) + stats[key];
   totals.longest = Math.max(totals.longest ?? 0, stats.longest);
   if (stats.fastest > 0) totals.fastest = totals.fastest ? Math.min(totals.fastest, stats.fastest) : stats.fastest;
+  return totals;
+}
+
+/** Cumul des stats de Crampons : tout s'additionne, sauf le meilleur match */
+function mergeCramponsTotals(raw: string | null, stats: CramponsRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of ["goals", "conceded", "shots", "onTarget", "passes", "passesOk", "myGoals"] as const)
+    totals[key] = (totals[key] ?? 0) + stats[key];
+  totals.bestGoals = Math.max(totals.bestGoals ?? 0, stats.myGoals);
   return totals;
 }
 
@@ -392,7 +420,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
   const owned = new Set(achRows.map((r) => `${r.user_id}:${r.achievement}`));
 
   // Elo : tout le monde avec son niveau d'avant la partie, les bots à leur niveau fixe
-  const botLevel = rec.game === "uno" ? undefined : rec.settings.botLevel;
+  const botLevel = rec.game === "uno" ? undefined : rec.game === "crampons" ? String(rec.settings.level) : rec.settings.botLevel;
   const ratingOf = (p: GameRecordPlayer) => (p.userId ? (byUser.get(p.userId)?.elo ?? ELO_START) : botElo(rec.game, botLevel));
   const deltas = eloChanges(
     rec.players.map((p) => ({
@@ -444,6 +472,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as MecheStats;
       totals = mergeMecheTotals(prev?.totals ?? null, stats);
       earnedIds = earnedMecheAchievements({ won, played, lives: rec.settings.lives, stats });
+    } else if (rec.game === "crampons") {
+      const stats = p.stats as CramponsRecordStats;
+      totals = mergeCramponsTotals(prev?.totals ?? null, stats);
+      earnedIds = earnedCramponsAchievements({ won, played, stats });
     } else if (rec.game === "bolides") {
       const stats = p.stats as BolidesRecordStats;
       totals = mergeBolidesTotals(prev?.totals ?? null, stats, rec.mode, rec.settings.laps);
@@ -805,6 +837,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const capitale = statRows.results.find((r) => r.game === "capitale");
   const meche = statRows.results.find((r) => r.game === "meche");
   const bolides = statRows.results.find((r) => r.game === "bolides");
+  const crampons = statRows.results.find((r) => r.game === "crampons");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -821,6 +854,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     capitale: { ...statsSummary(capitale), totals: totalsOf(capitale) },
     meche: { ...statsSummary(meche), totals: totalsOf(meche) },
     bolides: { ...statsSummary(bolides), totals: totalsOf(bolides) },
+    crampons: { ...statsSummary(crampons), totals: totalsOf(crampons) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

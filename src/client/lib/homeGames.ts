@@ -94,6 +94,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de Bolides",
   },
+  {
+    id: "crampons",
+    name: "Crampons",
+    desc: "Du foot en 3D : passes, frappes dosées, tacles, corners, hors-jeu et penaltys, de 5 contre 5 à 11 contre 11. Choisis ton club, seul contre l'ordinateur ou jusqu'à 4 contre 4 entre amis.",
+    keywords: "football foot ballon but match club équipe stade penalty",
+    players: seats("crampons"),
+    quick: "Match rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de Crampons",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

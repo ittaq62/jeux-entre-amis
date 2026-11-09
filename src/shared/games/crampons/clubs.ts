@@ -244,3 +244,195 @@ export function makeSquad(team: Team, setup: TeamSetup, side: number, seed: numb
     };
   });
 }
+
+// -------------------------------------------------------------------------
+// Les clubs
+// -------------------------------------------------------------------------
+
+export interface KitColors {
+  shirt: string;
+  sleeves: string;
+  shorts: string;
+  socks: string;
+}
+
+export interface Club {
+  id: string;
+  name: string;
+  /** Trois lettres, pour le tableau d'affichage */
+  short: string;
+  rating: number;
+  formation: FormationId;
+  home: KitColors;
+  away: KitColors;
+}
+
+const kit = (shirt: string, shorts: string, socks: string, sleeves = shirt): KitColors => ({ shirt, sleeves, shorts, socks });
+
+/** Tous inventés, du meilleur au plus sympathique */
+export const CLUBS: Club[] = [
+  {
+    id: "saint-ballon",
+    name: "AS Saint-Ballon",
+    short: "ASB",
+    rating: 86,
+    formation: "433",
+    home: kit("#c8232c", "#ffffff", "#c8232c"),
+    away: kit("#f4efe2", "#c8232c", "#f4efe2"),
+  },
+  {
+    id: "haute-combe",
+    name: "Olympique de Haute-Combe",
+    short: "OHC",
+    rating: 84,
+    formation: "4231",
+    home: kit("#1f4ea8", "#ffffff", "#1f4ea8", "#f2c230"),
+    away: kit("#f2c230", "#1f4ea8", "#f2c230"),
+  },
+  {
+    id: "les-forges",
+    name: "Les Forges FC",
+    short: "FOR",
+    rating: 82,
+    formation: "442",
+    home: kit("#2b2b33", "#2b2b33", "#e8792b", "#e8792b"),
+    away: kit("#e8792b", "#2b2b33", "#2b2b33"),
+  },
+  {
+    id: "port-sale",
+    name: "FC Port-Salé",
+    short: "POR",
+    rating: 80,
+    formation: "433",
+    home: kit("#14a0b8", "#f5f5ee", "#14a0b8"),
+    away: kit("#f5f5ee", "#14a0b8", "#14a0b8"),
+  },
+  {
+    id: "mont-bidule",
+    name: "Racing Mont-Bidule",
+    short: "RMB",
+    rating: 78,
+    formation: "352",
+    home: kit("#2e8b4e", "#f5f5ee", "#2e8b4e"),
+    away: kit("#f5f5ee", "#2e8b4e", "#f5f5ee"),
+  },
+  {
+    id: "clairmarais",
+    name: "Stade Clairmarais",
+    short: "CLA",
+    rating: 77,
+    formation: "442",
+    home: kit("#7d3fa8", "#ffffff", "#7d3fa8"),
+    away: kit("#f0d6ff", "#7d3fa8", "#7d3fa8"),
+  },
+  {
+    id: "trois-clochers",
+    name: "US Trois-Clochers",
+    short: "UTC",
+    rating: 76,
+    formation: "4231",
+    home: kit("#f0c419", "#1f2a44", "#1f2a44"),
+    away: kit("#1f2a44", "#f0c419", "#f0c419"),
+  },
+  {
+    id: "vieux-moulin",
+    name: "Entente Vieux-Moulin",
+    short: "EVM",
+    rating: 74,
+    formation: "532",
+    home: kit("#8c2f3a", "#d8c8a8", "#8c2f3a"),
+    away: kit("#d8c8a8", "#8c2f3a", "#d8c8a8"),
+  },
+  {
+    id: "belle-rive",
+    name: "JS Belle-Rive",
+    short: "JBR",
+    rating: 73,
+    formation: "433",
+    home: kit("#66b8e8", "#ffffff", "#66b8e8"),
+    away: kit("#1a3a5c", "#66b8e8", "#1a3a5c"),
+  },
+  {
+    id: "grand-pre",
+    name: "Union Grand-Pré",
+    short: "UGP",
+    rating: 72,
+    formation: "442",
+    home: kit("#56a832", "#20331a", "#56a832"),
+    away: kit("#20331a", "#56a832", "#56a832"),
+  },
+  {
+    id: "sainte-marmite",
+    name: "AC Sainte-Marmite",
+    short: "ASM",
+    rating: 70,
+    formation: "352",
+    home: kit("#e0572f", "#f7e9d0", "#e0572f"),
+    away: kit("#f7e9d0", "#e0572f", "#e0572f"),
+  },
+  {
+    id: "roche-noire",
+    name: "Roche-Noire AC",
+    short: "RNA",
+    rating: 68,
+    formation: "532",
+    home: kit("#3a3f4a", "#a8adb8", "#3a3f4a"),
+    away: kit("#a8adb8", "#3a3f4a", "#a8adb8"),
+  },
+  {
+    id: "val-joli",
+    name: "CS Val-Joli",
+    short: "CVJ",
+    rating: 66,
+    formation: "442",
+    home: kit("#ef7fa6", "#ffffff", "#ef7fa6"),
+    away: kit("#ffffff", "#ef7fa6", "#ef7fa6"),
+  },
+  {
+    id: "moules-frites",
+    name: "FC Moules-Frites",
+    short: "FMF",
+    rating: 62,
+    formation: "442",
+    home: kit("#f2d04e", "#26364f", "#f2d04e"),
+    away: kit("#26364f", "#f2d04e", "#26364f"),
+  },
+  {
+    id: "comptoir",
+    name: "Amicale du Comptoir",
+    short: "ADC",
+    rating: 56,
+    formation: "442",
+    home: kit("#a8703a", "#f1e4c8", "#a8703a"),
+    away: kit("#f1e4c8", "#a8703a", "#f1e4c8"),
+  },
+  {
+    id: "veterans",
+    name: "Vétérans du Dimanche",
+    short: "VDD",
+    rating: 50,
+    formation: "532",
+    home: kit("#6d8aa8", "#e9e4d6", "#6d8aa8"),
+    away: kit("#e9e4d6", "#6d8aa8", "#e9e4d6"),
+  },
+];
+
+export const CLUB_BY_ID = new Map(CLUBS.map((c) => [c.id, c]));
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Les deux maillots doivent se distinguer d'un coup d'œil : si besoin, l'équipe qui reçoit moins prend sa tenue d'extérieur */
+export function matchKits(a: Club, b: Club): [KitColors, KitColors] {
+  const [r0, g0, b0] = hexToRgb(a.home.shirt);
+  const [r1, g1, b1] = hexToRgb(b.home.shirt);
+  const close = Math.hypot(r0 - r1, g0 - g1, b0 - b1) < 130;
+  return [a.home, close ? b.away : b.home];
+}
+
+export const KEEPER_KITS: [KitColors, KitColors] = [
+  { shirt: "#55c26c", sleeves: "#55c26c", shorts: "#143a24", socks: "#55c26c" },
+  { shirt: "#f08a3c", sleeves: "#f08a3c", shorts: "#3a2412", socks: "#f08a3c" },
+];

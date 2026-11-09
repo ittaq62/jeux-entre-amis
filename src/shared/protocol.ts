@@ -2,6 +2,8 @@ import type { AvatarConfig } from "./avatar.ts";
 import type { SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
+import type { MatchEvent } from "./games/crampons/model.ts";
+import type { CramponsConfig, CramponsTick, CramponsView } from "./games/crampons/view.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
 import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
@@ -15,7 +17,7 @@ import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
 
-export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides";
+export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
@@ -27,11 +29,12 @@ export const GAME_NAMES: Record<GameId, string> = {
   capitale: "Capitale",
   meche: "Mèche",
   bolides: "Bolides",
+  crampons: "Crampons",
 };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
 /** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche", "bolides"] as const satisfies readonly TableGame[];
+export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche", "bolides", "crampons"] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -571,6 +574,62 @@ export type BolidesServerMessage =
   | { t: "tick"; now: number; k: KartNet[]; a?: number[]; c?: number[]; ct?: number[] }
   /** Ce qui arrive entre deux états complets (objets, coups, tours) */
   | { t: "fx"; events: BolidesEvent[]; now: number }
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string };
+
+export interface CramponsRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  crampons: CramponsConfig;
+}
+
+export const CRAMPONS_MAX_PLAYERS = 8;
+
+export interface CramponsRoomView {
+  code: string;
+  game: "crampons";
+  status: RoomStatus;
+  settings: CramponsRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  /** Dans quelle équipe joue chaque siège */
+  teams: Record<string, 0 | 1>;
+  crampons: CramponsView | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+  tour?: string | null;
+}
+
+export type CramponsClientMessage =
+  | { t: "settings"; settings: Partial<CramponsConfig>; visibility?: Visibility; maxPlayers?: number }
+  /** Choisir son équipe */
+  | { t: "team"; team: 0 | 1 }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  /** La direction du stick, le sprint et le pressing, plusieurs fois par seconde */
+  | { t: "in"; x: number; z: number; s: boolean; p: boolean }
+  /** Un geste : passer, frapper, tacler, changer de joueur */
+  | { t: "act"; k: string; p: number; x: number; z: number }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  | { t: "close" };
+
+export type CramponsServerMessage =
+  | { t: "room"; room: CramponsRoomView; events: MatchEvent[] }
+  | ({ t: "tick"; now: number } & CramponsTick)
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
   | { t: "emote"; seatId: string | null; userId: string; emote: string }
   | { t: "achievements"; unlocks: AchievementUnlock[] }

@@ -32,6 +32,8 @@ export interface TableLobbyProps {
   kind?: "table" | "tour";
   /** Le vote pour lancer (tournée) : à côté du bouton de l'hôte, à la place de l'attente pour les autres */
   vote?: ReactNode;
+  /** Pas de bots à asseoir : l'ordinateur complète déjà les équipes */
+  noBots?: boolean;
   /** Boutons en plus dans l'en-tête (la musique de la tournée…) */
   topActions?: ReactNode;
 }
@@ -52,6 +54,7 @@ export function TableLobby({
   startHint = "Il faut au moins deux joueurs : ajoute un bot pour commencer tout de suite.",
   seatNote,
   aside,
+  noBots = false,
   kind = "table",
   vote,
   topActions,
@@ -206,7 +209,7 @@ export function TableLobby({
                 <li key={`empty-${i}`} className="seat-row is-empty">
                   <span className="seat-empty-mark" />
                   <span className="row-text">Place libre</span>
-                  {isHost && i === 0 && (
+                  {isHost && i === 0 && !noBots && (
                     <button className="btn btn-sm" onClick={() => send({ t: "addBot" })}>
                       Ajouter un bot
                     </button>

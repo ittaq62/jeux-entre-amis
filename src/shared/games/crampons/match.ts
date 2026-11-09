@@ -73,6 +73,7 @@ export function createMatch(
     shootout: null,
     cuts: 0,
     shotAt: -10,
+    shotBy: -1,
     kickAt: -10,
     kickTeam: 0,
     winner: null,
@@ -121,6 +122,42 @@ function followBall(m: Match, id: number) {
     .map((o) => ({ o, d: Math.hypot(m.players[o.active]!.x - p.x, m.players[o.active]!.z - p.z) }))
     .sort((a, b) => a.d - b.d)[0];
   if (best) best.o.active = p.i;
+  syncHumans(m);
+}
+
+/** Un humain revient : il reprend un joueur de son équipe */
+export function addHuman(m: Match, id: string, team: Team) {
+  if (m.humans.some((h) => h.id === id)) return;
+  const h: Human = { id, team, active: -1, mx: 0, mz: 0, sprint: false, press: false, queue: [] };
+  m.humans.push(h);
+  pickActive(m, h);
+}
+
+/** Un humain s'en va : l'ordinateur reprend son joueur */
+export function dropHuman(m: Match, id: string) {
+  m.humans = m.humans.filter((h) => h.id !== id);
+  syncHumans(m);
+}
+
+/** L'adversaire vient de prendre le ballon : chaque humain reprend le joueur le mieux placé, s'il y en a un nettement plus près */
+function defendSwitch(m: Match, owner: Player) {
+  for (const h of m.humans) {
+    if (h.team === owner.team) continue;
+    const current = m.players[h.active];
+    const here = current ? Math.hypot(current.x - owner.x, current.z - owner.z) : Infinity;
+    const taken = new Set(m.humans.filter((o) => o !== h).map((o) => o.active));
+    let best = -1;
+    let bd = Infinity;
+    for (const p of m.players) {
+      if (p.team !== h.team || p.off || p.role === "GK" || taken.has(p.i)) continue;
+      const d = Math.hypot(p.x - owner.x, p.z - owner.z);
+      if (d < bd) {
+        bd = d;
+        best = p.i;
+      }
+    }
+    if (best >= 0 && bd < here - 7) h.active = best;
+  }
   syncHumans(m);
 }
 
@@ -370,6 +407,8 @@ function syncRestartHuman(m: Match) {
   if (!r) return;
   const h = m.humans.find((o) => o.team === r.team);
   if (h) {
+    // Un coéquipier humain qui dirigeait déjà le tireur en prend un autre
+    for (const o of m.humans) if (o !== h && o.active === r.taker) pickActive(m, o, r.taker);
     h.active = r.taker;
     h.queue = [];
   }
@@ -605,6 +644,8 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         p.act = "none";
         m.phase = "play";
         m.restart = null;
+        // L'humain ne garde pas le gardien : il retrouve un joueur de champ
+        if (p.role === "GK") for (const o of m.humans) if (o.active === p.i) pickActive(m, o);
       }
       continue;
     }
@@ -749,6 +790,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
   p.thinkAt = m.t + levelOf(m).think * (0.4 + random(m) * 0.8);
   ev.push({ k: "touch", p: p.i });
   followBall(m, p.i);
+  defendSwitch(m, p);
   // Une frappe demandée juste avant : la reprise
   const h = p.human ? m.humans.find((o) => o.id === p.human) : null;
   if (h) {
@@ -840,6 +882,7 @@ function header(m: Match, p: Player, ev: MatchEvent[]) {
     b.vy = -1 + random(m) * 2.5;
     m.stats[p.team].shots++;
     m.shotAt = m.t;
+    m.shotBy = p.i;
     ev.push({ k: "shot", p: p.i, power: 0.6 });
   } else {
     // Dans sa moitié, on dégage ; dans l'autre, on remet à un coéquipier
@@ -1037,7 +1080,10 @@ function defenders(m: Match) {
 }
 
 function concludeGoal(m: Match, team: Team, ev: MatchEvent[]) {
-  const scorer = m.lastTouch;
+  // Une frappe repoussée ou déviée dans le but reste le but du tireur : le contre-son-camp, c'est autre chose
+  const shot = m.players[m.shotBy];
+  const fromShot = m.t - m.shotAt < 2.5 && shot?.team === team;
+  const scorer = fromShot && m.players[m.lastTouch]?.team !== team ? m.shotBy : m.lastTouch;
   const scorerP = m.players[scorer];
   const own = scorerP ? scorerP.team !== team : false;
   ev.push({ k: "whistle", why: "goal" });

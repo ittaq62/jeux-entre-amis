@@ -234,6 +234,8 @@ export interface Match {
   cuts: number;
   /** La dernière frappe : le gardien réagit un instant plus tard */
   shotAt: number;
+  /** Son auteur : un but après un arrêt ou une déviation lui revient */
+  shotBy: number;
   /** Le dernier coup de pied, et l'équipe qui l'a donné : l'adversaire met un instant à réagir */
   kickAt: number;
   kickTeam: Team;

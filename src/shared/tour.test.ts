@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CONFIG } from "./games/crampons/view.ts";
 import { DEFAULT_SETTINGS as BOLIDES_DEFAULTS } from "./games/bolides/race.ts";
 import { DEFAULT_SETTINGS as MECHE_DEFAULTS } from "./games/meche/engine.ts";
 import { random } from "./rng.ts";
@@ -177,6 +178,7 @@ describe("règles des jeux", () => {
     capitale: CAPITALE_DEFAULTS,
     meche: MECHE_DEFAULTS,
     bolides: BOLIDES_DEFAULTS,
+    crampons: DEFAULT_CONFIG,
   };
 
   it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {

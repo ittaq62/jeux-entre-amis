@@ -15,6 +15,7 @@ import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
+import { CramponsPreview } from "../crampons/CramponsPreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -40,6 +41,7 @@ const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
   capitale: { stage: "is-map", art: () => <CapitalePreview px={360} /> },
   meche: { stage: "is-workshop", art: () => <MechePreview /> },
   bolides: { stage: "is-circuit", art: () => <BolidesPreview /> },
+  crampons: { stage: "is-pitch", art: () => <CramponsPreview /> },
 };
 
 function greeting() {
@@ -436,6 +438,9 @@ const NAVAL_MODES: Record<string, string> = {
   vignes: "aux Vignes",
   col: "au Col",
   hasard: "circuit au hasard",
+  "5": "5 contre 5",
+  "7": "7 contre 7",
+  "11": "11 contre 11",
 };
 
 function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {

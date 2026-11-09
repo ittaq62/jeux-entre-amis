@@ -164,6 +164,20 @@ describe("un match", () => {
     expect(m.goals[0]!.own).toBe(true);
   });
 
+  it("une frappe repoussée dans son but reste le but du tireur", () => {
+    const m = createMatch(settings(), teams, [], 3);
+    toPlay(m);
+    const end = attackDir(m, 0);
+    const shooter = m.players.find((p) => p.team === 0 && p.role === "ST")!;
+    const keeper = m.players.find((p) => p.team === 1 && p.role === "GK")!;
+    setBall(m, end * (HALF_L - 1), 1, 0, end * 25, 0, 0, keeper.i);
+    m.shotBy = shooter.i;
+    m.shotAt = m.t;
+    play(m, (e) => e.some((x) => x.k === "goal"), 60);
+    expect(m.score).toEqual([1, 0]);
+    expect(m.goals[0]).toMatchObject({ own: false, scorer: shooter.name });
+  });
+
   it("en touche, le ballon revient à l'équipe qui ne l'a pas sorti", () => {
     const m = createMatch(settings(), teams, [], 4);
     toPlay(m);
@@ -301,6 +315,53 @@ describe("les commandes", () => {
     expect(ev.some((x) => x.k === "shot")).toBe(true);
     expect(m.ball.vx * end).toBeGreaterThan(10);
     expect(m.stats[0].shots).toBe(1);
+  });
+});
+
+describe("le changement de joueur", () => {
+  it("quand l'adversaire prend le ballon, l'humain reprend un joueur nettement mieux placé", () => {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 31);
+    toPlay(m);
+    const h = m.humans[0]!;
+    const end = attackDir(m, 0);
+    const far = m.players[h.active]!;
+    far.x = end * 45;
+    far.z = 30;
+    // Un adversaire seul, au milieu du terrain, sur un ballon arrêté à ses pieds
+    const foe = m.players.find((p) => p.team === 1 && p.role !== "GK")!;
+    const near = m.players.find((p) => p.team === 0 && p.role !== "GK" && p.i !== far.i)!;
+    for (const p of m.players) {
+      if (p !== foe && p !== near && p !== far && p.role !== "GK") p.x = -end * 40;
+      p.lockedUntil = m.t + 3;
+    }
+    foe.x = 0;
+    foe.z = 0;
+    foe.lockedUntil = 0;
+    near.x = -end * 3;
+    near.z = 2;
+    Object.assign(m.ball, { x: 0, y: BALL_R, z: 0, vx: 0, vy: 0, vz: 0 });
+    m.owner = -1;
+    m.lastTouch = far.i;
+    m.pass = null;
+    play(m, () => m.owner === foe.i, 30);
+    expect(m.owner).toBe(foe.i);
+    expect(h.active).toBe(near.i);
+  });
+
+  it("après un six mètres, l'humain ne reste pas sur son gardien", () => {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 32);
+    toPlay(m);
+    const end = attackDir(m, 1);
+    setBall(m, end * (HALF_L - 0.5), BALL_R, 12, end * 8, 0, 0, 13);
+    play(m, (e) => e.some((x) => x.k === "restart"), 60);
+    expect(m.restart).toMatchObject({ kind: "goalkick", team: 0 });
+    for (let i = 0; i < 120 && !m.restart?.ready; i++) stepMatch(m);
+    const h = m.humans[0]!;
+    expect(m.players[h.active]!.role).toBe("GK");
+    pushAction(m, "moi", "clear", 0.7, attackDir(m, 0), 0);
+    for (let i = 0; i < 30 && m.phase !== "play"; i++) stepMatch(m);
+    expect(m.phase).toBe("play");
+    expect(m.players[h.active]!.role).not.toBe("GK");
   });
 });
 

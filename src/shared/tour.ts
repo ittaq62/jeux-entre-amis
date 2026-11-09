@@ -27,6 +27,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   capitale: { min: 2, max: 6 },
   meche: { min: 2, max: 8 },
   bolides: { min: 2, max: 8 },
+  crampons: { min: 2, max: 8 },
 };
 
 export const TOUR_MIN_PLAYERS = 2;
@@ -375,6 +376,7 @@ const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   capitale: CAPITALE_VARIANTS,
   meche: MECHE_VARIANTS,
   bolides: BOLIDES_VARIANTS,
+  crampons: [{ id: "classique", name: "Match", blurb: "Un match, avec les règles de la table.", settings: {} }],
 };
 
 /** Les variantes d'un jeu, sans leurs réglages */

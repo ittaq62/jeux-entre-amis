@@ -204,6 +204,47 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "capitale-ruin", game: "capitale", chip: "0", tone: "black", title: "Sur la paille", description: "Faire faillite." },
 
   // Tournée
+  // Crampons
+  {
+    id: "crampons-first-win",
+    game: "crampons",
+    chip: "1re",
+    tone: "red",
+    title: "Première victoire",
+    description: "Gagner un match de Crampons.",
+  },
+  {
+    id: "crampons-regular",
+    game: "crampons",
+    chip: "25",
+    tone: "blue",
+    title: "Abonné au stade",
+    description: "Jouer 25 matchs de Crampons.",
+  },
+  {
+    id: "crampons-clean",
+    game: "crampons",
+    chip: "0",
+    tone: "green",
+    title: "Cage inviolée",
+    description: "Gagner un match sans encaisser de but.",
+  },
+  {
+    id: "crampons-hat-trick",
+    game: "crampons",
+    chip: "x3",
+    tone: "red",
+    title: "Coup du chapeau",
+    description: "Marquer trois buts dans un match avec le joueur que tu diriges.",
+  },
+  {
+    id: "crampons-rout",
+    game: "crampons",
+    chip: "+5",
+    tone: "green",
+    title: "Festival offensif",
+    description: "Gagner un match avec cinq buts d'écart ou plus.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -357,6 +398,23 @@ export interface CapitaleOutcome {
   played: number;
   bankrupt: boolean;
   stats: CapitaleStats;
+}
+
+export interface CramponsOutcome {
+  won: boolean;
+  played: number;
+  stats: { goals: number; conceded: number; myGoals: number };
+}
+
+export function earnedCramponsAchievements(o: CramponsOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("crampons-first-win", o.won);
+  add("crampons-regular", o.played >= 25);
+  add("crampons-clean", o.won && o.stats.conceded === 0);
+  add("crampons-hat-trick", o.stats.myGoals >= 3);
+  add("crampons-rout", o.won && o.stats.goals - o.stats.conceded >= 5);
+  return out;
 }
 
 export interface BolidesOutcome {

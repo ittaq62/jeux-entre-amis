@@ -316,6 +316,7 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
   m.stats[p.team].shots++;
   if (onTarget) m.stats[p.team].onTarget++;
   m.shotAt = m.t;
+  m.shotBy = p.i;
   m.pass = null;
   ev.push({ k: "shot", p: p.i, power: o.power });
 }
