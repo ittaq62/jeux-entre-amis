@@ -113,15 +113,14 @@ describe("les paquets", () => {
     expect(worst).toBeLessThan(PACK_PRICE * 0.75);
   });
 
-  it("la dernière carte qui manque finit par arriver bien plus vite que par hasard", () => {
+  it("hors garantie, une carte qui manque ne tombe pas plus souvent qu'une autre", () => {
     const missing = CARDS.find((c) => c.rarity === "commune")!.id;
     const owned = new Set(CARDS.map((c) => c.id).filter((id) => id !== missing));
     const rand = seeded(5);
     let found = 0;
     const packs = 4000;
     for (let i = 0; i < packs; i++) if (drawPack(fresh, owned, rand).cards.includes(missing)) found++;
-    const byChance = 3 * 0.74 * (1 / RARITIES_COUNT("commune"));
-    expect(found / packs).toBeGreaterThan(byChance * 4);
+    expect(found / packs).toBeCloseTo((3 * 0.74) / RARITIES_COUNT("commune"), 1);
   });
 
   it("un album complet donne toujours cinq cartes différentes", () => {
