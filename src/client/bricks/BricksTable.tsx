@@ -36,6 +36,8 @@ interface Props {
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** Téléphone couché : la largeur que prend un petit plateau, avec le pseudo au-dessus */
+const FLAT_RIVAL_W = 66;
 
 const STRATEGIES: { value: TargetStrategy; label: string }[] = [
   { value: "random", label: "Au hasard" },
@@ -68,7 +70,10 @@ export function BricksTable({
   const inTour = useTourBridge() !== null;
   const g = room.bricks!;
   const { w, h } = useViewport();
-  const phone = w < 760;
+  // Les boutons à l'écran dès qu'on joue au doigt sur un écran bas, même large : un téléphone couché n'a pas de clavier
+  const phone = w < 760 || (h < 560 && window.matchMedia("(pointer: coarse)").matches);
+  const flat = phone && w > h && h < 560;
+  const tightPad = phone && h < 640;
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const music = useControls((s) => s.music);
@@ -125,22 +130,50 @@ export function BricksTable({
   // Tailles : son plateau aussi grand que possible, les autres autour.
   // Téléphone, de haut en bas : en-tête, plateaux des autres, le sien, puis les boutons.
   const melee = enemies.length > 1;
-  const phoneRival = clamp(Math.floor((w - 24 - (rivals.length - 1) * 8) / Math.max(1, rivals.length) / 10), 3, 5);
-  const phoneRivalsH = rivals.length > 0 ? phoneRival * SHOWN_ROWS + 20 + (melee ? 36 : 0) : 0;
-  const cell = phone
-    ? clamp(Math.floor(Math.min((h - 58 - phoneRivalsH - 128 - 30) / SHOWN_ROWS, (w - 36) / 15.4)), 12, 30)
-    : clamp(Math.floor((h - 150) / SHOWN_ROWS), 18, 34);
-  const rivalCell = phone
-    ? phoneRival
-    : rivals.length === 1
-      ? Math.round(cell * 0.72)
-      : clamp(Math.floor((h - 190) / (Math.ceil(rivals.length / 2) * (SHOWN_ROWS + 3))), 8, 18);
-  const spectatorCell = clamp(Math.floor((h - 200) / (Math.ceil(g.players.length / 3) * (SHOWN_ROWS + 3))), 8, 20);
+  const meleeH = melee ? 36 : 0;
+  // Son plateau d'abord : ceux des autres ne prennent jamais plus du quart de la place, et tout tient dans l'écran
+  const phoneRoom = h - 58 - (tightPad ? 100 : 128) - 30;
+  const phoneRival = clamp(
+    Math.floor(
+      Math.min((w - 24 - (rivals.length - 1) * 8) / Math.max(1, rivals.length) / 10, (phoneRoom * 0.24 - 20 - meleeH) / SHOWN_ROWS),
+    ),
+    3,
+    5,
+  );
+  const phoneRivalsH = rivals.length > 0 ? phoneRival * SHOWN_ROWS + 20 + meleeH : 0;
+  // Téléphone couché : le plateau sur toute la hauteur, les boutons de chaque côté, sous les pouces
+  // (Autour du plateau : la réserve, les suivantes et leurs écarts, puis les boutons de chaque côté)
+  const flatCell = clamp(Math.floor(Math.min((h - 10) / SHOWN_ROWS, (w - 532) / 10)), 8, 30);
+  const flatSide = Math.floor((w - 16 - (10 * flatCell + 168)) / 2);
+  // Les plateaux des autres passent sur deux rangées plutôt que de mordre sur le sien
+  const flatCols = clamp(Math.floor(flatSide / FLAT_RIVAL_W), 1, Math.max(1, rivals.length));
+  const flatRows = Math.ceil(rivals.length / flatCols);
+  const flatRival = clamp(Math.floor((h - 190 - flatRows * 16) / Math.max(1, flatRows) / SHOWN_ROWS), 2, 5);
+  const cell = flat
+    ? flatCell
+    : phone
+      ? clamp(Math.floor(Math.min((phoneRoom - phoneRivalsH) / SHOWN_ROWS, (w - 36) / 15.4)), 8, 30)
+      : clamp(Math.floor((h - 150) / SHOWN_ROWS), 10, 34);
+  const rivalCell = flat
+    ? flatRival
+    : phone
+      ? phoneRival
+      : rivals.length === 1
+        ? Math.round(cell * 0.72)
+        : clamp(Math.floor((h - 190) / (Math.ceil(rivals.length / 2) * (SHOWN_ROWS + 3))), 4, 18);
+  // Spectateur : le nombre de colonnes qui donne les plus grands plateaux sans sortir de l'écran
+  let spectatorCell = 3;
+  for (let cols = 1; cols <= g.players.length; cols++) {
+    const rows = Math.ceil(g.players.length / cols);
+    const fits = Math.min((w - 40 - (cols - 1) * 20) / cols / 10, (h - 80 - rows * 34 - (rows - 1) * 20) / rows / SHOWN_ROWS);
+    spectatorCell = Math.max(spectatorCell, Math.floor(fits));
+  }
+  spectatorCell = Math.min(spectatorCell, 20);
   const modeLabel = g.mode === "sprint" ? "solo 40 lignes" : g.mode === "duel" ? "duel" : g.mode === "teams" ? "2 contre 2" : "mêlée";
   const relayed = Boolean(mySeat?.autoplay);
 
   return (
-    <div className="table-root felt bricks-root">
+    <div className={`table-root felt bricks-root ${flat ? "is-flat" : ""}`}>
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <Icon name="menu" />
@@ -199,7 +232,10 @@ export function BricksTable({
         </AnimatePresence>
       </header>
 
-      <main className={`bricks-stage ${phone ? "is-phone" : ""} ${me ? "" : "is-spectating"} rivals-${rivals.length}`}>
+      <main
+        className={`bricks-stage ${phone ? "is-phone" : ""} ${flat ? "is-flat" : ""} ${me ? "" : "is-spectating"} rivals-${rivals.length}`}
+        style={flat ? { ["--flat-side" as string]: `${flatSide}px` } : undefined}
+      >
         {me ? (
           <>
             {rivals.length > 0 && (
@@ -230,6 +266,8 @@ export function BricksTable({
                 meId={me.id}
                 cell={cell}
                 phone={phone}
+                flat={flat}
+                tightPad={tightPad}
                 serverOffset={serverOffset}
                 send={send}
                 listeners={listeners}

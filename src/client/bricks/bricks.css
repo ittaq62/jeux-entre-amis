@@ -748,6 +748,13 @@
   gap: 12px;
 }
 
+/* Au doigt, il n'y a pas de touches à régler */
+@media (pointer: coarse) {
+  .keys-list {
+    display: none;
+  }
+}
+
 .key-btn {
   min-width: 130px;
   font-family: var(--font-card);
@@ -926,6 +933,149 @@
   grid-area: hard;
   background: linear-gradient(180deg, #c9a25a, #8f6b2c);
   color: #1d1507;
+}
+
+/* Peu de hauteur : des boutons un peu moins hauts, et les compteurs sur une ligne chacun */
+.own-board.is-tight .pad-btn {
+  height: 44px;
+}
+
+.own-board.is-tight:not(.is-flat) .own-stats {
+  gap: 2px;
+}
+
+.own-board.is-tight:not(.is-flat) .own-stats div {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.own-board.is-tight:not(.is-flat) .own-stats dt {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.own-board.is-tight:not(.is-flat) .own-stats dd {
+  font-size: 15px;
+}
+
+/* Téléphone couché : le plateau au centre sur toute la hauteur, les boutons sous les pouces, les autres en haut à gauche */
+.bricks-root.is-flat .table-top {
+  position: absolute;
+  top: 0;
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+  background: none;
+  pointer-events: none;
+}
+
+.bricks-root.is-flat .table-top > * {
+  pointer-events: auto;
+}
+
+.bricks-root.is-flat .table-title {
+  display: none;
+}
+
+.bricks-root.is-flat .round-hud {
+  position: static;
+  translate: none;
+  margin: 0;
+  pointer-events: none;
+}
+
+.bricks-root.is-flat .round-clock {
+  font-size: 20px;
+}
+
+.bricks-stage.is-flat {
+  position: relative;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 4px calc(8px + env(safe-area-inset-right, 0px)) calc(4px + var(--safe-bottom)) calc(8px + env(safe-area-inset-left, 0px));
+}
+
+.bricks-stage.is-flat .bricks-me {
+  flex: 1;
+  min-width: 0;
+}
+
+.bricks-stage.is-flat .bricks-rivals {
+  position: absolute;
+  top: calc(52px + var(--safe-top));
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: auto;
+  pointer-events: none;
+}
+
+.bricks-stage.is-flat .rivals-grid {
+  width: var(--flat-side);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 2px 6px;
+  pointer-events: auto;
+}
+
+.bricks-stage.is-flat .mini-board {
+  max-width: 60px;
+}
+
+.bricks-stage.is-flat .strategy-pick {
+  width: var(--flat-side);
+  pointer-events: auto;
+}
+
+.bricks-stage.is-flat .strategy-pick .options {
+  flex-wrap: wrap;
+}
+
+.own-board.is-flat {
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+  grid-template-areas: "padl left frame right padr";
+  justify-content: stretch;
+  gap: 0 10px;
+}
+
+.own-board.is-flat .own-side,
+.own-board.is-flat .own-frame-wrap {
+  align-self: start;
+}
+
+.touch-pad.is-left,
+.touch-pad.is-right {
+  align-self: end;
+  width: auto;
+  gap: 6px;
+}
+
+.touch-pad.is-left {
+  grid-area: padl;
+  justify-self: start;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-areas:
+    "hold hold hold"
+    "left soft right";
+}
+
+@media (max-width: 640px) {
+  .touch-pad.is-left {
+    grid-template-columns: repeat(3, 48px);
+  }
+}
+
+.touch-pad.is-right {
+  grid-area: padr;
+  justify-self: end;
+  grid-template-columns: repeat(2, 62px);
+  grid-template-areas:
+    "ccw cw"
+    "hard hard";
 }
 
 @media (max-width: 760px) {

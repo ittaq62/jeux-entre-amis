@@ -35,6 +35,7 @@ export function MiniBoard({ initial, meId, seat, cell, serverOffset, pickable, t
   const threat = pickable && meId !== null && player.target === meId;
   const live = useLive((s) => s.pieces[player.id] ?? null);
   const renderer = useRef<BoardRenderer | null>(null);
+  const rendererCell = useRef(0);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const { width, height } = boardSize(cell);
   const fx = useRef<Effects>(miniEffects.get(player.id) ?? new Effects());
@@ -46,7 +47,11 @@ export function MiniBoard({ initial, meId, seat, cell, serverOffset, pickable, t
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
-    if (!renderer.current) renderer.current = new BoardRenderer(ctx, cell, dpr);
+    // Une nouvelle taille (téléphone qu'on tourne) : le calque doit être refait à la bonne échelle
+    if (!renderer.current || rendererCell.current !== cell) {
+      renderer.current = new BoardRenderer(ctx, cell, dpr);
+      rendererCell.current = cell;
+    }
     const r = renderer.current;
     const grid = gridFromString(player.grid);
     const now = Date.now() + serverOffset;

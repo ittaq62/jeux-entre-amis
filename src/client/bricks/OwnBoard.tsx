@@ -20,6 +20,10 @@ interface Props {
   meId: string;
   cell: number;
   phone: boolean;
+  /** Téléphone couché : les boutons de chaque côté du plateau */
+  flat: boolean;
+  /** Pas beaucoup de hauteur : des boutons un peu moins hauts */
+  tightPad: boolean;
   serverOffset: number;
   send: (msg: BricksClientMessage) => void;
   listeners: MutableRefObject<BricksListeners>;
@@ -46,7 +50,7 @@ function clearLabel(lines: number, spin: Spin): string | null {
 
 /** Son plateau : la partie tourne ici, au clavier, au doigt ou avec les boutons. */
 export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
-  { room, meId, cell, phone, serverOffset, send, listeners, lastSnapshot, relayed },
+  { room, meId, cell, phone, flat, tightPad, serverOffset, send, listeners, lastSnapshot, relayed },
   ref,
 ) {
   // Ses chiffres (lignes, envoyées, K.O., place) arrivent pose après pose dans useBoards
@@ -421,7 +425,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
 
   return (
     <div
-      className={`own-board ${phone ? "is-phone" : ""}`}
+      className={`own-board ${phone ? "is-phone" : ""} ${flat ? "is-flat" : ""} ${tightPad ? "is-tight" : ""}`}
       style={{ ["--cell" as string]: `${cell}px`, ["--sky" as string]: `${SKY_ROWS * cell}px` }}
     >
       <div className="own-side own-side-left">
@@ -505,7 +509,11 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       </div>
 
       {phone && (
-        <TouchControls onPress={(a) => !relayed && game.current?.press(a, serverNow())} onRelease={(a) => game.current?.release(a)} />
+        <TouchControls
+          flat={flat}
+          onPress={(a) => !relayed && game.current?.press(a, serverNow())}
+          onRelease={(a) => game.current?.release(a)}
+        />
       )}
     </div>
   );
@@ -573,28 +581,53 @@ const PAD: { action: InputAction; label: string; aria: string; wide?: boolean }[
 ];
 
 /** Gros boutons pour le téléphone, en plus des gestes sur le plateau. */
-function TouchControls({ onPress, onRelease }: { onPress: (a: InputAction) => void; onRelease: (a: InputAction) => void }) {
+function TouchControls({
+  flat,
+  onPress,
+  onRelease,
+}: {
+  flat: boolean;
+  onPress: (a: InputAction) => void;
+  onRelease: (a: InputAction) => void;
+}) {
+  const buttons = (only: typeof PAD) =>
+    only.map((b) => (
+      <button
+        key={b.action}
+        type="button"
+        className={`pad-btn pad-${b.action} ${b.wide ? "is-wide" : ""}`}
+        aria-label={b.aria}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          unlockAudio();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          onPress(b.action);
+          vibrate(8);
+        }}
+        onPointerUp={() => onRelease(b.action)}
+        onPointerCancel={() => onRelease(b.action)}
+      >
+        {b.label}
+      </button>
+    ));
+  const stopMenu = (e: { preventDefault: () => void }) => e.preventDefault();
+  if (flat) {
+    // Le pouce gauche déplace, le pouce droit tourne et lâche
+    const isLeft = (b: (typeof PAD)[number]) => b.action === "hold" || b.action === "left" || b.action === "soft" || b.action === "right";
+    return (
+      <>
+        <div className="touch-pad is-left" onContextMenu={stopMenu}>
+          {buttons(PAD.filter(isLeft))}
+        </div>
+        <div className="touch-pad is-right" onContextMenu={stopMenu}>
+          {buttons(PAD.filter((b) => !isLeft(b)))}
+        </div>
+      </>
+    );
+  }
   return (
-    <div className="touch-pad" onContextMenu={(e) => e.preventDefault()}>
-      {PAD.map((b) => (
-        <button
-          key={b.action}
-          type="button"
-          className={`pad-btn pad-${b.action} ${b.wide ? "is-wide" : ""}`}
-          aria-label={b.aria}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            unlockAudio();
-            e.currentTarget.setPointerCapture(e.pointerId);
-            onPress(b.action);
-            vibrate(8);
-          }}
-          onPointerUp={() => onRelease(b.action)}
-          onPointerCancel={() => onRelease(b.action)}
-        >
-          {b.label}
-        </button>
-      ))}
+    <div className="touch-pad" onContextMenu={stopMenu}>
+      {buttons(PAD)}
     </div>
   );
 }
