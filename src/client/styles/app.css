@@ -355,6 +355,26 @@
   font-size: 24px;
 }
 
+/* Quand la place manque, une fenêtre perd ses marges avant de devoir défiler */
+@media (max-height: 800px), (max-width: 480px) {
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal {
+    max-height: calc(100dvh - 16px);
+    padding: 14px;
+  }
+
+  .modal-head {
+    margin-bottom: 8px;
+  }
+
+  .modal-head h2 {
+    font-size: 20px;
+  }
+}
+
 .toasts {
   position: fixed;
   top: calc(12px + var(--safe-top));

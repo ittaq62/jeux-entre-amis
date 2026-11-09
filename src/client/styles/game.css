@@ -12,6 +12,15 @@
   touch-action: manipulation;
 }
 
+/* Pendant une partie, la page elle-même ne bouge jamais */
+html:has(.table-root),
+html:has(.table-root) body,
+html:has(.bolides-root),
+html:has(.bolides-root) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .table-top {
   position: relative;
   z-index: 15;
@@ -800,6 +809,33 @@
   border-color: var(--gold);
 }
 
+/* Écran bas : les réactions s'étalent en largeur pour tenir dans la hauteur */
+@media (max-height: 420px) {
+  .emote-picker {
+    width: min(480px, calc(100vw - 24px));
+  }
+
+  .emote-grid {
+    grid-template-columns: repeat(8, 1fr);
+    margin-bottom: 4px;
+  }
+
+  .emote-btn {
+    height: 38px;
+    font-size: 22px;
+  }
+
+  .taunt-list {
+    gap: 4px;
+    padding-top: 4px;
+  }
+
+  .taunt-btn {
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Effets                                                              */
 /* ------------------------------------------------------------------ */
@@ -1115,7 +1151,11 @@
   inset: 0;
   z-index: 80;
   display: grid;
+  /* Sans ça, une ligne trop large élargirait la feuille au-delà de l'écran */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
+  /* Si un jour la feuille dépasse, son haut reste atteignable */
+  place-items: safe center;
   padding: 16px;
   background: rgba(3, 10, 7, 0.66);
   overflow-y: auto;
@@ -1273,6 +1313,120 @@
   align-items: center;
   gap: 10px;
   margin-top: 4px;
+}
+
+/* Quand la place manque, la feuille se resserre : tout le classement et tous les boutons d'un coup d'œil, sans défiler */
+@media (max-height: 760px), (max-width: 480px) {
+  .overlay {
+    padding: 8px;
+  }
+
+  .overlay > .score-sheet {
+    padding: 12px 14px 12px 44px;
+    gap: 8px;
+    background-image: linear-gradient(90deg, transparent 32px, rgba(179, 38, 30, 0.5) 32px, rgba(179, 38, 30, 0.5) 33px, transparent 33px);
+  }
+
+  .overlay > .score-sheet h2 {
+    font-size: 21px;
+    line-height: 1.1;
+  }
+
+  .gameover-head {
+    gap: 10px;
+  }
+
+  .gameover-head > .avatar {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .gameover-points {
+    margin-top: 2px;
+    font-size: 13.5px;
+  }
+
+  .gameover-points strong {
+    font-size: 18px;
+  }
+
+  .gameover-elo {
+    margin-top: 0;
+    font-size: 13.5px;
+  }
+
+  .overlay .score-rank {
+    width: 22px;
+    margin-left: -38px;
+    margin-right: 6px;
+    font-size: 18px;
+  }
+
+  .overlay .score-lines li {
+    min-height: 36px;
+    padding: 2px 0;
+    gap: 8px;
+    font-size: 14.5px;
+  }
+
+  .overlay .score-points {
+    font-size: 18px;
+  }
+
+  .overlay-actions {
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .overlay-actions .btn {
+    flex: 1 1 auto;
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+}
+
+@media (max-height: 600px) {
+  .gameover-head .hint {
+    display: none;
+  }
+
+  .overlay .score-lines li {
+    min-height: 31px;
+    padding: 1px 0;
+    font-size: 14px;
+  }
+
+  .overlay .score-lines .avatar {
+    width: 22px !important;
+    height: 22px !important;
+  }
+}
+
+@media (max-height: 520px) {
+  .overlay .score-lines li {
+    min-height: 28px;
+  }
+}
+
+/* Téléphone couché : le classement à droite, le reste à gauche */
+@media (max-height: 460px) and (min-width: 560px) {
+  .overlay > .score-sheet {
+    width: min(780px, 100%);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-content: start;
+    column-gap: 44px;
+  }
+
+  .overlay > .score-sheet > * {
+    grid-column: 1;
+  }
+
+  .overlay > .score-sheet > .score-lines {
+    grid-column: 2;
+    grid-row: 1 / span 6;
+  }
 }
 
 /* ------------------------------------------------------------------ */
