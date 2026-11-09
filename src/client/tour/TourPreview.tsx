@@ -2,7 +2,7 @@
 // volent, parce que les jeux sortent au hasard. Elle ne montre aucun jeu en particulier : on peut en ajouter sans y toucher.
 
 /** Le bord intérieur du rideau, à la hauteur y : il est tiré sur le côté */
-const curtainEdge = (y: number) => 34 + 104 * (1 - y / 440) ** 2.4;
+const curtainEdge = (y: number) => 34 + 104 * Math.max(0, 1 - y / 440) ** 2.4;
 
 const FOLDS = 6;
 
