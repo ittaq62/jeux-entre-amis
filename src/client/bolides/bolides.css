@@ -460,10 +460,6 @@
   border-color: #fff4dc;
 }
 
-.hud-item2.is-rolling {
-  animation: hud-roll 0.18s ease-in-out infinite alternate;
-}
-
 .hud-item {
   position: relative;
   pointer-events: auto;
@@ -711,6 +707,12 @@
   border-radius: 12px;
   background: #f3ecdc;
   box-shadow: 0 -4px 14px rgba(60, 40, 10, 0.16);
+}
+
+@media (max-height: 520px) {
+  .bolides-sheet .overlay-actions {
+    padding: 4px 8px;
+  }
 }
 
 /* Sur un téléphone couché : une seule rangée de petits boutons, pour laisser voir le classement */
@@ -1157,6 +1159,36 @@
   border-radius: 36px;
   font-size: 16px;
   letter-spacing: 0.04em;
+}
+
+/* Écran étroit : les boutons de droite restent entiers à l'écran */
+@media (max-width: 380px) {
+  .pads-steer,
+  .pads-act {
+    gap: 8px;
+  }
+
+  .pad {
+    width: 72px;
+    height: 72px;
+  }
+
+  .pad-small {
+    width: 56px;
+    height: 56px;
+  }
+
+  .pad-item {
+    width: 80px;
+    height: 80px;
+    border-radius: 22px;
+  }
+
+  .pad-drift {
+    width: 130px;
+    height: 62px;
+    font-size: 15px;
+  }
 }
 
 .is-phone .hud-place {
