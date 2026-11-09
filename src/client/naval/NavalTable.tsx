@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { cellIndex, cellX, cellY, FLEETS, type Dir, type Weapon } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView, NavalView } from "../../shared/games/naval/view.ts";
 import type { NavalClientMessage, NavalRoomView, SeatView } from "../../shared/protocol.ts";
@@ -340,7 +340,12 @@ function Battle({
       <div className="naval-boards">
         <div className="naval-target" hidden={!showRadar}>
           {enemies.length > 1 || !me ? (
-            <div className="naval-targets" role="tablist" aria-label="Choisir la flotte visée">
+            <div
+              className="naval-targets"
+              role="tablist"
+              aria-label="Choisir la flotte visée"
+              style={{ "--per-row": enemies.length === 4 ? 2 : Math.min(3, enemies.length), "--count": enemies.length } as CSSProperties}
+            >
               {enemies.map((p) => {
                 const s = seat(p.id);
                 const b = g.boards.find((x) => x.owner === p.id)!;
@@ -354,10 +359,12 @@ function Battle({
                     onClick={() => setTargetId(p.id)}
                     disabled={p.out && !active}
                   >
-                    {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={28} />}
-                    <span className="naval-target-name">{s?.name}</span>
-                    {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
-                    <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
+                    {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 24 : 28} />}
+                    <span className="naval-target-who">
+                      <span className="naval-target-name">{s?.name}</span>
+                      {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
+                      <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
+                    </span>
                   </button>
                 );
               })}

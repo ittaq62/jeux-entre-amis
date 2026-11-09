@@ -121,6 +121,17 @@
     background-color 0.15s;
 }
 
+/* Le classement de fin : les pseudos en entier */
+.naval-log .score-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Sur ordinateur, tout tient sur une ligne ; sur téléphone, le pseudo et les navires s'empilent à côté de l'avatar */
+.naval-target-who {
+  display: contents;
+}
+
 .naval-target-tab:hover:not(:disabled) {
   color: var(--text);
 }
@@ -913,20 +924,62 @@
   padding-top: 0;
 }
 
+.naval-battle.is-phone .naval-target {
+  width: 100%;
+}
+
+/* Tous les adversaires d'un coup d'œil, jamais de bande à faire défiler : deux lignes au plus, et chaque pseudo en entier */
 .naval-battle.is-phone .naval-targets {
-  flex-wrap: nowrap;
-  justify-content: safe center;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
+  gap: 6px;
+  width: 100%;
+  max-width: 520px;
 }
 
 .naval-battle.is-phone .naval-target-tab {
-  flex: none;
-  gap: 6px;
-  min-height: 38px;
-  padding: 3px 10px 3px 4px;
-  font-size: 14px;
+  flex: 0 0 calc((100% - (var(--per-row) - 1) * 6px) / var(--per-row));
+  min-width: 0;
+  gap: 5px;
+  min-height: 42px;
+  padding: 4px 6px 4px 4px;
+  font-size: 13px;
+  line-height: 1.12;
+  text-align: left;
+}
+
+.naval-battle.is-phone .naval-target-who {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.naval-battle.is-phone .naval-target-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.naval-battle.is-phone .naval-target-tab .fleet-pips {
+  gap: 2px;
+}
+
+.naval-battle.is-phone .naval-target-tab .fleet-pips span {
+  width: 6px;
+  height: 4px;
+}
+
+.naval-battle.is-phone .naval-target-tab .away-note {
+  font-size: 10px;
+  white-space: normal;
+}
+
+/* Un téléphone couché ou une petite tablette : tout le monde sur une seule ligne */
+@media (min-width: 600px) {
+  .naval-battle.is-phone .naval-targets {
+    --per-row: var(--count) !important;
+    max-width: none;
+  }
 }
 
 .naval-target[hidden] {
