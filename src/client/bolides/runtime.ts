@@ -251,8 +251,33 @@ export class RaceRuntime {
     await sounds;
     if (this.disposed) return;
     this.takeView(this.view, this.serverOffset);
+    await this.rehearse();
+    if (this.disposed) return;
     this.last = performance.now();
     this.frame = requestAnimationFrame(this.loop);
+  }
+
+  /**
+   * Quelques vraies images du survol, encore cachées par l'écran de chargement : la première vue du circuit coûte
+   * cher (ombres, halo, résolution réelle), et on ne prévient le serveur qu'une fois ce prix payé.
+   */
+  private async rehearse() {
+    for (let i = 0; i < 4 && !this.disposed; i++) {
+      this.scene.render({
+        karts: this.shown.map((kart, k) => ({ kart, steer: 0, shield: false, done: false, held: this.view.racers[k]?.item ?? null })),
+        follow: this.mine,
+        camera: "intro",
+        introT: 0,
+        lights: 0,
+        serverNow: this.serverNow,
+        dt: 1 / 60,
+        aim: null,
+      });
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+        setTimeout(resolve, 150);
+      });
+    }
   }
 
   private get serverNow() {

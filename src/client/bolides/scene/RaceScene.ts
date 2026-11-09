@@ -360,15 +360,20 @@ export class RaceScene {
    */
   private async compileShaders() {
     const targets = this.composer ? [null, this.composer.renderTarget1] : [null];
-    for (const target of targets) {
-      this.renderer.setRenderTarget(target);
-      try {
-        await Promise.race([
-          this.renderer.compileAsync(this.scene, this.camera),
-          new Promise((resolve) => setTimeout(resolve, COMPILE_LIMIT_MS)),
-        ]);
-      } catch {
-        // Tant pis : ça se préparera à la première image
+    // Un kart qui clignote ou qui frôle la caméra devient transparent : ce sont d'autres shaders, à préparer aussi
+    for (const fading of [true, false]) {
+      for (const k of this.karts) k.fade(fading ? 0.5 : 1);
+      for (const target of targets) {
+        this.renderer.setRenderTarget(target);
+        try {
+          await Promise.race([
+            this.renderer.compileAsync(this.scene, this.camera),
+            new Promise((resolve) => setTimeout(resolve, COMPILE_LIMIT_MS)),
+          ]);
+        } catch {
+          // Tant pis : ça se préparera à la première image
+        }
+        if (this.disposed) throw new SceneStopped();
       }
     }
     this.renderer.setRenderTarget(null);
