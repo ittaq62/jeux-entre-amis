@@ -26,6 +26,10 @@ export type SoundName =
   | "eliminated"
   | "buzzer"
   | "achievement"
+  | "cardTear"
+  | "cardRare"
+  | "cardEpic"
+  | "cardLegend"
   | "join"
   | "cannon"
   | "splash"
@@ -133,6 +137,10 @@ const FILES: Record<SoundName, string[]> = {
   eliminated: ["eliminated.mp3"],
   buzzer: ["buzzer.mp3"],
   achievement: ["achievement.mp3"],
+  cardTear: ["card-tear.mp3"],
+  cardRare: ["card-rare.mp3"],
+  cardEpic: ["card-epic.mp3"],
+  cardLegend: ["card-legend.mp3"],
   join: ["join.mp3"],
   cannon: ["naval-cannon.mp3"],
   splash: ["naval-splash.mp3"],
@@ -226,6 +234,17 @@ const FILES: Record<SoundName, string[]> = {
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
+export const CARD_SOUNDS: SoundName[] = [
+  "tourShake",
+  "tourFlip",
+  "cardSlide",
+  "cardTear",
+  "cardRare",
+  "cardEpic",
+  "cardLegend",
+  "achievement",
+];
+
 export const UNO_SOUNDS: SoundName[] = [
   "cardPlace",
   "cardSlide",
