@@ -29,6 +29,7 @@ const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ de
 const DevGarage = lazy(() => import("./bolides/DevGarage.tsx").then((m) => ({ default: m.DevGarage })));
 const DevItems = lazy(() => import("./bolides/DevItems.tsx").then((m) => ({ default: m.DevItems })));
 const DevCards = lazy(() => import("./cards/DevCards.tsx").then((m) => ({ default: m.DevCards })));
+const DevMatch = lazy(() => import("./crampons/DevMatch.tsx").then((m) => ({ default: m.DevMatch })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -92,6 +93,7 @@ export function App() {
           {import.meta.env.DEV && <Route path="/dev/garage" component={DevGarage} />}
           {import.meta.env.DEV && <Route path="/dev/objets" component={DevItems} />}
           {import.meta.env.DEV && <Route path="/dev/cartes" component={DevCards} />}
+          {import.meta.env.DEV && <Route path="/dev/crampons" component={DevMatch} />}
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>
