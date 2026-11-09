@@ -5,6 +5,7 @@ import { CLUB_BY_ID, CLUBS, FORMATION_NAMES, KEEPER_KITS, matchKits, type Format
 import type { Act, GoalRecord, Match, MatchEvent, MatchSettings, Phase, RestartKind, Role, Shootout, Team, TeamStats } from "./model.ts";
 
 export type Ambience = "jour" | "soir" | "nuit";
+export type WeatherId = "clair" | "pluie" | "neige";
 
 /** Tout ce que l'hôte règle avant le match */
 export interface CramponsConfig extends MatchSettings {
@@ -12,6 +13,7 @@ export interface CramponsConfig extends MatchSettings {
   /** Le dispositif de chaque équipe */
   formations: [FormationId, FormationId];
   ambience: Ambience;
+  weather: WeatherId;
 }
 
 export const HALF_CHOICES = [2, 3, 4, 6, 8] as const;
@@ -28,6 +30,7 @@ export const DEFAULT_CONFIG: CramponsConfig = {
   clubs: [CLUBS[0]!.id, CLUBS[2]!.id],
   formations: [CLUBS[0]!.formation, CLUBS[2]!.formation],
   ambience: "soir",
+  weather: "clair",
 };
 
 /** Applique les réglages reçus, en refusant tout ce qui n'existe pas */
@@ -40,6 +43,7 @@ export function mergeConfig(current: CramponsConfig, patch: Partial<CramponsConf
   if (typeof patch.fouls === "boolean") next.fouls = patch.fouls;
   if (patch.draw === "none" || patch.draw === "penalties" || patch.draw === "extra") next.draw = patch.draw;
   if (patch.ambience === "jour" || patch.ambience === "soir" || patch.ambience === "nuit") next.ambience = patch.ambience;
+  if (patch.weather === "clair" || patch.weather === "pluie" || patch.weather === "neige") next.weather = patch.weather;
   if (Array.isArray(patch.clubs) && patch.clubs.length === 2 && patch.clubs.every((c) => CLUB_BY_ID.has(c))) {
     next.clubs = [patch.clubs[0]!, patch.clubs[1]!];
   }

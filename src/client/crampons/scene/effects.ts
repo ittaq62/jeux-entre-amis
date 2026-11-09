@@ -10,6 +10,9 @@ const TRAIL = 14;
 const DUST = 26;
 const CONFETTI = 380;
 const FLASHES = 46;
+/** La pluie tombe en biais : autant de mètres sur le côté que de chute */
+const RAIN_SLANT = 0.16;
+const RAIN_TOP = 44;
 
 function softDot(): THREE.CanvasTexture {
   const c = document.createElement("canvas");
@@ -53,28 +56,50 @@ export class Effects {
 
   constructor(scene: THREE.Scene, weather: Weather, low: boolean) {
     this.weather = weather;
-    const trailMat = new THREE.MeshBasicMaterial({ color: "#fff6d8", transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false });
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: "#fff6d8",
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      toneMapped: false,
+    });
     this.trail = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 8, 6), trailMat, TRAIL);
     this.trail.frustumCulled = false;
     this.group.add(this.trail);
     for (let i = 0; i < TRAIL; i++) this.trailPoints.push(new THREE.Vector3(0, -50, 0));
 
     for (let i = 0; i < DUST; i++) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.dot, color: "#d9c79a", transparent: true, opacity: 0, depthWrite: false }));
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: this.dot, color: "#d9c79a", transparent: true, opacity: 0, depthWrite: false }),
+      );
       sprite.visible = false;
       this.group.add(sprite);
       this.puffs.push({ sprite, life: 0, max: 1, vx: 0, vz: 0 });
     }
 
     const bit = new THREE.PlaneGeometry(0.28, 0.18);
-    this.confetti = new THREE.InstancedMesh(bit, new THREE.MeshBasicMaterial({ color: "#ffffff", side: THREE.DoubleSide, toneMapped: false }), low ? 120 : CONFETTI);
+    this.confetti = new THREE.InstancedMesh(
+      bit,
+      new THREE.MeshBasicMaterial({ color: "#ffffff", side: THREE.DoubleSide, toneMapped: false }),
+      low ? 120 : CONFETTI,
+    );
     this.confetti.frustumCulled = false;
     this.confetti.visible = false;
     this.group.add(this.confetti);
 
     if (!low) {
       for (let i = 0; i < FLASHES; i++) {
-        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.dot, color: "#ffffff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0, fog: false }));
+        const s = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: this.dot,
+            color: "#ffffff",
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            opacity: 0,
+            fog: false,
+          }),
+        );
         s.scale.setScalar(2.4);
         s.visible = false;
         this.group.add(s);
@@ -83,25 +108,32 @@ export class Effects {
     }
 
     if (weather !== "clair") {
-      const n = low ? 500 : 1800;
+      const n = weather === "pluie" ? (low ? 700 : 2600) : low ? 900 : 3200;
       if (weather === "pluie") {
         const pos = new Float32Array(n * 6);
+        // Chaque goutte s'estompe vers le haut : un trait fin plutôt qu'un petit bâton blanc
+        const tint = new Float32Array(n * 8);
         for (let i = 0; i < n; i++) {
-          const x = Math.random() * 110 - 55;
-          const y = Math.random() * 42;
+          const x = Math.random() * 120 - 60;
+          const y = Math.random() * RAIN_TOP;
           const z = Math.random() * 90 - 45;
-          pos.set([x, y, z, x + 0.05, y - 0.85, z + 0.02], i * 6);
+          pos.set([x, y, z, x + 1.7 * RAIN_SLANT, y - 1.7, z + 0.04], i * 6);
+          tint.set([0.82, 0.89, 0.97, 0, 0.82, 0.89, 0.97, 0.5], i * 8);
         }
         const g = new THREE.BufferGeometry();
         g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#cfe2f5", transparent: true, opacity: 0.42, depthWrite: false }));
+        g.setAttribute("color", new THREE.BufferAttribute(tint, 4));
+        this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }));
         this.rainPos = pos;
       } else {
         const pos = new Float32Array(n * 3);
         for (let i = 0; i < n; i++) pos.set([Math.random() * 110 - 55, Math.random() * 42, Math.random() * 90 - 45], i * 3);
         const g = new THREE.BufferGeometry();
         g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        this.rain = new THREE.Points(g, new THREE.PointsMaterial({ map: this.dot, color: "#ffffff", size: 0.34, transparent: true, opacity: 0.9, depthWrite: false }));
+        this.rain = new THREE.Points(
+          g,
+          new THREE.PointsMaterial({ map: this.dot, color: "#ffffff", size: 0.46, transparent: true, opacity: 0.9, depthWrite: false }),
+        );
         this.rainPos = pos;
       }
       this.rain.frustumCulled = false;
@@ -198,7 +230,11 @@ export class Effects {
       if (this.flashFor > 0 && Math.random() < dt * 5) {
         const side = Math.random();
         const along = (Math.random() - 0.5) * 130;
-        s.position.set(side < 0.8 ? along : Math.sign(along) * (HALF_L + 22), 5 + Math.random() * 18, side < 0.8 ? -(HALF_W + 18 + Math.random() * 22) : (Math.random() - 0.5) * 70);
+        s.position.set(
+          side < 0.8 ? along : Math.sign(along) * (HALF_L + 22),
+          5 + Math.random() * 18,
+          side < 0.8 ? -(HALF_W + 18 + Math.random() * 22) : (Math.random() - 0.5) * 70,
+        );
         m.opacity = 1;
         s.visible = true;
       }
@@ -206,15 +242,23 @@ export class Effects {
 
     if (this.rain && this.rainPos) {
       const pos = this.rainPos;
-      const fall = (this.weather === "pluie" ? 34 : 3.2) * dt;
+      const fall = (this.weather === "pluie" ? 38 : 3.2) * dt;
       const stride = this.weather === "pluie" ? 6 : 3;
       for (let i = 0; i < pos.length; i += stride) {
         pos[i + 1]! -= fall;
         if (this.weather === "neige") pos[i]! += Math.sin(t + i) * dt * 0.6;
-        if (stride === 6) pos[i + 4]! -= fall;
+        if (stride === 6) {
+          pos[i + 4]! -= fall;
+          pos[i]! += fall * RAIN_SLANT;
+          pos[i + 3]! += fall * RAIN_SLANT;
+        }
         if (pos[i + 1]! < 0) {
-          pos[i + 1]! += 42;
-          if (stride === 6) pos[i + 4]! += 42;
+          pos[i + 1]! += RAIN_TOP;
+          if (stride === 6) {
+            pos[i + 4]! += RAIN_TOP;
+            pos[i]! -= RAIN_TOP * RAIN_SLANT;
+            pos[i + 3]! -= RAIN_TOP * RAIN_SLANT;
+          }
         }
       }
       (this.rain.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;

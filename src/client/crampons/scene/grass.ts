@@ -2,6 +2,7 @@
 // et que l'herbe ait du grain, des bandes de tonte croisées et un peu d'usure devant les buts.
 
 import * as THREE from "three";
+import type { Weather } from "./effects.ts";
 import { BOX_HALF, BOX_L, CIRCLE_R, HALF_L, HALF_W, SIX_HALF, SIX_L, SPOT_L } from "../../../shared/games/crampons/pitch.ts";
 
 export interface GrassColors {
@@ -52,6 +53,8 @@ const GLSL = /* glsl */ `
   uniform vec3 uGrassB;
   uniform vec3 uDirt;
   uniform vec3 uOutside;
+  uniform float uSnow;
+  uniform float uWet;
   varying vec3 vWorldP;
   const float L = ${HALF_L.toFixed(2)};
   const float W = ${HALF_W.toFixed(2)};
@@ -80,6 +83,18 @@ const GLSL = /* glsl */ `
     return max(m, 1.0 - smoothstep(-aa2, aa2, spot));
   }
 
+  /** De grandes taches douces : trois passages tournés l'un par rapport à l'autre, pour ne jamais voir de carrés */
+  float softPatches(vec2 p) {
+    vec2 a = mat2(0.8, -0.6, 0.6, 0.8) * p;
+    vec2 b = mat2(0.28, 0.96, -0.96, 0.28) * p;
+    return texture2D(uNoise, a * 0.0052).g * 0.5 + texture2D(uNoise, b * 0.012 + 0.37).g * 0.32 + texture2D(uNoise, a.yx * 0.028 + 0.71).g * 0.18;
+  }
+
+  /** Les endroits où l'eau reste en surface : ils brillent */
+  float wetSheen() {
+    return uWet * smoothstep(0.42, 0.68, softPatches(vWorldP.xz));
+  }
+
   vec3 grassColor() {
     vec2 p = vWorldP.xz;
     float fine = texture2D(uNoise, p * 1.3).r;
@@ -101,29 +116,40 @@ const GLSL = /* glsl */ `
     float wear = clamp((mouth * 0.42 + centre * 0.45) * (0.2 + patchy * 1.1 + fine * 0.4), 0.0, 0.42);
     col = mix(col, uDirt, wear * inside);
     col = mix(uOutside * (0.86 + 0.3 * fine), col, inside);
+    col *= 1.0 - uWet * 0.12 - wetSheen() * 0.05;
+    // Une couche de neige irrégulière, plus fine là où l'on a joué ; les lignes passent en rouge pour rester visibles
+    float snow = uSnow * mix(0.62, 0.92, smoothstep(0.3, 0.62, softPatches(p))) * (1.0 - wear * 1.6);
+    // Les bandes de tonte se devinent encore : sur un terrain uni, on ne verrait plus qu'on avance
+    col = mix(col, vec3(0.8, 0.84, 0.91) * (0.86 + 0.12 * fine + 0.14 * stripe), snow);
     float line = pitchLines(p);
-    return mix(col, vec3(0.93, 0.94, 0.9), line * 0.94);
+    return mix(col, mix(vec3(0.93, 0.94, 0.9), vec3(0.66, 0.07, 0.08), uSnow), line * 0.94);
   }
 `;
 
 /** La pelouse, à poser dans la scène */
-export function buildGrass(colors: GrassColors, shadows: boolean): { mesh: THREE.Mesh; dispose: () => void } {
+export function buildGrass(colors: GrassColors, shadows: boolean, weather: Weather = "clair"): { mesh: THREE.Mesh; dispose: () => void } {
   const noise = noiseTexture();
   const geo = new THREE.PlaneGeometry((HALF_L + 22) * 2, (HALF_W + 22) * 2);
   geo.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.96, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: weather === "pluie" ? 0.84 : 0.96, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uNoise = { value: noise };
     shader.uniforms.uGrassA = { value: new THREE.Color(colors.a) };
     shader.uniforms.uGrassB = { value: new THREE.Color(colors.b) };
     shader.uniforms.uDirt = { value: new THREE.Color(colors.dirt) };
     shader.uniforms.uOutside = { value: new THREE.Color(colors.outside) };
+    shader.uniforms.uSnow = { value: weather === "neige" ? 1 : 0 };
+    shader.uniforms.uWet = { value: weather === "pluie" ? 1 : 0 };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vWorldP;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWorldP = (modelMatrix * vec4(position, 1.0)).xyz;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>\n${GLSL}`)
-      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb = grassColor();");
+      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb = grassColor();")
+      .replace(
+        "#include <roughnessmap_fragment>",
+        "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.6, wetSheen());",
+      );
   };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = shadows;

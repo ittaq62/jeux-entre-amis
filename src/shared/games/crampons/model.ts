@@ -93,7 +93,7 @@ export interface Human {
   queue: HumanAction[];
 }
 
-export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush";
+export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
 
 export interface HumanAction {
   k: HumanActionKind;

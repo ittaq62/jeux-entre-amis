@@ -68,6 +68,7 @@ export function DevMatch() {
       keepers: m.players.map((p) => p.role === "GK"),
       shirts: m.players.map((p) => p.shirt),
       ambience: (params.get("sky") as "jour" | "soir" | "nuit") ?? "soir",
+      weather: (params.get("meteo") as "clair" | "pluie" | "neige") ?? "clair",
       lowQuality: false,
     });
     (window as unknown as { __scene: CramponsScene }).__scene = scene;

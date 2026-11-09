@@ -45,6 +45,7 @@ const ACTIONS: readonly string[] = [
   "switch",
   "rush",
   "skill",
+  "skip",
 ];
 
 interface Seat {

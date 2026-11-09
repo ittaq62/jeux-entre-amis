@@ -1,5 +1,12 @@
 import { CLUBS, FORMATION_NAMES, type Club, type FormationId } from "../../shared/games/crampons/clubs.ts";
-import { HALF_CHOICES, LEVEL_NAMES, SIDE_CHOICES, type Ambience, type CramponsConfig } from "../../shared/games/crampons/view.ts";
+import {
+  HALF_CHOICES,
+  LEVEL_NAMES,
+  SIDE_CHOICES,
+  type Ambience,
+  type CramponsConfig,
+  type WeatherId,
+} from "../../shared/games/crampons/view.ts";
 import { CRAMPONS_MAX_PLAYERS, type CramponsClientMessage, type CramponsRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
@@ -208,6 +215,21 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
                   { value: "jour", label: "Plein jour" },
                   { value: "soir", label: "Coucher de soleil" },
                   { value: "nuit", label: "Nocturne" },
+                ]}
+              />
+            </div>
+
+            <div className="field">
+              <span className="field-label">Météo</span>
+              <Options<WeatherId>
+                label="Météo"
+                value={s.weather}
+                disabled={!isHost}
+                onChange={(weather) => update({ weather })}
+                options={[
+                  { value: "clair", label: "Dégagé" },
+                  { value: "pluie", label: "Pluie" },
+                  { value: "neige", label: "Neige" },
                 ]}
               />
             </div>

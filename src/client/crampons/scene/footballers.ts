@@ -9,6 +9,8 @@ export interface Kit {
   sleeves: string;
   shorts: string;
   socks: string;
+  pattern?: string;
+  accent?: string;
 }
 
 export interface FootballerView {
@@ -349,16 +351,39 @@ function shirtAtlas(kits: Kit[], shirts: number[]): THREE.CanvasTexture {
     const y = Math.floor(i / TILE_COLS) * th;
     g.fillStyle = k.shirt;
     g.fillRect(x, y, tw, th);
+    // Le motif du club, sur le pourtour du maillot
+    g.save();
+    g.beginPath();
+    g.rect(x, y, tw, th);
+    g.clip();
+    g.fillStyle = k.accent ?? k.sleeves;
+    if (k.pattern === "rayures") for (let s = 0; s < 8; s += 2) g.fillRect(x + (s * tw) / 8, y, tw / 8, th);
+    else if (k.pattern === "cercles") for (let s = 0; s < 7; s += 2) g.fillRect(x, y + (s * th) / 7, tw, th / 7);
+    else if (k.pattern === "moitie") g.fillRect(x + tw * 0.5, y, tw * 0.5, th);
+    else if (k.pattern === "echarpe") {
+      g.beginPath();
+      g.moveTo(x, y + th * 0.72);
+      g.lineTo(x + tw, y - th * 0.02);
+      g.lineTo(x + tw, y + th * 0.3);
+      g.lineTo(x, y + th * 1.04);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
     // Les flancs, le col et le haut des épaules, dans la couleur des manches
     g.fillStyle = k.sleeves === k.shirt ? "rgba(255,255,255,0.28)" : k.sleeves;
-    g.fillRect(x + tw * 0.22, y, tw * 0.05, th);
-    g.fillRect(x + tw * 0.73, y, tw * 0.05, th);
     g.fillRect(x, y, tw, th * 0.13);
     // Le numéro, au milieu du dos
-    g.fillStyle = isLight(k.shirt) ? "#16202c" : "#ffffff";
+    // Dans le dos, un numéro bordé : il reste lisible sur n'importe quel motif
+    const dark = isLight(k.shirt);
     g.font = `900 ${th * 0.56}px 'Arial Black', Arial, sans-serif`;
     g.textAlign = "center";
     g.textBaseline = "middle";
+    g.lineJoin = "round";
+    g.lineWidth = 9;
+    g.strokeStyle = dark ? "#ffffff" : "#16202c";
+    g.strokeText(String(shirts[i] ?? i + 1), x + tw / 2, y + th * 0.57);
+    g.fillStyle = dark ? "#16202c" : "#ffffff";
     g.fillText(String(shirts[i] ?? i + 1), x + tw / 2, y + th * 0.57);
     // Un petit écusson sur le cœur
     g.fillStyle = isLight(k.shirt) ? "#16202c" : "#ffffff";

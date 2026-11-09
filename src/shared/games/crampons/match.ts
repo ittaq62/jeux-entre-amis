@@ -34,7 +34,9 @@ const TACKLE_S = 0.42;
 const TACKLE_HIT_AT = 0.2;
 const SLIDE_S = 0.7;
 const DOWN_S = 0.75;
-const GOAL_PAUSE = 4;
+/** La célébration, puis le ralenti : on peut passer dès qu'on a vu son but */
+const GOAL_PAUSE = 7.6;
+const GOAL_SKIP_AFTER = 1.2;
 const HALFTIME_PAUSE = 3;
 /** Le temps laissé à un humain pour tirer une remise en jeu : ensuite, l'ordinateur la tire pour lui */
 const HUMAN_RESTART_WAIT = 4;
@@ -1210,6 +1212,11 @@ export function stepMatch(m: Match): MatchEvent[] {
   }
 
   if (m.phase === "goal") {
+    for (const h of m.humans) {
+      if (h.queue.some((a) => a.k === "skip") && m.t > m.phaseUntil - GOAL_PAUSE + GOAL_SKIP_AFTER)
+        m.phaseUntil = Math.min(m.phaseUntil, m.t + 0.1);
+      h.queue = [];
+    }
     const hits = stepBall(m.ball, DT);
     if (hits.includes("net")) ev.push({ k: "net" });
     stepPlayers(m, ev);

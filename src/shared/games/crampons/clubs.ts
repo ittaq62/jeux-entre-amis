@@ -249,11 +249,16 @@ export function makeSquad(team: Team, setup: TeamSetup, side: number, seed: numb
 // Les clubs
 // -------------------------------------------------------------------------
 
+export type KitPattern = "uni" | "rayures" | "cercles" | "echarpe" | "moitie";
+
 export interface KitColors {
   shirt: string;
   sleeves: string;
   shorts: string;
   socks: string;
+  /** Le motif du maillot, dans la couleur des manches */
+  pattern?: KitPattern;
+  accent?: string;
 }
 
 export interface Club {
@@ -267,7 +272,14 @@ export interface Club {
   away: KitColors;
 }
 
-const kit = (shirt: string, shorts: string, socks: string, sleeves = shirt): KitColors => ({ shirt, sleeves, shorts, socks });
+const kit = (shirt: string, shorts: string, socks: string, sleeves = shirt, pattern: KitPattern = "uni", accent?: string): KitColors => ({
+  shirt,
+  sleeves,
+  shorts,
+  socks,
+  pattern,
+  accent,
+});
 
 /** Tous inventés, du meilleur au plus sympathique */
 export const CLUBS: Club[] = [
@@ -416,6 +428,25 @@ export const CLUBS: Club[] = [
     away: kit("#e9e4d6", "#6d8aa8", "#e9e4d6"),
   },
 ];
+
+/** Le motif du maillot à domicile : chaque club a le sien */
+const HOME_PATTERNS: Record<string, [KitPattern, string]> = {
+  "saint-ballon": ["echarpe", "#ffffff"],
+  "haute-combe": ["rayures", "#f2c230"],
+  "les-forges": ["cercles", "#e8792b"],
+  "port-sale": ["cercles", "#f5f5ee"],
+  "mont-bidule": ["moitie", "#f5f5ee"],
+  clairmarais: ["rayures", "#ffffff"],
+  "trois-clochers": ["echarpe", "#1f2a44"],
+  "vieux-moulin": ["moitie", "#d8c8a8"],
+  "belle-rive": ["rayures", "#ffffff"],
+  "grand-pre": ["cercles", "#20331a"],
+  "moules-frites": ["rayures", "#26364f"],
+};
+for (const c of CLUBS) {
+  const p = HOME_PATTERNS[c.id];
+  if (p) [c.home.pattern, c.home.accent] = p;
+}
 
 export const CLUB_BY_ID = new Map(CLUBS.map((c) => [c.id, c]));
 

@@ -870,3 +870,77 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Les plans de cinéma : deux bandes noires, et le mot « Ralenti » */
+.cr-cinema i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9vh;
+  background: #000;
+  animation: cr-bar 0.35s ease-out;
+  pointer-events: none;
+}
+
+.cr-cinema i:first-child {
+  top: 0;
+}
+
+.cr-cinema i:last-child {
+  bottom: 0;
+}
+
+@keyframes cr-bar {
+  from {
+    height: 0;
+  }
+}
+
+.cr-replay {
+  position: absolute;
+  top: calc(9vh + 10px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(11, 19, 32, 0.82);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.cr-replay span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e94a3a;
+  animation: cr-blink 0.9s infinite;
+}
+
+.cr-replay small {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.85;
+}
+
+@keyframes cr-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Une ombre douce sur les bords de l'image, comme à la télévision */
+.cr-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 75% 75% at 50% 52%, transparent 62%, rgba(0, 0, 0, 0.32) 100%);
+  pointer-events: none;
+}

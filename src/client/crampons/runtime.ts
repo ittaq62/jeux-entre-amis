@@ -6,8 +6,16 @@ import { clamp, DT, GOAL_HALF, wrapAngle } from "../../shared/games/crampons/pit
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
 import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
-import { CramponsScene, type SceneFrame } from "./scene/CramponsScene.ts";
+import { CramponsScene, SCORER_CAM_DIST, type SceneFrame } from "./scene/CramponsScene.ts";
 import type { FootballerView } from "./scene/footballers.ts";
+
+/** La distance d'un point à la ligne de vue, de la caméra (cx, cz) à ce qu'elle filme (tx, tz) */
+function distToSight(px: number, pz: number, cx: number, cz: number, tx: number, tz: number): number {
+  const dx = tx - cx;
+  const dz = tz - cz;
+  const u = clamp(((px - cx) * dx + (pz - cz) * dz) / (dx * dx + dz * dz), 0, 1);
+  return Math.hypot(px - cx - dx * u, pz - cz - dz * u);
+}
 
 const SEND_EVERY_MS = 33;
 /** Même sans changement, on donne signe de vie : c'est aussi ce qui mesure le temps de trajet */
@@ -102,6 +110,20 @@ export class MatchRuntime {
   // Le ballon montré : il suit le pied en douceur, sans sauter d'un côté à l'autre du joueur
   private shownBall = { x: 0, y: 0.2, z: 0 };
   private lastOwner = -2;
+  // Le film des dernières secondes, pour revoir un but au ralenti
+  private film: { t: number; p: Float32Array; b: Float32Array; acts: Act[] }[] = [];
+  private cinema: "intro" | "scorer" | "replay" | null = null;
+  private cinemaT = 0;
+  private replayAt = 0;
+  private replayEnd = 0;
+  private goalEnd = 1;
+  private goalX = 0;
+  private goalZ = 0;
+  private goalScorer = -1;
+  /** L'état du match a bien annoncé le but : avant cela, il peut encore dire que le jeu continue */
+  private goalSeen = false;
+  private goalAngle = 0;
+  private intro = true;
   private cursorPoint: [number, number] | null = null;
   private aimX = 0;
   private aimZ = 0;
@@ -124,6 +146,7 @@ export class MatchRuntime {
       shirts: view.players.map((p) => p.shirt),
       ambience: view.config.ambience,
       lowQuality,
+      weather: view.config.weather,
     });
     this.frameViews = view.players.map((p) => ({
       x: 0,
@@ -156,9 +179,52 @@ export class MatchRuntime {
     this.scene.setScoreboard({ left: view.teams[0].short, right: view.teams[1].short, score: view.score });
   }
 
-  /** Le filet tremble du côté où le ballon est entré */
-  shakeNet() {
-    this.scene.shakeNet(this.shownBall.x > 0 ? 1 : -1);
+  /** Le filet tremble, les confettis tombent, et la célébration commence */
+  goal(scorer: number, team: number) {
+    const end = this.shownBall.x > 0 ? 1 : -1;
+    this.scene.shakeNet(end);
+    const kit = this.view.teams[team as 0 | 1].kit;
+    this.scene.celebrate(end, [kit.shirt, kit.sleeves, kit.shorts, "#ffffff", "#f8d866"]);
+    this.goalEnd = end;
+    this.goalScorer = scorer;
+    this.goalSeen = false;
+    this.cinema = "scorer";
+    this.cinemaT = 0;
+    const v = this.frameViews[scorer];
+    this.goalX = v?.x ?? this.shownBall.x;
+    this.goalZ = v?.z ?? this.shownBall.z;
+    this.goalAngle = this.clearAngle(scorer);
+    this.replayEnd = (this.film.at(-1)?.t ?? 0) + 0.5;
+  }
+
+  /** L'angle du gros plan où personne ne s'interpose entre la caméra et le buteur */
+  private clearAngle(scorer: number): number {
+    let best = 0;
+    let bestGap = -1;
+    for (const a of [0, -0.8, 0.8, -1.3, 1.3]) {
+      const cx = this.goalX - Math.cos(a) * SCORER_CAM_DIST * this.goalEnd;
+      const cz = this.goalZ + Math.sin(a) * SCORER_CAM_DIST;
+      let gap = Infinity;
+      this.frameViews.forEach((p, i) => {
+        if (i !== scorer) gap = Math.min(gap, distToSight(p.x, p.z, cx, cz, this.goalX, this.goalZ));
+      });
+      if (gap > bestGap + 0.4) {
+        bestGap = gap;
+        best = a;
+      }
+    }
+    return best;
+  }
+
+  /** Une frappe ou un tacle arrache un peu d'herbe */
+  dust(player: number, strength: number) {
+    const v = this.frameViews[player];
+    if (v) this.scene.puff(v.x, v.z, strength > 0.7 ? 7 : 4, strength);
+  }
+
+  /** Le ralenti est-il en cours ? Le joueur peut alors passer */
+  get inCinema(): "intro" | "scorer" | "replay" | null {
+    return this.cinema;
   }
 
   /** De nouvelles touches, une autre visée ou une autre qualité : tout s'applique aussitôt */
@@ -371,6 +437,12 @@ export class MatchRuntime {
       return kind;
     };
 
+    // Pendant un ralenti, n'importe quel geste le passe
+    if (this.cinema && this.cinema !== "intro" && pad.pressed.length > 0) {
+      this.opts.act("skip", 0, 0, 0);
+      this.cinema = null;
+      this.scene.setShot(null);
+    }
     if (pad.swap) this.opts.act("switch", 0, 0, 0);
     for (const r of pad.released) {
       if (taking || hasBall) {
@@ -602,6 +674,118 @@ export class MatchRuntime {
     return best;
   }
 
+  /** Garde en mémoire les dernières secondes de jeu */
+  private record(frame: SceneFrame) {
+    if (this.renderSim === null) return;
+    const n = frame.players.length;
+    const p = new Float32Array(n * 4);
+    const acts: Act[] = [];
+    for (let i = 0; i < n; i++) {
+      const v = frame.players[i]!;
+      p[i * 4] = v.x;
+      p[i * 4 + 1] = v.z;
+      p[i * 4 + 2] = v.h;
+      p[i * 4 + 3] = v.v;
+      acts.push(v.act);
+    }
+    this.film.push({
+      t: this.renderSim,
+      p,
+      b: new Float32Array([frame.ball.x, frame.ball.y, frame.ball.z, frame.ball.vx, frame.ball.vz]),
+      acts,
+    });
+    while (this.film.length > 2 && this.film.at(-1)!.t - this.film[0]!.t > 7) this.film.shift();
+  }
+
+  /** Une image du film, à l'instant voulu */
+  private filmFrame(at: number, base: SceneFrame): SceneFrame {
+    const list = this.film;
+    let i = 1;
+    while (i < list.length - 1 && list[i]!.t < at) i++;
+    const a = list[i - 1]!;
+    const b = list[i]!;
+    const f = clamp(b.t > a.t ? (at - a.t) / (b.t - a.t) : 0, 0, 1);
+    const views = base.players.map((v, k) => ({
+      ...v,
+      x: a.p[k * 4]! + (b.p[k * 4]! - a.p[k * 4]!) * f,
+      z: a.p[k * 4 + 1]! + (b.p[k * 4 + 1]! - a.p[k * 4 + 1]!) * f,
+      h: a.p[k * 4 + 2]! + wrapAngle(b.p[k * 4 + 2]! - a.p[k * 4 + 2]!) * f,
+      v: a.p[k * 4 + 3]!,
+      act: b.acts[k]!,
+      cheer: false,
+    }));
+    return {
+      ...base,
+      players: views,
+      active: -1,
+      receiver: -1,
+      aim: null,
+      charge: 0,
+      ball: {
+        x: a.b[0]! + (b.b[0]! - a.b[0]!) * f,
+        y: a.b[1]! + (b.b[1]! - a.b[1]!) * f,
+        z: a.b[2]! + (b.b[2]! - a.b[2]!) * f,
+        vx: b.b[3]!,
+        vz: b.b[4]!,
+      },
+    };
+  }
+
+  /** Enchaîne les plans : la présentation avant le match, le buteur, puis le ralenti */
+  private directCinema(dt: number, frame: SceneFrame): SceneFrame {
+    if (this.intro) {
+      this.intro = false;
+      if (this.view.phase === "kickoff" && this.view.period === 1 && this.view.score[0] + this.view.score[1] === 0) {
+        this.cinema = "intro";
+        this.cinemaT = 0;
+      }
+    }
+    if (!this.cinema) return frame;
+    // Le match a repris sans attendre la fin du film : on revient au direct
+    if (this.cinema !== "intro") {
+      if (this.view.phase === "goal") {
+        this.goalSeen = true;
+      } else if (this.goalSeen || this.cinemaT > 1) {
+        this.cinema = null;
+        this.scene.setShot(null);
+        return frame;
+      }
+    }
+    this.cinemaT += dt;
+    if (this.cinema === "intro") {
+      if (this.cinemaT > 2.8 || this.view.phase === "play") {
+        this.cinema = null;
+        this.scene.setShot(null);
+        return frame;
+      }
+      this.scene.setShot({ kind: "intro", t: this.cinemaT / 2.8 });
+      return frame;
+    }
+    if (this.cinema === "scorer") {
+      if (this.cinemaT > 2.4 && this.film.length > 10) {
+        this.cinema = "replay";
+        this.cinemaT = 0;
+        this.replayAt = this.replayEnd - 3.2;
+      } else {
+        const v = this.frameViews[this.goalScorer];
+        if (v) {
+          this.goalX += (v.x - this.goalX) * Math.min(1, dt * 4);
+          this.goalZ += (v.z - this.goalZ) * Math.min(1, dt * 4);
+        }
+        this.scene.setShot({ kind: "scorer", x: this.goalX, z: this.goalZ, side: this.goalEnd, t: this.cinemaT, base: this.goalAngle });
+        return frame;
+      }
+    }
+    this.replayAt += dt * 0.62;
+    if (this.replayAt >= this.replayEnd) {
+      this.cinema = null;
+      this.scene.setShot(null);
+      return frame;
+    }
+    this.scene.setShot({ kind: "replay", end: this.goalEnd });
+    return this.filmFrame(this.replayAt, frame);
+  }
+
   private loop = (now: number) => {
     this.raf = requestAnimationFrame(this.loop);
     this.adaptQuality(now);
@@ -611,7 +795,8 @@ export class MatchRuntime {
     const frame = this.interpolated(dt);
     if (!frame) return;
     if (import.meta.env.DEV) (window as unknown as { __crFrame: SceneFrame }).__crFrame = frame;
-    this.scene.render(dt, frame);
+    if (this.view.phase !== "goal") this.record(frame);
+    this.scene.render(dt, this.directCinema(dt, frame));
     if (now - this.hudAt > 90) {
       this.hudAt = now;
       const a = this.myActive();

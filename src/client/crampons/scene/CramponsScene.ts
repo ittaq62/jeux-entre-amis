@@ -2,8 +2,9 @@
 
 import * as THREE from "three";
 import { clamp, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
+import { Effects, type Weather } from "./effects.ts";
 import { Footballers, type FootballerView, type Kit } from "./footballers.ts";
-import { buildStadium, THEMES, type Ambience, type ScoreboardData, type Stadium } from "./stadium.ts";
+import { buildStadium, themeFor, type Ambience, type ScoreboardData, type Stadium } from "./stadium.ts";
 
 export interface BallView {
   x: number;
@@ -33,6 +34,15 @@ export interface SceneFrame {
 }
 
 export type CameraMode = "tele" | "large" | "pres";
+
+/** Un plan de cinéma, le temps d'une présentation, d'un but ou d'un ralenti */
+export type Shot =
+  | { kind: "intro"; t: number }
+  | { kind: "scorer"; x: number; z: number; side: number; t: number; base: number }
+  | { kind: "replay"; end: number };
+
+/** À quelle distance du buteur se place la caméra : assez loin pour le voir en entier sous le bandeau */
+export const SCORER_CAM_DIST = 10;
 
 /** Le ballon se voit de loin : un peu plus gros qu'en vrai */
 const BALL_VIEW_R = 0.25;
@@ -78,6 +88,7 @@ export class CramponsScene {
   private ring: THREE.Mesh;
   private gauge: THREE.Mesh;
   private arrow: THREE.Mesh;
+  private fx: Effects;
   private reticle: THREE.Mesh;
   private target: THREE.Mesh;
   private basePixelRatio = 1;
@@ -105,9 +116,10 @@ export class CramponsScene {
       shirts: number[];
       ambience: Ambience;
       lowQuality: boolean;
+      weather?: Weather;
     },
   ) {
-    const theme = THEMES[opts.ambience];
+    const theme = themeFor(opts.ambience, opts.weather ?? "clair");
     this.shadows = !opts.lowQuality;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.lowQuality, powerPreference: "high-performance" });
     this.basePixelRatio = Math.min(window.devicePixelRatio, opts.lowQuality ? 1.25 : 2);
@@ -152,12 +164,14 @@ export class CramponsScene {
         away: [opts.kits[1].shirt, opts.kits[1].sleeves, opts.kits[1].shorts],
       },
       this.shadows,
+      opts.weather ?? "clair",
     );
     this.crowd = new Footballers(this.scene, opts.count, opts.kits, opts.gkKits, opts.keepers, opts.shirts, this.shadows);
+    this.fx = new Effects(this.scene, opts.weather ?? "clair", opts.lowQuality);
 
     this.ball = new THREE.Mesh(
       new THREE.SphereGeometry(BALL_VIEW_R, 20, 14),
-      new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.42 }),
+      new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.42, color: opts.weather === "neige" ? "#ff9a30" : "#ffffff" }),
     );
     this.ball.castShadow = this.shadows;
     this.scene.add(this.ball);
@@ -243,6 +257,20 @@ export class CramponsScene {
     this.stadium.shakeNet(end);
   }
 
+  puff(x: number, z: number, count = 5, strength = 1) {
+    this.fx.puff(x, z, count, strength);
+  }
+
+  celebrate(end: number, colors: string[]) {
+    this.fx.celebrate(end, colors);
+  }
+
+  /** Une image, avec éventuellement un plan de cinéma à la place de la caméra de match */
+  private shot: Shot | null = null;
+  setShot(shot: Shot | null) {
+    this.shot = shot;
+  }
+
   /** Vers où pointe « haut de l'écran » et « droite de l'écran » sur le terrain, pour traduire le stick */
   screenToWorld(sx: number, sy: number): [number, number] {
     if (this.portrait) return [-sy * this.side, sx * this.side];
@@ -297,7 +325,9 @@ export class CramponsScene {
 
     this.crowd.update(dt, this.time, frame.players);
     this.stadium.update(this.time, frame.excitement, dt);
-    this.moveCamera(dt, frame);
+    if (this.shot) this.cinema(dt, frame, this.shot);
+    else this.moveCamera(dt, frame);
+    this.fx.update(dt, this.time, b, this.cx, this.cz);
     if (this.shadows) {
       // L'ombre suit le jeu, calée sur sa grille pour ne pas scintiller quand la caméra glisse
       const step = 100 / 2048;
@@ -307,6 +337,42 @@ export class CramponsScene {
       this.sun.position.set(tx + this.sunOffset.x, this.sunOffset.y, tz + this.sunOffset.z);
     }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Les plans de cinéma : le tour du stade, le buteur de près, le ralenti depuis le bord du terrain */
+  private cinema(dt: number, frame: SceneFrame, shot: Shot) {
+    const b = frame.ball;
+    this.ring.visible = false;
+    this.arrow.visible = false;
+    this.gauge.visible = false;
+    this.reticle.visible = false;
+    this.target.visible = false;
+    if (shot.kind === "intro") {
+      const k = clamp(shot.t, 0, 1);
+      const a = -1.5 + k * 1.5;
+      const r = 92 - k * 34;
+      this.camera.position.set(Math.sin(a) * r, 42 - k * 18, Math.cos(a) * r);
+      this.camera.lookAt(0, 1, 0);
+      return;
+    }
+    if (shot.kind === "scorer") {
+      // Tout près de celui qui vient de marquer, la caméra tourne doucement autour de lui
+      const a = shot.base + (shot.t - 1.2) * 0.3;
+      // La caméra reste du côté du terrain, jamais derrière le filet ni dans les panneaux
+      this.camera.position.set(
+        clamp(shot.x - Math.cos(a) * SCORER_CAM_DIST * shot.side, -HALF_L - 6, HALF_L + 6),
+        2.8,
+        clamp(shot.z + Math.sin(a) * SCORER_CAM_DIST, -HALF_W - 6, HALF_W + 6),
+      );
+      this.camera.lookAt(shot.x, 2, shot.z);
+      return;
+    }
+    // Le ralenti : au ras du sol, à côté du but, on voit le ballon arriver
+    const k = 1 - Math.exp(-dt * 7);
+    this.cx += (b.x - this.cx) * k;
+    this.cz += (b.z - this.cz) * k;
+    this.camera.position.set(shot.end * (HALF_L + 9), 4.2, clamp(this.cz * 0.5, -14, 14) + 13);
+    this.camera.lookAt(this.cx, 1, this.cz);
   }
 
   private moveCamera(dt: number, frame: SceneFrame) {
@@ -347,6 +413,7 @@ export class CramponsScene {
   dispose() {
     this.stadium.dispose();
     this.crowd.dispose();
+    this.fx.dispose();
     this.renderer.dispose();
   }
 }

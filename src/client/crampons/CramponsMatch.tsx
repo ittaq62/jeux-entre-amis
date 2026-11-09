@@ -1,4 +1,3 @@
-import confetti from "canvas-confetti";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import type { MatchEvent, RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
@@ -165,6 +164,7 @@ export function CramponsMatch({
   const [mods, setMods] = useState({ finesse: false, chip: false });
   const [settings, setSettings] = useState<CramponsSettings>(() => loadSettings());
   const [panel, setPanel] = useState(false);
+  const [cinema, setCinema] = useState<"intro" | "scorer" | "replay" | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // L'aide s'ouvre d'elle-même au tout premier match
@@ -198,7 +198,10 @@ export function CramponsMatch({
         seatId,
         send: (x, z, s, p, c) => send({ t: "in", x, z, s, p, c }),
         act: (k, p, x, z) => send({ t: "act", k, p, x, z }),
-        onHud: setHud,
+        onHud: (h) => {
+          setHud(h);
+          setCinema(runtime.current?.inCinema ?? null);
+        },
         onLocalKick: (kind) =>
           play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
       },
@@ -223,10 +226,11 @@ export function CramponsMatch({
         } else if (e.k === "net") play("footNet");
         else if (e.k === "save" && !e.caught) play("footOoh");
         if (e.k === "shot") setMods({ finesse: false, chip: false });
+        if (e.k === "kick" && (e.kind === "shot" || e.kind === "clear")) rt.dust(e.p, e.power);
+        if (e.k === "tackle") rt.dust(e.p, 0.9);
         if (e.k === "goal") {
           play("footCheer");
-          rt.shakeNet();
-          void confetti({ particleCount: 140, spread: 110, startVelocity: 46, origin: { y: 0.35 }, zIndex: 60 });
+          rt.goal(e.scorer, e.team);
           show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
         } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
         else if (e.k === "foul") show({ tone: "info", title: e.penalty ? "Penalty !" : "Faute", sub: nameOf(e.p) }, 1700);
@@ -341,6 +345,7 @@ export function CramponsMatch({
       )}
 
       {!banner &&
+        !cinema &&
         restart?.ready &&
         view.phase !== "play" &&
         (taking ? (
@@ -351,15 +356,29 @@ export function CramponsMatch({
           <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>
         ))}
 
+      {cinema && (
+        <div className="cr-cinema" aria-hidden="true">
+          <i />
+          <i />
+        </div>
+      )}
+      {cinema === "replay" && (
+        <div className="cr-replay">
+          <span /> Ralenti <small>Appuie sur une touche pour passer</small>
+        </div>
+      )}
+
       {settings.showFps && (
         <div className="cr-fps num">
           {hud.fps} i/s · {hud.ping} ms
         </div>
       )}
-      {seatId !== null && !over && !touch && <KeyHints scheme={hud.scheme} defending={hud.defending} bindings={settings.bindings} />}
-      {!over && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
+      {seatId !== null && !over && !touch && !cinema && (
+        <KeyHints scheme={hud.scheme} defending={hud.defending} bindings={settings.bindings} />
+      )}
+      {!over && !cinema && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
 
-      {seatId !== null && hud.activeName && !over && (
+      {seatId !== null && hud.activeName && !over && !cinema && (
         <div className="cr-player">
           <span className="cr-pname">{hud.activeName}</span>
           <span className="cr-bar" aria-hidden="true">

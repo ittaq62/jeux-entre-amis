@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { GOAL_DEPTH, GOAL_H, GOAL_HALF, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
 import { Crowd, type Seat } from "./crowd.ts";
+import type { Weather } from "./effects.ts";
 import { buildGrass, type GrassColors } from "./grass.ts";
 
 export type Ambience = "jour" | "soir" | "nuit";
@@ -73,6 +74,27 @@ export const THEMES: Record<Ambience, Theme> = {
   },
 };
 
+/** Sous la pluie ou la neige, le ciel se couvre et la lumière perd son éclat */
+export function themeFor(ambience: Ambience, weather: Weather): Theme {
+  const base = THEMES[ambience];
+  if (weather === "clair") return base;
+  const cover = new THREE.Color(
+    ambience === "jour" ? (weather === "neige" ? "#c6cfda" : "#7f8b9a") : ambience === "soir" ? "#565a6c" : "#1a2029",
+  );
+  const toward = (c: string, k: number) => `#${new THREE.Color(c).lerp(cover, k).getHexString()}`;
+  // La nuit, ce sont les projecteurs qui éclairent : le temps ne change presque rien
+  const sun = ambience === "nuit" ? 0.9 : weather === "pluie" ? 0.48 : 0.62;
+  return {
+    ...base,
+    skyTop: toward(base.skyTop, 0.88),
+    skyBottom: toward(base.skyBottom, 0.82),
+    haze: toward(base.haze, 0.85),
+    sun: base.sun * sun,
+    hemi: base.hemi * 1.1,
+    sunColor: toward(base.sunColor, 0.35),
+  };
+}
+
 const MARGIN = 9;
 const ROW_H = 0.62;
 const ROW_D = 0.92;
@@ -120,6 +142,28 @@ function ledTexture(colors: [string, string]): THREE.CanvasTexture {
     g.textBaseline = "middle";
     g.fillText(text, (i + 0.5) * w, 50);
   });
+  return texture(c, true);
+}
+
+/** Les banderoles accrochées au bas des tribunes, aux couleurs des deux clubs */
+function bannerTexture(colors: [string, string]): THREE.CanvasTexture {
+  const [c, g] = canvas(1024, 64);
+  const w = 1024 / 8;
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = colors[i % 2]!;
+    g.fillRect(i * w, 0, w, 64);
+    g.fillStyle = "rgba(255,255,255,0.85)";
+    for (let k = 0; k < 4; k++) {
+      const x = i * w + 22 + k * 28;
+      g.beginPath();
+      g.moveTo(x, 12);
+      g.lineTo(x + 10, 32);
+      g.lineTo(x, 52);
+      g.lineTo(x - 10, 32);
+      g.closePath();
+      g.fill();
+    }
+  }
   return texture(c, true);
 }
 
@@ -226,7 +270,14 @@ interface StandBuild {
 }
 
 /** Une tribune en deux étages, vue d'en face : l'axe z local regarde le terrain */
-function buildStand(length: number, low: boolean, theme: Theme, led: THREE.Texture, pickColor: (u: number) => THREE.Color): StandBuild {
+function buildStand(
+  length: number,
+  low: boolean,
+  theme: Theme,
+  led: THREE.Texture,
+  pickColor: (u: number) => THREE.Color,
+  banner: THREE.Texture,
+): StandBuild {
   const group = new THREE.Group();
   const lowerRows = low ? 9 : 15;
   const upperRows = low ? 0 : 14;
@@ -261,6 +312,11 @@ function buildStand(length: number, low: boolean, theme: Theme, led: THREE.Textu
   geos.push(box(length + 4, topY + 8, 1, 0, (topY + 8) / 2, backZ - 0.6));
   const concrete = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ color: theme.concrete }));
   group.add(concrete);
+
+  // Les banderoles qui habillent le bas de la tribune
+  const flagsDown = new THREE.Mesh(new THREE.PlaneGeometry(length, 1.7), new THREE.MeshBasicMaterial({ map: banner, color: "#b4b4b4" }));
+  flagsDown.position.set(0, 0.95, ROW_D / 2 + 0.03);
+  group.add(flagsDown);
 
   if (upperRows) {
     // Le bandeau lumineux entre les deux étages
@@ -309,11 +365,18 @@ export interface Stadium {
 }
 
 /** Construit le stade dans `scene` et rend la poignée qui permet de l'animer */
-export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolean, colors: StandColors, shadows: boolean): Stadium {
-  const theme = THEMES[ambience];
+export function buildStadium(
+  scene: THREE.Scene,
+  ambience: Ambience,
+  low: boolean,
+  colors: StandColors,
+  shadows: boolean,
+  weather: Weather = "clair",
+): Stadium {
+  const theme = themeFor(ambience, weather);
   const root = new THREE.Group();
   scene.add(root);
-  scene.fog = new THREE.Fog(theme.haze, 220, 620);
+  scene.fog = weather === "clair" ? new THREE.Fog(theme.haze, 220, 620) : new THREE.Fog(theme.haze, 70, 380);
 
   // Le ciel : un dôme dégradé
   const skyGeo = new THREE.SphereGeometry(700, 24, 14);
@@ -329,7 +392,7 @@ export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolea
   const sky = new THREE.Mesh(skyGeo, skyMat);
   root.add(sky);
 
-  const grass = buildGrass(theme.grass, shadows);
+  const grass = buildGrass(theme.grass, shadows, weather);
   root.add(grass.mesh);
 
   // Sous les tribunes et tout autour : le sol, pour que la caméra ne voie jamais le vide
@@ -352,6 +415,8 @@ export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolea
     return pick(r < home ? homeColors : r < home + away ? awayColors : neutral);
   };
 
+  const banner = bannerTexture([colors.home[0]!, colors.away[0]!]);
+  banner.repeat.set(6, 1);
   const led = ledTexture([colors.home[0]!, colors.away[0]!]);
   led.repeat.set(5, 1);
   const crowds: Crowd[] = [];
@@ -371,13 +436,13 @@ export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolea
     crowds.push(crowd);
     return crowd;
   };
-  const far = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)());
+  const far = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)(), banner);
   place(far, 0, -front, 0);
-  const near = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)());
+  const near = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)(), banner);
   const nearCrowd = place(near, 0, front, Math.PI);
-  const west = buildStand(endLength, low, theme, led, () => mixed(0.9, 0.02)());
+  const west = buildStand(endLength, low, theme, led, () => mixed(0.9, 0.02)(), banner);
   place(west, -side, 0, Math.PI / 2);
-  const east = buildStand(endLength, low, theme, led, () => mixed(0.02, 0.9)());
+  const east = buildStand(endLength, low, theme, led, () => mixed(0.02, 0.9)(), banner);
   place(east, side, 0, -Math.PI / 2);
 
   // Les angles, fermés par des blocs : la tribune fait tout le tour
@@ -597,7 +662,7 @@ export function buildStadium(scene: THREE.Scene, ambience: Ambience, low: boolea
         const mat = m.material as THREE.Material | undefined;
         mat?.dispose?.();
       });
-      for (const t of [netTex, led, glowTex, cloudTex, screenTex]) t.dispose();
+      for (const t of [netTex, led, banner, glowTex, cloudTex, screenTex]) t.dispose();
       root.removeFromParent();
     },
   };
