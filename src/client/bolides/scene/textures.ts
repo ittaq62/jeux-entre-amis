@@ -338,28 +338,90 @@ export function crateTexture(): THREE.CanvasTexture {
   return toTexture(c, false);
 }
 
-/** Une flaque d'huile : noire, irisée */
-export function oilTexture(): THREE.CanvasTexture {
-  const [c, g] = canvas(128, 128);
+/** Le contour d'une flaque : irrégulier, et toujours le même */
+function oilOutline(g: CanvasRenderingContext2D, size: number, grow: number) {
   const r = rng(5);
-  g.fillStyle = "rgba(10,10,14,0.95)";
+  const c = size / 2;
   g.beginPath();
-  for (let i = 0; i <= 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const rr = 48 + r() * 14;
-    const x = 64 + Math.cos(a) * rr;
-    const y = 64 + Math.sin(a) * rr;
+  for (let i = 0; i <= 36; i++) {
+    const a = (i / 36) * Math.PI * 2;
+    const wave = 0.8 + 0.12 * Math.sin(a * 3 + 1) + 0.06 * Math.sin(a * 7) + r() * 0.03;
+    const rr = (c - 6) * wave + grow;
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
     if (i === 0) g.moveTo(x, y);
     else g.lineTo(x, y);
   }
+  g.closePath();
+}
+
+/** Une flaque d'huile : d'un noir brillant, au bord clair (elle doit se voir sur l'asphalte) */
+export function oilTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  g.lineJoin = "round";
+  oilOutline(g, 256, 0);
+  g.lineWidth = 12;
+  g.strokeStyle = "rgba(255,238,170,0.95)";
+  g.stroke();
+  g.fillStyle = "#120d1a";
   g.fill();
-  const sheen = g.createRadialGradient(54, 54, 4, 64, 64, 50);
-  sheen.addColorStop(0, "rgba(120,220,255,0.35)");
-  sheen.addColorStop(0.4, "rgba(220,120,255,0.18)");
-  sheen.addColorStop(0.7, "rgba(255,230,120,0.12)");
-  sheen.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = sheen;
-  g.fillRect(0, 0, 128, 128);
+  oilOutline(g, 256, -10);
+  g.lineWidth = 6;
+  g.strokeStyle = "rgba(120,60,190,0.9)";
+  g.stroke();
+  // De grands reflets blancs
+  g.fillStyle = "rgba(235,245,255,0.85)";
+  g.beginPath();
+  g.ellipse(98, 92, 36, 13, -0.5, 0, Math.PI * 2);
+  g.fill();
+  g.beginPath();
+  g.ellipse(162, 164, 18, 7, -0.5, 0, Math.PI * 2);
+  g.fill();
+  return toTexture(c, false);
+}
+
+/** Le reflet irisé de l'huile, qui tourne doucement au-dessus de la flaque */
+export function oilSheenTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  oilOutline(g, 256, -12);
+  g.save();
+  g.clip();
+  const grad = g.createConicGradient(0, 128, 128);
+  const colors = ["#ff3d7f", "#ffcf3a", "#3affb0", "#39a0ff", "#c05cff", "#ff3d7f"];
+  colors.forEach((color, i) => grad.addColorStop(i / (colors.length - 1), color));
+  g.globalAlpha = 0.62;
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  g.restore();
+  g.globalCompositeOperation = "destination-out";
+  const hole = g.createRadialGradient(128, 128, 18, 128, 128, 112);
+  hole.addColorStop(0, "rgba(0,0,0,0.9)");
+  hole.addColorStop(0.72, "rgba(0,0,0,0.15)");
+  hole.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = hole;
+  g.fillRect(0, 0, 256, 256);
+  return toTexture(c, false);
+}
+
+/** La gerbe de flammes d'un turbo, vue de face : une étoile vive au cœur blanc */
+export function flameBurstTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 128);
+  g.translate(64, 64);
+  const star = (outer: number, inner: number, n: number, color: string) => {
+    g.beginPath();
+    for (let i = 0; i <= n * 2; i++) {
+      const a = (i / (n * 2)) * Math.PI * 2;
+      const r = i % 2 === 0 ? outer : inner;
+      if (i === 0) g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fillStyle = color;
+    g.fill();
+  };
+  star(62, 30, 9, "rgba(255,110,20,0.75)");
+  star(46, 24, 9, "rgba(255,190,60,0.95)");
+  star(28, 15, 7, "rgba(255,245,200,1)");
   return toTexture(c, false);
 }
 
@@ -776,23 +838,33 @@ export function stripesTexture(colors: string[]): THREE.CanvasTexture {
 
 /** Une caisse-mystère : un verre clair aux bords plus vifs, et un gros point d'interrogation au milieu */
 export function mysteryTexture(): THREE.CanvasTexture {
-  const [c, g] = canvas(128, 128);
-  const grad = g.createRadialGradient(64, 64, 10, 64, 64, 90);
-  grad.addColorStop(0, "rgba(255,255,255,0.95)");
-  grad.addColorStop(0.7, "rgba(230,240,255,0.75)");
-  grad.addColorStop(1, "rgba(255,255,255,1)");
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = "rgba(255,255,255,1)";
-  g.lineWidth = 10;
-  g.strokeRect(5, 5, 118, 118);
-  g.font = "900 96px 'Big Shoulders Display Variable', 'Arial Black', sans-serif";
+  const [c, g] = canvas(256, 256);
+  // Un vitrail de couleurs franches, cerné de doré, et un grand point d'interrogation bien net
+  const conic = g.createConicGradient(0.6, 128, 128);
+  const colors = ["#ff4d5e", "#ffb02e", "#ffe14a", "#41d97a", "#38a7ff", "#b76bff", "#ff4d5e"];
+  colors.forEach((color, i) => conic.addColorStop(i / (colors.length - 1), color));
+  g.fillStyle = conic;
+  g.fillRect(0, 0, 256, 256);
+  const shine = g.createRadialGradient(100, 86, 10, 128, 128, 180);
+  shine.addColorStop(0, "rgba(255,255,255,0.75)");
+  shine.addColorStop(0.55, "rgba(255,255,255,0.12)");
+  shine.addColorStop(1, "rgba(0,0,0,0.1)");
+  g.fillStyle = shine;
+  g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = "#ffcf3a";
+  g.lineWidth = 22;
+  g.strokeRect(11, 11, 234, 234);
+  g.strokeStyle = "#7a4a08";
+  g.lineWidth = 4;
+  g.strokeRect(24, 24, 208, 208);
+  g.font = "900 188px 'Big Shoulders Display Variable', 'Arial Black', sans-serif";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  g.lineWidth = 8;
-  g.strokeStyle = "#2b1d14";
-  g.strokeText("?", 64, 70);
-  g.fillStyle = "#ffd23a";
-  g.fillText("?", 64, 70);
+  g.lineJoin = "round";
+  g.lineWidth = 20;
+  g.strokeStyle = "#17121f";
+  g.strokeText("?", 128, 138);
+  g.fillStyle = "#ffffff";
+  g.fillText("?", 128, 138);
   return toTexture(c, false);
 }

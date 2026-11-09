@@ -13,6 +13,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
 import { BolidesLoading } from "./BolidesLoading.tsx";
 import { ITEM_FAMILY, ItemIcon, ItemReel } from "./ItemIcon.tsx";
+import { OilSplats } from "./OilSplat.tsx";
 import { placeLabel, RaceRuntime, type Hud } from "./runtime.ts";
 import { faceCanvas, headCanvas } from "./scene/faces.ts";
 import { KART_COLORS } from "./scene/kart.ts";
@@ -429,6 +430,12 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
       {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : h.drafting ? "is-draft" : ""}`} aria-hidden="true" />}
       {h && <div className={`hud-pie ${h.pie ? "is-on" : ""}`} aria-hidden="true" />}
       {h && h.flash > 0 && !reduced && <div key={h.flash} className="hud-flash" aria-hidden="true" />}
+      {h && !reduced && <div className={`hud-aura ${h.aura ? `is-${h.aura}` : ""}`} aria-hidden="true" />}
+      {h?.burst && !reduced && (
+        <div key={h.burst.key} className={`hud-burst is-${h.burst.kind}`} aria-hidden="true">
+          {h.burst.kind === "oil" && <OilSplats />}
+        </div>
+      )}
       {h && !over && (
         <div className="bolides-hud" aria-live="polite">
           {me && (

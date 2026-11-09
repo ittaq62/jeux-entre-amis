@@ -102,6 +102,34 @@ const TRAIL_LIFE = 0.42;
 const TRAIL_POINTS = 18;
 const TRAIL_WIDTH = 0.34;
 
+interface TrailOptions {
+  life: number;
+  width: number;
+  height: number;
+  /** Les couleurs défilent le long du ruban */
+  rainbow: boolean;
+  on: (entry: TrailEntry) => boolean;
+}
+
+type TrailEntry = { kart: Kart; star?: boolean };
+
+const TURBO_TRAIL: TrailOptions = {
+  life: TRAIL_LIFE,
+  width: TRAIL_WIDTH,
+  height: 0.55,
+  rainbow: false,
+  on: ({ kart: k }) => k.boost > 0 && k.spin === 0,
+};
+
+/** Le ruban de l'arc-en-ciel : large, et de toutes les couleurs */
+export const RAINBOW_TRAIL: TrailOptions = {
+  life: 0.7,
+  width: 1.5,
+  height: 0.42,
+  rainbow: true,
+  on: ({ star }) => Boolean(star),
+};
+
 /** La traînée d'un turbo : un ruban lumineux, qui s'amincit et s'efface derrière le véhicule */
 export class TurboTrails {
   readonly mesh: THREE.Mesh;
@@ -109,8 +137,13 @@ export class TurboTrails {
   private col: Float32Array;
   private index: Uint16Array;
   private history: { x: number; y: number; z: number; t: number }[][];
+  private tint = new THREE.Color();
 
-  constructor(keep: Keep, count: number) {
+  constructor(
+    keep: Keep,
+    count: number,
+    private o: TrailOptions = TURBO_TRAIL,
+  ) {
     const verts = count * TRAIL_POINTS * 2;
     this.pos = new Float32Array(verts * 3);
     this.col = new Float32Array(verts * 4);
@@ -129,7 +162,7 @@ export class TurboTrails {
           depthWrite: false,
           blending: THREE.AdditiveBlending,
           side: THREE.DoubleSide,
-          color: new THREE.Color(1.45, 0.72, 0.2),
+          color: o.rainbow ? new THREE.Color(1.1, 1.1, 1.1) : new THREE.Color(1.45, 0.72, 0.2),
           fog: false,
         }),
       ),
@@ -138,22 +171,24 @@ export class TurboTrails {
     this.mesh.visible = false;
   }
 
-  update(karts: readonly { kart: Kart }[], time: number, camera: THREE.Vector3) {
+  update(karts: readonly TrailEntry[], time: number, camera: THREE.Vector3) {
     let v = 0;
     let i = 0;
-    karts.forEach(({ kart: k }, n) => {
+    const { life: span, width, height, rainbow } = this.o;
+    karts.forEach((entry, n) => {
+      const k = entry.kart;
       const h = this.history[n];
       if (!h) return;
-      const on = k.boost > 0 && k.spin === 0 && Math.hypot(k.x - camera.x, k.z - camera.z) < 90;
+      const on = this.o.on(entry) && Math.hypot(k.x - camera.x, k.z - camera.z) < 90;
       if (on) {
         const x = k.x - Math.sin(k.h) * 1.5;
         const z = k.z - Math.cos(k.h) * 1.5;
         const last = h.at(-1);
         // Une téléportation casse le ruban
         if (last && Math.hypot(x - last.x, z - last.z) > 12) h.length = 0;
-        if (!last || Math.hypot(x - last.x, z - last.z) > 0.55) h.push({ x, y: k.y + k.air + 0.55, z, t: time });
+        if (!last || Math.hypot(x - last.x, z - last.z) > 0.55) h.push({ x, y: k.y + k.air + height, z, t: time });
       }
-      while (h.length > 0 && (time - h[0]!.t > TRAIL_LIFE || h.length > TRAIL_POINTS)) h.shift();
+      while (h.length > 0 && (time - h[0]!.t > span || h.length > TRAIL_POINTS)) h.shift();
       if (h.length < 2) return;
       const first = v;
       h.forEach((p, j) => {
@@ -164,11 +199,15 @@ export class TurboTrails {
         const len = Math.hypot(sx, sz) || 1;
         sx /= len;
         sz /= len;
-        const life = Math.max(0, 1 - (time - p.t) / TRAIL_LIFE);
-        const half = TRAIL_WIDTH * 0.5 * life;
+        const life = Math.max(0, 1 - (time - p.t) / span);
+        const half = width * 0.5 * life;
         this.pos.set([p.x + sx * half, p.y, p.z + sz * half, p.x - sx * half, p.y, p.z - sz * half], v * 3);
-        const a = life * life * 0.55;
-        this.col.set([1, 1, 1, a, 1, 1, 1, a], v * 4);
+        const a = life * life * (rainbow ? 0.8 : 0.55);
+        if (rainbow) {
+          this.tint.setHSL((j * 0.075 + time * 1.5) % 1, 1, 0.56);
+          const { r, g, b } = this.tint;
+          this.col.set([r, g, b, a, r, g, b, a], v * 4);
+        } else this.col.set([1, 1, 1, a, 1, 1, 1, a], v * 4);
         v += 2;
       });
       for (let j = 0; j < h.length - 1; j++) {

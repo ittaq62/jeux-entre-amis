@@ -145,6 +145,130 @@
   }
 }
 
+/* Tant que l'objet dure, l'écran le rappelle sur ses bords */
+.hud-aura {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.hud-aura.is-shield {
+  opacity: 1;
+  box-shadow: inset 0 0 90px 12px rgba(96, 205, 255, 0.6);
+}
+
+.hud-aura.is-giant {
+  opacity: 1;
+  box-shadow: inset 0 0 120px 18px rgba(176, 92, 255, 0.62);
+}
+
+.hud-aura.is-magnet {
+  opacity: 1;
+  box-shadow: inset 0 0 70px 6px rgba(88, 198, 255, 0.36);
+}
+
+.hud-aura.is-star {
+  opacity: 1;
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 56%, #000 98%);
+  mask-image: radial-gradient(ellipse at center, transparent 56%, #000 98%);
+}
+
+.hud-aura.is-star::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  background: conic-gradient(#f0343c, #ff8a1f, #ffd93a, #35c75a, #2b8cff, #c06bff, #f0343c);
+  animation: hud-aura-spin 1.3s linear infinite;
+}
+
+@keyframes hud-aura-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Les chocs : l'explosion toute proche, le bouclier qui casse, le coup de trompe, l'huile sur l'écran */
+.hud-burst {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.hud-burst.is-blast {
+  background: radial-gradient(circle at 50% 56%, rgba(255, 244, 200, 0.82), rgba(255, 140, 40, 0.6) 44%, rgba(170, 30, 10, 0.28) 100%);
+  animation: hud-burst 0.4s ease-out;
+}
+
+.hud-burst.is-shield {
+  box-shadow: inset 0 0 150px 46px rgba(180, 238, 255, 0.95);
+  animation: hud-burst 0.34s ease-out;
+}
+
+.hud-burst.is-horn {
+  background: radial-gradient(circle at 50% 62%, transparent 36%, rgba(255, 234, 150, 0.6) 48%, transparent 58%);
+  animation: hud-horn 0.42s ease-out;
+}
+
+.hud-burst.is-bang {
+  background: radial-gradient(circle at 50% 56%, rgba(255, 244, 200, 0.5), rgba(255, 150, 50, 0.22) 46%, transparent 76%);
+  animation: hud-burst 0.26s ease-out;
+}
+
+.hud-burst.is-oil {
+  animation: hud-oil 1.15s ease-out;
+}
+
+.hud-burst.is-oil svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes hud-burst {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes hud-horn {
+  from {
+    opacity: 1;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes hud-oil {
+  0% {
+    opacity: 0.96;
+    transform: scale(1.1);
+  }
+  12% {
+    opacity: 0.96;
+    transform: scale(1);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(54px);
+  }
+}
+
 /* Le fil de la course : ce qui vient de se passer */
 .hud-feed {
   position: absolute;

@@ -8,15 +8,18 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { BOMBE_RADIUS, hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
+import { ITEM_KINDS, KLAXON_RADIUS, type Hazard, type ItemKind } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
+import type { HitKind } from "../../../shared/games/bolides/race.ts";
 import { pointAt, wrapAngle, type Track } from "../../../shared/games/bolides/track.ts";
 import { CoinField, Crossers } from "./features.ts";
+import { ItemFx, type Word } from "./itemFx.ts";
+import { ItemModels } from "./itemModels.ts";
 import { KartModel, type KartExtras, type KartLook } from "./kart.ts";
 import { AimGuide, type Aim } from "./aim.ts";
 import { TrackLife, WATER_DEPTH, type LifeEvent } from "./life.ts";
 import { Podium, type PodiumSpot } from "./podium.ts";
-import { DriftMarks, TurboTrails } from "./trails.ts";
+import { DriftMarks, RAINBOW_TRAIL, TurboTrails } from "./trails.ts";
 import type { Mood } from "./sky.ts";
 import * as TX from "./textures.ts";
 import { buildWorld, type World } from "./world.ts";
@@ -61,6 +64,8 @@ interface Puff {
   heavy: boolean;
   /** Son opacité au départ */
   alpha: number;
+  /** Sa taille au départ */
+  start: number;
 }
 
 /** Les couleurs des mini-turbos, du plus petit au plus gros */
@@ -106,6 +111,10 @@ export class RaceScene {
   private aim: AimGuide | null = null;
   private marks: DriftMarks | null = null;
   private trails: TurboTrails | null = null;
+  private rainbow: TurboTrails | null = null;
+  /** Les objets en 3D (mêmes formes partout), et ce qu'ils font à l'écran */
+  private items: ItemModels | null = null;
+  private fx: ItemFx | null = null;
   /** L'image finale : le flou de vitesse (sur ordinateur) */
   private finish: ShaderPass | null = null;
   private speedBlur = 0;
@@ -128,13 +137,7 @@ export class RaceScene {
   private crateShown: boolean[] = [];
   private crateMat: THREE.MeshStandardMaterial | null = null;
   private crateGeo: THREE.BufferGeometry | null = null;
-  private hazards = new Map<number, { hz: Hazard; mesh: THREE.Object3D }>();
-  private oilMat: THREE.MeshBasicMaterial;
-  private petardGeo: THREE.BufferGeometry;
-  private petardMat: THREE.MeshLambertMaterial;
-  private rocketParts: { geo: THREE.BufferGeometry; mat: THREE.Material }[] = [];
-  /** Les formes des objets lancés (libérées à la fin), et les ondes d'explosion et éclairs en cours */
-  private thrownParts: { dispose: () => void }[] = [];
+  /** Les ondes et les éclairs en cours */
   private pulses: { mesh: THREE.Mesh; life: number; max: number; radius: number }[] = [];
   private puffs: Puff[] = [];
   private spare: THREE.Sprite[] = [];
@@ -210,10 +213,6 @@ export class RaceScene {
     this.vignette.className = "bolides-vignette";
     container.appendChild(this.vignette);
 
-    this.oilMat = new THREE.MeshBasicMaterial({ map: TX.oilTexture(), transparent: true, depthWrite: false });
-    this.petardGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.1, 10);
-    this.petardGeo.rotateX(Math.PI / 2);
-    this.petardMat = new THREE.MeshLambertMaterial({ color: 0xd8352a, emissive: 0x401008 });
     this.puffTex = TX.sparkTexture();
     this.smokeTex = TX.smokeTexture();
 
@@ -289,21 +288,32 @@ export class RaceScene {
     this.scene.add(this.world.group, this.world.dome);
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
-    await step(0.6);
+    await step(0.58);
+    const keep = <T extends { dispose: () => void }>(x: T): T => {
+      this.featureKeep.push(x);
+      return x;
+    };
+    // Les objets : sculptés d'avance (rien ne se fabrique pendant la course), en petites bouchées
+    this.items = new ItemModels(keep, { detail: 1, shadows: this.shadows, outline: 0.03, icon: false });
+    for (let i = 0; i < ITEM_KINDS.length; i++) {
+      this.items.prepare(ITEM_KINDS[i]!);
+      if (i % 5 === 4) await step(0.58 + (i / ITEM_KINDS.length) * 0.03);
+    }
+    await step(0.61);
     this.karts = looks.map((look) => {
-      const m = new KartModel({ ...look, night: Boolean(mood.stars) }, this.shadows);
+      const m = new KartModel({ ...look, night: Boolean(mood.stars) }, this.shadows, this.items);
       this.scene.add(m.group);
       return m;
     });
     // Les caisses-mystère : un cube de verre aux couleurs qui changent, un point d'interrogation sur chaque face
+    const mystery = TX.mysteryTexture();
     this.crateMat = new THREE.MeshStandardMaterial({
-      map: TX.mysteryTexture(),
-      transparent: true,
-      opacity: 0.88,
-      roughness: 0.15,
-      metalness: 0.1,
+      map: mystery,
+      emissiveMap: mystery,
+      roughness: 0.2,
+      metalness: 0.05,
       emissive: 0xffffff,
-      emissiveIntensity: 0.35,
+      emissiveIntensity: 0.5,
     });
     this.crateGeo = new RoundedBoxGeometry(1.4, 1.4, 1.4, 2, 0.14);
     this.crates = new THREE.InstancedMesh(this.crateGeo, this.crateMat, Math.max(1, track.boxes.length));
@@ -315,10 +325,6 @@ export class RaceScene {
     this.crateShown = track.boxes.map(() => true);
     await step(0.68);
     // Les pièces et les engins qui traversent
-    const keep = <T extends { dispose: () => void }>(x: T): T => {
-      this.featureKeep.push(x);
-      return x;
-    };
     this.coins = new CoinField(track, keep);
     this.scene.add(this.coins.mesh);
     this.crossers = new Crossers(track, track.def.theme, keep, this.shadows, this.world.heightAt);
@@ -329,7 +335,18 @@ export class RaceScene {
     this.scene.add(this.aim.group);
     this.marks = new DriftMarks(keep, this.opts.phone ? 260 : 620);
     this.trails = new TurboTrails(keep, looks.length);
-    this.scene.add(this.marks.mesh, this.trails.mesh);
+    this.rainbow = new TurboTrails(keep, looks.length, RAINBOW_TRAIL);
+    this.scene.add(this.marks.mesh, this.trails.mesh, this.rainbow.mesh);
+    this.fx = new ItemFx({
+      scene: this.scene,
+      track,
+      keep,
+      items: this.items,
+      phone: this.opts.phone,
+      reduced: this.opts.reduced,
+      puff: (x, y, z, color, vx, vy, vz, life, grow, alpha, heavy, size) =>
+        this.puff(x, y, z, color, vx, vy, vz, life, grow, alpha, heavy, size),
+    });
     await step(0.76);
     await this.compileShaders();
     await step(0.92);
@@ -353,7 +370,6 @@ export class RaceScene {
       } catch {
         // Tant pis : ça se préparera à la première image
       }
-      if (this.disposed) throw new SceneStopped();
     }
     this.renderer.setRenderTarget(null);
   }
@@ -571,6 +587,7 @@ export class RaceScene {
       if (this.crateShown[i] && !on) {
         this.burst(at, 0xffd23a, 8);
         this.burst(at, 0x7fd9ff, 6);
+        this.fx?.crateBurst(at.x, at.y, at.z);
       }
       this.crateShown[i] = on;
     });
@@ -581,124 +598,9 @@ export class RaceScene {
     if (this.crateShown[i]) this.setCrates(this.crateShown.map((on, k) => (k === i ? false : on)));
   }
 
-  /** Les pièges sur la route : on ajoute les nouveaux, on retire ceux qui ne sont plus là */
+  /** Les pièges sur la route */
   setHazards(list: Hazard[]) {
-    const ids = new Set(list.map((h) => h.id));
-    for (const [id, item] of this.hazards) {
-      if (ids.has(id)) continue;
-      this.scene.remove(item.mesh);
-      this.hazards.delete(id);
-    }
-    for (const hz of list) {
-      if (this.hazards.has(hz.id)) continue;
-      let mesh: THREE.Object3D;
-      if (hz.kind === "huile") {
-        mesh = new THREE.Mesh(new THREE.CircleGeometry(1.9, 20), this.oilMat);
-        mesh.rotation.x = -Math.PI / 2;
-        const y = this.track ? pointAt(this.track, hz.s, hz.d).y : 0;
-        mesh.position.set(hz.x, y + 0.1, hz.z);
-      } else if (hz.kind === "fusee") {
-        mesh = this.rocket();
-      } else if (hz.kind === "bowling" || hz.kind === "tarte" || hz.kind === "bombe") {
-        mesh = this.thrown(hz.kind);
-      } else {
-        mesh = new THREE.Mesh(this.petardGeo, this.petardMat);
-      }
-      this.scene.add(mesh);
-      this.hazards.set(hz.id, { hz, mesh });
-    }
-  }
-
-  /** Une fusée : rouge et blanche, son nez, ses ailerons, sa flamme (les formes servent à toutes les fusées) */
-  private rocket(): THREE.Group {
-    if (this.rocketParts.length === 0) {
-      const body = new THREE.CylinderGeometry(0.32, 0.32, 1.6, 12);
-      body.rotateX(Math.PI / 2);
-      const nose = new THREE.ConeGeometry(0.32, 0.6, 12);
-      nose.rotateX(Math.PI / 2);
-      nose.translate(0, 0, 1.1);
-      const fins = new THREE.BoxGeometry(1.2, 0.08, 0.5);
-      fins.translate(0, 0, -0.65);
-      const fins2 = fins.clone().rotateZ(Math.PI / 2);
-      const flame = new THREE.ConeGeometry(0.28, 1.0, 10);
-      flame.rotateX(-Math.PI / 2);
-      flame.translate(0, 0, -1.3);
-      this.rocketParts = [
-        { geo: body, mat: new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.4 }) },
-        { geo: nose, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
-        { geo: fins, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
-        { geo: fins2, mat: new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.4 }) },
-        { geo: flame, mat: new THREE.MeshBasicMaterial({ color: 0xffb347 }) },
-      ];
-    }
-    const g = new THREE.Group();
-    for (const p of this.rocketParts) g.add(new THREE.Mesh(p.geo, p.mat));
-    g.scale.setScalar(1.3);
-    return g;
-  }
-
-  /** Ce qu'on lance : une boule de bowling, une tarte à la crème, une bombe et sa mèche */
-  private thrown(kind: "bowling" | "tarte" | "bombe"): THREE.Group {
-    const g = new THREE.Group();
-    const make = (geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0) => {
-      this.thrownParts.push(geo, mat);
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      m.castShadow = this.shadows;
-      g.add(m);
-      return m;
-    };
-    if (kind === "bowling") {
-      make(
-        new THREE.SphereGeometry(1.15, 24, 18),
-        new THREE.MeshStandardMaterial({ color: 0x2a1a7a, roughness: 0.12, metalness: 0.35, emissive: 0x120a40 }),
-      );
-      const hole = new THREE.MeshStandardMaterial({ color: 0x07060f, roughness: 0.9 });
-      for (const [x, y] of [
-        [-0.26, 0.5],
-        [0.26, 0.5],
-        [0, 0.08],
-      ] as const)
-        make(new THREE.SphereGeometry(0.16, 10, 8), hole, x, y, 1.02);
-    } else if (kind === "tarte") {
-      make(new THREE.CylinderGeometry(0.72, 0.52, 0.24, 20), new THREE.MeshStandardMaterial({ color: 0xd9a35c, roughness: 0.8 }));
-      const cream = make(
-        new THREE.SphereGeometry(0.66, 16, 12),
-        new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.5 }),
-        0,
-        0.18,
-        0,
-      );
-      cream.scale.y = 0.55;
-      make(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ color: 0xc8202c, roughness: 0.3 }), 0, 0.56, 0);
-    } else {
-      make(new THREE.SphereGeometry(0.72, 18, 14), new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.3, metalness: 0.4 }));
-      make(
-        new THREE.CylinderGeometry(0.2, 0.26, 0.24, 12),
-        new THREE.MeshStandardMaterial({ color: 0x4a4d55, roughness: 0.5 }),
-        0,
-        0.76,
-        0,
-      );
-      make(
-        new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6),
-        new THREE.MeshStandardMaterial({ color: 0xc9b98a, roughness: 0.9 }),
-        0.12,
-        1.08,
-        0,
-      ).rotation.z = -0.5;
-      make(new THREE.SphereGeometry(0.14, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd36b }), 0.26, 1.34, 0);
-      // Le cercle du danger, au sol, là où elle va sauter
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(BOMBE_RADIUS - 0.35, BOMBE_RADIUS, 40),
-        new THREE.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      this.thrownParts.push(ring.geometry, ring.material as THREE.Material);
-      ring.rotation.x = -Math.PI / 2;
-      ring.name = "danger";
-      g.add(ring);
-    }
-    return g;
+    this.fx?.setHazards(list);
   }
 
   /** Une explosion : une boule de feu, une onde qui s'étend au sol, de la fumée */
@@ -722,21 +624,8 @@ export class RaceScene {
         false,
       );
     }
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.75, 1, 48),
-      new THREE.MeshBasicMaterial({
-        color: 0xffb347,
-        transparent: true,
-        opacity: 0.85,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-      }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(x, y + 0.2, z);
-    this.scene.add(ring);
-    this.pulses.push({ mesh: ring, life: 0.5, max: 0.5, radius });
+    this.fx?.blast(x, y, z, radius);
+    this.wordNear("boum", x, y + 3.2, z, false);
     this.shakeNear(x, z, 26, 0.8);
   }
 
@@ -831,12 +720,87 @@ export class RaceScene {
       this.puff(x, y + 1, z, 0x6b6460, (Math.random() - 0.5) * 3, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 3, 1.4, 2.4);
   }
 
-  /** Une onde de klaxon autour d'un kart */
-  ring(x: number, y: number, z: number) {
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      this.puff(x, y + 0.8, z, 0xfff1a8, Math.cos(a) * 14, 0.5, Math.sin(a) * 14, 0.6, 1.2);
+  /** Une onomatopée, si on est assez près pour la lire (celles qui nous concernent se montrent toujours) */
+  private wordNear(word: Word, x: number, y: number, z: number, mine: boolean) {
+    if (mine || Math.hypot(x - this.camPos.x, z - this.camPos.z) < 60) this.fx?.word(word, x, y, z);
+  }
+
+  /** Un kart se sert d'un objet : ce qu'on voit partir de lui */
+  itemUsed(k: Kart, who: number, item: ItemKind) {
+    const fx = this.fx;
+    if (!fx) return;
+    const y = k.y + k.air;
+    if (item === "klaxon") {
+      fx.horn(k, who, KLAXON_RADIUS);
+      this.wordNear("pouet", k.x, y + 4.2, k.z, false);
+      this.shakeNear(k.x, k.z, 16, 0.35);
+    } else if (item === "turbo" || item === "turbo3") {
+      this.turboBurst(k, 3);
+      fx.shock(k.x - Math.sin(k.h) * 1.4, y + 0.5, k.z - Math.cos(k.h) * 1.4, 3.6, 0x7fe0ff, 0.28);
+    } else if (item === "ressort") {
+      fx.spring(who);
+      fx.shock(k.x, y + 0.15, k.z, 3.8, 0xfff1a8, 0.3);
+    } else if (item === "bouclier") {
+      fx.shock(k.x, y + 0.7, k.z, 3.6, 0x7fe3ff, 0.32);
+      this.karts[who]?.flashShield();
+    } else if (item === "arc") {
+      fx.shock(k.x, y + 0.5, k.z, 6, 0xffffff, 0.34);
+      fx.rainbowBurst(k.x, y + 1.2, k.z);
+    } else if (item === "geant") {
+      fx.shock(k.x, y + 0.3, k.z, 7, 0xc98bff, 0.4);
+      this.shakeNear(k.x, k.z, 18, 0.5);
+    } else if (item === "aimant") {
+      fx.shock(k.x, y + 0.5, k.z, 5, 0x6fd2ff, 0.34);
     }
+  }
+
+  /** Un kart touché : chaque objet a son coup à lui */
+  hitFx(k: Kart, who: number, kind: HitKind, mine: boolean) {
+    const fx = this.fx;
+    if (!fx) return;
+    const y = k.y + k.air;
+    const up = y + 3.1;
+    if (kind === "huile") {
+      fx.drops(k.x, y + 0.6, k.z, [0x14101c, 0x2b1f3d, 0x7a3fd0], 14);
+      this.wordNear("oups", k.x, up, k.z, mine);
+    } else if (kind === "petard") {
+      fx.flash(k.x, y + 1, k.z, 2.8, 0xffd27a, 0.18);
+      this.wordNear("paf", k.x, up, k.z, mine);
+    } else if (kind === "fusee") {
+      fx.flash(k.x, y + 1.2, k.z, 5, 0xff9a3a, 0.3);
+      fx.shock(k.x, y + 0.3, k.z, 7, 0xffc069, 0.4);
+      this.wordNear("boum", k.x, up, k.z, mine);
+    } else if (kind === "bowling") {
+      fx.strike(k);
+      this.wordNear("strike", k.x, up, k.z, mine);
+    } else if (kind === "arc") {
+      fx.rainbowBurst(k.x, y + 1, k.z);
+      this.wordNear("bam", k.x, up, k.z, mine);
+    } else if (kind === "geant") {
+      this.karts[who]?.crush();
+      fx.shock(k.x, y + 0.2, k.z, 4.5, 0xe6d7ff, 0.3);
+      this.wordNear("ecrase", k.x, up, k.z, mine);
+    } else if (kind === "orage") {
+      this.wordNear("zap", k.x, up, k.z, mine);
+    }
+  }
+
+  /** Un bouclier qui encaisse le coup, et casse */
+  shieldBroken(k: Kart, who: number, mine: boolean) {
+    this.karts[who]?.flashShield();
+    this.fx?.glassBurst(k.x, k.y + k.air + 1, k.z);
+    this.wordNear("ting", k.x, k.y + k.air + 3.1, k.z, mine);
+  }
+
+  /** Une tarte en pleine figure */
+  pieFx(k: Kart, mine: boolean) {
+    this.fx?.drops(k.x, k.y + k.air + 1.4, k.z, [0xfffaf0, 0xfff0d8, 0xe01b34], 16);
+    this.wordNear("splaf", k.x, k.y + k.air + 3.1, k.z, mine);
+  }
+
+  /** Une pièce attirée par l'aimant */
+  coinFly(who: number, x: number, y: number, z: number) {
+    if (!this.fx?.coinTo(who, x, y, z)) this.coinSparkle(x, y, z);
   }
 
   /** Un nuage de poussière ou de neige derrière un kart dans l'herbe */
@@ -869,6 +833,7 @@ export class RaceScene {
     grow: number,
     alpha = 1,
     heavy = grow < 1,
+    size = 0.5,
   ) {
     if (this.puffs.length >= MAX_PUFFS) return;
     let sprite = this.spare.pop();
@@ -882,8 +847,8 @@ export class RaceScene {
     sprite.material.opacity = alpha;
     sprite.visible = true;
     sprite.position.set(x, y, z);
-    sprite.scale.setScalar(0.5);
-    this.puffs.push({ sprite, vx, vy, vz, life, max: life, grow, heavy, alpha });
+    sprite.scale.setScalar(size);
+    this.puffs.push({ sprite, vx, vy, vz, life, max: life, grow, heavy, alpha, start: size });
   }
 
   /** La fumée des pneus pendant un dérapage (pour tous les karts proches de la caméra) */
@@ -1019,6 +984,7 @@ export class RaceScene {
     this.time += f.dt;
     this.adaptResolution(f.dt);
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
+    this.fx?.update(f.dt, f.serverNow, f.karts, this.camPos);
     this.coins?.update(this.time, f.dt);
     this.crossers?.update(f.serverNow / 1000);
     if (this.life) for (const e of this.life.update(f.serverNow / 1000, this.camPos)) this.lifeEvent(e);
@@ -1049,7 +1015,7 @@ export class RaceScene {
     }
     // Les caisses tournent et flottent ; celles qui reviennent grossissent ; leur lueur passe par toutes les couleurs
     if (this.crates && this.crateMat) {
-      this.crateMat.emissive.setHSL((this.time * 0.25) % 1, 0.9, 0.5);
+      this.crateMat.emissiveIntensity = 0.42 + Math.sin(this.time * 3.4) * 0.14;
       this.cratePos.forEach((p, i) => {
         const target = this.crateShown[i] ? 1 : 0;
         const s = this.crateScale[i]! + (target - this.crateScale[i]!) * Math.min(1, f.dt * (target ? 3 : 14));
@@ -1060,63 +1026,6 @@ export class RaceScene {
         this.crates!.setMatrixAt(i, this.crateM.compose(this.tmp, this.crateQ, this.crateS));
       });
       this.crates.instanceMatrix.needsUpdate = true;
-    }
-    // Les pétards filent le long de la route ; les fusées volent au-dessus, en fumant
-    for (const { hz, mesh } of this.hazards.values()) {
-      if (hz.kind === "bowling" || hz.kind === "tarte" || hz.kind === "bombe") {
-        const p = hazardPos(t, hz, f.serverNow);
-        mesh.visible = Boolean(p);
-        if (!p) continue;
-        if (hz.kind === "bowling") {
-          mesh.position.set(p.x, p.y + 1.25, p.z);
-          mesh.rotation.set((f.serverNow - hz.at) * 0.018, p.h, 0, "YXZ");
-        } else if (hz.kind === "tarte") {
-          mesh.position.set(p.x, p.y, p.z);
-          mesh.rotation.set(Math.sin(this.time * 11) * 0.4, this.time * 8, 0);
-        } else {
-          mesh.position.set(p.x, p.y, p.z);
-          const age = f.serverNow - hz.at;
-          const ring = mesh.getObjectByName("danger");
-          if (ring) {
-            ring.visible = age > 500;
-            ring.position.y = 0.2 - (p.y - (pointAt(t, hz.s, hz.d).y + 0.55));
-            const mat = (ring as THREE.Mesh).material as THREE.MeshBasicMaterial;
-            mat.opacity = 0.35 + 0.35 * Math.abs(Math.sin(age * 0.012));
-          }
-        }
-        continue;
-      }
-      if (hz.kind === "fusee") {
-        const p = hazardPos(t, hz, f.serverNow);
-        mesh.visible = Boolean(p);
-        if (!p) continue;
-        mesh.position.set(p.x, p.y + Math.sin(this.time * 9) * 0.15, p.z);
-        mesh.rotation.set(0, p.h, Math.sin(this.time * 14) * 0.3);
-        this.puff(
-          p.x,
-          p.y,
-          p.z,
-          Math.random() < 0.3 ? 0xffc46b : 0xd9d4cc,
-          (Math.random() - 0.5) * 0.6,
-          0.4,
-          (Math.random() - 0.5) * 0.6,
-          0.9,
-          2.2,
-          0.7,
-          false,
-        );
-        continue;
-      }
-      if (hz.kind !== "petard") continue;
-      const p = hazardPos(t, hz, f.serverNow);
-      if (!p) {
-        mesh.visible = false;
-        continue;
-      }
-      mesh.visible = true;
-      mesh.position.set(p.x, p.y + 0.7, p.z);
-      mesh.rotation.y = p.h;
-      if (Math.random() < 0.7) this.puff(p.x, p.y + 0.7, p.z, Math.random() < 0.5 ? 0xffd27a : 0xb0aaa4, 0, 0.6, 0, 0.5, 1.6);
     }
     // Les ondes d'explosion s'étendent ; les éclairs s'éteignent
     for (let i = this.pulses.length - 1; i >= 0; i--) {
@@ -1152,7 +1061,7 @@ export class RaceScene {
       p.sprite.position.y += p.vy * f.dt;
       p.sprite.position.z += p.vz * f.dt;
       const age = 1 - p.life / p.max;
-      p.sprite.scale.setScalar(0.5 + age * p.grow);
+      p.sprite.scale.setScalar(p.start + age * p.grow);
       p.sprite.material.opacity = p.alpha * (1 - age);
     }
     if (f.fireworks) this.launchFireworks(f.dt);
@@ -1232,6 +1141,41 @@ export class RaceScene {
     f.karts.forEach((k, i) => {
       const d = this.camPos.distanceTo(this.tmp.set(k.kart.x, k.kart.y + 0.8, k.kart.z));
       this.karts[i]?.showTag(d > 10 && d < 90);
+      this.karts[i]?.showHeld(d < (this.opts.phone ? 45 : 110));
+      // Les paillettes de l'arc-en-ciel, et la poussière sous les roues d'un géant
+      if (k.star && d < 60 && !this.opts.reduced && Math.random() < 0.7) {
+        const a = Math.random() * Math.PI * 2;
+        this.puff(
+          k.kart.x + Math.cos(a) * 1.5,
+          k.kart.y + k.kart.air + 0.4 + Math.random() * 1.6,
+          k.kart.z + Math.sin(a) * 1.5,
+          0xffffff,
+          0,
+          1.4,
+          0,
+          0.42,
+          0.14,
+          1,
+          true,
+          0.2,
+        );
+      }
+      if (k.giant && d < 60 && k.kart.air < 0.2 && !this.opts.reduced && Math.random() < 0.5) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.puff(
+          k.kart.x + Math.cos(k.kart.h) * side * 1.7,
+          k.kart.y + 0.3,
+          k.kart.z - Math.sin(k.kart.h) * side * 1.7,
+          0xcfc4ad,
+          (Math.random() - 0.5) * 3,
+          1.5,
+          (Math.random() - 0.5) * 3,
+          0.5,
+          3,
+          0.75,
+          false,
+        );
+      }
       // Celui qui vient d'être touché clignote : on voit qu'il est intouchable un moment
       const blink = k.safe && Math.sin(this.time * 24) > 0 ? 0.35 : 1;
       this.karts[i]?.fade(blink * (i === f.follow || f.camera !== "chase" ? 1 : Math.max(0, Math.min(1, (d - 2.6) / 2.6))));
@@ -1239,6 +1183,7 @@ export class RaceScene {
     this.setUnderwater(t.water !== null && this.camera.position.y < t.water);
     this.marks?.update(f.karts, this.time, this.camPos);
     this.trails?.update(f.karts, this.time, this.camPos);
+    this.rainbow?.update(f.karts, this.time, this.camPos);
     if (this.finish) {
       const k = f.follow >= 0 ? f.karts[f.follow]?.kart : undefined;
       const want = !k || f.camera !== "chase" ? 0 : (k.boost > 0 ? 0.075 : 0) + Math.max(0, k.v - 24) * 0.0016 + (k.glide ? 0.02 : 0);
@@ -1298,9 +1243,11 @@ export class RaceScene {
       const lift = Math.min(target.glide ? 2.6 : 8, air);
       this.camY += (target.y + air * 0.85 - this.camY) * (1 - Math.exp(-dt * 6));
       // En l'air, elle prend un peu de recul et de hauteur pour bien montrer le saut
-      const back = (portrait ? 7.4 : 6.3) + lift * 0.6;
+      // Devant un géant aussi : son véhicule ne doit jamais boucher la route
+      const grown = f.follow >= 0 ? (this.karts[f.follow]?.size ?? 1) : 1;
+      const back = ((portrait ? 7.4 : 6.3) + lift * 0.6) * (1 + (grown - 1) * 0.55);
       // Plus haut sous un deltaplane : on voit l'aile par-dessus, et le vide en dessous
-      const up = (portrait ? 3.1 : 2.55) + lift * 0.5 + (target.glide ? 1.5 : 0);
+      const up = ((portrait ? 3.1 : 2.55) + lift * 0.5 + (target.glide ? 1.5 : 0)) * (1 + (grown - 1) * 0.62);
       const fx = Math.sin(this.camYaw);
       const fz = Math.cos(this.camYaw);
       // Regarder derrière soi : la caméra passe devant le kart
@@ -1389,14 +1336,6 @@ export class RaceScene {
     this.crateMat?.map?.dispose();
     this.crateMat?.dispose();
     this.crateGeo?.dispose();
-    this.oilMat.dispose();
-    this.petardGeo.dispose();
-    this.petardMat.dispose();
-    for (const p of this.rocketParts) {
-      p.geo.dispose();
-      p.mat.dispose();
-    }
-    for (const d of this.thrownParts) d.dispose();
     this.puffTex.dispose();
     this.smokeTex.dispose();
     this.envTex?.dispose();

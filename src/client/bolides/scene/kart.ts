@@ -6,12 +6,15 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import type { SkinId, VehicleId } from "../../../shared/games/bolides/garage.ts";
+import type { ItemKind } from "../../../shared/games/bolides/items.ts";
 import { driftLevel, SPIN_TIME, TOP_SPEED, type Kart } from "../../../shared/games/bolides/physics.ts";
+import { backOut, flatScale, giantScale } from "./fxCurves.ts";
+import type { ItemModel, ItemModels } from "./itemModels.ts";
 import { mergeStatic } from "./merge.ts";
 import { PilotModel } from "./pilot.ts";
 import { paintFor } from "./skins.ts";
 import { buildVehicle, type VehicleSpec } from "./vehicles.ts";
-import { blobTexture, sparkTexture } from "./textures.ts";
+import { blobTexture, flameBurstTexture, sparkTexture } from "./textures.ts";
 
 export interface KartLook {
   color: string;
@@ -42,6 +45,8 @@ export interface KartExtras {
   /** La potion géante, l'aimant */
   giant?: boolean;
   magnet?: boolean;
+  /** L'objet qu'il transporte (on le voit sur le kart) */
+  held?: ItemKind | null;
   /** Touché à l'instant : intouchable un moment (il clignote) */
   safe?: boolean;
   /** Sous l'eau : l'hélice tourne */
@@ -51,6 +56,53 @@ export interface KartExtras {
 const SPARK_COLORS = [0xfff3c4, 0x45c8ff, 0xff9a2e, 0xc77dff];
 let sharedSpark: THREE.Texture | null = null;
 let sharedBlob: THREE.Texture | null = null;
+let sharedFlame: THREE.Texture | null = null;
+
+/**
+ * La bulle du bouclier (et de l'arc-en-ciel) : seul son bord brille, parcouru d'un quadrillage et d'un reflet qui monte.
+ * Le kart reste à ses vraies couleurs à l'intérieur.
+ */
+function bubbleMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uHit: { value: 0 }, uStar: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vN;
+      varying vec3 vV;
+      varying vec3 vP;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalMatrix * normal;
+        vV = -mv.xyz;
+        vP = position;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uHit;
+      uniform float uStar;
+      varying vec3 vN;
+      varying vec3 vV;
+      varying vec3 vP;
+      vec3 hue(float h) {
+        return clamp(abs(fract(vec3(h) + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+      }
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.3);
+        vec3 d = normalize(vP);
+        float lon = abs(sin(atan(d.z, d.x) * 6.0 + d.y * 2.0));
+        float lat = abs(sin(asin(clamp(d.y, -1.0, 1.0)) * 7.0));
+        float grid = 1.0 - smoothstep(0.0, 0.1, min(lon, lat));
+        float sweep = smoothstep(0.86, 1.0, sin(d.y * 4.5 - uTime * 3.2));
+        vec3 color = mix(vec3(0.18, 0.66, 1.0), vec3(0.86, 0.98, 1.0), rim);
+        color = mix(color, hue(d.x * 0.45 + d.y * 0.4 + uTime * 1.2), uStar);
+        float a = rim * 1.15 + grid * (0.08 + rim * 0.55) + sweep * 0.14 + uHit * 0.8;
+        gl_FragColor = vec4(color, clamp(a, 0.0, 1.0));
+      }`,
+  });
+}
 
 /** L'étiquette au-dessus d'un kart : son visage dans un rond, et son nom */
 function tagCanvas(look: KartLook): HTMLCanvasElement {
@@ -136,7 +188,24 @@ export class KartModel {
   private sparks: THREE.Points[] = [];
   private flames: THREE.Mesh[] = [];
   private flameMat: THREE.MeshBasicMaterial;
-  private shield: THREE.Mesh;
+  private shield: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  /** Le bouclier vient de casser : il flashe encore un instant */
+  private bubbleHit = 0;
+  /** Les gerbes de flammes du turbo, vues de derrière */
+  private flameGlows: THREE.Sprite[] = [];
+  private flameGlowMat!: THREE.SpriteMaterial;
+  /** L'objet transporté : son support, les exemplaires déjà sortis, celui qu'on montre, et son arrivée */
+  private heldSlot = new THREE.Group();
+  private heldBase = 1;
+  private heldModels = new Map<ItemKind, ItemModel>();
+  private heldNow: ItemKind | null = null;
+  private heldPop = 0;
+  private heldOn = true;
+  /** Écrasé par un géant : depuis combien de temps (-1 : il ne l'est pas) */
+  private flatT = -1;
+  private wasGiant = false;
+  private everGiant = false;
+  private growT = 0;
   /** L'ombre douce posée sous le kart (elle reste au sol quand il saute) */
   private blob: THREE.Mesh;
   private blobMat: THREE.MeshBasicMaterial;
@@ -164,7 +233,9 @@ export class KartModel {
   private spinner: THREE.Group | null = null;
   private radii: number[] = [];
   private leanNow = 0;
-  private magnetRing!: THREE.Mesh;
+  /** Les ondes de l'aimant, qui se resserrent sur le véhicule */
+  private magnetRings: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
+  private magnetR = 2;
   /** Le deltaplane, replié tant qu'on ne vole pas, et l'hélice sous l'eau */
   private wing = new THREE.Group();
   private wingOpen = 0;
@@ -178,7 +249,11 @@ export class KartModel {
   /** La taille du véhicule (la potion géante le fait grandir, en douceur) */
   private growth = 1;
 
-  constructor(look: KartLook, shadows: boolean) {
+  constructor(
+    look: KartLook,
+    shadows: boolean,
+    private items: ItemModels | null = null,
+  ) {
     const keep = <T extends { dispose: () => void }>(x: T): T => {
       this.disposables.push(x);
       return x;
@@ -231,6 +306,25 @@ export class KartModel {
       flame.visible = false;
       this.body.add(flame);
       this.flames.push(flame);
+    }
+    // De derrière, une flamme n'est qu'un rond : une gerbe en étoile, toujours face à la caméra
+    sharedFlame ??= flameBurstTexture();
+    this.flameGlowMat = keep(
+      new THREE.SpriteMaterial({
+        map: sharedFlame,
+        color: new THREE.Color(1.25, 1.02, 0.78),
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+    );
+    for (const [x, y, z] of spec.flames) {
+      const glow = new THREE.Sprite(this.flameGlowMat);
+      glow.position.set(x, y, z - 0.25);
+      glow.visible = false;
+      this.body.add(glow);
+      this.flameGlows.push(glow);
     }
     // Toutes ces pièces bougent ensemble : une forme par matière (les flammes restent à part, elles s'allument)
     mergeStatic(this.body, keep, [...this.flames, ...(this.spinner ? [this.spinner] : [])]);
@@ -294,29 +388,39 @@ export class KartModel {
       this.sparks.push(pts);
     }
     // Le bouclier
-    this.shield = new THREE.Mesh(
-      keep(new THREE.SphereGeometry(spec.shield[0], 22, 16)),
-      keep(new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.22, depthWrite: false })),
-    );
+    this.shield = new THREE.Mesh(keep(new THREE.SphereGeometry(spec.shield[0], 28, 20)), keep(bubbleMaterial()));
     this.shield.position.y = spec.shield[1];
     this.shield.visible = false;
     this.body.add(this.shield);
-    // L'aimant : un anneau bleu qui tourne autour du véhicule
-    this.magnetRing = new THREE.Mesh(
-      keep(new THREE.TorusGeometry(spec.shield[0] * 0.95, 0.07, 8, 40)),
-      keep(
-        new THREE.MeshBasicMaterial({
-          color: 0x58c6ff,
-          transparent: true,
-          opacity: 0.8,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        }),
-      ),
-    );
-    this.magnetRing.position.y = spec.shield[1];
-    this.magnetRing.visible = false;
-    this.body.add(this.magnetRing);
+    // L'aimant : des ondes bleues qui se resserrent sur le véhicule (ça attire)
+    this.magnetR = spec.shield[0] * 2.6;
+    const ringGeo = keep(new THREE.RingGeometry(0.955, 1, 48).rotateX(-Math.PI / 2));
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(
+        ringGeo,
+        keep(
+          new THREE.MeshBasicMaterial({
+            color: 0x6fd2ff,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          }),
+        ),
+      );
+      ring.position.y = 0.3;
+      ring.visible = false;
+      ring.userData.noFade = true;
+      this.group.add(ring);
+      this.magnetRings.push(ring);
+    }
+    // L'objet transporté flotte à côté du pilote : on le voit de derrière, et il ne cache pas la route
+    this.heldBase = spec.shield[1] + 0.2;
+    this.heldSlot.position.set(spec.shield[0] * 0.5, this.heldBase, -0.55);
+    this.heldSlot.visible = false;
+    this.tilt.add(this.heldSlot);
     this.body.position.y = -spec.pivot;
     this.tilt.add(this.body);
     this.group.add(this.tilt);
@@ -537,6 +641,11 @@ export class KartModel {
       f.visible = boosting;
       if (boosting) f.scale.set(1, 0.75 + Math.random() * 0.7, 1);
     }
+    for (const g of this.flameGlows) {
+      g.visible = boosting;
+      if (boosting) g.scale.setScalar(0.5 + Math.random() * 0.34);
+    }
+    if (boosting) this.flameGlowMat.rotation = time * 17;
     if (boosting) this.flameMat.color.setHex(Math.random() < 0.5 ? 0xffb347 : 0xffe07a);
     // Les étincelles : leur couleur dit le niveau du mini-turbo qui charge
     const drifting = k.drift !== 0 && k.spin === 0 && k.air < 0.3;
@@ -559,8 +668,24 @@ export class KartModel {
     if (star) this.paint.emissive.setHSL((time * 1.8) % 1, 0.95, 0.42);
     else if (this.starShown) this.paint.emissive.setHex(0x000000);
     this.starShown = star;
-    this.growth += ((x.giant ? 1.8 : 1) - this.growth) * Math.min(1, dt * 5);
+    // La potion : il grandit par à-coups, et rétrécit de même
+    const giant = Boolean(x.giant);
+    if (giant !== this.wasGiant) {
+      this.wasGiant = giant;
+      this.everGiant = true;
+      this.growT = 0;
+    }
+    this.growT += dt;
+    this.growth = this.everGiant ? giantScale(giant, this.growT) : 1;
     this.group.scale.setScalar(this.growth);
+    // Écrasé : plat comme une crêpe, puis il se regonfle d'un coup
+    if (this.flatT >= 0) {
+      this.flatT += dt;
+      const flat = this.flatT > 0.8 ? 1 : flatScale(this.flatT);
+      this.tilt.scale.set(1 + (1 - flat) * 0.35, flat, 1 + (1 - flat) * 0.35);
+      if (this.flatT > 0.8) this.flatT = -1;
+    }
+    this.showHeldNow(x.held ?? null, dt, time);
     // Le deltaplane s'ouvre d'un coup, puis ondule et penche dans les virages
     this.wingOpen += ((k.glide ? 1 : 0) - this.wingOpen) * Math.min(1, dt * (k.glide ? 11 : 16));
     this.wing.visible = this.wingOpen > 0.03;
@@ -580,10 +705,23 @@ export class KartModel {
     }
     this.propeller.visible = Boolean(x.under);
     if (x.under) this.propeller.rotation.z = time * 34;
-    this.magnetRing.visible = Boolean(x.magnet);
-    if (x.magnet) this.magnetRing.rotation.set(Math.PI / 2 + Math.sin(time * 3) * 0.3, Math.cos(time * 2) * 0.3, time * 4);
-    this.shield.visible = x.shield;
-    if (x.shield) (this.shield.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(time * 6) * 0.06;
+    this.magnetRings.forEach((ring, i) => {
+      ring.visible = Boolean(x.magnet);
+      if (!x.magnet) return;
+      const u = (time * 1.25 + i / 3) % 1;
+      ring.scale.setScalar(this.magnetR * (1 - u * 0.86));
+      ring.material.opacity = Math.sin(u * Math.PI) * 0.85;
+    });
+    this.bubbleHit = Math.max(0, this.bubbleHit - dt * 4.2);
+    const bubble = x.shield || star || this.bubbleHit > 0;
+    this.shield.visible = bubble;
+    if (bubble) {
+      const u = this.shield.material.uniforms;
+      u.uTime!.value = time;
+      u.uHit!.value = this.bubbleHit;
+      u.uStar!.value = star ? 1 : 0;
+      this.shield.scale.setScalar(1 + (this.bubbleHit > 0 ? (1 - this.bubbleHit) * 0.35 : Math.sin(time * 5) * 0.012));
+    }
     // Le pilote : penché dans le virage, plus fort en dérapage
     this.pilot.update({
       steer: k.spin > 0 ? 0 : x.steer,
@@ -607,7 +745,8 @@ export class KartModel {
     this.group.visible = a > 0;
     this.group.traverse((o) => {
       const mats = (o as THREE.Mesh).material;
-      if (!mats || o === this.blob || o === this.shield || o instanceof THREE.Points || o instanceof THREE.Sprite) return;
+      if (!mats || o === this.blob || o === this.shield || o.userData.noFade || o instanceof THREE.Points || o instanceof THREE.Sprite)
+        return;
       for (const m of Array.isArray(mats) ? mats : [mats]) {
         if (!this.solid.has(m)) this.solid.set(m, { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
         const base = this.solid.get(m)!;
@@ -616,6 +755,53 @@ export class KartModel {
         m.depthWrite = a >= 1 && base.depthWrite;
       }
     });
+  }
+
+  /** Ce qu'il transporte : il arrive en rebondissant, et flotte en se balançant */
+  private showHeldNow(want: ItemKind | null, dt: number, time: number) {
+    const kind = this.heldOn && this.items ? want : null;
+    if (kind !== this.heldNow) {
+      if (this.heldNow) this.heldModels.get(this.heldNow)!.root.visible = false;
+      this.heldNow = kind;
+      this.heldPop = 0;
+      if (kind) {
+        let model = this.heldModels.get(kind);
+        if (!model) {
+          model = this.items!.make(kind);
+          // Ces matières sont partagées entre tous les karts : elles ne s'effacent pas avec celui-ci
+          model.root.traverse((o) => (o.userData.noFade = true));
+          this.heldSlot.add(model.root);
+          this.heldModels.set(kind, model);
+        }
+        model.root.visible = true;
+      }
+    }
+    this.heldSlot.visible = kind !== null;
+    if (!kind) return;
+    this.heldPop = Math.min(1, this.heldPop + dt / 0.24);
+    this.heldSlot.scale.setScalar(Math.max(0.01, backOut(this.heldPop, 2.6)) * 0.58);
+    this.heldSlot.position.y = this.heldBase + Math.sin(time * 3.4) * 0.06;
+    this.heldSlot.rotation.set(Math.sin(time * 2.1) * 0.08, Math.PI + Math.sin(time * 1.5) * 0.45 - 0.35, Math.sin(time * 2.6) * 0.07);
+  }
+
+  /** Le bouclier casse : un dernier éclat */
+  flashShield() {
+    this.bubbleHit = 1;
+  }
+
+  /** Écrasé par un géant */
+  crush() {
+    this.flatT = 0;
+  }
+
+  /** La taille actuelle du véhicule (la caméra recule devant un géant) */
+  get size() {
+    return this.growth;
+  }
+
+  /** Montrer ou non ce qu'il transporte (trop loin, ça ne se verrait pas) */
+  showHeld(on: boolean) {
+    this.heldOn = on;
   }
 
   /** L'étiquette du nom : visible ou pas (on la cache quand le kart est trop loin ou trop près) */

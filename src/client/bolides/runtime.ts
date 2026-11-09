@@ -93,6 +93,10 @@ export interface Hud {
   feed: { key: number; text: string; mine: boolean }[];
   /** Un flash blanc à l'écran (la foudre) : change de numéro à chaque éclair */
   flash: number;
+  /** Ce qui entoure l'écran tant que l'objet dure */
+  aura: "shield" | "star" | "giant" | "magnet" | null;
+  /** Un choc plein écran, le temps d'un instant : change de clé à chaque fois */
+  burst: { key: number; kind: ScreenBurst } | null;
   stuck: boolean;
   speed: number;
   /** Ses pièces (dix au plus) */
@@ -104,6 +108,8 @@ export interface Hud {
   /** Les karts sur la petite carte : x, z, couleur, le sien */
   map: { x: number; z: number; color: string; me: boolean }[];
 }
+
+export type ScreenBurst = "blast" | "bang" | "shield" | "horn" | "oil";
 
 export interface RuntimeOptions {
   phone: boolean;
@@ -165,6 +171,8 @@ export class RaceRuntime {
   private names: string[] = [];
   private leaderNow: number | null = null;
   private flash = 0;
+  private burst: Hud["burst"] = null;
+  private burstSeq = 0;
   private rollingUntil = 0;
   private rollSlot: 1 | 2 = 1;
   private rollKey = 0;
@@ -320,9 +328,11 @@ export class RaceRuntime {
           break;
         case "use": {
           const at = this.kartOf(e.id);
+          const who = this.ids.indexOf(e.id);
+          if (at && who >= 0) this.scene.itemUsed(at, who, e.item);
           if (e.item === "klaxon") {
             honk();
-            if (at) this.scene.ring(at.x, at.y, at.z);
+            if (e.id === meId) this.screen("horn");
           } else if (e.item === "petard" || e.item === "fusee") this.near(e.id, "torpedo", e.item === "fusee" ? 1 : 0.8);
           else if (e.item === "arc") this.near(e.id, "tourFanfare", 0.6);
           else if (e.item === "geant") {
@@ -353,6 +363,10 @@ export class RaceRuntime {
             play("bolidesSplat");
             vibrate(40);
           } else this.near(e.id, "bolidesSplat", 0.6);
+          {
+            const at = this.kartOf(e.id);
+            if (at) this.scene.pieFx(at, e.id === meId || e.by === meId);
+          }
           this.tell(
             e.by === meId
               ? `Tarte en pleine figure pour ${this.nameOf(e.id)} !`
@@ -367,6 +381,10 @@ export class RaceRuntime {
           const y = locate(this.track, e.x, e.z).y;
           this.scene.explosion(e.x, y, e.z, BOMBE_RADIUS);
           this.nearAt(e.x, e.z, "mecheBoom", 1);
+          {
+            const mine = this.mine >= 0 ? this.shown[this.mine] : undefined;
+            if (mine && Math.hypot(mine.x - e.x, mine.z - e.z) < BOMBE_RADIUS * 1.4) this.screen("blast");
+          }
           break;
         }
         case "bolt": {
@@ -379,8 +397,12 @@ export class RaceRuntime {
           this.tellHit(e.id, e.by, e.kind);
           const at = this.kartOf(e.id);
           if (at) this.scene.boom(at.x, at.y, at.z, e.kind === "petard" || e.kind === "fusee");
+          if (at) this.scene.hitFx(at, this.ids.indexOf(e.id), e.kind, e.id === meId || e.by === meId);
           if (e.kind === "bowling") this.near(e.id, "bolidesStrike", 1);
           if (e.id === meId) {
+            if (e.kind === "huile") this.screen("oil");
+            else if (e.kind === "fusee") this.screen("blast");
+            else if (e.kind === "petard") this.screen("bang");
             this.driver?.hit();
             this.scene.shake(0.7);
             play("bigHit", { volume: 0.8 });
@@ -391,6 +413,8 @@ export class RaceRuntime {
         case "shield": {
           const at = this.kartOf(e.id);
           if (at) this.scene.burst({ x: at.x, y: at.y + 1, z: at.z }, 0x7fe3ff, 14);
+          if (at) this.scene.shieldBroken(at, this.ids.indexOf(e.id), e.id === meId);
+          if (e.id === meId) this.screen("shield");
           this.near(e.id, "pop", 1);
           break;
         }
@@ -417,6 +441,12 @@ export class RaceRuntime {
   private nameOf(id: string | null): string {
     const i = id ? this.ids.indexOf(id) : -1;
     return i >= 0 ? this.names[i]! : "Quelqu'un";
+  }
+
+  /** Un choc plein écran, le temps d'un instant */
+  private screen(kind: ScreenBurst) {
+    this.burst = { key: ++this.burstSeq, kind };
+    this.hudAt = 0;
   }
 
   /** Une ligne de plus dans le fil de la course */
@@ -675,7 +705,9 @@ export class RaceRuntime {
             const reach = (me.magnetUntil ?? 0) > now ? AIMANT_RADIUS : COIN_RADIUS + KART_RADIUS * 0.6;
             if (Math.hypot(c.x - d.kart.x, c.z - d.kart.z) < reach) {
               this.coinMine.set(i, now);
-              this.scene.coinSparkle(c.x, d.kart.y + 1, c.z);
+              // De loin, l'aimant la fait voler jusqu'au kart
+              if (Math.hypot(c.x - d.kart.x, c.z - d.kart.z) > 2.4) this.scene.coinFly(this.mine, c.x, d.kart.y + 1, c.z);
+              else this.scene.coinSparkle(c.x, d.kart.y + 1, c.z);
               play("bolidesCoin", { rate: 0.95 + Math.min(10, this.coinCounts[this.mine] ?? 0) * 0.03 });
             }
           });
@@ -842,6 +874,15 @@ export class RaceRuntime {
             star: (v.racers[i]!.starUntil ?? 0) > now,
             giant: (v.racers[i]!.giantUntil ?? 0) > now,
             magnet: (v.racers[i]!.magnetUntil ?? 0) > now,
+            // Ce qu'il transporte : l'aimant se voit tant qu'il agit ; le sien n'arrive qu'une fois la roue arrêtée
+            held:
+              v.racers[i]!.finish !== null
+                ? null
+                : (v.racers[i]!.magnetUntil ?? 0) > now
+                  ? "aimant"
+                  : i === this.mine && rolling && this.rollSlot === 1
+                    ? null
+                    : v.racers[i]!.item,
             safe: (v.racers[i]!.safeUntil ?? 0) > now,
             under: this.track.water !== null && kart.y + kart.air < this.track.water - 0.3,
           })),
@@ -1003,6 +1044,18 @@ export class RaceRuntime {
       pie: Boolean(me && (me.pieUntil ?? 0) > now),
       feed: this.feed.filter((l) => l.until > performance.now()),
       flash: this.flash,
+      aura: !me
+        ? null
+        : (me.starUntil ?? 0) > now
+          ? "star"
+          : (me.giantUntil ?? 0) > now
+            ? "giant"
+            : me.shieldUntil > now
+              ? "shield"
+              : (me.magnetUntil ?? 0) > now
+                ? "magnet"
+                : null,
+      burst: this.burst,
       stuck: Boolean(this.driver?.stuck) && v.phase === "racing" && me?.finish == null,
       speed: mk ? Math.round(Math.abs(mk.v) * 3.6) : 0,
       coins: this.mine >= 0 ? (this.coinCounts[this.mine] ?? me?.coins ?? 0) : 0,
