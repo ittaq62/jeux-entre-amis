@@ -157,6 +157,14 @@
   height: 3em;
 }
 
+.tc-name.is-long {
+  font-size: 1.2em;
+}
+
+.tc.is-small .tc-name.is-long {
+  font-size: 1.45em;
+}
+
 /* Les raretés */
 .tc.rar-peu-commune {
   --rim: linear-gradient(160deg, #8fdcae, #2a8a58);
@@ -194,13 +202,108 @@
 
 /* Les décors, famille par famille */
 .fam-habitues .tc-art {
-  background: radial-gradient(circle at 50% 28%, #f7c283 0, #bb5f2e 58%, #5b2413 100%);
+  --a: #f7c283;
+  --b: #bb5f2e;
+  --c: #5b2413;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 14%, rgba(255, 244, 214, 0.55), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 0.5em, transparent 0.5em 1.6em),
+    radial-gradient(circle at 50% 30%, var(--a), var(--b) 58%, var(--c));
+}
+
+.fam-habitues.tone-1 .tc-art {
+  --a: #9bd8cd;
+  --b: #2f7f86;
+  --c: #123f4a;
+}
+
+.fam-habitues.tone-2 .tc-art {
+  --a: #d3a8e0;
+  --b: #6f3f86;
+  --c: #2f1644;
+}
+
+.fam-habitues.tone-3 .tc-art {
+  --a: #f2dc92;
+  --b: #b98a2a;
+  --c: #54380f;
+}
+
+.fam-habitues.tone-4 .tc-art {
+  --a: #f4ac96;
+  --b: #a8422f;
+  --c: #4a1712;
+}
+
+.fam-habitues.tone-5 .tc-art {
+  --a: #b4d99c;
+  --b: #4a7f45;
+  --c: #1c3a1f;
 }
 
 .fam-flotte .tc-art {
   background:
     repeating-linear-gradient(170deg, rgba(255, 255, 255, 0.06) 0 0.35em, transparent 0.35em 1.6em),
     radial-gradient(circle at 50% 35%, #2a8cb0 0, #135672 62%, #0a3346 100%);
+}
+
+/* La flotte de série : un lagon, les profondeurs, le soir, l'orage, la nuit et le grand soleil */
+.tc-art.sea-torpilleur {
+  background:
+    repeating-linear-gradient(170deg, rgba(255, 255, 255, 0.09) 0 0.3em, transparent 0.3em 1.5em),
+    radial-gradient(circle at 32% 22%, #8ce9dc, #1f9aa3 64%, #0f6a78);
+}
+
+.tc-art.sea-sous-marin {
+  background:
+    repeating-linear-gradient(102deg, rgba(190, 235, 255, 0.07) 0 1.1em, transparent 1.1em 3.4em),
+    radial-gradient(circle at 50% 8%, #2f7ea0, #0e3a58 58%, #051827);
+}
+
+.tc-art.sea-contre-torpilleur {
+  background:
+    repeating-linear-gradient(170deg, rgba(255, 220, 190, 0.1) 0 0.3em, transparent 0.3em 1.5em),
+    linear-gradient(168deg, #f7ab8d, #a55a93 46%, #313c80);
+}
+
+.tc-art.sea-croiseur {
+  background:
+    repeating-linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0 0.25em, transparent 0.25em 1.1em),
+    radial-gradient(circle at 62% 16%, #4d6a7a, #2a4250 60%, #15252e);
+}
+
+.tc-art.sea-cuirasse {
+  background:
+    radial-gradient(circle at 80% 18%, #fffbe2 0 1.2em, rgba(255, 250, 220, 0.3) 1.3em, transparent 4.2em),
+    repeating-linear-gradient(170deg, rgba(180, 205, 255, 0.07) 0 0.3em, transparent 0.3em 1.6em), linear-gradient(180deg, #1c3263, #0a1731);
+}
+
+.tc-art.sea-porte-avions {
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255, 240, 180, 0.95), transparent 42%),
+    repeating-linear-gradient(170deg, rgba(255, 255, 255, 0.1) 0 0.3em, transparent 0.3em 1.5em),
+    linear-gradient(170deg, #5cc6dc, #1f86ad 60%, #125f85);
+}
+
+.tc-art.sk-jouet {
+  background:
+    repeating-radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16) 0 0.3em, transparent 0.3em 1.8em),
+    radial-gradient(circle at 50% 40%, #8bdcf8, #2f9cc9 72%, #1c6f96);
+}
+
+.tc-art.sk-pirate {
+  background: linear-gradient(180deg, #f7b267 0, #d9714e 30%, #1f6d86 30.5%, #0f3f55 100%);
+}
+
+.tc-art.sk-neon {
+  background:
+    linear-gradient(rgba(90, 240, 255, 0.12) 0.05em, transparent 0.05em) 0 0 / 1.8em 1.8em,
+    linear-gradient(90deg, rgba(255, 90, 220, 0.12) 0.05em, transparent 0.05em) 0 0 / 1.8em 1.8em,
+    radial-gradient(circle at 50% 40%, #2a1a66, #0a0726 76%);
+}
+
+.tc-art.sk-lave {
+  background: radial-gradient(circle at 50% 45%, #d04a1c, #5a1408 60%, #200703);
 }
 
 .fam-capitale .tc-art {
@@ -370,7 +473,34 @@
   font-size: 2.2em;
 }
 
+/* Une longue liste de cartes reste légère : les reflets ne bougent que sur celle qu'on regarde */
+.tc.is-still,
+.tc.is-still .tc-shine,
+.tc.is-still .tc-rays {
+  animation: none;
+}
+
+.tc-corner {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3em;
+  color: var(--soft);
+}
+
+/* Les portraits posent sur le bas du cadre */
+.fam-habitues .tc-subject {
+  place-items: end center;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .flip-burst,
+  .flip-in,
+  .pack,
+  .pack-sheen {
+    animation: none !important;
+  }
+
   .tc,
   .tc-shine,
   .tc-rays {
@@ -392,7 +522,7 @@
   justify-content: center;
   gap: 14px;
   padding: calc(10px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
-  background: radial-gradient(circle at 50% 42%, rgba(30, 90, 64, 0.96), rgba(3, 12, 8, 0.98) 72%);
+  background: radial-gradient(circle at 50% 42%, #1e5a40, #030c08 72%);
   overflow: hidden;
 }
 
@@ -403,79 +533,181 @@
   text-align: center;
 }
 
+/* Le paquet : tout se mesure en em, il tient même sur un téléphone couché */
 .pack {
   position: relative;
-  width: 200px;
-  height: 300px;
+  display: flex;
+  flex-direction: column;
+  height: min(300px, 72dvh);
+  aspect-ratio: 2 / 3;
   border: 0;
   padding: 0;
+  font-size: calc(min(300px, 72dvh) / 30);
   background: none;
   cursor: pointer;
+  filter: drop-shadow(0 1.6em 1.6em rgba(0, 0, 0, 0.6));
   animation: pack-float 2.2s ease-in-out infinite;
 }
 
-.pack-part {
-  position: absolute;
-  left: 0;
-  right: 0;
-  background: linear-gradient(135deg, #1a6a48, #0f4a33 40%, #2a8c60 60%, #0c3a28);
-  box-shadow: inset 0 0 0 3px rgba(226, 189, 110, 0.55);
+/* Les soudures dentelées, en haut et en bas */
+.pack-crimp {
+  flex: none;
+  height: 2.5em;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0 0.22em, transparent 0.22em 0.66em),
+    linear-gradient(90deg, #9a7428, #f6e3ad 30%, #b88a2e 55%, #f6e3ad 78%, #9a7428);
 }
 
-.pack-part.is-top {
-  top: 0;
-  height: 44px;
-  border-radius: 10px 10px 2px 2px;
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 8px), linear-gradient(135deg, #e9cd8c, #9a7428);
+.pack-crimp.is-top {
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #000 90deg, #0000 0) 0 0 / 0.8em 0.45em repeat-x,
+    linear-gradient(#000 0 0) 0 0.44em / 100% 100% no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #000 90deg, #0000 0) 0 0 / 0.8em 0.45em repeat-x,
+    linear-gradient(#000 0 0) 0 0.44em / 100% 100% no-repeat;
 }
 
-.pack-part.is-body {
-  top: 44px;
-  bottom: 0;
+.pack-crimp.is-bottom {
+  -webkit-mask:
+    conic-gradient(from -45deg at bottom, #000 90deg, #0000 0) 0 100% / 0.8em 0.45em repeat-x,
+    linear-gradient(#000 0 0) 0 calc(-0.44em) / 100% 100% no-repeat;
+  mask:
+    conic-gradient(from -45deg at bottom, #000 90deg, #0000 0) 0 100% / 0.8em 0.45em repeat-x,
+    linear-gradient(#000 0 0) 0 calc(-0.44em) / 100% 100% no-repeat;
+}
+
+.pack-face {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-radius: 2px 2px 12px 12px;
+  justify-content: flex-end;
+  gap: 0.25em;
+  padding: 0 0.8em 1.1em;
+  background:
+    radial-gradient(ellipse 75% 45% at 50% 30%, rgba(255, 214, 140, 0.45), transparent 75%),
+    linear-gradient(165deg, #7a3ca6, #3f1c64 58%, #1f0e36);
+  box-shadow:
+    inset 0.2em 0 0 rgba(226, 189, 110, 0.5),
+    inset -0.2em 0 0 rgba(226, 189, 110, 0.5);
   color: var(--gold-light);
 }
 
-.pack-part.is-body strong {
-  font-family: var(--font-title);
-  font-size: 30px;
-  font-weight: 400;
-  line-height: 1;
-  text-align: center;
+/* Trois merveilles de l'album, en vitrine */
+.pack-collage {
+  position: absolute;
+  inset: 0.2em 0 auto;
+  height: 15em;
 }
 
-.pack-part.is-body span {
-  font-size: 14px;
+.pack-collage > span {
+  position: absolute;
+  width: 10.5em;
+  height: 10.5em;
+  filter: drop-shadow(0 0.5em 0.5em rgba(0, 0, 0, 0.5));
+}
+
+.pack-collage > span:nth-child(1) {
+  left: -0.6em;
+  top: 3em;
+  rotate: -10deg;
+}
+
+.pack-collage > span:nth-child(3) {
+  right: -0.6em;
+  top: 3.4em;
+  rotate: 9deg;
+}
+
+.pack-collage > span:nth-child(2) {
+  left: calc(50% - 6.5em);
+  top: 0;
+  width: 13em;
+  height: 13em;
+  z-index: 1;
+}
+
+.pack-face strong {
+  position: relative;
+  font-family: var(--font-title);
+  font-size: 4.3em;
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: 0 0.06em 0 #7c5310;
+}
+
+.pack-face small {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 1.5em;
   font-weight: 600;
 }
 
-/* Le paquet tremble et sa languette s'arrache */
-.pack.is-torn {
-  animation: pack-shake 0.12s linear 5 alternate;
+.pack-count {
+  position: relative;
+  margin-top: 0.3em;
+  padding: 0.15em 0.8em;
+  border-radius: 99em;
+  background: rgba(0, 0, 0, 0.42);
+  font-size: 1.25em;
+  font-weight: 700;
 }
 
-.pack.is-torn .pack-part.is-top {
-  animation: pack-tear 0.5s 0.32s cubic-bezier(0.3, 0.1, 0.6, 1) forwards;
+.pack-sheen {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 43%, rgba(255, 255, 255, 0.3) 50%, transparent 57%);
+  pointer-events: none;
+  animation: pack-sheen 3.4s ease-in-out infinite;
+}
+
+@keyframes pack-sheen {
+  0%,
+  45% {
+    translate: -38% -18%;
+  }
+  100% {
+    translate: 38% 18%;
+  }
+}
+
+/* Il tremble, et sa languette s'arrache */
+.pack.is-torn {
+  animation: pack-shake 0.1s linear 6 alternate;
+}
+
+.pack.is-torn .pack-crimp.is-top {
+  animation: pack-tear 0.36s 0.28s cubic-bezier(0.3, 0.1, 0.6, 1) forwards;
+}
+
+.pack.is-torn .pack-face {
+  animation: pack-glow 0.34s 0.3s ease-in forwards;
 }
 
 @keyframes pack-shake {
   from {
-    transform: translateX(-5px) rotate(-1.8deg);
+    transform: translateX(-0.5em) rotate(-1.8deg);
   }
   to {
-    transform: translateX(5px) rotate(1.8deg);
+    transform: translateX(0.5em) rotate(1.8deg);
   }
 }
 
 @keyframes pack-tear {
   to {
-    transform: translate(70px, -130px) rotate(32deg);
+    transform: translate(8em, -13em) rotate(34deg);
     opacity: 0;
+  }
+}
+
+@keyframes pack-glow {
+  to {
+    filter: brightness(2.4);
   }
 }
 
@@ -504,6 +736,7 @@
 /* Une carte qui se retourne */
 .flip {
   position: relative;
+  isolation: isolate;
   border: 0;
   padding: 0;
   background: none;
@@ -522,6 +755,99 @@
 
 .flip.is-shown .flip-in {
   transform: rotateY(180deg);
+}
+
+/* Le coup d'éclat quand une belle carte apparaît : d'autant plus grand qu'elle est rare */
+.flip-burst {
+  position: absolute;
+  z-index: -1;
+  inset: -18%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flip.is-shown.rar-rare .flip-burst {
+  background: radial-gradient(circle, rgba(120, 180, 255, 0.95), rgba(120, 180, 255, 0) 68%);
+  animation: flip-burst 0.75s 0.14s ease-out;
+}
+
+.flip.is-shown.rar-epique .flip-burst {
+  inset: -38%;
+  background:
+    repeating-conic-gradient(rgba(205, 150, 255, 0.75) 0 10deg, transparent 10deg 26deg),
+    radial-gradient(circle, rgba(190, 120, 255, 0.95), rgba(190, 120, 255, 0) 70%);
+  animation: flip-burst 1s 0.14s ease-out;
+}
+
+.flip.is-shown.rar-legendaire .flip-burst {
+  inset: -70%;
+  background:
+    repeating-conic-gradient(rgba(255, 228, 150, 0.85) 0 9deg, transparent 9deg 22deg),
+    radial-gradient(circle, rgba(255, 215, 120, 1), rgba(255, 215, 120, 0) 72%);
+  animation: flip-burst-long 1.7s 0.14s ease-out;
+}
+
+@keyframes flip-burst {
+  0% {
+    opacity: 1;
+    transform: scale(0.35) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3) rotate(30deg);
+  }
+}
+
+@keyframes flip-burst-long {
+  0% {
+    opacity: 1;
+    transform: scale(0.3) rotate(0deg);
+  }
+  55% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35) rotate(70deg);
+  }
+}
+
+.flip.is-shown.rar-epique .flip-in {
+  animation: flip-pop 0.6s 0.16s ease-out;
+}
+
+.flip.is-shown.rar-legendaire .flip-in {
+  animation: flip-pop-big 0.8s 0.16s ease-out;
+}
+
+@keyframes flip-pop {
+  40% {
+    scale: 1.1;
+  }
+}
+
+@keyframes flip-pop-big {
+  40% {
+    scale: 1.2;
+  }
+  70% {
+    scale: 0.98;
+  }
+}
+
+/* Une légendaire : tout le reste s'éteint un instant */
+.pack-screen.has-spot .flip:not(.is-spot) {
+  filter: brightness(0.32);
+  transition: filter 0.25s;
+}
+
+.flip.is-spot {
+  z-index: 5;
+}
+
+.flip {
+  transition: filter 0.4s;
 }
 
 .flip-face {
@@ -717,6 +1043,80 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.album-buttons .btn-primary:not(:disabled) {
+  animation: album-call 2.6s ease-in-out infinite;
+}
+
+@keyframes album-call {
+  50% {
+    box-shadow: 0 0 1.1em 0.1em rgba(255, 214, 130, 0.65);
+  }
+}
+
+html:has(.pack-screen),
+html:has(.zoom-screen),
+html:has(.pack-screen) body,
+html:has(.zoom-screen) body {
+  overflow: hidden;
+}
+
+.pack-screen .zoom-screen {
+  z-index: 5;
+}
+
+.album-rarities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+}
+
+.album-rarity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.album-rarity i {
+  width: 10px;
+  height: 10px;
+  rotate: 45deg;
+  border-radius: 2px;
+  background: var(--c);
+}
+
+.album-rarity.is-commune {
+  --c: #b6a988;
+}
+
+.album-rarity.is-peu-commune {
+  --c: #4fc283;
+}
+
+.album-rarity.is-rare {
+  --c: #5ca0ff;
+}
+
+.album-rarity.is-epique {
+  --c: #c88bff;
+}
+
+.album-rarity.is-legendaire {
+  --c: #ffcf5a;
+}
+
+.album-rarity-name {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+@media (max-width: 480px) {
+  .album-rarity-name {
+    display: none;
+  }
 }
 
 .album-families {

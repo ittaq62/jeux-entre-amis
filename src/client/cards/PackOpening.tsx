@@ -1,26 +1,31 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
-import { useEffect, useState, type CSSProperties } from "react";
-import { CARD_BY_ID, familyBonus, FAMILIES, PACK_PRICE, type PackResponse } from "../../shared/cards.ts";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { CARD_BY_ID, FAMILIES, familyBonus, PACK_PRICE, RARITIES, type CardDef, type PackResponse } from "../../shared/cards.ts";
 import { Icon } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
 import { ApiError } from "../lib/api.ts";
-import { play } from "../lib/sound.ts";
+import { CARD_SOUNDS, play, preloadSounds, vibrate } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useViewport } from "../lib/viewport.ts";
 import { useAlbum } from "../stores/album.ts";
-import { useShop } from "../stores/shop.ts";
 import { usePrefs } from "../stores/prefs.ts";
-import { CardBackFace, TradingCard } from "./TradingCard.tsx";
+import { useShop } from "../stores/shop.ts";
+import { AtlasArt, CardBackFace, TradingCard } from "./TradingCard.tsx";
 
 const GAP = 10;
 const RATIO = 1.4;
+/** Le temps que le paquet tremble et se déchire avant que les cartes sortent */
+const TEAR_MS = 620;
 
 /** La taille des cartes pour que les cinq tiennent à l'écran, sans rien faire défiler */
 function fit(w: number, h: number): { width: number; rows: number[][] } {
   const room = h - 120;
   const oneRow = Math.min((w - 24 - 4 * GAP) / 5, room / RATIO);
   const twoRows = Math.min((w - 24 - 2 * GAP) / 3, (room - GAP) / 2 / RATIO);
+  // Sur un grand téléphone, trois rangées donnent de plus grandes cartes, et la plus belle arrive seule en bas
+  const threeRows = Math.min((w - 24 - GAP) / 2, (h - 190 - 2 * GAP) / 3 / RATIO);
+  if (threeRows > Math.max(oneRow, twoRows)) return { width: Math.floor(threeRows), rows: [[0, 1], [2, 3], [4]] };
   return oneRow >= twoRows
     ? { width: Math.floor(oneRow), rows: [[0, 1, 2, 3, 4]] }
     : {
@@ -32,7 +37,7 @@ function fit(w: number, h: number): { width: number; rows: number[][] } {
       };
 }
 
-/** L'ouverture d'un paquet : on le déchire, on retourne les cartes une à une, le dos annonce les plus belles. */
+/** L'ouverture d'un paquet : on le déchire, les cartes en sortent, et plus elle est rare, plus sa révélation est grande. */
 export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: () => void }) {
   const { w, h } = useViewport();
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -42,9 +47,23 @@ export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: ()
   const [opened, setOpened] = useState(false);
   const [tearing, setTearing] = useState(false);
   const [shown, setShown] = useState<ReadonlySet<number>>(new Set());
+  const [spot, setSpot] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<CardDef | null>(null);
   const [busy, setBusy] = useState(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // La vérité sur ce qui est retourné, à jour même pour les retournements déjà programmés
+  const revealed = useRef(new Set<number>());
   const { width, rows } = fit(w, h);
+  const height = Math.round(width * RATIO);
   const done = shown.size === current.cards.length;
+  const fresh = current.cards.filter((c) => c.isNew).length;
+
+  const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
+  useEffect(() => {
+    preloadSounds(CARD_SOUNDS);
+    const list = timers.current;
+    return () => list.forEach(clearTimeout);
+  }, []);
 
   useEffect(() => {
     if (!done) return;
@@ -55,56 +74,71 @@ export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: ()
     }
   }, [done, current]);
 
-  // Le paquet tremble, sa languette s'arrache, et les cartes en sortent
   function tear() {
     if (opened || tearing) return;
     setTearing(true);
-    play("tourShake", { volume: 0.7 });
-    setTimeout(() => play("tourReveal", { volume: 0.7 }), 420);
-    setTimeout(
+    play("tourShake", { volume: 0.6 });
+    later(() => play("cardTear"), 300);
+    later(() => vibrate(25), 300);
+    later(
       () => {
         setOpened(true);
         setTearing(false);
+        current.cards.forEach((_, i) => play("cardSlide", { delay: i * 70, volume: 0.9, rate: 0.95 + i * 0.05 }));
       },
-      reduced ? 80 : 620,
+      reduced ? 60 : TEAR_MS,
     );
   }
 
   function reveal(i: number) {
-    if (shown.has(i)) return;
-    setShown((s) => new Set(s).add(i));
+    if (revealed.current.has(i)) return;
+    revealed.current.add(i);
+    setShown(new Set(revealed.current));
     const rarity = CARD_BY_ID.get(current.cards[i]!.id)!.rarity;
-    play("tourFlip", { volume: 0.8 });
-    if (rarity === "epique") play("achievement", { delay: 180 });
+    const rank = RARITIES.indexOf(rarity);
+    play("tourFlip", { volume: 0.8, rate: 0.96 + rank * 0.05 });
+    if (rarity === "rare") play("cardRare", { delay: 130 });
+    if (rarity === "epique") {
+      play("cardEpic", { delay: 130 });
+      vibrate([20, 30, 50]);
+    }
     if (rarity === "legendaire") {
-      play("tourFanfare", { delay: 180 });
+      play("cardLegend", { delay: 110 });
+      vibrate([40, 40, 90, 40, 140]);
+      setSpot(i);
+      later(() => setSpot(null), 1900);
       if (!reduced) {
-        setTimeout(() => {
-          void confetti({
-            particleCount: 140,
-            spread: 95,
-            startVelocity: 42,
-            origin: { y: 0.45 },
-            colors: ["#ffe28a", "#d9a21e", "#fff8d2", "#ffffff"],
-            scalar: 1,
-            zIndex: 130,
-          });
-        }, 220);
+        later(() => {
+          const colors = ["#ffe28a", "#d9a21e", "#fff8d2", "#ffffff"];
+          void confetti({ particleCount: 150, spread: 100, startVelocity: 44, origin: { y: 0.45 }, colors, scalar: 1, zIndex: 130 });
+        }, 240);
       }
     }
   }
 
+  // Les plus belles à la fin, avec un temps d'attente avant elles
   function revealAll() {
-    current.cards.forEach((_, i) => setTimeout(() => reveal(i), i * 170));
+    const rank = (i: number) => RARITIES.indexOf(CARD_BY_ID.get(current.cards[i]!.id)!.rarity);
+    const order = current.cards.map((_, i) => i).filter((i) => !revealed.current.has(i));
+    order.sort((a, b) => rank(a) - rank(b));
+    let at = 0;
+    for (const i of order) {
+      later(() => reveal(i), at);
+      at += rank(i) >= 2 ? 620 : 240;
+    }
   }
 
   async function again() {
     setBusy(true);
     try {
       const next = await openPack();
+      timers.current.forEach(clearTimeout);
+      timers.current.length = 0;
+      revealed.current.clear();
       setCurrent(next);
       setShown(new Set());
       setOpened(false);
+      setSpot(null);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible d'ouvrir un paquet." });
     } finally {
@@ -112,40 +146,69 @@ export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: ()
     }
   }
 
+  // D'où part chaque carte : du milieu, là où était le paquet
+  const dealFrom = (rowIndex: number, slot: number, count: number) => ({
+    x: -(slot - (count - 1) / 2) * (width + GAP),
+    y: -(rowIndex - (rows.length - 1) / 2) * (height + GAP),
+  });
+
   return (
-    <div className="pack-screen" role="dialog" aria-modal="true" aria-label="Ouverture d'un paquet de cartes">
+    <div
+      className={`pack-screen ${spot !== null ? "has-spot" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ouverture d'un paquet de cartes"
+    >
       {!opened ? (
         <>
           <button className={`pack ${tearing ? "is-torn" : ""}`} onClick={tear} aria-label="Déchirer le paquet">
-            <span className="pack-part is-top" />
-            <span className="pack-part is-body">
-              <Logo size={46} withName={false} />
-              <strong>L'Album de La Tablée</strong>
-              <span>5 cartes</span>
+            <span className="pack-crimp is-top" />
+            <span className="pack-face">
+              <span className="pack-collage" aria-hidden="true">
+                <span>
+                  <AtlasArt artKey="vehicle:soucoupe" />
+                </span>
+                <span>
+                  <AtlasArt artKey="pilot:patronne" />
+                </span>
+                <span>
+                  <AtlasArt artKey="token:couronne" />
+                </span>
+              </span>
+              <strong>L'Album</strong>
+              <small>
+                <Logo size={14} withName={false} /> de La Tablée
+              </small>
+              <span className="pack-count">5 cartes</span>
+              <span className="pack-sheen" aria-hidden="true" />
             </span>
+            <span className="pack-crimp is-bottom" />
           </button>
-          <p className="pack-hint">Touche le paquet pour le déchirer</p>
+          <p className="pack-hint" style={tearing ? { visibility: "hidden" } : undefined}>
+            Touche le paquet pour le déchirer
+          </p>
         </>
       ) : (
         <>
           <div className="pack-table" style={{ "--gap": `${GAP}px` } as CSSProperties}>
-            {rows.map((row) => (
+            {rows.map((row, rowIndex) => (
               <div key={row[0]} className="pack-row">
-                {row.map((i) => {
+                {row.map((i, slot) => {
                   const entry = current.cards[i]!;
                   const def = CARD_BY_ID.get(entry.id)!;
                   const on = shown.has(i);
                   return (
                     <motion.button
                       key={`${current.packs}-${i}`}
-                      className={`flip glow-${def.rarity} ${on ? "is-shown" : ""}`}
-                      style={{ width, height: Math.round(width * RATIO) }}
-                      initial={reduced ? false : { y: 60, opacity: 0, scale: 0.7 }}
-                      animate={{ y: 0, opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.07, type: "spring", stiffness: 300, damping: 24 }}
-                      onClick={() => reveal(i)}
-                      aria-label={on ? def.name : `Retourner la carte ${i + 1}`}
+                      className={`flip rar-${def.rarity} glow-${def.rarity} ${on ? "is-shown" : ""} ${spot === i ? "is-spot" : ""}`}
+                      style={{ width, height }}
+                      initial={reduced ? false : { ...dealFrom(rowIndex, slot, row.length), opacity: 0, scale: 0.5, rotate: (i - 2) * 7 }}
+                      animate={{ x: 0, y: 0, opacity: 1, scale: 1, rotate: 0 }}
+                      transition={{ delay: i * 0.07, type: "spring", stiffness: 260, damping: 22 }}
+                      onClick={() => (on ? setZoom(def) : reveal(i))}
+                      aria-label={on ? `${def.name}, voir en grand` : `Retourner la carte ${i + 1}`}
                     >
+                      <span className="flip-burst" aria-hidden="true" />
                       <span className="flip-in">
                         <span className="flip-face">
                           <CardBackFace width={width} />
@@ -163,6 +226,12 @@ export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: ()
               </div>
             ))}
           </div>
+          {done && (
+            <p className="pack-hint">
+              {fresh === 0 ? "Que des doubles, cette fois." : `${fresh} nouvelle${fresh > 1 ? "s" : ""} dans ton album.`} Touche une carte
+              pour la voir en grand.
+            </p>
+          )}
           <div className="pack-actions">
             {!done ? (
               <button className="btn btn-primary" onClick={revealAll}>
@@ -180,6 +249,16 @@ export function PackOpening({ pack, onClose }: { pack: PackResponse; onClose: ()
             )}
           </div>
         </>
+      )}
+      {zoom && (
+        <div className="zoom-screen" onClick={() => setZoom(null)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TradingCard card={zoom} width={Math.min(w - 40, Math.round((h - 110) / RATIO), 340)} tilt />
+          </div>
+          <button className="btn btn-ghost" onClick={() => setZoom(null)}>
+            Fermer
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
-import { useId, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { cardNumber, RARITY, type CardArt, type CardDef } from "../../shared/cards.ts";
+import { useEffect, useId, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { CARDS, cardNumber, RARITY, type CardArt, type CardDef, type CardFamily } from "../../shared/cards.ts";
 import { SHIP_LENGTH } from "../../shared/games/naval/engine.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import { CardFace } from "../components/Card.tsx";
+import { Icon, type IconName } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
 import { CELL, hullFill, ShipShape, SkinDefs } from "../naval/ships.tsx";
 import { ATLAS_COLS, ATLAS_KEYS, ATLAS_ROWS } from "./atlasKeys.ts";
@@ -18,7 +19,7 @@ const UNO_FACES: Record<Extract<CardArt, { kind: "uno" }>["face"], Card> = {
   wild4: { id: 9006, kind: "wild4", color: null },
 };
 
-function AtlasArt({ artKey }: { artKey: string }) {
+export function AtlasArt({ artKey }: { artKey: string }) {
   const i = ATLAS_KEYS.indexOf(artKey);
   const x = (i % ATLAS_COLS) / (ATLAS_COLS - 1);
   const y = Math.floor(i / ATLAS_COLS) / (ATLAS_ROWS - 1);
@@ -254,42 +255,81 @@ export function CardBackFace({ width }: { width: number }) {
   );
 }
 
-/** Une carte de l'album. `tilt` : elle suit le doigt ou la souris, et ses reflets avec. */
+const FAMILY_ICON: Record<CardFamily, IconName> = {
+  habitues: "users",
+  flotte: "target",
+  capitale: "build",
+  circuit: "zap",
+  tapis: "cards",
+  briques: "layers",
+  meche: "flame",
+};
+
+/** Six couleurs de mur pour les Habitués, données dans l'ordre pour que deux voisins n'aient jamais la même */
+const WALL = new Map(CARDS.filter((c) => c.family === "habitues").map((c, i) => [c.id, i % 6]));
+
+/**
+ * Une carte de l'album. `tilt` : elle suit le doigt ou la souris, et bouge doucement toute seule le reste du temps.
+ * `still` : sans animation, pour les longues listes de cartes.
+ */
 export function TradingCard({
   card,
   width,
   missing = false,
   tilt = false,
+  still = false,
 }: {
   card: CardDef;
   width: number;
   missing?: boolean;
   tilt?: boolean;
+  still?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const held = useRef(false);
   const info = RARITY[card.rarity];
   const small = width < 150;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !tilt || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      if (held.current) return;
+      const t = (now - t0) / 1000;
+      el.style.setProperty("--ry", `${Math.sin(t * 0.9) * 10}deg`);
+      el.style.setProperty("--rx", `${Math.cos(t * 0.7) * 6}deg`);
+      el.style.setProperty("--mx", `${50 + Math.sin(t * 0.9) * 38}%`);
+      el.style.setProperty("--my", `${36 + Math.cos(t * 0.7) * 26}%`);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [tilt]);
+
   const move = (e: ReactPointerEvent<HTMLDivElement>) => {
     const el = ref.current;
     if (!el || !tilt) return;
+    held.current = true;
     const r = el.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
-    el.style.setProperty("--ry", `${(x - 0.5) * 22}deg`);
-    el.style.setProperty("--rx", `${(0.5 - y) * 18}deg`);
+    el.style.setProperty("--ry", `${(x - 0.5) * 24}deg`);
+    el.style.setProperty("--rx", `${(0.5 - y) * 20}deg`);
     el.style.setProperty("--mx", `${x * 100}%`);
     el.style.setProperty("--my", `${y * 100}%`);
   };
   const leave = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.setProperty("--ry", "0deg");
-    el.style.setProperty("--rx", "0deg");
+    held.current = false;
   };
+  // Chaque bateau a sa mer : au large, ils ne se ressemblent plus
+  const backdrop = card.art.kind !== "ship" ? "" : card.art.skin === "marine" ? `sea-${card.art.ship}` : `sk-${card.art.skin}`;
+  const tone = card.family === "habitues" ? `tone-${WALL.get(card.id)}` : "";
   return (
     <div
       ref={ref}
-      className={`tc rar-${card.rarity} fam-${card.family} ${missing ? "is-missing" : ""} ${small ? "is-small" : ""} ${tilt ? "is-tilt" : ""}`}
+      className={`tc rar-${card.rarity} fam-${card.family} ${tone} ${missing ? "is-missing" : ""} ${small ? "is-small" : ""} ${tilt ? "is-tilt" : ""} ${still ? "is-still" : ""}`}
       style={em(width)}
       onPointerMove={move}
       onPointerLeave={leave}
@@ -298,10 +338,15 @@ export function TradingCard({
     >
       <div className="tc-inner">
         <div className="tc-head">
-          <span className="tc-name">{card.name}</span>
-          {!small && <span className="tc-no num">{cardNumber(card.id)}</span>}
+          <span className={`tc-name ${card.name.length > 16 ? "is-long" : ""}`}>{card.name}</span>
+          {!small && (
+            <span className="tc-corner">
+              <Icon name={FAMILY_ICON[card.family]} size={Math.round(width * 0.075)} />
+              <span className="tc-no num">{cardNumber(card.id)}</span>
+            </span>
+          )}
         </div>
-        <div className="tc-art">
+        <div className={`tc-art ${backdrop}`}>
           {(card.rarity === "legendaire" || card.rarity === "epique") && !missing && <span className="tc-rays" />}
           <span className="tc-subject">
             <Art art={card.art} width={width} />

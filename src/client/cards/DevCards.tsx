@@ -112,8 +112,8 @@ async function subject(key: string, items: ItemModels): Promise<Shot> {
       object: pilot.group,
       dir: new THREE.Vector3(0.28, 0.1, 1).normalize(),
       zoom: 1,
-      look: new THREE.Vector3(0, 1.02, 0.04),
-      distance: 3.75,
+      look: new THREE.Vector3(0, 1.2, 0.04),
+      distance: 2.95,
     };
   }
   if (family === "vehicle") {
