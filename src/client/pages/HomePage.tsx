@@ -14,6 +14,7 @@ import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
+import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -105,6 +106,8 @@ export function HomePage() {
         <h1 className="home-greeting">
           <span className="script-word">{greeting()},</span> {user.pseudo}
         </h1>
+
+        <HomeAlbum />
 
         {tourOn && (
           <section className="home-game home-game-tour panel" aria-label="La Tournée">

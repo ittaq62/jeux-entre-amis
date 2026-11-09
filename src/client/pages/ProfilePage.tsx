@@ -4,6 +4,8 @@ import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
 import { TABLE_NAMES, type GameId, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
+import { CARD_BY_ID, CARDS } from "../../shared/cards.ts";
+import { TradingCard } from "../cards/TradingCard.tsx";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
@@ -37,6 +39,7 @@ interface Profile {
   bolides: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
+  album: { count: number; best: string[] };
   achievements: { id: string; at: number }[];
   recent: {
     id: string;
@@ -231,6 +234,21 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 
         <div className="profile-grid">
           <div className="profile-col">
+            {profile.album.count > 0 && (
+              <section className="carnet panel">
+                <h2>L'album</h2>
+                <div className="profile-album">
+                  <div className="profile-album-cards">
+                    {profile.album.best.map((id) => (
+                      <TradingCard key={id} card={CARD_BY_ID.get(id)!} width={84} />
+                    ))}
+                  </div>
+                  <p className="carnet-summary">
+                    <strong className="num">{profile.album.count}</strong> cartes sur {CARDS.length}
+                  </p>
+                </div>
+              </section>
+            )}
             <section className="carnet panel">
               <h2>Le carnet</h2>
               <p className="carnet-summary">

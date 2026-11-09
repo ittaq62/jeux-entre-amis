@@ -1,0 +1,813 @@
+/* ------------------------------------------------------------------ */
+/* L'album : les cartes à collectionner                                 */
+/* ------------------------------------------------------------------ */
+
+/* Tout se mesure en em : la largeur de la carte fait 20em, à n'importe quelle taille */
+.tc {
+  --rim: linear-gradient(160deg, #e4dac2, #a99d83);
+  --paper: #f6efdf;
+  --ink: #2a2116;
+  --soft: rgba(42, 33, 22, 0.72);
+  --gem: #8a7d63;
+  --rx: 0deg;
+  --ry: 0deg;
+  --mx: 50%;
+  --my: 30%;
+  position: relative;
+  flex: none;
+  width: 20em;
+  height: 28em;
+  padding: 0.62em;
+  border-radius: 1.25em;
+  background: var(--rim);
+  color: var(--ink);
+  box-shadow:
+    0 0.1em 0 rgba(255, 255, 255, 0.35) inset,
+    0 0.9em 1.6em -0.5em rgba(0, 0, 0, 0.75);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tc.is-tilt {
+  transform: perspective(60em) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.12s ease-out;
+  touch-action: none;
+}
+
+.tc-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38em;
+  height: 100%;
+  padding: 0.5em 0.6em 0.55em;
+  border-radius: 0.8em;
+  background: var(--paper);
+}
+
+.tc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em;
+  height: 2.5em;
+  flex: none;
+}
+
+.tc-name {
+  font-family: var(--font-title);
+  font-size: 1.55em;
+  line-height: 1;
+}
+
+.tc-no {
+  flex: none;
+  color: var(--soft);
+  font-family: var(--font-card);
+  font-size: 0.95em;
+  font-weight: 800;
+}
+
+.tc-art {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0.55em;
+  box-shadow:
+    inset 0 0 0 0.09em rgba(0, 0, 0, 0.32),
+    inset 0 0.5em 1em -0.3em rgba(0, 0, 0, 0.45);
+}
+
+.tc-subject {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.tc-atlas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0.4em 0.5em rgba(0, 0, 0, 0.42));
+}
+
+.tc-svg {
+  display: block;
+  width: 94%;
+  height: 94%;
+  filter: drop-shadow(0 0.4em 0.5em rgba(0, 0, 0, 0.45));
+}
+
+.tc-uno {
+  display: block;
+  rotate: -7deg;
+  filter: drop-shadow(0 0.5em 0.6em rgba(0, 0, 0, 0.5));
+}
+
+.tc-rarity {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  min-height: 1.15em;
+}
+
+.tc-gems {
+  display: inline-flex;
+  gap: 0.34em;
+  padding-left: 0.2em;
+}
+
+.tc-gems i {
+  width: 0.72em;
+  height: 0.72em;
+  rotate: 45deg;
+  border-radius: 0.12em;
+  background: var(--gem);
+  box-shadow: inset 0.08em 0.08em 0 rgba(255, 255, 255, 0.55);
+}
+
+.tc-rname {
+  color: var(--soft);
+  font-size: 0.82em;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tc-quote {
+  flex: none;
+  height: 3em;
+  margin: 0;
+  color: var(--soft);
+  font-size: 0.88em;
+  font-style: italic;
+  line-height: 1.17;
+}
+
+/* Les petites cartes de l'album : le nom plus gros, sans la phrase */
+.tc.is-small .tc-name {
+  font-size: 1.95em;
+}
+
+.tc.is-small .tc-head {
+  height: 3em;
+}
+
+/* Les raretés */
+.tc.rar-peu-commune {
+  --rim: linear-gradient(160deg, #8fdcae, #2a8a58);
+  --paper: #eff8ee;
+  --gem: #2a9a60;
+}
+
+.tc.rar-rare {
+  --rim: linear-gradient(155deg, #a8d2ff, #2f6fd6 55%, #8bc0ff);
+  --paper: #eaf2ff;
+  --gem: #2f7be8;
+}
+
+.tc.rar-epique {
+  --rim: linear-gradient(150deg, #e4b8ff, #6a2fc0 45%, #d9a2ff 75%, #5a22a8);
+  --paper: linear-gradient(170deg, #2e1a48, #1c0f30);
+  --ink: #f6ecff;
+  --soft: rgba(238, 224, 255, 0.76);
+  --gem: #c88bff;
+  box-shadow:
+    0 0 1.2em -0.1em rgba(170, 100, 255, 0.65),
+    0 0.9em 1.6em -0.5em rgba(0, 0, 0, 0.75);
+}
+
+.tc.rar-legendaire {
+  --rim: linear-gradient(150deg, #fff4bf, #d9a21e 35%, #fff8d2 58%, #b67c12 82%, #ffe28a);
+  --paper: linear-gradient(170deg, #33230a, #170f04);
+  --ink: #ffe6a0;
+  --soft: rgba(255, 236, 190, 0.8);
+  --gem: #ffcf5a;
+  box-shadow:
+    0 0 1.5em 0.1em rgba(255, 200, 80, 0.7),
+    0 0.9em 1.6em -0.5em rgba(0, 0, 0, 0.75);
+}
+
+/* Les décors, famille par famille */
+.fam-habitues .tc-art {
+  background: radial-gradient(circle at 50% 28%, #f7c283 0, #bb5f2e 58%, #5b2413 100%);
+}
+
+.fam-flotte .tc-art {
+  background:
+    repeating-linear-gradient(170deg, rgba(255, 255, 255, 0.06) 0 0.35em, transparent 0.35em 1.6em),
+    radial-gradient(circle at 50% 35%, #2a8cb0 0, #135672 62%, #0a3346 100%);
+}
+
+.fam-capitale .tc-art {
+  background: linear-gradient(180deg, #a7dcf2 0, #dff3fa 62%, #9fd18b 62%, #6faf61 100%);
+}
+
+.fam-circuit .tc-art {
+  background:
+    linear-gradient(180deg, transparent 72%, rgba(0, 0, 0, 0.25) 72%),
+    linear-gradient(180deg, #ff9d5c 0, #ffd28a 58%, #5c6168 58%, #3b3f45 100%);
+}
+
+.fam-tapis .tc-art {
+  background: radial-gradient(circle at 50% 40%, #1f7a52 0, #114a33 62%, #0a3022 100%);
+}
+
+.fam-briques .tc-art {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.05) 0.06em, transparent 0.06em) 0 0 / 2em 2em,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0.06em, transparent 0.06em) 0 0 / 2em 2em,
+    radial-gradient(circle at 50% 40%, #1b2f28 0, #0a1712 100%);
+}
+
+.fam-meche .tc-art {
+  background: radial-gradient(circle at 50% 40%, #6a4a2c 0, #3a2616 62%, #1e130a 100%);
+}
+
+/* Les cartes pas encore dans l'album : on voit à quoi on joue, mais éteintes */
+.tc.is-missing {
+  --rim: linear-gradient(160deg, #39473f, #26312b);
+  --paper: #1a2520;
+  --ink: rgba(244, 236, 218, 0.62);
+  --soft: rgba(244, 236, 218, 0.42);
+  box-shadow: inset 0 0 0 0.06em rgba(255, 255, 255, 0.06);
+}
+
+.tc.is-missing .tc-art > * {
+  filter: grayscale(1) brightness(0.42);
+}
+
+.tc.is-missing .tc-art {
+  background: #121a16;
+}
+
+/* Le reflet sur l'image : une lueur qui passe, et qui suit le doigt quand on tient la carte */
+.tc-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tc.rar-rare .tc-shine {
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.38) 50%, transparent 62%) no-repeat;
+  background-size: 260% 260%;
+  mix-blend-mode: soft-light;
+  animation: tc-sheen 6s ease-in-out infinite;
+}
+
+.tc.rar-epique .tc-shine,
+.tc.rar-legendaire .tc-shine {
+  background:
+    radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, 0.5), transparent 46%),
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 110, 190, 0.55) 0 1.4em,
+      rgba(255, 225, 110, 0.55) 2.8em,
+      rgba(110, 240, 205, 0.55) 4.2em,
+      rgba(135, 150, 255, 0.55) 5.6em,
+      rgba(255, 110, 190, 0.55) 7em
+    );
+  background-size:
+    100% 100%,
+    260% 260%;
+  mix-blend-mode: soft-light;
+  animation: tc-holo 7s linear infinite;
+}
+
+/* Le cadre des plus belles cartes : du métal qui bouge */
+.tc.rar-epique,
+.tc.rar-legendaire {
+  background-size: 260% 260%;
+  animation: tc-metal 5s ease-in-out infinite alternate;
+}
+
+@keyframes tc-metal {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}
+
+@keyframes tc-sheen {
+  0%,
+  55% {
+    background-position: 120% 120%;
+  }
+  100% {
+    background-position: -30% -30%;
+  }
+}
+
+@keyframes tc-holo {
+  from {
+    background-position:
+      0 0,
+      0% 0%;
+  }
+  to {
+    background-position:
+      0 0,
+      100% 100%;
+  }
+}
+
+/* Les rayons qui tournent derrière les plus belles cartes */
+.tc-rays {
+  position: absolute;
+  inset: -40%;
+  animation: tc-spin 16s linear infinite;
+}
+
+.rar-epique .tc-rays {
+  background: repeating-conic-gradient(rgba(190, 130, 255, 0.24) 0 12deg, transparent 12deg 30deg);
+}
+
+.rar-legendaire .tc-rays {
+  background: repeating-conic-gradient(rgba(255, 225, 140, 0.34) 0 10deg, transparent 10deg 24deg);
+}
+
+@keyframes tc-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* Le dos des cartes */
+.tc-back {
+  position: relative;
+  width: 20em;
+  height: 28em;
+  padding: 0.62em;
+  border-radius: 1.25em;
+  background: linear-gradient(155deg, #e2bd6e, #9a7428 55%, #e9cd8c);
+  box-shadow: 0 0.9em 1.6em -0.5em rgba(0, 0, 0, 0.75);
+}
+
+.tc-back-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  height: 100%;
+  border-radius: 0.8em;
+  background:
+    repeating-linear-gradient(45deg, rgba(226, 189, 110, 0.12) 0 0.5em, transparent 0.5em 1.6em),
+    repeating-linear-gradient(-45deg, rgba(226, 189, 110, 0.12) 0 0.5em, transparent 0.5em 1.6em),
+    radial-gradient(circle at 50% 42%, #1f7a52, #0c3a28);
+  box-shadow: inset 0 0 0 0.14em rgba(226, 189, 110, 0.55);
+}
+
+.tc-back-title {
+  color: var(--gold-light);
+  font-family: var(--font-title);
+  font-size: 2.2em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc,
+  .tc-shine,
+  .tc-rays {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Le paquet qu'on ouvre                                                */
+/* ------------------------------------------------------------------ */
+
+.pack-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(10px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
+  background: radial-gradient(circle at 50% 42%, rgba(30, 90, 64, 0.96), rgba(3, 12, 8, 0.98) 72%);
+  overflow: hidden;
+}
+
+.pack-hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 15px;
+  text-align: center;
+}
+
+.pack {
+  position: relative;
+  width: 200px;
+  height: 300px;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  animation: pack-float 2.2s ease-in-out infinite;
+}
+
+.pack-part {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #1a6a48, #0f4a33 40%, #2a8c60 60%, #0c3a28);
+  box-shadow: inset 0 0 0 3px rgba(226, 189, 110, 0.55);
+}
+
+.pack-part.is-top {
+  top: 0;
+  height: 44px;
+  border-radius: 10px 10px 2px 2px;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 8px), linear-gradient(135deg, #e9cd8c, #9a7428);
+}
+
+.pack-part.is-body {
+  top: 44px;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 2px 2px 12px 12px;
+  color: var(--gold-light);
+}
+
+.pack-part.is-body strong {
+  font-family: var(--font-title);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+  text-align: center;
+}
+
+.pack-part.is-body span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Le paquet tremble et sa languette s'arrache */
+.pack.is-torn {
+  animation: pack-shake 0.12s linear 5 alternate;
+}
+
+.pack.is-torn .pack-part.is-top {
+  animation: pack-tear 0.5s 0.32s cubic-bezier(0.3, 0.1, 0.6, 1) forwards;
+}
+
+@keyframes pack-shake {
+  from {
+    transform: translateX(-5px) rotate(-1.8deg);
+  }
+  to {
+    transform: translateX(5px) rotate(1.8deg);
+  }
+}
+
+@keyframes pack-tear {
+  to {
+    transform: translate(70px, -130px) rotate(32deg);
+    opacity: 0;
+  }
+}
+
+@keyframes pack-float {
+  0%,
+  100% {
+    transform: translateY(-4px) rotate(-1.6deg);
+  }
+  50% {
+    transform: translateY(5px) rotate(1.6deg);
+  }
+}
+
+.pack-table {
+  display: grid;
+  justify-content: center;
+  gap: var(--gap);
+}
+
+.pack-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap);
+}
+
+/* Une carte qui se retourne */
+.flip {
+  position: relative;
+  border: 0;
+  padding: 0;
+  background: none;
+  perspective: 900px;
+  cursor: pointer;
+}
+
+.flip-in {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.flip.is-shown .flip-in {
+  transform: rotateY(180deg);
+}
+
+.flip-face {
+  display: block;
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flip-face.is-front {
+  transform: rotateY(180deg);
+}
+
+/* Avant de la retourner : le dos annonce la couleur */
+.flip:not(.is-shown).glow-rare .flip-face {
+  border-radius: 8%;
+  animation: glow-rare 1.3s ease-in-out infinite alternate;
+}
+
+.flip:not(.is-shown).glow-epique .flip-face {
+  border-radius: 8%;
+  animation: glow-epique 0.9s ease-in-out infinite alternate;
+}
+
+.flip:not(.is-shown).glow-legendaire .flip-face {
+  border-radius: 8%;
+  animation: glow-legend 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes glow-rare {
+  to {
+    box-shadow: 0 0 22px 4px rgba(90, 160, 255, 0.85);
+  }
+}
+
+@keyframes glow-epique {
+  to {
+    box-shadow: 0 0 28px 7px rgba(180, 110, 255, 0.95);
+  }
+}
+
+@keyframes glow-legend {
+  to {
+    box-shadow: 0 0 36px 12px rgba(255, 205, 90, 1);
+  }
+}
+
+.flip-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  translate: -50% 0;
+  z-index: 3;
+  padding: 1px 8px;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+.flip-tag.is-new {
+  background: var(--gold);
+  color: #2a1c08;
+}
+
+.flip-tag.is-double {
+  background: #2f3b34;
+  color: var(--text-soft);
+}
+
+.pack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+}
+
+/* ------------------------------------------------------------------ */
+/* L'accueil                                                            */
+/* ------------------------------------------------------------------ */
+
+/* Un bandeau : l'album se voit tout de suite, sans repousser les jeux trop loin */
+.home-album {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+  padding: 14px 20px;
+  background:
+    radial-gradient(ellipse 40% 120% at 12% 50%, rgba(255, 214, 150, 0.18), transparent 72%),
+    linear-gradient(100deg, #4a2560, #2a1540 55%, #1b0d2a);
+}
+
+.album-fan {
+  position: relative;
+  width: 148px;
+  height: 104px;
+}
+
+.album-fan > * {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.album-text {
+  min-width: 0;
+}
+
+.album-title {
+  margin: 0 0 2px;
+  color: #f2d9ff;
+  font-family: var(--font-title);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.album-text .hint {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.album-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.album-buttons .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .home-album {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px 14px;
+    padding: 12px 14px;
+  }
+
+  .album-buttons {
+    grid-column: 1 / -1;
+    flex-direction: row;
+  }
+
+  .album-buttons .btn {
+    flex: 1 1 0;
+    padding: 0 8px;
+  }
+}
+
+.album-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  font-weight: 600;
+}
+
+.album-bar {
+  flex: 1;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.album-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d9a21e, #ffe28a);
+  transition: width 0.4s;
+}
+
+/* ------------------------------------------------------------------ */
+/* La page de l'album                                                   */
+/* ------------------------------------------------------------------ */
+
+.album-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.album-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.album-families {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.album-families button {
+  flex: 0 1 auto;
+  min-height: 32px;
+  padding: 3px 9px;
+  font-size: 13.5px;
+}
+
+.profile-album {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-album-cards {
+  display: flex;
+  gap: 6px;
+}
+
+.album-family h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.album-family h2 small {
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.album-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+}
+
+.album-cell {
+  position: relative;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.album-count {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 2;
+  min-width: 22px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: var(--gold);
+  color: #2a1c08;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.zoom-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(10px + var(--safe-top)) 14px calc(12px + var(--safe-bottom));
+  background: rgba(3, 12, 8, 0.9);
+}
+
+.zoom-info {
+  margin: 0;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.zoom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}

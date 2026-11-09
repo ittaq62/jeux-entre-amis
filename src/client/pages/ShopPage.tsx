@@ -9,6 +9,7 @@ import { VehiclePreview } from "../bolides/Garage.tsx";
 import { KART_COLORS } from "../bolides/scene/kart.ts";
 import { PAWN_COLORS } from "../capitale/boardUi.ts";
 import { tokenThumbnails } from "../capitale/scene/tokens.ts";
+import { Link } from "wouter";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
@@ -77,7 +78,7 @@ export function ShopPage() {
             </p>
             <p className="hint">
               Chaque partie bien placée t'en rapporte. Prends ce que tu veux, dans l'ordre que tu veux : dépenser ne change rien à ton
-              classement.
+              classement. Ils servent aussi à ouvrir des paquets de cartes : <Link href="/album">voir l'album</Link>.
             </p>
           </div>
         </section>

@@ -24,9 +24,11 @@ const AccountPage = lazy(() => import("./pages/AccountPage.tsx").then((m) => ({ 
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage.tsx").then((m) => ({ default: m.PrivacyPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx").then((m) => ({ default: m.AdminPage })));
 const ShopPage = lazy(() => import("./pages/ShopPage.tsx").then((m) => ({ default: m.ShopPage })));
+const AlbumPage = lazy(() => import("./pages/AlbumPage.tsx").then((m) => ({ default: m.AlbumPage })));
 const DevGallery = lazy(() => import("./pages/DevGallery.tsx").then((m) => ({ default: m.DevGallery })));
 const DevGarage = lazy(() => import("./bolides/DevGarage.tsx").then((m) => ({ default: m.DevGarage })));
 const DevItems = lazy(() => import("./bolides/DevItems.tsx").then((m) => ({ default: m.DevItems })));
+const DevCards = lazy(() => import("./cards/DevCards.tsx").then((m) => ({ default: m.DevCards })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -82,12 +84,14 @@ export function App() {
           <Route path="/tournee/:id">{(params) => <TourSheetPage id={params.id} />}</Route>
           <Route path="/classement" component={LeaderboardPage} />
           <Route path="/boutique" component={ShopPage} />
+          <Route path="/album" component={AlbumPage} />
           <Route path="/amis" component={FriendsPage} />
           <Route path="/compte" component={AccountPage} />
           <Route path="/admin" component={AdminPage} />
           {import.meta.env.DEV && <Route path="/dev/galerie" component={DevGallery} />}
           {import.meta.env.DEV && <Route path="/dev/garage" component={DevGarage} />}
           {import.meta.env.DEV && <Route path="/dev/objets" component={DevItems} />}
+          {import.meta.env.DEV && <Route path="/dev/cartes" component={DevCards} />}
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>
