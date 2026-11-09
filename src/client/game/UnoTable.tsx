@@ -20,6 +20,7 @@ import { ColorPicker, TargetPicker } from "./Pickers.tsx";
 import { Seat, TimerRing } from "./Seat.tsx";
 import type { EmoteBubble } from "./useRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { useViewport } from "../lib/viewport.ts";
 
 interface TableProps {
   room: RoomView;
@@ -30,16 +31,6 @@ interface TableProps {
   onOpenChat: () => void;
   onShowLobby: () => void;
   onLeave: () => void;
-}
-
-function useViewport() {
-  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
-  useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return size;
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));

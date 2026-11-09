@@ -18,6 +18,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { Dynamite, FuseRope, ropeStart } from "./FuseRope.tsx";
 import { MecheGameOver } from "./MecheGameOver.tsx";
 import { useTyping, type EventBatch, type RefusedWord } from "./useMecheRoom.ts";
+import { screenSize } from "../lib/viewport.ts";
 
 interface Props {
   room: MecheRoomView;
@@ -60,7 +61,7 @@ function readVisibleArea() {
   const typing = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement;
   const vh = v?.height ?? window.innerHeight;
   return {
-    w: window.innerWidth,
+    w: screenSize().w,
     h: Math.round(typing ? vh : Math.max(vh, window.innerHeight)),
     // Le navigateur a pu décaler la vue pour montrer le champ : la table suit ce décalage
     top: Math.round(typing ? (v?.offsetTop ?? 0) : 0),

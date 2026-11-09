@@ -19,6 +19,7 @@ import { NavalGameOver } from "./NavalGameOver.tsx";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { PlacementBoard } from "./Placement.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { useViewport } from "../lib/viewport.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -36,16 +37,6 @@ const WEAPONS: Record<Weapon, { name: string; help: string }> = {
   torpedo: { name: "Torpille", help: "File sur une ligne ou une colonne et frappe le premier navire." },
   barrage: { name: "Barrage", help: "Cinq obus en croix d'un coup." },
 };
-
-function useViewport() {
-  const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
-  useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return size;
-}
 
 /** Cases touchées par une arme visée sur une case. */
 function weaponArea(weapon: Weapon, cell: number, size: number, dir: Dir): number[] {

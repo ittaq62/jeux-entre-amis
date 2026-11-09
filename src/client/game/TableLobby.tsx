@@ -172,19 +172,21 @@ export function TableLobby({
                             .join(", ") || " "}
                         </span>
                       </span>
-                      {seat.kind === "human" && seat.userId && seat.userId !== room.you.userId && (
-                        <FriendButton userId={seat.userId} pseudo={seat.name} />
-                      )}
-                      {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() =>
-                            send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
-                          }
-                        >
-                          {seat.kind === "bot" ? "Retirer" : "Exclure"}
-                        </button>
-                      )}
+                      <span className="seat-actions">
+                        {seat.kind === "human" && seat.userId && seat.userId !== room.you.userId && (
+                          <FriendButton userId={seat.userId} pseudo={seat.name} />
+                        )}
+                        {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() =>
+                              send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
+                            }
+                          >
+                            {seat.kind === "bot" ? "Retirer" : "Exclure"}
+                          </button>
+                        )}
+                      </span>
                     </motion.li>
                   );
                 })}

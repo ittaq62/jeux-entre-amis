@@ -20,6 +20,7 @@ import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { SHOWN_ROWS } from "./draw.ts";
 import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { useViewport } from "../lib/viewport.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -32,16 +33,6 @@ interface Props {
   onLeave: () => void;
   listeners: MutableRefObject<BricksListeners>;
   lastSnapshot: MutableRefObject<BricksSnapshot | null>;
-}
-
-function useViewport() {
-  const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
-  useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return size;
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));

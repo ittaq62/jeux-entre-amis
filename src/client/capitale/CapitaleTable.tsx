@@ -26,6 +26,7 @@ import { Offers, TradeModal, type TradeDraft } from "./Panels.tsx";
 import { AuctionPrompt, BuyPrompt, CardShow, DebtPrompt, JailChoices } from "./Prompts.tsx";
 import { squareFacts, SquareTip } from "./SquareInfo.tsx";
 import type { EventBatch } from "./useCapitaleRoom.ts";
+import { useViewport } from "../lib/viewport.ts";
 
 interface Props {
   room: CapitaleRoomView;
@@ -62,16 +63,6 @@ const DEED_EVENTS = new Set<CapitaleEvent["type"]>([
 
 let billSeq = 0;
 let lineSeq = 0;
-
-function useViewport() {
-  const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
-  useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return size;
-}
 
 /** Le centre d'un repère à l'écran : le portrait d'un joueur, mes billets, la banque ou la cagnotte sur le plateau */
 function anchorOf(account: string): { x: number; y: number } | null {
