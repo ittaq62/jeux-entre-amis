@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
@@ -8,6 +8,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace } from "../components/Card.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { Modal } from "../components/ui.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
@@ -17,6 +18,7 @@ import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 import { useSession } from "../stores/session.ts";
@@ -28,6 +30,17 @@ const TABLE_CARDS: { card: Card; x: number; y: number; r: number }[] = [
   { card: { id: 3, kind: "wild4", color: null }, x: 128, y: 18, r: 7 },
   { card: { id: 4, kind: "draw2", color: "red" }, x: 70, y: 112, r: 19 },
 ];
+
+// Le coin de décor de chaque fiche. Ses textes sont dans HOME_GAMES : un nouveau jeu, c'est une entrée ici et une là-bas.
+const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
+  tour: { stage: "is-stage", art: () => <TourPreview /> },
+  uno: { stage: "", art: () => <TableScatter /> },
+  naval: { stage: "is-sea", art: () => <NavalPreview px={250} /> },
+  bricks: { stage: "is-lacquer", art: () => <BricksPreview cell={17} /> },
+  capitale: { stage: "is-map", art: () => <CapitalePreview px={360} /> },
+  meche: { stage: "is-workshop", art: () => <MechePreview /> },
+  bolides: { stage: "is-circuit", art: () => <BolidesPreview /> },
+};
 
 function greeting() {
   const h = new Date().getHours();
@@ -48,6 +61,7 @@ export function HomePage() {
   const tourOn = useSession((s) => s.tour);
   const [createFor, setCreateFor] = useState<TableGame | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     watchLobby(true);
@@ -95,7 +109,14 @@ export function HomePage() {
     }
   }
 
-  const rooms = lobby.filter((r) => (r.game === "tour" ? tourOn : games.includes(r.game)));
+  const terms = searchWords(query);
+  const searching = terms.length > 0;
+  const available = HOME_GAMES.filter((g) => (g.id === "tour" ? tourOn : g.id === "uno" || games.includes(g.id)));
+  const found = new Set(available.filter((g) => matchesGame(g, terms)).map((g) => g.id));
+  const albumShown = matchesGame(ALBUM_SEARCH, terms);
+  const nothing = found.size === 0 && !albumShown;
+  // Quand on cherche un jeu, les tables ouvertes se limitent à lui
+  const rooms = lobby.filter((r) => (r.game === "tour" ? tourOn : games.includes(r.game)) && (!searching || found.has(r.game)));
   const accepted = friends.filter((f) => f.status === "accepted");
   const sortedFriends = accepted.slice().sort((a, b) => Number(b.user.id in online) - Number(a.user.id in online));
 
@@ -103,317 +124,122 @@ export function HomePage() {
     <div className="felt page">
       <AppHeader />
       <main className="home">
-        <h1 className="home-greeting">
-          <span className="script-word">{greeting()},</span> {user.pseudo}
-        </h1>
-
-        <HomeAlbum />
-
-        {tourOn && (
-          <section className="home-game home-game-tour panel" aria-label="La Tournée">
-            <div className="game-stage is-stage" aria-hidden="true">
-              <TourPreview />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-tour">La Tournée</h2>
-              {beta.includes("tour") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                Plusieurs jeux à la suite pour la même bande. L'hôte coche les jeux, ils sortent au hasard, et chaque place rapporte des
-                points jusqu'au podium.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("tour")} disabled={busy !== null}>
-                  {busy === "quick-tour" && <span className="spinner" />} Tournée rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("tour")} disabled={busy !== null}>
-                  Lancer une tournée
-                </button>
-              </div>
-              <JoinCode id="join-code-tour" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        <section className="home-game panel" aria-label="UNO">
-          <div className="game-stage" aria-hidden="true">
-            <div className="table-scatter">
-              {TABLE_CARDS.map(({ card, x, y, r }, i) => (
-                <motion.div
-                  key={card.id}
-                  className="scatter-card"
-                  style={{ left: x, top: y }}
-                  initial={{ opacity: 0, y: -18, rotate: r - 10 }}
-                  animate={{ opacity: 1, y: 0, rotate: r }}
-                  transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
-                >
-                  <CardFace card={card} width={96} />
-                </motion.div>
-              ))}
-              <motion.div
-                className="scatter-card scatter-deck"
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
-              >
-                <CardBack width={80} />
-              </motion.div>
-            </div>
-          </div>
-
-          <div className="game-sheet">
-            <h2 className="game-name">UNO</h2>
-            <p className="game-desc">Classique ou No Mercy, de 2 à 8 joueurs. S'il manque du monde, des bots complètent la table.</p>
-            <div className="game-actions">
-              <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("uno")} disabled={busy !== null}>
-                {busy === "quick-uno" && <span className="spinner" />} Partie rapide
-              </button>
-              <button className="btn btn-lg" onClick={() => setCreateFor("uno")} disabled={busy !== null}>
-                Ouvrir une table
-              </button>
-            </div>
-            <JoinCode id="join-code-uno" busy={busy !== null} onJoin={join} />
-          </div>
-        </section>
-
-        {games.includes("naval") && (
-          <section className="home-game home-game-naval panel" aria-label="Bataille navale">
-            <div className="game-stage is-sea" aria-hidden="true">
-              <NavalPreview px={250} />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-naval">Bataille navale</h2>
-              {beta.includes("naval") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">En duel, en mêlée jusqu'à 6 ou en équipes 2 contre 2. Radar, torpille et barrage en option.</p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("naval")} disabled={busy !== null}>
-                  {busy === "quick-naval" && <span className="spinner" />} Partie rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("naval")} disabled={busy !== null}>
-                  Ouvrir une table
-                </button>
-              </div>
-              <JoinCode id="join-code-naval" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        {games.includes("bricks") && (
-          <section className="home-game home-game-bricks panel" aria-label="Briques">
-            <div className="game-stage is-lacquer" aria-hidden="true">
-              <BricksPreview cell={17} />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-bricks">Briques</h2>
-              {beta.includes("bricks") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                Empile, fais des lignes, et envoie-les en lignes grises chez les autres. En duel, en mêlée jusqu'à 6, en équipes ou seul
-                contre la montre.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bricks")} disabled={busy !== null}>
-                  {busy === "quick-bricks" && <span className="spinner" />} Partie rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("bricks")} disabled={busy !== null}>
-                  Ouvrir une table
-                </button>
-              </div>
-              <JoinCode id="join-code-bricks" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        {games.includes("capitale") && (
-          <section className="home-game home-game-capitale panel" aria-label="Capitale">
-            <div className="game-stage is-map" aria-hidden="true">
-              <CapitalePreview px={360} />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-capitale">Capitale</h2>
-              {beta.includes("capitale") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                Achète les villes de France, de Guéret à Paris, bâtis ta ville case par case jusqu'aux gratte-ciel, pose une décharge chez
-                les autres et ruine-les à coups de loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("capitale")} disabled={busy !== null}>
-                  {busy === "quick-capitale" && <span className="spinner" />} Partie rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("capitale")} disabled={busy !== null}>
-                  Ouvrir une table
-                </button>
-              </div>
-              <JoinCode id="join-code-capitale" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        {games.includes("meche") && (
-          <section className="home-game home-game-meche panel" aria-label="Mèche">
-            <div className="game-stage is-workshop" aria-hidden="true">
-              <MechePreview />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-meche">Mèche</h2>
-              {beta.includes("meche") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                La mèche brûle et passe de main en main : écris vite un mot avec les lettres imposées pour t'en débarrasser. Si elle saute
-                chez toi, tu perds une allumette. Mèche classique, à rallonge ou chacun la sienne, de 2 à 8 joueurs.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("meche")} disabled={busy !== null}>
-                  {busy === "quick-meche" && <span className="spinner" />} Partie rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("meche")} disabled={busy !== null}>
-                  Ouvrir une table
-                </button>
-              </div>
-              <JoinCode id="join-code-meche" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        {games.includes("bolides") && (
-          <section className="home-game home-game-bolides panel" aria-label="Bolides">
-            <div className="game-stage is-circuit" aria-hidden="true">
-              <BolidesPreview />
-            </div>
-            <div className="game-sheet">
-              <h2 className="game-name is-bolides">Bolides</h2>
-              {beta.includes("bolides") && (
-                <p className="beta-note">
-                  <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous
-                  depuis la page Admin.
-                </p>
-              )}
-              <p className="game-desc">
-                Des courses de karts en 3D, de 2 à 8 pilotes : dérape dans les virages pour charger un turbo, casse les caisses pour gagner
-                des objets, vole en deltaplane et plonge sous la mer. Six circuits et des Grands Prix, au clavier, à la manette ou sur
-                téléphone.
-              </p>
-              <div className="game-actions">
-                <button className="btn btn-primary btn-lg" onClick={() => void quickMatch("bolides")} disabled={busy !== null}>
-                  {busy === "quick-bolides" && <span className="spinner" />} Course rapide
-                </button>
-                <button className="btn btn-lg" onClick={() => setCreateFor("bolides")} disabled={busy !== null}>
-                  Ouvrir une table
-                </button>
-              </div>
-              <JoinCode id="join-code-bolides" busy={busy !== null} onJoin={join} />
-            </div>
-          </section>
-        )}
-
-        <div className="home-columns">
-          <section className="home-list">
-            <h2>Tables ouvertes</h2>
-            {rooms.length === 0 ? (
-              <p className="empty">
-                Personne n'attend pour l'instant. Lance une partie rapide : les prochains arrivés s'assoiront avec toi.
-              </p>
-            ) : (
-              <ul className="rows">
-                {rooms.map((room) => (
-                  <RoomRow key={room.code} room={room} showGame={games.length > 1} />
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="home-list">
-            <h2>
-              Tes amis{" "}
-              <Link href="/amis" className="heading-link">
-                gérer
-              </Link>
-            </h2>
-            {sortedFriends.length === 0 ? (
-              <p className="empty">
-                Pas encore d'amis ici. <Link href="/amis">Cherche leur pseudo</Link> pour les voir en ligne et les inviter.
-              </p>
-            ) : (
-              <ul className="rows">
-                {sortedFriends.slice(0, 8).map((f) => {
-                  const isOnline = f.user.id in online;
-                  const room = online[f.user.id];
-                  return (
-                    <li key={f.user.id} className="row">
-                      <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
-                        <span className="avatar-wrap">
-                          <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={36} />
-                          <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
-                        </span>
-                        <span className="row-text">
-                          <strong>
-                            <PlayerName name={f.user.pseudo} admin={f.user.admin} />
-                          </strong>
-                          <span className="hint">
-                            {!isOnline
-                              ? "hors ligne"
-                              : room
-                                ? room.status === "playing"
-                                  ? "en pleine partie"
-                                  : "à une table"
-                                : "en ligne"}
-                          </span>
-                        </span>
-                      </Link>
-                      {room && (
-                        <Link href={`/salon/${room.code}`} className="btn btn-sm">
-                          {room.status === "playing" ? "Regarder" : "Rejoindre"}
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+        <div className="home-top">
+          <h1 className="home-greeting">
+            <span className="script-word">{greeting()},</span> {user.pseudo}
+          </h1>
+          <GameSearch value={query} onChange={setQuery} />
         </div>
+        <p className="visually-hidden" role="status">
+          {searching
+            ? found.size === 0
+              ? "Aucun jeu trouvé"
+              : `${found.size} jeu${found.size > 1 ? "x" : ""} trouvé${found.size > 1 ? "s" : ""}`
+            : ""}
+        </p>
+
+        {/* Masqués plutôt que retirés : ce qu'on efface réapparaît aussitôt, sans rejouer les animations */}
+        <div hidden={!albumShown}>
+          <HomeAlbum />
+        </div>
+
+        <div className="home-games">
+          {available.map((game) => (
+            <GameSheet
+              key={game.id}
+              game={game}
+              hidden={!found.has(game.id)}
+              isBeta={beta.includes(game.id)}
+              busy={busy}
+              onQuick={(id) => void quickMatch(id)}
+              onCreate={setCreateFor}
+              onJoin={(code) => void join(code)}
+            />
+          ))}
+          {nothing && (
+            <div className="home-no-game panel">
+              <p>Aucun jeu ne correspond à « {query.trim()} ».</p>
+              <button className="btn" onClick={() => setQuery("")}>
+                Voir tous les jeux
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!nothing && (
+          <div className="home-columns">
+            <section className="home-list">
+              <h2>Tables ouvertes</h2>
+              {rooms.length === 0 ? (
+                <p className="empty">
+                  Personne n'attend pour l'instant. Lance une partie rapide : les prochains arrivés s'assoiront avec toi.
+                </p>
+              ) : (
+                <ul className="rows">
+                  {rooms.map((room) => (
+                    <RoomRow key={room.code} room={room} showGame={games.length > 1} />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="home-list">
+              <h2>
+                Tes amis{" "}
+                <Link href="/amis" className="heading-link">
+                  gérer
+                </Link>
+              </h2>
+              {sortedFriends.length === 0 ? (
+                <p className="empty">
+                  Pas encore d'amis ici. <Link href="/amis">Cherche leur pseudo</Link> pour les voir en ligne et les inviter.
+                </p>
+              ) : (
+                <ul className="rows">
+                  {sortedFriends.slice(0, 8).map((f) => {
+                    const isOnline = f.user.id in online;
+                    const room = online[f.user.id];
+                    return (
+                      <li key={f.user.id} className="row">
+                        <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
+                          <span className="avatar-wrap">
+                            <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={36} />
+                            <span className={`dot presence-dot ${isOnline ? (room ? "dot-playing" : "dot-online") : ""}`} />
+                          </span>
+                          <span className="row-text">
+                            <strong>
+                              <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                            </strong>
+                            <span className="hint">
+                              {!isOnline
+                                ? "hors ligne"
+                                : room
+                                  ? room.status === "playing"
+                                    ? "en pleine partie"
+                                    : "à une table"
+                                  : "en ligne"}
+                            </span>
+                          </span>
+                        </Link>
+                        {room && (
+                          <Link href={`/salon/${room.code}`} className="btn btn-sm">
+                            {room.status === "playing" ? "Regarder" : "Rejoindre"}
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
       </main>
 
       <Modal
         open={createFor !== null}
         onClose={() => setCreateFor(null)}
-        title={
-          createFor === "tour"
-            ? "Lancer une tournée"
-            : createFor === "naval"
-              ? "Ouvrir une table de bataille navale"
-              : createFor === "bricks"
-                ? "Ouvrir une table de Briques"
-                : createFor === "capitale"
-                  ? "Ouvrir une table de Capitale"
-                  : createFor === "meche"
-                    ? "Ouvrir une table de Mèche"
-                    : createFor === "bolides"
-                      ? "Ouvrir une table de Bolides"
-                      : "Ouvrir une table"
-        }
+        title={HOME_GAMES.find((g) => g.id === createFor)?.modal ?? "Ouvrir une table"}
       >
         <div className="create-options">
           <button className="create-option" onClick={() => void createRoom("private")} disabled={busy !== null}>
@@ -435,6 +261,128 @@ export function HomePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** La barre de recherche : elle filtre les fiches à chaque lettre. */
+function GameSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <form
+      className="home-search"
+      role="search"
+      onSubmit={(e) => {
+        // « Entrée » range le clavier du téléphone, qui cachait les résultats
+        e.preventDefault();
+        input.current?.blur();
+      }}
+    >
+      <Icon name="search" size={20} aria-hidden="true" />
+      <input
+        ref={input}
+        className="input"
+        type="search"
+        enterKeyHint="search"
+        aria-label="Chercher un jeu"
+        placeholder="Chercher un jeu : cartes, course, à 8…"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onChange("");
+        }}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+      />
+      {value && (
+        <button
+          type="button"
+          className="home-search-clear"
+          aria-label="Effacer la recherche"
+          onClick={() => {
+            onChange("");
+            input.current?.focus();
+          }}
+        >
+          <Icon name="close" size={18} aria-hidden="true" />
+        </button>
+      )}
+    </form>
+  );
+}
+
+/** Quelques cartes posées sur le feutre, sur la fiche d'UNO. */
+function TableScatter() {
+  return (
+    <div className="table-scatter">
+      {TABLE_CARDS.map(({ card, x, y, r }, i) => (
+        <motion.div
+          key={card.id}
+          className="scatter-card"
+          style={{ left: x, top: y }}
+          initial={{ opacity: 0, y: -18, rotate: r - 10 }}
+          animate={{ opacity: 1, y: 0, rotate: r }}
+          transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
+        >
+          <CardFace card={card} width={96} />
+        </motion.div>
+      ))}
+      <motion.div
+        className="scatter-card scatter-deck"
+        initial={{ opacity: 0, x: 30 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.4, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
+      >
+        <CardBack width={80} />
+      </motion.div>
+    </div>
+  );
+}
+
+/** La fiche d'un jeu : son décor, à quoi on y joue, et de quoi s'asseoir. */
+function GameSheet({
+  game,
+  hidden,
+  isBeta,
+  busy,
+  onQuick,
+  onCreate,
+  onJoin,
+}: {
+  game: HomeGame;
+  hidden: boolean;
+  isBeta: boolean;
+  busy: string | null;
+  onQuick: (game: TableGame) => void;
+  onCreate: (game: TableGame) => void;
+  onJoin: (code: string) => void;
+}) {
+  const look = LOOK[game.id];
+  return (
+    <section hidden={hidden} className={`home-game home-game-${game.id} panel`} aria-label={game.name}>
+      <div className={`game-stage ${look.stage}`} aria-hidden="true">
+        {look.art()}
+      </div>
+      <div className="game-sheet">
+        <h2 className={`game-name is-${game.id}`}>{game.name}</h2>
+        {isBeta && (
+          <p className="beta-note">
+            <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous depuis la
+            page Admin.
+          </p>
+        )}
+        <p className="game-desc">{game.desc}</p>
+        <div className="game-actions">
+          <button className="btn btn-primary btn-lg" onClick={() => onQuick(game.id)} disabled={busy !== null}>
+            {busy === `quick-${game.id}` && <span className="spinner" />} {game.quick}
+          </button>
+          <button className="btn btn-lg" onClick={() => onCreate(game.id)} disabled={busy !== null}>
+            {game.open}
+          </button>
+        </div>
+        <JoinCode id={`join-code-${game.id}`} busy={busy !== null} onJoin={onJoin} />
+      </div>
+    </section>
   );
 }
 

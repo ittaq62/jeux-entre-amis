@@ -923,6 +923,100 @@
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
 }
 
+/* Le bonjour et la recherche : côte à côte sur un ordinateur, l'un sous l'autre sur un téléphone */
+.home-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 28px;
+  margin-bottom: 24px;
+}
+
+.home-top .home-greeting {
+  margin-bottom: 0;
+}
+
+.home-search {
+  position: relative;
+  flex: 0 1 380px;
+}
+
+.home-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  translate: 0 -50%;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.home-search .input {
+  padding: 0 44px;
+  text-overflow: ellipsis;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* La croix est la nôtre : celle de Chrome et de Safari ferait double emploi */
+.home-search .input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.home-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.home-search-clear:hover {
+  color: var(--text);
+}
+
+@media (max-width: 760px) {
+  .home-search {
+    flex: 1 1 100%;
+  }
+}
+
+.home-games {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.home-games > .home-game {
+  margin: 0;
+}
+
+.home-games > [hidden] {
+  display: none;
+}
+
+.home-no-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 36px 20px;
+  text-align: center;
+}
+
+.home-no-game p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
 /* La fiche du jeu : à gauche un coin de tapis éclairé, à droite de quoi s'asseoir */
 .home-game {
   display: grid;
@@ -1366,6 +1460,7 @@
 
 .join-input {
   width: 150px;
+  min-width: 0;
   font-family: var(--font-card);
   font-weight: 700;
   font-size: 22px;
@@ -1551,7 +1646,7 @@
   }
 
   .home-game {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .game-stage {
@@ -1588,7 +1683,7 @@
   }
 
   .home-columns {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 36px;
     margin-top: 36px;
   }
