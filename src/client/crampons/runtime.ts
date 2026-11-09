@@ -1,8 +1,20 @@
 // La boucle d'un match, côté navigateur : recevoir les positions, les rejouer à vitesse constante un peu en retard pour
 // qu'elles soient fluides, anticiper son propre joueur pour que le stick réponde tout de suite, et traduire les boutons en gestes.
 
-import { steer, topSpeed, type Act, type HumanActionKind, type MatchEvent, type Player } from "../../shared/games/crampons/model.ts";
-import { clamp, DT, GOAL_HALF, wrapAngle } from "../../shared/games/crampons/pitch.ts";
+import { GRAVITY, stepBall, type Ball } from "../../shared/games/crampons/ball.ts";
+import { planPass, planThrough, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
+import {
+  BURST_COOLDOWN,
+  BURST_S,
+  BURST_SPEED,
+  steer,
+  topSpeed,
+  type Act,
+  type HumanActionKind,
+  type MatchEvent,
+  type Player,
+} from "../../shared/games/crampons/model.ts";
+import { clamp, DT, GOAL_HALF, HALF_L, lerp, wrapAngle } from "../../shared/games/crampons/pitch.ts";
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
 import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
@@ -18,6 +30,8 @@ function distToSight(px: number, pz: number, cx: number, cz: number, tx: number,
 }
 
 const SEND_EVERY_MS = 33;
+/** La présentation du match, avant le coup d'envoi */
+const INTRO_S = 2.4;
 /** Même sans changement, on donne signe de vie : c'est aussi ce qui mesure le temps de trajet */
 const HEARTBEAT_MS = 220;
 /** Au moins ce retard, pour avoir toujours deux positions entre lesquelles glisser (en secondes) */
@@ -25,6 +39,21 @@ const MIN_DELAY = 0.075;
 const MAX_DELAY = 0.32;
 /** Faute de position récente, on prolonge le mouvement, mais pas longtemps */
 const MAX_EXTRAPOLATE = 0.12;
+/** Ces boutons partent dès l'appui : seule la frappe se charge */
+const INSTANT: readonly GameButton[] = ["pass", "through", "lob"];
+
+/** Le ballon qu'on voit partir dès le clic, sans attendre la réponse du serveur */
+interface Ghost {
+  ball: Ball;
+  kicker: number;
+  born: number;
+  /** Le temps que doit durer son voyage : l'écart avec le vrai ballon se résorbe d'ici là */
+  eta: number;
+  seen: boolean;
+  lastX: number;
+  lastY: number;
+  lastZ: number;
+}
 
 interface Snapshot {
   sim: number;
@@ -57,10 +86,12 @@ const WITH_BALL: Record<GameButton, HumanActionKind> = { pass: "pass", through: 
 export interface RuntimeOptions {
   seatId: string | null;
   send: (x: number, z: number, sprint: boolean, press: boolean, stamp: number) => void;
-  act: (k: HumanActionKind, p: number, x: number, z: number) => void;
+  act: (k: HumanActionKind, p: number, x: number, z: number, to?: number) => void;
   onHud: (hud: HudState) => void;
   /** Le joueur vient de frapper : on l'entend tout de suite, sans attendre le serveur */
   onLocalKick: (kind: HumanActionKind) => void;
+  /** Les premières images sont prêtes : on peut lever le rideau */
+  onReady?: () => void;
 }
 
 export class MatchRuntime {
@@ -110,6 +141,7 @@ export class MatchRuntime {
   // Le ballon montré : il suit le pied en douceur, sans sauter d'un côté à l'autre du joueur
   private shownBall = { x: 0, y: 0.2, z: 0 };
   private lastOwner = -2;
+  private ownerChangedAt = 0;
   // Le film des dernières secondes, pour revoir un but au ralenti
   private film: { t: number; p: Float32Array; b: Float32Array; acts: Act[] }[] = [];
   private cinema: "intro" | "scorer" | "replay" | null = null;
@@ -127,6 +159,21 @@ export class MatchRuntime {
   private cursorPoint: [number, number] | null = null;
   private aimX = 0;
   private aimZ = 0;
+  /** Le coéquipier désigné à l'écran : c'est lui qui recevra la passe */
+  private receiver = -1;
+  private firedOnPress = new Set<GameButton>();
+  private ghost: Ghost | null = null;
+  /** Une passe arrive à son joueur : il va seul au ballon, et le serveur seul sait où il est */
+  private receiving = false;
+  private blendX = 0;
+  private blendZ = 0;
+  private predShownFor = -1;
+  private burstUntilMs = 0;
+  private burstReadyMs = 0;
+  private touchPhase = 0;
+  private shownFrames = 0;
+  private jank = 0;
+  private startedAt = performance.now();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -216,6 +263,12 @@ export class MatchRuntime {
     return best;
   }
 
+  /** Le choc d'une grosse frappe, ressenti jusque dans la caméra */
+  punch(player: number, power: number) {
+    const v = this.frameViews[player];
+    if (v) this.scene.impact(v.x, v.z, power);
+  }
+
   /** Une frappe ou un tacle arrache un peu d'herbe */
   dust(player: number, strength: number) {
     const v = this.frameViews[player];
@@ -243,24 +296,28 @@ export class MatchRuntime {
     this.resolution = q === "basse" ? 0.6 : q === "moyenne" ? 0.8 : 1;
     this.shadowsOn = q !== "basse";
     this.slowFor = 0;
-    this.scene.setResolution(this.resolution);
+    this.scene.setResolution(this.resolution, q === "haute" ? 3.7e6 : 2.3e6);
     this.scene.setShadows(this.shadowsOn);
   }
 
-  /** En mode automatique : plusieurs secondes sous les 50 images par seconde, et on allège d'un cran */
-  private adaptQuality(now: number) {
+  /** En mode automatique : des images qui manquent ou qui arrivent en retard deux secondes de suite, et on allège d'un cran */
+  private adaptQuality(now: number, frameMs: number) {
     this.fpsFrames++;
+    if (frameMs > 25) this.jank++;
     if (now - this.fpsAt < 1000) return;
     this.fps = Math.round((this.fpsFrames * 1000) / (now - this.fpsAt));
+    const jank = this.jank;
     this.fpsFrames = 0;
+    this.jank = 0;
     this.fpsAt = now;
-    if (this.settings.quality !== "auto" || document.hidden) return;
-    this.slowFor = this.fps < 50 ? this.slowFor + 1 : 0;
-    if (this.slowFor < 3) return;
+    // Les toutes premières secondes ne comptent pas : la carte graphique finit de tout charger
+    if (this.settings.quality !== "auto" || document.hidden || now - this.startedAt < 3500) return;
+    this.slowFor = this.fps < 45 || jank >= 6 ? this.slowFor + 1 : 0;
+    if (this.slowFor < 2) return;
     this.slowFor = 0;
     if (this.resolution > 0.62) {
-      this.resolution = Math.max(0.6, this.resolution - 0.15);
-      this.scene.setResolution(this.resolution);
+      this.resolution = Math.max(0.6, this.resolution - 0.14);
+      this.scene.setResolution(this.resolution, 2.3e6);
     } else if (this.shadowsOn) {
       this.shadowsOn = false;
       this.scene.setShadows(false);
@@ -315,8 +372,10 @@ export class MatchRuntime {
     const x = tick.p[k]!;
     const z = tick.p[k + 1]!;
     const h = tick.p[k + 2]!;
+    const speed = tick.p[k + 3]!;
     const act = ACTS[tick.p[k + 4]!] ?? "none";
     const stam = tick.p[k + 5]! / 100;
+    this.receiving = tick.r === a;
     if (!this.pred || this.predFor !== a) {
       const info = this.view.players[a]!;
       this.predFor = a;
@@ -328,8 +387,8 @@ export class MatchRuntime {
         stats: { pac: info.pac, dri: info.dri, phy: info.phy, sho: 0, pas: 0, tac: 0, gk: 0 },
         x,
         z,
-        vx: 0,
-        vz: 0,
+        vx: Math.cos(h) * speed,
+        vz: Math.sin(h) * speed,
         h,
         stam,
       };
@@ -340,6 +399,21 @@ export class MatchRuntime {
     }
     const p = this.pred;
     p.stam = stam;
+    if (this.receiving) {
+      // Il court seul vers le ballon : on le garde prêt à repartir du bon endroit, à la bonne vitesse
+      p.x = x;
+      p.z = z;
+      p.h = h;
+      p.vx = Math.cos(h) * speed;
+      p.vz = Math.sin(h) * speed;
+      this.prevX = x;
+      this.prevZ = z;
+      this.prevH = h;
+      this.history.length = 0;
+      this.corrX = this.corrZ = 0;
+      this.predBlocked = false;
+      return;
+    }
     // Un geste qui commande le corps, ou une remise en jeu : c'est le serveur qui sait
     this.predBlocked = act !== "none" && act !== "kick";
     if (this.predBlocked) {
@@ -403,9 +477,62 @@ export class MatchRuntime {
     const dx = pt[0] - this.pred.x;
     const dz = pt[1] - this.pred.z;
     const l = Math.hypot(dx, dz) || 1;
-    // Pour une frappe, le curseur désigne l'endroit du but : à gauche, au centre, à droite
-    if (kind === "shot" || kind === "finesse" || kind === "chip") return [dx / l, clamp(pt[1] / (GOAL_HALF + 0.5), -1, 1)];
+    // Pour une frappe, le curseur donne la ligne de tir : on regarde où elle coupe la ligne de but
+    if (kind === "shot" || kind === "finesse" || kind === "chip") {
+      const toGoal = this.attackEnd() * HALF_L - this.pred.x;
+      const z = Math.abs(dx) > 1 && Math.sign(dx) === Math.sign(toGoal) ? this.pred.z + (dz * toGoal) / dx : pt[1];
+      return [Math.sign(toGoal), clamp(z / (GOAL_HALF + 0.3), -1, 1)];
+    }
     return [dx / l, dz / l];
+  }
+
+  private attackEnd(): number {
+    const myTeam = this.myIndex >= 0 ? this.view.humans[this.myIndex]!.team : 0;
+    return (myTeam === 0) !== this.view.flipped ? 1 : -1;
+  }
+
+  /** Fait partir le ballon à l'écran dès le geste : le vrai, celui du serveur, le rejoindra pendant son voyage */
+  private launchGhost(kind: HumanActionKind, power: number, to: number, ax: number, az: number, me: number) {
+    const s = this.shownBall;
+    const end = this.attackEnd();
+    const q = to >= 0 ? this.frameViews[to] : undefined;
+    let vx: number;
+    let vy = 0;
+    let vz: number;
+    let eta: number;
+    if (kind === "pass" && q) {
+      const plan = planPass(s.x, s.z, q.x, q.z, Math.cos(q.h) * q.v, Math.sin(q.h) * q.v, power);
+      const d = Math.max(0.1, Math.hypot(plan.tx - s.x, plan.tz - s.z));
+      vx = ((plan.tx - s.x) / d) * plan.v;
+      vz = ((plan.tz - s.z) / d) * plan.v;
+      eta = plan.t;
+    } else if (kind === "through" && q) {
+      const [tx, tz] = throughTarget(q.x, q.z, end, ax, az, power);
+      const plan = planThrough(s.x, s.z, q.x, q.z, tx, tz);
+      const d = Math.max(0.1, Math.hypot(tx - s.x, tz - s.z));
+      vx = ((tx - s.x) / d) * plan.v;
+      vz = ((tz - s.z) / d) * plan.v;
+      eta = plan.t;
+    } else if ((kind === "shot" || kind === "finesse") && Math.abs(az) > 0.12) {
+      const gx = end * HALF_L;
+      const aimZ = clamp(az, -1, 1) * GOAL_HALF * 0.9;
+      const d = Math.max(1, Math.hypot(gx - s.x, aimZ - s.z));
+      const speed = shotSpeed(power, 0.78) * (kind === "finesse" ? 0.84 : 1);
+      eta = d / speed;
+      vx = ((gx - s.x) / d) * speed;
+      vz = ((aimZ - s.z) / d) * speed;
+      vy = (lerp(0.35, 1.5, power * power) - s.y + 0.5 * GRAVITY * eta * eta) / eta;
+    } else return;
+    this.ghost = {
+      ball: { x: s.x, y: s.y, z: s.z, vx, vy, vz, curl: 0 },
+      kicker: me,
+      born: performance.now(),
+      eta,
+      seen: false,
+      lastX: 0,
+      lastY: 0,
+      lastZ: 0,
+    };
   }
 
   /** Les boutons deviennent des gestes */
@@ -437,22 +564,41 @@ export class MatchRuntime {
       return kind;
     };
 
-    // Pendant un ralenti, n'importe quel geste le passe
-    if (this.cinema && this.cinema !== "intro" && pad.pressed.length > 0) {
-      this.opts.act("skip", 0, 0, 0);
+    // Pendant la présentation ou un ralenti, n'importe quel geste le passe
+    if (this.cinema && pad.pressed.length > 0) {
+      if (this.cinema !== "intro") this.opts.act("skip", 0, 0, 0);
       this.cinema = null;
       this.scene.setShot(null);
     }
     if (pad.swap) this.opts.act("switch", 0, 0, 0);
+    if (pad.skill && !taking) {
+      this.opts.act("skill", 0, mx, mz);
+      if (hasBall && now >= this.burstReadyMs) {
+        this.burstUntilMs = now + BURST_S * 1000;
+        this.burstReadyMs = now + BURST_COOLDOWN * 1000;
+      }
+    }
+    const fire = (button: GameButton, power: number) => {
+      const kind = kindFor(button);
+      const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
+      const to = kind === "pass" || kind === "through" || kind === "lob" ? this.receiver : -1;
+      this.opts.act(kind, power, ax, az, to);
+      if (hasBall && !taking) {
+        this.localKickUntil = now + 300;
+        this.opts.onLocalKick(kind);
+        this.launchGhost(kind, power, to, ax, az, active);
+      }
+    };
+    // Une passe part à l'instant où on appuie : c'est ce qui fait la différence entre un jeu vif et un jeu lourd
+    for (const b of pad.pressed) {
+      if (!INSTANT.includes(b) || foeHasIt) continue;
+      fire(b, 0.5);
+      this.firedOnPress.add(b);
+    }
     for (const r of pad.released) {
+      if (this.firedOnPress.delete(r.button)) continue;
       if (taking || hasBall) {
-        const kind = kindFor(r.button);
-        const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
-        this.opts.act(kind, r.power, ax, az);
-        if (hasBall && !taking) {
-          this.localKickUntil = now + 320;
-          this.opts.onLocalKick(kind);
-        }
+        fire(r.button, r.power);
         continue;
       }
       if (foeHasIt) {
@@ -483,7 +629,7 @@ export class MatchRuntime {
 
     // Anticiper son joueur, au même rythme que le serveur
     const p = this.pred;
-    const frozen = taking || this.view.phase === "halftime" || this.view.phase === "over" || this.predBlocked;
+    const frozen = taking || this.view.phase === "halftime" || this.view.phase === "over" || this.predBlocked || this.receiving;
     if (p && active === this.predFor) {
       this.acc += dt;
       while (this.acc >= DT) {
@@ -492,12 +638,14 @@ export class MatchRuntime {
         this.prevZ = p.z;
         this.prevH = p.h;
         if (frozen) {
-          p.vx = 0;
-          p.vz = 0;
+          if (!this.receiving) {
+            p.vx = 0;
+            p.vz = 0;
+          }
           continue;
         }
         const l = Math.hypot(mx, mz);
-        const speed = topSpeed(p, pad.sprint, hasBall) * Math.min(1, l * 1.25);
+        const speed = topSpeed(p, pad.sprint, hasBall) * Math.min(1, l * 1.25) * (now < this.burstUntilMs ? BURST_SPEED : 1);
         steer(p, l > 0.05 ? mx / l : 0, l > 0.05 ? mz / l : 0, speed);
       }
       // L'écart avec le serveur se rattrape peu à peu, à chaque image : jamais d'un coup
@@ -562,6 +710,10 @@ export class MatchRuntime {
     const active = this.myActive();
     const scorer = this.view.phase === "goal" ? (this.view.goals.at(-1)?.team ?? null) : null;
     const local = performance.now() < this.localKickUntil;
+    const fade = Math.exp(-dt / 0.09);
+    this.blendX *= fade;
+    this.blendZ *= fade;
+    let predicted = false;
     for (let i = 0; i < views.length; i++) {
       const k = i * TICK_STRIDE;
       const v = views[i]!;
@@ -588,15 +740,23 @@ export class MatchRuntime {
           v.dirZ = dz / l;
         }
       }
-      if (i === active && this.pred && this.predFor === i && (act === "none" || act === "kick")) {
+      if (i === active && this.pred && this.predFor === i && !this.receiving && (act === "none" || act === "kick")) {
         const [sx, sz, sh] = this.shownPred();
-        v.x = sx;
-        v.z = sz;
+        // Le joueur passe du temps du serveur au temps présent : on efface la différence en douceur, jamais d'un coup
+        if (this.predShownFor !== i) {
+          this.predShownFor = i;
+          this.blendX = v.x - sx;
+          this.blendZ = v.z - sz;
+        }
+        v.x = sx + this.blendX;
+        v.z = sz + this.blendZ;
         v.h = sh;
         v.v = Math.hypot(this.pred.vx, this.pred.vz);
         if (local) v.act = "kick";
+        predicted = true;
       }
     }
+    if (!predicted) this.predShownFor = -1;
     const ballA = a.b;
     const ballB = b.b;
     const fb = Math.min(f, maxF);
@@ -609,24 +769,76 @@ export class MatchRuntime {
     };
     // Le ballon de son joueur reste à ses pieds, là où on le voit
     const owner = b.o;
-    if (owner === active && active >= 0 && this.pred && this.predFor === active) {
+    if (owner === active && active >= 0 && predicted && this.pred) {
       const p = this.pred;
-      const reach = 0.55 + Math.min(1, Math.hypot(p.vx, p.vz) / 9) * 0.55;
-      const [sx, sz, sh] = this.shownPred();
-      ball.x = sx + Math.cos(sh) * reach;
-      ball.z = sz + Math.sin(sh) * reach;
+      const reach = 0.55 + Math.min(1, Math.hypot(p.vx, p.vz) / 11) * 0.55;
+      const me = views[active]!;
+      ball.x = me.x + Math.cos(me.h) * reach;
+      ball.z = me.z + Math.sin(me.h) * reach;
       ball.y = Math.min(ball.y, 0.3);
       ball.vx = p.vx;
       ball.vz = p.vz;
     }
+    // Balle au pied, il la pousse à chaque foulée : elle s'éloigne un peu du pied et revient
+    const carrier = owner >= 0 ? views[owner] : undefined;
+    if (carrier && carrier.act === "none" && carrier.v > 1) {
+      this.touchPhase += carrier.v * dt * 1.5;
+      const nudge = Math.abs(Math.sin(this.touchPhase)) * clamp(carrier.v / 9, 0, 1) * 0.3;
+      ball.x += Math.cos(carrier.h) * nudge;
+      ball.z += Math.sin(carrier.h) * nudge;
+    }
+    // Le ballon qu'on vient de frapper part aussitôt ; le vrai le rejoint pendant le trajet
+    const g = this.ghost;
+    let ghosted = false;
+    if (g) {
+      const age = (performance.now() - g.born) / 1000;
+      if (b.o === g.kicker && !g.seen) {
+        if (age > 0.5) this.ghost = null;
+        else {
+          stepBall(g.ball, dt);
+          ghosted = true;
+        }
+      } else if (b.o >= 0 && g.seen) {
+        // Quelqu'un a contrôlé le ballon : c'est fini
+        this.ghost = null;
+      } else {
+        if (!g.seen) {
+          g.seen = true;
+        } else {
+          g.ball.x += ball.x - g.lastX;
+          g.ball.y += ball.y - g.lastY;
+          g.ball.z += ball.z - g.lastZ;
+        }
+        g.lastX = ball.x;
+        g.lastY = ball.y;
+        g.lastZ = ball.z;
+        const close = Math.min(1, dt / Math.max(0.15, g.eta - age));
+        g.ball.x += (ball.x - g.ball.x) * close;
+        g.ball.y += (ball.y - g.ball.y) * close;
+        g.ball.z += (ball.z - g.ball.z) * close;
+        if (Math.hypot(ball.x - g.ball.x, ball.z - g.ball.z) < 0.12) this.ghost = null;
+        ghosted = true;
+      }
+      if (ghosted) {
+        ball.x = g.ball.x;
+        ball.y = Math.max(0.16, g.ball.y);
+        ball.z = g.ball.z;
+        ball.vx = g.ball.vx;
+        ball.vz = g.ball.vz;
+      }
+    }
     // Au pied, le ballon suit en souplesse ; libre, il va exactement où il doit aller
     const s = this.shownBall;
     const jump = Math.hypot(ball.x - s.x, ball.z - s.z);
-    const k = owner >= 0 && jump < 5 ? 1 - Math.exp(-dt * 24) : this.lastOwner !== owner && jump < 3 ? 0.5 : 1;
+    // Au contrôle, le ballon rejoint le pied sans sauter ; ensuite, il le suit de près
+    if (this.lastOwner !== owner) this.ownerChangedAt = performance.now();
+    const settling = performance.now() - this.ownerChangedAt < 200;
+    const k = ghosted ? 1 : owner >= 0 && jump < 9 ? 1 - Math.exp(-dt * (settling ? 15 : 42)) : settling && jump < 3 ? 0.3 : 1;
     s.x += (ball.x - s.x) * k;
     s.z += (ball.z - s.z) * k;
     s.y += (ball.y - s.y) * Math.max(k, 0.6);
     this.lastOwner = owner;
+    this.receiver = owner === active && active >= 0 ? this.guessReceiver(views, active) : -1;
     const flip = this.view.flipped;
     const myTeam = this.myIndex >= 0 ? this.view.humans[this.myIndex]!.team : 0;
     return {
@@ -638,13 +850,14 @@ export class MatchRuntime {
       cuts: this.view.cuts,
       charge: this.charge,
       aim: this.cursorPoint,
-      receiver: owner === active && active >= 0 ? this.guessReceiver(views, active) : -1,
+      receiver: this.receiver,
     };
   }
 
-  /** Le coéquipier qui recevrait la passe, pour le montrer avant de la donner */
+  /** Le coéquipier qui recevra la passe : le plus proche du curseur, sinon le mieux placé dans la direction demandée */
   private guessReceiver(views: FootballerView[], me: number): number {
     const p = views[me]!;
+    const cursor = this.cursorPoint;
     let dx = this.aimX;
     let dz = this.aimZ;
     if (Math.hypot(dx, dz) < 0.2) {
@@ -663,9 +876,14 @@ export class MatchRuntime {
       const rz = q.z - p.z;
       const d = Math.hypot(rx, rz);
       if (d < 2.5 || d > 62) continue;
-      const c = (rx * dx + rz * dz) / d;
-      if (c < 0.45) continue;
-      const s = c * c * 3 - d / 45;
+      let s: number;
+      if (cursor) {
+        s = -Math.hypot(q.x - cursor[0], q.z - cursor[1]) + (i === this.receiver ? 2.5 : 0);
+      } else {
+        const c = (rx * dx + rz * dz) / d;
+        if (c < 0.45) continue;
+        s = c * c * 3 - d / 45 + (i === this.receiver ? 0.25 : 0);
+      }
       if (s > score) {
         score = s;
         best = i;
@@ -753,12 +971,12 @@ export class MatchRuntime {
     }
     this.cinemaT += dt;
     if (this.cinema === "intro") {
-      if (this.cinemaT > 2.8 || this.view.phase === "play") {
+      if (this.cinemaT > INTRO_S || this.view.phase === "play") {
         this.cinema = null;
         this.scene.setShot(null);
         return frame;
       }
-      this.scene.setShot({ kind: "intro", t: this.cinemaT / 2.8 });
+      this.scene.setShot({ kind: "intro", t: this.cinemaT / INTRO_S });
       return frame;
     }
     if (this.cinema === "scorer") {
@@ -788,7 +1006,7 @@ export class MatchRuntime {
 
   private loop = (now: number) => {
     this.raf = requestAnimationFrame(this.loop);
-    this.adaptQuality(now);
+    this.adaptQuality(now, now - this.last);
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     if (this.opts.seatId !== null && this.myIndex >= 0) this.handleButtons(dt);
@@ -797,6 +1015,7 @@ export class MatchRuntime {
     if (import.meta.env.DEV) (window as unknown as { __crFrame: SceneFrame }).__crFrame = frame;
     if (this.view.phase !== "goal") this.record(frame);
     this.scene.render(dt, this.directCinema(dt, frame));
+    if (++this.shownFrames === 3) this.opts.onReady?.();
     if (now - this.hudAt > 90) {
       this.hudAt = now;
       const a = this.myActive();

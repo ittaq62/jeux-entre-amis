@@ -37,6 +37,7 @@ export type CameraMode = "tele" | "large" | "pres";
 
 /** Un plan de cinéma, le temps d'une présentation, d'un but ou d'un ralenti */
 export type Shot =
+  | { kind: "free"; x: number; y: number; z: number; tx: number; ty: number; tz: number }
   | { kind: "intro"; t: number }
   | { kind: "scorer"; x: number; z: number; side: number; t: number; base: number }
   | { kind: "replay"; end: number };
@@ -92,6 +93,12 @@ export class CramponsScene {
   private reticle: THREE.Mesh;
   private target: THREE.Mesh;
   private basePixelRatio = 1;
+  private resolution = 1;
+  /** Au-delà, la finesse ne se voit plus à cette distance, mais la carte graphique la paie très cher */
+  private maxPixels = 2.3e6;
+  private shake = 0;
+  private baseFov = 26;
+  private mateArrow: THREE.Mesh;
   private width = 1;
   private height = 1;
   private sun: THREE.DirectionalLight;
@@ -127,6 +134,8 @@ export class CramponsScene {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = theme.exposure;
+    // Vérifier chaque programme fige le navigateur au démarrage : en ligne, on s'en passe
+    this.renderer.debug.checkShaderErrors = import.meta.env.DEV;
     if (this.shadows) {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -225,12 +234,32 @@ export class CramponsScene {
     arrowGeo.rotateX(Math.PI);
     this.arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffe066", toneMapped: false }));
     this.scene.add(this.arrow);
+    this.mateArrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#6fe3ff", toneMapped: false }));
+    this.mateArrow.visible = false;
+    this.mateArrow.scale.setScalar(0.8);
+    this.scene.add(this.mateArrow);
+    // Tout est préparé d'un coup, derrière le rideau : sinon le jeu se fige en pleine partie à la première apparition de chaque matière
+    this.renderer.compile(this.scene, this.camera);
   }
 
   /** Allège ou affine l'image, sans toucher à ce qu'on voit */
-  setResolution(scale: number) {
-    this.renderer.setPixelRatio(this.basePixelRatio * scale);
+  setResolution(scale: number, maxPixels: number) {
+    this.resolution = scale;
+    this.maxPixels = maxPixels;
+    this.applyPixels();
+  }
+
+  private applyPixels() {
+    const cap = Math.sqrt(this.maxPixels / Math.max(1, this.width * this.height));
+    this.renderer.setPixelRatio(Math.min(this.basePixelRatio, cap) * this.resolution);
     this.renderer.setSize(this.width, this.height, false);
+  }
+
+  /** Une grosse frappe : un peu de poussière, un éclat, et la caméra qui encaisse le choc */
+  impact(x: number, z: number, power: number) {
+    this.fx.puff(x, z, 7, 0.6 + power);
+    this.fx.flash(x, z, power);
+    this.shake = Math.max(this.shake, 0.35 + power * 0.65);
   }
 
   setShadows(on: boolean) {
@@ -241,10 +270,11 @@ export class CramponsScene {
   resize(w: number, h: number) {
     this.width = w;
     this.height = h;
-    this.renderer.setSize(w, h, false);
+    this.applyPixels();
     this.camera.aspect = w / h;
     this.portrait = h > w * 1.05;
-    this.camera.fov = this.portrait ? 50 : 26;
+    this.baseFov = this.portrait ? 50 : 26;
+    this.camera.fov = this.baseFov;
     this.camera.updateProjectionMatrix();
     this.stadium.showNearStand(this.portrait);
   }
@@ -267,6 +297,8 @@ export class CramponsScene {
 
   /** Une image, avec éventuellement un plan de cinéma à la place de la caméra de match */
   private shot: Shot | null = null;
+  private tmpPos = new THREE.Vector3();
+  private tmpQuat = new THREE.Quaternion();
   setShot(shot: Shot | null) {
     this.shot = shot;
   }
@@ -321,12 +353,25 @@ export class CramponsScene {
     if (frame.aim) this.reticle.position.set(frame.aim[0], 0.07, frame.aim[1]);
     const mate = frame.receiver >= 0 ? frame.players[frame.receiver] : null;
     this.target.visible = Boolean(mate);
-    if (mate) this.target.position.set(mate.x, 0.05, mate.z);
+    this.mateArrow.visible = Boolean(mate);
+    if (mate) {
+      this.target.position.set(mate.x, 0.05, mate.z);
+      this.target.scale.setScalar(1 + Math.sin(this.time * 8) * 0.08);
+      this.mateArrow.position.set(mate.x, 2.95 + Math.sin(this.time * 7) * 0.1, mate.z);
+    }
+    // Le joueur qui sprinte soulève un peu d'herbe derrière lui
+    if (p && shown && p.v > 9.5 && Math.random() < dt * 16) this.fx.puff(p.x, p.z, 1, 0.3);
 
     this.crowd.update(dt, this.time, frame.players);
     this.stadium.update(this.time, frame.excitement, dt);
     if (this.shot) this.cinema(dt, frame, this.shot);
     else this.moveCamera(dt, frame);
+    // Le choc d'une frappe : la caméra resserre d'un rien, puis revient
+    if (this.shake > 0.002 || this.camera.fov !== this.baseFov) {
+      this.shake *= Math.exp(-dt * 9);
+      this.camera.fov = this.shake > 0.002 ? this.baseFov * (1 - this.shake * 0.028) : this.baseFov;
+      this.camera.updateProjectionMatrix();
+    }
     this.fx.update(dt, this.time, b, this.cx, this.cz);
     if (this.shadows) {
       // L'ombre suit le jeu, calée sur sa grille pour ne pas scintiller quand la caméra glisse
@@ -347,12 +392,27 @@ export class CramponsScene {
     this.gauge.visible = false;
     this.reticle.visible = false;
     this.target.visible = false;
+    this.mateArrow.visible = false;
+    if (shot.kind === "free") {
+      this.camera.position.set(shot.x, shot.y, shot.z);
+      this.camera.lookAt(shot.tx, shot.ty, shot.tz);
+      return;
+    }
     if (shot.kind === "intro") {
+      // Un survol qui reste à l'intérieur du stade, et qui se pose exactement là où commence la caméra de match
       const k = clamp(shot.t, 0, 1);
-      const a = -1.5 + k * 1.5;
-      const r = 92 - k * 34;
-      this.camera.position.set(Math.sin(a) * r, 42 - k * 18, Math.cos(a) * r);
-      this.camera.lookAt(0, 1, 0);
+      this.moveCamera(dt, frame);
+      const endPos = this.tmpPos.copy(this.camera.position);
+      const endQ = this.tmpQuat.copy(this.camera.quaternion);
+      const ease = k * k * (3 - 2 * k);
+      const a = -1.1 + ease * 0.75;
+      const r = 40 + ease * 8;
+      this.camera.position.set(Math.sin(a) * r, 5.5 + ease * 11, Math.cos(a) * r);
+      this.camera.lookAt(-5 * (1 - ease), 1.4, 0);
+      const f = clamp((k - 0.55) / 0.45, 0, 1);
+      const land = f * f * (3 - 2 * f);
+      this.camera.position.lerp(endPos, land);
+      this.camera.quaternion.slerp(endQ, land);
       return;
     }
     if (shot.kind === "scorer") {
@@ -380,9 +440,9 @@ export class CramponsScene {
     const snap = frame.cuts !== this.lastCuts;
     this.lastCuts = frame.cuts;
     // On regarde un peu devant le ballon, là où il va
-    const gx = b.x + clamp(b.vx * 0.22, -6, 6);
+    const gx = b.x + clamp(b.vx * 0.22, -7.5, 7.5);
     const gz = b.z + clamp(b.vz * 0.12, -3, 3);
-    const k = snap ? 1 : 1 - Math.exp(-dt * 3);
+    const k = snap ? 1 : 1 - Math.exp(-dt * 4.2);
     this.cx += (gx - this.cx) * k;
     this.cz += (gz - this.cz) * k;
     const nearGoal = clamp((Math.abs(this.cx) - (HALF_L - 34)) / 30, 0, 1);

@@ -619,7 +619,7 @@ export type CramponsClientMessage =
   /** La direction du stick, le sprint et le pressing, plusieurs fois par seconde */
   | { t: "in"; x: number; z: number; s: boolean; p: boolean; c?: number }
   /** Un geste : passer, frapper, tacler, changer de joueur */
-  | { t: "act"; k: string; p: number; x: number; z: number }
+  | { t: "act"; k: string; p: number; x: number; z: number; to?: number }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

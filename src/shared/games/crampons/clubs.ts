@@ -229,6 +229,8 @@ export function makeSquad(team: Team, setup: TeamSetup, side: number, seed: numb
       dirZ: 0,
       order: null,
       lockedUntil: 0,
+      burstUntil: 0,
+      burstReady: 0,
       human: null,
       yellow: 0,
       off: false,

@@ -332,7 +332,7 @@ function laneRisk(m: Match, p: Player, x: number, z: number, speed: number): num
     if (along < 0.5 || along > len + 1) continue;
     const side = Math.abs(rx * uz - rz * ux);
     const t = along / speed;
-    const room = side - Math.max(0, t - 0.22) * 6.6 - 0.7;
+    const room = side - Math.max(0, t - 0.22) * 9 - 0.7;
     risk = Math.max(risk, room < 0 ? Math.min(1, 0.6 - room * 0.25) : room < 1.2 ? 0.25 * (1 - room / 1.2) : 0);
   }
   return risk;
@@ -347,19 +347,19 @@ function throughSpot(m: Match, p: Player, q: Player): [number, number] | null {
     const [x, z] = onPitch(q.x + dir * lead, q.z * 0.86, 3);
     if (x * dir > HALF_L - 5) continue;
     const dq = Math.hypot(x - q.x, z - q.z);
-    const tAtk = dq / 8.2;
-    const tBall = Math.hypot(x - p.x, z - p.z) / 20;
+    const tAtk = dq / 11;
+    const tBall = Math.hypot(x - p.x, z - p.z) / 25;
     if (tBall > tAtk + 0.7) continue;
     let beaten = true;
     for (const o of m.players) {
       if (o.team === p.team || !free(o)) continue;
-      const reach = Math.max(0, Math.hypot(x - o.x, z - o.z) - 1) / (o.role === "GK" ? 6.5 : 8.2) + 0.28;
+      const reach = Math.max(0, Math.hypot(x - o.x, z - o.z) - 1) / (o.role === "GK" ? 8.5 : 11) + 0.28;
       if (reach < tAtk + 0.15) {
         beaten = false;
         break;
       }
     }
-    if (beaten && laneRisk(m, p, x, z, 21) < 0.55) return [x, z];
+    if (beaten && laneRisk(m, p, x, z, 26) < 0.55) return [x, z];
   }
   return null;
 }
@@ -380,7 +380,7 @@ function shotValue(m: Match, p: Player): number {
   const angle = Math.abs(toA - toB);
   let value = Math.pow(1 - d / 30, 1.3) * clamp(angle / 0.42, 0.1, 1.4) * 1.4;
   value *= 0.6 + (p.stats.sho / 100) * 0.5;
-  value *= 1 - laneRisk(m, p, gx, 0, 25) * 0.8;
+  value *= 1 - laneRisk(m, p, gx, 0, 32) * 0.8;
   return value;
 }
 
@@ -425,12 +425,12 @@ export function thinkCarrier(m: Match, p: Player) {
 
   // Frapper
   const shot = shotValue(m, p);
-  if (shot > 0.36) {
+  if (shot > 0.5) {
     options.push({
       score: shot * 1.25 + (inBox(p.x, p.z, dir) ? 0.28 : 0),
       run: () => {
         const finesse = random(m) < 0.25 && Math.hypot(gx - p.x, p.z) < 24;
-        orderKick(p, { kind: finesse ? "finesse" : "shot", power: 0.68 + random(m) * 0.2, ax: 0, az: 0, to: -1 });
+        orderKick(p, { kind: finesse ? "finesse" : "shot", power: 0.42 + random(m) * 0.26, ax: 0, az: 0, to: -1 });
       },
     });
   }
@@ -444,7 +444,7 @@ export function thinkCarrier(m: Match, p: Player) {
     if (m.settings.offside && ahead > line + 0.15 && ahead > p.x * dir) continue;
     const forward = ((q.x - p.x) * dir) / 40;
     const space = Math.min(openness(m, p.team, q.x, q.z), 8) / 8;
-    const risk = laneRisk(m, p, q.x, q.z, 19);
+    const risk = laneRisk(m, p, q.x, q.z, 24);
     if (risk > 0.72) continue;
     const closer = shotValue(m, q);
     const value = forward * 0.9 + space * 0.42 + closer * 0.9 - risk * 1.2 - d * 0.005;

@@ -288,6 +288,91 @@ describe("les commandes", () => {
     expect(m.stats[0].passes).toBe(1);
   });
 
+  /** Un joueur humain, le ballon au pied, un coéquipier à une distance donnée, personne autour */
+  function duo(gap: number) {
+    const m = human();
+    toPlay(m);
+    const h = m.humans[0]!;
+    const p = m.players[h.active]!;
+    const q = m.players.find((o) => o.team === 0 && o.i !== p.i && o.role !== "GK")!;
+    for (const o of m.players) {
+      o.x = o.team === 0 ? -20 : 30;
+      o.z = -30 + o.i * 2.5;
+      o.vx = o.vz = 0;
+      o.tx = o.x;
+      o.tz = o.z;
+      o.act = "none";
+    }
+    p.x = 0;
+    p.z = 0;
+    p.h = 0;
+    q.x = gap;
+    q.z = 6;
+    m.owner = p.i;
+    m.lastTouch = p.i;
+    m.pass = null;
+    p.order = null;
+    p.lockedUntil = 0;
+    return { m, h, p, q };
+  }
+
+  it("une passe arrive au receveur même si la touche de direction reste enfoncée", () => {
+    const { m, h, q } = duo(20);
+    setInput(m, "moi", -1, 0, false, false);
+    pushAction(m, "moi", "pass", 0.5, 1, 0.3, q.i);
+    for (let i = 0; i < 90 && m.owner !== q.i; i++) stepMatch(m);
+    expect(m.owner).toBe(q.i);
+    expect(h.active).toBe(q.i);
+  });
+
+  it("le ballon va au coéquipier désigné à l'écran, pas à celui qui est dans l'axe", () => {
+    const { m, q } = duo(14);
+    const autre = m.players.find((o) => o.team === 0 && o.i !== q.i && o.human === null && o.role !== "GK")!;
+    autre.x = 18;
+    autre.z = -2;
+    pushAction(m, "moi", "pass", 0.5, 1, -0.1, q.i);
+    stepMatch(m);
+    stepMatch(m);
+    expect(m.pass?.to).toBe(q.i);
+  });
+
+  it("le joueur retrouve ses touches au contrôle", () => {
+    const { m, q } = duo(14);
+    setInput(m, "moi", 0, 1, false, false);
+    pushAction(m, "moi", "pass", 0.5, 1, 0.3, q.i);
+    for (let i = 0; i < 90 && m.owner !== q.i; i++) stepMatch(m);
+    expect(m.owner).toBe(q.i);
+    const z = q.z;
+    for (let i = 0; i < 15; i++) stepMatch(m);
+    expect(q.z).toBeGreaterThan(z + 1.5);
+  });
+
+  it("le crochet donne un coup d'accélération, et il faut attendre avant d'en refaire un", () => {
+    const { m, p } = duo(14);
+    setInput(m, "moi", 1, 0, false, false);
+    for (let i = 0; i < 15; i++) stepMatch(m);
+    const normal = Math.hypot(p.vx, p.vz);
+    pushAction(m, "moi", "skill", 0, 1, 0);
+    for (let i = 0; i < 6; i++) stepMatch(m);
+    expect(Math.hypot(p.vx, p.vz)).toBeGreaterThan(normal * 1.25);
+    const ready = p.burstReady;
+    for (let i = 0; i < 15; i++) stepMatch(m);
+    pushAction(m, "moi", "skill", 0, 1, 0);
+    stepMatch(m);
+    expect(p.burstReady).toBe(ready);
+  });
+
+  it("un joueur lancé change de direction sans traîner", () => {
+    const { m, p } = duo(14);
+    setInput(m, "moi", 1, 0, true, false);
+    for (let i = 0; i < 20; i++) stepMatch(m);
+    setInput(m, "moi", 0, 1, true, false);
+    for (let i = 0; i < 12; i++) stepMatch(m);
+    // En 0,4 seconde, il court franchement dans la nouvelle direction
+    expect(p.vz).toBeGreaterThan(7);
+    expect(Math.abs(p.vx)).toBeLessThan(2);
+  });
+
   it("une action adverse ne fait rien à un joueur qui n'a pas le ballon, et changer de joueur en donne un autre", () => {
     const m = human();
     toPlay(m);

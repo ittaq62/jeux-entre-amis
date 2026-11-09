@@ -24,6 +24,8 @@ export interface PadState {
   /** La force en cours, pour la jauge : le plus long des boutons tenus */
   charge: number;
   swap: boolean;
+  /** Le crochet vient d'être demandé */
+  skill: boolean;
   finesse: boolean;
   chip: boolean;
   scheme: Scheme;
@@ -45,6 +47,7 @@ export class CramponsControls {
   private padDown: Partial<Record<GameButton, boolean>> = {};
   private padSwap = false;
   private swapTaken = false;
+  private skillTaken = false;
   private touchSwap = false;
   private cursor: { x: number; y: number } | null = null;
   private scheme: Scheme = "clavier";
@@ -204,7 +207,8 @@ export class CramponsControls {
         const t = now - (this.startedAt[b] ?? now);
         released.push({ button: b, power: Math.min(1, t / FULL_CHARGE_MS) });
       }
-      if (held[b]) charge = Math.max(charge, Math.min(1, (now - (this.startedAt[b] ?? now)) / FULL_CHARGE_MS));
+      // Seule la frappe se charge : les passes partent dès l'appui
+      if (held[b] && b === "shoot") charge = Math.min(1, (now - (this.startedAt[b] ?? now)) / FULL_CHARGE_MS);
       this.padDown[b] = held[b];
     }
     const padSwap = pb(4);
@@ -218,6 +222,9 @@ export class CramponsControls {
       this.touchSwap = false;
       swap = true;
     }
+    const skillHeld = this.any("skill");
+    const skill = skillHeld && !this.skillTaken;
+    this.skillTaken = skillHeld;
     const sprint = this.any("sprint") || this.touch.sprint || pb(5);
     const finesse = this.any("finesse") || this.touch.finesse || pb(6);
     const chip = this.any("chip") || this.touch.chip || pb(7);
@@ -232,6 +239,7 @@ export class CramponsControls {
       held,
       charge,
       swap: !this.paused && swap,
+      skill: !this.paused && skill,
       finesse,
       chip,
       scheme: this.scheme,

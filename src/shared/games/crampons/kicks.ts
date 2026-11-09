@@ -6,18 +6,18 @@ import { clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, lerp, onPitch } from "./p
 
 /** Le temps que le pied arrive au ballon, selon le geste */
 const WINDUP: Record<KickKind, number> = {
-  pass: 0.07,
-  through: 0.09,
-  lob: 0.13,
-  cross: 0.16,
-  clear: 0.12,
-  shot: 0.16,
-  finesse: 0.18,
-  chip: 0.16,
+  pass: 0.03,
+  through: 0.03,
+  lob: 0.07,
+  cross: 0.09,
+  clear: 0.07,
+  shot: 0.07,
+  finesse: 0.09,
+  chip: 0.08,
 };
 
 /** Passé ce moment, le frappeur ne peut plus retoucher le ballon tout de suite */
-const KICK_LOCK = 0.32;
+const KICK_LOCK = 0.24;
 
 export function orderKick(p: Player, order: KickOrder) {
   p.order = order;
@@ -149,7 +149,58 @@ function clumsiness(m: Match, p: Player, dx: number, dz: number): number {
 
 const noise = (m: Match, amount: number) => (random(m) * 2 - 1) * amount;
 
-/** Si c'est un humain qui donne, il dirige aussitôt le receveur : il peut aller au-devant du ballon */
+/** Celui que l'humain voyait désigné à l'écran, s'il peut encore recevoir ; sinon on en cherche un dans la direction demandée */
+function receiverOf(m: Match, p: Player, o: KickOrder, ahead = false): number {
+  const q = o.to >= 0 ? m.players[o.to] : undefined;
+  if (q && q.team === p.team && q.i !== p.i && !q.off) return q.i;
+  return pickReceiver(m, p, o.ax, o.az, ahead);
+}
+
+/** La vitesse d'une passe de `d` mètres à son arrivée : assez sèche pour ne pas traîner */
+export const passArrival = (d: number, power: number) => clamp(14 + d * 0.32, 14, 26) * (0.88 + power * 0.28);
+
+/** La vitesse d'une frappe, selon la jauge et le talent du tireur */
+export const shotSpeed = (power: number, sho: number) => lerp(21, 26 + sho * 15, power);
+
+/** Une passe à terre vers un coéquipier qui court : où viser, à quelle vitesse, et en combien de temps elle arrive */
+export function planPass(bx: number, bz: number, qx: number, qz: number, qvx: number, qvz: number, power: number) {
+  let tx = qx;
+  let tz = qz;
+  let v = 12;
+  let t = 0;
+  for (let it = 0; it < 3; it++) {
+    const d = Math.hypot(tx - bx, tz - bz);
+    v = groundSpeedFor(d, passArrival(d, power));
+    t = Math.min(rollTime(v, d), 3);
+    tx = qx + qvx * t * 0.8;
+    tz = qz + qvz * t * 0.8;
+  }
+  return { tx, tz, v, t };
+}
+
+/** Le point visé par une passe en profondeur : devant le receveur, un peu vers la direction demandée */
+export function throughTarget(qx: number, qz: number, dir: number, ax: number, az: number, power: number): [number, number] {
+  const stick = Math.hypot(ax, az);
+  let rx = dir + (stick > 0.2 ? (ax / stick) * 0.3 : 0);
+  let rz = stick > 0.2 ? (az / stick) * 0.7 : -qz * 0.02;
+  const l = Math.hypot(rx, rz);
+  rx /= l;
+  rz /= l;
+  const lead = 5 + power * 13;
+  return onPitch(qx + rx * lead, qz + rz * lead, 2);
+}
+
+/** La vitesse de cette passe en profondeur, pour que le ballon et le receveur arrivent ensemble */
+export function planThrough(bx: number, bz: number, qx: number, qz: number, tx: number, tz: number) {
+  const d = Math.max(1, Math.hypot(tx - bx, tz - bz));
+  const t = Math.max(0.45, Math.hypot(tx - qx, tz - qz) / 10);
+  return { v: clamp(d / t + (ROLL_DECEL * t) / 2, 13, 33), t };
+}
+
+/**
+ * Si c'est un humain qui donne, il prend aussitôt le receveur, qui part tout seul à la rencontre du ballon : ses touches
+ * ne reprennent la main qu'au contrôle, sans quoi la touche encore enfoncée l'emmènerait loin de la passe.
+ */
 function takeOver(m: Match, q: Player) {
   if (q.human !== null || q.role === "GK") return;
   const h = m.humans.find((o) => o.team === q.team && m.players[o.active]?.i === m.lastTouch);
@@ -162,32 +213,19 @@ function takeOver(m: Match, q: Player) {
 
 function firePass(m: Match, p: Player, o: KickOrder) {
   const b = m.ball;
-  const to = o.to >= 0 ? o.to : pickReceiver(m, p, o.ax, o.az);
+  const to = receiverOf(m, p, o);
   let tx: number;
   let tz: number;
   let v: number;
   const skill = p.stats.pas / 100;
   if (to >= 0) {
     const q = m.players[to]!;
-    tx = q.x;
-    tz = q.z;
-    v = 12;
     // On vise là où il sera, pas là où il est
-    for (let it = 0; it < 3; it++) {
-      const d = Math.hypot(tx - b.x, tz - b.z);
-      const arrive = clamp(11 + d * 0.28, 11, 22) * (0.8 + o.power * 0.45);
-      v = groundSpeedFor(d, arrive);
-      const t = Math.min(rollTime(v, d), 3);
-      tx = q.x + q.vx * t * 0.8;
-      tz = q.z + q.vz * t * 0.8;
-    }
-    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + Math.min(rollTime(v, Math.hypot(tx - b.x, tz - b.z)), 3) + 0.8 };
-    // Il vient au-devant du ballon, pour l'avoir avant son défenseur
-    const toBall = Math.max(0.1, Math.hypot(b.x - tx, b.z - tz));
-    const step = Math.min(3, toBall * 0.3);
-    q.runUntil = m.t + 0.8;
-    q.runX = tx + ((b.x - tx) / toBall) * step;
-    q.runZ = tz + ((b.z - tz) / toBall) * step;
+    const plan = planPass(b.x, b.z, q.x, q.z, q.vx, q.vz, o.power);
+    tx = plan.tx;
+    tz = plan.tz;
+    v = plan.v;
+    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + Math.min(rollTime(v, Math.hypot(tx - b.x, tz - b.z)), 3) + 0.9 };
     // L'humain prend tout de suite celui qui va recevoir le ballon
     takeOver(m, q);
   } else {
@@ -202,7 +240,9 @@ function firePass(m: Match, p: Player, o: KickOrder) {
     m.pass = null;
   }
   const d = Math.max(0.1, Math.hypot(tx - b.x, tz - b.z));
-  const err = (1.04 - skill) * 0.16 * clumsiness(m, p, tx - p.x, tz - p.z);
+  // Une passe vers un coéquipier désigné part droit : elle doit arriver dans ses pieds
+  const aimed = p.human !== null && to >= 0 ? 0.2 : 1.5;
+  const err = (1.04 - skill) * 0.16 * clumsiness(m, p, tx - p.x, tz - p.z) * aimed;
   const [dx, dz] = spin((tx - b.x) / d, (tz - b.z) / d, noise(m, err));
   setBall(b, [dx * v, 0, dz * v]);
   b.y = BALL_R;
@@ -212,29 +252,17 @@ function firePass(m: Match, p: Player, o: KickOrder) {
 function fireThrough(m: Match, p: Player, o: KickOrder) {
   const b = m.ball;
   const dir = attackDir(m, p.team);
-  const to = o.to >= 0 ? o.to : pickReceiver(m, p, o.ax, o.az, true);
+  const to = receiverOf(m, p, o, true);
   if (to < 0) return firePass(m, p, o);
   const q = m.players[to]!;
-  const stick = Math.hypot(o.ax, o.az);
-  // La course du receveur : vers l'avant, un peu vers la direction demandée
-  let rx = dir + (stick > 0.2 ? (o.ax / stick) * 0.3 : 0);
-  let rz = stick > 0.2 ? (o.az / stick) * 0.7 : -q.z * 0.02;
-  const l = Math.hypot(rx, rz);
-  rx /= l;
-  rz /= l;
-  const lead = 5 + o.power * 13;
-  const [tx, tz] = o.px !== undefined && o.pz !== undefined ? [o.px, o.pz] : onPitch(q.x + rx * lead, q.z + rz * lead, 2);
+  const [tx, tz] = o.px !== undefined && o.pz !== undefined ? [o.px, o.pz] : throughTarget(q.x, q.z, dir, o.ax, o.az, o.power);
   const d = Math.max(1, Math.hypot(tx - b.x, tz - b.z));
-  const runT = Math.max(0.5, Math.hypot(tx - q.x, tz - q.z) / 7.5);
-  const v = clamp(d / runT + (ROLL_DECEL * runT) / 2, 10, 27);
+  const { v, t: runT } = planThrough(b.x, b.z, q.x, q.z, tx, tz);
   const skill = p.stats.pas / 100;
-  const err = (1.05 - skill) * 0.17 * clumsiness(m, p, tx - p.x, tz - p.z);
+  const err = (1.05 - skill) * 0.17 * clumsiness(m, p, tx - p.x, tz - p.z) * (p.human !== null ? 0.3 : 1);
   const [dx, dz] = spin((tx - b.x) / d, (tz - b.z) / d, noise(m, err));
   setBall(b, [dx * v, 0, dz * v]);
   b.y = BALL_R;
-  q.runUntil = m.t + runT + 0.4;
-  q.runX = tx;
-  q.runZ = tz;
   takeOver(m, q);
   m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + runT + 1 };
   m.stats[p.team].passes++;
@@ -243,7 +271,7 @@ function fireThrough(m: Match, p: Player, o: KickOrder) {
 function fireLob(m: Match, p: Player, o: KickOrder) {
   const b = m.ball;
   const stick = Math.hypot(o.ax, o.az);
-  const to = o.to >= 0 ? o.to : pickReceiver(m, p, o.ax, o.az);
+  const to = receiverOf(m, p, o);
   let tx: number;
   let tz: number;
   if (o.px !== undefined && o.pz !== undefined) {
@@ -252,7 +280,7 @@ function fireLob(m: Match, p: Player, o: KickOrder) {
   } else if (to >= 0) {
     const q = m.players[to]!;
     const d0 = Math.hypot(q.x - b.x, q.z - b.z);
-    const t0 = 0.8 + d0 * 0.04;
+    const t0 = 0.6 + d0 * 0.03;
     tx = q.x + q.vx * t0 * 0.9;
     tz = q.z + q.vz * t0 * 0.9;
   } else {
@@ -262,15 +290,12 @@ function fireLob(m: Match, p: Player, o: KickOrder) {
   }
   [tx, tz] = onPitch(tx, tz, 1.5);
   const d = Math.max(1, Math.hypot(tx - b.x, tz - b.z));
-  const T = clamp(0.7 + d * 0.036, 0.75, 2.5) * (o.kind === "cross" ? 0.85 : 1);
+  const T = clamp(0.58 + d * 0.028, 0.65, 1.9) * (o.kind === "cross" ? 0.88 : 1);
   const skill = p.stats.pas / 100;
-  const err = (1.05 - skill) * 2.4 * (d / 22) * clumsiness(m, p, tx - p.x, tz - p.z);
+  const err = (1.05 - skill) * 2.4 * (d / 22) * clumsiness(m, p, tx - p.x, tz - p.z) * (p.human !== null ? 0.35 : 1);
   setBall(b, solveLob(b, tx + noise(m, err), tz + noise(m, err), T, 1.0));
   if (to >= 0) {
-    const q = m.players[to]!;
-    q.runUntil = m.t + T + 0.3;
-    q.runX = tx;
-    q.runZ = tz;
+    takeOver(m, m.players[to]!);
     m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + T + 0.9 };
   } else m.pass = null;
   m.stats[p.team].passes++;
@@ -286,7 +311,7 @@ function fireClear(m: Match, p: Player, o: KickOrder) {
   dx /= l;
   dz /= l;
   [dx, dz] = spin(dx, dz, noise(m, 0.18));
-  const v = 21 + o.power * 9;
+  const v = 25 + o.power * 10;
   setBall(b, [dx * v * 0.87, v * 0.5, dz * v * 0.87]);
   m.pass = null;
 }
@@ -303,13 +328,13 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
   const clumsy = clumsiness(m, p, gx - p.x, aimZ - p.z);
 
   if (o.kind === "chip") {
-    const T = clamp(0.85 + d * 0.03, 0.9, 1.7);
+    const T = clamp(0.72 + d * 0.026, 0.78, 1.5);
     const err = (1.05 - sho) * 2.2 * clumsy;
     setBall(b, solveLob(b, gx, aimZ * 0.6 + noise(m, err), T, 1.5 + noise(m, err * 0.5)));
   } else {
     const finesse = o.kind === "finesse";
     // Un simple appui part déjà avec du répondant : la jauge sert à aller au-delà
-    const speed = lerp(17, 21 + sho * 14, o.power) * (finesse ? 0.82 : 1);
+    const speed = shotSpeed(o.power, sho) * (finesse ? 0.84 : 1);
     const t = d / speed;
     // Trop de force, et ça passe au-dessus : c'est là tout le jeu de la jauge
     const over = Math.max(0, o.power - 0.82) * (1.25 - sho) * 13;

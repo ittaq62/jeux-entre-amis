@@ -30,6 +30,7 @@ const ATTACK: [ActionId, string][] = [
   ["pass", "Passe"],
   ["through", "En profondeur"],
   ["lob", "Lob, centre"],
+  ["skill", "Crochet"],
   ["sprint", "Sprint"],
 ];
 
@@ -133,10 +134,11 @@ export function HowTo({
   const rows: { label: string; note?: string; keys: string[] }[] = [
     { label: "Se déplacer", keys: moves },
     { label: "Tir", note: "tiens pour frapper fort · sans le ballon : tacle glissé", keys: label("shoot") },
-    { label: "Passe", note: "sans le ballon : presser et tacler", keys: label("pass") },
+    { label: "Passe", note: "vers le joueur désigné en bleu · sans le ballon : presser et tacler", keys: label("pass") },
     { label: "Sprint", keys: label("sprint") },
     { label: "Passe en profondeur", keys: label("through") },
     { label: "Lob ou centre", keys: label("lob") },
+    { label: "Crochet", note: "un coup d'accélération balle au pied, qui évite le tacle", keys: label("skill") },
     { label: "Changer de joueur", keys: label("swap") },
   ];
   return (
@@ -146,7 +148,7 @@ export function HowTo({
         {touch ? (
           <p>
             Le stick à gauche pour courir, le bouton jaune pour sprinter. À droite : passe, tir, passe en profondeur et lob. Sans le ballon,
-            les boutons deviennent presser, tacle glissé et changer de joueur. Plus tu tiens un bouton, plus le geste est fort.
+            les boutons deviennent presser, tacle glissé et changer de joueur. Plus tu tiens le bouton de tir, plus la frappe est forte.
           </p>
         ) : (
           <>

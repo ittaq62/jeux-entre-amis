@@ -151,6 +151,8 @@ export interface CramponsTick {
   c: number;
   /** Le joueur dirigé par chaque humain, dans l'ordre de `humans` */
   a: number[];
+  /** Le joueur à qui une passe est en route, ou -1 : il va seul au ballon, ses touches ne comptent pas encore */
+  r: number;
   /** Ce qui vient d'arriver */
   e: MatchEvent[];
 }
@@ -178,6 +180,7 @@ export function encodeTick(m: Match, events: MatchEvent[], stamps: ReadonlyMap<s
     o: m.owner,
     c: Math.round(m.clock),
     a: m.humans.map((h) => h.active),
+    r: m.pass?.to ?? -1,
     e: events,
   };
 }

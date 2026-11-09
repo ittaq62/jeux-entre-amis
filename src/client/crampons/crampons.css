@@ -26,6 +26,17 @@ html:has(.cr-root) body {
   display: block;
   width: 100%;
   height: 100%;
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+}
+
+.cr-canvas.is-ready {
+  opacity: 1;
+}
+
+.cr-bug.is-hidden,
+.cr-tools.is-hidden {
+  visibility: hidden;
 }
 
 /* Le score, façon télévision */

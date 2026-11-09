@@ -4,9 +4,9 @@ import { GOAL_DEPTH, GOAL_H, GOAL_HALF, HALF_L } from "./pitch.ts";
 
 /** Un peu plus gros qu'en vrai : à l'écran, il faut le suivre d'un coup d'œil */
 export const BALL_R = 0.16;
-export const GRAVITY = 11;
+export const GRAVITY = 13;
 /** Sur l'herbe, il perd autant de vitesse à chaque seconde (m/s²), ce qui permet de calculer une passe exactement */
-export const ROLL_DECEL = 3;
+export const ROLL_DECEL = 3.6;
 const AIR_DRAG = 0.009;
 const BOUNCE = 0.56;
 const BOUNCE_GRIP = 0.86;

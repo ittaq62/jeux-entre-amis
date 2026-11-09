@@ -1,6 +1,7 @@
 // Les réglages du joueur, gardés dans son navigateur : quelle touche fait quoi, comment on vise, quelle qualité d'image.
 
-export type ActionId = "up" | "down" | "left" | "right" | "sprint" | "shoot" | "pass" | "through" | "lob" | "swap" | "finesse" | "chip";
+export type ActionId =
+  "up" | "down" | "left" | "right" | "sprint" | "shoot" | "pass" | "through" | "lob" | "skill" | "swap" | "finesse" | "chip";
 
 /** Une touche (`KeyW`, `Space`…) ou un bouton de souris (`Mouse0` gauche, `Mouse1` molette, `Mouse2` droit) */
 export type Binding = string;
@@ -27,6 +28,7 @@ export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "pass", label: "Passe", note: "sans le ballon : presser et tacler" },
   { id: "through", label: "Passe en profondeur" },
   { id: "lob", label: "Lob ou centre" },
+  { id: "skill", label: "Crochet", note: "un coup d'accélération pour éviter le tacle" },
   { id: "swap", label: "Changer de joueur" },
   { id: "finesse", label: "Tir enroulé", note: "à tenir en tirant" },
   { id: "chip", label: "Tir piqué", note: "à tenir en tirant" },
@@ -52,6 +54,7 @@ export const PRESETS: { id: string; name: string; note: string; aim: AimMode; bi
       pass: ["Mouse2"],
       through: ["Space"],
       lob: ["Mouse1", "KeyC"],
+      skill: ["KeyQ"],
       swap: ["KeyE"],
       finesse: ["KeyF"],
       chip: ["KeyR"],
@@ -72,6 +75,7 @@ export const PRESETS: { id: string; name: string; note: string; aim: AimMode; bi
       pass: ["Space"],
       through: ["KeyX"],
       lob: ["KeyV"],
+      skill: ["KeyZ"],
       swap: ["KeyE"],
       finesse: ["KeyF"],
       chip: ["KeyG"],
@@ -89,6 +93,7 @@ export const PRESETS: { id: string; name: string; note: string; aim: AimMode; bi
       pass: ["KeyJ"],
       through: ["KeyI"],
       lob: ["KeyL"],
+      skill: ["KeyO"],
       swap: ["KeyU"],
       finesse: ["KeyH"],
       chip: ["KeyY"],

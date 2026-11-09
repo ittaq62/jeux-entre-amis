@@ -46,6 +46,7 @@ export class Effects {
   private bits: { p: THREE.Vector3; v: THREE.Vector3; a: number; s: number }[] = [];
   private confettiOn = 0;
   private flashes: THREE.Sprite[] = [];
+  private spark: THREE.Sprite;
   private flashFor = 0;
   private rain: THREE.LineSegments | THREE.Points | null = null;
   private rainPos: Float32Array | null = null;
@@ -77,6 +78,20 @@ export class Effects {
       this.puffs.push({ sprite, life: 0, max: 1, vx: 0, vz: 0 });
     }
 
+    this.spark = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.dot,
+        color: "#fff2c0",
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    this.spark.visible = false;
+    this.group.add(this.spark);
+
     const bit = new THREE.PlaneGeometry(0.28, 0.18);
     this.confetti = new THREE.InstancedMesh(
       bit,
@@ -85,6 +100,8 @@ export class Effects {
     );
     this.confetti.frustumCulled = false;
     this.confetti.visible = false;
+    // La couleur existe dès le départ : sinon le premier but forcerait la carte graphique à tout recompiler en plein match
+    this.confetti.setColorAt(0, new THREE.Color("#ffffff"));
     this.group.add(this.confetti);
 
     if (!low) {
@@ -155,6 +172,15 @@ export class Effects {
     }
   }
 
+  /** L'éclat au moment de la frappe */
+  flash(x: number, z: number, power: number) {
+    const s = this.spark;
+    s.position.set(x, 0.6, z);
+    s.scale.setScalar(1.6 + power * 2.6);
+    (s.material as THREE.SpriteMaterial).opacity = 0.75;
+    s.visible = true;
+  }
+
   /** La pluie de confettis sur le but qui vient de tomber */
   celebrate(end: number, colors: string[]) {
     const n = this.confetti.count;
@@ -180,7 +206,7 @@ export class Effects {
     const speed = Math.hypot(ball.vx, ball.vz);
     this.trailPoints.pop();
     this.trailPoints.unshift(this.trailPoints[this.trailPoints.length - 1]!.clone().set(ball.x, ball.y + 0.08, ball.z));
-    const on = speed > 15;
+    const on = speed > 20;
     for (let i = 0; i < TRAIL; i++) {
       const k = on ? (1 - i / TRAIL) * 0.95 : 0;
       this.scale.setScalar(Math.max(0.0001, k));
@@ -188,6 +214,13 @@ export class Effects {
       this.trail.setMatrixAt(i, this.matrix);
     }
     this.trail.instanceMatrix.needsUpdate = true;
+
+    if (this.spark.visible) {
+      const m = this.spark.material as THREE.SpriteMaterial;
+      m.opacity *= Math.exp(-dt * 16);
+      this.spark.scale.multiplyScalar(1 + dt * 5);
+      if (m.opacity < 0.02) this.spark.visible = false;
+    }
 
     for (const p of this.puffs) {
       if (p.life <= 0) continue;

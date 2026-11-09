@@ -164,7 +164,11 @@ export function CramponsMatch({
   const [mods, setMods] = useState({ finesse: false, chip: false });
   const [settings, setSettings] = useState<CramponsSettings>(() => loadSettings());
   const [panel, setPanel] = useState(false);
-  const [cinema, setCinema] = useState<"intro" | "scorer" | "replay" | null>(null);
+  // La présentation est montrée dès la première image : l'affichage du match n'apparaît qu'après
+  const [cinema, setCinema] = useState<"intro" | "scorer" | "replay" | null>(() =>
+    view.phase === "kickoff" && view.period === 1 && view.score[0] + view.score[1] === 0 ? "intro" : null,
+  );
+  const [ready, setReady] = useState(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // L'aide s'ouvre d'elle-même au tout premier match
@@ -197,7 +201,8 @@ export function CramponsMatch({
       {
         seatId,
         send: (x, z, s, p, c) => send({ t: "in", x, z, s, p, c }),
-        act: (k, p, x, z) => send({ t: "act", k, p, x, z }),
+        act: (k, p, x, z, to) => send({ t: "act", k, p, x, z, to }),
+        onReady: () => setReady(true),
         onHud: (h) => {
           setHud(h);
           setCinema(runtime.current?.inCinema ?? null);
@@ -227,6 +232,11 @@ export function CramponsMatch({
         else if (e.k === "save" && !e.caught) play("footOoh");
         if (e.k === "shot") setMods({ finesse: false, chip: false });
         if (e.k === "kick" && (e.kind === "shot" || e.kind === "clear")) rt.dust(e.p, e.power);
+        if (e.k === "shot" && e.power > 0.45) rt.punch(e.p, e.power);
+        if (e.k === "skill") {
+          rt.dust(e.p, 0.5);
+          play("footKick", { rate: 1.5 });
+        }
         if (e.k === "tackle") rt.dust(e.p, 0.9);
         if (e.k === "goal") {
           play("footCheer");
@@ -280,9 +290,9 @@ export function CramponsMatch({
   const key = mainKey(hud.scheme, settings.bindings, restart?.kind === "penalty");
   return (
     <div className="cr-root">
-      <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""}`} />
+      <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
 
-      <div className="cr-bug" role="status">
+      <div className={`cr-bug ${cinema === "intro" ? "is-hidden" : ""}`} role="status">
         <div className="cr-bug-teams">
           <div className="cr-bug-team">
             <i style={{ background: left.kit.shirt }} />
@@ -301,7 +311,7 @@ export function CramponsMatch({
         </div>
       </div>
 
-      <div className="cr-tools">
+      <div className={`cr-tools ${cinema === "intro" ? "is-hidden" : ""}`}>
         <button
           className="cr-mini"
           onClick={() => setCamera((c) => (c === "tele" ? "large" : c === "large" ? "pres" : "tele"))}

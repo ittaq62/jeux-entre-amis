@@ -325,7 +325,7 @@ export class CramponsRoom extends DurableObject<Env> {
 
       case "act": {
         if (!seat || !d.match || d.status !== "playing" || !ACTIONS.includes(msg.k) || !this.allowMessage(`act:${userId}`, 40)) return;
-        pushAction(d.match, seat.id, msg.k as HumanActionKind, Math.max(0, num(msg.p)), num(msg.x), num(msg.z));
+        pushAction(d.match, seat.id, msg.k as HumanActionKind, Math.max(0, num(msg.p)), num(msg.x), num(msg.z), msg.to ?? -1);
         return;
       }
 

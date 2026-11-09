@@ -16,7 +16,7 @@ const SKINS = ["#f0c8a2", "#e0ac83", "#b98055", "#8a5a3a", "#5d3b26"].map((c) =>
 
 /** Un supporter : un buste et une tête. Le drapeau `aHead` dira quelle partie prend la couleur de la peau. */
 function fanGeometry(): THREE.BufferGeometry {
-  const body = new THREE.CylinderGeometry(0.2, 0.27, 0.72, 6);
+  const body = new THREE.CylinderGeometry(0.2, 0.27, 0.72, 6, 1, true);
   body.translate(0, 0.36, 0);
   const head = new THREE.IcosahedronGeometry(0.19, 0);
   head.translate(0, 0.9, 0);

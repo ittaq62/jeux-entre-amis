@@ -79,6 +79,9 @@ export interface Player {
   runX: number;
   runZ: number;
   goals: number;
+  /** Le crochet : jusqu'à cet instant il file et échappe aux tacles ; le suivant n'est pas possible avant `burstReady` */
+  burstUntil: number;
+  burstReady: number;
 }
 
 export interface Human {
@@ -95,6 +98,11 @@ export interface Human {
 
 export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
 
+/** Le crochet : la durée, le temps de recharge, et le gain de vitesse */
+export const BURST_S = 0.34;
+export const BURST_COOLDOWN = 1.6;
+export const BURST_SPEED = 1.42;
+
 export interface HumanAction {
   k: HumanActionKind;
   p: number;
@@ -102,6 +110,8 @@ export interface HumanAction {
   mz: number;
   /** Quand l'humain a appuyé : l'action reste valable un court instant, pour une reprise de volée */
   at: number;
+  /** Le coéquipier qu'il voyait désigné à l'écran au moment d'appuyer, ou -1 */
+  to: number;
 }
 
 export type Phase = "kickoff" | "play" | "restart" | "goal" | "halftime" | "over";
@@ -177,6 +187,7 @@ export type MatchEvent =
   | { k: "kick"; p: number; power: number; kind: KickKind }
   | { k: "shot"; p: number; power: number }
   | { k: "touch"; p: number }
+  | { k: "skill"; p: number }
   | { k: "tackle"; p: number; won: boolean }
   | { k: "save"; p: number; caught: boolean }
   | { k: "woodwork"; bar: boolean }
@@ -263,22 +274,22 @@ export function random(m: Match): number {
 // Courir
 // -------------------------------------------------------------------------
 
-const ACCEL = 9.5;
-const BRAKE = 18;
-const TURN_RATE = 9;
+const ACCEL = 25;
+const BRAKE = 44;
+const TURN_RATE = 15;
 
 /** Sa vitesse de pointe, selon qu'il sprinte, qu'il a le ballon, et l'énergie qui lui reste */
 export function topSpeed(p: Player, sprint: boolean, withBall: boolean): number {
   const pace = p.stats.pac / 100;
-  let v = sprint ? 6.7 + 2.5 * pace : 4.5 + 1.1 * pace;
-  if (withBall) v *= sprint ? 0.84 + 0.14 * (p.stats.dri / 100) : 0.94;
+  let v = sprint ? 8.9 + 2.9 * pace : 6.4 + 1.5 * pace;
+  if (withBall) v *= sprint ? 0.88 + 0.12 * (p.stats.dri / 100) : 0.97;
   if (p.stam < 0.35) v *= 0.8 + 0.2 * (p.stam / 0.35);
   return v;
 }
 
 /**
- * Fait courir un joueur dans la direction voulue (longueur au plus 1, 0 pour s'arrêter). Il a de l'inertie : il freine
- * plus vite qu'il n'accélère, et tourne d'autant moins vite qu'il va vite.
+ * Fait courir un joueur dans la direction voulue (longueur au plus 1, 0 pour s'arrêter). Il démarre vite, et un changement
+ * de direction se fait avec toute la force du freinage : c'est ce qui donne un joueur vif plutôt qu'un paquebot.
  */
 export function steer(p: Player, wx: number, wz: number, speed: number, dt = DT) {
   const tvx = wx * speed;
@@ -288,7 +299,9 @@ export function steer(p: Player, wx: number, wz: number, speed: number, dt = DT)
   const dv = Math.hypot(dvx, dvz);
   // On accélère dans le sens de la course, on freine dans les autres
   const along = p.vx * tvx + p.vz * tvz;
-  const max = (along < 0 || speed < Math.hypot(p.vx, p.vz) ? BRAKE : ACCEL) * dt;
+  const current = Math.hypot(p.vx, p.vz);
+  const turning = current > 1 && along < 0.9 * current * speed;
+  const max = (turning || speed < current ? BRAKE : ACCEL) * dt;
   if (dv > max) {
     dvx *= max / dv;
     dvz *= max / dv;
@@ -316,6 +329,6 @@ export function faceTo(p: Player, x: number, z: number, dt = DT) {
 export function spendEnergy(p: Player, sprinting: boolean, halfMinutes: number, dt = DT) {
   const v = Math.hypot(p.vx, p.vz);
   const scale = 5 / clamp(halfMinutes, 2, 15);
-  const rate = sprinting && v > 5 ? -0.035 * (1.5 - p.stats.phy / 100) * scale : 0.012 * scale;
+  const rate = sprinting && v > 7 ? -0.035 * (1.5 - p.stats.phy / 100) * scale : 0.012 * scale;
   p.stam = clamp(p.stam + rate * dt, 0, 1);
 }

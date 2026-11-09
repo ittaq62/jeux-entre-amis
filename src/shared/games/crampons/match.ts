@@ -1,11 +1,14 @@
 // Le déroulement d'un match : courir, toucher le ballon, tacler, siffler, reprendre le jeu, marquer, changer de côté.
 
-import { BALL_R, makeBall, stepBall } from "./ball.ts";
+import { BALL_R, makeBall, rollingAt, stepBall } from "./ball.ts";
 import { levelOf, steerCarrier, thinkCarrier, thinkTeam } from "./brain.ts";
 import { makeSquad, type TeamSetup } from "./clubs.ts";
 import { openness, orderKick, pickReceiver, pressureOn, releaseKick } from "./kicks.ts";
 import {
   attackDir,
+  BURST_COOLDOWN,
+  BURST_S,
+  BURST_SPEED,
   faceTo,
   newTeamStats,
   opponent,
@@ -26,20 +29,22 @@ import {
 import { BOX_HALF, BOX_L, CIRCLE_R, clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch, SIX_L, SPOT_L } from "./pitch.ts";
 
 const REACH = 0.95;
+/** Celui à qui la passe est destinée la contrôle d'un peu plus loin : elle doit arriver dans ses pieds */
+const RECEIVE_REACH = 1.45;
 const HEADER_REACH = 1.05;
 const SEPARATION = 0.85;
 const FIRST_TIME_WINDOW = 0.45;
 const KEEPER_HOLD_S = 2.2;
-const TACKLE_S = 0.42;
-const TACKLE_HIT_AT = 0.2;
-const SLIDE_S = 0.7;
-const DOWN_S = 0.75;
+const TACKLE_S = 0.36;
+const TACKLE_HIT_AT = 0.14;
+const SLIDE_S = 0.6;
+const DOWN_S = 0.6;
 /** La célébration, puis le ralenti : on peut passer dès qu'on a vu son but */
 const GOAL_PAUSE = 7.6;
 const GOAL_SKIP_AFTER = 1.2;
-const HALFTIME_PAUSE = 3;
+const HALFTIME_PAUSE = 2.5;
 /** Le temps laissé à un humain pour tirer une remise en jeu : ensuite, l'ordinateur la tire pour lui */
-const HUMAN_RESTART_WAIT = 4;
+const HUMAN_RESTART_WAIT = 3.5;
 
 const KICK_KINDS: readonly string[] = ["pass", "through", "lob", "shot", "finesse", "chip", "clear", "cross"];
 const isKick = (k: string): k is KickKind => KICK_KINDS.includes(k);
@@ -159,7 +164,7 @@ function defendSwitch(m: Match, owner: Player) {
         best = p.i;
       }
     }
-    if (best >= 0 && bd < here - 7) h.active = best;
+    if (best >= 0 && bd < here - 4) h.active = best;
   }
   syncHumans(m);
 }
@@ -174,10 +179,10 @@ export function setInput(m: Match, id: string, mx: number, mz: number, sprint: b
   h.press = press;
 }
 
-export function pushAction(m: Match, id: string, k: HumanAction["k"], p: number, mx: number, mz: number) {
+export function pushAction(m: Match, id: string, k: HumanAction["k"], p: number, mx: number, mz: number, to = -1) {
   const h = m.humans.find((o) => o.id === id);
   if (!h || h.queue.length > 6) return;
-  h.queue.push({ k, p: clamp(p, 0, 1), mx, mz, at: m.t });
+  h.queue.push({ k, p: clamp(p, 0, 1), mx, mz, at: m.t, to: Number.isInteger(to) ? to : -1 });
 }
 
 function startTackle(p: Player, slide: boolean, h: Human | null, m: Match) {
@@ -227,13 +232,22 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
         continue;
       }
       if (m.phase !== "play" && m.phase !== "kickoff") continue;
+      if (a.k === "skill") {
+        // Le crochet : un coup d'accélération balle au pied, le temps d'échapper au tacle
+        if (m.phase === "play" && m.owner === p.i && p.act === "none" && m.t >= p.burstReady) {
+          p.burstUntil = m.t + BURST_S;
+          p.burstReady = m.t + BURST_COOLDOWN;
+          ev.push({ k: "skill", p: p.i });
+        }
+        continue;
+      }
       if (m.phase === "kickoff") {
         const r = m.restart;
         if (r && r.ready && r.taker === p.i && isKick(a.k) && !p.order) orderRestartKick(m, p, a);
         continue;
       }
       if (m.owner === p.i && isKick(a.k)) {
-        if (!p.order && p.act === "none") orderKick(p, { kind: a.k, power: a.p, ax: a.mx, az: a.mz, to: -1 });
+        if (!p.order && p.act === "none") orderKick(p, { kind: a.k, power: a.p, ax: a.mx, az: a.mz, to: a.to });
         continue;
       }
       if (isKick(a.k)) {
@@ -245,14 +259,13 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
     }
     h.queue = keep;
   }
-  void ev;
 }
 
 function orderRestartKick(m: Match, p: Player, a: HumanAction) {
   const r = m.restart!;
   const stick = Math.hypot(a.mx, a.mz);
   if (r.kind === "throw") {
-    const to = pickReceiver(m, p, a.mx, a.mz);
+    const to = a.to >= 0 && m.players[a.to]?.team === p.team ? a.to : pickReceiver(m, p, a.mx, a.mz);
     const q = to >= 0 ? m.players[to]! : null;
     const near = q && Math.hypot(q.x - p.x, q.z - p.z) < 26;
     const dist = 8 + a.p * 12;
@@ -263,7 +276,7 @@ function orderRestartKick(m: Match, p: Player, a: HumanAction) {
     );
     orderKick(p, { kind: "lob", power: a.p, ax: 0, az: 0, to: near ? to : -1, px, pz });
   } else {
-    orderKick(p, { kind: a.k as KickKind, power: a.p, ax: a.mx, az: a.mz, to: -1 });
+    orderKick(p, { kind: a.k as KickKind, power: a.p, ax: a.mx, az: a.mz, to: a.to });
   }
 }
 
@@ -478,7 +491,7 @@ function beginKickoff(m: Match, team: Team, ev: MatchEvent[]) {
     z: 0,
     taker: pickTaker(m, "kickoff", team, 0, 0),
     ready: false,
-    readyAt: m.t + 1.4,
+    readyAt: m.t + 1,
     deadline: 0,
     direct: false,
   };
@@ -598,7 +611,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       continue;
     }
     if (p.act === "dive") {
-      const v = 7.5 * (p.actT / 0.6) + 1.5;
+      const v = 9.5 * (p.actT / 0.6) + 1.5;
       p.x += p.dirX * v * DT;
       p.z += p.dirZ * v * DT;
       if (p.actT <= 0) {
@@ -608,7 +621,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       continue;
     }
     if (p.act === "slide") {
-      const v = Math.max(2, 9.8 * (p.actT / SLIDE_S));
+      const v = Math.max(2, 13.5 * (p.actT / SLIDE_S));
       p.vx = p.dirX * v;
       p.vz = p.dirZ * v;
       p.x += p.vx * DT;
@@ -621,7 +634,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       continue;
     }
     if (p.act === "tackle") {
-      const v = p.actT > TACKLE_S - TACKLE_HIT_AT ? 7.5 : 1.5;
+      const v = p.actT > TACKLE_S - TACKLE_HIT_AT ? 10.5 : 2;
       steer(p, p.dirX, p.dirZ, v);
       if (p.actT <= 0) p.act = "none";
       continue;
@@ -669,21 +682,20 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
     let sprinting = false;
     const slowed = p.act === "kick" ? 0.55 : 1;
 
-    if (h) {
+    if (live && !mine && m.pass?.to === p.i) {
+      // Celui à qui la passe est destinée, humain ou non, va à la rencontre du ballon
+      [wx, wz, speed] = receiveRun(m, p);
+      sprinting = true;
+    } else if (h && m.phase !== "goal") {
       wx = h.mx;
       wz = h.mz;
       sprinting = h.sprint;
-      speed = topSpeed(p, sprinting, mine) * Math.min(1, Math.hypot(wx, wz) * 1.25);
+      speed = topSpeed(p, sprinting, mine) * Math.min(1, Math.hypot(wx, wz) * 1.25) * (p.burstUntil > m.t ? BURST_SPEED : 1);
       const l = Math.hypot(wx, wz);
-      // Sans direction, un coéquipier désigné va chercher le ballon, et le presseur va au porteur
+      // Sans direction, le presseur va au porteur
       if (l < 0.1 && live) {
         const owner = m.owner >= 0 ? m.players[m.owner]! : null;
-        const goTo =
-          m.pass?.to === p.i
-            ? ([m.pass.x, m.pass.z] as const)
-            : h.press && owner && owner.team !== p.team
-              ? ([owner.x, owner.z] as const)
-              : null;
+        const goTo = h.press && owner && owner.team !== p.team ? ([owner.x, owner.z] as const) : null;
         if (goTo) {
           const dx = goTo[0] - p.x;
           const dz = goTo[1] - p.z;
@@ -722,6 +734,32 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
     p.x = clamp(p.x, -HALF_L - 3, HALF_L + 3);
     p.z = clamp(p.z, -HALF_W - 3, HALF_W + 3);
   }
+}
+
+/** La course du receveur : vers le premier point du trajet du ballon qu'il peut atteindre, sans le dépasser */
+function receiveRun(m: Match, p: Player): [number, number, number] {
+  const b = m.ball;
+  const top = topSpeed(p, true, false);
+  let tx = m.pass!.x;
+  let tz = m.pass!.z;
+  if (b.y < 1.2 && Math.hypot(b.vx, b.vz) > 0.3) {
+    for (let t = 0; t <= 3; t += 0.1) {
+      const [bx, bz] = rollingAt(b, t);
+      if (Math.hypot(bx - p.x, bz - p.z) <= 0.2 + top * t) {
+        tx = bx;
+        tz = bz;
+        break;
+      }
+    }
+  } else if (b.y < 1.2) {
+    tx = b.x;
+    tz = b.z;
+  }
+  const dx = tx - p.x;
+  const dz = tz - p.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.25) return [0, 0, 0];
+  return [dx / d, dz / d, top * clamp(d / 1.6 + 0.15, 0, 1)];
 }
 
 /** Les joueurs ne se traversent pas ; le plus solide déplace l'autre */
@@ -764,7 +802,7 @@ function carryBall(m: Match) {
   }
   if (m.restart?.ready && m.restart.taker === p.i) return;
   const v = Math.hypot(p.vx, p.vz);
-  const reach = 0.55 + clamp(v / 9, 0, 1) * 0.55;
+  const reach = 0.55 + clamp(v / 11, 0, 1) * 0.55;
   b.x = p.x + Math.cos(p.h) * reach;
   b.z = p.z + Math.sin(p.h) * reach;
   b.y = BALL_R;
@@ -781,7 +819,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
     ev.push({ k: "whistle", why: "offside" });
     ev.push({ k: "offside", p: p.i });
     m.stats[p.team].offsides++;
-    beginRestart(m, "free", opponent(p.team), clamp(p.x, -HALF_L + 2, HALF_L - 2), clamp(p.z, -HALF_W + 1, HALF_W - 1), ev, 1.4);
+    beginRestart(m, "free", opponent(p.team), clamp(p.x, -HALF_L + 2, HALF_L - 2), clamp(p.z, -HALF_W + 1, HALF_W - 1), ev, 1);
     return;
   }
   m.offside = [];
@@ -802,7 +840,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
     const a = h.queue.find((x) => isKick(x.k));
     if (a) {
       h.queue = h.queue.filter((x) => x !== a);
-      orderKick(p, { kind: a.k as KickKind, power: a.p, ax: a.mx, az: a.mz, to: -1 });
+      orderKick(p, { kind: a.k as KickKind, power: a.p, ax: a.mx, az: a.mz, to: a.to });
     }
   }
 }
@@ -829,7 +867,7 @@ function keeperTouch(m: Match, p: Player, ev: MatchEvent[]): boolean {
   const own = -attackDir(m, p.team);
   if (!inBox(p.x, p.z, own)) return false;
   const diving = p.act === "dive";
-  const reach = diving ? 2.3 : 1.55;
+  const reach = diving ? 2.7 : 1.8;
   if (Math.hypot(b.x - p.x, b.z - p.z) > reach || b.y > (diving ? 2.4 : 2.85)) return false;
   // Une passe de son coéquipier se joue au pied
   if (m.players[m.lastTouch]?.team === p.team && m.pass) return false;
@@ -851,9 +889,13 @@ function keeperTouch(m: Match, p: Player, ev: MatchEvent[]): boolean {
   }
   // Repoussé : vers le côté, loin du but, ou parfois derrière sa ligne
   const side = Math.sign(b.z - p.z) || (random(m) < 0.5 ? -1 : 1);
-  b.vx = random(m) < 0.42 ? own * (2 + random(m) * 2) : -own * (3 + random(m) * 6);
+  b.vx = -own * (3 + random(m) * 6);
   b.vy = 2.5 + random(m) * 4;
   b.vz = side * (5 + random(m) * 6);
+  // Parfois en corner : seulement s'il sort bien à côté du poteau, sinon il le pousserait dans son propre but
+  const toLine = own * HALF_L - b.x;
+  const push = own * (3 + random(m) * 2);
+  if (random(m) < 0.3 && Math.abs(b.z + (b.vz * toLine) / push) > GOAL_HALF + 0.6) b.vx = push;
   m.lastTouch = p.i;
   m.pass = null;
   p.lockedUntil = m.t + 0.5;
@@ -916,6 +958,14 @@ function header(m: Match, p: Player, ev: MatchEvent[]) {
   ev.push({ k: "kick", p: p.i, power: 0.5, kind: "pass" });
 }
 
+function toBallPath(p: Player, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  const u = l2 > 0 ? clamp(((p.x - ax) * dx + (p.z - az) * dz) / l2, 0, 1) : 0;
+  return Math.hypot(p.x - ax - dx * u, p.z - az - dz * u);
+}
+
 /** Qui touche le ballon libre ? Le plus proche à portée, gardien d'abord */
 function ballContacts(m: Match, ev: MatchEvent[]) {
   if (m.owner >= 0 || m.phase !== "play") return;
@@ -930,8 +980,9 @@ function ballContacts(m: Match, ev: MatchEvent[]) {
     }
     if (p.role === "GK" && keeperTouch(m, p, ev)) return;
     if (b.y > 2.7) continue;
-    const reach = b.y > 1.25 ? HEADER_REACH : REACH;
-    const d = Math.hypot(b.x - p.x, b.z - p.z);
+    const reach = b.y > 1.25 ? HEADER_REACH : m.pass?.to === p.i && p.human !== null ? RECEIVE_REACH : REACH;
+    // Le chemin parcouru depuis le dernier pas compte : un ballon rapide ne passe pas à travers un joueur
+    const d = toBallPath(p, b.x - b.vx * DT, b.z - b.vz * DT, b.x, b.z);
     if (d <= reach && d < bd) {
       bd = d;
       best = p;
@@ -945,14 +996,14 @@ function ballContacts(m: Match, ev: MatchEvent[]) {
   const rel = Math.hypot(b.vx - best.vx, b.vz - best.vz);
   // Couper une passe adverse n'est pas gagné d'avance : plus elle va vite, plus elle file sous le pied
   if (m.pass?.to !== best.i && m.players[m.lastTouch]?.team !== best.team && rel > 8) {
-    const base = clamp(0.95 - (rel - 8) / 14 + (best.stats.tac - 70) / 150, 0.18, 0.95) * levelOf(m).read;
+    const base = clamp(0.98 - (rel - 8) / 22 + (best.stats.tac - 70) / 150, 0.3, 0.98) * levelOf(m).read;
     if (random(m) > (best.human ? Math.min(1, base + 0.25) : base)) {
       best.lockedUntil = m.t + 0.25;
       return;
     }
   }
-  const maxTrap = 16 + (best.stats.dri / 100) * 14 + (m.pass?.to === best.i ? 5 : 0);
-  if (rel > maxTrap) {
+  const maxTrap = 22 + (best.stats.dri / 100) * 16;
+  if (m.pass?.to !== best.i && rel > maxTrap) {
     // Trop fort pour être contrôlé : il le dévie
     deflect(m, best, 0.42, ev);
     return;
@@ -970,7 +1021,7 @@ function tackles(m: Match, ev: MatchEvent[]) {
     if (p.act === "slide") {
       if (m.t < p.lockedUntil) continue;
       const dBall = Math.hypot(b.x - p.x, b.z - p.z);
-      if (owner && owner.team === p.team) continue;
+      if (owner && (owner.team === p.team || owner.burstUntil > m.t)) continue;
       if (dBall < 1.2 && b.y < 1) {
         // Le ballon est touché
         if (owner) {
@@ -996,8 +1047,9 @@ function tackles(m: Match, ev: MatchEvent[]) {
       if (d > 1.7) continue;
       // De face, c'est plus sûr ; de dos, on risque la faute
       const behind = Math.cos(owner.h) * (p.x - owner.x) + Math.sin(owner.h) * (p.z - owner.z) < -0.25;
-      const tune = p.human ? 1 : levelOf(m).tackle;
-      const chance = clamp(0.5 + (p.stats.tac - owner.stats.dri) / 130, 0.15, 0.85) * tune * (behind ? 0.7 : 1);
+      const tune = p.human ? 1.3 : levelOf(m).tackle * (owner.human !== null ? 0.8 : 1);
+      const dodge = owner.burstUntil > m.t ? 0.15 : 1;
+      const chance = clamp(0.5 + (p.stats.tac - owner.stats.dri) / 130, 0.15, 0.85) * tune * (behind ? 0.7 : 1) * dodge;
       if (random(m) < chance) {
         owner.lockedUntil = m.t + 0.55;
         m.owner = -1;
@@ -1032,10 +1084,10 @@ function commitFoul(m: Match, p: Player, victim: Player, slide: boolean, ev: Mat
   const yellowChance = (slide ? 0.18 : 0.06) + (behind ? 0.2 : 0);
   if (lastMan) card(m, p, true, ev);
   else if (random(m) < yellowChance) card(m, p, false, ev);
-  if (penalty) beginRestart(m, "penalty", victim.team, dir * (HALF_L - SPOT_L), 0, ev, 2, true);
+  if (penalty) beginRestart(m, "penalty", victim.team, dir * (HALF_L - SPOT_L), 0, ev, 1.4, true);
   else {
     const [x, z] = onPitch(victim.x, victim.z, 1);
-    beginRestart(m, "free", victim.team, x, z, ev, 1.5, true);
+    beginRestart(m, "free", victim.team, x, z, ev, 1, true);
   }
 }
 
@@ -1083,7 +1135,7 @@ function defenders(m: Match) {
   for (const p of m.players) {
     if (p.team === owner.team || p.off || p.human !== null || p.act !== "none" || p.role === "GK") continue;
     const d = Math.hypot(owner.x - p.x, owner.z - p.z);
-    if (d < 1.55 && m.t > p.lockedUntil && random(m) < 0.09 * levelOf(m).tackle) {
+    if (d < 1.55 && m.t > p.lockedUntil && random(m) < (owner.human !== null ? 0.05 : 0.09) * levelOf(m).tackle) {
       startTackle(p, false, null, m);
       p.lockedUntil = m.t + 0.6;
     } else if (d < 3.2 && d > 1.8 && random(m) < 0.008 * levelOf(m).tackle && !inBox(p.x, p.z, -attackDir(m, p.team))) {
@@ -1120,8 +1172,35 @@ function concludeGoal(m: Match, team: Team, ev: MatchEvent[]) {
   m.owner = -1;
   m.pass = null;
   m.offside = [];
+  celebrate(m, scorerP && !own ? scorerP : null, team);
   // Le prochain coup d'envoi revient à l'équipe qui a encaissé
   m.restart = { kind: "kickoff", team: opponent(team), x: 0, z: 0, taker: -1, ready: false, readyAt: 0, deadline: 0, direct: false };
+}
+
+/** Le buteur file vers le poteau de corner, ses coéquipiers courent le rejoindre, les autres s'arrêtent */
+function celebrate(m: Match, scorer: Player | null, team: Team) {
+  const dir = attackDir(m, team);
+  const side = Math.sign(scorer?.z || 1);
+  const spotX = dir * (HALF_L - 9);
+  const spotZ = side * (HALF_W - 9);
+  for (const p of m.players) {
+    p.order = null;
+    if (p.act === "kick" || p.act === "tackle") p.act = "none";
+    p.runUntil = 0;
+    p.sprint = false;
+    p.tx = p.x;
+    p.tz = p.z;
+    if (!scorer || p.team !== team || p.role === "GK") continue;
+    if (p === scorer) {
+      p.tx = spotX;
+      p.tz = spotZ;
+      p.sprint = true;
+    } else if (Math.hypot(p.x - scorer.x, p.z - scorer.z) < 34) {
+      p.tx = spotX - dir * (2 + random(m) * 4);
+      p.tz = spotZ - side * (1 + random(m) * 5);
+      p.sprint = true;
+    }
+  }
 }
 
 /** Le ballon est-il sorti, ou entré ? */
@@ -1152,10 +1231,10 @@ function checkBounds(m: Match, ev: MatchEvent[]) {
     const attacking: Team = attackDir(m, 0) === end ? 0 : 1;
     if (last && last.team === attacking) {
       const def = opponent(attacking);
-      beginRestart(m, "goalkick", def, end * (HALF_L - SIX_L), Math.sign(b.z || 1) * 7, ev, 1.5);
+      beginRestart(m, "goalkick", def, end * (HALF_L - SIX_L), Math.sign(b.z || 1) * 7, ev, 0.9);
     } else {
       m.stats[attacking].corners++;
-      beginRestart(m, "corner", attacking, end * (HALF_L - 0.3), Math.sign(b.z || 1) * (HALF_W - 0.3), ev, 1.7);
+      beginRestart(m, "corner", attacking, end * (HALF_L - 0.3), Math.sign(b.z || 1) * (HALF_W - 0.3), ev, 1.1);
     }
     return;
   }
@@ -1167,7 +1246,7 @@ function checkBounds(m: Match, ev: MatchEvent[]) {
     }
     const last = m.players[m.lastTouch];
     const team: Team = last ? opponent(last.team) : 0;
-    beginRestart(m, "throw", team, clamp(b.x, -HALF_L + 1, HALF_L - 1), Math.sign(b.z) * (HALF_W + 0.3), ev, 0.9);
+    beginRestart(m, "throw", team, clamp(b.x, -HALF_L + 1, HALF_L - 1), Math.sign(b.z) * (HALF_W + 0.3), ev, 0.5);
   }
 }
 
@@ -1220,6 +1299,7 @@ export function stepMatch(m: Match): MatchEvent[] {
     const hits = stepBall(m.ball, DT);
     if (hits.includes("net")) ev.push({ k: "net" });
     stepPlayers(m, ev);
+    separate(m);
     if (m.t >= m.phaseUntil) beginKickoff(m, m.restart?.team ?? 0, ev);
     return ev;
   }
@@ -1246,7 +1326,7 @@ export function stepMatch(m: Match): MatchEvent[] {
     if (r.ready) {
       const taker = m.players[r.taker]!;
       const human = taker.human !== null;
-      const delay = r.kind === "throw" ? 0.7 : r.kind === "kickoff" ? 0.5 : 1.3;
+      const delay = r.kind === "throw" ? 0.4 : r.kind === "kickoff" ? 0.3 : 0.8;
       const auto = human ? m.t >= r.deadline : m.t >= r.readyAt + delay;
       if (auto && !taker.order) autoRestart(m, taker);
       // Pendant une touche ou un dégagement, les autres se démarquent
