@@ -1,5 +1,15 @@
 import { useState, type CSSProperties } from "react";
-import { CARDS, FAMILIES, familyBonus, PACK_PRICE, RARITY, type CardDef, type CardFamily, type PackResponse } from "../../shared/cards.ts";
+import {
+  CARDS,
+  FAMILIES,
+  familyBonus,
+  PACK_PRICE,
+  RARITIES,
+  RARITY,
+  type CardDef,
+  type CardFamily,
+  type PackResponse,
+} from "../../shared/cards.ts";
 import { PackOpening } from "../cards/PackOpening.tsx";
 import { TradingCard } from "../cards/TradingCard.tsx";
 import { AppHeader } from "../components/AppHeader.tsx";
@@ -21,6 +31,7 @@ export function AlbumPage() {
   const craft = useAlbum((s) => s.craft);
   const { w, h } = useViewport();
   const [family, setFamily] = useState<CardFamily | "toutes">("toutes");
+  const [view, setView] = useState<"toutes" | "manquantes" | "doubles">("toutes");
   const [zoom, setZoom] = useState<CardDef | null>(null);
   const [pack, setPack] = useState<PackResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,6 +45,8 @@ export function AlbumPage() {
   const have = CARDS.filter((c) => owned[c.id]).length;
   const doubles = CARDS.reduce((n, c) => n + Math.max(0, (owned[c.id] ?? 0) - 1) * RARITY[c.rarity].sell, 0);
   const shown = FAMILIES.filter((f) => family === "toutes" || f.id === family);
+  const keep = (c: CardDef) => view === "toutes" || (view === "manquantes" ? !owned[c.id] : (owned[c.id] ?? 0) > 1);
+  const nothing = !shown.some((f) => CARDS.some((c) => c.family === f.id && keep(c)));
 
   async function run(action: () => Promise<void>) {
     if (busy) return;
@@ -82,6 +95,17 @@ export function AlbumPage() {
             )}
             <span className="hint">Tu as {points(balance)}.</span>
           </div>
+          <div className="album-rarities">
+            {RARITIES.map((r) => (
+              <span key={r} className={`album-rarity is-${r}`} title={RARITY[r].name}>
+                <i aria-hidden="true" />
+                <span className="num">
+                  {CARDS.filter((c) => c.rarity === r && owned[c.id]).length}/{CARDS.filter((c) => c.rarity === r).length}
+                </span>
+                <span className="album-rarity-name">{RARITY[r].name}</span>
+              </span>
+            ))}
+          </div>
           <div className="album-families options" role="radiogroup" aria-label="Famille">
             <button type="button" aria-pressed={family === "toutes"} onClick={() => setFamily("toutes")}>
               Toutes
@@ -92,11 +116,25 @@ export function AlbumPage() {
               </button>
             ))}
           </div>
+          <div className="album-families options" role="radiogroup" aria-label="Quelles cartes montrer">
+            <button type="button" aria-pressed={view === "toutes"} onClick={() => setView("toutes")}>
+              Tout l'album
+            </button>
+            <button type="button" aria-pressed={view === "manquantes"} onClick={() => setView("manquantes")}>
+              Il me manque
+            </button>
+            <button type="button" aria-pressed={view === "doubles"} onClick={() => setView("doubles")}>
+              Mes doubles
+            </button>
+          </div>
         </section>
+
+        {nothing && <p className="hint">{view === "doubles" ? "Aucun double ici." : "Rien ne manque ici : bravo !"}</p>}
 
         {shown.map((f) => {
           const cards = CARDS.filter((c) => c.family === f.id);
           const got = cards.filter((c) => owned[c.id]).length;
+          if (!cards.some(keep)) return null;
           return (
             <section key={f.id} className="album-family">
               <h2>
@@ -107,9 +145,9 @@ export function AlbumPage() {
                 </small>
               </h2>
               <div className="album-grid" style={{ "--gap": `${GAP}px` } as CSSProperties}>
-                {cards.map((c) => (
+                {cards.filter(keep).map((c) => (
                   <button key={c.id} className="album-cell" onClick={() => setZoom(c)} aria-label={c.name}>
-                    <TradingCard card={c} width={cardW} missing={!owned[c.id]} />
+                    <TradingCard card={c} width={cardW} missing={!owned[c.id]} still />
                     {(owned[c.id] ?? 0) > 1 && <span className="album-count num">×{owned[c.id]}</span>}
                   </button>
                 ))}
