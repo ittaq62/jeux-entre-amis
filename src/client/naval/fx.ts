@@ -43,6 +43,19 @@ const WATCH_SUNK_MS = 1250;
 
 export const useNavalFx = create<FxState>(() => ({ items: [], pending: {}, last: null }));
 
+/** L'instant où chaque case a envoyé son navire par le fond : l'épave qui vient d'apparaître a droit à sa mise en scène */
+const sunkAt = new Map<string, number>();
+const SUNK_FRESH_MS = 1500;
+
+/** Ce navire vient-il tout juste de couler ? (une épave déjà là depuis longtemps apparaît sans façon) */
+export function justSunk(board: string, cells: number[]) {
+  const now = performance.now();
+  return cells.some((c) => {
+    const at = sunkAt.get(`${board}:${c}`);
+    return at !== undefined && Math.abs(now - at) < SUNK_FRESH_MS;
+  });
+}
+
 let seq = 0;
 
 function addFx(item: Omit<FxItem, "id" | "start">, delay = 0) {
@@ -67,6 +80,7 @@ function hold(board: string, cell: number, ms: number) {
 
 export function resetNavalFx() {
   useNavalFx.setState({ items: [], pending: {}, last: null });
+  sunkAt.clear();
 }
 
 /**
@@ -109,7 +123,10 @@ export function playNavalEvents(events: NavalEvent[], me: string | null, reduced
           { board: e.target, kind: e.result === "sunk" ? "sunk" : "explosion", cell: e.cell, duration: e.result === "sunk" ? 1400 : 900 },
           impact,
         );
-        if (e.result === "sunk") play("bubbles", { delay: impact + 900, volume: 0.8 });
+        if (e.result === "sunk") {
+          play("bubbles", { delay: impact + 900, volume: 0.8 });
+          if (!reduced) sunkAt.set(`${e.target}:${e.cell}`, performance.now() + impact);
+        }
         if (onMe && !reduced) setTimeout(() => vibrate(e.result === "sunk" ? [60, 40, 120] : 50), impact);
       }
       // Les tirs d'un barrage partent les uns après les autres

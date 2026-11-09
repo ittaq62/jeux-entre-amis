@@ -487,6 +487,7 @@ function Battle({
         preview={preview}
         onHover={setHover}
         onCell={fireAt}
+        skin={seat(targetBoard.owner)?.skin}
       />
     </div>
   );

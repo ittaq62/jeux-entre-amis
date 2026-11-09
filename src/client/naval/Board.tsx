@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { cellIndex, cellX, cellY, shipCells, type Placement } from "../../shared/games/naval/engine.ts";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { cellIndex, cellX, cellY, shipCells, type GridSize, type Placement } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView } from "../../shared/games/naval/view.ts";
-import { useNavalFx, type FxItem } from "./fx.ts";
+import { justSunk, useNavalFx, type FxItem } from "./fx.ts";
 import type { SkinId } from "../../shared/games/naval/skins.ts";
 import { CELL, hullFill, ShipOutline, ShipShape, SkinDefs, shipTransform } from "./ships.tsx";
 
@@ -32,7 +32,7 @@ interface BoardProps {
   onHover?: (cell: number | null) => void;
   onPointer?: (p: BoardPointer) => void;
   className?: string;
-  /** Le thème de la flotte dessinée sur la mer */
+  /** Le thème de la flotte : sur la mer pour ses navires, sur le radar pour les épaves */
   skin?: SkinId;
 }
 
@@ -136,6 +136,7 @@ export function Board({
   }
 
   const center = (c: number) => ({ x: cellX(n, c) * CELL + CELL / 2, y: cellY(n, c) * CELL + CELL / 2 });
+  const hull = { ["--hull" as string]: hullFill(`skin${uid}`, skin, `url(#hull${uid})`) };
 
   return (
     <svg
@@ -165,6 +166,11 @@ export function Board({
         <clipPath id={`clip${uid}`}>
           <rect x={0} y={0} width={span} height={span} rx={1.5} />
         </clipPath>
+        <linearGradient id={`hull${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#9aa8ad" />
+          <stop offset="100%" stopColor="#5b686d" />
+        </linearGradient>
+        <SkinDefs id={`skin${uid}`} />
         {mode === "sea" ? (
           <>
             <radialGradient id={`water${uid}`} cx="50%" cy="38%" r="75%">
@@ -187,11 +193,6 @@ export function Board({
                 repeatCount="indefinite"
               />
             </pattern>
-            <linearGradient id={`hull${uid}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#9aa8ad" />
-              <stop offset="100%" stopColor="#5b686d" />
-            </linearGradient>
-            <SkinDefs id={`skin${uid}`} />
           </>
         ) : (
           <>
@@ -278,7 +279,7 @@ export function Board({
                   className={`ship-wrap ${isSunk ? "is-sunk" : ""} ${selectedShip === i ? "is-selected" : ""}`}
                   data-ship={i}
                   transform={shipTransform(p)}
-                  style={{ ["--hull" as string]: hullFill(`skin${uid}`, skin, `url(#hull${uid})`) }}
+                  style={hull}
                 >
                   <ShipShape kind={p.kind} skin={skin} />
                 </g>
@@ -293,14 +294,13 @@ export function Board({
             {ships
               ?.filter((p) => !sunk.some((q) => q.x === p.x && q.y === p.y && q.dir === p.dir))
               .map((p) => (
-                <g key={`afloat-${p.kind}-${p.x}-${p.y}`} transform={shipTransform(p)}>
+                <g key={`afloat-${p.kind}-${p.x}-${p.y}`} transform={shipTransform(p)} style={hull}>
+                  <ShipShape kind={p.kind} skin={skin} />
                   <ShipOutline kind={p.kind} afloat />
                 </g>
               ))}
             {sunk.map((p) => (
-              <g key={`${p.kind}-${p.x}-${p.y}`} transform={shipTransform(p)}>
-                <ShipOutline kind={p.kind} />
-              </g>
+              <Wreck key={`${board.owner}-${p.kind}-${p.x}-${p.y}`} owner={board.owner} size={n} ship={p} skin={skin} hull={hull} />
             ))}
           </g>
         )}
@@ -367,6 +367,23 @@ export function Board({
 
       <rect className="board-frame" x={-0.5} y={-0.5} width={span + 1} height={span + 1} rx={2} />
     </svg>
+  );
+}
+
+/** Un navire coulé sur le radar : on voit ce qu'on vient d'envoyer par le fond, dans le thème de sa flotte. */
+function Wreck({ owner, size, ship, skin, hull }: { owner: string; size: GridSize; ship: Placement; skin: SkinId; hull: CSSProperties }) {
+  const [fresh, setFresh] = useState(() => justSunk(owner, shipCells(size, ship) ?? []));
+  // Une seule fois : sans ça, l'apparition se rejouerait à chaque retour sur le radar
+  useEffect(() => {
+    if (!fresh) return;
+    const t = setTimeout(() => setFresh(false), 1000);
+    return () => clearTimeout(t);
+  }, [fresh]);
+  return (
+    <g className={`wreck-ship ${fresh ? "is-fresh" : ""}`} transform={shipTransform(ship)} style={hull}>
+      <ShipShape kind={ship.kind} skin={skin} />
+      <ShipOutline kind={ship.kind} />
+    </g>
   );
 }
 
