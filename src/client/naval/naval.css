@@ -35,6 +35,10 @@
   color: var(--gold-light);
 }
 
+.naval-status.is-aimed .naval-status-text {
+  color: #ffb4a8;
+}
+
 .naval-timer {
   position: relative;
   width: 30px;
@@ -148,6 +152,18 @@
 
 .naval-target-tab.is-out {
   opacity: 0.45;
+}
+
+/* La règle de la table interdit cette flotte pour ce tir */
+.naval-target-tab.is-locked {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* La flotte que le tireur est en train de viser */
+.naval-target-tab.is-aimed {
+  border-color: rgba(240, 96, 80, 0.85);
+  box-shadow: 0 0 0 1px rgba(240, 96, 80, 0.55);
 }
 
 .naval-target-tab.is-out .naval-target-name {

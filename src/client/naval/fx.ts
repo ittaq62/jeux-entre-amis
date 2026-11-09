@@ -26,9 +26,22 @@ interface FxState {
   items: FxItem[];
   /** Cases dont le résultat attend l'arrivée de l'obus, par plateau */
   pending: Record<string, number[]>;
+  /** Le dernier tir : sur quel plateau, et jusqu'à quand le laisser à l'écran pour voir l'impact */
+  last: LastShot | null;
 }
 
-export const useNavalFx = create<FxState>(() => ({ items: [], pending: {} }));
+export interface LastShot {
+  id: number;
+  by: string;
+  target: string;
+  until: number;
+}
+
+/** Ce qu'on laisse à l'écran après l'impact, avant de passer à la suite (un navire qui coule mérite qu'on le regarde) */
+const WATCH_AFTER_MS = 700;
+const WATCH_SUNK_MS = 1250;
+
+export const useNavalFx = create<FxState>(() => ({ items: [], pending: {}, last: null }));
 
 let seq = 0;
 
@@ -53,7 +66,7 @@ function hold(board: string, cell: number, ms: number) {
 }
 
 export function resetNavalFx() {
-  useNavalFx.setState({ items: [], pending: {} });
+  useNavalFx.setState({ items: [], pending: {}, last: null });
 }
 
 /**
@@ -79,6 +92,14 @@ export function playNavalEvents(events: NavalEvent[], me: string | null, reduced
       }
       hold(e.target, e.cell, start + flight);
       const impact = start + flight;
+      useNavalFx.setState({
+        last: {
+          id: ++seq,
+          by: e.by,
+          target: e.target,
+          until: performance.now() + impact + (e.result === "sunk" ? WATCH_SUNK_MS : WATCH_AFTER_MS),
+        },
+      });
       if (e.result === "miss") {
         play("splash", { delay: impact, volume: mine || onMe ? 1 : 0.6 });
         addFx({ board: e.target, kind: "splash", cell: e.cell, duration: 900 }, impact);
@@ -96,6 +117,7 @@ export function playNavalEvents(events: NavalEvent[], me: string | null, reduced
     } else if (e.type === "scan") {
       play("sonar", { delay });
       addFx({ board: e.target, kind: "scan", cell: e.cells[4] ?? e.cells[0]!, cells: e.cells, found: e.found, duration: 1300 }, delay);
+      useNavalFx.setState({ last: { id: ++seq, by: e.by, target: e.target, until: performance.now() + delay + 1300 } });
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   type GridSize,
   type NavalSettings,
   type ShotRule,
+  type Targeting,
 } from "../../shared/games/naval/engine.ts";
 import { NAVAL_MAX_PLAYERS, type NavalClientMessage, type NavalRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
@@ -19,6 +20,12 @@ const SHOT_HINTS: Record<ShotRule, string> = {
   single: "Un tir chacun son tour, touché ou pas.",
   replay: "Celui qui touche rejoue, jusqu'à tomber à l'eau.",
   salvo: "À chaque tour, autant de tirs que de navires encore à flot.",
+};
+
+const TARGET_HINTS: Record<Targeting, string> = {
+  free: "Chacun choisit la flotte qu'il attaque.",
+  random: "On ne choisit pas : à chaque tour, le hasard désigne la flotte à attaquer.",
+  leader: "On doit attaquer en priorité la flotte qui a le plus de navires à flot.",
 };
 
 const BOT_HINTS: Record<BotLevel, string> = {
@@ -45,6 +52,8 @@ export function NavalLobby({ room, send, ...rest }: Props) {
   const crews = crewsOf(room.seats);
   const balanced = crews[0].length === 2 && crews[1].length === 2;
   const fleet = FLEETS[s.grid].map((k) => `${SHIP_NAME[k]} (${SHIP_LENGTH[k]})`).join(", ");
+  const targeting = s.targeting ?? "free";
+  const alone = room.settings.maxPlayers === 2;
 
   const toggles: { key: "touching" | "arsenal" | "teams"; label: string; desc: string; disabled?: boolean }[] = [
     { key: "touching", label: "Navires collés", desc: "Deux navires peuvent se toucher. Sinon, une case d'eau les sépare toujours." },
@@ -120,6 +129,24 @@ export function NavalLobby({ room, send, ...rest }: Props) {
             />
             <p className="hint" style={{ margin: 0 }}>
               {SHOT_HINTS[s.shots]}
+            </p>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Qui on attaque</span>
+            <Options<Targeting>
+              label="Qui on attaque"
+              value={targeting}
+              disabled={!isHost || alone}
+              onChange={(next) => update({ targeting: next })}
+              options={[
+                { value: "free", label: "Au choix" },
+                { value: "random", label: "Au hasard" },
+                { value: "leader", label: "Plus de navires" },
+              ]}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {alone ? "À deux, il n'y a qu'une flotte à viser." : TARGET_HINTS[targeting]}
             </p>
           </div>
 

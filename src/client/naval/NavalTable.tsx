@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { cellIndex, cellX, cellY, FLEETS, type Dir, type Weapon } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView, NavalView } from "../../shared/games/naval/view.ts";
 import type { NavalClientMessage, NavalRoomView, SeatView } from "../../shared/protocol.ts";
@@ -15,6 +15,7 @@ import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { NAVAL_SOUNDS, play, preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Board } from "./Board.tsx";
+import { useNavalFx } from "./fx.ts";
 import { NavalGameOver } from "./NavalGameOver.tsx";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { PlacementBoard } from "./Placement.tsx";
@@ -234,14 +235,25 @@ function Battle({
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
   const ally = (id: string) => meP && (id === meP.id || (meP.team !== null && g.players.find((p) => p.id === id)?.team === meP.team));
-  const enemies = g.players.filter((p) => !ally(p.id));
+  // Chacun voit ses adversaires dans son ordre à lui : le premier de la liste n'est pas le même pour tout le monde
+  const rank = (id: string) => {
+    const i = g.order?.indexOf(id) ?? -1;
+    return i < 0 ? g.players.length : i;
+  };
+  const enemies = g.players.filter((p) => !ally(p.id)).sort((a, b) => rank(a.id) - rank(b.id));
+  const myTurn = g.phase === "battle" && g.turn === me && me !== null;
   const [targetId, setTargetId] = useState<string | null>(null);
-  const target = enemies.find((p) => p.id === targetId && !p.out) ?? enemies.find((p) => !p.out) ?? enemies[0];
-  const targetBoard = target ? g.boards.find((b) => b.owner === target.id)! : null;
+  // La règle de la table : à son tour, on ne peut viser que les flottes permises
+  const allowed = myTurn ? (g.allowed ?? null) : null;
+  const canAim = (id: string, out: boolean) => !out && (!allowed || allowed.includes(id));
+  const target = enemies.find((p) => p.id === targetId && canAim(p.id, p.out)) ?? enemies.find((p) => canAim(p.id, p.out)) ?? enemies[0];
+  // Le plateau qu'on regarde pendant que les autres tirent, à part celui qu'on a choisi pour soi
+  const [watch, setWatch] = useState<string | null>(null);
+  const shown = enemies.find((p) => p.id === watch) ?? target;
+  const targetBoard = shown ? g.boards.find((b) => b.owner === shown.id)! : null;
   const myBoard = me ? g.boards.find((b) => b.owner === me) : undefined;
   const mate = meP && meP.team !== null ? g.players.find((p) => p.id !== meP.id && p.team === meP.team) : undefined;
   const mateBoard = mate ? g.boards.find((b) => b.owner === mate.id) : undefined;
-  const myTurn = g.phase === "battle" && g.turn === me && me !== null;
   const [weapon, setWeapon] = useState<Weapon | null>(null);
   const [dir, setDir] = useState<Dir>("h");
   const [hover, setHover] = useState<number | null>(null);
@@ -255,21 +267,47 @@ function Battle({
     if (!myTurn) setWeapon(null);
   }, [myTurn]);
 
-  // Sur téléphone, un seul plateau à la fois : le radar quand on tire, sa flotte quand les autres tirent.
-  // On attend que l'obus en vol soit tombé avant de changer de plateau.
+  // On suit la bataille : le plateau montré est celui que le tireur vise, sa propre flotte seulement si c'est elle
+  // qu'on attaque. Un tir qui part se montre tout de suite ; pour le reste, on laisse d'abord voir l'obus tomber.
   const [view, setView] = useState<"radar" | "fleet">("radar");
+  const lastShot = useNavalFx((s) => s.last);
+  const watchUntil = useRef(0);
+  const lookAt = (id: string | null) => {
+    if (id !== null && !ally(id)) {
+      setWatch(id);
+      setView("radar");
+    } else {
+      setWatch(null);
+      setView(id === null ? "radar" : "fleet");
+    }
+  };
   useEffect(() => {
-    if (!phone || !me) return;
-    const next = g.phase === "battle" && g.turn !== me ? "fleet" : "radar";
-    const t = setTimeout(() => setView(next), 1000);
+    if (!lastShot) return;
+    watchUntil.current = lastShot.until;
+    if (lastShot.by !== me) lookAt(lastShot.target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastShot?.id]);
+  useEffect(() => {
+    if (g.phase === "placement") return;
+    const others = g.phase === "battle" && g.turn !== me;
+    // On ne sait pas encore ce qu'il vise : on reste où on est
+    if (others && !g.aim) return;
+    const t = setTimeout(() => lookAt(others ? g.aim : null), Math.max(0, watchUntil.current - performance.now()));
     return () => clearTimeout(t);
-  }, [phone, me, g.turn, g.phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, g.turn, g.turnId, g.aim, g.phase]);
   const showRadar = !phone || !me || view === "radar";
   const showFleet = !phone || view === "fleet";
 
   const size = g.settings.grid;
   const shotOn = (b: NavalBoardView) => new Set([...b.misses, ...b.hits]);
-  const canFire = myTurn && sentFor !== g.turnId && target && !target.out && targetBoard;
+  const canFire = myTurn && sentFor !== g.turnId && target && !target.out && targetBoard && shown?.id === target.id;
+
+  // À son tour, on annonce la flotte qu'on vise
+  useEffect(() => {
+    if (myTurn && !mySeat?.autoplay && target && !target.out && g.aim !== target.id) send({ t: "aim", target: target.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTurn, g.turnId, target?.id, g.aim, mySeat?.autoplay]);
 
   function fireAt(cell: number) {
     if (!canFire || !targetBoard || !target) return;
@@ -297,20 +335,34 @@ function Battle({
   else if (mySeat?.autoplay) status = "Un bot tient la barre pour toi.";
   else if (myTurn) {
     const shots = g.settings.shots === "salvo" && g.shotsLeft > 1 ? `, ${g.shotsLeft} tirs` : "";
-    status = enemies.filter((p) => !p.out).length > 1 ? `À toi de tirer${shots} : choisis ta cible.` : `À toi de tirer${shots} !`;
+    const only = allowed?.length === 1 ? (seat(allowed[0]!)?.name ?? "?") : null;
+    const rule = g.settings.targeting ?? "free";
+    if (enemies.filter((p) => !p.out).length <= 1) status = `À toi de tirer${shots} !`;
+    else if (rule === "random") status = `Le sort désigne ${only ?? "une flotte"} : à toi de tirer${shots} !`;
+    else if (rule === "leader")
+      status = only
+        ? `À toi de tirer sur ${only}, la plus grosse flotte${shots} !`
+        : `À toi de tirer${shots} : vise une des plus grosses flottes.`;
+    else status = `À toi de tirer${shots} : choisis ta cible.`;
   } else if (meP?.out)
     status =
       mate && !mate.out
         ? `Ta flotte est au fond : ${seat(mate.id)?.name ?? "ton équipier"} continue seul.`
         : "Ta flotte est au fond. Tu regardes la fin de la bataille.";
-  else status = `Au tour de ${turnSeat?.name ?? "?"}${awayTurnNote(turnSeat, turnLeft)}`;
+  else {
+    // Qui il vise, dès qu'on le sait (à deux, c'est forcément toi)
+    const aimed = g.mode === "duel" || !g.aim ? null : g.aim === me ? "ta flotte" : (seat(g.aim)?.name ?? null);
+    status = aimed
+      ? `${turnSeat?.name ?? "?"} vise ${aimed}${awayTurnNote(turnSeat, turnLeft)}`
+      : `Au tour de ${turnSeat?.name ?? "?"}${awayTurnNote(turnSeat, turnLeft)}`;
+  }
 
   const arsenal = meP?.arsenal ?? [];
   const counts = (["radar", "torpedo", "barrage"] as Weapon[]).map((k) => ({ k, n: arsenal.filter((a) => a === k).length }));
 
   return (
     <section className={`naval-battle ${phone ? "is-phone" : ""}`}>
-      <div className={`naval-status ${myTurn ? "is-turn" : ""}`}>
+      <div className={`naval-status ${myTurn ? "is-turn" : ""} ${!myTurn && g.aim === me && me !== null ? "is-aimed" : ""}`}>
         {myTurn && room.turnDeadline && (
           <span className="naval-timer">
             <TimerRing size={30} deadline={room.turnDeadline} total={g.settings.turnSeconds} offset={serverOffset} />
@@ -349,15 +401,22 @@ function Battle({
               {enemies.map((p) => {
                 const s = seat(p.id);
                 const b = g.boards.find((x) => x.owner === p.id)!;
-                const active = target?.id === p.id;
+                const active = shown?.id === p.id;
+                const locked = Boolean(allowed && !allowed.includes(p.id) && !p.out);
+                const aimed = g.aim === p.id && !p.out && !myTurn;
                 return (
                   <button
                     key={p.id}
                     role="tab"
                     aria-selected={active}
-                    className={`naval-target-tab ${active ? "is-active" : ""} ${p.out ? "is-out" : ""} ${g.turn === p.id ? "is-turn" : ""}`}
-                    onClick={() => setTargetId(p.id)}
-                    disabled={p.out && !active}
+                    className={`naval-target-tab ${active ? "is-active" : ""} ${p.out ? "is-out" : ""} ${g.turn === p.id ? "is-turn" : ""} ${
+                      locked ? "is-locked" : ""
+                    } ${aimed ? "is-aimed" : ""}`}
+                    onClick={() => {
+                      setTargetId(p.id);
+                      setWatch(null);
+                    }}
+                    disabled={(p.out && !active) || locked}
                   >
                     {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 24 : 28} />}
                     <span className="naval-target-who">
