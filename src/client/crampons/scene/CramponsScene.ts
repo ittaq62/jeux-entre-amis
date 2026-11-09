@@ -26,6 +26,10 @@ export interface SceneFrame {
   cuts: number;
   /** La force du tir en préparation, de 0 à 1 */
   charge: number;
+  /** Là où vise le curseur */
+  aim: [number, number] | null;
+  /** Le coéquipier qui recevrait la passe, ou -1 */
+  receiver: number;
 }
 
 export type CameraMode = "tele" | "large" | "pres";
@@ -74,6 +78,11 @@ export class CramponsScene {
   private ring: THREE.Mesh;
   private gauge: THREE.Mesh;
   private arrow: THREE.Mesh;
+  private reticle: THREE.Mesh;
+  private target: THREE.Mesh;
+  private basePixelRatio = 1;
+  private width = 1;
+  private height = 1;
   private sun: THREE.DirectionalLight;
   private sunOffset: THREE.Vector3;
   private shadows: boolean;
@@ -101,7 +110,8 @@ export class CramponsScene {
     const theme = THEMES[opts.ambience];
     this.shadows = !opts.lowQuality;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.lowQuality, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.lowQuality ? 1.25 : 2));
+    this.basePixelRatio = Math.min(window.devicePixelRatio, opts.lowQuality ? 1.25 : 2);
+    this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = theme.exposure;
@@ -179,13 +189,44 @@ export class CramponsScene {
     );
     this.gauge.renderOrder = 4;
     this.scene.add(this.gauge);
+    const reticleGeo = new THREE.RingGeometry(0.42, 0.56, 28);
+    reticleGeo.rotateX(-Math.PI / 2);
+    this.reticle = new THREE.Mesh(
+      reticleGeo,
+      new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false }),
+    );
+    this.reticle.renderOrder = 5;
+    this.reticle.visible = false;
+    this.scene.add(this.reticle);
+    const targetGeo = new THREE.RingGeometry(0.72, 0.92, 32);
+    targetGeo.rotateX(-Math.PI / 2);
+    this.target = new THREE.Mesh(
+      targetGeo,
+      new THREE.MeshBasicMaterial({ color: "#6fe3ff", transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false }),
+    );
+    this.target.renderOrder = 3;
+    this.target.visible = false;
+    this.scene.add(this.target);
     const arrowGeo = new THREE.ConeGeometry(0.34, 0.56, 4);
     arrowGeo.rotateX(Math.PI);
     this.arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffe066", toneMapped: false }));
     this.scene.add(this.arrow);
   }
 
+  /** Allège ou affine l'image, sans toucher à ce qu'on voit */
+  setResolution(scale: number) {
+    this.renderer.setPixelRatio(this.basePixelRatio * scale);
+    this.renderer.setSize(this.width, this.height, false);
+  }
+
+  setShadows(on: boolean) {
+    if (!this.shadows) return;
+    this.sun.castShadow = on;
+  }
+
   resize(w: number, h: number) {
+    this.width = w;
+    this.height = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.portrait = h > w * 1.05;
@@ -247,6 +288,12 @@ export class CramponsScene {
       this.gauge.geometry.setDrawRange(0, Math.round(frame.charge * GAUGE_SEGMENTS) * 6);
       (this.gauge.material as THREE.MeshBasicMaterial).color.set(frame.charge > 0.86 ? "#e94a3a" : "#ffb02e");
     }
+
+    this.reticle.visible = frame.aim !== null;
+    if (frame.aim) this.reticle.position.set(frame.aim[0], 0.07, frame.aim[1]);
+    const mate = frame.receiver >= 0 ? frame.players[frame.receiver] : null;
+    this.target.visible = Boolean(mate);
+    if (mate) this.target.position.set(mate.x, 0.05, mate.z);
 
     this.crowd.update(dt, this.time, frame.players);
     this.stadium.update(this.time, frame.excitement, dt);

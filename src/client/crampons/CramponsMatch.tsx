@@ -7,7 +7,9 @@ import { CRAMPONS_SOUNDS, play, preloadSounds, startLoop, stopLoop } from "../li
 import { usePrefs } from "../stores/prefs.ts";
 import type { GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
+import { loadSettings, type CramponsSettings } from "./bindings.ts";
 import { HowTo, KeyHints, mainKey, Radar } from "./CramponsHud.tsx";
+import { SettingsPanel } from "./CramponsSettings.tsx";
 import { MatchRuntime, type HudState } from "./runtime.ts";
 import type { MatchListeners } from "./useCramponsRoom.ts";
 
@@ -144,7 +146,9 @@ export function CramponsMatch({
     charge: 0,
     hasBall: false,
     defending: false,
-    scheme: "fleches",
+    scheme: "clavier",
+    fps: 60,
+    ping: 0,
     radar: [],
     ballX: 0,
     ballZ: 0,
@@ -159,6 +163,10 @@ export function CramponsMatch({
   // Un autre format, d'autres clubs ou une autre ambiance : il faut reconstruire le stade et les joueurs
   const matchKey = `${view.teams[0].name}|${view.teams[1].name}|${view.players.length}|${view.config.ambience}|${view.teams[1].kit.shirt}`;
   const [mods, setMods] = useState({ finesse: false, chip: false });
+  const [settings, setSettings] = useState<CramponsSettings>(() => loadSettings());
+  const [panel, setPanel] = useState(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   // L'aide s'ouvre d'elle-même au tout premier match
   const [help, setHelp] = useState(() => seatId !== null && !localStorage.getItem(HOWTO_KEY));
   const closeHelp = () => {
@@ -195,6 +203,7 @@ export function CramponsMatch({
           play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
       },
       reduced || window.matchMedia("(pointer: coarse)").matches,
+      settingsRef.current,
     );
     runtime.current = rt;
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
@@ -247,6 +256,15 @@ export function CramponsMatch({
     runtime.current?.setCamera(camera);
   }, [camera]);
 
+  useEffect(() => {
+    runtime.current?.setSettings(settings);
+  }, [settings]);
+
+  // Pendant les réglages et l'aide, les touches ne font plus jouer
+  useEffect(() => {
+    runtime.current?.setPaused(panel || help);
+  }, [panel, help]);
+
   const score = view.score;
   const restart = view.restart;
   const taking = restart?.ready && view.phase !== "play" && hud.activeName !== "" && view.players[restart.taker]?.name === hud.activeName;
@@ -255,10 +273,10 @@ export function CramponsMatch({
   const shootout = view.shootout;
   const over = view.phase === "over" && room.status === "finished";
 
-  const key = mainKey(hud.scheme);
+  const key = mainKey(hud.scheme, settings.bindings, restart?.kind === "penalty");
   return (
     <div className="cr-root">
-      <canvas ref={canvas} className="cr-canvas" />
+      <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""}`} />
 
       <div className="cr-bug" role="status">
         <div className="cr-bug-teams">
@@ -287,6 +305,9 @@ export function CramponsMatch({
           title="Changer de caméra"
         >
           <Icon name="eye" size={18} />
+        </button>
+        <button className="cr-mini" onClick={() => setPanel(true)} aria-label="Réglages" title="Réglages">
+          <Icon name="settings" size={18} />
         </button>
         <button className="cr-mini" onClick={() => setHelp(true)} aria-label="Comment jouer" title="Comment jouer">
           ?
@@ -330,7 +351,12 @@ export function CramponsMatch({
           <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>
         ))}
 
-      {seatId !== null && !over && !touch && <KeyHints scheme={hud.scheme} defending={hud.defending} />}
+      {settings.showFps && (
+        <div className="cr-fps num">
+          {hud.fps} i/s · {hud.ping} ms
+        </div>
+      )}
+      {seatId !== null && !over && !touch && <KeyHints scheme={hud.scheme} defending={hud.defending} bindings={settings.bindings} />}
       {!over && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
 
       {seatId !== null && hud.activeName && !over && (
@@ -380,7 +406,18 @@ export function CramponsMatch({
         </div>
       )}
 
-      {help && <HowTo touch={touch} onClose={closeHelp} />}
+      {help && (
+        <HowTo
+          touch={touch}
+          bindings={settings.bindings}
+          onClose={closeHelp}
+          onSettings={() => {
+            closeHelp();
+            setPanel(true);
+          }}
+        />
+      )}
+      {panel && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setPanel(false)} />}
 
       {over && <CramponsGameOver room={room} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />}
     </div>

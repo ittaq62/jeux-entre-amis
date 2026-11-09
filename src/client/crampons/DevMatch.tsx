@@ -39,6 +39,8 @@ function frameOf(m: Match, active: number): SceneFrame {
     excitement: m.phase === "goal" ? 1 : 0.1,
     cuts: m.cuts,
     charge: 0,
+    aim: null,
+    receiver: -1,
   };
 }
 

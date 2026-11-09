@@ -4,6 +4,7 @@
 import { steer, topSpeed, type Act, type HumanActionKind, type MatchEvent, type Player } from "../../shared/games/crampons/model.ts";
 import { clamp, DT, GOAL_HALF, wrapAngle } from "../../shared/games/crampons/pitch.ts";
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
+import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
 import { CramponsScene, type SceneFrame } from "./scene/CramponsScene.ts";
 import type { FootballerView } from "./scene/footballers.ts";
@@ -33,6 +34,9 @@ export interface HudState {
   /** L'équipe adverse a le ballon */
   defending: boolean;
   scheme: Scheme;
+  /** Images par seconde et temps de réponse, en millisecondes */
+  fps: number;
+  ping: number;
   /** Tout le monde, pour le mini-terrain : x, z, équipe */
   radar: number[];
   ballX: number;
@@ -66,7 +70,7 @@ export class MatchRuntime {
   private myIndex: number;
   private hudAt = 0;
   private charge = 0;
-  private scheme: Scheme = "fleches";
+  private scheme: Scheme = "clavier";
   // La lecture du match : une horloge qui avance régulièrement, calée sur les positions reçues
   private renderSim: number | null = null;
   private minLag: number | null = null;
@@ -78,6 +82,19 @@ export class MatchRuntime {
   private history: { t: number; x: number; z: number }[] = [];
   private corrX = 0;
   private corrZ = 0;
+  /** Son joueur au pas de calcul d'avant : on le montre entre les deux, sinon il n'avancerait qu'une image sur deux */
+  private prevX = 0;
+  private prevZ = 0;
+  private prevH = 0;
+  private errFor = 0;
+  private settings: CramponsSettings;
+  // La qualité s'adapte : si l'ordinateur peine, on allège l'image plutôt que de laisser le jeu saccader
+  private fpsFrames = 0;
+  private fpsAt = performance.now();
+  private fps = 60;
+  private slowFor = 0;
+  private resolution = 1;
+  private shadowsOn = true;
   private rtt = 0.09;
   private lastEcho = 0;
   private predBlocked = false;
@@ -85,13 +102,18 @@ export class MatchRuntime {
   // Le ballon montré : il suit le pied en douceur, sans sauter d'un côté à l'autre du joueur
   private shownBall = { x: 0, y: 0.2, z: 0 };
   private lastOwner = -2;
+  private cursorPoint: [number, number] | null = null;
+  private aimX = 0;
+  private aimZ = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
     view: CramponsView,
     private opts: RuntimeOptions,
     lowQuality: boolean,
+    settings: CramponsSettings,
   ) {
+    this.settings = settings;
     this.view = view;
     this.myIndex = view.humans.findIndex((h) => h.id === opts.seatId);
     this.scene = new CramponsScene(canvas, {
@@ -116,8 +138,9 @@ export class MatchRuntime {
       cheer: false,
       off: false,
     }));
-    this.controls = new CramponsControls(() => true);
+    this.controls = new CramponsControls(settings.bindings);
     this.controls.attachMouse(canvas);
+    this.applyQuality();
     this.fit();
     window.addEventListener("resize", this.fit);
     this.raf = requestAnimationFrame(this.loop);
@@ -136,6 +159,46 @@ export class MatchRuntime {
   /** Le filet tremble du côté où le ballon est entré */
   shakeNet() {
     this.scene.shakeNet(this.shownBall.x > 0 ? 1 : -1);
+  }
+
+  /** De nouvelles touches, une autre visée ou une autre qualité : tout s'applique aussitôt */
+  setSettings(s: CramponsSettings) {
+    this.settings = s;
+    this.controls.setBindings(s.bindings);
+    this.applyQuality();
+  }
+
+  setPaused(on: boolean) {
+    this.controls.paused = on;
+  }
+
+  private applyQuality() {
+    const q = this.settings.quality;
+    this.resolution = q === "basse" ? 0.6 : q === "moyenne" ? 0.8 : 1;
+    this.shadowsOn = q !== "basse";
+    this.slowFor = 0;
+    this.scene.setResolution(this.resolution);
+    this.scene.setShadows(this.shadowsOn);
+  }
+
+  /** En mode automatique : plusieurs secondes sous les 50 images par seconde, et on allège d'un cran */
+  private adaptQuality(now: number) {
+    this.fpsFrames++;
+    if (now - this.fpsAt < 1000) return;
+    this.fps = Math.round((this.fpsFrames * 1000) / (now - this.fpsAt));
+    this.fpsFrames = 0;
+    this.fpsAt = now;
+    if (this.settings.quality !== "auto" || document.hidden) return;
+    this.slowFor = this.fps < 50 ? this.slowFor + 1 : 0;
+    if (this.slowFor < 3) return;
+    this.slowFor = 0;
+    if (this.resolution > 0.62) {
+      this.resolution = Math.max(0.6, this.resolution - 0.15);
+      this.scene.setResolution(this.resolution);
+    } else if (this.shadowsOn) {
+      this.shadowsOn = false;
+      this.scene.setShadows(false);
+    }
   }
 
   setCamera(mode: "tele" | "large" | "pres") {
@@ -204,6 +267,9 @@ export class MatchRuntime {
         h,
         stam,
       };
+      this.prevX = x;
+      this.prevZ = z;
+      this.prevH = h;
       return;
     }
     const p = this.pred;
@@ -216,6 +282,9 @@ export class MatchRuntime {
       p.vx = 0;
       p.vz = 0;
       p.h = h;
+      this.prevX = x;
+      this.prevZ = z;
+      this.prevH = h;
       this.history.length = 0;
       this.corrX = this.corrZ = 0;
       return;
@@ -231,17 +300,26 @@ export class MatchRuntime {
     const ex = x - past.x;
     const ez = z - past.z;
     const err = Math.hypot(ex, ez);
+    // Un petit écart est normal quand on court : on ne touche à rien tant qu'il reste raisonnable
+    const tolerated = 0.22 + Math.hypot(p.vx, p.vz) * 0.05;
     if (err > 5) {
       p.x = x;
       p.z = z;
       p.vx = 0;
       p.vz = 0;
+      this.prevX = x;
+      this.prevZ = z;
       this.history.length = 0;
       this.corrX = this.corrZ = 0;
-    } else if (err > 0.15) {
-      this.corrX = ex;
-      this.corrZ = ez;
+    } else if (err > tolerated) {
+      // Un écart passager vient du temps de trajet et se résorbe tout seul : on ne recale que s'il dure
+      this.errFor += DT;
+      if (this.errFor > 0.25) {
+        this.corrX = ex;
+        this.corrZ = ez;
+      }
     } else {
+      this.errFor = 0;
       this.corrX = this.corrZ = 0;
     }
   }
@@ -251,9 +329,9 @@ export class MatchRuntime {
     return Boolean(r?.ready && r.taker === active && this.view.phase !== "play");
   }
 
-  /** La direction d'une action : le stick, ou le curseur pour un clic */
-  private aimOf(kind: HumanActionKind, mouse: boolean, mx: number, mz: number, cursor: { x: number; y: number } | null): [number, number] {
-    if (!mouse || !cursor || !this.pred) return [mx, mz];
+  /** La direction d'une action : le curseur, si le joueur vise avec, sinon le sens de sa course */
+  private aimOf(kind: HumanActionKind, mx: number, mz: number, cursor: { x: number; y: number } | null, scheme: Scheme): [number, number] {
+    if (this.settings.aim !== "curseur" || scheme !== "clavier" || !cursor || !this.pred) return [mx, mz];
     const pt = this.scene.pickGround(cursor.x, cursor.y);
     if (!pt) return [mx, mz];
     const dx = pt[0] - this.pred.x;
@@ -297,7 +375,7 @@ export class MatchRuntime {
     for (const r of pad.released) {
       if (taking || hasBall) {
         const kind = kindFor(r.button);
-        const [ax, az] = this.aimOf(kind, r.mouse, mx, mz, pad.mouse);
+        const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
         this.opts.act(kind, r.power, ax, az);
         if (hasBall && !taking) {
           this.localKickUntil = now + 320;
@@ -313,9 +391,14 @@ export class MatchRuntime {
       }
       // Le ballon est libre : c'est une reprise, si le ballon arrive à cet instant
       const kind = kindFor(r.button);
-      const [ax, az] = this.aimOf(kind, r.mouse, mx, mz, pad.mouse);
+      const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
       this.opts.act(kind, r.power, ax, az);
     }
+    // La mire, là où ira le prochain geste
+    this.cursorPoint =
+      this.settings.aim === "curseur" && pad.scheme === "clavier" && pad.mouse ? this.scene.pickGround(pad.mouse.x, pad.mouse.y) : null;
+    this.aimX = this.cursorPoint && this.pred ? this.cursorPoint[0] - this.pred.x : mx;
+    this.aimZ = this.cursorPoint && this.pred ? this.cursorPoint[1] - this.pred.z : mz;
 
     if (now - this.lastSend >= SEND_EVERY_MS) {
       const key = `${mx.toFixed(2)}|${mz.toFixed(2)}|${pad.sprint}|${press}`;
@@ -333,6 +416,9 @@ export class MatchRuntime {
       this.acc += dt;
       while (this.acc >= DT) {
         this.acc -= DT;
+        this.prevX = p.x;
+        this.prevZ = p.z;
+        this.prevH = p.h;
         if (frozen) {
           p.vx = 0;
           p.vz = 0;
@@ -343,11 +429,13 @@ export class MatchRuntime {
         steer(p, l > 0.05 ? mx / l : 0, l > 0.05 ? mz / l : 0, speed);
       }
       // L'écart avec le serveur se rattrape peu à peu, à chaque image : jamais d'un coup
-      const k = 1 - Math.exp(-dt * 7);
+      const k = 1 - Math.exp(-dt * 5);
       const dx = this.corrX * k;
       const dz = this.corrZ * k;
       p.x += dx;
       p.z += dz;
+      this.prevX += dx;
+      this.prevZ += dz;
       this.corrX -= dx;
       this.corrZ -= dz;
       for (const e of this.history) {
@@ -357,6 +445,13 @@ export class MatchRuntime {
       this.history.push({ t: now / 1000, x: p.x, z: p.z });
       if (this.history.length > 90) this.history.shift();
     }
+  }
+
+  /** Son joueur à cette image précise : entre son dernier pas de calcul et le précédent, au prorata du temps */
+  private shownPred(): [number, number, number] {
+    const p = this.pred!;
+    const f = clamp(this.acc / DT, 0, 1);
+    return [this.prevX + (p.x - this.prevX) * f, this.prevZ + (p.z - this.prevZ) * f, this.prevH + wrapAngle(p.h - this.prevH) * f];
   }
 
   /** Fait avancer l'horloge de lecture : d'un pas régulier, recalée tout en douceur */
@@ -422,9 +517,10 @@ export class MatchRuntime {
         }
       }
       if (i === active && this.pred && this.predFor === i && (act === "none" || act === "kick")) {
-        v.x = this.pred.x;
-        v.z = this.pred.z;
-        v.h = this.pred.h;
+        const [sx, sz, sh] = this.shownPred();
+        v.x = sx;
+        v.z = sz;
+        v.h = sh;
         v.v = Math.hypot(this.pred.vx, this.pred.vz);
         if (local) v.act = "kick";
       }
@@ -444,8 +540,9 @@ export class MatchRuntime {
     if (owner === active && active >= 0 && this.pred && this.predFor === active) {
       const p = this.pred;
       const reach = 0.55 + Math.min(1, Math.hypot(p.vx, p.vz) / 9) * 0.55;
-      ball.x = p.x + Math.cos(p.h) * reach;
-      ball.z = p.z + Math.sin(p.h) * reach;
+      const [sx, sz, sh] = this.shownPred();
+      ball.x = sx + Math.cos(sh) * reach;
+      ball.z = sz + Math.sin(sh) * reach;
       ball.y = Math.min(ball.y, 0.3);
       ball.vx = p.vx;
       ball.vz = p.vz;
@@ -468,11 +565,46 @@ export class MatchRuntime {
       excitement: this.view.phase === "goal" ? 1 : this.view.phase === "over" ? 0.6 : 0.12,
       cuts: this.view.cuts,
       charge: this.charge,
+      aim: this.cursorPoint,
+      receiver: owner === active && active >= 0 ? this.guessReceiver(views, active) : -1,
     };
+  }
+
+  /** Le coéquipier qui recevrait la passe, pour le montrer avant de la donner */
+  private guessReceiver(views: FootballerView[], me: number): number {
+    const p = views[me]!;
+    let dx = this.aimX;
+    let dz = this.aimZ;
+    if (Math.hypot(dx, dz) < 0.2) {
+      dx = Math.cos(p.h);
+      dz = Math.sin(p.h);
+    }
+    const l = Math.hypot(dx, dz) || 1;
+    dx /= l;
+    dz /= l;
+    let best = -1;
+    let score = -Infinity;
+    for (let i = 0; i < views.length; i++) {
+      const q = views[i]!;
+      if (i === me || q.team !== p.team || q.off || q.keeper) continue;
+      const rx = q.x - p.x;
+      const rz = q.z - p.z;
+      const d = Math.hypot(rx, rz);
+      if (d < 2.5 || d > 62) continue;
+      const c = (rx * dx + rz * dz) / d;
+      if (c < 0.45) continue;
+      const s = c * c * 3 - d / 45;
+      if (s > score) {
+        score = s;
+        best = i;
+      }
+    }
+    return best;
   }
 
   private loop = (now: number) => {
     this.raf = requestAnimationFrame(this.loop);
+    this.adaptQuality(now);
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     if (this.opts.seatId !== null && this.myIndex >= 0) this.handleButtons(dt);
@@ -498,6 +630,8 @@ export class MatchRuntime {
         hasBall: a >= 0 && owner === a,
         defending: a >= 0 && owner >= 0 && this.view.players[owner]?.team !== this.view.players[a]?.team,
         scheme: this.scheme,
+        fps: this.fps,
+        ping: Math.round(this.rtt * 1000),
         radar,
         ballX: frame.ball.x,
         ballZ: frame.ball.z,
