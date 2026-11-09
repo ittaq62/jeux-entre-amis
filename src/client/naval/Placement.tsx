@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cellX, cellY, randomFleet, shipCells, SHIP_LENGTH, validateFleet, type Placement } from "../../shared/games/naval/engine.ts";
 import type { NavalView } from "../../shared/games/naval/view.ts";
 import type { NavalClientMessage, NavalRoomView } from "../../shared/protocol.ts";
@@ -6,7 +6,9 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
+import { useBoxSize } from "../lib/viewport.ts";
 import { Board, type BoardPointer } from "./Board.tsx";
+import { SIDE_MIN } from "./NavalTable.tsx";
 import { SkinPicker } from "./SkinPicker.tsx";
 
 interface Props {
@@ -14,8 +16,12 @@ interface Props {
   g: NavalView;
   me: string;
   send: (msg: NavalClientMessage) => void;
-  px: number;
   serverOffset: number;
+  w: number;
+  h: number;
+  phone: boolean;
+  short: boolean;
+  header: (center?: ReactNode) => ReactNode;
 }
 
 interface Ghost {
@@ -32,7 +38,7 @@ interface Drag {
 }
 
 /** Placement de la flotte : on glisse un navire pour le déplacer, on le touche pour le tourner. */
-export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
+export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, short, header }: Props) {
   const board = g.boards.find((b) => b.owner === me)!;
   const size = g.settings.grid;
   const touching = g.settings.touching;
@@ -123,69 +129,168 @@ export function PlacementBoard({ room, g, me, send, px, serverOffset }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const waiting = g.players.filter((p) => !p.ready && p.id !== me);
+  // La grille prend ce qui reste une fois posé tout le reste : jamais rien à faire défiler
+  const compact = phone || short;
+  const [fitRef, box] = useBoxSize<HTMLDivElement>();
+  const frame = compact ? 12 : 20;
+  const widthForBoard = short ? w - SIDE_MIN - 36 : phone ? box.w : w - 260;
+  const px = Math.max(0, Math.floor(Math.min(phone ? 520 : 560, box.h - frame, widthForBoard - frame)));
+  // Sur un téléphone debout qui n'a pas la hauteur, les thèmes s'ouvrent à la demande pour laisser sa taille à la grille
+  const skinsOnDemand = phone && !short && h < w + 266;
+  const [skinsOpen, setSkinsOpen] = useState(false);
+
+  const others = g.players.filter((p) => p.id !== me);
+  const waiting = others.filter((p) => !p.ready);
+
+  const title = (
+    <div className="placement-head">
+      <h2>Place ta flotte</h2>
+      {left !== null && <span className={`placement-clock num ${left <= 10 ? "is-urgent" : ""}`}>{formatClock(left)}</span>}
+    </div>
+  );
+  const help = (
+    <p className="hint placement-help">
+      {compact ? "Glisse pour déplacer, touche pour tourner." : "Glisse un navire pour le déplacer, touche-le pour le tourner."}
+    </p>
+  );
+  const grid = (
+    <div className={`placement-board ${shake !== null ? "is-shaking" : ""}`}>
+      {px > 0 && (
+        <Board
+          board={{ ...board, ships: null, hits: [], misses: [], sunk: [], scans: [] }}
+          mode="sea"
+          px={px}
+          label="Ta flotte, en cours de placement"
+          fleet={shown}
+          selectedShip={selected}
+          preview={ghost ? { cells: shipCells(size, ghost.p) ?? [], ok: ghost.ok } : null}
+          onPointer={onPointer}
+          className="is-placing"
+          skin={room.seats.find((s) => s.id === me)?.skin}
+        />
+      )}
+    </div>
+  );
+  const skins = (
+    <SkinPicker
+      current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
+      wins={room.you.navalWins}
+      onPick={(skin) => {
+        send({ t: "skin", skin });
+        setSkinsOpen(false);
+      }}
+      side
+    />
+  );
+  const actions = (
+    <div className="placement-actions">
+      <button className="btn" onClick={() => setFleet(randomFleet(size, touching, { rng: Math.floor(Math.random() * 2 ** 32) }))}>
+        <Icon name="dice" size={18} /> Au hasard
+      </button>
+      <button className="btn" disabled={selected === null} onClick={() => selected !== null && rotate(selected)}>
+        <Icon name="refresh" size={18} /> Tourner
+      </button>
+      <button
+        className="btn btn-primary"
+        disabled={!valid(fleet)}
+        onClick={() => send({ t: "action", action: { type: "ready", ships: fleet } })}
+      >
+        Prêt au combat
+      </button>
+    </div>
+  );
+  // Sur petit écran, cette rangée existe toujours : c'est elle qui fait la place au bouton des réactions
+  const crew = (compact || waiting.length > 0) && (
+    <ul className="placement-crew" aria-label="Joueurs qui placent encore leur flotte">
+      {compact && others.length > 0 && (
+        <li className="placement-count hint">
+          {others.length - waiting.length}/{others.length} prêts
+        </li>
+      )}
+      {others.map((p) => {
+        const seat = room.seats.find((s) => s.id === p.id);
+        return (
+          <li key={p.id} className={p.ready ? "is-ready" : ""}>
+            {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={26} />}
+            <span>{seat?.name}</span>
+            <span className="hint">{p.ready ? "prêt" : "place sa flotte"}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  // Écran bas : la grille d'un côté, tout le reste de l'autre
+  if (short) {
+    return (
+      <main className="naval-stage is-compact">
+        <section className="naval-placement is-compact is-short">
+          <div className="naval-side">
+            {header(title)}
+            {help}
+            {skins}
+            {actions}
+            {crew}
+          </div>
+          <div className="naval-fit" ref={fitRef} style={{ width: px + frame }}>
+            {grid}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // Téléphone debout : de haut en bas, avec la grille sur tout ce qui reste
+  if (phone) {
+    return (
+      <>
+        {header(title)}
+        <main className="naval-stage is-compact">
+          <section className="naval-placement is-compact">
+            <div className="placement-tools">
+              {help}
+              {skinsOnDemand && (
+                <button className="btn btn-sm" aria-expanded={skinsOpen} onClick={() => setSkinsOpen(!skinsOpen)}>
+                  Thème
+                </button>
+              )}
+            </div>
+            {!skinsOnDemand && skins}
+            {skinsOnDemand && skinsOpen && (
+              <>
+                <div className="emote-catcher" onClick={() => setSkinsOpen(false)} />
+                <div className="placement-skins panel">{skins}</div>
+              </>
+            )}
+            <div className="naval-fit" ref={fitRef}>
+              {grid}
+            </div>
+            {actions}
+            {crew}
+          </section>
+        </main>
+      </>
+    );
+  }
 
   return (
-    <section className="naval-placement">
-      <div className="placement-head">
-        <h2>Place ta flotte</h2>
-        {left !== null && <span className={`placement-clock num ${left <= 10 ? "is-urgent" : ""}`}>{formatClock(left)}</span>}
-      </div>
-      <p className="hint placement-help">Glisse un navire pour le déplacer, touche-le pour le tourner.</p>
-      <div className="placement-main">
-        <div className={`placement-board ${shake !== null ? "is-shaking" : ""}`}>
-          <Board
-            board={{ ...board, ships: null, hits: [], misses: [], sunk: [], scans: [] }}
-            mode="sea"
-            px={px}
-            label="Ta flotte, en cours de placement"
-            fleet={shown}
-            selectedShip={selected}
-            preview={ghost ? { cells: shipCells(size, ghost.p) ?? [], ok: ghost.ok } : null}
-            onPointer={onPointer}
-            className="is-placing"
-            skin={room.seats.find((s) => s.id === me)?.skin}
-          />
-        </div>
-        {/* Les thèmes à côté de la flotte (au-dessus sur téléphone) : on voit tout de suite le résultat */}
-        <SkinPicker
-          current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
-          wins={room.you.navalWins}
-          onPick={(skin) => send({ t: "skin", skin })}
-          side
-        />
-      </div>
-      <div className="placement-actions">
-        <button className="btn" onClick={() => setFleet(randomFleet(size, touching, { rng: Math.floor(Math.random() * 2 ** 32) }))}>
-          <Icon name="dice" size={18} /> Au hasard
-        </button>
-        <button className="btn" disabled={selected === null} onClick={() => selected !== null && rotate(selected)}>
-          <Icon name="refresh" size={18} /> Tourner
-        </button>
-        <button
-          className="btn btn-primary"
-          disabled={!valid(fleet)}
-          onClick={() => send({ t: "action", action: { type: "ready", ships: fleet } })}
-        >
-          Prêt au combat
-        </button>
-      </div>
-      {waiting.length > 0 && (
-        <ul className="placement-crew" aria-label="Joueurs qui placent encore leur flotte">
-          {g.players
-            .filter((p) => p.id !== me)
-            .map((p) => {
-              const seat = room.seats.find((s) => s.id === p.id);
-              return (
-                <li key={p.id} className={p.ready ? "is-ready" : ""}>
-                  {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={26} />}
-                  <span>{seat?.name}</span>
-                  <span className="hint">{p.ready ? "prêt" : "place sa flotte"}</span>
-                </li>
-              );
-            })}
-        </ul>
-      )}
-    </section>
+    <>
+      {header()}
+      <main className="naval-stage">
+        <section className="naval-placement">
+          {title}
+          {help}
+          <div className="placement-main">
+            <div className="naval-fit" ref={fitRef} style={{ width: px + frame }}>
+              {grid}
+            </div>
+            {/* Les thèmes à côté de la flotte : on voit tout de suite le résultat */}
+            {skins}
+          </div>
+          {actions}
+          {crew}
+        </section>
+      </main>
+    </>
   );
 }

@@ -2,23 +2,71 @@
 /* Bataille navale                                                     */
 /* ------------------------------------------------------------------ */
 
-.naval-root {
-  overflow-y: auto;
-}
-
+/* Tout tient dans l'écran : les plateaux prennent la place qui reste, rien ne défile */
 .naval-stage {
   flex: 1;
+  min-height: 0;
   display: flex;
   justify-content: center;
-  padding: 6px 16px calc(90px + var(--safe-bottom));
+  padding: 6px 16px calc(14px + var(--safe-bottom));
+}
+
+.naval-stage.is-compact {
+  padding: 2px 12px calc(6px + var(--safe-bottom));
 }
 
 .naval-battle {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1320px;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* La place laissée à la grille : le plateau se calcule d'après elle */
+.naval-fit {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+}
+
+/* Écran bas : la grille à droite, le reste dans une colonne à gauche */
+.naval-battle.is-short,
+.naval-placement.is-short {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  max-width: none;
+  width: 100%;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.naval-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.naval-side .table-top {
+  padding: var(--safe-top) 0 2px;
+  background: none;
+}
+
+.is-short .naval-fit {
+  flex: none;
+  height: 100%;
+}
+
+.is-short .naval-fleet {
+  align-self: center;
 }
 
 .naval-status {
@@ -47,13 +95,17 @@
 }
 
 .naval-boards {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   gap: 36px;
 }
 
 .naval-target {
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -61,6 +113,7 @@
 }
 
 .naval-fleet {
+  align-self: flex-start;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -90,6 +143,10 @@
     inset 0 -2px 0 rgba(0, 0, 0, 0.4),
     0 18px 36px -18px rgba(0, 0, 0, 0.9);
   transition: box-shadow 0.3s;
+}
+
+.naval-scope[hidden] {
+  display: none;
 }
 
 .naval-scope.is-armed {
@@ -768,8 +825,10 @@
   color: var(--gold);
 }
 
-.weapon-dir {
-  flex: none;
+.weapon-dir-arrow {
+  color: var(--gold);
+  font-size: 18px;
+  line-height: 1;
 }
 
 .weapon-help {
@@ -782,10 +841,56 @@
 /* ------------------------------------------------------------------ */
 
 .naval-placement {
+  position: relative;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+}
+
+.naval-placement.is-compact {
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  gap: 6px;
+}
+
+/* Dans l'en-tête, sur petit écran : à la place du titre */
+.table-top .placement-head {
+  gap: 8px;
+  margin: 0 auto;
+  white-space: nowrap;
+}
+
+.table-top .placement-head h2 {
+  font-size: clamp(15px, 5vw, 21px);
+}
+
+.table-top .placement-clock {
+  font-size: 18px;
+}
+
+.placement-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.placement-tools .placement-help {
+  margin: 0;
+}
+
+/* Les thèmes à la demande : par-dessus le haut de la grille, le reste de la flotte reste en vue */
+.placement-skins {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: 8px;
+  box-shadow: var(--shadow-float);
 }
 
 .placement-head {
@@ -907,6 +1012,11 @@
   z-index: 30;
 }
 
+.naval-root.is-compact .naval-react {
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  bottom: calc(6px + var(--safe-bottom));
+}
+
 .naval-results-back {
   position: fixed;
   left: 50%;
@@ -929,29 +1039,139 @@
   font-size: 12.5px;
 }
 
-/* Téléphone : radar en haut, flotte en dessous */
-.naval-battle.is-phone .naval-boards {
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+/* Petit écran */
+.naval-battle.is-compact {
+  gap: 6px;
 }
 
-.naval-battle.is-phone .naval-fleet {
+.is-compact .naval-status {
+  gap: 8px;
+  min-height: 40px;
+  font-size: 15px;
+  line-height: 1.22;
+}
+
+.is-compact .naval-fleet {
+  gap: 4px;
   padding-top: 0;
 }
 
-.naval-battle.is-phone .naval-target {
-  width: 100%;
+.is-compact .naval-fleet-head h3 {
+  font-size: 15px;
+}
+
+.is-compact .naval-opponent {
+  justify-content: center;
+  min-height: 36px;
+}
+
+.is-compact .naval-scope,
+.is-compact .placement-board {
+  padding: 6px;
+  border-radius: 12px;
+}
+
+/* Les armes sur une seule rangée, à droite du bouton des réactions */
+.is-compact .naval-arsenal {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-height: 46px;
+  max-width: none;
+  padding-left: 50px;
+}
+
+.is-short .naval-arsenal {
+  margin-top: auto;
+}
+
+.is-compact .naval-arsenal .hint {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.is-compact .weapon-btn {
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-height: 46px;
+  padding: 2px 7px;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.is-compact .weapon-count {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 11px;
+}
+
+/* Une rangée, jamais deux : les boutons se serrent */
+.is-compact .placement-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.is-compact .placement-actions .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 350px) {
+  .is-compact .placement-actions .btn svg {
+    display: none;
+  }
+}
+
+/* Qui est prêt : les visages suffisent, à droite du bouton des réactions */
+.is-compact .placement-crew {
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  margin: 0;
+  padding-left: 50px;
+}
+
+.is-compact .placement-crew li > span {
+  display: none;
+}
+
+.is-compact .placement-crew li:not(.is-ready):not(.placement-count) .avatar {
+  opacity: 0.45;
+}
+
+.is-compact .placement-crew li.is-ready .avatar {
+  box-shadow: 0 0 0 2px var(--ok);
+}
+
+.is-compact .placement-help {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.is-short .placement-actions {
+  margin-top: auto;
 }
 
 /* Tous les adversaires d'un coup d'œil, jamais de bande à faire défiler : deux lignes au plus, et chaque pseudo en entier */
-.naval-battle.is-phone .naval-targets {
+.naval-battle.is-compact .naval-targets {
+  flex: none;
   gap: 6px;
   width: 100%;
   max-width: 520px;
+  align-self: center;
 }
 
-.naval-battle.is-phone .naval-target-tab {
+.naval-battle.is-compact .naval-target-tab {
   flex: 0 0 calc((100% - (var(--per-row) - 1) * 6px) / var(--per-row));
   min-width: 0;
   gap: 5px;
@@ -962,7 +1182,7 @@
   text-align: left;
 }
 
-.naval-battle.is-phone .naval-target-who {
+.naval-battle.is-compact .naval-target-who {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -971,70 +1191,61 @@
   min-width: 0;
 }
 
-.naval-battle.is-phone .naval-target-name {
+.naval-battle.is-compact .naval-target-name {
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 
-.naval-battle.is-phone .naval-target-tab .fleet-pips {
+.naval-battle.is-compact .naval-target-tab .fleet-pips {
   gap: 2px;
 }
 
-.naval-battle.is-phone .naval-target-tab .fleet-pips span {
+.naval-battle.is-compact .naval-target-tab .fleet-pips span {
   width: 6px;
   height: 4px;
 }
 
-.naval-battle.is-phone .naval-target-tab .away-note {
+.naval-battle.is-compact .naval-target-tab .away-note {
   font-size: 10px;
   white-space: normal;
 }
 
-/* Un téléphone couché ou une petite tablette : tout le monde sur une seule ligne */
+/* Une petite tablette debout : tout le monde sur une seule ligne */
 @media (min-width: 600px) {
-  .naval-battle.is-phone .naval-targets {
+  .naval-battle.is-portrait .naval-targets {
     --per-row: var(--count) !important;
     max-width: none;
   }
 }
 
-.naval-target[hidden] {
-  display: none;
-}
-
-/* Bascule radar / flotte sur téléphone */
-.naval-view {
-  align-self: center;
-  margin: -4px 0 12px;
+/* Bascule radar / flotte, dans l'en-tête sur petit écran */
+.table-top .naval-view {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  margin: 0 auto;
+  padding: 2px;
 }
 
 .naval-view button {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-width: 120px;
   justify-content: center;
+  gap: 2px;
+  min-height: 38px;
+  padding: 2px 10px;
+  font-size: 14px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.naval-view .fleet-pips {
+  gap: 2px;
 }
 
 .naval-view .fleet-pips span {
-  width: 8px;
-  height: 4px;
-}
-
-@media (max-width: 760px) {
-  .naval-stage {
-    padding: 4px 12px calc(90px + var(--safe-bottom));
-  }
-
-  .naval-scope,
-  .placement-board {
-    padding: 6px;
-    border-radius: 12px;
-  }
-
-  .placement-head h2 {
-    font-size: 24px;
-  }
+  width: 6px;
+  height: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1236,9 +1447,16 @@
 
 /* Au placement : les thèmes en colonne à droite de la flotte */
 .placement-main {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
+}
+
+.placement-main .naval-fit {
+  flex: none;
+  height: 100%;
 }
 
 .skin-field.is-side {
@@ -1258,52 +1476,32 @@
   font-size: 11px;
 }
 
-/* Sur téléphone : les thèmes juste au-dessus de la grille */
-@media (max-width: 760px) {
-  .naval-placement {
-    width: 100%;
-    min-width: 0;
-  }
+/* Sur petit écran : quatre par ligne, les huit thèmes d'un coup d'œil, sans rien faire défiler */
+.is-compact .skin-field.is-side {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
 
-  .placement-actions {
-    max-width: 100%;
-  }
+.is-compact .skin-field.is-side .field-label {
+  display: none;
+}
 
-  .placement-main {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-  }
+.is-compact .skin-field.is-side .skin-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
 
-  .placement-main .placement-board {
-    align-self: center;
-  }
+.is-compact .skin-field.is-side .skin-option {
+  gap: 2px;
+  padding: 4px 3px;
+}
 
-  .skin-field.is-side {
-    order: -1;
-    width: 100%;
-    min-width: 0;
-    gap: 4px;
-  }
-
-  /* Quatre par ligne : les huit thèmes d'un coup d'œil, sans rien faire défiler */
-  .skin-field.is-side .skin-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 5px;
-  }
-
-  .skin-field.is-side .skin-option {
-    gap: 2px;
-    padding: 4px 3px;
-  }
-
-  .skin-field.is-side .skin-name {
-    font-size: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
+.is-compact .skin-field.is-side .skin-name {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }

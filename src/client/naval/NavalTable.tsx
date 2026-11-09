@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cellIndex, cellX, cellY, FLEETS, type Dir, type Weapon } from "../../shared/games/naval/engine.ts";
 import type { NavalBoardView, NavalView } from "../../shared/games/naval/view.ts";
 import type { NavalClientMessage, NavalRoomView, SeatView } from "../../shared/protocol.ts";
@@ -20,7 +20,7 @@ import { NavalGameOver } from "./NavalGameOver.tsx";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { PlacementBoard } from "./Placement.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
-import { useViewport } from "../lib/viewport.ts";
+import { useBoxSize, useViewport } from "../lib/viewport.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -62,13 +62,28 @@ function weaponArea(weapon: Weapon, cell: number, size: number, dir: Dir): numbe
   return Array.from({ length: size }, (_, k) => (dir === "h" ? cellIndex(size, k, y) : cellIndex(size, x, k)));
 }
 
+/** Ce qu'il faut garder à côté de la grille sur un écran bas : le statut, les cibles, les armes */
+export const SIDE_MIN = 280;
+/** L'en-tête du plateau de l'équipier, et l'écart qui le sépare du nôtre */
+const MATE_HEAD = 36;
+
+/** Sa flotte et celle de l'équipier, l'une au-dessus de l'autre, dans la place donnée */
+function stackFleets(width: number, height: number, withMate: boolean) {
+  if (!withMate) return { mine: Math.min(width, height), mate: 0 };
+  const mine = Math.min(width, Math.round((height - MATE_HEAD) * 0.62));
+  return { mine, mate: Math.min(width, height - MATE_HEAD - mine) };
+}
+
 export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.naval!;
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
   const { w, h } = useViewport();
+  // Écran étroit : une seule grille à la fois. Écran bas (téléphone couché) : tout ce qui n'est pas la grille passe à côté.
   const phone = w < 760;
+  const short = h < 560 && w > h;
+  const compact = phone || short;
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -88,76 +103,72 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
   const seat = (id: string) => room.seats.find((s) => s.id === id);
   const mustPlace = g.phase === "placement" && meP && !meP.ready;
 
-  // Tailles des plateaux selon l'écran
-  const radarPx = phone ? Math.min(w - 40, 460) : Math.max(300, Math.min(600, h - 250, w - 560));
-  const fleetPx = phone ? Math.min(w - 24, Math.round(radarPx * 0.72)) : Math.round(radarPx * 0.62);
-  const placePx = phone ? Math.min(w - 40, 460) : Math.max(320, Math.min(560, h - 230));
-
   const modeLabel = g.mode === "duel" ? "Duel" : g.mode === "teams" ? "2 contre 2" : "Mêlée";
 
-  return (
-    <div className="table-root felt naval-root">
-      <header className="table-top">
-        <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
-          <Icon name="menu" />
-        </button>
+  // L'en-tête va tout en haut, ou en tête de la colonne de côté sur un écran bas ; sur petit écran, `center` prend la place du titre
+  const header = (center?: ReactNode) => (
+    <header className="table-top">
+      <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
+        <Icon name="menu" />
+      </button>
+      {center ?? (
         <div className="table-title">
           <span className="table-code">{room.code}</span>
           <span className="hint">Bataille navale, {modeLabel.toLowerCase()}</span>
         </div>
-        <div className="table-top-actions">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
-          </button>
-          <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
-            <Icon name="chat" />
-            {unread > 0 && <span className="badge badge-red">{unread}</span>}
-          </button>
-        </div>
-        <AnimatePresence>
-          {menuOpen && (
-            <>
-              <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
-              <motion.div
-                className="table-menu panel"
-                initial={{ y: -8, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -8, opacity: 0 }}
-              >
-                {!inTour && (
-                  <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
-                    <Icon name="users" size={18} /> Voir le salon et les règles
-                  </button>
-                )}
-                <button className="menu-item is-danger" onClick={onLeave}>
-                  <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
+      )}
+      <div className="table-top-actions">
+        <button
+          className="btn btn-ghost btn-icon"
+          onClick={() => setPrefs({ sound: !sound })}
+          aria-label={sound ? "Couper le son" : "Activer le son"}
+        >
+          <Icon name={sound ? "volume" : "mute"} />
+        </button>
+        <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
+          <Icon name="chat" />
+          {unread > 0 && <span className="badge badge-red">{unread}</span>}
+        </button>
+      </div>
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
+            <motion.div
+              className="table-menu panel"
+              initial={{ y: -8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -8, opacity: 0 }}
+            >
+              {!inTour && (
+                <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
+                  <Icon name="users" size={18} /> Voir le salon et les règles
                 </button>
-                {room.you.isAdmin && (
-                  <ConfirmButton
-                    className="menu-item is-danger"
-                    confirm="Fermer la table pour tous ?"
-                    onConfirm={() => send({ t: "close" })}
-                  >
-                    <Icon name="shield" size={18} /> Fermer la table (admin)
-                  </ConfirmButton>
-                )}
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </header>
-
-      <main className="naval-stage">
-        {mustPlace ? (
-          <PlacementBoard room={room} g={g} me={me!} send={send} px={placePx} serverOffset={serverOffset} />
-        ) : (
-          <Battle room={room} g={g} send={send} serverOffset={serverOffset} radarPx={radarPx} fleetPx={fleetPx} phone={phone} seat={seat} />
+              )}
+              <button className="menu-item is-danger" onClick={onLeave}>
+                <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
+              </button>
+              {room.you.isAdmin && (
+                <ConfirmButton className="menu-item is-danger" confirm="Fermer la table pour tous ?" onConfirm={() => send({ t: "close" })}>
+                  <Icon name="shield" size={18} /> Fermer la table (admin)
+                </ConfirmButton>
+              )}
+            </motion.div>
+          </>
         )}
-      </main>
+      </AnimatePresence>
+    </header>
+  );
+
+  const screen = { w, h, phone, short, header };
+
+  return (
+    <div className={`table-root felt naval-root ${compact ? "is-compact" : ""}`}>
+      {mustPlace ? (
+        <PlacementBoard room={room} g={g} me={me!} send={send} serverOffset={serverOffset} {...screen} />
+      ) : (
+        <Battle room={room} g={g} send={send} serverOffset={serverOffset} seat={seat} {...screen} />
+      )}
 
       <div className="naval-emotes" aria-live="polite">
         <AnimatePresence>
@@ -218,19 +229,23 @@ function Battle({
   g,
   send,
   serverOffset,
-  radarPx,
-  fleetPx,
-  phone,
   seat,
+  w,
+  h,
+  phone,
+  short,
+  header,
 }: {
   room: NavalRoomView;
   g: NavalView;
   send: (msg: NavalClientMessage) => void;
   serverOffset: number;
-  radarPx: number;
-  fleetPx: number;
-  phone: boolean;
   seat: (id: string) => SeatView | undefined;
+  w: number;
+  h: number;
+  phone: boolean;
+  short: boolean;
+  header: (center?: ReactNode) => ReactNode;
 }) {
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
@@ -360,181 +375,256 @@ function Battle({
   const arsenal = meP?.arsenal ?? [];
   const counts = (["radar", "torpedo", "barrage"] as Weapon[]).map((k) => ({ k, n: arsenal.filter((a) => a === k).length }));
 
-  return (
-    <section className={`naval-battle ${phone ? "is-phone" : ""}`}>
-      <div className={`naval-status ${myTurn ? "is-turn" : ""} ${!myTurn && g.aim === me && me !== null ? "is-aimed" : ""}`}>
-        {myTurn && room.turnDeadline && (
-          <span className="naval-timer">
-            <TimerRing size={30} deadline={room.turnDeadline} total={g.settings.turnSeconds} offset={serverOffset} />
-          </span>
-        )}
-        <span className="naval-status-text">{status}</span>
-        {g.phase === "placement" && placementLeft !== null && <span className="placement-clock num">{formatClock(placementLeft)}</span>}
-        {mySeat?.autoplay && (
-          <button className="btn btn-sm" onClick={() => send({ t: "takeBack" })}>
-            Reprendre la barre
-          </button>
-        )}
-      </div>
+  // Le plateau prend exactement ce qui reste une fois posé tout le reste : jamais rien à faire défiler
+  const compact = phone || short;
+  const [fitRef, box] = useBoxSize<HTMLDivElement>();
+  const frame = compact ? 12 : 20;
+  const widthForRadar = !short ? (phone ? box.w : (w - 68) / 1.62) : phone ? w - SIDE_MIN - 36 : (w - SIDE_MIN - 60) / 1.62;
+  const radarPx = Math.max(0, Math.floor(Math.min(phone ? 520 : 600, box.h - frame, widthForRadar - frame)));
+  const withMate = Boolean(mateBoard && mate);
+  // Sur grand écran, la flotte se règle sur l'écran et pas sur le radar : sa largeur décide si les cibles passent à la ligne,
+  // donc de la place du radar, et les deux se seraient renvoyé la balle sans fin
+  const desktopFleet = Math.round(Math.max(200, Math.min(600, h - 262, (w - 68) / 1.62)) * 0.62);
+  const fleets = phone
+    ? stackFleets(short ? radarPx + frame : box.w, box.h, withMate)
+    : short
+      ? stackFleets(Math.min(Math.round(radarPx * 0.62), w - SIDE_MIN - radarPx - frame - 48), box.h - MATE_HEAD, withMate)
+      : { mine: Math.round(desktopFleet * (withMate ? 0.8 : 1)), mate: Math.round(desktopFleet * 0.5) };
 
-      {phone && me && (
-        <div className="options naval-view" role="radiogroup" aria-label="Plateau affiché">
-          <button type="button" aria-pressed={view === "radar"} onClick={() => setView("radar")}>
-            Radar
-          </button>
-          <button type="button" aria-pressed={view === "fleet"} onClick={() => setView("fleet")}>
+  const statusBar = (
+    <div className={`naval-status ${myTurn ? "is-turn" : ""} ${!myTurn && g.aim === me && me !== null ? "is-aimed" : ""}`}>
+      {myTurn && room.turnDeadline && (
+        <span className="naval-timer">
+          <TimerRing size={30} deadline={room.turnDeadline} total={g.settings.turnSeconds} offset={serverOffset} />
+        </span>
+      )}
+      <span className="naval-status-text">{compact && weapon && showRadar ? WEAPONS[weapon].help : status}</span>
+      {g.phase === "placement" && placementLeft !== null && <span className="placement-clock num">{formatClock(placementLeft)}</span>}
+      {mySeat?.autoplay && (
+        <button className="btn btn-sm" onClick={() => send({ t: "takeBack" })}>
+          Reprendre la barre
+        </button>
+      )}
+    </div>
+  );
+
+  // Sur petit écran, la bascule Radar / Ta flotte prend la place du titre dans l'en-tête
+  const viewSwitch =
+    phone && me ? (
+      <div className="options naval-view" role="radiogroup" aria-label="Plateau affiché">
+        <button type="button" aria-pressed={view === "radar"} onClick={() => setView("radar")}>
+          Radar
+        </button>
+        <button type="button" aria-pressed={view === "fleet"} onClick={() => setView("fleet")}>
+          Ta flotte
+          <FleetPips total={FLEETS[size].length} afloat={myBoard?.afloat ?? 0} />
+        </button>
+      </div>
+    ) : undefined;
+
+  const targets =
+    enemies.length > 1 || !me ? (
+      <div
+        className="naval-targets"
+        role="tablist"
+        aria-label="Choisir la flotte visée"
+        style={{ "--per-row": enemies.length === 4 ? 2 : Math.min(3, enemies.length), "--count": enemies.length } as CSSProperties}
+      >
+        {enemies.map((p) => {
+          const s = seat(p.id);
+          const b = g.boards.find((x) => x.owner === p.id)!;
+          const active = shown?.id === p.id;
+          const locked = Boolean(allowed && !allowed.includes(p.id) && !p.out);
+          const aimed = g.aim === p.id && !p.out && !myTurn;
+          return (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={active}
+              className={`naval-target-tab ${active ? "is-active" : ""} ${p.out ? "is-out" : ""} ${g.turn === p.id ? "is-turn" : ""} ${
+                locked ? "is-locked" : ""
+              } ${aimed ? "is-aimed" : ""}`}
+              onClick={() => {
+                setTargetId(p.id);
+                setWatch(null);
+              }}
+              disabled={(p.out && !active) || locked}
+            >
+              {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={compact ? 24 : 28} />}
+              <span className="naval-target-who">
+                <span className="naval-target-name">{s?.name}</span>
+                {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
+                <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    ) : (
+      target && (
+        <div className="naval-opponent">
+          {seat(target.id) && (
+            <Avatar avatar={seat(target.id)!.avatar} userId={seat(target.id)!.userId} photo={seat(target.id)!.photo} size={34} />
+          )}
+          <span className="naval-opponent-name">
+            {seat(target.id)?.name}
+            {seat(target.id)?.admin && <AdminBadge />}
+          </span>
+          {seat(target.id) && <AwayNote seat={seat(target.id)!} serverOffset={serverOffset} />}
+          <FleetPips total={FLEETS[size].length} afloat={targetBoard?.afloat ?? 0} />
+        </div>
+      )
+    );
+
+  const radar = targetBoard && radarPx > 0 && (
+    <div className={`naval-scope ${canFire ? "is-armed" : ""}`} hidden={!showRadar}>
+      <Board
+        board={targetBoard}
+        mode="radar"
+        px={radarPx}
+        label={`Radar sur la flotte de ${seat(targetBoard.owner)?.name ?? "l'adversaire"}`}
+        aiming={Boolean(canFire)}
+        preview={preview}
+        onHover={setHover}
+        onCell={fireAt}
+      />
+    </div>
+  );
+
+  const showWeapons = g.settings.arsenal && me && g.phase !== "gameOver" && showRadar;
+  // Sur petit écran, cette rangée existe toujours : c'est elle qui fait la place au bouton des réactions
+  const arsenalRow = (showWeapons || (compact && me)) && (
+    <div className="naval-arsenal">
+      {showWeapons &&
+        (arsenal.length === 0 ? (
+          <p className="hint">Coule un navire pour gagner une arme.</p>
+        ) : (
+          <>
+            {counts
+              .filter((c) => c.n > 0)
+              .map(({ k, n }) => (
+                <button
+                  key={k}
+                  className={`weapon-btn ${weapon === k ? "is-active" : ""}`}
+                  disabled={!canFire}
+                  onClick={() => setWeapon(weapon === k ? null : k)}
+                  title={WEAPONS[k].help}
+                >
+                  <WeaponIcon weapon={k} />
+                  <span>{WEAPONS[k].name}</span>
+                  {n > 1 && <span className="weapon-count num">×{n}</span>}
+                </button>
+              ))}
+            {weapon === "torpedo" && (
+              <button
+                type="button"
+                className="weapon-btn weapon-dir"
+                title="Changer de sens"
+                onClick={() => setDir(dir === "h" ? "v" : "h")}
+              >
+                <span className="weapon-dir-arrow" aria-hidden="true">
+                  {dir === "h" ? "↔" : "↕"}
+                </span>
+                <span>{dir === "h" ? "Ligne" : "Colonne"}</span>
+              </button>
+            )}
+            {weapon && !compact && <p className="hint weapon-help">{WEAPONS[weapon].help}</p>}
+          </>
+        ))}
+    </div>
+  );
+
+  const fleet = myBoard && showFleet && fleets.mine > 0 && (
+    <div className="naval-fleet">
+      {!phone && (
+        <div className="naval-fleet-head">
+          <h3>
             Ta flotte
-            <FleetPips total={FLEETS[size].length} afloat={myBoard?.afloat ?? 0} />
-          </button>
+            {meP?.team !== null && meP?.team !== undefined && <span className="hint"> équipe {TEAM_NAMES[meP.team]}</span>}
+          </h3>
+          <FleetPips total={FLEETS[size].length} afloat={myBoard.afloat} />
         </div>
       )}
-
-      <div className="naval-boards">
-        <div className="naval-target" hidden={!showRadar}>
-          {enemies.length > 1 || !me ? (
-            <div
-              className="naval-targets"
-              role="tablist"
-              aria-label="Choisir la flotte visée"
-              style={{ "--per-row": enemies.length === 4 ? 2 : Math.min(3, enemies.length), "--count": enemies.length } as CSSProperties}
-            >
-              {enemies.map((p) => {
-                const s = seat(p.id);
-                const b = g.boards.find((x) => x.owner === p.id)!;
-                const active = shown?.id === p.id;
-                const locked = Boolean(allowed && !allowed.includes(p.id) && !p.out);
-                const aimed = g.aim === p.id && !p.out && !myTurn;
-                return (
-                  <button
-                    key={p.id}
-                    role="tab"
-                    aria-selected={active}
-                    className={`naval-target-tab ${active ? "is-active" : ""} ${p.out ? "is-out" : ""} ${g.turn === p.id ? "is-turn" : ""} ${
-                      locked ? "is-locked" : ""
-                    } ${aimed ? "is-aimed" : ""}`}
-                    onClick={() => {
-                      setTargetId(p.id);
-                      setWatch(null);
-                    }}
-                    disabled={(p.out && !active) || locked}
-                  >
-                    {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 24 : 28} />}
-                    <span className="naval-target-who">
-                      <span className="naval-target-name">{s?.name}</span>
-                      {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
-                      <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            target && (
-              <div className="naval-opponent">
-                {seat(target.id) && (
-                  <Avatar avatar={seat(target.id)!.avatar} userId={seat(target.id)!.userId} photo={seat(target.id)!.photo} size={34} />
-                )}
-                <span className="naval-opponent-name">
-                  {seat(target.id)?.name}
-                  {seat(target.id)?.admin && <AdminBadge />}
-                </span>
-                {seat(target.id) && <AwayNote seat={seat(target.id)!} serverOffset={serverOffset} />}
-                <FleetPips total={FLEETS[size].length} afloat={targetBoard?.afloat ?? 0} />
-              </div>
-            )
-          )}
-
-          {targetBoard && (
-            <div className={`naval-scope ${canFire ? "is-armed" : ""}`}>
-              <Board
-                board={targetBoard}
-                mode="radar"
-                px={radarPx}
-                label={`Radar sur la flotte de ${seat(targetBoard.owner)?.name ?? "l'adversaire"}`}
-                aiming={Boolean(canFire)}
-                preview={preview}
-                onHover={setHover}
-                onCell={fireAt}
-              />
-            </div>
-          )}
-
-          {g.settings.arsenal && me && g.phase !== "gameOver" && (
-            <div className="naval-arsenal">
-              {arsenal.length === 0 ? (
-                <p className="hint">Coule un navire pour gagner une arme.</p>
-              ) : (
-                <>
-                  {counts
-                    .filter((c) => c.n > 0)
-                    .map(({ k, n }) => (
-                      <button
-                        key={k}
-                        className={`weapon-btn ${weapon === k ? "is-active" : ""}`}
-                        disabled={!canFire}
-                        onClick={() => setWeapon(weapon === k ? null : k)}
-                        title={WEAPONS[k].help}
-                      >
-                        <WeaponIcon weapon={k} />
-                        <span>{WEAPONS[k].name}</span>
-                        {n > 1 && <span className="weapon-count num">×{n}</span>}
-                      </button>
-                    ))}
-                  {weapon === "torpedo" && (
-                    <div className="options weapon-dir" role="radiogroup" aria-label="Sens de la torpille">
-                      <button type="button" aria-pressed={dir === "h"} onClick={() => setDir("h")}>
-                        Ligne
-                      </button>
-                      <button type="button" aria-pressed={dir === "v"} onClick={() => setDir("v")}>
-                        Colonne
-                      </button>
-                    </div>
-                  )}
-                  {weapon && <p className="hint weapon-help">{WEAPONS[weapon].help}</p>}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {myBoard && showFleet && (
-          <div className="naval-fleet">
-            {!phone && (
-              <div className="naval-fleet-head">
-                <h3>
-                  Ta flotte
-                  {meP?.team !== null && meP?.team !== undefined && <span className="hint"> équipe {TEAM_NAMES[meP.team]}</span>}
-                </h3>
-                <FleetPips total={FLEETS[size].length} afloat={myBoard.afloat} />
-              </div>
-            )}
-            <Board
-              board={myBoard}
-              mode="sea"
-              px={phone ? radarPx : mateBoard ? Math.round(fleetPx * 0.8) : fleetPx}
-              label="Ta flotte"
-              skin={seat(myBoard.owner)?.skin}
-            />
-            {mateBoard && mate && (
-              <>
-                <div className="naval-fleet-head">
-                  <h3>Flotte de {seat(mate.id)?.name}</h3>
-                  {seat(mate.id) && <AwayNote seat={seat(mate.id)!} serverOffset={serverOffset} compact />}
-                  <FleetPips total={FLEETS[size].length} afloat={mateBoard.afloat} />
-                </div>
-                <Board
-                  board={mateBoard}
-                  mode="sea"
-                  px={Math.round(fleetPx * (phone ? 0.7 : 0.5))}
-                  label={`Flotte de ${seat(mate.id)?.name ?? "ton équipier"}`}
-                  skin={seat(mate.id)?.skin}
-                />
-              </>
-            )}
+      <Board board={myBoard} mode="sea" px={fleets.mine} label="Ta flotte" skin={seat(myBoard.owner)?.skin} />
+      {mateBoard && mate && (
+        <>
+          <div className="naval-fleet-head">
+            <h3>Flotte de {seat(mate.id)?.name}</h3>
+            {seat(mate.id) && <AwayNote seat={seat(mate.id)!} serverOffset={serverOffset} compact />}
+            <FleetPips total={FLEETS[size].length} afloat={mateBoard.afloat} />
           </div>
-        )}
-      </div>
-    </section>
+          <Board
+            board={mateBoard}
+            mode="sea"
+            px={fleets.mate}
+            label={`Flotte de ${seat(mate.id)?.name ?? "ton équipier"}`}
+            skin={seat(mate.id)?.skin}
+          />
+        </>
+      )}
+    </div>
+  );
+
+  // Écran bas : la grille d'un côté, tout le reste de l'autre
+  if (short) {
+    return (
+      <main className="naval-stage is-compact">
+        <section className="naval-battle is-compact is-short">
+          <div className="naval-side">
+            {header(viewSwitch)}
+            {statusBar}
+            {showRadar && targets}
+            {arsenalRow}
+          </div>
+          {!phone && fleet}
+          <div className="naval-fit" ref={fitRef} style={{ width: radarPx + frame }}>
+            {radar}
+            {phone && fleet}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // Téléphone debout : de haut en bas, avec la grille sur tout ce qui reste
+  if (phone) {
+    return (
+      <>
+        {header(viewSwitch)}
+        <main className="naval-stage is-compact">
+          <section className="naval-battle is-compact is-portrait">
+            {statusBar}
+            {showRadar && targets}
+            <div className="naval-fit" ref={fitRef}>
+              {radar}
+              {fleet}
+            </div>
+            {arsenalRow}
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {header()}
+      <main className="naval-stage">
+        <section className="naval-battle">
+          {statusBar}
+          <div className="naval-boards">
+            <div className="naval-target">
+              {targets}
+              <div className="naval-fit" ref={fitRef}>
+                {radar}
+              </div>
+              {arsenalRow}
+            </div>
+            {fleet}
+          </div>
+        </section>
+      </main>
+    </>
   );
 }
 
