@@ -133,6 +133,10 @@ export function cramponsView(m: Match, cfg: CramponsConfig): CramponsView {
 
 /** Ce qui change sans arrêt, dans le désordre : serré au maximum */
 export interface CramponsTick {
+  /** L'heure du match, en secondes : c'est elle qui date les positions, car le match avance par pas réguliers */
+  s: number;
+  /** Pour chaque humain : l'heure de sa dernière commande reçue, qu'il retrouve ainsi pour mesurer son temps de trajet */
+  k: number[];
   /** Pour chaque joueur : x, z, cap, vitesse, geste, énergie (de 0 à 100) */
   p: number[];
   /** Le ballon : x, y, z, vx, vz */
@@ -154,7 +158,7 @@ export const TICK_STRIDE = 6;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
-export function encodeTick(m: Match, events: MatchEvent[]): CramponsTick {
+export function encodeTick(m: Match, events: MatchEvent[], stamps: ReadonlyMap<string, number> = new Map()): CramponsTick {
   const p: number[] = [];
   for (const q of m.players) {
     // Une touche se joue les bras en l'air
@@ -163,6 +167,8 @@ export function encodeTick(m: Match, events: MatchEvent[]): CramponsTick {
   }
   const b = m.ball;
   return {
+    s: r3(m.t),
+    k: m.humans.map((h) => stamps.get(h.id) ?? 0),
     p,
     b: [r2(b.x), r2(b.y), r2(b.z), r2(b.vx), r2(b.vz)],
     o: m.owner,

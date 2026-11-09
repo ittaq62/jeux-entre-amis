@@ -25,6 +25,8 @@ export interface SceneFrame {
   excitement: number;
   /** Un changement de plan : la caméra saute au lieu de glisser */
   cuts: number;
+  /** La force du tir en préparation, de 0 à 1 */
+  charge: number;
 }
 
 export type CameraMode = "tele" | "large" | "pres";
@@ -80,7 +82,15 @@ export class CramponsScene {
 
   constructor(
     canvas: HTMLCanvasElement,
-    opts: { count: number; kits: [Kit, Kit]; gkKits: [Kit, Kit]; keepers: boolean[]; ambience: Ambience; lowQuality: boolean },
+    opts: {
+      count: number;
+      kits: [Kit, Kit];
+      gkKits: [Kit, Kit];
+      keepers: boolean[];
+      shirts: number[];
+      ambience: Ambience;
+      lowQuality: boolean;
+    },
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.lowQuality, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.lowQuality ? 1.25 : 2));
@@ -120,6 +130,16 @@ export class CramponsScene {
   screenToWorld(sx: number, sy: number): [number, number] {
     if (this.portrait) return [-sy * this.side, sx * this.side];
     return [sx, sy];
+  }
+
+  /** Le point du terrain sous un pixel de l'écran */
+  pickGround(px: number, py: number): [number, number] | null {
+    const ndc = new THREE.Vector3((px / window.innerWidth) * 2 - 1, -(py / window.innerHeight) * 2 + 1, 0.5).unproject(this.camera);
+    const dir = ndc.sub(this.camera.position).normalize();
+    if (Math.abs(dir.y) < 1e-4) return null;
+    const t = -this.camera.position.y / dir.y;
+    if (t < 0) return null;
+    return [this.camera.position.x + dir.x * t, this.camera.position.z + dir.z * t];
   }
 
   render(dt: number, frame: SceneFrame) {

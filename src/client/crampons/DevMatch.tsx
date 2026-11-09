@@ -38,6 +38,7 @@ function frameOf(m: Match, active: number): SceneFrame {
     attackSide: attackDir(m, m.humans[0]?.team ?? 0),
     excitement: m.phase === "goal" ? 1 : 0.1,
     cuts: m.cuts,
+    charge: 0,
   };
 }
 
@@ -63,6 +64,7 @@ export function DevMatch() {
       kits: KITS,
       gkKits: KEEPERS,
       keepers: m.players.map((p) => p.role === "GK"),
+      shirts: m.players.map((p) => p.shirt),
       ambience: (params.get("sky") as "jour" | "soir" | "nuit") ?? "soir",
       lowQuality: false,
     });

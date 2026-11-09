@@ -27,9 +27,9 @@ import { decodeHeaderJson } from "./util.ts";
 const AWAY_AFTER_MS = 8000;
 const SEAT_RELEASE_MS = 25_000;
 const CHAT_KEEP = 80;
-/** Le serveur envoie les positions de tout le monde vingt fois par seconde */
-const TICK_MS = 50;
-const SAVE_EVERY_MS = 4000;
+/** Le serveur envoie les positions de tout le monde une trentaine de fois par seconde */
+const TICK_MS = 34;
+const SAVE_EVERY_MS = 15_000;
 
 const ACTIONS: readonly string[] = [
   "pass",
@@ -103,6 +103,8 @@ export class CramponsRoom extends DurableObject<Env> {
   private acc = 0;
   private lastKey = "";
   private lastSave = 0;
+  /** La dernière commande de chaque joueur, renvoyée telle quelle pour qu'il mesure son temps de trajet */
+  private stamps = new Map<string, number>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -316,6 +318,7 @@ export class CramponsRoom extends DurableObject<Env> {
         // Le stick : jamais enregistré, seulement appliqué
         if (!seat || !d.match || d.status !== "playing") return;
         setInput(d.match, seat.id, num(msg.x), num(msg.z), msg.s === true, msg.p === true);
+        if (typeof msg.c === "number" && Number.isFinite(msg.c)) this.stamps.set(seat.id, msg.c);
         return;
       }
 
@@ -537,12 +540,16 @@ export class CramponsRoom extends DurableObject<Env> {
     this.lastTick = now;
     const events: MatchEvent[] = [];
     const step = DT * 1000;
+    let steps = 0;
     while (this.acc >= step) {
       this.acc -= step;
+      steps++;
       events.push(...stepMatch(m));
       if (m.phase === "over") break;
     }
-    this.broadcastRaw({ t: "tick", now, ...encodeTick(m, events) });
+    // Rien n'a avancé depuis le dernier envoi : inutile de renvoyer la même chose
+    if (steps === 0) return;
+    this.broadcastRaw({ t: "tick", now, ...encodeTick(m, events, this.stamps) });
     const key = stateKey(m);
     if (key !== this.lastKey) {
       this.lastKey = key;
@@ -550,12 +557,12 @@ export class CramponsRoom extends DurableObject<Env> {
         await this.finishGame(now);
         return;
       }
-      await this.persist();
+      this.saveLive();
       this.lastSave = now;
       this.broadcast([]);
     } else if (now - this.lastSave > SAVE_EVERY_MS) {
       this.lastSave = now;
-      await this.persist();
+      this.saveLive();
     }
   }
 
@@ -819,6 +826,11 @@ export class CramponsRoom extends DurableObject<Env> {
     } catch {
       // déjà fermée
     }
+  }
+
+  /** Pendant le match : on enregistre sans faire attendre les positions en route vers les joueurs */
+  private saveLive() {
+    if (this.data) void this.ctx.storage.put("room", this.data, { allowUnconfirmed: true });
   }
 
   private async persist() {

@@ -149,6 +149,17 @@ function clumsiness(m: Match, p: Player, dx: number, dz: number): number {
 
 const noise = (m: Match, amount: number) => (random(m) * 2 - 1) * amount;
 
+/** Si c'est un humain qui donne, il dirige aussitôt le receveur : il peut aller au-devant du ballon */
+function takeOver(m: Match, q: Player) {
+  if (q.human !== null || q.role === "GK") return;
+  const h = m.humans.find((o) => o.team === q.team && m.players[o.active]?.i === m.lastTouch);
+  if (!h) return;
+  const old = m.players[h.active];
+  if (old) old.human = null;
+  h.active = q.i;
+  q.human = h.id;
+}
+
 function firePass(m: Match, p: Player, o: KickOrder) {
   const b = m.ball;
   const to = o.to >= 0 ? o.to : pickReceiver(m, p, o.ax, o.az);
@@ -177,6 +188,8 @@ function firePass(m: Match, p: Player, o: KickOrder) {
     q.runUntil = m.t + 0.8;
     q.runX = tx + ((b.x - tx) / toBall) * step;
     q.runZ = tz + ((b.z - tz) / toBall) * step;
+    // L'humain prend tout de suite celui qui va recevoir le ballon
+    takeOver(m, q);
   } else {
     // Personne dans cette direction : une passe dans l'espace
     const l = Math.hypot(o.ax, o.az) || 1;
@@ -222,6 +235,7 @@ function fireThrough(m: Match, p: Player, o: KickOrder) {
   q.runUntil = m.t + runT + 0.4;
   q.runX = tx;
   q.runZ = tz;
+  takeOver(m, q);
   m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + runT + 1 };
   m.stats[p.team].passes++;
 }
@@ -284,9 +298,8 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
   const d = Math.hypot(gx - b.x, b.z);
   const sho = p.stats.sho / 100;
   // Vers quel côté du but : l'humain l'indique au stick, sinon on prend le poteau opposé
-  const stick = Math.abs(o.az) > 0.25 ? Math.sign(o.az) : -Math.sign(p.z || 1);
-  const corner = 0.62 + random(m) * 0.25;
-  const aimZ = o.pz ?? stick * GOAL_HALF * corner;
+  const stick = Math.abs(o.az) > 0.12 ? o.az : -Math.sign(p.z || 1) * (0.62 + random(m) * 0.25);
+  const aimZ = o.pz ?? clamp(stick, -1, 1) * GOAL_HALF * 0.9;
   const clumsy = clumsiness(m, p, gx - p.x, aimZ - p.z);
 
   if (o.kind === "chip") {
@@ -295,13 +308,14 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
     setBall(b, solveLob(b, gx, aimZ * 0.6 + noise(m, err), T, 1.5 + noise(m, err * 0.5)));
   } else {
     const finesse = o.kind === "finesse";
-    const speed = lerp(14, 20 + sho * 15, o.power) * (finesse ? 0.82 : 1);
+    // Un simple appui part déjà avec du répondant : la jauge sert à aller au-delà
+    const speed = lerp(17, 21 + sho * 14, o.power) * (finesse ? 0.82 : 1);
     const t = d / speed;
     // Trop de force, et ça passe au-dessus : c'est là tout le jeu de la jauge
     const over = Math.max(0, o.power - 0.82) * (1.25 - sho) * 13;
     const low = lerp(0.35, 1.5, o.power * o.power);
     const spread = ((1.14 - sho) * 0.2 + Math.max(0, d - 16) * 0.0036) * clumsy * (finesse ? 0.8 : 1);
-    const curl = finesse ? -end * stick * (5 + sho * 5) : 0;
+    const curl = finesse ? -end * Math.sign(stick) * (5 + sho * 5) : 0;
     const yT = clamp(low + over + noise(m, spread * d * 0.55), 0.1, 9);
     const [dx, dz] = spin((gx - b.x) / d, (aimZ - b.z) / d, noise(m, spread));
     const vy = (yT - b.y + 0.5 * GRAVITY * t * t) / t;

@@ -36,7 +36,8 @@ const SLIDE_S = 0.7;
 const DOWN_S = 0.75;
 const GOAL_PAUSE = 4;
 const HALFTIME_PAUSE = 3;
-const HUMAN_RESTART_WAIT = 8;
+/** Le temps laissé à un humain pour tirer une remise en jeu : ensuite, l'ordinateur la tire pour lui */
+const HUMAN_RESTART_WAIT = 4;
 
 const KICK_KINDS: readonly string[] = ["pass", "through", "lob", "shot", "finesse", "chip", "clear", "cross"];
 const isKick = (k: string): k is KickKind => KICK_KINDS.includes(k);
@@ -339,7 +340,8 @@ function setUpRestart(m: Match) {
   taker.h = Math.atan2(-r.z * 0.2, dir);
   m.owner = r.taker;
   m.lastTouch = r.taker;
-  placeBall(m, r.x, r.z, r.kind === "throw" ? 1.9 : BALL_R);
+  // Une touche se joue depuis la ligne : le ballon est déjà rentré sur le terrain, sinon il ressortirait aussitôt
+  placeBall(m, r.x, r.kind === "throw" ? Math.sign(r.z) * (HALF_W - 0.2) : r.z, r.kind === "throw" ? 1.9 : BALL_R);
 
   if (r.kind === "corner") {
     m.cuts++;
@@ -1062,11 +1064,19 @@ function carriers(m: Match) {
   } else if (p.act === "none") steerCarrier(m, p);
 }
 
-/** Les joueurs de l'ordinateur tentent le tacle quand le porteur est à portée */
+/** Les joueurs de l'ordinateur tentent le tacle quand le porteur est à portée ; un humain qui presse le fait d'un seul bouton */
 function defenders(m: Match) {
   if (m.owner < 0 || m.phase !== "play") return;
   const owner = m.players[m.owner]!;
   if (owner.act === "hold") return;
+  for (const h of m.humans) {
+    const p = m.players[h.active];
+    if (!p || !h.press || p.team === owner.team || p.act !== "none" || m.t < p.lockedUntil) continue;
+    if (Math.hypot(owner.x - p.x, owner.z - p.z) < 1.6) {
+      startTackle(p, false, h, m);
+      p.lockedUntil = m.t + 0.55;
+    }
+  }
   for (const p of m.players) {
     if (p.team === owner.team || p.off || p.human !== null || p.act !== "none" || p.role === "GK") continue;
     const d = Math.hypot(owner.x - p.x, owner.z - p.z);

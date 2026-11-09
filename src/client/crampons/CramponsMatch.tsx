@@ -123,7 +123,18 @@ export function CramponsMatch({
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtime = useRef<MatchRuntime | null>(null);
   const reduced = usePrefs((s) => s.reducedEffects);
-  const [hud, setHud] = useState<HudState>({ clock: 0, activeName: "", stamina: 1, charge: 0, hasBall: false });
+  const [hud, setHud] = useState<HudState>({
+    clock: 0,
+    activeName: "",
+    stamina: 1,
+    charge: 0,
+    hasBall: false,
+    defending: false,
+    scheme: "fleches",
+    radar: [],
+    ballX: 0,
+    ballZ: 0,
+  });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [camera, setCamera] = useState<"tele" | "large" | "pres">("tele");
   const seq = useRef(0);
@@ -156,10 +167,11 @@ export function CramponsMatch({
       viewRef.current,
       {
         seatId,
-        send: (x, z, s, p) => send({ t: "in", x, z, s, p }),
+        send: (x, z, s, p, c) => send({ t: "in", x, z, s, p, c }),
         act: (k, p, x, z) => send({ t: "act", k, p, x, z }),
         onHud: setHud,
-        onEvents: () => {},
+        onLocalKick: (kind) =>
+          play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
       },
       reduced,
     );
@@ -169,6 +181,7 @@ export function CramponsMatch({
     startLoop("footCrowd");
     listeners.current.onEvents = (events: MatchEvent[]) => {
       for (const e of events) {
+        if (e.k === "kick" && rt.isLocalKick(e.p)) continue;
         if (e.k === "kick")
           play(e.kind === "shot" || e.kind === "finesse" || e.kind === "clear" ? "footShot" : "footKick", {
             rate: 0.94 + Math.random() * 0.14,
@@ -322,10 +335,10 @@ export function CramponsMatch({
             </div>
           )}
           <div className="cr-buttons">
-            <PadButton runtime={runtime} button="y" tone="shot" label={hud.hasBall ? "Tir" : "Glissé"} />
-            <PadButton runtime={runtime} button="b" tone="through" label={hud.hasBall ? "Profond." : "Tacle"} />
-            <PadButton runtime={runtime} button="x" tone="lob" label={hud.hasBall ? "Lob" : "Changer"} />
-            <PadButton runtime={runtime} button="a" tone="pass" label={hud.hasBall ? "Passe" : "Presser"} />
+            <PadButton runtime={runtime} button="shoot" tone="shot" label={hud.defending ? "Glissé" : "Tir"} />
+            <PadButton runtime={runtime} button="through" tone="through" label={hud.defending ? "Changer" : "Profond."} />
+            <PadButton runtime={runtime} button="lob" tone="lob" label={hud.defending ? "Changer" : "Lob"} />
+            <PadButton runtime={runtime} button="pass" tone="pass" label={hud.defending ? "Presser" : "Passe"} />
           </div>
         </div>
       )}
