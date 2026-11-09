@@ -287,6 +287,40 @@
   gap: 8px;
 }
 
+/* Les images des objets viennent d'une seule planche */
+.item-icon {
+  display: inline-block;
+  flex: none;
+  background-repeat: no-repeat;
+  vertical-align: middle;
+}
+
+/* La couleur de la case dit à quoi sert l'objet : prendre de l'élan, attaquer, piéger, se protéger, un super pouvoir */
+[data-family="elan"] {
+  --slot: #ff9326;
+  --slot-deep: #7a3306;
+}
+
+[data-family="attaque"] {
+  --slot: #ff4f3e;
+  --slot-deep: #741313;
+}
+
+[data-family="piege"] {
+  --slot: #e8b92e;
+  --slot-deep: #5c4405;
+}
+
+[data-family="defense"] {
+  --slot: #3aa7ff;
+  --slot-deep: #0c3f7c;
+}
+
+[data-family="pouvoir"] {
+  --slot: #c06bff;
+  --slot-deep: #48157e;
+}
+
 .hud-item2 {
   display: grid;
   place-items: center;
@@ -295,6 +329,11 @@
   border-radius: 13px;
   background: rgba(15, 12, 10, 0.55);
   border: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.hud-item2[data-family] {
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--slot) 72%, white), var(--slot-deep));
+  border-color: #fff4dc;
 }
 
 .hud-item2.is-rolling {
@@ -325,14 +364,98 @@
     0 0 18px rgba(242, 201, 76, 0.45);
 }
 
-.hud-item.is-rolling {
-  animation: hud-roll 0.18s ease-in-out infinite alternate;
+/* L'objet prêt : la case prend sa couleur, et il flotte un peu au-dessus */
+.hud-item[data-family] {
+  border-color: #fff4dc;
+  background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--slot) 78%, white) 0%, var(--slot) 42%, var(--slot-deep) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.18),
+    0 4px 0 rgba(0, 0, 0, 0.32),
+    0 0 20px color-mix(in srgb, var(--slot) 65%, transparent);
 }
 
-@keyframes hud-roll {
+/* Ce qui entre et ce qui sort se superposent, au milieu de la case */
+.hud-item > .hud-item-face,
+.hud-item > .item-reel {
+  grid-area: 1 / 1;
+}
+
+.hud-item-face {
+  display: block;
+  line-height: 0;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.35));
+}
+
+.hud-item-face .item-icon {
+  animation: hud-item-float 1.3s ease-in-out infinite alternate;
+}
+
+@keyframes hud-item-float {
+  from {
+    transform: translateY(1.5px) rotate(-2deg);
+  }
   to {
-    scale: 1.06;
-    rotate: 3deg;
+    transform: translateY(-2.5px) rotate(2deg);
+  }
+}
+
+/* Les rayons qui jaillissent quand la roue s'arrête */
+.hud-item-rays {
+  position: absolute;
+  z-index: -1;
+  inset: -34px;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 8deg, rgba(255, 244, 200, 0.95) 0deg 13deg, transparent 13deg 36deg);
+  -webkit-mask-image: radial-gradient(circle, #000 34%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 34%, transparent 70%);
+  animation: hud-item-rays 0.42s ease-out;
+}
+
+@keyframes hud-item-rays {
+  0% {
+    opacity: 1;
+    transform: scale(0.45) rotate(-12deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15) rotate(14deg);
+  }
+}
+
+/* La roue : un ruban d'images qui défile, freine, dépasse et revient */
+.hud-item.is-rolling {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.45), transparent 26%, transparent 74%, rgba(0, 0, 0, 0.45)), linear-gradient(160deg, #4b3c6e, #1f2a4f);
+}
+
+.item-reel {
+  display: block;
+  overflow: hidden;
+  width: var(--cell);
+  height: var(--cell);
+  -webkit-mask-image: linear-gradient(transparent, #000 15%, #000 85%, transparent);
+  mask-image: linear-gradient(transparent, #000 15%, #000 85%, transparent);
+}
+
+.item-reel-strip {
+  display: flex;
+  flex-direction: column;
+  animation: item-reel 0.8s linear forwards;
+}
+
+@keyframes item-reel {
+  0% {
+    transform: translate3d(0, 0, 0);
+    animation-timing-function: cubic-bezier(0.2, 0.55, 0.3, 1);
+  }
+  84% {
+    transform: translate3d(0, calc(var(--cell) * (var(--cells) * -1 - 0.16)), 0);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: translate3d(0, calc(var(--cell) * var(--cells) * -1), 0);
   }
 }
 
@@ -872,6 +995,15 @@
   animation: pad-ready 1s ease-in-out infinite alternate;
 }
 
+.pad-item[data-family] {
+  border-color: #fff4dc;
+  background: radial-gradient(
+    circle at 50% 38%,
+    color-mix(in srgb, var(--slot) 70%, transparent),
+    color-mix(in srgb, var(--slot-deep) 72%, transparent)
+  );
+}
+
 @keyframes pad-ready {
   from {
     box-shadow: 0 0 8px rgba(242, 201, 76, 0.45);
@@ -1171,6 +1303,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hud-item.is-rolling,
+  .hud-item-face .item-icon,
   .hud-warning {
     animation: none;
   }

@@ -12,7 +12,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
 import { BolidesLoading } from "./BolidesLoading.tsx";
-import { ItemIcon } from "./ItemIcon.tsx";
+import { ITEM_FAMILY, ItemIcon, ItemReel } from "./ItemIcon.tsx";
 import { placeLabel, RaceRuntime, type Hud } from "./runtime.ts";
 import { faceCanvas, headCanvas } from "./scene/faces.ts";
 import { KART_COLORS } from "./scene/kart.ts";
@@ -28,24 +28,6 @@ interface Props {
   onShowLobby: () => void;
   onLeave: () => void;
 }
-
-const ITEM_ORDER = [
-  "turbo",
-  "tarte",
-  "huile",
-  "bowling",
-  "petard",
-  "bombe",
-  "bouclier",
-  "fusee",
-  "klaxon",
-  "ressort",
-  "turbo3",
-  "aimant",
-  "arc",
-  "geant",
-  "orage",
-] as const;
 
 /** Un temps de course : 1:23.4 */
 export function raceTime(ms: number): string {
@@ -345,7 +327,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const loading = !over && (!load.done || load.failed || g.phase === "loading");
   const h = loading ? null : hud;
   const showItem = g.settings.items && me !== null;
-  const rollingItem = h?.rolling ? ITEM_ORDER[Math.floor(performance.now() / 90) % ITEM_ORDER.length]! : null;
+  const rollingMain = Boolean(h?.rolling && h.rollSlot === 1);
+  const rollingSpare = Boolean(h?.rolling && h.rollSlot === 2);
 
   return (
     <div className={`bolides-root ${phone ? "is-phone" : ""}`} onPointerDown={() => unlockAudio()}>
@@ -488,21 +471,26 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           </div>
           {showItem && (
             <div className="hud-slots">
-              {(h.item2 || (h.rolling && h.rollSlot === 2)) && (
-                <div className={`hud-item2 ${h.rolling && h.rollSlot === 2 ? "is-rolling" : ""}`} title="En réserve">
-                  {h.rolling && h.rollSlot === 2 && rollingItem ? (
-                    <ItemIcon item={rollingItem} size={phone ? 24 : 30} />
+              {(h.item2 || rollingSpare) && (
+                <div
+                  className={`hud-item2 ${rollingSpare ? "is-rolling" : ""}`}
+                  data-family={h.item2 && !rollingSpare ? ITEM_FAMILY[h.item2] : undefined}
+                  title="En réserve"
+                >
+                  {rollingSpare && h.item2 ? (
+                    <ItemReel key={h.rollKey} final={h.item2} size={phone ? 32 : 40} />
                   ) : h.item2 ? (
-                    <ItemIcon item={h.item2} size={phone ? 24 : 30} />
+                    <ItemIcon item={h.item2} size={phone ? 32 : 40} />
                   ) : null}
                 </div>
               )}
               <button
                 key={h.nudge}
                 type="button"
-                className={`hud-item ${h.item || (h.rolling && h.rollSlot === 1) ? "is-full" : ""} ${
-                  h.rolling && h.rollSlot === 1 ? "is-rolling" : ""
-                } ${h.nudge > 0 ? "is-nudged" : ""}`}
+                className={`hud-item ${h.item || rollingMain ? "is-full" : ""} ${rollingMain ? "is-rolling" : ""} ${
+                  h.nudge > 0 ? "is-nudged" : ""
+                }`}
+                data-family={h.item && !rollingMain ? ITEM_FAMILY[h.item] : undefined}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -511,13 +499,27 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 }}
                 aria-label={h.item ? `Utiliser : ${ITEM_NAMES[h.item]}` : "Aucun objet"}
               >
-                {h.rolling && h.rollSlot === 1 && rollingItem ? (
-                  <ItemIcon item={rollingItem} size={phone ? 40 : 52} />
-                ) : h.item ? (
-                  <ItemIcon item={h.item} size={phone ? 40 : 52} />
-                ) : null}
-                {h.item && !(h.rolling && h.rollSlot === 1) && h.uses > 1 && <span className="hud-item-uses num">×{h.uses}</span>}
-                {!phone && h.item && !(h.rolling && h.rollSlot === 1) && <kbd className="hud-item-key">E</kbd>}
+                {rollingMain && h.item && <ItemReel key={h.rollKey} final={h.item} size={phone ? 54 : 72} />}
+                {/* Il arrive en rebondissant, et s'envole quand on s'en sert */}
+                <AnimatePresence initial={false}>
+                  {!rollingMain && h.item && (
+                    <motion.span
+                      key={`${h.item}-${h.rollKey}-${h.uses}`}
+                      className="hud-item-face"
+                      initial={reduced ? false : { scale: 0.5, rotate: -14 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      exit={reduced ? { opacity: 0 } : { scale: 1.8, opacity: 0, y: -14, transition: { duration: 0.22, ease: "easeOut" } }}
+                      transition={{ type: "spring", stiffness: 620, damping: 16 }}
+                    >
+                      <ItemIcon item={h.item} size={phone ? 54 : 72} />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {!rollingMain && h.item && h.rollKey > 0 && !reduced && (
+                  <span key={h.rollKey} className="hud-item-rays" aria-hidden="true" />
+                )}
+                {h.item && !rollingMain && h.uses > 1 && <span className="hud-item-uses num">×{h.uses}</span>}
+                {!phone && h.item && !rollingMain && <kbd className="hud-item-key">E</kbd>}
               </button>
             </div>
           )}
@@ -532,7 +534,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.16 }}
               >
-                <ItemIcon item={h.tip.item} size={phone ? 26 : 34} />
+                <ItemIcon item={h.tip.item} size={phone ? 32 : 42} />
                 <span>
                   <strong>{ITEM_NAMES[h.tip.item]}</strong>
                   {h.tip.long && <small>{ITEM_TIPS[h.tip.item]}</small>}
@@ -692,14 +694,15 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
             )}
             {g.settings.items && (
               <button
-                className={`pad pad-item ${h?.item && !(h.rolling && h.rollSlot === 1) ? "is-full" : ""}`}
+                className={`pad pad-item ${h?.item && !rollingMain ? "is-full" : ""}`}
+                data-family={h?.item && !rollingMain ? ITEM_FAMILY[h.item] : undefined}
                 onPointerDown={itemDown}
                 onPointerMove={itemMove}
                 onPointerUp={itemUp}
                 onPointerCancel={itemUp}
                 aria-label="Se servir de l'objet"
               >
-                {h?.item && !(h.rolling && h.rollSlot === 1) ? <ItemIcon item={h.item} size={56} /> : <span>Objet</span>}
+                {h?.item && !rollingMain ? <ItemIcon item={h.item} size={78} /> : <span>Objet</span>}
               </button>
             )}
             <button

@@ -42,6 +42,7 @@ import { LocalDriver, type LaunchPress } from "./driver.ts";
 import { EngineSound, honk } from "./engineSound.ts";
 import { RaceMusic } from "./music.ts";
 import type { Aim } from "./scene/aim.ts";
+import { atlasUrl } from "./ItemIcon.tsx";
 import type { KartLook } from "./scene/kart.ts";
 import { RaceScene } from "./scene/RaceScene.ts";
 
@@ -71,6 +72,8 @@ export interface Hud {
   /** La roue des objets tourne encore (on vient de prendre une caisse), et dans quelle case */
   rolling: boolean;
   rollSlot: 1 | 2;
+  /** Change à chaque caisse prise (la roue repart de zéro) */
+  rollKey: number;
   /** Ce qu'on affiche en recevant l'objet (`long` : avec l'explication) */
   tip: { key: number; item: ItemKind; long: boolean } | null;
   /** Augmente quand on appuie alors qu'il n'y a rien à utiliser (la case tremble) */
@@ -164,6 +167,7 @@ export class RaceRuntime {
   private flash = 0;
   private rollingUntil = 0;
   private rollSlot: 1 | 2 = 1;
+  private rollKey = 0;
   private rollTickAt = 0;
   private wasRolling = false;
   /** Pas deux objets d'affilée : le serveur n'a pas encore répondu */
@@ -222,8 +226,11 @@ export class RaceRuntime {
     let built = 0;
     let heard = false;
     const report = () => progress(built * 0.92 + (heard ? 0.08 : 0));
+    // Les images des objets : décodées d'avance, la roue ne doit jamais tourner à vide
+    const pictures = new Image();
+    pictures.src = atlasUrl;
     const sounds = Promise.race([
-      soundsLoaded(BOLIDES_SOUNDS, RACE_AUDIO),
+      Promise.all([soundsLoaded(BOLIDES_SOUNDS, RACE_AUDIO), pictures.decode().catch(() => {})]),
       new Promise((resolve) => setTimeout(resolve, SOUNDS_LIMIT_MS)),
     ]).then(() => {
       heard = true;
@@ -299,6 +306,9 @@ export class RaceRuntime {
           if (e.id === meId && e.item) {
             this.rollingUntil = performance.now() + ROLL_MS;
             this.rollSlot = e.slot === 2 ? 2 : 1;
+            this.rollKey++;
+            // La roue doit partir tout de suite, pas au prochain rafraîchissement de l'affichage
+            this.hudAt = 0;
             play("bolidesBox");
           }
           break;
@@ -769,10 +779,15 @@ export class RaceRuntime {
     const clockNow = performance.now();
     const rolling = clockNow < this.rollingUntil;
     if (rolling && clockNow >= this.rollTickAt) {
-      this.rollTickAt = clockNow + 90;
+      // Le tic-tac ralentit avec la roue
+      const done = 1 - (this.rollingUntil - clockNow) / ROLL_MS;
+      this.rollTickAt = clockNow + 48 + 170 * done ** 3;
       play("tick", { volume: 0.28, rate: 1.5 });
     }
-    if (this.wasRolling && !rolling) play("pop", { volume: 0.6 });
+    if (this.wasRolling && !rolling) {
+      play("pop", { volume: 0.6 });
+      this.hudAt = 0;
+    }
     this.wasRolling = rolling;
     // Une fusée vient sur soi : un bip, de plus en plus pressant à mesure qu'elle approche
     if (me && me.finish === null) {
@@ -976,6 +991,7 @@ export class RaceRuntime {
       uses2: me?.uses2 ?? 0,
       rolling,
       rollSlot: this.rollSlot,
+      rollKey: this.rollKey,
       tip: this.tip,
       nudge: this.nudge,
       drafting: Boolean(this.driver && (this.driver.kart.draft > 0.15 || this.driver.kart.glide)),

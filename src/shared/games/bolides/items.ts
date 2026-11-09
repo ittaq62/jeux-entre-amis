@@ -235,6 +235,16 @@ export function drawItem(rank: number, rand: () => number): ItemKind {
   return entries[0]![0];
 }
 
+/** Les images qui défilent dans la roue des objets : au hasard, jamais deux fois la même d'affilée, et on s'arrête sur `final` */
+export function rouletteStrip(final: ItemKind, rand: () => number, length = 12): ItemKind[] {
+  const strip: ItemKind[] = [final];
+  while (strip.length < length) {
+    const others = ITEM_KINDS.filter((k) => k !== strip[0]);
+    strip.unshift(others[Math.floor(rand() * others.length)]!);
+  }
+  return strip;
+}
+
 /** Qui la tarte va viser : le plus proche devant (ou derrière si on la lance en arrière), sinon de l'autre côté, à portée */
 export function tarteTarget<T extends { id: string; dist: number; done: boolean }>(
   list: T[],
