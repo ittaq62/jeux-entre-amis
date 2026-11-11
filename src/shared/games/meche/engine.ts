@@ -19,8 +19,17 @@ export type FuseMode = "commune" | "rallonge" | "chacun";
 
 export const FUSE_MODES: FuseMode[] = ["commune", "rallonge", "chacun"];
 
+/** Le mode choisi au salon : l'un des trois, ou tiré au sort au début de chaque partie */
+export type FuseChoice = FuseMode | "hasard";
+
+export const FUSE_NAMES: Record<FuseMode, string> = {
+  commune: "Classique",
+  rallonge: "À rallonge",
+  chacun: "Chacun sa mèche",
+};
+
 export interface MecheSettings {
-  mode: FuseMode;
+  mode: FuseChoice;
   /** Allumettes de chaque joueur au départ */
   lives: number;
   pace: Pace;
@@ -205,8 +214,11 @@ export interface MechePlayer {
   stats: MecheStats;
 }
 
+/** Les règles d'une partie lancée : le mode y est toujours décidé */
+export type PlayedSettings = Omit<MecheSettings, "mode"> & { mode: FuseMode };
+
 export interface MecheGame {
-  settings: MecheSettings;
+  settings: PlayedSettings;
   players: MechePlayer[];
   /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
   teams?: Teams;
@@ -263,7 +275,7 @@ export const REFUSALS: Record<Refusal, string> = {
 export function newGame(ids: string[], settings: MecheSettings, now: number, seed: number): MecheGame {
   const bank = bankFor(settings.pace, 0, ids.length);
   const g: MecheGame = {
-    settings: { ...settings },
+    settings: { ...settings, mode: settings.mode === "hasard" ? "commune" : settings.mode },
     players: ids.map((id) => ({ id, lives: settings.lives, passes: 0, bank, bankMax: bank, place: null, best: "", stats: emptyStats() })),
     holder: 0,
     letters: "",
@@ -287,6 +299,8 @@ export function newGame(ids: string[], settings: MecheSettings, now: number, see
     rng: seed,
   };
   g.holder = Math.floor(random(g) * ids.length);
+  // Au hasard : le mode est tiré au sort maintenant, pour toute la partie
+  if (settings.mode === "hasard") g.settings.mode = FUSE_MODES[Math.floor(random(g) * FUSE_MODES.length)]!;
   return g;
 }
 

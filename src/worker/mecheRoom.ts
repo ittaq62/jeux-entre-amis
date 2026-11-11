@@ -6,6 +6,7 @@ import {
   DEFAULT_SETTINGS,
   explode,
   FUSE_MODES,
+  FUSE_NAMES,
   holderOf,
   lightFuse,
   LIVES_CHOICES,
@@ -659,7 +660,11 @@ export class MecheRoom extends DurableObject<Env> {
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.addTimer({ at: d.game.breakUntil, kind: "light" });
     this.stopBot();
-    this.systemChat("La partie commence !");
+    this.systemChat(
+      d.settings.meche.mode === "hasard"
+        ? `La partie commence ! Le hasard a choisi : ${FUSE_NAMES[d.game.settings.mode]}.`
+        : "La partie commence !",
+    );
     return this.afterChange([], now);
   }
 
@@ -1090,7 +1095,7 @@ export class MecheRoom extends DurableObject<Env> {
 function mergeSettings(current: MecheSettings, patch: Partial<MecheSettings>): MecheSettings {
   // Une table ouverte avant les modes de jeu n'en a pas encore
   const next = { ...DEFAULT_SETTINGS, ...current };
-  if (FUSE_MODES.includes(patch.mode as FuseMode)) next.mode = patch.mode!;
+  if (FUSE_MODES.includes(patch.mode as FuseMode) || patch.mode === "hasard") next.mode = patch.mode!;
   if ((LIVES_CHOICES as readonly number[]).includes(patch.lives as number)) next.lives = patch.lives!;
   if (patch.pace === "pose" || patch.pace === "normal" || patch.pace === "nerveux") next.pace = patch.pace;
   if (patch.difficulty === "simple" || patch.difficulty === "normal" || patch.difficulty === "corse") next.difficulty = patch.difficulty;

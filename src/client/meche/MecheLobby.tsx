@@ -3,17 +3,17 @@ import {
   LIVES_CHOICES,
   type BotLevel,
   type Difficulty,
-  type FuseMode,
   type LetterSource,
   type MecheSettings,
   type Pace,
+  type FuseChoice,
 } from "../../shared/games/meche/engine.ts";
 import { MECHE_MAX_PLAYERS, type MecheClientMessage, type MecheRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 
 /** Les trois façons de faire brûler la mèche, et ce qu'on lit sous le choix */
-const MODES: { value: FuseMode; label: string; rule: string }[] = [
+const MODES: { value: FuseChoice; label: string; rule: string }[] = [
   {
     value: "commune",
     label: "Classique",
@@ -28,6 +28,11 @@ const MODES: { value: FuseMode; label: string; rule: string }[] = [
     value: "chacun",
     label: "Chacun la sienne",
     rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : le premier qui arrive au bout perd une allumette, puis tout le monde repart avec une mèche neuve.",
+  },
+  {
+    value: "hasard",
+    label: "Au hasard",
+    rule: "Le mode est tiré au sort au début de chaque partie : classique, à rallonge ou chacun sa mèche. Il est annoncé au lancement.",
   },
 ];
 
@@ -92,7 +97,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
 
           <div className="field">
             <span className="field-label">Mode de jeu</span>
-            <Options<FuseMode>
+            <Options<FuseChoice>
               label="Mode de jeu"
               value={mode.value}
               disabled={!isHost}

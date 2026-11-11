@@ -1,4 +1,4 @@
-import { holderOf, isAlive, ropeLeft, type MecheGame, type MecheSettings, type MecheStats, type Rope } from "./engine.ts";
+import { holderOf, isAlive, ropeLeft, type MecheGame, type MecheStats, type Rope, type PlayedSettings } from "./engine.ts";
 
 /**
  * La mèche telle que l'écran la dessine, quel que soit le mode : une corde qui brûle à vitesse croissante (ou pas),
@@ -28,7 +28,7 @@ export interface MechePlayerView {
 
 /** Ce que voient les joueurs : tout, sauf l'heure de l'explosion */
 export interface MecheView {
-  settings: MecheSettings;
+  settings: PlayedSettings;
   players: MechePlayerView[];
   holder: string;
   letters: string;

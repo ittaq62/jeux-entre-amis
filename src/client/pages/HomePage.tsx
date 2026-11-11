@@ -467,7 +467,14 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
       </li>
     );
   }
-  const variant = room.game !== "uno" ? (NAVAL_MODES[room.variant] ?? room.variant) : room.variant === "nomercy" ? "No Mercy" : "classique";
+  const variant =
+    room.game === "meche" && room.variant === "hasard"
+      ? "mode au hasard"
+      : room.game !== "uno"
+        ? (NAVAL_MODES[room.variant] ?? room.variant)
+        : room.variant === "nomercy"
+          ? "No Mercy"
+          : "classique";
   return (
     <li className="row">
       <span className="room-code">{room.code}</span>

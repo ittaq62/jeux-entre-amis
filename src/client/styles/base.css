@@ -576,7 +576,8 @@ textarea {
     color 0.15s;
 }
 
-.options button:hover:not(:disabled) {
+/* Le choix fait garde sa couleur sous la souris : on voit tout de suite qu'il est pris */
+.options button:hover:not(:disabled):not([aria-pressed="true"]) {
   color: var(--text);
   background: rgba(244, 236, 218, 0.05);
 }

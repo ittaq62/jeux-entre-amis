@@ -116,6 +116,16 @@ describe("les mots", () => {
 });
 
 describe("la mèche", () => {
+  it("au hasard, le mode est tiré au sort pour la partie, et les trois sortent", () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed < 60; seed++) {
+      const g = newGame(["a", "b", "c"], { ...DEFAULT_SETTINGS, mode: "hasard" }, NOW, seed);
+      expect(["commune", "rallonge", "chacun"]).toContain(g.settings.mode);
+      seen.add(g.settings.mode);
+    }
+    expect(seen.size).toBe(3);
+  });
+
   it("attend avant de s'allumer, puis tombe sur des lettres", () => {
     const g = game();
     expect(g.phase).toBe("break");
