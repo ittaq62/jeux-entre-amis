@@ -38,6 +38,8 @@ export interface FootballerView {
    * Le pied touche le ballon à KICK_CONTACT.
    */
   kickT?: number;
+  /** Sa façon de célébrer, imposée (l'atelier des cartes) ; sinon chacun a la sienne */
+  joy?: number;
 }
 
 // -------------------------------------------------------------------------
@@ -161,8 +163,9 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     // Le rythme de chacun, pour que la fête ne soit pas réglée comme un ballet
     const beat = t * 9 + s.hairSlot * 1.3;
     const hop = moving ? 0 : Math.abs(Math.sin(beat * 0.5));
+    const joy = f.joy ?? s.joy;
     target.nod = -0.35;
-    if (s.joy === 0) {
+    if (joy === 0) {
       // Les bras au ciel, en sautant, les genoux repliés en l'air
       target.armLa = 3.0;
       target.armRa = 3.0;
@@ -175,7 +178,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
         target.legLb = 0.3 + hop * 0.9;
         target.legRb = 0.3 + hop * 0.9;
       }
-    } else if (s.joy === 1) {
+    } else if (joy === 1) {
       // L'avion, qui penche d'une aile sur l'autre
       target.armLs = 1.5;
       target.armRs = 1.5;
@@ -190,7 +193,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
         target.legRa = -Math.sin(beat) * 0.3;
         target.lift = hop * 0.1;
       }
-    } else if (s.joy === 2) {
+    } else if (joy === 2) {
       // Le poing levé, qui frappe l'air
       target.armRa = 2.6 + Math.sin(beat * 1.4) * 0.45;
       target.armRb = 0.9 + Math.sin(beat * 1.4) * 0.5;
@@ -1306,6 +1309,14 @@ export class Footballers {
     }
     scene.add(this.group);
     this.paintKits();
+  }
+
+  /** Où se trouve une partie du corps d'un joueur, dans le repère des joueurs, après `update` (l'atelier des cartes y pose le ballon) */
+  partAt(i: number, part: "head" | "handL" | "handR" | "footL" | "footR", out = new THREE.Vector3()): THREE.Vector3 {
+    const m = new THREE.Matrix4();
+    if (part === "head") this.head.getMatrixAt(i, m);
+    else (part.startsWith("hand") ? this.hands : this.boots).getMatrixAt(i * 2 + (part.endsWith("L") ? 0 : 1), m);
+    return out.setFromMatrixPosition(m);
   }
 
   private setFace(i: number, mood: number) {

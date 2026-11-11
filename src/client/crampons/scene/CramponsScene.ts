@@ -52,7 +52,7 @@ export const SCORER_CAM_DIST = 10;
 const BALL_VIEW_R = 0.25;
 const GAUGE_SEGMENTS = 48;
 
-function ballTexture(): THREE.CanvasTexture {
+export function ballTexture(): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = 512;
   c.height = 256;

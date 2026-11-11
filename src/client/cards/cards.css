@@ -331,6 +331,14 @@
   background: radial-gradient(circle at 50% 40%, #6a4a2c 0, #3a2616 62%, #1e130a 100%);
 }
 
+/* Un soir de match : les projecteurs au-dessus des tribunes, la pelouse tondue en bandes */
+.fam-crampons .tc-art {
+  background:
+    radial-gradient(ellipse 75% 38% at 50% 0%, rgba(255, 248, 214, 0.5), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1.2em, transparent 1.2em 2.4em) 0 100% / 100% 40% no-repeat,
+    linear-gradient(180deg, #17304a 0, #2b5d78 60%, #48a65a 60%, #2c7a3c 100%);
+}
+
 /* Les cartes pas encore dans l'album : on voit à quoi on joue, mais éteintes */
 .tc.is-missing {
   --rim: linear-gradient(160deg, #39473f, #26312b);
@@ -1137,6 +1145,14 @@ html:has(.zoom-screen) body {
   min-height: 32px;
   padding: 3px 9px;
   font-size: 13.5px;
+}
+
+/* Sur téléphone : huit familles sur trois lignes, pas quatre */
+@media (max-width: 420px) {
+  .album-families button {
+    padding: 3px 6px;
+    font-size: 13px;
+  }
 }
 
 .profile-album {

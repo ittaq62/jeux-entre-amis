@@ -10,12 +10,17 @@ import type { ItemKind } from "../../shared/games/bolides/items.ts";
 import { newKart } from "../../shared/games/bolides/physics.ts";
 import { getTrack } from "../../shared/games/bolides/track.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
+import { CLUB_BY_ID, KEEPER_KITS } from "../../shared/games/crampons/clubs.ts";
+import { GOAL_H, GOAL_HALF, HALF_L } from "../../shared/games/crampons/pitch.ts";
 import { headCanvas } from "../bolides/scene/faces.ts";
 import { ICON_POSE, ItemModels } from "../bolides/scene/itemModels.ts";
 import { KartModel } from "../bolides/scene/kart.ts";
 import { PilotModel, type PilotRig } from "../bolides/scene/pilot.ts";
 import * as B from "../capitale/scene/buildings.ts";
 import { tokenModel } from "../capitale/scene/tokens.ts";
+import { ballTexture } from "../crampons/scene/CramponsScene.ts";
+import { Footballers, type FootballerView, type Kit } from "../crampons/scene/footballers.ts";
+import { buildGoal, netTexture } from "../crampons/scene/stadium.ts";
 import { ATLAS_CELL, ATLAS_COLS, ATLAS_KEYS, ATLAS_ROWS } from "./atlasKeys.ts";
 
 /** On dessine en grand, puis on réduit : des bords bien nets */
@@ -89,6 +94,140 @@ interface Shot {
   distance?: number;
 }
 
+// Crampons : les joueurs du jeu, figés en plein geste, aux couleurs d'un club
+const clubKit = (id: string): Kit => CLUB_BY_ID.get(id)!.home;
+const BALL_R = 0.22;
+
+function footBall(): THREE.Mesh {
+  return new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 36, 24), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.42 }));
+}
+
+/** Un joueur, la pose mise en place en rejouant quelques images (ou, pour une frappe, figée à un instant du geste) */
+function footballer(kit: Kit, seed: number, shirt: number, view: Partial<FootballerView>, keeper = false, time = 1) {
+  const group = new THREE.Group();
+  const kits: [Kit, Kit] = [kit, kit];
+  const crowd = new Footballers(group as unknown as THREE.Scene, 1, kits, kits, [keeper], [shirt], true, seed);
+  const full: FootballerView = {
+    x: 0,
+    z: 0,
+    h: Math.PI / 2,
+    v: 0,
+    act: "none",
+    team: 0,
+    keeper,
+    dirX: 0,
+    dirZ: 0,
+    cheer: false,
+    off: false,
+    ...view,
+  };
+  const frames = Math.round(time * 60);
+  for (let f = 0; f <= frames; f++) crowd.update(1 / 60, f / 60, [full]);
+  /** Un point devant le joueur, au-dessus et sur le côté de cette partie du corps */
+  const near = (part: Parameters<Footballers["partAt"]>[1], ahead: number, up = 0, side = 0) => {
+    const fx = Math.cos(full.h);
+    const fz = Math.sin(full.h);
+    return crowd.partAt(0, part).add(new THREE.Vector3(fx * ahead - fz * side, up, fz * ahead + fx * side));
+  };
+  return { group, near };
+}
+
+function footShot(id: string): Shot {
+  const holder = new THREE.Group();
+  const ball = footBall();
+  const at = (v: THREE.Vector3) => {
+    ball.position.copy(v);
+    holder.add(ball);
+  };
+  const player = (p: ReturnType<typeof footballer>) => {
+    holder.add(p.group);
+    return p;
+  };
+  const front = new THREE.Vector3(0.42, 0.2, 1).normalize();
+  switch (id) {
+    case "ballon": {
+      ball.rotation.set(0.35, -0.95, 0.25);
+      holder.add(ball);
+      return { object: holder, dir: new THREE.Vector3(0.2, 0.3, 1).normalize(), zoom: 1.28 };
+    }
+    case "cages": {
+      const goal = buildGoal(1, netTexture(), false).group;
+      goal.position.x = -HALF_L;
+      holder.add(goal);
+      return { object: holder, dir: new THREE.Vector3(-1, 0.36, 0.5).normalize(), zoom: 1.24 };
+    }
+    case "remplacant": {
+      player(footballer(clubKit("val-joli"), 31, 14, { sad: true, h: Math.PI / 2 + 0.35 }));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    case "ailier": {
+      player(footballer(clubKit("port-sale"), 7, 7, { v: 9.5, h: Math.PI * 0.7 }, false, 1.12));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    case "gardien": {
+      const p = player(footballer(KEEPER_KITS[0], 12, 1, { act: "hold", h: Math.PI / 2 + 0.1 }, true));
+      at(p.near("handL", 0.16, -0.12).lerp(p.near("handR", 0.16, -0.12), 0.5));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    case "tacle": {
+      const p = player(footballer(clubKit("les-forges"), 4, 4, { act: "slide", h: Math.PI * 0.92 }));
+      at(p.near("footR", 0.34, 0.12));
+      return { object: holder, dir: front, zoom: 1.04 };
+    }
+    case "touche": {
+      const p = player(footballer(clubKit("trois-clochers"), 23, 3, { act: "throw", h: Math.PI / 2 + 0.45 }));
+      at(p.near("handL", -0.08, 0.24).lerp(p.near("handR", -0.08, 0.24), 0.5));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    case "tete": {
+      const p = player(footballer(clubKit("haute-combe"), 9, 9, { act: "header", h: Math.PI * 0.82 }));
+      at(p.near("head", 0.34, 0.06));
+      return { object: holder, dir: front, zoom: 1.04 };
+    }
+    case "frappe": {
+      const p = player(footballer(clubKit("saint-ballon"), 10, 10, { act: "kick", kickT: 0.2, h: Math.PI }));
+      at(p.near("footR", 0.55, 0.22));
+      return { object: holder, dir: new THREE.Vector3(0.16, 0.16, 1).normalize(), zoom: 1.04 };
+    }
+    case "plongeon": {
+      const p = player(footballer(KEEPER_KITS[1], 16, 16, { act: "dive", h: Math.PI / 2, dirX: -1, dirZ: 0 }, true, 0.6));
+      at(
+        p
+          .near("handL", 0.1)
+          .lerp(p.near("handR", 0.1), 0.5)
+          .add(new THREE.Vector3(-0.42, 0.1, 0)),
+      );
+      return { object: holder, dir: new THREE.Vector3(0.12, 0.22, 1).normalize(), zoom: 1.06 };
+    }
+    case "celebration": {
+      player(footballer(clubKit("mont-bidule"), 11, 11, { cheer: true, joy: 0, h: Math.PI / 2 + 0.25 }, false, 1.18));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    case "gardien-buteur": {
+      player(footballer(KEEPER_KITS[0], 41, 1, { cheer: true, joy: 2, h: Math.PI / 2 + 0.3 }, true, 1.05));
+      return { object: holder, dir: front, zoom: 1.02 };
+    }
+    default: {
+      // La lucarne : le ballon au ras de la barre, le gardien plonge en vain
+      const goal = buildGoal(1, netTexture(), false).group;
+      holder.add(goal);
+      const p = player(
+        footballer(KEEPER_KITS[1], 16, 1, { act: "dive", x: HALF_L - 0.7, z: 1.1, h: Math.PI, dirX: 0, dirZ: 1 }, true, 0.6),
+      );
+      void p;
+      at(new THREE.Vector3(HALF_L + 0.4, GOAL_H - 0.32, GOAL_HALF - 0.36));
+      // Cadrage fixe sur le coin du but : le gardien et le ballon en grand
+      return {
+        object: holder,
+        dir: new THREE.Vector3(-1, 0.16, -0.3).normalize(),
+        zoom: 1,
+        look: new THREE.Vector3(HALF_L, 1.36, 2.35),
+        distance: 8.7,
+      };
+    }
+  }
+}
+
 async function subject(key: string, items: ItemModels): Promise<Shot> {
   const [family, id] = key.split(":") as [string, string];
   const three4 = new THREE.Vector3(0.78, 0.62, 1).normalize();
@@ -140,6 +279,7 @@ async function subject(key: string, items: ItemModels): Promise<Shot> {
     };
   }
   if (family === "token") return { object: tokenModel(id as TokenId, "#e2453c"), dir: three4, zoom: 1.04 };
+  if (family === "foot") return footShot(id);
   if (family === "item") {
     const kind = id as ItemKind;
     const pose = ICON_POSE[kind];

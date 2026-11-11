@@ -167,7 +167,7 @@ function bannerTexture(colors: [string, string]): THREE.CanvasTexture {
   return texture(c, true);
 }
 
-function netTexture(): THREE.CanvasTexture {
+export function netTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(128, 128);
   g.clearRect(0, 0, 128, 128);
   g.strokeStyle = "rgba(255,255,255,0.8)";
@@ -183,14 +183,14 @@ function netTexture(): THREE.CanvasTexture {
   return texture(c, true);
 }
 
-interface GoalParts {
+export interface GoalParts {
   group: THREE.Group;
   back: THREE.Mesh;
   backX: number;
   end: number;
 }
 
-function buildGoal(end: number, netTex: THREE.Texture, shadows: boolean): GoalParts {
+export function buildGoal(end: number, netTex: THREE.Texture, shadows: boolean): GoalParts {
   const group = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: "#fbfbf6", roughness: 0.35 });
   const steel = new THREE.MeshStandardMaterial({ color: "#c9ced8", roughness: 0.5 });

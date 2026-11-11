@@ -26,7 +26,7 @@ export const RARITY: Record<Rarity, RarityInfo> = {
   legendaire: { name: "Légendaire", gems: 5, sell: 200, craft: 2500 },
 };
 
-export type CardFamily = "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche";
+export type CardFamily = "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -36,6 +36,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "tapis", name: "Le Tapis vert", note: "Les cartes qui font mal" },
   { id: "briques", name: "Les Briques", note: "Celles qui tombent mal" },
   { id: "meche", name: "La Mèche", note: "Vite, un mot" },
+  { id: "crampons", name: "Les Crampons", note: "Du gazon plein les chaussettes" },
 ];
 
 export type CardArt =
@@ -612,6 +613,112 @@ export const CARDS: CardDef[] = [
     name: "Le Grand Boum",
     quote: "Tu l'avais pourtant sur le bout de la langue.",
     art: { kind: "meche", subject: "boum" },
+  },
+
+  // Les Crampons (arrivés après les autres : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "ballon",
+    family: "crampons",
+    rarity: "commune",
+    name: "Le Ballon",
+    quote: "Tout rond, et il ne va jamais là où on veut.",
+    art: atlas("foot:ballon"),
+  },
+  {
+    id: "cages",
+    family: "crampons",
+    rarity: "commune",
+    name: "Les Cages",
+    quote: "Sept mètres de large, et il a trouvé le poteau.",
+    art: atlas("foot:cages"),
+  },
+  {
+    id: "remplacant",
+    family: "crampons",
+    rarity: "commune",
+    name: "Le Remplaçant",
+    quote: "Il s'échauffe depuis la douzième minute.",
+    art: atlas("foot:remplacant"),
+  },
+  {
+    id: "ailier",
+    family: "crampons",
+    rarity: "commune",
+    name: "L'Ailier",
+    quote: "Très rapide. Le ballon, lui, est resté derrière.",
+    art: atlas("foot:ailier"),
+  },
+  {
+    id: "gardien",
+    family: "crampons",
+    rarity: "peu-commune",
+    name: "Le Gardien",
+    quote: "Le seul qui a le droit de le prendre à la main. Et il le lâche.",
+    art: atlas("foot:gardien"),
+  },
+  {
+    id: "tacle",
+    family: "crampons",
+    rarity: "peu-commune",
+    name: "Le Tacle glissé",
+    quote: "Il a pris le ballon. Et tout le reste avec.",
+    art: atlas("foot:tacle"),
+  },
+  {
+    id: "touche",
+    family: "crampons",
+    rarity: "peu-commune",
+    name: "La Touche",
+    quote: "Les deux pieds par terre, sinon on recommence.",
+    art: atlas("foot:touche"),
+  },
+  {
+    id: "tete",
+    family: "crampons",
+    rarity: "rare",
+    name: "La Tête plongeante",
+    quote: "Il a fermé les yeux. Ça compte quand même.",
+    art: atlas("foot:tete"),
+  },
+  {
+    id: "frappe",
+    family: "crampons",
+    rarity: "rare",
+    name: "La Frappe de mule",
+    quote: "Le filet s'en souvient encore.",
+    art: atlas("foot:frappe"),
+  },
+  {
+    id: "plongeon",
+    family: "crampons",
+    rarity: "rare",
+    name: "Le Plongeon",
+    quote: "Du bon côté. Une seconde trop tard.",
+    art: atlas("foot:plongeon"),
+  },
+  {
+    id: "celebration",
+    family: "crampons",
+    rarity: "epique",
+    name: "La Célébration",
+    quote: "Il l'a répétée toute la semaine devant sa glace.",
+    art: atlas("foot:celebration"),
+  },
+  {
+    id: "gardien-buteur",
+    family: "crampons",
+    rarity: "epique",
+    name: "Le Gardien buteur",
+    quote: "Monté sur le dernier corner. Il n'est jamais redescendu.",
+    art: atlas("foot:gardien-buteur"),
+  },
+  {
+    id: "lucarne",
+    family: "crampons",
+    rarity: "legendaire",
+    name: "La Lucarne",
+    quote: "Là où les chouettes font leur nid.",
+    art: atlas("foot:lucarne"),
   },
 ];
 

@@ -263,6 +263,7 @@ const FAMILY_ICON: Record<CardFamily, IconName> = {
   tapis: "cards",
   briques: "layers",
   meche: "flame",
+  crampons: "ball",
 };
 
 /** Six couleurs de mur pour les Habitués, données dans l'ordre pour que deux voisins n'aient jamais la même */
