@@ -549,6 +549,38 @@ describe("les remises en jeu", () => {
   });
 });
 
+describe("la fête d'un but", () => {
+  it("le ralenti ne se passe que lorsque tous les humains le demandent", () => {
+    const m = createMatch(
+      settings(),
+      teams,
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 1 },
+      ],
+      8,
+    );
+    toPlay(m);
+    const end = attackDir(m, 0);
+    const st = m.players.find((p) => p.team === 0 && p.role !== "GK")!;
+    setBall(m, end * (HALF_L + 0.3), 0.5, 0, end * 10, 0, 0, st.i);
+    play(m, (e) => e.some((x) => x.k === "goal"), 20);
+    expect(m.phase).toBe("goal");
+    const until = m.phaseUntil;
+    // Le premier veut passer : on attend l'autre
+    for (let i = 0; i < 90; i++) {
+      pushAction(m, "a", "skip", 0, 0, 0);
+      stepMatch(m);
+    }
+    expect(m.phase).toBe("goal");
+    expect(m.phaseUntil).toBe(until);
+    pushAction(m, "b", "skip", 0, 0, 0);
+    play(m, () => m.phase !== "goal", 30);
+    expect(m.phase).not.toBe("goal");
+    expect(m.t).toBeLessThan(until);
+  });
+});
+
 describe("le hors-jeu", () => {
   it("un attaquant derrière la défense au départ de la passe est signalé, et sifflé s'il touche le ballon", () => {
     const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 13);

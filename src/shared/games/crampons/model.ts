@@ -256,6 +256,8 @@ export interface Match {
   spotKick?: { at: number; gk: number; guess: number; dive: number; done: boolean } | null;
   /** Les têtes de suite sans que le ballon retombe : au-delà de deux, on le laisse descendre */
   headChain?: number;
+  /** Pendant la fête d'un but, les humains qui ont demandé à passer le ralenti */
+  skipBy?: string[];
   /** Le dernier coup de pied, et l'équipe qui l'a donné : l'adversaire met un instant à réagir */
   kickAt: number;
   kickTeam: Team;

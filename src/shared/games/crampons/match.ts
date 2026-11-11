@@ -382,6 +382,28 @@ function setUpRestart(m: Match) {
     });
     const gk = keeperOf(m, foes);
     if (gk) stand(gk, dir * (HALF_L - 0.8), Math.sign(r.z) * 1.1);
+  } else if (r.kind === "penalty" && m.shootout) {
+    // Aux tirs au but, les joueurs attendent dans le rond central, une équipe de chaque côté de la ligne ; le gardien
+    // de l'équipe qui tire patiente au coin de la surface, sur la ligne de but
+    m.cuts++;
+    for (const [team, list] of [
+      [r.team, ours],
+      [foes, theirs],
+    ] as const) {
+      list.forEach((p, n) => {
+        stand(p, (team === r.team ? -1 : 1) * 1.1 - dir * 0.4 * (n % 2), -6.5 + (13 * n) / Math.max(1, list.length - 1));
+        p.h = dir > 0 ? 0 : Math.PI;
+      });
+    }
+    const gk = keeperOf(m, foes);
+    if (gk) stand(gk, dir * (HALF_L - 0.1), 0);
+    const mine = keeperOf(m, r.team);
+    if (mine) {
+      stand(mine, dir * (HALF_L - 0.4), BOX_HALF + 1);
+      mine.h = -Math.PI / 2;
+    }
+    taker.h = dir > 0 ? 0 : Math.PI;
+    stand(taker, r.x - dir * 1.3, r.z);
   } else if (r.kind === "penalty") {
     m.cuts++;
     const outside = dir * (HALF_L - BOX_L - 2);
@@ -464,7 +486,7 @@ function keepDistance(m: Match) {
   for (const p of m.players) {
     if (p.off || p.i === r.taker) continue;
     if (r.kind === "penalty") {
-      if (p.role === "GK") continue;
+      if (p.role === "GK" || m.shootout) continue;
       const end = attackDir(m, r.team);
       outOfBox(p, end);
       if (p.x * end > HALF_L - BOX_L - 2.5) pushOut(p, end * (HALF_L - SPOT_L), 0, CIRCLE_R);
@@ -524,7 +546,7 @@ function autoRestart(m: Match, p: Player) {
   } else if (r.kind === "penalty") {
     // Un côté, plus ou moins près du poteau : plus c'est près, plus c'est imparable, mais plus ça risque de sortir
     const side = random(m) < 0.5 ? -1 : 1;
-    orderKick(p, { kind: "shot", power: 0.6 + random(m) * 0.2, ax: 0, az: side * (0.55 + random(m) * 0.45), to: -1 });
+    orderKick(p, { kind: "shot", power: 0.6 + random(m) * 0.2, ax: 0, az: side * (0.5 + random(m) * 0.5), to: -1 });
   } else {
     const dGoal = Math.hypot(dir * HALF_L - r.x, r.z);
     if (dGoal < 29) orderKick(p, { kind: "finesse", power: 0.66 + random(m) * 0.16, ax: 0, az: random(m) < 0.5 ? -1 : 1, to: -1 });
@@ -537,6 +559,7 @@ function autoRestart(m: Match, p: Player) {
 
 function beginKickoff(m: Match, team: Team, ev: MatchEvent[]) {
   freeze(m);
+  m.skipBy = [];
   m.cuts++;
   m.phase = "kickoff";
   m.owner = -1;
@@ -729,8 +752,9 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       continue;
     }
 
-    // Aux tirs au but, une fois le ballon frappé, seul le gardien bouge : les autres regardent depuis le rond
-    if (m.shootout && live && p.role !== "GK") {
+    // Aux tirs au but, seuls le tireur et le gardien qui lui fait face jouent : les autres attendent à leur place
+    // (le rond central, le coin de la surface), humains compris
+    if (m.shootout && p.i !== m.spotKick?.gk && !(r && r.taker === p.i && m.phase !== "play")) {
       steer(p, 0, 0, 0);
       continue;
     }
@@ -748,7 +772,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         m.phase = "play";
         if (r.kind === "penalty") {
           const guess = random(m) < 0.14 ? 0 : random(m) < 0.5 ? -1 : 1;
-          m.spotKick = { at: m.t, gk: keeperOf(m, opponent(r.team))?.i ?? -1, guess, dive: 0.45 + random(m) * 0.4, done: false };
+          m.spotKick = { at: m.t, gk: keeperOf(m, opponent(r.team))?.i ?? -1, guess, dive: 0.5 + random(m) * 0.5, done: false };
           if (m.shootout) m.shotAt = m.t;
         }
         m.restart = null;
@@ -1465,11 +1489,14 @@ export function stepMatch(m: Match): MatchEvent[] {
   }
 
   if (m.phase === "goal") {
+    // Le ralenti se passe quand tous les humains l'ont demandé : celui qui veut le revoir le voit en entier
+    const skip = (m.skipBy ??= []);
     for (const h of m.humans) {
-      if (h.queue.some((a) => a.k === "skip") && m.t > m.phaseUntil - GOAL_PAUSE + GOAL_SKIP_AFTER)
-        m.phaseUntil = Math.min(m.phaseUntil, m.t + 0.1);
+      if (h.queue.some((a) => a.k === "skip") && !skip.includes(h.id)) skip.push(h.id);
       h.queue = [];
     }
+    if (m.humans.length > 0 && m.humans.every((h) => skip.includes(h.id)) && m.t > m.phaseUntil - GOAL_PAUSE + GOAL_SKIP_AFTER)
+      m.phaseUntil = Math.min(m.phaseUntil, m.t + 0.1);
     const hits = stepBall(m.ball, DT);
     if (hits.includes("net")) ev.push({ k: "net" });
     stepPlayers(m, ev);
