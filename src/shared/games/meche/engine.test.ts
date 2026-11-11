@@ -210,6 +210,21 @@ describe("les mots joués", () => {
     g.letters = "eau";
     expect(checkWord(g, "ea", known)).toBe("lettres");
     expect(checkWord(g, "eauxqsd", known)).toBe("inconnu");
+    // Les noms qui servent aussi de titre se jouent comme les autres, et quelques mots récents aussi
+    for (const w of [
+      "papa",
+      "maman",
+      "mamans",
+      "monsieur",
+      "madame",
+      "mademoiselle",
+      "docteur",
+      "docteure",
+      "professeur",
+      "covid",
+      "visio",
+    ])
+      expect(known(normalizeWord(w)), w).toBe(true);
     expect(checkWord(g, "bateau", known)).toBeNull();
     playWord(g, "bateau", NOW + START_MS + 500);
     g.letters = "eau";

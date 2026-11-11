@@ -528,7 +528,8 @@ export class MecheRoom extends DurableObject<Env> {
 
   private async onWord(seat: Seat | null, msg: Extract<MecheClientMessage, { t: "word" }>) {
     if (!seat || !this.allowMessage(`word:${seat.id}`, 120)) return;
-    // Le dictionnaire peut être à recharger : tout se vérifie une fois qu'il est là, avec l'heure de ce moment-là
+    // Le mot compte à l'heure où il est arrivé : si le dictionnaire doit d'abord être rechargé, ce n'est pas au joueur de payer l'attente
+    const arrived = Date.now();
     let words: Dictionary;
     try {
       words = await loadDictionary(this.env);
@@ -539,7 +540,7 @@ export class MecheRoom extends DurableObject<Env> {
     const d = this.data;
     const g = d?.game;
     const now = Date.now();
-    if (!g || !this.isHolding(seat, msg.turn, now)) return;
+    if (!g || !this.isHolding(seat, msg.turn, arrived)) return;
     // Vérifié sans accents, montré tel qu'il a été écrit
     const shown = cleanShown(msg.word);
     const word = normalizeWord(shown);

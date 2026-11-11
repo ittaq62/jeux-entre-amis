@@ -24,8 +24,13 @@ const NOTICE = [
 /** Le plus court mot accepté */
 const MIN_LETTERS = 3;
 
-// Catégories écartées : noms de personnes et de lieux, nombres romains, ponctuation
+// Catégories écartées : noms de personnes et de lieux, nombres romains, ponctuation. Seule la nature du mot compte (la première
+// étiquette) : « nom titr », c'est un nom commun qui sert aussi de titre (papa, maman, madame, docteur), et il se joue.
 const BANNED_TAGS = new Set(["npr", "prn", "patr", "nbro", "ponc", "titr", "sign"]);
+
+/** Des mots d'aujourd'hui qui manquent au lexique : acceptés quand on les tape, jamais écrits par les bots */
+const EXTRA = `covid visio visios okay wouah hand seum crush crushs swag cringe chill fake fakes flex flexer vibe vibes mood insta
+  snap snaps streamer streamers spoil haters bolos`.split(/\s+/);
 
 /** Les injures racistes, homophobes ou sexistes : refusées à tout le monde */
 const HATE = new Set(
@@ -76,7 +81,7 @@ for (const line of lines.slice(start + 1)) {
   if (form !== form.toLowerCase() || !/^[\p{L}’'-]+$/u.test(form)) continue;
   if (/[\u0370-\u03ff\u1d00-\u1dbf]/.test(form)) continue;
   const tags = parts[TAGS]!.split(" ");
-  if (BANNED_TAGS.has(tags[0]!) || BANNED_TAGS.has(tags[1]!)) continue;
+  if (BANNED_TAGS.has(tags[0]!)) continue;
   const word = normalizeWord(form);
   // Sans voyelle, c'est un sigle ou une onomatopée (hlm, zzz…)
   if (word.length < MIN_LETTERS || HATE.has(word) || !/[aeiouy]/.test(word)) continue;
@@ -87,6 +92,7 @@ for (const line of lines.slice(start + 1)) {
   }
 }
 
+for (const w of EXTRA) all.add(normalizeWord(w));
 const sorted = [...all].sort();
 writeFileSync("public/meche/mots.txt", [...NOTICE, ...sorted].join("\n") + "\n");
 

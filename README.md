@@ -110,5 +110,6 @@ Mixkit), comme la musique de Briques et celle des entractes de la tournée (Mixk
 main.
 
 Les mots de Mèche (`public/meche/`) sont tirés du [lexique des formes fléchies de Grammalecte](https://grammalecte.net) (Olivier R.,
-licence [MPL 2.0](https://www.mozilla.org/MPL/2.0/)) : en minuscules sans accents, sans noms propres ni sigles. Pour les refaire à partir
+licence [MPL 2.0](https://www.mozilla.org/MPL/2.0/)) : en minuscules sans accents, sans noms propres ni sigles, avec quelques mots récents
+qui lui manquent (liste `EXTRA` du script). Pour les refaire à partir
 du lexique, `node --experimental-strip-types scripts/meche-mots.ts chemin/vers/lexique-grammalecte-fr-v7.7.txt`.

@@ -479,9 +479,10 @@ export function MecheTable({
     else typed.timer = setTimeout(flush, wait);
   }
 
-  /** Envoie le mot écrit, s'il y en a un et que c'est à soi */
+  /** Envoie le mot écrit, s'il y en a un et que c'est à soi : tel qu'il est dans le champ, dernière lettre comprise, même tapée à l'instant */
   function sendTyped() {
-    if (mine && normalizeWord(text)) send({ t: "word", word: text, turn: g.turn });
+    const word = input.current?.value || text;
+    if (mine && normalizeWord(word)) send({ t: "word", word, turn: g.turn });
   }
 
   function submit(e: FormEvent) {

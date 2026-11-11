@@ -44708,6 +44708,7 @@ bolometre
 bolometres
 bolometrique
 bolometriques
+bolos
 boloss
 bols
 bolus
@@ -68090,6 +68091,7 @@ chilienne
 chiliennes
 chiliens
 chilis
+chill
 chilla
 chillai
 chillaient
@@ -92312,6 +92314,7 @@ covendeuses
 covens
 covergirl
 covergirls
+covid
 covin
 covins
 covoitura
@@ -94693,6 +94696,7 @@ criminologues
 crin
 crincrin
 crincrins
+cringe
 criniere
 crinieres
 crinoide
@@ -95944,6 +95948,8 @@ cruralgies
 cruraux
 crurent
 crus
+crush
+crushs
 crusse
 crussent
 crusses
@@ -144666,6 +144672,10 @@ docs
 docte
 doctement
 doctes
+docteur
+docteure
+docteures
+docteurs
 doctissime
 doctissimes
 doctoral
@@ -144679,6 +144689,8 @@ doctorants
 doctorat
 doctorats
 doctoraux
+doctoresse
+doctoresses
 doctrinaire
 doctrinaires
 doctrinal
@@ -145301,8 +145313,10 @@ domptions
 domptons
 doms
 don
+dona
 donacie
 donacies
+donas
 donataire
 donataires
 donateur
@@ -189892,6 +189906,8 @@ faittout
 faix
 fajita
 fajitas
+fake
+fakes
 fakir
 fakirisme
 fakirismes
@@ -196293,6 +196309,8 @@ fleurons
 fleurs
 fleuve
 fleuves
+flex
+flexer
 flexibilisa
 flexibilisai
 flexibilisaient
@@ -218104,6 +218122,7 @@ hanchez
 hanchiez
 hanchions
 hanchons
+hand
 handball
 handballeur
 handballeurs
@@ -219023,6 +219042,7 @@ hateriez
 haterions
 haterons
 hateront
+haters
 hates
 hatez
 hatier
@@ -234622,6 +234642,7 @@ inspirez
 inspiriez
 inspirions
 inspirons
+insta
 instabilite
 instabilites
 instable
@@ -253941,6 +253962,8 @@ maculions
 maculons
 macumba
 macumbas
+madame
+madames
 madapolam
 madapolams
 made
@@ -253987,6 +254010,7 @@ madeleine
 madeleines
 madelonnette
 madelonnettes
+mademoiselle
 madere
 maderes
 maderisa
@@ -255820,6 +255844,8 @@ malwares
 mama
 mamamouchi
 mamamouchis
+maman
+mamans
 mamas
 mamba
 mambas
@@ -260733,6 +260759,7 @@ mazurkas
 mbalax
 mbar
 mcal
+mdame
 meaculpa
 meaculpas
 meandre
@@ -263949,6 +263976,8 @@ messin
 messine
 messines
 messins
+messire
+messires
 messoir
 mestrance
 mestrances
@@ -266232,6 +266261,9 @@ mijuin
 mikado
 mikados
 mil
+miladies
+milady
+miladys
 milan
 milanais
 milanaise
@@ -267930,6 +267962,7 @@ mixtures
 mkat
 mloukhiya
 mloukhiyas
+mman
 mmol
 mneme
 mnemes
@@ -269973,6 +270006,7 @@ monoxyles
 monozygote
 monozygotes
 monseigneur
+monsieur
 monsignor
 monsignore
 monsignores
@@ -270174,6 +270208,7 @@ monumentalite
 monumentalites
 monumentaux
 monuments
+mood
 moore
 moqua
 moquai
@@ -271094,6 +271129,7 @@ mosettes
 mosquee
 mosquees
 mossi
+mossieur
 mossis
 mostelle
 mostelles
@@ -272402,6 +272438,7 @@ mozzarellas
 mozzarelle
 mozzarelles
 mrad
+msieur
 mua
 muai
 muaient
@@ -282728,6 +282765,7 @@ oisons
 oit
 okapi
 okapis
+okay
 okoume
 okoumes
 oldowayen
@@ -290036,6 +290074,7 @@ paonneau
 paonneaux
 paonnes
 paons
+papa
 papabile
 papabiles
 papable
@@ -290051,6 +290090,7 @@ paparazzi
 paparazzis
 paparazzo
 paparazzos
+papas
 papaute
 papautes
 papaux
@@ -312208,6 +312248,7 @@ powellite
 powellites
 poya
 poyas
+ppa
 pracrit
 pracrits
 prad
@@ -317648,6 +317689,10 @@ professerions
 professerons
 professeront
 professes
+professeur
+professeure
+professeures
+professeurs
 professez
 professiez
 profession
@@ -374563,6 +374608,7 @@ seide
 seides
 seigle
 seigles
+seigneur
 seigneuresse
 seigneuresses
 seigneuriage
@@ -374573,6 +374619,7 @@ seigneuriales
 seigneuriaux
 seigneurie
 seigneuries
+seigneurs
 seille
 seilles
 seillon
@@ -375274,6 +375321,8 @@ seniorie
 seniories
 seniorisation
 seniorisations
+seniorita
+senioritas
 seniorite
 seniorites
 seniors
@@ -375281,6 +375330,12 @@ senne
 sennes
 senologie
 senologies
+senor
+senora
+senoras
+senorita
+senoritas
+senors
 sens
 sensass
 sensation
@@ -376596,6 +376651,7 @@ seulets
 seulette
 seulettes
 seuls
+seum
 seve
 seventies
 severe
@@ -379294,6 +379350,8 @@ snack
 snackbar
 snackbars
 snacks
+snap
+snaps
 snif
 snifa
 snifai
@@ -385202,6 +385260,7 @@ splittions
 splittons
 spodumene
 spodumenes
+spoil
 spoiler
 spoilers
 spoileur
@@ -387302,6 +387361,8 @@ stratovolcans
 stratum
 stratums
 stratus
+streamer
+streamers
 streameur
 streameurs
 streameuse
@@ -395923,6 +395984,7 @@ svelte
 sveltes
 sveltesse
 sveltesses
+swag
 swaheli
 swahelie
 swahelies
@@ -422783,6 +422845,8 @@ viandions
 viandons
 viatique
 viatiques
+vibe
+vibes
 vibice
 vibices
 vibord
@@ -424606,6 +424670,7 @@ visigothes
 visigothique
 visigothiques
 visigoths
+visio
 visiocasque
 visiocasques
 visioconference
@@ -424669,6 +424734,7 @@ visiophonie
 visiophonies
 visiophonique
 visiophoniques
+visios
 visita
 visitable
 visitables
@@ -427207,6 +427273,7 @@ woofer
 woofers
 wormien
 wormiens
+wouah
 wuhanais
 wuhanaise
 wuhanaises

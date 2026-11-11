@@ -1973,6 +1973,8 @@ divorce
 dixieme dixième
 dizaine
 dizaines
+docteur
+docteurs
 doctrine
 doctrines
 document
@@ -3675,6 +3677,7 @@ lycee lycée
 machine
 machines
 maconnerie maçonnerie
+madame
 magasin
 magasins
 magique
@@ -3980,6 +3983,7 @@ monetaires monétaires
 monnaie
 monnaies
 monopole
+monsieur
 mont
 montage
 montagne
@@ -4966,6 +4970,8 @@ produit
 produite
 produites
 produits
+professeur
+professeurs
 profession
 professionnel
 professionnelle
@@ -5729,6 +5735,8 @@ section
 sections
 securite sécurité
 segment
+seigneur
+seigneurs
 sein
 sejour séjour
 sel
@@ -18077,6 +18085,7 @@ macro
 macroeconomique macroéconomique
 macroscopique
 made
+mademoiselle
 madriers
 magazine
 magazines
@@ -18185,6 +18194,7 @@ maltraites maltraités
 malveillance
 malveillants
 malversations
+maman
 mamelle
 mamelles
 mamelon
@@ -18600,6 +18610,7 @@ messes
 messianique
 messianisme
 messidor
+messire
 mesurable
 mesurables
 mesurage
@@ -19933,6 +19944,7 @@ pantheon panthéon
 panthere panthère
 pantomime
 paon
+papa
 papale
 papaute papauté
 papes
@@ -37351,6 +37363,7 @@ doctorales
 doctorant
 doctorants
 doctorats
+doctoresse
 doctrinalement
 doctrinaux
 docu
@@ -47933,6 +47946,7 @@ malveillante
 malveillantes
 malversation
 mama
+mamans
 mamelonne mamelonné
 mamelonnee mamelonnée
 mamelonnees mamelonnées
@@ -48691,6 +48705,7 @@ messies
 messin
 messine
 messins
+messires
 mestre
 mestres
 mesurages
@@ -48913,6 +48928,7 @@ mihrab
 mijoter
 mikado
 mil
+milady
 milan
 milanais
 milanaise
@@ -51498,6 +51514,7 @@ paons
 papaine papaïne
 papal
 papales
+papas
 papaye
 papayer
 paperasse
@@ -54158,6 +54175,7 @@ profes profès
 professant
 professees professées
 professes professés
+professeure
 professionnaliser
 professionnalisme
 professionnellement
@@ -58267,6 +58285,7 @@ senior
 seniors
 senne
 sennes
+senor señor
 sensationnel
 sensationnelle
 sensationnelles
