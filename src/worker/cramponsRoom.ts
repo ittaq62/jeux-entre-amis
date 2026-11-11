@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AvatarConfig } from "../shared/avatar.ts";
+import { deClub } from "../shared/games/crampons/clubs.ts";
 import { addHuman, createMatch, dropHuman, pushAction, setInput, stepMatch } from "../shared/games/crampons/match.ts";
 import type { HumanActionKind, Match, MatchEvent, Team } from "../shared/games/crampons/model.ts";
 import { DT } from "../shared/games/crampons/pitch.ts";
@@ -574,7 +575,7 @@ export class CramponsRoom extends DurableObject<Env> {
     const m = d.match!;
     const name = (t: Team) => cramponsView(m, d.settings.crampons).teams[t].name;
     this.systemChat(
-      `Fin du match : ${m.score[0]} - ${m.score[1]}${m.winner !== null ? `, victoire de ${name(m.winner)}` : ", match nul"}.`,
+      `Fin du match : ${m.score[0]} - ${m.score[1]}${m.winner !== null ? `, victoire ${deClub(name(m.winner))}` : ", match nul"}.`,
     );
     await this.afterChange([], now);
   }

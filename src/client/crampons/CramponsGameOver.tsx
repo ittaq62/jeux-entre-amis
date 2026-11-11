@@ -1,3 +1,4 @@
+import { deClub } from "../../shared/games/crampons/clubs.ts";
 import type { TeamStats } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 
@@ -29,7 +30,7 @@ export function CramponsGameOver({
 }) {
   const v = room.crampons!;
   const [a, b] = v.stats;
-  const title = v.winner === null ? "Match nul" : `Victoire de ${v.teams[v.winner].name}`;
+  const title = v.winner === null ? "Match nul" : `Victoire ${deClub(v.teams[v.winner].name)}`;
   const asked = room.rematch.includes(room.you.userId);
   const sa = v.shootout?.kicks[0].filter(Boolean).length;
   const sb = v.shootout?.kicks[1].filter(Boolean).length;

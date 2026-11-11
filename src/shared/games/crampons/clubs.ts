@@ -455,6 +455,21 @@ for (const c of CLUBS) {
 
 export const CLUB_BY_ID = new Map(CLUBS.map((c) => [c.id, c]));
 
+/**
+ * « de » suivi du nom d'un club, avec le bon article : de l'AS Saint-Ballon, des Forges FC, du FC Port-Salé,
+ * de la JS Belle-Rive, de Roche-Noire AC
+ */
+export function deClub(name: string): string {
+  if (/^les /i.test(name)) return `des ${name.slice(4)}`;
+  if (/^le /i.test(name)) return `du ${name.slice(3)}`;
+  if (/^la /i.test(name)) return `de la ${name.slice(3)}`;
+  if (/^(FC|CS|Racing|Stade|Club|Sporting|Red Star)\b/.test(name)) return `du ${name}`;
+  if (/^(JS|ES)\b/.test(name)) return `de la ${name}`;
+  if (/^(AS|AC|US|Olympique|Entente|Union|Amicale|Athletic|Association)\b/i.test(name)) return `de l'${name}`;
+  if (/^(Vétérans|Anciens|Amis)\b/.test(name)) return `des ${name}`;
+  return `de ${name}`;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
