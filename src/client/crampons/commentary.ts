@@ -1,7 +1,10 @@
-// Le commentateur : la voix française du navigateur raconte le match. Il annonce les buts, les arrêts, les fautes et les
-// grosses occasions ; il se tait sur le reste plutôt que de bavarder, et ne se coupe la parole que pour plus important.
+// Le commentateur : des répliques enregistrées (une voix de synthèse neuronale, générée une fois pour toutes et
+// vérifiée réplique par réplique), enchaînées selon le match : un cri de but puis le nom du buteur, puis le score. Il
+// annonce les buts, les arrêts, les fautes et les grosses occasions ; il se tait sur le reste plutôt que de bavarder,
+// et ne se coupe la parole que pour plus important.
 
 import type { MatchEvent, Team } from "../../shared/games/crampons/model.ts";
+import { audioOut, soundBuffer } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
 export interface MatchInfo {
@@ -16,174 +19,172 @@ export interface MatchInfo {
 type Priority = 0 | 1 | 2 | 3;
 
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
+const variants = (base: string, n: number) => Array.from({ length: n }, (_, i) => `${base}-${i + 1}`);
 
-/** La plus belle voix française disponible : les voix « naturelles » en ligne d'abord, sinon celles du système */
-function bestFrenchVoice(): SpeechSynthesisVoice | null {
-  if (typeof speechSynthesis === "undefined") return null;
-  const voices = speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().replace("_", "-").startsWith("fr"));
-  const score = (v: SpeechSynthesisVoice) =>
-    (/natural|neural/i.test(v.name) ? 8 : 0) +
-    (/online/i.test(v.name) ? 4 : 0) +
-    (/google/i.test(v.name) ? 3 : 0) +
-    (v.lang.toLowerCase().replace("_", "-") === "fr-fr" ? 2 : 0) +
-    (/henri|remy|rémy|paul|thomas|denise|vivienne|eloise|amélie|amelie/i.test(v.name) ? 1 : 0);
-  return voices.sort((a, b) => score(b) - score(a))[0] ?? null;
+/** Le nom d'un fichier de réplique : « Le Goff » donne « le-goff », « Prévost » donne « prevost » */
+export function voiceSlug(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
+const GENERIC = [
+  ...variants("accueil", 3),
+  ...variants("envoi", 3),
+  ...variants("but", 5),
+  ...variants("csc", 2),
+  ...variants("frappe", 3),
+  ...variants("frappe-forte", 2),
+  ...variants("capte", 3),
+  ...variants("parade", 3),
+  ...variants("poteau", 2),
+  ...variants("barre", 2),
+  ...variants("faute", 3),
+  ...variants("penalty", 2),
+  ...variants("jaune", 2),
+  ...variants("rouge", 2),
+  ...variants("horsjeu", 2),
+  ...variants("corner", 2),
+  ...variants("tacle", 2),
+  ...variants("centre", 2),
+  ...variants("profondeur", 2),
+  ...variants("crochet", 2),
+  ...variants("passe", 2),
+  "mitemps",
+  "prolongations",
+  "tab",
+  "fin",
+  "fin-nul",
+  ...variants("tab-marque", 3),
+  ...variants("tab-rate", 3),
+];
+
 export class Commentator {
-  private voice: SpeechSynthesisVoice | null = null;
   private enabled: boolean;
-  private speakingPrio = -1;
+  private buffers = new Map<string, Promise<AudioBuffer | null>>();
+  /** Ce qui est en train d'être dit : on peut l'interrompre pour plus important */
+  private playing: { prio: number; until: number; sources: AudioBufferSourceNode[]; gain: GainNode } | null = null;
   private lastEnd = 0;
   private lastLine = "";
   private followUp: ReturnType<typeof setTimeout> | null = null;
   private kickoffs = 0;
-  private readonly onVoices = () => {
-    this.voice = bestFrenchVoice();
-  };
+  private seq = 0;
 
   constructor(
     private info: () => MatchInfo,
     enabled: boolean,
   ) {
     this.enabled = enabled;
-    if (typeof speechSynthesis === "undefined") return;
-    this.voice = bestFrenchVoice();
-    speechSynthesis.addEventListener("voiceschanged", this.onVoices);
+    if (enabled) this.preload();
+  }
+
+  /** Les répliques de tous les matchs, puis les noms de ceux qui jouent celui-ci : prêtes avant d'en avoir besoin */
+  private preload() {
+    const { players, teams } = this.info();
+    const keys = [
+      ...GENERIC,
+      ...players.map((p) => `nom-${voiceSlug(p.name)}`),
+      ...teams.flatMap((t) => [`club-${voiceSlug(t)}-pour`, `club-${voiceSlug(t)}-victoire`]),
+    ];
+    for (const k of keys) void this.load(k);
   }
 
   setEnabled(on: boolean) {
     this.enabled = on;
-    if (!on) this.silence();
+    if (on) this.preload();
+    else this.silence();
   }
 
-  /** Le nom d'un joueur, ou celui de son équipe s'il n'en a pas */
-  private name(i: number): string {
-    return this.info().players[i]?.name ?? "";
+  private load(key: string): Promise<AudioBuffer | null> {
+    let p = this.buffers.get(key);
+    if (!p) {
+      p = soundBuffer(`voix/${key}.mp3`);
+      this.buffers.set(key, p);
+    }
+    return p;
   }
 
-  private teamOf(i: number): string {
+  private nameKey(i: number): string | null {
     const p = this.info().players[i];
-    return p ? this.info().teams[p.team] : "";
+    return p ? `nom-${voiceSlug(p.name)}` : null;
   }
 
-  /** « 2 à 1 pour Forez », « 1 partout » */
-  private scoreline(): string {
+  /** « Deux à un », suivi de « pour Les Forges » ; « Un partout » */
+  private scoreline(): string[] {
     const { score, teams } = this.info();
-    if (score[0] === score[1]) return score[0] === 0 ? "Toujours zéro à zéro." : `${score[0]} partout.`;
+    const hi = Math.max(...score);
+    const lo = Math.min(...score);
+    if (hi > 9) return [];
+    if (hi === lo) return [`score-${hi}-${lo}`];
     const lead: Team = score[0] > score[1] ? 0 : 1;
-    return `${Math.max(...score)} à ${Math.min(...score)} pour ${teams[lead]}.`;
+    return [`score-${hi}-${lo}`, `club-${voiceSlug(teams[lead])}-pour`];
   }
 
   /** Le début du match, pendant la présentation */
   welcome() {
-    const [a, b] = this.info().teams;
-    this.say(
-      pick([
-        `Bonsoir et bienvenue au stade ! ${a} reçoit ${b}, coup d'envoi dans un instant.`,
-        `Bienvenue pour ce match entre ${a} et ${b} ! Les joueurs sont prêts.`,
-        `Ambiance des grands soirs pour ${a} contre ${b} ! C'est bientôt parti.`,
-      ]),
-      2,
-    );
+    this.say([pick(variants("accueil", 3))], 2);
   }
 
   event(e: MatchEvent) {
     switch (e.k) {
       case "goal": {
-        const who = this.name(e.scorer);
-        this.say(
-          e.own
-            ? pick([`Oh non ! Contre son camp de ${who} !`, `But contre son camp ! ${who} trompe son propre gardien !`])
-            : pick([
-                `But ! ${who} !`,
-                `Et c'est le but ! ${who} !`,
-                `Il l'a fait ! But de ${who} !`,
-                `${who} fait trembler les filets ! But !`,
-                `Quelle réalisation de ${who} ! But !`,
-              ]),
-          3,
-          true,
-        );
+        const name = this.nameKey(e.scorer);
+        this.say(e.own ? [pick(variants("csc", 2))] : [pick(variants("but", 5)), ...(name ? [name] : [])], 3);
         // Le score, une fois que la fête a commencé (et que l'image l'affiche)
-        this.later(2600, () => this.say(this.scoreline(), 2));
+        this.later(3200, () => this.say(this.scoreline(), 2));
         return;
       }
       case "shot":
-        this.say(
-          e.power > 0.85
-            ? pick([`Quelle frappe de ${this.name(e.p)} !`, `${this.name(e.p)} déclenche une frappe terrible !`])
-            : pick([`${this.name(e.p)} frappe !`, `Frappe de ${this.name(e.p)} !`, `${this.name(e.p)} tente sa chance !`]),
-          1,
-        );
+        this.say([e.power > 0.85 ? pick(variants("frappe-forte", 2)) : pick(variants("frappe", 3))], 1);
         return;
       case "save":
-        this.say(
-          e.caught
-            ? pick([`Bien capté par ${this.name(e.p)}.`, `${this.name(e.p)} s'en saisit.`, `Le gardien ${this.name(e.p)} est là.`])
-            : pick([`Quel arrêt de ${this.name(e.p)} !`, `Superbe parade de ${this.name(e.p)} !`, `${this.name(e.p)} sort le grand jeu !`]),
-          2,
-        );
+        this.say([e.caught ? pick(variants("capte", 3)) : pick(variants("parade", 3))], 2);
         return;
       case "woodwork":
-        this.say(
-          e.bar
-            ? pick(["Sur la barre !", "La transversale ! Quelle occasion !"])
-            : pick(["Sur le poteau !", "Le poteau ! C'était tout près !"]),
-          2,
-        );
+        this.say([e.bar ? pick(variants("barre", 2)) : pick(variants("poteau", 2))], 2);
         return;
       case "foul":
-        if (e.penalty)
-          this.say(pick([`Penalty ! ${this.name(e.p)} fauche dans la surface !`, `L'arbitre désigne le point de penalty !`]), 3);
-        else
-          this.say(
-            pick([`Faute de ${this.name(e.p)}.`, `Coup de sifflet, faute de ${this.name(e.p)}.`, `${this.name(e.p)} commet la faute.`]),
-            1,
-          );
+        if (e.penalty) this.say([pick(variants("penalty", 2))], 3);
+        else this.say([pick(variants("faute", 3))], 1);
         return;
       case "card":
-        if (e.red)
-          this.say(
-            pick([`Carton rouge pour ${this.name(e.p)} ! Il est expulsé !`, `Rouge ! ${this.name(e.p)} doit quitter le terrain !`]),
-            3,
-          );
-        else this.say(pick([`Carton jaune pour ${this.name(e.p)}.`, `${this.name(e.p)} est averti.`]), 2);
+        this.say([e.red ? pick(variants("rouge", 2)) : pick(variants("jaune", 2))], e.red ? 3 : 2);
         return;
       case "offside":
-        this.say(pick([`Hors-jeu de ${this.name(e.p)}.`, "Le drapeau se lève : hors-jeu.", `${this.name(e.p)} était parti trop tôt.`]), 1);
+        this.say([pick(variants("horsjeu", 2))], 1);
         return;
       case "restart":
-        if (e.kind === "corner") this.say(pick([`Corner pour ${this.info().teams[e.team]}.`, `Ce sera un corner.`]), 1);
+        if (e.kind === "corner") this.say([pick(variants("corner", 2))], 1);
         return;
       case "whistle":
-        if (e.why === "kickoff" && this.kickoffs++ === 0) this.say(pick(["C'est parti !", "Coup d'envoi !", "Et le match commence !"]), 2);
+        if (e.why === "kickoff" && this.kickoffs++ === 0) this.say([pick(variants("envoi", 3))], 2);
         return;
       case "half":
-        if (e.period === 1) this.say(`C'est la mi-temps. ${this.scoreline()}`, 3);
-        else if (e.period === 2) this.say(`Fin du temps réglementaire. ${this.scoreline()} Place aux prolongations !`, 3);
+        if (e.period === 1) this.say(["mitemps", ...this.scoreline()], 3);
+        else if (e.period === 2) this.say(["prolongations"], 3);
         return;
       case "end": {
         const { score, teams } = this.info();
-        if (e.winner === null) this.say(`C'est terminé ! Match nul, ${score[0]} partout.`, 3, true);
-        else this.say(`C'est terminé ! Victoire de ${teams[e.winner]} !`, 3, true);
+        if (e.winner === null) this.say(["fin-nul", ...(score[0] <= 9 ? [`score-${score[0]}-${score[1]}`] : [])], 3);
+        else this.say(["fin", `club-${voiceSlug(teams[e.winner])}-victoire`], 3);
         return;
       }
       case "penalty":
-        this.say(e.scored ? pick(["Marqué !", "Dans le but !", "Il ne tremble pas !"]) : pick(["Manqué !", "Arrêté !", "Raté !"]), 3);
+        this.say([e.scored ? pick(variants("tab-marque", 3)) : pick(variants("tab-rate", 3))], 3);
         return;
       case "tackle":
-        if (e.won && Math.random() < 0.35) this.say(pick([`Beau tacle de ${this.name(e.p)}.`, `${this.name(e.p)} récupère le ballon.`]), 0);
+        if (e.won && Math.random() < 0.35) this.say([pick(variants("tacle", 2))], 0);
         return;
       case "kick":
-        if (e.kind === "cross") this.say(pick([`Le centre de ${this.name(e.p)}…`, `${this.name(e.p)} centre…`]), 0);
-        else if (e.kind === "through" && Math.random() < 0.5)
-          this.say(pick([`${this.name(e.p)} lance en profondeur…`, `Ballon en profondeur de ${this.name(e.p)}…`]), 0);
-        else if (e.kind === "pass" && Math.random() < 0.07)
-          this.say(pick([`${this.name(e.p)}…`, `${this.teamOf(e.p)} fait tourner.`, `${this.name(e.p)} oriente le jeu.`]), 0);
+        if (e.kind === "cross") this.say([pick(variants("centre", 2))], 0);
+        else if (e.kind === "through" && Math.random() < 0.5) this.say([pick(variants("profondeur", 2))], 0);
+        else if (e.kind === "pass" && Math.random() < 0.06) this.say([pick(variants("passe", 2))], 0);
         return;
       case "skill":
-        if (Math.random() < 0.4) this.say(pick([`Joli crochet de ${this.name(e.p)} !`, `${this.name(e.p)} élimine son vis-à-vis !`]), 0);
+        if (Math.random() < 0.4) this.say([pick(variants("crochet", 2))], 0);
         return;
       default:
         return;
@@ -199,53 +200,89 @@ export class Commentator {
   }
 
   /**
-   * Parle, si cela vaut la peine : on ne coupe la parole que pour plus important, et les petites remarques attendent
-   * un silence de quelques secondes. `excited` : plus vite, plus haut.
+   * Dit ces répliques à la suite, si cela vaut la peine : on ne coupe la parole que pour plus important, et les petites
+   * remarques attendent un silence de quelques secondes.
    */
-  say(text: string, prio: Priority, excited = false) {
-    if (!this.enabled || typeof speechSynthesis === "undefined" || !this.voice || document.hidden) return;
+  say(keys: string[], prio: Priority) {
+    if (!this.enabled || keys.length === 0 || document.hidden) return;
     const prefs = usePrefs.getState();
     if (!prefs.sound || prefs.volume <= 0) return;
-    if (text === this.lastLine) return;
+    const line = keys.join("+");
+    if (line === this.lastLine && prio < 3) return;
     const now = performance.now();
-    const busy = speechSynthesis.speaking && this.speakingPrio >= 0;
-    if (busy) {
-      if (prio <= this.speakingPrio) return;
-      speechSynthesis.cancel();
+    const playing = this.playing;
+    if (playing && now < playing.until) {
+      if (prio <= playing.prio) return;
     } else {
       const quiet = now - this.lastEnd;
       if ((prio === 0 && quiet < 6000) || (prio === 1 && quiet < 1200)) return;
     }
-    const u = new SpeechSynthesisUtterance(text);
-    u.voice = this.voice;
-    u.lang = this.voice.lang;
-    u.rate = excited ? 1.18 : 1.1;
-    u.pitch = excited ? 1.25 : 1;
-    u.volume = Math.min(1, prefs.volume * 1.15);
-    const done = () => {
-      if (this.speakingPrio === prio) this.speakingPrio = -1;
-      this.lastEnd = performance.now();
-    };
-    u.onend = done;
-    u.onerror = done;
-    this.speakingPrio = prio;
-    this.lastLine = text;
-    speechSynthesis.speak(u);
-    if (import.meta.env.DEV) {
-      const w = window as unknown as { __crSaid?: string[] };
-      (w.__crSaid ??= []).push(text);
+    const io = audioOut();
+    if (!io) return;
+    const seq = ++this.seq;
+    this.lastLine = line;
+    void Promise.all(keys.map((k) => this.load(k))).then((bufs) => {
+      // Une réplique plus récente est passée devant pendant le chargement
+      if (seq !== this.seq || !this.enabled) return;
+      const parts = bufs.filter((b): b is AudioBuffer => b !== null);
+      if (parts.length === 0) return;
+      this.stopPlaying();
+      const { ctx, out } = io;
+      const gain = ctx.createGain();
+      gain.gain.value = Math.min(1, prefs.volume * 1.1);
+      gain.connect(out);
+      let t = ctx.currentTime + 0.03;
+      const sources: AudioBufferSourceNode[] = [];
+      for (const b of parts) {
+        const s = ctx.createBufferSource();
+        s.buffer = b;
+        s.connect(gain);
+        s.start(t);
+        sources.push(s);
+        t += b.duration + 0.07;
+      }
+      const until = performance.now() + (t - ctx.currentTime) * 1000;
+      this.playing = { prio, until, sources, gain };
+      setTimeout(
+        () => {
+          if (this.playing?.sources !== sources) return;
+          this.playing = null;
+          this.lastEnd = performance.now();
+          gain.disconnect();
+        },
+        until - performance.now() + 50,
+      );
+      if (import.meta.env.DEV) {
+        const w = window as unknown as { __crSaid?: string[] };
+        (w.__crSaid ??= []).push(line);
+      }
+    });
+  }
+
+  private stopPlaying() {
+    const p = this.playing;
+    if (!p) return;
+    this.playing = null;
+    const ctx = audioOut()?.ctx;
+    if (ctx) {
+      // Une coupure nette mais sans claquement
+      p.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.015);
+      for (const s of p.sources) s.stop(ctx.currentTime + 0.08);
     }
+    setTimeout(() => p.gain.disconnect(), 200);
+    this.lastEnd = performance.now();
   }
 
   silence() {
     if (this.followUp) clearTimeout(this.followUp);
     this.followUp = null;
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-    this.speakingPrio = -1;
+    this.seq++;
+    this.stopPlaying();
   }
 
   dispose() {
+    // Un commentateur remplacé (match reconstruit) ne dit plus rien, même ce qu'il avait prévu de dire
+    this.enabled = false;
     this.silence();
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.removeEventListener("voiceschanged", this.onVoices);
   }
 }

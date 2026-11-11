@@ -115,7 +115,9 @@ public, CC0), la foule en fête de « Festival concert people crowd » par steph
 ([pdsounds.org](https://commons.wikimedia.org/wiki/File:Festival_concert_people_crowd.ogg), domaine public), et les
 applaudissements et cornes de brume de « F1 Race Crowd Applause Air Horns » par
 [WebbFilmsUK](https://freesound.org/people/WebbFilmsUK/sounds/200809/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
-extraits raccourcis et normalisés). Le commentateur parle avec la voix française du navigateur.
+extraits raccourcis et normalisés). Les répliques du commentateur (`public/sounds/voix/`) ont été générées une fois pour
+toutes avec le moteur de synthèse libre [Piper](https://github.com/OHF-Voice/piper1-gpl) et sa voix française « siwis »,
+entraînée sur la [base SIWIS](https://datashare.is.ed.ac.uk/handle/10283/2353) (CC BY 4.0).
 
 Les mots de Mèche (`public/meche/`) sont tirés du [lexique des formes fléchies de Grammalecte](https://grammalecte.net) (Olivier R.,
 licence [MPL 2.0](https://www.mozilla.org/MPL/2.0/)) : en minuscules sans accents, sans noms propres ni sigles, avec quelques mots récents

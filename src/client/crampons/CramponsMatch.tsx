@@ -223,7 +223,8 @@ export function CramponsMatch({
     }, settingsRef.current.commentary);
     voice.current = commentator;
     const v0 = viewRef.current;
-    if (v0.phase === "kickoff" && v0.period === 1 && v0.score[0] + v0.score[1] === 0) setTimeout(() => commentator.welcome(), 700);
+    const welcome =
+      v0.phase === "kickoff" && v0.period === 1 && v0.score[0] + v0.score[1] === 0 ? setTimeout(() => commentator.welcome(), 700) : null;
     const onEvents = (events: MatchEvent[]) => {
       for (const e of events) {
         commentator.event(e);
@@ -298,6 +299,7 @@ export function CramponsMatch({
       listeners.current.onTick = undefined;
       listeners.current.onEvents = undefined;
       stadium.stop();
+      if (welcome) clearTimeout(welcome);
       commentator.dispose();
       voice.current = null;
       rt.dispose();
