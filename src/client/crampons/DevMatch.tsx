@@ -29,6 +29,7 @@ function frameOf(m: Match, active: number): SceneFrame {
     dirX: p.dirX,
     dirZ: p.dirZ,
     cheer: scorerTeam !== null && p.team === scorerTeam,
+    sad: scorerTeam !== null && p.team !== scorerTeam,
     off: p.off,
   }));
   return {

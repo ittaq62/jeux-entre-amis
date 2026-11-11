@@ -31,6 +31,8 @@ export interface SceneFrame {
   aim: [number, number] | null;
   /** Le coéquipier qui recevrait la passe, ou -1 */
   receiver: number;
+  /** Ce que la caméra suit à la place du ballon (le buteur pendant la fête) */
+  focus?: [number, number] | null;
 }
 
 export type CameraMode = "tele" | "large" | "pres";
@@ -436,7 +438,7 @@ export class CramponsScene {
   }
 
   private moveCamera(dt: number, frame: SceneFrame) {
-    const b = frame.ball;
+    const b = frame.focus ? { x: frame.focus[0], z: frame.focus[1], vx: 0, vz: 0 } : frame.ball;
     const snap = frame.cuts !== this.lastCuts;
     this.lastCuts = frame.cuts;
     // On regarde un peu devant le ballon, là où il va
@@ -474,6 +476,16 @@ export class CramponsScene {
     this.stadium.dispose();
     this.crowd.dispose();
     this.fx.dispose();
+    // Ce qui reste (le ballon et sa texture, la mire, les flèches…) : tout est rendu à la carte graphique
+    this.scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+      for (const m of mats) {
+        (m as THREE.MeshStandardMaterial).map?.dispose();
+        m.dispose();
+      }
+    });
     this.renderer.dispose();
   }
 }

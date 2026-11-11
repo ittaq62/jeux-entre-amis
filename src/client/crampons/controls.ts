@@ -37,6 +37,14 @@ export interface PadState {
 export const FULL_CHARGE_MS = 800;
 
 const BUTTONS: GameButton[] = ["pass", "shoot", "through", "lob"];
+/** Les boutons de la souris, dans le champ `buttons` des événements, et leur nom dans les réglages */
+const MOUSE_BITS: [number, string][] = [
+  [1, "Mouse0"],
+  [2, "Mouse2"],
+  [4, "Mouse1"],
+  [8, "Mouse3"],
+  [16, "Mouse4"],
+];
 
 export class CramponsControls {
   private held = new Set<string>();
@@ -104,23 +112,43 @@ export class CramponsControls {
 
   private onContext = (e: Event) => e.preventDefault();
 
+  /**
+   * Les boutons de la souris d'après le champ `buttons` : un deuxième bouton enfoncé pendant le premier n'envoie pas
+   * de pointerdown, et seul le dernier relâché envoie un pointerup. `fresh` : on accepte de nouveaux appuis.
+   */
+  private syncMouse(buttons: number, fresh: boolean) {
+    for (const [bit, code] of MOUSE_BITS) {
+      const down = (buttons & bit) !== 0;
+      if (!down) this.held.delete(code);
+      else if (fresh && !this.held.has(code) && this.known.has(code) && !this.paused) {
+        this.scheme = "clavier";
+        this.held.add(code);
+        this.tapped.add(code);
+      }
+    }
+  }
+
+  private mouseHeld() {
+    return MOUSE_BITS.some(([, code]) => this.held.has(code));
+  }
+
   private onPointerDown = (e: PointerEvent) => {
     if (e.pointerType !== "mouse" || this.paused) return;
     this.cursor = { x: e.clientX, y: e.clientY };
-    const code = `Mouse${e.button}`;
-    if (!this.known.has(code)) return;
+    if (!this.known.has(`Mouse${e.button}`)) return;
     e.preventDefault();
-    this.scheme = "clavier";
-    this.held.add(code);
-    this.tapped.add(code);
+    this.syncMouse(e.buttons, true);
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    if (e.pointerType === "mouse") this.held.delete(`Mouse${e.button}`);
+    if (e.pointerType === "mouse") this.syncMouse(e.buttons, false);
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (e.pointerType === "mouse") this.cursor = { x: e.clientX, y: e.clientY };
+    if (e.pointerType !== "mouse") return;
+    this.cursor = { x: e.clientX, y: e.clientY };
+    // Un bouton de plus pendant qu'un autre est tenu sur le terrain, ou un bouton relâché hors de la fenêtre
+    this.syncMouse(e.buttons, this.mouseHeld());
   };
 
   private onDown = (e: KeyboardEvent) => {

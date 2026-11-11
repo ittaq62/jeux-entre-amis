@@ -19,7 +19,7 @@ import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../s
 import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
 import { CramponsScene, SCORER_CAM_DIST, type SceneFrame } from "./scene/CramponsScene.ts";
-import type { FootballerView } from "./scene/footballers.ts";
+import { KICK_CONTACT, KICK_HOLD, type FootballerView } from "./scene/footballers.ts";
 
 /** La distance d'un point à la ligne de vue, de la caméra (cx, cz) à ce qu'elle filme (tx, tz) */
 function distToSight(px: number, pz: number, cx: number, cz: number, tx: number, tz: number): number {
@@ -41,6 +41,8 @@ const MAX_DELAY = 0.32;
 const MAX_EXTRAPOLATE = 0.12;
 /** Ces boutons partent dès l'appui : seule la frappe se charge */
 const INSTANT: readonly GameButton[] = ["pass", "through", "lob"];
+/** Un geste de frappe mené par l'affichage commence juste avant que le pied n'arrive au ballon */
+const KICK_START = KICK_CONTACT - 0.02;
 
 /** Le ballon qu'on voit partir dès le clic, sans attendre la réponse du serveur */
 interface Ghost {
@@ -64,6 +66,8 @@ interface Snapshot {
 
 export interface HudState {
   clock: number;
+  /** Le joueur qu'il dirige, ou -1 */
+  active: number;
   activeName: string;
   stamina: number;
   charge: number;
@@ -92,6 +96,10 @@ export interface RuntimeOptions {
   onLocalKick: (kind: HumanActionKind) => void;
   /** Les premières images sont prêtes : on peut lever le rideau */
   onReady?: () => void;
+  /** Les événements du match, au moment où l'image les montre : le son de la frappe quand le pied touche le ballon */
+  onEvents: (events: MatchEvent[]) => void;
+  /** L'état du match tel que l'image le montre : le score change quand le ballon franchit la ligne à l'écran */
+  onShownView?: (view: CramponsView) => void;
 }
 
 export class MatchRuntime {
@@ -137,7 +145,32 @@ export class MatchRuntime {
   private rtt = 0.09;
   private lastEcho = 0;
   private predBlocked = false;
-  private localKickUntil = 0;
+  /**
+   * L'image a un temps de retard sur le serveur, pour être fluide : les événements et l'état du match attendent qu'elle
+   * les ait rattrapés. Sinon on entend la frappe avant de la voir, et la fête commence avant que le ballon n'entre.
+   */
+  private pendingEvents: { at: number; events: MatchEvent[] }[] = [];
+  private pendingViews: { at: number; view: CramponsView }[] = [];
+  /** L'état du match tel que l'image le montre */
+  private shown: CramponsView;
+  /** Le geste de frappe de chaque joueur, calé sur le départ du ballon à l'écran (performance.now()) */
+  private kickShow = new Map<number, number>();
+  /** Sa propre frappe, partie au clic : le serveur ne fera que la confirmer */
+  private localKick: { p: number; at: number } | null = null;
+  /** Ce que faisait son équipe quand on a enfoncé chaque bouton : si le ballon a changé de camp, le relâcher ne fait rien */
+  private pressCtx = new Map<GameButton, "ball" | "foe" | "free">();
+  /** Le joueur qu'on cesse d'anticiper : l'écart avec sa position du serveur s'efface en douceur */
+  private releaseFor = -1;
+  private releaseX = 0;
+  private releaseZ = 0;
+  private lastPredX = 0;
+  private lastPredZ = 0;
+  /** La dernière position du serveur de son joueur : un saut, c'est une remise en place */
+  private srvFor = -1;
+  private srvX = 0;
+  private srvZ = 0;
+  /** L'instant du but, en temps du match : le ralenti s'arrête juste après */
+  private goalSim = -Infinity;
   // Le ballon montré : il suit le pied en douceur, sans sauter d'un côté à l'autre du joueur
   private shownBall = { x: 0, y: 0.2, z: 0 };
   private lastOwner = -2;
@@ -184,6 +217,7 @@ export class MatchRuntime {
   ) {
     this.settings = settings;
     this.view = view;
+    this.shown = view;
     this.myIndex = view.humans.findIndex((h) => h.id === opts.seatId);
     this.scene = new CramponsScene(canvas, {
       count: view.players.length,
@@ -223,7 +257,43 @@ export class MatchRuntime {
   setView(view: CramponsView) {
     this.view = view;
     this.myIndex = view.humans.findIndex((h) => h.id === this.opts.seatId);
+    // On ne montre ce nouvel état que lorsque l'image en est au même instant
+    const at = this.snaps.at(-1)?.sim;
+    if (at === undefined || this.renderSim === null) this.applyShown(view);
+    else this.pendingViews.push({ at, view });
+  }
+
+  private applyShown(view: CramponsView) {
+    this.shown = view;
     this.scene.setScoreboard({ left: view.teams[0].short, right: view.teams[1].short, score: view.score });
+    this.opts.onShownView?.(view);
+  }
+
+  /** Libère ce que l'image vient de rattraper : les événements (sons, bandeaux, fête), puis l'état du match */
+  private releaseDue() {
+    const at = this.renderSim;
+    const latest = this.snaps.at(-1)?.sim ?? 0;
+    const nowMs = performance.now();
+    while (this.pendingEvents.length > 0) {
+      const due = this.pendingEvents[0]!;
+      if (at !== null && due.at > at && latest - due.at < 1) break;
+      this.pendingEvents.shift();
+      // Restés en attente trop longtemps (l'onglet était caché) : on ne rejoue pas les sons d'il y a longtemps
+      if (at !== null && at - due.at > 1.5) continue;
+      for (const e of due.events) {
+        if (e.k !== "kick") continue;
+        // Le pied part quand le ballon part ; sa propre frappe, on l'a déjà vue partir au clic
+        const k = this.localKick;
+        if (!k || k.p !== e.p || nowMs - k.at > 1500) this.kickShow.set(e.p, nowMs);
+      }
+      this.opts.onEvents(due.events);
+    }
+    while (this.pendingViews.length > 0) {
+      const due = this.pendingViews[0]!;
+      if (at !== null && due.at > at && latest - due.at < 1) break;
+      this.pendingViews.shift();
+      this.applyShown(due.view);
+    }
   }
 
   /** Le filet tremble, les confettis tombent, et la célébration commence */
@@ -241,7 +311,9 @@ export class MatchRuntime {
     this.goalX = v?.x ?? this.shownBall.x;
     this.goalZ = v?.z ?? this.shownBall.z;
     this.goalAngle = this.clearAngle(scorer);
-    this.replayEnd = (this.film.at(-1)?.t ?? 0) + 0.5;
+    // Le ralenti finit un peu après que le ballon a franchi la ligne : on le voit gonfler les filets
+    this.goalSim = this.renderSim ?? this.film.at(-1)?.t ?? 0;
+    this.replayEnd = this.goalSim + 0.8;
   }
 
   /** L'angle du gros plan où personne ne s'interpose entre la caméra et le buteur */
@@ -328,16 +400,44 @@ export class MatchRuntime {
     this.scene.mode = mode;
   }
 
-  /** Ce coup de pied du joueur a déjà été entendu au moment d'appuyer */
+  /** Ce coup de pied du joueur a déjà été entendu et vu au moment d'appuyer : le serveur ne fait que le confirmer */
   isLocalKick(p: number): boolean {
-    return p === this.myActive() && performance.now() < this.localKickUntil;
+    const k = this.localKick;
+    if (!k || k.p !== p || performance.now() - k.at > 1500) return false;
+    this.localKick = null;
+    return true;
   }
 
   private fit = () => {
     this.scene.resize(window.innerWidth, window.innerHeight);
   };
 
+  /** Un nouveau match commence sur le même terrain (la revanche) : son horloge repart de zéro, on oublie l'ancien */
+  private resetTimeline() {
+    this.snaps.length = 0;
+    this.minLag = null;
+    this.renderSim = null;
+    this.jitter = 0.02;
+    this.film.length = 0;
+    this.pendingEvents.length = 0;
+    for (const v of this.pendingViews.splice(0)) this.applyShown(v.view);
+    this.pred = null;
+    this.predFor = -1;
+    this.predShownFor = -1;
+    this.releaseFor = -1;
+    this.srvFor = -1;
+    this.ghost = null;
+    this.localKick = null;
+    this.kickShow.clear();
+    this.cinema = null;
+    this.scene.setShot(null);
+    this.goalSim = -Infinity;
+    this.intro = true;
+  }
+
   onTick(_now: number, tick: CramponsTick) {
+    const prev = this.snaps.at(-1);
+    if (prev && tick.s < prev.sim - 1) this.resetTimeline();
     const arrival = performance.now() / 1000;
     const lag = arrival - tick.s;
     // Le trajet le plus court observé sert de référence ; il remonte très lentement pour suivre le réseau
@@ -346,6 +446,7 @@ export class MatchRuntime {
     this.jitter = Math.max(late, this.jitter * 0.992);
     this.snaps.push({ sim: tick.s, p: tick.p, b: tick.b, o: tick.o });
     if (this.snaps.length > 40) this.snaps.shift();
+    if (tick.e.length > 0) this.pendingEvents.push({ at: tick.s, events: tick.e });
     this.latestClock = tick.c;
     this.active = tick.a;
     this.reconcile(tick);
@@ -376,6 +477,11 @@ export class MatchRuntime {
     const act = ACTS[tick.p[k + 4]!] ?? "none";
     const stam = tick.p[k + 5]! / 100;
     this.receiving = tick.r === a;
+    // Le serveur l'a replacé d'un coup (remise en jeu, engagement) : on le suit sans glisser
+    const jumped = this.srvFor === a && Math.hypot(x - this.srvX, z - this.srvZ) > 2;
+    this.srvFor = a;
+    this.srvX = x;
+    this.srvZ = z;
     if (!this.pred || this.predFor !== a) {
       const info = this.view.players[a]!;
       this.predFor = a;
@@ -416,7 +522,7 @@ export class MatchRuntime {
     }
     // Un geste qui commande le corps, ou une remise en jeu : c'est le serveur qui sait
     this.predBlocked = act !== "none" && act !== "kick";
-    if (this.predBlocked) {
+    if (this.predBlocked || jumped) {
       p.x = x;
       p.z = z;
       p.vx = 0;
@@ -564,11 +670,18 @@ export class MatchRuntime {
       return kind;
     };
 
-    // Pendant la présentation ou un ralenti, n'importe quel geste le passe
-    if (this.cinema && pad.pressed.length > 0) {
-      if (this.cinema !== "intro") this.opts.act("skip", 0, 0, 0);
-      this.cinema = null;
-      this.scene.setShot(null);
+    // Pendant la présentation ou un ralenti, n'importe quel geste le passe ; le buteur, on le voit d'abord un instant
+    // (on vient souvent de tirer : un clic de trop ne doit pas effacer la fête). Ce geste ne fait rien d'autre :
+    // passer la présentation ne donne pas le coup d'envoi.
+    const watching = this.cinema !== null;
+    if (watching) {
+      const skippable = this.cinema === "intro" ? this.cinemaT > 0.4 : this.cinema === "scorer" ? this.cinemaT > 1.8 : true;
+      if (skippable && pad.pressed.length > 0) {
+        if (this.cinema !== "intro") this.opts.act("skip", 0, 0, 0);
+        this.cinema = null;
+        this.scene.setShot(null);
+      }
+      for (const b of pad.pressed) this.firedOnPress.add(b);
     }
     if (pad.swap) this.opts.act("switch", 0, 0, 0);
     if (pad.skill && !taking) {
@@ -579,24 +692,38 @@ export class MatchRuntime {
       }
     }
     const fire = (button: GameButton, power: number) => {
+      const kicking = hasBall && !taking;
+      // Le ballon est déjà parti au clic d'avant, le serveur ne le sait pas encore : un deuxième clic ne refait rien partir
+      if (kicking && this.localKick && now - this.localKick.at < (this.rtt + 0.3) * 1000) return;
       const kind = kindFor(button);
       const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
       const to = kind === "pass" || kind === "through" || kind === "lob" ? this.receiver : -1;
       this.opts.act(kind, power, ax, az, to);
-      if (hasBall && !taking) {
-        this.localKickUntil = now + 300;
+      if (kicking) {
+        this.localKick = { p: active, at: now };
+        this.kickShow.set(active, now);
         this.opts.onLocalKick(kind);
         this.launchGhost(kind, power, to, ax, az, active);
       }
     };
-    // Une passe part à l'instant où on appuie : c'est ce qui fait la différence entre un jeu vif et un jeu lourd
+    const ctx = taking || hasBall ? "ball" : foeHasIt ? "foe" : "free";
+    // Une passe part à l'instant où on appuie : c'est ce qui fait la différence entre un jeu vif et un jeu lourd.
+    // Au penalty, toutes les touches tirent : elles se chargent comme la frappe.
+    const penalty = taking && this.view.restart?.kind === "penalty";
     for (const b of pad.pressed) {
-      if (!INSTANT.includes(b) || foeHasIt) continue;
+      if (watching) break;
+      this.pressCtx.set(b, ctx);
+      if (!INSTANT.includes(b) || foeHasIt || penalty) continue;
       fire(b, 0.5);
       this.firedOnPress.add(b);
     }
     for (const r of pad.released) {
-      if (this.firedOnPress.delete(r.button)) continue;
+      const was = this.pressCtx.get(r.button);
+      this.pressCtx.delete(r.button);
+      if (this.firedOnPress.delete(r.button) || watching) continue;
+      // Le ballon a changé de camp pendant l'appui : on ne passe pas un ballon qu'on vient de gagner en pressant,
+      // on ne part pas en glissade parce qu'on l'a perdu en armant sa frappe
+      if ((was === "foe" && ctx === "ball") || (was === "ball" && ctx === "foe")) continue;
       if (taking || hasBall) {
         fire(r.button, r.power);
         continue;
@@ -629,7 +756,9 @@ export class MatchRuntime {
 
     // Anticiper son joueur, au même rythme que le serveur
     const p = this.pred;
-    const frozen = taking || this.view.phase === "halftime" || this.view.phase === "over" || this.predBlocked || this.receiving;
+    // Pendant la fête d'un but aussi : le serveur n'écoute plus les touches, il emmène tout le monde célébrer
+    const phase = this.view.phase;
+    const frozen = taking || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || this.receiving;
     if (p && active === this.predFor) {
       this.acc += dt;
       while (this.acc >= DT) {
@@ -645,6 +774,16 @@ export class MatchRuntime {
           continue;
         }
         const l = Math.hypot(mx, mz);
+        const carrier = press && l < 0.1 && owner >= 0 ? this.frameViews[owner] : undefined;
+        if (carrier) {
+          // Sans direction, le presseur fonce sur le porteur, comme le fait le serveur
+          const dx = carrier.x - p.x;
+          const dz = carrier.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d > 0.6) steer(p, dx / d, dz / d, topSpeed(p, true, false));
+          else steer(p, 0, 0, 0);
+          continue;
+        }
         const speed = topSpeed(p, pad.sprint, hasBall) * Math.min(1, l * 1.25) * (now < this.burstUntilMs ? BURST_SPEED : 1);
         steer(p, l > 0.05 ? mx / l : 0, l > 0.05 ? mz / l : 0, speed);
       }
@@ -708,11 +847,18 @@ export class MatchRuntime {
     const f = clamp(span > 0 ? (at - a.sim) / span : 1, 0, maxF);
     const views = this.frameViews;
     const active = this.myActive();
-    const scorer = this.view.phase === "goal" ? (this.view.goals.at(-1)?.team ?? null) : null;
-    const local = performance.now() < this.localKickUntil;
+    const shown = this.shown;
+    const scorer = shown.phase === "goal" ? (shown.goals.at(-1)?.team ?? null) : null;
+    const nowMs = performance.now();
     const fade = Math.exp(-dt / 0.09);
     this.blendX *= fade;
     this.blendZ *= fade;
+    const ease = Math.exp(-dt / 0.16);
+    this.releaseX *= ease;
+    this.releaseZ *= ease;
+    const wasPredicted = this.predShownFor;
+    // Pendant la fête d'un but, le serveur n'écoute plus les touches : on montre son joueur tel qu'il est
+    const canPredict = this.view.phase !== "goal";
     let predicted = false;
     for (let i = 0; i < views.length; i++) {
       const k = i * TICK_STRIDE;
@@ -730,7 +876,9 @@ export class MatchRuntime {
       const act = ACTS[(f < 0.5 ? a : b).p[k + 4]!] ?? "none";
       v.act = act;
       v.cheer = scorer !== null && v.team === scorer;
-      v.off = this.view.cards.some((c) => c.i === i && c.off);
+      v.sad = scorer !== null && v.team !== scorer;
+      v.off = shown.cards.some((c) => c.i === i && c.off);
+      if (teleport && i === this.releaseFor) this.releaseX = this.releaseZ = 0;
       if (act === "dive" || act === "slide") {
         const dx = bx - ax;
         const dz = bz - az;
@@ -740,7 +888,8 @@ export class MatchRuntime {
           v.dirZ = dz / l;
         }
       }
-      if (i === active && this.pred && this.predFor === i && !this.receiving && (act === "none" || act === "kick")) {
+      let mine = false;
+      if (canPredict && i === active && this.pred && this.predFor === i && !this.receiving && (act === "none" || act === "kick")) {
         const [sx, sz, sh] = this.shownPred();
         // Le joueur passe du temps du serveur au temps présent : on efface la différence en douceur, jamais d'un coup
         if (this.predShownFor !== i) {
@@ -752,8 +901,33 @@ export class MatchRuntime {
         v.z = sz + this.blendZ;
         v.h = sh;
         v.v = Math.hypot(this.pred.vx, this.pred.vz);
-        if (local) v.act = "kick";
+        this.lastPredX = v.x;
+        this.lastPredZ = v.z;
         predicted = true;
+        mine = true;
+      } else if (i === wasPredicted) {
+        // On cesse de l'anticiper (passe donnée, autre joueur, geste du serveur) : il ne recule pas d'un coup jusqu'à
+        // sa position du serveur, l'écart s'efface en douceur
+        this.releaseFor = i;
+        this.releaseX = this.lastPredX - v.x;
+        this.releaseZ = this.lastPredZ - v.z;
+        if (Math.hypot(this.releaseX, this.releaseZ) > 4) this.releaseX = this.releaseZ = 0;
+      }
+      if (!mine && i === this.releaseFor) {
+        v.x += this.releaseX;
+        v.z += this.releaseZ;
+      }
+      // Le geste de frappe, calé sur le départ du ballon à l'écran
+      v.kickT = undefined;
+      const kickAt = this.kickShow.get(i);
+      if (kickAt !== undefined) {
+        const age = (nowMs - kickAt) / 1000;
+        // Jusqu'au bout de l'accompagnement du pied, puis le geste s'achève comme les autres
+        if (KICK_START + age > KICK_HOLD) this.kickShow.delete(i);
+        else if (v.act === "none" || v.act === "kick") {
+          v.act = "kick";
+          v.kickT = KICK_START + age;
+        }
       }
     }
     if (!predicted) this.predShownFor = -1;
@@ -793,7 +967,9 @@ export class MatchRuntime {
     if (g) {
       const age = (performance.now() - g.born) / 1000;
       if (b.o === g.kicker && !g.seen) {
-        if (age > 0.5) this.ghost = null;
+        // Le serveur ne l'a pas encore vu partir : on attend le temps d'un aller-retour et du retard de l'image
+        const late = Math.max(0, (this.snaps.at(-1)?.sim ?? at) - at);
+        if (age > this.rtt + late + 0.3) this.ghost = null;
         else {
           stepBall(g.ball, dt);
           ghosted = true;
@@ -846,11 +1022,14 @@ export class MatchRuntime {
       ball: { x: s.x, y: s.y, z: s.z, vx: ball.vx, vz: ball.vz },
       active,
       attackSide: (myTeam === 0) !== flip ? 1 : -1,
-      excitement: this.view.phase === "goal" ? 1 : this.view.phase === "over" ? 0.6 : 0.12,
-      cuts: this.view.cuts,
+      excitement: shown.phase === "goal" ? 1 : shown.phase === "over" ? 0.6 : 0.12,
+      // Le changement de plan tombe avec la remise en place, à l'image
+      cuts: shown.cuts,
       charge: this.charge,
       aim: this.cursorPoint,
       receiver: this.receiver,
+      // Pendant la fête, la caméra suit le buteur, pas le ballon resté dans les filets
+      focus: shown.phase === "goal" && views[this.goalScorer] ? [views[this.goalScorer]!.x, views[this.goalScorer]!.z] : null,
     };
   }
 
@@ -953,7 +1132,7 @@ export class MatchRuntime {
   private directCinema(dt: number, frame: SceneFrame): SceneFrame {
     if (this.intro) {
       this.intro = false;
-      if (this.view.phase === "kickoff" && this.view.period === 1 && this.view.score[0] + this.view.score[1] === 0) {
+      if (this.shown.phase === "kickoff" && this.shown.period === 1 && this.shown.score[0] + this.shown.score[1] === 0) {
         this.cinema = "intro";
         this.cinemaT = 0;
       }
@@ -961,7 +1140,7 @@ export class MatchRuntime {
     if (!this.cinema) return frame;
     // Le match a repris sans attendre la fin du film : on revient au direct
     if (this.cinema !== "intro") {
-      if (this.view.phase === "goal") {
+      if (this.shown.phase === "goal") {
         this.goalSeen = true;
       } else if (this.goalSeen || this.cinemaT > 1) {
         this.cinema = null;
@@ -971,7 +1150,7 @@ export class MatchRuntime {
     }
     this.cinemaT += dt;
     if (this.cinema === "intro") {
-      if (this.cinemaT > INTRO_S || this.view.phase === "play") {
+      if (this.cinemaT > INTRO_S || this.shown.phase === "play") {
         this.cinema = null;
         this.scene.setShot(null);
         return frame;
@@ -1012,9 +1191,15 @@ export class MatchRuntime {
     if (this.opts.seatId !== null && this.myIndex >= 0) this.handleButtons(dt);
     const frame = this.interpolated(dt);
     if (!frame) return;
+    this.releaseDue();
     if (import.meta.env.DEV) (window as unknown as { __crFrame: SceneFrame }).__crFrame = frame;
-    if (this.view.phase !== "goal") this.record(frame);
-    this.scene.render(dt, this.directCinema(dt, frame));
+    // On filme le jeu, et encore un instant après le but : le ralenti montre le ballon gonfler les filets
+    if (this.shown.phase !== "goal" || (this.renderSim ?? 0) < this.goalSim + 0.9) this.record(frame);
+    const shot = this.directCinema(dt, frame);
+    if (import.meta.env.DEV) (window as unknown as { __crShot: SceneFrame }).__crShot = shot;
+    // Au ralenti, les gestes ralentissent avec le film
+    this.scene.render(this.cinema === "replay" ? dt * 0.62 : dt, shot);
+    if (import.meta.env.DEV) (window as unknown as { __crCam: number[] }).__crCam = this.scene.camera.position.toArray();
     if (++this.shownFrames === 3) this.opts.onReady?.();
     if (now - this.hudAt > 90) {
       this.hudAt = now;
@@ -1028,6 +1213,7 @@ export class MatchRuntime {
       }
       this.opts.onHud({
         clock: this.latestClock,
+        active: a,
         activeName: a >= 0 ? (this.view.players[a]?.name ?? "") : "",
         stamina: a >= 0 && last ? last.p[a * TICK_STRIDE + 5]! / 100 : 1,
         charge: this.charge,

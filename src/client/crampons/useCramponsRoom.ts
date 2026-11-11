@@ -54,8 +54,8 @@ export function useCramponsRoom(code: string) {
                 onRoom(msg.room, msg.events);
                 break;
               case "tick":
+                // Ses événements arrivent avec lui : le match les rendra quand l'image en sera là
                 listeners.current.onTick?.(msg.now, msg);
-                if (msg.e.length > 0) listeners.current.onEvents?.(msg.e);
                 break;
               case "chat":
                 if (msg.reset) setChat(msg.messages);

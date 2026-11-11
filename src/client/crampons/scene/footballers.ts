@@ -30,7 +30,14 @@ export interface FootballerView {
   dirZ: number;
   /** Il vient de marquer ou il célèbre */
   cheer: boolean;
+  /** Son équipe vient d'encaisser un but */
+  sad?: boolean;
   off: boolean;
+  /**
+   * Quand c'est l'affichage qui mène la frappe (le ballon part à l'écran à cet instant) : où en est le geste, en secondes.
+   * Le pied touche le ballon à KICK_CONTACT.
+   */
+  kickT?: number;
 }
 
 // -------------------------------------------------------------------------
@@ -45,12 +52,16 @@ const SHOULDER_Y = 0.47;
 const SHOULDER_X = 0.3;
 const NECK_Y = 0.56;
 const HEAD_Y = 0.85;
-const THIGH = 0.42;
-const SHIN = 0.4;
+const THIGH = 0.37;
+const SHIN = 0.35;
+/** Du bas de la cheville au bas de la semelle */
+const SOLE_DEPTH = 0.116;
 const UPPER = 0.28;
 const FORE = 0.26;
 /** Le buste reste dans le geste un moment après le ballon */
-const KICK_HOLD = 0.3;
+export const KICK_HOLD = 0.3;
+/** L'instant du geste où le pied arrive au ballon */
+export const KICK_CONTACT = 0.13;
 
 const HEAD_W = 0.2;
 const HEAD_H = 0.238;
@@ -112,6 +123,8 @@ interface State {
   lastAct: Act;
   kickT: number;
   lastH: number;
+  /** De combien on remonte (ou descend) le corps pour qu'il touche la pelouse, lissé d'une image à l'autre */
+  ground: number;
   bank: number;
   hairStyle: number;
   hairSlot: number;
@@ -123,70 +136,96 @@ interface State {
 }
 
 function legsRunning(target: Pose, s: State, speed: number) {
-  const amp = 0.55 + speed * 0.72;
+  const amp = 0.38 + speed * 0.32;
   const sin = Math.sin(s.phase);
   const cos = Math.cos(s.phase);
-  target.legLa = sin * amp;
-  target.legRa = -sin * amp;
-  target.legLb = 0.3 + Math.max(0, -cos) * (0.75 + speed * 1.05);
-  target.legRb = 0.3 + Math.max(0, cos) * (0.75 + speed * 1.05);
-  target.lift = Math.abs(sin) * 0.06 * speed;
+  // La cuisse va et vient ; le genou se plie quand la jambe revient vers l'avant (le talon monte sous les fesses),
+  // il reste presque tendu quand le pied pousse sur la pelouse. Le corps descend et remonte de lui-même avec la foulée.
+  target.legLa = sin * amp + 0.06 * speed;
+  target.legRa = -sin * amp + 0.06 * speed;
+  target.legLb = 0.22 + Math.max(0, cos) * (0.55 + speed * 1.15);
+  target.legRb = 0.22 + Math.max(0, -cos) * (0.55 + speed * 1.15);
+  target.lift = 0;
 }
 
 function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number) {
   Object.assign(target, zeroPose());
   const speed = Math.min(1.2, f.v / 10);
   if (f.cheer) {
-    if (f.v > 1) legsRunning(target, s, speed);
-    const bob = Math.sin(t * 10 + s.hairSlot);
-    const jump = f.v > 1 ? 0 : Math.max(0, bob);
-    target.nod = -0.3;
+    const moving = f.v > 1;
+    if (moving) legsRunning(target, s, speed);
+    // Le rythme de chacun, pour que la fête ne soit pas réglée comme un ballet
+    const beat = t * 9 + s.hairSlot * 1.3;
+    const hop = moving ? 0 : Math.abs(Math.sin(beat * 0.5));
+    target.nod = -0.35;
     if (s.joy === 0) {
-      // Les bras au ciel, en sautant
-      target.armLa = 3.05;
-      target.armRa = 3.05;
-      target.armLs = 0.3;
-      target.armRs = 0.3;
-      target.armLb = 0.15;
-      target.armRb = 0.15;
-      target.lift = jump * 0.34;
-      if (f.v <= 1) {
-        target.legLb = 0.8;
-        target.legRb = 0.8;
+      // Les bras au ciel, en sautant, les genoux repliés en l'air
+      target.armLa = 3.0;
+      target.armRa = 3.0;
+      target.armLs = 0.35;
+      target.armRs = 0.35;
+      target.armLb = 0.2 + Math.sin(beat) * 0.25;
+      target.armRb = 0.2 - Math.sin(beat) * 0.25;
+      target.lift = hop * 0.42;
+      if (!moving) {
+        target.legLb = 0.3 + hop * 0.9;
+        target.legRb = 0.3 + hop * 0.9;
       }
     } else if (s.joy === 1) {
-      // L'avion
-      target.armLs = 1.55;
-      target.armRs = 1.55;
+      // L'avion, qui penche d'une aile sur l'autre
+      target.armLs = 1.5;
+      target.armRs = 1.5;
       target.armLb = 0.05;
       target.armRb = 0.05;
-      target.roll = Math.sin(t * 5) * 0.22;
-      target.lean = 0.28;
+      target.armLa = Math.sin(beat * 0.5) * 0.3;
+      target.armRa = -Math.sin(beat * 0.5) * 0.3;
+      target.roll = Math.sin(beat * 0.5) * 0.32;
+      target.lean = 0.3;
+      if (!moving) {
+        target.legLa = Math.sin(beat) * 0.3;
+        target.legRa = -Math.sin(beat) * 0.3;
+        target.lift = hop * 0.1;
+      }
     } else if (s.joy === 2) {
-      // Le poing levé
-      target.armRa = 3.0;
-      target.armRb = 1.05;
+      // Le poing levé, qui frappe l'air
+      target.armRa = 2.6 + Math.sin(beat * 1.4) * 0.45;
+      target.armRb = 0.9 + Math.sin(beat * 1.4) * 0.5;
       target.armRs = 0.2;
-      target.armLa = -0.2;
-      target.armLb = 1.5;
-      target.lift = jump * 0.18;
-      target.twist = Math.sin(t * 8) * 0.25;
+      target.armLa = -0.3;
+      target.armLb = 1.4;
+      target.armLs = 0.3;
+      target.lift = hop * 0.25;
+      target.twist = Math.sin(beat * 0.5) * 0.3;
     } else {
-      // Les deux poings, le buste en arrière
-      target.armLa = 1.5;
-      target.armRa = 1.5;
-      target.armLb = 1.9 + Math.sin(t * 12) * 0.5;
-      target.armRb = 1.9 - Math.sin(t * 12) * 0.5;
-      target.armLs = 0.55;
-      target.armRs = 0.55;
-      target.lean = -0.22;
-      target.lift = jump * 0.12;
+      // Les deux poings serrés, le buste en arrière : il crie sa joie
+      target.armLa = 1.4;
+      target.armRa = 1.4;
+      target.armLb = 1.9 + Math.sin(beat) * 0.6;
+      target.armRb = 1.9 - Math.sin(beat) * 0.6;
+      target.armLs = 0.6;
+      target.armRs = 0.6;
+      target.lean = -0.28;
+      target.nod = -0.5;
+      target.lift = hop * 0.18;
     }
+    return;
+  }
+  if (f.sad) {
+    // L'équipe qui vient d'encaisser : la tête basse, les mains sur les hanches
+    if (f.v > 1) legsRunning(target, s, speed * 0.6);
+    target.nod = 0.55;
+    target.lean = 0.12;
+    target.armLa = -0.15;
+    target.armRa = -0.15;
+    target.armLb = 2.2;
+    target.armRb = 2.2;
+    target.armLs = 0.55;
+    target.armRs = 0.55;
     return;
   }
   if (act === "kick") {
     const p = Math.min(1, s.kickT / 0.24);
-    const swing = p < 0.3 ? -1.25 * (p / 0.3) : -1.25 + 3.4 * ((p - 0.3) / 0.7);
+    const swing = p < 0.3 ? -1.25 * (p / 0.3) : -1.25 + 2.95 * ((p - 0.3) / 0.7);
     target.legRa = swing;
     target.legRb = p < 0.3 ? 1.5 : 0.1;
     target.legLa = -0.1;
@@ -213,17 +252,19 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     return;
   }
   if (act === "slide") {
-    target.pitch = -1.2;
-    target.drop = 0.76;
-    target.legRa = 1.55;
-    target.legRb = 0;
-    target.legLa = 1.0;
-    target.legLb = 1.4;
-    target.armLa = -0.7;
-    target.armRa = 0.6;
-    target.armLs = 1.1;
-    target.armRs = 1.1;
-    target.nod = 0.7;
+    // Assis sur l'herbe, le buste en arrière, la jambe d'attaque tendue au ras du sol, l'autre repliée dessous
+    target.pitch = -1.0;
+    target.drop = 0.55;
+    target.legRa = 0.48;
+    target.legRb = 0.05;
+    target.legLa = 0.2;
+    target.legLb = 1.65;
+    target.armLa = -1.1;
+    target.armLb = 0.2;
+    target.armLs = 0.9;
+    target.armRa = 0.5;
+    target.armRs = 0.7;
+    target.nod = 0.6;
     return;
   }
   if (act === "down") {
@@ -1103,6 +1144,7 @@ export class Footballers {
         actAge: 0,
         lastAct: "none",
         kickT: 9,
+        ground: 0,
         lastH: 0,
         bank: 0,
         hairStyle: style,
@@ -1313,12 +1355,16 @@ export class Footballers {
 
   update(dt: number, t: number, views: FootballerView[]) {
     const blend = 1 - Math.exp(-dt * 20);
-    const hip = new THREE.Vector3();
-    const knee = new THREE.Vector3();
-    const ankle = new THREE.Vector3();
-    const shoulder = new THREE.Vector3();
-    const elbow = new THREE.Vector3();
-    const wrist = new THREE.Vector3();
+    const pelvis = new THREE.Vector3();
+    const chest = new THREE.Vector3();
+    const two3 = () => [new THREE.Vector3(), new THREE.Vector3()];
+    const legTop = two3();
+    const knees = two3();
+    const ankles = two3();
+    const shoulders = two3();
+    const elbows = two3();
+    const wrists = two3();
+    const shinAngle = [0, 0];
     const root = new THREE.Matrix4();
     const rootQ = new THREE.Quaternion();
     const upperQ = new THREE.Quaternion();
@@ -1346,14 +1392,21 @@ export class Footballers {
         hideAll(i, s);
         continue;
       }
-      if (f.act !== s.lastAct) {
-        if (f.act === "kick") s.kickT = 0;
-        s.lastAct = f.act;
-        s.actAge = 0;
-      } else s.actAge += dt;
-      s.kickT += dt;
+      if (f.kickT !== undefined) {
+        // C'est l'affichage qui mène la frappe, calée sur le départ du ballon à l'écran
+        if (s.lastAct !== "kick") s.actAge = 0;
+        s.lastAct = "kick";
+        s.kickT = f.kickT;
+      } else {
+        if (f.act !== s.lastAct) {
+          if (f.act === "kick") s.kickT = 0;
+          s.lastAct = f.act;
+          s.actAge = 0;
+        } else s.actAge += dt;
+        s.kickT += dt;
+      }
       // Le geste continue après le départ du ballon : c'est l'accompagnement du pied
-      const act = f.act === "none" && s.kickT < KICK_HOLD ? "kick" : f.act;
+      const act = f.kickT !== undefined ? "kick" : f.act === "none" && s.kickT < KICK_HOLD ? "kick" : f.act;
       s.phase += (f.v / (1.55 + f.v * 0.07)) * Math.PI * dt;
       const turn = wrapAngle(f.h - s.lastH) / Math.max(dt, 0.001);
       s.lastH = f.h;
@@ -1368,30 +1421,83 @@ export class Footballers {
       for (const k of POSE_KEYS) s.pose[k] += (this.targetPose[k] - s.pose[k]) * Math.min(1, blend * fast);
       const p = s.pose;
 
+      // Le corps tourne vers sa course, penche (roulis positif : la tête part du côté gauche du joueur, vers le centre
+      // du virage ou vers le plongeon), et bascule en avant ou en arrière
       const yaw = Math.PI / 2 - f.h;
       rootQ.setFromAxisAngle(Y_AXIS, yaw);
-      tmpQ2.setFromAxisAngle(Z_AXIS, -p.roll);
+      tmpQ2.setFromAxisAngle(Z_AXIS, p.roll);
       rootQ.multiply(tmpQ2);
       tmpQ2.setFromAxisAngle(X_AXIS, p.pitch);
       rootQ.multiply(tmpQ2);
-      rootPos.set(f.x, Math.max(0, p.lift) * SCALE, f.z);
-      root.compose(rootPos, rootQ, scale);
 
-      hip.set(0, HIP_Y - p.drop, 0);
+      // Toutes les articulations d'abord, dans le repère du joueur : on pourra poser le corps sur la pelouse
+      pelvis.set(0, HIP_Y - p.drop, 0);
       upperQ.setFromAxisAngle(X_AXIS, p.lean);
       tmpQ2.setFromAxisAngle(Y_AXIS, p.twist);
       upperQ.multiply(tmpQ2);
-      this.setPart(this.torso, i, root, hip, upperQ);
-      this.setPart(this.shorts, i, root, hip, none);
-      tmpV2.set(0, NECK_Y, 0).applyQuaternion(upperQ).add(hip);
-      this.setPart(this.neck, i, root, tmpV2, upperQ);
-      tmpV2.set(0, NECK_Y, 0.008).applyQuaternion(upperQ).add(hip);
-      this.setPart(this.collar, i, root, tmpV2, upperQ);
+      chest
+        .set(0, SHOULDER_Y * 0.62, 0)
+        .applyQuaternion(upperQ)
+        .add(pelvis);
       // La tête regarde devant elle, et ne suit pas toute l'inclinaison du buste
       headQ.copy(upperQ);
       tmpQ2.setFromAxisAngle(X_AXIS, p.nod);
       headQ.multiply(tmpQ2);
-      headAt.set(0, HEAD_Y, 0.03).applyQuaternion(upperQ).add(hip);
+      headAt.set(0, HEAD_Y, 0.03).applyQuaternion(upperQ).add(pelvis);
+      for (let k = 0; k < 2; k++) {
+        const side = k === 0 ? -1 : 1;
+        const a = k === 0 ? p.legLa : p.legRa;
+        const b = k === 0 ? p.legLb : p.legRb;
+        const top = legTop[k]!;
+        top.set(side * HIP_X, HIP_Y - p.drop - 0.09, 0);
+        knees[k]!.set(top.x, top.y - Math.cos(a) * THIGH, top.z + Math.sin(a) * THIGH);
+        const c = a - b;
+        shinAngle[k] = c;
+        ankles[k]!.set(top.x, knees[k]!.y - Math.cos(c) * SHIN, knees[k]!.z + Math.sin(c) * SHIN);
+        const ga = k === 0 ? p.armLa : p.armRa;
+        const gb = k === 0 ? p.armLb : p.armRb;
+        const gs = k === 0 ? p.armLs : p.armRs;
+        const sh = shoulders[k]!.set(side * SHOULDER_X, SHOULDER_Y, 0)
+          .applyQuaternion(upperQ)
+          .add(pelvis);
+        const el = elbows[k]!.set(
+          sh.x + side * Math.sin(gs) * UPPER,
+          sh.y - Math.cos(ga) * Math.cos(gs) * UPPER,
+          sh.z + Math.sin(ga) * Math.cos(gs) * UPPER,
+        );
+        const fc = ga + gb;
+        wrists[k]!.set(el.x, el.y - Math.cos(fc) * FORE, el.z + Math.sin(fc) * FORE);
+      }
+      // Le point le plus bas du corps, une fois tourné
+      let low = Infinity;
+      const lowest = (v: THREE.Vector3, r: number) => {
+        tmpV.copy(v).applyQuaternion(rootQ);
+        if (tmpV.y - r < low) low = tmpV.y - r;
+      };
+      for (let k = 0; k < 2; k++) {
+        lowest(ankles[k]!, SOLE_DEPTH);
+        lowest(knees[k]!, 0.075);
+        lowest(elbows[k]!, 0.06);
+        lowest(wrists[k]!, 0.06);
+      }
+      lowest(pelvis, 0.17);
+      lowest(chest, 0.16);
+      lowest(headAt, 0.15);
+      // Au sol, il touche la pelouse sans s'y enfoncer ni flotter (une glissade, une chute, un tacle, la foulée) ;
+      // en l'air (un saut, une tête, un plongeon), on l'empêche seulement de passer dessous
+      const lift = Math.max(0, p.lift);
+      const air = clamp(lift / 0.1, 0, 1);
+      const settle = -low * (1 - air) + Math.max(0, -low) * air;
+      s.ground += (settle - s.ground) * Math.min(1, dt * 30);
+      rootPos.set(f.x, (lift + s.ground) * SCALE, f.z);
+      root.compose(rootPos, rootQ, scale);
+
+      this.setPart(this.torso, i, root, pelvis, upperQ);
+      this.setPart(this.shorts, i, root, pelvis, none);
+      tmpV2.set(0, NECK_Y, 0).applyQuaternion(upperQ).add(pelvis);
+      this.setPart(this.neck, i, root, tmpV2, upperQ);
+      tmpV2.set(0, NECK_Y, 0.008).applyQuaternion(upperQ).add(pelvis);
+      this.setPart(this.collar, i, root, tmpV2, upperQ);
       this.setPart(this.head, i, root, headAt, headQ);
       this.hair[s.hairStyle] && this.setPart(this.hair[s.hairStyle]!, s.hairSlot, root, headAt, headQ);
 
@@ -1405,43 +1511,28 @@ export class Footballers {
         this.setPart(this.ears, n, root, tmpV2, headQ);
 
         // La jambe
-        const a = k === 0 ? p.legLa : p.legRa;
-        const b = k === 0 ? p.legLb : p.legRb;
-        hip.set(side * HIP_X, HIP_Y - p.drop - 0.09, 0);
-        knee.set(hip.x, hip.y - Math.cos(a) * THIGH, hip.z + Math.sin(a) * THIGH);
-        const c = a - b;
-        ankle.set(knee.x, knee.y - Math.cos(c) * SHIN, knee.z + Math.sin(c) * SHIN);
-        this.setBone(this.thighs, n, root, hip, knee);
-        tmpV2.lerpVectors(hip, knee, 0.56);
-        this.setBone(this.shortLegs, n, root, hip, tmpV2);
-        this.setBone(this.shins, n, root, knee, ankle);
-        tmpV2.lerpVectors(knee, ankle, 0.1);
-        this.setBone(this.cuffs, n, root, tmpV2, knee, true);
-        tmpQ.setFromAxisAngle(X_AXIS, c * 0.55);
-        this.setPart(this.boots, n, root, ankle, tmpQ);
-        this.setPart(this.soles, n, root, ankle, tmpQ);
+        const top = legTop[k]!;
+        const kn = knees[k]!;
+        const an = ankles[k]!;
+        this.setBone(this.thighs, n, root, top, kn);
+        tmpV2.lerpVectors(top, kn, 0.56);
+        this.setBone(this.shortLegs, n, root, top, tmpV2);
+        this.setBone(this.shins, n, root, kn, an);
+        tmpV2.lerpVectors(kn, an, 0.1);
+        this.setBone(this.cuffs, n, root, tmpV2, kn, true);
+        tmpQ.setFromAxisAngle(X_AXIS, shinAngle[k]! * 0.55);
+        this.setPart(this.boots, n, root, an, tmpQ);
+        this.setPart(this.soles, n, root, an, tmpQ);
 
         // Le bras
-        const ga = k === 0 ? p.armLa : p.armRa;
-        const gb = k === 0 ? p.armLb : p.armRb;
-        const gs = k === 0 ? p.armLs : p.armRs;
-        hip.set(0, HIP_Y - p.drop, 0);
-        shoulder
-          .set(side * SHOULDER_X, SHOULDER_Y, 0)
-          .applyQuaternion(upperQ)
-          .add(hip);
-        elbow.set(
-          shoulder.x + side * Math.sin(gs) * UPPER,
-          shoulder.y - Math.cos(ga) * Math.cos(gs) * UPPER,
-          shoulder.z + Math.sin(ga) * Math.cos(gs) * UPPER,
-        );
-        const fc = ga + gb;
-        wrist.set(elbow.x, elbow.y - Math.cos(fc) * FORE, elbow.z + Math.sin(fc) * FORE);
-        this.setBone(this.upperArms, n, root, shoulder, elbow);
-        this.setBone(this.foreArms, n, root, elbow, wrist);
+        const sh = shoulders[k]!;
+        const el = elbows[k]!;
+        const wr = wrists[k]!;
+        this.setBone(this.upperArms, n, root, sh, el);
+        this.setBone(this.foreArms, n, root, el, wr);
         // La main prolonge l'avant-bras : on la reconstruit dans son axe
-        tmpV2.copy(wrist).sub(elbow).normalize().multiplyScalar(0.1).add(wrist);
-        this.setBone(this.hands, n, root, wrist, tmpV2, true);
+        tmpV2.copy(wr).sub(el).normalize().multiplyScalar(0.1).add(wr);
+        this.setBone(this.hands, n, root, wr, tmpV2, true);
       }
       if (this.shadows) {
         const flat = p.pitch !== 0 || p.roll !== 0 ? 1.3 : 1;

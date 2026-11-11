@@ -460,10 +460,14 @@ export function buildStadium(
   const boardGeo: THREE.BufferGeometry[] = [];
   const longBoard = HALF_L * 2 + 8;
   boardGeo.push(box(longBoard, 1.1, 0.25, 0, 0.55, -(HALF_W + 4.5)));
-  boardGeo.push(box(longBoard, 1.1, 0.25, 0, 0.55, HALF_W + 4.5));
   const boards = new THREE.Mesh(mergeGeometries(boardGeo), adMat);
   root.add(boards);
   for (const g of boardGeo) g.dispose();
+  // Les panneaux du premier plan, comme la tribune du même côté, ne servent que quand la caméra regarde dans l'axe :
+  // à la télévision, ils barreraient le bas de l'image
+  const nearBoards = new THREE.Mesh(new THREE.BoxGeometry(longBoard, 1.1, 0.25), adMat);
+  nearBoards.position.set(0, 0.55, HALF_W + 4.5);
+  root.add(nearBoards);
   for (const sz of [-1, 1]) {
     for (const end of [-1, 1]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(HALF_W - 6, 1.1, 0.25), adMat);
@@ -647,6 +651,7 @@ export function buildStadium(
     },
     showNearStand(on) {
       near.group.visible = on;
+      nearBoards.visible = on;
       nearCrowd.mesh.visible = on;
     },
     shakeNet(end) {

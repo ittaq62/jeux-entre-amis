@@ -197,7 +197,7 @@ export class Effects {
     }
     if (this.confetti.instanceColor) this.confetti.instanceColor.needsUpdate = true;
     this.confetti.visible = true;
-    this.confettiOn = 6.5;
+    this.confettiOn = 7.5;
     this.flashFor = 3.2;
   }
 
@@ -237,6 +237,8 @@ export class Effects {
     if (this.confettiOn > 0) {
       this.confettiOn -= dt;
       const pos = new THREE.Vector3();
+      // Sur la fin, les confettis rapetissent jusqu'à disparaître, au lieu de s'éteindre d'un coup en plein vol
+      const fade = Math.min(1, this.confettiOn / 1.6);
       for (let i = 0; i < this.bits.length; i++) {
         const b = this.bits[i]!;
         b.a += dt * 7;
@@ -245,7 +247,7 @@ export class Effects {
         if (b.p.y < 0.05) b.p.y = 0.05;
         pos.copy(b.p);
         this.quat.setFromEuler(new THREE.Euler(b.a, b.a * 0.7, b.a * 0.4));
-        this.scale.setScalar(b.s);
+        this.scale.setScalar(Math.max(0.0001, b.s * fade));
         this.matrix.compose(pos, this.quat, this.scale);
         this.confetti.setMatrixAt(i, this.matrix);
       }

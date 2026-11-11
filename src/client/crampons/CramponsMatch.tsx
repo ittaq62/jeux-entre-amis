@@ -135,11 +135,15 @@ export function CramponsMatch({
   onShowLobby: () => void;
 }) {
   const view = room.crampons!;
+  // L'état du match tel que l'image le montre : le score change quand le ballon entre, pas un instant avant
+  const [shownView, setShown] = useState(view);
+  const shown = shownView.teams[0].name === view.teams[0].name ? shownView : view;
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtime = useRef<MatchRuntime | null>(null);
   const reduced = usePrefs((s) => s.reducedEffects);
   const [hud, setHud] = useState<HudState>({
     clock: 0,
+    active: -1,
     activeName: "",
     stamina: 1,
     charge: 0,
@@ -154,6 +158,8 @@ export function CramponsMatch({
   });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [camera, setCamera] = useState<"tele" | "large" | "pres">("tele");
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
   const seq = useRef(0);
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -164,6 +170,7 @@ export function CramponsMatch({
   const [mods, setMods] = useState({ finesse: false, chip: false });
   const [settings, setSettings] = useState<CramponsSettings>(() => loadSettings());
   const [panel, setPanel] = useState(false);
+  const pausedRef = useRef(false);
   // La présentation est montrée dès la première image : l'affichage du match n'apparaît qu'après
   const [cinema, setCinema] = useState<"intro" | "scorer" | "replay" | null>(() =>
     view.phase === "kickoff" && view.period === 1 && view.score[0] + view.score[1] === 0 ? "intro" : null,
@@ -173,6 +180,7 @@ export function CramponsMatch({
   settingsRef.current = settings;
   // L'aide s'ouvre d'elle-même au tout premier match
   const [help, setHelp] = useState(() => seatId !== null && !localStorage.getItem(HOWTO_KEY));
+  pausedRef.current = panel || help;
   const closeHelp = () => {
     localStorage.setItem(HOWTO_KEY, "1");
     setHelp(false);
@@ -195,6 +203,40 @@ export function CramponsMatch({
       setTimeout(() => setBanner((cur) => (cur?.id === id ? null : cur)), ms);
     };
     const nameOf = (i: number) => viewRef.current.players[i]?.name ?? "";
+    const onEvents = (events: MatchEvent[]) => {
+      for (const e of events) {
+        if (e.k === "kick" && runtime.current?.isLocalKick(e.p)) continue;
+        if (e.k === "kick")
+          play(e.kind === "shot" || e.kind === "finesse" || e.kind === "clear" ? "footShot" : "footKick", {
+            rate: 0.94 + Math.random() * 0.14,
+          });
+        else if (e.k === "whistle") play(e.why === "end" || e.why === "half" ? "footWhistleEnd" : "footWhistle");
+        else if (e.k === "woodwork") {
+          play("footPost");
+          play("footOoh", { delay: 120 });
+        } else if (e.k === "net") play("footNet");
+        else if (e.k === "save" && !e.caught) play("footOoh");
+        if (e.k === "shot") setMods({ finesse: false, chip: false });
+        if (e.k === "kick" && (e.kind === "shot" || e.kind === "clear")) runtime.current?.dust(e.p, e.power);
+        if (e.k === "shot" && e.power > 0.45) runtime.current?.punch(e.p, e.power);
+        if (e.k === "skill") {
+          runtime.current?.dust(e.p, 0.5);
+          play("footKick", { rate: 1.5 });
+        }
+        if (e.k === "tackle") runtime.current?.dust(e.p, 0.9);
+        if (e.k === "goal") {
+          play("footCheer");
+          runtime.current?.goal(e.scorer, e.team);
+          show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
+        } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
+        else if (e.k === "foul") show({ tone: "info", title: e.penalty ? "Penalty !" : "Faute", sub: nameOf(e.p) }, 1700);
+        else if (e.k === "card") show({ tone: "card", title: e.red ? "Carton rouge" : "Carton jaune", sub: nameOf(e.p) }, 2300);
+        else if (e.k === "save" && !e.caught) show({ tone: "info", title: "Quel arrêt !", sub: nameOf(e.p) }, 1300);
+        else if (e.k === "woodwork") show({ tone: "info", title: e.bar ? "Sur la barre !" : "Sur le poteau !" }, 1300);
+        else if (e.k === "half" && e.period === 1) show({ tone: "info", title: "Mi-temps" }, 2500);
+        else if (e.k === "penalty") show({ tone: e.scored ? "goal" : "info", title: e.scored ? "Marqué !" : "Raté !" }, 1200);
+      }
+    };
     const rt = new MatchRuntime(
       canvas.current!,
       viewRef.current,
@@ -209,48 +251,20 @@ export function CramponsMatch({
         },
         onLocalKick: (kind) =>
           play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
+        onEvents,
+        onShownView: setShown,
       },
       reduced || window.matchMedia("(pointer: coarse)").matches,
       settingsRef.current,
     );
     runtime.current = rt;
+    // Un match reconstruit garde la caméra choisie, et reste en pause si un panneau est ouvert
+    rt.setCamera(cameraRef.current);
+    rt.setPaused(pausedRef.current);
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
+    listeners.current.onEvents = onEvents;
     preloadSounds(CRAMPONS_SOUNDS);
     startLoop("footCrowd");
-    listeners.current.onEvents = (events: MatchEvent[]) => {
-      for (const e of events) {
-        if (e.k === "kick" && rt.isLocalKick(e.p)) continue;
-        if (e.k === "kick")
-          play(e.kind === "shot" || e.kind === "finesse" || e.kind === "clear" ? "footShot" : "footKick", {
-            rate: 0.94 + Math.random() * 0.14,
-          });
-        else if (e.k === "whistle") play(e.why === "end" || e.why === "half" ? "footWhistleEnd" : "footWhistle");
-        else if (e.k === "woodwork") {
-          play("footPost");
-          play("footOoh", { delay: 120 });
-        } else if (e.k === "net") play("footNet");
-        else if (e.k === "save" && !e.caught) play("footOoh");
-        if (e.k === "shot") setMods({ finesse: false, chip: false });
-        if (e.k === "kick" && (e.kind === "shot" || e.kind === "clear")) rt.dust(e.p, e.power);
-        if (e.k === "shot" && e.power > 0.45) rt.punch(e.p, e.power);
-        if (e.k === "skill") {
-          rt.dust(e.p, 0.5);
-          play("footKick", { rate: 1.5 });
-        }
-        if (e.k === "tackle") rt.dust(e.p, 0.9);
-        if (e.k === "goal") {
-          play("footCheer");
-          rt.goal(e.scorer, e.team);
-          show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
-        } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
-        else if (e.k === "foul") show({ tone: "info", title: e.penalty ? "Penalty !" : "Faute", sub: nameOf(e.p) }, 1700);
-        else if (e.k === "card") show({ tone: "card", title: e.red ? "Carton rouge" : "Carton jaune", sub: nameOf(e.p) }, 2300);
-        else if (e.k === "save" && !e.caught) show({ tone: "info", title: "Quel arrêt !", sub: nameOf(e.p) }, 1300);
-        else if (e.k === "woodwork") show({ tone: "info", title: e.bar ? "Sur la barre !" : "Sur le poteau !" }, 1300);
-        else if (e.k === "half" && e.period === 1) show({ tone: "info", title: "Mi-temps" }, 2500);
-        else if (e.k === "penalty") show({ tone: e.scored ? "goal" : "info", title: e.scored ? "Marqué !" : "Raté !" }, 1200);
-      }
-    };
     return () => {
       listeners.current.onTick = undefined;
       listeners.current.onEvents = undefined;
@@ -279,13 +293,13 @@ export function CramponsMatch({
     runtime.current?.setPaused(panel || help);
   }, [panel, help]);
 
-  const score = view.score;
+  const score = shown.score;
   const restart = view.restart;
-  const taking = restart?.ready && view.phase !== "play" && hud.activeName !== "" && view.players[restart.taker]?.name === hud.activeName;
+  const taking = restart?.ready && view.phase !== "play" && hud.active >= 0 && restart.taker === hud.active;
   const left = view.teams[0];
   const right = view.teams[1];
-  const shootout = view.shootout;
-  const over = view.phase === "over" && room.status === "finished";
+  const shootout = shown.shootout;
+  const over = shown.phase === "over" && room.status === "finished";
 
   const key = mainKey(hud.scheme, settings.bindings, restart?.kind === "penalty");
   return (
