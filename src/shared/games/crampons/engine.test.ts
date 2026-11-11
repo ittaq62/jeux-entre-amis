@@ -549,6 +549,43 @@ describe("les remises en jeu", () => {
   });
 });
 
+describe("le gardien", () => {
+  /** Un humain seul face au gardien, à `dist` mètres du but, frappe en visant `az` (1 : le coin) ; rend vrai s'il marque */
+  function duel(seed: number, dist: number, az: number): boolean {
+    const m = createMatch(settings({ offside: false, fouls: false }), teams, [{ id: "moi", team: 0 }], seed);
+    toPlay(m);
+    const dir = attackDir(m, 0);
+    const me = m.players[m.humans[0]!.active]!;
+    for (const p of m.players) {
+      if (p === me || (p.team === 1 && p.role === "GK")) continue;
+      p.x = -dir * 30 + (p.i % 5);
+      p.z = (p.i % 7) * 4 - 12;
+      p.vx = p.vz = 0;
+    }
+    me.x = dir * (HALF_L - dist);
+    me.z = 0;
+    me.h = dir > 0 ? 0 : Math.PI;
+    m.owner = me.i;
+    m.lastTouch = me.i;
+    for (let i = 0; i < 45; i++) stepMatch(m);
+    pushAction(m, "moi", "shot", 0.7, 0, az);
+    return play(m, (e) => e.some((x) => x.k === "goal"), 150).length > 0;
+  }
+
+  it("une frappe placée dans le coin a ses chances ; une frappe sur le gardien est arrêtée", () => {
+    let corner = 0;
+    let central = 0;
+    const N = 24;
+    for (let s = 1; s <= N; s++) {
+      if (duel(s * 7 + 1, 16, s % 2 ? 1 : -1)) corner++;
+      if (duel(s * 7 + 1, 16, s % 2 ? 0.3 : -0.3)) central++;
+    }
+    expect(corner / N).toBeGreaterThan(0.25);
+    expect(corner / N).toBeLessThan(0.85);
+    expect(central / N).toBeLessThan(0.3);
+  });
+});
+
 describe("la fête d'un but", () => {
   it("le ralenti ne se passe que lorsque tous les humains le demandent", () => {
     const m = createMatch(

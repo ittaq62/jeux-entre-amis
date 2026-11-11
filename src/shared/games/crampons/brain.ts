@@ -7,10 +7,10 @@ import { clamp, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch } from "
 
 /** Ce qui change d'un niveau à l'autre : le temps de réaction, l'œil pour la passe, le pressing */
 const LEVELS = [
-  { think: 0.5, press: 0.55, vision: 0.55, keeper: 0.3, tackle: 0.7, speed: 0.92, react: 0.5, read: 0.65 },
-  { think: 0.34, press: 0.75, vision: 0.75, keeper: 0.24, tackle: 0.95, speed: 0.97, react: 0.4, read: 0.8 },
-  { think: 0.22, press: 0.9, vision: 0.9, keeper: 0.18, tackle: 1.15, speed: 1, react: 0.32, read: 0.95 },
-  { think: 0.14, press: 1, vision: 1, keeper: 0.13, tackle: 1.4, speed: 1.03, react: 0.24, read: 1.1 },
+  { think: 0.5, press: 0.55, vision: 0.55, keeper: 0.3, tackle: 0.7, speed: 0.92, react: 0.5, read: 0.65, keeperErr: 1.6 },
+  { think: 0.34, press: 0.75, vision: 0.75, keeper: 0.24, tackle: 0.95, speed: 0.97, react: 0.4, read: 0.8, keeperErr: 1.3 },
+  { think: 0.22, press: 0.9, vision: 0.9, keeper: 0.18, tackle: 1.15, speed: 1, react: 0.32, read: 0.95, keeperErr: 1.0 },
+  { think: 0.14, press: 1, vision: 1, keeper: 0.13, tackle: 1.4, speed: 1.03, react: 0.24, read: 1.1, keeperErr: 0.8 },
 ];
 
 export const levelOf = (m: Match) => LEVELS[clamp(m.settings.level, 0, 3)]!;
@@ -107,6 +107,59 @@ function nearestOf(m: Match, team: Team, x: number, z: number, skip: (p: Player)
     .map((e) => e.p);
 }
 
+/**
+ * Une frappe qui vient vers son but : un instant après le départ, il la lit (pas au centimètre), s'y porte à petits pas
+ * et plonge si elle s'écarte de lui. Appelé à chaque pas du match, pas seulement quand l'équipe réfléchit : sinon sa
+ * réaction dépendrait du hasard du calendrier. Rend vrai s'il s'en occupe.
+ */
+export function keeperReadsShot(m: Match, p: Player): boolean {
+  const own = -attackDir(m, p.team);
+  const line = own * HALF_L;
+  const b = m.ball;
+  // Au penalty, il a déjà choisi son côté (voir spotKeeper)
+  const sk = m.spotKick;
+  if (sk && sk.gk === p.i && m.t - sk.at < 1.4) return true;
+  if (m.owner < 0 && b.vx * own > 4) {
+    const t = (line - b.x) / b.vx;
+    if (t > 0 && t < 2) {
+      const zAt = b.z + b.vz * t;
+      const yAt = b.y + b.vy * t - 5.5 * t * t;
+      if (Math.abs(zAt) < GOAL_HALF + 0.9 && yAt < GOAL_H + 0.8) {
+        const react = tuning(m, p.team).keeper * (1.4 - p.stats.gk / 100);
+        if (m.t - m.shotAt >= react) {
+          // Il lit la frappe, mais pas au centimètre : plus elle est forte, plus elle vient de loin (elle flotte, plonge,
+          // s'enroule) et plus lui est moyen, plus il se trompe
+          if (m.keeperRead?.shotAt !== m.shotAt) {
+            const speed = Math.hypot(b.vx, b.vz);
+            const spread = (0.3 + speed * 0.03 + (m.shotDist ?? 15) * 0.025) * (1.25 - p.stats.gk / 100) * tuning(m, p.team).keeperErr;
+            m.keeperRead = { shotAt: m.shotAt, err: (random(m) * 2 - 1) * spread };
+          }
+          const zSeen = zAt + m.keeperRead.err;
+          const lateral = zSeen - p.z;
+          // Il reste à sa hauteur (sorti pour fermer l'angle, il ne recule pas) et se décale
+          p.tx = clamp(p.x, -HALF_L + 0.4, HALF_L - 0.4);
+          p.tz = clamp(zSeen, -GOAL_HALF - 0.5, GOAL_HALF + 0.5);
+          // Face à une frappe, il se décale à petits pas : on ne traverse pas son but au sprint
+          p.sprint = false;
+          if (p.act === "none" && Math.abs(lateral) > 0.75 && t < 0.62) {
+            p.act = "dive";
+            p.actT = 0.6;
+            const s = Math.sign(lateral);
+            p.dirX = 0;
+            p.dirZ = s;
+            // Juste assez loin pour que le ballon arrive dans ses bras : plonger trop loin, c'est le laisser passer derrière soi
+            const T = Math.min(t, 0.6);
+            const full = (9.17 * (0.36 - (0.6 - T) * (0.6 - T))) / 2 + 0.8 * T;
+            p.diveK = clamp((Math.abs(lateral) - 0.35) / Math.max(full, 0.1), 0.3, 1);
+          }
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 /** Le gardien : sur la ligne de tir, il avance selon le danger, plonge sur les frappes, sort sur les ballons qu'il atteindra le premier */
 function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
   const dir = attackDir(m, p.team);
@@ -125,31 +178,7 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
     }
     return;
   }
-  // Une frappe qui vient vers le but
-  if (m.owner < 0 && b.vx * own > 4) {
-    const t = (line - b.x) / b.vx;
-    if (t > 0 && t < 2) {
-      const zAt = b.z + b.vz * t;
-      const yAt = b.y + b.vy * t - 5.5 * t * t;
-      if (Math.abs(zAt) < GOAL_HALF + 0.9 && yAt < GOAL_H + 0.8) {
-        const react = tuning(m, p.team).keeper * (1.4 - p.stats.gk / 100);
-        if (m.t - m.shotAt >= react) {
-          const lateral = zAt - p.z;
-          p.tx = line - own * 0.7;
-          p.tz = clamp(zAt, -GOAL_HALF - 0.5, GOAL_HALF + 0.5);
-          p.sprint = true;
-          if (p.act === "none" && Math.abs(lateral) > 0.9 && t < 0.62) {
-            p.act = "dive";
-            p.actT = 0.6;
-            const s = Math.sign(lateral);
-            p.dirX = 0;
-            p.dirZ = s;
-          }
-          return;
-        }
-      }
-    }
-  }
+  if (keeperReadsShot(m, p)) return;
   // Une balle en profondeur qu'il atteint le premier
   if (m.owner < 0 && path && inBox(b.x + b.vx * 0.5, b.z + b.vz * 0.5, own)) {
     const mine = intercept(p, path, 0.1);
@@ -168,9 +197,12 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
       }
     }
   }
-  // Sa place : entre le ballon et le centre du but, plus avancé si le ballon est loin ou si un attaquant arrive seul
+  // Sa place : entre le ballon et le centre du but, plus avancé si le ballon est loin. Un attaquant arrive balle au
+  // pied : il sort à sa rencontre pour lui fermer l'angle
   const dBall = Math.hypot(b.x - line, b.z);
-  const out = clamp(dBall * 0.18, 1.2, 7);
+  const carrier = m.owner >= 0 ? m.players[m.owner]! : null;
+  const threat = carrier !== null && carrier.team !== p.team && dBall < 22;
+  const out = threat ? clamp(dBall * 0.15, 1.3, 3.2) : clamp(dBall * 0.18, 1.2, 7);
   const gx = line + (b.x - line) * (out / Math.max(dBall, 1));
   const gz = (b.z / Math.max(dBall, 1)) * out * 1.25;
   p.tx = gx;
@@ -384,11 +416,12 @@ function shotValue(m: Match, p: Player): number {
   const dir = attackDir(m, p.team);
   const gx = dir * HALF_L;
   const d = Math.hypot(gx - p.x, p.z);
-  if (d > 30) return 0;
+  if (d > 34) return 0;
   const toA = Math.atan2(GOAL_HALF - p.z, gx - p.x);
   const toB = Math.atan2(-GOAL_HALF - p.z, gx - p.x);
   const angle = Math.abs(toA - toB);
-  let value = Math.pow(1 - d / 30, 1.3) * clamp(angle / 0.42, 0.1, 1.4) * 1.4;
+  // On ose la frappe de loin quand la voie est libre : le gardien n'arrête pas tout
+  let value = Math.pow(1 - d / 34, 0.9) * clamp(angle / 0.42, 0.1, 1.4) * 1.4;
   value *= 0.6 + (p.stats.sho / 100) * 0.5;
   value *= 1 - laneRisk(m, p, gx, 0, 32) * 0.8;
   return value;
@@ -435,7 +468,7 @@ export function thinkCarrier(m: Match, p: Player) {
 
   // Frapper
   const shot = shotValue(m, p);
-  if (shot > 0.5) {
+  if (shot > 0.42) {
     options.push({
       score: shot * 1.25 + (inBox(p.x, p.z, dir) ? 0.28 : 0),
       run: () => {

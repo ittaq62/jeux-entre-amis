@@ -4,6 +4,19 @@ import { BALL_R, cloneBall, GRAVITY, groundSpeedFor, ROLL_DECEL, rollTime, stepB
 import { attackDir, opponent, random, type KickKind, type KickOrder, type Match, type MatchEvent, type Player } from "./model.ts";
 import { clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, lerp, onPitch } from "./pitch.ts";
 
+/**
+ * La précision des tireurs de l'ordinateur, selon le niveau choisi (un humain vise lui-même, et ses coéquipiers jouent
+ * au niveau « confirmé ») : un débutant tire plus souvent à côté ou sur le gardien
+ */
+const AI_AIM = [1.9, 1.6, 1.35, 1.15];
+/** Jusqu'où l'ordinateur ose viser loin du gardien (fraction du demi-but), selon le niveau : un débutant tire sur lui */
+const AI_WIDTH: [number, number][] = [
+  [0.15, 0.45],
+  [0.25, 0.55],
+  [0.35, 0.7],
+  [0.45, 0.85],
+];
+
 /** Le temps que le pied arrive au ballon, selon le geste */
 const WINDUP: Record<KickKind, number> = {
   pass: 0.03,
@@ -323,9 +336,15 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
   const d = Math.hypot(gx - b.x, b.z);
   const sho = p.stats.sho / 100;
   // Vers quel côté du but : l'humain l'indique au stick, sinon on prend le poteau opposé
-  const stick = Math.abs(o.az) > 0.12 ? o.az : -Math.sign(p.z || 1) * (0.62 + random(m) * 0.25);
+  const ours = m.humans.some((h) => h.team === p.team);
+  const level = ours ? 2 : clamp(m.settings.level, 0, 3);
+  const [w0, w1] = p.human !== null ? [0.5, 0.85] : (AI_WIDTH[level] ?? [0.35, 0.7]);
+  const stick = Math.abs(o.az) > 0.12 ? o.az : -Math.sign(p.z || 1) * (w0 + random(m) * (w1 - w0));
   const aimZ = o.pz ?? clamp(stick, -1, 1) * GOAL_HALF * 0.9;
-  const clumsy = clumsiness(m, p, gx - p.x, aimZ - p.z);
+  // Un humain qui vise un coin y va : il est plus précis que l'ordinateur de son niveau
+  const aim = p.human !== null ? 0.75 : (AI_AIM[level] ?? 1.35);
+  const clumsy = clumsiness(m, p, gx - p.x, aimZ - p.z) * aim;
+  m.shotDist = d;
 
   if (o.kind === "chip") {
     const T = clamp(0.72 + d * 0.026, 0.78, 1.5);

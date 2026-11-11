@@ -1,7 +1,7 @@
 // Le déroulement d'un match : courir, toucher le ballon, tacler, siffler, reprendre le jeu, marquer, changer de côté.
 
 import { BALL_R, makeBall, rollingAt, stepBall } from "./ball.ts";
-import { levelOf, steerCarrier, thinkCarrier, thinkTeam } from "./brain.ts";
+import { keeperReadsShot, levelOf, steerCarrier, thinkCarrier, thinkTeam } from "./brain.ts";
 import { makeSquad, type TeamSetup } from "./clubs.ts";
 import { openness, orderKick, pickReceiver, pressureOn, releaseKick } from "./kicks.ts";
 import {
@@ -29,6 +29,8 @@ import {
 import { BOX_HALF, BOX_L, CIRCLE_R, clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch, SIX_L, SPOT_L } from "./pitch.ts";
 
 const REACH = 0.95;
+/** La vitesse d'un gardien qui se décale face à une frappe */
+const KEEPER_SHUFFLE = 3.3;
 /** Celui à qui la passe est destinée la contrôle d'un peu plus loin : elle doit arriver dans ses pieds */
 const RECEIVE_REACH = 1.45;
 const HEADER_REACH = 1.05;
@@ -721,8 +723,8 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       continue;
     }
     if (p.act === "dive") {
-      // Au penalty, il s'est jeté au jugé : plus ou moins loin
-      const v = (9.5 * (p.actT / 0.6) + 1.5) * (m.spotKick?.gk === p.i ? m.spotKick.dive : 1);
+      // Au penalty, il s'est jeté au jugé, plus ou moins loin ; dans le jeu, un plongeon couvre deux mètres et demi
+      const v = m.spotKick?.gk === p.i ? (9.5 * (p.actT / 0.6) + 1.5) * m.spotKick.dive : (5.5 * (p.actT / 0.6) + 0.8) * (p.diveK ?? 1);
       p.x = clamp(p.x + p.dirX * v * DT, -HALF_L - 3, HALF_L + 3);
       p.z = clamp(p.z + p.dirZ * v * DT, -HALF_W - 3, HALF_W + 3);
       if (p.actT <= 0) {
@@ -850,6 +852,9 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         wz = dz / d;
         sprinting = p.sprint;
         speed = topSpeed(p, sprinting, mine) * clamp(d / 2.5 + 0.2, 0, 1) * levelOf(m).speed;
+        // Face à une frappe qui vient vers lui, le gardien se décale à petits pas
+        if (p.role === "GK" && m.owner < 0 && m.t - m.shotAt < 1.2 && m.ball.vx * attackDir(m, p.team) < -4)
+          speed = Math.min(speed, KEEPER_SHUFFLE);
       }
     }
     steer(p, wx, wz, speed * slowed);
@@ -1017,11 +1022,32 @@ function keeperTouch(m: Match, p: Player, ev: MatchEvent[]): boolean {
   const diving = p.act === "dive";
   // Au penalty, il a choisi son côté : il n'attrape que ce qui passe à sa portée
   const spot = !!m.spotKick && m.t - m.spotKick.at < 1.4;
-  const reach = spot ? 1.0 : diving ? 2.7 : 1.8;
-  if (Math.hypot(b.x - p.x, b.z - p.z) > reach || b.y > (diving ? 2.4 : 2.85)) return false;
+  // De près, il se fait grand (bras et jambes écartés) : il couvre davantage
+  const spread = clamp((14 - (m.shotDist ?? 20)) * 0.1, 0, 0.75);
+  const reach = spot ? 1.0 : (diving ? 1.2 : 0.95) + spread;
+  const speed = Math.hypot(b.vx, b.vy, b.vz);
+  let d: number;
+  if (speed > 8 && Math.abs(b.vx) > 3) {
+    // Une frappe se juge quand elle passe à sa hauteur, sur l'écart de côté (le bras tendu) : avant, elle est encore
+    // devant lui, hors d'atteinte, et un essai raté là-bas la laisserait ensuite lui traverser le corps
+    const px = b.x - b.vx * DT;
+    if ((px - p.x) * (b.x - p.x) > 0 && Math.abs(b.x - p.x) > 0.3) return false;
+    const f = Math.abs(b.x - px) > 1e-6 ? clamp((p.x - px) / (b.x - px), 0, 1) : 1;
+    d = Math.abs(b.z - b.vz * DT * (1 - f) - p.z);
+  } else d = Math.hypot(b.x - p.x, b.z - p.z);
+  // En pleine extension, il atteint moins loin ce qui monte vers la lucarne
+  const high = diving ? clamp((b.y - 1.5) * 0.45, 0, 0.45) : 0;
+  if (d > reach * (1 - high) || b.y > (diving ? 2.4 : 2.7)) return false;
   // Une passe de son coéquipier se joue au pied
   if (m.players[m.lastTouch]?.team === p.team && m.pass) return false;
-  const speed = Math.hypot(b.vx, b.vy, b.vz);
+  // Sur lui, il l'arrête ; au bout des doigts, il ne la touche pas toujours, encore moins si elle va vite : la frappe
+  // placée passe, la frappe sur le gardien non
+  const edge = clamp((d - reach * 0.55) / (reach * 0.45), 0, 1);
+  const touch = 1 - Math.pow(edge, 1.2) * clamp(0.5 + speed / 70, 0.55, 0.95);
+  if (!spot && random(m) > touch) {
+    p.lockedUntil = m.t + 0.35;
+    return false;
+  }
   const skill = p.stats.gk / 100;
   const chance = clamp(1.25 - speed / (20 + skill * 16), 0.12, 0.98);
   const shot = m.t - m.shotAt < 1.6;
@@ -1564,6 +1590,7 @@ export function stepMatch(m: Match): MatchEvent[] {
   carriers(m);
   defenders(m);
   spotKeeper(m);
+  for (const p of m.players) if (p.role === "GK" && !p.off && p.human === null && p.act !== "down") keeperReadsShot(m, p);
   stepPlayers(m, ev);
   if (m.phase !== "play") return ev;
   separate(m);

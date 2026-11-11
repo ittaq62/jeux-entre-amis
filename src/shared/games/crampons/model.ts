@@ -82,6 +82,8 @@ export interface Player {
   /** Le crochet : jusqu'à cet instant il file et échappe aux tacles ; le suivant n'est pas possible avant `burstReady` */
   burstUntil: number;
   burstReady: number;
+  /** La force d'un plongeon (de 0,3 à 1) : il se jette juste assez loin pour mettre le ballon dans ses bras */
+  diveK?: number;
 }
 
 export interface Human {
@@ -256,6 +258,10 @@ export interface Match {
   spotKick?: { at: number; gk: number; guess: number; dive: number; done: boolean } | null;
   /** Les têtes de suite sans que le ballon retombe : au-delà de deux, on le laisse descendre */
   headChain?: number;
+  /** Comment le gardien a lu la dernière frappe : de combien il se trompe sur l'endroit où elle arrive (en mètres) */
+  keeperRead?: { shotAt: number; err: number } | null;
+  /** D'où est partie la dernière frappe (sa distance au but) : de près, le gardien se fait grand */
+  shotDist?: number;
   /** Pendant la fête d'un but, les humains qui ont demandé à passer le ralenti */
   skipBy?: string[];
   /** Le dernier coup de pied, et l'équipe qui l'a donné : l'adversaire met un instant à réagir */
