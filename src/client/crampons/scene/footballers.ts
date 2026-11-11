@@ -44,7 +44,8 @@ export interface FootballerView {
 // Les proportions : en mètres avant l'échelle, l'origine aux pieds
 // -------------------------------------------------------------------------
 
-const SCALE = 1.12;
+/** La taille des joueurs : un peu plus de 2 m, tête comprise ; plus grands, le gardien bouchait tout son but */
+const SCALE = 1.06;
 const HIP_Y = 0.92;
 const HIP_X = 0.115;
 /** Depuis le bassin */
@@ -135,8 +136,11 @@ interface State {
   mood: number;
 }
 
+/** L'amplitude de la foulée (en radians de cuisse) à cette vitesse, de 0 à 1,2 */
+const strideAmp = (speed: number) => 0.38 + speed * 0.32;
+
 function legsRunning(target: Pose, s: State, speed: number) {
-  const amp = 0.38 + speed * 0.32;
+  const amp = strideAmp(speed);
   const sin = Math.sin(s.phase);
   const cos = Math.cos(s.phase);
   // La cuisse va et vient ; le genou se plie quand la jambe revient vers l'avant (le talon monte sous les fesses),
@@ -1407,7 +1411,8 @@ export class Footballers {
       }
       // Le geste continue après le départ du ballon : c'est l'accompagnement du pied
       const act = f.kickT !== undefined ? "kick" : f.act === "none" && s.kickT < KICK_HOLD ? "kick" : f.act;
-      s.phase += (f.v / (1.55 + f.v * 0.07)) * Math.PI * dt;
+      // La cadence suit la vitesse : le pied posé recule exactement aussi vite que le corps avance, il ne patine pas
+      s.phase += (f.v / ((THIGH + SHIN) * SCALE * strideAmp(Math.min(1.2, f.v / 10)))) * dt;
       const turn = wrapAngle(f.h - s.lastH) / Math.max(dt, 0.001);
       s.lastH = f.h;
       s.bank += (clamp(turn * f.v * 0.011, -0.3, 0.3) - s.bank) * Math.min(1, dt * 10);

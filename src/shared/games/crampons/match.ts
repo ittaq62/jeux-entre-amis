@@ -34,7 +34,8 @@ const KEEPER_SHUFFLE = 3.3;
 /** Celui à qui la passe est destinée la contrôle d'un peu plus loin : elle doit arriver dans ses pieds */
 const RECEIVE_REACH = 1.45;
 const HEADER_REACH = 1.05;
-const SEPARATION = 0.85;
+/** Deux joueurs ne se marchent pas dessus : leurs corps (épaules et bras) se touchent à peine */
+const SEPARATION = 1.0;
 const FIRST_TIME_WINDOW = 0.45;
 const KEEPER_HOLD_S = 2.2;
 const TACKLE_S = 0.36;
@@ -904,10 +905,11 @@ function separate(m: Match) {
   const list = m.players;
   for (let a = 0; a < list.length; a++) {
     const p = list[a]!;
-    if (p.off || p.act === "dive") continue;
+    // Un plongeon, une glissade passent dans les jambes : on ne les écarte pas
+    if (p.off || p.act === "dive" || p.act === "slide") continue;
     for (let b = a + 1; b < list.length; b++) {
       const q = list[b]!;
-      if (q.off || q.act === "dive") continue;
+      if (q.off || q.act === "dive" || q.act === "slide") continue;
       const dx = q.x - p.x;
       if (dx > SEPARATION || dx < -SEPARATION) continue;
       const dz = q.z - p.z;

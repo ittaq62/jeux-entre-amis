@@ -72,7 +72,7 @@ export class StadiumSound {
     // La rumeur : deux lectures décalées et un peu désaccordées, l'une à gauche, l'autre à droite. Leur mélange ne se
     // répète qu'au bout de plusieurs minutes, et le léger écart de hauteur multiplie les voix.
     const bedGain = ctx.createGain();
-    bedGain.gain.value = 0.5;
+    bedGain.gain.value = 0.42;
     const air = ctx.createBiquadFilter();
     air.type = "lowpass";
     air.frequency.value = 7000;
@@ -129,7 +129,7 @@ export class StadiumSound {
     const h = clamp(this.hype + this.burst, 0, 1.4);
     const t = ctx.currentTime;
     this.master.gain.setTargetAtTime(this.level(), t, 0.25);
-    this.bedGain?.gain.setTargetAtTime(0.5 + Math.min(h, 1) * 0.12, t, 0.3);
+    this.bedGain?.gain.setTargetAtTime(0.42 + Math.min(h, 1) * 0.12, t, 0.3);
     this.feteGain?.gain.setTargetAtTime(Math.max(0, h - 0.12) * 0.85, t, 0.18);
     // Plus la foule s'enflamme, plus elle crie : le son s'ouvre vers les aigus
     this.feteTone?.frequency.setTargetAtTime(1500 + Math.min(h, 1.2) * 4200, t, 0.25);

@@ -282,8 +282,11 @@ export class MatchRuntime {
       this.pendingEvents.shift();
       // Restés en attente trop longtemps (l'onglet était caché) : on ne rejoue pas les sons d'il y a longtemps
       if (at !== null && at - due.at > 1.5) continue;
+      // L'image juste avant ces événements : une touche se joue à la main, pas d'un coup de pied
+      const before = this.snaps.findLast((sn) => sn.sim < due.at);
       for (const e of due.events) {
         if (e.k !== "kick") continue;
+        if (before && ACTS[before.p[e.p * TICK_STRIDE + 4]!] === "throw") continue;
         // Le pied part quand le ballon part ; sa propre frappe, on l'a déjà vue partir au clic
         const k = this.localKick;
         if (!k || k.p !== e.p || nowMs - k.at > 1500) this.kickShow.set(e.p, nowMs);

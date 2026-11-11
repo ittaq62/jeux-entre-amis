@@ -6,7 +6,13 @@ import { HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
 
 export type Weather = "clair" | "pluie" | "neige";
 
-const TRAIL = 14;
+/** La traînée d'un ballon frappé fort : ses positions des dernières images, reliées en un ruban qui s'effile */
+const TRAIL = 12;
+const tmpA = new THREE.Vector3();
+const tmpB = new THREE.Vector3();
+const tmpC = new THREE.Vector3();
+const tmpEye = new THREE.Vector3();
+const clampUnit = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const DUST = 26;
 const CONFETTI = 380;
 const FLASHES = 46;
@@ -38,8 +44,12 @@ interface Puff {
 export class Effects {
   private group = new THREE.Group();
   private dot = softDot();
-  private trail: THREE.InstancedMesh;
+  private trail: THREE.Mesh;
+  private trailPos = new Float32Array(TRAIL * 2 * 3);
+  private trailCol = new Float32Array(TRAIL * 2 * 4);
   private trailPoints: THREE.Vector3[] = [];
+  /** La traînée apparaît et s'éteint en douceur */
+  private trailFade = 0;
   private puffs: Puff[] = [];
   private puffIndex = 0;
   private confetti: THREE.InstancedMesh;
@@ -57,15 +67,27 @@ export class Effects {
 
   constructor(scene: THREE.Scene, weather: Weather, low: boolean) {
     this.weather = weather;
+    // Un ruban continu, tourné vers la caméra, plus large et plus clair près du ballon : des sphères séparées se
+    // lisaient comme plusieurs ballons
+    const trailGeo = new THREE.BufferGeometry();
+    const idx: number[] = [];
+    for (let i = 0; i < TRAIL - 1; i++) {
+      const a = i * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    trailGeo.setIndex(idx);
+    trailGeo.setAttribute("position", new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+    trailGeo.setAttribute("color", new THREE.BufferAttribute(this.trailCol, 4).setUsage(THREE.DynamicDrawUsage));
     const trailMat = new THREE.MeshBasicMaterial({
-      color: "#fff6d8",
+      vertexColors: true,
       transparent: true,
-      opacity: 0.55,
       depthWrite: false,
       toneMapped: false,
+      side: THREE.DoubleSide,
     });
-    this.trail = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 8, 6), trailMat, TRAIL);
+    this.trail = new THREE.Mesh(trailGeo, trailMat);
     this.trail.frustumCulled = false;
+    this.trail.visible = false;
     this.group.add(this.trail);
     for (let i = 0; i < TRAIL; i++) this.trailPoints.push(new THREE.Vector3(0, -50, 0));
 
@@ -201,19 +223,15 @@ export class Effects {
     this.flashFor = 3.2;
   }
 
-  update(dt: number, t: number, ball: { x: number; y: number; z: number; vx: number; vz: number }, cameraX: number, cameraZ: number) {
-    // La traînée n'apparaît que sur les ballons frappés fort
-    const speed = Math.hypot(ball.vx, ball.vz);
-    this.trailPoints.pop();
-    this.trailPoints.unshift(this.trailPoints[this.trailPoints.length - 1]!.clone().set(ball.x, ball.y + 0.08, ball.z));
-    const on = speed > 20;
-    for (let i = 0; i < TRAIL; i++) {
-      const k = on ? (1 - i / TRAIL) * 0.95 : 0;
-      this.scale.setScalar(Math.max(0.0001, k));
-      this.matrix.compose(this.trailPoints[i]!, this.quat, this.scale);
-      this.trail.setMatrixAt(i, this.matrix);
-    }
-    this.trail.instanceMatrix.needsUpdate = true;
+  update(
+    dt: number,
+    t: number,
+    ball: { x: number; y: number; z: number; vx: number; vz: number },
+    cameraX: number,
+    cameraZ: number,
+    eye?: THREE.Vector3,
+  ) {
+    this.updateTrail(dt, ball, eye ?? tmpEye.set(cameraX, 20, cameraZ + 50));
 
     if (this.spark.visible) {
       const m = this.spark.material as THREE.SpriteMaterial;
@@ -300,6 +318,53 @@ export class Effects {
       // La pluie suit la caméra : il pleut toujours là où on regarde
       this.rain.position.set(cameraX, 0, cameraZ * 0.3);
     }
+  }
+
+  /** La traînée : seulement sur un ballon frappé fort, et jamais en travers du terrain après une remise en place */
+  private updateTrail(dt: number, ball: { x: number; y: number; z: number; vx: number; vz: number }, eye: THREE.Vector3) {
+    const pts = this.trailPoints;
+    const last = pts.pop()!;
+    last.set(ball.x, ball.y, ball.z);
+    if (pts[0] && pts[0].distanceTo(last) > 3) for (const q of pts) q.copy(last);
+    pts.unshift(last);
+    const speed = Math.hypot(ball.vx, ball.vz);
+    const want = clampUnit((speed - 17) / 10);
+    this.trailFade += (want - this.trailFade) * Math.min(1, dt * 14);
+    if (this.trailFade < 0.02) {
+      this.trail.visible = false;
+      return;
+    }
+    this.trail.visible = true;
+    const tan = tmpA;
+    const view = tmpB;
+    const side = tmpC;
+    for (let i = 0; i < TRAIL; i++) {
+      const p = pts[i]!;
+      tan.subVectors(pts[Math.max(0, i - 1)]!, pts[Math.min(TRAIL - 1, i + 1)]!);
+      if (tan.lengthSq() < 1e-6) tan.set(ball.vx, 0, ball.vz);
+      view.subVectors(eye, p);
+      side.crossVectors(tan, view).normalize();
+      const f = i / (TRAIL - 1);
+      const w = 0.12 * Math.pow(1 - f, 0.7);
+      const k = i * 6;
+      this.trailPos[k] = p.x + side.x * w;
+      this.trailPos[k + 1] = p.y + side.y * w;
+      this.trailPos[k + 2] = p.z + side.z * w;
+      this.trailPos[k + 3] = p.x - side.x * w;
+      this.trailPos[k + 4] = p.y - side.y * w;
+      this.trailPos[k + 5] = p.z - side.z * w;
+      const a = this.trailFade * 0.55 * Math.pow(1 - f, 1.4);
+      for (let v = 0; v < 2; v++) {
+        const c = (i * 2 + v) * 4;
+        this.trailCol[c] = 1;
+        this.trailCol[c + 1] = 0.97;
+        this.trailCol[c + 2] = 0.86;
+        this.trailCol[c + 3] = a;
+      }
+    }
+    const g = this.trail.geometry;
+    g.getAttribute("position").needsUpdate = true;
+    g.getAttribute("color").needsUpdate = true;
   }
 
   dispose() {

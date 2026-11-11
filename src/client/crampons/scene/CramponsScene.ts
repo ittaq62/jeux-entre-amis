@@ -374,7 +374,7 @@ export class CramponsScene {
       this.camera.fov = this.shake > 0.002 ? this.baseFov * (1 - this.shake * 0.028) : this.baseFov;
       this.camera.updateProjectionMatrix();
     }
-    this.fx.update(dt, this.time, b, this.cx, this.cz);
+    this.fx.update(dt, this.time, b, this.cx, this.cz, this.camera.position);
     if (this.shadows) {
       // L'ombre suit le jeu, calée sur sa grille pour ne pas scintiller quand la caméra glisse
       const step = 100 / 2048;
