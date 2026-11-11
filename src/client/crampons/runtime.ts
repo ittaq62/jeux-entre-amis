@@ -100,6 +100,8 @@ export interface RuntimeOptions {
   onEvents: (events: MatchEvent[]) => void;
   /** L'état du match tel que l'image le montre : le score change quand le ballon franchit la ligne à l'écran */
   onShownView?: (view: CramponsView) => void;
+  /** À chaque image, l'envie du public d'après ce qu'on voit (de 0 à 1) : le stade gronde quand ça chauffe */
+  onCrowd?: (dt: number, mood: number) => void;
 }
 
 export class MatchRuntime {
@@ -1033,6 +1035,26 @@ export class MatchRuntime {
     };
   }
 
+  /**
+   * L'envie du public : un ballon qui approche d'un but dans l'axe, une frappe qui part, un penalty ou un corner qui se
+   * prépare. Pendant la fête d'un but, tout le stade est debout ; à la pause, il bavarde.
+   */
+  private crowdMood(frame: SceneFrame): number {
+    const s = this.shown;
+    if (s.phase === "goal") return 1;
+    if (s.phase === "halftime" || s.phase === "over") return 0.08;
+    if (this.cinema === "intro") return 0.45;
+    const b = frame.ball;
+    const toLine = HALF_L - Math.abs(b.x);
+    const axis = Math.abs(b.z) < GOAL_HALF + 16 ? 1 : 0.55;
+    let mood = 0.1 + Math.pow(clamp(1 - toLine / 36, 0, 1), 1.5) * 0.62 * axis;
+    if (Math.hypot(b.vx, b.vz) > 17 && toLine < 38) mood += 0.3;
+    const r = s.phase === "restart" || s.phase === "kickoff" ? s.restart : null;
+    if (r?.kind === "penalty") mood = Math.max(mood, 0.75);
+    else if (r?.kind === "corner") mood = Math.max(mood, 0.42);
+    return clamp(mood, 0, 1);
+  }
+
   /** Le coéquipier qui recevra la passe : le plus proche du curseur, sinon le mieux placé dans la direction demandée */
   private guessReceiver(views: FootballerView[], me: number): number {
     const p = views[me]!;
@@ -1200,6 +1222,7 @@ export class MatchRuntime {
     // Au ralenti, les gestes ralentissent avec le film
     this.scene.render(this.cinema === "replay" ? dt * 0.62 : dt, shot);
     if (import.meta.env.DEV) (window as unknown as { __crCam: number[] }).__crCam = this.scene.camera.position.toArray();
+    this.opts.onCrowd?.(dt, this.crowdMood(frame));
     if (++this.shownFrames === 3) this.opts.onReady?.();
     if (now - this.hudAt > 90) {
       this.hudAt = now;

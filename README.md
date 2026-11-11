@@ -109,6 +109,14 @@ Les effets sonores viennent de [Kenney](https://kenney.nl) (domaine public, CC0)
 Mixkit), comme la musique de Briques et celle des entractes de la tournée (Mixkit, licence libre Mixkit). Polices : Young Serif, Libre Franklin, Big Shoulders et Great Vibes (licence OFL). UNO est une marque de Mattel : ce projet est un jeu amateur entre amis, sans lien avec Mattel, et ses cartes sont dessinées à la
 main.
 
+Le public de Crampons est fait de trois vrais enregistrements, découpés, mis en boucle et compressés : la rumeur du stade
+vient de « large crowd, medium distance » par [eguobyte](https://freesound.org/people/eguobyte/sounds/360703/) (domaine
+public, CC0), la foule en fête de « Festival concert people crowd » par stephan
+([pdsounds.org](https://commons.wikimedia.org/wiki/File:Festival_concert_people_crowd.ogg), domaine public), et les
+applaudissements et cornes de brume de « F1 Race Crowd Applause Air Horns » par
+[WebbFilmsUK](https://freesound.org/people/WebbFilmsUK/sounds/200809/) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
+extraits raccourcis et normalisés). Le commentateur parle avec la voix française du navigateur.
+
 Les mots de Mèche (`public/meche/`) sont tirés du [lexique des formes fléchies de Grammalecte](https://grammalecte.net) (Olivier R.,
 licence [MPL 2.0](https://www.mozilla.org/MPL/2.0/)) : en minuscules sans accents, sans noms propres ni sigles, avec quelques mots récents
 qui lui manquent (liste `EXTRA` du script). Pour les refaire à partir

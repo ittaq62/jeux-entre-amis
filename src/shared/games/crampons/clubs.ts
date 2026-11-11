@@ -186,11 +186,14 @@ export interface TeamSetup {
   rating: number;
 }
 
-/** Un effectif prêt à jouer, avec des noms et des notes tirés de la graine pour rester les mêmes à chaque match */
-export function makeSquad(team: Team, setup: TeamSetup, side: number, seed: number, firstIndex: number): Player[] {
+/**
+ * Un effectif prêt à jouer, avec des noms et des notes tirés de la graine pour rester les mêmes à chaque match. `taken` :
+ * les noms de l'adversaire, pour que le commentateur (et le joueur) ne confondent jamais deux joueurs.
+ */
+export function makeSquad(team: Team, setup: TeamSetup, side: number, seed: number, firstIndex: number, taken: string[] = []): Player[] {
   const rand = mulberry(seed);
   const slots = side === 11 ? FORMATIONS[setup.formation] : (SMALL[side] ?? SMALL[5]!);
-  const pool = SURNAMES.slice();
+  const pool = SURNAMES.filter((n) => !taken.includes(n));
   return slots.map(([role, fx, fz], n) => {
     const pick = Math.floor(rand() * pool.length);
     const name = pool.splice(pick, 1)[0]!;

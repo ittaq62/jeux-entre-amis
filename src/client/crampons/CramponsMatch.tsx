@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject, type Point
 import type { MatchEvent, RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
-import { CRAMPONS_SOUNDS, play, preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
+import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import type { GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
 import { loadSettings, type CramponsSettings } from "./bindings.ts";
 import { HowTo, KeyHints, mainKey, Radar } from "./CramponsHud.tsx";
 import { SettingsPanel } from "./CramponsSettings.tsx";
+import { Commentator } from "./commentary.ts";
 import { MatchRuntime, type HudState } from "./runtime.ts";
+import { StadiumSound } from "./stadiumSound.ts";
 import type { MatchListeners } from "./useCramponsRoom.ts";
 
 interface Banner {
@@ -138,6 +140,9 @@ export function CramponsMatch({
   // L'état du match tel que l'image le montre : le score change quand le ballon entre, pas un instant avant
   const [shownView, setShown] = useState(view);
   const shown = shownView.teams[0].name === view.teams[0].name ? shownView : view;
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const voice = useRef<Commentator | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtime = useRef<MatchRuntime | null>(null);
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -203,19 +208,44 @@ export function CramponsMatch({
       setTimeout(() => setBanner((cur) => (cur?.id === id ? null : cur)), ms);
     };
     const nameOf = (i: number) => viewRef.current.players[i]?.name ?? "";
+    // Le stade : une vraie foule, qui suit le jeu ; et la voix du commentateur
+    const stadium = new StadiumSound();
+    void stadium.start();
+    const commentator = new Commentator(() => {
+      const v = viewRef.current;
+      const s = shownRef.current;
+      return {
+        teams: [v.teams[0].name, v.teams[1].name],
+        players: v.players.map((p) => ({ name: p.name, team: p.team, keeper: p.role === "GK" })),
+        score: s.score,
+        period: s.period,
+      };
+    }, settingsRef.current.commentary);
+    voice.current = commentator;
+    const v0 = viewRef.current;
+    if (v0.phase === "kickoff" && v0.period === 1 && v0.score[0] + v0.score[1] === 0) setTimeout(() => commentator.welcome(), 700);
     const onEvents = (events: MatchEvent[]) => {
       for (const e of events) {
+        commentator.event(e);
+        if (e.k === "goal") stadium.goal();
+        else if (e.k === "save") {
+          stadium.ooh(e.caught ? 0.6 : 1);
+          if (!e.caught) stadium.applaud(0.5);
+        } else if (e.k === "woodwork") stadium.ooh(1);
+        else if (e.k === "shot") stadium.rise(0.2 + e.power * 0.25);
+        else if (e.k === "half" || e.k === "end") stadium.applaud(0.8);
+        else if (e.k === "penalty") {
+          if (e.scored) stadium.applaud(0.7);
+          else stadium.ooh(1);
+        }
         if (e.k === "kick" && runtime.current?.isLocalKick(e.p)) continue;
         if (e.k === "kick")
           play(e.kind === "shot" || e.kind === "finesse" || e.kind === "clear" ? "footShot" : "footKick", {
             rate: 0.94 + Math.random() * 0.14,
           });
         else if (e.k === "whistle") play(e.why === "end" || e.why === "half" ? "footWhistleEnd" : "footWhistle");
-        else if (e.k === "woodwork") {
-          play("footPost");
-          play("footOoh", { delay: 120 });
-        } else if (e.k === "net") play("footNet");
-        else if (e.k === "save" && !e.caught) play("footOoh");
+        else if (e.k === "woodwork") play("footPost");
+        else if (e.k === "net") play("footNet");
         if (e.k === "shot") setMods({ finesse: false, chip: false });
         if (e.k === "kick" && (e.kind === "shot" || e.kind === "clear")) runtime.current?.dust(e.p, e.power);
         if (e.k === "shot" && e.power > 0.45) runtime.current?.punch(e.p, e.power);
@@ -225,7 +255,6 @@ export function CramponsMatch({
         }
         if (e.k === "tackle") runtime.current?.dust(e.p, 0.9);
         if (e.k === "goal") {
-          play("footCheer");
           runtime.current?.goal(e.scorer, e.team);
           show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
         } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
@@ -253,6 +282,7 @@ export function CramponsMatch({
           play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
         onEvents,
         onShownView: setShown,
+        onCrowd: (dt, mood) => stadium.update(dt, mood),
       },
       reduced || window.matchMedia("(pointer: coarse)").matches,
       settingsRef.current,
@@ -264,11 +294,12 @@ export function CramponsMatch({
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
     listeners.current.onEvents = onEvents;
     preloadSounds(CRAMPONS_SOUNDS);
-    startLoop("footCrowd");
     return () => {
       listeners.current.onTick = undefined;
       listeners.current.onEvents = undefined;
-      stopLoop("footCrowd");
+      stadium.stop();
+      commentator.dispose();
+      voice.current = null;
       rt.dispose();
       runtime.current = null;
     };
@@ -286,6 +317,7 @@ export function CramponsMatch({
 
   useEffect(() => {
     runtime.current?.setSettings(settings);
+    voice.current?.setEnabled(settings.commentary);
   }, [settings]);
 
   // Pendant les réglages et l'aide, les touches ne font plus jouer

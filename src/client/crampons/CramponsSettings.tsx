@@ -156,6 +156,10 @@ export function SettingsPanel({
             ))}
           </div>
           <label className="cr-check">
+            <input type="checkbox" checked={settings.commentary} onChange={(e) => update({ ...settings, commentary: e.target.checked })} />
+            Le commentateur raconte le match (voix de ton navigateur)
+          </label>
+          <label className="cr-check">
             <input type="checkbox" checked={settings.showFps} onChange={(e) => update({ ...settings, showFps: e.target.checked })} />
             Afficher les images par seconde et le temps de réponse
           </label>

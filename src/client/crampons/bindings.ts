@@ -16,6 +16,8 @@ export interface CramponsSettings {
   aim: AimMode;
   quality: Quality;
   showFps: boolean;
+  /** La voix du commentateur */
+  commentary: boolean;
 }
 
 export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
@@ -105,7 +107,7 @@ const KEY = "crampons-reglages";
 
 export function defaultSettings(): CramponsSettings {
   const p = PRESETS[0]!;
-  return { preset: p.id, bindings: structuredClone(p.bindings), aim: p.aim, quality: "auto", showFps: false };
+  return { preset: p.id, bindings: structuredClone(p.bindings), aim: p.aim, quality: "auto", showFps: false, commentary: true };
 }
 
 export function loadSettings(): CramponsSettings {
@@ -120,6 +122,7 @@ export function loadSettings(): CramponsSettings {
       aim: data.aim === "direction" ? "direction" : data.aim === "curseur" ? "curseur" : base.aim,
       quality: data.quality === "haute" || data.quality === "moyenne" || data.quality === "basse" ? data.quality : "auto",
       showFps: data.showFps === true,
+      commentary: data.commentary !== false,
     };
   } catch {
     return defaultSettings();

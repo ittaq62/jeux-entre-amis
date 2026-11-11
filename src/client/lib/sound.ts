@@ -32,9 +32,6 @@ export type SoundName =
   | "footWhistleEnd"
   | "footPost"
   | "footNet"
-  | "footCrowd"
-  | "footCheer"
-  | "footOoh"
   | "cardTear"
   | "cardRare"
   | "cardEpic"
@@ -152,9 +149,6 @@ const FILES: Record<SoundName, string[]> = {
   footWhistleEnd: ["foot-whistle-end.mp3"],
   footPost: ["foot-post.mp3"],
   footNet: ["foot-net.mp3"],
-  footCrowd: ["foot-crowd.mp3"],
-  footCheer: ["foot-cheer.mp3"],
-  footOoh: ["foot-ooh.mp3"],
   cardTear: ["card-tear.mp3"],
   cardRare: ["card-rare.mp3"],
   cardEpic: ["card-epic.mp3"],
@@ -252,17 +246,7 @@ const FILES: Record<SoundName, string[]> = {
 };
 
 /** Sons de chaque jeu, pour ne précharger que ceux qui servent */
-export const CRAMPONS_SOUNDS: SoundName[] = [
-  "footKick",
-  "footShot",
-  "footWhistle",
-  "footWhistleEnd",
-  "footPost",
-  "footNet",
-  "footCrowd",
-  "footCheer",
-  "footOoh",
-];
+export const CRAMPONS_SOUNDS: SoundName[] = ["footKick", "footShot", "footWhistle", "footWhistleEnd", "footPost", "footNet"];
 
 export const CARD_SOUNDS: SoundName[] = [
   "tourShake",
@@ -416,9 +400,6 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   footWhistleEnd: 0.5,
   footPost: 0.6,
   footNet: 0.5,
-  footCrowd: 0.32,
-  footCheer: 0.75,
-  footOoh: 0.5,
   cardPlace: 0.75,
   cardSlide: 0.5,
   cardDraw: 0.55,

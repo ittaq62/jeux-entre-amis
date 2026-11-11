@@ -58,7 +58,18 @@ export function createMatch(
   seed: number,
 ): Match {
   const side = settings.side;
-  const players = [...makeSquad(0, teams[0], side, seed ^ 0x1234, 0), ...makeSquad(1, teams[1], side, seed ^ 0x9876, side)];
+  const home = makeSquad(0, teams[0], side, seed ^ 0x1234, 0);
+  const players = [
+    ...home,
+    ...makeSquad(
+      1,
+      teams[1],
+      side,
+      seed ^ 0x9876,
+      side,
+      home.map((p) => p.name),
+    ),
+  ];
   const m: Match = {
     settings,
     seed,
