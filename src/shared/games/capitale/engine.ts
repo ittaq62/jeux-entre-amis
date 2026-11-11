@@ -1,6 +1,7 @@
 // Capitale : le moteur de partie, partagé entre le serveur (qui fait foi) et les tests.
 // Aucune notion de temps ici : les chronos (enchère, temps de décision, fin de partie) sont tenus par le salon.
 
+import { oneTeamLeft, type Teams } from "../teams.ts";
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 import {
   BUYABLE,
@@ -172,6 +173,8 @@ export type Step = "roll" | "buy" | "auction" | "debt" | "manage" | "over";
 export interface CapitaleState {
   settings: CapitaleSettings;
   players: CapitalePlayer[];
+  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  teams?: Teams;
   /** Un titre par case achetable, null ailleurs */
   deeds: (Deed | null)[];
   /** Le tour en cours : les rues déjà améliorées (une fois chacune), et si le bâtiment spécial est posé */
@@ -1047,7 +1050,13 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   if (s.auction && !s.auction.out.includes(p.id)) s.auction.out.push(p.id);
   events.push({ type: "bankrupt", player: p.id, to: heir && !heir.bankrupt ? heir.id : "bank" });
   const alive = s.players.filter((x) => !x.bankrupt);
-  if (alive.length <= 1) {
+  if (
+    alive.length <= 1 ||
+    oneTeamLeft(
+      s.teams,
+      alive.map((x) => x.id),
+    )
+  ) {
     finishGame(s, events);
     return;
   }

@@ -684,6 +684,8 @@ export class CapitaleRoom extends DurableObject<Env> {
       d.settings.capitale,
       randomSeed(),
     );
+    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
+    state.teams = d.tour?.teams ?? null;
     d.capitale = state;
     d.status = "playing";
     d.startedAt = now;

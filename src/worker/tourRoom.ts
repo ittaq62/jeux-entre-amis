@@ -977,7 +977,10 @@ export class TourRoom extends DurableObject<Env> {
       // Le 2 contre 2 de la bataille navale et de Briques se joue avec les équipes de la tournée ; UNO, à toutes les
       // tailles d'équipes égales (chacun y voit la main de ses coéquipiers)
       const red = players.filter((m) => m.team === 0).length;
-      const fair = game === "uno" ? players.length >= 4 && red * 2 === players.length : players.length === 4 && red === 2;
+      // UNO, Mèche et Capitale : à toutes les tailles d'équipes égales (on y voit son coéquipier, la partie s'arrête
+      // quand il ne reste qu'une équipe en jeu) ; ailleurs, seulement le 2 contre 2
+      const anySize = game === "uno" || game === "meche" || game === "capitale";
+      const fair = anySize ? players.length >= 4 && red * 2 === players.length : players.length === 4 && red === 2;
       const teams = d.settings.teams && fair ? Object.fromEntries(players.map((m) => [m.userId, m.team as 0 | 1])) : null;
       const users: PublicUser[] = players
         .filter((m) => m.kind === "human")

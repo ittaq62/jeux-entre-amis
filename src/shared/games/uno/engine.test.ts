@@ -76,6 +76,27 @@ describe("UNO en équipe", () => {
   });
 });
 
+describe("UNO en équipe, la fin", () => {
+  it("No Mercy : quand la seule adversaire encore en jeu est éliminée, la partie s'arrête", () => {
+    const pile = Array.from({ length: 40 }, () => n("blue", 1));
+    const s = rig({
+      hands: [[n("red", 1), n("red", 2)], Array.from({ length: 24 }, () => n("green", 3)), [n("red", 4)], [n("yellow", 5)]],
+      top: n("red", 9),
+      turn: 1,
+      drawPile: pile,
+      settings: { variant: "nomercy" },
+    });
+    s.teams = { p0: 0, p1: 1, p2: 0, p3: 1 };
+    Object.assign(s.players[3]!, { out: true, eliminated: true, hand: [] });
+    s.eliminationOrder.push(3);
+    act(s, 1, { type: "draw" });
+    expect(s.players[1]!.eliminated).toBe(true);
+    expect(s.phase).toBe("gameOver");
+    // Le moins de points en main l'emporte : 1 + 2 contre 4
+    expect(s.ranking!.slice(0, 2)).toEqual(["p0", "p2"]);
+  });
+});
+
 describe("jeu de cartes", () => {
   it("contient les 108 cartes officielles", () => {
     const deck = buildClassicDeck();

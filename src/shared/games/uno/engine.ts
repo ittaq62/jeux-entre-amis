@@ -1,3 +1,4 @@
+import { oneTeamLeft, type Teams } from "../teams.ts";
 import { buildClassicDeck, cardPoints, COLORS, drawValue, isDrawCard, isWild, sameFace, type Card, type Color } from "./cards.ts";
 import { buildNoMercyDeck, MERCY_BONUS, MERCY_LIMIT } from "./nomercy.ts";
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
@@ -120,6 +121,8 @@ export interface RoundResult {
 export interface UnoState {
   settings: UnoSettings;
   players: UnoPlayer[];
+  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  teams?: Teams;
   drawPile: Card[];
   discard: Card[];
   color: Color;
@@ -896,7 +899,7 @@ function finishPlayer(s: UnoState, p: number, ev: UnoEvent[]) {
     player.out = true;
     s.finishOrder.push(p);
     ev.push({ type: "finish", player: player.id, rank: s.finishOrder.length });
-    if (activeCount(s) <= 1) {
+    if (activeCount(s) <= 1 || oneTeamLeft(s.teams, activeIds(s))) {
       endGameByRanking(s, ev);
       return;
     }
@@ -916,11 +919,17 @@ function finishPlayer(s: UnoState, p: number, ev: UnoEvent[]) {
   endRound(s, p, ev);
 }
 
-/** No Mercy : s'il ne reste qu'un joueur apres des eliminations, il remporte la manche. */
+const activeIds = (s: UnoState) => s.players.filter((pl) => !pl.out).map((pl) => pl.id);
+
+/**
+ * No Mercy : s'il ne reste qu'un joueur apres des eliminations, il remporte la manche. En equipes, s'il ne reste que
+ * des joueurs d'une meme equipe, celui qui a le moins de points en main l'emporte.
+ */
 function checkRoundEndByElimination(s: UnoState, ev: UnoEvent[]): boolean {
   if (s.phase !== "playing") return true;
-  if (activeCount(s) > 1) return false;
-  const last = s.players.findIndex((pl) => !pl.out);
+  if (activeCount(s) > 1 && !oneTeamLeft(s.teams, activeIds(s))) return false;
+  const left = s.players.map((_, i) => i).filter((i) => !s.players[i]!.out);
+  const last = left.sort((a, b) => handPoints(s.players[a]!) - handPoints(s.players[b]!))[0] ?? -1;
   if (s.settings.endMode === "ranking") {
     endGameByRanking(s, ev);
   } else {

@@ -360,6 +360,21 @@ describe("dettes et faillite", () => {
     expect(s.ranking).toEqual(["b", "a"]);
   });
 
+  it("en tournée par équipes, la partie s'arrête quand il ne reste qu'une équipe", () => {
+    const s = game(3);
+    s.teams = { a: 0, b: 1, c: 1 };
+    own(s, "a", 1, 3);
+    lvl(s, 1, 1);
+    Object.assign(P(s, "a"), { position: 0, cash: 10 });
+    Object.assign(P(s, "c"), { cash: 2000 });
+    own(s, "b", 39);
+    rollAs(s, "a", [1, 3]);
+    act(s, "a", { type: "bankrupt" });
+    expect(s.step).toBe("over");
+    expect(s.ranking![2]).toBe("a");
+    expect(s.ranking!.slice(0, 2).sort()).toEqual(["b", "c"]);
+  });
+
   it("la faillite envers la banque rend les titres libres", () => {
     const s = game(3);
     own(s, "a", 1, 3);

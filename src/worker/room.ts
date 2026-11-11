@@ -655,6 +655,8 @@ export class GameRoom extends DurableObject<Env> {
       d.settings.uno,
       randomSeed(),
     );
+    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
+    state.teams = d.tour?.teams ?? null;
     d.uno = state;
     d.status = "playing";
     d.startedAt = now;

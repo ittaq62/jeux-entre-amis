@@ -4,6 +4,7 @@
 // la sienne, qui ne brûle que pendant son tour. Dans tous les cas, celui qui traîne ne fait jamais sauter le suivant.
 // Tout se décide ici, sans réseau ni horloge : l'heure est passée en paramètre, le hasard vient de la partie.
 
+import { oneTeamLeft, type Teams } from "../teams.ts";
 import { random } from "../../rng.ts";
 import { LETTRES } from "./lettres.ts";
 import { normalizeWord } from "./words.ts";
@@ -207,6 +208,8 @@ export interface MechePlayer {
 export interface MecheGame {
   settings: MecheSettings;
   players: MechePlayer[];
+  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  teams?: Teams;
   /** Celui qui tient la mèche (ou qui la recevra à la prochaine) */
   holder: number;
   /** Les lettres à placer ; vides entre deux mèches */
@@ -454,9 +457,17 @@ export function explode(g: MecheGame, now: number): MecheEvent[] {
   g.letters = "";
   g.lastWord = null;
   g.rope = null;
-  if (left.length === 1) {
-    finish(g, left[0]!);
-    events.push({ type: "over", winner: left[0]!.id });
+  if (
+    left.length === 1 ||
+    oneTeamLeft(
+      g.teams,
+      left.map((q) => q.id),
+    )
+  ) {
+    // Les survivants se classent entre eux : le plus d'allumettes, puis le plus de mots
+    const order = left.slice().sort((a, b) => b.lives - a.lives || b.stats.words - a.stats.words);
+    finish(g, order);
+    events.push({ type: "over", winner: order[0]!.id });
     return events;
   }
   // Chacun sa mèche : une manche est finie, tout le monde repart avec une mèche neuve, un peu plus courte
@@ -473,8 +484,8 @@ export function explode(g: MecheGame, now: number): MecheEvent[] {
   return events;
 }
 
-function finish(g: MecheGame, winner: MechePlayer) {
-  winner.place = 1;
+function finish(g: MecheGame, survivors: MechePlayer[]) {
+  survivors.forEach((p, i) => (p.place = i + 1));
   g.phase = "over";
   for (const p of g.players) p.stats.livesLeft = p.lives;
   const ordered = [...g.players].sort((a, b) => a.place! - b.place!);

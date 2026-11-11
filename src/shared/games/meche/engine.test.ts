@@ -126,6 +126,21 @@ describe("la mèche", () => {
     expect(ev[0]).toMatchObject({ type: "lit", fuse: 1, holder: "p0" });
   });
 
+  it("en tournée par équipes, la partie s'arrête quand il ne reste qu'une équipe en jeu", () => {
+    const g = game({}, 4);
+    g.teams = { p0: 0, p1: 1, p2: 0, p3: 1 };
+    lightFuse(g, NOW + START_MS);
+    Object.assign(g.players[3]!, { lives: 0, place: 4 });
+    g.players[1]!.lives = 1;
+    g.players[2]!.lives = 3;
+    g.players[0]!.lives = 2;
+    g.holder = 1;
+    const ev = explode(g, NOW + START_MS + 1000);
+    expect(g.phase).toBe("over");
+    expect(ev.at(-1)).toMatchObject({ type: "over", winner: "p2" });
+    expect(g.ranking).toEqual(["p2", "p0", "p1", "p3"]);
+  });
+
   it("explose dans la zone rouge de la main, jamais avant", () => {
     for (let seed = 1; seed < 200; seed++) {
       const g = newGame(["a", "b"], DEFAULT_SETTINGS, NOW, seed);

@@ -649,6 +649,8 @@ export class MecheRoom extends DurableObject<Env> {
       now,
       randomSeed(),
     );
+    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
+    d.game.teams = d.tour?.teams ?? null;
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
