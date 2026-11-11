@@ -22,11 +22,16 @@ export interface UnoPlayerView {
   rank: number | null;
 }
 
-/** Ce qu'un joueur a le droit de voir : sa main, et seulement le nombre de cartes des autres. */
+/**
+ * Ce qu'un joueur a le droit de voir : sa main, et seulement le nombre de cartes des autres. En équipe, il voit
+ * aussi la main de ses coéquipiers.
+ */
 export interface UnoView {
   settings: UnoSettings;
   you: string | null;
   hand: Card[];
+  /** Les mains de ses coéquipiers (vide hors équipes) */
+  partners: { id: string; hand: Card[] }[];
   playable: number[];
   players: UnoPlayerView[];
   turn: string;
@@ -54,7 +59,7 @@ export interface UnoView {
   mercyLimit: number | null;
 }
 
-export function viewFor(s: UnoState, viewerId: string | null): UnoView {
+export function viewFor(s: UnoState, viewerId: string | null, partnerIds: readonly string[] = []): UnoView {
   const me = viewerId ? playerIndex(s, viewerId) : -1;
   const meP = me >= 0 ? s.players[me]! : null;
   const isMyTurn = me >= 0 && me === s.turn;
@@ -67,6 +72,9 @@ export function viewFor(s: UnoState, viewerId: string | null): UnoView {
     settings: s.settings,
     you: meP?.id ?? null,
     hand: meP ? meP.hand.slice() : [],
+    partners: meP
+      ? s.players.filter((p) => p.id !== meP.id && partnerIds.includes(p.id)).map((p) => ({ id: p.id, hand: p.hand.slice() }))
+      : [],
     playable: me >= 0 ? playableCardIds(s, me) : [],
     players: s.players.map((p, i) => ({
       id: p.id,

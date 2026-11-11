@@ -56,6 +56,26 @@ function expectFail(s: UnoState, who: number, action: Parameters<typeof applyAct
   expect(res.ok).toBe(false);
 }
 
+describe("UNO en équipe", () => {
+  it("chacun voit la main de son coéquipier, et seulement la sienne", () => {
+    const s = rig({ hands: [[n("red", 1)], [n("blue", 2)], [n("green", 3), n("green", 4)], [n("yellow", 5)]], top: n("red", 9) });
+    const v = viewFor(s, "p0", ["p2"]);
+    expect(v.partners).toEqual([{ id: "p2", hand: s.players[2]!.hand }]);
+    expect(viewFor(s, "p1", []).partners).toEqual([]);
+    expect(viewFor(s, null, ["p2"]).partners).toEqual([]);
+  });
+
+  it("un bot ne fait pas piocher son partenaire quand il a mieux à jouer", () => {
+    const hand = [c("draw2", "red"), n("red", 5)];
+    for (let k = 0; k < 20; k++) {
+      const s = rig({ hands: [hand, [n("blue", 1), n("blue", 2)], [n("green", 3)], [n("yellow", 4)]], top: n("red", 9) });
+      const actions = botTurn(s, "p0", { rng: k * 7919 + 1 }, new Set(["p1"]));
+      const play = actions.find((a) => a.type === "play");
+      expect(play && play.type === "play" ? play.cardId : -1).toBe(hand[1]!.id);
+    }
+  });
+});
+
 describe("jeu de cartes", () => {
   it("contient les 108 cartes officielles", () => {
     const deck = buildClassicDeck();

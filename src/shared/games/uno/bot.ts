@@ -13,9 +13,10 @@ import { random, type RngHolder } from "../../rng.ts";
 
 /**
  * Choisit les actions d'un bot pour son tour (ou pour un joueur absent).
- * Le bot ne voit que sa main et le nombre de cartes des autres, comme un humain.
+ * Le bot ne voit que sa main et le nombre de cartes des autres, comme un humain. En équipe (`partners` : les
+ * ids de ses coéquipiers), il évite de frapper son partenaire et ne lui prend pas sa main.
  */
-export function botTurn(s: UnoState, playerId: string, rng: RngHolder): UnoAction[] {
+export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners: ReadonlySet<string> = new Set()): UnoAction[] {
   const p = playerIndex(s, playerId);
   if (p < 0 || s.phase !== "playing" || s.turn !== p) return [];
   const me = s.players[p]!;
@@ -27,7 +28,7 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder): UnoActio
     // Plus l'accuse a de cartes, plus il est probable qu'il avait la couleur
     const suspicion = accused.hand.length >= 6 ? 0.45 : accused.hand.length >= 3 ? 0.25 : 0.1;
     const stack = me.hand.filter((c) => canPlayCard(s, p, c));
-    if (stack.length > 0) return withUno(s, p, playAction(s, p, stack[0]!, rng), rng);
+    if (stack.length > 0) return withUno(s, p, playAction(s, p, stack[0]!, rng, partners), rng);
     return random(rng) < suspicion ? [{ type: "challenge" }] : [{ type: "draw" }];
   }
 
@@ -37,19 +38,19 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder): UnoActio
     if (playable.length === 0) return [{ type: "draw" }];
     // Repondre avec la plus petite carte « + » possible, garder les grosses
     const best = playable.slice().sort((a, b) => drawValue(a) - drawValue(b))[0]!;
-    return withUno(s, p, playAction(s, p, best, rng), rng);
+    return withUno(s, p, playAction(s, p, best, rng, partners), rng);
   }
 
   if (s.hasDrawn && s.drawnCardId !== null) {
     const drawn = me.hand.find((c) => c.id === s.drawnCardId);
-    if (drawn && canPlayCard(s, p, drawn)) return withUno(s, p, playAction(s, p, drawn, rng), rng);
+    if (drawn && canPlayCard(s, p, drawn)) return withUno(s, p, playAction(s, p, drawn, rng, partners), rng);
     return [{ type: "pass" }];
   }
 
   if (playable.length === 0) return [{ type: "draw" }];
 
-  const choice = pickCard(s, p, playable, rng);
-  return withUno(s, p, playAction(s, p, choice, rng), rng);
+  const choice = pickCard(s, p, playable, rng, partners);
+  return withUno(s, p, playAction(s, p, choice, rng, partners), rng);
 }
 
 /** Avant de poser son avant-derniere carte, le bot crie UNO… la plupart du temps. */
@@ -60,7 +61,7 @@ function withUno(s: UnoState, p: number, actions: UnoAction[], rng: RngHolder): 
   return actions;
 }
 
-function playAction(s: UnoState, p: number, card: Card, rng: RngHolder): UnoAction[] {
+function playAction(s: UnoState, p: number, card: Card, rng: RngHolder, partners: ReadonlySet<string>): UnoAction[] {
   const me = s.players[p]!;
   const action: UnoAction = { type: "play", cardId: card.id };
   if (isWild(card) && card.kind !== "wildRoulette") {
@@ -68,10 +69,11 @@ function playAction(s: UnoState, p: number, card: Card, rng: RngHolder): UnoActi
     action.color = rest.length > 0 ? mostCommonColor(rest, rng) : COLORS[Math.floor(random(rng) * 4)]!;
   }
   if (card.kind === "number" && card.value === 7 && effectiveRules(s.settings).sevenZero) {
-    // On echange avec la main la plus petite
+    // On echange avec la main la plus petite, jamais avec son partenaire
     let target = -1;
     for (let i = 0; i < s.players.length; i++) {
       if (i === p || s.players[i]!.out) continue;
+      if (partners.has(s.players[i]!.id) && s.players.some((o, k) => k !== p && !o.out && !partners.has(o.id))) continue;
       if (target < 0 || s.players[i]!.hand.length < s.players[target]!.hand.length) target = i;
     }
     if (target >= 0) action.target = s.players[target]!.id;
@@ -79,10 +81,12 @@ function playAction(s: UnoState, p: number, card: Card, rng: RngHolder): UnoActi
   return [action];
 }
 
-function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder): Card {
+function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, partners: ReadonlySet<string>): Card {
   const me = s.players[p]!;
   const next = s.players[nextIndex(s, p, 1)]!;
-  const danger = next.hand.length <= 2;
+  // Le suivant est son partenaire : on ne lui fait ni piocher ni passer son tour
+  const friend = partners.has(next.id);
+  const danger = !friend && next.hand.length <= 2;
   const colorCounts = new Map<string, number>();
   for (const c of me.hand) if (c.color) colorCounts.set(c.color, (colorCounts.get(c.color) ?? 0) + 1);
 
@@ -98,13 +102,15 @@ function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder): Car
       const hasColor = me.hand.some((c) => c.id !== card.id && c.color === s.color);
       if (hasColor) score -= 30; // bluff rare
     }
-    if (isDrawCard(card) || card.kind === "skip" || card.kind === "skipAll") {
+    if (isDrawCard(card) || card.kind === "skip") {
+      score += friend ? -28 : danger ? 25 : 4;
+    } else if (card.kind === "skipAll") {
       score += danger ? 25 : 4;
     }
     if (card.kind === "reverse") score += danger && activeCount(s) > 2 ? 14 : 3;
     if (card.kind === "discardAll" && card.color) score += (colorCounts.get(card.color) ?? 0) * 4;
     if (card.kind === "number" && card.value === 7 && effectiveRules(s.settings).sevenZero) {
-      const smallest = Math.min(...s.players.filter((pl, i) => i !== p && !pl.out).map((pl) => pl.hand.length));
+      const smallest = Math.min(...s.players.filter((pl, i) => i !== p && !pl.out && !partners.has(pl.id)).map((pl) => pl.hand.length));
       score += smallest < me.hand.length - 1 ? 18 : -8;
     }
     score += random(rng) * 3;

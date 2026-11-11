@@ -974,12 +974,11 @@ export class TourRoom extends DurableObject<Env> {
       }
       const index = d.games.length + 1;
       const code = await this.hub.allocateCode();
-      // Le 2 contre 2 de la bataille navale et de Briques se joue avec les équipes de la tournée
+      // Le 2 contre 2 de la bataille navale et de Briques se joue avec les équipes de la tournée ; UNO, à toutes les
+      // tailles d'équipes égales (chacun y voit la main de ses coéquipiers)
       const red = players.filter((m) => m.team === 0).length;
-      const teams =
-        d.settings.teams && game !== "uno" && players.length === 4 && red === 2
-          ? Object.fromEntries(players.map((m) => [m.userId, m.team as 0 | 1]))
-          : null;
+      const fair = game === "uno" ? players.length >= 4 && red * 2 === players.length : players.length === 4 && red === 2;
+      const teams = d.settings.teams && fair ? Object.fromEntries(players.map((m) => [m.userId, m.team as 0 | 1])) : null;
       const users: PublicUser[] = players
         .filter((m) => m.kind === "human")
         .map((m) => ({

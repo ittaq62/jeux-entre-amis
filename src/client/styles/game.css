@@ -1651,3 +1651,66 @@ html:has(.bolides-root) body {
     animation: none;
   }
 }
+
+/* UNO en équipe : la couleur de chacun autour de son portrait, et la main de son coéquipier, face visible */
+.seat.has-team .seat-avatar .avatar {
+  box-shadow:
+    0 0 0 2px rgba(5, 17, 12, 0.9),
+    0 0 0 4px var(--team-color),
+    0 6px 14px -4px rgba(0, 0, 0, 0.65);
+}
+
+.seat.has-team.is-turn .seat-avatar .avatar {
+  box-shadow:
+    0 0 0 2px rgba(5, 17, 12, 0.9),
+    0 0 0 4px var(--gold),
+    0 0 0 7px var(--team-color),
+    0 0 22px 2px rgba(226, 189, 110, 0.4);
+}
+
+.seat-partner-tag {
+  margin-top: -2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--team-color) 30%, rgba(0, 0, 0, 0.45));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.partner-hand {
+  position: relative;
+  flex: none;
+}
+
+.partner-card {
+  position: absolute;
+  top: 0;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+
+.team-note {
+  min-width: 0;
+  margin: 0 auto 0 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--team-color) 60%, transparent);
+  background: color-mix(in srgb, var(--team-color) 22%, rgba(0, 0, 0, 0.5));
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-note span {
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+@media (max-width: 520px) {
+  .team-note span {
+    display: none;
+  }
+}

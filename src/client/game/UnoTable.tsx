@@ -21,6 +21,7 @@ import { Seat, TimerRing } from "./Seat.tsx";
 import type { EmoteBubble } from "./useRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
+import { TOUR_TEAM_COLORS, TOUR_TEAMS } from "../../shared/tour.ts";
 
 interface TableProps {
   room: RoomView;
@@ -241,6 +242,21 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
           </span>
         </div>
+        {mySeat?.team !== undefined && (
+          <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team] }}>
+            Équipe {TOUR_TEAMS[mySeat.team]}
+            {g.partners.length > 0 && (
+              <span>
+                {" "}
+                · avec{" "}
+                {g.partners
+                  .map((x) => room.seats.find((s) => s.id === x.id)?.name)
+                  .filter(Boolean)
+                  .join(" et ")}
+              </span>
+            )}
+          </p>
+        )}
         <div className="table-top-actions">
           <button
             className="btn btn-ghost btn-icon"
@@ -296,6 +312,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           const seat = room.seats.find((s) => s.id === p.id);
           if (!seat) return null;
           const pos = positions[k]!;
+          const partnerHand = g.partners.find((x) => x.id === p.id)?.hand;
           return (
             <div key={p.id} className="seat-slot" style={{ left: pos.x, top: pos.y }}>
               <Seat
@@ -308,9 +325,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 showScore={g.settings.endMode === "points"}
                 emotes={emotes.filter((e) => e.seatId === p.id)}
                 compact={compact}
-                vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out}
+                vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partnerHand}
                 onCatch={() => act({ type: "catch", target: p.id })}
                 mercyLimit={g.mercyLimit}
+                teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team] : undefined}
+                partnerHand={partnerHand}
               />
             </div>
           );

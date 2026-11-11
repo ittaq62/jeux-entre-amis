@@ -75,6 +75,8 @@ interface Seat {
   autoplay: false | "away" | "afk";
   missed: number;
   disconnectedAt: number | null;
+  /** En tournée par équipes : son équipe ; il voit la main de ses coéquipiers */
+  team?: 0 | 1;
 }
 
 type TimerKind =
@@ -200,6 +202,20 @@ export class GameRoom extends DurableObject<Env> {
           disconnectedAt: null,
         })),
       ];
+      // En équipes, les partenaires s'assoient en alternance : on ne joue jamais juste après son coéquipier
+      const teams = opts.tour.teams;
+      if (teams) {
+        for (const s of d.seats) s.team = teams[s.id];
+        const red = d.seats.filter((s) => s.team === 0);
+        const blue = d.seats.filter((s) => s.team === 1);
+        const others = d.seats.filter((s) => s.team === undefined);
+        const mixed: Seat[] = [];
+        for (let i = 0; i < Math.max(red.length, blue.length); i++) {
+          if (red[i]) mixed.push(red[i]!);
+          if (blue[i]) mixed.push(blue[i]!);
+        }
+        d.seats = [...mixed, ...others];
+      }
       d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
       // Les règles choisies par la tournée (variante)
       d.settings.uno = { ...d.settings.uno, ...variantSettings("uno", opts.tour.variant) };
@@ -401,7 +417,9 @@ export class GameRoom extends DurableObject<Env> {
           seat.missed = 0;
           d.scheduledTurnId = -1;
         }
-        const res = applyAction(d.uno, seat.id, sanitizeAction(msg.action), now);
+        const action = sanitizeAction(msg.action);
+        if (action.type === "catch" && this.partnersOf(seat).includes(action.target)) return error("On ne dénonce pas son coéquipier !");
+        const res = applyAction(d.uno, seat.id, action, now);
         if (!res.ok) {
           error(res.error);
           return this.afterChange([], now);
@@ -721,6 +739,8 @@ export class GameRoom extends DurableObject<Env> {
         let best: { seat: Seat; delay: number } | null = null;
         for (const s of d.seats) {
           if (s === vulnerable || !(s.kind === "bot" || s.autoplay)) continue;
+          // On ne dénonce pas son coéquipier
+          if (s.team !== undefined && s.team === vulnerable.team) continue;
           if (g.players.find((p) => p.id === s.id)?.out) continue;
           const delay = botCatchDelay(d);
           if (delay !== null && (!best || delay < best.delay)) best = { seat: s, delay };
@@ -823,7 +843,7 @@ export class GameRoom extends DurableObject<Env> {
       case "bot": {
         if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id) return null;
         if (!(seat.kind === "bot" || seat.autoplay)) return null;
-        return this.playAll(g, seat.id, botTurn(g, seat.id, d), now);
+        return this.playAll(g, seat.id, botTurn(g, seat.id, d, new Set(this.partnersOf(seat))), now);
       }
       case "timeout": {
         if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id || seat.autoplay) return null;
@@ -994,6 +1014,12 @@ export class GameRoom extends DurableObject<Env> {
     if (d.chat.length > CHAT_KEEP) d.chat.splice(0, d.chat.length - CHAT_KEEP);
   }
 
+  /** Les coéquipiers d'un joueur (vide hors équipes) */
+  private partnersOf(seat: Seat | undefined): string[] {
+    if (!seat || seat.team === undefined) return [];
+    return this.data!.seats.filter((o) => o !== seat && o.team === seat.team).map((o) => o.id);
+  }
+
   private viewFor(userId: string, connected: Map<string, PublicUser>): RoomView {
     const d = this.data!;
     const seat = d.seats.find((s) => s.userId === userId);
@@ -1019,11 +1045,12 @@ export class GameRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
+        ...(s.team !== undefined ? { team: s.team } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
-      uno: d.uno ? viewFor(d.uno, seat?.id ?? null) : null,
+      uno: d.uno ? viewFor(d.uno, seat?.id ?? null, this.partnersOf(seat)) : null,
       turnDeadline: d.turnDeadline,
       nextRoundAt: d.nextRoundAt,
       serverNow: Date.now(),
