@@ -325,7 +325,10 @@ export class CramponsRoom extends DurableObject<Env> {
       }
 
       case "act": {
-        if (!seat || !d.match || d.status !== "playing" || !ACTIONS.includes(msg.k) || !this.allowMessage(`act:${userId}`, 40)) return;
+        // Chaque sorte de geste a sa propre cadence : un changement de joueur ne fait pas perdre la passe qui le suit
+        if (!seat || !d.match || d.status !== "playing" || !ACTIONS.includes(msg.k)) return;
+        // (la file de gestes du match est de toute façon bornée)
+        if (!this.allowMessage(`act:${userId}:${msg.k}`, 40)) return;
         pushAction(d.match, seat.id, msg.k as HumanActionKind, Math.max(0, num(msg.p)), num(msg.x), num(msg.z), msg.to ?? -1);
         return;
       }

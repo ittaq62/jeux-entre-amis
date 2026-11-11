@@ -9,6 +9,7 @@ import {
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
+  AUTO_SWITCH_HOLD,
   HUMAN_KEEPER_WAIT,
   HUMAN_RESTART_WAIT,
   faceTo,
@@ -158,11 +159,31 @@ function followBall(m: Match, id: number) {
     .map((o) => ({ o, d: Math.hypot(m.players[o.active]!.x - p.x, m.players[o.active]!.z - p.z) }))
     .sort((a, b) => a.d - b.d)[0];
   if (best) {
-    best.o.active = p.i;
+    autoSwitch(m, best.o, p.i);
     // Un clic donné pour le joueur d'avant ne fait pas relancer le gardien
     if (p.role === "GK") best.o.queue = [];
   }
   syncHumans(m);
+}
+
+/** Un clic arrivé si vite après un changement fait sans lui qu'il n'a pas pu le voir : il était pour le joueur d'avant */
+const AUTO_SWITCH_BLIND = 0.3;
+
+/** Change de joueur sans que l'humain l'ait demandé, en gardant trace de celui qu'il dirigeait */
+function autoSwitch(m: Match, h: Human, to: number) {
+  if (h.active === to) return;
+  h.autoFrom = h.active;
+  h.active = to;
+  h.autoAt = m.t;
+  h.switchAt = m.t;
+  h.autoMx = h.mx;
+  h.autoMz = h.mz;
+}
+
+/** La touche qu'il tient encore était pour son joueur d'avant : le nouveau n'en tient pas compte tant qu'elle ne change pas */
+function stickFromBefore(m: Match, h: Human): boolean {
+  if (h.autoAt === undefined || m.t - h.autoAt >= AUTO_SWITCH_HOLD) return false;
+  return Math.hypot(h.mx - (h.autoMx ?? 0), h.mz - (h.autoMz ?? 0)) < 0.35;
 }
 
 /** Là où le ballon qui vient de partir retombera, à peu près : on y donne la main au coéquipier le mieux placé */
@@ -213,24 +234,36 @@ export function dropHuman(m: Match, id: string) {
   syncHumans(m);
 }
 
-/** L'adversaire vient de prendre le ballon : chaque humain reprend le joueur le mieux placé, s'il y en a un nettement plus près */
+/**
+ * L'adversaire vient de prendre le ballon : l'humain reprend un défenseur mieux placé, mais seulement si le sien est
+ * loin ou déjà dépassé, et pas plus d'une fois par seconde. Changer sans cesse de joueur, c'est le perdre de vue, et
+ * courir n'importe où avec la touche qu'on tenait pour l'autre.
+ */
 function defendSwitch(m: Match, owner: Player) {
   for (const h of m.humans) {
-    if (h.team === owner.team) continue;
+    if (h.team === owner.team || m.t - (h.switchAt ?? -9) < 1) continue;
     const current = m.players[h.active];
+    const gx = -attackDir(m, h.team) * HALF_L;
+    const toGoal = (q: { x: number; z: number }) => Math.hypot(gx - q.x, q.z);
     const here = current ? Math.hypot(current.x - owner.x, current.z - owner.z) : Infinity;
+    const beaten = !current || toGoal(current) > toGoal(owner) + 2;
+    if (here < 9 && !beaten) continue;
     const taken = new Set(m.humans.filter((o) => o !== h).map((o) => o.active));
     let best = -1;
     let bd = Infinity;
+    let bScore = Infinity;
     for (const p of m.players) {
       if (p.team !== h.team || p.off || p.role === "GK" || taken.has(p.i)) continue;
       const d = Math.hypot(p.x - owner.x, p.z - owner.z);
-      if (d < bd) {
+      // Entre deux défenseurs aussi proches, celui qui est entre le porteur et le but
+      const score = d + (toGoal(p) < toGoal(owner) ? 0 : 4);
+      if (score < bScore) {
+        bScore = score;
         bd = d;
         best = p.i;
       }
     }
-    if (best >= 0 && bd < here - 4) h.active = best;
+    if (best >= 0 && bd < here - 4) autoSwitch(m, h, best);
   }
   syncHumans(m);
 }
@@ -248,8 +281,12 @@ export function setInput(m: Match, id: string, mx: number, mz: number, sprint: b
 export function pushAction(m: Match, id: string, k: HumanAction["k"], p: number, mx: number, mz: number, to = -1) {
   const h = m.humans.find((o) => o.id === id);
   if (!h || h.queue.length > 6) return;
-  h.queue.push({ k, p: clamp(p, 0, 1), mx, mz, at: m.t, to: Number.isInteger(to) ? to : -1 });
+  const blind = h.autoAt !== undefined && h.autoFrom !== undefined && m.t - h.autoAt < AUTO_SWITCH_BLIND;
+  h.queue.push({ k, p: clamp(p, 0, 1), mx, mz, at: m.t, to: Number.isInteger(to) ? to : -1, by: blind ? h.autoFrom : h.active });
 }
+
+/** Ce geste a-t-il été demandé pour ce joueur-là ? (pas pour celui qu'il dirigeait juste avant) */
+const meantFor = (a: HumanAction, p: Player) => a.by === undefined || a.by === p.i;
 
 function startTackle(p: Player, slide: boolean, h: Human | null, m: Match) {
   if (p.act !== "none") return;
@@ -287,7 +324,10 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
       if (!p) continue;
       if (a.k === "switch") {
         // On ne quitte pas un joueur qui a le ballon : on le perdrait aussitôt
-        if (m.owner !== h.active) pickActive(m, h, h.active);
+        if (m.owner !== h.active) {
+          pickActive(m, h, h.active);
+          h.switchAt = m.t;
+        }
         continue;
       }
       if (m.phase === "restart") {
@@ -312,6 +352,8 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
         if (r && r.ready && r.taker === p.i && isKick(a.k) && !p.order) orderRestartKick(m, p, a);
         continue;
       }
+      // Un geste demandé pour un autre joueur (on dirigeait quelqu'un d'autre en appuyant) ne se rejoue pas sur celui-ci
+      if (isKick(a.k) && !meantFor(a, p)) continue;
       if (m.owner === p.i && isKick(a.k)) {
         // Son gardien relâche le ballon qu'il tient pour le relancer ; tout juste capté, le geste attend un instant
         const holding = p.act === "hold";
@@ -890,7 +932,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       // Celui à qui la passe est destinée, humain ou non, va à la rencontre du ballon
       [wx, wz, speed] = receiveRun(m, p);
       sprinting = true;
-    } else if (h && m.phase !== "goal") {
+    } else if (h && m.phase !== "goal" && !stickFromBefore(m, h)) {
       wx = h.mx;
       wz = h.mz;
       sprinting = h.sprint;
@@ -1063,7 +1105,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
   // Une frappe demandée juste avant : la reprise
   const h = p.human ? m.humans.find((o) => o.id === p.human) : null;
   if (h) {
-    const a = h.queue.find((x) => isKick(x.k));
+    const a = h.queue.find((x) => isKick(x.k) && meantFor(x, p));
     if (a) {
       h.queue = h.queue.filter((x) => x !== a);
       orderKick(p, humanOrder(m, p, a));

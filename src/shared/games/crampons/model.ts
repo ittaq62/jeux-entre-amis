@@ -102,7 +102,24 @@ export interface Human {
   queue: HumanAction[];
   /** Ses buts à lui, quel que soit le joueur qu'il dirigeait (absent des matchs commencés avant) */
   goals?: number;
+  /** Le dernier changement de joueur, qu'il l'ait demandé ou non */
+  switchAt?: number;
+  /**
+   * Le dernier changement fait sans lui (un coéquipier a ramassé le ballon, un autre défenseur est mieux placé), et le
+   * joueur qu'il dirigeait avant : un clic parti avant qu'il ait pu le voir était pour celui-là
+   */
+  autoAt?: number;
+  autoFrom?: number;
+  /** La direction qu'il tenait à ce moment-là : tant qu'il ne la change pas, elle ne vaut pas pour le nouveau joueur */
+  autoMx?: number;
+  autoMz?: number;
 }
+
+/**
+ * Juste après un changement de joueur fait sans lui, la touche encore enfoncée était pour l'autre : le nouveau joueur
+ * continue sa course jusqu'à ce que la direction change, ou au plus ce temps-là
+ */
+export const AUTO_SWITCH_HOLD = 0.5;
 
 export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
 
@@ -134,6 +151,11 @@ export interface HumanAction {
   at: number;
   /** Le coéquipier qu'il voyait désigné à l'écran au moment d'appuyer, ou -1 */
   to: number;
+  /**
+   * Le joueur qu'il dirigeait en appuyant : une reprise ne vaut que pour lui. Un coéquipier qui ramasse le ballon
+   * juste après ne rejoue pas ce geste à sa place (absent des matchs commencés avant).
+   */
+  by?: number;
 }
 
 export type Phase = "kickoff" | "play" | "restart" | "goal" | "halftime" | "over";

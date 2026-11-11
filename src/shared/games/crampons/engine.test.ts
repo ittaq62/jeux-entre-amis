@@ -634,6 +634,62 @@ describe("son gardien qui capte le ballon", () => {
   });
 });
 
+describe("les gestes ne vont qu'au joueur pour qui on les a faits", () => {
+  /** Le ballon libre à côté d'un défenseur de l'ordinateur ; l'humain dirige un autre joueur, touche vers son propre but */
+  function looseBall() {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 21);
+    toPlay(m);
+    const dir = attackDir(m, 0);
+    const h = m.humans[0]!;
+    const me = m.players[h.active]!;
+    const mate = m.players.find((o) => o.team === 0 && o.i !== me.i && o.role === "CB")!;
+    for (const o of m.players) {
+      if (o.role !== "GK") {
+        o.x = o.team === 0 ? 30 * dir : 40 * dir;
+        o.z = -30 + o.i * 2.5;
+      }
+      o.vx = o.vz = 0;
+      o.tx = o.x;
+      o.tz = o.z;
+      o.lockedUntil = 0;
+    }
+    me.x = -10 * dir;
+    me.z = 4;
+    mate.x = -20 * dir;
+    mate.z = 0;
+    Object.assign(m.ball, { x: -19 * dir, y: 0.16, z: 0.5, vx: 0, vy: 0, vz: 0 });
+    m.owner = -1;
+    m.lastTouch = m.players.find((o) => o.team === 1)!.i;
+    m.pass = null;
+    setInput(m, "moi", -dir, 0, false, false);
+    return { m, h, mate, dir };
+  }
+
+  it("un coéquipier qui ramasse le ballon ne rejoue pas la passe demandée pour un autre", () => {
+    const { m, h, mate } = looseBall();
+    pushAction(m, "moi", "pass", 1, -attackDir(m, 0), 0, -1);
+    let kicked = false;
+    for (let i = 0; i < 30; i++) for (const e of stepMatch(m)) if (e.k === "kick" && e.p === mate.i) kicked = true;
+    expect(m.owner).toBe(mate.i);
+    expect(h.active).toBe(mate.i);
+    expect(kicked).toBe(false);
+  });
+
+  it("le nouveau joueur ne file pas tout de suite dans la direction tenue pour l'ancien", () => {
+    const { m, h, mate, dir } = looseBall();
+    for (let i = 0; i < 12 && h.active !== mate.i; i++) stepMatch(m);
+    expect(h.active).toBe(mate.i);
+    const x0 = mate.x;
+    for (let i = 0; i < 9; i++) stepMatch(m);
+    expect((x0 - mate.x) * dir).toBeLessThan(0.8);
+    // Une fois la direction changée, elle vaut pour lui
+    setInput(m, "moi", 0, 1, false, false);
+    const z0 = mate.z;
+    for (let i = 0; i < 15; i++) stepMatch(m);
+    expect(mate.z - z0).toBeGreaterThan(1);
+  });
+});
+
 describe("le gardien", () => {
   /** Un humain seul face au gardien, à `dist` mètres du but, frappe en visant `az` (1 : le coin) ; rend vrai s'il marque */
   function duel(seed: number, dist: number, az: number): boolean {

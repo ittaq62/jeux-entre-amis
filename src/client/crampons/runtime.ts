@@ -4,6 +4,7 @@
 import { GRAVITY, stepBall, type Ball } from "../../shared/games/crampons/ball.ts";
 import { planPass, planThrough, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
 import {
+  AUTO_SWITCH_HOLD,
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
@@ -202,6 +203,18 @@ export class MatchRuntime {
   private ghost: Ghost | null = null;
   /** Une passe arrive à son joueur : il va seul au ballon, et le serveur seul sait où il est */
   private receiving = false;
+  /**
+   * Le serveur vient de lui donner un autre joueur sans qu'il le demande : la touche encore enfoncée était pour
+   * l'ancien, le nouveau finit sa course (comme sur le serveur) jusqu'à ce que la direction change
+   */
+  private autoHoldUntil = 0;
+  private autoStickX = 0;
+  private autoStickZ = 0;
+  private stickX = 0;
+  private stickZ = 0;
+  /** Ses derniers gestes : un changement de joueur qui les suit, c'est lui qui l'a voulu */
+  private switchAskedAt = -1e9;
+  private kickedAt = -1e9;
   private blendX = 0;
   private blendZ = 0;
   private predShownFor = -1;
@@ -490,6 +503,12 @@ export class MatchRuntime {
     this.srvX = x;
     this.srvZ = z;
     if (!this.pred || this.predFor !== a) {
+      // Un autre joueur, sans l'avoir demandé ni venir de donner le ballon : le serveur le laisse finir sa course
+      if (this.pred && nowMs - this.switchAskedAt > 700 && nowMs - this.kickedAt > 1500) {
+        this.autoHoldUntil = nowMs + Math.max(0.1, AUTO_SWITCH_HOLD - this.rtt / 2) * 1000;
+        this.autoStickX = this.stickX;
+        this.autoStickZ = this.stickZ;
+      } else this.autoHoldUntil = 0;
       const info = this.view.players[a]!;
       this.predFor = a;
       this.history.length = 0;
@@ -512,7 +531,7 @@ export class MatchRuntime {
     }
     const p = this.pred;
     p.stam = stam;
-    if (this.receiving) {
+    if (this.receiving || this.autoHolding()) {
       // Il court seul vers le ballon : on le garde prêt à repartir du bon endroit, à la bonne vitesse
       p.x = x;
       p.z = z;
@@ -575,6 +594,23 @@ export class MatchRuntime {
       this.errFor = 0;
       this.corrX = this.corrZ = 0;
     }
+  }
+
+  private autoHolding() {
+    return this.autoHoldUntil > performance.now();
+  }
+
+  /** Le ballon libre arrive sur son joueur (une passe pour lui, ou il est tout près, ou il roule droit sur lui) */
+  private ballComing(): boolean {
+    if (this.receiving) return true;
+    const p = this.pred;
+    const s = this.snaps.at(-1);
+    if (!p || !s) return false;
+    const dx = p.x - s.b[0]!;
+    const dz = p.z - s.b[2]!;
+    const d = Math.hypot(dx, dz);
+    if (d < 4) return true;
+    return d < 16 && (s.b[3]! * dx + s.b[4]! * dz) / d > Math.max(3, d * 0.5);
   }
 
   private isTaking(active: number) {
@@ -674,6 +710,11 @@ export class MatchRuntime {
     // Son gardien : sa frappe est un dégagement (le serveur en décide), et il ne bouge pas tant qu'il tient le ballon
     const keeper = hasBall && this.view.players[active]?.role === "GK";
     const holding = keeper && ACTS[lastSnap!.p[active * TICK_STRIDE + 4]!] === "hold";
+    // Après un changement de joueur fait sans lui, la direction qu'il tenait ne vaut qu'une fois changée
+    this.stickX = mx;
+    this.stickZ = mz;
+    if (this.autoHoldUntil > now && Math.hypot(mx - this.autoStickX, mz - this.autoStickZ) >= 0.35) this.autoHoldUntil = 0;
+    const autoHold = this.autoHoldUntil > now;
 
     const kindFor = (button: GameButton): HumanActionKind => {
       // Un penalty se tire, un coup d'envoi se passe : quelle que soit la touche, on fait ce qui va de soi
@@ -702,8 +743,12 @@ export class MatchRuntime {
       }
       for (const b of pad.pressed) this.firedOnPress.add(b);
     }
-    if (pad.swap) this.opts.act("switch", 0, 0, 0);
-    if (pad.skill && !taking) {
+    if (pad.swap) {
+      this.opts.act("switch", 0, 0, 0);
+      this.switchAskedAt = now;
+    }
+    // Le crochet ne sert que balle au pied : envoyé sans le ballon, il prendrait la place d'une passe juste après
+    if (pad.skill && !taking && hasBall) {
       this.opts.act("skill", 0, mx, mz);
       if (hasBall && now >= this.burstReadyMs) {
         this.burstUntilMs = now + BURST_S * 1000;
@@ -718,6 +763,7 @@ export class MatchRuntime {
       const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
       const to = kind === "pass" || kind === "through" || kind === "lob" ? this.receiver : -1;
       this.opts.act(kind, power, ax, az, to);
+      this.kickedAt = now;
       if (kicking) {
         this.localKick = { p: active, at: now };
         this.kickShow.set(active, now);
@@ -733,6 +779,8 @@ export class MatchRuntime {
       if (watching) break;
       this.pressCtx.set(b, ctx);
       if (!INSTANT.includes(b) || foeHasIt || penalty) continue;
+      // Ballon libre loin de lui : rien ne part (sinon le coéquipier qui le ramasse jouerait cette passe à sa place)
+      if (ctx === "free" && !this.ballComing()) continue;
       fire(b, 0.5);
       this.firedOnPress.add(b);
     }
@@ -740,9 +788,9 @@ export class MatchRuntime {
       const was = this.pressCtx.get(r.button);
       this.pressCtx.delete(r.button);
       if (this.firedOnPress.delete(r.button) || watching) continue;
-      // Le ballon a changé de camp pendant l'appui : on ne passe pas un ballon qu'on vient de gagner en pressant,
-      // on ne part pas en glissade parce qu'on l'a perdu en armant sa frappe
-      if ((was === "foe" && ctx === "ball") || (was === "ball" && ctx === "foe")) continue;
+      // Le ballon a changé de camp pendant l'appui : on ne passe pas un ballon qu'on vient de gagner (ou qui vient de se
+      // libérer) en pressant, on ne part pas en glissade parce qu'on l'a perdu en armant sa frappe
+      if ((was === "foe" && ctx !== "foe") || (was === "ball" && ctx === "foe")) continue;
       if (taking || hasBall) {
         fire(r.button, r.power);
         continue;
@@ -750,13 +798,18 @@ export class MatchRuntime {
       if (foeHasIt) {
         // L'adversaire a le ballon : Passe presse tant qu'on la tient, Tir part en glissade, les deux autres changent de joueur
         if (r.button === "shoot") this.opts.act("slide", r.power, mx, mz);
-        else if (r.button === "through" || r.button === "lob") this.opts.act("switch", 0, 0, 0);
+        else if (r.button === "through" || r.button === "lob") {
+          this.opts.act("switch", 0, 0, 0);
+          this.switchAskedAt = now;
+        }
         continue;
       }
-      // Le ballon est libre : c'est une reprise, si le ballon arrive à cet instant
+      // Le ballon est libre : c'est une reprise, s'il arrive sur son joueur ; loin de lui, le geste ne fait rien
+      if (!this.ballComing()) continue;
       const kind = kindFor(r.button);
       const [ax, az] = this.aimOf(kind, mx, mz, pad.mouse, pad.scheme);
-      this.opts.act(kind, r.power, ax, az);
+      this.opts.act(kind, r.power, ax, az, kind === "pass" || kind === "through" || kind === "lob" ? this.receiver : -1);
+      this.kickedAt = now;
     }
     // La mire, là où ira le prochain geste
     this.cursorPoint = this.cursorAims(pad, mx, mz) ? this.scene.pickGround(pad.mouse!.x, pad.mouse!.y) : null;
@@ -776,7 +829,8 @@ export class MatchRuntime {
     const p = this.pred;
     // Pendant la fête d'un but aussi : le serveur n'écoute plus les touches, il emmène tout le monde célébrer
     const phase = this.view.phase;
-    const frozen = taking || holding || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || this.receiving;
+    const following = this.receiving || autoHold;
+    const frozen = taking || holding || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || following;
     if (p && active === this.predFor) {
       this.acc += dt;
       while (this.acc >= DT) {
@@ -785,7 +839,7 @@ export class MatchRuntime {
         this.prevZ = p.z;
         this.prevH = p.h;
         if (frozen) {
-          if (!this.receiving) {
+          if (!following) {
             p.vx = 0;
             p.vz = 0;
           }
@@ -907,7 +961,15 @@ export class MatchRuntime {
         }
       }
       let mine = false;
-      if (canPredict && i === active && this.pred && this.predFor === i && !this.receiving && (act === "none" || act === "kick")) {
+      if (
+        canPredict &&
+        i === active &&
+        this.pred &&
+        this.predFor === i &&
+        !this.receiving &&
+        !this.autoHolding() &&
+        (act === "none" || act === "kick")
+      ) {
         const [sx, sz, sh] = this.shownPred();
         // Le joueur passe du temps du serveur au temps présent : on efface la différence en douceur, jamais d'un coup
         if (this.predShownFor !== i) {
