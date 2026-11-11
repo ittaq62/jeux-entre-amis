@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
-import { HUMAN_RESTART_WAIT, type MatchEvent, type RestartKind } from "../../shared/games/crampons/model.ts";
+import { HUMAN_KEEPER_WAIT, HUMAN_RESTART_WAIT, type MatchEvent, type RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
@@ -153,6 +153,7 @@ export function CramponsMatch({
     stamina: 1,
     charge: 0,
     hasBall: false,
+    keeperHold: false,
     defending: false,
     scheme: "clavier",
     fps: 60,
@@ -331,16 +332,19 @@ export function CramponsMatch({
   const restart = view.restart;
   const taking = restart?.ready && view.phase !== "play" && hud.active >= 0 && restart.taker === hud.active;
   // À lui de jouer la remise en jeu : un compte à rebours, sinon l'ordinateur la joue à sa place
+  // De même quand son gardien tient le ballon dans les mains : à lui de relancer
+  const keeperHold = hud.keeperHold && view.phase === "play" && !cinema;
   const [restartLeft, setRestartLeft] = useState<number | null>(null);
-  const takingKey = taking ? `${restart?.kind}-${restart?.taker}` : "";
+  const takingKey = taking ? `${restart?.kind}-${restart?.taker}` : keeperHold ? `gk-${hud.active}` : "";
   useEffect(() => {
     if (!takingKey) {
       setRestartLeft(null);
       return;
     }
+    const wait = takingKey.startsWith("gk-") ? HUMAN_KEEPER_WAIT : HUMAN_RESTART_WAIT;
     const start = performance.now();
-    setRestartLeft(HUMAN_RESTART_WAIT);
-    const id = setInterval(() => setRestartLeft(Math.max(0, Math.ceil(HUMAN_RESTART_WAIT - (performance.now() - start) / 1000))), 200);
+    setRestartLeft(wait);
+    const id = setInterval(() => setRestartLeft(Math.max(0, Math.ceil(wait - (performance.now() - start) / 1000))), 200);
     return () => clearInterval(id);
   }, [takingKey]);
   const left = view.teams[0];
@@ -348,7 +352,9 @@ export function CramponsMatch({
   const shootout = shown.shootout;
   const over = shown.phase === "over" && room.status === "finished";
 
-  const key = mainKey(hud.scheme, settings.bindings, restart?.kind === "penalty");
+  // Au doigt, on nomme le bouton de l'écran ; au clavier et à la manette, la touche
+  const keyOf = (shot: boolean) => (hud.scheme === "tactile" ? (shot ? "Tir" : "Passe") : mainKey(hud.scheme, settings.bindings, shot));
+  const key = keyOf(restart?.kind === "penalty");
   return (
     <div className="cr-root">
       <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
@@ -429,6 +435,15 @@ export function CramponsMatch({
           <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>
         ))}
 
+      {!banner && keeperHold && seatId !== null && (
+        <div className="cr-prompt">
+          <b className="cr-prompt-me">À toi !</b>
+          <kbd>{keyOf(false)}</kbd> Relancer
+          <kbd>{keyOf(true)}</kbd> Dégager
+          {restartLeft !== null && restartLeft <= 4 && <span className="cr-prompt-count num">{restartLeft}</span>}
+        </div>
+      )}
+
       {cinema && (
         <div className="cr-cinema" aria-hidden="true">
           <i />
@@ -490,7 +505,14 @@ export function CramponsMatch({
             </div>
           )}
           <div className="cr-buttons">
-            <PadButton runtime={runtime} button="shoot" tone="shot" label={hud.defending ? "Glissé" : "Tir"} />
+            <PadButton
+              runtime={runtime}
+              button="shoot"
+              tone="shot"
+              label={
+                hud.defending ? "Glissé" : hud.hasBall && hud.active >= 0 && view.players[hud.active]?.role === "GK" ? "Dégager" : "Tir"
+              }
+            />
             <PadButton runtime={runtime} button="through" tone="through" label={hud.defending ? "Changer" : "Profond."} />
             <PadButton runtime={runtime} button="lob" tone="lob" label={hud.defending ? "Changer" : "Lob"} />
             <PadButton runtime={runtime} button="pass" tone="pass" label={hud.defending ? "Presser" : "Passe"} />

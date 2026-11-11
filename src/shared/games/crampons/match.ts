@@ -1,6 +1,6 @@
 // Le déroulement d'un match : courir, toucher le ballon, tacler, siffler, reprendre le jeu, marquer, changer de côté.
 
-import { BALL_R, makeBall, rollingAt, stepBall } from "./ball.ts";
+import { BALL_R, GRAVITY, makeBall, rollingAt, stepBall } from "./ball.ts";
 import { keeperReadsShot, levelOf, steerCarrier, thinkCarrier, thinkTeam } from "./brain.ts";
 import { makeSquad, type TeamSetup } from "./clubs.ts";
 import { openness, orderKick, pickReceiver, pressureOn, releaseKick } from "./kicks.ts";
@@ -9,8 +9,11 @@ import {
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
+  HUMAN_KEEPER_WAIT,
   HUMAN_RESTART_WAIT,
   faceTo,
+  inKeeperHands,
+  releaseFromHands,
   newTeamStats,
   opponent,
   random,
@@ -20,6 +23,7 @@ import {
   type Human,
   type HumanAction,
   type KickKind,
+  type KickOrder,
   type Match,
   type MatchEvent,
   type MatchSettings,
@@ -49,7 +53,8 @@ const GOAL_SKIP_AFTER = 2;
 /** Le receveur d'un humain court seul vers le ballon, mais pas plus longtemps que ça : ensuite, les touches reprennent la main */
 const RECEIVE_AUTO_S = 2.2;
 const HALFTIME_PAUSE = 2.5;
-/** Le temps laissé à un humain pour tirer une remise en jeu : ensuite, l'ordinateur la tire pour lui */
+/** Le gardien qui tient le ballon ne le relâche pas au moindre clic qui traînait : il le garde au moins ça */
+const KEEPER_MIN_HOLD = 0.45;
 
 const KICK_KINDS: readonly string[] = ["pass", "through", "lob", "shot", "finesse", "chip", "clear", "cross"];
 const isKick = (k: string): k is KickKind => KICK_KINDS.includes(k);
@@ -117,14 +122,18 @@ function syncHumans(m: Match) {
   for (const h of m.humans) if (h.active >= 0) m.players[h.active]!.human = h.id;
 }
 
-/** Donne à cet humain le joueur libre le plus proche du ballon (hors gardien), en évitant celui qu'il dirige déjà si demandé */
-function pickActive(m: Match, h: Human, avoid = -1) {
+/**
+ * Donne à cet humain le joueur libre le plus proche du ballon (hors gardien), ou de l'endroit indiqué (là où retombera
+ * un dégagement), en évitant celui qu'il dirige déjà si demandé
+ */
+function pickActive(m: Match, h: Human, avoid = -1, at?: readonly [number, number]) {
   const taken = new Set(m.humans.filter((o) => o !== h).map((o) => o.active));
+  const [ax, az] = at ?? [m.ball.x, m.ball.z];
   let best = -1;
   let bd = Infinity;
   for (const p of m.players) {
     if (p.team !== h.team || p.off || p.role === "GK" || taken.has(p.i) || p.i === avoid) continue;
-    const d = Math.hypot(p.x - m.ball.x, p.z - m.ball.z);
+    const d = Math.hypot(p.x - ax, p.z - az);
     if (d < bd) {
       bd = d;
       best = p.i;
@@ -134,10 +143,13 @@ function pickActive(m: Match, h: Human, avoid = -1) {
   syncHumans(m);
 }
 
-/** Le ballon arrive à un coéquipier : si personne ne le dirige, l'humain le prend */
+/**
+ * Le ballon arrive à un coéquipier : si personne ne le dirige, l'humain le prend. Son gardien aussi, dans le jeu : c'est
+ * lui qui choisit la relance (pas aux tirs au but, où le gardien n'est à personne).
+ */
 function followBall(m: Match, id: number) {
   const p = m.players[id]!;
-  if (p.human !== null || p.role === "GK") return;
+  if (p.human !== null || (p.role === "GK" && (m.shootout || m.phase !== "play"))) return;
   const h = m.humans.find((o) => o.team === p.team);
   if (!h) return;
   // Avec plusieurs humains dans l'équipe, c'est celui qui est le plus près
@@ -145,8 +157,46 @@ function followBall(m: Match, id: number) {
     .filter((o) => o.team === p.team)
     .map((o) => ({ o, d: Math.hypot(m.players[o.active]!.x - p.x, m.players[o.active]!.z - p.z) }))
     .sort((a, b) => a.d - b.d)[0];
-  if (best) best.o.active = p.i;
+  if (best) {
+    best.o.active = p.i;
+    // Un clic donné pour le joueur d'avant ne fait pas relancer le gardien
+    if (p.role === "GK") best.o.queue = [];
+  }
   syncHumans(m);
+}
+
+/** Là où le ballon qui vient de partir retombera, à peu près : on y donne la main au coéquipier le mieux placé */
+function landingSpot(m: Match): [number, number] {
+  const b = m.ball;
+  const t = b.vy > 0 ? (2 * b.vy) / GRAVITY : 0.6;
+  return onPitch(b.x + b.vx * t, b.z + b.vz * t, 2);
+}
+
+/** Son gardien quitte le ballon : l'humain retrouve un joueur de champ, près de l'endroit où va le ballon */
+function leaveKeeper(m: Match, p: Player) {
+  if (p.role !== "GK") return;
+  for (const o of m.humans) if (o.active === p.i) pickActive(m, o, -1, landingSpot(m));
+}
+
+/**
+ * Ce que fait le geste d'un humain. Son gardien ne tire pas au but depuis son camp : sa frappe est un dégagement, et
+ * toujours vers l'avant (une touche encore enfoncée vers son propre but ne l'y enverra pas). Seul le penalty se tire.
+ */
+function humanOrder(m: Match, p: Player, a: HumanAction): KickOrder {
+  const kind = a.k as KickKind;
+  const shot = kind === "shot" || kind === "finesse" || kind === "chip";
+  if (p.role !== "GK" || !shot || (m.restart?.kind === "penalty" && m.restart.taker === p.i)) {
+    return { kind, power: a.p, ax: a.mx, az: a.mz, to: a.to };
+  }
+  const dir = attackDir(m, p.team);
+  const l = Math.hypot(a.mx, a.mz);
+  let ax = l > 0.2 ? a.mx / l : dir;
+  let az = l > 0.2 ? a.mz / l : 0;
+  if (ax * dir < 0.5) {
+    ax = dir * 0.8;
+    az = (Math.sign(az) || 1) * 0.6;
+  }
+  return { kind: "clear", power: a.p, ax, az, to: -1 };
 }
 
 /** Un humain revient : il reprend un joueur de son équipe */
@@ -263,7 +313,13 @@ function runHumanActions(m: Match, ev: MatchEvent[]) {
         continue;
       }
       if (m.owner === p.i && isKick(a.k)) {
-        if (!p.order && p.act === "none") orderKick(p, { kind: a.k, power: a.p, ax: a.mx, az: a.mz, to: a.to });
+        // Son gardien relâche le ballon qu'il tient pour le relancer ; tout juste capté, le geste attend un instant
+        const holding = p.act === "hold";
+        if (holding && m.t - p.gotAt < KEEPER_MIN_HOLD) keep.push(a);
+        else if (!p.order && (p.act === "none" || holding)) {
+          releaseFromHands(m, p);
+          orderKick(p, humanOrder(m, p, a));
+        }
         continue;
       }
       if (isKick(a.k)) {
@@ -294,7 +350,7 @@ function orderRestartKick(m: Match, p: Player, a: HumanAction) {
   } else {
     // Au penalty, on tire : une passe ou un lob depuis le point serait aussitôt compté manqué
     const kind = r.kind === "penalty" && a.k !== "finesse" && a.k !== "chip" ? "shot" : (a.k as KickKind);
-    orderKick(p, { kind, power: a.p, ax: a.mx, az: a.mz, to: a.to });
+    orderKick(p, humanOrder(m, p, { ...a, k: kind }));
   }
 }
 
@@ -775,7 +831,11 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
     }
     if (p.act === "hold") {
       steer(p, 0, 0, 0);
-      faceTo(p, attackDir(m, p.team) * HALF_L, 0);
+      // Son gardien se tourne vers où on veut relancer, jamais vers son propre but
+      const h = p.human ? m.humans.find((o) => o.id === p.human) : null;
+      const dir = attackDir(m, p.team);
+      if (h && Math.hypot(h.mx, h.mz) > 0.3 && h.mx * dir > -0.1) p.h = Math.atan2(h.mz, h.mx);
+      else faceTo(p, dir * HALF_L, 0);
       p.x = clamp(p.x, -HALF_L + 0.4, HALF_L - 0.4);
       continue;
     }
@@ -805,14 +865,16 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         }
         m.restart = null;
         // L'humain ne garde pas le gardien : il retrouve un joueur de champ
-        if (p.role === "GK") for (const o of m.humans) if (o.active === p.i) pickActive(m, o);
+        leaveKeeper(m, p);
       }
       continue;
     }
 
     if (p.act === "kick" && p.actT <= 0) {
-      if (m.owner === p.i) releaseKick(m, p, ev);
-      else p.order = null;
+      if (m.owner === p.i) {
+        releaseKick(m, p, ev);
+        leaveKeeper(m, p);
+      } else p.order = null;
       p.act = "none";
     }
 
@@ -1004,7 +1066,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
     const a = h.queue.find((x) => isKick(x.k));
     if (a) {
       h.queue = h.queue.filter((x) => x !== a);
-      orderKick(p, { kind: a.k as KickKind, power: a.p, ax: a.mx, az: a.mz, to: a.to });
+      orderKick(p, humanOrder(m, p, a));
     }
   }
 }
@@ -1077,6 +1139,7 @@ function keeperTouch(m: Match, p: Player, ev: MatchEvent[]): boolean {
     p.act = "hold";
     p.actT = 0;
     p.thinkAt = m.t + KEEPER_HOLD_S * (0.5 + random(m) * 0.5);
+    followBall(m, p.i);
     if (shot) ev.push({ k: "save", p: p.i, caught: true });
     return true;
   }
@@ -1222,7 +1285,7 @@ function tackles(m: Match, ev: MatchEvent[]) {
     if (p.act === "slide") {
       if (m.t < p.lockedUntil) continue;
       const dBall = Math.hypot(b.x - p.x, b.z - p.z);
-      if (owner && (owner.team === p.team || owner.burstUntil > m.t || owner.act === "hold")) continue;
+      if (owner && (owner.team === p.team || owner.burstUntil > m.t || inKeeperHands(m, owner))) continue;
       if (dBall < 1.2 && b.y < 1) {
         // Le ballon est touché
         if (owner) {
@@ -1244,7 +1307,7 @@ function tackles(m: Match, ev: MatchEvent[]) {
       }
     } else if (p.act === "tackle" && p.actT <= TACKLE_S - TACKLE_HIT_AT && p.actT > TACKLE_S - TACKLE_HIT_AT - DT * 1.5) {
       // Le ballon dans les mains du gardien ne se dispute pas
-      if (!owner || owner.team === p.team || owner.act === "hold") continue;
+      if (!owner || owner.team === p.team || inKeeperHands(m, owner)) continue;
       const d = Math.hypot(owner.x - p.x, owner.z - p.z);
       if (d > 1.7) continue;
       // De face, c'est plus sûr ; de dos, on risque la faute
@@ -1319,7 +1382,9 @@ function card(m: Match, p: Player, red: boolean, ev: MatchEvent[]) {
 function carriers(m: Match) {
   if (m.owner < 0 || m.phase !== "play") return;
   const p = m.players[m.owner]!;
-  if (p.human !== null || p.order || p.act === "down") return;
+  // Son gardien garde le ballon dans les mains sans que rien ne vienne : l'ordinateur relance à sa place
+  const idleKeeper = p.human !== null && p.act === "hold" && m.t - p.gotAt > HUMAN_KEEPER_WAIT;
+  if ((p.human !== null && !idleKeeper) || p.order || p.act === "down") return;
   if (p.act === "hold" && m.t < p.thinkAt) return;
   if (m.t >= p.thinkAt) {
     p.thinkAt = m.t + levelOf(m).think * (0.7 + random(m) * 0.6);
@@ -1331,7 +1396,7 @@ function carriers(m: Match) {
 function defenders(m: Match) {
   if (m.owner < 0 || m.phase !== "play") return;
   const owner = m.players[m.owner]!;
-  if (owner.act === "hold") return;
+  if (inKeeperHands(m, owner)) return;
   for (const h of m.humans) {
     const p = m.players[h.active];
     if (!p || !h.press || p.team === owner.team || p.act !== "none" || m.t < p.lockedUntil) continue;

@@ -62,6 +62,8 @@ export interface Player {
   order: KickOrder | null;
   /** Il ne peut pas retoucher le ballon avant cet instant (il vient de le frapper ou de le perdre) */
   lockedUntil: number;
+  /** Le gardien relance de la main jusqu'à cet instant : comme quand il tient le ballon, personne ne le charge */
+  handsUntil?: number;
   /** L'identifiant de l'humain qui le dirige, ou null */
   human: string | null;
   yellow: number;
@@ -106,6 +108,17 @@ export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch"
 
 /** Le temps qu'a un humain pour jouer sa remise en jeu avant que l'ordinateur ne la joue pour lui (affiché à l'écran) */
 export const HUMAN_RESTART_WAIT = 8;
+/** Son gardien a le ballon dans les mains : c'est à lui de relancer ; sans geste de sa part, l'ordinateur le fait après ça */
+export const HUMAN_KEEPER_WAIT = 6;
+
+/** Le ballon que le gardien tient, ou qu'il est en train de relancer de la main, ne se dispute pas */
+export const inKeeperHands = (m: Match, p: Player) => p.act === "hold" || (p.handsUntil ?? -1) > m.t;
+
+/** Le gardien lâche le ballon qu'il tenait pour le relancer : il reste intouchable le temps du geste */
+export function releaseFromHands(m: Match, p: Player) {
+  if (p.act === "hold") p.handsUntil = m.t + 0.8;
+  p.act = "none";
+}
 
 /** Le crochet : la durée, le temps de recharge, et le gain de vitesse */
 export const BURST_S = 0.34;

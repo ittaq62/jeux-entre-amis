@@ -72,6 +72,8 @@ export interface HudState {
   stamina: number;
   charge: number;
   hasBall: boolean;
+  /** Son gardien tient le ballon dans les mains : à lui de relancer */
+  keeperHold: boolean;
   /** L'équipe adverse a le ballon */
   defending: boolean;
   scheme: Scheme;
@@ -669,6 +671,9 @@ export class MatchRuntime {
     const taking = this.isTaking(active);
     const press = foeHasIt && pad.held.pass;
     this.charge = hasBall || taking ? pad.charge : 0;
+    // Son gardien : sa frappe est un dégagement (le serveur en décide), et il ne bouge pas tant qu'il tient le ballon
+    const keeper = hasBall && this.view.players[active]?.role === "GK";
+    const holding = keeper && ACTS[lastSnap!.p[active * TICK_STRIDE + 4]!] === "hold";
 
     const kindFor = (button: GameButton): HumanActionKind => {
       // Un penalty se tire, un coup d'envoi se passe : quelle que soit la touche, on fait ce qui va de soi
@@ -717,7 +722,7 @@ export class MatchRuntime {
         this.localKick = { p: active, at: now };
         this.kickShow.set(active, now);
         this.opts.onLocalKick(kind);
-        this.launchGhost(kind, power, to, ax, az, active);
+        if (!keeper || kind === "pass" || kind === "through") this.launchGhost(kind, power, to, ax, az, active);
       }
     };
     const ctx = taking || hasBall ? "ball" : foeHasIt ? "foe" : "free";
@@ -771,7 +776,7 @@ export class MatchRuntime {
     const p = this.pred;
     // Pendant la fête d'un but aussi : le serveur n'écoute plus les touches, il emmène tout le monde célébrer
     const phase = this.view.phase;
-    const frozen = taking || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || this.receiving;
+    const frozen = taking || holding || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || this.receiving;
     if (p && active === this.predFor) {
       this.acc += dt;
       while (this.acc >= DT) {
@@ -1252,6 +1257,7 @@ export class MatchRuntime {
         stamina: a >= 0 && last ? last.p[a * TICK_STRIDE + 5]! / 100 : 1,
         charge: this.charge,
         hasBall: a >= 0 && owner === a,
+        keeperHold: a >= 0 && owner === a && last !== undefined && ACTS[last.p[a * TICK_STRIDE + 4]!] === "hold",
         defending: a >= 0 && owner >= 0 && this.view.players[owner]?.team !== this.view.players[a]?.team,
         scheme: this.scheme,
         fps: this.fps,

@@ -549,6 +549,91 @@ describe("les remises en jeu", () => {
   });
 });
 
+describe("son gardien qui capte le ballon", () => {
+  /** Une frappe adverse molle droit sur le gardien de l'humain, jusqu'à ce qu'il la capte dans les mains */
+  function caught(seed: number) {
+    for (let s = seed; s < seed + 40; s++) {
+      const m = createMatch(settings({ offside: false, fouls: false }), teams, [{ id: "moi", team: 0 }], s);
+      toPlay(m);
+      const dir = attackDir(m, 0);
+      const gk = m.players.find((p) => p.team === 0 && p.role === "GK")!;
+      const foe = m.players.find((p) => p.team === 1 && p.role !== "GK")!;
+      setBall(m, -dir * (HALF_L - 14), 0.3, gk.z, -dir * 11, 0, 0, foe.i);
+      for (let i = 0; i < 120 && m.owner !== gk.i; i++) stepMatch(m);
+      if (m.owner === gk.i && gk.act === "hold") return { m, gk, dir };
+    }
+    throw new Error("le gardien n'a jamais capté");
+  }
+
+  it("l'humain prend son gardien et relance lui-même, puis retrouve le receveur", () => {
+    const { m, gk, dir } = caught(3);
+    expect(m.humans[0]!.active).toBe(gk.i);
+    // Rien ne part tout seul tant qu'il réfléchit
+    for (let i = 0; i < 90; i++) stepMatch(m);
+    expect(m.owner).toBe(gk.i);
+    const mate = m.players
+      .filter((p) => p.team === 0 && p.role !== "GK")
+      .sort((a, b) => Math.hypot(a.x - gk.x, a.z - gk.z) - Math.hypot(b.x - gk.x, b.z - gk.z))[0]!;
+    const d = Math.hypot(mate.x - gk.x, mate.z - gk.z);
+    pushAction(m, "moi", "pass", 0.5, (mate.x - gk.x) / d, (mate.z - gk.z) / d, mate.i);
+    for (let i = 0; i < 30 && m.owner === gk.i; i++) stepMatch(m);
+    expect(m.owner).not.toBe(gk.i);
+    expect(m.pass?.to).toBe(mate.i);
+    expect(m.humans[0]!.active).toBe(mate.i);
+    expect(Math.sign(m.ball.vx) === dir || Math.abs(m.ball.vz) > Math.abs(m.ball.vx)).toBe(true);
+  });
+
+  it("sa frappe est un dégagement vers l'avant, même la touche tournée vers son but", () => {
+    const { m, gk, dir } = caught(5);
+    for (let i = 0; i < 20; i++) stepMatch(m);
+    pushAction(m, "moi", "shot", 0.8, -dir, 0);
+    for (let i = 0; i < 30 && m.owner === gk.i; i++) stepMatch(m);
+    expect(m.owner).toBe(-1);
+    expect(m.ball.vx * dir).toBeGreaterThan(10);
+    expect(m.players[m.humans[0]!.active]!.role).not.toBe("GK");
+  });
+
+  it("s'il ne fait rien, l'ordinateur relance à sa place au bout de quelques secondes", () => {
+    const { m, gk } = caught(7);
+    for (let i = 0; i < Math.round(4 / DT) && m.owner === gk.i; i++) stepMatch(m);
+    expect(m.owner).toBe(gk.i);
+    for (let i = 0; i < Math.round(4 / DT) && m.owner === gk.i; i++) stepMatch(m);
+    expect(m.owner).not.toBe(gk.i);
+    expect(m.players[m.humans[0]!.active]!.role).not.toBe("GK");
+  });
+
+  it("un attaquant collé au gardien ne lui vole pas sa relance", () => {
+    let lost = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const m = createMatch(settings({ offside: false }), teams, [], seed);
+      toPlay(m);
+      const dir = attackDir(m, 0);
+      const gk = m.players.find((p) => p.team === 0 && p.role === "GK")!;
+      const foe = m.players.find((p) => p.team === 1 && p.role === "ST")!;
+      gk.x = -dir * (HALF_L - 0.5);
+      gk.z = 1;
+      foe.x = gk.x + dir;
+      foe.z = 1.4;
+      Object.assign(m.ball, { vx: 0, vy: 0, vz: 0 });
+      m.owner = gk.i;
+      m.lastTouch = gk.i;
+      m.pass = null;
+      gk.act = "hold";
+      gk.gotAt = m.t;
+      gk.thinkAt = m.t + 1.5;
+      for (let i = 0; i < 240; i++) {
+        stepMatch(m);
+        if (m.owner >= 0 && m.players[m.owner]!.team === 1) {
+          lost++;
+          break;
+        }
+        if (m.owner >= 0 && m.owner !== gk.i) break;
+      }
+    }
+    expect(lost).toBeLessThanOrEqual(1);
+  });
+});
+
 describe("le gardien", () => {
   /** Un humain seul face au gardien, à `dist` mètres du but, frappe en visant `az` (1 : le coin) ; rend vrai s'il marque */
   function duel(seed: number, dist: number, az: number): boolean {

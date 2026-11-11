@@ -2,8 +2,8 @@
 
 import { cloneBall, stepBall } from "./ball.ts";
 import { offsideLine, openness, orderKick, pressureOn, runSpaceAhead } from "./kicks.ts";
-import { attackDir, opponent, random, topSpeed, type Match, type Player, type Team } from "./model.ts";
-import { clamp, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch } from "./pitch.ts";
+import { attackDir, inKeeperHands, opponent, random, releaseFromHands, topSpeed, type Match, type Player, type Team } from "./model.ts";
+import { BOX_L, clamp, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch } from "./pitch.ts";
 
 /** Ce qui change d'un niveau à l'autre : le temps de réaction, l'œil pour la passe, le pressing */
 const LEVELS = [
@@ -304,6 +304,13 @@ export function thinkTeam(m: Match, team: Team) {
           p.sprint = true;
         });
     }
+  } else if (owner && inKeeperHands(m, owner)) {
+    // Le gardien adverse tient le ballon : personne ne va le chercher, on sort de sa surface en reprenant sa place
+    const edge = HALF_L - BOX_L - 2;
+    for (const p of m.players) {
+      if (p.team !== team || !free(p) || human(p) || p.role === "GK") continue;
+      if (p.tx * dir > edge) p.tx = edge * dir;
+    }
   } else if (owner) {
     // Défense : un homme va au porteur, le deuxième ferme la route du but, les autres prennent chacun un adversaire
     const press = nearestOf(m, team, owner.x, owner.z, (p) => p.role === "GK");
@@ -439,19 +446,20 @@ export function thinkCarrier(m: Match, p: Player) {
 
   if (p.role === "GK") {
     if (p.act === "hold" && held < 1.2) return;
-    // Le gardien relance : un défenseur libre, sinon loin devant
+    // Le gardien relance : un défenseur libre, sinon loin devant ; jamais une passe qu'un attaquant tout près couperait
     let best = -1;
     let bestScore = -Infinity;
     for (const q of m.players) {
       if (q.team !== p.team || q.i === p.i || q.off) continue;
-      const score = Math.min(openness(m, p.team, q.x, q.z), 15) - Math.hypot(q.x - p.x, q.z - p.z) * 0.25;
+      const score =
+        Math.min(openness(m, p.team, q.x, q.z), 15) - Math.hypot(q.x - p.x, q.z - p.z) * 0.25 - laneRisk(m, p, q.x, q.z, 16) * 14;
       if (score > bestScore) {
         bestScore = score;
         best = q.i;
       }
     }
     if (best >= 0 && bestScore > 5) {
-      p.act = "none";
+      releaseFromHands(m, p);
       orderKick(p, {
         kind: Math.hypot(m.players[best]!.x - p.x, m.players[best]!.z - p.z) > 32 ? "lob" : "pass",
         power: 0.6,
@@ -460,7 +468,7 @@ export function thinkCarrier(m: Match, p: Player) {
         to: best,
       });
     } else {
-      p.act = "none";
+      releaseFromHands(m, p);
       orderKick(p, { kind: "clear", power: 0.8, ax: dir, az: 0, to: -1 });
     }
     return;
