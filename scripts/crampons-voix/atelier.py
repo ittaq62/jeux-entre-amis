@@ -1,9 +1,10 @@
-# L'atelier du commentateur de Crampons : génère chaque réplique du catalogue avec Piper (voix française « siwis »), la
-# traite façon retransmission, la fait transcrire par une reconnaissance vocale (faster-whisper) et retente avec de
-# légères variations celles qui sont mal comprises. Garde la meilleure dans public/sounds/voix/.
+# L'atelier du commentateur de Crampons : génère chaque réplique du catalogue avec Piper (voix française « siwis »),
+# lui donne de l'élan (emotion.py : intonation sculptée, voyelles étirées), la traite façon retransmission, la fait
+# transcrire par une reconnaissance vocale (faster-whisper) et retente avec de légères variations celles qui sont mal
+# comprises. Garde la meilleure dans public/sounds/voix/.
 #
 # Mode d'emploi (une fois) :
-#   python -m venv .venv-voix && .venv-voix/Scripts/pip install piper-tts faster-whisper
+#   python -m venv .venv-voix && .venv-voix/Scripts/pip install piper-tts faster-whisper praat-parselmouth
 #   télécharger fr_FR-siwis-medium.onnx et .onnx.json (huggingface.co/rhasspy/piper-voices, fr/fr_FR/siwis/medium)
 #   télécharger le modèle Systran/faster-whisper-base (config.json, model.bin, tokenizer.json, vocabulary.txt)
 # Puis, depuis la racine du projet, avec ffmpeg installé :
@@ -15,6 +16,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from catalogue import LINES
+from emotion import express
 from piper import PiperVoice, SynthesisConfig
 from faster_whisper import WhisperModel
 
@@ -30,19 +32,34 @@ voice = PiperVoice.load(os.environ.get("PIPER_VOICE", "fr_FR-siwis-medium.onnx")
 asr = WhisperModel(os.environ.get("WHISPER_MODEL", "faster-whisper-base"), device="cpu", compute_type="int8")
 
 BASE = {"calme": (0.95, 0.6, 0.7), "vif": (0.88, 0.66, 0.8), "fort": (0.84, 0.7, 0.85)}
-# Monter la hauteur abîme les voyelles (« but » devient « bit ») : l'élan vient du débit et du volume
-POST = {"calme": "", "vif": "rubberband=tempo=1.02,", "fort": "rubberband=tempo=1.05,"}
+# L'émotion vient d'emotion.py (intonation sculptée sans toucher au timbre) ; ici, plus de changement de hauteur
+POST = {"calme": "", "vif": "", "fort": ""}
+
+
+def stretch_for(key):
+    """La voyelle finale qu'on fait durer : le cri de but (« le buuut ! »), le nom du buteur, le penalty marqué"""
+    if key.startswith("but-"):
+        return 2.0
+    if key.startswith("nom-"):
+        # Un nom de trois syllables ou plus, étiré, devient confus : on l'étire moins
+        syllables = len(re.findall(r"[aeiouyéèêàâôû]+", LINES[key][0].lower()))
+        return 1.5 if syllables <= 2 else 1.2
+    if key.startswith("tab-marque") or key.startswith("parade") or key.startswith("poteau") or key.startswith("barre"):
+        return 1.35
+    return 1.0
 LOUD = {"calme": -17, "vif": -16, "fort": -14}
 # Les essais successifs : un peu plus lent, un peu moins de variation, pour les mots qui passent mal
 VARIANTS = [(1.0, 1.0), (1.06, 0.85), (1.1, 0.7), (0.97, 0.9), (1.14, 0.6), (1.03, 0.75)]
 
 
-def render(text, tone, path, variant):
+def render(text, tone, path, variant, key=""):
     ls, ns, nw = BASE[tone]
     k_len, k_noise = VARIANTS[variant]
+    plain = path.replace(".mp3", "-plat.wav")
     raw = path.replace(".mp3", ".wav")
-    with wave.open(raw, "wb") as wf:
+    with wave.open(plain, "wb") as wf:
         voice.synthesize_wav(text, wf, syn_config=SynthesisConfig(length_scale=ls * k_len, noise_scale=ns * k_noise, noise_w_scale=nw * k_noise))
+    express(plain, raw, tone, stretch_for(key))
     chain = (
         # On ne coupe que le silence du début et de la fin : les pauses entre deux phrases restent
         "silenceremove=start_periods=1:start_threshold=-48dB,areverse,silenceremove=start_periods=1:start_threshold=-48dB,areverse,"
@@ -97,7 +114,7 @@ for key in order:
     best = (-1.0, None, "")
     for v in range(len(VARIANTS)):
         path = os.path.join(TMP, f"{key}-{v}.mp3")
-        render(text, tone, path, v)
+        render(text, tone, path, v, key)
         if key in ("but-2", "club-stade-clairmarais-pour") and v == 0:
             shutil.copy(path, os.path.join(OUT, f"{key}.mp3"))
         score, heard = check(key, text, path)
