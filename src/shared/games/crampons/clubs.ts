@@ -118,7 +118,7 @@ const ROLE_BIAS: Record<Role, Partial<Stats>> = {
   ST: { pac: 5, sho: 8, pas: -6, dri: 3, tac: -28, phy: 2 },
 };
 
-const SURNAMES = [
+export const SURNAMES = [
   "Pichon",
   "Vasseur",
   "Lemoine",

@@ -215,11 +215,18 @@ export function CramponsMatch({
     const commentator = new Commentator(() => {
       const v = viewRef.current;
       const s = shownRef.current;
+      const rt = runtime.current;
       return {
         teams: [v.teams[0].name, v.teams[1].name],
         players: v.players.map((p) => ({ name: p.name, team: p.team, keeper: p.role === "GK" })),
         score: s.score,
         period: s.period,
+        clock: rt?.clock ?? 0,
+        weather: v.config.weather,
+        ambience: v.config.ambience,
+        spot: (i) => rt?.spotOf(i) ?? null,
+        ball: () => rt?.ballSpot() ?? { x: 0, z: 0 },
+        attack: (team) => rt?.attackSign(team) ?? (team === 0 ? 1 : -1),
       };
     }, settingsRef.current.commentary);
     voice.current = commentator;

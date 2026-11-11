@@ -372,6 +372,24 @@ export class MatchRuntime {
     return this.cinema;
   }
 
+  // Pour le commentateur : ce que montre l'image (où sont les joueurs et le ballon), le chronomètre, le sens du jeu
+  spotOf(i: number): { x: number; z: number } | null {
+    const v = this.frameViews[i];
+    return v ? { x: v.x, z: v.z } : null;
+  }
+
+  ballSpot(): { x: number; z: number } {
+    return { x: this.shownBall.x, z: this.shownBall.z };
+  }
+
+  get clock(): number {
+    return this.latestClock;
+  }
+
+  attackSign(team: 0 | 1): 1 | -1 {
+    return (team === 0) !== this.view.flipped ? 1 : -1;
+  }
+
   /** De nouvelles touches, une autre visée ou une autre qualité : tout s'applique aussitôt */
   setSettings(s: CramponsSettings) {
     this.settings = s;
