@@ -2,7 +2,7 @@
 // qu'elles soient fluides, anticiper son propre joueur pour que le stick réponde tout de suite, et traduire les boutons en gestes.
 
 import { GRAVITY, stepBall, type Ball } from "../../shared/games/crampons/ball.ts";
-import { planPass, planThrough, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
+import { planPass, planThrough, RECEIVER_MIN_COS, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
 import {
   AUTO_SWITCH_HOLD,
   BURST_COOLDOWN,
@@ -1094,7 +1094,10 @@ export class MatchRuntime {
     s.z += (ball.z - s.z) * k;
     s.y += (ball.y - s.y) * Math.max(k, 0.6);
     this.lastOwner = owner;
-    this.receiver = owner === active && active >= 0 ? this.guessReceiver(views, active) : -1;
+    // Le receveur de sa prochaine passe : dès que le serveur lui a donné le ballon (l'image a un temps de retard), et
+    // pendant qu'une passe arrive sur lui, pour la remise en une touche
+    const mine = active >= 0 && (owner === active || this.snaps.at(-1)?.o === active || this.receiving);
+    this.receiver = mine ? this.guessReceiver(views, active) : -1;
     const flip = this.view.flipped;
     const myTeam = this.myIndex >= 0 ? this.view.humans[this.myIndex]!.team : 0;
     return {
@@ -1159,8 +1162,9 @@ export class MatchRuntime {
       if (cursor) {
         s = -Math.hypot(q.x - cursor[0], q.z - cursor[1]) + (i === this.receiver ? 2.5 : 0);
       } else {
+        // Comme sur le serveur : le plus dans l'axe d'abord, mais un coéquipier même assez de côté plutôt que le vide
         const c = (rx * dx + rz * dz) / d;
-        if (c < 0.45) continue;
+        if (c < RECEIVER_MIN_COS) continue;
         s = c * c * 3 - d / 45 + (i === this.receiver ? 0.25 : 0);
       }
       if (s > score) {

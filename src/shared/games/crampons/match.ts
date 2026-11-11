@@ -663,7 +663,7 @@ function autoRestart(m: Match, p: Player) {
     const dGoal = Math.hypot(dir * HALF_L - r.x, r.z);
     if (dGoal < 29) orderKick(p, { kind: "finesse", power: 0.66 + random(m) * 0.16, ax: 0, az: random(m) < 0.5 ? -1 : 1, to: -1 });
     else {
-      const to = pickReceiver(m, p, dir, 0);
+      const to = pickReceiver(m, p, dir, 0, false, 0.45);
       orderKick(p, { kind: "pass", power: 0.5, ax: dir, az: 0, to });
     }
   }
@@ -1234,7 +1234,7 @@ function header(m: Match, p: Player, ev: MatchEvent[]) {
   } else {
     // Dans sa moitié, on dégage ; dans l'autre, on remet à un coéquipier
     const own = b.x * dir < -5;
-    const to = own ? -1 : pickReceiver(m, p, dir, 0);
+    const to = own ? -1 : pickReceiver(m, p, dir, 0, false, 0.45);
     if (to >= 0) {
       const q = m.players[to]!;
       const a = Math.atan2(q.z - b.z, q.x - b.x);

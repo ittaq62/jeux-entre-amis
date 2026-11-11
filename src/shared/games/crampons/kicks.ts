@@ -82,8 +82,15 @@ function markOffside(m: Match, p: Player, kind: "kick" | "free") {
   }
 }
 
+/**
+ * Jusqu'où, de côté, on cherche un receveur pour une passe : presque à angle droit. L'angle compte tant dans le choix
+ * que le plus dans l'axe l'emporte toujours ; ce n'est qu'à défaut qu'on va chercher un coéquipier de côté, plutôt
+ * qu'envoyer le ballon dans le vide (perdu sept fois sur dix).
+ */
+export const RECEIVER_MIN_COS = 0.1;
+
 /** Le coéquipier le mieux placé dans la direction demandée : l'angle compte le plus, puis la distance et l'espace autour de lui */
-export function pickReceiver(m: Match, p: Player, ax: number, az: number, ahead = false): number {
+export function pickReceiver(m: Match, p: Player, ax: number, az: number, ahead = false, minCos = RECEIVER_MIN_COS): number {
   let dx = ax;
   let dz = az;
   if (Math.hypot(dx, dz) < 0.2) {
@@ -103,7 +110,7 @@ export function pickReceiver(m: Match, p: Player, ax: number, az: number, ahead 
     const d = Math.hypot(rx, rz);
     if (d < 2.5 || d > 62) continue;
     const c = (rx * dx + rz * dz) / d;
-    if (c < 0.45) continue;
+    if (c < minCos) continue;
     if (q.role === "GK" && c < 0.93) continue;
     if (ahead && (q.x - p.x) * dir < -4) continue;
     const space = Math.min(openness(m, p.team, q.x, q.z), 9) / 9;
