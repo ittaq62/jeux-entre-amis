@@ -11,3 +11,8 @@ coverage/
 
 # Types generes par `npm run types`
 src/worker/worker-configuration.d.ts
+
+# L atelier des voix de Crampons (scripts/crampons-voix)
+.venv-voix/
+scripts/crampons-voix/essais/
+scripts/crampons-voix/__pycache__/
