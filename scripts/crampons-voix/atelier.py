@@ -39,13 +39,13 @@ POST = {"calme": "", "vif": "", "fort": ""}
 def stretch_for(key):
     """La voyelle finale qu'on fait durer : le cri de but (« le buuut ! »), le nom du buteur, le penalty marqué"""
     if key.startswith("but-"):
-        return 2.0
+        return 1.0
     if key.startswith("nom-"):
         # Un nom de trois syllables ou plus, étiré, devient confus : on l'étire moins
         syllables = len(re.findall(r"[aeiouyéèêàâôû]+", LINES[key][0].lower()))
-        return 1.5 if syllables <= 2 else 1.2
+        return 1.0
     if key.startswith("tab-marque") or key.startswith("parade") or key.startswith("poteau") or key.startswith("barre"):
-        return 1.35
+        return 1.0
     return 1.0
 LOUD = {"calme": -17, "vif": -16, "fort": -14}
 # Les essais successifs : un peu plus lent, un peu moins de variation, pour les mots qui passent mal

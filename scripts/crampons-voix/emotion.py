@@ -4,10 +4,12 @@ import parselmouth
 from parselmouth.praat import call
 
 # Par ton : de combien on élargit les montées et descentes, de combien on monte la voix, le débit, l'élan final
+# Neutre : l'essai d'une intonation sculptée (voix plus aiguë, plus variée, voyelles étirées) sonnait moins naturel que
+# la voix telle que Piper la donne. On garde l'outil, réglé pour ne rien changer.
 STYLE = {
-    "calme": dict(spread=1.25, lift=1.04, speed=1.0, peak=0.0, stretch=1.0),
-    "vif": dict(spread=1.45, lift=1.16, speed=0.95, peak=0.08, stretch=1.0),
-    "fort": dict(spread=1.7, lift=1.28, speed=0.93, peak=0.14, stretch=1.0),
+    "calme": dict(spread=1.0, lift=1.0, speed=1.0, peak=0.0, stretch=1.0),
+    "vif": dict(spread=1.0, lift=1.0, speed=1.0, peak=0.0, stretch=1.0),
+    "fort": dict(spread=1.0, lift=1.0, speed=1.0, peak=0.0, stretch=1.0),
 }
 
 def voiced_runs(pitch, step):
