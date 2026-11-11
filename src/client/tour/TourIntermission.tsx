@@ -7,7 +7,7 @@ import { ConfirmButton } from "../components/ui.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
-import { GameTicket, playedGames, ReadyVote, rulesName, Standings, TeamScore, TourTop } from "./TourParts.tsx";
+import { GameTicket, playedGames, ReadyVote, rulesName, Standings, TourTop } from "./TourParts.tsx";
 import { TourRules } from "./TourRules.tsx";
 
 interface Props {
@@ -50,108 +50,114 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
     <div className="felt page tour-page">
       <TourTop view={view} now={now} unread={unread} onOpenChat={onOpenChat} onLeave={onLeave} />
       <main className="tour-break">
-        <section className="tour-draw panel" aria-label="Prochain jeu">
-          <h2>{view.games.length === 0 ? "Premier jeu" : "Prochain jeu"}</h2>
-          {view.next ? (
-            <TourDraw
-              key={drawKey}
-              games={view.settings.games}
-              pick={view.next.game}
-              players={players}
-              onDone={() => setRevealedKey(drawKey)}
-            />
-          ) : (
-            <div className="tour-draw-row">
-              {view.settings.games.map((g) => (
-                <GameTicket key={g} game={g} dim off={!fitsGame(g, Math.max(2, players))} />
-              ))}
-            </div>
-          )}
-          <TourRules view={view} send={send} revealed={revealed} />
-          <div className={`tour-countdown ${lastSeconds ? "is-last" : ""}`} aria-live="polite">
-            {view.notice ? (
-              <p className="tour-notice">{view.notice}</p>
-            ) : paused ? (
-              <p>
-                <strong>En pause.</strong> {isHost ? "Relance quand tout le monde est prêt." : "L'hôte relancera la tournée."}
-              </p>
-            ) : view.next && left !== null ? (
-              <p>
-                {/* Le nom du jeu n'est pas écrit ici : c'est le tirage qui le révèle */}
-                Départ dans{" "}
-                <strong key={lastSeconds ? left : "clock"} className="num countdown-num">
-                  {left > 59 ? formatClock(left) : `${left} s`}
-                </strong>
-              </p>
-            ) : null}
-          </div>
-          {view.next && <ReadyVote view={view} send={send} action="le jeu est lancé" />}
-          {isHost && (
-            <div className="tour-host-actions">
-              {view.next && !paused && (
-                <button className="btn btn-primary" onClick={() => send({ t: "launch" })}>
-                  Lancer maintenant
-                </button>
-              )}
-              {view.next && !paused && (
-                <button className="btn" onClick={() => send({ t: "pause" })}>
-                  Pause
-                </button>
-              )}
-              {(paused || !view.next) && (
-                <button className="btn btn-primary" onClick={() => send({ t: "resume" })}>
-                  Reprendre
-                </button>
-              )}
-              <ConfirmButton className="btn btn-ghost" confirm="Terminer maintenant ?" onConfirm={() => send({ t: "finish" })}>
-                Terminer la tournée
-              </ConfirmButton>
-            </div>
-          )}
-          {view.you.member && view.you.role === "spectator" && canSit && (
-            <button className="btn" onClick={() => send({ t: "sit" })}>
-              Jouer au prochain jeu
-            </button>
-          )}
-          {view.you.role === "player" && view.members.find((m) => m.userId === view.you.userId)?.waiting && (
-            <p className="hint" style={{ margin: 0 }}>
-              Tu entres dans la tournée au prochain jeu.
-            </p>
-          )}
-        </section>
-
-        {last?.results && (
-          <section className="tour-last paper score-sheet" aria-label="Résultats du dernier jeu">
-            <div className="tour-last-head">
-              <GameTicket game={last.game} size="sm" />
-              <div>
-                <h2>{GAME_NAMES[last.game]}</h2>
-                <p className="hint" style={{ margin: 0 }}>
-                  Jeu {last.index}
-                  {lastRules ? `, règles « ${lastRules} »` : ""}, les points qu'il rapporte
-                </p>
+        <div className="break-left">
+          <section className="tour-draw panel" aria-label="Prochain jeu">
+            <h2>{view.games.length === 0 ? "Premier jeu" : "Prochain jeu"}</h2>
+            {view.next ? (
+              <TourDraw
+                key={drawKey}
+                games={view.settings.games}
+                pick={view.next.game}
+                players={players}
+                onDone={() => setRevealedKey(drawKey)}
+              />
+            ) : (
+              <div className="tour-draw-row">
+                {view.settings.games.map((g) => (
+                  <GameTicket key={g} game={g} dim off={!fitsGame(g, Math.max(2, players))} />
+                ))}
               </div>
+            )}
+            <TourRules view={view} send={send} revealed={revealed} />
+            <div className={`tour-countdown ${lastSeconds ? "is-last" : ""}`} aria-live="polite">
+              {view.notice ? (
+                <p className="tour-notice">{view.notice}</p>
+              ) : paused ? (
+                <p>
+                  <strong>En pause.</strong> {isHost ? "Relance quand tout le monde est prêt." : "L'hôte relancera la tournée."}
+                </p>
+              ) : view.next && left !== null ? (
+                <p>
+                  {/* Le nom du jeu n'est pas écrit ici : c'est le tirage qui le révèle */}
+                  Départ dans{" "}
+                  <strong key={lastSeconds ? left : "clock"} className="num countdown-num">
+                    {left > 59 ? formatClock(left) : `${left} s`}
+                  </strong>
+                </p>
+              ) : null}
             </div>
-            <ol className="score-lines">
-              {last.results.map((r) => {
-                const m = seatOf(r.userId);
-                return (
-                  <li key={r.userId} className={`${r.rank === 1 ? "is-winner" : ""} ${r.userId === view.you.userId ? "is-me" : ""}`}>
-                    <span className="score-rank num">{r.rank}</span>
-                    {m && <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={28} />}
-                    <span className="score-name">{r.name}</span>
-                    <span className="score-points num">+{r.points}</span>
-                  </li>
-                );
-              })}
-            </ol>
+            {view.next && <ReadyVote view={view} send={send} action="le jeu est lancé" />}
+            {isHost && (
+              <div className="tour-host-actions">
+                {view.next && !paused && (
+                  <button className="btn btn-primary" onClick={() => send({ t: "launch" })}>
+                    Lancer maintenant
+                  </button>
+                )}
+                {view.next && !paused && (
+                  <button className="btn" onClick={() => send({ t: "pause" })}>
+                    Pause
+                  </button>
+                )}
+                {(paused || !view.next) && (
+                  <button className="btn btn-primary" onClick={() => send({ t: "resume" })}>
+                    Reprendre
+                  </button>
+                )}
+                <ConfirmButton className="btn btn-ghost" confirm="Terminer maintenant ?" onConfirm={() => send({ t: "finish" })}>
+                  Terminer la tournée
+                </ConfirmButton>
+              </div>
+            )}
+            {view.you.member && view.you.role === "spectator" && canSit && (
+              <button className="btn" onClick={() => send({ t: "sit" })}>
+                Jouer au prochain jeu
+              </button>
+            )}
+            {view.you.role === "player" && view.members.find((m) => m.userId === view.you.userId)?.waiting && (
+              <p className="hint" style={{ margin: 0 }}>
+                Tu entres dans la tournée au prochain jeu.
+              </p>
+            )}
           </section>
-        )}
+
+          {last?.results && (
+            // Le dernier jeu : son podium ; les points de chacun sont dans le classement
+            <section className="tour-last paper" aria-label="Résultats du dernier jeu">
+              <GameTicket game={last.game} size="sm" />
+              <div className="tour-last-text">
+                <p className="tour-last-title">
+                  {GAME_NAMES[last.game]}
+                  <span>
+                    {" "}
+                    · jeu {last.index}
+                    {lastRules ? ` · ${lastRules}` : ""}
+                  </span>
+                </p>
+                <ol className="tour-last-podium">
+                  {last.results
+                    .filter((r) => r.rank <= 3)
+                    .slice(0, 3)
+                    .map((r) => {
+                      const m = seatOf(r.userId);
+                      return (
+                        <li key={r.userId} className={r.userId === view.you.userId ? "is-me" : ""}>
+                          <span className={`tour-last-rank place-${r.rank} num`}>{r.rank}</span>
+                          {m && <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={22} />}
+                          <span className="tour-last-name">{r.name}</span>
+                          <b className="num">+{r.points}</b>
+                        </li>
+                      );
+                    })}
+                </ol>
+              </div>
+            </section>
+          )}
+        </div>
 
         <section className="tour-standings panel" aria-label="Classement de la tournée">
           <h2>Classement</h2>
-          {view.settings.teams && <TeamScore view={view} />}
-          <Standings view={view} last={last} meId={view.you.userId} celebrate />
+          <Standings view={view} last={last} meId={view.you.userId} celebrate teams={view.settings.teams} />
         </section>
       </main>
     </div>

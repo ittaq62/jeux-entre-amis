@@ -133,10 +133,10 @@ const MEDALS: Record<string, { color: string; art: ReactNode }> = {
 const FALLBACK = { color: "#e2bd6e", art: <circle cx={24} cy={24} r={11} /> };
 
 /** Délai avant la première médaille : le podium a fini de monter */
-const FIRST_MS = 1300;
-const STEP_MS = 420;
+const FIRST_MS = 1000;
+const STEP_MS = 320;
 
-/** Les trophées de fin de tournée : une médaille par exploit, remise l'une après l'autre. */
+/** Les trophées de fin de tournée : une ligne par exploit, la médaille, le chiffre et le gagnant, remis l'un après l'autre. */
 export function TourTrophies({ titles, members, meId }: { titles: TourTitle[]; members: TourMemberView[]; meId: string }) {
   const reduced = usePrefs((s) => s.reducedEffects);
 
@@ -150,45 +150,35 @@ export function TourTrophies({ titles, members, meId }: { titles: TourTitle[]; m
   }, [titles, meId, reduced]);
 
   return (
-    <section className="tour-trophies" aria-label="Les trophées de la tournée">
-      <h2 className="tour-trophies-title">Les trophées</h2>
-      <div className="tour-trophies-list">
-        {titles.map((t, i) => {
-          const medal = MEDALS[t.id] ?? FALLBACK;
-          const member = members.find((m) => m.userId === t.userId);
-          const mine = t.userId === meId;
-          return (
-            <motion.article
-              key={t.id}
-              className={`trophy ${mine ? "is-mine" : ""}`}
-              style={{ ["--medal" as string]: medal.color, ["--shine-delay" as string]: `${(FIRST_MS + i * STEP_MS + 350) / 1000}s` }}
-              initial={reduced ? false : { opacity: 0, scale: 0.6, rotate: i % 2 ? 6 : -6, y: 24 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
-              transition={{ delay: (FIRST_MS + i * STEP_MS) / 1000, type: "spring", stiffness: 260, damping: 17 }}
-            >
-              {mine && <span className="trophy-me">C'est toi !</span>}
-              <span className="trophy-medal" aria-hidden="true">
-                <svg viewBox="0 0 48 48">{medal.art}</svg>
-              </span>
-              <h3 className="trophy-name">{t.label}</h3>
-              <p className="trophy-stat">
-                {t.stat ? (
-                  <>
-                    <strong className="num">{t.stat}</strong>
-                    <span>{t.unit}</span>
-                  </>
-                ) : (
-                  <span>{t.detail}</span>
-                )}
-              </p>
-              <span className="trophy-who">
-                {member && <Avatar avatar={member.avatar} userId={member.userId} photo={member.photo} size={28} />}
-                <span>{t.name}</span>
-              </span>
-            </motion.article>
-          );
-        })}
-      </div>
-    </section>
+    <ol className="trophy-list">
+      {titles.map((t, i) => {
+        const medal = MEDALS[t.id] ?? FALLBACK;
+        const member = members.find((m) => m.userId === t.userId);
+        const mine = t.userId === meId;
+        return (
+          <motion.li
+            key={t.id}
+            className={`trophy-row ${mine ? "is-mine" : ""}`}
+            style={{ ["--medal" as string]: medal.color, ["--shine-delay" as string]: `${(FIRST_MS + i * STEP_MS + 250) / 1000}s` }}
+            initial={reduced ? false : { opacity: 0, x: -22, scale: 0.94 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ delay: (FIRST_MS + i * STEP_MS) / 1000, type: "spring", stiffness: 320, damping: 22 }}
+          >
+            <span className="trophy-medal" aria-hidden="true">
+              <svg viewBox="0 0 48 48">{medal.art}</svg>
+            </span>
+            <span className="trophy-text">
+              <strong className="trophy-name">{t.label}</strong>
+              <span className="trophy-unit">{t.stat ? t.unit : t.detail}</span>
+            </span>
+            {t.stat && <strong className="trophy-stat num">{t.stat}</strong>}
+            <span className="trophy-who">
+              {member && <Avatar avatar={member.avatar} userId={member.userId} photo={member.photo} size={24} />}
+              <span>{mine ? "Toi !" : t.name}</span>
+            </span>
+          </motion.li>
+        );
+      })}
+    </ol>
   );
 }

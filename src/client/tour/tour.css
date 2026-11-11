@@ -17,28 +17,38 @@
   letter-spacing: 0.08em;
 }
 
-/* Entracte : le tirage en haut, les résultats et le classement dessous */
+/* Entracte : le tirage et le dernier jeu à gauche, le classement à droite, le tout sur un écran */
+.tour-page {
+  padding-bottom: calc(14px + var(--safe-bottom));
+}
+
 .tour-break {
-  width: min(1060px, 100% - 32px);
-  margin: 8px auto 40px;
+  width: min(1180px, 100% - 32px);
+  margin: 8px auto 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 18px;
   align-items: start;
 }
 
+.break-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
 .tour-draw {
-  grid-column: 1 / -1;
-  padding: 22px 24px 22px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   background: radial-gradient(ellipse 60% 70% at 50% 0%, rgba(255, 226, 170, 0.12), transparent 70%), var(--panel);
 }
 
 .tour-draw h2 {
-  font-size: 26px;
+  font-size: 24px;
   margin: 0;
 }
 
@@ -46,8 +56,12 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 18px;
-  padding: 10px 0 4px;
+  gap: 10px;
+  padding: 6px 0 2px;
+}
+
+.tour-draw-row .game-ticket {
+  --w: 84px;
 }
 
 .tour-countdown {
@@ -79,31 +93,99 @@
   gap: 10px;
 }
 
+/* Le dernier jeu : une bande de papier et son podium */
 .tour-last {
-  width: auto;
-}
-
-.tour-last-head {
   display: flex;
   align-items: center;
   gap: 14px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-float);
 }
 
-.tour-last-head h2 {
-  font-size: 26px;
+.tour-last-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tour-last-title {
   margin: 0;
+  font-family: var(--font-title);
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.tour-last-title span {
+  font-family: var(--font-ui, inherit);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.tour-last-podium {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.tour-last-podium li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.tour-last-podium li.is-me .tour-last-name {
+  text-decoration: underline;
+  text-decoration-color: var(--red);
+  text-underline-offset: 3px;
+}
+
+.tour-last-rank {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--ink-soft);
+}
+
+.tour-last-rank.place-1 {
+  color: var(--red);
+}
+
+.tour-last-name {
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tour-last-podium b {
+  font-family: var(--font-card);
+  color: #23753f;
 }
 
 .tour-standings {
-  padding: 20px 22px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .tour-standings h2 {
-  font-size: 24px;
+  font-size: 22px;
   margin: 0;
+}
+
+.standings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .tour-standings-list {
@@ -112,12 +194,13 @@
   padding: 0;
 }
 
+/* Une ligne par joueur : sa place, son visage, son nom et sa barre, ce qu'il vient de gagner, ses points */
 .standing-row {
   --team: transparent;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px 8px 8px;
+  padding: 5px 10px 5px 8px;
   border-bottom: 1px solid var(--line-soft);
   border-left: 3px solid var(--team);
 }
@@ -137,10 +220,11 @@
 
 .standing-rank {
   width: 22px;
+  flex: none;
   text-align: right;
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 20px;
+  font-size: 19px;
   color: var(--text-faint);
 }
 
@@ -153,63 +237,300 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 5px;
 }
 
-.standing-who strong {
+.standing-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.standing-name strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.standing-who .hint {
-  font-size: 12.5px;
+/* Les détails cèdent la place avant le nom */
+.standing-tags {
+  flex: 0 10 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* La barre : la part des points du premier, qui grandit quand les points tombent */
+.standing-bar {
+  position: relative;
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.standing-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: rgba(233, 220, 192, 0.5);
+  transition: width 1s cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+.standing-row.is-team .standing-bar i {
+  background: var(--team);
+}
+
+.standing-row.is-first:not(.is-team) .standing-bar i {
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+}
+
+.standing-row.is-me:not(.is-team) .standing-bar i {
+  background: linear-gradient(90deg, var(--gold), #fff2c9);
+}
+
+.standing-move {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.standing-move.is-up {
+  color: #85e6ac;
+  background: rgba(47, 168, 100, 0.2);
+}
+
+.standing-move.is-down {
+  color: #ff9a90;
+  background: rgba(212, 69, 60, 0.16);
 }
 
 .standing-gain {
   font-family: var(--font-card);
   font-weight: 700;
-  font-size: 17px;
+  font-size: 16px;
   color: var(--ok);
 }
 
 .standing-points {
-  min-width: 42px;
+  min-width: 40px;
   text-align: right;
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 26px;
+  font-size: 24px;
   color: var(--text);
 }
 
-/* Les deux équipes, une barre partagée */
-.team-score {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* L'annonce : une équipe ou un joueur passe devant */
+.standings-news {
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 10px;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 20px;
+  line-height: 1.15;
+  color: color-mix(in srgb, var(--news, var(--gold-light)) 55%, #fff);
+  background: color-mix(in srgb, var(--news, var(--gold)) 18%, rgba(0, 0, 0, 0.25));
+  border: 1px solid color-mix(in srgb, var(--news, var(--gold)) 50%, transparent);
+}
+
+/* Le duel des équipes : chacune son camp, son total, et la corde qui penche vers celle qui mène */
+.team-duel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   width: 100%;
 }
 
-.team-score-names {
+.duel-side {
+  --team: #888;
   display: flex;
-  justify-content: space-between;
-  font-weight: 700;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--team) 40%, rgba(0, 0, 0, 0.25)),
+    color-mix(in srgb, var(--team) 8%, rgba(0, 0, 0, 0.25))
+  );
+  border: 1px solid color-mix(in srgb, var(--team) 45%, transparent);
+  transition: box-shadow 0.5s ease;
 }
 
-.team-score-names strong {
-  font-family: var(--font-card);
-  font-size: 24px;
+.duel-side.side-1 {
+  flex-direction: row-reverse;
+  background: linear-gradient(
+    260deg,
+    color-mix(in srgb, var(--team) 40%, rgba(0, 0, 0, 0.25)),
+    color-mix(in srgb, var(--team) 8%, rgba(0, 0, 0, 0.25))
+  );
 }
 
-.team-score-bar {
+.duel-side.is-leading {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--team) 75%, #fff),
+    0 0 26px -6px var(--team);
+}
+
+.duel-faces {
   display: flex;
-  height: 10px;
-  border-radius: 5px;
+  flex: none;
+}
+
+.duel-faces > * {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.duel-faces > * + * {
+  margin-left: -9px;
+}
+
+.side-1 .duel-faces {
+  flex-direction: row-reverse;
+}
+
+.side-1 .duel-faces > * + * {
+  margin-left: 0;
+  margin-right: -9px;
+}
+
+.duel-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 15px;
+  color: color-mix(in srgb, var(--team) 35%, #fff);
+  white-space: nowrap;
   overflow: hidden;
+}
+
+.side-1 .duel-name {
+  flex-direction: row-reverse;
+}
+
+.duel-name svg {
+  flex: none;
+  color: var(--gold-light);
+}
+
+.duel-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.side-1 .duel-score {
+  flex-direction: row-reverse;
+}
+
+.duel-total {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.duel-gain {
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ok);
+}
+
+.duel-vs {
+  font-family: var(--font-title);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+.duel-bar {
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.35);
 }
 
-.team-score-bar span {
-  transition: width 0.6s ease;
+.duel-fill {
+  height: 100%;
+  transition: width 1s cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+.duel-fill.side-0 {
+  border-radius: 6px 0 0 6px;
+  background: linear-gradient(90deg, #8f2a23, #d4453c);
+}
+
+.duel-fill.side-1 {
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(90deg, #3f7fd8, #234f91);
+}
+
+.duel-knot {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 3px solid #1b1712;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  transition: left 1s cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+.team-duel.is-final {
+  max-width: 820px;
+}
+
+/* Dans le classement, le duel reste compact : les visages et le « contre » sont pour la fin de la tournée */
+.standings .team-duel {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.standings .duel-faces,
+.standings .duel-vs {
+  display: none;
+}
+
+.team-duel.is-final .duel-side {
+  padding: 10px 16px;
+}
+
+.team-duel.is-final .duel-name {
+  font-size: 18px;
+}
+
+.team-duel.is-final .duel-total {
+  font-size: 46px;
+}
+
+.team-duel.is-final .duel-bar {
+  height: 16px;
 }
 
 /* Salon : les jeux au programme */
@@ -270,32 +591,47 @@
   margin: 2px 0 10px;
 }
 
-/* Fin de tournée */
+/* Fin de tournée : le titre, le duel des équipes, puis deux colonnes qui tiennent sur l'écran */
 .tour-finale {
-  width: min(1060px, 100% - 32px);
-  margin: 4px auto 48px;
+  width: min(1180px, 100% - 32px);
+  margin: 4px auto 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 14px;
 }
 
 .tour-finale-title {
   margin: 0;
-  font-size: 30px;
+  font-size: 28px;
   text-align: center;
 }
 
-.tour-finale > .team-score {
-  max-width: 520px;
+.tour-finale-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  width: 100%;
+  align-items: start;
+}
+
+.finale-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.finale-tabs {
+  display: none;
 }
 
 .podium {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 12px;
-  padding-top: 10px;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .podium-place {
@@ -303,8 +639,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 150px;
+  gap: 4px;
+  width: 134px;
 }
 
 .podium-name {
@@ -312,13 +648,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .podium-points {
   font-family: var(--font-card);
   font-weight: 700;
-  font-size: 18px;
+  font-size: 16px;
   color: var(--gold-light);
 }
 
@@ -332,92 +668,72 @@
   box-shadow: var(--shadow-panel);
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 40px;
+  font-size: 28px;
   color: var(--text-faint);
 }
 
 .place-1 .podium-step {
-  height: 130px;
+  height: 70px;
   color: var(--gold);
   background: linear-gradient(180deg, #3a3018, #1c170b);
 }
 
 .place-2 .podium-step {
-  height: 96px;
+  height: 50px;
 }
 
 .place-3 .podium-step {
-  height: 70px;
+  height: 36px;
 }
 
-/* Les trophées : une médaille par exploit, le chiffre en grand, le visage du gagnant */
+/* Les trophées : une ligne par exploit, la médaille, le chiffre en grand, le gagnant */
 .tour-trophies {
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
-.tour-trophies-title {
-  font-size: 26px;
-  color: var(--gold-light);
+.tour-trophies h2 {
+  font-size: 22px;
+  margin: 0;
 }
 
-.tour-trophies-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 16px;
-  width: 100%;
-}
-
-.trophy {
-  position: relative;
+.trophy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
-  width: 204px;
-  padding: 18px 14px 14px;
-  border-radius: 18px;
-  text-align: center;
-  background:
-    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--medal) 34%, transparent), transparent 70%),
-    linear-gradient(180deg, var(--panel-raised), var(--panel));
-  border: 1px solid color-mix(in srgb, var(--medal) 45%, transparent);
-  box-shadow: var(--shadow-float);
 }
 
-.trophy.is-mine {
+.trophy-row {
+  --medal: #e2bd6e;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto minmax(0, 132px);
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--medal) 20%, transparent), transparent 70%), rgba(0, 0, 0, 0.16);
+  border: 1px solid color-mix(in srgb, var(--medal) 30%, transparent);
+}
+
+.trophy-row.is-mine {
   border-color: var(--gold);
   box-shadow:
-    0 0 0 3px var(--gold-tint),
-    0 0 30px -6px color-mix(in srgb, var(--gold) 60%, transparent),
-    var(--shadow-float);
+    0 0 0 2px var(--gold-tint),
+    0 0 18px -6px var(--gold);
 }
 
-.trophy-me {
-  position: absolute;
-  top: -11px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--gold);
-  color: var(--gold-ink);
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-/* La médaille : un disque de couleur, son ruban, un reflet qui passe une fois */
+/* La médaille : un disque de couleur, un reflet qui passe une fois */
 .trophy-medal {
   position: relative;
   display: grid;
   place-items: center;
-  width: 78px;
-  height: 78px;
-  margin-bottom: 6px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   overflow: hidden;
   color: #fff8ea;
@@ -428,16 +744,15 @@
     color-mix(in srgb, var(--medal) 70%, #000)
   );
   box-shadow:
-    inset 0 0 0 4px rgba(255, 255, 255, 0.22),
-    inset 0 -6px 10px rgba(0, 0, 0, 0.25),
-    0 8px 18px -6px color-mix(in srgb, var(--medal) 70%, #000);
+    inset 0 0 0 3px rgba(255, 255, 255, 0.22),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.25);
 }
 
 .trophy-medal svg {
-  width: 46px;
-  height: 46px;
+  width: 26px;
+  height: 26px;
   fill: currentColor;
-  filter: drop-shadow(0 1.5px 0 rgba(0, 0, 0, 0.25));
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.25));
 }
 
 .trophy-medal::after {
@@ -455,48 +770,46 @@
   }
 }
 
+.trophy-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .trophy-name {
-  margin: 0;
   font-family: var(--font-title);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 400;
   line-height: 1.15;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trophy-unit {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trophy-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: 0;
-  line-height: 1.2;
-}
-
-.trophy-stat strong {
   font-family: var(--font-card);
-  font-size: 40px;
+  font-size: 26px;
   font-weight: 800;
   line-height: 1;
   color: color-mix(in srgb, var(--medal) 75%, #fff);
 }
 
-.trophy-stat span {
-  font-size: 13px;
-  color: var(--text-soft);
-}
-
 .trophy-who {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
-  font-weight: 700;
-  font-size: 15px;
+  gap: 7px;
   min-width: 0;
+  font-weight: 700;
+  font-size: 14px;
 }
 
 .trophy-who > span {
@@ -505,42 +818,8 @@
   text-overflow: ellipsis;
 }
 
-/* Sur téléphone : deux par ligne */
-@media (max-width: 520px) {
-  .tour-trophies-list {
-    gap: 12px 10px;
-  }
-
-  .trophy {
-    width: calc(50% - 5px);
-    padding: 16px 10px 12px;
-  }
-
-  .trophy-medal {
-    width: 62px;
-    height: 62px;
-  }
-
-  .trophy-medal svg {
-    width: 38px;
-    height: 38px;
-  }
-
-  .trophy-name {
-    font-size: 17px;
-  }
-
-  .trophy-stat strong {
-    font-size: 34px;
-  }
-
-  .trophy-stat span {
-    font-size: 12px;
-  }
-
-  .trophy-who {
-    font-size: 14px;
-  }
+.trophy-row.is-mine .trophy-who {
+  color: var(--gold-light);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -549,12 +828,22 @@
   }
 }
 
-.tour-finale-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 20px;
-  width: 100%;
-  align-items: start;
+/* Jeu par jeu, plus serré */
+.tour-finale .tour-recap {
+  padding: 16px 18px;
+  gap: 10px;
+}
+
+.tour-finale .tour-recap h2 {
+  font-size: 22px;
+}
+
+.tour-finale .tour-recap-list {
+  gap: 6px;
+}
+
+.tour-finale .tour-recap-list .game-ticket {
+  --w: 46px;
 }
 
 .tour-finale-actions {
@@ -562,6 +851,10 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
+}
+
+.tour-finale-note {
+  margin: -6px 0 0;
 }
 
 /* Les règles du jeu tiré : une carte qui se retourne */
@@ -860,8 +1153,48 @@
 @media (max-width: 820px) {
   /* minmax(0, …) : un long pseudo se coupe au lieu d'élargir la colonne hors de l'écran */
   .tour-break,
-  .tour-finale-columns {
+  .tour-finale-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tour-break {
+    gap: 12px;
+  }
+
+  /* Un onglet à la fois : classement, trophées ou jeu par jeu */
+  .finale-tabs {
+    display: flex;
+    align-self: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .finale-tab {
+    padding: 7px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-soft);
+    font: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .finale-tab.is-active {
+    background: var(--gold);
+    color: var(--gold-ink);
+  }
+
+  .finale-pane:not(.is-active) {
+    display: none;
+  }
+
+  .tour-finale-grid,
+  .finale-col {
+    gap: 10px;
   }
 
   .tour-waiting-card {
@@ -900,27 +1233,203 @@
     padding-inline: 14px;
   }
 
+  .tour-draw-row {
+    gap: 6px;
+  }
+
   .tour-draw-row .game-ticket {
-    --w: 88px;
+    --w: 56px;
+  }
+
+  .tour-draw {
+    padding: 14px 12px;
+    gap: 10px;
+  }
+
+  .tour-draw h2,
+  .tour-standings h2,
+  .tour-trophies h2,
+  .tour-finale .tour-recap h2 {
+    font-size: 19px;
+  }
+
+  .tour-standings,
+  .tour-trophies,
+  .tour-finale .tour-recap {
+    padding: 12px;
+  }
+
+  .tour-last {
+    padding: 10px 12px;
+  }
+
+  /* Sur téléphone, le gagnant du dernier jeu suffit : les points de chacun sont au classement */
+  .tour-last-podium li:not(:first-child) {
+    display: none;
   }
 
   .podium-place {
-    width: 104px;
+    width: 98px;
   }
 
   .place-1 .podium-step {
-    height: 100px;
+    height: 42px;
   }
 
   .place-2 .podium-step {
-    height: 74px;
+    height: 30px;
   }
 
   .place-3 .podium-step {
-    height: 54px;
+    height: 22px;
+  }
+
+  .podium-step {
+    font-size: 22px;
   }
 
   .tour-finale-title {
-    font-size: 24px;
+    font-size: 22px;
+  }
+
+  .duel-faces,
+  .duel-vs {
+    display: none;
+  }
+
+  .team-duel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .duel-side,
+  .team-duel.is-final .duel-side {
+    padding: 6px 10px;
+  }
+
+  .duel-total,
+  .team-duel.is-final .duel-total {
+    font-size: 28px;
+  }
+
+  .team-duel.is-final .duel-name {
+    font-size: 15px;
+  }
+
+  .trophy-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 4px 10px;
+  }
+
+  .trophy-medal {
+    width: 38px;
+    height: 38px;
+  }
+
+  .trophy-who {
+    grid-column: 2 / -1;
+    font-size: 13px;
+  }
+
+  .standing-points {
+    font-size: 21px;
+  }
+
+  .standing-row {
+    gap: 8px;
+    padding: 3px 8px 3px 6px;
+  }
+
+  /* Sur téléphone, le nom passe avant les détails */
+  .standing-tags {
+    display: none;
+  }
+
+  .tour-draw {
+    gap: 8px;
+    padding: 12px 12px 14px;
+  }
+
+  .tour-draw-row .game-ticket {
+    --w: 52px;
+  }
+
+  .tour-countdown p {
+    font-size: 16px;
+  }
+
+  .tour-countdown strong {
+    font-size: 22px;
+  }
+
+  /* Le dernier jeu tient sur une ligne */
+  .tour-last {
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .tour-last .game-ticket {
+    --w: 40px;
+  }
+
+  .tour-last-text {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+  }
+
+  .tour-last-title {
+    font-size: 16px;
+  }
+
+  .standing-row .avatar {
+    width: 26px;
+    height: 26px;
+  }
+
+  .standing-who {
+    gap: 4px;
+  }
+
+  .podium-place .avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .podium-place.place-1 .avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .podium-name {
+    font-size: 13.5px;
+  }
+
+  .podium-points {
+    font-size: 14px;
+  }
+
+  .tour-finale {
+    gap: 10px;
+  }
+
+  .tour-finale-actions {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .tour-finale-actions .btn-lg {
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+
+  .tour-host-actions {
+    gap: 6px;
+  }
+
+  .tour-host-actions .btn {
+    padding: 8px 11px;
+    font-size: 13.5px;
   }
 }

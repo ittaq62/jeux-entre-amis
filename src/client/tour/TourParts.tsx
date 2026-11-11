@@ -353,7 +353,7 @@ function RollingNumber({ value, className }: { value: number; className?: string
     let raf = 0;
     const t0 = performance.now();
     const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 650);
+      const k = Math.min(1, (t - t0) / 900);
       setShown(Math.round(start + (value - start) * (1 - (1 - k) ** 3)));
       if (k < 1) raf = requestAnimationFrame(step);
     };
@@ -363,83 +363,160 @@ function RollingNumber({ value, className }: { value: number; className?: string
   return <span className={className}>{shown}</span>;
 }
 
-/** Après un jeu : les « +10 » arrivent un à un (en ms), puis les lignes glissent à leur nouvelle place */
+/** Après un jeu : les « +10 » arrivent un à un (en ms), puis les barres grandissent et les lignes glissent à leur nouvelle place */
 const GAIN_AT = 650;
-const GAIN_STEP = 150;
+const GAIN_STEP = 140;
+
+/** Les points rapportés par le dernier jeu à chaque équipe */
+function teamGains(view: TourView, last: TourGameView | null): [number, number] | null {
+  if (!last?.results) return null;
+  const out: [number, number] = [0, 0];
+  for (const r of last.results) {
+    const m = view.members.find((x) => x.userId === r.userId);
+    if (m && m.team !== null) out[m.team] += r.points;
+  }
+  return out;
+}
+
+/** Ce que le dernier jeu a changé en haut du classement, à annoncer : une équipe ou un joueur passe devant, ou on grimpe soi-même */
+function leadNews(view: TourView, last: TourGameView | null, meId: string): { text: string; color?: string } | null {
+  if (!last?.results) return null;
+  const before = standingsOf(view, last, true);
+  const after = standingsOf(view, last);
+  if (view.settings.teams) {
+    const lead = ([r, b]: [number, number]) => (r === b ? null : r > b ? 0 : 1);
+    const was = lead(teamScores(before.map((x) => x.member)));
+    const now = lead(teamScores(after.map((x) => x.member)));
+    if (now !== null && now !== was) return { text: `Les ${TOUR_TEAMS[now]} passent devant !`, color: TOUR_TEAM_COLORS[now] };
+    if (now === null && was !== null) return { text: "Les deux équipes à égalité !" };
+  }
+  const first = after[0];
+  const alone = first && after[1]?.rank !== 1;
+  if (first && alone && before[0]?.member.userId !== first.member.userId)
+    return { text: first.member.userId === meId ? "Tu prends la tête !" : `${first.member.name} prend la tête !` };
+  const mine = (list: Placed[]) => list.find((x) => x.member.userId === meId)?.rank;
+  const climbed = (mine(before) ?? 0) - (mine(after) ?? 0);
+  if (climbed > 0) return { text: `Tu gagnes ${climbed} place${climbed > 1 ? "s" : ""} !` };
+  return null;
+}
 
 export function Standings({
   view,
   last,
   meId,
   celebrate = false,
+  teams = false,
 }: {
   view: TourView;
   last: TourGameView | null;
   meId: string;
   /** Rejouer l'arrivée des points du dernier jeu */
   celebrate?: boolean;
+  /** Le duel des deux équipes, au-dessus des joueurs */
+  teams?: boolean;
 }) {
   const reduced = usePrefs((s) => s.reducedEffects);
   const animate = celebrate && !reduced && Boolean(last?.results);
   const [before, setBefore] = useState(animate);
   const rows = standingsOf(view, last, before);
+  const earlier = standingsOf(view, last, true);
+  const gainCount = earlier.filter((r) => (r.gained ?? 0) > 0).length;
+  const news = celebrate ? leadNews(view, last, meId) : null;
 
   useEffect(() => {
     if (!animate) return;
-    const order = standingsOf(view, last, true).filter((r) => (r.gained ?? 0) > 0);
-    const timers = order.map((_, i) => setTimeout(() => play("tourChip", { rate: 0.94 + i * 0.07 }), GAIN_AT + i * GAIN_STEP));
-    timers.push(setTimeout(() => setBefore(false), GAIN_AT + order.length * GAIN_STEP + 450));
+    const settle = GAIN_AT + gainCount * GAIN_STEP + 450;
+    const timers = Array.from({ length: gainCount }, (_, i) =>
+      setTimeout(() => play("tourChip", { rate: 0.94 + i * 0.07 }), GAIN_AT + i * GAIN_STEP),
+    );
+    timers.push(setTimeout(() => setBefore(false), settle));
+    if (news) timers.push(setTimeout(() => play("tourReveal", { volume: 0.7 }), settle + 450));
     return () => timers.forEach(clearTimeout);
     // Une seule fois par jeu terminé
   }, [animate, last?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (rows.length === 0) return <p className="hint">Personne n'a encore marqué.</p>;
+  // Les barres se mesurent au premier : elles grandissent quand les points tombent
+  const top = Math.max(1, ...rows.map((r) => r.member.points));
+  const settled = celebrate && Boolean(last?.results) && !before;
+  const wasRank = new Map(earlier.map((r) => [r.member.userId, r.rank]));
   let gainIndex = 0;
   return (
-    <ol className="tour-standings-list">
-      {rows.map(({ member: m, rank, gained }) => {
-        const popAt = (gained ?? 0) > 0 ? GAIN_AT + gainIndex++ * GAIN_STEP : 0;
-        return (
-          <motion.li
-            key={m.userId}
-            layout={!reduced}
-            transition={{ type: "spring", stiffness: 340, damping: 30 }}
-            className={`standing-row ${rank === 1 ? "is-first" : ""} ${m.userId === meId ? "is-me" : ""} ${m.left ? "is-left" : ""}`}
-            style={m.team !== null ? { ["--team" as string]: TOUR_TEAM_COLORS[m.team] } : undefined}
+    <div className="standings">
+      {teams && <TeamDuel members={rows.map((r) => r.member)} gains={teamGains(view, last)} animate={animate} />}
+      <AnimatePresence>
+        {settled && news && (
+          <motion.p
+            key={news.text}
+            className="standings-news"
+            style={news.color ? { ["--news" as string]: news.color } : undefined}
+            initial={reduced ? false : { opacity: 0, scale: 0.7, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ delay: reduced ? 0 : 0.4, type: "spring", stiffness: 380, damping: 18 }}
           >
-            <span className="standing-rank num">{rank}</span>
-            <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={34} />
-            <span className="standing-who">
-              <strong>
-                <PlayerName name={m.name} admin={m.admin} suffix={m.userId === meId ? " (toi)" : undefined} />
-              </strong>
-              <span className="hint">
-                {[
-                  m.kind === "bot" && "bot",
-                  m.team !== null && TOUR_TEAMS[m.team],
-                  m.wins > 0 && `${m.wins} jeu${m.wins > 1 ? "x" : ""} gagné${m.wins > 1 ? "s" : ""}`,
-                  m.left ? (m.kind === "bot" ? "a cédé sa place" : "a quitté la tournée") : !m.connected && "absent",
-                  m.waiting && !m.left && "joue au prochain jeu",
-                ]
-                  .filter(Boolean)
-                  .join(", ") || " "}
+            {news.text}
+          </motion.p>
+        )}
+      </AnimatePresence>
+      <ol className="tour-standings-list">
+        {rows.map(({ member: m, rank, gained }) => {
+          const popAt = (gained ?? 0) > 0 ? GAIN_AT + gainIndex++ * GAIN_STEP : 0;
+          const move = settled ? (wasRank.get(m.userId) ?? rank) - rank : 0;
+          const tags = [
+            m.kind === "bot" && "bot",
+            m.wins > 0 && `${m.wins} victoire${m.wins > 1 ? "s" : ""}`,
+            m.left ? (m.kind === "bot" ? "a cédé sa place" : "parti") : !m.connected && "absent",
+            m.waiting && !m.left && "au prochain jeu",
+          ].filter(Boolean);
+          return (
+            <motion.li
+              key={m.userId}
+              layout={!reduced}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className={`standing-row ${rank === 1 ? "is-first" : ""} ${m.userId === meId ? "is-me" : ""} ${m.left ? "is-left" : ""} ${m.team !== null ? "is-team" : ""}`}
+              style={m.team !== null ? { ["--team" as string]: TOUR_TEAM_COLORS[m.team] } : undefined}
+            >
+              <span className="standing-rank num">{rank}</span>
+              <Avatar avatar={m.avatar} userId={m.userId} photo={m.photo} size={30} />
+              <span className="standing-who">
+                <span className="standing-name">
+                  <strong>
+                    <PlayerName name={m.name} admin={m.admin} suffix={m.userId === meId ? " (toi)" : undefined} />
+                  </strong>
+                  {tags.length > 0 && <span className="standing-tags">{tags.join(" · ")}</span>}
+                </span>
+                <span className="standing-bar" aria-hidden="true">
+                  <i style={{ width: `${(m.points / top) * 100}%` }} />
+                </span>
               </span>
-            </span>
-            {gained !== null && (
-              <motion.span
-                className="standing-gain num"
-                initial={animate ? { opacity: 0, y: 12, scale: 0.5 } : false}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ delay: popAt / 1000, type: "spring", stiffness: 460, damping: 17 }}
-              >
-                +{gained}
-              </motion.span>
-            )}
-            <RollingNumber className="standing-points num" value={m.points} />
-          </motion.li>
-        );
-      })}
-    </ol>
+              {move !== 0 && (
+                <motion.span
+                  className={`standing-move num ${move > 0 ? "is-up" : "is-down"}`}
+                  initial={reduced ? false : { opacity: 0, scale: 0.4 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.35, type: "spring", stiffness: 500, damping: 16 }}
+                  aria-label={move > 0 ? `gagne ${move} place${move > 1 ? "s" : ""}` : `perd ${-move} place${move < -1 ? "s" : ""}`}
+                >
+                  {move > 0 ? "▲" : "▼"}
+                  {Math.abs(move)}
+                </motion.span>
+              )}
+              {gained !== null && (
+                <motion.span
+                  className="standing-gain num"
+                  initial={animate ? { opacity: 0, y: 12, scale: 0.5 } : false}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: popAt / 1000, type: "spring", stiffness: 460, damping: 17 }}
+                >
+                  +{gained}
+                </motion.span>
+              )}
+              <RollingNumber className="standing-points num" value={m.points} />
+            </motion.li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -531,23 +608,65 @@ export function MusicToggle() {
   );
 }
 
-/** Les deux équipes et leur total */
-export function TeamScore({ view }: { view: TourView }) {
-  const [red, blue] = teamScores(view.members);
+/**
+ * Le duel des deux équipes : chacune son total qui défile, les points du dernier jeu qui tombent, et la corde qui penche
+ * vers celle qui mène. `final` : la fin de la tournée, en grand.
+ */
+export function TeamDuel({
+  members,
+  gains = null,
+  animate = false,
+  final = false,
+}: {
+  members: TourMemberView[];
+  gains?: [number, number] | null;
+  animate?: boolean;
+  final?: boolean;
+}) {
+  const [red, blue] = teamScores(members);
   const total = Math.max(1, red + blue);
+  const lead = red === blue ? null : red > blue ? 0 : 1;
+  const share = red + blue === 0 ? 50 : (red / total) * 100;
+  const side = (t: 0 | 1) => (
+    <div className={`duel-side side-${t} ${lead === t ? "is-leading" : ""}`} style={{ ["--team" as string]: TOUR_TEAM_COLORS[t] }}>
+      <span className="duel-faces" aria-hidden="true">
+        {members
+          .filter((m) => m.team === t && !m.left)
+          .slice(0, 4)
+          .map((m) => (
+            <Avatar key={m.userId} avatar={m.avatar} userId={m.userId} photo={m.photo} size={final ? 34 : 28} />
+          ))}
+      </span>
+      <span className="duel-name">
+        {lead === t && <Icon name="crown" size={final ? 20 : 16} />}
+        {TOUR_TEAMS[t]}
+      </span>
+      <span className="duel-score">
+        {gains && gains[t] > 0 && (
+          <motion.span
+            className="duel-gain num"
+            initial={animate ? { opacity: 0, y: 10, scale: 0.5 } : false}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: GAIN_AT / 1000, type: "spring", stiffness: 420, damping: 15 }}
+          >
+            +{gains[t]}
+          </motion.span>
+        )}
+        <RollingNumber className="duel-total num" value={t === 0 ? red : blue} />
+      </span>
+    </div>
+  );
   return (
-    <div className="team-score" aria-label={`${TOUR_TEAMS[0]} ${red}, ${TOUR_TEAMS[1]} ${blue}`}>
-      <div className="team-score-names">
-        <span style={{ color: TOUR_TEAM_COLORS[0] }}>
-          {TOUR_TEAMS[0]} <strong className="num">{red}</strong>
-        </span>
-        <span style={{ color: TOUR_TEAM_COLORS[1] }}>
-          <strong className="num">{blue}</strong> {TOUR_TEAMS[1]}
-        </span>
-      </div>
-      <div className="team-score-bar">
-        <span style={{ width: `${(red / total) * 100}%`, background: TOUR_TEAM_COLORS[0] }} />
-        <span style={{ width: `${(blue / total) * 100}%`, background: TOUR_TEAM_COLORS[1] }} />
+    <div className={`team-duel ${final ? "is-final" : ""}`} aria-label={`${TOUR_TEAMS[0]} ${red}, ${TOUR_TEAMS[1]} ${blue}`}>
+      {side(0)}
+      <span className="duel-vs" aria-hidden="true">
+        contre
+      </span>
+      {side(1)}
+      <div className="duel-bar" aria-hidden="true">
+        <span className="duel-fill side-0" style={{ width: `${share}%` }} />
+        <span className="duel-fill side-1" style={{ width: `${100 - share}%` }} />
+        <i className="duel-knot" style={{ left: `${share}%` }} />
       </div>
     </div>
   );
