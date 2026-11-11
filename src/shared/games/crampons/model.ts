@@ -94,6 +94,8 @@ export interface Human {
   /** Il demande à son équipe de presser le porteur */
   press: boolean;
   queue: HumanAction[];
+  /** Ses buts à lui, quel que soit le joueur qu'il dirigeait (absent des matchs commencés avant) */
+  goals?: number;
 }
 
 export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
@@ -237,7 +239,7 @@ export interface Match {
   /** Les joueurs signalés hors-jeu au dernier départ de passe */
   offside: number[];
   /** La passe en cours : à qui, où elle arrive, et quand on la saura ratée */
-  pass: { from: number; to: number; x: number; z: number; until: number } | null;
+  pass: { from: number; to: number; x: number; z: number; until: number; at: number } | null;
   stats: [TeamStats, TeamStats];
   goals: GoalRecord[];
   shootout: Shootout | null;
@@ -247,6 +249,13 @@ export interface Match {
   shotAt: number;
   /** Son auteur : un but après un arrêt ou une déviation lui revient */
   shotBy: number;
+  /**
+   * Le penalty qui vient d'être frappé : son gardien a choisi son côté (-1, 1) ou reste au centre (0) ; il plonge une
+   * fois, plus ou moins loin (`dive`, de 0 à 1)
+   */
+  spotKick?: { at: number; gk: number; guess: number; dive: number; done: boolean } | null;
+  /** Les têtes de suite sans que le ballon retombe : au-delà de deux, on le laisse descendre */
+  headChain?: number;
   /** Le dernier coup de pied, et l'équipe qui l'a donné : l'adversaire met un instant à réagir */
   kickAt: number;
   kickTeam: Team;

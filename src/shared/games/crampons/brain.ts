@@ -115,6 +115,16 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
   const b = m.ball;
   if (m.owner === p.i) return;
   p.sprint = false;
+  // Le penalty : il a choisi son côté au moment de la frappe, il ne lit pas la trajectoire (le plongeon se décide à
+  // chaque pas du match, voir spotKeeper)
+  const sk = m.spotKick;
+  if (sk && sk.gk === p.i && m.owner < 0 && m.t - sk.at < 1.4) {
+    if (sk.guess !== 0) {
+      p.tx = p.x;
+      p.tz = p.z;
+    }
+    return;
+  }
   // Une frappe qui vient vers le but
   if (m.owner < 0 && b.vx * own > 4) {
     const t = (line - b.x) / b.vx;

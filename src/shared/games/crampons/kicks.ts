@@ -225,7 +225,7 @@ function firePass(m: Match, p: Player, o: KickOrder) {
     tx = plan.tx;
     tz = plan.tz;
     v = plan.v;
-    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + Math.min(rollTime(v, Math.hypot(tx - b.x, tz - b.z)), 3) + 0.9 };
+    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + Math.min(rollTime(v, Math.hypot(tx - b.x, tz - b.z)), 3) + 0.9, at: m.t };
     // L'humain prend tout de suite celui qui va recevoir le ballon
     takeOver(m, q);
   } else {
@@ -264,7 +264,7 @@ function fireThrough(m: Match, p: Player, o: KickOrder) {
   setBall(b, [dx * v, 0, dz * v]);
   b.y = BALL_R;
   takeOver(m, q);
-  m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + runT + 1 };
+  m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + runT + 1, at: m.t };
   m.stats[p.team].passes++;
 }
 
@@ -296,7 +296,7 @@ function fireLob(m: Match, p: Player, o: KickOrder) {
   setBall(b, solveLob(b, tx + noise(m, err), tz + noise(m, err), T, 1.0));
   if (to >= 0) {
     takeOver(m, m.players[to]!);
-    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + T + 0.9 };
+    m.pass = { from: p.i, to, x: tx, z: tz, until: m.t + T + 0.9, at: m.t };
   } else m.pass = null;
   m.stats[p.team].passes++;
 }
@@ -339,7 +339,8 @@ function fireShot(m: Match, p: Player, o: KickOrder, ev: MatchEvent[]) {
     // Trop de force, et ça passe au-dessus : c'est là tout le jeu de la jauge
     const over = Math.max(0, o.power - 0.82) * (1.25 - sho) * 13;
     const low = lerp(0.35, 1.5, o.power * o.power);
-    const spread = ((1.14 - sho) * 0.2 + Math.max(0, d - 16) * 0.0036) * clumsy * (finesse ? 0.8 : 1);
+    const calm = m.restart?.kind === "penalty" ? 0.6 : 1;
+    const spread = ((1.14 - sho) * 0.2 + Math.max(0, d - 16) * 0.0036) * clumsy * (finesse ? 0.8 : 1) * calm;
     const curl = finesse ? -end * Math.sign(stick) * (5 + sho * 5) : 0;
     const yT = clamp(low + over + noise(m, spread * d * 0.55), 0.1, 9);
     const [dx, dz] = spin((gx - b.x) / d, (aimZ - b.z) / d, noise(m, spread));

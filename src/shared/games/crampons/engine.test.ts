@@ -231,7 +231,68 @@ describe("un match", () => {
       const [a, b] = m.shootout!.kicks;
       expect(Math.abs(a.length - b.length)).toBeLessThanOrEqual(1);
       expect(a.length).toBeGreaterThanOrEqual(3);
+      // En mort subite, l'autre équipe a toujours droit à sa réponse
+      if (a.length > 5) expect(b.length).toBe(a.length);
     }
+  });
+
+  it("un penalty est marqué le plus souvent, mais pas toujours", () => {
+    let kicks = 0;
+    let scored = 0;
+    for (let seed = 1; seed <= 14; seed++) {
+      const m = createMatch(settings({ draw: "penalties" }), teams, [], seed);
+      toPlay(m);
+      m.period = 2;
+      m.clock = 90 * 60 - 0.01;
+      m.ball.x = 0;
+      m.score = [1, 1];
+      for (let i = 0; i < 30000 && m.phase !== "over"; i++) {
+        for (const e of stepMatch(m)) {
+          if (e.k !== "penalty") continue;
+          kicks++;
+          if (e.scored) scored++;
+        }
+      }
+    }
+    expect(kicks).toBeGreaterThan(100);
+    expect(scored / kicks).toBeGreaterThan(0.6);
+    expect(scored / kicks).toBeLessThan(0.88);
+  });
+
+  it("une équipe garde toujours assez de joueurs, même avec beaucoup de cartons", () => {
+    const m = createMatch(settings({ side: 5 }), teams, [], 4);
+    toPlay(m);
+    // Des fautes de dernier défenseur à répétition : rouge à chaque fois, tant qu'il en reste assez
+    let reds = 0;
+    for (let k = 0; k < 6; k++) {
+      const dir = attackDir(m, 0);
+      const left = m.players.filter((p) => p.team === 1 && !p.off && p.role !== "GK");
+      const foul = left[0]!;
+      const victim = m.players.find((p) => p.team === 0 && p.role !== "GK" && !p.off)!;
+      m.phase = "play";
+      m.restart = null;
+      victim.x = dir * 30;
+      victim.z = 0;
+      victim.h = dir > 0 ? 0 : Math.PI;
+      victim.act = "none";
+      for (const p of left) if (p !== foul) p.x = victim.x - dir * 12;
+      foul.x = victim.x - dir * 0.6;
+      foul.z = 0;
+      foul.act = "slide";
+      foul.actT = 0.2;
+      foul.dirX = dir;
+      foul.dirZ = 0;
+      foul.lockedUntil = 0;
+      m.owner = victim.i;
+      m.ball.x = dir * 45;
+      m.ball.z = 0;
+      for (const e of stepMatch(m)) if (e.k === "card" && e.red) reds++;
+    }
+    expect(reds).toBe(2);
+    expect(m.players.filter((p) => p.team === 1 && !p.off).length).toBe(3);
+    // Et le match continue sans accroc jusqu'au bout
+    for (let i = 0; i < 20000 && m.phase !== "over"; i++) stepMatch(m);
+    expect(m.phase).toBe("over");
   });
 
   it("après un match nul avec prolongations, on joue jusqu'à 120 minutes", () => {
@@ -448,6 +509,43 @@ describe("le changement de joueur", () => {
     for (let i = 0; i < 30 && m.phase !== "play"; i++) stepMatch(m);
     expect(m.phase).toBe("play");
     expect(m.players[h.active]!.role).not.toBe("GK");
+  });
+});
+
+describe("les remises en jeu", () => {
+  it("à l'engagement et sur un coup franc, l'adversaire reste à 9 m 15 du ballon", () => {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 1 }], 21);
+    for (let i = 0; i < 400 && !m.restart?.ready; i++) stepMatch(m);
+    // L'humain de l'équipe qui n'engage pas fonce vers le ballon : il s'arrête au bord du rond
+    const h = m.humans[0]!;
+    for (let i = 0; i < 60 && m.phase === "kickoff"; i++) {
+      const p = m.players[h.active]!;
+      setInput(m, "moi", -p.x, -p.z, true, false);
+      stepMatch(m);
+      if (m.phase !== "kickoff") break;
+      for (const q of m.players) if (q.team === 1 && !q.off) expect(Math.hypot(q.x, q.z)).toBeGreaterThan(9);
+    }
+  });
+
+  it("un gardien qui tient le ballon ne se le fait pas prendre", () => {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 5);
+    toPlay(m);
+    const end = attackDir(m, 0);
+    const gk = m.players.find((p) => p.team === 1 && p.role === "GK")!;
+    const me = m.players[m.humans[0]!.active]!;
+    gk.x = end * (HALF_L - 6);
+    gk.z = 0;
+    gk.act = "hold";
+    gk.thinkAt = m.t + 5;
+    m.owner = gk.i;
+    m.lastTouch = gk.i;
+    me.x = gk.x - end * 1;
+    me.z = 0;
+    for (let k = 0; k < 10; k++) {
+      pushAction(m, "moi", "tackle", 1, 0, 0);
+      for (let i = 0; i < 12; i++) stepMatch(m);
+      expect(m.owner).toBe(gk.i);
+    }
   });
 });
 

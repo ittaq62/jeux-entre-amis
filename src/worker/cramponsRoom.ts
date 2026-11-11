@@ -678,7 +678,8 @@ export class CramponsRoom extends DurableObject<Env> {
     try {
       // Égalité sans vainqueur : tout le monde est deuxième, personne ne compte pour une victoire
       const rankOf = (t: Team) => (m.winner === t ? 1 : 2);
-      const goalsOf = (id: string) => m.players.find((p) => p.human === id)?.goals ?? 0;
+      // Les buts de l'humain lui-même, pas ceux du joueur qu'il dirigeait au coup de sifflet final
+      const goalsOf = (id: string) => m.humans.find((h) => h.id === id)?.goals ?? 0;
       const statsOf = (t: Team, id: string | null) => {
         const s = m.stats[t];
         return {
