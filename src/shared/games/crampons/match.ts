@@ -970,7 +970,10 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         wx = dx / d;
         wz = dz / d;
         sprinting = p.sprint;
-        speed = topSpeed(p, sprinting, mine) * clamp(d / 2.5 + 0.2, 0, 1) * levelOf(m).speed;
+        // Se recaler de deux mètres dans le bloc se fait au trot, pas au sprint : sinon, chaque mouvement du ballon le
+        // ferait partir à fond dans un sens puis dans l'autre. Aller au ballon, presser, porter le ballon : à fond.
+        const calm = !sprinting && !mine && p.role !== "GK";
+        speed = topSpeed(p, sprinting, mine) * clamp(calm ? d / 5 + 0.15 : d / 2.5 + 0.2, 0, 1) * levelOf(m).speed;
         // Face à une frappe qui vient vers lui, le gardien se décale à petits pas
         if (p.role === "GK" && m.owner < 0 && m.t - m.shotAt < 1.2 && m.ball.vx * attackDir(m, p.team) < -4)
           speed = Math.min(speed, KEEPER_SHUFFLE);

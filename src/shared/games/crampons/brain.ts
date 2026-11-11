@@ -62,10 +62,11 @@ function goalSide(m: Match, p: Player, x: number, z: number, gap: number): [numb
 function shapeSpot(m: Match, p: Player, inPossession: boolean): [number, number] {
   const dir = attackDir(m, p.team);
   const bx = m.ball.x * dir;
-  // Le porteur a le temps de lever la tête : la défense recule pour ne rien laisser dans son dos
+  // Le porteur a le temps de lever la tête : la défense recule pour ne rien laisser dans son dos (peu à peu, selon la
+  // pression qu'il subit : un seuil ferait reculer et remonter toute la ligne d'un coup à chaque pas de l'adversaire)
   const owner = m.owner >= 0 ? m.players[m.owner]! : null;
-  const time = !inPossession && owner !== null && pressureOn(m, owner) < 0.35;
-  const defLine = clamp(bx - (inPossession ? 27 : time ? 27 : 19), -41, inPossession ? 16 : 8);
+  const time = !inPossession && owner !== null ? 1 - clamp((pressureOn(m, owner) - 0.2) / 0.3, 0, 1) : 0;
+  const defLine = clamp(bx - (inPossession ? 27 : 19 + time * 8), -41, inPossession ? 16 : 8);
   const atkLine = clamp(bx + (inPossession ? 17 : 9), -12, 46);
   const x = lerp(defLine, atkLine, p.fx);
   const width = inPossession ? 0.92 : 0.62;
@@ -217,12 +218,21 @@ export function thinkTeam(m: Match, team: Team) {
   const inPossession = owner ? owner.team === team : m.lastTouch >= 0 && m.players[m.lastTouch]?.team === team;
   const path = m.owner < 0 ? predictFlight(m) : null;
   const human = (p: Player) => p.human !== null;
+  // Le bloc ne se retourne qu'une fois le ballon gardé un instant : dans une mêlée, chaque contact ne renvoie pas toute
+  // l'équipe en sens inverse (des joueurs qui courent dans un sens puis dans l'autre, pour rien)
+  if (m.phase !== "play") m.shapeTeam = undefined;
+  else if (owner && m.t - owner.gotAt >= 0.45) m.shapeTeam = owner.team;
+  const shapeIn = m.phase === "play" && m.shapeTeam !== undefined ? m.shapeTeam === team : inPossession;
+  // Les cibles d'avant, et ceux qui ont une tâche urgente (aller au ballon, au porteur) : voir la fin
+  const before = new Map<number, [number, number, boolean]>();
+  for (const p of m.players) if (p.team === team) before.set(p.i, [p.tx, p.tz, p.sprint]);
+  const urgent = new Set<number>();
 
   // Sans le ballon, tout le monde prend sa place ; on affinera ensuite pour ceux qui ont une tâche
   for (const p of m.players) {
     if (p.team !== team || !free(p) || human(p) || p.i === m.owner) continue;
     if (p.role === "GK") continue;
-    const [x, z] = shapeSpot(m, p, inPossession);
+    const [x, z] = shapeSpot(m, p, shapeIn);
     p.tx = x;
     p.tz = z;
     p.sprint = false;
@@ -245,6 +255,7 @@ export function thinkTeam(m: Match, team: Team) {
       first.p.tx = first.f.x;
       first.p.tz = first.f.z;
       first.p.sprint = true;
+      urgent.add(first.p.i);
     }
     // Un deuxième arrive en soutien, pour ramasser les miettes
     const second = callers.find((e) => e !== first && !human(e.p) && e.p.role !== "GK");
@@ -252,6 +263,7 @@ export function thinkTeam(m: Match, team: Team) {
       second.p.tx = second.f.x;
       second.p.tz = second.f.z;
       second.p.sprint = true;
+      urgent.add(second.p.i);
     }
     // Sans ballon en vue, on retombe sur le ballon le plus proche : personne ne regarde un ballon arrêté
     if (callers.length === 0 && m.ball.y < 3) {
@@ -260,6 +272,7 @@ export function thinkTeam(m: Match, team: Team) {
         nearest.tx = m.ball.x;
         nearest.tz = m.ball.z;
         nearest.sprint = true;
+        urgent.add(nearest.i);
       }
     }
   }
@@ -316,6 +329,7 @@ export function thinkTeam(m: Match, team: Team) {
     const press = nearestOf(m, team, owner.x, owner.z, (p) => p.role === "GK");
     const first = press[0];
     if (first && !human(first)) {
+      urgent.add(first.i);
       const danger = owner.x * -dir > HALF_L - 40;
       if (danger || random(m) < tune.press) {
         first.tx = owner.x + owner.vx * 0.35;
@@ -330,6 +344,7 @@ export function thinkTeam(m: Match, team: Team) {
     }
     const second = press[1];
     if (second && !human(second)) {
+      urgent.add(second.i);
       const [gx, gz] = goalSide(m, second, owner.x, owner.z, 7);
       second.tx = gx;
       second.tz = gz;
@@ -358,6 +373,35 @@ export function thinkTeam(m: Match, team: Team) {
         p.sprint = Math.hypot(gx - p.x, gz - p.z) > 6;
       }
     }
+  }
+  noAboutTurn(m, team, before, urgent);
+}
+
+/** Le temps qu'un joueur court dans un sens avant de pouvoir repartir dans l'autre, si rien d'urgent ne l'appelle */
+const TURN_COMMIT_S = 0.8;
+
+/**
+ * Pas de demi-tour pour rien. Une tâche qui hésite d'une réflexion à l'autre (marquer cet adversaire ou garder sa place,
+ * se proposer ou non) renvoyait un joueur en sens inverse quelques dixièmes après son départ : il courait dans un sens,
+ * puis dans l'autre, sans aller nulle part. Il finit sa course, sauf pour aller au ballon ou au porteur.
+ */
+function noAboutTurn(m: Match, team: Team, before: Map<number, [number, number, boolean]>, urgent: Set<number>) {
+  for (const p of m.players) {
+    if (p.team !== team || !free(p) || p.human !== null || p.role === "GK" || p.i === m.owner || p.runUntil > m.t) continue;
+    const v = Math.hypot(p.vx, p.vz);
+    if (v < 2 || urgent.has(p.i)) {
+      // Il part d'arrêté, ou il va au ballon : c'est le début d'une course
+      if (v < 2) p.turnAt = m.t;
+      continue;
+    }
+    const nx = p.tx - p.x;
+    const nz = p.tz - p.z;
+    const nd = Math.hypot(nx, nz);
+    if (nd < 1.5 || (p.vx * nx + p.vz * nz) / (v * nd) > -0.3) continue;
+    const old = before.get(p.i);
+    if (old && m.t - (p.turnAt ?? -9) < TURN_COMMIT_S) {
+      [p.tx, p.tz, p.sprint] = old;
+    } else p.turnAt = m.t;
   }
 }
 

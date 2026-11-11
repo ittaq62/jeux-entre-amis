@@ -78,6 +78,8 @@ export interface Player {
   gotAt: number;
   /** Un appel de balle : il court vers ce point jusqu'à cet instant */
   runUntil: number;
+  /** Depuis quand il court dans ce sens : il ne fait pas demi-tour aussitôt pour une tâche qui n'a rien d'urgent */
+  turnAt?: number;
   runX: number;
   runZ: number;
   goals: number;
@@ -310,6 +312,11 @@ export interface Match {
   winner: Team | null;
   /** Le cerveau de chaque équipe ne recalcule pas à chaque pas */
   brainAt: number;
+  /**
+   * L'équipe qui a le ballon pour la forme des blocs : elle ne change qu'une fois le ballon vraiment gagné (gardé un
+   * instant), pour que toute une équipe ne reparte pas en sens inverse à chaque contact dans une mêlée
+   */
+  shapeTeam?: Team;
 }
 
 /** Vers quelle extrémité du terrain cette équipe attaque-t-elle (+1 ou -1) ? */
