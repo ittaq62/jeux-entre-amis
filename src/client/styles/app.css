@@ -1922,6 +1922,59 @@
   font-size: 15px;
 }
 
+/* UNO : le choix du dos de ses cartes, en tête des règles de la table */
+.back-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 6px;
+}
+
+.back-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px 5px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.back-option.is-on {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-tint);
+}
+
+/* Pas encore à soi : on voit quand même à quoi il ressemble avant de l'acheter */
+.back-option.is-locked .card-svg {
+  filter: saturate(0.75) brightness(0.72);
+}
+
+.back-name {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.back-lock {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--gold-light);
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .rule-list {
   display: flex;
   flex-direction: column;

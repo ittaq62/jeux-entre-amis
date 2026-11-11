@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botCatchDelay, botThinkDelay, botTurn } from "../shared/games/uno/bot.ts";
+import { BACK_BY_ID, isBackId, type BackId } from "../shared/games/uno/backs.ts";
 import { sameFace } from "../shared/games/uno/cards.ts";
 import {
   applyAction,
@@ -38,6 +39,8 @@ import {
 import { random, randomSeed } from "../shared/rng.ts";
 import { variantSettings, type TourInit } from "../shared/tour.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { unoItem } from "../shared/shop.ts";
+import { ownsItem } from "./shop.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -77,6 +80,8 @@ interface Seat {
   disconnectedAt: number | null;
   /** En tournée par équipes : son équipe ; il voit la main de ses coéquipiers */
   team?: 0 | 1;
+  /** Le dos de ses cartes, que voient ses adversaires */
+  back?: BackId;
 }
 
 type TimerKind =
@@ -451,6 +456,16 @@ export class GameRoom extends DurableObject<Env> {
         const valid = (REACTIONS as readonly string[]).includes(msg.emote) || (TAUNTS as readonly string[]).includes(msg.emote);
         if (!valid || !this.allowMessage(`emote:${userId}`, 900)) return;
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
+      }
+
+      case "back": {
+        // Le dos de ses cartes : à tout moment, s'il l'a (les autres s'achètent à la boutique)
+        if (!seat || !this.allowMessage(`back:${userId}`, 150)) return;
+        const info = isBackId(msg.back) ? BACK_BY_ID.get(msg.back) : undefined;
+        if (!info || seat.back === info.id) return;
+        if (!(await ownsItem(this.env.DB, userId, unoItem(info.id)))) return error(`${info.name} s'achète à la boutique.`);
+        seat.back = info.id;
+        return this.afterChange([], now);
       }
 
       case "sit": {
@@ -1048,6 +1063,7 @@ export class GameRoom extends DurableObject<Env> {
             : null,
         isHost: s.userId === d.hostId,
         ...(s.team !== undefined ? { team: s.team } : {}),
+        ...(s.back && s.back !== "classique" ? { back: s.back } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,

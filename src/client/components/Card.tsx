@@ -1,6 +1,8 @@
-import { memo, type ReactNode } from "react";
+import { memo, useContext, type ReactNode } from "react";
+import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { Card as CardData, Color } from "../../shared/games/uno/cards.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { BackArt, BackDefs, CardBackSkin } from "./cardBacks.tsx";
 
 export const CARD_RATIO = 1.4;
 
@@ -72,30 +74,15 @@ export const CardFace = memo(function CardFace({ card, width, className }: CardP
   );
 });
 
-/** Dos de carte : bordeaux et dorures art deco. */
-export const CardBack = memo(function CardBack({ width, className }: { width: number; className?: string }) {
+/**
+ * Dos de carte. Sans dos précisé, celui du joueur qui regarde (le contexte CardBackSkin) : sur la pioche et les cartes qui
+ * volent. Les cartes en main d'un adversaire montrent le sien.
+ */
+export const CardBack = memo(function CardBack({ width, className, skin }: { width: number; className?: string; skin?: BackId }) {
+  const mine = useContext(CardBackSkin);
   return (
     <svg viewBox="0 0 100 140" width={width} height={width * CARD_RATIO} className={`card-svg ${className ?? ""}`} aria-hidden="true">
-      <rect x="0.6" y="0.6" width="98.8" height="138.8" rx="10" fill="#fbf5e6" stroke="rgba(40,25,10,0.35)" strokeWidth="1.2" />
-      <rect x="5" y="5" width="90" height="130" rx="7" fill="url(#card-back-field)" />
-      <rect x="5" y="5" width="90" height="130" rx="7" fill="url(#card-back-rays)" />
-      <rect x="10" y="10" width="80" height="120" rx="4.5" fill="none" stroke="#e6c36f" strokeOpacity="0.75" strokeWidth="1" />
-      <rect x="13" y="13" width="74" height="114" rx="3" fill="none" stroke="#e6c36f" strokeOpacity="0.35" strokeWidth="0.6" />
-      <g transform="translate(50 70)">
-        <path d="M0 -30 L22 0 L0 30 L-22 0 Z" fill="#3a0a17" stroke="#e6c36f" strokeWidth="1.3" />
-        <path d="M0 -23 L16.5 0 L0 23 L-16.5 0 Z" fill="none" stroke="#e6c36f" strokeOpacity="0.5" strokeWidth="0.7" />
-        <circle cx="0" cy="-9" r="4.2" fill={COLOR_HEX.red} />
-        <circle cx="9" cy="0" r="4.2" fill={COLOR_HEX.yellow} />
-        <circle cx="0" cy="9" r="4.2" fill={COLOR_HEX.green} />
-        <circle cx="-9" cy="0" r="4.2" fill={COLOR_HEX.blue} />
-        <circle cx="0" cy="0" r="1.6" fill="#e6c36f" />
-      </g>
-      {[-1, 1].map((s) => (
-        <g key={s} transform={`translate(50 ${70 + s * 45})`} stroke="#e6c36f" strokeOpacity="0.6" strokeWidth="0.8" fill="none">
-          <path d="M-18 0 H-5 M5 0 H18" />
-          <path d="M0 -3 L3 0 L0 3 L-3 0 Z" fill="#e6c36f" fillOpacity="0.6" />
-        </g>
-      ))}
+      <BackArt skin={skin ?? mine} />
     </svg>
   );
 });
@@ -405,6 +392,7 @@ export function CardDefs() {
         <pattern id="card-back-rays" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <path d="M0 4 H8 M4 0 V8" stroke="#e6c36f" strokeOpacity="0.09" strokeWidth="0.8" />
         </pattern>
+        <BackDefs />
       </defs>
     </svg>
   );

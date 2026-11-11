@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isWild, type Card, type Color } from "../../shared/games/uno/cards.ts";
 import { effectiveRules, type UnoAction } from "../../shared/games/uno/engine.ts";
 import type { RoomClientMessage, RoomView } from "../../shared/protocol.ts";
+import { CardBackSkin } from "../components/cardBacks.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
@@ -229,225 +230,228 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     </div>
   );
 
+  // La pioche et les cartes qui volent : avec le dos de ce joueur
   return (
-    <div className="table-root felt" ref={scope}>
-      <header className="table-top">
-        <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
-          <Icon name="menu" />
-        </button>
-        <div className="table-title">
-          <span className="table-code">{room.code}</span>
-          <span className="hint">
-            {g.settings.variant === "nomercy" ? "No Mercy" : "Classique"}
-            {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
-          </span>
-        </div>
-        {mySeat?.team !== undefined && (
-          <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team] }}>
-            Équipe {TOUR_TEAMS[mySeat.team]}
-            {g.partners.length > 0 && (
-              <span>
-                {" "}
-                · avec{" "}
-                {g.partners
-                  .map((x) => room.seats.find((s) => s.id === x.id)?.name)
-                  .filter(Boolean)
-                  .join(" et ")}
-              </span>
-            )}
-          </p>
-        )}
-        <div className="table-top-actions">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
+    <CardBackSkin.Provider value={mySeat?.back ?? "classique"}>
+      <div className="table-root felt" ref={scope}>
+        <header className="table-top">
+          <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
+            <Icon name="menu" />
           </button>
-          <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
-            <Icon name="chat" />
-            {unread > 0 && <span className="badge badge-red">{unread}</span>}
-          </button>
-        </div>
-        <AnimatePresence>
-          {menuOpen && (
-            <>
-              <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
-              <motion.div
-                className="table-menu panel"
-                initial={{ y: -8, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -8, opacity: 0 }}
-              >
-                {!inTour && (
-                  <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
-                    <Icon name="users" size={18} /> Voir le salon et les règles
-                  </button>
-                )}
-                <button className="menu-item" onClick={() => setPrefs({ colorblind: !usePrefs.getState().colorblind })}>
-                  <Icon name="eye" size={18} /> Symboles de couleur
-                </button>
-                <button className="menu-item is-danger" onClick={onLeave}>
-                  <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
-                </button>
-                {room.you.isAdmin && (
-                  <ConfirmButton
-                    className="menu-item is-danger"
-                    confirm="Fermer la table pour tous ?"
-                    onConfirm={() => send({ t: "close" })}
-                  >
-                    <Icon name="shield" size={18} /> Fermer la table (admin)
-                  </ConfirmButton>
-                )}
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </header>
-
-      <div className="table-area" ref={areaRef}>
-        <div className="table-oval" aria-hidden="true" />
-        {ordered.map((p, k) => {
-          const seat = room.seats.find((s) => s.id === p.id);
-          if (!seat) return null;
-          const pos = positions[k]!;
-          const partnerHand = g.partners.find((x) => x.id === p.id)?.hand;
-          return (
-            <div key={p.id} className="seat-slot" style={{ left: pos.x, top: pos.y }}>
-              <Seat
-                seat={seat}
-                player={p}
-                isTurn={g.phase === "playing" && g.turn === p.id}
-                deadline={room.turnDeadline}
-                turnSeconds={timerTotal}
-                serverOffset={serverOffset}
-                showScore={g.settings.endMode === "points"}
-                emotes={emotes.filter((e) => e.seatId === p.id)}
-                compact={compact}
-                vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partnerHand}
-                onCatch={() => act({ type: "catch", target: p.id })}
-                mercyLimit={g.mercyLimit}
-                teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team] : undefined}
-                partnerHand={partnerHand}
-              />
-            </div>
-          );
-        })}
-        <div className="center-slot" style={portrait && ordered.length > 1 ? { top: "57%" } : undefined}>
-          <Center game={g} pileWidth={pileW} canDraw={canDraw} onDraw={() => act({ type: "draw" })} />
-        </div>
-      </div>
-
-      {me && myPlayer && (
-        <div className={`my-zone ${myTurn ? "is-turn" : ""}`}>
-          <div className="my-bar">
-            {compact && emoteSide}
-            <div className="my-status">
-              {myTurn && room.turnDeadline && timerTotal > 0 && (
-                <span className="my-timer">
-                  <TimerRing size={30} deadline={room.turnDeadline} total={timerTotal} offset={serverOffset} />
+          <div className="table-title">
+            <span className="table-code">{room.code}</span>
+            <span className="hint">
+              {g.settings.variant === "nomercy" ? "No Mercy" : "Classique"}
+              {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
+            </span>
+          </div>
+          {mySeat?.team !== undefined && (
+            <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team] }}>
+              Équipe {TOUR_TEAMS[mySeat.team]}
+              {g.partners.length > 0 && (
+                <span>
+                  {" "}
+                  · avec{" "}
+                  {g.partners
+                    .map((x) => room.seats.find((s) => s.id === x.id)?.name)
+                    .filter(Boolean)
+                    .join(" et ")}
                 </span>
               )}
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={status}
-                  className="my-status-text"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                >
-                  {status}
-                </motion.span>
-              </AnimatePresence>
-            </div>
-            <div className="my-actions">
-              {mySeat?.autoplay && (
-                <button className="btn btn-primary btn-sm" onClick={() => send({ t: "takeBack" })}>
-                  Reprendre la main
-                </button>
-              )}
-              {myTurn && g.canChallenge && (
-                <button className="btn btn-danger btn-sm" onClick={() => act({ type: "challenge" })}>
-                  Contester
-                </button>
-              )}
-              {myTurn && g.pendingDraw > 0 && (g.canStack || g.canChallenge) && (
-                <button className="btn btn-sm" onClick={() => act({ type: "draw" })}>
-                  Encaisser +{g.pendingDraw}
-                </button>
-              )}
-              {myTurn && g.drawnCardId !== null && !rules.mustPlay && (
-                <button className="btn btn-sm" onClick={() => act({ type: "pass" })}>
-                  Garder
-                </button>
-              )}
-              {canDraw && g.pendingDraw === 0 && (
-                <button className={`btn btn-sm ${g.playable.length === 0 ? "btn-primary" : ""}`} onClick={() => act({ type: "draw" })}>
-                  Piocher
-                </button>
-              )}
-            </div>
-            {compact && unoSide}
+            </p>
+          )}
+          <div className="table-top-actions">
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={() => setPrefs({ sound: !sound })}
+              aria-label={sound ? "Couper le son" : "Activer le son"}
+            >
+              <Icon name={sound ? "volume" : "mute"} />
+            </button>
+            <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
+              <Icon name="chat" />
+              {unread > 0 && <span className="badge badge-red">{unread}</span>}
+            </button>
           </div>
-          <div className="my-hand-row">
-            {!compact && emoteSide}
-            <Hand
-              cards={hand}
-              playable={playable}
-              myTurn={myTurn}
-              cardWidth={handW}
-              onPlay={onCardClick}
-              highlight={myTurn ? g.drawnCardId : null}
-              maxRows={portrait ? 3 : h < 500 ? 1 : 2}
-            />
-            {!compact && unoSide}
+          <AnimatePresence>
+            {menuOpen && (
+              <>
+                <div className="emote-catcher" onClick={() => setMenuOpen(false)} />
+                <motion.div
+                  className="table-menu panel"
+                  initial={{ y: -8, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -8, opacity: 0 }}
+                >
+                  {!inTour && (
+                    <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
+                      <Icon name="users" size={18} /> Voir le salon et les règles
+                    </button>
+                  )}
+                  <button className="menu-item" onClick={() => setPrefs({ colorblind: !usePrefs.getState().colorblind })}>
+                    <Icon name="eye" size={18} /> Symboles de couleur
+                  </button>
+                  <button className="menu-item is-danger" onClick={onLeave}>
+                    <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
+                  </button>
+                  {room.you.isAdmin && (
+                    <ConfirmButton
+                      className="menu-item is-danger"
+                      confirm="Fermer la table pour tous ?"
+                      onConfirm={() => send({ t: "close" })}
+                    >
+                      <Icon name="shield" size={18} /> Fermer la table (admin)
+                    </ConfirmButton>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </header>
+
+        <div className="table-area" ref={areaRef}>
+          <div className="table-oval" aria-hidden="true" />
+          {ordered.map((p, k) => {
+            const seat = room.seats.find((s) => s.id === p.id);
+            if (!seat) return null;
+            const pos = positions[k]!;
+            const partnerHand = g.partners.find((x) => x.id === p.id)?.hand;
+            return (
+              <div key={p.id} className="seat-slot" style={{ left: pos.x, top: pos.y }}>
+                <Seat
+                  seat={seat}
+                  player={p}
+                  isTurn={g.phase === "playing" && g.turn === p.id}
+                  deadline={room.turnDeadline}
+                  turnSeconds={timerTotal}
+                  serverOffset={serverOffset}
+                  showScore={g.settings.endMode === "points"}
+                  emotes={emotes.filter((e) => e.seatId === p.id)}
+                  compact={compact}
+                  vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partnerHand}
+                  onCatch={() => act({ type: "catch", target: p.id })}
+                  mercyLimit={g.mercyLimit}
+                  teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team] : undefined}
+                  partnerHand={partnerHand}
+                />
+              </div>
+            );
+          })}
+          <div className="center-slot" style={portrait && ordered.length > 1 ? { top: "57%" } : undefined}>
+            <Center game={g} pileWidth={pileW} canDraw={canDraw} onDraw={() => act({ type: "draw" })} />
           </div>
         </div>
-      )}
 
-      <FxLayer />
+        {me && myPlayer && (
+          <div className={`my-zone ${myTurn ? "is-turn" : ""}`}>
+            <div className="my-bar">
+              {compact && emoteSide}
+              <div className="my-status">
+                {myTurn && room.turnDeadline && timerTotal > 0 && (
+                  <span className="my-timer">
+                    <TimerRing size={30} deadline={room.turnDeadline} total={timerTotal} offset={serverOffset} />
+                  </span>
+                )}
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={status}
+                    className="my-status-text"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                  >
+                    {status}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+              <div className="my-actions">
+                {mySeat?.autoplay && (
+                  <button className="btn btn-primary btn-sm" onClick={() => send({ t: "takeBack" })}>
+                    Reprendre la main
+                  </button>
+                )}
+                {myTurn && g.canChallenge && (
+                  <button className="btn btn-danger btn-sm" onClick={() => act({ type: "challenge" })}>
+                    Contester
+                  </button>
+                )}
+                {myTurn && g.pendingDraw > 0 && (g.canStack || g.canChallenge) && (
+                  <button className="btn btn-sm" onClick={() => act({ type: "draw" })}>
+                    Encaisser +{g.pendingDraw}
+                  </button>
+                )}
+                {myTurn && g.drawnCardId !== null && !rules.mustPlay && (
+                  <button className="btn btn-sm" onClick={() => act({ type: "pass" })}>
+                    Garder
+                  </button>
+                )}
+                {canDraw && g.pendingDraw === 0 && (
+                  <button className={`btn btn-sm ${g.playable.length === 0 ? "btn-primary" : ""}`} onClick={() => act({ type: "draw" })}>
+                    Piocher
+                  </button>
+                )}
+              </div>
+              {compact && unoSide}
+            </div>
+            <div className="my-hand-row">
+              {!compact && emoteSide}
+              <Hand
+                cards={hand}
+                playable={playable}
+                myTurn={myTurn}
+                cardWidth={handW}
+                onPlay={onCardClick}
+                highlight={myTurn ? g.drawnCardId : null}
+                maxRows={portrait ? 3 : h < 500 ? 1 : 2}
+              />
+              {!compact && unoSide}
+            </div>
+          </div>
+        )}
 
-      <ColorPicker
-        open={colorFor !== null}
-        title="Choisis une couleur"
-        onCancel={() => setColorFor(null)}
-        onPick={(color: Color) => {
-          if (colorFor) act({ type: "play", cardId: colorFor.id, color });
-          setColorFor(null);
-        }}
-      />
-      <ColorPicker
-        open={isRouletteVictim}
-        title="Roulette ! Quelle couleur chercher ?"
-        onPick={(color) => act({ type: "roulette", color })}
-      />
-      <TargetPicker
-        open={targetFor !== null}
-        seats={room.seats}
-        players={g.players}
-        me={me}
-        onCancel={() => setTargetFor(null)}
-        onPick={(id) => {
-          if (targetFor) act({ type: "play", cardId: targetFor.id, target: id });
-          setTargetFor(null);
-        }}
-      />
+        <FxLayer />
 
-      {g.phase === "roundOver" && g.lastRound && (
-        <RoundOver room={room} offset={serverOffset} onNext={room.you.isHost ? () => send({ t: "nextRound" }) : undefined} />
-      )}
-      {g.phase === "gameOver" && !resultsHidden && (
-        <GameOver
-          room={room}
-          onRematch={() => send(room.you.isHost ? { t: "start" } : { t: "rematch" })}
-          onLobby={() => {
-            setResultsHidden(true);
-            onShowLobby();
+        <ColorPicker
+          open={colorFor !== null}
+          title="Choisis une couleur"
+          onCancel={() => setColorFor(null)}
+          onPick={(color: Color) => {
+            if (colorFor) act({ type: "play", cardId: colorFor.id, color });
+            setColorFor(null);
           }}
-          onLeave={onLeave}
         />
-      )}
-    </div>
+        <ColorPicker
+          open={isRouletteVictim}
+          title="Roulette ! Quelle couleur chercher ?"
+          onPick={(color) => act({ type: "roulette", color })}
+        />
+        <TargetPicker
+          open={targetFor !== null}
+          seats={room.seats}
+          players={g.players}
+          me={me}
+          onCancel={() => setTargetFor(null)}
+          onPick={(id) => {
+            if (targetFor) act({ type: "play", cardId: targetFor.id, target: id });
+            setTargetFor(null);
+          }}
+        />
+
+        {g.phase === "roundOver" && g.lastRound && (
+          <RoundOver room={room} offset={serverOffset} onNext={room.you.isHost ? () => send({ t: "nextRound" }) : undefined} />
+        )}
+        {g.phase === "gameOver" && !resultsHidden && (
+          <GameOver
+            room={room}
+            onRematch={() => send(room.you.isHost ? { t: "start" } : { t: "rematch" })}
+            onLobby={() => {
+              setResultsHidden(true);
+              onShowLobby();
+            }}
+            onLeave={onLeave}
+          />
+        )}
+      </div>
+    </CardBackSkin.Provider>
   );
 }

@@ -1,6 +1,8 @@
 import { effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
 import { MAX_PLAYERS, type RoomClientMessage, type RoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
+import { usePrefs } from "../stores/prefs.ts";
+import { BackPicker } from "./BackPicker.tsx";
 import { RulesHeading, TableLobby, TableSize } from "./TableLobby.tsx";
 
 interface LobbyProps {
@@ -25,6 +27,8 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
   const isHost = room.you.isHost;
   const rules = effectiveRules(s);
   const update = (patch: Partial<UnoSettings>) => send({ t: "settings", settings: patch });
+  const setPrefs = usePrefs((p) => p.set);
+  const mine = room.seats.find((seat) => seat.id === room.you.seatId);
 
   return (
     <TableLobby
@@ -37,6 +41,16 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          {mine && (
+            <BackPicker
+              current={mine.back ?? "classique"}
+              onPick={(back) => {
+                setPrefs({ unoBack: back });
+                send({ t: "back", back });
+              }}
+            />
+          )}
 
           <div className="field">
             <span className="field-label">Jeu</span>

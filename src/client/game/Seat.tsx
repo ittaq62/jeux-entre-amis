@@ -110,7 +110,7 @@ export function Seat({
                   className="seat-fan-card"
                   style={{ transform: `translateX(${(i - (fan - 1) / 2) * (compact ? 5 : 7)}px) rotate(${(i - (fan - 1) / 2) * 7}deg)` }}
                 >
-                  <CardBack width={compact ? 14 : 18} />
+                  <CardBack width={compact ? 14 : 18} skin={seat.back ?? "classique"} />
                 </span>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
+import type { BackId } from "../../shared/games/uno/backs.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
 interface Prefs {
@@ -26,6 +27,8 @@ interface Prefs {
   bolidesAssist: boolean;
   /** Combien de fois on a reçu chaque objet (l'explication s'efface quand on le connaît) */
   bolidesItemsSeen: Record<string, number>;
+  /** UNO : le dos de cartes choisi en dernier sur cet appareil, repris à chaque table */
+  unoBack: BackId | null;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -56,6 +59,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   bolidesAutoItem: false,
   bolidesAssist: false,
   bolidesItemsSeen: {},
+  unoBack: null,
   ...load(),
   set: (patch) => {
     set(patch);

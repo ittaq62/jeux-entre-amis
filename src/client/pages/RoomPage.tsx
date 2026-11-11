@@ -9,6 +9,9 @@ import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
+import { unoItem } from "../../shared/shop.ts";
 
 // La bataille navale, Briques, Capitale et Mèche ne sont chargées que pour leurs tables
 const NavalRoom = lazy(() => import("../naval/NavalRoom.tsx").then((m) => ({ default: m.NavalRoom })));
@@ -84,6 +87,15 @@ function UnoRoom({ code }: { code: string }) {
   const unread = useUnread(messages, chatOpen, me?.id);
 
   useEffect(() => preloadSounds(UNO_SOUNDS), []);
+
+  // Le dos de cartes choisi en dernier sur cet appareil : repris à chaque table où l'on s'assoit (s'il est à soi)
+  const unoBack = usePrefs((p) => p.unoBack);
+  const { has } = useMyItems();
+  const mySeatBack = view?.seats.find((s) => s.id === view.you.seatId)?.back ?? (view?.you.seatId ? "classique" : null);
+  const owned = unoBack !== null && has(unoItem(unoBack));
+  useEffect(() => {
+    if (mySeatBack !== null && unoBack && owned && mySeatBack !== unoBack) send({ t: "back", back: unoBack });
+  }, [mySeatBack, unoBack, owned, send]);
 
   // Quand une partie demarre, on bascule sur la table
   useEffect(() => {

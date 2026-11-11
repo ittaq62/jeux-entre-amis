@@ -11,8 +11,9 @@ import {
 } from "./games/bolides/garage.ts";
 import { TOKENS, type TokenId } from "./games/capitale/tokens.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
+import { BACKS, type BackId } from "./games/uno/backs.ts";
 
-export type ShopKind = "naval" | "token" | "vehicle" | "kart";
+export type ShopKind = "naval" | "token" | "vehicle" | "kart" | "uno";
 
 export interface ShopItem {
   id: string;
@@ -27,6 +28,7 @@ export const navalItem = (id: NavalSkinId) => `naval:${id}`;
 export const tokenItem = (id: TokenId) => `token:${id}`;
 export const vehicleItem = (id: VehicleId) => `vehicle:${id}`;
 export const kartItem = (id: KartSkinId) => `kart:${id}`;
+export const unoItem = (id: BackId) => `uno:${id}`;
 
 export const SHOP_ITEMS: ShopItem[] = [
   ...NAVAL_SKINS.map((s): ShopItem => ({ id: navalItem(s.id), kind: "naval", ref: s.id, name: s.name, price: s.price })),
@@ -45,6 +47,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     name: KART_SKINS[id].name,
     price: KART_SKINS[id].price,
   })),
+  ...BACKS.map((b): ShopItem => ({ id: unoItem(b.id), kind: "uno", ref: b.id, name: b.name, price: b.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

@@ -109,13 +109,13 @@ function FlyingCard({ flight }: { flight: Flight }) {
             <CardFace card={flight.card!} width={width} />
           </div>
           <div className="flip-back">
-            <CardBack width={width} />
+            <CardBack width={width} skin={flight.back} />
           </div>
         </motion.div>
       ) : showFace ? (
         <CardFace card={flight.card!} width={width} />
       ) : (
-        <CardBack width={width} />
+        <CardBack width={width} skin={flight.back} />
       )}
     </motion.div>
   );

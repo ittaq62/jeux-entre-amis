@@ -9,6 +9,7 @@ import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./g
 import type { CapitaleAction, CapitaleEvent, CapitaleSettings } from "./games/capitale/engine.ts";
 import type { TokenId } from "./games/capitale/tokens.ts";
 import type { SkinId } from "./games/naval/skins.ts";
+import type { BackId } from "./games/uno/backs.ts";
 import type { CapitaleView } from "./games/capitale/view.ts";
 import type { MecheEvent, MecheSettings, Refusal } from "./games/meche/engine.ts";
 import type { MecheView } from "./games/meche/view.ts";
@@ -172,6 +173,8 @@ export interface SeatView {
   token?: TokenId;
   /** Bataille navale : le thème de la flotte */
   skin?: SkinId;
+  /** UNO : le dos de ses cartes (absent : le classique) */
+  back?: BackId;
 }
 
 export interface SpectatorView {
@@ -249,6 +252,8 @@ export type RoomClientMessage =
   | { t: "rematch" }
   | { t: "nextRound" }
   | { t: "sit" }
+  /** Le dos de ses cartes */
+  | { t: "back"; back: string }
   | { t: "leave" }
   | { t: "close" };
 

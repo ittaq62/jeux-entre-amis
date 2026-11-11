@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,8 @@ export interface Flight {
   toRotate: number;
   /** La carte se retourne en vol (dos -> face) */
   flip: boolean;
+  /** Le dos montré en vol : celui du joueur d'où part la carte (par défaut, celui de qui regarde) */
+  back?: BackId;
   done: () => void;
 }
 

@@ -3,6 +3,7 @@ import { seededAvatar } from "../../shared/avatar.ts";
 import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
+import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { GameId } from "../../shared/protocol.ts";
 import { SHOP_ITEMS, type ShopItem, type ShopKind } from "../../shared/shop.ts";
 import { VehiclePreview } from "../bolides/Garage.tsx";
@@ -11,6 +12,7 @@ import { PAWN_COLORS } from "../capitale/boardUi.ts";
 import { tokenThumbnails } from "../capitale/scene/tokens.ts";
 import { Link } from "wouter";
 import { AppHeader } from "../components/AppHeader.tsx";
+import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
@@ -18,6 +20,7 @@ import { useSession } from "../stores/session.ts";
 import { useMyItems } from "../stores/shop.ts";
 
 const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] = [
+  { kind: "uno", game: "uno", title: "UNO", note: "Le dos de tes cartes" },
   { kind: "naval", game: "naval", title: "Bataille navale", note: "Les thèmes de ta flotte" },
   { kind: "token", game: "capitale", title: "Capitale", note: "Tes pions" },
   { kind: "vehicle", game: "bolides", title: "Bolides", note: "Tes véhicules, chacun sa conduite" },
@@ -36,6 +39,7 @@ export function ShopPage() {
 
   const look = (item: ShopItem): ReactNode => {
     if (item.kind === "naval") return <NavalSkinPreview skin={item.ref as NavalSkinId} defs={defs} />;
+    if (item.kind === "uno") return <CardBack width={46} skin={item.ref as BackId} />;
     if (item.kind === "token") {
       const src = thumbs?.[item.ref as TokenId];
       return src ? <img src={src} alt="" width={64} height={64} draggable={false} /> : null;
@@ -59,6 +63,7 @@ export function ShopPage() {
         />
       );
     }
+    if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
     return look(item);
   };
 

@@ -1,3 +1,4 @@
+import type { BackId } from "../../shared/games/uno/backs.ts";
 import { COLOR_LABELS, type Card } from "../../shared/games/uno/cards.ts";
 import type { UnoEvent } from "../../shared/games/uno/engine.ts";
 import type { RoomView } from "../../shared/protocol.ts";
@@ -27,6 +28,11 @@ function seatPoint(id: string, me: string | null, dy = -10) {
 
 function nameOf(room: RoomView, id: string): string {
   return room.seats.find((s) => s.id === id)?.name ?? "?";
+}
+
+/** Le dos des cartes d'un joueur : une carte qui quitte sa main le garde en vol */
+function backOf(room: RoomView, id: string): BackId {
+  return room.seats.find((s) => s.id === id)?.back ?? "classique";
 }
 
 /** Rejoue en animation les evenements d'un message, avant que le nouvel etat ne s'affiche. */
@@ -83,6 +89,7 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
             fromWidth: e.player === me ? undefined : 26,
             duration: e.player === me ? 340 : 420,
             flip: e.player !== me,
+            back: backOf(next, e.player),
             fromRotate: e.player === me ? 0 : -20,
             toRotate: pileRotation(e.card.id),
           });
@@ -244,6 +251,7 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
               fromWidth: arrivalWidth(e.a, me, pileW),
               toWidth: arrivalWidth(e.b, me, pileW),
               duration: 520,
+              back: backOf(prev, e.a),
             }),
             fly({
               card: null,
@@ -253,6 +261,7 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
               fromWidth: arrivalWidth(e.b, me, pileW),
               toWidth: arrivalWidth(e.a, me, pileW),
               duration: 520,
+              back: backOf(prev, e.b),
             }),
           ]);
         }
@@ -285,6 +294,7 @@ export async function animateEvents(events: UnoEvent[], prev: RoomView, next: Ro
                 fromWidth: arrivalWidth(pl.id, me, pileW),
                 toWidth: arrivalWidth(target.id, me, pileW),
                 duration: 600,
+                back: backOf(prev, pl.id),
               }),
             );
         });
