@@ -169,7 +169,8 @@ export function encodeTick(m: Match, events: MatchEvent[], stamps: ReadonlyMap<s
   for (const q of m.players) {
     // Une touche se joue les bras en l'air
     const act = m.restart?.ready && m.restart.kind === "throw" && m.restart.taker === q.i ? "throw" : q.act;
-    p.push(r2(q.x), r2(q.z), r3(q.h), r2(Math.hypot(q.vx, q.vz)), ACT_CODE.get(act) ?? 0, Math.round(q.stam * 100));
+    // Sa vitesse réelle, pas celle qu'il voudrait avoir : bloqué contre un adversaire, il ne court pas sur place
+    p.push(r2(q.x), r2(q.z), r3(q.h), r2(q.seen ?? Math.hypot(q.vx, q.vz)), ACT_CODE.get(act) ?? 0, Math.round(q.stam * 100));
   }
   const b = m.ball;
   return {

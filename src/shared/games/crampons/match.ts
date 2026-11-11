@@ -9,6 +9,7 @@ import {
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
+  HUMAN_RESTART_WAIT,
   faceTo,
   newTeamStats,
   opponent,
@@ -49,7 +50,6 @@ const GOAL_SKIP_AFTER = 2;
 const RECEIVE_AUTO_S = 2.2;
 const HALFTIME_PAUSE = 2.5;
 /** Le temps laissé à un humain pour tirer une remise en jeu : ensuite, l'ordinateur la tire pour lui */
-const HUMAN_RESTART_WAIT = 3.5;
 
 const KICK_KINDS: readonly string[] = ["pass", "through", "lob", "shot", "finesse", "chip", "clear", "cross"];
 const isKick = (k: string): k is KickKind => KICK_KINDS.includes(k);
@@ -612,9 +612,22 @@ function beginKickoff(m: Match, team: Team, ev: MatchEvent[]) {
   void ev;
 }
 
+/** Le jeu s'arrête pour de bon (la pause, la fin) : tout le monde s'immobilise, personne ne reste figé en pleine course */
+function standStill(m: Match) {
+  for (const p of m.players) {
+    p.vx = 0;
+    p.vz = 0;
+    p.seen = 0;
+    p.sprint = false;
+    p.tx = p.x;
+    p.tz = p.z;
+  }
+}
+
 function endPeriod(m: Match, ev: MatchEvent[]) {
   ev.push({ k: "whistle", why: m.period === 1 || m.period === 3 ? "half" : "end" });
   freeze(m);
+  standStill(m);
   m.owner = -1;
   m.restart = null;
   const level = m.score[0] === m.score[1];
@@ -641,6 +654,7 @@ function endPeriod(m: Match, ev: MatchEvent[]) {
 
 function finish(m: Match, ev: MatchEvent[]) {
   m.phase = "over";
+  standStill(m);
   m.owner = -1;
   m.restart = null;
   let winner: Team | null = m.score[0] > m.score[1] ? 0 : m.score[1] > m.score[0] ? 1 : null;
@@ -1499,9 +1513,27 @@ function tickClock(m: Match, ev: MatchEvent[]) {
 }
 
 /** Avance le match d'un pas ; rend ce qui s'est passé */
+/**
+ * Avance le match d'un pas, et note la vitesse à laquelle chacun s'est réellement déplacé : un joueur qui pousse contre un
+ * autre, ou contre la distance d'une remise en jeu, ne doit pas être montré en train de courir sur place.
+ */
 export function stepMatch(m: Match): MatchEvent[] {
+  if (m.phase === "over") return [];
+  const before = m.players.map((p) => [p.x, p.z] as const);
+  const ev = stepInner(m);
+  for (let i = 0; i < m.players.length; i++) {
+    const p = m.players[i]!;
+    const [x0, z0] = before[i]!;
+    const moved = Math.hypot(p.x - x0, p.z - z0) / DT;
+    // Une remise en place d'un coup n'est pas une course
+    const v = moved > 14 ? 0 : moved;
+    p.seen = (p.seen ?? v) * 0.45 + v * 0.55;
+  }
+  return ev;
+}
+
+function stepInner(m: Match): MatchEvent[] {
   const ev: MatchEvent[] = [];
-  if (m.phase === "over") return ev;
   m.t += DT;
 
   if (m.phase === "halftime") {

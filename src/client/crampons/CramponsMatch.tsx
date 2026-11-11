@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
-import type { MatchEvent, RestartKind } from "../../shared/games/crampons/model.ts";
+import { HUMAN_RESTART_WAIT, type MatchEvent, type RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
@@ -330,6 +330,19 @@ export function CramponsMatch({
   const score = shown.score;
   const restart = view.restart;
   const taking = restart?.ready && view.phase !== "play" && hud.active >= 0 && restart.taker === hud.active;
+  // À lui de jouer la remise en jeu : un compte à rebours, sinon l'ordinateur la joue à sa place
+  const [restartLeft, setRestartLeft] = useState<number | null>(null);
+  const takingKey = taking ? `${restart?.kind}-${restart?.taker}` : "";
+  useEffect(() => {
+    if (!takingKey) {
+      setRestartLeft(null);
+      return;
+    }
+    const start = performance.now();
+    setRestartLeft(HUMAN_RESTART_WAIT);
+    const id = setInterval(() => setRestartLeft(Math.max(0, Math.ceil(HUMAN_RESTART_WAIT - (performance.now() - start) / 1000))), 200);
+    return () => clearInterval(id);
+  }, [takingKey]);
   const left = view.teams[0];
   const right = view.teams[1];
   const shootout = shown.shootout;
@@ -408,7 +421,9 @@ export function CramponsMatch({
         view.phase !== "play" &&
         (taking ? (
           <div className="cr-prompt">
+            <b className="cr-prompt-me">À toi !</b>
             <kbd>{key}</kbd> {RESTART_ACTION[restart.kind]}
+            {restartLeft !== null && restartLeft <= 5 && <span className="cr-prompt-count num">{restartLeft}</span>}
           </div>
         ) : (
           <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>

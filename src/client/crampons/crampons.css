@@ -257,6 +257,22 @@ html:has(.cr-root) body {
   animation: cr-breathe 1.2s ease-in-out infinite;
 }
 
+.cr-prompt-me {
+  color: #ffe066;
+}
+
+/* Les dernières secondes avant que l'ordinateur ne joue la remise en jeu à sa place */
+.cr-prompt-count {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e94a3a;
+  color: #fff;
+  font-size: 15px;
+}
+
 .cr-prompt.is-quiet {
   padding: 4px 14px;
   font-size: 15px;

@@ -45,6 +45,7 @@ export type Shot =
   | { kind: "replay"; end: number };
 
 /** À quelle distance du buteur se place la caméra : assez loin pour le voir en entier sous le bandeau */
+const tmpProj = new THREE.Vector3();
 export const SCORER_CAM_DIST = 10;
 
 /** Le ballon se voit de loin : un peu plus gros qu'en vrai */
@@ -101,6 +102,10 @@ export class CramponsScene {
   private shake = 0;
   private baseFov = 26;
   private mateArrow: THREE.Mesh;
+  /** Son joueur hors de l'image : une flèche au bord de l'écran pointe vers lui (dessinée par-dessus la scène) */
+  private hud = new THREE.Scene();
+  private hudCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+  private edgeArrow = new THREE.Group();
   private width = 1;
   private height = 1;
   private sun: THREE.DirectionalLight;
@@ -197,14 +202,23 @@ export class CramponsScene {
       this.scene.add(this.ballShadow);
     }
 
-    // Le joueur dirigé : un anneau au sol, une flèche au-dessus de la tête, et la jauge autour de ses pieds
-    const ringGeo = new THREE.RingGeometry(0.78, 1, 40);
+    // Le joueur dirigé : un anneau épais et un disque au sol, une grande flèche cerclée de noir au-dessus de la tête
+    // (jamais cachée par un autre joueur), et la jauge autour de ses pieds
+    const ringGeo = new THREE.RingGeometry(0.7, 1.08, 40);
     ringGeo.rotateX(-Math.PI / 2);
     this.ring = new THREE.Mesh(
       ringGeo,
-      new THREE.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }),
+      new THREE.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }),
     );
     this.ring.renderOrder = 3;
+    const discGeo = new THREE.CircleGeometry(0.7, 32);
+    discGeo.rotateX(-Math.PI / 2);
+    const disc = new THREE.Mesh(
+      discGeo,
+      new THREE.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.22, depthWrite: false, toneMapped: false }),
+    );
+    disc.renderOrder = 3;
+    this.ring.add(disc);
     this.scene.add(this.ring);
     const gaugeGeo = new THREE.RingGeometry(1.06, 1.36, GAUGE_SEGMENTS, 1, Math.PI / 2, Math.PI * 2);
     gaugeGeo.rotateX(-Math.PI / 2);
@@ -234,8 +248,32 @@ export class CramponsScene {
     this.scene.add(this.target);
     const arrowGeo = new THREE.ConeGeometry(0.34, 0.56, 4);
     arrowGeo.rotateX(Math.PI);
-    this.arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffe066", toneMapped: false }));
+    const bigArrow = new THREE.ConeGeometry(0.52, 0.9, 4);
+    bigArrow.rotateX(Math.PI);
+    this.arrow = new THREE.Mesh(bigArrow, new THREE.MeshBasicMaterial({ color: "#ffe066", toneMapped: false, depthTest: false }));
+    this.arrow.renderOrder = 11;
+    const outline = new THREE.Mesh(bigArrow, new THREE.MeshBasicMaterial({ color: "#111111", toneMapped: false, depthTest: false }));
+    outline.scale.setScalar(1.22);
+    outline.position.y = 0.04;
+    outline.renderOrder = 10;
+    this.arrow.add(outline);
     this.scene.add(this.arrow);
+    // La flèche du bord de l'écran : un triangle jaune cerclé de noir, pointe vers l'extérieur
+    const tri = new THREE.Shape();
+    tri.moveTo(0.06, 0);
+    tri.lineTo(-0.035, 0.045);
+    tri.lineTo(-0.035, -0.045);
+    tri.closePath();
+    const triGeo = new THREE.ShapeGeometry(tri);
+    const back = new THREE.Mesh(triGeo, new THREE.MeshBasicMaterial({ color: "#111111", depthTest: false, toneMapped: false }));
+    back.scale.setScalar(1.3);
+    back.position.x = -0.006;
+    const front = new THREE.Mesh(triGeo, new THREE.MeshBasicMaterial({ color: "#ffe066", depthTest: false, toneMapped: false }));
+    front.position.z = 0.01;
+    this.edgeArrow.add(back, front);
+    this.edgeArrow.visible = false;
+    this.hud.add(this.edgeArrow);
+    this.hudCam.position.z = 5;
     this.mateArrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#6fe3ff", toneMapped: false }));
     this.mateArrow.visible = false;
     this.mateArrow.scale.setScalar(0.8);
@@ -274,6 +312,10 @@ export class CramponsScene {
     this.height = h;
     this.applyPixels();
     this.camera.aspect = w / h;
+    // Le repère du bord de l'écran garde ses proportions quelle que soit la forme de la fenêtre
+    this.hudCam.left = -w / h;
+    this.hudCam.right = w / h;
+    this.hudCam.updateProjectionMatrix();
     this.portrait = h > w * 1.05;
     this.baseFov = this.portrait ? 50 : 26;
     this.camera.fov = this.baseFov;
@@ -344,7 +386,10 @@ export class CramponsScene {
     if (p && shown) {
       this.ring.position.set(p.x, 0.05, p.z);
       this.ring.scale.setScalar(1 + Math.sin(this.time * 6) * 0.05);
-      this.arrow.position.set(p.x, 3.05 + Math.sin(this.time * 5) * 0.12, p.z);
+      // Plus la caméra est loin, plus la flèche grossit : elle reste lisible en vue large
+      const far = clamp(this.camera.position.distanceTo(this.ring.position) / 42, 1, 2.3);
+      this.arrow.scale.setScalar(far);
+      this.arrow.position.set(p.x, 2.95 + far * 0.55 + Math.sin(this.time * 5) * 0.12 * far, p.z);
       this.arrow.rotation.y = this.time * 2;
       this.gauge.position.set(p.x, 0.06, p.z);
       this.gauge.geometry.setDrawRange(0, Math.round(frame.charge * GAUGE_SEGMENTS) * 6);
@@ -384,6 +429,29 @@ export class CramponsScene {
       this.sun.position.set(tx + this.sunOffset.x, this.sunOffset.y, tz + this.sunOffset.z);
     }
     this.renderer.render(this.scene, this.camera);
+    // Son joueur sorti de l'image : la flèche du bord pointe vers lui
+    this.edgeArrow.visible = false;
+    if (p && shown && !this.shot) {
+      const v = tmpProj.set(p.x, 1, p.z).project(this.camera);
+      const behind = v.z > 1;
+      const aspect = this.width / Math.max(1, this.height);
+      let x = (behind ? -v.x : v.x) * aspect;
+      let y = behind ? -v.y : v.y;
+      const out = behind || Math.abs(v.x) > 0.97 || Math.abs(v.y) > 0.95;
+      if (out) {
+        const k = 1 / Math.max(Math.abs(x) / (aspect * 0.93), Math.abs(y) / 0.88, 1e-3);
+        x *= k;
+        y *= k;
+        this.edgeArrow.position.set(x, y, 0);
+        this.edgeArrow.rotation.z = Math.atan2(y, x);
+        this.edgeArrow.scale.setScalar(1 + Math.sin(this.time * 7) * 0.08);
+        this.edgeArrow.visible = true;
+        this.renderer.autoClear = false;
+        this.renderer.clearDepth();
+        this.renderer.render(this.hud, this.hudCam);
+        this.renderer.autoClear = true;
+      }
+    }
   }
 
   /** Les plans de cinéma : le tour du stade, le buteur de près, le ralenti depuis le bord du terrain */
@@ -442,8 +510,20 @@ export class CramponsScene {
     const snap = frame.cuts !== this.lastCuts;
     this.lastCuts = frame.cuts;
     // On regarde un peu devant le ballon, là où il va
-    const gx = b.x + clamp(b.vx * 0.22, -7.5, 7.5);
-    const gz = b.z + clamp(b.vz * 0.12, -3, 3);
+    let gx = b.x + clamp(b.vx * 0.22, -7.5, 7.5);
+    let gz = b.z + clamp(b.vz * 0.12, -3, 3);
+    // Son joueur loin du ballon : la caméra penche vers lui pour les garder tous deux dans l'image
+    const me = frame.focus ? undefined : frame.players[frame.active];
+    if (me && !me.off) {
+      const dx = me.x - b.x;
+      const dz = me.z - b.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 6) {
+        const k = clamp((d - 6) / 34, 0, 0.32);
+        gx += clamp(dx * k, -12, 12);
+        gz += clamp(dz * k * 0.7, -6, 6);
+      }
+    }
     const k = snap ? 1 : 1 - Math.exp(-dt * 4.2);
     this.cx += (gx - this.cx) * k;
     this.cz += (gz - this.cz) * k;
@@ -477,7 +557,7 @@ export class CramponsScene {
     this.crowd.dispose();
     this.fx.dispose();
     // Ce qui reste (le ballon et sa texture, la mire, les flèches…) : tout est rendu à la carte graphique
-    this.scene.traverse((o) => {
+    const free = (o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       mesh.geometry?.dispose();
       const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
@@ -485,7 +565,9 @@ export class CramponsScene {
         (m as THREE.MeshStandardMaterial).map?.dispose();
         m.dispose();
       }
-    });
+    };
+    this.scene.traverse(free);
+    this.hud.traverse(free);
     this.renderer.dispose();
   }
 }

@@ -31,6 +31,8 @@ export interface PadState {
   scheme: Scheme;
   /** Le curseur, en pixels, s'il est connu */
   mouse: { x: number; y: number } | null;
+  /** Depuis combien de temps la souris n'a pas bougé (ms) : un curseur oublié dans un coin ne doit pas viser */
+  mouseIdle: number;
 }
 
 /** Il faut tenir le bouton ce temps-là pour la pleine puissance */
@@ -58,6 +60,7 @@ export class CramponsControls {
   private skillTaken = false;
   private touchSwap = false;
   private cursor: { x: number; y: number } | null = null;
+  private cursorMovedAt = -Infinity;
   private scheme: Scheme = "clavier";
   private target: HTMLElement | null = null;
   private known = new Set<string>();
@@ -146,6 +149,7 @@ export class CramponsControls {
 
   private onPointerMove = (e: PointerEvent) => {
     if (e.pointerType !== "mouse") return;
+    if (!this.cursor || Math.hypot(e.clientX - this.cursor.x, e.clientY - this.cursor.y) > 2) this.cursorMovedAt = performance.now();
     this.cursor = { x: e.clientX, y: e.clientY };
     // Un bouton de plus pendant qu'un autre est tenu sur le terrain, ou un bouton relâché hors de la fenêtre
     this.syncMouse(e.buttons, this.mouseHeld());
@@ -272,6 +276,7 @@ export class CramponsControls {
       chip,
       scheme: this.scheme,
       mouse: this.cursor,
+      mouseIdle: now - this.cursorMovedAt,
     };
   }
 }

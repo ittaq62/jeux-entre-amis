@@ -580,9 +580,18 @@ export class MatchRuntime {
     return Boolean(r?.ready && r.taker === active && this.view.phase !== "play");
   }
 
+  /**
+   * Le curseur vise-t-il ? Oui si le joueur s'en sert : il l'a bougé il y a peu, ou il ne dirige pas son joueur au
+   * clavier. Une souris oubliée dans un coin pendant qu'on court aux flèches enverrait la passe n'importe où.
+   */
+  private cursorAims(pad: { mouse: { x: number; y: number } | null; mouseIdle: number; scheme: Scheme }, mx: number, mz: number): boolean {
+    if (this.settings.aim !== "curseur" || pad.scheme !== "clavier" || !pad.mouse) return false;
+    return pad.mouseIdle < 2500 || Math.hypot(mx, mz) < 0.2;
+  }
+
   /** La direction d'une action : le curseur, si le joueur vise avec, sinon le sens de sa course */
   private aimOf(kind: HumanActionKind, mx: number, mz: number, cursor: { x: number; y: number } | null, scheme: Scheme): [number, number] {
-    if (this.settings.aim !== "curseur" || scheme !== "clavier" || !cursor || !this.pred) return [mx, mz];
+    if (this.settings.aim !== "curseur" || scheme !== "clavier" || !cursor || !this.pred || !this.cursorPoint) return [mx, mz];
     const pt = this.scene.pickGround(cursor.x, cursor.y);
     if (!pt) return [mx, mz];
     const dx = pt[0] - this.pred.x;
@@ -745,8 +754,7 @@ export class MatchRuntime {
       this.opts.act(kind, r.power, ax, az);
     }
     // La mire, là où ira le prochain geste
-    this.cursorPoint =
-      this.settings.aim === "curseur" && pad.scheme === "clavier" && pad.mouse ? this.scene.pickGround(pad.mouse.x, pad.mouse.y) : null;
+    this.cursorPoint = this.cursorAims(pad, mx, mz) ? this.scene.pickGround(pad.mouse!.x, pad.mouse!.y) : null;
     this.aimX = this.cursorPoint && this.pred ? this.cursorPoint[0] - this.pred.x : mx;
     this.aimZ = this.cursorPoint && this.pred ? this.cursorPoint[1] - this.pred.z : mz;
 

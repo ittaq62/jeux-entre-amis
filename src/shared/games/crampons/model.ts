@@ -82,6 +82,8 @@ export interface Player {
   /** Le crochet : jusqu'à cet instant il file et échappe aux tacles ; le suivant n'est pas possible avant `burstReady` */
   burstUntil: number;
   burstReady: number;
+  /** La vitesse à laquelle il s'est réellement déplacé au dernier pas (lissée) : c'est elle que montrent ses jambes */
+  seen?: number;
   /** La force d'un plongeon (de 0,3 à 1) : il se jette juste assez loin pour mettre le ballon dans ses bras */
   diveK?: number;
 }
@@ -101,6 +103,9 @@ export interface Human {
 }
 
 export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
+
+/** Le temps qu'a un humain pour jouer sa remise en jeu avant que l'ordinateur ne la joue pour lui (affiché à l'écran) */
+export const HUMAN_RESTART_WAIT = 8;
 
 /** Le crochet : la durée, le temps de recharge, et le gain de vitesse */
 export const BURST_S = 0.34;
