@@ -1,6 +1,7 @@
 import { deClub } from "../../shared/games/crampons/clubs.ts";
 import type { TeamStats } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
+import { useTourBridge } from "../tour/bridge.ts";
 
 const ROWS: [string, (s: TeamStats, total: TeamStats) => string][] = [
   ["Tirs", (s) => String(s.shots)],
@@ -16,7 +17,7 @@ const ROWS: [string, (s: TeamStats, total: TeamStats) => string][] = [
   ["Cartons", (s) => String(s.yellow + s.red)],
 ];
 
-/** Le tableau de fin : le score, les buteurs, les statistiques, et la revanche. */
+/** Le tableau de fin : le score, les buteurs, les statistiques, et la revanche (dans une tournée, le jeu suivant). */
 export function CramponsGameOver({
   room,
   send,
@@ -35,6 +36,7 @@ export function CramponsGameOver({
   const sa = v.shootout?.kicks[0].filter(Boolean).length;
   const sb = v.shootout?.kicks[1].filter(Boolean).length;
   const myResult = room.results?.[room.you.userId];
+  const inTour = Boolean(useTourBridge());
   return (
     <div className="cr-over">
       <div className="cr-over-card panel">
@@ -74,17 +76,24 @@ export function CramponsGameOver({
             ))}
           </tbody>
         </table>
+        {inTour && (
+          <p className="tour-next-note">
+            <span className="spinner" /> La tournée continue : le classement arrive.
+          </p>
+        )}
         <div className="cr-over-actions">
-          <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
-            {asked ? "En attente des autres" : "Revanche"}
-          </button>
-          {room.you.isHost && (
+          {!inTour && (
+            <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
+              {asked ? "En attente des autres" : "Revanche"}
+            </button>
+          )}
+          {room.you.isHost && !inTour && (
             <button className="btn" onClick={onShowLobby}>
               Changer les règles
             </button>
           )}
           <button className="btn btn-ghost" onClick={onLeave}>
-            Quitter
+            {inTour ? "Quitter la tournée" : "Quitter"}
           </button>
         </div>
       </div>

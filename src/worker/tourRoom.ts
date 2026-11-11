@@ -980,7 +980,13 @@ export class TourRoom extends DurableObject<Env> {
       // UNO, Mèche et Capitale : à toutes les tailles d'équipes égales (on y voit son coéquipier, la partie s'arrête
       // quand il ne reste qu'une équipe en jeu) ; ailleurs, seulement le 2 contre 2
       const anySize = game === "uno" || game === "meche" || game === "capitale";
-      const fair = anySize ? players.length >= 4 && red * 2 === players.length : players.length === 4 && red === 2;
+      // Crampons se joue toujours en deux équipes, que l'ordinateur complète : celles de la tournée, quelle que soit leur taille
+      const fair =
+        game === "crampons"
+          ? red > 0 && red < players.length
+          : anySize
+            ? players.length >= 4 && red * 2 === players.length
+            : players.length === 4 && red === 2;
       const teams = d.settings.teams && fair ? Object.fromEntries(players.map((m) => [m.userId, m.team as 0 | 1])) : null;
       const users: PublicUser[] = players
         .filter((m) => m.kind === "human")

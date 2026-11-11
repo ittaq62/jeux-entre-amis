@@ -4,6 +4,7 @@ import type { CramponsClientMessage, CramponsRoomView } from "../../shared/proto
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { useTourBridge } from "../tour/bridge.ts";
 import type { GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
 import { loadSettings, type CramponsSettings } from "./bindings.ts";
@@ -146,6 +147,7 @@ export function CramponsMatch({
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtime = useRef<MatchRuntime | null>(null);
   const reduced = usePrefs((s) => s.reducedEffects);
+  const inTour = Boolean(useTourBridge());
   const [hud, setHud] = useState<HudState>({
     clock: 0,
     active: -1,
@@ -404,7 +406,12 @@ export function CramponsMatch({
           <Icon name="chat" size={18} />
           {unread > 0 && <span className="cr-badge">{unread}</span>}
         </button>
-        <button className="cr-mini" onClick={onLeave} aria-label="Quitter le match" title="Quitter le match">
+        <button
+          className="cr-mini"
+          onClick={onLeave}
+          aria-label={inTour ? "Quitter la tournée" : "Quitter le match"}
+          title={inTour ? "Quitter la tournée" : "Quitter le match"}
+        >
           <Icon name="close" size={18} />
         </button>
       </div>

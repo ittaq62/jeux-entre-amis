@@ -3335,6 +3335,10 @@ h3 .hint {
   --art: linear-gradient(170deg, #2f7aa0 0%, #0d3344 100%);
 }
 
+.game-ticket.is-crampons {
+  --art: linear-gradient(165deg, #3d9150 0%, #164a24 100%);
+}
+
 .ticket-name {
   flex: 1;
   display: flex;

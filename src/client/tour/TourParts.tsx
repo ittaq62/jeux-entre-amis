@@ -57,6 +57,8 @@ export function GameTicket({
             <MecheArt />
           ) : game === "bolides" ? (
             <BolidesArt />
+          ) : game === "crampons" ? (
+            <CramponsArt />
           ) : (
             <NavalArt />
           )}
@@ -64,6 +66,34 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Un ballon qui file au fond des filets */
+function CramponsArt() {
+  return (
+    <>
+      <ellipse cx="42" cy="64" rx="24" ry="3.4" fill="rgba(0,0,0,0.25)" />
+      {/* Le but : les poteaux, la barre et le filet */}
+      <path d="M66 22H92M66 30H92M66 38H92M66 46H92M66 54H92M70 18V60M78 18V60M86 18V60" stroke="#fbf5e6" strokeWidth="0.9" opacity="0.4" />
+      <path d="M64 61V16H94V61" fill="none" stroke="#fbf5e6" strokeWidth="3.2" strokeLinejoin="round" />
+      {/* La traînée du ballon */}
+      <path d="M4 31H17M1 40H15M5 49H17" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
+      {/* Le ballon : un pentagone noir au centre, ses voisins coupés par le bord */}
+      <circle cx="37" cy="40" r="16" fill="#fbf5e6" />
+      <path d="M37 33L43.7 37.9L41.1 45.7H32.9L30.3 37.9Z" fill="#1b1b1e" />
+      <path
+        d="M37 33V25.4M43.7 37.9L51.2 35.6M41.1 45.7L45.7 52.1M32.9 45.7L28.3 52.1M30.3 37.9L22.8 35.6"
+        stroke="#1b1b1e"
+        strokeWidth="1.3"
+      />
+      <path d="M33.4 24.4L37 25.4L40.6 24.4L39.6 24.1H34.4Z" fill="#1b1b1e" />
+      <path d="M51.2 35.6L52.8 40L52.6 44.1L49.6 43.6L48.5 38.6Z" fill="#1b1b1e" />
+      <path d="M45.7 52.1L42.6 55.6L46.3 53.9Z" fill="#1b1b1e" />
+      <path d="M28.3 52.1L31.4 55.6L27.7 53.9Z" fill="#1b1b1e" />
+      <path d="M22.8 35.6L21.2 40L21.4 44.1L24.4 43.6L25.5 38.6Z" fill="#1b1b1e" />
+      <circle cx="37" cy="40" r="16" fill="none" stroke="#1b1b1e" strokeWidth="1.4" />
+    </>
   );
 }
 

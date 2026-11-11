@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AvatarConfig } from "../shared/avatar.ts";
-import { deClub } from "../shared/games/crampons/clubs.ts";
+import { CLUB_BY_ID, CLUBS, deClub } from "../shared/games/crampons/clubs.ts";
 import { addHuman, createMatch, dropHuman, pushAction, setInput, stepMatch } from "../shared/games/crampons/match.ts";
 import type { HumanActionKind, Match, MatchEvent, Team } from "../shared/games/crampons/model.ts";
 import { DT } from "../shared/games/crampons/pitch.ts";
@@ -21,7 +21,9 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
+import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -62,7 +64,7 @@ interface Seat {
   team: Team;
 }
 
-type TimerKind = "away" | "seatCleanup" | "cleanup";
+type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart";
 
 interface Timer {
   at: number;
@@ -87,6 +89,8 @@ interface CramponsData {
   kicked: string[];
   recorded: boolean;
   results?: EloResults | null;
+  /** Table d'une tournée : la tournée l'a créée et attend son résultat */
+  tour?: TourInit | null;
 }
 
 interface Attachment {
@@ -144,11 +148,76 @@ export class CramponsRoom extends DurableObject<Env> {
       timers: [{ at: now + 10 * 60_000, kind: "cleanup" }],
       kicked: [],
       recorded: false,
+      tour: opts.tour ?? null,
     };
+    if (opts.tour) this.seatTour(opts.tour, now);
     await this.persist();
     await this.syncHub();
     await this.armAlarm();
     return true;
+  }
+
+  /**
+   * Table d'une tournée : tout le monde est déjà assis, les bots de la tournée aussi (sous leur nom, chacun dans une
+   * équipe dont il partage le résultat). Les équipes de la tournée s'il y en a, sinon moitié-moitié, les humains
+   * d'abord. L'affiche, l'heure et le temps sont tirés au sort : chaque match de la tournée a les siens.
+   */
+  private seatTour(tour: TourInit, now: number) {
+    const d = this.data!;
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
+    const ids = CLUBS.map((c) => c.id);
+    const home = pick(ids);
+    const away = pick(ids.filter((id) => id !== home));
+    const rain = Math.random();
+    d.settings.crampons = mergeConfig(d.settings.crampons, {
+      ...variantSettings("crampons", tour.variant),
+      level: TOUR_BOT_LEVELS[tour.botLevel]?.crampons ?? d.settings.crampons.level,
+      clubs: [home, away],
+      formations: [CLUB_BY_ID.get(home)!.formation, CLUB_BY_ID.get(away)!.formation],
+      ambience: pick(["jour", "soir", "nuit"] as const),
+      weather: rain < 0.7 ? "clair" : rain < 0.9 ? "pluie" : "neige",
+    });
+    const humans: Seat[] = tour.players.map((u) => ({
+      id: u.id,
+      kind: "human",
+      userId: u.id,
+      name: u.pseudo,
+      avatar: u.avatar,
+      photo: u.photo,
+      admin: Boolean(u.admin),
+      autoplay: false,
+      disconnectedAt: now,
+      team: 0,
+    }));
+    const bots: Seat[] = tour.bots.map((b) => ({
+      id: b.id,
+      kind: "bot",
+      userId: null,
+      name: b.name,
+      avatar: b.avatar,
+      photo: 0,
+      autoplay: false,
+      disconnectedAt: null,
+      team: 0,
+    }));
+    if (tour.teams) {
+      for (const s of [...humans, ...bots]) s.team = tour.teams[s.userId ?? s.id] ?? 0;
+    } else {
+      // Les humains au hasard, un de chaque côté à tour de rôle, puis chaque bot là où il y a le moins de monde
+      const count: [number, number] = [0, 0];
+      for (const s of [...humans].sort(() => Math.random() - 0.5)) {
+        s.team = count[0] <= count[1] ? 0 : 1;
+        count[s.team]++;
+      }
+      for (const b of bots) {
+        b.team = count[0] <= count[1] ? 0 : 1;
+        count[b.team]++;
+      }
+    }
+    d.seats = [...humans, ...bots];
+    d.settings.maxPlayers = Math.min(CRAMPONS_MAX_PLAYERS, Math.max(1, d.seats.length));
+    d.hostId = humans[0]?.userId ?? d.hostId;
+    d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
   }
 
   async summary(): Promise<RoomSummary | null> {
@@ -204,13 +273,17 @@ export class CramponsRoom extends DurableObject<Env> {
         seat.avatar = user.avatar;
         seat.photo = user.photo;
       }
-    } else if (d.status !== "playing") {
+    } else if (d.status !== "playing" && !d.tour) {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} entre sur le terrain.`);
     }
     if (!seat) this.systemChat(`${user.pseudo} s'installe en tribune.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
+    // Table de tournée : le coup d'envoi dès que tous les joueurs sont arrivés
+    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      return this.startTourGame(now);
+    }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
   }
@@ -314,6 +387,8 @@ export class CramponsRoom extends DurableObject<Env> {
     const now = Date.now();
     const error = (message: string) => this.send(ws, { t: "error", message });
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
+    // À une table de tournée, c'est la tournée qui décide des règles, des équipes et des revanches
+    if (d.tour && TOUR_LOCKED.has(msg.t)) return;
 
     switch (msg.t) {
       case "in": {
@@ -489,11 +564,24 @@ export class CramponsRoom extends DurableObject<Env> {
   // Le match
   // -------------------------------------------------------------------------
 
+  /** Table de tournée : on joue avec ceux qui sont arrivés ; sans assez de monde, la tournée reprend la main. */
+  private async startTourGame(now: number) {
+    const d = this.data!;
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
+    if (present.length < 2 || !present.some((s) => s.kind === "human")) {
+      await abortToTour(this.env, d.tour!.code, d.code);
+      await this.close("Pas assez de joueurs arrivés : la tournée reprend la main.");
+      return;
+    }
+    return this.startGame(now);
+  }
+
   private async startGame(now: number, ws?: WebSocket) {
     const d = this.data!;
-    d.seats = d.seats.filter((x) => this.isConnected(x.userId));
+    d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
     this.ensureHost();
-    if (d.seats.length === 0) {
+    if (!d.seats.some((s) => s.kind === "human")) {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins un joueur." });
       return this.afterChange([], now);
     }
@@ -505,7 +593,7 @@ export class CramponsRoom extends DurableObject<Env> {
     d.match = createMatch(
       cfg,
       teamsFor(cfg),
-      d.seats.map((s) => ({ id: s.id, team: s.team })),
+      d.seats.filter((s) => s.kind === "human").map((s) => ({ id: s.id, team: s.team })),
       randomSeed(),
     );
     d.status = "playing";
@@ -575,6 +663,7 @@ export class CramponsRoom extends DurableObject<Env> {
     const d = this.data!;
     d.status = "finished";
     this.stopLoop();
+    if (d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
     const m = d.match!;
     const name = (t: Team) => cramponsView(m, d.settings.crampons).teams[t].name;
     this.systemChat(
@@ -663,6 +752,10 @@ export class CramponsRoom extends DurableObject<Env> {
         if (this.connectedUsers().size > 0) return false;
         await this.destroy();
         return false;
+      case "tourStart":
+        if (!d.tour || d.status !== "lobby") return false;
+        await this.startTourGame(Date.now());
+        return false;
     }
   }
 
@@ -709,9 +802,10 @@ export class CramponsRoom extends DurableObject<Env> {
           team: s.team as number,
           stats: statsOf(s.team, s.id),
         }));
-      // L'ordinateur compte comme un adversaire pour une équipe sans humain en face
+      // L'ordinateur compte comme un adversaire pour une équipe sans humain en face (à une table de tournée, une
+      // équipe de bots de la tournée aussi)
       for (const t of [0, 1] as const) {
-        if (d.seats.some((s) => s.team === t)) continue;
+        if (d.seats.some((s) => s.team === t && s.userId)) continue;
         players.push({
           seat: players.length,
           userId: null,
@@ -724,6 +818,7 @@ export class CramponsRoom extends DurableObject<Env> {
           stats: statsOf(t, null),
         });
       }
+      if (d.tour) await this.reportTour(m, goalsOf, statsOf);
       const { unlocked, elo } = await recordGame(this.env.DB, {
         game: "crampons",
         mode: `${d.settings.crampons.side}`,
@@ -745,16 +840,46 @@ export class CramponsRoom extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Le classement pour la tournée, entre ses membres (humains et bots) : l'équipe gagnante devant (personne en cas de
+   * match nul), puis, dans chaque équipe, celui qui a marqué le plus. Les ex aequo partagent leur place.
+   */
+  private async reportTour(m: Match, goalsOf: (id: string) => number, statsOf: (t: Team, id: string | null) => Record<string, number>) {
+    const d = this.data!;
+    const tour = d.tour!;
+    const lines = d.seats.map((s) => ({
+      seat: s,
+      lost: m.winner !== null && m.winner !== s.team ? 1 : 0,
+      goals: s.kind === "human" ? goalsOf(s.id) : 0,
+    }));
+    const ahead = (a: (typeof lines)[number], b: (typeof lines)[number]) => a.lost < b.lost || (a.lost === b.lost && a.goals > b.goals);
+    await reportToTour(this.env, tour.code, {
+      code: d.code,
+      index: tour.index,
+      game: "crampons",
+      seats: lines.length,
+      // Un bot de la tournée se reconnaît à son id de siège
+      players: lines.map((l) => ({
+        userId: l.seat.userId ?? l.seat.id,
+        rank: 1 + lines.filter((o) => ahead(o, l)).length,
+        stats: statsOf(l.seat.team, l.seat.kind === "human" ? l.seat.id : null),
+      })),
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Diffusion
   // -------------------------------------------------------------------------
 
+  /** Statut montré aux amis ; à une table de tournée, c'est la tournée qui le donne */
   private setPresence(userId: string, room: PresenceRoom | null): Promise<void> {
+    if (this.data?.tour) return Promise.resolve();
     return this.hub.setUserRoom(userId, room);
   }
 
   private systemChat(text: string) {
     const d = this.data!;
+    if (d.tour && d.status !== "lobby") tourChat(this.env, d.tour.code, d.code, text);
     const message: ChatMessage = { id: ++d.chatSeq, userId: null, name: "", text, at: Date.now(), system: true };
     this.pushChat(message);
     this.broadcastRaw({ t: "chat", messages: [message] });
@@ -801,7 +926,7 @@ export class CramponsRoom extends DurableObject<Env> {
       rematch: d.rematch,
       results: d.results ?? null,
       quick: d.quick,
-      tour: null,
+      tour: d.tour?.code ?? null,
     };
   }
 
@@ -857,8 +982,8 @@ export class CramponsRoom extends DurableObject<Env> {
       status: d.status,
       visibility: d.settings.visibility,
       hostName: host?.name ?? "",
-      humans: d.seats.length,
-      bots: 0,
+      humans: d.seats.filter((s) => s.kind === "human").length,
+      bots: d.seats.filter((s) => s.kind === "bot").length,
       maxPlayers: d.settings.maxPlayers,
       names: d.seats.map((s) => s.name),
       createdAt: d.createdAt,

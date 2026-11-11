@@ -5,6 +5,7 @@ import type { AvatarConfig } from "./avatar.ts";
 import type { BotLevel as BolidesBotLevel } from "./games/bolides/bot.ts";
 import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
+import type { CramponsConfig } from "./games/crampons/view.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
 import type { BotLevel as MecheBotLevel, MecheSettings } from "./games/meche/engine.ts";
@@ -12,12 +13,12 @@ import type { UnoSettings } from "./games/uno/engine.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides"];
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons"];
 /**
- * Capitale dure 20 minutes dans une tournée, Mèche et Bolides se découvrent encore :
+ * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
  * l'hôte les coche s'il veut, ils ne le sont pas d'office
  */
-const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche" && g !== "bolides");
+const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons");
 
 /** Nombre de joueurs qu'accueille chaque jeu */
 export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
@@ -58,11 +59,13 @@ export const TOUR_BOT_LEVELS: Record<
     capitale: CapitaleBotLevel;
     meche: MecheBotLevel;
     bolides: BolidesBotLevel;
+    /** Crampons : le niveau de l'ordinateur, de 0 (Débutant) à 3 (Légende) */
+    crampons: number;
   }
 > = {
-  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile", bolides: "facile" },
-  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen", bolides: "moyen" },
-  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort", bolides: "fort" },
+  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile", bolides: "facile", crampons: 0 },
+  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen", bolides: "moyen", crampons: 1 },
+  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort", bolides: "fort", crampons: 2 },
 };
 
 /** Comment se choisissent les règles de chaque jeu */
@@ -369,6 +372,23 @@ const BOLIDES_VARIANTS: VariantOf<BolidesSettings>[] = [
   { id: "sprint", name: "Sprint", blurb: "Deux tours seulement : pas le droit à l'erreur.", settings: { laps: 2 } },
 ];
 
+const CRAMPONS_VARIANTS: VariantOf<CramponsConfig>[] = [
+  { id: "classique", name: "Match", blurb: "Onze contre onze, deux mi-temps de trois minutes.", settings: {} },
+  {
+    id: "eclair",
+    name: "Match éclair",
+    blurb: "Cinq contre cinq, deux mi-temps de deux minutes : ça va vite.",
+    settings: { side: 5, halfMinutes: 2 },
+  },
+  { id: "sept", name: "À sept", blurb: "Sept contre sept, sur tout le terrain : de l'espace pour dribbler.", settings: { side: 7 } },
+  {
+    id: "tab",
+    name: "Pas de nul",
+    blurb: "En cas d'égalité, une séance de tirs au but désigne le vainqueur.",
+    settings: { draw: "penalties" },
+  },
+];
+
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -376,7 +396,7 @@ const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   capitale: CAPITALE_VARIANTS,
   meche: MECHE_VARIANTS,
   bolides: BOLIDES_VARIANTS,
-  crampons: [{ id: "classique", name: "Match", blurb: "Un match, avec les règles de la table.", settings: {} }],
+  crampons: CRAMPONS_VARIANTS,
 };
 
 /** Les variantes d'un jeu, sans leurs réglages */
@@ -405,6 +425,7 @@ export function variantSettings(game: "bricks", id: string | null | undefined): 
 export function variantSettings(game: "capitale", id: string | null | undefined): Partial<CapitaleSettings>;
 export function variantSettings(game: "meche", id: string | null | undefined): Partial<MecheSettings>;
 export function variantSettings(game: "bolides", id: string | null | undefined): Partial<BolidesSettings>;
+export function variantSettings(game: "crampons", id: string | null | undefined): Partial<CramponsConfig>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);
   if (!base || !extra) return {};
@@ -552,6 +573,14 @@ const TITLE_RULES: TitleRule[] = [
     score: (c) => {
       const n = sum(c, "meche", "booms");
       return n >= 3 ? { value: n, stat: `${n}×`, unit: "la mèche lui a sauté au nez" } : null;
+    },
+  },
+  {
+    id: "striker",
+    label: "Le buteur",
+    score: (c) => {
+      const n = sum(c, "crampons", "myGoals");
+      return n >= 2 ? { value: n, stat: `${n}`, unit: "buts marqués sur le terrain" } : null;
     },
   },
   {
