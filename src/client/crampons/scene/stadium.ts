@@ -358,6 +358,12 @@ export interface Stadium {
   update(t: number, excitement: number, dt: number): void;
   /** La tribune du premier plan gênerait la caméra de télévision : on la montre seulement quand la vue passe dans l'axe */
   showNearStand(on: boolean): void;
+  /**
+   * La caméra est passée derrière ce but (sur un téléphone tenu droit, quand le jeu descend vers le but du bas) : le
+   * virage de ce côté, son toit, ses angles et son écran géant s'effacent, sinon ils boucheraient le bas de l'image.
+   * 0 : tout est montré.
+   */
+  hideEnd(end: number): void;
   /** Le filet qui tremble quand le ballon y entre */
   shakeNet(end: number): void;
   setScoreboard(data: ScoreboardData): void;
@@ -441,9 +447,14 @@ export function buildStadium(
   const near = buildStand(longLength, low, theme, led, () => mixed(0.42, 0.26)(), banner);
   const nearCrowd = place(near, 0, front, Math.PI);
   const west = buildStand(endLength, low, theme, led, () => mixed(0.9, 0.02)(), banner);
-  place(west, -side, 0, Math.PI / 2);
+  const westCrowd = place(west, -side, 0, Math.PI / 2);
   const east = buildStand(endLength, low, theme, led, () => mixed(0.02, 0.9)(), banner);
-  place(east, side, 0, -Math.PI / 2);
+  const eastCrowd = place(east, side, 0, -Math.PI / 2);
+  // Ce qui se trouve derrière chaque but, du côté -x puis +x : de quoi l'effacer quand la caméra y passe
+  const ends: [THREE.Object3D[], THREE.Object3D[]] = [
+    [west.group, westCrowd.mesh],
+    [east.group, eastCrowd.mesh],
+  ];
 
   // Les angles, fermés par des blocs : la tribune fait tout le tour
   const cornerMat = new THREE.MeshLambertMaterial({ color: theme.concrete });
@@ -452,6 +463,7 @@ export function buildStadium(
       const m = new THREE.Mesh(new THREE.BoxGeometry(26, 26, 26), cornerMat);
       m.position.set(sx * (side + 13), 13, sz * (front + 13));
       root.add(m);
+      ends[sx < 0 ? 0 : 1].push(m);
     }
   }
 
@@ -630,6 +642,7 @@ export function buildStadium(
     g.position.set(end * (side + (low ? 16 : 34)), low ? 22 : 45, end * 0);
     g.rotation.y = -end * (Math.PI / 2);
     root.add(g);
+    ends[end < 0 ? 0 : 1].push(g);
   }
 
   let shake = [0, 0];
@@ -653,6 +666,10 @@ export function buildStadium(
       near.group.visible = on;
       nearBoards.visible = on;
       nearCrowd.mesh.visible = on;
+    },
+    hideEnd(end) {
+      for (const o of ends[0]) o.visible = end >= 0;
+      for (const o of ends[1]) o.visible = end <= 0;
     },
     shakeNet(end) {
       shake = end > 0 ? [1, shake[1]!] : [shake[0]!, 1];

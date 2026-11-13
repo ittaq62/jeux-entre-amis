@@ -76,7 +76,8 @@ export function DevMatch() {
       shirts: m.players.map((p) => p.shirt),
       ambience: (params.get("sky") as "jour" | "soir" | "nuit") ?? "soir",
       weather: (params.get("meteo") as "clair" | "pluie" | "neige") ?? "clair",
-      lowQuality: false,
+      // ?bas : la qualité des téléphones
+      lowQuality: params.has("bas"),
     });
     (window as unknown as { __scene: CramponsScene }).__scene = scene;
     const fit = () => scene.resize(innerWidth, innerHeight);

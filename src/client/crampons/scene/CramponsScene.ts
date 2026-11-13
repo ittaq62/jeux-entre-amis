@@ -493,6 +493,13 @@ export class CramponsScene {
       this.moveCamera(dt, frame);
       this.lastShot = null;
     }
+    // La caméra passée derrière un but (le téléphone tenu droit, le jeu près du but du bas) : le virage de ce côté
+    // s'efface. Il est derrière elle ou sous elle, et son toit couvrirait sinon tout le bas de l'écran.
+    const behindEnd = Math.abs(this.camera.position.x) > HALF_L + 7 ? Math.sign(this.camera.position.x) : 0;
+    if (behindEnd !== this.hiddenEnd) {
+      this.hiddenEnd = behindEnd;
+      this.stadium.hideEnd(behindEnd);
+    }
     // Le gros plan du buteur se fait au téléobjectif ; le choc d'une frappe : la caméra resserre d'un rien, puis revient
     const fov = this.shot?.kind === "scorer" ? (this.portrait ? SCORER_FOV_PORTRAIT : SCORER_FOV) : this.baseFov;
     if (this.shake > 0.002 || this.camera.fov !== fov) {
@@ -542,6 +549,7 @@ export class CramponsScene {
   }
 
   private lastShot: Shot["kind"] | null = null;
+  private hiddenEnd = 0;
   /** Sur un téléphone, jusqu'où la caméra regarde devant le jeu (moins sur une faute) */
   private ahead = 13;
   private cinemaShot(dt: number, frame: SceneFrame, shot: Shot) {
@@ -634,7 +642,10 @@ export class CramponsScene {
       const lz = clamp(this.cz, -HALF_W + 8, HALF_W - 8);
       this.ahead += (13 * (1 - close * 0.9) - this.ahead) * (snap ? 1 : 1 - Math.exp(-dt * 2.2));
       this.camera.position.set(lx - s * dist, height, lz);
-      this.camera.lookAt(lx + s * this.ahead, 0, lz);
+      // Près du but adverse, on ne regarde pas plus loin que lui : la tribune derrière prendrait le haut de l'écran,
+      // et le jeu serait poussé vers les boutons
+      const look = s * Math.min(s * (lx + s * this.ahead), HALF_L - 4);
+      this.camera.lookAt(look, 0, lz);
       return;
     }
     // À la télévision : depuis la tribune, plus bas, plus près du jeu
