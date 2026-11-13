@@ -184,6 +184,7 @@ html:has(.cr-root) body {
 /* Les grands moments : un bandeau qui traverse l'écran */
 .cr-banner {
   position: absolute;
+  max-width: calc(100% - 12px);
   top: 19%;
   left: 50%;
   translate: -50% 0;
@@ -224,6 +225,11 @@ html:has(.cr-root) body {
 .cr-banner.is-goal strong {
   font-size: clamp(50px, 10vw, 96px);
   letter-spacing: 0.02em;
+}
+
+/* « Contre son camp ! » tient sur l'écran d'un téléphone */
+.cr-banner.is-goal.is-long strong {
+  font-size: clamp(28px, 7.4vw, 72px);
 }
 
 .cr-banner.is-goal span {
@@ -389,9 +395,19 @@ kbd {
   transition: opacity 0.3s;
 }
 
-/* Pendant le gros plan du buteur et le ralenti, les boutons s'effacent (une touche passe toujours le film) */
+/* Pendant la présentation, le gros plan du buteur et le ralenti, les boutons s'effacent : toucher l'écran passe le film */
 .cr-pad.is-cinema {
   opacity: 0.12;
+}
+
+.cr-pad.is-cinema .cr-stickzone {
+  pointer-events: none;
+}
+
+.cr-skip {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
 }
 
 /* Le stick se pose sous le pouce, n'importe où dans le bas de l'écran à gauche : pas de rond à viser */
@@ -1129,6 +1145,7 @@ kbd {
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  white-space: nowrap;
   pointer-events: none;
 }
 

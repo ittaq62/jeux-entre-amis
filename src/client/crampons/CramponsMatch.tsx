@@ -438,6 +438,18 @@ export function CramponsMatch({
   return (
     <div className="cr-root">
       <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
+      {/* Au doigt, pendant la présentation, le gros plan ou le ralenti : toucher l'écran n'importe où les passe */}
+      {touch && cinema && seatId !== null && (
+        <div
+          className="cr-skip"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const pad = runtime.current?.pad;
+            pad?.touchButton("pass", true);
+            pad?.touchButton("pass", false);
+          }}
+        />
+      )}
 
       <div className={`cr-bug ${cinema === "intro" ? "is-hidden" : ""}`} role="status">
         <div className="cr-bug-teams">
@@ -500,7 +512,7 @@ export function CramponsMatch({
       )}
 
       {banner && (
-        <div key={banner.id} className={`cr-banner is-${banner.tone}`}>
+        <div key={banner.id} className={`cr-banner is-${banner.tone} ${banner.title.length > 8 ? "is-long" : ""}`}>
           <strong>{banner.title}</strong>
           {banner.sub && <span>{banner.sub}</span>}
         </div>
@@ -537,7 +549,7 @@ export function CramponsMatch({
       )}
       {cinema === "replay" && (
         <div className="cr-replay">
-          <span /> Ralenti <small>Appuie sur une touche pour passer</small>
+          <span /> Ralenti <small>{touch ? "Touche l'écran pour passer" : "Appuie sur une touche pour passer"}</small>
         </div>
       )}
 
@@ -561,10 +573,7 @@ export function CramponsMatch({
       )}
 
       {touch && seatId !== null && !over && (
-        <div
-          className={`cr-pad is-${settings.touchPad} ${cinema === "scorer" || cinema === "replay" ? "is-cinema" : ""}`}
-          data-ball={withBall ? "" : undefined}
-        >
+        <div className={`cr-pad is-${settings.touchPad} ${cinema ? "is-cinema" : ""}`} data-ball={withBall ? "" : undefined}>
           <Stick runtime={runtime} />
           {settings.touchPad === "complet" && hud.hasBall && (
             <div className="cr-mods">
