@@ -21,6 +21,8 @@ export interface SceneFrame {
   active: number;
   /** De quel côté attaque l'équipe qu'on suit (+1 ou -1), pour la vue en portrait */
   attackSide: number;
+  /** Qui a le ballon, vu de l'équipe qu'on suit : 1 elle, -1 l'adversaire, 0 personne (1 si on ne sait pas) */
+  possession?: number;
   /** Le stade s'enflamme : de 0 à 1 */
   excitement: number;
   /** Un changement de plan : la caméra saute au lieu de glisser */
@@ -554,8 +556,8 @@ export class CramponsScene {
 
   private lastShot: Shot["kind"] | null = null;
   private hiddenEnd = 0;
-  /** Sur un téléphone, jusqu'où la caméra regarde devant le jeu (moins sur une faute) */
-  private ahead = 13;
+  /** Sur un téléphone, jusqu'où la caméra regarde devant le jeu (moins sur une faute, en arrière quand on défend) */
+  private ahead = 9;
   private cinemaShot(dt: number, frame: SceneFrame, shot: Shot) {
     const b = frame.ball;
     this.ring.visible = false;
@@ -644,7 +646,11 @@ export class CramponsScene {
       const height = 34 * this.zoom;
       const lx = clamp(this.cx, -HALF_L - 2, HALF_L + 2);
       const lz = clamp(this.cz, -HALF_W + 8, HALF_W - 8);
-      this.ahead += (13 * (1 - close * 0.9) - this.ahead) * (snap ? 1 : 1 - Math.exp(-dt * 2.2));
+      // Balle au pied, on regarde devant soi, vers le but adverse ; quand l'adversaire attaque, le jeu remonte vers le
+      // milieu de l'écran, au lieu de descendre sous les boutons, là où il va (vers son propre but, en bas)
+      const pos = frame.possession ?? 1;
+      const want = pos > 0 ? 9 : pos < 0 ? -3 : 3;
+      this.ahead += (want * (1 - close * 0.9) - this.ahead) * (snap ? 1 : 1 - Math.exp(-dt * 1.3));
       this.camera.position.set(lx - s * dist, height, lz);
       // Près du but adverse, on ne regarde pas plus loin que lui : la tribune derrière prendrait le haut de l'écran,
       // et le jeu serait poussé vers les boutons

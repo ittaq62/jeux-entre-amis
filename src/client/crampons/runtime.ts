@@ -1199,11 +1199,14 @@ export class MatchRuntime {
     this.receiver = mine ? this.guessReceiver(views, active) : -1;
     const flip = this.view.flipped;
     const myTeam = this.myIndex >= 0 ? this.view.humans[this.myIndex]!.team : 0;
+    // L'équipe qui a le ballon : celle de son porteur, ou celle qui va jouer la remise en jeu
+    const holder = owner >= 0 ? views[owner]?.team : shown.phase !== "play" ? shown.restart?.team : undefined;
     return {
       players: views,
       ball: { x: s.x, y: s.y, z: s.z, vx: ball.vx, vz: ball.vz },
       active,
       attackSide: (myTeam === 0) !== flip ? 1 : -1,
+      possession: holder === undefined ? 0 : holder === myTeam ? 1 : -1,
       excitement: shown.phase === "goal" ? 1 : shown.phase === "over" ? 0.6 : 0.12,
       // Le changement de plan tombe avec la remise en place, à l'image
       cuts: shown.cuts,
