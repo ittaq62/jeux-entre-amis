@@ -10,12 +10,17 @@ répliques sont des fichiers mp3 dans `public/sounds/commentaire/`, que le jeu a
   ouvert ! ». Chaque situation a plusieurs variantes, numérotées (`but-1`, `but-2`…).
 - `voix.py` : les deux voix (leur description, leurs références) et les corrections de prononciation.
 - `casting/` : les références des deux voix (le commentateur posé, le commentateur survolté, le consultant). Toutes les
-  répliques les clonent : c'est ce qui garde la même personne d'un bout à l'autre du match.
+  répliques les clonent : c'est ce qui garde la même personne d'un bout à l'autre du match. La référence survoltée
+  (`c3-clone.flac`) est elle-même un clone de la posée qui crie un but : même voix, plus haut et plus fort. L'ancienne
+  (`c3-0.flac`, dessinée à part) montait à plus de 300 Hz et ne ressemblait pas plus au commentateur que le consultant :
+  on entendait deux personnes dans une même phrase.
 - `casting.py` : comment ces voix ont été choisies (Qwen3-TTS, voix décrites en mots, plusieurs essais).
 - `atelier.py` : génère les répliques. Plusieurs prises par réplique ; `verifier.py` transcrit chaque prise (faster-whisper)
   et mesure sa hauteur et ses silences (parselmouth) ; on garde la mieux comprise, à la bonne intensité.
 - `manifeste.py` : écrit `src/client/crampons/voixLignes.ts`, le nombre de variantes de chaque réplique.
 - `timbre.py` : compare des voix entre elles (même personne ou non).
+- `ressemblance.py` : compare chaque réplique générée à la voix posée de son personnage ; celles qui s'en écartent sont à
+  refaire (les noms seuls, trop courts, se mesurent mal : on juge sur les répliques de trois mots et plus).
 
 ## Refaire ou ajouter des répliques
 

@@ -140,7 +140,7 @@ export const SURNAMES = [
   "Jacquet",
   "Delorme",
   "Charpentier",
-  "Guillot",
+  "Garnier",
   "Picard",
   "Dufour",
   "Morvan",

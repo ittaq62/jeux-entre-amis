@@ -2,6 +2,8 @@
 # (k), ancien joueur, qui l'analyse. Chaque réplique a une intensité : 0 posé, 1 vif, 2 enthousiaste, 3 explosion.
 # Les répliques sont des morceaux que le jeu assemble : « La frappe de... » + « Vasseur ! », « Et c'est le but ! » +
 # « Vasseur ! » + « Le score est ouvert ! ». Chaque situation a beaucoup de variantes, pour ne pas se répéter.
+# On écrit comme on parle à l'antenne : des phrases courtes, celles qu'on entend vraiment pendant un match, jamais une
+# tournure écrite ; un mot seul (« Faute. », « Hors-jeu. ») se dit mal, on lui donne toujours un peu de contexte.
 import re, unicodedata
 
 
@@ -24,22 +26,28 @@ def group(cat, who, level, texts):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Avant le match
+# Avant le match : l'accueil selon l'heure du match, le temps qu'il fait, l'avis du consultant
 # ---------------------------------------------------------------------------------------------------------------------
-group("accueil", "c", 0, [
+group("accueil-soir", "c", 0, [
     "Bonsoir à tous, et bienvenue pour ce match.",
     "Bonsoir et bienvenue ! Belle affiche ce soir.",
-    "Bienvenue à toutes et à tous, on va passer une belle soirée de football.",
-    "Bonsoir ! Le stade est plein, les tribunes chantent déjà.",
-    "Bienvenue ! Quelle ambiance pour cette rencontre.",
-    "Bonsoir à tous, et merci de nous rejoindre pour ce match.",
-    "Bienvenue au stade, la pelouse est superbe ce soir.",
-    "Bonsoir ! On sent déjà la tension dans les tribunes.",
+    "Bonsoir à toutes et à tous, on va passer une belle soirée de football.",
+    "Bonsoir ! Le stade est plein, ça promet.",
+    "Bonsoir à tous, merci de nous rejoindre pour cette rencontre.",
+    "Bonsoir ! L'ambiance est déjà magnifique.",
+])
+group("accueil-jour", "c", 0, [
+    "Bonjour à tous, et bienvenue pour ce match.",
+    "Bonjour et bienvenue ! Belle affiche cet après-midi.",
+    "Bonjour à toutes et à tous, on va passer un bel après-midi de football.",
+    "Bonjour ! Le stade est plein, ça promet.",
+    "Bonjour à tous, merci de nous rejoindre pour cette rencontre.",
+    "Bonjour ! L'ambiance est déjà magnifique.",
 ])
 # Le temps qu'il fait (le jeu choisit selon le match)
 group("meteo-pluie", "c", 0, [
     "Il pleut sur le stade, le ballon va fuser sur cette pelouse mouillée.",
-    "La pluie tombe, attention aux glissades ce soir.",
+    "La pluie tombe, attention aux glissades.",
 ])
 group("meteo-neige", "c", 0, [
     "Il neige ! Un décor de carte postale pour ce match.",
@@ -56,12 +64,12 @@ group("meteo-nuit", "c", 0, [
 group("avant", "k", 0, [
     "Deux équipes qui aiment avoir le ballon, ça devrait être ouvert.",
     "Il faudra être concentré d'entrée, le premier but va compter.",
-    "J'attends beaucoup du milieu de terrain, c'est là que tout va se jouer.",
+    "Tout va se jouer au milieu de terrain, j'en suis sûr.",
     "Attention aux contres, les deux équipes vont vite vers l'avant.",
     "On va voir qui prend le jeu à son compte.",
-    "Il faudra de la patience, et beaucoup de réalisme devant le but.",
-    "Je m'attends à un vrai combat, il va falloir de l'engagement.",
-    "Le plus important, c'est de bien démarrer et de ne pas encaisser.",
+    "Il faudra de la patience, et du réalisme devant le but.",
+    "Je m'attends à un vrai combat, avec beaucoup d'engagement.",
+    "L'important, c'est de bien démarrer et de ne pas encaisser.",
 ])
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -85,7 +93,7 @@ group("mitemps", "c", 0, [
     "C'est la mi-temps.",
     "L'arbitre siffle la pause.",
     "Fin de la première période.",
-    "Les joueurs rentrent aux vestiaires.",
+    "Et c'est la pause.",
 ])
 group("mitemps-nul0", "k", 0, [
     "Une première période fermée, il va falloir se libérer après la pause.",
@@ -93,11 +101,11 @@ group("mitemps-nul0", "k", 0, [
 ])
 group("mitemps-nul", "k", 0, [
     "Tout reste à faire, c'est un match très équilibré.",
-    "Personne n'a vraiment pris le dessus, la deuxième mi-temps va être passionnante.",
+    "Personne n'a vraiment pris le dessus, la deuxième période va être passionnante.",
 ])
 group("mitemps-court", "k", 0, [
     "Un petit avantage à la pause, mais rien n'est fait.",
-    "Ils mènent, mais il faudra tenir pendant quarante-cinq minutes.",
+    "Ils mènent, mais il reste toute une mi-temps à tenir.",
 ])
 group("mitemps-large", "k", 0, [
     "C'est déjà presque plié à la pause.",
@@ -110,12 +118,12 @@ group("mitemps-fou", "k", 1, [
 group("dix-minutes", "c", 1, [
     "Plus que dix minutes à jouer.",
     "On entre dans les dix dernières minutes.",
-    "Dix minutes, il reste dix minutes.",
+    "Il reste dix minutes, tout est encore possible.",
 ])
 group("derniere-minute", "c", 2, [
     "On joue la dernière minute !",
     "Les dernières secondes de ce match !",
-    "C'est la dernière minute !",
+    "On est dans le temps additionnel !",
 ])
 group("prolongations", "c", 1, [
     "Fin du temps réglementaire, place aux prolongations !",
@@ -141,41 +149,41 @@ group("bilan-large", "k", 1, ["Une victoire nette, rien à redire.", "Ils ont é
 group("bilan-court", "k", 1, ["Ils ont souffert, mais ils l'ont fait.", "Une victoire arrachée, qui vaut cher.", "Ça s'est joué à rien, mais ils l'ont fait."])
 group("bilan-remontada", "k", 2, ["Quelle remontée, c'est magnifique !", "Ils étaient menés, et ils renversent tout. Chapeau !"])
 group("bilan-tard", "k", 2, ["Arraché au bout du suspense !", "Ils y ont cru jusqu'au bout, et ils ont eu raison !"])
-group("bilan-nul0", "k", 0, ["Pas de but, mais un vrai combat.", "Les défenses ont pris le dessus ce soir."])
-group("bilan-nul", "k", 0, ["Un nul qui ne satisfait personne.", "Un partage des points plutôt logique.", "Chacun repart avec un point."])
+group("bilan-nul0", "k", 0, ["Pas de but, mais un vrai combat.", "Les défenses ont pris le dessus aujourd'hui."])
+group("bilan-nul", "k", 0, ["Un nul qui ne satisfait personne.", "Un match nul plutôt logique.", "Chacun repart avec un point."])
 group("bilan-fou", "k", 1, ["Un match fou, bravo aux deux équipes pour le spectacle !", "Quel spectacle ! On en redemande."])
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Le jeu : la construction, les temps calmes
 # ---------------------------------------------------------------------------------------------------------------------
 group("construction", "c", 0, [
-    "Ça circule.",
-    "On fait tourner le ballon.",
+    "Ça fait tourner.",
+    "On fait circuler le ballon.",
     "Patience dans la construction.",
-    "On cherche une ouverture.",
-    "Le jeu est posé.",
+    "On cherche l'ouverture.",
+    "Le jeu se pose un peu.",
     "Ils prennent leur temps.",
     "Le ballon change de côté.",
     "Bonne conservation du ballon.",
     "Ils cherchent la faille.",
-    "Jeu court, jeu en triangle.",
+    "Petites passes, on construit.",
 ])
 # Le consultant, quand rien ne se passe
 group("analyse", "k", 0, [
     "Il faut plus de mouvement devant, c'est trop statique.",
     "Il faut écarter le jeu, l'axe est bouché.",
     "Le bloc défensif est bien en place.",
-    "Il manque un peu de vitesse dans les transmissions.",
+    "Ça manque un peu de vitesse dans les transmissions.",
     "Personne ne veut prendre de risque pour l'instant.",
     "Attention à la perte de balle au milieu, ça peut coûter cher.",
     "Le pressing est bien coordonné.",
     "C'est un match très tactique.",
-    "Il faut tenter quelque chose, une frappe de loin pourquoi pas.",
+    "Il faut tenter quelque chose. Une frappe de loin, pourquoi pas.",
     "Les latéraux montent beaucoup, il y a de l'espace dans leur dos.",
     "Il faut être plus juste dans la dernière passe.",
     "C'est intense, ça court beaucoup.",
     "Les deux équipes se neutralisent.",
-    "Ça manque un peu de folie offensive.",
+    "Il manque un peu de folie devant.",
 ])
 group("analyse-mene", "k", 0, [
     "Ils gèrent bien leur avantage.",
@@ -202,8 +210,8 @@ group("analyse-nul-tard", "k", 0, [
 group("profondeur", "c", 1, [
     "Ballon en profondeur !",
     "Il lance dans la course !",
-    "La passe en profondeur...",
-    "Il cherche l'appel !",
+    "Attention, dans la profondeur !",
+    "Il trouve l'appel !",
     "Ouverture dans le dos de la défense !",
     "Bien vu, en profondeur !",
 ])
@@ -212,7 +220,7 @@ group("centre", "c", 1, [
     "Il centre !",
     "Ballon dans la surface !",
     "Centre au deuxième poteau !",
-    "Il met le ballon devant le but !",
+    "Attention, le centre !",
     "Le centre est envoyé !",
 ])
 group("long", "c", 1, [
@@ -234,7 +242,7 @@ group("tacle", "c", 1, [
     "Ballon récupéré !",
     "Tacle propre !",
     "Il récupère le ballon !",
-    "Interception !",
+    "Belle interception !",
     "Bien vu en défense !",
 ])
 
@@ -246,16 +254,16 @@ group("frappe", "c", 2, [
     "Il tente sa chance !",
     "Il déclenche !",
     "Il arme !",
-    "Frappe !",
-    "Il ose !",
+    "Oh, la frappe !",
+    "Il frappe !",
     "Il tire !",
-    "Sur la frappe !",
+    "Attention, la frappe !",
 ])
 # Suivies du nom du tireur
 group("frappe-de", "c", 2, [
     "La frappe de...",
-    "Tentative de...",
-    "Il tente sa chance...",
+    "Et la frappe de...",
+    "Oh, la frappe de...",
 ])
 group("frappe-loin", "c", 2, [
     "De loin !",
@@ -292,10 +300,10 @@ group("cote-avis", "k", 0, [
 group("capte", "c", 0, [
     "Bien capté par le gardien.",
     "Le gardien s'en saisit.",
-    "Sans difficulté pour le gardien.",
+    "Pas de problème pour le gardien.",
     "Dans les gants du gardien.",
     "Le gardien est bien placé.",
-    "Arrêt facile.",
+    "Un arrêt facile pour le gardien.",
 ])
 group("parade", "c", 3, [
     "Quel arrêt !",
@@ -316,7 +324,7 @@ group("parade-avis", "k", 1, [
     "Superbe détente, rien à dire.",
 ])
 group("gardien-feu", "k", 2, [
-    "Le gardien est en feu ce soir !",
+    "Le gardien est en feu aujourd'hui !",
     "Il est infranchissable aujourd'hui.",
     "Quel match du gardien, il écœure les attaquants !",
 ])
@@ -325,14 +333,14 @@ group("poteau", "c", 3, [
     "Le poteau ! C'était tout près !",
     "Il trouve le poteau !",
     "Le montant ! Pas de chance !",
-    "Poteau !",
+    "Oh, le poteau !",
 ])
 group("barre", "c", 3, [
     "Sur la barre !",
     "La transversale ! Quelle occasion !",
     "La barre ! Ça tremble encore !",
     "Il trouve la barre !",
-    "Transversale !",
+    "Oh, la transversale !",
 ])
 group("montant-avis", "k", 1, [
     "C'était à quelques centimètres.",
@@ -351,11 +359,11 @@ group("but", "c", 3, [
     "C'est au fond !",
     "Le ballon est au fond des filets !",
     "Ça fait trembler les filets !",
-    "Quelle réalisation !",
+    "Et le but !",
     "Et c'est dedans !",
     "Il marque !",
     "Mais quel but !",
-    "Et le ballon est dedans !",
+    "Oh le but !",
     "Il trompe le gardien !",
 ])
 group("but-ouverture", "c", 2, [
@@ -374,7 +382,7 @@ group("but-egalisation", "c", 2, [
 group("but-devant", "c", 2, [
     "Ils passent devant !",
     "Ils prennent l'avantage !",
-    "Retournement de situation !",
+    "Le match a basculé !",
     "Et ils mènent !",
 ])
 group("but-ecart", "c", 2, [
@@ -393,7 +401,7 @@ group("but-tard", "c", 3, [
     "À la dernière minute !",
     "Dans les ultimes instants !",
     "Au bout du suspense !",
-    "Un but au bout du temps !",
+    "Dans le temps additionnel !",
 ])
 group("but-double", "c", 2, ["Il s'offre un doublé !", "Et de deux pour lui !", "Deuxième but pour lui !"])
 group("but-triple", "c", 3, ["Le triplé !", "Un triplé, le coup du chapeau !", "Et de trois pour lui !"])
@@ -431,12 +439,12 @@ group("csc-avis", "k", 0, [
 # L'arbitre
 # ---------------------------------------------------------------------------------------------------------------------
 group("faute", "c", 1, [
-    "Faute.",
     "Coup de sifflet, il y a faute.",
-    "L'arbitre siffle.",
-    "Il y a faute.",
+    "L'arbitre siffle la faute.",
+    "Il y a faute, l'arbitre arrête le jeu.",
     "Il l'a accroché.",
-    "L'arbitre arrête le jeu.",
+    "Faute, coup franc.",
+    "Il est fauché !",
 ])
 group("faute-avis", "k", 0, [
     "Il arrive trop tard.",
@@ -460,13 +468,13 @@ group("penalty", "c", 3, [
     "L'arbitre n'hésite pas, penalty !",
 ])
 group("penalty-avis", "k", 1, [
-    "Il n'a pas le droit de faire ça dans la surface.",
+    "On ne peut pas faire ça dans la surface.",
     "C'est logique, il le fauche.",
     "Pas de discussion possible.",
     "Quelle erreur du défenseur !",
 ])
 # Le carton jaune : suivi du nom du joueur
-group("jaune", "c", 1, ["Carton jaune pour...", "Avertissement pour...", "Jaune pour..."])
+group("jaune", "c", 1, ["Carton jaune pour...", "Avertissement pour...", "L'arbitre sort le jaune pour..."])
 group("rouge", "c", 3, [
     "Carton rouge !",
     "Rouge ! Il est expulsé !",
@@ -475,28 +483,28 @@ group("rouge", "c", 3, [
 ])
 group("rouge-avis", "k", 1, [
     "Ça va peser lourd dans ce match.",
-    "Son équipe va devoir jouer en infériorité numérique.",
+    "Son équipe va devoir jouer à dix.",
     "Il laisse ses partenaires dans l'embarras.",
 ])
 group("horsjeu", "c", 0, [
-    "Hors-jeu.",
+    "Il est hors-jeu.",
     "Le drapeau se lève, hors-jeu.",
     "Il est parti trop tôt.",
     "Position de hors-jeu.",
     "Hors-jeu, de peu.",
 ])
 group("corner", "c", 1, [
-    "Corner.",
     "Ce sera un corner.",
     "Corner à jouer.",
     "Il obtient un corner.",
+    "Il y a corner.",
 ])
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Les tirs au but
 # ---------------------------------------------------------------------------------------------------------------------
 group("tab-marque", "c", 2, ["Marqué !", "Dans le but !", "Il ne tremble pas !", "Transformé !", "Plein de sang-froid !", "Le gardien est battu !"])
-group("tab-rate", "c", 3, ["C'est manqué !", "Arrêté !", "Il a raté !", "Le gardien l'arrête !", "À côté !", "Quelle tension, il le manque !"])
+group("tab-rate", "c", 3, ["C'est manqué !", "Arrêté !", "Il a raté !", "Le gardien l'arrête !", "C'est à côté !", "Quelle tension, il le manque !"])
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Le score : « deux à un » suivi de l'équipe qui mène, « un partout »
@@ -507,13 +515,14 @@ for hi in range(10):
         if hi == lo:
             add(f"score-{hi}-{lo}", "Zéro à zéro." if hi == 0 else f"{WORDS[hi].capitalize()} partout.", "c", 0)
         else:
-            add(f"score-{hi}-{lo}", f"{WORDS[hi].capitalize()} à {WORDS[lo]}...", "c", 0)
+            # « Six à un » se dit mal (on n'entend plus le chiffre) : « six buts à un », comme à l'antenne
+            add(f"score-{hi}-{lo}", "Six buts à un..." if (hi, lo) == (6, 1) else f"{WORDS[hi].capitalize()} à {WORDS[lo]}...", "c", 0)
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Les joueurs : leur nom dit de trois façons (en passant, dans l'action, sur un but)
 # ---------------------------------------------------------------------------------------------------------------------
 SURNAMES = ['Pichon', 'Vasseur', 'Lemoine', 'Barbier', 'Chauvin', 'Tessier', 'Ragot', 'Poulain', 'Bouvier', 'Gaillard', 'Renaud',
-            'Marchand', 'Perrot', 'Maillard', 'Besson', 'Hamon', 'Prévost', 'Collin', 'Jacquet', 'Delorme', 'Charpentier', 'Guillot',
+            'Marchand', 'Perrot', 'Maillard', 'Besson', 'Hamon', 'Prévost', 'Collin', 'Jacquet', 'Delorme', 'Charpentier', 'Garnier',
             'Picard', 'Dufour', 'Morvan', 'Tanguy', 'Le Goff', 'Ferrand', 'Dumas', 'Joly', 'Rigaud', 'Sauvage', 'Cordier', 'Blanchet',
             'Thibaud', 'Roussel', 'Lacombe', 'Pasquier', 'Lambert', 'Noiret', 'Grangier', 'Fournel', 'Sénéchal', 'Berthier', 'Courtin',
             'Aubry', 'Mazet', 'Vidal']

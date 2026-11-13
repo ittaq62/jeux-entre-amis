@@ -48,6 +48,12 @@ const HALF_L = 52.5;
 
 const chance = (p: number) => Math.random() < p;
 
+/**
+ * Ces répliques appellent la suite sans reprendre son souffle : « La frappe de… », « Deux à un… » (pas « Un partout. »),
+ * « D'un côté, … », le cri du but avant le nom du buteur
+ */
+const continues = (key: string) => /^(frappe-de|passeur|jaune|score|but)-|-cote1$/.test(key) && !/^score-(\d)-\1$/.test(key);
+
 export class Commentator {
   private enabled: boolean;
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
@@ -102,7 +108,8 @@ export class Commentator {
     const { players, teams } = this.info();
     const keys: string[] = [];
     // D'abord ce qui sert dès les premières secondes et sur les grands moments
-    for (const cat of ["accueil", "envoi", "avant", "but", "frappe", "parade", "capte"]) keys.push(...this.variants(cat));
+    for (const cat of ["accueil-soir", "accueil-jour", "envoi", "avant", "but", "frappe", "parade", "capte"])
+      keys.push(...this.variants(cat));
     for (const t of teams) keys.push(...["cote1", "cote2", "pour", "victoire", "devant"].map((x) => `club-${voiceSlug(t)}-${x}`));
     for (const p of players) keys.push(`nom-${voiceSlug(p.name)}`, `nom-${voiceSlug(p.name)}-vif`, `nom-${voiceSlug(p.name)}-but`);
     for (const cat of Object.keys(VOIX)) keys.push(...this.variants(cat));
@@ -186,7 +193,8 @@ export class Commentator {
     const meteo = weather !== "clair" ? `meteo-${weather}` : ambience === "nuit" ? "meteo-nuit" : ambience === "jour" ? "meteo-jour" : null;
     // Le coup d'envoi suit de près : l'accueil et les deux équipes forment une seule phrase ; l'avis du consultant
     // viendra au premier moment calme
-    const intro = this.parts(["accueil", ...(meteo && chance(0.5) ? [meteo] : [])]);
+    // « Bonjour » l'après-midi, « Bonsoir » le soir et la nuit
+    const intro = this.parts([ambience === "jour" ? "accueil-jour" : "accueil-soir", ...(meteo && chance(0.5) ? [meteo] : [])]);
     this.say([...intro, this.club(0, "cote1"), this.club(1, "cote2")], 2, "c");
   }
 
@@ -230,8 +238,9 @@ export class Commentator {
           this.say(this.parts(["penalty"]), 3, "c");
           if (chance(0.6)) this.later(this.parts(["penalty-avis"]), 1, "k", 500, 7000);
         } else {
-          if (chance(0.6)) this.say(this.parts(["faute"]), 1, "c");
-          if (chance(0.25)) this.later(this.parts(["faute-avis"]), 0, "k", 500, 5000);
+          // Le jeu s'arrête vraiment : le temps de nommer la faute, et souvent l'avis du consultant
+          if (chance(0.75)) this.say(this.parts(["faute"]), 1, "c");
+          if (chance(0.45)) this.later(this.parts(["faute-avis"]), 0, "k", 450, 4500);
         }
         return;
       case "card":
@@ -622,15 +631,17 @@ export class Commentator {
       gain.connect(out);
       let t = ctx.currentTime + 0.03;
       const sources: AudioBufferSourceNode[] = [];
-      for (const b of parts) {
+      const said = keys.filter((_, k) => bufs[k] !== null);
+      parts.forEach((b, k) => {
         const s = ctx.createBufferSource();
         s.buffer = b;
         s.connect(gain);
         s.start(t);
         sources.push(s);
-        // Les morceaux d'une même phrase s'enchaînent presque sans pause
-        t += b.duration + 0.04;
-      }
+        // Les morceaux d'une même phrase s'enchaînent presque sans pause (« La frappe de… » + « Vasseur ! ») ; d'une
+        // phrase à la suivante, on respire, comme quand on parle
+        t += b.duration + (continues(said[k] ?? "") ? 0.04 : 0.24);
+      });
       const until = performance.now() + (t - ctx.currentTime) * 1000;
       this.playing = { prio, until, sources, gain, who };
       setTimeout(

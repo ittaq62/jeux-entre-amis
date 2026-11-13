@@ -1,7 +1,7 @@
 // Service worker minimal : rend le site installable et garde en cache les fichiers statiques
 // (scripts, polices, sons, icones). Les pages et l'API passent toujours par le reseau.
-// v2 : les sons de Crampons ont change de contenu sous le meme nom ; changer de version vide l'ancien cache
-const CACHE = "tablee-v2";
+// v3 : le commentaire de Crampons a ete reenregistre sous les memes noms ; changer de version vide l'ancien cache
+const CACHE = "tablee-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 

@@ -1,7 +1,8 @@
 // Généré par scripts/crampons-voix (manifeste.py) depuis le catalogue : ne pas modifier à la main.
 // Le nombre de variantes enregistrées de chaque réplique du commentaire (fichiers public/sounds/commentaire/<réplique>-<n>.mp3).
 export const VOIX: Record<string, number> = {
-  accueil: 8,
+  "accueil-soir": 6,
+  "accueil-jour": 6,
   "meteo-pluie": 2,
   "meteo-neige": 2,
   "meteo-jour": 2,

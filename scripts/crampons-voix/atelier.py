@@ -49,9 +49,10 @@ def ref_for(who, level):
     return "k0" if who == "k" else ("c3" if level >= 2 else "c0")
 
 
-# La hauteur habituelle de chaque voix posée (mesurée sur les références), et la montée attendue selon l'intensité
-BASE_F0 = {"c": 105.0, "k": 81.0}
-WANT = {0: 1.0, 1: 1.08, 2: 1.7, 3: 2.2}
+# La hauteur habituelle de chaque voix posée (mesurée sur les références), et la montée attendue selon l'intensité : une
+# voix qui s'emballe monte d'un tiers, d'une moitié au plus (au-delà, ce n'est plus la même personne, c'est un cri de tête)
+BASE_F0 = {"c": 118.0, "k": 81.0}
+WANT = {0: 1.0, 1: 1.08, 2: 1.35, 3: 1.55}
 
 
 def chain(level):
@@ -72,7 +73,7 @@ def grade(text, who, level, m):
         s -= 0.5
     if m.get("f0"):
         lift = m["f0"] / BASE_F0[who]
-        s += 0.25 * min(lift / WANT[level], 1.0) - (0.15 if level <= 1 and lift > 1.45 else 0)
+        s += 0.25 * min(lift / WANT[level], 1.0) - (0.15 if level <= 1 and lift > 1.45 else 0) - (0.2 if lift > 1.9 else 0)
     return s
 
 
