@@ -247,6 +247,8 @@ export class MatchRuntime {
   private seenX: number[] = [];
   private seenZ: number[] = [];
   private seenV: number[] = [];
+  private seenDX: number[] = [];
+  private seenDZ: number[] = [];
   /** La dernière fois qu'il a touché au stick ou à un bouton, et si l'ordinateur mène son joueur pendant qu'il n'y touche pas */
   private inputAtMs = -Infinity;
   private assisting = false;
@@ -1186,6 +1188,16 @@ export class MatchRuntime {
         const seen = (this.seenV[i] ?? 0) + (moved - (this.seenV[i] ?? 0)) * Math.min(1, dt * 8);
         this.seenV[i] = seen;
         if (v.act === "none") v.v = Math.max(v.v, seen);
+        // Le sens de sa marche par rapport à son regard : le gardien qui recule face au jeu marche à reculons
+        if (step <= 1.5) {
+          const k = Math.min(1, dt * 6);
+          this.seenDX[i] = (this.seenDX[i] ?? 0) + ((v.x - lastX) / dt - (this.seenDX[i] ?? 0)) * k;
+          this.seenDZ[i] = (this.seenDZ[i] ?? 0) + ((v.z - lastZ) / dt - (this.seenDZ[i] ?? 0)) * k;
+        }
+        const dx = this.seenDX[i] ?? 0;
+        const dz = this.seenDZ[i] ?? 0;
+        const sp = Math.hypot(dx, dz);
+        v.gait = sp > 0.5 ? (dx * Math.cos(v.h) + dz * Math.sin(v.h)) / sp : 1;
       }
       this.seenX[i] = v.x;
       this.seenZ[i] = v.z;

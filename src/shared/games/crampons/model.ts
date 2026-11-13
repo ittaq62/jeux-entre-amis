@@ -92,6 +92,10 @@ export interface Player {
   diveK?: number;
   /** Exclu, il quitte le terrain à pied jusqu'à cet instant (on le voit encore), puis il disparaît */
   leaveUntil?: number;
+  /** Le gardien suit le ballon du regard avec un temps de retard : là où il le voit, et depuis quand */
+  watchX?: number;
+  watchZ?: number;
+  watchAt?: number;
 }
 
 export interface Human {

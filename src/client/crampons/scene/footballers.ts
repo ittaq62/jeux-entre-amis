@@ -42,6 +42,11 @@ export interface FootballerView {
   joy?: number;
   /** Il vient de faire une faute et proteste, les bras écartés */
   protest?: boolean;
+  /**
+   * Le sens de sa marche par rapport à son regard : 1 droit devant, 0 de côté, -1 à reculons (le gardien qui recule
+   * face au jeu). Absent : droit devant.
+   */
+  gait?: number;
 }
 
 // -------------------------------------------------------------------------
@@ -148,8 +153,8 @@ interface State {
 /** L'amplitude de la foulée (en radians de cuisse) à cette vitesse, de 0 à 1,2 */
 const strideAmp = (speed: number) => 0.38 + speed * 0.32;
 
-function legsRunning(target: Pose, s: State, speed: number) {
-  const amp = strideAmp(speed);
+function legsRunning(target: Pose, s: State, speed: number, stride = 1) {
+  const amp = strideAmp(speed) * stride;
   const sin = Math.sin(s.phase);
   const cos = Math.cos(s.phase);
   // La cuisse va et vient ; le genou se plie quand la jambe revient vers l'avant (le talon monte sous les fesses),
@@ -371,8 +376,21 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     target.lean = -0.2;
     return;
   }
+  const gait = f.gait ?? 1;
+  if (f.keeper && f.v > 0.35 && f.v < 6 && gait < 0.75) {
+    // Le gardien qui se décale ou recule face au jeu : à petits pas, un peu fléchi, les bras prêts
+    legsRunning(target, s, speed, gait < -0.3 ? 0.55 : 0.45);
+    target.armLs = 0.65;
+    target.armRs = 0.65;
+    target.armLa = 0.55;
+    target.armRa = 0.55;
+    target.drop = 0.08;
+    target.lean = gait < -0.3 ? 0.02 : 0.14;
+    return;
+  }
   if (f.v > 0.35) {
-    legsRunning(target, s, speed);
+    // À reculons ou de côté, les pas sont plus courts
+    legsRunning(target, s, speed, gait < -0.3 ? 0.6 : 0.6 + 0.4 * Math.abs(gait));
     const sin = Math.sin(s.phase);
     const amp = 0.5 + speed * 0.6;
     target.armLa = -sin * amp;
@@ -1480,7 +1498,8 @@ export class Footballers {
       // Le geste continue après le départ du ballon : c'est l'accompagnement du pied
       const act = f.kickT !== undefined ? "kick" : f.act === "none" && s.kickT < KICK_HOLD ? "kick" : f.act;
       // La cadence suit la vitesse : le pied posé recule exactement aussi vite que le corps avance, il ne patine pas
-      s.phase += (f.v / ((THIGH + SHIN) * SCALE * strideAmp(Math.min(1.2, f.v / 10)))) * dt;
+      // À reculons, les jambes tournent dans l'autre sens : il fait des pas en arrière au lieu de courir sur place
+      s.phase += ((f.gait ?? 1) < -0.3 ? -1 : 1) * (f.v / ((THIGH + SHIN) * SCALE * strideAmp(Math.min(1.2, f.v / 10)))) * dt;
       const turn = wrapAngle(f.h - s.lastH) / Math.max(dt, 0.001);
       s.lastH = f.h;
       s.bank += (clamp(turn * f.v * 0.011, -0.3, 0.3) - s.bank) * Math.min(1, dt * 10);

@@ -39,6 +39,9 @@ import { BOX_HALF, BOX_L, CIRCLE_R, clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W
 const REACH = 0.95;
 /** La vitesse d'un gardien qui se décale face à une frappe */
 const KEEPER_SHUFFLE = 3.3;
+/** Le gardien qui se replace : au petit trot quand le jeu est loin, à pas mesurés quand il approche */
+const KEEPER_JOG = 3;
+const KEEPER_STEP = 5.4;
 /** Celui à qui la passe est destinée la contrôle d'un peu plus loin : elle doit arriver dans ses pieds */
 const RECEIVE_REACH = 1.45;
 const HEADER_REACH = 1.05;
@@ -1123,6 +1126,12 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         // Face à une frappe qui vient vers lui, le gardien se décale à petits pas
         if (p.role === "GK" && m.owner < 0 && m.t - m.shotAt < 1.2 && m.ball.vx * attackDir(m, p.team) < -4)
           speed = Math.min(speed, KEEPER_SHUFFLE);
+        // Le gardien qui se replace sans urgence va au petit trot si le jeu est loin, à pas mesurés sinon : il ne
+        // court pas à fond pour deux mètres, ni d'un bout à l'autre de sa surface quand le ballon change de côté
+        if (p.role === "GK" && !sprinting && m.phase === "play") {
+          const far = Math.abs(m.ball.x + attackDir(m, p.team) * HALF_L) > 35;
+          speed = Math.min(speed, far ? KEEPER_JOG : KEEPER_STEP);
+        }
       }
       if (m.phase === "goal" && p.i !== m.celebrant) {
         [wx, wz, speed] = makeRoom(m, p, wx, wz, speed);
@@ -1130,7 +1139,15 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         if (p.team !== m.goals.at(-1)?.team) speed = Math.min(speed, CONCEDED_WALK);
       }
     }
+    // Le gardien qui se replace garde les yeux sur le ballon : il recule ou se décale face au jeu, au lieu de lui tourner
+    // le dos pour courir vers son but
+    const watching = p.role === "GK" && !sprinting && m.phase === "play" && p.act === "none" && m.owner !== p.i;
+    const facing = p.h;
     steer(p, wx, wz, speed * slowed);
+    if (watching) {
+      p.h = facing;
+      faceTo(p, m.ball.x, m.ball.z);
+    }
     spendEnergy(p, sprinting, m.settings.halfMinutes);
     // Arrêté, on regarde le ballon ; pendant la fête d'un but, on se tourne vers le public de la caméra
     if (speed < 0.5) {

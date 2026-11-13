@@ -33,6 +33,8 @@ const POSES: Record<string, { view: Partial<FootballerView>; keeper?: boolean }>
   triste: { view: { sad: true } },
   tristecourse: { view: { sad: true, v: 3 } },
   gardien: { view: {}, keeper: true },
+  gardienpas: { view: { v: 3, gait: 0 }, keeper: true },
+  gardienrecule: { view: { v: 3, gait: -1 }, keeper: true },
   capte: { view: { act: "hold" }, keeper: true },
   plongeon: { view: { act: "dive", dirX: 1 }, keeper: true },
   touche: { view: { act: "throw" } },

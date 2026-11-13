@@ -213,12 +213,21 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
   // pied : il sort à sa rencontre pour lui fermer l'angle, de plus en plus à mesure qu'il approche, et reste un pas
   // devant lui (reculer sur sa ligne, c'est lui laisser tout le but et finir dans ses filets) ; de tout près, il se jette
   // dans ses pieds (voir keeperSmother)
-  const dBall = Math.hypot(b.x - line, b.z);
   const carrier = m.owner >= 0 ? m.players[m.owner]! : null;
-  const threat = carrier !== null && carrier.team !== p.team && dBall < 22;
+  const threat = carrier !== null && carrier.team !== p.team && Math.hypot(b.x - line, b.z) < 22;
+  // Sans attaquant lancé sur lui, il suit le ballon du regard avec un léger retard : une passe en travers ne l'envoie
+  // pas à un poteau, puis à l'autre à la passe suivante (des demi-tours en courant, pour rien)
+  const near = Math.hypot(b.x - line, b.z) < 25;
+  const lag = threat || near ? 1 : 1 - Math.exp(-(m.t - (p.watchAt ?? -9)) / 0.45);
+  p.watchX = lerp(p.watchX ?? b.x, b.x, lag);
+  p.watchZ = lerp(p.watchZ ?? b.z, b.z, lag);
+  p.watchAt = m.t;
+  const bx = p.watchX;
+  const bz = p.watchZ;
+  const dBall = Math.hypot(bx - line, bz);
   const out = threat ? clamp(Math.min(dBall - 1.6, 1.2 + (22 - dBall) * 0.28), 1.2, 6.5) : clamp(dBall * 0.18, 1.2, 7);
-  const gx = line + (b.x - line) * (out / Math.max(dBall, 1));
-  const gz = (b.z / Math.max(dBall, 1)) * out * (threat ? 1 : 1.25);
+  const gx = line + (bx - line) * (out / Math.max(dBall, 1));
+  const gz = (bz / Math.max(dBall, 1)) * out * (threat ? 1 : 1.25);
   p.tx = gx;
   p.tz = clamp(gz, -GOAL_HALF - (threat ? 3 : 1), GOAL_HALF + (threat ? 3 : 1));
   // Il se jette au-devant de l'attaquant : vite, sans traîner en chemin
