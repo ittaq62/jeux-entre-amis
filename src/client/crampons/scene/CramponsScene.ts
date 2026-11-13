@@ -363,6 +363,10 @@ export class CramponsScene {
   private tmpPos = new THREE.Vector3();
   private tmpQuat = new THREE.Quaternion();
   setShot(shot: Shot | null) {
+    // À la fin du gros plan ou du ralenti, on coupe net sur le jeu, comme à la télévision : sans cela, la caméra du
+    // match repartait de là où le ralenti l'avait laissée (près du but) et traversait le terrain jusqu'au ballon.
+    // La présentation, elle, se pose d'elle-même sur la caméra du match.
+    if (!shot && this.shot && this.shot.kind !== "intro") this.lastCuts = Number.NaN;
     this.shot = shot;
   }
 

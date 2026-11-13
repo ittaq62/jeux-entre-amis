@@ -53,8 +53,10 @@ export class Effects {
   private puffs: Puff[] = [];
   private puffIndex = 0;
   private confetti: THREE.InstancedMesh;
-  private bits: { p: THREE.Vector3; v: THREE.Vector3; a: number; s: number }[] = [];
+  /** Chaque confetti ; `ground` : depuis combien de temps il est posé sur la pelouse (-1 : encore en l'air) */
+  private bits: { p: THREE.Vector3; v: THREE.Vector3; a: number; s: number; ground: number }[] = [];
   private confettiOn = 0;
+  private euler = new THREE.Euler();
   private flashes: THREE.Sprite[] = [];
   private spark: THREE.Sprite;
   private flashFor = 0;
@@ -207,6 +209,14 @@ export class Effects {
   celebrate(end: number, colors: string[]) {
     const n = this.confetti.count;
     const c = new THREE.Color();
+    // Les couleurs du club, mêlées de blanc et d'or ; une couleur très sombre (un maillot noir) est éclaircie : posé sur
+    // la pelouse, un confetti noir ressemble à une tache
+    const palette = [...colors, "#ffffff", "#f6cf4a"].map((hex) => {
+      const col = new THREE.Color(hex);
+      const hsl = { h: 0, s: 0, l: 0 };
+      col.getHSL(hsl);
+      return hsl.l < 0.3 ? col.lerp(new THREE.Color("#ffffff"), 0.55) : col;
+    });
     this.bits = [];
     for (let i = 0; i < n; i++) {
       this.bits.push({
@@ -214,8 +224,9 @@ export class Effects {
         v: new THREE.Vector3((Math.random() - 0.5) * 4, -1 - Math.random() * 2.5, (Math.random() - 0.5) * 4),
         a: Math.random() * 6,
         s: 0.7 + Math.random() * 0.7,
+        ground: -1,
       });
-      this.confetti.setColorAt(i, c.set(colors[i % colors.length]!));
+      this.confetti.setColorAt(i, c.copy(palette[i % palette.length]!));
     }
     if (this.confetti.instanceColor) this.confetti.instanceColor.needsUpdate = true;
     this.confetti.visible = true;
@@ -259,13 +270,25 @@ export class Effects {
       const fade = Math.min(1, this.confettiOn / 1.6);
       for (let i = 0; i < this.bits.length; i++) {
         const b = this.bits[i]!;
-        b.a += dt * 7;
-        b.p.addScaledVector(b.v, dt);
-        b.p.x += Math.sin(t * 2 + i) * dt * 0.8;
-        if (b.p.y < 0.05) b.p.y = 0.05;
+        let size = b.s * fade;
+        if (b.ground < 0) {
+          b.a += dt * 7;
+          b.p.addScaledVector(b.v, dt);
+          b.p.x += Math.sin(t * 2 + i) * dt * 0.8;
+          if (b.p.y <= 0.04) {
+            b.p.y = 0.04;
+            b.ground = 0;
+          }
+          this.euler.set(b.a, b.a * 0.7, b.a * 0.4);
+        } else {
+          // Posé à plat sur la pelouse, il ne bouge plus, et s'efface au bout d'une seconde
+          b.ground += dt;
+          size *= Math.max(0, 1 - (b.ground - 1) / 0.6);
+          this.euler.set(-Math.PI / 2, 0, b.a);
+        }
         pos.copy(b.p);
-        this.quat.setFromEuler(new THREE.Euler(b.a, b.a * 0.7, b.a * 0.4));
-        this.scale.setScalar(Math.max(0.0001, b.s * fade));
+        this.quat.setFromEuler(this.euler);
+        this.scale.setScalar(Math.max(0.0001, size));
         this.matrix.compose(pos, this.quat, this.scale);
         this.confetti.setMatrixAt(i, this.matrix);
       }
