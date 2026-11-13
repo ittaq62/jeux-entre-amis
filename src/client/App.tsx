@@ -30,6 +30,7 @@ const DevGarage = lazy(() => import("./bolides/DevGarage.tsx").then((m) => ({ de
 const DevItems = lazy(() => import("./bolides/DevItems.tsx").then((m) => ({ default: m.DevItems })));
 const DevCards = lazy(() => import("./cards/DevCards.tsx").then((m) => ({ default: m.DevCards })));
 const DevMatch = lazy(() => import("./crampons/DevMatch.tsx").then((m) => ({ default: m.DevMatch })));
+const DevPoses = lazy(() => import("./crampons/DevPoses.tsx").then((m) => ({ default: m.DevPoses })));
 const DevTour = lazy(() => import("./tour/DevTour.tsx").then((m) => ({ default: m.DevTour })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
@@ -95,6 +96,7 @@ export function App() {
           {import.meta.env.DEV && <Route path="/dev/objets" component={DevItems} />}
           {import.meta.env.DEV && <Route path="/dev/cartes" component={DevCards} />}
           {import.meta.env.DEV && <Route path="/dev/crampons" component={DevMatch} />}
+          {import.meta.env.DEV && <Route path="/dev/poses" component={DevPoses} />}
           {import.meta.env.DEV && <Route path="/dev/tournee" component={DevTour} />}
           <Route component={NotFoundPage} />
         </Switch>

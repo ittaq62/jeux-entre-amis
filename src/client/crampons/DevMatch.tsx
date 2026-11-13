@@ -42,8 +42,14 @@ function frameOf(m: Match, active: number): SceneFrame {
     charge: 0,
     aim: null,
     receiver: -1,
+    // ?carton=jaune|rouge : le carton brandi au-dessus du joueur dirigé, en boucle (pour régler son allure)
+    card: CARD ? { p: Math.max(0, active), red: CARD === "rouge", t: (performance.now() / 1000) % 3.2 } : null,
+    closeUp: CARD ? 1 : 0,
+    focus: CARD && active >= 0 ? [m.players[active]!.x, m.players[active]!.z] : null,
   };
 }
+
+const CARD = new URLSearchParams(location.search).get("carton");
 
 export function DevMatch() {
   const canvas = useRef<HTMLCanvasElement>(null);

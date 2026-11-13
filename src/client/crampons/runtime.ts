@@ -19,7 +19,7 @@ import { clamp, DT, GOAL_HALF, HALF_L, lerp, wrapAngle } from "../../shared/game
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
 import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
-import { CramponsScene, SCORER_CAM_DIST, type SceneFrame } from "./scene/CramponsScene.ts";
+import { CramponsScene, scorerCamera, type SceneFrame } from "./scene/CramponsScene.ts";
 import { KICK_CONTACT, KICK_HOLD, type FootballerView } from "./scene/footballers.ts";
 
 /** La distance d'un point à la ligne de vue, de la caméra (cx, cz) à ce qu'elle filme (tx, tz) */
@@ -193,6 +193,14 @@ export class MatchRuntime {
   /** L'état du match a bien annoncé le but : avant cela, il peut encore dire que le jeu continue */
   private goalSeen = false;
   private goalAngle = 0;
+  private angleWanted = 0;
+  private angleAt = 0;
+  /** Quelqu'un passe devant le buteur quel que soit l'angle : la caméra filme d'un peu plus haut */
+  private goalHigh = false;
+  /** Une faute : la caméra va voir le joueur au sol (et celui qui l'a fauché) jusqu'à cet instant */
+  private incident: { victim: number; by: number; until: number } | null = null;
+  /** Le carton brandi au-dessus d'un joueur */
+  private cardShow: { p: number; red: boolean; at: number } | null = null;
   private intro = true;
   private cursorPoint: [number, number] | null = null;
   private aimX = 0;
@@ -330,28 +338,71 @@ export class MatchRuntime {
     const v = this.frameViews[scorer];
     this.goalX = v?.x ?? this.shownBall.x;
     this.goalZ = v?.z ?? this.shownBall.z;
-    this.goalAngle = this.clearAngle(scorer);
+    this.goalAngle = this.angleWanted = this.clearAngle(scorer);
+    this.angleAt = 0.35;
     // Le ralenti finit un peu après que le ballon a franchi la ligne : on le voit gonfler les filets
     this.goalSim = this.renderSim ?? this.film.at(-1)?.t ?? 0;
     this.replayEnd = this.goalSim + 0.8;
   }
 
-  /** L'angle du gros plan où personne ne s'interpose entre la caméra et le buteur */
-  private clearAngle(scorer: number): number {
-    let best = 0;
-    let bestGap = -1;
-    for (const a of [0, -0.8, 0.8, -1.3, 1.3]) {
-      const cx = this.goalX - Math.cos(a) * SCORER_CAM_DIST * this.goalEnd;
-      const cz = this.goalZ + Math.sin(a) * SCORER_CAM_DIST;
+  /** Une faute sifflée : on va voir l'action de plus près, le temps que le jeu reprenne */
+  foul(victim: number, by: number) {
+    this.incident = { victim, by, until: performance.now() + 2300 };
+  }
+
+  /** Le carton : brandi au-dessus du joueur, la caméra sur lui */
+  card(p: number, red: boolean) {
+    const now = performance.now();
+    this.cardShow = { p, red, at: now };
+    if (this.incident) this.incident.until = Math.max(this.incident.until, now + 2700);
+    else this.incident = { victim: p, by: p, until: now + 2700 };
+  }
+
+  /** Ce que la caméra regarde pendant une faute, et le carton s'il y en a un */
+  private incidentView(views: FootballerView[]): { focus: [number, number] | null; closeUp: number; card: SceneFrame["card"] } {
+    const now = performance.now();
+    const inc = this.incident;
+    const c = this.cardShow;
+    const card = c && now - c.at < 2800 && views[c.p] ? { p: c.p, red: c.red, t: (now - c.at) / 1000 } : null;
+    if (!card) this.cardShow = null;
+    // Le jeu a repris : on rend la caméra au ballon
+    if (!inc || now > inc.until || this.shown.phase === "play" || this.shown.restart?.ready) {
+      this.incident = null;
+      return { focus: null, closeUp: 0, card };
+    }
+    const target = card ? views[card.p] : views[inc.victim];
+    const other = views[inc.by];
+    if (!target) return { focus: null, closeUp: 0, card };
+    // Entre le joueur au sol et celui qui l'a fauché, plus près du premier ; sur le carton, celui qui le reçoit
+    const focus: [number, number] =
+      card || !other ? [target.x, target.z] : [target.x * 0.7 + other.x * 0.3, target.z * 0.7 + other.z * 0.3];
+    return { focus, closeUp: 1, card };
+  }
+
+  /**
+   * L'angle du gros plan où personne ne s'interpose entre la caméra et le buteur : face à lui depuis la grande tribune
+   * si c'est dégagé, sinon un peu de côté. Les joueurs collés à lui (qui le serrent dans leurs bras) ne gênent pas.
+   */
+  private clearAngle(scorer: number, current = 0): number {
+    let best = current;
+    let bestScore = -Infinity;
+    let bestGap = 0;
+    for (const a of [0, -0.3, 0.3, -0.6, 0.6]) {
+      const [cx, cz] = scorerCamera(this.goalX, this.goalZ, a);
       let gap = Infinity;
       this.frameViews.forEach((p, i) => {
-        if (i !== scorer) gap = Math.min(gap, distToSight(p.x, p.z, cx, cz, this.goalX, this.goalZ));
+        if (i === scorer || p.off || Math.hypot(p.x - this.goalX, p.z - this.goalZ) < 1.4) return;
+        gap = Math.min(gap, distToSight(p.x, p.z, cx, cz, this.goalX, this.goalZ));
       });
-      if (gap > bestGap + 0.4) {
-        bestGap = gap;
+      // Dégagé, c'est tout ce qui compte ; de face plutôt que de côté, et sans changer d'angle pour rien
+      const score = Math.min(gap, 2.5) - Math.abs(a) * 0.35 - (Math.abs(a - current) > 0.01 ? 0.3 : 0);
+      if (score > bestScore) {
+        bestScore = score;
         best = a;
+        bestGap = gap;
       }
     }
+    this.goalHigh = bestGap < 0.9;
     return best;
   }
 
@@ -967,7 +1018,12 @@ export class MatchRuntime {
       v.act = act;
       v.cheer = scorer !== null && v.team === scorer;
       v.sad = scorer !== null && v.team !== scorer;
-      v.off = shown.cards.some((c) => c.i === i && c.off);
+      // L'exclu reste visible le temps de quitter le terrain, tête basse
+      const carded = shown.cards.find((c) => c.i === i);
+      v.off = carded ? (carded.away ?? carded.off) : false;
+      if (carded?.off && !v.off) v.sad = true;
+      // Celui qui vient de faire la faute proteste, les bras écartés : « j'ai joué le ballon ! »
+      v.protest = this.incident !== null && this.incident.by === i && act === "none" && !v.off;
       if (teleport && i === this.releaseFor) this.releaseX = this.releaseZ = 0;
       if (act === "dive" || act === "slide") {
         const dx = bx - ax;
@@ -1129,8 +1185,10 @@ export class MatchRuntime {
       charge: this.charge,
       aim: this.cursorPoint,
       receiver: this.receiver,
-      // Pendant la fête, la caméra suit le buteur, pas le ballon resté dans les filets
-      focus: shown.phase === "goal" && views[this.goalScorer] ? [views[this.goalScorer]!.x, views[this.goalScorer]!.z] : null,
+      // Pendant la fête, la caméra suit le buteur, pas le ballon resté dans les filets ; après une faute, l'action
+      ...(shown.phase === "goal" && views[this.goalScorer]
+        ? { focus: [views[this.goalScorer]!.x, views[this.goalScorer]!.z] as [number, number], closeUp: 0, card: null }
+        : this.incidentView(views)),
     };
   }
 
@@ -1288,10 +1346,16 @@ export class MatchRuntime {
       } else {
         const v = this.frameViews[this.goalScorer];
         if (v) {
-          this.goalX += (v.x - this.goalX) * Math.min(1, dt * 4);
-          this.goalZ += (v.z - this.goalZ) * Math.min(1, dt * 4);
+          this.goalX += (v.x - this.goalX) * Math.min(1, dt * 10);
+          this.goalZ += (v.z - this.goalZ) * Math.min(1, dt * 10);
         }
-        this.scene.setShot({ kind: "scorer", x: this.goalX, z: this.goalZ, side: this.goalEnd, t: this.cinemaT, base: this.goalAngle });
+        // Les joueurs bougent : on revoit l'angle dégagé de temps en temps, et la caméra y glisse
+        if ((this.angleAt -= dt) <= 0) {
+          this.angleAt = 0.35;
+          this.angleWanted = this.clearAngle(this.goalScorer, this.angleWanted);
+        }
+        this.goalAngle += (this.angleWanted - this.goalAngle) * Math.min(1, dt * 2.5);
+        this.scene.setShot({ kind: "scorer", x: this.goalX, z: this.goalZ, t: this.cinemaT, angle: this.goalAngle, high: this.goalHigh });
         return frame;
       }
     }

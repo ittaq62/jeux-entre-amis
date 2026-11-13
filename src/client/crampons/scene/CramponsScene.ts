@@ -31,8 +31,12 @@ export interface SceneFrame {
   aim: [number, number] | null;
   /** Le coéquipier qui recevrait la passe, ou -1 */
   receiver: number;
-  /** Ce que la caméra suit à la place du ballon (le buteur pendant la fête) */
+  /** Ce que la caméra suit à la place du ballon (le buteur pendant la fête, l'action d'une faute) */
   focus?: [number, number] | null;
+  /** La caméra se rapproche de l'action (une faute, un carton) : de 0 à 1 */
+  closeUp?: number;
+  /** Le carton brandi au-dessus d'un joueur, depuis `t` secondes */
+  card?: { p: number; red: boolean; t: number } | null;
 }
 
 export type CameraMode = "tele" | "large" | "pres";
@@ -41,12 +45,27 @@ export type CameraMode = "tele" | "large" | "pres";
 export type Shot =
   | { kind: "free"; x: number; y: number; z: number; tx: number; ty: number; tz: number }
   | { kind: "intro"; t: number }
-  | { kind: "scorer"; x: number; z: number; side: number; t: number; base: number }
+  | { kind: "scorer"; x: number; z: number; t: number; angle: number; high: boolean }
   | { kind: "replay"; end: number };
 
-/** À quelle distance du buteur se place la caméra : assez loin pour le voir en entier sous le bandeau */
+/**
+ * Le gros plan du buteur : la caméra se tient devant lui, côté grande tribune, au téléobjectif (de loin, avec un angle
+ * serré, comme à la télévision : pas de visage déformé, pas de tête géante qui passe devant), assez loin pour le voir
+ * des genoux à la tête sous le bandeau
+ */
 const tmpProj = new THREE.Vector3();
-export const SCORER_CAM_DIST = 10;
+const tmpVec = new THREE.Vector3();
+export const SCORER_CAM_DIST = 11;
+const SCORER_FOV = 19;
+const SCORER_FOV_PORTRAIT = 30;
+
+/** Où se place la caméra du gros plan, pour un buteur en (x, z) et un angle autour de lui (0 : face à la grande tribune) */
+export function scorerCamera(x: number, z: number, angle: number): [number, number] {
+  return [
+    clamp(x + Math.sin(angle) * SCORER_CAM_DIST, -HALF_L - 5, HALF_L + 5),
+    clamp(z + Math.cos(angle) * SCORER_CAM_DIST, -HALF_W + 3, HALF_W + 5.5),
+  ];
+}
 
 /** Le ballon se voit de loin : un peu plus gros qu'en vrai */
 const BALL_VIEW_R = 0.25;
@@ -363,6 +382,62 @@ export class CramponsScene {
     return [this.camera.position.x + dir.x * t, this.camera.position.z + dir.z * t];
   }
 
+  /** Le carton brandi : un rectangle jaune ou rouge qui monte au-dessus du joueur et reste face à la caméra */
+  private cardSprite: THREE.Sprite | null = null;
+  private cardTextures: [THREE.CanvasTexture, THREE.CanvasTexture] | null = null;
+  private showCard(card: { p: number; red: boolean; t: number } | null | undefined, frame: SceneFrame) {
+    const p = card ? frame.players[card.p] : undefined;
+    if (!card || !p) {
+      if (this.cardSprite) this.cardSprite.visible = false;
+      return;
+    }
+    if (!this.cardSprite) {
+      const paint = (color: string) => {
+        const c = document.createElement("canvas");
+        c.width = 128;
+        c.height = 180;
+        const g = c.getContext("2d")!;
+        // Bordé de blanc pour se détacher de la pelouse comme des tribunes, une ombre, un reflet
+        g.fillStyle = "rgba(0,0,0,0.35)";
+        g.beginPath();
+        g.roundRect(10, 12, 112, 164, 14);
+        g.fill();
+        g.fillStyle = "#ffffff";
+        g.beginPath();
+        g.roundRect(4, 4, 112, 164, 14);
+        g.fill();
+        g.fillStyle = color;
+        g.beginPath();
+        g.roundRect(11, 11, 98, 150, 9);
+        g.fill();
+        g.fillStyle = "rgba(255,255,255,0.3)";
+        g.beginPath();
+        g.roundRect(18, 18, 30, 136, 7);
+        g.fill();
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      };
+      this.cardTextures = [paint("#f6cf1d"), paint("#d9272e")];
+      // Sans le rendu « cinéma » de la scène : le jaune et le rouge restent francs
+      this.cardSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: this.cardTextures[0], transparent: true, depthTest: false, toneMapped: false }),
+      );
+      this.cardSprite.renderOrder = 10;
+      this.scene.add(this.cardSprite);
+    }
+    const s = this.cardSprite;
+    const mat = s.material as THREE.SpriteMaterial;
+    mat.map = this.cardTextures![card.red ? 1 : 0];
+    // Il monte d'un coup, reste brandi, puis s'efface
+    const rise = 1 - Math.pow(1 - clamp(card.t / 0.35, 0, 1), 3);
+    mat.opacity = clamp((2.6 - card.t) / 0.4, 0, 1);
+    s.visible = mat.opacity > 0.01;
+    const far = clamp(this.camera.position.distanceTo(tmpVec.set(p.x, 2.6, p.z)) / 26, 1, 2.4);
+    s.scale.set(0.72 * far, 1.03 * far, 1);
+    s.position.set(p.x, 2.5 + rise * (0.75 + 0.55 * far), p.z);
+  }
+
   render(dt: number, frame: SceneFrame) {
     this.time += dt;
     const b = frame.ball;
@@ -381,7 +456,8 @@ export class CramponsScene {
     const p = frame.players[frame.active];
     const shown = Boolean(p) && !p?.off;
     this.ring.visible = shown;
-    this.arrow.visible = shown;
+    // Le carton brandi au-dessus de son joueur prend la place de la flèche
+    this.arrow.visible = shown && frame.card?.p !== frame.active;
     this.gauge.visible = shown && frame.charge > 0.02;
     if (p && shown) {
       this.ring.position.set(p.x, 0.05, p.z);
@@ -410,13 +486,18 @@ export class CramponsScene {
     if (p && shown && p.v > 9.5 && Math.random() < dt * 16) this.fx.puff(p.x, p.z, 1, 0.3);
 
     this.crowd.update(dt, this.time, frame.players);
+    this.showCard(this.shot ? null : frame.card, frame);
     this.stadium.update(this.time, frame.excitement, dt);
     if (this.shot) this.cinema(dt, frame, this.shot);
-    else this.moveCamera(dt, frame);
-    // Le choc d'une frappe : la caméra resserre d'un rien, puis revient
-    if (this.shake > 0.002 || this.camera.fov !== this.baseFov) {
+    else {
+      this.moveCamera(dt, frame);
+      this.lastShot = null;
+    }
+    // Le gros plan du buteur se fait au téléobjectif ; le choc d'une frappe : la caméra resserre d'un rien, puis revient
+    const fov = this.shot?.kind === "scorer" ? (this.portrait ? SCORER_FOV_PORTRAIT : SCORER_FOV) : this.baseFov;
+    if (this.shake > 0.002 || this.camera.fov !== fov) {
       this.shake *= Math.exp(-dt * 9);
-      this.camera.fov = this.shake > 0.002 ? this.baseFov * (1 - this.shake * 0.028) : this.baseFov;
+      this.camera.fov = this.shake > 0.002 ? fov * (1 - this.shake * 0.028) : fov;
       this.camera.updateProjectionMatrix();
     }
     this.fx.update(dt, this.time, b, this.cx, this.cz, this.camera.position);
@@ -456,6 +537,12 @@ export class CramponsScene {
 
   /** Les plans de cinéma : le tour du stade, le buteur de près, le ralenti depuis le bord du terrain */
   private cinema(dt: number, frame: SceneFrame, shot: Shot) {
+    this.cinemaShot(dt, frame, shot);
+    this.lastShot = shot.kind;
+  }
+
+  private lastShot: Shot["kind"] | null = null;
+  private cinemaShot(dt: number, frame: SceneFrame, shot: Shot) {
     const b = frame.ball;
     this.ring.visible = false;
     this.arrow.visible = false;
@@ -486,15 +573,16 @@ export class CramponsScene {
       return;
     }
     if (shot.kind === "scorer") {
-      // Tout près de celui qui vient de marquer, la caméra tourne doucement autour de lui
-      const a = shot.base + (shot.t - 1.2) * 0.3;
-      // La caméra reste du côté du terrain, jamais derrière le filet ni dans les panneaux
-      this.camera.position.set(
-        clamp(shot.x - Math.cos(a) * SCORER_CAM_DIST * shot.side, -HALF_L - 6, HALF_L + 6),
-        2.8,
-        clamp(shot.z + Math.sin(a) * SCORER_CAM_DIST, -HALF_W - 6, HALF_W + 6),
-      );
-      this.camera.lookAt(shot.x, 2, shot.z);
+      // Face au buteur, qui court vers son coin puis fête avec les siens tournés vers la tribune ; la caméra glisse
+      // doucement avec lui (et tourne d'un rien autour), sans à-coups
+      // Elle reste à sa distance même quand il court droit sur elle (un retard le ferait arriver dans l'objectif) ;
+      // quelqu'un passe devant : elle monte d'un cran pour filmer par-dessus
+      const [cx, cz] = scorerCamera(shot.x, shot.z, shot.angle + (shot.t - 1.2) * 0.04);
+      const first = this.lastShot !== "scorer";
+      const k = first ? 1 : 1 - Math.exp(-dt * 12);
+      // On vise au-dessus de sa tête : il se tient dans le bas de l'image, sous le bandeau du but
+      this.camera.position.lerp(tmpVec.set(cx, shot.high ? 3.6 : 2.3, cz), k);
+      this.camera.lookAt(shot.x, shot.high ? 1.6 : 1.85, shot.z);
       return;
     }
     // Le ralenti : au ras du sol, à côté du but, on voit le ballon arriver
@@ -529,8 +617,10 @@ export class CramponsScene {
     this.cz += (gz - this.cz) * k;
     const nearGoal = clamp((Math.abs(this.cx) - (HALF_L - 34)) / 30, 0, 1);
     const baseZoom = this.mode === "pres" ? 0.72 : this.mode === "large" ? 1.34 : 1;
-    const goalZoom = baseZoom * (1 - nearGoal * 0.08);
-    this.zoom += (goalZoom - this.zoom) * (snap ? 1 : 1 - Math.exp(-dt * 1.4));
+    // Une faute, un carton : la caméra se rapproche de l'action, puis reprend sa place
+    const close = frame.closeUp ?? 0;
+    const goalZoom = baseZoom * (1 - nearGoal * 0.08) * (1 - close * 0.55);
+    this.zoom += (goalZoom - this.zoom) * (snap ? 1 : 1 - Math.exp(-dt * (close > 0 ? 2.2 : 1.4)));
 
     if (this.portrait) {
       // Sur un téléphone tenu droit : on regarde dans la longueur, le but adverse en haut de l'écran
@@ -556,6 +646,7 @@ export class CramponsScene {
     this.stadium.dispose();
     this.crowd.dispose();
     this.fx.dispose();
+    for (const t of this.cardTextures ?? []) t.dispose();
     // Ce qui reste (le ballon et sa texture, la mire, les flèches…) : tout est rendu à la carte graphique
     const free = (o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;

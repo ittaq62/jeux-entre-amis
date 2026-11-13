@@ -40,6 +40,8 @@ export interface FootballerView {
   kickT?: number;
   /** Sa façon de célébrer, imposée (l'atelier des cartes) ; sinon chacun a la sienne */
   joy?: number;
+  /** Il vient de faire une faute et proteste, les bras écartés */
+  protest?: boolean;
 }
 
 // -------------------------------------------------------------------------
@@ -91,6 +93,9 @@ interface Pose {
   armRa: number;
   armRb: number;
   armRs: number;
+  /** L'avant-bras qui se replie vers le milieu du corps (les mains sur les hanches, sur la tête) */
+  armLi: number;
+  armRi: number;
   pitch: number;
   roll: number;
   /** La tête, qui se relève ou se baisse sans suivre le buste */
@@ -112,6 +117,8 @@ const zeroPose = (): Pose => ({
   armRa: 0,
   armRb: 0.28,
   armRs: 0.13,
+  armLi: 0,
+  armRi: 0,
   pitch: 0,
   roll: 0,
   nod: 0,
@@ -218,16 +225,44 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     return;
   }
   if (f.sad) {
-    // L'équipe qui vient d'encaisser : la tête basse, les mains sur les hanches
-    if (f.v > 1) legsRunning(target, s, speed * 0.6);
+    // L'équipe qui vient d'encaisser (ou l'exclu qui sort) : la tête basse et les mains sur les hanches, ou les bras
+    // ballants pour ceux qui marchent
+    if (f.v > 1) {
+      legsRunning(target, s, speed * 0.6);
+      target.nod = 0.6;
+      target.lean = 0.16;
+      const sin = Math.sin(s.phase);
+      target.armLa = -sin * 0.25;
+      target.armRa = sin * 0.25;
+      target.armLb = 0.3;
+      target.armRb = 0.3;
+      return;
+    }
     target.nod = 0.55;
-    target.lean = 0.12;
-    target.armLa = -0.15;
-    target.armRa = -0.15;
-    target.armLb = 2.2;
-    target.armRb = 2.2;
-    target.armLs = 0.55;
-    target.armRs = 0.55;
+    target.lean = 0.1;
+    target.armLa = -0.2;
+    target.armRa = -0.2;
+    target.armLs = 0.6;
+    target.armRs = 0.6;
+    target.armLb = 0.65;
+    target.armRb = 0.65;
+    target.armLi = 0.91;
+    target.armRi = 0.91;
+    return;
+  }
+  if (f.protest && act === "none") {
+    // « J'ai joué le ballon ! » : les bras écartés devant lui, les paumes vers le ciel, la tête qui se secoue
+    if (f.v > 1) legsRunning(target, s, speed * 0.6);
+    const shake = Math.sin(t * 7 + s.hairSlot) * 0.12;
+    target.armLa = 0.9;
+    target.armRa = 0.9;
+    target.armLs = 0.75;
+    target.armRs = 0.75;
+    target.armLb = 0.55;
+    target.armRb = 0.55;
+    target.lean = -0.06;
+    target.twist = shake;
+    target.nod = -0.2;
     return;
   }
   if (act === "kick") {
@@ -1063,6 +1098,10 @@ export class Footballers {
   private upperArms: THREE.InstancedMesh;
   private foreArms: THREE.InstancedMesh;
   private hands: THREE.InstancedMesh;
+  /** Les épaules, les coudes et les genoux : des rotules qui raccordent les membres, quel que soit le geste */
+  private delts: THREE.InstancedMesh;
+  private elbowBalls: THREE.InstancedMesh;
+  private kneeBalls: THREE.InstancedMesh;
   private thighs: THREE.InstancedMesh;
   private shins: THREE.InstancedMesh;
   private cuffs: THREE.InstancedMesh;
@@ -1263,6 +1302,16 @@ export class Footballers {
     const cuff = new THREE.TorusGeometry(0.075, 0.016, 6, 14);
     cuff.rotateX(Math.PI / 2);
     this.cuffs = two(cuff, mat(0.7), false);
+    // L'épaule arrondie (dans la couleur de la manche), le coude et le genou (de la couleur de la peau)
+    const delt = new THREE.SphereGeometry(1, 14, 10);
+    delt.scale(0.086, 0.082, 0.084);
+    this.delts = two(delt, mat(0.62));
+    const elbow = new THREE.SphereGeometry(1, 10, 8);
+    elbow.scale(0.05, 0.05, 0.05);
+    this.elbowBalls = two(elbow, mat(0.56), false);
+    const knee = new THREE.SphereGeometry(1, 12, 8);
+    knee.scale(0.064, 0.064, 0.068);
+    this.kneeBalls = two(knee, mat(0.56), false);
 
     // La chaussure : un dessus de couleur vive et une semelle claire
     const upper = new THREE.CapsuleGeometry(0.066, 0.17, 4, 12);
@@ -1345,6 +1394,9 @@ export class Footballers {
         this.thighs.setColorAt(n, s.skin);
         this.shins.setColorAt(n, c.set(kit.socks));
         this.cuffs.setColorAt(n, c.set(kit.socks === kit.shorts ? "#f4f2ea" : kit.shorts));
+        this.delts.setColorAt(n, c.set(kit.sleeves));
+        this.elbowBalls.setColorAt(n, this.keeperFlags[i] ? c.set(kit.sleeves) : s.skin);
+        this.kneeBalls.setColorAt(n, s.skin);
         this.boots.setColorAt(n, c.set(team === 0 ? "#f6c93a" : "#2fd4e6"));
       }
       this.hair[s.hairStyle]?.setColorAt(s.hairSlot, s.hair);
@@ -1482,7 +1534,10 @@ export class Footballers {
           sh.z + Math.sin(ga) * Math.cos(gs) * UPPER,
         );
         const fc = ga + gb;
-        wrists[k]!.set(el.x, el.y - Math.cos(fc) * FORE, el.z + Math.sin(fc) * FORE);
+        // L'avant-bras se replie aussi vers le milieu du corps : les mains sur les hanches, sur la tête
+        const gi = k === 0 ? p.armLi : p.armRi;
+        const ci = Math.cos(gi);
+        wrists[k]!.set(el.x - side * Math.sin(gi) * FORE, el.y - Math.cos(fc) * ci * FORE, el.z + Math.sin(fc) * ci * FORE);
       }
       // Le point le plus bas du corps, une fois tourné
       let low = Infinity;
@@ -1534,6 +1589,7 @@ export class Footballers {
         tmpV2.lerpVectors(top, kn, 0.56);
         this.setBone(this.shortLegs, n, root, top, tmpV2);
         this.setBone(this.shins, n, root, kn, an);
+        this.setPart(this.kneeBalls, n, root, kn, none);
         tmpV2.lerpVectors(kn, an, 0.1);
         this.setBone(this.cuffs, n, root, tmpV2, kn, true);
         tmpQ.setFromAxisAngle(X_AXIS, shinAngle[k]! * 0.55);
@@ -1546,6 +1602,8 @@ export class Footballers {
         const wr = wrists[k]!;
         this.setBone(this.upperArms, n, root, sh, el);
         this.setBone(this.foreArms, n, root, el, wr);
+        this.setPart(this.delts, n, root, sh, upperQ);
+        this.setPart(this.elbowBalls, n, root, el, none);
         // La main prolonge l'avant-bras : on la reconstruit dans son axe
         tmpV2.copy(wr).sub(el).normalize().multiplyScalar(0.1).add(wr);
         this.setBone(this.hands, n, root, wr, tmpV2, true);
