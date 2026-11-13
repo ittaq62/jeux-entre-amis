@@ -42,6 +42,12 @@ const RECEIVE_REACH = 1.45;
 const HEADER_REACH = 1.05;
 /** Deux joueurs ne se marchent pas dessus : leurs corps (épaules et bras) se touchent à peine */
 const SEPARATION = 1.0;
+/** La marche de ceux qui viennent d'encaisser un but */
+const CONCEDED_WALK = 1.5;
+/** Pendant la fête d'un but, chacun garde cette place autour de lui */
+const ROOM = 1.25;
+/** Et l'écart forcé, s'il en faut un, reste petit : un joueur poussé glisse à l'image sans bouger les jambes */
+const GOAL_PUSH = 0.03;
 const FIRST_TIME_WINDOW = 0.45;
 const KEEPER_HOLD_S = 2.2;
 const TACKLE_S = 0.36;
@@ -1091,6 +1097,11 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         if (p.role === "GK" && m.owner < 0 && m.t - m.shotAt < 1.2 && m.ball.vx * attackDir(m, p.team) < -4)
           speed = Math.min(speed, KEEPER_SHUFFLE);
       }
+      if (m.phase === "goal" && p.i !== m.celebrant) {
+        [wx, wz, speed] = makeRoom(m, p, wx, wz, speed);
+        // Après un but encaissé, on rentre en marchant (et on s'écarte de la fête au pas, sans courir)
+        if (p.team !== m.goals.at(-1)?.team) speed = Math.min(speed, CONCEDED_WALK);
+      }
     }
     steer(p, wx, wz, speed * slowed);
     spendEnergy(p, sprinting, m.settings.halfMinutes);
@@ -1134,6 +1145,34 @@ function receiveRun(m: Match, p: Player): [number, number, number] {
   return [dx / d, dz / d, top * clamp(d / 1.6 + 0.15, 0, 1)];
 }
 
+/**
+ * Pendant la fête d'un but, chacun se fait de la place en marchant, plutôt que d'être poussé par ceux qui arrivent : à
+ * l'image, un joueur poussé glisse sans bouger les jambes. Le buteur, lui, ne s'écarte pour personne.
+ */
+function makeRoom(m: Match, p: Player, wx: number, wz: number, speed: number): [number, number, number] {
+  let rx = 0;
+  let rz = 0;
+  for (const q of m.players) {
+    if (q === p || q.off) continue;
+    const dx = p.x - q.x;
+    const dz = p.z - q.z;
+    const d = Math.hypot(dx, dz);
+    if (d >= ROOM || d < 1e-4) continue;
+    const k = (ROOM - d) / ROOM;
+    rx += (dx / d) * k;
+    rz += (dz / d) * k;
+  }
+  const r = Math.hypot(rx, rz);
+  if (r < 0.12) return [wx, wz, speed];
+  const away = 1.6 * Math.min(1, r * 1.5);
+  const vx = wx * speed + (rx / r) * away;
+  const vz = wz * speed + (rz / r) * away;
+  const v = Math.hypot(vx, vz);
+  if (v < 1e-3) return [wx, wz, speed];
+  // Au moins le pas : on le voit marcher
+  return [vx / v, vz / v, Math.max(v, 0.9)];
+}
+
 /** Les joueurs ne se traversent pas ; le plus solide déplace l'autre */
 function separate(m: Match) {
   const list = m.players;
@@ -1149,9 +1188,13 @@ function separate(m: Match) {
       const dz = q.z - p.z;
       const d = Math.hypot(dx, dz);
       if (d >= SEPARATION || d < 1e-4) continue;
-      const push = SEPARATION - d;
-      // Le gardien qui tient le ballon, et le tireur d'une remise en jeu, ne se laissent pas pousser
-      const fixed = (o: typeof p) => o.act === "hold" || (m.restart?.ready === true && m.restart.taker === o.i && m.phase !== "play");
+      const push = m.phase === "goal" ? Math.min(SEPARATION - d, GOAL_PUSH) : SEPARATION - d;
+      // Le gardien qui tient le ballon, et le tireur d'une remise en jeu, ne se laissent pas pousser ; le buteur qui
+      // fête son but non plus
+      const fixed = (o: typeof p) =>
+        o.act === "hold" ||
+        (m.restart?.ready === true && m.restart.taker === o.i && m.phase !== "play") ||
+        (m.phase === "goal" && o.i === m.celebrant);
       const share = fixed(p) ? 0 : fixed(q) ? 1 : 0.5 + (q.stats.phy - p.stats.phy) / 300;
       const nx = dx / d;
       const nz = dz / d;
@@ -1715,6 +1758,7 @@ function concludeGoal(m: Match, team: Team, ev: MatchEvent[]) {
  * coéquipiers proches viennent l'entourer ; les autres s'arrêtent. Tout le monde se tourne ensuite vers le public.
  */
 function celebrate(m: Match, scorer: Player | null, team: Team) {
+  m.celebrant = scorer ? scorer.i : -1;
   const dir = attackDir(m, team);
   const side = scorer && scorer.z < -12 ? -1 : 1;
   const spotX = dir * (HALF_L - 8);
@@ -1732,6 +1776,13 @@ function celebrate(m: Match, scorer: Player | null, team: Team) {
     p.tx = p.x;
     p.tz = p.z;
   }
+  // L'équipe qui encaisse repart vers le rond central en marchant, tête basse : elle laisse la fête aux autres, et ne
+  // passe pas devant la caméra du buteur
+  for (const p of m.players) {
+    if (p.team === team || p.off || p.role === "GK") continue;
+    p.tx = p.x * 0.55;
+    p.tz = p.z * 0.75;
+  }
   if (!scorer) return;
   scorer.tx = spotX;
   scorer.tz = spotZ;
@@ -1739,8 +1790,9 @@ function celebrate(m: Match, scorer: Player | null, team: Team) {
   // En arc de cercle derrière lui, du côté opposé à la caméra (qui filme depuis la grande tribune, côté z positif) : le
   // buteur au premier rang, ses coéquipiers qui arrivent derrière et sur les côtés, personne entre lui et l'objectif
   joiners.forEach((p, k) => {
+    // Deux rangs, assez espacés pour que chacun ait sa place sans bousculer le voisin
     const a = ((k + 0.5) / joiners.length) * Math.PI;
-    const r = 1.8 + (k % 2) * 0.8;
+    const r = 2.2 + (k % 2) * 1.2;
     p.tx = spotX - Math.cos(a) * r * 1.2;
     p.tz = clamp(spotZ - Math.sin(a) * r - 0.4, -HALF_W + 1, HALF_W - 1);
     p.sprint = true;

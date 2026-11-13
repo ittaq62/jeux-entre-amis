@@ -308,6 +308,8 @@ export interface Match {
   shotDist?: number;
   /** Pendant la fête d'un but, les humains qui ont demandé à passer le ralenti */
   skipBy?: string[];
+  /** Pendant la fête d'un but : le buteur, pour qui les autres s'écartent (-1 : un but contre son camp) */
+  celebrant?: number;
   /** Le dernier coup de pied, et l'équipe qui l'a donné : l'adversaire met un instant à réagir */
   kickAt: number;
   kickTeam: Team;

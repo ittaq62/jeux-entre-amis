@@ -908,6 +908,41 @@ describe("la fête d'un but", () => {
     expect(m.phase).not.toBe("goal");
     expect(m.t).toBeLessThan(until);
   });
+
+  it("personne ne glisse : chacun se fait de la place en marchant, et l'équipe battue rentre au pas", () => {
+    let pushed = 0;
+    let fastLosers = 0;
+    let samples = 0;
+    for (const seed of [3, 17, 41]) {
+      const m = createMatch(settings(), teams, [], seed);
+      toPlay(m);
+      // Un but marqué au milieu de toute l'équipe, rassemblée devant le but adverse : la fête la plus serrée possible
+      const end = attackDir(m, 0);
+      const st = m.players.find((p) => p.team === 0 && p.role === "ST")!;
+      for (const p of m.players) if (p.team === 0 && p.role !== "GK") Object.assign(p, { x: end * (HALF_L - 14), z: (p.i % 5) - 2 });
+      setBall(m, end * (HALF_L + 0.3), 0.5, 0, end * 10, 0, 0, st.i);
+      play(m, (e) => e.some((x) => x.k === "goal"), 20);
+      expect(m.phase).toBe("goal");
+      const goalAt = m.t;
+      while (m.phase === "goal") {
+        const before = m.players.map((p) => [p.x, p.z]);
+        stepMatch(m);
+        if (m.phase !== "goal") break;
+        for (const p of m.players) {
+          if (p.off) continue;
+          samples++;
+          const moved = Math.hypot(p.x - before[p.i]![0]!, p.z - before[p.i]![1]!) / DT;
+          // Ses jambes sont figées (vitesse sous 0,35 m/s) : s'il bouge, il ne doit presque pas bouger
+          if (Math.hypot(p.vx, p.vz) < 0.35 && moved > 1) pushed++;
+          // Le temps de freiner sa course, ceux qui viennent d'encaisser rentrent en marchant
+          if (m.t - goalAt > 1.5 && p.team === 1 && p.role !== "GK" && Math.hypot(p.vx, p.vz) > 1.6) fastLosers++;
+        }
+      }
+    }
+    expect(samples).toBeGreaterThan(1000);
+    expect(pushed).toBe(0);
+    expect(fastLosers).toBe(0);
+  });
 });
 
 describe("le hors-jeu", () => {

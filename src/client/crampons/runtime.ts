@@ -229,6 +229,10 @@ export class MatchRuntime {
   private burstUntilMs = 0;
   private burstReadyMs = 0;
   private touchPhase = 0;
+  /** Où chaque joueur était à l'image d'avant, et la vitesse qu'on lui voit (lissée) */
+  private seenX: number[] = [];
+  private seenZ: number[] = [];
+  private seenV: number[] = [];
   private shownFrames = 0;
   private jank = 0;
   private startedAt = performance.now();
@@ -1090,6 +1094,20 @@ export class MatchRuntime {
           v.kickT = KICK_START + age;
         }
       }
+      // Les jambes suivent aussi le déplacement à l'écran, pas seulement la course annoncée par le serveur : un joueur
+      // bousculé, ou qui se fait de la place pendant la fête d'un but, fait quelques pas au lieu de glisser les jambes figées
+      const lastX = this.seenX[i];
+      const lastZ = this.seenZ[i];
+      if (lastX !== undefined && lastZ !== undefined && dt > 0) {
+        const step = Math.hypot(v.x - lastX, v.z - lastZ);
+        // Un saut (une remise en place, un changement de plan) n'est pas une marche
+        const moved = step > 1.5 ? 0 : step / dt;
+        const seen = (this.seenV[i] ?? 0) + (moved - (this.seenV[i] ?? 0)) * Math.min(1, dt * 8);
+        this.seenV[i] = seen;
+        if (v.act === "none") v.v = Math.max(v.v, seen);
+      }
+      this.seenX[i] = v.x;
+      this.seenZ[i] = v.z;
     }
     if (!predicted) this.predShownFor = -1;
     const ballA = a.b;

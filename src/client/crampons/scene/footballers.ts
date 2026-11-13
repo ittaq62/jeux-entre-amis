@@ -165,7 +165,8 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
   Object.assign(target, zeroPose());
   const speed = Math.min(1.2, f.v / 10);
   if (f.cheer) {
-    const moving = f.v > 1;
+    // Dès qu'il se déplace, il marche ou court : pas de joueur qui glisse, les jambes figées, pendant la fête
+    const moving = f.v > 0.35;
     if (moving) legsRunning(target, s, speed);
     // Le rythme de chacun, pour que la fête ne soit pas réglée comme un ballet
     const beat = t * 9 + s.hairSlot * 1.3;
@@ -173,13 +174,17 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     const joy = f.joy ?? s.joy;
     target.nod = -0.35;
     if (joy === 0) {
-      // Les bras au ciel, en sautant, les genoux repliés en l'air
-      target.armLa = 3.0;
-      target.armRa = 3.0;
-      target.armLs = 0.35;
-      target.armRs = 0.35;
-      target.armLb = 0.2 + Math.sin(beat) * 0.25;
-      target.armRb = 0.2 - Math.sin(beat) * 0.25;
+      // Les bras au ciel, en V, qui frappent l'air tour à tour ; il saute sur place, les genoux repliés en l'air.
+      // L'avant-bras prolonge l'écart du bras (armLi négatif) : sans cela, les coudes partaient sur le côté et les mains
+      // remontaient à la verticale, comme un « haut les mains »
+      target.armLa = 2.95;
+      target.armRa = 2.95;
+      target.armLs = 0.42;
+      target.armRs = 0.42;
+      target.armLi = -0.42;
+      target.armRi = -0.42;
+      target.armLb = 0.12 + Math.max(0, Math.sin(beat)) * 0.35;
+      target.armRb = 0.12 + Math.max(0, -Math.sin(beat)) * 0.35;
       target.lift = hop * 0.42;
       if (!moving) {
         target.legLb = 0.3 + hop * 0.9;
@@ -227,7 +232,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
   if (f.sad) {
     // L'équipe qui vient d'encaisser (ou l'exclu qui sort) : la tête basse et les mains sur les hanches, ou les bras
     // ballants pour ceux qui marchent
-    if (f.v > 1) {
+    if (f.v > 0.35) {
       legsRunning(target, s, speed * 0.6);
       target.nod = 0.6;
       target.lean = 0.16;
