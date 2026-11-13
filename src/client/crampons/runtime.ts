@@ -4,6 +4,7 @@
 import { GRAVITY, stepBall, type Ball } from "../../shared/games/crampons/ball.ts";
 import { planPass, planThrough, RECEIVER_MIN_COS, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
 import {
+  AUTO_SWITCH_BLIND,
   AUTO_SWITCH_HOLD,
   BURST_COOLDOWN,
   BURST_S,
@@ -218,6 +219,8 @@ export class MatchRuntime {
   private receiver = -1;
   private firedOnPress = new Set<GameButton>();
   private ghost: Ghost | null = null;
+  /** Quand une frappe montrée d'avance n'a jamais eu lieu sur le serveur */
+  private ghostDroppedAt = -Infinity;
   /** Une passe arrive à son joueur : il va seul au ballon, et le serveur seul sait où il est */
   private receiving = false;
   /**
@@ -225,6 +228,8 @@ export class MatchRuntime {
    * l'ancien, le nouveau finit sa course (comme sur le serveur) jusqu'à ce que la direction change
    */
   private autoHoldUntil = 0;
+  /** Quand le serveur lui a donné un autre joueur sans qu'il le demande (à l'arrivée de l'image) */
+  private autoSwitchAt = -Infinity;
   private autoStickX = 0;
   private autoStickZ = 0;
   private stickX = 0;
@@ -625,6 +630,9 @@ export class MatchRuntime {
     this.srvX = x;
     this.srvZ = z;
     if (!this.pred || this.predFor !== a) {
+      // Un autre joueur sans l'avoir demandé (le ballon vient d'arriver à un coéquipier...) : un clic qui suit de trop
+      // près était pour le joueur d'avant, et le serveur l'ignore (voir handleButtons)
+      if (this.pred && nowMs - this.switchAskedAt > 700) this.autoSwitchAt = nowMs;
       // Un autre joueur, sans l'avoir demandé ni venir de donner le ballon : le serveur le laisse finir sa course
       if (this.pred && nowMs - this.switchAskedAt > 700 && nowMs - this.kickedAt > 1500) {
         this.autoHoldUntil = nowMs + Math.max(0.1, AUTO_SWITCH_HOLD - this.rtt / 2) * 1000;
@@ -901,9 +909,17 @@ export class MatchRuntime {
     // Les commandes simples, au doigt : le bouton Passe fait aussi la passe en profondeur (le centre, sur un corner),
     // si on le tient un peu. Balle au pied, la passe part donc au moment où on le lâche.
     const smartPass = this.settings.touchPad === "simple" && pad.scheme === "tactile" && !penalty;
+    // Un clic juste après un changement de joueur fait sans lui (le ballon est arrivé à un coéquipier) : le serveur le
+    // garde pour le joueur d'avant, qui n'a plus le ballon, et n'en fait rien. On n'en fait rien non plus : sinon l'image
+    // faisait partir le ballon du nouveau joueur, puis le ramenait à son pied (un double clic, par exemple)
+    const blind = now - this.autoSwitchAt < (AUTO_SWITCH_BLIND - this.rtt) * 1000;
     for (const b of pad.pressed) {
       if (watching) break;
       this.pressCtx.set(b, ctx);
+      if (blind) {
+        this.firedOnPress.add(b);
+        continue;
+      }
       if (!INSTANT.includes(b) || foeHasIt || penalty) continue;
       if (smartPass && b === "pass" && ctx === "ball") continue;
       // Ballon libre loin de lui : rien ne part (sinon le coéquipier qui le ramasse jouerait cette passe à sa place)
@@ -914,7 +930,7 @@ export class MatchRuntime {
     for (const r of pad.released) {
       const was = this.pressCtx.get(r.button);
       this.pressCtx.delete(r.button);
-      if (this.firedOnPress.delete(r.button) || watching) continue;
+      if (this.firedOnPress.delete(r.button) || watching || blind) continue;
       // Le ballon a changé de camp pendant l'appui : on ne passe pas un ballon qu'on vient de gagner (ou qui vient de se
       // libérer) en pressant, on ne part pas en glissade parce qu'on l'a perdu en armant sa frappe
       if ((was === "foe" && ctx !== "foe") || (was === "ball" && ctx === "foe")) continue;
@@ -1213,8 +1229,11 @@ export class MatchRuntime {
       if (b.o === g.kicker && !g.seen) {
         // Le serveur ne l'a pas encore vu partir : on attend le temps d'un aller-retour et du retard de l'image
         const late = Math.max(0, (this.snaps.at(-1)?.sim ?? at) - at);
-        if (age > this.rtt + late + 0.3) this.ghost = null;
-        else {
+        if (age > this.rtt + late + 0.3) {
+          // Le serveur ne l'a jamais frappé : le ballon revient au pied en glissant, pas d'un coup
+          this.ghost = null;
+          this.ghostDroppedAt = performance.now();
+        } else {
           stepBall(g.ball, dt);
           ghosted = true;
         }
@@ -1253,7 +1272,16 @@ export class MatchRuntime {
     // Au contrôle, le ballon rejoint le pied sans sauter ; ensuite, il le suit de près
     if (this.lastOwner !== owner) this.ownerChangedAt = performance.now();
     const settling = performance.now() - this.ownerChangedAt < 200;
-    const k = ghosted ? 1 : owner >= 0 && jump < 9 ? 1 - Math.exp(-dt * (settling ? 15 : 42)) : settling && jump < 3 ? 0.3 : 1;
+    const dropped = performance.now() - this.ghostDroppedAt < 300;
+    const k = ghosted
+      ? 1
+      : dropped
+        ? 1 - Math.exp(-dt * 14)
+        : owner >= 0 && jump < 9
+          ? 1 - Math.exp(-dt * (settling ? 15 : 42))
+          : settling && jump < 3
+            ? 0.3
+            : 1;
     s.x += (ball.x - s.x) * k;
     s.z += (ball.z - s.z) * k;
     s.y += (ball.y - s.y) * Math.max(k, 0.6);

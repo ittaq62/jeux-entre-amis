@@ -32,6 +32,7 @@ import {
   type RestartKind,
   type Team,
   assisted,
+  AUTO_SWITCH_BLIND,
 } from "./model.ts";
 import { BOX_HALF, BOX_L, CIRCLE_R, clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch, SIX_L, SPOT_L } from "./pitch.ts";
 
@@ -183,9 +184,6 @@ function followBall(m: Match, id: number) {
   }
   syncHumans(m);
 }
-
-/** Un clic arrivé si vite après un changement fait sans lui qu'il n'a pas pu le voir : il était pour le joueur d'avant */
-const AUTO_SWITCH_BLIND = 0.3;
 
 /** Change de joueur sans que l'humain l'ait demandé, en gardant trace de celui qu'il dirigeait */
 function autoSwitch(m: Match, h: Human, to: number) {

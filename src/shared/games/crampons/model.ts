@@ -150,6 +150,9 @@ export function assisted(m: Match, p: Player): boolean {
  */
 export const AUTO_SWITCH_HOLD = 0.5;
 
+/** Un clic arrivé si vite après un changement fait sans lui qu'il n'a pas pu le voir : il était pour le joueur d'avant */
+export const AUTO_SWITCH_BLIND = 0.3;
+
 export type HumanActionKind = KickKind | "skill" | "tackle" | "slide" | "switch" | "rush" | "skip";
 
 /** Le temps qu'a un humain pour jouer sa remise en jeu avant que l'ordinateur ne la joue pour lui (affiché à l'écran) */
