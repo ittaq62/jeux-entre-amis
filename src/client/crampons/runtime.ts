@@ -147,6 +147,13 @@ export class MatchRuntime {
   private fpsAt = performance.now();
   private fps = 60;
   private slowFor = 0;
+  /** Depuis combien de secondes tout va bien, quand et jusqu'où on est remonté, et le plafond d'une remontée ratée */
+  private fastFor = 0;
+  private raisedAt = -Infinity;
+  private ceiling = 1;
+  /** On ne descend pas sous ce cran ; et le dernier allègement, pour voir s'il a servi */
+  private floor = 0.6;
+  private drop: { at: number; fps: number; from: number } | null = null;
   private resolution = 1;
   private shadowsOn = true;
   private rtt = 0.09;
@@ -466,11 +473,21 @@ export class MatchRuntime {
     this.resolution = q === "basse" ? 0.6 : q === "moyenne" ? 0.8 : 1;
     this.shadowsOn = q !== "basse";
     this.slowFor = 0;
+    this.fastFor = 0;
+    this.ceiling = this.resolution;
+    this.floor = 0.6;
+    this.drop = null;
     this.scene.setResolution(this.resolution, q === "haute" ? 3.7e6 : 2.3e6);
     this.scene.setShadows(this.shadowsOn);
   }
 
-  /** En mode automatique : des images qui manquent ou qui arrivent en retard deux secondes de suite, et on allège d'un cran */
+  /**
+   * En mode automatique : des images qui manquent ou qui arrivent en retard deux secondes de suite, et on allège d'un cran.
+   * Si alléger ne fait rien gagner (un téléphone en économie d'énergie plafonne à 30 images par seconde, quoi qu'on fasse),
+   * on revient au cran d'avant et on n'y touche plus : l'image deviendrait floue pour rien. Quand tout redevient fluide
+   * pendant dix secondes (un but, un moment chargé est passé), on remonte d'un cran ; sans cela, l'image restait floue
+   * jusqu'à la fin du match. Une remontée qui ne tient pas fixe le plafond, sans aller-retour.
+   */
   private adaptQuality(now: number, frameMs: number) {
     this.fpsFrames++;
     if (frameMs > 25) this.jank++;
@@ -482,11 +499,38 @@ export class MatchRuntime {
     this.fpsAt = now;
     // Les toutes premières secondes ne comptent pas : la carte graphique finit de tout charger
     if (this.settings.quality !== "auto" || document.hidden || now - this.startedAt < 3500) return;
+    // Trois secondes après avoir allégé : si rien n'a changé, ce n'était pas l'image qui ralentissait
+    if (this.drop && now - this.drop.at > 3000) {
+      const gained = this.fps >= this.drop.fps + 4;
+      if (!gained) {
+        this.resolution = this.drop.from;
+        this.floor = this.drop.from;
+        this.scene.setResolution(this.resolution, 2.3e6);
+      }
+      this.drop = null;
+      this.slowFor = 0;
+      this.fastFor = 0;
+      return;
+    }
+    if (this.drop) return;
     this.slowFor = this.fps < 45 || jank >= 6 ? this.slowFor + 1 : 0;
-    if (this.slowFor < 2) return;
+    this.fastFor = this.fps >= 55 && jank <= 1 ? this.fastFor + 1 : 0;
+    if (this.slowFor < 2) {
+      if (this.fastFor >= 10 && this.resolution < this.ceiling - 0.01) {
+        this.fastFor = 0;
+        this.resolution = Math.min(this.ceiling, this.resolution + 0.14);
+        this.raisedAt = now;
+        this.scene.setResolution(this.resolution, 2.3e6);
+      }
+      return;
+    }
     this.slowFor = 0;
-    if (this.resolution > 0.62) {
-      this.resolution = Math.max(0.6, this.resolution - 0.14);
+    this.fastFor = 0;
+    // On venait de remonter et ça ne tient pas : ce cran-là est de trop pour cet appareil
+    if (now - this.raisedAt < 15000) this.ceiling = Math.max(this.floor, this.resolution - 0.14);
+    if (this.resolution > this.floor + 0.02) {
+      this.drop = { at: now, fps: this.fps, from: this.resolution };
+      this.resolution = Math.max(this.floor, this.resolution - 0.14);
       this.scene.setResolution(this.resolution, 2.3e6);
     } else if (this.shadowsOn) {
       this.shadowsOn = false;

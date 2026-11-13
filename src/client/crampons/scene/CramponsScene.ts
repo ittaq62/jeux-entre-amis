@@ -157,7 +157,9 @@ export class CramponsScene {
     const theme = themeFor(opts.ambience, opts.weather ?? "clair");
     this.shadows = !opts.lowQuality;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.lowQuality, powerPreference: "high-performance" });
-    this.basePixelRatio = Math.min(window.devicePixelRatio, opts.lowQuality ? 1.25 : 2);
+    // Jusqu'à deux pixels par point, téléphones compris : à 1,25, l'image d'un écran de téléphone (trois pixels par point)
+    // était floue. La qualité automatique redescend d'elle-même si l'appareil peine.
+    this.basePixelRatio = Math.min(window.devicePixelRatio, 2);
     this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
