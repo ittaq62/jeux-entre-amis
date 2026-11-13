@@ -22,10 +22,13 @@ const QUALITIES: { id: Quality; label: string }[] = [
 ];
 
 export function SettingsPanel({
+  touch,
   settings,
   onChange,
   onClose,
 }: {
+  /** Au doigt : les touches du clavier et la visée à la souris ne servent à rien, on règle les boutons de l'écran */
+  touch: boolean;
   settings: CramponsSettings;
   onChange: (s: CramponsSettings) => void;
   onClose: () => void;
@@ -74,73 +77,96 @@ export function SettingsPanel({
       <div className="cr-settings panel">
         <h2>Réglages</h2>
 
-        <section>
-          <h3>Disposition</h3>
-          <div className="cr-presets">
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                className={settings.preset === p.id ? "is-on" : ""}
-                onClick={() => update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings), aim: p.aim })}
-              >
-                <strong>{p.name}</strong>
-                <small>{p.note}</small>
+        {touch && (
+          <section>
+            <h3>Boutons de l'écran</h3>
+            <div className="cr-presets">
+              <button className={settings.touchPad === "simple" ? "is-on" : ""} onClick={() => update({ ...settings, touchPad: "simple" })}>
+                <strong>Simples</strong>
+                <small>Passe et Tir. Tiens la passe pour jouer en profondeur.</small>
               </button>
-            ))}
-          </div>
-        </section>
+              <button
+                className={settings.touchPad === "complet" ? "is-on" : ""}
+                onClick={() => update({ ...settings, touchPad: "complet" })}
+              >
+                <strong>Complets</strong>
+                <small>En plus : profondeur, lob, tir enroulé et piqué.</small>
+              </button>
+            </div>
+          </section>
+        )}
 
-        <section>
-          <h3>Touches</h3>
-          <p className="hint">Clique sur une case, puis appuie sur la touche ou le bouton de souris que tu veux.</p>
-          <table className="cr-bindings">
-            <tbody>
-              {ACTION_ROWS.map((row) => {
-                const list = settings.bindings[row.id];
-                return (
-                  <tr key={row.id}>
-                    <th scope="row">
-                      {row.label}
-                      {row.note && <small>{row.note}</small>}
-                    </th>
-                    {[0, 1].map((slot) => {
-                      const active = capture?.action === row.id && capture.slot === slot;
-                      const value = list[slot];
-                      return (
-                        <td key={slot}>
-                          <button className={`cr-bind ${active ? "is-wait" : ""}`} onClick={() => setCapture({ action: row.id, slot })}>
-                            {active ? "Appuie…" : value ? keyLabel(value) : "—"}
-                          </button>
-                          {value && slot === 1 && !active && (
-                            <button
-                              className="cr-unbind"
-                              onClick={() => update(clearBinding(settings, row.id, slot))}
-                              aria-label={`Retirer ${keyLabel(value)}`}
-                            >
-                              ×
-                            </button>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+        {!touch && (
+          <>
+            <section>
+              <h3>Disposition</h3>
+              <div className="cr-presets">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={settings.preset === p.id ? "is-on" : ""}
+                    onClick={() => update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings), aim: p.aim })}
+                  >
+                    <strong>{p.name}</strong>
+                    <small>{p.note}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
 
-        <section>
-          <h3>Viser</h3>
-          <div className="cr-choice">
-            <button className={settings.aim === "curseur" ? "is-on" : ""} onClick={() => update({ ...settings, aim: "curseur" })}>
-              Avec le curseur
-            </button>
-            <button className={settings.aim === "direction" ? "is-on" : ""} onClick={() => update({ ...settings, aim: "direction" })}>
-              Dans le sens de la course
-            </button>
-          </div>
-        </section>
+            <section>
+              <h3>Touches</h3>
+              <p className="hint">Clique sur une case, puis appuie sur la touche ou le bouton de souris que tu veux.</p>
+              <table className="cr-bindings">
+                <tbody>
+                  {ACTION_ROWS.map((row) => {
+                    const list = settings.bindings[row.id];
+                    return (
+                      <tr key={row.id}>
+                        <th scope="row">
+                          {row.label}
+                          {row.note && <small>{row.note}</small>}
+                        </th>
+                        {[0, 1].map((slot) => {
+                          const active = capture?.action === row.id && capture.slot === slot;
+                          const value = list[slot];
+                          return (
+                            <td key={slot}>
+                              <button className={`cr-bind ${active ? "is-wait" : ""}`} onClick={() => setCapture({ action: row.id, slot })}>
+                                {active ? "Appuie…" : value ? keyLabel(value) : "—"}
+                              </button>
+                              {value && slot === 1 && !active && (
+                                <button
+                                  className="cr-unbind"
+                                  onClick={() => update(clearBinding(settings, row.id, slot))}
+                                  aria-label={`Retirer ${keyLabel(value)}`}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+
+            <section>
+              <h3>Viser</h3>
+              <div className="cr-choice">
+                <button className={settings.aim === "curseur" ? "is-on" : ""} onClick={() => update({ ...settings, aim: "curseur" })}>
+                  Avec le curseur
+                </button>
+                <button className={settings.aim === "direction" ? "is-on" : ""} onClick={() => update({ ...settings, aim: "direction" })}>
+                  Dans le sens de la course
+                </button>
+              </div>
+            </section>
+          </>
+        )}
 
         <section>
           <h3>Qualité de l'image</h3>
@@ -166,7 +192,7 @@ export function SettingsPanel({
         </section>
 
         <div className="cr-settings-actions">
-          <button className="btn" onClick={() => update(defaultSettings())}>
+          <button className="btn" onClick={() => update({ ...defaultSettings(), touchPad: touch ? "simple" : settings.touchPad })}>
             Tout remettre par défaut
           </button>
           <button className="btn btn-primary" onClick={onClose}>

@@ -9,6 +9,8 @@ export type Bindings = Record<ActionId, Binding[]>;
 
 export type AimMode = "curseur" | "direction";
 export type Quality = "auto" | "haute" | "moyenne" | "basse";
+/** Sur un écran tactile : deux gros boutons (passe et tir), ou tous les gestes */
+export type TouchPad = "simple" | "complet";
 
 export interface CramponsSettings {
   preset: string;
@@ -18,6 +20,7 @@ export interface CramponsSettings {
   showFps: boolean;
   /** La voix du commentateur */
   commentary: boolean;
+  touchPad: TouchPad;
 }
 
 export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
@@ -107,7 +110,15 @@ const KEY = "crampons-reglages";
 
 export function defaultSettings(): CramponsSettings {
   const p = PRESETS[0]!;
-  return { preset: p.id, bindings: structuredClone(p.bindings), aim: p.aim, quality: "auto", showFps: false, commentary: true };
+  return {
+    preset: p.id,
+    bindings: structuredClone(p.bindings),
+    aim: p.aim,
+    quality: "auto",
+    showFps: false,
+    commentary: true,
+    touchPad: "simple",
+  };
 }
 
 export function loadSettings(): CramponsSettings {
@@ -123,6 +134,7 @@ export function loadSettings(): CramponsSettings {
       quality: data.quality === "haute" || data.quality === "moyenne" || data.quality === "basse" ? data.quality : "auto",
       showFps: data.showFps === true,
       commentary: data.commentary !== false,
+      touchPad: data.touchPad === "complet" ? "complet" : "simple",
     };
   } catch {
     return defaultSettings();

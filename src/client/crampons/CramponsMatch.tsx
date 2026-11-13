@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { HUMAN_KEEPER_WAIT, HUMAN_RESTART_WAIT, type MatchEvent, type RestartKind } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import type { GameButton } from "./controls.ts";
+import { THROUGH_HOLD_MS, type GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
 import { loadSettings, type CramponsSettings } from "./bindings.ts";
 import { HowTo, KeyHints, mainKey, Radar } from "./CramponsHud.tsx";
@@ -49,45 +49,74 @@ function formatClock(seconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** Le stick du pouce gauche */
-function Joystick({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) {
-  const [knob, setKnob] = useState<[number, number] | null>(null);
-  const origin = useRef<[number, number]>([0, 0]);
-  const R = 56;
-  const move = (e: ReactPointerEvent) => {
-    const dx = e.clientX - origin.current[0];
-    const dy = e.clientY - origin.current[1];
+/** Le stick suit le doigt jusque-là ; au-delà du grand cercle, le joueur sprinte */
+const STICK_R = 52;
+const STICK_SPRINT = STICK_R * 1.45;
+
+/**
+ * Le stick du pouce gauche : il se pose là où le pouce touche, n'importe où en bas à gauche de l'écran (pas besoin de
+ * viser un rond). Poussé jusqu'au grand cercle, il fait sprinter : le pouce qui dirige n'a pas à aller chercher un bouton.
+ */
+function Stick({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) {
+  const [live, setLive] = useState<{ ox: number; oy: number; kx: number; ky: number; sprint: boolean } | null>(null);
+  const origin = useRef<[number, number] | null>(null);
+  const finger = useRef<number | null>(null);
+  const zone = useRef<HTMLDivElement>(null);
+  const move = (x: number, y: number) => {
+    const o = origin.current;
+    const z = zone.current?.getBoundingClientRect();
+    if (!o || !z) return;
+    const dx = x - o[0];
+    const dy = y - o[1];
     const l = Math.hypot(dx, dy);
-    const k = l > R ? R / l : 1;
-    setKnob([dx * k, dy * k]);
+    const k = l > STICK_R ? STICK_R / l : 1;
+    const sprint = l > STICK_SPRINT;
     const t = runtime.current?.pad.touch;
     if (t) {
-      t.sx = (dx * k) / R;
-      t.sy = (dy * k) / R;
+      t.sx = (dx * k) / STICK_R;
+      t.sy = (dy * k) / STICK_R;
+      t.sprint = sprint;
     }
+    // Le rond suit le doigt jusqu'au grand cercle, pour qu'on voie où commence le sprint
+    const shown = l > 0 ? Math.min(l, STICK_SPRINT + 4) / l : 0;
+    setLive({ ox: o[0] - z.left, oy: o[1] - z.top, kx: dx * shown, ky: dy * shown, sprint });
   };
-  const end = () => {
-    setKnob(null);
+  const end = (id: number) => {
+    if (id !== finger.current) return;
+    finger.current = null;
+    origin.current = null;
+    setLive(null);
     const t = runtime.current?.pad.touch;
     if (t) {
       t.sx = 0;
       t.sy = 0;
+      t.sprint = false;
     }
   };
   return (
     <div
-      className="cr-stick"
+      ref={zone}
+      className="cr-stickzone"
       onPointerDown={(e) => {
+        e.preventDefault();
+        if (finger.current !== null) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        const r = e.currentTarget.getBoundingClientRect();
-        origin.current = [r.left + r.width / 2, r.top + r.height / 2];
-        move(e);
+        finger.current = e.pointerId;
+        origin.current = [e.clientX, e.clientY];
+        move(e.clientX, e.clientY);
       }}
-      onPointerMove={(e) => knob && move(e)}
-      onPointerUp={end}
-      onPointerCancel={end}
+      onPointerMove={(e) => e.pointerId === finger.current && move(e.clientX, e.clientY)}
+      onPointerUp={(e) => end(e.pointerId)}
+      onPointerCancel={(e) => end(e.pointerId)}
     >
-      <span className="cr-knob" style={knob ? { transform: `translate(${knob[0]}px, ${knob[1]}px)` } : undefined} />
+      <div
+        className={`cr-stick ${live ? "is-live" : ""} ${live?.sprint ? "is-sprint" : ""}`}
+        style={live ? { left: live.ox, top: live.oy } : undefined}
+      >
+        <i className="cr-stick-ring" />
+        <span className="cr-knob" style={live ? { transform: `translate(${live.kx}px, ${live.ky}px)` } : undefined} />
+        {live?.sprint && <b className="cr-stick-sprint">Sprint</b>}
+      </div>
     </div>
   );
 }
@@ -96,17 +125,34 @@ function PadButton({
   runtime,
   button,
   label,
+  holdLabel,
   tone,
 }: {
   runtime: MutableRefObject<MatchRuntime | null>;
   button: GameButton;
   label: string;
+  /** Ce que fait le bouton si on le tient (la passe en profondeur) : écrit dessus dès que c'est le cas */
+  holdLabel?: string;
   tone: string;
 }) {
-  const set = (on: boolean) => runtime.current?.pad.touchButton(button, on);
+  const [long, setLong] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const set = (on: boolean) => {
+    runtime.current?.pad.touchButton(button, on);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    if (on && holdLabel) timer.current = setTimeout(() => setLong(true), THROUGH_HOLD_MS);
+    else setLong(false);
+  };
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   return (
     <button
-      className={`cr-btn is-${tone}`}
+      className={`cr-btn is-${tone} ${long ? "is-long" : ""}`}
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -114,8 +160,25 @@ function PadButton({
       }}
       onPointerUp={() => set(false)}
       onPointerCancel={() => set(false)}
+      onContextMenu={(e) => e.preventDefault()}
     >
-      {label}
+      {long && holdLabel ? holdLabel : label}
+    </button>
+  );
+}
+
+/** Changer de joueur, sans le ballon : d'un seul appui */
+function SwapButton({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) {
+  return (
+    <button
+      className="cr-btn is-swap"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        runtime.current?.pad.swapNow();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      Changer
     </button>
   );
 }
@@ -347,6 +410,8 @@ export function CramponsMatch({
   // À lui de jouer la remise en jeu : un compte à rebours, sinon l'ordinateur la joue à sa place
   // De même quand son gardien tient le ballon dans les mains : à lui de relancer
   const keeperHold = hud.keeperHold && view.phase === "play" && !cinema;
+  // Le ballon est à lui (au pied, dans les mains de son gardien, ou pour une remise en jeu) : les boutons servent à le jouer
+  const withBall = hud.hasBall || Boolean(taking);
   const [restartLeft, setRestartLeft] = useState<number | null>(null);
   const takingKey = taking ? `${restart?.kind}-${restart?.taker}` : keeperHold ? `gk-${hud.active}` : "";
   useEffect(() => {
@@ -366,7 +431,9 @@ export function CramponsMatch({
   const over = shown.phase === "over" && room.status === "finished";
 
   // Au doigt, on nomme le bouton de l'écran ; au clavier et à la manette, la touche
-  const keyOf = (shot: boolean) => (hud.scheme === "tactile" ? (shot ? "Tir" : "Passe") : mainKey(hud.scheme, settings.bindings, shot));
+  // Sur un téléphone, avant même le premier appui (le coup d'envoi), c'est le bouton de l'écran : pas « Clic droit »
+  const screenKeys = hud.scheme === "tactile" || (touch && hud.scheme !== "manette");
+  const keyOf = (shot: boolean) => (screenKeys ? (shot ? "Tir" : "Passe") : mainKey(hud.scheme, settings.bindings, shot));
   const key = keyOf(restart?.kind === "penalty");
   return (
     <div className="cr-root">
@@ -484,7 +551,7 @@ export function CramponsMatch({
       )}
       {!over && !cinema && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
 
-      {seatId !== null && hud.activeName && !over && !cinema && (
+      {seatId !== null && hud.activeName && !over && !cinema && !(touch && shootout) && (
         <div className="cr-player">
           <span className="cr-pname">{hud.activeName}</span>
           <span className="cr-bar" aria-hidden="true">
@@ -494,25 +561,12 @@ export function CramponsMatch({
       )}
 
       {touch && seatId !== null && !over && (
-        <div className={`cr-pad ${cinema === "scorer" || cinema === "replay" ? "is-cinema" : ""}`}>
-          <Joystick runtime={runtime} />
-          <button
-            className="cr-sprint"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.currentTarget.setPointerCapture(e.pointerId);
-              if (runtime.current) runtime.current.pad.touch.sprint = true;
-            }}
-            onPointerUp={() => {
-              if (runtime.current) runtime.current.pad.touch.sprint = false;
-            }}
-            onPointerCancel={() => {
-              if (runtime.current) runtime.current.pad.touch.sprint = false;
-            }}
-          >
-            Sprint
-          </button>
-          {hud.hasBall && (
+        <div
+          className={`cr-pad is-${settings.touchPad} ${cinema === "scorer" || cinema === "replay" ? "is-cinema" : ""}`}
+          data-ball={withBall ? "" : undefined}
+        >
+          <Stick runtime={runtime} />
+          {settings.touchPad === "complet" && hud.hasBall && (
             <div className="cr-mods">
               <button className={mods.finesse ? "is-on" : ""} onClick={() => setMod("finesse")} aria-pressed={mods.finesse}>
                 Effet
@@ -525,15 +579,31 @@ export function CramponsMatch({
           <div className="cr-buttons">
             <PadButton
               runtime={runtime}
-              button="shoot"
-              tone="shot"
-              label={
-                hud.defending ? "Glissé" : hud.hasBall && hud.active >= 0 && view.players[hud.active]?.role === "GK" ? "Dégager" : "Tir"
+              button="pass"
+              tone="pass"
+              label={hud.defending ? "Presser" : keeperHold ? "Relancer" : "Passe"}
+              holdLabel={
+                settings.touchPad === "simple" && withBall && !(taking && (restart?.kind === "penalty" || restart?.kind === "kickoff"))
+                  ? taking && restart?.kind === "corner"
+                    ? "Centre"
+                    : "Profondeur"
+                  : undefined
               }
             />
-            <PadButton runtime={runtime} button="through" tone="through" label={hud.defending ? "Changer" : "Profond."} />
-            <PadButton runtime={runtime} button="lob" tone="lob" label={hud.defending ? "Changer" : "Lob"} />
-            <PadButton runtime={runtime} button="pass" tone="pass" label={hud.defending ? "Presser" : "Passe"} />
+            <PadButton
+              runtime={runtime}
+              button="shoot"
+              tone="shot"
+              label={hud.defending ? "Tacle" : hud.hasBall && view.players[hud.active]?.role === "GK" ? "Dégager" : "Tir"}
+            />
+            {settings.touchPad === "complet" ? (
+              <>
+                <PadButton runtime={runtime} button="through" tone="through" label={hud.defending ? "Changer" : "Profond."} />
+                {!hud.defending && <PadButton runtime={runtime} button="lob" tone="lob" label="Lob" />}
+              </>
+            ) : (
+              !withBall && <SwapButton runtime={runtime} />
+            )}
           </div>
         </div>
       )}
@@ -541,6 +611,7 @@ export function CramponsMatch({
       {help && (
         <HowTo
           touch={touch}
+          touchPad={settings.touchPad}
           bindings={settings.bindings}
           onClose={closeHelp}
           onSettings={() => {
@@ -549,7 +620,7 @@ export function CramponsMatch({
           }}
         />
       )}
-      {panel && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setPanel(false)} />}
+      {panel && <SettingsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setPanel(false)} />}
 
       {over && <CramponsGameOver room={room} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />}
     </div>

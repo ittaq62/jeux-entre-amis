@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { HALF_L, HALF_W } from "../../shared/games/crampons/pitch.ts";
-import { keyLabel, type ActionId, type Bindings } from "./bindings.ts";
+import { keyLabel, type ActionId, type Bindings, type TouchPad } from "./bindings.ts";
 import type { Scheme } from "./controls.ts";
 
 interface Hint {
@@ -120,11 +120,13 @@ export function Radar({ data, ballX, ballZ, colors }: { data: number[]; ballX: n
 /** L'aide, affichée au premier match et accessible à tout moment */
 export function HowTo({
   touch,
+  touchPad,
   bindings,
   onClose,
   onSettings,
 }: {
   touch: boolean;
+  touchPad: TouchPad;
   bindings: Bindings;
   onClose: () => void;
   onSettings: () => void;
@@ -146,10 +148,30 @@ export function HowTo({
       <div className="cr-howto-card panel">
         <h2>Comment jouer</h2>
         {touch ? (
-          <p>
-            Le stick à gauche pour courir, le bouton jaune pour sprinter. À droite : passe, tir, passe en profondeur et lob. Sans le ballon,
-            les boutons deviennent presser, tacle glissé et changer de joueur. Plus tu tiens le bouton de tir, plus la frappe est forte.
-          </p>
+          <ul className="cr-howto-touch">
+            <li>
+              <b>Courir</b> : pose le pouce n'importe où en bas à gauche, le stick apparaît dessous. Pousse jusqu'au grand cercle pour
+              sprinter.
+            </li>
+            {touchPad === "simple" ? (
+              <li>
+                <b>Passe</b> : appuie pour une passe vers le joueur entouré de bleu. Tiens-la puis lâche : passe en profondeur (un centre,
+                sur un corner).
+              </li>
+            ) : (
+              <li>
+                <b>Passe</b>, <b>Profond.</b> (dans la course) et <b>Lob</b> (par-dessus, ou un centre). <b>Effet</b> et <b>Piqué</b>{" "}
+                changent ton prochain tir.
+              </li>
+            )}
+            <li>
+              <b>Tir</b> : plus tu le tiens, plus tu frappes fort.
+            </li>
+            <li>
+              <b>Sans le ballon</b> : <b>Presser</b> (tiens-le, ton joueur fonce sur le porteur et tacle), <b>Tacle</b> (glissé) et{" "}
+              <b>Changer</b> de joueur.
+            </li>
+          </ul>
         ) : (
           <>
             <table>

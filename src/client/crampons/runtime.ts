@@ -18,7 +18,7 @@ import {
 import { clamp, DT, GOAL_HALF, HALF_L, lerp, wrapAngle } from "../../shared/games/crampons/pitch.ts";
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
 import type { CramponsSettings } from "./bindings.ts";
-import { CramponsControls, type GameButton, type Scheme } from "./controls.ts";
+import { CramponsControls, FULL_CHARGE_MS, THROUGH_HOLD_MS, type GameButton, type Scheme } from "./controls.ts";
 import { CramponsScene, scorerCamera, type SceneFrame } from "./scene/CramponsScene.ts";
 import { KICK_CONTACT, KICK_HOLD, type FootballerView } from "./scene/footballers.ts";
 
@@ -844,10 +844,14 @@ export class MatchRuntime {
     // Une passe part à l'instant où on appuie : c'est ce qui fait la différence entre un jeu vif et un jeu lourd.
     // Au penalty, toutes les touches tirent : elles se chargent comme la frappe.
     const penalty = taking && this.view.restart?.kind === "penalty";
+    // Les commandes simples, au doigt : le bouton Passe fait aussi la passe en profondeur (le centre, sur un corner),
+    // si on le tient un peu. Balle au pied, la passe part donc au moment où on le lâche.
+    const smartPass = this.settings.touchPad === "simple" && pad.scheme === "tactile" && !penalty;
     for (const b of pad.pressed) {
       if (watching) break;
       this.pressCtx.set(b, ctx);
       if (!INSTANT.includes(b) || foeHasIt || penalty) continue;
+      if (smartPass && b === "pass" && ctx === "ball") continue;
       // Ballon libre loin de lui : rien ne part (sinon le coéquipier qui le ramasse jouerait cette passe à sa place)
       if (ctx === "free" && !this.ballComing()) continue;
       fire(b, 0.5);
@@ -861,7 +865,10 @@ export class MatchRuntime {
       // libérer) en pressant, on ne part pas en glissade parce qu'on l'a perdu en armant sa frappe
       if ((was === "foe" && ctx !== "foe") || (was === "ball" && ctx === "foe")) continue;
       if (taking || hasBall) {
-        fire(r.button, r.power);
+        if (smartPass && r.button === "pass") {
+          const long = r.power * FULL_CHARGE_MS >= THROUGH_HOLD_MS;
+          fire(long ? (this.view.restart?.kind === "corner" && taking ? "lob" : "through") : "pass", 0.5);
+        } else fire(r.button, r.power);
         continue;
       }
       if (foeHasIt) {

@@ -38,6 +38,9 @@ export interface PadState {
 /** Il faut tenir le bouton ce temps-là pour la pleine puissance */
 export const FULL_CHARGE_MS = 800;
 
+/** Commandes simples, au doigt : la passe tenue au moins ce temps-là part en profondeur */
+export const THROUGH_HOLD_MS = 300;
+
 const BUTTONS: GameButton[] = ["pass", "shoot", "through", "lob"];
 /** Les boutons de la souris, dans le champ `buttons` des événements, et leur nom dans les réglages */
 const MOUSE_BITS: [number, string][] = [
