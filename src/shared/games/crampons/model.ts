@@ -260,6 +260,12 @@ export const newTeamStats = (): TeamStats => ({
   possession: 0,
 });
 
+/**
+ * Ce qui a été sifflé : un tacle glissé qui a manqué le ballon, un tacle par derrière, une charge dans le dos (un tacle
+ * debout, par derrière), ou le dernier défenseur qui arrête une occasion en faute
+ */
+export type FoulKind = "glisse" | "derriere" | "charge" | "dernier";
+
 export type WhistleReason = "goal" | "out" | "foul" | "offside" | "half" | "end" | "kickoff";
 
 /** Ce qui vient d'arriver : le téléphone en fait des sons, des images et des messages */
@@ -274,7 +280,7 @@ export type MatchEvent =
   | { k: "net" }
   | { k: "goal"; team: Team; scorer: number; assist: number; own: boolean }
   | { k: "whistle"; why: WhistleReason }
-  | { k: "foul"; p: number; on: number; penalty: boolean }
+  | { k: "foul"; p: number; on: number; penalty: boolean; how?: FoulKind }
   | { k: "card"; p: number; red: boolean }
   | { k: "offside"; p: number }
   | { k: "restart"; kind: RestartKind; team: Team }

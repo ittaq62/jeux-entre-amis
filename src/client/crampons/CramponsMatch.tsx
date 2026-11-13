@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { HUMAN_KEEPER_WAIT, HUMAN_RESTART_WAIT, type MatchEvent, type RestartKind } from "../../shared/games/crampons/model.ts";
+import {
+  HUMAN_KEEPER_WAIT,
+  HUMAN_RESTART_WAIT,
+  type FoulKind,
+  type MatchEvent,
+  type RestartKind,
+} from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
@@ -38,6 +44,20 @@ const RESTART_ACTION: Record<RestartKind, string> = {
   goalkick: "Dégager",
   free: "Jouer le coup franc",
   penalty: "Tirer le penalty",
+};
+
+/** La faute sifflée, en titre du bandeau, et dans une phrase (le penalty) */
+const FOUL_TITLE: Record<FoulKind, string> = {
+  glisse: "Tacle glissé",
+  derriere: "Tacle par derrière",
+  charge: "Charge dans le dos",
+  dernier: "Dernier défenseur",
+};
+const FOUL_SAID: Record<FoulKind, string> = {
+  glisse: "Tacle glissé",
+  derriere: "Tacle par derrière",
+  charge: "Charge dans le dos",
+  dernier: "Faute",
 };
 
 const PERIODS: Record<number, string> = { 1: "1re mi-temps", 2: "2e mi-temps", 3: "Prolong.", 4: "Prolong.", 5: "Tirs au but" };
@@ -399,7 +419,19 @@ export function CramponsMatch({
         } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
         else if (e.k === "foul") {
           runtime.current?.foul(e.on, e.p);
-          show({ tone: "info", title: e.penalty ? "Penalty !" : "Faute", sub: nameOf(e.p) }, 1700);
+          // Ce qui s'est passé, et qui sur qui : « Tacle par derrière — Fournel sur Ragot »
+          const how = e.how ?? "glisse";
+          const who = `${nameOf(e.p)} sur ${nameOf(e.on)}`;
+          if (e.penalty)
+            show(
+              {
+                tone: "info",
+                title: "Penalty !",
+                sub: how === "dernier" ? `${nameOf(e.p)}, dernier défenseur, sur ${nameOf(e.on)}` : `${FOUL_SAID[how]} de ${who}`,
+              },
+              2600,
+            );
+          else show({ tone: "info", title: FOUL_TITLE[how], sub: who }, 2400);
         } else if (e.k === "card") {
           runtime.current?.card(e.p, e.red);
           show({ tone: "card", title: e.red ? "Carton rouge" : "Carton jaune", sub: nameOf(e.p) }, 2300);

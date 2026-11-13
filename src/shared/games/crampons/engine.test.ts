@@ -271,9 +271,11 @@ describe("un match", () => {
       Object.assign(foul, { x: dir * 43.4, z: 3, act: "slide", actT: 0.2, dirX: dir, dirZ: 0, lockedUntil: 0 });
       m.owner = victim.i;
       Object.assign(m.ball, { x: dir * 49, z: 3 });
-      let penalty = false;
-      for (let i = 0; i < 10 && !penalty; i++) penalty = stepMatch(m).some((e) => e.k === "foul" && e.penalty);
-      expect(penalty).toBe(true);
+      let foulEv: MatchEvent | undefined;
+      for (let i = 0; i < 10 && !foulEv; i++) foulEv = stepMatch(m).find((e) => e.k === "foul");
+      expect(foulEv).toMatchObject({ k: "foul", penalty: true });
+      // On sait ce qui a été sifflé : un tacle glissé par derrière (ou, seul devant le but, le dernier défenseur)
+      expect(["derriere", "dernier"]).toContain(foulEv?.k === "foul" ? foulEv.how : undefined);
       for (let i = 0; i < 400 && !m.restart?.ready; i++) stepMatch(m);
       expect(m.restart).toMatchObject({ kind: "penalty", ready: true });
       const spotX = dir * (HALF_L - 11);

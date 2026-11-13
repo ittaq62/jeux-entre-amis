@@ -31,6 +31,7 @@ import {
   type Player,
   type RestartKind,
   type Team,
+  type FoulKind,
   assisted,
   AUTO_SWITCH_BLIND,
 } from "./model.ts";
@@ -1588,16 +1589,17 @@ function tackles(m: Match, ev: MatchEvent[]) {
 function commitFoul(m: Match, p: Player, victim: Player, slide: boolean, ev: MatchEvent[]) {
   const dir = attackDir(m, victim.team);
   const penalty = inBox(victim.x, victim.z, dir);
-  m.stats[p.team].fouls++;
-  ev.push({ k: "whistle", why: "foul" });
-  ev.push({ k: "foul", p: p.i, on: victim.i, penalty });
-  victim.act = "down";
-  victim.actT = FOULED_DOWN_S;
-  const cards = m.stats[p.team].yellow + m.stats[p.team].red;
   // Par derrière ou dernier défenseur : carton
   const behind = Math.cos(victim.h) * (p.x - victim.x) + Math.sin(victim.h) * (p.z - victim.z) < -0.4;
   const defenders = m.players.filter((q) => q.team === p.team && !q.off && q.x * dir > victim.x * dir).length;
   const lastMan = defenders <= 1 && victim.x * dir > 20 && Math.abs(victim.z) < 18;
+  const how: FoulKind = lastMan ? "dernier" : !slide ? "charge" : behind ? "derriere" : "glisse";
+  m.stats[p.team].fouls++;
+  ev.push({ k: "whistle", why: "foul" });
+  ev.push({ k: "foul", p: p.i, on: victim.i, penalty, how });
+  victim.act = "down";
+  victim.actT = FOULED_DOWN_S;
+  const cards = m.stats[p.team].yellow + m.stats[p.team].red;
   const yellowChance = (slide ? 0.18 : 0.06) + (behind ? 0.2 : 0);
   if (lastMan) card(m, p, true, ev);
   else if (random(m) < yellowChance) card(m, p, false, ev);
