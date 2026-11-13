@@ -155,6 +155,7 @@ export class MatchRuntime {
   /** On ne descend pas sous ce cran ; et le dernier allègement, pour voir s'il a servi */
   private floor = 0.6;
   private drop: { at: number; fps: number; from: number } | null = null;
+  private useless = 0;
   private resolution = 1;
   private shadowsOn = true;
   private rtt = 0.09;
@@ -484,6 +485,7 @@ export class MatchRuntime {
     this.ceiling = this.resolution;
     this.floor = 0.6;
     this.drop = null;
+    this.useless = 0;
     this.scene.setResolution(this.resolution, q === "haute" ? 3.7e6 : 2.3e6);
     this.scene.setShadows(this.shadowsOn);
   }
@@ -511,8 +513,10 @@ export class MatchRuntime {
       const gained = this.fps >= this.drop.fps + 4;
       if (!gained) {
         this.resolution = this.drop.from;
-        this.floor = this.drop.from;
         this.scene.setResolution(this.resolution, 2.3e6);
+        // Deux fois sans effet : c'est l'appareil qui plafonne, on n'allégera plus l'image (un seul essai pouvait tomber
+        // pendant un moment chargé, un but, et ne rien prouver)
+        if (++this.useless >= 2) this.floor = this.drop.from;
       }
       this.drop = null;
       this.slowFor = 0;

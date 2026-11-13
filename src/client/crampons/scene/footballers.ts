@@ -153,6 +153,16 @@ interface State {
 /** L'amplitude de la foulée (en radians de cuisse) à cette vitesse, de 0 à 1,2 */
 const strideAmp = (speed: number) => 0.38 + speed * 0.32;
 
+/**
+ * La longueur de ses pas, selon le sens de sa marche : droit devant, la foulée entière ; de côté ou à reculons, des pas
+ * plus courts (le gardien, en pas chassés, plus courts encore). La cadence suit : des pas courts, mais plus fréquents.
+ */
+function strideOf(f: FootballerView): number {
+  const gait = f.gait ?? 1;
+  if (f.keeper && f.v > 0.35 && f.v < 6 && gait < 0.75) return gait < -0.3 ? 0.55 : 0.45;
+  return gait < -0.3 ? 0.6 : 0.6 + 0.4 * Math.abs(gait);
+}
+
 function legsRunning(target: Pose, s: State, speed: number, stride = 1) {
   const amp = strideAmp(speed) * stride;
   const sin = Math.sin(s.phase);
@@ -379,7 +389,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
   const gait = f.gait ?? 1;
   if (f.keeper && f.v > 0.35 && f.v < 6 && gait < 0.75) {
     // Le gardien qui se décale ou recule face au jeu : à petits pas, un peu fléchi, les bras prêts
-    legsRunning(target, s, speed, gait < -0.3 ? 0.55 : 0.45);
+    legsRunning(target, s, speed, strideOf(f));
     target.armLs = 0.65;
     target.armRs = 0.65;
     target.armLa = 0.55;
@@ -390,7 +400,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
   }
   if (f.v > 0.35) {
     // À reculons ou de côté, les pas sont plus courts
-    legsRunning(target, s, speed, gait < -0.3 ? 0.6 : 0.6 + 0.4 * Math.abs(gait));
+    legsRunning(target, s, speed, strideOf(f));
     const sin = Math.sin(s.phase);
     const amp = 0.5 + speed * 0.6;
     target.armLa = -sin * amp;
@@ -1499,7 +1509,8 @@ export class Footballers {
       const act = f.kickT !== undefined ? "kick" : f.act === "none" && s.kickT < KICK_HOLD ? "kick" : f.act;
       // La cadence suit la vitesse : le pied posé recule exactement aussi vite que le corps avance, il ne patine pas
       // À reculons, les jambes tournent dans l'autre sens : il fait des pas en arrière au lieu de courir sur place
-      s.phase += ((f.gait ?? 1) < -0.3 ? -1 : 1) * (f.v / ((THIGH + SHIN) * SCALE * strideAmp(Math.min(1.2, f.v / 10)))) * dt;
+      const stride = f.cheer || f.sad ? 1 : strideOf(f);
+      s.phase += ((f.gait ?? 1) < -0.3 ? -1 : 1) * (f.v / ((THIGH + SHIN) * SCALE * strideAmp(Math.min(1.2, f.v / 10)) * stride)) * dt;
       const turn = wrapAngle(f.h - s.lastH) / Math.max(dt, 0.001);
       s.lastH = f.h;
       s.bank += (clamp(turn * f.v * 0.011, -0.3, 0.3) - s.bank) * Math.min(1, dt * 10);
