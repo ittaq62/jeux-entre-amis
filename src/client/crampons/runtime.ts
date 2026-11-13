@@ -8,6 +8,8 @@ import {
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
+  IDLE_ASSIST,
+  IDLE_CARRY,
   steer,
   topSpeed,
   type Act,
@@ -233,6 +235,9 @@ export class MatchRuntime {
   private seenX: number[] = [];
   private seenZ: number[] = [];
   private seenV: number[] = [];
+  /** La dernière fois qu'il a touché au stick ou à un bouton, et si l'ordinateur mène son joueur pendant qu'il n'y touche pas */
+  private inputAtMs = -Infinity;
+  private assisting = false;
   private shownFrames = 0;
   private jank = 0;
   private startedAt = performance.now();
@@ -604,8 +609,9 @@ export class MatchRuntime {
     }
     const p = this.pred;
     p.stam = stam;
-    if (this.receiving || this.autoHolding()) {
-      // Il court seul vers le ballon : on le garde prêt à repartir du bon endroit, à la bonne vitesse
+    if (this.receiving || this.autoHolding() || this.assisting) {
+      // Il court seul vers le ballon (ou l'ordinateur le fait défendre pendant qu'on ne touche à rien) : on le garde prêt
+      // à repartir du bon endroit, à la bonne vitesse
       p.x = x;
       p.z = z;
       p.h = h;
@@ -909,7 +915,21 @@ export class MatchRuntime {
     const p = this.pred;
     // Pendant la fête d'un but aussi : le serveur n'écoute plus les touches, il emmène tout le monde célébrer
     const phase = this.view.phase;
-    const following = this.receiving || autoHold;
+    // Il ne touche plus à rien pendant que l'adversaire attaque (ou longtemps balle au pied) : comme sur le serveur,
+    // c'est l'ordinateur qui mène son joueur, et l'image montre ce que fait le serveur au lieu de l'anticiper
+    if (Math.hypot(pad.sx, pad.sy) > 0.15 || pad.sprint || press || pad.pressed.length > 0 || pad.released.length > 0 || pad.swap)
+      this.inputAtMs = now;
+    const idleMs = now - this.inputAtMs;
+    const keeperActive = this.view.players[active]?.role === "GK";
+    this.assisting =
+      phase === "play" &&
+      active >= 0 &&
+      !keeperActive &&
+      !taking &&
+      (hasBall
+        ? idleMs > IDLE_CARRY * 1000 && now - this.ownerChangedAt > IDLE_CARRY * 1000
+        : (foeHasIt || owner < 0) && idleMs > IDLE_ASSIST * 1000);
+    const following = this.receiving || autoHold || this.assisting;
     const frozen = taking || holding || phase === "halftime" || phase === "over" || phase === "goal" || this.predBlocked || following;
     if (p && active === this.predFor) {
       this.acc += dt;
@@ -1052,6 +1072,7 @@ export class MatchRuntime {
         this.pred &&
         this.predFor === i &&
         !this.receiving &&
+        !this.assisting &&
         !this.autoHolding() &&
         (act === "none" || act === "kick")
       ) {

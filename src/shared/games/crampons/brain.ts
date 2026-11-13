@@ -2,7 +2,18 @@
 
 import { cloneBall, stepBall } from "./ball.ts";
 import { offsideLine, openness, orderKick, pressureOn, runSpaceAhead } from "./kicks.ts";
-import { attackDir, inKeeperHands, opponent, random, releaseFromHands, topSpeed, type Match, type Player, type Team } from "./model.ts";
+import {
+  assisted,
+  attackDir,
+  inKeeperHands,
+  opponent,
+  random,
+  releaseFromHands,
+  topSpeed,
+  type Match,
+  type Player,
+  type Team,
+} from "./model.ts";
 import { BOX_L, clamp, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch } from "./pitch.ts";
 
 /** Ce qui change d'un niveau à l'autre : le temps de réaction, l'œil pour la passe, le pressing */
@@ -221,7 +232,8 @@ export function thinkTeam(m: Match, team: Team) {
   const owner = m.owner >= 0 ? m.players[m.owner]! : null;
   const inPossession = owner ? owner.team === team : m.lastTouch >= 0 && m.players[m.lastTouch]?.team === team;
   const path = m.owner < 0 ? predictFlight(m) : null;
-  const human = (p: Player) => p.human !== null;
+  // Le joueur d'un humain qui ne touche plus à rien en défense : l'ordinateur le fait défendre comme les autres
+  const human = (p: Player) => p.human !== null && !assisted(m, p);
   // Le bloc ne se retourne qu'une fois le ballon gardé un instant : dans une mêlée, chaque contact ne renvoie pas toute
   // l'équipe en sens inverse (des joueurs qui courent dans un sens puis dans l'autre, pour rien)
   if (m.phase !== "play") m.shapeTeam = undefined;
@@ -391,7 +403,8 @@ const TURN_COMMIT_S = 0.8;
  */
 function noAboutTurn(m: Match, team: Team, before: Map<number, [number, number, boolean]>, urgent: Set<number>) {
   for (const p of m.players) {
-    if (p.team !== team || !free(p) || p.human !== null || p.role === "GK" || p.i === m.owner || p.runUntil > m.t) continue;
+    if (p.team !== team || !free(p) || (p.human !== null && !assisted(m, p)) || p.role === "GK" || p.i === m.owner || p.runUntil > m.t)
+      continue;
     const v = Math.hypot(p.vx, p.vz);
     if (v < 2 || urgent.has(p.i)) {
       // Il part d'arrêté, ou il va au ballon : c'est le début d'une course

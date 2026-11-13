@@ -512,6 +512,58 @@ describe("le changement de joueur", () => {
   });
 });
 
+describe("le joueur d'un humain qui ne touche plus à rien", () => {
+  /** L'adversaire part à l'attaque, ballon au pied, vers le but de l'humain ; rend le joueur dirigé par l'humain */
+  function attacked(seed: number) {
+    const m = createMatch(settings({ fouls: false, offside: false }), teams, [{ id: "moi", team: 0 }], seed);
+    toPlay(m);
+    const h = m.humans[0]!;
+    const own = -attackDir(m, 0);
+    const foe = m.players.find((p) => p.team === 1 && p.role === "ST")!;
+    Object.assign(foe, { x: own * 10, z: 4, vx: 0, vz: 0, gotAt: m.t });
+    Object.assign(m.ball, { x: foe.x, y: BALL_R, z: foe.z, vx: 0, vy: 0, vz: 0 });
+    m.owner = foe.i;
+    m.lastTouch = foe.i;
+    m.pass = null;
+    const me = m.players[h.active]!;
+    // Son joueur, loin du jeu et arrêté : l'humain ne le fait plus bouger
+    Object.assign(me, { x: -own * 20, z: -20, vx: 0, vz: 0 });
+    h.switchAt = m.t;
+    // Il vient de lâcher le stick
+    setInput(m, "moi", 0, 0, false, false);
+    h.inputAt = m.t;
+    return { m, h, me };
+  }
+
+  it("quand l'adversaire attaque, son joueur défend tout seul au bout d'un instant", () => {
+    let defended = 0;
+    for (const seed of [5, 9, 13, 21]) {
+      const { m, me } = attacked(seed);
+      const x0 = me.x;
+      const z0 = me.z;
+      // Avant le délai, il ne bouge pas : c'est encore à l'humain
+      for (let i = 0; i < 30; i++) stepMatch(m);
+      expect(Math.hypot(me.x - x0, me.z - z0)).toBeLessThan(0.3);
+      for (let i = 0; i < 90 && m.phase === "play"; i++) stepMatch(m);
+      if (Math.hypot(me.x - x0, me.z - z0) > 4) defended++;
+    }
+    expect(defended).toBe(4);
+  });
+
+  it("il reprend la main dès qu'il touche au stick", () => {
+    const { m, me } = attacked(7);
+    for (let i = 0; i < 90; i++) stepMatch(m);
+    // Il fait courir son joueur vers la ligne de touche : le joueur y va, et plus là où l'ordinateur l'emmenait
+    const toward = me.z > 0 ? -1 : 1;
+    for (let i = 0; i < 20; i++) {
+      setInput(m, "moi", 0, toward, false, false);
+      stepMatch(m);
+    }
+    expect(Math.sign(me.vz)).toBe(toward);
+    expect(Math.abs(me.vz)).toBeGreaterThan(Math.abs(me.vx) * 2);
+  });
+});
+
 describe("les remises en jeu", () => {
   it("à l'engagement et sur un coup franc, l'adversaire reste à 9 m 15 du ballon", () => {
     const m = createMatch(settings(), teams, [{ id: "moi", team: 1 }], 21);
@@ -708,6 +760,7 @@ describe("le gardien", () => {
     me.h = dir > 0 ? 0 : Math.PI;
     m.owner = me.i;
     m.lastTouch = me.i;
+    me.gotAt = m.t;
     for (let i = 0; i < 45; i++) stepMatch(m);
     pushAction(m, "moi", "shot", 0.7, 0, az);
     return play(m, (e) => e.some((x) => x.k === "goal"), 150).length > 0;

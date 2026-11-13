@@ -31,6 +31,7 @@ import {
   type Player,
   type RestartKind,
   type Team,
+  assisted,
 } from "./model.ts";
 import { BOX_HALF, BOX_L, CIRCLE_R, clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch, SIX_L, SPOT_L } from "./pitch.ts";
 
@@ -293,11 +294,13 @@ export function setInput(m: Match, id: string, mx: number, mz: number, sprint: b
   h.mz = l > 1 ? mz / l : mz;
   h.sprint = sprint;
   h.press = press;
+  if (l > 0.15 || sprint || press) h.inputAt = m.t;
 }
 
 export function pushAction(m: Match, id: string, k: HumanAction["k"], p: number, mx: number, mz: number, to = -1) {
   const h = m.humans.find((o) => o.id === id);
   if (!h || h.queue.length > 6) return;
+  h.inputAt = m.t;
   const blind = h.autoAt !== undefined && h.autoFrom !== undefined && m.t - h.autoAt < AUTO_SWITCH_BLIND;
   h.queue.push({ k, p: clamp(p, 0, 1), mx, mz, at: m.t, to: Number.isInteger(to) ? to : -1, by: blind ? h.autoFrom : h.active });
 }
@@ -1051,7 +1054,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
       // Celui à qui la passe est destinée, humain ou non, va à la rencontre du ballon
       [wx, wz, speed] = receiveRun(m, p);
       sprinting = true;
-    } else if (h && m.phase !== "goal" && !stickFromBefore(m, h) && !(r && !r.ready && r.taker === p.i && walksIn(m))) {
+    } else if (h && m.phase !== "goal" && !stickFromBefore(m, h) && !(r && !r.ready && r.taker === p.i && walksIn(m)) && !assisted(m, p)) {
       wx = h.mx;
       wz = h.mz;
       sprinting = h.sprint;
@@ -1610,9 +1613,10 @@ function leaveField(m: Match, p: Player) {
 function carriers(m: Match) {
   if (m.owner < 0 || m.phase !== "play") return;
   const p = m.players[m.owner]!;
-  // Son gardien garde le ballon dans les mains sans que rien ne vienne : l'ordinateur relance à sa place
+  // Son gardien garde le ballon dans les mains sans que rien ne vienne : l'ordinateur relance à sa place. De même pour
+  // un joueur balle au pied que l'humain laisse planté (il ne touche plus à rien) : il le perdrait au premier tacle
   const idleKeeper = p.human !== null && p.act === "hold" && m.t - p.gotAt > HUMAN_KEEPER_WAIT;
-  if ((p.human !== null && !idleKeeper) || p.order || p.act === "down") return;
+  if ((p.human !== null && !idleKeeper && !assisted(m, p)) || p.order || p.act === "down") return;
   if (p.act === "hold" && m.t < p.thinkAt) return;
   if (m.t >= p.thinkAt) {
     p.thinkAt = m.t + levelOf(m).think * (0.7 + random(m) * 0.6);
@@ -1634,7 +1638,7 @@ function defenders(m: Match) {
     }
   }
   for (const p of m.players) {
-    if (p.team === owner.team || p.off || p.human !== null || p.act !== "none" || p.role === "GK") continue;
+    if (p.team === owner.team || p.off || (p.human !== null && !assisted(m, p)) || p.act !== "none" || p.role === "GK") continue;
     const d = Math.hypot(owner.x - p.x, owner.z - p.z);
     const behind = Math.cos(owner.h) * (p.x - owner.x) + Math.sin(owner.h) * (p.z - owner.z) < -0.25;
     const ownBox = inBox(owner.x, owner.z, -attackDir(m, p.team));

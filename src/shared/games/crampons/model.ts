@@ -117,6 +117,31 @@ export interface Human {
   /** La direction qu'il tenait à ce moment-là : tant qu'il ne la change pas, elle ne vaut pas pour le nouveau joueur */
   autoMx?: number;
   autoMz?: number;
+  /** La dernière fois qu'il a touché au stick ou à un bouton */
+  inputAt?: number;
+}
+
+/** Sans toucher à rien ce temps-là pendant que l'adversaire attaque, son joueur défend tout seul */
+export const IDLE_ASSIST = 1.5;
+/** Balle au pied sans toucher à rien ce temps-là : l'ordinateur joue le ballon à sa place (comme pour son gardien) */
+export const IDLE_CARRY = 3;
+
+/**
+ * L'humain ne touche plus à rien et l'adversaire a le ballon (ou personne) : l'ordinateur fait défendre son joueur à sa
+ * place, jusqu'à son prochain geste. Planté là, le défenseur que le jeu vient de lui confier (le mieux placé) laisserait
+ * un trou ; sur un téléphone surtout, on lâche souvent le stick quand le ballon est loin. Balle au pied ou quand son
+ * équipe a le ballon, rien ne change : son joueur ne bouge que s'il le fait bouger.
+ */
+export function assisted(m: Match, p: Player): boolean {
+  if (p.human === null || m.phase !== "play" || p.role === "GK") return false;
+  const h = m.humans.find((o) => o.id === p.human);
+  if (!h) return false;
+  const idle = m.t - (h.inputAt ?? -Infinity);
+  // Balle au pied, il faut l'avoir laissé planté bien plus longtemps (il est parti, ou ne sait pas quoi faire)
+  if (m.owner === p.i) return p.act === "none" && idle > IDLE_CARRY && m.t - p.gotAt > IDLE_CARRY;
+  if (idle < IDLE_ASSIST) return false;
+  const owner = m.owner >= 0 ? m.players[m.owner] : undefined;
+  return !owner || owner.team !== p.team;
 }
 
 /**
