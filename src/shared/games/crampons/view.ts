@@ -95,8 +95,8 @@ export interface CramponsView {
   restart: { kind: RestartKind; team: Team; taker: number; ready: boolean } | null;
   shootout: Shootout | null;
   winner: Team | null;
-  /** Les joueurs expulsés et ceux qui ont un carton */
-  cards: { i: number; yellow: number; off: boolean }[];
+  /** Les joueurs expulsés et ceux qui ont un carton ; `away` : l'exclu a quitté le terrain (avant, on le voit sortir) */
+  cards: { i: number; yellow: number; off: boolean; away?: boolean }[];
   cuts: number;
 }
 
@@ -130,7 +130,9 @@ export function cramponsView(m: Match, cfg: CramponsConfig): CramponsView {
     restart: m.restart ? { kind: m.restart.kind, team: m.restart.team, taker: m.restart.taker, ready: m.restart.ready } : null,
     shootout: m.shootout,
     winner: m.winner,
-    cards: m.players.filter((p) => p.yellow > 0 || p.off).map((p) => ({ i: p.i, yellow: p.yellow, off: p.off })),
+    cards: m.players
+      .filter((p) => p.yellow > 0 || p.off)
+      .map((p) => ({ i: p.i, yellow: p.yellow, off: p.off, away: p.off && !((p.leaveUntil ?? 0) > m.t) })),
     cuts: m.cuts,
   };
 }
@@ -198,6 +200,7 @@ export function stateKey(m: Match): string {
     m.restart?.ready ?? "",
     m.restart?.taker ?? "",
     m.players.filter((p) => p.yellow > 0 || p.off).length,
+    m.players.filter((p) => p.off && !((p.leaveUntil ?? 0) > m.t)).length,
     m.humans.map((h) => h.id).join(","),
     m.shootout?.kicks.map((k) => k.length).join("-") ?? "",
     m.cuts,

@@ -727,6 +727,157 @@ describe("le gardien", () => {
   });
 });
 
+describe("le gardien face à la frappe et à l'attaquant", () => {
+  it("une frappe puissante droit sur lui ne lui passe pas à travers", () => {
+    let stopped = 0;
+    const N = 30;
+    for (let s = 1; s <= N; s++) {
+      const m = createMatch(settings({ offside: false, fouls: false }), teams, [], s * 13);
+      toPlay(m);
+      const gk = m.players.find((p) => p.team === 1 && p.role === "GK")!;
+      const own = -attackDir(m, 1);
+      const shooter = m.players.find((p) => p.team === 0 && p.role === "ST")!;
+      setBall(m, own * (HALF_L - 14), 0.4, 0, own * 27, 1.2, 0, shooter.i);
+      gk.x = own * (HALF_L - 1.5);
+      gk.z = 0;
+      gk.lockedUntil = 0;
+      m.shotAt = m.t;
+      m.shotBy = shooter.i;
+      const ev = play(m, (e) => e.some((x) => x.k === "goal" || x.k === "save"), 90);
+      if (ev.some((x) => x.k === "save")) stopped++;
+    }
+    expect(stopped / N).toBeGreaterThan(0.9);
+  });
+
+  it("il sort au-devant d'un attaquant seul, au lieu de reculer dans son but, et se jette dans ses pieds", () => {
+    let dived = 0;
+    let backedIn = 0;
+    const N = 16;
+    for (let s = 1; s <= N; s++) {
+      // Un humain fonce droit au but, balle au pied, sans tirer
+      const m = createMatch(settings({ offside: false, fouls: false }), teams, [{ id: "moi", team: 0 }], s * 31);
+      toPlay(m);
+      const dir = attackDir(m, 0);
+      const me = m.players[m.humans[0]!.active]!;
+      const gk = m.players.find((p) => p.team === 1 && p.role === "GK")!;
+      for (const p of m.players) {
+        if (p === me || p === gk) continue;
+        p.x = -dir * 30 + (p.i % 5);
+        p.z = (p.i % 7) * 4 - 12;
+      }
+      me.x = dir * (HALF_L - 22);
+      me.z = 2;
+      me.h = dir > 0 ? 0 : Math.PI;
+      m.owner = me.i;
+      m.lastTouch = me.i;
+      let min = Infinity;
+      for (let i = 0; i < 150 && m.owner === me.i && m.phase === "play"; i++) {
+        setInput(m, "moi", dir, -me.z * 0.05, false, false);
+        stepMatch(m);
+        if (gk.act === "dive") {
+          dived++;
+          break;
+        }
+        // À quelle distance de sa ligne il attend l'attaquant, une fois celui-ci dans la surface
+        if (Math.abs(me.x) > HALF_L - 16) min = Math.min(min, Math.abs(dir * HALF_L - gk.x));
+      }
+      if (min < 1) backedIn++;
+    }
+    expect(dived).toBeGreaterThan(N * 0.6);
+    expect(backedIn).toBeLessThan(N * 0.2);
+  });
+});
+
+describe("les arrêts de jeu se préparent sous nos yeux", () => {
+  it("sur une touche, personne ne se téléporte : le tireur va chercher le ballon", () => {
+    const m = createMatch(settings(), teams, [], 4);
+    toPlay(m);
+    setBall(m, 10, BALL_R, HALF_W - 0.5, 0, 0, 9, 3);
+    play(m, (e) => e.some((x) => x.k === "restart"), 60);
+    expect(m.restart?.kind).toBe("throw");
+    let prev = m.players.map((p) => [p.x, p.z]);
+    const cuts = m.cuts;
+    for (let i = 0; i < 300 && m.phase === "restart"; i++) {
+      stepMatch(m);
+      if (m.cuts !== cuts) break;
+      for (const p of m.players) {
+        if (p.off) continue;
+        expect(Math.hypot(p.x - prev[p.i]![0]!, p.z - prev[p.i]![1]!)).toBeLessThan(0.7);
+      }
+      prev = m.players.map((p) => [p.x, p.z]);
+    }
+    expect(m.phase).toBe("play");
+  });
+
+  it("au coup d'envoi, le tireur est au ballon dès le changement de plan", () => {
+    const m = createMatch(settings(), teams, [], 8);
+    const taker = m.players[m.restart!.taker]!;
+    expect(Math.hypot(taker.x, taker.z)).toBeLessThan(0.3);
+  });
+
+  it("après une faute, le jeu s'arrête vraiment avant de reprendre", () => {
+    let measured = 0;
+    for (let s = 1; s <= 6 && measured < 3; s++) {
+      const m = createMatch(settings({ level: 3 }), teams, [], 400 + s);
+      let foulAt = -1;
+      play(
+        m,
+        (e) => {
+          if (e.some((x) => x.k === "foul")) foulAt = m.t;
+          if (foulAt >= 0 && e.some((x) => x.k === "kick")) {
+            expect(m.t - foulAt).toBeGreaterThan(2.5);
+            measured++;
+            return true;
+          }
+          return false;
+        },
+        30 * 60 * 8,
+      );
+    }
+    expect(measured).toBeGreaterThan(0);
+  });
+
+  it("l'exclu quitte le terrain à pied avant de disparaître", () => {
+    let reds = 0;
+    for (let s = 1; s <= 60 && reds < 2; s++) {
+      const m = createMatch(settings(), teams, [], 900 + s);
+      toPlay(m);
+      // Un défenseur déjà averti tacle par derrière le porteur du ballon, en plein élan
+      const p = m.players.find((q) => q.team === 1 && q.role === "CM")!;
+      const victim = m.players.find((q) => q.team === 0 && q.role === "ST")!;
+      const dir = attackDir(m, 0);
+      victim.x = dir * 3;
+      victim.z = 0;
+      victim.h = dir > 0 ? 0 : Math.PI;
+      // Le ballon devant lui : le tacle arrive dans les jambes, pas sur le ballon
+      Object.assign(m.ball, { x: dir * 3.7, y: BALL_R, z: 0, vx: 0, vy: 0, vz: 0 });
+      p.x = victim.x - dir * 0.85;
+      p.z = 0.1;
+      p.yellow = 1;
+      m.owner = victim.i;
+      p.act = "slide";
+      p.actT = 0.5;
+      p.dirX = dir;
+      p.dirZ = 0;
+      p.lockedUntil = 0;
+      const ev = play(m, (e) => e.some((x) => x.k === "card" || x.k === "tackle" || x.k === "foul"), 20);
+      if (!ev.some((x) => x.k === "card" && x.red)) continue;
+      reds++;
+      expect(p.off).toBe(true);
+      // On le voit encore marcher vers la touche, puis il disparaît
+      const gone = () => p.off && !((p.leaveUntil ?? 0) > m.t);
+      expect(gone()).toBe(false);
+      const x0 = p.x;
+      const z0 = p.z;
+      for (let i = 0; i < 30; i++) stepMatch(m);
+      expect(Math.hypot(p.x - x0, p.z - z0)).toBeGreaterThan(0.5);
+      for (let i = 0; i < 30 * 12 && !gone(); i++) stepMatch(m);
+      expect(gone()).toBe(true);
+    }
+    expect(reds).toBeGreaterThan(0);
+  });
+});
+
 describe("la fête d'un but", () => {
   it("le ralenti ne se passe que lorsque tous les humains le demandent", () => {
     const m = createMatch(

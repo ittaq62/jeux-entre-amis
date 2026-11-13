@@ -59,7 +59,7 @@ function goalSide(m: Match, p: Player, x: number, z: number, gap: number): [numb
 }
 
 /** Sa place normale dans le bloc, qui suit le ballon, resserré sans le ballon et ouvert avec */
-function shapeSpot(m: Match, p: Player, inPossession: boolean): [number, number] {
+export function shapeSpot(m: Match, p: Player, inPossession: boolean): [number, number] {
   const dir = attackDir(m, p.team);
   const bx = m.ball.x * dir;
   // Le porteur a le temps de lever la tête : la défense recule pour ne rien laisser dans son dos (peu à peu, selon la
@@ -199,15 +199,19 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
     }
   }
   // Sa place : entre le ballon et le centre du but, plus avancé si le ballon est loin. Un attaquant arrive balle au
-  // pied : il sort à sa rencontre pour lui fermer l'angle
+  // pied : il sort à sa rencontre pour lui fermer l'angle, de plus en plus à mesure qu'il approche, et reste un pas
+  // devant lui (reculer sur sa ligne, c'est lui laisser tout le but et finir dans ses filets) ; de tout près, il se jette
+  // dans ses pieds (voir keeperSmother)
   const dBall = Math.hypot(b.x - line, b.z);
   const carrier = m.owner >= 0 ? m.players[m.owner]! : null;
   const threat = carrier !== null && carrier.team !== p.team && dBall < 22;
-  const out = threat ? clamp(dBall * 0.15, 1.3, 3.2) : clamp(dBall * 0.18, 1.2, 7);
+  const out = threat ? clamp(Math.min(dBall - 1.6, 1.2 + (22 - dBall) * 0.28), 1.2, 6.5) : clamp(dBall * 0.18, 1.2, 7);
   const gx = line + (b.x - line) * (out / Math.max(dBall, 1));
-  const gz = (b.z / Math.max(dBall, 1)) * out * 1.25;
+  const gz = (b.z / Math.max(dBall, 1)) * out * (threat ? 1 : 1.25);
   p.tx = gx;
-  p.tz = clamp(gz, -GOAL_HALF - 1, GOAL_HALF + 1);
+  p.tz = clamp(gz, -GOAL_HALF - (threat ? 3 : 1), GOAL_HALF + (threat ? 3 : 1));
+  // Il se jette au-devant de l'attaquant : vite, sans traîner en chemin
+  p.sprint = threat && Math.hypot(gx - p.x, p.tz - p.z) > 1.5;
 }
 
 /** Les décisions de toute une équipe : à chaque joueur son rôle et sa destination */

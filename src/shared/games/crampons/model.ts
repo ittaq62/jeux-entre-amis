@@ -90,6 +90,8 @@ export interface Player {
   seen?: number;
   /** La force d'un plongeon (de 0,3 à 1) : il se jette juste assez loin pour mettre le ballon dans ses bras */
   diveK?: number;
+  /** Exclu, il quitte le terrain à pied jusqu'à cet instant (on le voit encore), puis il disparaît */
+  leaveUntil?: number;
 }
 
 export interface Human {
