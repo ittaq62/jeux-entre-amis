@@ -40,8 +40,12 @@ def measure(path):
     gap = 0.0
     if len(idx) > 1:
         gap = float(np.diff(idx).max() - 1) * 0.01
+    # La vivacité : de combien la voix monte et descend autour de sa hauteur habituelle (en demi-tons). Une voix qui
+    # récite sur une seule note reste sous un demi-ton ; à l'antenne, on vit sa phrase
+    sd = float(np.std(12 * np.log2(f0 / np.median(f0)))) if len(f0) > 10 else 0.0
     return {
         "dur": len(a) / sr,
+        "sd": sd,
         "f0": float(np.median(f0)) if len(f0) else 0.0,
         "f0_hi": float(np.percentile(f0, 90)) if len(f0) else 0.0,
         # Le niveau des passages parlés, au-dessus du plancher : une réplique criée est plus forte

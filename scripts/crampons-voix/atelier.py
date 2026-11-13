@@ -46,13 +46,17 @@ PROMPTS = {k: model.create_voice_clone_prompt(ref_audio=os.path.join(CASTING, f)
 
 
 def ref_for(who, level):
-    return "k0" if who == "k" else ("c3" if level >= 2 else "c0")
+    return "k1" if who == "k" else ("c3" if level >= 2 else "c0")
 
 
 # La hauteur habituelle de chaque voix posée (mesurée sur les références), et la montée attendue selon l'intensité : une
 # voix qui s'emballe monte d'un tiers, d'une moitié au plus (au-delà, ce n'est plus la même personne, c'est un cri de tête)
 BASE_F0 = {"c": 118.0, "k": 81.0}
 WANT = {0: 1.0, 1: 1.08, 2: 1.35, 3: 1.55}
+# La vivacité attendue (écart-type de la hauteur, en demi-tons) : une réplique dite sur une seule note sonne récitée
+LIVELY = {"c": {0: 3.4, 1: 3.8, 2: 4.2, 3: 4.3}, "k": {0: 3.0, 1: 3.2, 2: 3.4, 3: 3.4}}
+# Au moins ce nombre de prises pour chaque réplique : on garde la plus vivante de celles qui sont bien comprises
+MIN_ROUNDS = int(os.environ.get("PRISES_MIN", "3"))
 
 
 def chain(level):
@@ -74,12 +78,16 @@ def grade(text, who, level, m):
     if m.get("f0"):
         lift = m["f0"] / BASE_F0[who]
         s += 0.25 * min(lift / WANT[level], 1.0) - (0.15 if level <= 1 and lift > 1.45 else 0) - (0.2 if lift > 1.9 else 0)
+    # Une phrase qui vit (sans aller jusqu'au chant : au-delà du double de l'attendu, ça ne s'arrange plus)
+    target = LIVELY[who][min(level, 3)]
+    sd = m.get("sd", 0)
+    s += 0.3 * min(sd / target, 1.0) - (0.15 if sd > target * 2 else 0)
     return s
 
 
-def good(m, g):
-    """Une prise bien comprise et dans le ton : inutile d'en faire d'autres"""
-    return m.get("score", 0) >= 0.93 and g >= m.get("score", 0) + 0.2
+def good(m, g, who, level):
+    """Une prise bien comprise, dans le ton et vivante : inutile d'en faire d'autres"""
+    return m.get("score", 0) >= 0.93 and g >= m.get("score", 0) + 0.2 and m.get("sd", 0) >= 0.8 * LIVELY[who][min(level, 3)]
 
 
 def wanted(k):
@@ -117,7 +125,8 @@ for rnd in range(ROUNDS):
             done += len(lot)
             el = time.time() - t0
             print(f"tour {rnd + 1} : {done}/{len(todo)} ({el / 60:.1f} min)", flush=True)
-    todo = [k for k in todo if not good(best[k][2], best[k][0])]
+    # Les premiers tours repassent tout : on choisit entre plusieurs prises ; ensuite, seulement celles qui ne vont pas
+    todo = list(keys) if rnd + 1 < MIN_ROUNDS else [k for k in todo if not good(best[k][2], best[k][0], LINES[k][1], LINES[k][2])]
     print(f"après le tour {rnd + 1} : {len(todo)} à refaire", flush=True)
 
 report = []
@@ -133,5 +142,5 @@ json.dump(report, open(os.path.join(HERE, name), "w", encoding="utf-8"), ensure_
 low = [r for r in report if r["score"] < 0.8]
 print(f"{len(report)} répliques en {(time.time() - t0) / 60:.0f} min ; {len(low)} mal comprises")
 for r in report[:30]:
-    print(f"{r['grade']:.2f} {r['score']:.2f} f0 {r.get('f0', 0):.0f} {r['key']:30} « {r['text']} » | entendu « {r['heard']} »")
+    print(f"{r['grade']:.2f} {r['score']:.2f} f0 {r.get('f0', 0):.0f} sd {r.get('sd', 0):.1f} {r['key']:30} « {r['text']} » | entendu « {r['heard']} »")
 ver.stdin.close()

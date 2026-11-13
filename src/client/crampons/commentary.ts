@@ -238,8 +238,9 @@ export class Commentator {
           this.say(this.parts(["penalty"]), 3, "c");
           if (chance(0.6)) this.later(this.parts(["penalty-avis"]), 1, "k", 500, 7000);
         } else {
-          // Le jeu s'arrête vraiment : le temps de nommer la faute, et souvent l'avis du consultant
-          if (chance(0.75)) this.say(this.parts(["faute"]), 1, "c");
+          // Le jeu s'arrête vraiment : le temps de dire ce qui a été sifflé (un tacle par derrière, une charge dans le
+          // dos...), et souvent l'avis du consultant
+          if (chance(0.8)) this.say(this.parts([chance(0.75) ? `faute-${e.how ?? "glisse"}` : "faute"]), 1, "c");
           if (chance(0.45)) this.later(this.parts(["faute-avis"]), 0, "k", 450, 4500);
         }
         return;
@@ -422,7 +423,8 @@ export class Commentator {
     else if (lead >= 2) story = this.parts(["but-ecart"]);
     else if (lead < 0) story = this.parts(["but-reduit"]);
     if (story) this.later(story, 3, "c", 150, 6000);
-    const passer = assist >= 0 && players[assist]?.team === team && chance(0.5) ? this.name(assist) : null;
+    // La passe décisive, dite dans le même élan que le but (la voix ne retombe pas d'un coup)
+    const passer = assist >= 0 && players[assist]?.team === team && chance(0.5) ? this.name(assist, "vif") : null;
     if (passer) this.later([...this.parts(["passeur"]), passer], 2, "c", 250, 8000);
     this.later(this.parts(["but-avis"]), 2, "k", 700, 11000);
     this.later(this.scoreline(), 1, "c", 600, 16000);

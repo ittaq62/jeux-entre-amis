@@ -18,6 +18,10 @@ REFS = {
     "c3": ("c3-clone.flac", "Attention, attention ! Il est seul ! Il frappe ! Et c'est au fond ! Quel but !"),
     "k0": ("k0-3.flac", "Je trouve que les deux équipes se neutralisent. Il manque un peu de mouvement devant, et surtout de la "
                        "vitesse dans les transmissions. Il faudra prendre plus de risques."),
+    # Le consultant vif (references.py) : clone de la voix posée qui s'enthousiasme. Cloner la posée donnait des avis dits
+    # presque sur une seule note ; celle-ci, même voix et même hauteur, vit davantage
+    "k1": ("k1-vive.flac", "Ah, ça, c'est très bien joué ! Il prend l'espace, il lève la tête, et il trouve le bon partenaire. "
+                          "Magnifique !"),
 }
 
 # Ce que la voix lirait mal : on l'écrit comme ça se dit

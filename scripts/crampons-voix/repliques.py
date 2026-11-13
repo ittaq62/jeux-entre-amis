@@ -157,7 +157,7 @@ group("bilan-fou", "k", 1, ["Un match fou, bravo aux deux équipes pour le spect
 # Le jeu : la construction, les temps calmes
 # ---------------------------------------------------------------------------------------------------------------------
 group("construction", "c", 0, [
-    "Ça fait tourner.",
+    "Ils font tourner.",
     "On fait circuler le ballon.",
     "Patience dans la construction.",
     "On cherche l'ouverture.",
@@ -166,7 +166,7 @@ group("construction", "c", 0, [
     "Le ballon change de côté.",
     "Bonne conservation du ballon.",
     "Ils cherchent la faille.",
-    "Petites passes, on construit.",
+    "Ils construisent patiemment.",
 ])
 # Le consultant, quand rien ne se passe
 group("analyse", "k", 0, [
@@ -234,7 +234,7 @@ group("dribble", "c", 2, [
     "Il l'élimine !",
     "Quel geste !",
     "Il passe en force !",
-    "Il le met dans le vent !",
+    "Il le laisse sur place !",
     "Superbe dribble !",
 ])
 group("tacle", "c", 1, [
@@ -273,7 +273,7 @@ group("frappe-loin", "c", 2, [
 ])
 group("frappe-forte", "c", 2, [
     "Quelle frappe !",
-    "Une mine !",
+    "Une frappe énorme !",
     "Une frappe terrible !",
     "Il frappe fort !",
 ])
@@ -293,7 +293,7 @@ group("cote-avis", "k", 0, [
     "Trop de précipitation sur ce coup.",
     "Il se dépêche trop, il avait le temps.",
     "C'est dommage, l'action était bien construite.",
-    "Il a voulu mettre trop de force.",
+    "Il a voulu mettre trop de force, c'est dommage !",
     "Il faut cadrer ces frappes-là.",
     "Il y avait mieux à faire, un partenaire était démarqué.",
 ])
@@ -310,21 +310,21 @@ group("parade", "c", 3, [
     "Superbe parade !",
     "Le gardien sort le grand jeu !",
     "Il la sort !",
-    "Quelle claquette !",
+    "Quelle détente !",
     "Le gardien s'interpose !",
     "Exceptionnel, le gardien !",
     "Il détourne !",
 ])
 group("parade-avis", "k", 1, [
     "Énorme réflexe du gardien.",
-    "Le gardien sauve son équipe.",
+    "Ah, le gardien sauve son équipe !",
     "Ça, c'est un arrêt décisif.",
     "Il a été très vif sur sa ligne.",
     "Il a bien fermé l'angle.",
     "Superbe détente, rien à dire.",
 ])
 group("gardien-feu", "k", 2, [
-    "Le gardien est en feu aujourd'hui !",
+    "Le gardien est impérial aujourd'hui !",
     "Il est infranchissable aujourd'hui.",
     "Quel match du gardien, il écœure les attaquants !",
 ])
@@ -338,7 +338,7 @@ group("poteau", "c", 3, [
 group("barre", "c", 3, [
     "Sur la barre !",
     "La transversale ! Quelle occasion !",
-    "La barre ! Ça tremble encore !",
+    "La barre ! Le gardien était battu !",
     "Il trouve la barre !",
     "Oh, la transversale !",
 ])
@@ -358,7 +358,7 @@ group("but", "c", 3, [
     "Il l'a fait !",
     "C'est au fond !",
     "Le ballon est au fond des filets !",
-    "Ça fait trembler les filets !",
+    "Et ça rentre !",
     "Et le but !",
     "Et c'est dedans !",
     "Il marque !",
@@ -366,32 +366,32 @@ group("but", "c", 3, [
     "Oh le but !",
     "Il trompe le gardien !",
 ])
-group("but-ouverture", "c", 2, [
+group("but-ouverture", "c", 3, [
     "Et c'est l'ouverture du score !",
     "Le premier but du match !",
     "Le score est ouvert !",
     "Ça y est, le verrou a sauté !",
 ])
-group("but-egalisation", "c", 2, [
+group("but-egalisation", "c", 3, [
     "Égalisation !",
     "Ils reviennent au score !",
     "Tout est à refaire !",
     "Le match est relancé !",
     "On repart de zéro !",
 ])
-group("but-devant", "c", 2, [
+group("but-devant", "c", 3, [
     "Ils passent devant !",
     "Ils prennent l'avantage !",
     "Le match a basculé !",
     "Et ils mènent !",
 ])
-group("but-ecart", "c", 2, [
+group("but-ecart", "c", 3, [
     "Ils creusent l'écart !",
     "C'est le break !",
     "Ça commence à faire beaucoup !",
     "Ils font le trou !",
 ])
-group("but-reduit", "c", 2, [
+group("but-reduit", "c", 3, [
     "Ils réduisent l'écart !",
     "Ils reviennent à un but !",
     "Il y a encore de l'espoir !",
@@ -403,10 +403,10 @@ group("but-tard", "c", 3, [
     "Au bout du suspense !",
     "Dans le temps additionnel !",
 ])
-group("but-double", "c", 2, ["Il s'offre un doublé !", "Et de deux pour lui !", "Deuxième but pour lui !"])
+group("but-double", "c", 3, ["Il s'offre un doublé !", "Et de deux pour lui !", "Deuxième but pour lui !"])
 group("but-triple", "c", 3, ["Le triplé !", "Un triplé, le coup du chapeau !", "Et de trois pour lui !"])
-group("but-festival", "c", 2, ["C'est un festival !", "Une démonstration !"])
-group("but-penalty", "c", 2, ["Le penalty est transformé !", "Il ne tremble pas, transformé !", "Pas d'erreur, il transforme !"])
+group("but-festival", "c", 3, ["C'est un festival !", "Une démonstration !"])
+group("but-penalty", "c", 3, ["Le penalty est transformé !", "Il ne tremble pas, transformé !", "Pas d'erreur, il transforme !"])
 group("csc", "c", 3, [
     "Contre son camp !",
     "Oh non, il trompe son propre gardien !",
@@ -414,14 +414,14 @@ group("csc", "c", 3, [
     "Quelle malchance, but contre son camp !",
 ])
 # La passe décisive : suivie du nom du passeur
-group("passeur", "c", 1, ["Sur une passe de...", "Bien servi par...", "Et quelle passe de..."])
+group("passeur", "c", 2, ["Sur une passe de...", "Bien servi par...", "Et quelle passe de..."])
 group("but-avis", "k", 2, [
     "Quelle finition, rien à dire.",
     "Le gardien ne pouvait rien.",
     "Superbe mouvement collectif.",
     "Il a été clinique devant le but.",
     "Il l'a placée parfaitement.",
-    "Il a pris sa chance, et il a eu raison.",
+    "Il a pris sa chance... et il a eu raison !",
     "La défense a été trop passive sur ce coup.",
     "C'est le fruit d'une belle pression.",
     "Il a gardé son sang-froid, chapeau.",
@@ -445,6 +445,29 @@ group("faute", "c", 1, [
     "Il l'a accroché.",
     "Faute, coup franc.",
     "Il est fauché !",
+])
+group("faute-glisse", "c", 1, [
+    "Tacle glissé, mais il n'a pas touché le ballon.",
+    "Il arrive en glissade, et c'est faute.",
+    "Tacle glissé en retard, l'arbitre siffle.",
+    "Il se jette, mais il prend le joueur.",
+])
+group("faute-derriere", "c", 2, [
+    "Tacle par derrière, l'arbitre siffle tout de suite !",
+    "Il le fauche par derrière !",
+    "Par derrière, c'est dangereux, ça !",
+    "Il arrive par derrière, il n'avait aucune chance de jouer le ballon !",
+])
+group("faute-charge", "c", 1, [
+    "Il le pousse dans le dos, faute.",
+    "Charge dans le dos, l'arbitre siffle.",
+    "Il le bouscule par derrière, coup franc.",
+    "Il y va avec l'épaule dans le dos, c'est sifflé.",
+])
+group("faute-dernier", "c", 2, [
+    "Il le fait tomber alors qu'il filait au but !",
+    "Le dernier défenseur le stoppe en faute !",
+    "Il était seul face au but, et il est fauché !",
 ])
 group("faute-avis", "k", 0, [
     "Il arrive trop tard.",
@@ -575,7 +598,7 @@ for club, art in CLUBS.items():
     add(f"club-{s}-cote2", f"de l'autre, {art} !", "c", 1)
     add(f"club-{s}-pour", f"pour {art}.", "c", 0)
     add(f"club-{s}-victoire", f"Victoire {de(art)} !", "c", 3)
-    add(f"club-{s}-devant", f"{cap(art)} passe devant !" if not art.startswith("les ") else f"{cap(art)} passent devant !", "c", 2)
+    add(f"club-{s}-devant", f"{cap(art)} passe devant !" if not art.startswith("les ") else f"{cap(art)} passent devant !", "c", 3)
 
 if __name__ == "__main__":
     from collections import Counter
