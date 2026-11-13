@@ -259,6 +259,40 @@ describe("un match", () => {
     expect(scored / kicks).toBeLessThan(0.88);
   });
 
+  it("au penalty, chacun se place comme dans un vrai match : hors de la surface et de l'arc, tourné vers le but", () => {
+    for (const side of [11, 7, 5] as const) {
+      const m = createMatch(settings({ side }), teams, [], 12 + side);
+      toPlay(m);
+      // Un tacle glissé par derrière dans la surface
+      const dir = attackDir(m, 0);
+      const victim = m.players.find((p) => p.team === 0 && p.role !== "GK")!;
+      const foul = m.players.find((p) => p.team === 1 && p.role !== "GK")!;
+      Object.assign(victim, { x: dir * 44, z: 3, h: dir > 0 ? 0 : Math.PI, act: "none" });
+      Object.assign(foul, { x: dir * 43.4, z: 3, act: "slide", actT: 0.2, dirX: dir, dirZ: 0, lockedUntil: 0 });
+      m.owner = victim.i;
+      Object.assign(m.ball, { x: dir * 49, z: 3 });
+      let penalty = false;
+      for (let i = 0; i < 10 && !penalty; i++) penalty = stepMatch(m).some((e) => e.k === "foul" && e.penalty);
+      expect(penalty).toBe(true);
+      for (let i = 0; i < 400 && !m.restart?.ready; i++) stepMatch(m);
+      expect(m.restart).toMatchObject({ kind: "penalty", ready: true });
+      const spotX = dir * (HALF_L - 11);
+      const others = m.players.filter((p) => !p.off && p.role !== "GK" && p.i !== m.restart!.taker);
+      for (const p of others) {
+        expect(Math.abs(p.x) < HALF_L - 16.5 || Math.abs(p.z) > 20.16 || p.x * dir < 0).toBe(true);
+        expect(Math.hypot(p.x - spotX, p.z)).toBeGreaterThan(9.1);
+        // Tourné vers le point de penalty
+        const look = Math.cos(p.h) * (spotX - p.x) + Math.sin(p.h) * -p.z;
+        expect(look).toBeGreaterThan(0);
+      }
+      // Des deux équipes, au bord de la surface pour suivre la frappe
+      for (const team of [0, 1]) {
+        const ready = others.filter((p) => p.team === team && Math.abs(p.x * dir - (HALF_L - 16.5)) < 3);
+        expect(ready.length).toBeGreaterThanOrEqual(side === 5 ? 2 : 3);
+      }
+    }
+  });
+
   it("une équipe garde toujours assez de joueurs, même avec beaucoup de cartons", () => {
     const m = createMatch(settings({ side: 5 }), teams, [], 4);
     toPlay(m);

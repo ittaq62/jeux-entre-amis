@@ -605,16 +605,7 @@ function setUpRestart(m: Match) {
     stand(taker, r.x - dir * 1.3, r.z);
   } else if (r.kind === "penalty") {
     m.cuts++;
-    const outside = dir * (HALF_L - BOX_L - 2);
-    [...ours, ...theirs].forEach((p, n) => {
-      const z = -14 + n * 1.45;
-      // Hors de l'arc aussi : à 9 m 15 du point
-      const x = outside - dir * (n % 3) * 1.6;
-      const sx = dir * (HALF_L - SPOT_L);
-      const d = Math.hypot(x - sx, z);
-      const k = d < CIRCLE_R + 0.6 ? (CIRCLE_R + 0.6) / Math.max(d, 0.1) : 1;
-      stand(p, sx + (x - sx) * k, z * k);
-    });
+    placeForPenalty(ours, theirs, dir);
     const gk = keeperOf(m, foes);
     if (gk) stand(gk, dir * (HALF_L - 0.1), 0);
     taker.h = dir > 0 ? 0 : Math.PI;
@@ -649,6 +640,41 @@ function setUpRestart(m: Match) {
   }
   keepDistance(m);
   syncRestartHuman(m);
+}
+
+/**
+ * Un penalty, comme dans un vrai match : au bord de la surface, de part et d'autre de l'arc, les attaquants les plus
+ * avancés mêlés aux défenseurs, prêts à suivre la frappe ; un défenseur en haut de l'arc pour dégager ; les défenseurs
+ * de l'équipe qui tire restent en arrière, et les avants de l'autre attendent la contre-attaque vers le milieu.
+ * Tout le monde hors de la surface, hors de l'arc, et tourné vers le but.
+ */
+function placeForPenalty(ours: Player[], theirs: Player[], dir: number) {
+  // Les plus près du but adverse d'abord : ce sont eux qui suivent la frappe (ou qui la défendent)
+  const byDepth = (list: Player[]) => [...list].sort((a, b) => b.x * dir - a.x * dir);
+  const attackers = byDepth(ours);
+  const defenders = byDepth(theirs);
+  const edge = dir * (HALF_L - BOX_L - 0.9);
+  const spotX = dir * (HALF_L - SPOT_L);
+  // Au bord de la surface, de chaque côté de l'arc, en s'écartant : un défenseur, un attaquant, un défenseur...
+  const rush = Math.min(4, attackers.length);
+  const block = Math.min(4, defenders.length);
+  const slot = (k: number, first: number): [number, number] => {
+    const side = k % 2 === 0 ? 1 : -1;
+    const rank = Math.floor(k / 2) * 2 + first;
+    return [edge - dir * (rank % 2) * 0.5, side * (7.8 + rank * 1.75)];
+  };
+  for (let k = 0; k < block; k++) stand(defenders[k]!, ...slot(k, 0));
+  for (let k = 0; k < rush; k++) stand(attackers[k]!, ...slot(k, 1));
+  // Un défenseur en haut de l'arc, pour le dégagement, et un attaquant un peu derrière, pour la deuxième balle
+  const top = dir * (HALF_L - SPOT_L - CIRCLE_R - 0.8);
+  if (defenders[block]) stand(defenders[block]!, top, 0.6);
+  if (attackers[rush]) stand(attackers[rush]!, top - dir * 4, -3.5);
+  // Le reste de l'équipe qui tire garde l'arrière ; les avants de l'autre attendent la contre-attaque vers le milieu
+  const backs = attackers.slice(rush + 1);
+  backs.forEach((p, n) => stand(p, dir * (14 - (n % 2) * 5), (n - (backs.length - 1) / 2) * 11));
+  const outs = defenders.slice(block + 1);
+  outs.forEach((p, n) => stand(p, dir * (3 + (n % 2) * 4), (n - (outs.length - 1) / 2) * 13));
+  for (const p of [...ours, ...theirs]) p.h = Math.atan2(-p.z, spotX - p.x);
 }
 
 /**
