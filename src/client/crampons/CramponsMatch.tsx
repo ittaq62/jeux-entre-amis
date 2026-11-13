@@ -494,7 +494,7 @@ export function CramponsMatch({
       )}
 
       {touch && seatId !== null && !over && (
-        <div className="cr-pad">
+        <div className={`cr-pad ${cinema === "scorer" || cinema === "replay" ? "is-cinema" : ""}`}>
           <Joystick runtime={runtime} />
           <button
             className="cr-sprint"

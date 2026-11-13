@@ -542,6 +542,8 @@ export class CramponsScene {
   }
 
   private lastShot: Shot["kind"] | null = null;
+  /** Sur un téléphone, jusqu'où la caméra regarde devant le jeu (moins sur une faute) */
+  private ahead = 13;
   private cinemaShot(dt: number, frame: SceneFrame, shot: Shot) {
     const b = frame.ball;
     this.ring.visible = false;
@@ -623,14 +625,16 @@ export class CramponsScene {
     this.zoom += (goalZoom - this.zoom) * (snap ? 1 : 1 - Math.exp(-dt * (close > 0 ? 2.2 : 1.4)));
 
     if (this.portrait) {
-      // Sur un téléphone tenu droit : on regarde dans la longueur, le but adverse en haut de l'écran
+      // Sur un téléphone tenu droit : on regarde dans la longueur, le but adverse en haut de l'écran. Sur une faute, la
+      // caméra centre l'action, au lieu de la laisser en bas de l'écran sous les boutons
       const s = frame.attackSide;
       const dist = 30 * this.zoom;
       const height = 34 * this.zoom;
       const lx = clamp(this.cx, -HALF_L - 2, HALF_L + 2);
       const lz = clamp(this.cz, -HALF_W + 8, HALF_W - 8);
+      this.ahead += (13 * (1 - close * 0.9) - this.ahead) * (snap ? 1 : 1 - Math.exp(-dt * 2.2));
       this.camera.position.set(lx - s * dist, height, lz);
-      this.camera.lookAt(lx + s * 13, 0, lz);
+      this.camera.lookAt(lx + s * this.ahead, 0, lz);
       return;
     }
     // À la télévision : depuis la tribune, plus bas, plus près du jeu
