@@ -59,56 +59,81 @@ const STICK_SPRINT = STICK_R * 1.45;
  */
 function Stick({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) {
   const [live, setLive] = useState<{ ox: number; oy: number; kx: number; ky: number; sprint: boolean } | null>(null);
-  const origin = useRef<[number, number] | null>(null);
-  const finger = useRef<number | null>(null);
   const zone = useRef<HTMLDivElement>(null);
-  const move = (x: number, y: number) => {
-    const o = origin.current;
-    const z = zone.current?.getBoundingClientRect();
-    if (!o || !z) return;
-    const dx = x - o[0];
-    const dy = y - o[1];
-    const l = Math.hypot(dx, dy);
-    const k = l > STICK_R ? STICK_R / l : 1;
-    const sprint = l > STICK_SPRINT;
-    const t = runtime.current?.pad.touch;
-    if (t) {
-      t.sx = (dx * k) / STICK_R;
-      t.sy = (dy * k) / STICK_R;
-      t.sprint = sprint;
-    }
-    // Le rond suit le doigt jusqu'au grand cercle, pour qu'on voie où commence le sprint
-    const shown = l > 0 ? Math.min(l, STICK_SPRINT + 4) / l : 0;
-    setLive({ ox: o[0] - z.left, oy: o[1] - z.top, kx: dx * shown, ky: dy * shown, sprint });
-  };
-  const end = (id: number) => {
-    if (id !== finger.current) return;
-    finger.current = null;
-    origin.current = null;
-    setLive(null);
-    const t = runtime.current?.pad.touch;
-    if (t) {
-      t.sx = 0;
-      t.sy = 0;
-      t.sprint = false;
-    }
-  };
+  useEffect(() => {
+    const el = zone.current;
+    if (!el) return;
+    /** Le doigt suivi, et là où il s'est posé */
+    let finger: { id: number; x: number; y: number } | null = null;
+    const apply = (x: number, y: number) => {
+      if (!finger) return;
+      const z = el.getBoundingClientRect();
+      const dx = x - finger.x;
+      const dy = y - finger.y;
+      const l = Math.hypot(dx, dy);
+      const k = l > STICK_R ? STICK_R / l : 1;
+      const sprint = l > STICK_SPRINT;
+      const t = runtime.current?.pad.touch;
+      if (t) {
+        t.sx = (dx * k) / STICK_R;
+        t.sy = (dy * k) / STICK_R;
+        t.sprint = sprint;
+      }
+      // Le rond suit le doigt jusqu'au grand cercle, pour qu'on voie où commence le sprint
+      const shown = l > 0 ? Math.min(l, STICK_SPRINT + 4) / l : 0;
+      setLive({ ox: finger.x - z.left, oy: finger.y - z.top, kx: dx * shown, ky: dy * shown, sprint });
+    };
+    const release = () => {
+      finger = null;
+      setLive(null);
+      const t = runtime.current?.pad.touch;
+      if (t) {
+        t.sx = 0;
+        t.sy = 0;
+        t.sprint = false;
+      }
+    };
+    const down = (e: PointerEvent) => {
+      e.preventDefault();
+      // Un nouveau pouce prend toujours la main : un doigt dont on n'aurait pas vu le départ ne bloque jamais le stick
+      finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        // Le doigt est suivi sur toute la fenêtre de toute façon
+      }
+      apply(e.clientX, e.clientY);
+    };
+    // Suivi sur toute la fenêtre : le pouce qui sort de la zone (poussé à fond vers un coin) garde le stick
+    const move = (e: PointerEvent) => {
+      if (finger && e.pointerId === finger.id) apply(e.clientX, e.clientY);
+    };
+    const up = (e: PointerEvent) => {
+      if (finger && e.pointerId === finger.id) release();
+    };
+    // Sur iPhone, un pouce immobile ou près du bord pouvait être pris pour un geste du téléphone (appui long, retour en
+    // arrière) qui annulait le toucher : on garde ces gestes pour nous
+    const keep = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    el.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    el.addEventListener("touchstart", keep, { passive: false });
+    el.addEventListener("touchmove", keep, { passive: false });
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      el.removeEventListener("touchstart", keep);
+      el.removeEventListener("touchmove", keep);
+      release();
+    };
+  }, [runtime]);
   return (
-    <div
-      ref={zone}
-      className="cr-stickzone"
-      onPointerDown={(e) => {
-        e.preventDefault();
-        if (finger.current !== null) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        finger.current = e.pointerId;
-        origin.current = [e.clientX, e.clientY];
-        move(e.clientX, e.clientY);
-      }}
-      onPointerMove={(e) => e.pointerId === finger.current && move(e.clientX, e.clientY)}
-      onPointerUp={(e) => end(e.pointerId)}
-      onPointerCancel={(e) => end(e.pointerId)}
-    >
+    <div ref={zone} className="cr-stickzone">
       <div
         className={`cr-stick ${live ? "is-live" : ""} ${live?.sprint ? "is-sprint" : ""}`}
         style={live ? { left: live.ox, top: live.oy } : undefined}
@@ -119,6 +144,23 @@ function Stick({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) 
       </div>
     </div>
   );
+}
+
+/** Garde pour nous les gestes du doigt sur un bouton (appui long, double appui qui zoome) */
+function useTouchKept(ref: { current: HTMLElement | null }) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const keep = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    el.addEventListener("touchstart", keep, { passive: false });
+    el.addEventListener("touchmove", keep, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", keep);
+      el.removeEventListener("touchmove", keep);
+    };
+  }, [ref]);
 }
 
 function PadButton({
@@ -137,6 +179,10 @@ function PadButton({
 }) {
   const [long, setLong] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+  /** Le doigt qui tient le bouton : il le relâche où qu'il se lève, même ailleurs sur l'écran */
+  const finger = useRef<number | null>(null);
+  useTouchKept(ref);
   const set = (on: boolean) => {
     runtime.current?.pad.touchButton(button, on);
     if (timer.current) clearTimeout(timer.current);
@@ -144,22 +190,38 @@ function PadButton({
     if (on && holdLabel) timer.current = setTimeout(() => setLong(true), THROUGH_HOLD_MS);
     else setLong(false);
   };
-  useEffect(
-    () => () => {
+  const setNow = useRef(set);
+  setNow.current = set;
+  useEffect(() => {
+    const up = (e: PointerEvent) => {
+      if (finger.current !== e.pointerId) return;
+      finger.current = null;
+      setNow.current(false);
+    };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+      if (finger.current !== null) runtime.current?.pad.touchButton(button, false);
+      finger.current = null;
+    };
+  }, [runtime, button]);
   return (
     <button
+      ref={ref}
       className={`cr-btn is-${tone} ${long ? "is-long" : ""}`}
       onPointerDown={(e) => {
         e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
+        finger.current = e.pointerId;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Le lever du doigt est suivi sur toute la fenêtre
+        }
         set(true);
       }}
-      onPointerUp={() => set(false)}
-      onPointerCancel={() => set(false)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {long && holdLabel ? holdLabel : label}
@@ -169,8 +231,11 @@ function PadButton({
 
 /** Changer de joueur, sans le ballon : d'un seul appui */
 function SwapButton({ runtime }: { runtime: MutableRefObject<MatchRuntime | null> }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useTouchKept(ref);
   return (
     <button
+      ref={ref}
       className="cr-btn is-swap"
       onPointerDown={(e) => {
         e.preventDefault();
