@@ -14,6 +14,7 @@ import {
 import { Avatar } from "../components/Avatar.tsx";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { teamRulesText } from "../capitale/teamsUi.tsx";
 
 interface Props {
   view: TourView;
@@ -24,12 +25,14 @@ interface Props {
 
 /**
  * Les règles du jeu tiré : une carte qui se retourne (de base ou au hasard), ou le vote tant qu'il est ouvert. Au UNO,
- * « pas de UNO d'avance » se rappelle dessous : un réglage à part, ni tiré ni voté avec les règles.
+ * « pas de UNO d'avance » se rappelle dessous, à Capitale en équipes les règles d'équipe : des réglages à part, ni tirés
+ * ni votés avec les règles.
  */
 export function TourRules({ view, send, revealed }: Props) {
   const next = view.next;
   if (!next) return null;
   const fixed = revealed && next.game === "uno" && view.settings.noEarlyUno;
+  const capTeams = revealed && next.game === "capitale" && view.settings.teams && view.settings.capitaleTeam;
   return (
     <>
       <RulesOf view={view} send={send} revealed={revealed} />
@@ -37,6 +40,11 @@ export function TourRules({ view, send, revealed }: Props) {
         <p className="rules-fixed">
           <strong>Et pas de UNO d'avance</strong> : on le crie avec sa dernière carte seule en main, plus avec deux. Réglé à part par
           l'hôte.
+        </p>
+      )}
+      {capTeams && (
+        <p className="rules-fixed">
+          <strong>En équipes</strong> : {teamRulesText({ settings: view.settings.capitaleTeam }).join(", ")}. Réglé à part par l'hôte.
         </p>
       )}
     </>

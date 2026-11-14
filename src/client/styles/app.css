@@ -3560,3 +3560,18 @@ h3 .hint {
   height: 8px;
   border-radius: 50%;
 }
+
+/* Un sous-titre dans un réglage du salon (les règles d'équipe de Capitale) */
+.field-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.tour-cap-team {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}

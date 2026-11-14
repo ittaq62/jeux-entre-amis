@@ -1,5 +1,6 @@
 import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import {
+  DEFAULT_CAPITALE_TEAM,
   END_CHOICES,
   gameModifiers,
   gameVariants,
@@ -21,6 +22,7 @@ import {
 import { Check, Options } from "../components/ui.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { TeamsPanel } from "../game/TeamsPanel.tsx";
+import { TeamRules } from "../capitale/TeamRules.tsx";
 import { GameTicket, MusicToggle, ReadyVote } from "./TourParts.tsx";
 
 interface Props {
@@ -341,6 +343,20 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
               Points à chaque jeu : {TOUR_POINTS.map((p, i) => `${i + 1}${i === 0 ? "er" : "e"} ${p}`).join(", ")}, puis 1 point.
               {s.teams && ` Les ${TOUR_TEAMS[0]} et les ${TOUR_TEAMS[1]} additionnent les points de leurs joueurs.`}
             </p>
+            {s.teams && s.games.includes("capitale") && (
+              <div className="tour-cap-team">
+                <span className="field-sub">
+                  <strong>Capitale en équipes</strong> : réglé à part, pour chaque partie de Capitale
+                  {s.rules === "random" ? ", jamais tiré au sort avec les règles" : s.rules === "vote" ? ", hors du vote" : ""} (à 4 joueurs
+                  ou plus, en équipes égales).
+                </span>
+                <TeamRules
+                  s={s.capitaleTeam ?? DEFAULT_CAPITALE_TEAM}
+                  disabled={!isHost}
+                  update={(patch) => update({ capitaleTeam: { ...(s.capitaleTeam ?? DEFAULT_CAPITALE_TEAM), ...patch } })}
+                />
+              </div>
+            )}
           </div>
 
           <div className="field">
