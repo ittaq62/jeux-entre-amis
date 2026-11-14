@@ -50,6 +50,15 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
     ["jeux", "Jeu par jeu"],
   ];
   const pane = (id: typeof tab) => `finale-pane ${tab === id ? "is-active" : ""}`;
+  const report = (
+    <ReportButton
+      game="tour"
+      variant={`La Tournée, ${games.length} jeu${games.length > 1 ? "x" : ""}${view.settings.teams ? ", en équipes" : ""}`}
+      code={null}
+      tour={view.code}
+      role={view.you.role === "player" ? "player" : view.you.role === "spectator" ? "watcher" : null}
+    />
+  );
 
   // Tout tient sur l'écran : un classement trop long défile dans son cadre, et l'on y voit d'emblée sa propre ligne
   const standingsBox = useRef<HTMLDivElement>(null);
@@ -168,16 +177,12 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
           <button className="btn btn-lg" onClick={onLeave}>
             Retour à l'accueil
           </button>
+          {report}
         </div>
-        <p className="hint center-text tour-finale-note">
+        {/* Au téléphone, les deux boutons prennent la largeur : « Signaler un problème » passe sous la note */}
+        <p className={`hint center-text tour-finale-note ${view.you.isHost ? "is-report-only" : ""}`}>
           {!view.you.isHost && <span>L'hôte peut relancer une tournée avec la même bande.</span>}
-          <ReportButton
-            game="tour"
-            variant={`La Tournée, ${games.length} jeu${games.length > 1 ? "x" : ""}${view.settings.teams ? ", en équipes" : ""}`}
-            code={null}
-            tour={view.code}
-            role={view.you.role === "player" ? "player" : view.you.role === "spectator" ? "watcher" : null}
-          />
+          {report}
         </p>
       </main>
     </div>

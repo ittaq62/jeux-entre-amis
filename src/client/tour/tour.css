@@ -968,6 +968,25 @@
   margin: -4px 0;
 }
 
+/* « Signaler un problème » : à côté des boutons, sauf au téléphone où il passe sous la note */
+.tour-finale-actions .report-link {
+  align-self: center;
+  margin: 0 0 0 -2px;
+}
+
+@media (min-width: 521px) {
+  .tour-finale-note .report-link,
+  .tour-finale-note.is-report-only {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .tour-finale-actions .report-link {
+    display: none;
+  }
+}
+
 /*
   Toute la fin de tournée tient sur l'écran, les boutons en bas, sans défiler : la page prend la hauteur de l'écran,
   et ce qui est long (un classement à huit, beaucoup de jeux) défile dans son propre cadre. Les blocs gardent leur
