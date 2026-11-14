@@ -22,10 +22,29 @@ interface Props {
   revealed: boolean;
 }
 
-/** Les règles du jeu tiré : une carte qui se retourne (de base ou au hasard), ou le vote tant qu'il est ouvert. */
+/**
+ * Les règles du jeu tiré : une carte qui se retourne (de base ou au hasard), ou le vote tant qu'il est ouvert. Au UNO,
+ * « pas de UNO d'avance » se rappelle dessous : un réglage à part, ni tiré ni voté avec les règles.
+ */
 export function TourRules({ view, send, revealed }: Props) {
   const next = view.next;
   if (!next) return null;
+  const fixed = revealed && next.game === "uno" && view.settings.noEarlyUno;
+  return (
+    <>
+      <RulesOf view={view} send={send} revealed={revealed} />
+      {fixed && (
+        <p className="rules-fixed">
+          <strong>Et pas de UNO d'avance</strong> : on le crie avec sa dernière carte seule en main, plus avec deux. Réglé à part par
+          l'hôte.
+        </p>
+      )}
+    </>
+  );
+}
+
+function RulesOf({ view, send, revealed }: Props) {
+  const next = view.next!;
   const mode = view.settings.rules;
   if (mode === "base") {
     // Rien à deviner : la carte s'affiche une fois le jeu connu

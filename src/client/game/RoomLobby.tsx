@@ -14,12 +14,20 @@ interface LobbyProps {
   onBackToGame?: () => void;
 }
 
-const HOUSE_RULES: { key: "stacking" | "drawUntilPlayable" | "sevenZero" | "jumpIn"; label: string; desc: string }[] = [
+const HOUSE_RULES: { key: "stacking" | "drawUntilPlayable" | "sevenZero" | "jumpIn" | "noEarlyUno"; label: string; desc: string }[] = [
   { key: "stacking", label: "Cumul des +2 et +4", desc: "On renvoie la pénalité au suivant ; le dernier ramasse tout." },
   { key: "drawUntilPlayable", label: "Piocher jusqu'à pouvoir jouer", desc: "On pioche tant qu'aucune carte ne peut être posée." },
   { key: "sevenZero", label: "Règle du 7-0", desc: "Un 7 échange ta main avec celle de ton choix, un 0 fait tourner toutes les mains." },
   { key: "jumpIn", label: "Interception", desc: "Une carte strictement identique peut être jouée hors de son tour." },
+  {
+    key: "noEarlyUno",
+    label: "Pas de UNO d'avance",
+    desc: "On crie UNO avec sa dernière carte seule en main, juste après avoir posé l'avant-dernière : plus avec deux cartes. Classique comme No Mercy.",
+  },
 ];
+
+/** Les règles que No Mercy impose ; les autres restent au choix */
+const MERCY_FREE = new Set(["jumpIn", "noEarlyUno"]);
 
 /** Le salon d'une table de UNO : le salon commun et les règles du UNO. */
 export function RoomLobby({ room, send, ...rest }: LobbyProps) {
@@ -73,8 +81,8 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
 
           <div className="rule-list">
             {HOUSE_RULES.map((r) => {
-              const forced = rules.noMercy && r.key !== "jumpIn";
-              const checked = forced || s[r.key];
+              const forced = rules.noMercy && !MERCY_FREE.has(r.key);
+              const checked = forced || Boolean(s[r.key]);
               const toggle = () => isHost && !forced && update({ [r.key]: !s[r.key] });
               return (
                 <div key={r.key} className={`rule-row ${forced ? "is-forced" : ""}`} onClick={toggle}>

@@ -263,6 +263,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     </div>
   );
 
+  // Pas de UNO d'avance : avec deux cartes, le bouton reste éteint et dit quand il servira
+  const unoLater = !rules.earlyUno && myTurn && g.hand.length === 2 && !myPlayer?.declaredUno && !g.canUno;
+  const unoHelp = rules.earlyUno
+    ? "Crier UNO"
+    : "Crier UNO : pas de UNO d'avance, seulement une fois ta carte posée, avec ta dernière carte";
   const unoSide = (
     <div className="my-side my-side-right">
       <motion.button
@@ -270,10 +275,24 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
         disabled={!g.canUno}
         onClick={() => act({ type: "uno" })}
         whileTap={{ scale: 0.88 }}
-        aria-label="Crier UNO"
+        aria-label={unoHelp}
+        title={rules.earlyUno ? undefined : "Pas de UNO d'avance : crie-le une fois ta carte posée"}
       >
         <Chip label="UNO" tone="red" size={compact ? 52 : 60} muted={!g.canUno} />
       </motion.button>
+      <AnimatePresence>
+        {unoLater && (
+          <motion.span
+            className="uno-later"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            aria-hidden="true"
+          >
+            après ta carte
+          </motion.span>
+        )}
+      </AnimatePresence>
     </div>
   );
 
@@ -289,6 +308,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             <span className="table-code">{room.code}</span>
             <span className="hint">
               {g.settings.variant === "nomercy" ? "No Mercy" : "Classique"}
+              {rules.earlyUno ? "" : " · sans UNO d'avance"}
               {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
             </span>
           </div>

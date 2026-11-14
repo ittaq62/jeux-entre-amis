@@ -243,6 +243,25 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             <p className="hint" style={{ margin: 0 }}>
               {RULES_MODES[s.rules].hint}
             </p>
+            {s.games.includes("uno") && (
+              <div className="rule-list">
+                <div className="rule-row" onClick={() => isHost && update({ noEarlyUno: !s.noEarlyUno })}>
+                  <Check label="UNO : pas de UNO d'avance" checked={Boolean(s.noEarlyUno)} disabled={!isHost} onChange={() => {}} />
+                  <span>
+                    <strong>UNO : pas de UNO d'avance</strong>
+                    <span className="hint">
+                      On crie UNO avec sa dernière carte seule en main, plus avec deux. Un réglage à part : il vaut pour chaque partie de
+                      UNO, Classique comme No Mercy
+                      {s.rules === "random"
+                        ? ", et n'est jamais tiré au sort avec les règles."
+                        : s.rules === "vote"
+                          ? ", hors du vote."
+                          : "."}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            )}
             {s.rules !== "base" && (
               <ul className="variant-list">
                 {s.games.map((g) => (
