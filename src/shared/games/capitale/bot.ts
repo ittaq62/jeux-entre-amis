@@ -1,5 +1,8 @@
 // Capitale : les bots. Facile achète un peu au hasard et garde peu de réserve ; Moyen est raisonnable ;
 // Fort valorise les groupes complets, bloque ceux des autres, bâtit vite, pose ses nuisances chez le plus riche et négocie.
+// En équipes, chacun joue pour son camp : pas de nuisance ni de surenchère chez un coéquipier, un titre donné quand il
+// complète son quartier, de l'argent quand il est en dette. Au Monopole, tous visent les titres qui font gagner leur camp
+// et bloquent ceux qui feraient gagner un adversaire.
 // Aucune décision ne tire sur le hasard de la partie : le doute de Facile vient d'un calcul sur l'état.
 
 import {
@@ -16,24 +19,34 @@ import {
   STATIONS,
   unmortgageCost,
   upgradeCost,
+  UTILITIES,
   type SpecialKind,
 } from "./board.ts";
 import {
+  allies,
   canMortgage,
   canPlaceSpecial,
   canRaze,
   canSell,
   canUpgrade,
   districtSpecials,
+  giftProblem,
   hasStadium,
   levelOf,
   liquidity,
+  monopolyOf,
+  monopolyProgress,
   ownedBy,
   ownSpecial,
   ownsGroup,
   playerOf,
+  rentDue,
   rentFor,
+  sideOf,
   specialUsed,
+  teammates,
+  teamPlay,
+  teamRules,
   tradeProblem,
   type BotLevel,
   type CapitaleAction,
@@ -50,15 +63,55 @@ function doubt(s: CapitaleState, salt: number): number {
   return (h % 1000) / 1000;
 }
 
-/** Le pire loyer qu'on risque sur le plateau : on garde de quoi le payer */
+/** Le pire loyer qu'on risque sur le plateau (rien chez soi, le tarif d'équipe chez un coéquipier) : on garde de quoi le payer */
 function danger(s: CapitaleState, playerId: string): number {
   let worst = 0;
-  for (const i of BUYABLE) {
-    const d = s.deeds[i]!;
-    if (!d.owner || d.owner === playerId) continue;
-    worst = Math.max(worst, rentFor(s, i, { diceTotal: 8 }));
-  }
+  for (const i of BUYABLE) worst = Math.max(worst, rentDue(s, i, playerId, { diceTotal: 8 }));
   return worst;
+}
+
+/** Le propriétaire d'une case est-il de son camp (soi ou un coéquipier) ? */
+const ours = (s: CapitaleState, playerId: string, i: number) => {
+  const o = s.deeds[i]?.owner;
+  return Boolean(o && allies(s, o, playerId));
+};
+/** … ou d'un camp adverse ? */
+const theirs = (s: CapitaleState, playerId: string, i: number) => {
+  const o = s.deeds[i]?.owner;
+  return Boolean(o && !allies(s, o, playerId));
+};
+
+/** Les camps adverses encore en jeu, chacun représenté par un de ses joueurs */
+function rivalSides(s: CapitaleState, playerId: string): string[] {
+  const seen = new Map<string, string>();
+  for (const p of s.players) {
+    if (p.bankrupt || allies(s, p.id, playerId)) continue;
+    const side = sideOf(s, p.id);
+    if (!seen.has(side)) seen.set(side, p.id);
+  }
+  return [...seen.values()];
+}
+
+/** Ce titre ferait-il gagner tout de suite le camp de ce joueur, au Monopole ? */
+function wins(s: CapitaleState, playerId: string, index: number): boolean {
+  if (!s.settings.monopoly) return false;
+  return monopolyProgress(s, playerId).winning.includes(index);
+}
+
+/** Ce titre ferait-il gagner un camp adverse ? (on le lui bloque) */
+function rivalWins(s: CapitaleState, playerId: string, index: number): boolean {
+  if (!s.settings.monopoly) return false;
+  return rivalSides(s, playerId).some((id) => monopolyProgress(s, id).winning.includes(index));
+}
+
+/** Au Monopole : combien il manquerait de titres au camp de ce joueur s'il avait aussi celui-ci (essayé puis remis) */
+function closestWith(s: CapitaleState, playerId: string, index: number): number {
+  const d = s.deeds[index]!;
+  const was = d.owner;
+  d.owner = playerId;
+  const n = monopolyProgress(s, playerId).closest;
+  d.owner = was;
+  return n;
 }
 
 function reserve(s: CapitaleState, playerId: string, level: BotLevel): number {
@@ -86,25 +139,48 @@ function looseToMortgage(s: CapitaleState, playerId: string, level: BotLevel, ex
   return loose[0] ?? null;
 }
 
-/** Combien vaut une case pour ce joueur : le prix, plus s'il complète un groupe ou en bloque un */
+/** N'importe quel titre qu'on peut hypothéquer, le moins utile d'abord (pour un titre vital au Monopole) */
+function anyToMortgage(s: CapitaleState, playerId: string, except: number): number | null {
+  const all = ownedBy(s, playerId)
+    .filter((i) => i !== except && canMortgage(s, playerId, i) === null)
+    .sort((a, b) => valueFor(s, playerId, a) - valueFor(s, playerId, b));
+  return all[0] ?? null;
+}
+
+/**
+ * Combien vaut une case pour ce joueur : le prix, plus s'il complète un groupe (le sien ou celui d'un coéquipier, à qui
+ * il le donnera) ou en bloque un. Au Monopole : tout ce qu'on a pour le titre qui fait gagner son camp, très cher celui
+ * qui ferait gagner un adversaire, et un peu plus pour ce qui rapproche du but.
+ */
 export function valueFor(s: CapitaleState, playerId: string, index: number, level: BotLevel = "moyen"): number {
   const sq = SQUARES[index]!;
-  let v = sq.price ?? 0;
+  const price = sq.price ?? 0;
+  let v = price;
   if (sq.kind === "property") {
     const g = GROUPS[sq.group!];
     const others = g.squares.filter((i) => i !== index);
-    const mine = others.filter((i) => s.deeds[i]!.owner === playerId).length;
-    const owners = new Set(others.map((i) => s.deeds[i]!.owner).filter((o): o is string => Boolean(o) && o !== playerId));
+    const mine = others.filter((i) => ours(s, playerId, i)).length;
+    const rivals = new Set(others.filter((i) => theirs(s, playerId, i)).map((i) => sideOf(s, s.deeds[i]!.owner!)));
     if (mine === others.length) v *= level === "fort" ? 3 : level === "moyen" ? 2.2 : 1.5;
-    else if (owners.size === 1 && others.every((i) => s.deeds[i]!.owner && s.deeds[i]!.owner !== playerId)) {
-      // Un seul autre joueur a tout le reste : prendre cette case lui bloque le groupe
+    else if (rivals.size === 1 && others.every((i) => theirs(s, playerId, i))) {
+      // Un seul autre camp a tout le reste : prendre cette case lui bloque le groupe
       v *= level === "fort" ? 1.6 : 1.25;
     } else if (mine > 0) v *= 1.3;
   } else if (sq.kind === "station") {
-    const mine = STATIONS.filter((i) => i !== index && s.deeds[i]!.owner === playerId).length;
+    const mine = STATIONS.filter((i) => i !== index && ours(s, playerId, i)).length;
     v *= 1 + 0.3 * mine;
   } else if (sq.kind === "utility") {
     v *= 0.85;
+  }
+  if (s.settings.monopoly && sq.price !== undefined) {
+    if (wins(s, playerId, index)) v = Math.max(v, 10_000);
+    else if (rivalWins(s, playerId, index)) v = Math.max(v, price * (level === "fort" ? 5 : level === "moyen" ? 4 : 2) + 300);
+    else {
+      // Un pas de plus vers son Monopole
+      const now = monopolyProgress(s, playerId).closest;
+      const after = closestWith(s, playerId, index);
+      if (after < now) v *= after <= 1 ? (level === "facile" ? 1.4 : 2) : after <= 2 ? 1.35 : 1.1;
+    }
   }
   if (s.deeds[index]?.mortgaged) v -= mortgageValue(index) + mortgageInterest(index);
   return Math.max(0, Math.round(v));
@@ -113,12 +189,14 @@ export function valueFor(s: CapitaleState, playerId: string, index: number, leve
 /** Ce que coûte de céder une case : sa valeur pour soi, et plus si elle complète le groupe de celui qui la reçoit */
 function costOfGiving(s: CapitaleState, from: string, to: string, index: number, level: BotLevel): number {
   let v = valueFor(s, from, index, level);
+  if (allies(s, from, to)) return v;
   const g = groupOf(index);
   if (g) {
     const rest = g.squares.filter((i) => i !== index);
-    if (rest.every((i) => s.deeds[i]!.owner === to))
-      v += (SQUARES[index]!.price ?? 0) * (level === "fort" ? 3 : level === "moyen" ? 2 : 0.8);
+    if (rest.every((i) => ours(s, to, i))) v += (SQUARES[index]!.price ?? 0) * (level === "fort" ? 3 : level === "moyen" ? 2 : 0.8);
   }
+  // Au Monopole, jamais le titre qui fait gagner l'adversaire
+  if (wins(s, to, index)) v += 50_000;
   return v;
 }
 
@@ -126,7 +204,12 @@ function costOfGiving(s: CapitaleState, from: string, to: string, index: number,
 // Le coup à jouer quand c'est au bot de décider
 // ---------------------------------------------------------------------------
 
-export function botAction(s: CapitaleState, playerId: string, level: BotLevel, opts: { allowTrade?: boolean } = {}): CapitaleAction | null {
+export function botAction(
+  s: CapitaleState,
+  playerId: string,
+  level: BotLevel,
+  opts: { allowTrade?: boolean; allowGift?: boolean } = {},
+): CapitaleAction | null {
   const p = playerOf(s, playerId);
   if (!p || p.bankrupt) return null;
   if (s.step === "debt") return s.debts[0]?.debtor === playerId ? raiseMoney(s, playerId, level) : null;
@@ -147,14 +230,17 @@ export function botAction(s: CapitaleState, playerId: string, level: BotLevel, o
       const price = SQUARES[index]!.price!;
       const value = valueFor(s, playerId, index, level);
       const keen = value > price * 1.4;
+      // Au Monopole : le titre qui fait gagner son camp, ou qui ferait gagner un adversaire, se prend coûte que coûte
+      const vital = wins(s, playerId, index) || (level !== "facile" && rivalWins(s, playerId, index));
       if (p.cash < price) {
-        // Fort hypothèque un titre isolé pour s'offrir celui qui complète (ou bloque) un groupe
-        if (level === "fort" && keen) {
-          const m = looseToMortgage(s, playerId, level, index);
+        // Fort hypothèque un titre isolé pour s'offrir celui qui complète (ou bloque) un groupe ; tous le font pour un titre vital
+        if ((level === "fort" && keen) || vital) {
+          const m = looseToMortgage(s, playerId, level, index) ?? (vital ? anyToMortgage(s, playerId, index) : null);
           if (m !== null) return { type: "mortgage", square: m };
         }
         return { type: "decline" };
       }
+      if (vital) return { type: "buy" };
       const left = p.cash - price;
       const buy =
         level === "facile"
@@ -165,15 +251,22 @@ export function botAction(s: CapitaleState, playerId: string, level: BotLevel, o
       return buy ? { type: "buy" } : { type: "decline" };
     }
     case "manage":
-      return manage(s, playerId, level, opts.allowTrade ?? false) ?? { type: "endTurn" };
+      return manage(s, playerId, level, opts.allowTrade ?? false, opts.allowGift ?? false) ?? { type: "endTurn" };
     default:
       return null;
   }
 }
 
-/** Gestion de fin de tour : lever des hypothèques, améliorer, poser un bâtiment spécial, éventuellement proposer un échange */
-function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean): CapitaleAction | null {
+/**
+ * Gestion de fin de tour : donner à un coéquipier le titre qui complète son quartier, lever des hypothèques, améliorer,
+ * poser un bâtiment spécial, éventuellement proposer un échange
+ */
+function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean, allowGift: boolean): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
+  if (allowGift) {
+    const gift = giftMove(s, playerId);
+    if (gift) return gift;
+  }
   const keep = reserve(s, playerId, level);
   // D'abord les hypothèques des groupes complets : un quartier complet rapporte le double
   for (const i of ownedBy(s, playerId)) {
@@ -247,10 +340,10 @@ function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: 
       if (a) return a;
     }
   }
-  // Une nuisance sur la rue adverse qui rapporte le plus
+  // Une nuisance sur la rue adverse qui rapporte le plus (jamais chez un coéquipier)
   const target = BUYABLE.filter((i) => {
     const d = s.deeds[i]!;
-    return SQUARES[i]!.kind === "property" && d.owner && d.owner !== playerId && !d.mortgaged && !d.special;
+    return SQUARES[i]!.kind === "property" && d.owner && !allies(s, d.owner, playerId) && !d.mortgaged && !d.special;
   }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }))[0];
   if (target !== undefined) {
     const rent = rentFor(s, target, { diceTotal: 8 });
@@ -312,10 +405,14 @@ export function botBid(s: CapitaleState, playerId: string, level: BotLevel): Cap
   const p = playerOf(s, playerId);
   if (!a || !p || p.bankrupt || a.out.includes(playerId)) return null;
   if (a.high?.player === playerId) return null;
+  // On ne surenchérit pas sur un coéquipier : l'argent irait à la banque
+  if (a.high && allies(s, a.high.player, playerId)) return { type: "pass" };
   const price = SQUARES[a.square]!.price!;
   const value = valueFor(s, playerId, a.square, level);
   const factor = level === "facile" ? 0.5 + doubt(s, 3 + a.bids) * 0.3 : level === "moyen" ? 0.95 : 1.15;
-  const limit = Math.min(p.cash - Math.min(reserve(s, playerId, level), p.cash * 0.5), value * factor);
+  // Au Monopole : tout son argent pour le titre qui fait gagner son camp, presque tout pour bloquer un adversaire
+  const vital = wins(s, playerId, a.square) || (level !== "facile" && rivalWins(s, playerId, a.square));
+  const limit = vital ? p.cash : Math.min(p.cash - Math.min(reserve(s, playerId, level), p.cash * 0.5), value * factor);
   const step = price >= 200 ? 20 : 10;
   const next = (a.high?.amount ?? 0) + (a.high ? step : Math.max(10, Math.round((price * 0.3) / 10) * 10));
   if (next > limit || next > p.cash) return { type: "pass" };
@@ -332,40 +429,155 @@ function offerValue(s: CapitaleState, owner: string, receiver: string, offer: Of
   return v;
 }
 
-/** Le bot reçoit une proposition : il accepte si ce qu'il gagne vaut ce qu'il cède, selon son niveau */
+/** Après cet échange, le camp de `other` aurait-il gagné au Monopole, ou serait-il à un seul titre de gagner ? */
+function tradeHelpsRival(s: CapitaleState, me: string, other: string, trade: Trade): boolean {
+  if (!s.settings.monopoly || allies(s, me, other)) return false;
+  const before = monopolyProgress(s, other).closest;
+  const moved = [...trade.give.squares.map((i) => [i, trade.to] as const), ...trade.get.squares.map((i) => [i, trade.from] as const)];
+  const was = moved.map(([i]) => s.deeds[i]!.owner);
+  moved.forEach(([i, to]) => (s.deeds[i]!.owner = to));
+  const won = monopolyOf(s, other) !== null;
+  const after = monopolyProgress(s, other).closest;
+  moved.forEach(([i], k) => (s.deeds[i]!.owner = was[k]!));
+  return won || (after <= 1 && after < before);
+}
+
+/**
+ * Le bot reçoit une proposition : il accepte si ce qu'il gagne vaut ce qu'il cède, selon son niveau. Un coéquipier
+ * obtient ce qu'il demande tant que le bot ne casse pas un de ses quartiers complets ; au Monopole, jamais de quoi
+ * faire gagner un adversaire (ni le mettre à un titre de la victoire).
+ */
 export function botAnswer(s: CapitaleState, playerId: string, trade: Trade, level: BotLevel): CapitaleAction {
-  const gain = offerValue(s, trade.from, playerId, trade.give, level, false);
-  const loss = offerValue(s, playerId, trade.from, trade.get, level, true);
   const p = playerOf(s, playerId)!;
   const cashAfter = p.cash - trade.get.cash + trade.give.cash;
+  const reject = { type: "reject", trade: trade.id } as const;
+  if (cashAfter < 0) return reject;
+  if (allies(s, playerId, trade.from)) {
+    const breaks = trade.get.squares.some((i) => {
+      const g = groupOf(i);
+      return g !== null && ownsGroup(s, playerId, g.id);
+    });
+    return breaks ? reject : { type: "accept", trade: trade.id };
+  }
+  if (tradeHelpsRival(s, playerId, trade.from, trade)) return reject;
+  const gain = offerValue(s, trade.from, playerId, trade.give, level, false);
+  const loss = offerValue(s, playerId, trade.from, trade.get, level, true);
   const threshold = level === "fort" ? 1.2 : level === "moyen" ? 1.0 : 0.8;
-  if (cashAfter < 0 || gain < loss * threshold) return { type: "reject", trade: trade.id };
+  if (gain < loss * threshold) return reject;
   return { type: "accept", trade: trade.id };
 }
 
-/** Une proposition pour compléter un groupe auquel il ne manque qu'une case, payée en argent */
+/**
+ * Une proposition pour compléter un groupe auquel il ne manque qu'une case, payée en argent (demandée pour rien à un
+ * coéquipier quand les dons sont permis) ; au Monopole, d'abord le titre qui ferait gagner son camp
+ */
 function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): CapitaleAction | null {
   if (s.trades.some((t) => t.from === playerId)) return null;
   const p = playerOf(s, playerId)!;
+  const gifts = teamPlay(s) && teamRules(s).gifts;
+  const ask = (target: number, boost: number): CapitaleAction | null => {
+    const owner = s.deeds[target]!.owner;
+    if (!owner || owner === playerId || tradeProblem(s, owner, target) !== null) return null;
+    const other = playerOf(s, owner);
+    if (!other || other.bankrupt) return null;
+    const get = { cash: 0, squares: [target], jailCards: 0 };
+    if (allies(s, owner, playerId) && gifts) return { type: "propose", to: owner, give: { cash: 0, squares: [], jailCards: 0 }, get };
+    // Assez pour que l'autre (s'il raisonne comme un bot moyen) y trouve son compte
+    const want = costOfGiving(s, owner, playerId, target, "moyen");
+    const offerCash = Math.round((want * (level === "fort" ? 1.1 : 1.2) * boost) / 10) * 10;
+    if (p.cash - offerCash < reserve(s, playerId, level) / boost) return null;
+    return { type: "propose", to: owner, give: { cash: Math.min(offerCash, p.cash), squares: [], jailCards: 0 }, get };
+  };
+  if (s.settings.monopoly) {
+    // La victoire est à un titre : on le demande à son propriétaire (un adversaire humain peut ne pas voir le danger)
+    for (const target of monopolyProgress(s, playerId).winning) {
+      const owner = s.deeds[target]!.owner;
+      if (!owner) continue;
+      const price = SQUARES[target]!.price ?? 0;
+      const offer = allies(s, owner, playerId) ? ask(target, 1) : proposeFor(s, playerId, owner, target, Math.max(price * 2, 300));
+      if (offer) return offer;
+    }
+  }
   for (const g of GROUP_ORDER) {
     const squares = GROUPS[g].squares;
     const missing = squares.filter((i) => s.deeds[i]!.owner !== playerId);
     if (missing.length !== 1) continue;
-    const target = missing[0]!;
-    const owner = s.deeds[target]!.owner;
-    if (!owner || tradeProblem(s, owner, target) !== null) continue;
-    const other = playerOf(s, owner);
-    if (!other || other.bankrupt) continue;
-    // Assez pour que l'autre (s'il raisonne comme un bot moyen) y trouve son compte
-    const ask = costOfGiving(s, owner, playerId, target, "moyen");
-    const offerCash = Math.round((ask * (level === "fort" ? 1.1 : 1.2)) / 10) * 10;
-    if (p.cash - offerCash < reserve(s, playerId, level)) continue;
-    return {
-      type: "propose",
-      to: owner,
-      give: { cash: offerCash, squares: [], jailCards: 0 },
-      get: { cash: 0, squares: [target], jailCards: 0 },
-    };
+    const offer = ask(missing[0]!, 1);
+    if (offer) return offer;
   }
   return null;
+}
+
+/** Une offre d'argent pour un titre précis, à un adversaire, dans la limite de ce qu'on a */
+function proposeFor(s: CapitaleState, playerId: string, owner: string, target: number, cash: number): CapitaleAction | null {
+  const p = playerOf(s, playerId)!;
+  if (tradeProblem(s, owner, target) !== null || playerOf(s, owner)?.bankrupt) return null;
+  const amount = Math.min(p.cash, Math.round(cash / 10) * 10);
+  if (amount <= 0) return null;
+  return {
+    type: "propose",
+    to: owner,
+    give: { cash: amount, squares: [], jailCards: 0 },
+    get: { cash: 0, squares: [target], jailCards: 0 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// En équipes : les dons
+// ---------------------------------------------------------------------------
+
+/**
+ * Le don du tour : le titre qui complète le quartier d'un coéquipier, ou une gare (un réseau) à celui qui en a déjà
+ * plus, pour que ses loyers montent
+ */
+export function giftMove(s: CapitaleState, playerId: string): CapitaleAction | null {
+  if (!teamPlay(s) || !teamRules(s).gifts) return null;
+  const mates = teammates(s, playerId).filter((x) => !x.bankrupt);
+  if (mates.length === 0) return null;
+  const give = (to: string, square: number): CapitaleAction | null =>
+    giftProblem(s, playerId, to, { cash: 0, squares: [square], jailCards: 0 }) === null
+      ? { type: "gift", to, give: { cash: 0, squares: [square], jailCards: 0 } }
+      : null;
+  for (const i of ownedBy(s, playerId)) {
+    const g = groupOf(i);
+    if (!g) continue;
+    const rest = g.squares.filter((x) => x !== i);
+    for (const m of mates) {
+      if (!rest.every((x) => s.deeds[x]!.owner === m.id)) continue;
+      const a = give(m.id, i);
+      if (a) return a;
+    }
+  }
+  for (const list of [STATIONS, UTILITIES]) {
+    const count = (id: string) => list.filter((x) => s.deeds[x]!.owner === id).length;
+    const mine = count(playerId);
+    if (mine === 0) continue;
+    // Toujours vers celui qui en a le plus (à égalité, le premier dans l'ordre) : jamais d'aller-retour
+    const best = [...mates].sort((a, b) => count(b.id) - count(a.id))[0]!;
+    if (count(best.id) === 0 || count(best.id) < mine || (count(best.id) === mine && best.id > playerId)) continue;
+    const square = list.find((x) => s.deeds[x]!.owner === playerId)!;
+    const a = give(best.id, square);
+    if (a) return a;
+  }
+  return null;
+}
+
+/**
+ * Un coéquipier est en dette : le bot lui donne ce qui manque, s'il peut le faire en gardant de quoi voir venir, ou
+ * coûte que coûte quand la dette l'enverrait à la faillite
+ */
+export function botRescue(s: CapitaleState, helperId: string, level: BotLevel): CapitaleAction | null {
+  if (!teamPlay(s) || !teamRules(s).gifts || s.step !== "debt") return null;
+  const debt = s.debts[0];
+  const helper = playerOf(s, helperId);
+  if (!debt || !helper || helper.bankrupt || debt.debtor === helperId || !allies(s, helperId, debt.debtor)) return null;
+  const debtor = playerOf(s, debt.debtor)!;
+  const owed = s.debts.filter((d) => d.debtor === debtor.id).reduce((n, d) => n + d.amount, 0);
+  const short = owed - debtor.cash;
+  if (short <= 0 || helper.cash < short) return null;
+  const doomed = liquidity(s, debtor.id) < owed;
+  const keep = level === "facile" ? 100 : reserve(s, helperId, level) * 0.5;
+  if (!doomed && helper.cash - short < keep) return null;
+  const give = { cash: short, squares: [], jailCards: 0 };
+  return giftProblem(s, helperId, debtor.id, give) === null ? { type: "gift", to: debtor.id, give } : null;
 }
