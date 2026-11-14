@@ -1,5 +1,6 @@
 // Une page réservée au développement : l'entracte et la fin d'une tournée, avec des parties inventées, pour régler l'affichage
 // sans jouer une tournée entière. /dev/tournee?vue=fin&equipes=1&joueurs=8&titres=5&jeux=5
+// Le tirage de l'entracte : &programme=7 (nombre de jeux au programme) &tire=bolides (le jeu qui sort)
 
 import { useMemo, useState } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
@@ -20,7 +21,15 @@ const TITLES: TourTitle[] = [
   { id: "brave", label: "Le courageux", userId: "u4", name: "Josiane", detail: "", stat: "2×", unit: "dernier, et toujours là" },
 ];
 
-function mockView(kind: "entracte" | "fin", teams: boolean, players: number, titles: number, played: number): TourView {
+function mockView(
+  kind: "entracte" | "fin",
+  teams: boolean,
+  players: number,
+  titles: number,
+  played: number,
+  program: GameId[],
+  drawn: GameId,
+): TourView {
   let seed = 7;
   const rand = () => ((seed = (seed * 16807) % 2147483647), seed / 2147483647);
   const members: TourMemberView[] = NAMES.slice(0, players).map((name, i) => ({
@@ -68,7 +77,7 @@ function mockView(kind: "entracte" | "fin", teams: boolean, players: number, tit
     settings: {
       visibility: "private",
       maxPlayers: 8,
-      games: ["uno", "bricks", "naval", "capitale", "meche"],
+      games: program,
       end: { kind: "games", count: 5 },
       teams,
       once: false,
@@ -81,7 +90,7 @@ function mockView(kind: "entracte" | "fin", teams: boolean, players: number, tit
     you: { userId: "u0", isHost: true, isAdmin: false, member: true, role: "player" },
     games,
     current: null,
-    next: kind === "fin" ? null : { game: "naval", at: now + 25_000, variant: "base", votes: {} },
+    next: kind === "fin" ? null : { game: drawn, at: now + 25_000, variant: "base", votes: {} },
     voters: ["u0"],
     ready: [],
     startedAt: now - 600_000,
@@ -101,8 +110,15 @@ export function DevTour() {
   const players = Number(params.get("joueurs") ?? 6);
   const titles = Number(params.get("titres") ?? 5);
   const played = Number(params.get("jeux") ?? 3);
+  // Le tirage : combien de jeux au programme (les premiers de la liste), et celui qui sort
+  const programCount = Math.min(GAMES.length, Math.max(1, Number(params.get("programme") ?? 5)));
+  const drawnParam = params.get("tire");
   const [replay, setReplay] = useState(0);
-  const view = useMemo(() => mockView(kind, teams, players, titles, played), [kind, teams, players, titles, played]);
+  const view = useMemo(() => {
+    const program = GAMES.slice(0, programCount);
+    const drawn = program.find((g) => g === drawnParam) ?? program[Math.min(2, program.length - 1)]!;
+    return mockView(kind, teams, players, titles, played, program, drawn);
+  }, [kind, teams, players, titles, played, programCount, drawnParam]);
   const props = { view, send: () => {}, serverOffset: 0, unread: 0, onOpenChat: () => {}, onLeave: () => setReplay((n) => n + 1) };
   return kind === "fin" ? <TourFinale key={replay} {...props} /> : <TourIntermission key={replay} {...props} />;
 }

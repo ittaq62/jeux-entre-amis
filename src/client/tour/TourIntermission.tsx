@@ -7,6 +7,7 @@ import { ConfirmButton } from "../components/ui.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { drawSchedule } from "./drawTiming.ts";
 import { GameTicket, playedGames, ReadyVote, rulesName, Standings, TourTop } from "./TourParts.tsx";
 import { TourRules } from "./TourRules.tsx";
 
@@ -181,28 +182,21 @@ function TourDraw({ games, pick, players, onDone }: { games: GameId[]; pick: Gam
       return;
     }
     play("tourShake");
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const steps = count * 3 + target + 1;
-    let at = 0;
-    let gap = 70;
-    for (let k = 0; k < steps; k++) {
-      at += gap;
-      gap *= 1.13;
-      const pos = k % count;
-      timers.push(
-        setTimeout(() => {
-          setLit(pos);
-          play("tick", { volume: 0.16 });
-        }, at),
-      );
-    }
+    // La durée est fixée d'avance selon le nombre de jeux (voir drawTiming.ts), les pas s'y répartissent
+    const { steps, doneAt } = drawSchedule(count, target);
+    const timers = steps.map(({ at, pos }) =>
+      setTimeout(() => {
+        setLit(pos);
+        play("tick", { volume: 0.16 });
+      }, at),
+    );
     timers.push(
       setTimeout(() => {
         setDone(true);
         play("tourThrow");
         play("tourReveal", { delay: 120 });
         onDone();
-      }, at + 260),
+      }, doneAt),
     );
     return () => timers.forEach(clearTimeout);
     // Le tirage ne repart que si le programme change vraiment, pas à chaque nouvelle vue
