@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { COLS, emptyGrid, ROWS, type Active } from "../../shared/games/bricks/engine.ts";
 import { boardSize, drawBoard } from "./draw.ts";
 
-// Un duel, figé : à gauche, une ligne complète s'en va ; à droite, l'adversaire voit monter les lignes grises
+// Un duel : à gauche, une ligne complète brille puis part chez l'adversaire, à droite, qui la reçoit par le bas en ligne
+// grise (l'animation est en CSS, dans banners.css ; ses positions supposent cell = 17)
 const MINE_BOTTOM_UP = ["734411526.", "655243317.", "1122667541", "4455.32114", ".331..6625", "221....425", "27.....42.", "2......4.."];
 const THEIRS_BOTTOM_UP = [
   "88888.8888",
@@ -30,7 +31,21 @@ function gridOf(rows: string[]) {
   return g;
 }
 
-function Board({ rows, piece, ghost, cell, flash }: { rows: string[]; piece: Active; ghost: Active | null; cell: number; flash?: number }) {
+function Board({
+  rows,
+  piece,
+  ghost,
+  cell,
+  flash,
+  impact,
+}: {
+  rows: string[];
+  piece: Active;
+  ghost: Active | null;
+  cell: number;
+  flash?: number;
+  impact?: boolean;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const { width, height } = boardSize(cell);
@@ -42,6 +57,7 @@ function Board({ rows, piece, ghost, cell, flash }: { rows: string[]; piece: Act
     <div className="bricks-preview-board" style={{ width, height }}>
       <canvas ref={canvas} width={width * dpr} height={height * dpr} style={{ width, height }} />
       {flash !== undefined && <span className="bricks-preview-flash" style={{ bottom: flash * cell, height: cell }} />}
+      {impact && <span className="bricks-preview-impact" style={{ height: cell }} />}
     </div>
   );
 }
@@ -53,20 +69,14 @@ export function BricksPreview({ cell }: { cell: number }) {
       <div className="bricks-preview-mine">
         <Board rows={MINE_BOTTOM_UP} piece={MY_PIECE} ghost={MY_GHOST} cell={cell} flash={FULL_ROW} />
       </div>
-      <svg className="bricks-preview-attack" viewBox="0 0 56 40" aria-hidden="true">
-        <defs>
-          <linearGradient id="bricks-trail" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#ffd98a" stopOpacity="0" />
-            <stop offset="1" stopColor="#ffd98a" />
-          </linearGradient>
-        </defs>
-        <path d="M0 20C14 13 30 13 44 17V23C30 27 14 27 0 20Z" fill="url(#bricks-trail)" />
-        <rect x="36" y="12" width="16" height="16" rx="3" fill="#8b8e96" stroke="#fff1cf" strokeWidth="2" />
-        <rect x="40" y="16" width="8" height="3.4" rx="1.4" fill="#fff" opacity="0.55" />
-      </svg>
       <div className="bricks-preview-theirs">
-        <Board rows={THEIRS_BOTTOM_UP} piece={THEIR_PIECE} ghost={null} cell={Math.round(cell * 0.68)} />
+        <Board rows={THEIRS_BOTTOM_UP} piece={THEIR_PIECE} ghost={null} cell={Math.round(cell * 0.68)} impact />
       </div>
+      {/* La ligne envoyée, de son plateau à celui d'en face : dorée au départ, grise (avec son trou) à l'arrivée */}
+      <span className="bricks-preview-line" aria-hidden="true">
+        <i className="is-gold" />
+        <i className="is-grey" />
+      </span>
     </div>
   );
 }

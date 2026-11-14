@@ -382,3 +382,201 @@
     opacity: 0;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Briques : la ligne complète brille, part chez l'adversaire et s'y  */
+/* glisse par le bas, en ligne grise ; son plateau encaisse le coup   */
+/* ------------------------------------------------------------------ */
+
+.bricks-preview-flash {
+  animation: bricks-preview-flash 5s ease-in-out infinite;
+}
+
+@keyframes bricks-preview-flash {
+  0% {
+    opacity: 0.45;
+    scale: 1;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  19% {
+    opacity: 0.6;
+  }
+
+  25% {
+    opacity: 1;
+    scale: 1;
+  }
+
+  28% {
+    opacity: 1;
+    scale: 1.05 1.5;
+  }
+
+  31%,
+  76% {
+    opacity: 0;
+    scale: 1;
+  }
+
+  100% {
+    opacity: 0.45;
+    scale: 1;
+  }
+}
+
+/* La ligne qui voyage : partie dorée de chez soi, arrivée grise chez l'autre */
+.bricks-preview-line {
+  position: absolute;
+  left: 7.6px;
+  top: 322.8px;
+  width: 170px;
+  height: 17px;
+  opacity: 0;
+  rotate: -3deg;
+  pointer-events: none;
+  animation: bricks-preview-line 5s linear infinite;
+}
+
+.bricks-preview-line i {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+}
+
+.bricks-preview-line .is-gold {
+  background: linear-gradient(90deg, rgba(255, 244, 205, 0.7), rgba(255, 252, 235, 1), rgba(255, 244, 205, 0.7));
+  box-shadow: 0 0 16px 4px rgba(255, 222, 140, 0.75);
+  animation: bricks-preview-gold 5s linear infinite;
+}
+
+/* Une ligne grise de cases, avec son trou : celle que l'adversaire reçoit */
+.bricks-preview-line .is-grey {
+  opacity: 0;
+  background:
+    linear-gradient(90deg, transparent 0 70%, #2a1f24 70% 80%, transparent 80%),
+    repeating-linear-gradient(90deg, #a7aab2 0 15px, #6c7079 15px 17px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    0 0 10px 2px rgba(255, 222, 140, 0.55);
+  animation: bricks-preview-grey 5s linear infinite;
+}
+
+@keyframes bricks-preview-line {
+  0%,
+  27.9% {
+    translate: 0 0;
+    rotate: -3deg;
+    scale: 1;
+    opacity: 0;
+  }
+
+  28% {
+    translate: 0 0;
+    rotate: -3deg;
+    scale: 1.04 1.3;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 0.6);
+  }
+
+  41% {
+    translate: 88px -64px;
+    rotate: 1deg;
+    scale: 0.86;
+    animation-timing-function: cubic-bezier(0.4, 0.4, 0.6, 1);
+  }
+
+  52% {
+    translate: 176.6px -0.6px;
+    rotate: 4deg;
+    scale: 0.706;
+    opacity: 1;
+  }
+
+  57%,
+  100% {
+    translate: 176.6px -0.6px;
+    rotate: 4deg;
+    scale: 0.706;
+    opacity: 0;
+  }
+}
+
+@keyframes bricks-preview-gold {
+  0%,
+  30% {
+    opacity: 1;
+  }
+
+  47%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes bricks-preview-grey {
+  0%,
+  30% {
+    opacity: 0;
+  }
+
+  47%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Le plateau d'en face encaisse : il tressaille, sa ligne du bas s'éclaire */
+.bricks-preview-theirs .bricks-preview-board {
+  animation: bricks-preview-jolt 5s ease-out infinite;
+}
+
+@keyframes bricks-preview-jolt {
+  0%,
+  51.9% {
+    translate: 0 0;
+  }
+
+  54% {
+    translate: 0 -4px;
+  }
+
+  58% {
+    translate: 0 1px;
+  }
+
+  62%,
+  100% {
+    translate: 0 0;
+  }
+}
+
+.bricks-preview-impact {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 244, 205, 0.4), rgba(255, 252, 235, 0.85), rgba(255, 244, 205, 0.4));
+  box-shadow: 0 0 12px 3px rgba(255, 222, 140, 0.6);
+  animation: bricks-preview-impact 5s ease-out infinite;
+}
+
+@keyframes bricks-preview-impact {
+  0%,
+  51.9% {
+    opacity: 0;
+  }
+
+  53% {
+    opacity: 1;
+  }
+
+  66%,
+  100% {
+    opacity: 0;
+  }
+}

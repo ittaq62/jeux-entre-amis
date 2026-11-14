@@ -1684,11 +1684,12 @@ a.shop-item {
     radial-gradient(ellipse 90% 85% at 50% 45%, #4a1d27 0%, #2c1018 55%, #160709 100%);
 }
 
-/* Deux plateaux en duel, et la ligne qui part de l'un vers l'autre */
+/* Deux plateaux en duel, et la ligne qui part de l'un vers l'autre (elle vole dans l'écart : banners.css) */
 .bricks-preview {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 48px;
 }
 
 .bricks-preview-mine {
@@ -1716,44 +1717,6 @@ a.shop-item {
   right: 0;
   background: linear-gradient(90deg, rgba(255, 244, 205, 0.55), rgba(255, 252, 235, 0.95), rgba(255, 244, 205, 0.55));
   box-shadow: 0 0 16px 4px rgba(255, 222, 140, 0.7);
-  animation: bricks-preview-flash 1s ease-in-out infinite alternate;
-}
-
-@keyframes bricks-preview-flash {
-  from {
-    opacity: 0.55;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.bricks-preview-attack {
-  flex: none;
-  width: 56px;
-  height: 40px;
-  margin: 0 -8px;
-  z-index: 1;
-  filter: drop-shadow(0 0 6px rgba(255, 214, 130, 0.7));
-  animation: bricks-preview-attack 0.9s ease-in-out infinite alternate;
-}
-
-@keyframes bricks-preview-attack {
-  from {
-    translate: -5px 2px;
-  }
-
-  to {
-    translate: 6px -2px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bricks-preview-flash,
-  .bricks-preview-attack {
-    animation: none;
-  }
 }
 
 .game-name.is-bricks {
@@ -2183,7 +2146,7 @@ a.shop-item {
   }
 
   .bricks-preview {
-    scale: 0.62;
+    scale: 0.56;
   }
 
   .capitale-preview {
@@ -2233,7 +2196,7 @@ a.shop-item {
   }
 
   .bricks-preview {
-    scale: 0.52;
+    scale: 0.47;
   }
 
   .game-sheet {
