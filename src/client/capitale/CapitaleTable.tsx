@@ -89,9 +89,12 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const g = room.capitale!;
   const me = g.you;
   const { w, h } = useViewport();
-  const phone = w < 900;
-  /** Un téléphone couché : pas de place sous les joueurs, les équipes et le Monopole vont dans l'en-tête */
-  const landscape = phone && h < 500 && w >= 560;
+  /**
+   * Un téléphone couché, même un grand (932 × 430) : peu de hauteur. Les joueurs passent en colonne à gauche, les billets
+   * et les boutons à droite, et le plateau prend toute la hauteur au milieu ; les équipes et le Monopole vont dans l'en-tête
+   */
+  const landscape = h < 500 && w >= 560 && w < 1100;
+  const phone = w < 900 || landscape;
   const sound = usePrefs((s) => s.sound);
   const music = usePrefs((s) => s.tourMusic);
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -400,7 +403,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
 
   return (
     <div
-      className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}`}
+      className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}${landscape ? " is-land" : ""}`}
       style={phone && topH && tallTop ? { ["--cap-top" as string]: `${topH + 4}px` } : undefined}
     >
       <header className="table-top">
