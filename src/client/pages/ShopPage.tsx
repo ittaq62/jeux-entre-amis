@@ -22,6 +22,7 @@ import { BombArt } from "../meche/bombs/BombArt.tsx";
 import { BombShow } from "../meche/bombs/BombShow.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
+import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
 import { useSession } from "../stores/session.ts";
 import { useMyItems } from "../stores/shop.ts";
 
@@ -81,6 +82,7 @@ export function ShopPage() {
   };
 
   const bigPreview = (item: ShopItem): ReactNode => {
+    if (item.kind === "perso") return <PersoPreview item={item} />;
     if (item.kind === "vehicle" || item.kind === "kart") {
       return (
         <VehiclePreview
@@ -121,6 +123,8 @@ export function ShopPage() {
         </section>
 
         <NavalSkinDefs id={defs} />
+
+        <PersoShop balance={balance} has={has} onBuy={setBuying} />
 
         {SECTIONS.filter((s) => games.includes(s.game)).map((section) => (
           <section key={section.kind} className="shop-section">

@@ -404,6 +404,23 @@
   color: var(--text-faint);
 }
 
+/* Le personnage : ce qu'on a déjà reste un lien vers l'éditeur, pour le porter */
+a.shop-item {
+  text-decoration: none;
+}
+
+.shop-item.is-worn {
+  border-color: rgba(76, 195, 138, 0.55);
+}
+
+.perso-buy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
 .shop-look {
   display: grid;
   place-items: center;
