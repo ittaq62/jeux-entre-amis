@@ -1336,8 +1336,9 @@ a.shop-item {
     gap: 6px;
   }
 
+  /* La barre des boutons peut tenir sur deux lignes */
   .perso-controls {
-    padding-bottom: 80px;
+    padding-bottom: 150px;
   }
 }
 
