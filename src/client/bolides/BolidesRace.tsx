@@ -16,6 +16,7 @@ import { OilSplats } from "./OilSplat.tsx";
 import { placeLabel, RaceRuntime, type Hud } from "./runtime.ts";
 import { faceCanvas, headCanvas } from "./scene/faces.ts";
 import { KART_COLORS } from "./scene/kart.ts";
+import { screenLayers } from "./screenFx.ts";
 import type { RaceListeners } from "./useBolidesRoom.ts";
 
 interface Props {
@@ -412,14 +413,12 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </>
       )}
       {h && !reduced && <div className={`hud-speedlines ${h.boosting ? "is-on" : h.drafting ? "is-draft" : ""}`} aria-hidden="true" />}
-      {h && <div className={`hud-pie ${h.pie ? "is-on" : ""}`} aria-hidden="true" />}
-      {h && h.flash > 0 && !reduced && <div key={h.flash} className="hud-flash" aria-hidden="true" />}
-      {h && !reduced && <div className={`hud-aura ${h.aura ? `is-${h.aura}` : ""}`} aria-hidden="true" />}
-      {h?.burst && !reduced && (
-        <div key={h.burst.key} className={`hud-burst is-${h.burst.kind}`} aria-hidden="true">
-          {h.burst.kind === "oil" && <OilSplats />}
-        </div>
-      )}
+      {h &&
+        screenLayers(h, reduced).map((layer) => (
+          <div key={layer.key} className={layer.className} aria-hidden="true">
+            {layer.oil && <OilSplats />}
+          </div>
+        ))}
       {h && !over && (
         <div className="bolides-hud" aria-live="polite">
           {me && (
