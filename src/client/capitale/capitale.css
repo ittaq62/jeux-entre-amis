@@ -3047,3 +3047,72 @@
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Le grand bouton au centre de l'écran, sous le plateau, quoi qu'il y  */
+/* ait autour : les billets se rangent à sa gauche sans le pousser      */
+/* ------------------------------------------------------------------ */
+
+.cap-bright:not(.is-phone) .cap-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  column-gap: 24px;
+}
+
+.cap-bright:not(.is-phone) .cap-bar .cap-hand {
+  grid-column: 1;
+  justify-self: end;
+  /* Sa largeur naturelle, même quand la colonne est étroite : le total ne passe jamais à la ligne */
+  width: max-content;
+}
+
+.cap-bright:not(.is-phone) .cap-bar-main {
+  grid-column: 2;
+}
+
+/* Un écran étroit : les billets se font un peu plus petits pour tenir à gauche du bouton, sans sortir de l'écran */
+@media (max-width: 1099px) {
+  .cap-bright:not(.is-phone) .cap-bar .cap-hand {
+    scale: 0.85;
+    transform-origin: 100% 100%;
+  }
+}
+
+@media (max-width: 999px) {
+  .cap-bright:not(.is-phone) .cap-bar .cap-hand {
+    scale: 0.72;
+  }
+}
+
+/* La barre des équipes au milieu de l'en-tête, sur l'axe du plateau et du bouton ; à trois équipes sur un écran
+   étroit, elle reste entre le titre et les boutons pour ne pas les recouvrir */
+.cap-bright:not(.is-phone) .table-top .cap-teambar:not(.is-n3) {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  margin: 0;
+  width: max-content;
+}
+
+@media (min-width: 1100px) {
+  .cap-bright:not(.is-phone) .table-top .cap-teambar.is-n3 {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    margin: 0;
+    width: max-content;
+  }
+}
+
+/* Téléphone couché : la barre des équipes au milieu de l'en-tête, le plateau garde la place qu'il avait */
+.cap-bright.is-phone .table-top .cap-teambar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  margin: 0;
+  width: max-content;
+}

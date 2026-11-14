@@ -88,8 +88,10 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const inTour = useTourBridge() !== null;
   const g = room.capitale!;
   const me = g.you;
-  const { w } = useViewport();
+  const { w, h } = useViewport();
   const phone = w < 900;
+  /** Un téléphone couché : pas de place sous les joueurs, les équipes et le Monopole vont dans l'en-tête */
+  const landscape = phone && h < 500 && w >= 560;
   const sound = usePrefs((s) => s.sound);
   const music = usePrefs((s) => s.tourMusic);
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -302,6 +304,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   // L'étiquette de chaque case : son prix si elle est libre, sinon son loyer à la couleur du propriétaire
   const shownState = useMemo(() => asState({ ...g, deeds }), [g, deeds]);
   const teams = inTeams(g);
+  // Sur téléphone, le plateau descend sous les joueurs seulement quand ils prennent plus de place qu'à l'ordinaire (la
+  // ligne des équipes ou du Monopole, une troisième rangée à six) ; sinon il reste où il a toujours été
+  const tallTop = !landscape && (teams || g.settings.monopoly || g.players.length > 4);
   const tagOf = (i: number) => {
     const d = deeds[i];
     const sq = SQUARES[i]!;
@@ -396,7 +401,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   return (
     <div
       className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}`}
-      style={phone && topH ? { ["--cap-top" as string]: `${topH + 4}px` } : undefined}
+      style={phone && topH && tallTop ? { ["--cap-top" as string]: `${topH + 4}px` } : undefined}
     >
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
@@ -416,9 +421,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                   : "jusqu'à la faillite"}
           </span>
         </div>
-        {teams && !phone && <TeamBar g={g} name={name} phone={false} />}
+        {teams && (!phone || landscape) && <TeamBar g={g} name={name} phone={landscape} />}
         <div className="table-top-actions">
-          {g.settings.monopoly && !phone && (
+          {g.settings.monopoly && (!phone || landscape) && (
             <button className="btn btn-ghost cap-mono-btn" onClick={() => setMonoOpen(true)} title="Monopole : où en est chacun">
               Monopole
             </button>
@@ -516,7 +521,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           onMonopoly={() => setMonoOpen(true)}
           onHeight={setTopH}
           footer={
-            phone && (teams || g.settings.monopoly) ? (
+            phone && !landscape && (teams || g.settings.monopoly) ? (
               <div className="cap-strip">
                 {teams && <TeamBar g={g} name={name} phone />}
                 {g.settings.monopoly && (

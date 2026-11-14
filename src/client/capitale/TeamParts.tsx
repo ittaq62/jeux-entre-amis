@@ -15,7 +15,7 @@ export function TeamBar({ g, name, phone }: { g: CapitaleView; name: (id: string
   const mine = g.you ? g.teams?.[g.you] : undefined;
   const win = teamRules(g).win;
   return (
-    <div className={`cap-teambar ${phone ? "is-phone" : ""}`} aria-label="Les équipes">
+    <div className={`cap-teambar is-n${teams.length} ${phone ? "is-phone" : ""}`} aria-label="Les équipes">
       {teams.map((t, k) => {
         const members = g.players.filter((p) => g.teams?.[p.id] === t);
         const worth = members.reduce((n, p) => n + (p.bankrupt ? 0 : (g.worth[p.id] ?? 0)), 0);
