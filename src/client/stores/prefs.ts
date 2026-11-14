@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
+import type { BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { Looks } from "../../shared/looks.ts";
@@ -40,6 +41,8 @@ interface Prefs {
   navalSkin: NavalSkinId | null;
   /** Capitale : son pion, choisi en dernier sur cet appareil et repris à chaque table */
   capitaleToken: TokenId | null;
+  /** Mèche : la bombe qu'on allume, choisie en dernier sur cet appareil et reprise à chaque table */
+  mecheBomb: BombId | null;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -75,6 +78,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   cramponsFete: null,
   navalSkin: null,
   capitaleToken: null,
+  mecheBomb: null,
   ...load(),
   set: (patch) => {
     set(patch);
@@ -96,5 +100,6 @@ export function deviceLooks(p: ReturnType<typeof usePrefs.getState>): Looks {
     ...(p.bolidesVehicle ? { bolidesVehicle: p.bolidesVehicle } : {}),
     ...(p.bolidesSkin ? { bolidesSkin: p.bolidesSkin } : {}),
     ...(p.cramponsFete ? { cramponsFete: p.cramponsFete } : {}),
+    ...(p.mecheBomb ? { mecheBomb: p.mecheBomb } : {}),
   };
 }

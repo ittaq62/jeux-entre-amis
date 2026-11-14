@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
+import { BOMB_BY_ID, DEFAULT_BOMB, isBombId, type BombId } from "../shared/games/meche/bombs.ts";
 import { botPlan } from "../shared/games/meche/bot.ts";
 import {
   checkWord,
@@ -37,10 +38,13 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { lookOf } from "../shared/looks.ts";
 import { random, randomSeed } from "../shared/rng.ts";
+import { bombItem, canUse } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { ownedItems } from "./shop.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -87,6 +91,8 @@ interface Seat {
   admin?: boolean;
   autoplay: false | "away";
   disconnectedAt: number | null;
+  /** La bombe qu'il allume (absent : la dynamite) */
+  bomb?: BombId;
 }
 
 type TimerKind = "light" | "boom" | "away" | "seatCleanup" | "cleanup" | "tourStart";
@@ -118,6 +124,11 @@ interface MecheData {
   results?: EloResults | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
+  /** La bombe de la mèche en cours (ou de la dernière) : celle de qui l'a allumée, figée jusqu'à la suivante */
+  roundBomb?: BombId;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 interface Attachment {
@@ -180,8 +191,13 @@ export class MecheRoom extends DurableObject<Env> {
     if (opts.tour) {
       // Tout le monde est déjà assis, y compris les bots de la tournée sous leur nom de tournée
       const d = this.data;
+      const tour = opts.tour;
       d.seats = [
-        ...opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now })),
+        // La bombe choisie sur son appareil (déjà vérifiée par la tournée)
+        ...tour.players.map((u) => {
+          const bomb = lookOf(tour.looks, u.id).mecheBomb;
+          return { ...this.newHumanSeat(u), disconnectedAt: now, ...(bomb && bomb !== DEFAULT_BOMB ? { bomb } : {}) };
+        }),
         ...opts.tour.bots.map((b) => ({
           id: b.id,
           kind: "bot" as const,
@@ -266,9 +282,11 @@ export class MecheRoom extends DurableObject<Env> {
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      await this.startTourGame(now);
-      return;
+    if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      // Tout le monde est là : une fenêtre pour choisir sa bombe, puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + TOUR_PICK_MS;
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
@@ -419,6 +437,27 @@ export class MecheRoom extends DurableObject<Env> {
         const valid = (REACTIONS as readonly string[]).includes(msg.emote) || (TAUNTS as readonly string[]).includes(msg.emote);
         if (!valid || !this.allowMessage(`emote:${userId}`, 900)) return;
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
+      }
+
+      case "bomb": {
+        // La bombe qu'il allume : à tout moment, s'il l'a (les autres s'achètent à la boutique). La mèche déjà
+        // allumée garde la sienne : la nouvelle sert à la prochaine qu'il allumera.
+        if (!seat || !isBombId(msg.bomb) || !this.allowMessage(`bomb:${userId}`, 300)) return;
+        const bomb = msg.bomb === DEFAULT_BOMB ? undefined : msg.bomb;
+        if (seat.bomb === bomb) return;
+        if (bomb && !canUse(bombItem(bomb), await ownedItems(this.env.DB, userId)))
+          return error(`${BOMB_BY_ID.get(bomb)!.name} s'achète à la boutique.`);
+        seat.bomb = bomb;
+        return this.afterChange([], now);
+      }
+
+      case "ready": {
+        // Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins
+        if (!d.tour || d.status !== "lobby" || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        const humans = d.seats.filter((s) => s.kind === "human");
+        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        return this.afterChange([], now);
       }
 
       case "sit": {
@@ -618,10 +657,17 @@ export class MecheRoom extends DurableObject<Env> {
     return this.data!.seats.find((s) => s.id === id);
   }
 
+  /** La bombe qu'allume ce joueur (un bot : la dynamite) */
+  private bombOf(id: string): BombId {
+    return this.seatById(id)?.bomb ?? DEFAULT_BOMB;
+  }
+
   /** Table de tournée : on joue avec ceux qui sont arrivés ; s'ils sont moins de deux, la tournée reprend la main. */
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
       await abortToTour(this.env, d.tour!.code, d.code);
@@ -659,6 +705,8 @@ export class MecheRoom extends DurableObject<Env> {
     );
     // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
     d.game.teams = d.tour?.teams ?? null;
+    // La première bombe sur la table : celle de qui allumera la première mèche
+    d.roundBomb = this.bombOf(holderOf(d.game).id);
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
@@ -850,6 +898,8 @@ export class MecheRoom extends DurableObject<Env> {
     switch (t.kind) {
       case "light": {
         if (!g || g.phase !== "break" || d.status !== "playing") return null;
+        // Celui qui allume la mèche y met sa bombe : toute la table la voit, jusqu'à ce qu'elle saute
+        d.roundBomb = this.bombOf(holderOf(g).id);
         const events = lightFuse(g, now);
         this.resetBoomTimer();
         this.scheduleBot();
@@ -999,16 +1049,20 @@ export class MecheRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
+        ...(s.bomb ? { bomb: s.bomb } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       meche: d.game ? mecheView(d.game) : null,
+      bomb: d.roundBomb ?? (d.game ? this.bombOf(holderOf(d.game).id) : DEFAULT_BOMB),
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
     };
   }
 

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { BALLS, FETES } from "./games/crampons/boutique.ts";
 import { CLUBS, deClub, isLegend } from "./games/crampons/clubs.ts";
 import { DEFAULT_CONFIG } from "./games/crampons/view.ts";
+import { BOMBS, DEFAULT_BOMB } from "./games/meche/bombs.ts";
 import {
   ballItem,
+  bombItem,
   canUse,
   clubItem,
   feteItem,
@@ -31,7 +33,7 @@ describe("la boutique", () => {
   });
 
   it("chaque catégorie garde de quoi jouer sans rien acheter, et a quelque chose à vendre", () => {
-    for (const kind of ["naval", "token", "vehicle", "kart", "uno", "club", "ballon", "fete"] as const) {
+    for (const kind of ["naval", "token", "vehicle", "kart", "uno", "club", "ballon", "fete", "bombe"] as const) {
       const items = SHOP_ITEMS.filter((i) => i.kind === kind);
       expect(items.some((i) => i.price === 0)).toBe(true);
       expect(items.some((i) => i.price > 0)).toBe(true);
@@ -58,6 +60,10 @@ describe("la boutique", () => {
     expect(canUse(feteItem("maison"), none)).toBe(true);
     expect(canUse(feteItem("genoux"), none)).toBe(false);
     expect(canUse(clubItem("inconnu"), none)).toBe(false);
+    // Mèche : la dynamite est à tout le monde
+    expect(canUse(bombItem("dynamite"), none)).toBe(true);
+    expect(canUse(bombItem("gaz"), none)).toBe(false);
+    expect(canUse(bombItem("gaz"), new Set([bombItem("gaz")]))).toBe(true);
   });
 
   it("on peut acheter directement le plus cher : aucun article n'en réclame un autre", () => {
@@ -67,7 +73,7 @@ describe("la boutique", () => {
 
   it("la migration garde acquis chaque article payant de l'ancien système", () => {
     // Les dos de cartes UNO et tout Crampons sont arrivés après : l'ancien système ne les connaissait pas
-    const later = new Set(["uno", "club", "ballon", "fete"]);
+    const later = new Set(["uno", "club", "ballon", "fete", "bombe"]);
     for (const item of SHOP_ITEMS.filter((i) => i.price > 0 && !later.has(i.kind))) expect(migration).toContain(`'${item.id}'`);
   });
 });
@@ -101,5 +107,25 @@ describe("Crampons à la boutique", () => {
     expect(new Set(poses).size).toBe(poses.length);
     // Les gestes de chaque joueur vont de 0 à 3 : ceux de la boutique commencent après (footballers.ts)
     for (const pose of poses) expect(pose).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("Mèche à la boutique", () => {
+  it("la dynamite est offerte et vient en premier ; les autres coûtent de plus en plus cher", () => {
+    expect(BOMBS[0]).toMatchObject({ id: DEFAULT_BOMB, price: 0 });
+    const prices = BOMBS.slice(1).map((b) => b.price);
+    for (const price of prices) expect(price).toBeGreaterThan(0);
+    expect([...prices].sort((a, b) => a - b)).toEqual(prices);
+  });
+
+  it("chaque bombe a son nom, sa fin en quelques mots, et son cri à elle", () => {
+    expect(new Set(BOMBS.map((b) => b.name)).size).toBe(BOMBS.length);
+    expect(new Set(BOMBS.map((b) => b.word)).size).toBe(BOMBS.length);
+    for (const b of BOMBS) {
+      expect(b.blurb.length).toBeGreaterThan(20);
+      // Le cri tient au milieu de la table, même sur téléphone
+      expect(b.word.length).toBeLessThanOrEqual(10);
+      expect(b.word).toMatch(/ !$/);
+    }
   });
 });

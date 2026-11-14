@@ -12,6 +12,7 @@ import type { TokenId } from "./games/capitale/tokens.ts";
 import type { SkinId } from "./games/naval/skins.ts";
 import type { BackId } from "./games/uno/backs.ts";
 import type { CapitaleView } from "./games/capitale/view.ts";
+import type { BombId } from "./games/meche/bombs.ts";
 import type { MecheEvent, MecheSettings, Refusal } from "./games/meche/engine.ts";
 import type { MecheView } from "./games/meche/view.ts";
 import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engine.ts";
@@ -178,6 +179,8 @@ export interface SeatView {
   back?: BackId;
   /** Crampons : la célébration de ses buts (absent : chacun fête à sa façon) */
   fete?: FeteId;
+  /** Mèche : la bombe qu'il allume (absent : la dynamite) */
+  bomb?: BombId;
 }
 
 export interface SpectatorView {
@@ -502,12 +505,17 @@ export interface MecheRoomView {
   hostId: string;
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   meche: MecheView | null;
+  /** La bombe de la mèche en cours, celle du joueur qui l'a allumée (entre deux mèches : celle qui vient de sauter) */
+  bomb: BombId;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 export type MecheClientMessage =
@@ -521,6 +529,10 @@ export type MecheClientMessage =
   | { t: "word"; word: string; turn: number }
   /** Se débarrasser de la mèche avec une passe */
   | { t: "pass"; turn: number }
+  /** La bombe qu'il allume */
+  | { t: "bomb"; bomb: BombId }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

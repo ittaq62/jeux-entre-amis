@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { SKIN_IDS, VEHICLE_IDS } from "./games/bolides/garage.ts";
 import { TOKENS } from "./games/capitale/tokens.ts";
 import { FETES } from "./games/crampons/boutique.ts";
+import { BOMBS } from "./games/meche/bombs.ts";
 import { SKINS as NAVAL_SKINS } from "./games/naval/skins.ts";
 import { BACKS } from "./games/uno/backs.ts";
 import { cleanLooks, lookOf, usableLooks, type Looks } from "./looks.ts";
-import { feteItem, kartItem, navalItem, SHOP_BY_ID, tokenItem, unoItem, vehicleItem } from "./shop.ts";
+import { bombItem, feteItem, kartItem, navalItem, SHOP_BY_ID, tokenItem, unoItem, vehicleItem } from "./shop.ts";
 
 const price = (item: string) => SHOP_BY_ID.get(item)!.price;
 // Pour chaque jeu, un article offert à tous et un article qui s'achète
@@ -18,6 +19,8 @@ const paidVehicle = VEHICLE_IDS.find((id) => price(vehicleItem(id)) > 0)!;
 const freeKart = SKIN_IDS.find((id) => price(kartItem(id)) === 0)!;
 const paidKart = SKIN_IDS.find((id) => price(kartItem(id)) > 0)!;
 const paidFete = FETES.find((f) => price(feteItem(f.id)) > 0)!.id;
+const freeBomb = BOMBS.find((b) => price(bombItem(b.id)) === 0)!.id;
+const paidBomb = BOMBS.find((b) => price(bombItem(b.id)) > 0)!.id;
 
 const everything: Looks = {
   unoBack: paidBack,
@@ -26,6 +29,7 @@ const everything: Looks = {
   bolidesVehicle: paidVehicle,
   bolidesSkin: paidKart,
   cramponsFete: paidFete,
+  mecheBomb: paidBomb,
 };
 
 describe("skins de chacun", () => {
@@ -39,6 +43,7 @@ describe("skins de chacun", () => {
         bolidesVehicle: null,
         bolidesSkin: { id: paidKart },
         cramponsFete: paidFete,
+        mecheBomb: "pétard",
         triche: "oui",
       }),
     ).toEqual({ cramponsFete: paidFete });
@@ -47,10 +52,13 @@ describe("skins de chacun", () => {
 
   it("ne garde que ce que le joueur a le droit d'utiliser", () => {
     // Rien d'acheté : seuls les articles offerts passent
-    expect(usableLooks({ ...everything, unoBack: freeBack, capitaleToken: freeToken, bolidesSkin: freeKart }, new Set())).toEqual({
+    expect(
+      usableLooks({ ...everything, unoBack: freeBack, capitaleToken: freeToken, bolidesSkin: freeKart, mecheBomb: freeBomb }, new Set()),
+    ).toEqual({
       unoBack: freeBack,
       capitaleToken: freeToken,
       bolidesSkin: freeKart,
+      mecheBomb: freeBomb,
     });
     // Tout acheté : tout passe
     const owned = new Set([
@@ -60,6 +68,7 @@ describe("skins de chacun", () => {
       vehicleItem(paidVehicle),
       kartItem(paidKart),
       feteItem(paidFete),
+      bombItem(paidBomb),
     ]);
     expect(usableLooks(everything, owned)).toEqual(everything);
     // Un seul article acheté

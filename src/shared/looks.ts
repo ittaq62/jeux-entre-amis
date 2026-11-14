@@ -5,9 +5,10 @@
 import { isSkinId as isKartSkinId, isVehicleId, type SkinId as KartSkinId, type VehicleId } from "./games/bolides/garage.ts";
 import { isTokenId, type TokenId } from "./games/capitale/tokens.ts";
 import { isFeteId, type FeteId } from "./games/crampons/boutique.ts";
+import { isBombId, type BombId } from "./games/meche/bombs.ts";
 import { isSkinId as isNavalSkinId, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { isBackId, type BackId } from "./games/uno/backs.ts";
-import { canUse, feteItem, kartItem, navalItem, tokenItem, unoItem, vehicleItem } from "./shop.ts";
+import { bombItem, canUse, feteItem, kartItem, navalItem, tokenItem, unoItem, vehicleItem } from "./shop.ts";
 
 /** Le ballon de Crampons n'y est pas : chacun ne voit que le sien, sur son appareil, sans passer par la table */
 export interface Looks {
@@ -17,6 +18,7 @@ export interface Looks {
   bolidesVehicle?: VehicleId;
   bolidesSkin?: KartSkinId;
   cramponsFete?: FeteId;
+  mecheBomb?: BombId;
 }
 
 /** Seulement des articles connus, chacun à sa place ; le reste est oublié */
@@ -29,6 +31,7 @@ export function cleanLooks(raw: unknown): Looks {
   if (isVehicleId(o.bolidesVehicle)) out.bolidesVehicle = o.bolidesVehicle;
   if (isKartSkinId(o.bolidesSkin)) out.bolidesSkin = o.bolidesSkin;
   if (isFeteId(o.cramponsFete)) out.cramponsFete = o.cramponsFete;
+  if (isBombId(o.mecheBomb)) out.mecheBomb = o.mecheBomb;
   return out;
 }
 
@@ -41,6 +44,7 @@ export function usableLooks(looks: Looks, owned: ReadonlySet<string>): Looks {
   if (looks.bolidesVehicle && canUse(vehicleItem(looks.bolidesVehicle), owned)) out.bolidesVehicle = looks.bolidesVehicle;
   if (looks.bolidesSkin && canUse(kartItem(looks.bolidesSkin), owned)) out.bolidesSkin = looks.bolidesSkin;
   if (looks.cramponsFete && canUse(feteItem(looks.cramponsFete), owned)) out.cramponsFete = looks.cramponsFete;
+  if (looks.mecheBomb && canUse(bombItem(looks.mecheBomb), owned)) out.mecheBomb = looks.mecheBomb;
   return out;
 }
 
