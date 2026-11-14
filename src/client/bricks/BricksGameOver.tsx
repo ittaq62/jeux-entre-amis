@@ -51,9 +51,10 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
     return () => clearTimeout(t);
   }, [won, sprint?.sprintTime, reduced]);
 
-  // Solo : le record personnel, une fois la partie enregistrée
+  // Solo : le record personnel, une fois la partie enregistrée (pas pour un spectateur : ce serait le sien, pas celui du joueur)
+  const mySprint = sprint !== undefined && sprint.id === me;
   useEffect(() => {
-    if (!sprint || !pseudo) return;
+    if (!sprint || !mySprint || !pseudo) return;
     const t = setTimeout(() => {
       api
         .get<{ bricks?: { totals: Record<string, number> } }>(`/profile/${encodeURIComponent(pseudo)}`)
@@ -61,7 +62,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
         .catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [sprint, pseudo]);
+  }, [sprint, mySprint, pseudo]);
 
   const actions = inTour ? (
     <>
