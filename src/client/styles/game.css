@@ -1190,6 +1190,15 @@ html:has(.bolides-root) body {
   overflow-y: auto;
 }
 
+/* La feuille rangée pour revoir la table : de quoi la rouvrir */
+.uno-results-back {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + var(--safe-bottom));
+  translate: -50% 0;
+  z-index: 40;
+}
+
 .score-sheet {
   width: min(500px, 100%);
   padding: 26px 28px 24px 56px;

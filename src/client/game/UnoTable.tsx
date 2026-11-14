@@ -540,7 +540,13 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               onShowLobby();
             }}
             onLeave={onLeave}
+            onInspect={() => setResultsHidden(true)}
           />
+        )}
+        {g.phase === "gameOver" && resultsHidden && (
+          <button className="btn btn-primary uno-results-back" onClick={() => setResultsHidden(false)}>
+            Revoir les résultats
+          </button>
         )}
       </div>
     </CardBackSkin.Provider>

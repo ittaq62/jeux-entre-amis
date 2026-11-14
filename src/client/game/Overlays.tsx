@@ -86,11 +86,14 @@ export function GameOver({
   onRematch,
   onLobby,
   onLeave,
+  onInspect,
 }: {
   room: RoomView;
   onRematch: () => void;
   onLobby: () => void;
   onLeave: () => void;
+  /** Ranger la feuille pour revoir la table (et retrouver son menu) */
+  onInspect: () => void;
 }) {
   const g = room.uno!;
   const ranking = g.ranking ?? [];
@@ -169,24 +172,36 @@ export function GameOver({
             <span className="spinner" /> La tournée continue : le classement arrive.
           </p>
         ) : (
-          <div className="overlay-actions">
-            {room.you.isHost ? (
-              <button className="btn btn-primary btn-lg" onClick={onRematch}>
-                Rejouer
-              </button>
-            ) : me ? (
-              <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
-                {voted ? "Revanche demandée" : "Demander la revanche"}
-              </button>
-            ) : null}
-            <button className="btn" onClick={onLobby}>
-              {room.you.isHost ? "Changer les règles" : "Voir la table"}
+          !me && (
+            <p className="hint" style={{ margin: 0 }}>
+              Tu regardes cette table : reste pour voir la partie suivante.
+            </p>
+          )
+        )}
+        <div className="overlay-actions">
+          {inTour ? null : room.you.isHost ? (
+            <button className="btn btn-primary btn-lg" onClick={onRematch}>
+              Rejouer
             </button>
+          ) : me ? (
+            <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
+              {voted ? "Revanche demandée" : "Demander la revanche"}
+            </button>
+          ) : null}
+          <button className="btn" onClick={onInspect}>
+            Voir la table
+          </button>
+          {!inTour && (
+            <button className="btn" onClick={onLobby}>
+              {room.you.isHost ? "Changer les règles" : "Voir le salon"}
+            </button>
+          )}
+          {!inTour && (
             <button className="btn btn-ghost" onClick={onLeave}>
               Quitter
             </button>
-          </div>
-        )}
+          )}
+        </div>
         {!inTour && room.rematch.length > 0 && (
           <p className="hint" style={{ margin: 0 }}>
             Revanche demandée par{" "}
