@@ -1,4 +1,6 @@
-import { CLUBS, FORMATION_NAMES, type Club, type FormationId } from "../../shared/games/crampons/clubs.ts";
+import { useMemo, useState } from "react";
+import { BALLS, FETES, type BallId, type FeteId } from "../../shared/games/crampons/boutique.ts";
+import { CLUBS, FORMATION_NAMES, isLegend, type Club, type FormationId } from "../../shared/games/crampons/clubs.ts";
 import {
   HALF_CHOICES,
   LEVEL_NAMES,
@@ -8,8 +10,15 @@ import {
   type WeatherId,
 } from "../../shared/games/crampons/view.ts";
 import { CRAMPONS_MAX_PLAYERS, type CramponsClientMessage, type CramponsRoomView } from "../../shared/protocol.ts";
+import { ballItem, clubItem, feteItem, SHOP_BY_ID, type ShopItem } from "../../shared/shop.ts";
+import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { BuyModal } from "../shop/BuyModal.tsx";
+import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
+import { CramponsLook } from "./CramponsLook.tsx";
+import { ballThumbnail } from "./scene/balls.ts";
 
 const LEVEL_HINTS = [
   "L'ordinateur lit mal le jeu et rate ses passes : pour découvrir.",
@@ -19,12 +28,16 @@ const LEVEL_HINTS = [
 ];
 
 const clubBy = (id: string): Club => CLUBS.find((c) => c.id === id) ?? CLUBS[0]!;
+const REGULAR = CLUBS.filter((c) => !isLegend(c));
+const LEGENDS = CLUBS.filter(isLegend);
+const points = (n: number) => `${n} point${n > 1 ? "s" : ""}`;
 
 function ClubPicker({
   label,
   value,
   formation,
   disabled,
+  owns,
   onClub,
   onFormation,
 }: {
@@ -32,6 +45,8 @@ function ClubPicker({
   value: string;
   formation: FormationId;
   disabled: boolean;
+  /** Ce club de légende est-il débloqué (pour l'hôte, qui choisit) ? */
+  owns: (club: Club) => boolean;
   onClub: (id: string) => void;
   onFormation: (id: FormationId) => void;
 }) {
@@ -49,11 +64,18 @@ function ClubPicker({
           {club.short}
         </span>
         <select id={`club-${label}`} className="input" value={value} disabled={disabled} onChange={(e) => onClub(e.target.value)}>
-          {CLUBS.map((c) => (
+          {REGULAR.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({c.rating})
             </option>
           ))}
+          <optgroup label="Clubs de légende">
+            {LEGENDS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.rating}){owns(c) || c.id === value ? "" : ` · ${points(c.price ?? 0)}`}
+              </option>
+            ))}
+          </optgroup>
         </select>
         <select
           className="input cr-form"
@@ -73,6 +95,122 @@ function ClubPicker({
   );
 }
 
+/**
+ * Le vestiaire de chacun : son ballon (qu'il est seul à voir) et la célébration de ses buts (que toute la table voit).
+ * Ce qui est verrouillé s'achète sur place, avec ses points.
+ */
+function Locker({ onBuy }: { onBuy: (item: ShopItem) => void }) {
+  const { balance, has } = useMyItems();
+  const set = usePrefs((p) => p.set);
+  const savedBall = usePrefs((p) => p.cramponsBall);
+  const savedFete = usePrefs((p) => p.cramponsFete);
+  const ball: BallId = savedBall && has(ballItem(savedBall)) ? savedBall : "classique";
+  const fete: FeteId = savedFete && has(feteItem(savedFete)) ? savedFete : "maison";
+  /** Ce qu'on regarde sans l'avoir encore */
+  const [peekBall, setPeekBall] = useState<BallId | null>(null);
+  const [peekFete, setPeekFete] = useState<FeteId | null>(null);
+  const thumbs = useMemo(() => new Map(BALLS.map((b) => [b.id, ballThumbnail(b.id, 22)])), []);
+  const shownBall = BALLS.find((b) => b.id === (peekBall ?? ball))!;
+  const shownFete = FETES.find((f) => f.id === (peekFete ?? fete))!;
+  const pickBall = (id: BallId) => {
+    if (has(ballItem(id))) {
+      setPeekBall(null);
+      set({ cramponsBall: id });
+    } else setPeekBall(id);
+  };
+  const pickFete = (id: FeteId) => {
+    if (has(feteItem(id))) {
+      setPeekFete(null);
+      set({ cramponsFete: id });
+    } else setPeekFete(id);
+  };
+  const ownedBalls = BALLS.filter((b) => has(ballItem(b.id))).length;
+  const ownedFetes = FETES.filter((f) => has(feteItem(f.id))).length;
+  return (
+    <section className="lobby-section panel cr-locker">
+      <div className="field">
+        <span className="field-label">
+          Ton ballon{" "}
+          <small className="hint">
+            {ownedBalls} sur {BALLS.length} · {points(balance)} à dépenser
+          </small>
+        </span>
+        <div className="cr-balls">
+          {BALLS.map((b) => {
+            const open = has(ballItem(b.id));
+            const label = open ? b.name : `${b.name} : ${points(b.price)}`;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                title={label}
+                aria-label={label}
+                aria-pressed={b.id === (peekBall ?? ball)}
+                className={`cr-ball ${b.id === (peekBall ?? ball) ? "is-on" : ""} ${open ? "" : "is-locked"}`}
+                onClick={() => pickBall(b.id)}
+              >
+                <img src={thumbs.get(b.id)} alt="" width={44} height={44} draggable={false} />
+                {!open && (
+                  <span className="cr-lock">
+                    <Icon name="coin" size={12} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <p className="hint cr-pick-line">
+          <span>
+            <strong>{shownBall.name}</strong> · toi seul le vois
+          </span>
+          {!has(ballItem(shownBall.id)) && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onBuy(SHOP_BY_ID.get(ballItem(shownBall.id))!)}>
+              <Icon name="coin" size={15} /> {points(shownBall.price)}
+            </button>
+          )}
+        </p>
+      </div>
+      <div className="field">
+        <span className="field-label">
+          Ta célébration{" "}
+          <small className="hint">
+            {ownedFetes} sur {FETES.length}
+          </small>
+        </span>
+        <div className="cr-fetes">
+          {FETES.map((f) => {
+            const open = has(feteItem(f.id));
+            return (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={f.id === (peekFete ?? fete)}
+                className={`cr-fete ${f.id === (peekFete ?? fete) ? "is-on" : ""} ${open ? "" : "is-locked"}`}
+                onClick={() => pickFete(f.id)}
+              >
+                {f.name}
+                {!open && (
+                  <span className="cr-price num">
+                    <Icon name="coin" size={12} /> {f.price}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <p className="hint cr-pick-line">
+          <span>{shownFete.blurb}</span>
+          {!has(feteItem(shownFete.id)) && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onBuy(SHOP_BY_ID.get(feteItem(shownFete.id))!)}>
+              <Icon name="coin" size={15} /> {points(shownFete.price)}
+            </button>
+          )}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 interface Props {
   room: CramponsRoomView;
   send: (msg: CramponsClientMessage) => void;
@@ -87,6 +225,20 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
   const isHost = room.you.isHost;
   const update = (settings: Partial<CramponsConfig>) => send({ t: "settings", settings });
   const mine = room.you.seatId ? room.teams[room.you.seatId] : undefined;
+  const { has } = useMyItems();
+  const set = usePrefs((p) => p.set);
+  const [buying, setBuying] = useState<{ item: ShopItem; team?: 0 | 1 } | null>(null);
+  const owns = (c: Club) => !isLegend(c) || has(clubItem(c.id));
+  // Un club de légende pas encore débloqué : on propose de l'acheter, et il entre en jeu une fois à soi
+  const chooseClub = (t: 0 | 1, id: string) => {
+    if (owns(clubBy(id))) setClub(t, id);
+    else setBuying({ item: SHOP_BY_ID.get(clubItem(id))!, team: t });
+  };
+  const bought = (item: ShopItem) => {
+    if (item.kind === "club" && buying?.team !== undefined) setClub(buying.team, item.ref);
+    if (item.kind === "ballon") set({ cramponsBall: item.ref as BallId });
+    if (item.kind === "fete") set({ cramponsFete: item.ref as FeteId });
+  };
   const setClub = (t: 0 | 1, id: string) => {
     const clubs: [string, string] = [...s.clubs];
     clubs[t] = id;
@@ -115,21 +267,24 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
       seatNote={(seat) => `${clubBy(s.clubs[room.teams[seat.id] ?? 0]).name}`}
       aside={
         room.you.seatId ? (
-          <section className="lobby-section panel field">
-            <span className="field-label">Ton équipe</span>
-            <Options<0 | 1>
-              label="Ton équipe"
-              value={mine ?? 0}
-              onChange={(team) => send({ t: "team", team })}
-              options={[
-                { value: 0, label: clubBy(s.clubs[0]).short },
-                { value: 1, label: clubBy(s.clubs[1]).short },
-              ]}
-            />
-            <p className="hint" style={{ margin: 0 }}>
-              L'ordinateur joue les postes laissés libres, et toute une équipe s'il n'y a personne dedans.
-            </p>
-          </section>
+          <>
+            <section className="lobby-section panel field">
+              <span className="field-label">Ton équipe</span>
+              <Options<0 | 1>
+                label="Ton équipe"
+                value={mine ?? 0}
+                onChange={(team) => send({ t: "team", team })}
+                options={[
+                  { value: 0, label: clubBy(s.clubs[0]).short },
+                  { value: 1, label: clubBy(s.clubs[1]).short },
+                ]}
+              />
+              <p className="hint" style={{ margin: 0 }}>
+                L'ordinateur joue les postes laissés libres, et toute une équipe s'il n'y a personne dedans.
+              </p>
+            </section>
+            <Locker onBuy={(item) => setBuying({ item })} />
+          </>
         ) : null
       }
       rules={
@@ -141,7 +296,8 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               value={s.clubs[0]}
               formation={s.formations[0]}
               disabled={!isHost}
-              onClub={(id) => setClub(0, id)}
+              owns={owns}
+              onClub={(id) => chooseClub(0, id)}
               onFormation={(f) => setFormation(0, f)}
             />
             <ClubPicker
@@ -149,7 +305,8 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               value={s.clubs[1]}
               formation={s.formations[1]}
               disabled={!isHost}
-              onClub={(id) => setClub(1, id)}
+              owns={owns}
+              onClub={(id) => chooseClub(1, id)}
               onFormation={(f) => setFormation(1, f)}
             />
 
@@ -257,6 +414,12 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
             <TableSize room={room} send={send} max={CRAMPONS_MAX_PLAYERS} />
           </section>
 
+          <BuyModal
+            item={buying?.item ?? null}
+            preview={buying ? <CramponsLook item={buying.item} big /> : undefined}
+            onClose={() => setBuying(null)}
+            onBought={bought}
+          />
           <section className="rules-sheet panel cr-help">
             <h3>Comment jouer</h3>
             <p className="hint">

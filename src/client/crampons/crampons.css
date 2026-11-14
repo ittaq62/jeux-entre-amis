@@ -916,6 +916,115 @@ kbd {
   font-size: 16px;
 }
 
+/* Le vestiaire, dans le salon : son ballon et sa célébration */
+.cr-locker {
+  display: grid;
+  gap: 14px;
+}
+
+.cr-locker .field {
+  margin: 0;
+}
+
+.cr-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cr-ball {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.cr-ball img {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.cr-ball.is-on {
+  border-color: #f2c94c;
+  box-shadow: 0 0 0 2px rgba(242, 201, 76, 0.35);
+}
+
+.cr-ball.is-locked img {
+  filter: saturate(0.5) brightness(0.62);
+}
+
+.cr-lock {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2a2418;
+  color: #ffd98a;
+}
+
+.cr-fetes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cr-fete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cr-fete.is-on {
+  border-color: #f2c94c;
+  background: rgba(242, 201, 76, 0.18);
+  color: #ffe6a0;
+}
+
+.cr-fete.is-locked {
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.cr-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #ffd98a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cr-pick-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  min-height: 32px;
+  margin: 0;
+}
+
 /* L'illustration de l'accueil */
 .game-stage.is-pitch {
   background:

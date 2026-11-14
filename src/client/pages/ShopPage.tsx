@@ -2,6 +2,8 @@ import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "re
 import { seededAvatar } from "../../shared/avatar.ts";
 import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
+import { FETE_BY_ID, type FeteId } from "../../shared/games/crampons/boutique.ts";
+import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { GameId } from "../../shared/protocol.ts";
@@ -14,6 +16,7 @@ import { Link } from "wouter";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { CramponsLook, isCramponsKind } from "../crampons/CramponsLook.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { useSession } from "../stores/session.ts";
@@ -25,6 +28,9 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "token", game: "capitale", title: "Capitale", note: "Tes pions" },
   { kind: "vehicle", game: "bolides", title: "Bolides", note: "Tes véhicules, chacun sa conduite" },
   { kind: "kart", game: "bolides", title: "Bolides", note: "Tes skins" },
+  { kind: "club", game: "crampons", title: "Crampons", note: "Les clubs de légende, à choisir au salon" },
+  { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
+  { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -48,6 +54,18 @@ export function ShopPage() {
       const [a, b] = KART_SKINS[item.ref as KartSkinId].swatch;
       return <span className="shop-swatch" style={{ "--a": a, "--b": b } as CSSProperties} />;
     }
+    if (isCramponsKind(item.kind)) return <CramponsLook item={item} />;
+    return null;
+  };
+
+  /** Quelques mots sous le nom : ce que fait le véhicule, le jeu du club, le geste de la célébration */
+  const blurb = (item: ShopItem): string | null => {
+    if (item.kind === "vehicle") return VEHICLES[item.ref as VehicleId].blurb;
+    if (item.kind === "club") {
+      const club = CLUB_BY_ID.get(item.ref);
+      return club ? `Note ${club.rating}, en ${FORMATION_NAMES[club.formation]}` : null;
+    }
+    if (item.kind === "fete") return FETE_BY_ID.get(item.ref as FeteId)?.blurb ?? null;
     return null;
   };
 
@@ -64,6 +82,7 @@ export function ShopPage() {
       );
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
+    if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     return look(item);
   };
 
@@ -108,7 +127,7 @@ export function ShopPage() {
                   >
                     {look(item) && <span className="shop-look">{look(item)}</span>}
                     <span className="shop-name">{item.name}</span>
-                    {item.kind === "vehicle" && <span className="shop-blurb">{VEHICLES[item.ref as VehicleId].blurb}</span>}
+                    {blurb(item) && <span className="shop-blurb">{blurb(item)}</span>}
                     {mine ? (
                       <span className="shop-mine">
                         <Icon name="check" size={14} /> À toi
