@@ -453,8 +453,12 @@ app.get("/tours/:id", withSession, withProfile, async (c) => {
 app.get("/rooms/:code", withSession, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
-  const summary = await (await roomStub(c, code)).summary();
+  const stub = await roomStub(c, code);
+  const summary = await stub.summary();
   if (!summary) return c.json({ error: "Ce salon n'existe pas ou est fermé." }, 404);
+  // Partie lancée, porte fermée en cours de route, ami de personne : rien sur la table, seulement pourquoi
+  const refused = await stub.refusal(toPublic(c.get("user")));
+  if (refused) return c.json({ error: refused }, 403);
   return c.json({ room: summary });
 });
 

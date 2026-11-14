@@ -218,8 +218,9 @@ export class Hub extends DurableObject<Env> {
         (r) =>
           r.summary.game === game &&
           r.summary.visibility === "public" &&
-          // On rejoint une tournée en cours entre deux jeux ; une table de jeu, seulement avant la partie
-          (r.summary.status === "lobby" || (game === "tour" && r.summary.status === "playing")) &&
+          // On rejoint une tournée en cours entre deux jeux (si elle s'ouvre en cours de route) ; une table de jeu,
+          // seulement avant la partie
+          (r.summary.status === "lobby" || (game === "tour" && r.summary.status === "playing" && r.summary.lateJoin !== false)) &&
           r.summary.humans > 0 &&
           r.summary.humans < r.summary.maxPlayers &&
           now - r.updatedAt < 30 * 60_000,

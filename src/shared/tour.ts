@@ -99,6 +99,8 @@ export interface TourSettings {
    * l'hôte comme « pas de UNO d'avance » : jamais tirés ni votés avec les règles.
    */
   capitaleTeam: CapitaleTeamRules;
+  /** Rejoindre en cours de route : qui arrive pendant la tournée peut la jouer dès le prochain jeu, ou la regarder ; sinon seuls les amis des joueurs la suivent */
+  lateJoin?: boolean;
 }
 
 /** Les règles d'équipe de Capitale qu'une tournée confie à ses tables */
@@ -776,6 +778,7 @@ export type TourClientMessage =
       settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "noEarlyUno" | "capitaleTeam">>;
       visibility?: Visibility;
       maxPlayers?: number;
+      lateJoin?: boolean;
     }
   | { t: "start" }
   /** Jouer la tournée (plutôt que la regarder) */

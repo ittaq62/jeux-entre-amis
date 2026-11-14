@@ -37,7 +37,22 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
+import {
+  CLOSED_TABLE,
+  defaultLateJoin,
+  forgetWatcher,
+  intentFrom,
+  JOINS_STARTED,
+  lateJoinNotice,
+  lateJoinOf,
+  maySit,
+  rememberWatcher,
+  type Arrival,
+  type ArrivalCase,
+  type ArrivalIntent,
+} from "../shared/lateJoin.ts";
 import { tourUnoSettings, type TourInit } from "../shared/tour.ts";
+import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { lookOf } from "../shared/looks.ts";
 import { unoItem } from "../shared/shop.ts";
@@ -128,6 +143,8 @@ interface RoomData {
   /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
   pickUntil?: number | null;
   ready?: string[];
+  /** Ceux qui regardent la table (venus pour regarder, ou arrivés pendant une partie) : jamais assis sans le demander */
+  watchers?: string[];
 }
 
 interface Attachment {
@@ -177,7 +194,7 @@ export class GameRoom extends DurableObject<Env> {
       createdAt: now,
       hostId: opts.host.id,
       quick: opts.quick,
-      settings: { visibility: opts.visibility, maxPlayers: 6, uno: { ...DEFAULT_SETTINGS } },
+      settings: { visibility: opts.visibility, maxPlayers: 6, lateJoin: defaultLateJoin(opts.quick), uno: { ...DEFAULT_SETTINGS } },
       status: "lobby",
       seats: [],
       botCounter: 0,
@@ -249,6 +266,15 @@ export class GameRoom extends DurableObject<Env> {
     return this.data ? this.buildSummary() : null;
   }
 
+  /** Pourquoi ce compte reste à la porte (partie lancée, table fermée en cours de route, ami de personne), ou null */
+  async refusal(user: PublicUser): Promise<string | null> {
+    const d = this.data;
+    if (!d || d.tour) return null;
+    const c = this.arrivalCase(user.id, null);
+    const friend = await friendForArrival(this.env.DB, user, c, d.seats);
+    return this.data && decide(this.arrivalCase(user.id, null), friend) === "deny" ? CLOSED_TABLE : null;
+  }
+
   /** Administration : ferme la table pour tout le monde. */
   async adminClose(): Promise<boolean> {
     if (!this.data) return false;
@@ -268,20 +294,41 @@ export class GameRoom extends DurableObject<Env> {
     const user = decodeHeaderJson<PublicUser>(request.headers.get("X-User"));
     if (!user || request.headers.get("Upgrade") !== "websocket") return new Response("Requête invalide", { status: 400 });
     if (d.kicked.includes(user.id)) return new Response("Tu as été exclu de ce salon", { status: 403 });
+    // Ce que veut celui qui arrive (« Regarder » : jamais assis), puis ce que la table permet
+    const intent = intentFrom(new URL(request.url).search);
+    const friend = await friendForArrival(this.env.DB, user, this.arrivalCase(user.id, intent), d.seats);
+    if (!this.data) return new Response("Salon introuvable", { status: 404 });
+    const decision = d.tour ? "watch" : decide(this.arrivalCase(user.id, intent), friend);
+    if (decision === "deny") return refuseSocket(CLOSED_TABLE);
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [user.id]);
     server.serializeAttachment({ userId: user.id, user } satisfies Attachment);
     // Un seul appareil par compte : s'il était déjà là ailleurs, l'ancien appareil est prévenu et laisse la place
     replaceOlder(this.ctx.getWebSockets(user.id), server);
-    await this.onJoin(user, server);
+    await this.onJoin(user, server, decision);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** Rejoindre en cours de route (voir lateJoin.ts) : tout ce qui compte pour celui qui arrive */
+  private arrivalCase(userId: string, intent: ArrivalIntent): ArrivalCase {
+    const d = this.data!;
+    return {
+      intent,
+      seated: d.seats.some((s) => s.userId === userId),
+      started: d.status === "playing",
+      lateJoin: lateJoinOf(d.settings, d.quick),
+      midGame: JOINS_STARTED.uno,
+      watcher: (d.watchers ?? []).includes(userId),
+      friend: false,
+      room: d.seats.length < d.settings.maxPlayers || d.seats.some((s) => s.kind === "bot"),
+    };
   }
 
   // -------------------------------------------------------------------------
   // Arrivees et departs
   // -------------------------------------------------------------------------
 
-  private async onJoin(user: PublicUser, ws: WebSocket) {
+  private async onJoin(user: PublicUser, ws: WebSocket, decision: Arrival) {
     const d = this.data!;
     const now = Date.now();
     d.timers = d.timers.filter((t) => t.kind !== "cleanup");
@@ -301,11 +348,15 @@ export class GameRoom extends DurableObject<Env> {
         seat.avatar = user.avatar;
         seat.photo = user.photo;
       }
-    } else if (d.status !== "playing" && !d.tour) {
+    } else if (decision === "seat" && d.status !== "playing") {
       seat = this.seatHuman(user) ?? undefined;
       if (seat) this.systemChat(`${user.pseudo} s'installe à la table.`);
     }
-    if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
+    if (!seat) {
+      // Spectateur : il le reste, même s'il revient plus tard, tant qu'il ne prend pas une place lui-même
+      d.watchers = rememberWatcher(d.watchers, user.id);
+      this.systemChat(`${user.pseudo} regarde la partie.`);
+    }
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
     if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
@@ -497,9 +548,11 @@ export class GameRoom extends DurableObject<Env> {
       }
 
       case "sit": {
-        if (seat || d.status === "playing") return;
+        // Une partie de UNO lancée ne se rejoint pas : on s'assoit avant, ou entre deux parties
+        if (seat || d.tour || !maySit(this.arrivalCase(userId, "play"))) return;
         const seated = this.seatHuman(att.user);
         if (!seated) return error("La table est complète.");
+        d.watchers = forgetWatcher(d.watchers, userId);
         this.systemChat(`${att.user.pseudo} s'installe à la table.`);
         return this.afterChange([], now);
       }
@@ -548,7 +601,13 @@ export class GameRoom extends DurableObject<Env> {
     if (!isHost && !(isAdmin && moderation)) return error("Seul l'hôte peut faire ça.");
     switch (msg.t) {
       case "settings": {
-        if (d.status === "playing") return error("On ne change pas les règles en pleine partie.");
+        // Rejoindre en cours de route : la porte de la table, que l'hôte ouvre ou ferme à tout moment
+        if (typeof msg.lateJoin === "boolean" && msg.lateJoin !== lateJoinOf(d.settings, d.quick)) {
+          d.settings.lateJoin = msg.lateJoin;
+          this.systemChat(lateJoinNotice("uno", msg.lateJoin));
+          if (d.status === "playing") return this.afterChange([], now);
+        }
+        if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine partie.") : undefined;
         d.settings.uno = mergeSettings(d.settings.uno, msg.settings ?? {});
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
@@ -1080,7 +1139,7 @@ export class GameRoom extends DurableObject<Env> {
       code: d.code,
       game: "uno",
       status: d.status,
-      settings: d.settings,
+      settings: { ...d.settings, lateJoin: lateJoinOf(d.settings, d.quick) },
       seats: d.seats.map((s) => ({
         id: s.id,
         kind: s.kind,
@@ -1150,7 +1209,8 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private presenceRoom(): PresenceRoom {
-    return { code: this.data!.code, game: "uno", status: this.data!.status };
+    const d = this.data!;
+    return { code: d.code, game: "uno", status: d.status, lateJoin: lateJoinOf(d.settings, d.quick) };
   }
 
   private buildSummary(): RoomSummary {
@@ -1169,6 +1229,7 @@ export class GameRoom extends DurableObject<Env> {
       names: d.seats.filter((s) => s.kind === "human").map((s) => s.name),
       createdAt: d.createdAt,
       quick: d.quick,
+      lateJoin: lateJoinOf(d.settings, d.quick),
     };
   }
 

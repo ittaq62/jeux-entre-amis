@@ -12,6 +12,18 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import {
+  CLOSED_TOUR,
+  defaultLateJoin,
+  intentFrom,
+  JOINS_STARTED,
+  lateJoinNotice,
+  lateJoinOf,
+  maySit,
+  type Arrival,
+  type ArrivalCase,
+  type ArrivalIntent,
+} from "../shared/lateJoin.ts";
 import { cleanLooks, usableLooks, type Looks } from "../shared/looks.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import {
@@ -55,6 +67,7 @@ import {
 import type { RoomInit } from "./room.ts";
 import { ownedItems } from "./shop.ts";
 import { gameStub } from "./tourLink.ts";
+import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 import { recordTour } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -214,7 +227,7 @@ export class TourRoom extends DurableObject<Env> {
       createdAt: now,
       hostId: opts.host.id,
       quick: opts.quick,
-      settings: defaultTourSettings(opts.visibility),
+      settings: { ...defaultTourSettings(opts.visibility), lateJoin: defaultLateJoin(opts.quick) },
       status: "lobby",
       members: [],
       games: [],
@@ -242,6 +255,13 @@ export class TourRoom extends DurableObject<Env> {
 
   async summary(): Promise<RoomSummary | null> {
     return this.data ? this.buildSummary() : null;
+  }
+
+  /** Pourquoi ce compte reste à la porte (tournée lancée, fermée en cours de route, ami de personne), ou null */
+  async refusal(user: PublicUser): Promise<string | null> {
+    if (!this.data) return null;
+    const friend = await friendForArrival(this.env.DB, user, this.arrivalCase(user.id, null), this.tablePlayers());
+    return this.data && decide(this.arrivalCase(user.id, null), friend) === "deny" ? CLOSED_TOUR : null;
   }
 
   async adminClose(): Promise<boolean> {
@@ -337,13 +357,43 @@ export class TourRoom extends DurableObject<Env> {
     const user = decodeHeaderJson<PublicUser>(request.headers.get("X-User"));
     if (!user || request.headers.get("Upgrade") !== "websocket") return new Response("Requête invalide", { status: 400 });
     if (d.kicked.includes(user.id)) return new Response("Tu as été exclu de cette tournée", { status: 403 });
+    // Ce que veut celui qui arrive (« Regarder » : jamais joueur), puis ce que la tournée permet
+    const intent = intentFrom(new URL(request.url).search);
+    const friend = await friendForArrival(this.env.DB, user, this.arrivalCase(user.id, intent), this.tablePlayers());
+    if (!this.data) return new Response("Tournée introuvable", { status: 404 });
+    const decision = decide(this.arrivalCase(user.id, intent), friend);
+    if (decision === "deny") return refuseSocket(CLOSED_TOUR);
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [user.id]);
     server.serializeAttachment({ userId: user.id, user } satisfies Attachment);
     // Un seul appareil par compte : s'il était déjà là ailleurs, l'ancien appareil est prévenu et laisse la place
     replaceOlder(this.ctx.getWebSockets(user.id), server);
-    await this.onJoin(user, server);
+    await this.onJoin(user, server, decision);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** Les joueurs de la tournée, dont l'amitié ouvre la porte quand elle est fermée */
+  private tablePlayers() {
+    return this.data!.members.filter((m) => m.role === "player" && !m.left);
+  }
+
+  /**
+   * Rejoindre en cours de route (voir lateJoin.ts) : un joueur de la tournée (même parti) retrouve sa place, un
+   * spectateur reste spectateur sans le demander. La tournée est « lancée » dès son premier tirage.
+   */
+  private arrivalCase(userId: string, intent: ArrivalIntent): ArrivalCase {
+    const d = this.data!;
+    const m = this.member(userId);
+    return {
+      intent,
+      seated: m?.role === "player",
+      started: d.status !== "lobby",
+      lateJoin: lateJoinOf(d.settings, d.quick),
+      midGame: JOINS_STARTED.tour,
+      watcher: m?.role === "spectator",
+      friend: false,
+      room: this.playerCount() < d.settings.maxPlayers || this.tablePlayers().some((x) => x.kind === "bot"),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -424,6 +474,17 @@ export class TourRoom extends DurableObject<Env> {
     return this.data!.members.filter((m) => m.role === "player" && !m.left).length;
   }
 
+  /** Un spectateur devient joueur : une place libre, ou celle d'un bot ; arrivé pendant un jeu, il joue le suivant */
+  private makePlayer(member: Member): boolean {
+    const d = this.data!;
+    if (this.playerCount() >= d.settings.maxPlayers && !this.freeSeatFromBot()) return false;
+    member.role = "player";
+    member.waiting = d.status === "playing";
+    if (d.settings.teams) member.team = this.emptierTeam();
+    this.systemChat(`${member.name} joue la tournée.`);
+    return true;
+  }
+
   /** L'équipe la moins remplie, les Rouges en cas d'égalité */
   private emptierTeam(): 0 | 1 {
     const players = this.data!.members.filter((m) => m.role === "player" && !m.left);
@@ -431,7 +492,7 @@ export class TourRoom extends DurableObject<Env> {
     return red <= players.length - red ? 0 : 1;
   }
 
-  private async onJoin(user: PublicUser, ws: WebSocket) {
+  private async onJoin(user: PublicUser, ws: WebSocket, decision: Arrival) {
     const d = this.data!;
     const now = Date.now();
     d.timers = d.timers.filter((t) => t.kind !== "cleanup" && !(t.userId === user.id && (t.kind === "release" || t.kind === "host")));
@@ -449,8 +510,11 @@ export class TourRoom extends DurableObject<Env> {
         member.waiting = d.status === "playing";
         if (d.status !== "finished") this.systemChat(`${member.name} revient dans la tournée.`);
       }
+      // Un spectateur qui revient en demandant à jouer (« Rejoindre ») : il entre, si la tournée le permet
+      if (member.role === "spectator" && decision === "seat" && d.status !== "finished") this.makePlayer(member);
     } else if (d.status !== "finished") {
-      const player = this.playerCount() < d.settings.maxPlayers || this.freeSeatFromBot();
+      // « Regarder », ou une tournée déjà lancée sans qu'il ait demandé à jouer : il regarde (l'écran lui propose d'entrer)
+      const player = decision === "seat" && (this.playerCount() < d.settings.maxPlayers || this.freeSeatFromBot());
       member = {
         userId: user.id,
         kind: "human",
@@ -581,11 +645,9 @@ export class TourRoom extends DurableObject<Env> {
 
       case "sit": {
         if (!member || member.role === "player" || d.status === "finished") return;
-        if (this.playerCount() >= d.settings.maxPlayers && !this.freeSeatFromBot()) return error("La tournée est complète.");
-        member.role = "player";
-        member.waiting = d.status === "playing";
-        if (d.settings.teams) member.team = this.emptierTeam();
-        this.systemChat(`${member.name} joue la tournée.`);
+        // Tournée lancée et fermée en cours de route : on la suit, on n'y entre plus
+        if (!maySit(this.arrivalCase(userId, "play"))) return error("La tournée n'accepte plus de joueurs en cours de route.");
+        if (!this.makePlayer(member)) return error("La tournée est complète.");
         return this.afterChange();
       }
 
@@ -706,7 +768,14 @@ export class TourRoom extends DurableObject<Env> {
       }
 
       case "settings": {
-        if (d.status !== "lobby") return error("Les règles de la tournée sont fixées une fois lancée.");
+        // Rejoindre en cours de route : la porte de la tournée, que l'hôte ouvre ou ferme à tout moment
+        if (typeof msg.lateJoin === "boolean" && msg.lateJoin !== lateJoinOf(d.settings, d.quick)) {
+          d.settings.lateJoin = msg.lateJoin;
+          this.systemChat(lateJoinNotice("tour", msg.lateJoin));
+          if (d.status !== "lobby") return this.afterChange();
+        }
+        if (d.status !== "lobby")
+          return msg.lateJoin === undefined ? error("Les règles de la tournée sont fixées une fois lancée.") : undefined;
         const patch = msg.settings ?? {};
         if (Array.isArray(patch.games)) {
           const games = TOUR_GAMES.filter((g) => patch.games!.includes(g));
@@ -1273,7 +1342,7 @@ export class TourRoom extends DurableObject<Env> {
       code: d.code,
       game: "tour",
       status: d.status,
-      settings: d.settings,
+      settings: { ...d.settings, lateJoin: lateJoinOf(d.settings, d.quick) },
       hostId: d.hostId,
       members: d.members.map((m) => ({
         userId: m.userId,
@@ -1354,7 +1423,8 @@ export class TourRoom extends DurableObject<Env> {
   }
 
   private presenceRoom(): PresenceRoom {
-    return { code: this.data!.code, game: "tour", status: this.roomStatus() };
+    const d = this.data!;
+    return { code: d.code, game: "tour", status: this.roomStatus(), lateJoin: lateJoinOf(d.settings, d.quick) };
   }
 
   private buildSummary(): RoomSummary {
@@ -1374,6 +1444,7 @@ export class TourRoom extends DurableObject<Env> {
       names: players.filter((m) => m.kind === "human").map((m) => m.name),
       createdAt: d.createdAt,
       quick: d.quick,
+      lateJoin: lateJoinOf(d.settings, d.quick),
     };
   }
 
