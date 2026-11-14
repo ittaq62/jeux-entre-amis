@@ -3107,16 +3107,6 @@
   }
 }
 
-/* Téléphone couché : la barre des équipes au milieu de l'en-tête, le plateau garde la place qu'il avait */
-.cap-bright.is-phone .table-top .cap-teambar {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  translate: -50% -50%;
-  margin: 0;
-  width: max-content;
-}
-
 /* ------------------------------------------------------------------ */
 /* Téléphone couché : les joueurs en colonne à gauche, le plateau au   */
 /* milieu sur toute la hauteur, les billets et les boutons à droite    */
@@ -3357,5 +3347,56 @@
 
   .cap-corners.is-phone.is-dense .cap-corner-cash {
     font-size: 14px;
+  }
+}
+
+/* Couché, l'en-tête : le titre cède sa place aux équipes en premier (le code de la table reste), et les équipes ne
+   recouvrent ni le titre ni le bouton Monopole */
+.cap-bright.is-land .table-title {
+  flex: 0 100 auto;
+  min-width: 64px;
+}
+
+.cap-bright.is-land .table-title .hint {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cap-bright.is-phone .table-top .cap-teambar {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 2px;
+  overflow: hidden;
+}
+
+.cap-bright.is-phone .table-top .cap-teambar-team {
+  white-space: nowrap;
+}
+
+/* À trois équipes, la forme et la couleur suffisent : il reste la fortune de chacune */
+.cap-bright.is-phone .table-top .cap-teambar.is-n3 .cap-teambar-team:has(b) strong {
+  display: none;
+}
+
+.cap-bright.is-land .table-top .cap-mono-btn {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+/* Le plus étroit : les équipes sur deux lignes, en plus petit, plutôt que des fortunes coupées */
+@media (max-width: 639px) {
+  .cap-bright.is-phone .table-top .cap-teambar {
+    flex-wrap: wrap;
+    gap: 2px 4px;
+    padding: 0;
+  }
+
+  .cap-bright.is-phone .table-top .cap-teambar-team {
+    padding: 1px 6px 1px 4px;
+    font-size: 11px;
   }
 }
