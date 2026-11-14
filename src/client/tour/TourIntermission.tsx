@@ -8,7 +8,6 @@ import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { drawSchedule } from "./drawTiming.ts";
-import { NextGameLooks } from "./TourLooks.tsx";
 import { GameTicket, playedGames, ReadyVote, rulesName, Standings, TourTop } from "./TourParts.tsx";
 import { TourRules } from "./TourRules.tsx";
 
@@ -71,8 +70,6 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
               </div>
             )}
             <TourRules view={view} send={send} revealed={revealed} />
-            {/* Le jeu est connu : ses skins pour ce jeu-là, à changer avant le départ */}
-            {revealed && view.next && view.you.role === "player" && <NextGameLooks game={view.next.game} games={view.settings.games} />}
             <div className={`tour-countdown ${lastSeconds ? "is-last" : ""}`} aria-live="polite">
               {view.notice ? (
                 <p className="tour-notice">{view.notice}</p>

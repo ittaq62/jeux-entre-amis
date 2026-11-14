@@ -21,7 +21,6 @@ import {
 import { Check, Options } from "../components/ui.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { TeamsPanel } from "../game/TeamsPanel.tsx";
-import { TourLooksPanel } from "./TourLooks.tsx";
 import { GameTicket, MusicToggle, ReadyVote } from "./TourParts.tsx";
 
 interface Props {
@@ -163,7 +162,6 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           {s.teams && room.seats.length > 0 && (
             <TeamsPanel room={room} send={(msg) => send(msg)} names={TOUR_TEAMS} colors={TOUR_TEAM_COLORS} />
           )}
-          {view.you.member && <TourLooksPanel games={s.games} />}
           {view.you.member && (
             <div className="tour-role">
               {view.you.role === "player" ? (
