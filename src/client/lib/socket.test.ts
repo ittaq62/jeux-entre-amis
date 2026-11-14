@@ -87,6 +87,20 @@ describe("la connexion à une table", () => {
     socket.close();
   });
 
+  it("ce que veut celui qui arrive (« ?regarder ») part jusqu'à la première connexion réussie, pas aux reconnexions", () => {
+    const socket = new LiveSocket<unknown, unknown>("/rooms/ABCD/ws", { onMessage: () => {}, firstQuery: "?regarder" });
+    expect(FakeWS.made[0]!.url).toBe("ws://localhost/api/rooms/ABCD/ws?regarder");
+    // Le réseau manque avant même d'arriver : on réessaie avec la même intention
+    FakeWS.made[0]!.shut(1006);
+    vi.advanceTimersByTime(7000);
+    expect(FakeWS.made[1]!.url).toBe("ws://localhost/api/rooms/ABCD/ws?regarder");
+    FakeWS.made[1]!.open();
+    FakeWS.made[1]!.shut(1006);
+    vi.advanceTimersByTime(7000);
+    expect(FakeWS.made[2]!.url).toBe("ws://localhost/api/rooms/ABCD/ws");
+    socket.close();
+  });
+
   it("une connexion déjà quittée ne parle plus", () => {
     const { socket, messages } = connect();
     const first = FakeWS.made[0]!;

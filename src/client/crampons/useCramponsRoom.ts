@@ -11,6 +11,7 @@ import {
 } from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { announceSeatChanges } from "../game/AwayNote.tsx";
+import { arrivalQuery } from "../lib/arrival.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
@@ -55,6 +56,7 @@ export function useCramponsRoom(code: string) {
         if (cancelled) return;
         socket.current = new LiveSocket<CramponsServerMessage, CramponsClientMessage>(`/rooms/${code}/ws`, {
           fatalCodes: [4003, 4004, SOCKET_REPLACED],
+          firstQuery: arrivalQuery(code),
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {

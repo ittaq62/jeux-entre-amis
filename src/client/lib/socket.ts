@@ -9,6 +9,11 @@ export interface SocketOptions<In> {
   onStatus?: (status: SocketStatus) => void;
   /** Codes de fermeture apres lesquels on ne se reconnecte pas */
   fatalCodes?: number[];
+  /**
+   * Ajouté à l'adresse jusqu'à la première connexion réussie (ce que veut celui qui arrive : « ?regarder ») : les
+   * reconnexions s'en passent, la salle se souvient de lui
+   */
+  firstQuery?: string;
 }
 
 /** WebSocket qui se reconnecte tout seul, avec un battement de coeur pour garder la connexion vivante. */
@@ -19,6 +24,7 @@ export class LiveSocket<In, Out> {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private queue: string[] = [];
+  private opened = false;
   status: SocketStatus = "connecting";
 
   constructor(
@@ -46,11 +52,13 @@ export class LiveSocket<In, Out> {
   private connect() {
     if (this.stopped) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/api${this.path}`);
+    const query = this.opened ? "" : (this.opts.firstQuery ?? "");
+    const ws = new WebSocket(`${proto}://${location.host}/api${this.path}${query}`);
     this.ws = ws;
     this.setStatus(this.attempts === 0 ? "connecting" : "reconnecting");
     ws.onopen = () => {
       this.attempts = 0;
+      this.opened = true;
       this.setStatus("open");
       for (const msg of this.queue.splice(0)) ws.send(msg);
       if (this.pingTimer) clearInterval(this.pingTimer);

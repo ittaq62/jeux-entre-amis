@@ -52,6 +52,8 @@ export function CapitaleRoom({ code }: { code: string }) {
 
   return (
     <RoomShell
+      room={view}
+      onSit={() => send({ t: "sit" })}
       chat={messages}
       meId={me?.id ?? ""}
       chatOpen={chatOpen}

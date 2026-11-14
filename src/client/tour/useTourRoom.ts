@@ -3,6 +3,7 @@ import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import { SOCKET_REPLACED, type ChatMessage } from "../../shared/protocol.ts";
 import type { TourClientMessage, TourServerMessage, TourView } from "../../shared/tour.ts";
 import { Chip } from "../components/Chip.tsx";
+import { arrivalQuery } from "../lib/arrival.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
@@ -53,6 +54,7 @@ export function useTourRoom(code: string) {
         if (cancelled) return;
         socket.current = new LiveSocket<TourServerMessage, TourClientMessage>(`/rooms/${code}/ws`, {
           fatalCodes: [4003, 4004, SOCKET_REPLACED],
+          firstQuery: arrivalQuery(code),
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {

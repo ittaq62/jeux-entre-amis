@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
 import { GAME_END_HOLD_MS, type TourView } from "../../shared/tour.ts";
 import { Loading } from "../components/ui.tsx";
+import { ArrivalChoice } from "../game/ArrivalChoice.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { preloadSounds, startLoop, stopLoop, TOUR_SOUNDS } from "../lib/sound.ts";
 import { GameRoom } from "../pages/RoomPage.tsx";
@@ -63,33 +64,53 @@ export function TourRoom({ code }: { code: string }) {
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion à la tournée…" : "Arrivée à la tournée…"} />;
 
+  // Arrivé pendant la tournée : la jouer ou la regarder (toujours au même endroit, qu'un jeu s'affiche ou non)
+  const seated = view.members.filter((m) => m.role === "player" && !m.left);
+  const arrival = (
+    <ArrivalChoice
+      code={code}
+      game="tour"
+      started={view.status === "intermission" || view.status === "playing"}
+      seated={view.you.role === "player" || !view.you.member}
+      lateJoin={Boolean(view.settings.lateJoin)}
+      room={seated.length < view.settings.maxPlayers || seated.some((m) => m.kind === "bot")}
+      onJoin={() => send({ t: "sit" })}
+    />
+  );
+
   // Le jeu en cours, dans sa table : c'est elle qui affiche son chat, celui de la tournée
   if (shown && bridge) {
     return (
-      <TourBridgeContext.Provider value={bridge}>
-        <GameRoom key={shown.code} game={shown.game} code={shown.code} />
-      </TourBridgeContext.Provider>
+      <>
+        <TourBridgeContext.Provider value={bridge}>
+          <GameRoom key={shown.code} game={shown.game} code={shown.code} />
+        </TourBridgeContext.Provider>
+        {arrival}
+      </>
     );
   }
 
   const screenProps = { view, send, unread, onOpenChat: () => setChatOpen(true), onLeave: leave };
   return (
-    <RoomShell
-      chat={chat}
-      meId={me?.id ?? ""}
-      chatOpen={chatOpen}
-      onCloseChat={() => setChatOpen(false)}
-      onSend={sendChat}
-      reconnecting={status === "reconnecting"}
-    >
-      {view.status === "lobby" ? (
-        <TourLobby {...screenProps} />
-      ) : view.status === "finished" ? (
-        <TourFinale {...screenProps} serverOffset={serverOffset} />
-      ) : (
-        <TourIntermission {...screenProps} serverOffset={serverOffset} />
-      )}
-    </RoomShell>
+    <>
+      <RoomShell
+        chat={chat}
+        meId={me?.id ?? ""}
+        chatOpen={chatOpen}
+        onCloseChat={() => setChatOpen(false)}
+        onSend={sendChat}
+        reconnecting={status === "reconnecting"}
+      >
+        {view.status === "lobby" ? (
+          <TourLobby {...screenProps} />
+        ) : view.status === "finished" ? (
+          <TourFinale {...screenProps} serverOffset={serverOffset} />
+        ) : (
+          <TourIntermission {...screenProps} serverOffset={serverOffset} />
+        )}
+      </RoomShell>
+      {arrival}
+    </>
   );
 }
 

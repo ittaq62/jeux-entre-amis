@@ -8,6 +8,7 @@ import { UnoTable } from "../game/UnoTable.tsx";
 import { useRoom } from "../game/useRoom.ts";
 import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { noteArrival } from "../lib/arrival.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
@@ -27,8 +28,15 @@ const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ defaul
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
 export function RoomPage({ code }: { code: string }) {
   const upper = code.toUpperCase();
+  const [, navigate] = useLocation();
   const [game, setGame] = useState<TableGame | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
+  // Ce que veut celui qui arrive (« ?regarder », « ?jouer ») : gardé pour la connexion à la salle, puis retiré de
+  // l'adresse (le lien qu'on copie ensuite est celui de la table, sans plus)
+  useState(() => noteArrival(upper, window.location.search));
+  useEffect(() => {
+    if (window.location.search) navigate(`/salon/${upper}`, { replace: true });
+  }, [upper, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +127,8 @@ function UnoRoom({ code }: { code: string }) {
 
   return (
     <RoomShell
+      room={view}
+      onSit={() => send({ t: "sit" })}
       chat={messages}
       meId={me?.id ?? ""}
       chatOpen={chatOpen}

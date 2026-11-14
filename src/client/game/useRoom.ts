@@ -3,6 +3,7 @@ import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import { SOCKET_REPLACED, type ChatMessage, type RoomClientMessage, type RoomServerMessage, type RoomView } from "../../shared/protocol.ts";
 import type { UnoEvent } from "../../shared/games/uno/engine.ts";
 import { Chip } from "../components/Chip.tsx";
+import { arrivalQuery } from "../lib/arrival.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play, vibrate } from "../lib/sound.ts";
@@ -86,6 +87,7 @@ export function useRoom(code: string) {
         if (cancelled) return;
         socket.current = new LiveSocket<RoomServerMessage, RoomClientMessage>(`/rooms/${code}/ws`, {
           fatalCodes: [4003, 4004, SOCKET_REPLACED],
+          firstQuery: arrivalQuery(code),
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {
