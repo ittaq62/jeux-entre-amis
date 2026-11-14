@@ -15,16 +15,18 @@ interface Props {
   onLobby: () => void;
   onLeave: () => void;
   onInspect: () => void;
+  /** Le temps de voir la dernière bombe sauter jusqu'au bout, en secondes (le nuage du gaz dure plus que le boum) */
+  wait?: number;
 }
 
-const sheetIn = {
+const sheetIn = (wait: number) => ({
   initial: { y: 24, opacity: 0, rotate: -1.5 },
   animate: { y: 0, opacity: 1, rotate: -0.6 },
-  transition: { duration: 0.35, ease: [0.2, 0.8, 0.3, 1] as const, delay: 1.5 },
-};
+  transition: { duration: 0.35, ease: [0.2, 0.8, 0.3, 1] as const, delay: wait + 0.1 },
+});
 
 /** Fin de partie : qui a tenu le plus longtemps, et le plus beau mot de chacun. */
-export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect }: Props) {
+export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wait = 1.4 }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.meche!;
   const ranks = g.ranks ?? {};
@@ -37,12 +39,15 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
 
   useEffect(() => {
     if (!won || reduced) return;
-    const t = setTimeout(() => {
-      const colors = ["#ff9a3c", "#ffd36b", "#f4ecda", "#e0463c"];
-      void confetti({ particleCount: 110, spread: 80, startVelocity: 40, origin: { y: 0.35 }, colors, scalar: 0.9 });
-    }, 1600);
+    const t = setTimeout(
+      () => {
+        const colors = ["#ff9a3c", "#ffd36b", "#f4ecda", "#e0463c"];
+        void confetti({ particleCount: 110, spread: 80, startVelocity: 40, origin: { y: 0.35 }, colors, scalar: 0.9 });
+      },
+      (wait + 0.2) * 1000,
+    );
     return () => clearTimeout(t);
-  }, [won, reduced]);
+  }, [won, reduced, wait]);
 
   const placed = ranking.map((id) => ({ id, rank: ranks[id] ?? ranking.length, isBot: seatOf(id)?.kind !== "human" }));
   const mine = placed.find((p) => p.id === me && !p.isBot);
@@ -55,8 +60,8 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
   }`;
 
   return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}>
-      <motion.div className="score-sheet paper gameover meche-sheet" {...sheetIn}>
+    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: wait }}>
+      <motion.div className="score-sheet paper gameover meche-sheet" {...sheetIn(wait)}>
         <div className="gameover-head">
           {winner && <Avatar avatar={winner.avatar} userId={winner.userId} photo={winner.photo} size={64} />}
           <div>

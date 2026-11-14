@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import type { BombId } from "../../shared/games/meche/bombs.ts";
 import { ropeLeft } from "../../shared/games/meche/engine.ts";
 import { fuseProgress, type FuseView } from "../../shared/games/meche/view.ts";
+import { BombArt } from "./bombs/BombArt.tsx";
 
 interface Props {
   fuse: FuseView | null;
@@ -9,6 +11,8 @@ interface Props {
   serverOffset: number;
   /** L'étincelle vient d'entrer dans la zone rouge (ou d'en sortir, à la mèche suivante) */
   onHot?: (hot: boolean) => void;
+  /** Ce qui saute au bout : la bombe de celui qui a allumé la mèche */
+  bomb: BombId;
   /** La bombe a sauté : elle n'est plus sur la table jusqu'à la mèche suivante */
   bombGone: boolean;
   hot: boolean;
@@ -42,8 +46,9 @@ function ropePath(w: number, h: number): string {
  * React ; quand un mot la fait reculer (mèche à rallonge), elle repart en arrière en glissant. Quand c'est une autre
  * mèche (le tour suivant à la classique, le joueur suivant à chacun la sienne), elle y saute d'un coup, avec un éclat.
  * Les pointillés ont toujours un vide plus long que la corde : jamais un bout de motif ne repasse au bout de la corde.
+ * La part brûlée est aussi posée en `--p` sur la table : certaines bombes la suivent (le ballon gonfle, la jauge monte…).
  */
-export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Props) {
+export function FuseRope({ fuse, glide, serverOffset, onHot, bomb, bombGone, hot }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const line = useRef<SVGPathElement>(null);
   const burnt = useRef<SVGPathElement>(null);
@@ -74,6 +79,7 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
     const before = previous.current;
     previous.current = fuse;
     if (!fuse || size.w === 0) {
+      box.current?.style.setProperty("--p", "0");
       burnt.current?.setAttribute("stroke-dasharray", "0 3000");
       burntCore.current?.setAttribute("stroke-dasharray", "0 3000");
       drawn.current = 0;
@@ -125,6 +131,7 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
       // En avant, on suit ; en arrière, on glisse (toute la corde en 0,7 s au plus vite)
       drawn.current = target < drawn.current ? Math.max(target, drawn.current - dt * 1.4) : target;
       const p = drawn.current;
+      box.current?.style.setProperty("--p", p.toFixed(3));
       const dash = `${p * 1000} 3000`;
       burnt.current?.setAttribute("stroke-dasharray", dash);
       burntCore.current?.setAttribute("stroke-dasharray", dash);
@@ -148,7 +155,8 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
   const risk = fuse ? Math.min(1, Math.max(0, fuse.risk)) : 1;
   const red = `0 ${risk * 1000} 3000`;
   return (
-    <div ref={box} className={`meche-rope ${fuse ? "is-lit" : ""}`} aria-hidden="true">
+    <div ref={box} className={`meche-rope bomb-${bomb} ${fuse ? "is-lit" : ""}`} aria-hidden="true">
+      <div className="bomb-haze" />
       {size.w > 0 && (
         <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`}>
           <path d={d} className="rope-shadow" />
@@ -173,45 +181,9 @@ export function FuseRope({ fuse, glide, serverOffset, onHot, bombGone, hot }: Pr
         </svg>
       )}
       <span ref={gain} className="rope-gain" />
-      <Dynamite gone={bombGone} hot={hot} />
+      <div className={`meche-bomb ${hot ? "is-hot" : ""} ${bombGone ? "is-gone" : ""}`}>
+        <BombArt id={bomb} />
+      </div>
     </div>
-  );
-}
-
-/** La bombe : trois bâtons de dynamite ficelés, posés sur le rebord, là où la corde finit */
-export function Dynamite({ gone = false, hot = false, className = "" }: { gone?: boolean; hot?: boolean; className?: string }) {
-  return (
-    <svg
-      className={`meche-dynamite ${hot ? "is-hot" : ""} ${gone ? "is-gone" : ""} ${className}`}
-      viewBox="0 0 100 62"
-      width="100"
-      height="62"
-      aria-hidden="true"
-    >
-      <ellipse cx="50" cy="58" rx="44" ry="4" fill="rgba(0,0,0,0.35)" />
-      {[6, 22, 38].map((y, i) => (
-        <g key={y}>
-          <rect x="7" y={y} width="86" height="17" rx="8.5" fill="#b8302a" />
-          <rect x="11" y={y + 2.2} width="78" height="4" rx="2" fill="#e2624f" opacity={0.85} />
-          <rect x="9" y={y + 12} width="82" height="3.5" rx="1.75" fill="#7d1f19" opacity={0.6} />
-          <ellipse cx="9.5" cy={y + 8.5} rx="4" ry="8" fill={i === 1 ? "#d9554a" : "#c8463a"} stroke="#6e1a14" strokeWidth="1" />
-        </g>
-      ))}
-      <rect x="24" y="3.5" width="9" height="53" rx="2" fill="#2b211b" />
-      <rect x="67" y="3.5" width="9" height="53" rx="2" fill="#2b211b" />
-      <rect x="35" y="21" width="30" height="20" rx="3" fill="#f3e4c4" stroke="#2b211b" strokeWidth="1.5" />
-      <text
-        x="50"
-        y="35.5"
-        textAnchor="middle"
-        fontSize="12.5"
-        fontWeight="800"
-        fontFamily="var(--font-card)"
-        fill="#b8302a"
-        letterSpacing="0.6"
-      >
-        BOUM
-      </text>
-    </svg>
   );
 }

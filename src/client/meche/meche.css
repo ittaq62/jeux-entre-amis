@@ -79,7 +79,7 @@
     inset 0 0 0 11px rgba(255, 214, 160, 0.16),
     inset 0 -14px 30px rgba(0, 0, 0, 0.35),
     0 0 0 4px var(--spark),
-    0 0 60px 4px rgba(255, 170, 70, 0.5),
+    0 0 60px 4px color-mix(in srgb, var(--spark) 50%, transparent),
     0 34px 60px -18px rgba(0, 0, 0, 0.9);
 }
 
@@ -94,7 +94,7 @@
       inset 0 0 0 11px rgba(255, 214, 160, 0.16),
       inset 0 -14px 30px rgba(0, 0, 0, 0.35),
       0 0 0 4px var(--spark-hot),
-      0 0 80px 8px rgba(255, 90, 50, 0.6),
+      0 0 80px 8px color-mix(in srgb, var(--spark-hot) 60%, transparent),
       0 34px 60px -18px rgba(0, 0, 0, 0.9);
   }
 }
@@ -508,13 +508,14 @@
   pointer-events: none;
 }
 
-.meche-rope svg {
+/* La corde seule : la bombe a son propre dessin */
+.meche-rope > svg {
   position: absolute;
   inset: 0;
   overflow: visible;
 }
 
-.meche-rope path {
+.meche-rope > svg path {
   fill: none;
   stroke-linecap: butt;
 }
@@ -582,11 +583,11 @@
 }
 
 .rope-spark {
-  filter: drop-shadow(0 0 6px rgba(255, 170, 70, 0.95));
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--spark) 95%, transparent));
 }
 
 .spark-glow {
-  fill: rgba(255, 150, 60, 0.3);
+  fill: var(--spark-glow, rgba(255, 150, 60, 0.3));
   animation: meche-spark 0.16s ease-in-out infinite alternate;
   transform-box: fill-box;
   transform-origin: center;
@@ -594,7 +595,7 @@
 
 /* L'éclat quand une autre mèche s'allume (tour suivant, joueur suivant) */
 .spark-flash {
-  fill: rgba(255, 214, 140, 0.85);
+  fill: color-mix(in srgb, var(--spark) 55%, rgba(255, 255, 255, 0.85));
   opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
@@ -609,7 +610,7 @@
 }
 
 .meche-rope .spark-rays {
-  stroke: #ffe08a;
+  stroke: color-mix(in srgb, var(--spark) 55%, #fff6d6);
   stroke-width: 1.6;
   stroke-linecap: round;
   animation: meche-rays 0.22s linear infinite;
@@ -629,33 +630,7 @@
   }
 }
 
-/* La bombe : trois bâtons ficelés posés sur le rebord, en haut de la table */
-.meche-rope svg.meche-dynamite {
-  inset: auto;
-  position: absolute;
-  top: -6px;
-  left: 50%;
-  width: 100px;
-  height: auto;
-  translate: -50% 0;
-  transform-origin: 50% 80%;
-  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.6));
-  transition:
-    opacity 0.25s ease,
-    scale 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
-  animation: meche-bomb-idle 2.4s ease-in-out infinite;
-}
-
-.meche-rope svg.meche-dynamite.is-hot {
-  animation: meche-bomb-hot 0.16s linear infinite;
-}
-
-.meche-rope svg.meche-dynamite.is-gone {
-  opacity: 0;
-  scale: 0.3;
-  animation: none;
-}
-
+/* La bombe posée sur le rebord, en haut de la table (voir bombs/bombs.css) : son balancement, et quand ça chauffe */
 @keyframes meche-bomb-idle {
   50% {
     transform: translateY(-2px) rotate(-1.5deg);
@@ -673,7 +648,7 @@
 
 /* Les braises qui s'échappent de l'étincelle */
 .spark-ember {
-  fill: #ffd36b;
+  fill: color-mix(in srgb, var(--spark) 60%, #fff6d6);
   animation: meche-ember 0.7s ease-out infinite;
 }
 
@@ -740,13 +715,13 @@
   scale: 1.12;
   box-shadow:
     0 0 0 3.5px var(--spark),
-    0 0 26px 4px rgba(255, 179, 71, 0.7);
+    0 0 26px 4px color-mix(in srgb, var(--spark) 70%, transparent);
 }
 
 .meche-seat.is-holder.is-hot .meche-seat-avatar {
   box-shadow:
     0 0 0 3.5px var(--spark-hot),
-    0 0 34px 7px rgba(255, 90, 50, 0.85);
+    0 0 34px 7px color-mix(in srgb, var(--spark-hot) 85%, transparent);
   animation: meche-seat-hot 0.32s ease-in-out infinite alternate;
 }
 
@@ -946,30 +921,6 @@
   color: var(--spark);
 }
 
-/* Noirci par l'explosion, le temps de s'en remettre */
-.meche-seat.is-sooty .meche-seat-avatar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 35%, rgba(20, 16, 12, 0.85) 0 18%, transparent 19%),
-    radial-gradient(circle at 68% 60%, rgba(20, 16, 12, 0.75) 0 22%, transparent 23%),
-    radial-gradient(circle at 45% 75%, rgba(20, 16, 12, 0.7) 0 15%, transparent 16%), rgba(30, 22, 16, 0.45);
-  pointer-events: none;
-  animation: meche-soot 2.6s ease-in forwards;
-}
-
-@keyframes meche-soot {
-  0%,
-  55% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
 /* L'allumette perdue flambe un instant avant de rester noire */
 .meche-match-fire {
   fill: #ffb347;
@@ -1006,8 +957,8 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: radial-gradient(circle, #fff6d6 0%, var(--spark) 45%, rgba(255, 120, 40, 0) 72%);
-  box-shadow: 0 0 18px 6px rgba(255, 160, 60, 0.7);
+  background: radial-gradient(circle, #fff6d6 0%, var(--spark) 45%, transparent 72%);
+  box-shadow: 0 0 18px 6px color-mix(in srgb, var(--spark) 70%, transparent);
 }
 
 /* Les mots déjà joués */
@@ -1140,7 +1091,7 @@
   position: fixed;
   z-index: 39;
   inset: 0;
-  background: #fff1cf;
+  background: var(--flash, #fff1cf);
   pointer-events: none;
   animation: meche-flash 0.42s ease-out forwards;
 }
@@ -1189,53 +1140,6 @@
   font-size: 14px;
   font-weight: 700;
   color: #4a2c12;
-}
-
-/* L'explosion chez celui qui tenait la mèche : la bombe lui saute dessus, une onde de choc, de la fumée */
-.meche-blast {
-  position: absolute;
-  z-index: 19;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.meche-blast-bomb {
-  position: absolute;
-  width: 70px;
-  margin: -22px 0 0 -35px;
-}
-
-.meche-blast-bomb svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.meche-shock {
-  position: absolute;
-  width: 90px;
-  height: 90px;
-  margin: -45px 0 0 -45px;
-  border-radius: 50%;
-  border: 6px solid rgba(255, 210, 140, 0.95);
-  box-shadow:
-    0 0 24px rgba(255, 160, 60, 0.8),
-    inset 0 0 18px rgba(255, 160, 60, 0.6);
-}
-
-.meche-shock.is-inner {
-  border: 0;
-  background: radial-gradient(circle, #fff6d6 0%, #ffd36b 30%, rgba(255, 120, 40, 0.8) 55%, rgba(255, 90, 40, 0) 72%);
-  box-shadow: none;
-}
-
-.meche-smoke {
-  position: absolute;
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(70, 62, 56, 0.9) 0%, rgba(50, 44, 40, 0.6) 45%, rgba(40, 36, 32, 0) 72%);
-  filter: blur(1px);
 }
 
 /* La fin de partie */
@@ -1323,23 +1227,6 @@
   scale: 0.8;
 }
 
-.is-phone .meche-rope svg.meche-dynamite {
-  top: -5px;
-  width: 66px;
-}
-
-.is-phone .meche-blast-bomb {
-  width: 48px;
-  margin: -15px 0 0 -24px;
-}
-
-.is-phone .meche-shock {
-  width: 60px;
-  height: 60px;
-  margin: -30px 0 0 -30px;
-  border-width: 4px;
-}
-
 .is-phone .meche-ownfuse {
   gap: 3px;
 }
@@ -1425,8 +1312,7 @@
   .meche-seat.is-holder.is-hot .meche-seat-avatar,
   .spark-glow,
   .spark-ember,
-  .meche-rope .spark-rays,
-  .meche-rope svg.meche-dynamite {
+  .meche-rope .spark-rays {
     animation: none;
   }
 

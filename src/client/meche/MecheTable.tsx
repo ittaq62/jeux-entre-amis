@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { bombInfo, DEFAULT_BOMB, type BombId } from "../../shared/games/meche/bombs.ts";
 import { LONG_WORD, REFUSALS, type FuseMode } from "../../shared/games/meche/engine.ts";
 import { fuseProgress, type MechePlayerView } from "../../shared/games/meche/view.ts";
 import { cleanShown, normalizeWord, promptRange } from "../../shared/games/meche/words.ts";
@@ -15,7 +16,9 @@ import type { EmoteBubble } from "../game/useRoom.ts";
 import { MECHE_SOUNDS, play, preloadSounds, startLoop, stopLoop, vibrate } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import { Dynamite, FuseRope, ropeStart } from "./FuseRope.tsx";
+import { BombBlast, BombBurst } from "./bombs/BombFx.tsx";
+import { bombSounds, bombTheme, bombVars } from "./bombs/theme.ts";
+import { FuseRope, ropeStart } from "./FuseRope.tsx";
 import { MecheGameOver } from "./MecheGameOver.tsx";
 import { useTyping, type EventBatch, type RefusedWord } from "./useMecheRoom.ts";
 import { screenSize } from "../lib/viewport.ts";
@@ -219,8 +222,17 @@ interface SeatWord {
 
 interface Blast extends Spot {
   key: number;
+  bomb: BombId;
   /** D'où part la bombe qui saute jusqu'à lui (le rebord de la table) */
   from: Spot;
+}
+
+/** La trace que la bombe laisse sur celui qui l'a reçue, et l'allumette qu'il vient de perdre */
+interface Scorch {
+  id: string;
+  match: number;
+  bomb: BombId;
+  ms: number;
 }
 
 export function MecheTable({
@@ -249,9 +261,9 @@ export function MecheTable({
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
   const [hot, setHot] = useState(false);
-  const [boom, setBoom] = useState<{ key: number; id: string; out: boolean } | null>(null);
+  const [boom, setBoom] = useState<{ key: number; id: string; out: boolean; bomb: BombId } | null>(null);
   const [blast, setBlast] = useState<Blast | null>(null);
-  const [scorched, setScorched] = useState<{ id: string; match: number } | null>(null);
+  const [scorched, setScorched] = useState<Scorch | null>(null);
   const [trails, setTrails] = useState<Trail[]>([]);
   const [words, setWords] = useState<Record<string, SeatWord | undefined>>({});
   const [focused, setFocused] = useState(false);
@@ -273,6 +285,9 @@ export function MecheTable({
   const canType = me?.alive === true && g.phase !== "over";
   const holderName = seat(g.holder)?.name ?? "";
   const mode = g.settings.mode ?? "commune";
+  // La bombe de la mèche en cours : celle de qui l'a allumée, et tout ce qui va avec (ses couleurs, ses sons, sa fin)
+  const bomb = room.bomb ?? DEFAULT_BOMB;
+  const theme = bombTheme(bomb);
   // Soi en bas de la table, puis les autres dans l'ordre où la mèche passe
   const myIndex = g.players.findIndex((p) => p.id === meId);
   const order = myIndex > 0 ? [...g.players.slice(myIndex), ...g.players.slice(0, myIndex)] : g.players;
@@ -292,12 +307,16 @@ export function MecheTable({
 
   useEffect(() => preloadSounds(MECHE_SOUNDS), []);
   useEffect(() => () => stopLoop(), []);
+  // Les sons des bombes de la table : celles des joueurs assis, et celle de la mèche en cours
+  const tableBombs = [...new Set([bomb, ...room.seats.map((s) => s.bomb ?? DEFAULT_BOMB)])].sort().join(" ");
+  useEffect(() => preloadSounds(bombSounds(tableBombs.split(" ") as BombId[])), [tableBombs]);
 
-  // La mèche grésille tant qu'elle brûle
+  // La mèche grésille (ou fuit, bourdonne, tic-taque…) tant qu'elle brûle
+  const fuseSound = theme.fuse;
   useEffect(() => {
-    if (lit && sound) startLoop("mecheFuse");
-    else stopLoop("mecheFuse");
-  }, [lit, sound]);
+    if (lit && sound) startLoop(fuseSound);
+    else stopLoop(fuseSound);
+  }, [lit, sound, fuseSound]);
 
   // Le tic-tac : de plus en plus serré à mesure que l'étincelle avance
   const burning = g.burning;
@@ -350,7 +369,7 @@ export function MecheTable({
       } else if (e.type === "boom") {
         explode(e.id, e.lives);
       } else if (e.type === "over") {
-        play(e.winner === meId ? "tourApplause" : "capLose", { delay: 1300 });
+        play(e.winner === meId ? "tourApplause" : "capLose", { delay: Math.max(1300, theme.fxMs - 500) });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -379,32 +398,34 @@ export function MecheTable({
 
   function explode(id: string, lives: number) {
     const out = lives === 0;
-    stopLoop("mecheFuse");
-    play("mecheBoom");
+    stopLoop(theme.fuse);
+    play(theme.boom);
     if (out) play("capBankrupt", { delay: 500 });
     if (id === meId) vibrate([120, 50, 200]);
     const key = ++fxSeq;
-    setBoom({ key, id, out });
+    setBoom({ key, id, out, bomb });
     setTimeout(() => setBoom((b) => (b?.key === key ? null : b)), 1500);
-    // L'allumette perdue brûle, et le joueur reste noirci de suie un moment
-    setScorched({ id, match: lives });
-    setTimeout(() => setScorched((s) => (s?.id === id ? null : s)), 2600);
+    // L'allumette perdue brûle, et le joueur garde un moment la trace de la bombe (suie, glace, crème, gaz…)
+    setScorched({ id, match: lives, bomb, ms: theme.markMs });
+    setTimeout(() => setScorched((s) => (s?.id === id ? null : s)), theme.markMs);
     if (usePrefs.getState().reducedEffects) return;
     const spot = spotOf(id);
     if (spot) {
-      setBlast({ key, x: spot.x, y: spot.y, from: bombSpot });
-      setTimeout(() => setBlast((b) => (b?.key === key ? null : b)), 1600);
+      setBlast({ key, bomb, x: spot.x, y: spot.y, from: bombSpot });
+      setTimeout(() => setBlast((b) => (b?.key === key ? null : b)), theme.fxMs);
     }
     const at = document.querySelector(`[data-seat="${id}"] .meche-seat-avatar`)?.getBoundingClientRect();
     if (at) {
+      const d = theme.debris;
       void confetti({
-        particleCount: 54,
+        particleCount: d.count,
         spread: 360,
-        startVelocity: 28,
-        gravity: 0.9,
+        startVelocity: d.speed,
+        gravity: d.gravity,
         ticks: 95,
         scalar: 0.85,
-        colors: ["#2a211a", "#ff9a3c", "#ffd36b", "#7a6a5c", "#e5442c"],
+        colors: d.colors,
+        shapes: d.shapes,
         origin: { x: (at.left + at.width / 2) / window.innerWidth, y: (at.top + at.height / 2) / window.innerHeight },
       });
     }
@@ -502,7 +523,10 @@ export function MecheTable({
   }
 
   // Sur téléphone, la table tient dans ce qu'on voit au-dessus du clavier (et rien ne l'oblige à prendre tout l'écran)
-  const area = phone ? ({ position: "fixed", top, left: 0, right: 0, height: h, minHeight: 0 } as CSSProperties) : undefined;
+  const area: CSSProperties = {
+    ...(phone ? ({ position: "fixed", top, left: 0, right: 0, height: h, minHeight: 0 } as CSSProperties) : {}),
+    ...bombVars(bomb),
+  };
   // Les rappels des premières mèches : ce qui fait le mode d'abord, puis les accents, puis les passes
   const tip =
     g.fuse <= 1
@@ -610,6 +634,7 @@ export function MecheTable({
                 serverOffset={serverOffset}
                 onHot={setHot}
                 hot={hot}
+                bomb={bomb}
                 bombGone={(g.phase === "break" && g.fuse > 0) || g.phase === "over"}
               />
               <div
@@ -643,7 +668,7 @@ export function MecheTable({
                     />
                   </>
                 ) : g.phase === "break" ? (
-                  <Starter seat={seat(g.holder)} isMe={g.holder === meId} drawing={needle.spinning} medal={medal} />
+                  <Starter seat={seat(g.holder)} isMe={g.holder === meId} drawing={needle.spinning} medal={medal} first={g.fuse === 0} />
                 ) : (
                   <p className="meche-who">C'est fini !</p>
                 )}
@@ -709,8 +734,8 @@ export function MecheTable({
                   serverOffset={serverOffset}
                   spot={spot}
                   avatar={layout.avatar}
-                  blown={boom?.id === p.id}
-                  scorched={scorched?.id === p.id ? scorched.match : null}
+                  blown={boom?.id === p.id && (boom.bomb === "dynamite" || boom.bomb === "fusee")}
+                  scorched={scorched?.id === p.id ? scorched : null}
                   ownFuse={mode === "chacun" ? { burning: lit && g.holder === p.id, since: g.heldSince } : null}
                 />
               );
@@ -765,42 +790,25 @@ export function MecheTable({
               />
             )}
 
-            <AnimatePresence>{blast && <BlastFx key={blast.key} blast={blast} phone={phone} />}</AnimatePresence>
+            <AnimatePresence>
+              {blast && <BombBlast key={blast.key} bomb={blast.bomb} at={blast} from={blast.from} avatar={layout.avatar} />}
+            </AnimatePresence>
 
             <AnimatePresence>
               {boom && (
-                <motion.div
+                <BombBurst
                   key={boom.key}
-                  className="meche-burst"
-                  aria-live="polite"
-                  style={{ left: layout.cx, top: layout.cy, width: Math.min(layout.tableR * 1.9, 430) }}
-                  initial={{ scale: 0.3, rotate: -14 }}
-                  animate={{ scale: 1, rotate: -4 }}
-                  exit={{ opacity: 0, scale: 1.1 }}
-                  transition={{ type: "spring", stiffness: 520, damping: 16 }}
-                >
-                  <svg viewBox="0 0 200 200" aria-hidden="true">
-                    <path
-                      d="M100 4l15 41 34-29-8 44 44-11-29 35 40 15-41 12 28 34-44-8 8 44-34-29-15 42-13-42-36 29 9-44-44 8 29-34-41-12 40-15-29-35 44 11-8-44 34 29z"
-                      fill="#f4a13a"
-                      stroke="#2a1a0e"
-                      strokeWidth="5"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M100 32l10 29 24-20-6 31 31-8-20 25 28 10-29 9 20 24-31-6 6 31-24-20-10 29-9-29-25 20 6-31-31 6 20-24-29-9 28-10-20-25 31 8-6-31 25 20z"
-                      fill="#ffe08a"
-                    />
-                  </svg>
-                  <strong>BOUM !</strong>
-                  <span>
-                    {boom.id === meId
+                  bomb={boom.bomb}
+                  at={{ x: layout.cx, y: layout.cy }}
+                  width={Math.min(layout.tableR * 1.9, 430)}
+                  line={
+                    boom.id === meId
                       ? boom.out
                         ? "Plus d'allumette pour toi"
                         : "Une allumette de moins"
-                      : `${seat(boom.id)?.name} ${boom.out ? "n'a plus d'allumette" : "perd une allumette"}`}
-                  </span>
-                </motion.div>
+                      : `${seat(boom.id)?.name} ${boom.out ? "n'a plus d'allumette" : "perd une allumette"}`
+                  }
+                />
               )}
             </AnimatePresence>
           </>
@@ -857,6 +865,7 @@ export function MecheTable({
       {g.ranking && !resultsHidden && (
         <MecheGameOver
           room={room}
+          wait={Math.max(1.4, theme.fxMs / 1000 - 0.4)}
           onRematch={() => send(room.you.isHost ? { t: "start" } : { t: "rematch" })}
           onLobby={onShowLobby}
           onLeave={onLeave}
@@ -959,7 +968,21 @@ function LiveWord({
 }
 
 /** Entre deux mèches, au centre : celui qui va allumer la suivante. Au tout début, un point d'interrogation pendant le tirage. */
-function Starter({ seat, isMe, drawing, medal }: { seat: SeatView | undefined; isMe: boolean; drawing: boolean; medal: number }) {
+function Starter({
+  seat,
+  isMe,
+  drawing,
+  medal,
+  first,
+}: {
+  seat: SeatView | undefined;
+  isMe: boolean;
+  drawing: boolean;
+  medal: number;
+  /** La toute première mèche : sa bombe est déjà sur la table */
+  first: boolean;
+}) {
+  const bomb = seat?.bomb ?? DEFAULT_BOMB;
   return (
     <AnimatePresence mode="wait">
       {drawing || !seat ? (
@@ -976,6 +999,11 @@ function Starter({ seat, isMe, drawing, medal }: { seat: SeatView | undefined; i
         >
           <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={Math.round(medal * 0.36)} />
           <span className="meche-who is-mine">{isMe ? "Toi" : seat.name}</span>
+          {!first && bomb !== DEFAULT_BOMB && medal >= 150 && (
+            <span className="meche-starter-bomb" style={bombVars(bomb)}>
+              {bombInfo(bomb).name}
+            </span>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
@@ -1024,58 +1052,6 @@ function MatchStrike({ from, to, delay, onStrike }: { from: Spot; to: Spot; dela
         aria-hidden="true"
       />
     </>
-  );
-}
-
-/** L'explosion chez celui qui tenait la mèche : la bombe lui saute dessus, une onde de choc, de la fumée */
-function BlastFx({ blast, phone }: { blast: Blast; phone: boolean }) {
-  const puffs = useRef(
-    Array.from({ length: 8 }, (_, i) => ({
-      dx: Math.cos((i / 8) * Math.PI * 2 + Math.random()) * (phone ? 34 : 60),
-      dy: Math.sin((i / 8) * Math.PI * 2 + Math.random()) * (phone ? 26 : 44) - (phone ? 26 : 40),
-      size: (phone ? 34 : 54) * (0.7 + Math.random() * 0.6),
-      delay: 0.12 + Math.random() * 0.18,
-    })),
-  ).current;
-  return (
-    <motion.div
-      className="meche-blast"
-      style={{ left: blast.x, top: blast.y }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.3 }}
-      aria-hidden="true"
-    >
-      <motion.div
-        className="meche-blast-bomb"
-        initial={{ x: blast.from.x - blast.x, y: blast.from.y - blast.y, scale: 0.8, opacity: 1 }}
-        animate={{ x: 0, y: 0, scale: [0.8, 1, 1.5], opacity: [1, 1, 0] }}
-        transition={{ duration: 0.32, times: [0, 0.6, 1], ease: "easeIn" }}
-      >
-        <Dynamite />
-      </motion.div>
-      <motion.span
-        className="meche-shock"
-        initial={{ scale: 0.15, opacity: 0.95 }}
-        animate={{ scale: phone ? 2.2 : 3.2, opacity: 0 }}
-        transition={{ delay: 0.12, duration: 0.7, ease: "easeOut" }}
-      />
-      <motion.span
-        className="meche-shock is-inner"
-        initial={{ scale: 0.1, opacity: 1 }}
-        animate={{ scale: phone ? 1.4 : 2, opacity: 0 }}
-        transition={{ delay: 0.16, duration: 0.5, ease: "easeOut" }}
-      />
-      {puffs.map((p, i) => (
-        <motion.span
-          key={i}
-          className="meche-smoke"
-          style={{ width: p.size, height: p.size }}
-          initial={{ x: 0, y: 0, scale: 0.3, opacity: 0 }}
-          animate={{ x: p.dx, y: p.dy, scale: [0.3, 1, 1.5], opacity: [0, 0.85, 0] }}
-          transition={{ delay: p.delay, duration: 1.3, ease: "easeOut" }}
-        />
-      ))}
-    </motion.div>
   );
 }
 
@@ -1175,17 +1151,20 @@ function MecheSeat({
   spot: SeatSpot;
   avatar: number;
   blown: boolean;
-  /** L'allumette qui vient de brûler, quand la mèche lui a sauté au nez */
-  scorched: number | null;
+  /** La trace de la bombe qui vient de lui sauter au nez, et l'allumette qui vient de brûler */
+  scorched: Scorch | null;
   ownFuse: { burning: boolean; since: number } | null;
 }) {
   return (
     <div
-      className={`meche-seat ${spot.up ? "is-up" : ""} ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""} ${scorched !== null ? "is-sooty" : ""}`}
+      className={`meche-seat ${spot.up ? "is-up" : ""} ${holder ? "is-holder" : ""} ${hot ? "is-hot" : ""} ${player.alive ? "" : "is-out"} ${isMe ? "is-me" : ""} ${blown ? "is-blown" : ""}`}
       style={{ left: spot.x, top: spot.y, "--a": `${avatar}px` } as CSSProperties}
       data-seat={player.id}
     >
-      <div className="meche-seat-avatar">
+      <div
+        className={`meche-seat-avatar ${scorched ? `bomb-mark bomb-mark-${scorched.bomb}` : ""}`}
+        style={scorched ? ({ "--mark": `${scorched.ms}ms` } as CSSProperties) : undefined}
+      >
         <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={avatar} title={seat.name} />
         {seat.kind === "bot" && (
           <span className="seat-tag" title="Bot">
@@ -1240,7 +1219,7 @@ function MecheSeat({
         </div>
         <div className="meche-matches" aria-label={`${player.lives} allumette${player.lives > 1 ? "s" : ""} sur ${total}`}>
           {Array.from({ length: total }, (_, i) => (
-            <Match key={i} burnt={i >= player.lives} burning={scorched === i} />
+            <Match key={i} burnt={i >= player.lives} burning={scorched?.match === i} />
           ))}
           {player.passes > 0 && (
             <span className="meche-seat-passes num" title={`${player.passes} passe${player.passes > 1 ? "s" : ""}`}>
