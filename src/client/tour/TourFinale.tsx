@@ -1,6 +1,6 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GAME_NAMES } from "../../shared/protocol.ts";
 import { teamScores, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourClientMessage, type TourView } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
@@ -50,8 +50,18 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
   ];
   const pane = (id: typeof tab) => `finale-pane ${tab === id ? "is-active" : ""}`;
 
+  // Tout tient sur l'écran : un classement trop long défile dans son cadre, et l'on y voit d'emblée sa propre ligne
+  const standingsBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = standingsBox.current;
+    const row = box?.querySelector<HTMLElement>(".standing-row.is-me");
+    if (!box || !row) return;
+    const below = row.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+    if (below > 0) box.scrollTop += below + 6;
+  }, []);
+
   return (
-    <div className="felt page tour-page">
+    <div className="felt page tour-page tour-finale-page">
       <TourTop view={view} now={Date.now() + serverOffset} unread={unread} onOpenChat={onOpenChat} onLeave={onLeave} />
       <main className="tour-finale">
         <h2 className="tour-finale-title">
@@ -80,7 +90,7 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
                     transition={{ delay: 0.25 + (p!.rank === 1 ? 0.5 : i * 0.2), type: "spring", stiffness: 220, damping: 20 }}
                     style={p!.member.team !== null ? { ["--team" as string]: TOUR_TEAM_COLORS[p!.member.team] } : undefined}
                   >
-                    <Avatar avatar={p!.member.avatar} userId={p!.member.userId} photo={p!.member.photo} size={p!.rank === 1 ? 62 : 48} />
+                    <Avatar avatar={p!.member.avatar} userId={p!.member.userId} photo={p!.member.photo} size={p!.rank === 1 ? 56 : 46} />
                     <strong className="podium-name">{p!.member.name}</strong>
                     <span className="podium-points num">{p!.member.points} pts</span>
                     <span className="podium-step num">{p!.rank}</span>
@@ -105,7 +115,9 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
             )}
             <section className={`tour-standings panel ${pane("classement")}`} aria-label="Classement final">
               <h2>Classement final</h2>
-              <Standings view={view} last={null} meId={view.you.userId} />
+              <div className="finale-scroll" ref={standingsBox}>
+                <Standings view={view} last={null} meId={view.you.userId} />
+              </div>
             </section>
           </div>
 
@@ -113,7 +125,9 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
             {hasTitles && (
               <section className={`tour-trophies panel ${pane("trophees")}`} aria-label="Les trophées de la tournée">
                 <h2>Les trophées</h2>
-                <TourTrophies titles={view.titles!} members={view.members} meId={view.you.userId} />
+                <div className="finale-scroll">
+                  <TourTrophies titles={view.titles!} members={view.members} meId={view.you.userId} />
+                </div>
               </section>
             )}
             <section className={`tour-recap panel ${pane("jeux")}`} aria-label="Jeu par jeu">
@@ -121,7 +135,7 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
               {games.length === 0 ? (
                 <p className="hint">Aucun jeu n'est allé au bout.</p>
               ) : (
-                <ol className="tour-recap-list">
+                <ol className="tour-recap-list finale-scroll">
                   {games.map((g) => {
                     const winners = (g.results ?? []).filter((r) => r.rank === 1).map((r) => r.name);
                     const rules = view.settings.rules !== "base" ? rulesName(g.game, g.variant) : null;
