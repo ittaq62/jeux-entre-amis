@@ -21,6 +21,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { tableHref } from "../lib/arrival.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
+import { AdminReports } from "./AdminReports.tsx";
 
 const failed = (err: unknown) => toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Ça n'a pas marché." });
 
@@ -30,6 +31,14 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<AdminUser | null>(null);
+  // L'onglet ouvert reste dans l'adresse : /admin?onglet=signalements
+  const [tab, setTab] = useState<"overview" | "reports">(() =>
+    new URLSearchParams(window.location.search).get("onglet") === "signalements" ? "reports" : "overview",
+  );
+  const showTab = (next: typeof tab) => {
+    setTab(next);
+    window.history.replaceState(window.history.state, "", next === "reports" ? "/admin?onglet=signalements" : "/admin");
+  };
 
   const loadOverview = useCallback(() => {
     api.get<AdminOverview>("/admin/overview").then(setOverview).catch(failed);
@@ -83,7 +92,23 @@ export function AdminPage() {
           <span className="hint">Visible par les admins seulement. Mise à jour toutes les 15 secondes.</span>
         </div>
 
-        <div className="admin-grid">
+        <div className="admin-tabs" role="tablist" aria-label="Rubriques de l'administration">
+          <button role="tab" aria-selected={tab === "overview"} onClick={() => showTab("overview")}>
+            Vue d'ensemble
+          </button>
+          <button role="tab" aria-selected={tab === "reports"} onClick={() => showTab("reports")}>
+            Signalements
+            {overview.newReports > 0 && (
+              <span className="admin-tab-badge num" aria-label={`${overview.newReports} nouveau${overview.newReports > 1 ? "x" : ""}`}>
+                {overview.newReports}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {tab === "reports" && <AdminReports fresh={overview.newReports} onChange={loadOverview} />}
+
+        <div className="admin-grid" style={tab === "overview" ? undefined : { display: "none" }}>
           <div className="admin-col">
             <section className="panel admin-section">
               <h2>En ce moment</h2>
