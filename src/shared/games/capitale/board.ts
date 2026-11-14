@@ -103,6 +103,16 @@ export const UTILITIES = [12, 28];
 /** Tout ce qui s'achète : terrains, gares, réseaux */
 export const BUYABLE = SQUARES.filter((s) => s.price !== undefined).map((s) => s.index);
 
+/** Les quatre côtés du plateau, chacun avec ses rues : deux quartiers par côté, de Départ à la Prison et ainsi de suite */
+export const SIDES: { groups: GroupId[]; squares: number[] }[] = [0, 1, 2, 3].map((k) => {
+  const squares = SQUARES.filter((s) => s.kind === "property" && s.index > k * 10 && s.index < k * 10 + 10).map((s) => s.index);
+  return { groups: [...new Set(squares.map((i) => SQUARES[i]!.group!))], squares };
+});
+
+/** Monopole : la partie s'arrête net pour qui réunit trois quartiers complets, toutes les rues d'un côté, ou les quatre gares */
+export const MONOPOLY_GROUPS = 3;
+export type MonopolyKind = "groups" | "side" | "stations";
+
 export const square = (index: number): Square => SQUARES[index]!;
 export const isBuyable = (index: number) => SQUARES[index]?.price !== undefined;
 export const groupOf = (index: number): Group | null => {

@@ -1,7 +1,8 @@
-// Les équipes de la tournée, vues des jeux où chacun joue pour soi : les points de chacun s'additionnent par équipe.
+// Les équipes, vues des jeux où chacun joue pour soi : les points de chacun s'additionnent par équipe.
+// La tournée en fait deux (0 et 1) ; Capitale en accepte jusqu'à trois à ses propres tables.
 
-/** L'équipe de chaque joueur, ou null hors équipes */
-export type Teams = Record<string, 0 | 1> | null;
+/** L'équipe de chaque joueur (0, 1, 2…), ou null hors équipes */
+export type Teams = Record<string, number> | null;
 
 /**
  * Il ne reste en jeu que des joueurs d'une même équipe : la suite ne changerait plus rien au score des équipes,

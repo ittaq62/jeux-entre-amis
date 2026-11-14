@@ -15,8 +15,10 @@ import {
   JAIL_FINE,
   JAIL_SQUARE,
   MAX_LEVEL,
+  MONOPOLY_GROUPS,
   mortgageInterest,
   mortgageValue,
+  SIDES,
   SPECIALS,
   specialPrice,
   SQUARES,
@@ -29,13 +31,19 @@ import {
   UTILITIES,
   type DeckId,
   type GroupId,
+  type MonopolyKind,
   type SpecialKind,
 } from "./board.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
 export type EndMode = "bankrupt" | "timed";
+/** En équipes : le loyer qu'un joueur paie chez un coéquipier (et le billet de son stade) */
+export type TeamRent = "free" | "half" | "full";
 export const GAME_MINUTES = [30, 45, 60] as const;
 export const TURN_SECONDS = [30, 60, 0] as const;
+/** À une table : chacun pour soi (0), ou deux ou trois équipes */
+export const TEAM_COUNTS = [0, 2, 3] as const;
+export type TeamCount = (typeof TEAM_COUNTS)[number];
 /** Garde-fou : au-delà, la partie s'arrête et le plus riche gagne */
 export const MAX_ROUNDS = 150;
 
@@ -52,7 +60,19 @@ export interface CapitaleSettings {
   quickStart: boolean;
   /** Bâtiments spéciaux : gratte-ciel, parc, stade, et des nuisances chez les autres */
   specials: boolean;
+  /** Monopole : trois quartiers complets, un côté entier du plateau ou les quatre gares, et la partie s'arrête net */
+  monopoly: boolean;
   botLevel: BotLevel;
+  /** À une table : le nombre d'équipes (0, chacun pour soi). En tournée, ce sont les équipes de la tournée */
+  teamCount: TeamCount;
+  /** En équipes : le loyer entre coéquipiers, stade compris */
+  teamRent: TeamRent;
+  /** En équipes : on peut donner de l'argent, des titres ou une carte de prison à un coéquipier, à tout moment */
+  teamGifts: boolean;
+  /** En équipes : les titres d'un joueur en faillite passent à un coéquipier encore en jeu */
+  teamHeir: boolean;
+  /** En équipes : on gagne ensemble (fortunes additionnées, et les titres de l'équipe comptent ensemble au Monopole) */
+  teamWin: boolean;
 }
 
 export const DEFAULT_SETTINGS: CapitaleSettings = {
@@ -64,8 +84,27 @@ export const DEFAULT_SETTINGS: CapitaleSettings = {
   noRentInJail: false,
   quickStart: false,
   specials: true,
+  monopoly: false,
   botLevel: "moyen",
+  teamCount: 0,
+  teamRent: "free",
+  teamGifts: true,
+  teamHeir: true,
+  teamWin: true,
 };
+
+/**
+ * Les règles d'équipe d'une partie. Une partie commencée avant leur arrivée n'a pas ces réglages : elle garde la règle
+ * d'alors (loyer plein, pas de dons, pas d'héritage, chacun son classement).
+ */
+export function teamRules(s: { settings: Partial<CapitaleSettings> }) {
+  return {
+    rent: s.settings.teamRent ?? "full",
+    gifts: s.settings.teamGifts ?? false,
+    heir: s.settings.teamHeir ?? false,
+    win: s.settings.teamWin ?? false,
+  };
+}
 
 /** Le bâtiment spécial d'une rue, et qui l'a posé (le propriétaire, ou l'adversaire d'une nuisance) */
 export interface Special {
@@ -134,7 +173,8 @@ export type MoneyReason =
   | "trade"
   | "bankrupt"
   | "special"
-  | "ticket";
+  | "ticket"
+  | "gift";
 
 export interface Offer {
   cash: number;
@@ -170,11 +210,37 @@ export interface Auction {
 
 export type Step = "roll" | "buy" | "auction" | "debt" | "manage" | "over";
 
+/** Ce qu'un camp a réuni pour gagner au Monopole */
+export interface MonopolyWin {
+  kind: MonopolyKind;
+  /** Les titres qui font la victoire (les quartiers complets, le côté, ou les gares) */
+  squares: number[];
+  /** Le côté du plateau (0 à 3), pour une victoire par un côté */
+  side?: number;
+}
+
+/** Comment la partie s'est terminée, et qui l'emporte */
+export interface Outcome {
+  /** Monopole réuni, plus qu'un joueur (ou qu'une équipe) en jeu, l'heure, ou le garde-fou des tours */
+  reason: "monopoly" | "bankrupt" | "time" | "rounds";
+  /** Monopole : ce qui a été réuni, et par qui (le joueur dont le coup l'a fait) */
+  monopoly?: MonopolyWin & { player: string };
+  /** En équipes (victoire d'équipe) : l'équipe gagnante, ou null en cas d'égalité */
+  team?: number | null;
+  /** En équipes (victoire d'équipe) : la fortune de chaque équipe, faillis comptés à zéro */
+  teamWorth?: Record<number, number>;
+}
+
 export interface CapitaleState {
   settings: CapitaleSettings;
   players: CapitalePlayer[];
-  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  /**
+   * Les équipes (tournée par équipes, ou table en équipes) : l'équipe de chacun. Quand il ne reste qu'une équipe en jeu,
+   * la partie s'arrête ; les règles d'équipe (loyer, dons, héritage, victoire) s'y appliquent.
+   */
   teams?: Teams;
+  /** La fin de partie, une fois arrivée */
+  outcome?: Outcome | null;
   /** Un titre par case achetable, null ailleurs */
   deeds: (Deed | null)[];
   /** Le tour en cours : les rues déjà améliorées (une fois chacune), et si le bâtiment spécial est posé */
@@ -230,7 +296,14 @@ export type CapitaleEvent =
   | { type: "leaveJail"; player: string; how: "pay" | "card" | "doubles" | "forced" }
   | { type: "debt"; player: string; amount: number; creditor: Account }
   | { type: "trade"; trade: Trade; status: "proposed" | "accepted" | "rejected" | "cancelled" | "expired" }
-  | { type: "bankrupt"; player: string; to: Account }
+  /** Un don à un coéquipier : argent, titres, cartes de prison, sans contrepartie */
+  | { type: "gift"; from: string; to: string; give: Offer }
+  /** Arrêté chez un coéquipier : pas de loyer (la somme qu'aurait coûté la case) */
+  | { type: "teamFree"; player: string; owner: string; square: number; amount: number }
+  /** Faillite ; `to` reprend ses titres (le créancier, un coéquipier s'il hérite, ou la banque) */
+  | { type: "bankrupt"; player: string; to: Account; heir?: boolean }
+  /** Monopole réuni : la partie s'arrête net */
+  | { type: "monopoly"; player: string; team: number | null; kind: MonopolyKind; squares: number[]; side?: number }
   | { type: "timeUp" }
   | { type: "gameOver"; ranking: string[] };
 
@@ -252,6 +325,8 @@ export type CapitaleAction =
   | { type: "accept"; trade: number }
   | { type: "reject"; trade: number }
   | { type: "cancel"; trade: number }
+  /** Donner à un coéquipier (règle des dons) */
+  | { type: "gift"; to: string; give: Offer }
   | { type: "bankrupt" }
   | { type: "endTurn" };
 
@@ -293,10 +368,14 @@ export function createGame(
   playerIds: string[],
   settings: CapitaleSettings,
   seed: number,
+  /** Les équipes de chacun, s'il y en a */
+  teams: Teams = null,
 ): { state: CapitaleState; events: CapitaleEvent[] } {
   const holder: RngHolder = { rng: seed };
   const state: CapitaleState = {
     settings: { ...settings },
+    teams: teams && playerIds.every((id) => teams[id] !== undefined) ? { ...teams } : null,
+    outcome: null,
     players: playerIds.map((id) => ({
       id,
       cash: START_CASH,
@@ -342,13 +421,18 @@ export function createGame(
     rng: holder.rng,
   };
   if (settings.quickStart) {
-    // Départ rapide : deux titres tirés au sort pour chacun, offerts par la banque
-    const pool = shuffle(state, [...BUYABLE]);
-    for (const p of state.players) {
-      for (let k = 0; k < 2; k++) {
-        const sq = pool.pop();
-        if (sq !== undefined) state.deeds[sq]!.owner = p.id;
+    // Départ rapide : deux titres tirés au sort pour chacun, offerts par la banque. Au Monopole, jamais une partie gagnée
+    // d'avance : on redistribue (une équipe de trois peut tirer les quatre gares)
+    for (let attempt = 0; attempt < 30; attempt++) {
+      for (const i of BUYABLE) state.deeds[i]!.owner = null;
+      const pool = shuffle(state, [...BUYABLE]);
+      for (const p of state.players) {
+        for (let k = 0; k < 2; k++) {
+          const sq = pool.pop();
+          if (sq !== undefined) state.deeds[sq]!.owner = p.id;
+        }
       }
+      if (!settings.monopoly || state.players.every((p) => monopolyOf(state, p.id) === null)) break;
     }
     for (const p of state.players) p.stats.monopolies = monopoliesOf(state, p.id);
   }
@@ -374,6 +458,60 @@ export function actorOf(s: CapitaleState): string | null {
   if (s.step === "over" || s.step === "auction") return null;
   if (s.debts.length > 0) return s.debts[0]!.debtor;
   return currentPlayer(s).id;
+}
+
+// ---------------------------------------------------------------------------
+// Les équipes
+// ---------------------------------------------------------------------------
+
+/** L'équipe d'un joueur, ou null quand chacun joue pour soi */
+export function teamOf(s: Pick<CapitaleState, "teams">, playerId: string | null | undefined): number | null {
+  if (!playerId || !s.teams) return null;
+  const t = s.teams[playerId];
+  return t === undefined ? null : t;
+}
+
+/** La partie se joue-t-elle en équipes (au moins deux équipes, chacun dans la sienne) ? */
+export function teamPlay(s: Pick<CapitaleState, "teams" | "players">): boolean {
+  if (!s.teams) return false;
+  const teams = s.players.map((p) => teamOf(s, p.id));
+  return teams.every((t) => t !== null) && new Set(teams).size >= 2;
+}
+
+/** Deux joueurs du même camp : le même joueur, ou deux coéquipiers */
+export function allies(s: Pick<CapitaleState, "teams" | "players">, a: string, b: string): boolean {
+  if (a === b) return true;
+  if (!teamPlay(s)) return false;
+  const t = teamOf(s, a);
+  return t !== null && t === teamOf(s, b);
+}
+
+/** Les coéquipiers d'un joueur (lui exclu), faillis compris */
+export function teammates(s: CapitaleState, playerId: string): CapitalePlayer[] {
+  return s.players.filter((p) => p.id !== playerId && allies(s, p.id, playerId));
+}
+
+/**
+ * Le camp d'un joueur pour gagner : son équipe quand l'équipe gagne ensemble, sinon lui seul. Les titres d'un camp
+ * comptent ensemble au Monopole.
+ */
+export function sideOf(s: CapitaleState, playerId: string): string {
+  const t = teamOf(s, playerId);
+  return t !== null && teamPlay(s) && teamRules(s).win ? `team:${t}` : playerId;
+}
+
+/** Le loyer d'un coéquipier : 0 (gratuit), la moitié ou tout ; 1 entre adversaires */
+export function rentFactor(s: CapitaleState, payer: string, owner: string): number {
+  if (payer === owner || !allies(s, payer, owner)) return 1;
+  const rent = teamRules(s).rent;
+  return rent === "free" ? 0 : rent === "half" ? 0.5 : 1;
+}
+
+/** Ce que paierait ce joueur en s'arrêtant sur cette case (0 chez soi, tarif d'équipe chez un coéquipier) */
+export function rentDue(s: CapitaleState, index: number, payer: string, ctx: RentContext): number {
+  const owner = s.deeds[index]?.owner;
+  if (!owner || owner === payer) return 0;
+  return Math.floor(rentFor(s, index, ctx) * rentFactor(s, payer, owner));
 }
 
 export function ownsGroup(s: CapitaleState, playerId: string, group: GroupId): boolean {
@@ -438,6 +576,89 @@ export function liquidity(s: CapitaleState, playerId: string): number {
   let total = p.cash + buildingsValue(s, playerId) / 2;
   for (const i of ownedBy(s, playerId)) if (!s.deeds[i]!.mortgaged) total += mortgageValue(i);
   return Math.floor(total);
+}
+
+// ---------------------------------------------------------------------------
+// Monopole : trois quartiers complets, un côté entier ou les quatre gares
+// ---------------------------------------------------------------------------
+
+/** Ce qu'a réuni ce camp, ou null ; `extra` compte une case de plus comme à lui (pour savoir ce qui le ferait gagner) */
+function monopolyHeld(s: CapitaleState, side: string, extra?: number): MonopolyWin | null {
+  const held = (i: number) => {
+    if (i === extra) return true;
+    const owner = s.deeds[i]?.owner;
+    return Boolean(owner && !playerOf(s, owner)?.bankrupt && sideOf(s, owner) === side);
+  };
+  const groups = GROUP_ORDER.filter((g) => GROUPS[g].squares.every(held));
+  if (groups.length >= MONOPOLY_GROUPS) return { kind: "groups", squares: groups.flatMap((g) => GROUPS[g].squares) };
+  const side4 = SIDES.findIndex((x) => x.squares.every(held));
+  if (side4 >= 0) return { kind: "side", squares: [...SIDES[side4]!.squares], side: side4 };
+  if (STATIONS.every(held)) return { kind: "stations", squares: [...STATIONS] };
+  return null;
+}
+
+/** Ce qu'a réuni le camp de ce joueur (lui, ou son équipe quand elle gagne ensemble), ou null */
+export function monopolyOf(s: CapitaleState, playerId: string): MonopolyWin | null {
+  return monopolyHeld(s, sideOf(s, playerId));
+}
+
+export interface MonopolyProgress {
+  /** Les quartiers complets du camp */
+  groups: GroupId[];
+  /** Pour chaque côté : les rues du camp et celles qui manquent */
+  sides: { have: number; total: number; missing: number[] }[];
+  /** Les gares du camp et celles qui manquent */
+  stations: { have: number; missing: number[] };
+  /** Les titres dont un seul suffirait à faire gagner ce camp tout de suite */
+  winning: number[];
+  /** Combien de titres lui manquent, au mieux, pour gagner */
+  closest: number;
+}
+
+/** Où en est le camp de ce joueur des objectifs du Monopole */
+export function monopolyProgress(s: CapitaleState, playerId: string): MonopolyProgress {
+  const side = sideOf(s, playerId);
+  const held = (i: number) => {
+    const owner = s.deeds[i]?.owner;
+    return Boolean(owner && !playerOf(s, owner)?.bankrupt && sideOf(s, owner) === side);
+  };
+  const groups = GROUP_ORDER.filter((g) => GROUPS[g].squares.every(held));
+  const sides = SIDES.map((x) => ({
+    have: x.squares.filter(held).length,
+    total: x.squares.length,
+    missing: x.squares.filter((i) => !held(i)),
+  }));
+  const stations = { have: STATIONS.filter(held).length, missing: STATIONS.filter((i) => !held(i)) };
+  // Au mieux : les quartiers les plus proches d'être complets, le côté le plus avancé, ou les gares
+  const gaps = GROUP_ORDER.map((g) => GROUPS[g].squares.filter((i) => !held(i)).length)
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  const groupsGap = gaps.slice(0, Math.max(0, MONOPOLY_GROUPS - groups.length)).reduce((n, k) => n + k, 0);
+  const closest = Math.min(groupsGap, ...sides.map((x) => x.missing.length), stations.missing.length);
+  const winning = closest === 1 ? BUYABLE.filter((i) => !held(i) && monopolyHeld(s, side, i) !== null) : [];
+  return { groups, sides, stations, winning, closest };
+}
+
+/** Un camp vient-il de réunir son Monopole ? La partie s'arrête net (en commençant par le camp de celui qui a joué) */
+function checkMonopoly(s: CapitaleState, events: CapitaleEvent[], actor?: string) {
+  if (!s.settings.monopoly || s.step === "over") return;
+  const order = [...s.players].sort((a, b) => Number(b.id === actor) - Number(a.id === actor));
+  for (const p of order) {
+    if (p.bankrupt) continue;
+    const win = monopolyOf(s, p.id);
+    if (!win) continue;
+    const team = sideOf(s, p.id) === p.id ? null : teamOf(s, p.id);
+    events.push({
+      type: "monopoly",
+      player: p.id,
+      team,
+      kind: win.kind,
+      squares: win.squares,
+      ...(win.side !== undefined ? { side: win.side } : {}),
+    });
+    finishGame(s, events, "monopoly", { ...win, player: p.id });
+    return;
+  }
 }
 
 export interface RentContext {
@@ -568,7 +789,9 @@ function payTickets(s: CapitaleState, p: CapitalePlayer, from: number, steps: nu
     if (!d?.owner || d.owner === p.id || d.mortgaged || ownSpecial(s, i) !== "stade") continue;
     const owner = playerOf(s, d.owner);
     if (!owner || owner.bankrupt || (s.settings.noRentInJail && owner.inJail)) continue;
-    charge(s, p, owner.id, STADIUM_TICKET, "ticket", events, i);
+    // Un coéquipier paie le tarif d'équipe (rien quand le loyer entre coéquipiers est gratuit)
+    const ticket = Math.floor(STADIUM_TICKET * rentFactor(s, p.id, owner.id));
+    if (ticket > 0) charge(s, p, owner.id, ticket, "ticket", events, i);
   }
 }
 
@@ -613,7 +836,13 @@ function land(s: CapitaleState, p: CapitalePlayer, events: CapitaleEvent[], ctx:
       }
       if (deed.owner === p.id) return;
       const rent = rentFor(s, sq.index, { diceTotal, stationTimes: ctx.stationTimes, utilityTimes: ctx.utilityTimes });
-      charge(s, p, deed.owner, rent, "rent", events, sq.index);
+      const factor = rentFactor(s, p.id, deed.owner);
+      // Chez un coéquipier : rien à payer (loyer gratuit), ou la moitié
+      if (factor === 0) {
+        if (rent > 0) events.push({ type: "teamFree", player: p.id, owner: deed.owner, square: sq.index, amount: rent });
+        return;
+      }
+      charge(s, p, deed.owner, Math.floor(rent * factor), "rent", events, sq.index);
       return;
     }
     case "tax":
@@ -711,7 +940,7 @@ function resume(s: CapitaleState) {
 
 function nextTurn(s: CapitaleState, events: CapitaleEvent[]) {
   if (s.timeUp || s.round > MAX_ROUNDS) {
-    finishGame(s, events);
+    finishGame(s, events, s.timeUp ? "time" : "rounds");
     return;
   }
   let i = s.turn;
@@ -728,7 +957,7 @@ function nextTurn(s: CapitaleState, events: CapitaleEvent[]) {
   s.rollAgain = false;
   s.pendingBuy = null;
   events.push({ type: "turn", player: s.players[i]!.id });
-  if (s.round > MAX_ROUNDS) finishGame(s, events);
+  if (s.round > MAX_ROUNDS) finishGame(s, events, "rounds");
 }
 
 function roll(s: CapitaleState, p: CapitalePlayer, events: CapitaleEvent[]) {
@@ -863,6 +1092,7 @@ export function canPlaceSpecial(s: CapitaleState, playerId: string, index: numbe
   const here = districtSpecials(s, sq.group!);
   if (info.nuisance) {
     if (!deed.owner || deed.owner === playerId) return "Une nuisance se pose chez un adversaire.";
+    if (allies(s, playerId, deed.owner)) return "Pas de nuisance chez un coéquipier.";
     if (here.some((b) => b.kind === "parc")) return "Un parc protège ce quartier.";
   } else {
     if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
@@ -939,10 +1169,10 @@ function raze(s: CapitaleState, p: CapitalePlayer, index: number, how: "sell" | 
   events.push({ type: "raze", player: p.id, square: index, kind, how });
 }
 
-/** La nuisance qu'un joueur avait posée sur une rue qui devient la sienne disparaît */
+/** La nuisance qu'un joueur (ou un coéquipier) avait posée sur une rue qui devient la sienne disparaît */
 function dropOwnNuisance(s: CapitaleState, index: number, events: CapitaleEvent[]) {
   const d = s.deeds[index];
-  if (d?.owner && d.special && SPECIALS[d.special.kind].nuisance && d.special.by === d.owner)
+  if (d?.owner && d.special && SPECIALS[d.special.kind].nuisance && allies(s, d.special.by, d.owner))
     raze(s, playerOf(s, d.owner)!, index, "auto", events);
 }
 
@@ -1013,6 +1243,41 @@ function executeTrade(s: CapitaleState, t: Trade, events: CapitaleEvent[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Les dons entre coéquipiers
+// ---------------------------------------------------------------------------
+
+/** Peut-on faire ce don ? À un coéquipier encore en jeu, hors enchère, sans dette à régler soi-même */
+export function giftProblem(s: CapitaleState, from: string, to: string, give: Offer): string | null {
+  if (!teamPlay(s) || !teamRules(s).gifts) return "Les dons entre coéquipiers ne sont pas de la partie.";
+  if (s.step === "over") return "La partie est finie.";
+  const other = playerOf(s, to);
+  if (!other || other.bankrupt || to === from || !allies(s, from, to)) return "On ne donne qu'à un coéquipier encore en jeu.";
+  if (s.step === "auction") return "Pas de don pendant une enchère.";
+  if (s.debts.some((d) => d.debtor === from)) return "Règle d'abord ta dette.";
+  if (isEmpty(give)) return "Le don est vide.";
+  const problem = offerProblem(s, from, give);
+  if (problem) return problem;
+  if (interestOn(s, give.squares) > other.cash + give.cash)
+    return "Ton coéquipier n'a pas de quoi payer les 10 % d'intérêts des titres hypothéqués.";
+  return null;
+}
+
+function executeGift(s: CapitaleState, from: CapitalePlayer, to: CapitalePlayer, give: Offer, events: CapitaleEvent[]) {
+  events.push({ type: "gift", from: from.id, to: to.id, give });
+  if (give.cash > 0) pay(s, from.id, to.id, give.cash, "gift", events);
+  for (const i of give.squares) s.deeds[i]!.owner = to.id;
+  for (let k = 0; k < give.jailCards; k++) {
+    const card = from.jailCards.shift();
+    if (card) to.jailCards.push(card);
+  }
+  for (const i of give.squares) dropOwnNuisance(s, i, events);
+  // Comme à un échange : un titre hypothéqué reçu coûte 10 % d'intérêts tout de suite
+  const interest = interestOn(s, give.squares);
+  if (interest > 0) pay(s, to.id, "bank", interest, "interest", events);
+  to.stats.monopolies = Math.max(to.stats.monopolies, monopoliesOf(s, to.id));
+}
+
+// ---------------------------------------------------------------------------
 // Faillite et fin
 // ---------------------------------------------------------------------------
 
@@ -1024,22 +1289,31 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
     if (ownSpecial(s, i)) raze(s, p, i, "sell", events);
   }
   for (const i of BUYABLE) if (s.deeds[i]!.special?.by === p.id) raze(s, p, i, "auto", events);
-  const heir = creditor !== "bank" && creditor !== "pot" ? playerOf(s, creditor) : undefined;
-  if (heir && !heir.bankrupt) {
-    if (p.cash > 0) pay(s, p.id, heir.id, p.cash, "bankrupt", events);
+  const found = creditor !== "bank" && creditor !== "pot" ? playerOf(s, creditor) : undefined;
+  const live = found && !found.bankrupt ? found : undefined;
+  // Héritage d'équipe : le plus riche des coéquipiers encore en jeu reprend ses titres ; un créancier adverse ne touche
+  // que l'argent qui reste
+  const ally =
+    teamPlay(s) && teamRules(s).heir && !(live && allies(s, live.id, p.id))
+      ? teammates(s, p.id)
+          .filter((x) => !x.bankrupt)
+          .sort((a, b) => netWorth(s, b.id) - netWorth(s, a.id))[0]
+      : undefined;
+  const heir = ally ?? live;
+  if (p.cash > 0) pay(s, p.id, live ? live.id : "bank", p.cash, "bankrupt", events);
+  if (heir) {
     for (const i of ownedBy(s, p.id)) {
       s.deeds[i]!.owner = heir.id;
       dropOwnNuisance(s, i, events);
     }
     heir.jailCards.push(...p.jailCards);
-    heir.stats.bankrupted += 1;
     heir.stats.monopolies = Math.max(heir.stats.monopolies, monopoliesOf(s, heir.id));
   } else {
-    if (p.cash > 0) pay(s, p.id, "bank", p.cash, "bankrupt", events);
     // Les titres redeviennent libres
     for (const i of ownedBy(s, p.id)) s.deeds[i] = freshDeed(i);
     for (const deck of p.jailCards) s.decks[deck].push(JAIL_CARD_INDEX[deck]);
   }
+  if (live) live.stats.bankrupted += 1;
   p.jailCards = [];
   p.cash = 0;
   p.bankrupt = true;
@@ -1048,7 +1322,7 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   s.debts = s.debts.filter((d) => d.debtor !== p.id);
   s.trades = s.trades.filter((t) => t.from !== p.id && t.to !== p.id);
   if (s.auction && !s.auction.out.includes(p.id)) s.auction.out.push(p.id);
-  events.push({ type: "bankrupt", player: p.id, to: heir && !heir.bankrupt ? heir.id : "bank" });
+  events.push({ type: "bankrupt", player: p.id, to: heir ? heir.id : "bank", ...(ally ? { heir: true } : {}) });
   const alive = s.players.filter((x) => !x.bankrupt);
   if (
     alive.length <= 1 ||
@@ -1057,7 +1331,7 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
       alive.map((x) => x.id),
     )
   ) {
-    finishGame(s, events);
+    finishGame(s, events, "bankrupt");
     return;
   }
   if (wasCurrent) {
@@ -1067,7 +1341,7 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   }
 }
 
-function finishGame(s: CapitaleState, events: CapitaleEvent[]) {
+function finishGame(s: CapitaleState, events: CapitaleEvent[], reason: Outcome["reason"], monopoly?: MonopolyWin & { player: string }) {
   if (s.step === "over") return;
   s.step = "over";
   s.auction = null;
@@ -1078,17 +1352,59 @@ function finishGame(s: CapitaleState, events: CapitaleEvent[]) {
     p.stats.netWorth = netWorth(s, p.id);
     p.stats.monopolies = Math.max(p.stats.monopolies, p.bankrupt ? 0 : monopoliesOf(s, p.id));
   }
-  const alive = s.players.filter((p) => !p.bankrupt).sort((a, b) => b.stats.netWorth - a.stats.netWorth);
-  const out = [...s.eliminated].reverse();
-  const ranking = [...alive.map((p) => p.id), ...out];
+  const outcome: Outcome = { reason, ...(monopoly ? { monopoly } : {}) };
   const ranks: Record<string, number> = {};
-  alive.forEach((p, i) => {
-    const prev = alive[i - 1];
-    ranks[p.id] = prev && prev.stats.netWorth === p.stats.netWorth ? ranks[prev.id]! : i + 1;
-  });
-  out.forEach((id, i) => (ranks[id] = alive.length + i + 1));
+  let ranking: string[];
+  const byWorth = (a: CapitalePlayer, b: CapitalePlayer) => b.stats.netWorth - a.stats.netWorth;
+  if (teamPlay(s) && teamRules(s).win) {
+    // Victoire d'équipe : les équipes se classent (le Monopole d'abord, puis celles encore en jeu par fortune, puis les
+    // autres par ordre de sortie) et chacun prend le rang de la sienne
+    const team = (p: CapitalePlayer) => teamOf(s, p.id)!;
+    const ids = [...new Set(s.players.map(team))];
+    const members = (t: number) => s.players.filter((p) => team(p) === t);
+    const worth: Record<number, number> = Object.fromEntries(ids.map((t) => [t, members(t).reduce((n, p) => n + p.stats.netWorth, 0)]));
+    const alive = (t: number) => members(t).some((p) => !p.bankrupt);
+    const lastOut = (t: number) => Math.max(...members(t).map((p) => s.eliminated.indexOf(p.id)));
+    const winner = monopoly ? teamOf(s, monopoly.player) : null;
+    const order = [...ids].sort(
+      (a, b) =>
+        Number(b === winner) - Number(a === winner) ||
+        Number(alive(b)) - Number(alive(a)) ||
+        (alive(a) ? worth[b]! - worth[a]! : lastOut(b) - lastOut(a)),
+    );
+    const teamRank: Record<number, number> = {};
+    let ahead = 0;
+    order.forEach((t, k) => {
+      const prev = order[k - 1];
+      const tie = prev !== undefined && prev !== winner && alive(prev) && alive(t) && worth[prev] === worth[t];
+      teamRank[t] = tie ? teamRank[prev]! : ahead + 1;
+      ahead += members(t).length;
+    });
+    const out = (p: CapitalePlayer) => s.eliminated.indexOf(p.id);
+    ranking = order.flatMap((t) =>
+      members(t)
+        .sort((a, b) => Number(a.bankrupt) - Number(b.bankrupt) || (a.bankrupt ? out(b) - out(a) : byWorth(a, b)))
+        .map((p) => p.id),
+    );
+    for (const p of s.players) ranks[p.id] = teamRank[team(p)]!;
+    const top = order.filter((t) => teamRank[t] === 1);
+    outcome.team = top.length === 1 ? top[0]! : null;
+    outcome.teamWorth = worth;
+  } else {
+    // Chacun pour soi : le Monopole d'abord, puis les joueurs encore en jeu par fortune, puis les faillis
+    const winner = monopoly?.player ?? null;
+    const alive = s.players.filter((p) => !p.bankrupt).sort((a, b) => Number(b.id === winner) - Number(a.id === winner) || byWorth(a, b));
+    const out = [...s.eliminated].reverse();
+    ranking = [...alive.map((p) => p.id), ...out];
+    alive.forEach((p, i) => {
+      const prev = alive[i - 1];
+      ranks[p.id] = prev && prev.id !== winner && prev.stats.netWorth === p.stats.netWorth ? ranks[prev.id]! : i + 1;
+    });
+    out.forEach((id, i) => (ranks[id] = alive.length + i + 1));
+  }
   s.ranking = ranking;
   s.ranks = ranks;
+  s.outcome = outcome;
   events.push({ type: "gameOver", ranking });
 }
 
@@ -1103,8 +1419,10 @@ export function timeUp(s: CapitaleState): CapitaleEvent[] {
 export function closeAuction(s: CapitaleState): CapitaleEvent[] {
   if (!s.auction) return [];
   const events: CapitaleEvent[] = [];
+  const winner = s.auction.high?.player;
   closeAuctionInner(s, events);
   settleDebts(s, events);
+  checkMonopoly(s, events, winner);
   resume(s);
   return events;
 }
@@ -1309,6 +1627,13 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       events.push({ type: "trade", trade: t, status: "cancelled" });
       break;
     }
+    case "gift": {
+      const give = sanitizeOffer(action.give);
+      const problem = giftProblem(s, playerId, action.to, give);
+      if (problem) return fail(problem);
+      executeGift(s, p, playerOf(s, action.to)!, give, events);
+      break;
+    }
     case "bankrupt": {
       const debt = s.debts[0];
       if (s.step !== "debt" || !debt || debt.debtor !== playerId) return fail("Tu n'as pas de dette à régler.");
@@ -1324,6 +1649,7 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       return fail("Action inconnue.");
   }
   settleDebts(s, events);
+  checkMonopoly(s, events, playerId);
   resume(s);
   return { ok: true, events };
 }
