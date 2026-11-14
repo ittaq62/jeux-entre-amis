@@ -10,6 +10,8 @@ import {
   BURST_S,
   BURST_SPEED,
   AUTO_SWITCH_HOLD,
+  CELEBRATION_RUN,
+  GOAL_PAUSE,
   HUMAN_KEEPER_WAIT,
   HUMAN_RESTART_WAIT,
   faceTo,
@@ -60,8 +62,6 @@ const TACKLE_S = 0.36;
 const TACKLE_HIT_AT = 0.14;
 const SLIDE_S = 0.6;
 const DOWN_S = 0.6;
-/** La célébration, puis le ralenti : on peut passer dès qu'on a vu son but */
-const GOAL_PAUSE = 7.6;
 const GOAL_SKIP_AFTER = 2;
 /** Le receveur d'un humain court seul vers le ballon, mais pas plus longtemps que ça : ensuite, les touches reprennent la main */
 const RECEIVE_AUTO_S = 2.2;
@@ -1789,7 +1789,7 @@ function concludeGoal(m: Match, team: Team, ev: MatchEvent[]) {
     minute: Math.min(Math.ceil(m.clock / 60), m.period >= 3 ? 120 : 90),
     own,
   });
-  ev.push({ k: "goal", team, scorer, assist, own });
+  ev.push({ k: "goal", team, scorer, assist, own, human: scorerP?.human ?? null });
   m.phase = "goal";
   m.phaseUntil = m.t + GOAL_PAUSE;
   m.owner = -1;
@@ -1803,13 +1803,23 @@ function concludeGoal(m: Match, team: Team, ev: MatchEvent[]) {
 /**
  * Le buteur file vers le coin, du côté de la caméra de télévision (ou de l'autre si c'est bien plus près), et ses
  * coéquipiers proches viennent l'entourer ; les autres s'arrêtent. Tout le monde se tourne ensuite vers le public.
+ * Il ne court pas plus de CELEBRATION_RUN mètres : la caméra reste sur lui quelques secondes, et il doit avoir le temps
+ * d'arriver et de faire sa célébration avant le ralenti.
  */
 function celebrate(m: Match, scorer: Player | null, team: Team) {
   m.celebrant = scorer ? scorer.i : -1;
   const dir = attackDir(m, team);
   const side = scorer && scorer.z < -12 ? -1 : 1;
-  const spotX = dir * (HALF_L - 8);
-  const spotZ = side * (HALF_W - 5);
+  let spotX = dir * (HALF_L - 8);
+  let spotZ = side * (HALF_W - 5);
+  if (scorer) {
+    const run = Math.hypot(spotX - scorer.x, spotZ - scorer.z);
+    if (run > CELEBRATION_RUN) {
+      const k = CELEBRATION_RUN / run;
+      spotX = clamp(scorer.x + (spotX - scorer.x) * k, -HALF_L + 3, HALF_L - 3);
+      spotZ = clamp(scorer.z + (spotZ - scorer.z) * k, -HALF_W + 3, HALF_W - 3);
+    }
+  }
   const joiners = scorer
     ? m.players.filter(
         (p) => p.team === team && p !== scorer && p.role !== "GK" && !p.off && Math.hypot(p.x - scorer.x, p.z - scorer.z) < 45,

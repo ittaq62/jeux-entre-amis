@@ -152,6 +152,11 @@ export function assisted(m: Match, p: Player): boolean {
  * Juste après un changement de joueur fait sans lui, la touche encore enfoncée était pour l'autre : le nouveau joueur
  * continue sa course jusqu'à ce que la direction change, ou au plus ce temps-là
  */
+/** Après un but, le jeu attend ce temps-là : la célébration, puis le ralenti (on peut passer dès qu'on a vu son but) */
+export const GOAL_PAUSE = 7.6;
+/** Le buteur court fêter son but, mais pas plus loin que ça : arrivé tôt, on le voit faire sa célébration */
+export const CELEBRATION_RUN = 12;
+
 export const AUTO_SWITCH_HOLD = 0.5;
 
 /** Un clic arrivé si vite après un changement fait sans lui qu'il n'a pas pu le voir : il était pour le joueur d'avant */
@@ -278,7 +283,8 @@ export type MatchEvent =
   | { k: "save"; p: number; caught: boolean }
   | { k: "woodwork"; bar: boolean }
   | { k: "net" }
-  | { k: "goal"; team: Team; scorer: number; assist: number; own: boolean }
+  /** `human` : l'humain qui dirigeait le buteur (sa célébration est celle qu'on voit) */
+  | { k: "goal"; team: Team; scorer: number; assist: number; own: boolean; human?: string | null }
   | { k: "whistle"; why: WhistleReason }
   | { k: "foul"; p: number; on: number; penalty: boolean; how?: FoulKind }
   | { k: "card"; p: number; red: boolean }

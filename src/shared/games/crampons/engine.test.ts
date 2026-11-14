@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BALL_R, groundSpeedFor, makeBall, rollTime, stepBall } from "./ball.ts";
 import type { TeamSetup } from "./clubs.ts";
 import { createMatch, pushAction, setInput, stepMatch } from "./match.ts";
-import { attackDir, type Match, type MatchEvent, type MatchSettings, type Team } from "./model.ts";
+import { attackDir, CELEBRATION_RUN, type Match, type MatchEvent, type MatchSettings, type Team } from "./model.ts";
 import { DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W } from "./pitch.ts";
 
 const teams: [TeamSetup, TeamSetup] = [
@@ -1031,6 +1031,38 @@ describe("la fête d'un but", () => {
     expect(samples).toBeGreaterThan(1000);
     expect(pushed).toBe(0);
     expect(fastLosers).toBe(0);
+  });
+
+  it("le buteur arrive vite à sa place : on a le temps de le voir fêter avant le ralenti", () => {
+    for (const [seed, z] of [
+      [3, 0],
+      [17, -20],
+      [41, 15],
+    ] as const) {
+      const m = createMatch(settings(), teams, [], seed);
+      toPlay(m);
+      const end = attackDir(m, 0);
+      const st = m.players.find((p) => p.team === 0 && p.role === "ST")!;
+      // Le buteur au ras de la ligne de but : loin du coin où il va fêter, la course la plus longue
+      Object.assign(st, { x: end * (HALF_L - 2), z, vx: 0, vz: 0 });
+      setBall(m, end * (HALF_L + 0.3), 0.5, 0, end * 10, 0, 0, st.i);
+      play(m, (e) => e.some((x) => x.k === "goal"), 20);
+      expect(m.phase).toBe("goal");
+      const scorer = m.players[m.celebrant ?? -1]!;
+      expect(scorer.i).toBe(st.i);
+      const from = { x: scorer.x, z: scorer.z };
+      const goalAt = m.t;
+      let arrived = Infinity;
+      while (m.phase === "goal" && m.t - goalAt < 6) {
+        stepMatch(m);
+        if (Math.hypot(scorer.vx, scorer.vz) < 0.35 && m.t - goalAt > 0.3) {
+          arrived = Math.min(arrived, m.t - goalAt);
+        } else arrived = Infinity;
+      }
+      expect(Math.hypot(scorer.x - from.x, scorer.z - from.z)).toBeLessThan(CELEBRATION_RUN + 0.5);
+      // Arrêté avant la fin du plan sur lui (2,4 s au moins, 4,2 au plus)
+      expect(arrived).toBeLessThan(3);
+    }
   });
 });
 

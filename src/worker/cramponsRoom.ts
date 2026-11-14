@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AvatarConfig } from "../shared/avatar.ts";
-import { CLUB_BY_ID, CLUBS, deClub } from "../shared/games/crampons/clubs.ts";
+import { FETE_BY_ID, isFeteId, type FeteId } from "../shared/games/crampons/boutique.ts";
+import { CLUB_BY_ID, CLUBS, deClub, isLegend } from "../shared/games/crampons/clubs.ts";
 import { addHuman, createMatch, dropHuman, pushAction, setInput, stepMatch } from "../shared/games/crampons/match.ts";
 import type { HumanActionKind, Match, MatchEvent, Team } from "../shared/games/crampons/model.ts";
 import { DT } from "../shared/games/crampons/pitch.ts";
@@ -21,9 +22,11 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
+import { canUse, clubItem, feteItem } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { ownedItems } from "./shop.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
 
@@ -62,6 +65,8 @@ interface Seat {
   autoplay: false | "away";
   disconnectedAt: number | null;
   team: Team;
+  /** La célébration de ses buts (absent : à sa façon) */
+  fete?: FeteId;
 }
 
 type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart";
@@ -165,7 +170,7 @@ export class CramponsRoom extends DurableObject<Env> {
   private seatTour(tour: TourInit, now: number) {
     const d = this.data!;
     const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
-    const ids = CLUBS.map((c) => c.id);
+    const ids = CLUBS.filter((c) => !isLegend(c)).map((c) => c.id);
     const home = pick(ids);
     const away = pick(ids.filter((id) => id !== home));
     const rain = Math.random();
@@ -430,6 +435,17 @@ export class CramponsRoom extends DurableObject<Env> {
         return this.afterChange([], now);
       }
 
+      case "fete": {
+        // La célébration de ses buts : à tout moment, s'il l'a (les autres s'achètent à la boutique)
+        if (!seat || !isFeteId(msg.fete) || !this.allowMessage(`fete:${userId}`, 300)) return;
+        const fete = msg.fete === "maison" ? undefined : msg.fete;
+        if (seat.fete === fete) return;
+        if (fete && !canUse(feteItem(fete), await ownedItems(this.env.DB, userId)))
+          return error(`${FETE_BY_ID.get(fete)!.name} s'achète à la boutique.`);
+        seat.fete = fete;
+        return this.afterChange([], now);
+      }
+
       case "sit": {
         if (seat || d.status === "playing") return;
         if (!this.seatHuman(att.user)) return error("Le terrain est complet.");
@@ -481,6 +497,17 @@ export class CramponsRoom extends DurableObject<Env> {
     switch (msg.t) {
       case "settings": {
         if (d.status === "playing") return error("On ne change pas les règles en plein match.");
+        // Un club de légende se joue si l'hôte l'a débloqué à la boutique ; sinon on garde le club d'avant
+        const wanted = msg.settings?.clubs;
+        if (Array.isArray(wanted)) {
+          const fresh = wanted.filter((id) => typeof id === "string" && !d.settings.crampons.clubs.includes(id));
+          const locked = fresh.map((id) => CLUB_BY_ID.get(id)).filter((c) => c !== undefined && isLegend(c));
+          if (locked.length > 0) {
+            const owned = await ownedItems(this.env.DB, userId);
+            const missing = locked.find((c) => !canUse(clubItem(c!.id), owned));
+            if (missing) return error(`${missing.name} se débloque à la boutique.`);
+          }
+        }
         d.settings.crampons = mergeConfig(d.settings.crampons, msg.settings ?? {});
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
@@ -916,6 +943,7 @@ export class CramponsRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
+        ...(s.fete ? { fete: s.fete } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,

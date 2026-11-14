@@ -275,6 +275,8 @@ export interface Club {
   formation: FormationId;
   home: KitColors;
   away: KitColors;
+  /** Un club de légende s'achète à la boutique, avec ses points ; les autres sont à tout le monde */
+  price?: number;
 }
 
 const kit = (shirt: string, shorts: string, socks: string, sleeves = shirt, pattern: KitPattern = "uni", accent?: string): KitColors => ({
@@ -432,7 +434,61 @@ export const CLUBS: Club[] = [
     home: kit("#6d8aa8", "#e9e4d6", "#6d8aa8"),
     away: kit("#e9e4d6", "#6d8aa8", "#e9e4d6"),
   },
+  // Les clubs de légende : plus forts que tous les autres, chacun avec son maillot. Ils se débloquent à la boutique.
+  {
+    id: "etoile-minuit",
+    name: "Étoile de Minuit",
+    short: "ETM",
+    rating: 88,
+    formation: "4231",
+    home: kit("#16224f", "#16224f", "#e8c35a", "#e8c35a", "echarpe", "#e8c35a"),
+    away: kit("#e8c35a", "#16224f", "#e8c35a"),
+    price: 300,
+  },
+  {
+    id: "dynamo-petanque",
+    name: "Dynamo Pétanque",
+    short: "DYP",
+    rating: 89,
+    formation: "433",
+    home: kit("#5ab4e6", "#ffffff", "#5ab4e6", "#5ab4e6", "cercles", "#ffffff"),
+    away: kit("#ffffff", "#5ab4e6", "#ffffff"),
+    price: 450,
+  },
+  {
+    id: "sporting-croissant",
+    name: "Sporting Croissant",
+    short: "SPC",
+    rating: 90,
+    formation: "442",
+    home: kit("#f0c45a", "#8a5426", "#f0c45a", "#8a5426", "cercles", "#8a5426"),
+    away: kit("#8a5426", "#f0c45a", "#8a5426"),
+    price: 650,
+  },
+  {
+    id: "union-volcans",
+    name: "Union des Volcans",
+    short: "UDV",
+    rating: 91,
+    formation: "352",
+    home: kit("#d8431f", "#1d1d22", "#d8431f", "#1d1d22", "rayures", "#1d1d22"),
+    away: kit("#1d1d22", "#d8431f", "#1d1d22"),
+    price: 900,
+  },
+  {
+    id: "meteore",
+    name: "Météore FC",
+    short: "MET",
+    rating: 93,
+    formation: "433",
+    home: kit("#3a1f6e", "#c9cdd8", "#3a1f6e", "#c9cdd8", "echarpe", "#c9cdd8"),
+    away: kit("#c9cdd8", "#3a1f6e", "#c9cdd8"),
+    price: 1300,
+  },
 ];
+
+/** Un club de légende, qui se débloque à la boutique */
+export const isLegend = (c: Club) => (c.price ?? 0) > 0;
 
 /** Le motif du maillot à domicile : chaque club a le sien */
 const HOME_PATTERNS: Record<string, [KitPattern, string]> = {
@@ -463,9 +519,9 @@ export function deClub(name: string): string {
   if (/^les /i.test(name)) return `des ${name.slice(4)}`;
   if (/^le /i.test(name)) return `du ${name.slice(3)}`;
   if (/^la /i.test(name)) return `de la ${name.slice(3)}`;
-  if (/^(FC|CS|Racing|Stade|Club|Sporting|Red Star)\b/.test(name)) return `du ${name}`;
+  if (/^(FC|CS|Racing|Stade|Club|Sporting|Red Star|Dynamo|Météore)\b/.test(name)) return `du ${name}`;
   if (/^(JS|ES)\b/.test(name)) return `de la ${name}`;
-  if (/^(AS|AC|US|Olympique|Entente|Union|Amicale|Athletic|Association)\b/i.test(name)) return `de l'${name}`;
+  if (/^(AS|AC|US|Olympique|Entente|Union|Amicale|Athletic|Association|Étoile)\b/i.test(name)) return `de l'${name}`;
   if (/^(Vétérans|Anciens|Amis)\b/.test(name)) return `des ${name}`;
   return `de ${name}`;
 }

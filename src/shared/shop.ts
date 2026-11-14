@@ -10,10 +10,12 @@ import {
   type VehicleId,
 } from "./games/bolides/garage.ts";
 import { TOKENS, type TokenId } from "./games/capitale/tokens.ts";
+import { BALLS, FETES, type BallId, type FeteId } from "./games/crampons/boutique.ts";
+import { CLUBS } from "./games/crampons/clubs.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 
-export type ShopKind = "naval" | "token" | "vehicle" | "kart" | "uno";
+export type ShopKind = "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete";
 
 export interface ShopItem {
   id: string;
@@ -29,6 +31,10 @@ export const tokenItem = (id: TokenId) => `token:${id}`;
 export const vehicleItem = (id: VehicleId) => `vehicle:${id}`;
 export const kartItem = (id: KartSkinId) => `kart:${id}`;
 export const unoItem = (id: BackId) => `uno:${id}`;
+/** Crampons : un club (ceux de légende s'achètent), un ballon, une célébration de but */
+export const clubItem = (id: string) => `club:${id}`;
+export const ballItem = (id: BallId) => `ballon:${id}`;
+export const feteItem = (id: FeteId) => `fete:${id}`;
 
 export const SHOP_ITEMS: ShopItem[] = [
   ...NAVAL_SKINS.map((s): ShopItem => ({ id: navalItem(s.id), kind: "naval", ref: s.id, name: s.name, price: s.price })),
@@ -48,6 +54,9 @@ export const SHOP_ITEMS: ShopItem[] = [
     price: KART_SKINS[id].price,
   })),
   ...BACKS.map((b): ShopItem => ({ id: unoItem(b.id), kind: "uno", ref: b.id, name: b.name, price: b.price })),
+  ...CLUBS.map((c): ShopItem => ({ id: clubItem(c.id), kind: "club", ref: c.id, name: c.name, price: c.price ?? 0 })),
+  ...BALLS.map((b): ShopItem => ({ id: ballItem(b.id), kind: "ballon", ref: b.id, name: b.name, price: b.price })),
+  ...FETES.map((f): ShopItem => ({ id: feteItem(f.id), kind: "fete", ref: f.id, name: f.name, price: f.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

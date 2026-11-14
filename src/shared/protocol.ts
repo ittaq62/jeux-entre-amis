@@ -3,6 +3,7 @@ import type { SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts"
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
 import type { MatchEvent } from "./games/crampons/model.ts";
+import type { FeteId } from "./games/crampons/boutique.ts";
 import type { CramponsConfig, CramponsTick, CramponsView } from "./games/crampons/view.ts";
 import type { Active, BricksSettings, GarbageChunk, Placement as BrickPlacement, TargetStrategy } from "./games/bricks/engine.ts";
 import type { BricksFx, BricksPlayerView, BricksSnapshot, BricksView } from "./games/bricks/view.ts";
@@ -175,6 +176,8 @@ export interface SeatView {
   skin?: SkinId;
   /** UNO : le dos de ses cartes (absent : le classique) */
   back?: BackId;
+  /** Crampons : la célébration de ses buts (absent : chacun fête à sa façon) */
+  fete?: FeteId;
 }
 
 export interface SpectatorView {
@@ -617,6 +620,8 @@ export type CramponsClientMessage =
   | { t: "settings"; settings: Partial<CramponsConfig>; visibility?: Visibility; maxPlayers?: number }
   /** Choisir son équipe */
   | { t: "team"; team: 0 | 1 }
+  /** La célébration de ses buts, s'il l'a (les autres s'achètent à la boutique) */
+  | { t: "fete"; fete: FeteId }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }

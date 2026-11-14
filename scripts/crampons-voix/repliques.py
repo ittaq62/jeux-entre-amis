@@ -576,6 +576,12 @@ CLUBS = {
     "FC Moules-Frites": "le F.C. Moules-Frites",
     "Amicale du Comptoir": "l'Amicale du Comptoir",
     "Vétérans du Dimanche": "les Vétérans du Dimanche",
+    # Les clubs de légende, qui se débloquent à la boutique
+    "Étoile de Minuit": "l'Étoile de Minuit",
+    "Dynamo Pétanque": "le Dynamo Pétanque",
+    "Sporting Croissant": "le Sporting Croissant",
+    "Union des Volcans": "l'Union des Volcans",
+    "Météore FC": "le Météore F.C.",
 }
 
 
