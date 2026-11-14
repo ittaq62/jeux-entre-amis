@@ -1,5 +1,4 @@
-import { motion } from "motion/react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "wouter";
 import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
@@ -7,7 +6,7 @@ import { GAME_NAMES, type GameId, type RoomSummary, type TableGame, type Visibil
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { CardBack, CardFace } from "../components/Card.tsx";
+import { CardBack, CardFace, COLOR_HEX } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Modal } from "../components/ui.tsx";
 import { lateJoinTag, TableLinks } from "../components/TableLinks.tsx";
@@ -23,16 +22,29 @@ import { api, ApiError } from "../lib/api.ts";
 import { tableHref } from "../lib/arrival.ts";
 import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
 import { toast } from "../lib/toast.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { useHub } from "../stores/hub.ts";
 import { useSession } from "../stores/session.ts";
+import "../styles/banners.css";
 
 // Quelques cartes posees sur le feutre, a cote de la fiche du jeu
 const TABLE_CARDS: { card: Card; x: number; y: number; r: number }[] = [
   { card: { id: 1, kind: "number", color: "blue", value: 9 }, x: 0, y: 26, r: -14 },
   { card: { id: 2, kind: "skip", color: "green" }, x: 62, y: 4, r: -4 },
   { card: { id: 3, kind: "wild4", color: null }, x: 128, y: 18, r: 7 },
-  { card: { id: 4, kind: "draw2", color: "red" }, x: 70, y: 112, r: 19 },
 ];
+
+// Puis la partie continue sur la pile, une carte toutes les 3 s : un +2 rouge (l'image fixe), un +2 jaune, un joker qui
+// redemande du rouge, et le +2 rouge revient. Chacune part de la pioche, en bas à droite.
+const PILE = { x: 70, y: 112 };
+const DECK_CENTER = { x: 260, y: 200 };
+const PLAYED: { card: Card; dx: number; dy: number; r: number; glow?: string }[] = [
+  { card: { id: 4, kind: "draw2", color: "red" }, dx: 0, dy: 0, r: 19 },
+  { card: { id: 5, kind: "draw2", color: "yellow" }, dx: 7, dy: -7, r: 9 },
+  { card: { id: 6, kind: "wild", color: null }, dx: -3, dy: 3, r: 27, glow: COLOR_HEX.red },
+];
+const PLAY_EVERY = 3;
+const FIRST_PLAY = 0.8;
 
 // Le coin de décor de chaque fiche. Ses textes sont dans HOME_GAMES : un nouveau jeu, c'est une entrée ici et une là-bas.
 const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
@@ -318,30 +330,40 @@ function GameSearch({ value, onChange }: { value: string; onChange: (value: stri
   );
 }
 
-/** Quelques cartes posées sur le feutre, sur la fiche d'UNO. */
+/** Quelques cartes posées sur le feutre, sur la fiche d'UNO, et une partie qui continue sur la pile (en CSS). */
 function TableScatter() {
   return (
     <div className="table-scatter">
       {TABLE_CARDS.map(({ card, x, y, r }, i) => (
-        <motion.div
-          key={card.id}
-          className="scatter-card"
-          style={{ left: x, top: y }}
-          initial={{ opacity: 0, y: -18, rotate: r - 10 }}
-          animate={{ opacity: 1, y: 0, rotate: r }}
-          transition={{ delay: 0.08 * i, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
-        >
+        <div key={card.id} className="scatter-card is-dealt" style={{ left: x, top: y, "--r": `${r}deg`, "--i": i } as CSSProperties}>
           <CardFace card={card} width={96} />
-        </motion.div>
+        </div>
       ))}
-      <motion.div
-        className="scatter-card scatter-deck"
-        initial={{ opacity: 0, x: 30 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.4, duration: 0.45, ease: [0.2, 0.8, 0.3, 1] }}
-      >
+      <div className="scatter-card scatter-deck">
         <CardBack width={80} />
-      </motion.div>
+      </div>
+      {PLAYED.map(({ card, dx, dy, r, glow }, i) => {
+        const left = PILE.x + dx;
+        const top = PILE.y + dy;
+        const style = {
+          left,
+          top,
+          "--r": `${r}deg`,
+          "--fx": `${DECK_CENTER.x - (left + 48)}px`,
+          "--fy": `${(DECK_CENTER.y - (top + 48 * 1.4)).toFixed(1)}px`,
+          "--d": `${FIRST_PLAY + i * PLAY_EVERY}s`,
+          ...(glow ? { "--glow": glow } : {}),
+        } as CSSProperties;
+        return (
+          <div key={card.id} className={`scatter-card scatter-play ${i === 0 ? "is-first" : ""}`} style={style}>
+            {glow && <span className="scatter-glow" />}
+            <div className="scatter-flip">
+              <CardFace card={card} width={96} />
+              <CardBack width={96} className="scatter-back" />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -365,9 +387,15 @@ function GameSheet({
   onJoin: (code: string) => void;
 }) {
   const look = LOOK[game.id];
+  const stage = useRef<HTMLDivElement>(null);
+  const motion = useStageMotion(stage);
   return (
     <section hidden={hidden} className={`home-game home-game-${game.id} panel`} aria-label={game.name}>
-      <div className={`game-stage ${look.stage}`} aria-hidden="true">
+      <div
+        ref={stage}
+        className={`game-stage ${look.stage} ${motion === "still" ? "is-still" : motion === "paused" ? "is-paused" : ""}`}
+        aria-hidden="true"
+      >
         {look.art()}
       </div>
       <div className="game-sheet">
@@ -391,6 +419,50 @@ function GameSheet({
       </div>
     </section>
   );
+}
+
+/**
+ * Ce que fait le décor d'une fiche : il bouge quand on le voit ; hors de l'écran, fiche masquée ou page cachée, il s'arrête
+ * là où il en est (et reprend sans saut) ; avec « Effets réduits » ou si le système le demande, il montre son image fixe.
+ * Les animations sont en CSS (is-paused, is-still dans banners.css) ; celles en SVG (la mer de la bataille navale) suivent ici.
+ */
+function useStageMotion(stage: RefObject<HTMLDivElement | null>): "live" | "paused" | "still" {
+  const reduced = usePrefs((s) => s.reducedEffects);
+  const [osReduced, setOsReduced] = useState(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const [onScreen, setOnScreen] = useState(false);
+  const [pageShown, setPageShown] = useState(() => document.visibilityState === "visible");
+
+  useEffect(() => {
+    const query = matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setOsReduced(query.matches);
+    query.addEventListener("change", onChange);
+    const onVisibility = () => setPageShown(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      query.removeEventListener("change", onChange);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(Boolean(entry?.isIntersecting)), { rootMargin: "80px 0px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stage]);
+
+  const state = reduced || osReduced ? "still" : onScreen && pageShown ? "live" : "paused";
+
+  useEffect(() => {
+    for (const svg of stage.current?.querySelectorAll("svg") ?? []) {
+      if (state === "live") svg.unpauseAnimations();
+      else svg.pauseAnimations();
+      if (state === "still") svg.setCurrentTime(0);
+    }
+  }, [state, stage]);
+
+  return state;
 }
 
 /** « Un ami t'a donné un code ? » : le même champ sur la fiche de chaque jeu. */

@@ -1,0 +1,200 @@
+/* Les décors des fiches de l'accueil, ce qui y bouge : chaque animation tourne en boucle, sans saut à la reprise.
+   Rien ne tourne hors de l'écran ni page cachée (is-paused), et avec « Effets réduits » ou prefers-reduced-motion,
+   le décor s'arrête sur son image fixe (is-still) : les styles de base de chaque élément sont cette image. */
+
+.game-stage.is-paused *,
+.game-stage.is-paused *::before,
+.game-stage.is-paused *::after {
+  animation-play-state: paused !important;
+}
+
+.game-stage.is-still *,
+.game-stage.is-still *::before,
+.game-stage.is-still *::after {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-stage *,
+  .game-stage *::before,
+  .game-stage *::after {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* UNO : les cartes arrivent sur le feutre, puis la partie continue : */
+/* une carte part de la pioche, se retourne en route et se pose sur   */
+/* la pile, chacune son tour (un +2 rouge, un +2 jaune, un joker qui  */
+/* redemande du rouge)                                                */
+/* ------------------------------------------------------------------ */
+
+.scatter-card.is-dealt {
+  rotate: var(--r);
+  animation: scatter-deal 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 0.08s);
+}
+
+@keyframes scatter-deal {
+  from {
+    opacity: 0;
+    translate: 0 -18px;
+    rotate: calc(var(--r) - 10deg);
+  }
+}
+
+/* La pioche glisse en place, puis tressaille chaque fois qu'on y prend une carte */
+.scatter-deck {
+  animation:
+    scatter-deck-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) 0.3s both,
+    scatter-deck-draw 3s ease-out 0.8s infinite;
+}
+
+@keyframes scatter-deck-in {
+  from {
+    opacity: 0;
+    translate: 30px 0;
+  }
+}
+
+@keyframes scatter-deck-draw {
+  0%,
+  3% {
+    translate: 0 0;
+  }
+
+  7% {
+    translate: -1px 2px;
+  }
+
+  14%,
+  100% {
+    translate: 0 0;
+  }
+}
+
+/* Une carte jouée : posée sur la pile (son image fixe), elle part en fait de la pioche (--fx, --fy) */
+.scatter-play {
+  width: 96px;
+  rotate: var(--r);
+  animation: scatter-play 9s linear var(--d) infinite both;
+}
+
+.scatter-play:not(.is-first) {
+  opacity: 0;
+}
+
+@keyframes scatter-play {
+  0%,
+  1.2% {
+    translate: var(--fx) var(--fy);
+    rotate: 9deg;
+    scale: 0.8333;
+    opacity: 0;
+  }
+
+  1.3% {
+    translate: var(--fx) var(--fy);
+    rotate: 9deg;
+    scale: 0.8333;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+
+  3.6% {
+    translate: calc(var(--fx) - 10px) calc(var(--fy) - 30px);
+    rotate: 4deg;
+    scale: 0.93;
+    animation-timing-function: cubic-bezier(0.35, 0.1, 0.4, 1);
+  }
+
+  9.4% {
+    translate: -2px -6px;
+    rotate: calc(var(--r) + 5deg);
+    scale: 1.05;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+  }
+
+  10.8%,
+  45.6% {
+    translate: 0 0;
+    rotate: var(--r);
+    scale: 1;
+    opacity: 1;
+  }
+
+  48.9%,
+  100% {
+    translate: 0 0;
+    rotate: var(--r);
+    scale: 1;
+    opacity: 0;
+  }
+}
+
+/* Elle montre son dos en quittant la pioche et se retourne avant de toucher la pile */
+.scatter-flip {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: scatter-flip 9s cubic-bezier(0.45, 0, 0.35, 1) var(--d) infinite both;
+}
+
+@keyframes scatter-flip {
+  0%,
+  3.2% {
+    transform: perspective(700px) rotateY(180deg);
+  }
+
+  8.8%,
+  100% {
+    transform: perspective(700px) rotateY(0deg);
+  }
+}
+
+.scatter-flip > .card-svg {
+  display: block;
+  backface-visibility: hidden;
+}
+
+.scatter-flip > .scatter-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+/* Le joker posé, la couleur demandée s'allume autour de lui */
+.scatter-glow {
+  position: absolute;
+  inset: 4px;
+  border-radius: 12px;
+  box-shadow:
+    0 0 22px 8px var(--glow),
+    0 0 4px 3px var(--glow);
+  opacity: 0;
+  animation: scatter-glow 9s ease-out var(--d) infinite both;
+}
+
+@keyframes scatter-glow {
+  0%,
+  10.8% {
+    opacity: 0;
+    scale: 0.9;
+  }
+
+  14% {
+    opacity: 1;
+    scale: 1.06;
+  }
+
+  18%,
+  44% {
+    opacity: 0.8;
+    scale: 1;
+  }
+
+  48.9%,
+  100% {
+    opacity: 0;
+    scale: 1;
+  }
+}
