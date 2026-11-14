@@ -5,7 +5,8 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 
 /** La version du site, jointe aux signalements : le commit et la date de construction (« dev » en local) */
 function siteVersion(dev: boolean): string {
-  const date = new Date().toISOString().slice(0, 16).replace("T", " ");
+  // À l'heure de la machine qui construit (« 2026-11-14 23:16 »)
+  const date = new Date().toLocaleString("sv-SE").slice(0, 16);
   let commit = "";
   try {
     commit = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
