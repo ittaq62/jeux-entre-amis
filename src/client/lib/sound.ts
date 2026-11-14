@@ -97,6 +97,20 @@ export type SoundName =
   | "mecheWord"
   | "mecheRefused"
   | "mecheBoom"
+  | "mecheFuseBallon"
+  | "mecheBoomBallon"
+  | "mecheFuseNeige"
+  | "mecheBoomNeige"
+  | "mecheFuseGateau"
+  | "mecheBoomGateau"
+  | "mecheFuseReveil"
+  | "mecheBoomReveil"
+  | "mecheFuseRuche"
+  | "mecheBoomRuche"
+  | "mecheFuseFusee"
+  | "mecheBoomFusee"
+  | "mecheFuseGaz"
+  | "mecheBoomGaz"
   | "bolidesJump"
   | "bolidesLand"
   | "bolidesTrick"
@@ -220,6 +234,21 @@ const FILES: Record<SoundName, string[]> = {
   mecheWord: ["meche-word.wav"],
   mecheRefused: ["meche-refused.wav"],
   mecheBoom: ["meche-boom.wav"],
+  // Les bombes de la boutique : la mèche de chacune, en boucle, et sa fin
+  mecheFuseBallon: ["meche-ballon-fuse.wav"],
+  mecheBoomBallon: ["meche-ballon-boom.wav"],
+  mecheFuseNeige: ["meche-neige-fuse.wav"],
+  mecheBoomNeige: ["meche-neige-boom.wav"],
+  mecheFuseGateau: ["meche-gateau-fuse.wav"],
+  mecheBoomGateau: ["meche-gateau-boom.wav"],
+  mecheFuseReveil: ["meche-reveil-fuse.wav"],
+  mecheBoomReveil: ["meche-reveil-boom.wav"],
+  mecheFuseRuche: ["meche-ruche-fuse.wav"],
+  mecheBoomRuche: ["meche-ruche-boom.wav"],
+  mecheFuseFusee: ["meche-fusee-fuse.wav"],
+  mecheBoomFusee: ["meche-fusee-boom.wav"],
+  mecheFuseGaz: ["meche-gaz-fuse.wav"],
+  mecheBoomGaz: ["meche-gaz-boom.wav"],
   bolidesJump: ["bolides-jump.wav"],
   bolidesLand: ["bolides-land.wav"],
   bolidesTrick: ["bolides-trick.wav"],
@@ -471,6 +500,20 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   mecheWord: 0.55,
   mecheRefused: 0.55,
   mecheBoom: 0.85,
+  mecheFuseBallon: 0.26,
+  mecheBoomBallon: 0.9,
+  mecheFuseNeige: 0.26,
+  mecheBoomNeige: 0.85,
+  mecheFuseGateau: 0.3,
+  mecheBoomGateau: 0.8,
+  mecheFuseReveil: 0.32,
+  mecheBoomReveil: 0.6,
+  mecheFuseRuche: 0.2,
+  mecheBoomRuche: 0.75,
+  mecheFuseFusee: 0.2,
+  mecheBoomFusee: 0.9,
+  mecheFuseGaz: 0.17,
+  mecheBoomGaz: 0.85,
   bolidesJump: 0.42,
   bolidesLand: 0.5,
   bolidesTrick: 0.4,
