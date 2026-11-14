@@ -1668,15 +1668,106 @@ html:has(.bolides-root) body {
     0 0 22px 2px rgba(226, 189, 110, 0.4);
 }
 
-.seat-partner-tag {
-  margin-top: -2px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--team-color) 30%, rgba(0, 0, 0, 0.45));
+/* Son coéquipier : la plaque du nom prend la couleur de l'équipe (sa main s'affiche à part, en haut) */
+.seat.is-partner .seat-plate {
+  background: color-mix(in srgb, var(--team-color) 42%, rgba(3, 12, 8, 0.8));
+  border-color: color-mix(in srgb, var(--team-color) 80%, white 10%);
   color: #fff;
-  font-size: 11px;
+}
+
+/*
+ * Les mains des coéquipiers ont leur place à elles, en haut : dans la barre si elles y tiennent, sinon sur une ligne
+ * juste dessous (la barre passe à la ligne et la table descend d'autant : rien ne se chevauche).
+ */
+.table-top.has-partners {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.table-top.has-partners .team-note {
+  margin-right: 0;
+  flex: none;
+}
+
+.table-top.has-partners .table-top-actions {
+  margin-left: auto;
+}
+
+.partner-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.partner-bar.is-inline {
+  flex: 0 1 auto;
+  margin: 0 auto;
+}
+
+.partner-bar.is-row {
+  order: 1;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+}
+
+.partner-bar.is-stacked {
+  flex-direction: column;
+  align-items: center;
+}
+
+.partner-panel {
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--team-color) 55%, transparent);
+  background: color-mix(in srgb, var(--team-color) 14%, rgba(3, 12, 8, 0.72));
+  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.7);
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.partner-panel.is-turn {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 1px var(--gold),
+    0 0 16px rgba(226, 189, 110, 0.35);
+}
+
+.partner-label {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.partner-name {
+  font-size: 13px;
   font-weight: 700;
+  color: var(--text);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partner-panel.is-turn .partner-name {
+  color: var(--gold-light);
+}
+
+.partner-count {
+  font-size: 11.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.partner-bar.is-compact .partner-name {
+  font-size: 12px;
+}
+
+.partner-bar.is-compact .partner-count {
+  font-size: 10.5px;
 }
 
 .partner-hand {
@@ -1687,6 +1778,7 @@ html:has(.bolides-root) body {
 .partner-card {
   position: absolute;
   top: 0;
+  line-height: 0;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
 }
 
@@ -1702,15 +1794,4 @@ html:has(.bolides-root) body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.team-note span {
-  font-weight: 500;
-  color: var(--text-soft);
-}
-
-@media (max-width: 520px) {
-  .team-note span {
-    display: none;
-  }
 }

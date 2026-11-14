@@ -17,6 +17,7 @@ import { useFx } from "./fx.ts";
 import { FxLayer } from "./FxLayer.tsx";
 import { Hand, sortHand } from "./Hand.tsx";
 import { GameOver, RoundOver } from "./Overlays.tsx";
+import { PartnerBar } from "./PartnerBar.tsx";
 import { ColorPicker, TargetPicker } from "./Pickers.tsx";
 import { Seat, TimerRing } from "./Seat.tsx";
 import type { EmoteBubble } from "./useRoom.ts";
@@ -48,6 +49,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   const { w, h } = useViewport();
   const compact = w < 720 || h < 600;
   const portrait = h > w * 1.15;
+  // En équipe, les mains des coéquipiers : dans la barre du haut si elles tiennent à côté du titre et des boutons
+  const short = h < 500 && w > h;
+  const partnerCard = compact ? (short ? 28 : 30) : clamp(h / 19, 34, 44);
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerRoom, setHeaderRoom] = useState({ inline: 0, row: 0 });
   const handW = compact ? clamp(portrait ? w / 4.5 : w / 5.6, 58, 90) : clamp(h / 8.4, 78, 112);
   const pileW = compact ? clamp(portrait ? w / 4.6 : w / 5.2, 62, 88) : clamp(h / 7.8, 84, 116);
   const sound = usePrefs((s) => s.sound);
@@ -69,6 +75,26 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // La place libre dans la barre du haut, sans compter les mains des coéquipiers elles-mêmes
+  const hasPartners = g.partners.length > 0;
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el || !hasPartners) return;
+    const measure = () => {
+      const style = getComputedStyle(el);
+      const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const gap = parseFloat(style.columnGap) || 0;
+      const fixed = [...el.children].filter((c) => !c.matches(".partner-bar, .table-menu, .emote-catcher")) as HTMLElement[];
+      const used = fixed.reduce((sum, c) => sum + c.scrollWidth, 0) + gap * fixed.length;
+      const row = el.clientWidth - pad;
+      setHeaderRoom((prev) => (prev.inline === row - used && prev.row === row ? prev : { inline: row - used, row }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasPartners]);
 
   useEffect(() => {
     if (shakeCount === 0 || !scope.current) return;
@@ -234,7 +260,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   return (
     <CardBackSkin.Provider value={mySeat?.back ?? "classique"}>
       <div className="table-root felt" ref={scope}>
-        <header className="table-top">
+        <header className={`table-top ${hasPartners ? "has-partners" : ""}`} ref={headerRef}>
           <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
             <Icon name="menu" />
           </button>
@@ -248,17 +274,22 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           {mySeat?.team !== undefined && (
             <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team] }}>
               Équipe {TOUR_TEAMS[mySeat.team]}
-              {g.partners.length > 0 && (
-                <span>
-                  {" "}
-                  · avec{" "}
-                  {g.partners
-                    .map((x) => room.seats.find((s) => s.id === x.id)?.name)
-                    .filter(Boolean)
-                    .join(" et ")}
-                </span>
-              )}
             </p>
+          )}
+          {hasPartners && mySeat?.team !== undefined && headerRoom.row > 0 && (
+            <PartnerBar
+              partners={g.partners}
+              seats={room.seats}
+              players={g.players}
+              turn={g.phase === "playing" ? g.turn : null}
+              teamColor={TOUR_TEAM_COLORS[mySeat.team]}
+              compact={compact}
+              short={short}
+              tall={portrait && h >= 760}
+              card={partnerCard}
+              inlineRoom={headerRoom.inline}
+              rowRoom={headerRoom.row}
+            />
           )}
           <div className="table-top-actions">
             <button
@@ -315,7 +346,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             const seat = room.seats.find((s) => s.id === p.id);
             if (!seat) return null;
             const pos = positions[k]!;
-            const partnerHand = g.partners.find((x) => x.id === p.id)?.hand;
+            const partner = g.partners.some((x) => x.id === p.id);
             return (
               <div key={p.id} className="seat-slot" style={{ left: pos.x, top: pos.y }}>
                 <Seat
@@ -328,11 +359,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   showScore={g.settings.endMode === "points"}
                   emotes={emotes.filter((e) => e.seatId === p.id)}
                   compact={compact}
-                  vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partnerHand}
+                  vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partner}
                   onCatch={() => act({ type: "catch", target: p.id })}
                   mercyLimit={g.mercyLimit}
                   teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team] : undefined}
-                  partnerHand={partnerHand}
+                  partner={partner}
                 />
               </div>
             );
