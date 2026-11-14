@@ -345,7 +345,13 @@ function Battle({
   let status: string;
   if (g.phase === "placement") {
     const waiting = g.players.filter((p) => !p.ready).map((p) => seat(p.id)?.name ?? "?");
-    status = waiting.length > 0 ? `Ta flotte est prête. On attend ${waiting.join(", ")}.` : "Toutes les flottes sont prêtes.";
+    // Un spectateur n'a pas de flotte : il voit seulement qui place encore la sienne
+    status =
+      waiting.length === 0
+        ? "Toutes les flottes sont prêtes."
+        : meP
+          ? `Ta flotte est prête. On attend ${waiting.join(", ")}.`
+          : `Les joueurs placent leur flotte. On attend ${waiting.join(", ")}.`;
   } else if (g.phase === "gameOver") status = "La bataille est terminée.";
   else if (mySeat?.autoplay) status = "Un bot tient la barre pour toi.";
   else if (myTurn) {
