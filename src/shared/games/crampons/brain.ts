@@ -17,9 +17,11 @@ import {
 import { BOX_L, clamp, GOAL_H, GOAL_HALF, HALF_L, HALF_W, inBox, lerp, onPitch } from "./pitch.ts";
 
 /** Ce qui change d'un niveau à l'autre : le temps de réaction, l'œil pour la passe, le pressing */
+// Débutant et Amateur, pour qu'on y gagne en découvrant le jeu au doigt : des adversaires qui décident plus lentement,
+// pressent moins, taclent et coupent moins bien les passes
 const LEVELS = [
-  { think: 0.5, press: 0.55, vision: 0.55, keeper: 0.3, tackle: 0.7, speed: 0.92, react: 0.5, read: 0.65, keeperErr: 1.6 },
-  { think: 0.34, press: 0.75, vision: 0.75, keeper: 0.24, tackle: 0.95, speed: 0.97, react: 0.4, read: 0.8, keeperErr: 1.3 },
+  { think: 0.62, press: 0.42, vision: 0.5, keeper: 0.3, tackle: 0.5, speed: 0.89, react: 0.5, read: 0.52, keeperErr: 1.6 },
+  { think: 0.42, press: 0.66, vision: 0.7, keeper: 0.24, tackle: 0.82, speed: 0.95, react: 0.4, read: 0.72, keeperErr: 1.3 },
   { think: 0.22, press: 0.9, vision: 0.9, keeper: 0.18, tackle: 1.15, speed: 1, react: 0.32, read: 0.95, keeperErr: 1.0 },
   { think: 0.14, press: 1, vision: 1, keeper: 0.13, tackle: 1.4, speed: 1.03, react: 0.24, read: 1.1, keeperErr: 0.8 },
 ];
@@ -28,7 +30,11 @@ export const levelOf = (m: Match) => LEVELS[clamp(m.settings.level, 0, 3)]!;
 
 /** Un humain sur cette équipe : l'ordinateur reste au niveau normal pour ses coéquipiers */
 const isOurs = (m: Match, team: Team) => m.humans.some((h) => h.team === team);
-const tuning = (m: Match, team: Team) => (isOurs(m, team) ? LEVELS[2]! : levelOf(m));
+/**
+ * Le niveau de jeu d'une équipe : celui choisi pour l'ordinateur, sauf pour les coéquipiers d'un humain, qui jouent
+ * toujours au niveau normal. En « Débutant », ce sont les adversaires qui sont lents et maladroits, pas ses partenaires.
+ */
+export const tuning = (m: Match, team: Team) => (isOurs(m, team) ? LEVELS[2]! : levelOf(m));
 
 interface FlightPoint {
   t: number;

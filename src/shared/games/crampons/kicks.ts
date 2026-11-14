@@ -8,7 +8,7 @@ import { clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, lerp, onPitch } from "./p
  * La précision des tireurs de l'ordinateur, selon le niveau choisi (un humain vise lui-même, et ses coéquipiers jouent
  * au niveau « confirmé ») : un débutant tire plus souvent à côté ou sur le gardien
  */
-const AI_AIM = [1.9, 1.6, 1.35, 1.15];
+const AI_AIM = [2.15, 1.7, 1.35, 1.15];
 /** Jusqu'où l'ordinateur ose viser loin du gardien (fraction du demi-but), selon le niveau : un débutant tire sur lui */
 const AI_WIDTH: [number, number][] = [
   [0.15, 0.45],

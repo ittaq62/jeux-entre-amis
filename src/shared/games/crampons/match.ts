@@ -1,7 +1,7 @@
 // Le déroulement d'un match : courir, toucher le ballon, tacler, siffler, reprendre le jeu, marquer, changer de côté.
 
 import { BALL_R, GRAVITY, makeBall, rollingAt, stepBall } from "./ball.ts";
-import { keeperReadsShot, levelOf, shapeSpot, steerCarrier, thinkCarrier, thinkTeam } from "./brain.ts";
+import { keeperReadsShot, shapeSpot, steerCarrier, thinkCarrier, thinkTeam, tuning } from "./brain.ts";
 import { makeSquad, type TeamSetup } from "./clubs.ts";
 import { openness, orderKick, pickReceiver, pressureOn, releaseKick } from "./kicks.ts";
 import {
@@ -1123,7 +1123,7 @@ function stepPlayers(m: Match, ev: MatchEvent[]) {
         // Se recaler de deux mètres dans le bloc se fait au trot, pas au sprint : sinon, chaque mouvement du ballon le
         // ferait partir à fond dans un sens puis dans l'autre. Aller au ballon, presser, porter le ballon : à fond.
         const calm = !sprinting && !mine && p.role !== "GK";
-        speed = topSpeed(p, sprinting, mine) * clamp(calm ? d / 5 + 0.15 : d / 2.5 + 0.2, 0, 1) * levelOf(m).speed;
+        speed = topSpeed(p, sprinting, mine) * clamp(calm ? d / 5 + 0.15 : d / 2.5 + 0.2, 0, 1) * tuning(m, p.team).speed;
         // Face à une frappe qui vient vers lui, le gardien se décale à petits pas
         if (p.role === "GK" && m.owner < 0 && m.t - m.shotAt < 1.2 && m.ball.vx * attackDir(m, p.team) < -4)
           speed = Math.min(speed, KEEPER_SHUFFLE);
@@ -1303,7 +1303,7 @@ function takeBall(m: Match, p: Player, ev: MatchEvent[]) {
   m.owner = p.i;
   m.lastTouch = p.i;
   p.gotAt = m.t;
-  p.thinkAt = m.t + levelOf(m).think * (0.4 + random(m) * 0.8);
+  p.thinkAt = m.t + tuning(m, p.team).think * (0.4 + random(m) * 0.8);
   ev.push({ k: "touch", p: p.i });
   followBall(m, p.i);
   defendSwitch(m, p);
@@ -1512,7 +1512,7 @@ function ballContacts(m: Match, ev: MatchEvent[]) {
   const rel = Math.hypot(b.vx - best.vx, b.vz - best.vz);
   // Couper une passe adverse n'est pas gagné d'avance : plus elle va vite, plus elle file sous le pied
   if (m.pass?.to !== best.i && m.players[m.lastTouch]?.team !== best.team && rel > 8) {
-    const base = clamp(0.98 - (rel - 8) / 22 + (best.stats.tac - 70) / 150, 0.3, 0.98) * levelOf(m).read;
+    const base = clamp(0.98 - (rel - 8) / 22 + (best.stats.tac - 70) / 150, 0.3, 0.98) * tuning(m, best.team).read;
     if (random(m) > (best.human ? Math.min(1, base + 0.25) : base)) {
       best.lockedUntil = m.t + 0.25;
       return;
@@ -1564,7 +1564,7 @@ function tackles(m: Match, ev: MatchEvent[]) {
       if (d > 1.7) continue;
       // De face, c'est plus sûr ; de dos, on risque la faute
       const behind = Math.cos(owner.h) * (p.x - owner.x) + Math.sin(owner.h) * (p.z - owner.z) < -0.25;
-      const tune = p.human ? 1.3 : levelOf(m).tackle * (owner.human !== null ? 0.8 : 1);
+      const tune = p.human ? 1.3 : tuning(m, p.team).tackle * (owner.human !== null ? 0.8 : 1);
       const dodge = owner.burstUntil > m.t ? 0.15 : 1;
       const chance = clamp(0.5 + (p.stats.tac - owner.stats.dri) / 130, 0.15, 0.85) * tune * (behind ? 0.7 : 1) * dodge;
       if (random(m) < chance) {
@@ -1662,7 +1662,7 @@ function carriers(m: Match) {
   if ((p.human !== null && !idleKeeper && !assisted(m, p)) || p.order || p.act === "down") return;
   if (p.act === "hold" && m.t < p.thinkAt) return;
   if (m.t >= p.thinkAt) {
-    p.thinkAt = m.t + levelOf(m).think * (0.7 + random(m) * 0.6);
+    p.thinkAt = m.t + tuning(m, p.team).think * (0.7 + random(m) * 0.6);
     thinkCarrier(m, p);
   } else if (p.act === "none") steerCarrier(m, p);
 }
@@ -1686,10 +1686,10 @@ function defenders(m: Match) {
     const behind = Math.cos(owner.h) * (p.x - owner.x) + Math.sin(owner.h) * (p.z - owner.z) < -0.25;
     const ownBox = inBox(owner.x, owner.z, -attackDir(m, p.team));
     if (ownBox && behind) continue;
-    if (d < 1.55 && m.t > p.lockedUntil && random(m) < (owner.human !== null ? 0.05 : 0.09) * levelOf(m).tackle) {
+    if (d < 1.55 && m.t > p.lockedUntil && random(m) < (owner.human !== null ? 0.05 : 0.09) * tuning(m, p.team).tackle) {
       startTackle(p, false, null, m);
       p.lockedUntil = m.t + 0.6;
-    } else if (d < 3.2 && d > 1.8 && random(m) < 0.008 * levelOf(m).tackle && !inBox(p.x, p.z, -attackDir(m, p.team))) {
+    } else if (d < 3.2 && d > 1.8 && random(m) < 0.008 * tuning(m, p.team).tackle && !inBox(p.x, p.z, -attackDir(m, p.team))) {
       startTackle(p, true, null, m);
     }
   }
