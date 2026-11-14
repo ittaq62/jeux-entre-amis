@@ -10,6 +10,7 @@ import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/eng
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
 import type { BotLevel as MecheBotLevel, MecheSettings } from "./games/meche/engine.ts";
 import type { UnoSettings } from "./games/uno/engine.ts";
+import type { Looks } from "./looks.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
@@ -747,6 +748,8 @@ export type TourClientMessage =
   | { t: "finish" }
   /** Hôte, une fois la tournée finie : en relancer une avec la même bande */
   | { t: "again" }
+  /** Ses skins, choisis sur son appareil : la tournée les confie à chaque table où il joue */
+  | { t: "looks"; looks: Looks }
   | { t: "leave" }
   | { t: "close" };
 
@@ -784,6 +787,8 @@ export interface TourInit {
   teams: Record<string, 0 | 1> | null;
   /** Les règles du jeu (id de variante) */
   variant: string;
+  /** Les skins de chaque joueur (par compte), déjà vérifiés par la tournée ; absents des tournées plus anciennes */
+  looks?: Record<string, Looks>;
 }
 
 /** Le nom de chaque titre, pour la feuille d'une tournée passée */

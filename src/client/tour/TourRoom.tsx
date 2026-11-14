@@ -6,7 +6,7 @@ import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { preloadSounds, startLoop, stopLoop, TOUR_SOUNDS } from "../lib/sound.ts";
 import { GameRoom } from "../pages/RoomPage.tsx";
-import { usePrefs } from "../stores/prefs.ts";
+import { deviceLooks, usePrefs } from "../stores/prefs.ts";
 import { TourBridgeContext, type TourBridge } from "./bridge.ts";
 import { TourFinale } from "./TourFinale.tsx";
 import { TourIntermission } from "./TourIntermission.tsx";
@@ -35,6 +35,16 @@ export function TourRoom({ code }: { code: string }) {
     else stopLoop("tourMusic");
   }, [musicOn, breakTime]);
   useEffect(() => () => stopLoop("tourMusic"), []);
+
+  // Les skins choisis sur cet appareil partent à la tournée, qui les confie à chaque table : à l'arrivée, après chaque
+  // coupure de connexion, et dès qu'on en change (un court délai regroupe les changements rapprochés)
+  const looks = usePrefs((p) => JSON.stringify(deviceLooks(p)));
+  const member = view?.you.member ?? false;
+  useEffect(() => {
+    if (status !== "open" || !member) return;
+    const t = setTimeout(() => send({ t: "looks", looks: JSON.parse(looks) }), 300);
+    return () => clearTimeout(t);
+  }, [status, member, looks, send]);
 
   const leave = useCallback(() => {
     send({ t: "leave" });

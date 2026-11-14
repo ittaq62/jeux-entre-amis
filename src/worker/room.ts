@@ -39,6 +39,7 @@ import {
 import { random, randomSeed } from "../shared/rng.ts";
 import { variantSettings, type TourInit } from "../shared/tour.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { lookOf } from "../shared/looks.ts";
 import { unoItem } from "../shared/shop.ts";
 import { ownsItem } from "./shop.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -195,8 +196,13 @@ export class GameRoom extends DurableObject<Env> {
     if (opts.tour) {
       // Tout le monde est déjà assis ; la partie part dès que chacun est arrivé, ou sans les absents
       const d = this.data;
+      const looks = opts.tour.looks;
       d.seats = [
-        ...opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now })),
+        // Chacun avec le dos de cartes choisi sur son appareil
+        ...opts.tour.players.map((u) => {
+          const back = lookOf(looks, u.id).unoBack;
+          return { ...this.newHumanSeat(u), disconnectedAt: now, ...(back ? { back } : {}) };
+        }),
         // Les bots de la tournée, sous leur nom de tournée
         ...opts.tour.bots.map((b) => ({
           id: b.id,

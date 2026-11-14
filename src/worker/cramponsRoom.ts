@@ -22,6 +22,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
+import { lookOf } from "../shared/looks.ts";
 import { canUse, clubItem, feteItem } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
@@ -185,18 +186,23 @@ export class CramponsRoom extends DurableObject<Env> {
       ambience: pick(["jour", "soir", "nuit"] as const),
       weather: rain < 0.7 ? "clair" : rain < 0.9 ? "pluie" : "neige",
     });
-    const humans: Seat[] = tour.players.map((u) => ({
-      id: u.id,
-      kind: "human",
-      userId: u.id,
-      name: u.pseudo,
-      avatar: u.avatar,
-      photo: u.photo,
-      admin: Boolean(u.admin),
-      autoplay: false,
-      disconnectedAt: now,
-      team: 0,
-    }));
+    const humans: Seat[] = tour.players.map((u) => {
+      // La célébration choisie sur son appareil (« maison » : celle de tout le monde)
+      const fete = lookOf(tour.looks, u.id).cramponsFete;
+      return {
+        id: u.id,
+        kind: "human",
+        userId: u.id,
+        name: u.pseudo,
+        avatar: u.avatar,
+        photo: u.photo,
+        admin: Boolean(u.admin),
+        autoplay: false,
+        disconnectedAt: now,
+        team: 0,
+        ...(fete && fete !== "maison" ? { fete } : {}),
+      };
+    });
     const bots: Seat[] = tour.bots.map((b) => ({
       id: b.id,
       kind: "bot",

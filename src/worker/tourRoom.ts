@@ -12,6 +12,7 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { cleanLooks, usableLooks, type Looks } from "../shared/looks.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import {
   adoptedVariant,
@@ -50,6 +51,7 @@ import {
   type TourView,
 } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
+import { ownedItems } from "./shop.ts";
 import { gameStub } from "./tourLink.ts";
 import { recordTour } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
@@ -81,6 +83,8 @@ interface Member {
   /** A quitté la tournée : ses points restent au classement, il peut revenir */
   left: boolean;
   disconnectedAt: number | null;
+  /** Ses skins, envoyés par son appareil et vérifiés : ils partent avec lui à chaque table */
+  looks?: Looks;
 }
 
 interface TourGame {
@@ -608,6 +612,13 @@ export class TourRoom extends DurableObject<Env> {
         return this.afterChange();
       }
 
+      case "looks": {
+        // Seulement ce qu'il possède : les tables le reprennent telles quelles
+        if (!member || member.kind !== "human" || !this.allowMessage(`looks:${userId}`, 250)) return;
+        member.looks = usableLooks(cleanLooks(msg.looks), await ownedItems(this.env.DB, userId));
+        return this.persist();
+      }
+
       case "team": {
         if (d.status !== "lobby") return error("Les équipes sont faites pour toute la tournée.");
         if (!d.settings.teams) return;
@@ -1005,12 +1016,15 @@ export class TourRoom extends DurableObject<Env> {
           ...(m.admin ? { admin: true as const } : {}),
         }));
       const bots = [...players.filter((m) => m.kind === "bot").map((m) => ({ id: m.userId, name: m.name, avatar: m.avatar })), ...guests];
+      // Les skins de chacun, que la table met en place avant même que la partie démarre
+      const looks: Record<string, Looks> = {};
+      for (const m of players) if (m.kind === "human" && m.looks) looks[m.userId] = m.looks;
       await gameStub(this.env, game, code).init({
         code,
         host: users[0]!,
         visibility: "private",
         quick: false,
-        tour: { code: d.code, index, players: users, bots, botLevel: d.settings.botLevel, teams, variant },
+        tour: { code: d.code, index, players: users, bots, botLevel: d.settings.botLevel, teams, variant, looks },
       });
       if (this.data !== d || d.status !== "intermission") return;
       d.games.push({

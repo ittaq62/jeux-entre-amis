@@ -19,6 +19,7 @@ import {
   type Placement,
 } from "../shared/games/naval/engine.ts";
 import { isSkinId, SKIN_BY_ID, type SkinId } from "../shared/games/naval/skins.ts";
+import { lookOf } from "../shared/looks.ts";
 import { navalItem } from "../shared/shop.ts";
 import { ownsItem } from "./shop.ts";
 import { eventsFor, viewFor } from "../shared/games/naval/view.ts";
@@ -177,8 +178,13 @@ export class NavalRoom extends DurableObject<Env> {
       // Tout le monde est déjà à bord ; en 2 contre 2, avec les équipes de la tournée
       const d = this.data;
       const teams = opts.tour.teams;
+      const looks = opts.tour.looks;
       d.seats = [
-        ...opts.tour.players.map((u, i) => ({ ...this.newHumanSeat(u, teams?.[u.id] ?? ((i % 2) as 0 | 1)), disconnectedAt: now })),
+        // Chacun avec le thème de flotte choisi sur son appareil
+        ...opts.tour.players.map((u, i) => {
+          const skin = lookOf(looks, u.id).navalSkin;
+          return { ...this.newHumanSeat(u, teams?.[u.id] ?? ((i % 2) as 0 | 1)), disconnectedAt: now, ...(skin ? { skin } : {}) };
+        }),
         // Les bots de la tournée, sous leur nom de tournée
         ...opts.tour.bots.map((b, i) => ({
           id: b.id,

@@ -4,6 +4,7 @@ import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
+import type { Looks } from "../../shared/looks.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
 interface Prefs {
@@ -85,3 +86,15 @@ export const usePrefs = create<Prefs>((set, get) => ({
     }
   },
 }));
+
+/** Les skins choisis sur cet appareil, que la tournée confie à chaque table (le serveur vérifie qu'on les possède) */
+export function deviceLooks(p: ReturnType<typeof usePrefs.getState>): Looks {
+  return {
+    ...(p.unoBack ? { unoBack: p.unoBack } : {}),
+    ...(p.navalSkin ? { navalSkin: p.navalSkin } : {}),
+    ...(p.capitaleToken ? { capitaleToken: p.capitaleToken } : {}),
+    ...(p.bolidesVehicle ? { bolidesVehicle: p.bolidesVehicle } : {}),
+    ...(p.bolidesSkin ? { bolidesSkin: p.bolidesSkin } : {}),
+    ...(p.cramponsFete ? { cramponsFete: p.cramponsFete } : {}),
+  };
+}

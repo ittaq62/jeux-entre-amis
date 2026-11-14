@@ -3,6 +3,7 @@ import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import type { BotLevel, BotMemory } from "../shared/games/bolides/bot.ts";
 import { botGarage, isSkinId, isVehicleId, type SkinId, type VehicleId } from "../shared/games/bolides/garage.ts";
 import { SPEED_CLASSES } from "../shared/games/bolides/physics.ts";
+import { lookOf } from "../shared/looks.ts";
 import { canUse, kartItem, vehicleItem } from "../shared/shop.ts";
 import { ownedItems } from "./shop.ts";
 import {
@@ -166,10 +167,15 @@ export class BolidesRoom extends DurableObject<Env> {
       tour: opts.tour ?? null,
     };
     if (opts.tour) {
-      // Tout le monde est déjà assis, y compris les bots de la tournée sous leur nom de tournée
+      // Tout le monde est déjà assis, y compris les bots de la tournée sous leur nom de tournée. La course part dès que
+      // chacun est arrivé, sans passer par le garage : chacun y prend le véhicule et le skin choisis sur son appareil
       const d = this.data;
+      const looks = opts.tour.looks;
       d.seats = [
-        ...opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now })),
+        ...opts.tour.players.map((u) => {
+          const { bolidesVehicle: vehicle, bolidesSkin: skin } = lookOf(looks, u.id);
+          return { ...this.newHumanSeat(u), disconnectedAt: now, ...(vehicle ? { vehicle } : {}), ...(skin ? { skin } : {}) };
+        }),
         ...opts.tour.bots.map((b) => ({
           id: b.id,
           kind: "bot" as const,

@@ -22,6 +22,7 @@ import {
 } from "../shared/games/capitale/engine.ts";
 import { batchMs } from "../shared/games/capitale/timing.ts";
 import { FREE_TOKENS, isTokenId, TOKEN_BY_ID, type TokenId } from "../shared/games/capitale/tokens.ts";
+import { lookOf } from "../shared/looks.ts";
 import { tokenItem } from "../shared/shop.ts";
 import { ownsItem } from "./shop.ts";
 import { viewFor } from "../shared/games/capitale/view.ts";
@@ -207,8 +208,14 @@ export class CapitaleRoom extends DurableObject<Env> {
     if (opts.tour) {
       // Tout le monde est déjà assis : les joueurs de la tournée, puis ses bots sous leur nom
       const d = this.data;
+      const looks = opts.tour.looks;
       d.seats = [
-        ...opts.tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now })),
+        // Chacun avec le pion choisi sur son appareil (il peut encore en changer avant le départ)
+        ...opts.tour.players.map((u) => ({
+          ...this.newHumanSeat(u),
+          disconnectedAt: now,
+          token: lookOf(looks, u.id).capitaleToken ?? "pion",
+        })),
         ...opts.tour.bots.map((b, k) => ({
           id: b.id,
           kind: "bot" as const,
