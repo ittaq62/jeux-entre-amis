@@ -3226,8 +3226,22 @@
   margin: -12px 0 -14px;
 }
 
+/* L'éventail moins ouvert, pour rester dans la colonne ; plus petit à partir de cinq coupures, jusqu'à sept */
 .cap-bright.is-land .cap-hand-stack {
-  margin: 0 -38px;
+  margin: 0 -40px;
+  transform: rotate(calc(var(--a) / 2)) translateY(calc(var(--y) / 2));
+}
+
+.cap-bright.is-land .cap-hand-fan:has(> .cap-hand-stack:nth-child(5)) {
+  scale: 0.54;
+}
+
+.cap-bright.is-land .cap-hand-fan:has(> .cap-hand-stack:nth-child(6)) {
+  scale: 0.47;
+}
+
+.cap-bright.is-land .cap-hand-fan:has(> .cap-hand-stack:nth-child(6)) > .cap-hand-stack {
+  margin: 0 -42px;
 }
 
 .cap-bright.is-land .cap-hand-total {
