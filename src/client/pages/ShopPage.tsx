@@ -28,9 +28,14 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "token", game: "capitale", title: "Capitale", note: "Tes pions" },
   { kind: "vehicle", game: "bolides", title: "Bolides", note: "Tes véhicules, chacun sa conduite" },
   { kind: "kart", game: "bolides", title: "Bolides", note: "Tes skins" },
-  { kind: "club", game: "crampons", title: "Crampons", note: "Les clubs de légende, à choisir au salon" },
+  {
+    kind: "club",
+    game: "crampons",
+    title: "Crampons",
+    note: "Les clubs de légende, à choisir au salon : touche-en un pour voir son maillot",
+  },
   { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
-  { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts" },
+  { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */

@@ -1,15 +1,16 @@
 // Le maillot d'un club en petit, dessiné à plat avec son motif : pour la boutique, où l'on découvre les clubs de légende.
 
 import { useId } from "react";
-import type { Club } from "../../shared/games/crampons/clubs.ts";
+import type { Club, KitColors } from "../../shared/games/crampons/clubs.ts";
 
 const BODY = "M14 6 L26 6 L30 9 L30 46 L10 46 L10 9 Z";
 const LEFT_SLEEVE = "M14 6 L10 9 L2 18 L8 24 L10 21 Z";
 const RIGHT_SLEEVE = "M26 6 L30 9 L38 18 L32 24 L30 21 Z";
 
-export function KitShirt({ club, size = 56 }: { club: Club; size?: number }) {
+/** `kit` : le maillot porté pour ce match (celui de l'extérieur si les couleurs des deux clubs se confondent) */
+export function KitShirt({ club, kit, size = 56 }: { club: Club; kit?: KitColors; size?: number }) {
   const clip = `kit${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const { shirt, sleeves, pattern, accent } = club.home;
+  const { shirt, sleeves, pattern, accent } = kit ?? club.home;
   const mark = accent ?? sleeves;
   return (
     <svg width={size} height={size * 1.15} viewBox="0 0 40 46" aria-hidden="true">

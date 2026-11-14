@@ -400,6 +400,19 @@
   height: 128px;
 }
 
+/* Crampons : un joueur du club, ou la célébration, en 3D */
+.buy-preview .cr-look-stage {
+  width: min(340px, 100%);
+  overflow: hidden;
+  border-radius: 12px;
+  background: radial-gradient(ellipse 90% 80% at 50% 88%, #22603a 0%, #133524 52%, #0b1d14 100%);
+}
+
+.buy-preview .cr-look-stage svg {
+  display: block;
+  margin: 16px auto;
+}
+
 /* Le dessin 3D ne doit pas décider de la taille de la fenêtre : il prend celle qu'on lui donne */
 .buy-preview .garage-preview {
   position: relative;

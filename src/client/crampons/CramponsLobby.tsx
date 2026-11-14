@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 import { BALLS, FETES, type BallId, type FeteId } from "../../shared/games/crampons/boutique.ts";
-import { CLUBS, FORMATION_NAMES, isLegend, type Club, type FormationId } from "../../shared/games/crampons/clubs.ts";
+import {
+  CLUBS,
+  FORMATION_NAMES,
+  isLegend,
+  matchKits,
+  type Club,
+  type FormationId,
+  type KitColors,
+} from "../../shared/games/crampons/clubs.ts";
 import {
   HALF_CHOICES,
   LEVEL_NAMES,
@@ -18,6 +26,8 @@ import { BuyModal } from "../shop/BuyModal.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { CramponsLook } from "./CramponsLook.tsx";
+import { KitShirt } from "./KitShirt.tsx";
+import { PlayerStageView } from "./PlayerStage.tsx";
 import { ballThumbnail } from "./scene/balls.ts";
 
 const LEVEL_HINTS = [
@@ -35,6 +45,7 @@ const points = (n: number) => `${n} point${n > 1 ? "s" : ""}`;
 function ClubPicker({
   label,
   value,
+  kit,
   formation,
   disabled,
   owns,
@@ -43,6 +54,8 @@ function ClubPicker({
 }: {
   label: string;
   value: string;
+  /** Le maillot que ce club portera pour ce match */
+  kit: KitColors;
   formation: FormationId;
   disabled: boolean;
   /** Ce club de légende est-il débloqué (pour l'hôte, qui choisit) ? */
@@ -57,11 +70,8 @@ function ClubPicker({
         {label}
       </label>
       <div className="cr-club">
-        <span
-          className="cr-crest"
-          style={{ background: club.home.shirt, color: club.home.sleeves !== club.home.shirt ? club.home.sleeves : club.home.shorts }}
-        >
-          {club.short}
+        <span className="cr-crest" title={`${club.name}, note ${club.rating}`}>
+          <KitShirt club={club} kit={kit} size={40} />
         </span>
         <select id={`club-${label}`} className="input" value={value} disabled={disabled} onChange={(e) => onClub(e.target.value)}>
           {REGULAR.map((c) => (
@@ -99,7 +109,7 @@ function ClubPicker({
  * Le vestiaire de chacun : son ballon (qu'il est seul à voir) et la célébration de ses buts (que toute la table voit).
  * Ce qui est verrouillé s'achète sur place, avec ses points.
  */
-function Locker({ onBuy }: { onBuy: (item: ShopItem) => void }) {
+function Locker({ kit, onBuy }: { kit: KitColors; onBuy: (item: ShopItem) => void }) {
   const { balance, has } = useMyItems();
   const set = usePrefs((p) => p.set);
   const savedBall = usePrefs((p) => p.cramponsBall);
@@ -198,6 +208,15 @@ function Locker({ onBuy }: { onBuy: (item: ShopItem) => void }) {
             );
           })}
         </div>
+        {/* La célébration jouée par un joueur de son équipe : on la voit avant de l'acheter */}
+        <PlayerStageView
+          className="cr-fete-stage"
+          actors={[{ kit, shirt: 10 }]}
+          pose={shownFete.pose}
+          framing="celebration"
+          ratio={4 / 3}
+          label={`La célébration : ${shownFete.blurb}`}
+        />
         <p className="hint cr-pick-line">
           <span>{shownFete.blurb}</span>
           {!has(feteItem(shownFete.id)) && (
@@ -208,6 +227,19 @@ function Locker({ onBuy }: { onBuy: (item: ShopItem) => void }) {
         </p>
       </div>
     </section>
+  );
+}
+
+/** Sous chaque joueur de l'affiche : son club et sa note (une étoile pour un club de légende) */
+function MatchupTag({ club }: { club: Club }) {
+  return (
+    <span className="cr-matchup-tag">
+      <strong>{club.name}</strong>
+      <span className="num">
+        {isLegend(club) ? "★ " : ""}
+        {club.rating}
+      </span>
+    </span>
   );
 }
 
@@ -225,6 +257,11 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
   const isHost = room.you.isHost;
   const update = (settings: Partial<CramponsConfig>) => send({ t: "settings", settings });
   const mine = room.you.seatId ? room.teams[room.you.seatId] : undefined;
+  const home = clubBy(s.clubs[0]);
+  const away = clubBy(s.clubs[1]);
+  // Les maillots du match, tels qu'on les verra sur le terrain
+  const kits = useMemo(() => matchKits(home, away), [home, away]);
+  const myKit = kits[mine ?? 0];
   const { has } = useMyItems();
   const set = usePrefs((p) => p.set);
   const [buying, setBuying] = useState<{ item: ShopItem; team?: 0 | 1 } | null>(null);
@@ -283,7 +320,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
                 L'ordinateur joue les postes laissés libres, et toute une équipe s'il n'y a personne dedans.
               </p>
             </section>
-            <Locker onBuy={(item) => setBuying({ item })} />
+            <Locker kit={myKit} onBuy={(item) => setBuying({ item })} />
           </>
         ) : null
       }
@@ -291,8 +328,27 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
         <>
           <section className="rules-sheet panel">
             <RulesHeading room={room} />
+            {/* L'affiche du match : un joueur de chaque club, dans le maillot qu'il portera */}
+            <div className="cr-matchup">
+              <PlayerStageView
+                actors={[
+                  { kit: kits[0], shirt: 10 },
+                  { kit: kits[1], shirt: 10 },
+                ]}
+                framing="lineup"
+                ratio={2}
+                seed={7}
+                label={`${home.name} contre ${away.name}`}
+              />
+              <div className="cr-matchup-tags" aria-hidden="true">
+                <MatchupTag club={home} />
+                <span className="cr-matchup-vs">contre</span>
+                <MatchupTag club={away} />
+              </div>
+            </div>
             <ClubPicker
               label="Domicile"
+              kit={kits[0]}
               value={s.clubs[0]}
               formation={s.formations[0]}
               disabled={!isHost}
@@ -302,6 +358,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
             />
             <ClubPicker
               label="Extérieur"
+              kit={kits[1]}
               value={s.clubs[1]}
               formation={s.formations[1]}
               disabled={!isHost}
@@ -416,7 +473,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
 
           <BuyModal
             item={buying?.item ?? null}
-            preview={buying ? <CramponsLook item={buying.item} big /> : undefined}
+            preview={buying ? <CramponsLook item={buying.item} big kit={myKit} /> : undefined}
             onClose={() => setBuying(null)}
             onBought={bought}
           />

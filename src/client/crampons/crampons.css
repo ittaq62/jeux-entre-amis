@@ -903,8 +903,68 @@ kbd {
   width: 46px;
   height: 46px;
   border-radius: 10px;
-  font-size: 13px;
-  font-weight: 900;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* L'affiche du match : un joueur de chaque club, dans son maillot, sous les projecteurs */
+.cr-matchup,
+.cr-fete-stage {
+  overflow: hidden;
+  border-radius: 12px;
+  background: radial-gradient(ellipse 90% 80% at 50% 88%, #22603a 0%, #133524 52%, #0b1d14 100%);
+}
+
+.cr-matchup {
+  margin: 4px 0 2px;
+}
+
+/* Sous l'affiche, chaque club sous son joueur */
+.cr-matchup-tags {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 10px;
+}
+
+.cr-matchup-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12.5px;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.cr-matchup-tag:last-child {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.cr-matchup-tag strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cr-matchup-tag .num {
+  color: #ffd98a;
+  font-weight: 800;
+}
+
+.cr-matchup-vs {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.cr-fete-stage {
+  margin-top: 10px;
 }
 
 .cr-form {
