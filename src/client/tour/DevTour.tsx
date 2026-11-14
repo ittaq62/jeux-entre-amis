@@ -85,6 +85,7 @@ function mockView(
       once: false,
       botLevel: "normal",
       rules: "base",
+      noEarlyUno: false,
     },
     hostId: host ? "u0" : "u1",
     members,

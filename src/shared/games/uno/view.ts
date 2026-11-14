@@ -98,8 +98,12 @@ export function viewFor(s: UnoState, viewerId: string | null, partnerIds: readon
     hasDrawn: isMyTurn && s.hasDrawn,
     unoVulnerable: w ? s.players[w.player]!.id : null,
     unoWindowEndsAt: w ? w.since + UNO_GRACE_MS : null,
+    // Avec deux cartes, à son tour, on peut l'annoncer d'avance… sauf « pas de UNO d'avance » : seulement avec la dernière
     canUno:
-      meP !== null && !meP.out && s.phase === "playing" && (w?.player === me || (meP.hand.length === 2 && !meP.declaredUno && isMyTurn)),
+      meP !== null &&
+      !meP.out &&
+      s.phase === "playing" &&
+      (w?.player === me || (meP.hand.length === 2 && !meP.declaredUno && isMyTurn && effectiveRules(s.settings).earlyUno)),
     rouletteVictim: s.roulette ? s.players[s.turn]!.id : null,
     phase: s.phase,
     round: s.round,

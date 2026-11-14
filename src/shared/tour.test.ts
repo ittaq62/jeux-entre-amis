@@ -24,6 +24,7 @@ import {
   tourCapacity,
   tourOver,
   tourPoints,
+  tourUnoSettings,
   tourTitles,
   type TitleCandidate,
   drawBolidesBots,
@@ -231,6 +232,24 @@ describe("règles des jeux", () => {
     expect(findVariant("naval", "salve+inconnue")).toBeNull();
     // Les autres jeux n'ont pas de règle à part
     for (let i = 0; i < 50; i++) expect(drawVariant("uno", rand)).not.toContain("+");
+  });
+
+  it("UNO : « pas de UNO d'avance » reste le choix de l'hôte, quelle que soit la variante, même tirée au sort", () => {
+    const rand = () => random(holder);
+    const holder = { rng: 11 };
+    // Aucune variante ne le règle d'elle-même
+    for (const v of gameVariants("uno")) expect(variantSettings("uno", v.id)).not.toHaveProperty("noEarlyUno");
+    for (let i = 0; i < 100; i++) {
+      const variant = drawVariant("uno", rand);
+      for (const noEarlyUno of [true, false]) {
+        const s = tourUnoSettings({ variant, noEarlyUno });
+        expect(s.noEarlyUno).toBe(noEarlyUno);
+        // La variante tirée garde ses propres règles : No Mercy reste No Mercy, avec ou sans l'option
+        expect(s).toMatchObject(variantSettings("uno", variant));
+      }
+    }
+    // Tournées plus anciennes : l'option n'existait pas, on garde l'annonce d'avance
+    expect(tourUnoSettings({ variant: "no-mercy" })).toEqual({ variant: "nomercy", noEarlyUno: false });
   });
 
   it("adopte une variante dès la moitié des voix des joueurs présents", () => {

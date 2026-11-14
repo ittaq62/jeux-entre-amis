@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { botCatchDelay, botThinkDelay, botTurn } from "../shared/games/uno/bot.ts";
+import { botCatchDelay, botThinkDelay, botTurn, botUnoDelay } from "../shared/games/uno/bot.ts";
 import { BACK_BY_ID, isBackId, type BackId } from "../shared/games/uno/backs.ts";
 import { sameFace } from "../shared/games/uno/cards.ts";
 import {
@@ -37,7 +37,7 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import { variantSettings, type TourInit } from "../shared/tour.ts";
+import { tourUnoSettings, type TourInit } from "../shared/tour.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { lookOf } from "../shared/looks.ts";
 import { unoItem } from "../shared/shop.ts";
@@ -234,8 +234,8 @@ export class GameRoom extends DurableObject<Env> {
         d.seats = [...mixed, ...others];
       }
       d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
-      // Les règles choisies par la tournée (variante)
-      d.settings.uno = { ...d.settings.uno, ...variantSettings("uno", opts.tour.variant) };
+      // Les règles choisies par la tournée (variante), et « pas de UNO d'avance », réglé à part par l'hôte
+      d.settings.uno = { ...d.settings.uno, ...tourUnoSettings(opts.tour) };
       d.hostId = d.seats[0]?.userId ?? opts.host.id;
       d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
     }
@@ -793,8 +793,12 @@ export class GameRoom extends DurableObject<Env> {
           if (delay !== null && (!best || delay < best.delay)) best = { seat: s, delay };
         }
         if (best) this.addTimer({ at: w.since + best.delay, kind: "catch", seatId: best.seat.id, target: vulnerable.id });
-        if (vulnerable.kind === "bot" && random(d) < 0.5) {
-          this.addTimer({ at: w.since + 900 + random(d) * 1600, kind: "botUno", seatId: vulnerable.id });
+        // Un bot crie UNO après avoir posé sa carte : sans UNO d'avance, c'est le moment normal (et le bot qui joue
+        // à la place d'un absent le fait aussi) ; sinon, c'est qu'il avait oublié, et il se rattrape parfois
+        const early = effectiveRules(g.settings).earlyUno;
+        if (vulnerable.kind === "bot" || (vulnerable.autoplay && !early)) {
+          const delay = botUnoDelay(g, d);
+          if (delay !== null) this.addTimer({ at: w.since + delay, kind: "botUno", seatId: vulnerable.id });
         }
       }
     }
@@ -912,6 +916,7 @@ export class GameRoom extends DurableObject<Env> {
       }
       case "botUno": {
         if (!playing || !seat || !g.unoWindow || g.players[g.unoWindow.player]!.id !== seat.id) return null;
+        if (!(seat.kind === "bot" || seat.autoplay)) return null;
         const res = applyAction(g, seat.id, { type: "uno" }, now);
         return res.ok ? res.events : null;
       }
@@ -1187,7 +1192,8 @@ export class GameRoom extends DurableObject<Env> {
 }
 
 function variantLabel(s: UnoSettings): string {
-  return s.variant === "nomercy" ? "Mode No Mercy, sans pitié" : "UNO classique";
+  const base = s.variant === "nomercy" ? "Mode No Mercy, sans pitié" : "UNO classique";
+  return s.noEarlyUno ? `${base}, et pas de UNO d'avance : on le crie avec sa dernière carte` : base;
 }
 
 function sanitizeAction(raw: unknown): UnoAction {
@@ -1220,7 +1226,7 @@ function mergeSettings(current: UnoSettings, patch: Partial<UnoSettings>): UnoSe
     if (patch.variant !== next.variant && next.endMode === "points") next.targetScore = patch.variant === "nomercy" ? 1000 : 500;
     next.variant = patch.variant;
   }
-  for (const key of ["stacking", "drawUntilPlayable", "sevenZero", "jumpIn"] as const) {
+  for (const key of ["stacking", "drawUntilPlayable", "sevenZero", "jumpIn", "noEarlyUno"] as const) {
     if (typeof patch[key] === "boolean") next[key] = patch[key];
   }
   if (patch.endMode === "first" || patch.endMode === "ranking" || patch.endMode === "points") next.endMode = patch.endMode;

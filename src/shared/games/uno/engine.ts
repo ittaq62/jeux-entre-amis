@@ -20,6 +20,12 @@ export interface UnoSettings {
   sevenZero: boolean;
   /** Jouer une carte identique hors de son tour */
   jumpIn: boolean;
+  /**
+   * Pas de UNO d'avance : on ne peut crier UNO qu'une fois sa dernière carte seule en main (juste après avoir posé
+   * l'avant-dernière), jamais avec encore deux cartes. Réglage à part, valable en Classique comme en No Mercy ;
+   * absent des parties plus anciennes (on pouvait alors l'annoncer d'avance).
+   */
+  noEarlyUno?: boolean;
   endMode: EndMode;
   targetScore: number;
   /** Secondes par tour, 0 = sans chrono (gere par le salon) */
@@ -32,6 +38,7 @@ export const DEFAULT_SETTINGS: UnoSettings = {
   drawUntilPlayable: false,
   sevenZero: false,
   jumpIn: false,
+  noEarlyUno: false,
   endMode: "first",
   targetScore: 500,
   turnSeconds: 30,
@@ -50,6 +57,8 @@ export function effectiveRules(settings: UnoSettings) {
     drawUntilPlayable: noMercy || settings.drawUntilPlayable,
     sevenZero: noMercy || settings.sevenZero,
     jumpIn: settings.jumpIn,
+    /** UNO annoncé d'avance, avec encore deux cartes en main (sauf « pas de UNO d'avance ») */
+    earlyUno: !settings.noEarlyUno,
     challenge: !noMercy,
     /** No Mercy : on ne pioche que si on ne peut pas jouer, et la carte piochee doit etre posee */
     mustPlay: noMercy,
@@ -529,6 +538,7 @@ export function applyAction(s: UnoState, playerId: string, action: UnoAction, no
         return ok(ev);
       }
       if (player.hand.length === 2 && !player.declaredUno) {
+        if (!effectiveRules(s.settings).earlyUno) return fail("Pas de UNO d'avance : crie-le une fois ta carte posée.");
         player.declaredUno = true;
         player.stats.unoCalls += 1;
         ev.push({ type: "uno", player: player.id });

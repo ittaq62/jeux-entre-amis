@@ -89,6 +89,11 @@ export interface TourSettings {
   once: boolean;
   botLevel: TourBotLevel;
   rules: TourRulesMode;
+  /**
+   * UNO : pas de UNO d'avance. Un réglage à part, choisi par l'hôte : il vaut pour chaque partie de UNO, quelles que
+   * soient les règles de base, tirées au sort ou votées, et n'est jamais tiré avec elles.
+   */
+  noEarlyUno: boolean;
 }
 
 export function defaultTourSettings(visibility: Visibility): TourSettings {
@@ -101,6 +106,7 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
     once: false,
     botLevel: "normal",
     rules: "base",
+    noEarlyUno: false,
   };
 }
 
@@ -419,6 +425,14 @@ export function findVariant(game: GameId, id: string | null | undefined): TourVa
   };
 }
 
+/**
+ * Les réglages d'une table de UNO de la tournée : la variante retenue (de base, tirée ou votée), puis « pas de UNO
+ * d'avance » tel que l'hôte l'a choisi, jamais tiré avec la variante.
+ */
+export function tourUnoSettings(init: { variant: string | null | undefined; noEarlyUno?: boolean }): Partial<UnoSettings> {
+  return { ...variantSettings("uno", init.variant), noEarlyUno: init.noEarlyUno === true };
+}
+
 /** Les réglages à appliquer à la table pour cette variante (rien si elle est inconnue) */
 export function variantSettings(game: "uno", id: string | null | undefined): Partial<UnoSettings>;
 export function variantSettings(game: "naval", id: string | null | undefined): Partial<NavalSettings>;
@@ -719,7 +733,7 @@ export interface TourView {
 export type TourClientMessage =
   | {
       t: "settings";
-      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules">>;
+      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "noEarlyUno">>;
       visibility?: Visibility;
       maxPlayers?: number;
     }
@@ -789,6 +803,8 @@ export interface TourInit {
   variant: string;
   /** Les skins de chaque joueur (par compte), déjà vérifiés par la tournée ; absents des tournées plus anciennes */
   looks?: Record<string, Looks>;
+  /** UNO : pas de UNO d'avance, réglé à part par l'hôte (absent des tournées plus anciennes) */
+  noEarlyUno?: boolean;
 }
 
 /** Le nom de chaque titre, pour la feuille d'une tournée passée */

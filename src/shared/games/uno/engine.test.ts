@@ -12,7 +12,7 @@ import {
   type UnoSettings,
   type UnoState,
 } from "./engine.ts";
-import { botTurn } from "./bot.ts";
+import { botTurn, botUnoDelay } from "./bot.ts";
 import { viewFor } from "./view.ts";
 
 let nextId = 1000;
@@ -352,6 +352,83 @@ describe("UNO !", () => {
   });
 });
 
+describe("pas de UNO d'avance", () => {
+  const twoCards = (variant: UnoSettings["variant"], noEarlyUno: boolean) => {
+    const card = n("red", 2);
+    const s = rig({
+      hands: [
+        [card, n("blue", 3)],
+        [n("yellow", 1), n("yellow", 2)],
+        [n("green", 1), n("green", 2)],
+      ],
+      top: n("red", 5),
+      settings: { variant, noEarlyUno },
+    });
+    return { s, card };
+  };
+
+  for (const variant of ["classic", "nomercy"] as const) {
+    it(`${variant} : refusé avec encore deux cartes, permis dès que l'avant-dernière est posée`, () => {
+      const { s, card } = twoCards(variant, true);
+      expect(viewFor(s, "p0").canUno).toBe(false);
+      expectFail(s, 0, { type: "uno" });
+      expect(s.players[0]!.declaredUno).toBe(false);
+      act(s, 0, { type: "play", cardId: card.id }, 0);
+      // La dernière carte seule en main : c'est maintenant qu'il faut le crier
+      expect(s.unoWindow?.player).toBe(0);
+      expect(viewFor(s, "p0").canUno).toBe(true);
+      act(s, 0, { type: "uno" }, 300);
+      expect(s.players[0]!.declaredUno).toBe(true);
+      expectFail(s, 1, { type: "catch", target: "p0" });
+    });
+
+    it(`${variant} : sans l'option, on peut toujours l'annoncer d'avance`, () => {
+      const { s, card } = twoCards(variant, false);
+      expect(viewFor(s, "p0").canUno).toBe(true);
+      act(s, 0, { type: "uno" });
+      act(s, 0, { type: "play", cardId: card.id });
+      expect(s.unoWindow).toBeNull();
+      expect(s.players[0]!.declaredUno).toBe(true);
+    });
+  }
+
+  it("refusé aussi hors de son tour, avec deux cartes en main", () => {
+    const { s } = twoCards("classic", true);
+    expectFail(s, 1, { type: "uno" });
+    expect(s.players[1]!.declaredUno).toBe(false);
+  });
+
+  it("qui tarde à le crier après sa carte se fait dénoncer comme d'habitude", () => {
+    const { s, card } = twoCards("classic", true);
+    act(s, 0, { type: "play", cardId: card.id }, 0);
+    act(s, 2, { type: "catch", target: "p0" }, 400);
+    expect(s.players[0]!.hand).toHaveLength(3);
+  });
+
+  it("un bot ne l'annonce jamais d'avance, et le crie peu après avoir posé sa carte", () => {
+    let early = 0;
+    for (let k = 0; k < 60; k++) {
+      for (const noEarlyUno of [true, false]) {
+        const { s } = twoCards("classic", noEarlyUno);
+        const actions = botTurn(s, "p0", { rng: k * 7919 + 1 });
+        const shouts = actions.filter((a) => a.type === "uno").length;
+        if (noEarlyUno) expect(shouts).toBe(0);
+        else early += shouts;
+        // Et ses actions passent toutes
+        for (const a of actions) expect(applyAction(s, "p0", a, 0).ok).toBe(true);
+      }
+    }
+    // Sans l'option, les bots l'annoncent bien d'avance (le test ci-dessus n'est pas vide)
+    expect(early).toBeGreaterThan(30);
+    const { s } = twoCards("classic", true);
+    const delays = Array.from({ length: 200 }, (_, k) => botUnoDelay(s, { rng: k * 104729 + 3 }));
+    const shouted = delays.filter((d): d is number => d !== null);
+    expect(shouted.length).toBeGreaterThan(150);
+    for (const d of shouted) expect(d).toBeGreaterThanOrEqual(600);
+    for (const d of shouted) expect(d).toBeLessThan(1600);
+  });
+});
+
 describe("regle du 7-0", () => {
   it("un 7 echange sa main avec le joueur choisi", () => {
     const seven = n("red", 7);
@@ -480,6 +557,9 @@ describe("parties completes entre bots", () => {
     { variant: "nomercy" },
     { variant: "nomercy", endMode: "ranking" },
     { variant: "nomercy", endMode: "points", targetScore: 300 },
+    { noEarlyUno: true },
+    { noEarlyUno: true, sevenZero: true, jumpIn: true },
+    { variant: "nomercy", noEarlyUno: true },
   ];
 
   for (const extra of variants) {

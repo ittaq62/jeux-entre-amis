@@ -181,8 +181,9 @@ export class TourRoom extends DurableObject<Env> {
         d.settings.once ??= false;
         d.settings.botLevel ??= "normal";
         d.botCounter ??= 0;
-        // Tournées ouvertes avant les règles au choix et les votes
+        // Tournées ouvertes avant les règles au choix et les votes, puis avant « pas de UNO d'avance »
         d.settings.rules ??= "base";
+        d.settings.noEarlyUno ??= false;
         d.ready ??= [];
         if (d.next) {
           d.next.variant ??= baseVariant(d.next.game);
@@ -719,6 +720,7 @@ export class TourRoom extends DurableObject<Env> {
         if (typeof patch.once === "boolean") d.settings.once = patch.once;
         if (patch.botLevel === "easy" || patch.botLevel === "normal" || patch.botLevel === "hard") d.settings.botLevel = patch.botLevel;
         if (patch.rules === "base" || patch.rules === "random" || patch.rules === "vote") d.settings.rules = patch.rules;
+        if (typeof patch.noEarlyUno === "boolean") d.settings.noEarlyUno = patch.noEarlyUno;
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -1024,7 +1026,17 @@ export class TourRoom extends DurableObject<Env> {
         host: users[0]!,
         visibility: "private",
         quick: false,
-        tour: { code: d.code, index, players: users, bots, botLevel: d.settings.botLevel, teams, variant, looks },
+        tour: {
+          code: d.code,
+          index,
+          players: users,
+          bots,
+          botLevel: d.settings.botLevel,
+          teams,
+          variant,
+          looks,
+          noEarlyUno: d.settings.noEarlyUno,
+        },
       });
       if (this.data !== d || d.status !== "intermission") return;
       d.games.push({

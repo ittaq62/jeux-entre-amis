@@ -53,8 +53,12 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners:
   return withUno(s, p, playAction(s, p, choice, rng, partners), rng);
 }
 
-/** Avant de poser son avant-derniere carte, le bot crie UNO… la plupart du temps. */
+/**
+ * Avant de poser son avant-derniere carte, le bot crie UNO… la plupart du temps. Sans UNO d'avance, il attend d'avoir
+ * posé sa carte : c'est la salle qui le fait crier un peu après (voir `botUnoDelay`).
+ */
 function withUno(s: UnoState, p: number, actions: UnoAction[], rng: RngHolder): UnoAction[] {
+  if (!effectiveRules(s.settings).earlyUno) return actions;
   const me = s.players[p]!;
   const willHaveOne = me.hand.length === 2;
   if (willHaveOne && !me.declaredUno && random(rng) < 0.88) return [{ type: "uno" }, ...actions];
@@ -135,6 +139,16 @@ function leastLikelyColor(hand: Card[], rng: RngHolder): Color {
 export function botCatchDelay(rng: RngHolder): number | null {
   if (random(rng) > 0.7) return null;
   return 1100 + Math.floor(random(rng) * 1700);
+}
+
+/**
+ * Un bot qui vient de poser son avant-dernière carte sans avoir crié UNO : le crie-t-il, et après combien de temps ?
+ * Sans UNO d'avance, c'est le moment normal de le crier : presque toujours, assez vite, mais un humain rapide peut le
+ * prendre de vitesse. Sinon, c'est un oubli : il se rattrape une fois sur deux, plus tard.
+ */
+export function botUnoDelay(s: UnoState, rng: RngHolder): number | null {
+  if (!effectiveRules(s.settings).earlyUno) return random(rng) < 0.88 ? 600 + Math.floor(random(rng) * 1000) : null;
+  return random(rng) < 0.5 ? 900 + Math.floor(random(rng) * 1600) : null;
 }
 
 /** Delai de reflexion d'un bot, pour un rythme naturel. */
