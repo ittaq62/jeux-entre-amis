@@ -198,3 +198,187 @@
     scale: 1;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Bataille navale : les obus de l'adversaire tombent à tour de rôle, */
+/* une gerbe dans l'eau, un coup au but, une autre gerbe              */
+/* ------------------------------------------------------------------ */
+
+.naval-preview {
+  position: relative;
+}
+
+.naval-preview-fx {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.np-shot circle {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-duration: 7.5s;
+  animation-delay: var(--d);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+.np-shadow {
+  fill: rgba(0, 0, 0, 0.5);
+  animation-name: np-shadow;
+  animation-timing-function: linear;
+}
+
+.np-shell {
+  fill: #1c1c1c;
+  stroke: #ffd27a;
+  stroke-width: 0.45;
+  animation-name: np-shell;
+  animation-timing-function: ease-in;
+}
+
+/* L'obus arrive en 0,7 s (9,3 % de la boucle), puis l'impact */
+@keyframes np-shadow {
+  0% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+
+  2% {
+    opacity: 0.08;
+  }
+
+  9.3% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+
+  9.4%,
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes np-shell {
+  0% {
+    transform: translate(-5px, -9px) scale(3.2);
+    opacity: 0;
+  }
+
+  2.5% {
+    opacity: 1;
+  }
+
+  9.3% {
+    transform: translate(0, 0) scale(0.8);
+    opacity: 1;
+  }
+
+  9.4%,
+  100% {
+    transform: translate(0, 0) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.np-ring {
+  fill: none;
+  stroke: rgba(235, 250, 255, 0.9);
+  stroke-width: 0.6;
+  animation-name: np-ring;
+  animation-timing-function: ease-out;
+}
+
+.np-ring.is-late {
+  animation-delay: calc(var(--d) + 0.14s);
+}
+
+.np-ring.is-fire {
+  stroke: #ff8a3d;
+  stroke-width: 0.8;
+}
+
+@keyframes np-ring {
+  0%,
+  9.3% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+
+  9.4% {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+
+  21%,
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+.np-drop {
+  fill: #e9fbff;
+  animation-name: np-drop;
+  animation-timing-function: ease-out;
+}
+
+.np-spark {
+  fill: #ffcf6b;
+  animation-name: np-drop;
+  animation-timing-function: ease-out;
+}
+
+@keyframes np-drop {
+  0%,
+  9.3% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+
+  9.4% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+
+  17.5%,
+  100% {
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0;
+  }
+}
+
+.np-core {
+  fill: #ffd27a;
+  animation-name: np-core;
+  animation-timing-function: ease-out;
+}
+
+@keyframes np-core {
+  0%,
+  9.3% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+
+  9.4% {
+    transform: scale(0.2);
+    fill: #fff1c2;
+    opacity: 1;
+  }
+
+  13.5% {
+    fill: #ff8a3d;
+    opacity: 0.95;
+  }
+
+  21%,
+  100% {
+    transform: scale(2.2);
+    fill: #5b2a1a;
+    opacity: 0;
+  }
+}

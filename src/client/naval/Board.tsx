@@ -6,7 +6,8 @@ import type { SkinId } from "../../shared/games/naval/skins.ts";
 import { CELL, hullFill, ShipOutline, ShipShape, SkinDefs, shipTransform } from "./ships.tsx";
 
 const LETTERS = "ABCDEFGHIJKL";
-const MARGIN = 7;
+/** La marge autour des cases, pour les numéros et les lettres : le viewBox du plateau commence à -MARGIN */
+export const MARGIN = 7;
 
 export type BoardMode = "sea" | "radar";
 

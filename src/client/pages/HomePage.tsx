@@ -50,7 +50,7 @@ const FIRST_PLAY = 0.8;
 const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
   tour: { stage: "is-stage", art: () => <TourPreview /> },
   uno: { stage: "", art: () => <TableScatter /> },
-  naval: { stage: "is-sea", art: () => <NavalPreview px={250} /> },
+  naval: { stage: "is-sea", art: () => <NavalPreview px={290} /> },
   bricks: { stage: "is-lacquer", art: () => <BricksPreview cell={17} /> },
   capitale: { stage: "is-map", art: () => <CapitalePreview px={360} /> },
   meche: { stage: "is-workshop", art: () => <MechePreview /> },
