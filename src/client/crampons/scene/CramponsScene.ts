@@ -2,6 +2,8 @@
 
 import * as THREE from "three";
 import { clamp, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
+import type { BallId } from "../../../shared/games/crampons/boutique.ts";
+import { ballCanvas, ballMaterial } from "./balls.ts";
 import { Effects, type Weather } from "./effects.ts";
 import { Footballers, type FootballerView, type Kit } from "./footballers.ts";
 import { buildStadium, themeFor, type Ambience, type ScoreboardData, type Stadium } from "./stadium.ts";
@@ -47,7 +49,8 @@ export type CameraMode = "tele" | "large" | "pres";
 export type Shot =
   | { kind: "free"; x: number; y: number; z: number; tx: number; ty: number; tz: number }
   | { kind: "intro"; t: number }
-  | { kind: "scorer"; x: number; z: number; t: number; angle: number; high: boolean }
+  /** low : le buteur est à genoux, la caméra baisse avec lui */
+  | { kind: "scorer"; x: number; z: number; t: number; angle: number; high: boolean; low?: boolean }
   | { kind: "replay"; end: number };
 
 /**
@@ -73,30 +76,9 @@ export function scorerCamera(x: number, z: number, angle: number): [number, numb
 const BALL_VIEW_R = 0.25;
 const GAUGE_SEGMENTS = 48;
 
+/** Le ballon classique, pour les cartes de l'album (photographiées dans le jeu) */
 export function ballTexture(): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 256;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#fdfaf0";
-  g.fillRect(0, 0, 512, 256);
-  g.fillStyle = "#e0453a";
-  for (let i = 0; i < 4; i++) g.fillRect(i * 128 + 12, 0, 34, 256);
-  g.fillStyle = "#1f3f8f";
-  for (let i = 0; i < 4; i++) {
-    g.save();
-    g.translate(i * 128 + 88, 128);
-    g.beginPath();
-    for (let k = 0; k < 10; k++) {
-      const r = k % 2 ? 14 : 32;
-      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
-      g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    g.closePath();
-    g.fill();
-    g.restore();
-  }
-  const t = new THREE.CanvasTexture(c);
+  const t = new THREE.CanvasTexture(ballCanvas("classique"));
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
@@ -109,6 +91,8 @@ export class CramponsScene {
   private stadium: Stadium;
   private crowd: Footballers;
   private ball: THREE.Mesh;
+  private ballId: BallId;
+  private readonly snow: boolean;
   private ballShadow: THREE.Mesh | null = null;
   private ring: THREE.Mesh;
   private gauge: THREE.Mesh;
@@ -152,6 +136,8 @@ export class CramponsScene {
       ambience: Ambience;
       lowQuality: boolean;
       weather?: Weather;
+      /** Le ballon de ce joueur (chacun voit le sien) */
+      ball?: BallId;
     },
   ) {
     const theme = themeFor(opts.ambience, opts.weather ?? "clair");
@@ -208,10 +194,9 @@ export class CramponsScene {
     this.crowd = new Footballers(this.scene, opts.count, opts.kits, opts.gkKits, opts.keepers, opts.shirts, this.shadows);
     this.fx = new Effects(this.scene, opts.weather ?? "clair", opts.lowQuality);
 
-    this.ball = new THREE.Mesh(
-      new THREE.SphereGeometry(BALL_VIEW_R, 20, 14),
-      new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.42, color: opts.weather === "neige" ? "#ff9a30" : "#ffffff" }),
-    );
+    this.snow = opts.weather === "neige";
+    this.ballId = opts.ball ?? "classique";
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_VIEW_R, 20, 14), ballMaterial(this.ballId, this.snow));
     this.ball.castShadow = this.shadows;
     this.scene.add(this.ball);
     if (!this.shadows) {
@@ -557,6 +542,8 @@ export class CramponsScene {
   }
 
   private lastShot: Shot["kind"] | null = null;
+  /** De combien la caméra du buteur s'est baissée vers lui (à genoux), de 0 à 1 */
+  private scorerDrop = 0;
   private hiddenEnd = 0;
   /** Sur un téléphone, jusqu'où la caméra regarde devant le jeu (moins sur une faute, en arrière quand on défend) */
   private ahead = 9;
@@ -598,9 +585,12 @@ export class CramponsScene {
       const [cx, cz] = scorerCamera(shot.x, shot.z, shot.angle + (shot.t - 1.2) * 0.04);
       const first = this.lastShot !== "scorer";
       const k = first ? 1 : 1 - Math.exp(-dt * 12);
+      // À genoux, il est plus bas d'un demi-mètre : la caméra descend avec lui, en douceur, pour le garder en entier
+      if (first) this.scorerDrop = 0;
+      this.scorerDrop += ((shot.low ? 1 : 0) - this.scorerDrop) * (1 - Math.exp(-dt * 3));
       // On vise au-dessus de sa tête : il se tient dans le bas de l'image, sous le bandeau du but
-      this.camera.position.lerp(tmpVec.set(cx, shot.high ? 3.6 : 2.3, cz), k);
-      this.camera.lookAt(shot.x, shot.high ? 1.6 : 1.85, shot.z);
+      this.camera.position.lerp(tmpVec.set(cx, (shot.high ? 3.6 : 2.3) - this.scorerDrop * 0.5, cz), k);
+      this.camera.lookAt(shot.x, (shot.high ? 1.6 : 1.85) - this.scorerDrop * 0.7, shot.z);
       return;
     }
     // Le ralenti : au ras du sol, à côté du but, on voit le ballon arriver
@@ -667,6 +657,16 @@ export class CramponsScene {
     const lz = clamp(this.cz * 0.62, -HALF_W + 12, HALF_W - 13);
     this.camera.position.set(lx, height, lz + dist);
     this.camera.lookAt(lx, 0.6, lz - 2);
+  }
+
+  /** Un autre ballon, en plein match (la liste de ses achats arrive parfois après le coup d'envoi) */
+  setBall(id: BallId) {
+    if (id === this.ballId) return;
+    this.ballId = id;
+    const old = this.ball.material as THREE.MeshStandardMaterial;
+    this.ball.material = ballMaterial(id, this.snow);
+    old.map?.dispose();
+    old.dispose();
   }
 
   dispose() {

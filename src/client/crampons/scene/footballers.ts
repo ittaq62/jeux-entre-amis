@@ -148,6 +148,8 @@ interface State {
   /** Sa façon à lui de célébrer */
   joy: number;
   mood: number;
+  /** Pendant la fête : il a pris son élan pour la glissade à genoux (il ne s'agenouille pas en démarrant) */
+  slid: boolean;
 }
 
 /** L'amplitude de la foulée (en radians de cuisse) à cette vitesse, de 0 à 1,2 */
@@ -176,8 +178,132 @@ function legsRunning(target: Pose, s: State, speed: number, stride = 1) {
   target.lift = 0;
 }
 
+/**
+ * Les bras en croix, tendus : l'avant-bras prolonge le bras vers l'extérieur (armLi négatif). Sans lui, il pendait du coude
+ * à la verticale.
+ */
+function armsOut(target: Pose) {
+  target.armLa = 0;
+  target.armRa = 0;
+  target.armLs = 1.45;
+  target.armRs = 1.45;
+  target.armLb = 0;
+  target.armRb = 0;
+  target.armLi = -1.4;
+  target.armRi = -1.4;
+}
+
+/** Les célébrations de la boutique (FETES, boutique.ts) commencent à ce numéro ; avant, celles de chaque joueur */
+const CELEBRATION_FIRST = 4;
+const TOUPIE = 7;
+/** La glissade à genoux : au-dessous de cette vitesse, il est déjà à genoux et glisse sur sa lancée */
+const KNEE_SLIDE_V = 5;
+
+/**
+ * Les célébrations choisies à la boutique, celles du buteur : bras croisés (4), main à l'oreille (5), le salut (6), la
+ * toupie (7), la glissade à genoux (8). En courant vers son coin, il court ; arrivé, il prend la pose.
+ */
+function celebration(joy: number, target: Pose, s: State, f: FootballerView, moving: boolean, beat: number) {
+  const speed = Math.min(1.2, f.v / 10);
+  if (joy === 8) {
+    if (f.v > KNEE_SLIDE_V) s.slid = true;
+    if (f.v > KNEE_SLIDE_V || (moving && !s.slid)) {
+      // Il file vers le coin, les bras écartés (ou, s'il n'a pas pris d'élan, il trottine jusqu'à sa place)
+      target.armLa = 1.5;
+      target.armRa = 1.5;
+      target.armLs = 1.15;
+      target.armRs = 1.15;
+      target.armLb = 0.1;
+      target.armRb = 0.1;
+      return;
+    }
+    // À genoux, le buste droit, les bras au ciel, la tête renversée : il glisse sur sa lancée, puis reste ainsi
+    target.legLa = 0;
+    target.legRa = 0;
+    target.legLb = Math.PI / 2;
+    target.legRb = Math.PI / 2;
+    target.drop = 0.5;
+    target.lean = -0.22;
+    target.armLa = 2.75;
+    target.armRa = 2.75;
+    target.armLs = 0.62;
+    target.armRs = 0.62;
+    target.armLi = -0.62;
+    target.armRi = -0.62;
+    target.armLb = 0.15 + Math.max(0, Math.sin(beat * 0.6)) * 0.2;
+    target.armRb = 0.15 + Math.max(0, -Math.sin(beat * 0.6)) * 0.2;
+    target.nod = -0.6;
+    return;
+  }
+  if (moving) {
+    // En chemin : il court, les bras en l'air (la pose viendra une fois arrivé)
+    legsRunning(target, s, speed);
+    target.armLa = 2.6;
+    target.armRa = 2.6;
+    target.armLs = 0.5;
+    target.armRs = 0.5;
+    target.armLi = -0.5;
+    target.armRi = -0.5;
+    target.armLb = 0.2;
+    target.armRb = 0.2;
+    if (joy === TOUPIE) armsOut(target);
+    return;
+  }
+  const sway = Math.sin(beat * 0.35) * 0.06;
+  if (joy === 4) {
+    // Les bras croisés sur la poitrine, le menton levé : sûr de lui. Les coudes devant les flancs, les avant-bras qui se
+    // croisent au milieu de la poitrine, le gauche un peu plus bas (sinon ils passeraient l'un dans l'autre)
+    target.armLa = 0.65;
+    target.armRa = 0.65;
+    target.armLs = -0.3;
+    target.armRs = -0.3;
+    target.armLb = 1.05;
+    target.armRb = 1.6;
+    target.armLi = 1.25;
+    target.armRi = 1.25;
+    target.lean = -0.1;
+    target.nod = -0.28;
+    target.twist = sway;
+  } else if (joy === 5) {
+    // La main droite à l'oreille, penché vers le public : « je n'entends rien ! »
+    target.armRa = 2.2;
+    target.armRs = 0.5;
+    target.armRb = 1.2;
+    target.armRi = 0.9;
+    target.armLa = 0.2;
+    target.armLs = 0.35;
+    target.armLb = 0.3;
+    target.lean = 0.12;
+    target.roll = -0.12;
+    target.twist = -0.2 + sway;
+    target.nod = -0.05;
+  } else if (joy === 6) {
+    // Le salut, au garde-à-vous : la main droite au front, l'autre le long du corps, la poitrine en avant
+    target.armRa = 2.75;
+    target.armRs = 0.2;
+    target.armRb = 0.1;
+    target.armRi = 0.9;
+    target.armLa = 0;
+    target.armLs = 0.07;
+    target.armLb = 0.05;
+    target.legLa = 0;
+    target.legRa = 0;
+    target.legLb = 0.02;
+    target.legRb = 0.02;
+    target.lean = -0.08;
+    target.nod = 0;
+  } else if (joy === TOUPIE) {
+    // Les bras en croix, il tourne sur lui-même (voir update, qui le fait tourner)
+    armsOut(target);
+    target.lean = -0.12;
+    target.nod = -0.4;
+    target.roll = Math.sin(beat * 0.5) * 0.08;
+  }
+}
+
 function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number) {
   Object.assign(target, zeroPose());
+  if (!f.cheer) s.slid = false;
   const speed = Math.min(1.2, f.v / 10);
   if (f.cheer) {
     // Dès qu'il se déplace, il marche ou court : pas de joueur qui glisse, les jambes figées, pendant la fête
@@ -188,6 +314,10 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
     const hop = moving ? 0 : Math.abs(Math.sin(beat * 0.5));
     const joy = f.joy ?? s.joy;
     target.nod = -0.35;
+    if (joy >= CELEBRATION_FIRST) {
+      celebration(joy, target, s, f, moving, beat);
+      return;
+    }
     if (joy === 0) {
       // Les bras au ciel, en V, qui frappent l'air tour à tour ; il saute sur place, les genoux repliés en l'air.
       // L'avant-bras prolonge l'écart du bras (armLi négatif) : sans cela, les coudes partaient sur le côté et les mains
@@ -207,10 +337,7 @@ function poseFor(s: State, f: FootballerView, act: Act, target: Pose, t: number)
       }
     } else if (joy === 1) {
       // L'avion, qui penche d'une aile sur l'autre
-      target.armLs = 1.5;
-      target.armRs = 1.5;
-      target.armLb = 0.05;
-      target.armRb = 0.05;
+      armsOut(target);
       target.armLa = Math.sin(beat * 0.5) * 0.3;
       target.armRa = -Math.sin(beat * 0.5) * 0.3;
       target.roll = Math.sin(beat * 0.5) * 0.32;
@@ -1232,6 +1359,7 @@ export class Footballers {
         hair: hairColor,
         joy: Math.floor(rand() * 4),
         mood: 0,
+        slid: false,
       });
       hairUsed[style]!++;
       this.setFace(i, 0);
@@ -1526,7 +1654,9 @@ export class Footballers {
 
       // Le corps tourne vers sa course, penche (roulis positif : la tête part du côté gauche du joueur, vers le centre
       // du virage ou vers le plongeon), et bascule en avant ou en arrière
-      const yaw = Math.PI / 2 - f.h;
+      // La toupie : arrivé dans son coin, il tourne sur lui-même
+      const spin = f.cheer && (f.joy ?? s.joy) === TOUPIE && f.v <= 0.35 ? t * 6.5 : 0;
+      const yaw = Math.PI / 2 - f.h + spin;
       rootQ.setFromAxisAngle(Y_AXIS, yaw);
       tmpQ2.setFromAxisAngle(Z_AXIS, p.roll);
       rootQ.multiply(tmpQ2);

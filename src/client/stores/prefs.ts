@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
+import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
@@ -29,6 +30,9 @@ interface Prefs {
   bolidesItemsSeen: Record<string, number>;
   /** UNO : le dos de cartes choisi en dernier sur cet appareil, repris à chaque table */
   unoBack: BackId | null;
+  /** Crampons : le ballon et la célébration de ses buts, choisis sur cet appareil et repris à chaque match */
+  cramponsBall: BallId | null;
+  cramponsFete: FeteId | null;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -60,6 +64,8 @@ export const usePrefs = create<Prefs>((set, get) => ({
   bolidesAssist: false,
   bolidesItemsSeen: {},
   unoBack: null,
+  cramponsBall: null,
+  cramponsFete: null,
   ...load(),
   set: (patch) => {
     set(patch);

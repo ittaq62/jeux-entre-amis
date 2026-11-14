@@ -1,8 +1,10 @@
 // Une page réservée au développement : l'affiche de Crampons pour l'accueil, composée avec le vrai moteur du jeu (le stade,
 // la foule, les joueurs, le ballon), puis photographiée en image (public/crampons-apercu.webp). La 3D ne se charge qu'à table.
 // /dev/affiche?cam=33,2.2,9&vise=48,1.6,-0.5  (pour régler le cadre ; le reste est la composition retenue)
+// &ballon=neon : un ballon de la boutique, pour le voir dans le vrai stade
 
 import { useEffect, useRef } from "react";
+import { isBallId, type BallId } from "../../shared/games/crampons/boutique.ts";
 import { HALF_L } from "../../shared/games/crampons/pitch.ts";
 import { CramponsScene, type SceneFrame } from "./scene/CramponsScene.ts";
 import type { FootballerView, Kit } from "./scene/footballers.ts";
@@ -18,6 +20,7 @@ const KEEPERS: [Kit, Kit] = [
 ];
 
 const GOAL = HALF_L;
+const ballParam = (v: string | null): BallId => (isBallId(v) ? v : "classique");
 
 /** Un joueur de la scène */
 function view(over: Partial<FootballerView> & { x: number; z: number; team: 0 | 1 }): FootballerView {
@@ -71,8 +74,9 @@ export function DevAffiche() {
       keepers: players.map((p) => p.keeper),
       shirts: players.map((_, i) => [9, 10][i] ?? [1, 4, 5, 3][i - 11] ?? 20 + i),
       ambience: (params.get("ciel") as "jour" | "soir" | "nuit") ?? "nuit",
-      weather: "clair",
+      weather: (params.get("meteo") as "clair" | "pluie" | "neige") ?? "clair",
       lowQuality: false,
+      ball: ballParam(params.get("ballon")),
     });
     scene.resize(innerWidth, innerHeight);
     scene.setShot({ kind: "free", x: cx, y: cy, z: cz, tx, ty, tz });

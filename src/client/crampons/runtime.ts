@@ -9,6 +9,7 @@ import {
   BURST_COOLDOWN,
   BURST_S,
   BURST_SPEED,
+  GOAL_PAUSE,
   IDLE_ASSIST,
   IDLE_CARRY,
   steer,
@@ -20,6 +21,7 @@ import {
 } from "../../shared/games/crampons/model.ts";
 import { clamp, DT, GOAL_HALF, HALF_L, lerp, wrapAngle } from "../../shared/games/crampons/pitch.ts";
 import { ACTS, TICK_STRIDE, type CramponsTick, type CramponsView } from "../../shared/games/crampons/view.ts";
+import type { BallId } from "../../shared/games/crampons/boutique.ts";
 import type { CramponsSettings } from "./bindings.ts";
 import { CramponsControls, FULL_CHARGE_MS, THROUGH_HOLD_MS, type GameButton, type Scheme } from "./controls.ts";
 import { CramponsScene, scorerCamera, type SceneFrame } from "./scene/CramponsScene.ts";
@@ -91,10 +93,27 @@ export interface HudState {
 }
 
 /** Ce que font les boutons quand on a le ballon */
+/** La glissade à genoux (boutique.ts, FETES) : la caméra baisse avec lui */
+const KNEE_SLIDE_POSE = 8;
+/** Le plan du buteur dure au moins ça, et au plus ça (le ralenti doit encore avoir le temps de passer) */
+const SCORER_MIN_S = 2.4;
+const SCORER_MAX_S = 4.2;
+/** Le temps qu'on le regarde fêter, arrêté, avant le ralenti : sa façon à lui, ou la célébration de la boutique */
+const SCORER_HOLD = 0.9;
+const SCORER_HOLD_POSE = 1.7;
+/** Le ralenti : la vitesse du film, et ce qu'il montre avant le but (en secondes de jeu) */
+const REPLAY_SLOW = 0.62;
+const REPLAY_MIN = 1.9;
+const REPLAY_MAX = 3.2;
+/** Le ralenti finit avant le coup d'envoi, avec cette marge (le direct arrive un peu après le serveur) */
+const REPLAY_MARGIN = 0.5;
+
 const WITH_BALL: Record<GameButton, HumanActionKind> = { pass: "pass", through: "through", lob: "lob", shoot: "shot" };
 
 export interface RuntimeOptions {
   seatId: string | null;
+  /** Le ballon de ce joueur (chacun voit le sien) */
+  ball?: BallId;
   send: (x: number, z: number, sprint: boolean, press: boolean, stamp: number) => void;
   act: (k: HumanActionKind, p: number, x: number, z: number, to?: number) => void;
   onHud: (hud: HudState) => void;
@@ -220,6 +239,12 @@ export class MatchRuntime {
   private receiver = -1;
   private firedOnPress = new Set<GameButton>();
   private ghost: Ghost | null = null;
+  /** La célébration du dernier but (absent : le buteur fête à sa façon) */
+  private goalPose: number | null = null;
+  /** Depuis combien de temps le buteur est arrêté, à faire sa célébration */
+  private stillFor = 0;
+  /** Il a pris son élan pour la glissade à genoux */
+  private kneeRun = false;
   /** Quand une frappe montrée d'avance n'a jamais eu lieu sur le serveur */
   private ghostDroppedAt = -Infinity;
   /** Une passe arrive à son joueur : il va seul au ballon, et le serveur seul sait où il est */
@@ -277,6 +302,7 @@ export class MatchRuntime {
       ambience: view.config.ambience,
       lowQuality,
       weather: view.config.weather,
+      ball: opts.ball,
     });
     this.frameViews = view.players.map((p) => ({
       x: 0,
@@ -349,7 +375,9 @@ export class MatchRuntime {
   }
 
   /** Le filet tremble, les confettis tombent, et la célébration commence */
-  goal(scorer: number, team: number) {
+  goal(scorer: number, team: number, pose: number | null = null) {
+    // La célébration choisie à la boutique par celui qui dirigeait le buteur (sinon, le buteur fête à sa façon)
+    this.goalPose = pose;
     const end = this.shownBall.x > 0 ? 1 : -1;
     this.scene.shakeNet(end);
     const kit = this.view.teams[team as 0 | 1].kit;
@@ -359,6 +387,8 @@ export class MatchRuntime {
     this.goalSeen = false;
     this.cinema = "scorer";
     this.cinemaT = 0;
+    this.stillFor = 0;
+    this.kneeRun = false;
     const v = this.frameViews[scorer];
     this.goalX = v?.x ?? this.shownBall.x;
     this.goalZ = v?.z ?? this.shownBall.z;
@@ -437,6 +467,11 @@ export class MatchRuntime {
   }
 
   /** Une frappe ou un tacle arrache un peu d'herbe */
+  /** Son ballon change (il arrive avec la liste de ses achats) */
+  setBall(id: BallId) {
+    this.scene.setBall(id);
+  }
+
   dust(player: number, strength: number) {
     const v = this.frameViews[player];
     if (v) this.scene.puff(v.x, v.z, strength > 0.7 ? 7 : 4, strength);
@@ -1114,6 +1149,7 @@ export class MatchRuntime {
       const act = ACTS[(f < 0.5 ? a : b).p[k + 4]!] ?? "none";
       v.act = act;
       v.cheer = scorer !== null && v.team === scorer;
+      v.joy = scorer !== null && i === this.goalScorer && this.goalPose !== null ? this.goalPose : undefined;
       v.sad = scorer !== null && v.team !== scorer;
       // L'exclu reste visible le temps de quitter le terrain, tête basse
       const carded = shown.cards.find((c) => c.i === i);
@@ -1476,10 +1512,17 @@ export class MatchRuntime {
       return frame;
     }
     if (this.cinema === "scorer") {
-      if (this.cinemaT > 2.4 && this.film.length > 10) {
+      // On reste sur le buteur jusqu'à ce qu'on l'ait vu fêter, arrêté, un moment (un peu plus long pour une célébration
+      // choisie à la boutique) ; le ralenti prend le temps qui reste avant le coup d'envoi
+      const scorerView = this.frameViews[this.goalScorer];
+      this.stillFor = scorerView && scorerView.v < 0.35 ? this.stillFor + dt : 0;
+      const hold = this.goalPose !== null ? SCORER_HOLD_POSE : SCORER_HOLD;
+      const seen = this.cinemaT > SCORER_MIN_S && (this.stillFor > hold || this.cinemaT > SCORER_MAX_S);
+      if (seen && this.film.length > 10) {
+        const left = GOAL_PAUSE - this.cinemaT - REPLAY_MARGIN;
+        this.replayAt = this.replayEnd - clamp(left * REPLAY_SLOW, REPLAY_MIN, REPLAY_MAX);
         this.cinema = "replay";
         this.cinemaT = 0;
-        this.replayAt = this.replayEnd - 3.2;
       } else {
         const v = this.frameViews[this.goalScorer];
         if (v) {
@@ -1492,11 +1535,22 @@ export class MatchRuntime {
           this.angleWanted = this.clearAngle(this.goalScorer, this.angleWanted);
         }
         this.goalAngle += (this.angleWanted - this.goalAngle) * Math.min(1, dt * 2.5);
-        this.scene.setShot({ kind: "scorer", x: this.goalX, z: this.goalZ, t: this.cinemaT, angle: this.goalAngle, high: this.goalHigh });
+        // La glissade à genoux : une fois lancé, il est à genoux dès qu'il ralentit (comme dans footballers.ts)
+        if (this.goalPose === KNEE_SLIDE_POSE && scorerView && scorerView.v > 5) this.kneeRun = true;
+        const low = this.goalPose === KNEE_SLIDE_POSE && !!scorerView && (scorerView.v <= 0.35 || (this.kneeRun && scorerView.v <= 5));
+        this.scene.setShot({
+          kind: "scorer",
+          x: this.goalX,
+          z: this.goalZ,
+          t: this.cinemaT,
+          angle: this.goalAngle,
+          high: this.goalHigh,
+          low,
+        });
         return frame;
       }
     }
-    this.replayAt += dt * 0.62;
+    this.replayAt += dt * REPLAY_SLOW;
     if (this.replayAt >= this.replayEnd) {
       this.cinema = null;
       this.scene.setShot(null);
@@ -1521,7 +1575,7 @@ export class MatchRuntime {
     const shot = this.directCinema(dt, frame);
     if (import.meta.env.DEV) (window as unknown as { __crShot: SceneFrame }).__crShot = shot;
     // Au ralenti, les gestes ralentissent avec le film
-    this.scene.render(this.cinema === "replay" ? dt * 0.62 : dt, shot);
+    this.scene.render(this.cinema === "replay" ? dt * REPLAY_SLOW : dt, shot);
     if (import.meta.env.DEV) (window as unknown as { __crCam: number[] }).__crCam = this.scene.camera.position.toArray();
     this.opts.onCrowd?.(dt, this.crowdMood(frame));
     if (++this.shownFrames === 3) this.opts.onReady?.();

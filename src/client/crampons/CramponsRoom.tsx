@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { feteItem } from "../../shared/shop.ts";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { CramponsLobby } from "./CramponsLobby.tsx";
 import { CramponsMatch } from "./CramponsMatch.tsx";
@@ -24,6 +27,16 @@ export function CramponsRoom({ code }: { code: string }) {
     if (view && lastStatus.current !== "playing" && view.status === "playing") setLobbyOpen(false);
     lastStatus.current = view?.status;
   }, [view]);
+
+  // La célébration choisie sur cet appareil : reprise à chaque table où l'on joue (si elle est à soi)
+  const fete = usePrefs((p) => p.cramponsFete);
+  const { has } = useMyItems();
+  const mySeat = view?.seats.find((s) => s.id === view.you.seatId);
+  const seatFete = mySeat ? (mySeat.fete ?? "maison") : null;
+  const owned = fete !== null && has(feteItem(fete));
+  useEffect(() => {
+    if (seatFete !== null && fete && owned && seatFete !== fete) send({ t: "fete", fete });
+  }, [seatFete, fete, owned, send]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion au stade…" : "Arrivée au stade…"} />;

@@ -9,7 +9,10 @@ import {
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
+import { FETE_BY_ID } from "../../shared/games/crampons/boutique.ts";
+import { ballItem } from "../../shared/shop.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { THROUGH_HOLD_MS, type GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
@@ -62,6 +65,16 @@ const FOUL_SAID: Record<FoulKind, string> = {
 
 const PERIODS: Record<number, string> = { 1: "1re mi-temps", 2: "2e mi-temps", 3: "Prolong.", 4: "Prolong.", 5: "Tirs au but" };
 const HOWTO_KEY = "crampons-howto-vu";
+
+/**
+ * La célébration d'un but : celle qu'a choisie l'humain qui dirigeait le buteur ; si c'est un coéquipier de l'ordinateur
+ * qui a marqué, celle d'un humain de l'équipe. Personne n'en a choisi : le buteur fête à sa façon (null).
+ */
+function celebrationFor(room: CramponsRoomView, team: number, human: string | null): number | null {
+  const seats = room.seats.filter((s) => s.kind === "human" && room.teams[s.id] === team);
+  const seat = (human !== null ? seats.find((s) => s.id === human) : undefined) ?? seats.find((s) => s.fete);
+  return seat?.fete ? (FETE_BY_ID.get(seat.fete)?.pose ?? null) : null;
+}
 
 function formatClock(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -318,6 +331,13 @@ export function CramponsMatch({
   cameraRef.current = camera;
   const seq = useRef(0);
   const viewRef = useRef(view);
+  // Les sièges de la table : la célébration de chacun, lue au moment d'un but
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  // Son ballon : celui choisi sur cet appareil, s'il est à soi
+  const ballPref = usePrefs((p) => p.cramponsBall);
+  const { has } = useMyItems();
+  const ball = ballPref && has(ballItem(ballPref)) ? ballPref : "classique";
   viewRef.current = view;
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const seatId = room.you.seatId;
@@ -414,7 +434,7 @@ export function CramponsMatch({
         }
         if (e.k === "tackle") runtime.current?.dust(e.p, 0.9);
         if (e.k === "goal") {
-          runtime.current?.goal(e.scorer, e.team);
+          runtime.current?.goal(e.scorer, e.team, e.own ? null : celebrationFor(roomRef.current, e.team, e.human ?? null));
           show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
         } else if (e.k === "offside") show({ tone: "info", title: "Hors-jeu", sub: nameOf(e.p) }, 1600);
         else if (e.k === "foul") {
@@ -446,6 +466,7 @@ export function CramponsMatch({
       viewRef.current,
       {
         seatId,
+        ball,
         send: (x, z, s, p, c) => send({ t: "in", x, z, s, p, c }),
         act: (k, p, x, z, to) => send({ t: "act", k, p, x, z, to }),
         onReady: () => setReady(true),
@@ -482,6 +503,9 @@ export function CramponsMatch({
     // Le match se crée une fois : ses données changent ensuite par setView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchKey, seatId]);
+
+  // Le ballon choisi, s'il arrive après le coup d'envoi (la liste de ses achats relue au retour dans un match en cours)
+  useEffect(() => runtime.current?.setBall(ball), [ball]);
 
   useEffect(() => {
     runtime.current?.setView(view);
