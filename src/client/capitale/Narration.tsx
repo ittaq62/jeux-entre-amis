@@ -248,7 +248,7 @@ export function Narrator({ lines, g, seat }: { lines: Line[]; g: CapitaleView; s
               transition={{ type: "spring", stiffness: 420, damping: 32 }}
             >
               {s ? (
-                <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={k === 0 ? 30 : 22} />
+                <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={k === 0 ? 24 : 20} />
               ) : (
                 <span className="cap-line-dot" />
               )}

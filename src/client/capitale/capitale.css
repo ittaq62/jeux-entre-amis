@@ -1404,9 +1404,17 @@
     0 10px 22px -12px rgba(20, 40, 60, 0.55);
 }
 
+/* L'annonce reste discrète : une étiquette d'une ligne en haut du plateau, pas un bandeau */
 .cap-bright .cap-line.is-new {
-  font-size: 19px;
-  padding: 8px 20px 8px 8px;
+  gap: 7px;
+  font-size: 16px;
+  padding: 4px 16px 4px 4px;
+}
+
+.cap-bright.is-phone .cap-line.is-new {
+  gap: 6px;
+  font-size: 13.5px;
+  padding: 3px 12px 3px 3px;
 }
 
 .cap-bright .cap-line.tone-good.is-new {
