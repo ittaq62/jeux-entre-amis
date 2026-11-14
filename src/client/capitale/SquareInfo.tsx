@@ -1,7 +1,17 @@
-import { GO_SALARY, GROUPS, JAIL_FINE, LEVEL_NAMES, SPECIALS, SQUARES, STATION_RENTS } from "../../shared/games/capitale/board.ts";
-import { levelOf, rentFor } from "../../shared/games/capitale/engine.ts";
+import {
+  GO_SALARY,
+  GROUPS,
+  JAIL_FINE,
+  LEVEL_NAMES,
+  SPECIALS,
+  SQUARES,
+  STATION_RENTS,
+  teamName,
+} from "../../shared/games/capitale/board.ts";
+import { levelOf, rentFor, teamRules } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { asState, colorOf, money } from "./boardUi.ts";
+import { isMate, teamIn } from "./teamsUi.tsx";
 
 // Ce que fait chaque case, en une phrase : pour la bulle au survol, et les fenêtres quand on touche une case.
 
@@ -15,7 +25,7 @@ export interface SquareFacts {
   what: string;
   /** Le chiffre qui compte : son prix si elle est libre, son loyer sinon */
   figure?: { label: string; value: string };
-  owner?: { id: string; color: string };
+  owner?: { id: string; color: string; team: number | null; mate: boolean };
   /** Une ligne de plus : le niveau, le bâtiment spécial, l'hypothèque */
   extra?: string;
 }
@@ -24,8 +34,27 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
   const sq = SQUARES[index]!;
   const deed = g.deeds[index];
   const s = asState(g);
-  const owner = deed?.owner ? { id: deed.owner, color: colorOf(g, deed.owner) } : undefined;
-  const ownerText = deed?.owner ? (deed.owner === g.you ? "à toi" : `à ${name(deed.owner)}`) : "";
+  const team = teamIn(g, deed?.owner);
+  const mate = isMate(g, g.you, deed?.owner);
+  const owner = deed?.owner ? { id: deed.owner, color: colorOf(g, deed.owner), team, mate } : undefined;
+  const ownerText = deed?.owner
+    ? deed.owner === g.you
+      ? "à toi"
+      : mate
+        ? `à ${name(deed.owner)}, de ton équipe`
+        : team !== null
+          ? `à ${name(deed.owner)} (${teamName(team)})`
+          : `à ${name(deed.owner)}`
+    : "";
+  // Chez un coéquipier : ce qu'on y paie, selon la règle d'équipe
+  const rule = teamRules(g).rent;
+  const payNote = mate
+    ? rule === "free"
+      ? " Tu n'y paies rien."
+      : rule === "half"
+        ? " Tu y paies la moitié du loyer."
+        : " Tu y paies le loyer comme tout le monde."
+    : " Qui s'arrête ici paie le loyer.";
   const rent = deed?.owner && !deed.mortgaged ? rentFor(s, index, { diceTotal: 7 }) : 0;
   switch (sq.kind) {
     case "property": {
@@ -42,7 +71,7 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         band: group.color,
         kind: `Rue · quartier ${group.name.toLowerCase()}`,
         what: deed?.owner
-          ? `Elle est ${ownerText}. Qui s'arrête ici paie le loyer.`
+          ? `Elle est ${ownerText}.${payNote}`
           : `À vendre. Ensuite, chaque adversaire qui s'arrête ici te paie un loyer, et tu peux l'améliorer.`,
         figure: deed?.owner ? { label: "Loyer", value: money(rent) } : { label: "Prix", value: money(sq.price!) },
         ...(owner ? { owner } : {}),

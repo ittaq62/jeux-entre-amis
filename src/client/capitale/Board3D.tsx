@@ -9,6 +9,8 @@ import { toast } from "../lib/toast.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { colorOf } from "./boardUi.ts";
 import { CapitaleScene, type OwnerFilter } from "./scene/CapitaleScene.ts";
+import { teamName } from "../../shared/games/capitale/board.ts";
+import { teamIn, TeamMark } from "./teamsUi.tsx";
 
 interface Props {
   g: CapitaleView;
@@ -27,7 +29,7 @@ interface Props {
   /** La case sous la souris, pour la bulle qui l'explique */
   onHover: (square: number | null, x: number, y: number) => void;
   /** L'étiquette au-dessus de chaque case achetable */
-  tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean };
+  tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean; mark?: number | null };
   /** Le pion de chaque joueur */
   tokens: Record<string, TokenId | undefined>;
   /** Le nom de chaque joueur (pour le filtre des villes) */
@@ -36,8 +38,8 @@ interface Props {
   look: { id: string; n: number } | null;
 }
 
-/** Les villes qu'on regarde : toutes, les siennes, celles des adversaires, ou celles d'un joueur */
-type View = { kind: "mine" } | { kind: "others" } | { kind: "player"; id: string } | null;
+/** Les villes qu'on regarde : toutes, les siennes, celles des adversaires, celles d'une équipe, ou celles d'un joueur */
+type View = { kind: "mine" } | { kind: "others" } | { kind: "team"; team: number } | { kind: "player"; id: string } | null;
 
 /** Le plateau en 3D : la scène three.js, ses repères pour les billets, et les boutons de la vue */
 export function Board3D({
@@ -77,6 +79,13 @@ export function Board3D({
   const lastDice = useRef(dice);
   const thrown = useRef(dice.rollId);
   const me = g.you;
+  const gRef = useRef(g);
+  gRef.current = g;
+  // En équipes : les villes de chaque équipe d'un coup, la sienne d'abord
+  const myTeam = teamIn(g, me);
+  const teamList = [...new Set(g.players.map((p) => teamIn(g, p.id)).filter((x): x is number => x !== null))].sort(
+    (a, b) => Number(b === myTeam) - Number(a === myTeam) || a - b,
+  );
 
   useEffect(() => {
     if (!box.current) return;
@@ -113,6 +122,7 @@ export function Board3D({
         id: p.id,
         color: colorOf(g, p.id),
         token: tokens[p.id],
+        team: teamIn(g, p.id),
         position: shown[p.id] ?? p.position,
         inJail: p.inJail,
         bankrupt: p.bankrupt,
@@ -146,6 +156,7 @@ export function Board3D({
     if (view?.kind === "mine") f = (owner) => owner === me;
     else if (view?.kind === "others") f = (owner) => owner !== me;
     else if (view?.kind === "player") f = (owner) => owner === view.id;
+    else if (view?.kind === "team") f = (owner) => teamIn(gRef.current, owner) === view.team;
     scene.current?.setFilter(f);
   }, [view, me, version]);
 
@@ -190,7 +201,11 @@ export function Board3D({
         ? "les villes des adversaires"
         : view?.kind === "player"
           ? `les villes de ${name(view.id)}`
-          : null;
+          : view?.kind === "team"
+            ? view.team === myTeam
+              ? "les villes de ton équipe"
+              : `les villes des ${teamName(view.team)}`
+            : null;
   const toggle = (key: "capDiceZoom" | "capFollow", on: boolean, text: string) => {
     setPrefs({ [key]: on });
     toast({ title: on ? `${text} : activé` : `${text} : désactivé`, duration: 2200 });
@@ -276,6 +291,17 @@ export function Board3D({
                     <em>{titlesOf(me!)}</em>
                   </button>
                 )}
+                {teamList.map((team) => (
+                  <button
+                    key={`t${team}`}
+                    className={`cap-filter-item ${view?.kind === "team" && view.team === team ? "is-on" : ""}`}
+                    role="menuitem"
+                    onClick={() => pick({ kind: "team", team })}
+                  >
+                    <TeamMark team={team} size={14} /> {team === myTeam ? "Mon équipe" : `Les ${teamName(team)}`}
+                    <em>{g.players.filter((p) => teamIn(g, p.id) === team).reduce((n, p) => n + titlesOf(p.id), 0)}</em>
+                  </button>
+                ))}
                 {me && others.length > 1 && (
                   <button
                     className={`cap-filter-item ${view?.kind === "others" ? "is-on" : ""}`}

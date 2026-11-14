@@ -1,12 +1,17 @@
-import type { CapitaleState } from "../../shared/games/capitale/engine.ts";
+import { teamPlay, type CapitaleState } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
+import { pawnColor } from "./teamsUi.tsx";
 
-/** Les couleurs des pions, dans l'ordre des joueurs */
+/** Les couleurs des pions, dans l'ordre des joueurs (en équipes, des teintes de la couleur de l'équipe) */
 export const PAWN_COLORS = ["#e2453c", "#3f7fd8", "#2fa864", "#e8b12f", "#9b59d0", "#e07a3a"];
 
 export function colorOf(g: CapitaleView, playerId: string | null | undefined): string {
-  const i = g.players.findIndex((p) => p.id === playerId);
-  return i >= 0 ? PAWN_COLORS[i % PAWN_COLORS.length]! : "transparent";
+  if (!playerId || !g.players.some((p) => p.id === playerId)) return "transparent";
+  return pawnColor(
+    g.players.map((p) => p.id),
+    teamPlay(g) ? g.teams : null,
+    playerId,
+  );
 }
 
 /** Les aides du moteur (construire, vendre…) lisent la vue comme l'état : elle en a tout ce qu'il faut */

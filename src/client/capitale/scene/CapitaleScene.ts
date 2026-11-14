@@ -8,7 +8,7 @@ import * as C from "./city.ts";
 import { tokenModel } from "./tokens.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
 import * as L from "./layout.ts";
-import { drawBoard, fontsReady, hatchTexture, makeCanvas, signTexture, tagTexture } from "./textures.ts";
+import { drawBoard, fontsReady, hatchTexture, makeCanvas, markTexture, signTexture, tagTexture } from "./textures.ts";
 
 // La scène 3D de Capitale : le plateau, la ville au centre, les pions, les dés.
 // Elle ne connaît que ce qu'on lui montre (setState) ; les animations partent des différences.
@@ -18,6 +18,8 @@ export interface ScenePlayer {
   color: string;
   /** Le pion choisi (le pion classique par défaut) */
   token?: TokenId;
+  /** En équipes : son équipe, dont la forme flotte au-dessus du pion */
+  team?: number | null;
   position: number;
   inJail: boolean;
   bankrupt: boolean;
@@ -47,8 +49,8 @@ export interface SceneOptions {
   onSquare: (index: number) => void;
   /** La case sous la souris (ou plus rien), et où elle est à l'écran : pour la bulle qui explique */
   onHover?: (square: number | null, x: number, y: number) => void;
-  /** Ce qu'affiche l'étiquette d'une case achetable : le prix, ou le loyer chez son propriétaire */
-  tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean };
+  /** Ce qu'affiche l'étiquette d'une case achetable : le prix, ou le loyer chez son propriétaire (et la forme de son équipe) */
+  tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean; mark?: number | null };
   /** La vue a été déplacée à la main (ou remise en place) : le bouton « Recentrer » apparaît ou s'en va */
   onView?: (moved: boolean) => void;
 }
@@ -611,12 +613,12 @@ export class CapitaleScene {
   private syncTags() {
     for (const [i, t] of this.tags) {
       const tag = this.opts.tagOf(i);
-      const key = `${tag.text}|${tag.color}|${tag.level}|${tag.muted}`;
+      const key = `${tag.text}|${tag.color}|${tag.level}|${tag.muted}|${tag.mark ?? ""}`;
       if (key === t.key) continue;
       t.key = key;
       const mat = t.sprite.material;
       mat.map?.dispose();
-      mat.map = tagTexture(tag.text, tag.color, tag.level, tag.muted);
+      mat.map = tagTexture(tag.text, tag.color, tag.level, tag.muted, tag.mark ?? null);
       mat.needsUpdate = true;
     }
   }
@@ -696,6 +698,18 @@ export class CapitaleScene {
       let obj = this.pawns.get(p.id);
       if (!obj) {
         const group = tokenModel(p.token ?? "pion", p.color);
+        if (p.team !== undefined && p.team !== null) {
+          // La forme de son équipe, au-dessus du pion : on la voit de loin, même sans voir les couleurs
+          const top = new THREE.Box3().setFromObject(group).max.y;
+          const mark = new THREE.Sprite(
+            new THREE.SpriteMaterial({ map: markTexture(p.team), transparent: true, depthTest: false, depthWrite: false }),
+          );
+          mark.scale.setScalar(0.24);
+          mark.position.y = top + 0.17;
+          mark.renderOrder = 5;
+          mark.name = "team-mark";
+          group.add(mark);
+        }
         this.scene.add(group);
         obj = {
           id: p.id,

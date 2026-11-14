@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { LEVEL_NAMES, SPECIALS, SQUARES } from "../../shared/games/capitale/board.ts";
+import { LEVEL_NAMES, sideName, SPECIALS, SQUARES, teamName } from "../../shared/games/capitale/board.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Modal } from "../components/ui.tsx";
 import { colorOf, money } from "./boardUi.ts";
+import { isMate } from "./teamsUi.tsx";
 
 // Ce qui se passe, en clair : chaque événement devient une phrase, montrée au moment où on le voit sur le plateau.
 
@@ -60,6 +61,13 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       const to = e.to;
       const player = (a: string) => a !== "bank" && a !== "pot";
       if (e.reason === "rent" && player(from) && player(to)) {
+        // Entre coéquipiers, le loyer réduit de l'équipe
+        if (isMate(g, from, to))
+          return {
+            text: `${say(from, "paie", "paies")} ${money(e.amount)} à ${isMe(to) ? "toi" : name(to)}, tarif d'équipe (${sq(e.square)})`,
+            tone: "info",
+            who: from,
+          };
         if (isMe(from)) return { text: `Tu paies ${money(e.amount)} de loyer à ${name(to)} (${sq(e.square)})`, tone: "bad", who: to };
         if (isMe(to)) return { text: `${name(from)} te paie ${money(e.amount)} de loyer (${sq(e.square)})`, tone: "good", who: from };
         return { text: `${name(from)} paie ${money(e.amount)} de loyer à ${name(to)}`, tone: "info", who: from };
@@ -174,7 +182,36 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       if (e.status === "rejected") return { text: `${say(e.trade.to, "refuse", "refuses")} l'échange`, tone: "info", who: e.trade.to };
       return null;
     case "bankrupt":
+      if (e.heir)
+        return {
+          text: `${say(e.player, "fait", "fais")} faillite : ${isMe(e.to) ? "tu reprends" : `${name(e.to as string)} reprend`} ses titres, l'équipe les garde`,
+          tone: "bad",
+          who: e.player,
+        };
       return { text: `${say(e.player, "fait", "fais")} faillite`, tone: "bad", who: e.player };
+    case "gift": {
+      const parts = [
+        ...e.give.squares.map((i) => SQUARES[i]!.name),
+        ...(e.give.cash > 0 ? [money(e.give.cash)] : []),
+        ...(e.give.jailCards > 0 ? [e.give.jailCards > 1 ? "des cartes de sortie de prison" : "une carte de sortie de prison"] : []),
+      ].join(", ");
+      if (isMe(e.to)) return { text: `${name(e.from)} te donne ${parts}`, tone: "good", who: e.from };
+      return { text: `${say(e.from, "donne", "donnes")} ${parts} à ${name(e.to)}`, tone: "info", who: e.from };
+    }
+    case "teamFree":
+      return {
+        text: isMe(e.player)
+          ? `Chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de ton équipe : pas de loyer (${money(e.amount)} économisés)`
+          : `${name(e.player)} est chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de son équipe : pas de loyer`,
+        tone: isMe(e.player) || isMe(e.owner) ? "good" : "info",
+        who: e.player,
+      };
+    case "monopoly": {
+      const what =
+        e.kind === "stations" ? "les quatre gares" : e.kind === "side" ? `tout ${sideName(e.side ?? 0)}` : "trois quartiers complets";
+      const who = e.team !== null ? `Les ${teamName(e.team)} réunissent` : isMe(e.player) ? "Tu réunis" : `${name(e.player)} réunit`;
+      return { text: `Monopole ! ${who} ${what}`, tone: "big", who: e.player };
+    }
     case "timeUp":
       return { text: "C'est l'heure : ce tour est le dernier", tone: "big", who: null };
     default:

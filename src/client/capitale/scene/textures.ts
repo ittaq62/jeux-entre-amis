@@ -841,7 +841,45 @@ function inkOn(bg: string): string {
  * L'étiquette au-dessus d'une case : le prix d'une case libre (fond crème), le loyer chez son propriétaire (à sa couleur),
  * avec des points pour le niveau ; grisée si elle est hypothéquée
  */
-export function tagTexture(text: string, color: string | null, level: number, muted: boolean): THREE.CanvasTexture {
+/** La forme d'une équipe (rond, triangle, carré), à sa couleur et bordée de blanc */
+function drawMark(ctx: CanvasRenderingContext2D, team: number, x: number, y: number, r: number) {
+  const colors = ["#d4453c", "#3f7fd8", "#2e9d59"];
+  ctx.beginPath();
+  const shape = team % 3;
+  if (shape === 0) ctx.arc(x, y, r, 0, Math.PI * 2);
+  else if (shape === 1) {
+    ctx.moveTo(x, y - r * 1.1);
+    ctx.lineTo(x + r * 1.08, y + r * 0.8);
+    ctx.lineTo(x - r * 1.08, y + r * 0.8);
+    ctx.closePath();
+  } else ctx.roundRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8, 3);
+  ctx.fillStyle = colors[team] ?? "#888";
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
+/** La forme d'une équipe seule, pour le repère au-dessus des pions */
+export function markTexture(team: number): THREE.CanvasTexture {
+  const S = 64;
+  const [canvas, ctx] = makeCanvas(S, S);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+  ctx.shadowBlur = 6;
+  drawMark(ctx, team, S / 2, S / 2 + 2, 20);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function tagTexture(
+  text: string,
+  color: string | null,
+  level: number,
+  muted: boolean,
+  mark: number | null = null,
+): THREE.CanvasTexture {
   const W = 256;
   const H = 128;
   const [canvas, ctx] = makeCanvas(W, H);
@@ -858,10 +896,13 @@ export function tagTexture(text: string, color: string | null, level: number, mu
   ctx.strokeStyle = color && !muted ? "#ffffff" : "rgba(40, 32, 20, 0.55)";
   ctx.stroke();
   ctx.fillStyle = muted ? "#ffffff" : color ? inkOn(color) : INK;
-  fitFont(ctx, text, 50, W - 50, "800", FONT_NUM);
+  // En équipes : la forme de l'équipe du propriétaire, à gauche du loyer (lisible sans voir les couleurs)
+  const shift = mark !== null ? 22 : 0;
+  fitFont(ctx, text, 50, W - 50 - shift * 2, "800", FONT_NUM);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, W / 2, 45);
+  ctx.fillText(text, W / 2 + shift, 45);
+  if (mark !== null) drawMark(ctx, mark, 44, 43, 17);
   // Le niveau : cinq points, pleins jusqu'au niveau atteint
   if (level > 0) {
     for (let k = 0; k < 5; k++) {

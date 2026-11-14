@@ -2620,3 +2620,426 @@
     padding: 0 220px 12px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Les équipes : une forme et une couleur par équipe, partout          */
+/* ------------------------------------------------------------------ */
+
+.team-mark {
+  flex: none;
+  display: inline-block;
+  vertical-align: -2px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+
+.team-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--team) 80%, #1b2a33);
+}
+
+.team-tag em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--card-soft);
+}
+
+/* La forme de l'équipe sur le portrait de chaque joueur */
+.cap-corner-team {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.cap-corner-teamline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  font-size: 12px;
+}
+
+.cap-mate {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pawn) 18%, #fff);
+  color: color-mix(in srgb, var(--pawn) 70%, #1b2a33);
+  font-style: normal;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.cap-mate.is-phone {
+  position: absolute;
+  right: 7px;
+  top: 22px;
+}
+
+/* Mes coéquipiers : un double liseré, à la couleur de l'équipe */
+.cap-corner.is-mate {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--pawn) 75%, #fff),
+    0 0 0 6px color-mix(in srgb, var(--pawn) 22%, transparent),
+    0 10px 24px -12px rgba(20, 40, 60, 0.55);
+}
+
+/* Au Monopole : où en est le camp de chacun */
+.cap-mono-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--card-soft);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cap-mono-chips > span {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2f4;
+  white-space: nowrap;
+}
+
+.cap-mono-chips b {
+  color: var(--card-ink);
+}
+
+.cap-mono-chips.is-close b {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #d6433a;
+  color: #fff;
+  animation: cap-bob 1.2s ease-in-out infinite;
+}
+
+.cap-mono-btn {
+  font-weight: 800;
+}
+
+/* La fortune de chaque équipe : dans l'en-tête au PC, sous les joueurs au téléphone */
+.cap-teambar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 auto;
+  font-size: 14px;
+}
+
+.cap-teambar-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--team) 55%, #fff),
+    0 4px 12px -8px rgba(20, 40, 60, 0.6);
+  color: var(--card-ink);
+}
+
+.cap-teambar-team.is-mine {
+  box-shadow:
+    inset 0 0 0 3px var(--team),
+    0 4px 12px -8px rgba(20, 40, 60, 0.6);
+}
+
+.cap-teambar-team strong {
+  color: color-mix(in srgb, var(--team) 80%, #1b2a33);
+}
+
+.cap-teambar-names {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--card-soft);
+  font-size: 12px;
+}
+
+.cap-teambar-vs {
+  margin-right: 4px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--card-soft);
+}
+
+.cap-teambar .cap-teambar-team + .cap-teambar-team {
+  margin-left: 0;
+}
+
+.cap-teambar.is-phone {
+  gap: 4px;
+  margin: 0;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+/* Sur téléphone, sous les joueurs : les équipes et le Monopole */
+.cap-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cap-strip-mono {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 2px #d9c27a,
+    0 4px 12px -8px rgba(20, 40, 60, 0.6);
+  color: var(--card-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cap-strip-mono.is-close {
+  background: #d6433a;
+  box-shadow: none;
+  color: #fff;
+  animation: cap-bob 1.2s ease-in-out infinite;
+}
+
+.cap-teambar.is-phone .cap-teambar-team {
+  padding: 2px 8px 2px 5px;
+}
+
+.cap-teambar.is-phone .cap-teambar-vs {
+  display: none;
+}
+
+.cap-bright.is-phone.has-strip .cap-board-zone {
+  top: 124px;
+}
+
+/* Un coéquipier en dette : l'aide d'un bouton */
+.cap-help {
+  box-shadow:
+    0 0 0 2px #2fa864,
+    0 14px 30px -14px rgba(0, 0, 0, 0.6);
+}
+
+/* Le détail du Monopole */
+.cap-mono-rule {
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.cap-mono-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(60dvh, 520px);
+  overflow-y: auto;
+}
+
+.cap-mono-side {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--panel-sunken, rgba(255, 255, 255, 0.05));
+}
+
+.cap-mono-side.is-close {
+  box-shadow: inset 0 0 0 2px #e0574a;
+}
+
+.cap-mono-side h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.cap-mono-side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.cap-mono-side li {
+  display: grid;
+  grid-template-columns: 76px 42px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.cap-mono-goal {
+  font-weight: 700;
+}
+
+.cap-mono-what {
+  color: var(--text-soft, #b9c4bd);
+}
+
+.cap-mono-group,
+.cap-mono-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+  border-radius: 3px;
+  vertical-align: -1px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.cap-mono-dot {
+  border-radius: 50%;
+}
+
+.cap-mono-alert {
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(214, 67, 58, 0.18);
+  color: #ffb3aa;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Les échanges en équipes et au Monopole */
+.cap-partner-mate {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+.cap-trade-win,
+.cap-trade-danger {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.cap-trade-win {
+  background: rgba(47, 168, 100, 0.18);
+  color: #2b8a52;
+}
+
+.cap-trade-danger {
+  background: rgba(214, 67, 58, 0.16);
+  color: #c2362d;
+}
+
+/* Fin de partie : pourquoi elle s'arrête, les titres du Monopole, les équipes */
+.cap-end-why {
+  margin: 10px 0 0;
+  font-weight: 700;
+}
+
+.cap-end-squares {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cap-end-squares li {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border-left: 6px solid var(--group);
+  background: rgba(0, 0, 0, 0.06);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.cap-end-teams {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cap-end-teams li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  box-shadow: inset 4px 0 0 var(--team);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.cap-end-teams li.is-winner {
+  background: color-mix(in srgb, var(--team) 16%, transparent);
+}
+
+.cap-end-teams em {
+  font-style: normal;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.cap-end-teams .num {
+  margin-left: auto;
+  font-weight: 800;
+}
+
+/* Le salon : deux ou trois équipes */
+.cap-teams .team-name::before {
+  display: none;
+}
+
+.cap-teams-grid.is-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.cap-team-move {
+  min-width: 30px;
+  padding: 0 6px;
+  line-height: 0;
+}
+
+@media (max-width: 720px) {
+  .cap-teams-grid.is-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Avant une partie de tournée : avec qui l'on joue, et les règles du jour */
+.cap-pick-rules {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cap-pick-rules p {
+  margin: 4px 0 0;
+}
+
+.table-pick-seats .team-mark {
+  margin-left: -10px;
+  align-self: flex-end;
+}

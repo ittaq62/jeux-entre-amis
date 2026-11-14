@@ -1,12 +1,14 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { BUYABLE } from "../../shared/games/capitale/board.ts";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BUYABLE, MONOPOLY_GROUPS } from "../../shared/games/capitale/board.ts";
+import type { MonopolyProgress } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { CapitaleRoomView, SeatView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { AwayNote } from "../game/AwayNote.tsx";
 import { TimerRing } from "../game/Seat.tsx";
 import { colorOf, money } from "./boardUi.ts";
+import { isMate, teamIn, TeamMark, TeamTag } from "./teamsUi.tsx";
 
 // Les joueurs aux coins de l'écran, comme autour d'une vraie table : le nom sur un bandeau à sa couleur, l'argent en grand.
 // Celui qui joue s'allume ; les sommes gagnées ou perdues montent de son portrait.
@@ -45,6 +47,9 @@ export function Corners({
   turn,
   phone,
   onPick,
+  mono,
+  onMonopoly,
+  footer,
 }: {
   g: CapitaleView;
   room: CapitaleRoomView;
@@ -57,6 +62,12 @@ export function Corners({
   phone: boolean;
   /** Un clic sur un joueur : la caméra va voir son pion */
   onPick: (id: string) => void;
+  /** Au Monopole : où en est le camp de chaque joueur (son équipe, ou lui) */
+  mono: Record<string, MonopolyProgress> | null;
+  /** Ouvrir le détail du Monopole */
+  onMonopoly: () => void;
+  /** Sous les joueurs, sur téléphone : les équipes */
+  footer?: ReactNode;
 }) {
   return (
     <div className={`cap-corners ${phone ? "is-phone" : ""}`}>
@@ -65,10 +76,13 @@ export function Corners({
         const acting = g.actor === p.id;
         const titles = BUYABLE.filter((i) => g.deeds[i]!.owner === p.id).length;
         const color = colorOf(g, p.id);
+        const team = teamIn(g, p.id);
+        const mate = isMate(g, g.you, p.id);
+        const progress = mono?.[p.id];
         return (
           <div
             key={p.id}
-            className={`cap-corner at-${SPOTS[k % SPOTS.length]} ${turn === p.id ? "is-turn" : ""} ${p.bankrupt ? "is-out" : ""} ${p.id === g.you ? "is-me" : ""}`}
+            className={`cap-corner at-${SPOTS[k % SPOTS.length]} ${turn === p.id ? "is-turn" : ""} ${p.bankrupt ? "is-out" : ""} ${p.id === g.you ? "is-me" : ""} ${mate ? "is-mate" : ""}`}
             style={{ ["--pawn" as string]: color }}
             role="button"
             tabIndex={0}
@@ -78,6 +92,11 @@ export function Corners({
           >
             <span className="cap-corner-avatar" data-cap-anchor={p.id}>
               {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 34 : 52} />}
+              {team !== null && (
+                <span className="cap-corner-team">
+                  <TeamMark team={team} size={phone ? 15 : 20} />
+                </span>
+              )}
               {acting && room.deadline && (
                 <span className="cap-corner-timer">
                   <TimerRing size={phone ? 42 : 62} deadline={room.deadline} total={g.settings.turnSeconds} offset={serverOffset} />
@@ -107,6 +126,13 @@ export function Corners({
                 {p.id === g.you && <em> (toi)</em>}
               </span>
               <span className="cap-corner-cash num">{p.bankrupt ? "faillite" : <Rolling value={cash[p.id] ?? p.cash} />}</span>
+              {!phone && team !== null && (
+                <span className="cap-corner-teamline">
+                  <TeamTag team={team} />
+                  {mate && <em className="cap-mate">avec toi</em>}
+                </span>
+              )}
+              {phone && mate && <span className="cap-mate is-phone">avec toi</span>}
               {!phone && (
                 <span className="cap-corner-meta">
                   {p.bankrupt
@@ -120,12 +146,53 @@ export function Corners({
                         .join(" · ")}
                 </span>
               )}
+              {!phone && progress && !p.bankrupt && <MonoChips progress={progress} onOpen={onMonopoly} />}
               {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
             </span>
             {turn === p.id && !p.bankrupt && <span className="cap-corner-arrow">{p.id === g.you ? "À toi !" : "joue"}</span>}
           </div>
         );
       })}
+      {footer}
     </div>
+  );
+}
+
+/** Au Monopole, où en est un camp : ses quartiers complets, son côté le plus avancé, ses gares ; en rouge à un titre */
+export function MonoChips({ progress, onOpen }: { progress: MonopolyProgress; onOpen: () => void }) {
+  const side = [...progress.sides].sort((a, b) => a.missing.length - b.missing.length || b.have - a.have)[0]!;
+  const close = progress.winning.length > 0;
+  return (
+    <button
+      type="button"
+      className={`cap-mono-chips ${close ? "is-close" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      title="Monopole : où en est chacun"
+    >
+      {close ? (
+        <b>À un titre de gagner !</b>
+      ) : (
+        <>
+          <span>
+            Quartiers{" "}
+            <b className="num">
+              {Math.min(progress.groups.length, MONOPOLY_GROUPS)}/{MONOPOLY_GROUPS}
+            </b>
+          </span>
+          <span>
+            Côté{" "}
+            <b className="num">
+              {side.have}/{side.total}
+            </b>
+          </span>
+          <span>
+            Gares <b className="num">{progress.stations.have}/4</b>
+          </span>
+        </>
+      )}
+    </button>
   );
 }

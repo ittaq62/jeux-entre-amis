@@ -1,7 +1,17 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SQUARES, type DeckId } from "../../shared/games/capitale/board.ts";
-import { canUpgrade, rentFor, type CapitaleAction, type CapitaleEvent, type Deed, type Trade } from "../../shared/games/capitale/engine.ts";
+import { SQUARES, teamName, type DeckId } from "../../shared/games/capitale/board.ts";
+import {
+  canUpgrade,
+  monopolyProgress,
+  rentFor,
+  teamRules,
+  type CapitaleAction,
+  type CapitaleEvent,
+  type Deed,
+  type MonopolyProgress,
+  type Trade,
+} from "../../shared/games/capitale/engine.ts";
 import { batchMs, cardReadMs } from "../../shared/games/capitale/timing.ts";
 import type { CapitaleClientMessage, CapitaleRoomView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
@@ -26,6 +36,8 @@ import { Offers, TradeModal, type TradeDraft } from "./Panels.tsx";
 import { AuctionPrompt, BuyPrompt, CardShow, DebtPrompt, JailChoices } from "./Prompts.tsx";
 import { squareFacts, SquareTip } from "./SquareInfo.tsx";
 import type { EventBatch } from "./useCapitaleRoom.ts";
+import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
+import { inTeams, sidesOf, teamIn } from "./teamsUi.tsx";
 import { useViewport } from "../lib/viewport.ts";
 
 interface Props {
@@ -87,6 +99,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [resultsHidden, setResultsHidden] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   const [citiesOpen, setCitiesOpen] = useState(false);
+  const [monoOpen, setMonoOpen] = useState(false);
   /** La fiche d'une case ouverte au milieu de l'écran */
   const [city, setCity] = useState<number | null>(null);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
@@ -104,6 +117,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   useEffect(() => () => stopLoop("tourMusic"), []);
   useEffect(() => {
     if (g.step !== "over") setResultsHidden(false);
+    // La partie finie, le bilan passe devant : le détail du Monopole se ferme
+    else setMonoOpen(false);
   }, [g.step]);
 
   // ---------------------------------------------------------------------------
@@ -284,15 +299,49 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
 
   // L'étiquette de chaque case : son prix si elle est libre, sinon son loyer à la couleur du propriétaire
   const shownState = useMemo(() => asState({ ...g, deeds }), [g, deeds]);
+  const teams = inTeams(g);
   const tagOf = (i: number) => {
     const d = deeds[i];
     const sq = SQUARES[i]!;
-    if (!d?.owner) return { text: money(sq.price!), color: null, level: 0, muted: false };
+    if (!d?.owner) return { text: money(sq.price!), color: null, level: 0, muted: false, mark: null };
     const color = colorOf(g, d.owner);
-    if (d.mortgaged) return { text: "hypothéquée", color, level: 0, muted: true };
-    if (sq.kind === "utility") return { text: "× dés", color, level: 0, muted: false };
-    return { text: money(rentFor(shownState, i, { diceTotal: 7 })), color, level: d.level ?? 0, muted: false };
+    // En équipes, la forme de l'équipe du propriétaire, devant le loyer
+    const mark = teamIn(g, d.owner);
+    if (d.mortgaged) return { text: "hypothéquée", color, level: 0, muted: true, mark };
+    if (sq.kind === "utility") return { text: "× dés", color, level: 0, muted: false, mark };
+    return { text: money(rentFor(shownState, i, { diceTotal: 7 })), color, level: d.level ?? 0, muted: false, mark };
   };
+
+  // Au Monopole : où en est le camp de chacun (calculé sur les titres tels qu'on les montre)
+  const mono = useMemo(() => {
+    if (!g.settings.monopoly) return null;
+    const out: Record<string, MonopolyProgress> = {};
+    for (const side of sidesOf(g)) {
+      const p = monopolyProgress(shownState, side.rep);
+      for (const id of side.members) out[id] = p;
+    }
+    return out;
+  }, [g, shownState]);
+  // Un camp n'est plus qu'à un titre de gagner : tout le monde est prévenu, une fois par menace
+  const threats = useRef<Record<string, string>>({});
+  useEffect(() => {
+    if (!g.settings.monopoly || g.step === "over") return;
+    for (const side of sidesOf(g)) {
+      const p = monopolyProgress(shownState, side.rep);
+      const key = p.winning.join(",");
+      const before = threats.current[side.key] ?? "";
+      threats.current[side.key] = key;
+      if (!key || key === before) continue;
+      const names = p.winning.map((i) => SQUARES[i]!.name);
+      const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} ou ${names.at(-1)}` : names[0]!;
+      const mine = Boolean(g.you && side.members.includes(g.you));
+      const who = side.team !== null ? `aux ${teamName(side.team)}` : `à ${nameRef.current(side.rep)}`;
+      const text = mine
+        ? `Monopole : plus qu'un titre pour gagner, ${list} !`
+        : `Attention : il ne manque plus que ${list} ${who} pour gagner !`;
+      setLines((l) => pushLine(l, { text, tone: mine ? "good" : "bad", who: side.rep }, ++lineSeq));
+    }
+  }, [shownState, g]);
 
   const startCounter = (t: Trade) => setDraft({ partner: t.from, give: t.get, get: t.give, replaces: t.id });
   const openTrade = () =>
@@ -343,7 +392,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const facts = tip ? squareFacts(g, tip.square, (id) => name(id)) : null;
 
   return (
-    <div className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}`}>
+    <div className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""} ${teams || g.settings.monopoly ? "has-strip" : ""}`}>
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <Icon name="menu" />
@@ -351,7 +400,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
         <div className="table-title">
           <span className="table-code">{room.code}</span>
           <span className="hint">
-            Capitale,{" "}
+            Capitale{teams && !phone ? " en équipes" : ""}
+            {g.settings.monopoly && !phone ? " · Monopole" : ""},{" "}
             {g.step === "over"
               ? "partie terminée"
               : g.timeUp
@@ -361,7 +411,13 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                   : "jusqu'à la faillite"}
           </span>
         </div>
+        {teams && !phone && <TeamBar g={g} name={name} phone={false} />}
         <div className="table-top-actions">
+          {g.settings.monopoly && !phone && (
+            <button className="btn btn-ghost cap-mono-btn" onClick={() => setMonoOpen(true)} title="Monopole : où en est chacun">
+              Monopole
+            </button>
+          )}
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => setJournalOpen(true)}
@@ -451,6 +507,23 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           turn={turn}
           phone={phone}
           onPick={(id) => setLook((l) => ({ id, n: (l?.n ?? 0) + 1 }))}
+          mono={mono}
+          onMonopoly={() => setMonoOpen(true)}
+          footer={
+            phone && (teams || g.settings.monopoly) ? (
+              <div className="cap-strip">
+                {teams && <TeamBar g={g} name={name} phone />}
+                {g.settings.monopoly && (
+                  <button
+                    className={`cap-strip-mono ${mono && Object.values(mono).some((p) => p.winning.length > 0) ? "is-close" : ""}`}
+                    onClick={() => setMonoOpen(true)}
+                  >
+                    Monopole
+                  </button>
+                )}
+              </div>
+            ) : null
+          }
         />
 
         <div className="cap-bar">
@@ -473,14 +546,16 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                 </button>
                 {!g.auction && (
                   <button className="cap-small" onClick={openTrade}>
-                    <Icon name="swap" size={18} /> Échanger
+                    <Icon name="swap" size={18} /> {teams && teamRules(g).gifts ? "Échanger, donner" : "Échanger"}
                   </button>
                 )}
               </div>
             )}
           </div>
         </div>
-        <Offers g={g} me={me} seat={seat} act={act} onCounter={startCounter} />
+        <Offers g={g} me={me} seat={seat} act={act} onCounter={startCounter} name={name}>
+          <TeamHelp g={g} me={me} seat={seat} act={act} />
+        </Offers>
       </main>
 
       <AnimatePresence>{prompt}</AnimatePresence>
@@ -569,6 +644,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       )}
 
       <Journal open={journalOpen} onClose={() => setJournalOpen(false)} lines={lines} />
+      {g.settings.monopoly && <MonopolyPanel g={{ ...g, deeds }} open={monoOpen} onClose={() => setMonoOpen(false)} name={name} />}
       {me && <TradeModal g={g} me={me} seat={seat} draft={draft} onClose={() => setDraft(null)} act={act} />}
 
       {g.step === "over" && !resultsHidden && (

@@ -30,6 +30,7 @@ import { Icon } from "../components/Icon.tsx";
 import { asState, colorOf, manageRights, money } from "./boardUi.ts";
 import { levelThumb, specialThumb } from "./scene/thumbs.ts";
 import { squareFacts } from "./SquareInfo.tsx";
+import { isMate, TeamMark } from "./teamsUi.tsx";
 
 // La fiche d'une case, en grand au milieu de l'écran : son loyer, ses niveaux, et un bouton pour l'améliorer.
 // « Mes villes » : toutes ses rues d'un coup d'œil, avec le bouton Améliorer sur chaque ligne.
@@ -77,7 +78,9 @@ export function Band({ g, index, name }: { g: CapitaleView; index: number; name:
       <strong>{facts.title}</strong>
       {facts.owner && (
         <em className="cap-band-owner" style={{ ["--owner" as string]: facts.owner.color }}>
+          {facts.owner.team !== null && <TeamMark team={facts.owner.team} size={13} />}
           {facts.owner.id === g.you ? "à toi" : name(facts.owner.id)}
+          {facts.owner.mate && " · ton équipe"}
         </em>
       )}
     </div>
@@ -259,6 +262,8 @@ function SpecialSection({
     );
   }
   if (rights !== "full") return null;
+  // Pas de nuisance chez un coéquipier : rien à poser ici
+  if (!mine && isMate(g, me, g.deeds[index]!.owner)) return null;
   const kinds = SPECIAL_ORDER.filter((k) => SPECIALS[k].nuisance !== mine);
   return (
     <div className="cap-specials">

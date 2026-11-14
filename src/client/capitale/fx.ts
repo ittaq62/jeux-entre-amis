@@ -104,7 +104,7 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
           play("capCoins", { delay: delay + 120 });
         } else if (e.reason === "card") {
           play(e.to === "bank" || e.to === "pot" ? "capBills" : "capCoins", { delay });
-        } else if (e.reason === "trade") {
+        } else if (e.reason === "trade" || e.reason === "gift") {
           play("capBills", { delay });
         } else if (e.reason === "tax" || e.reason === "jail" || e.reason === "interest") {
           play("capBills", { delay, rate: 0.9 });
@@ -151,6 +151,14 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
         return;
       case "timeUp":
         play("tick", { delay, volume: 0.8 });
+        return;
+      case "gift":
+        play("capDeal", { delay, volume: 0.8 });
+        return;
+      case "monopoly":
+        // Monopole : la partie s'arrête net, le gong des enchères puis les applaudissements
+        play("capGavel", { delay });
+        play("tourApplause", { delay: delay + 400 });
         return;
       default:
         return;

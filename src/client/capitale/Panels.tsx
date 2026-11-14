@@ -1,12 +1,21 @@
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { groupOf, SQUARES } from "../../shared/games/capitale/board.ts";
-import { tradeProblem, type CapitaleAction, type Offer, type Trade } from "../../shared/games/capitale/engine.ts";
+import {
+  monopolyOf,
+  teamPlay,
+  teamRules,
+  tradeProblem,
+  type CapitaleAction,
+  type Offer,
+  type Trade,
+} from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Modal } from "../components/ui.tsx";
 import { asState, colorOf, money } from "./boardUi.ts";
+import { isMate, teamIn, TeamMark } from "./teamsUi.tsx";
 
 type Seat = (id: string) => SeatView | undefined;
 
@@ -28,6 +37,21 @@ export function describeOffer(o: Offer): string {
     ...(o.jailCards > 0 ? [`${o.jailCards} carte${o.jailCards > 1 ? "s" : ""} sortie de prison`] : []),
   ];
   return parts.length > 0 ? parts.join(", ") : "rien";
+}
+
+/**
+ * Au Monopole : ce marché ferait-il gagner l'un des deux tout de suite ? On essaie sur une copie des titres. Renvoie le
+ * joueur qui gagnerait, ou null.
+ */
+export function tradeWinner(g: CapitaleView, from: string, to: string, give: Offer, get: Offer): string | null {
+  if (!g.settings.monopoly) return null;
+  const deeds = g.deeds.map((d) => (d ? { ...d } : d));
+  for (const i of give.squares) deeds[i]!.owner = to;
+  for (const i of get.squares) deeds[i]!.owner = from;
+  const after = asState({ ...g, deeds });
+  if (monopolyOf(after, from)) return from;
+  if (monopolyOf(after, to)) return to;
+  return null;
 }
 
 export interface TradeDraft {
@@ -56,7 +80,13 @@ export function TradeModal({
     <Modal
       open={draft !== null}
       onClose={onClose}
-      title={draft?.replaces !== undefined ? "Contre-proposition" : "Proposer un échange"}
+      title={
+        draft?.replaces !== undefined
+          ? "Contre-proposition"
+          : teamPlay(g) && teamRules(g).gifts
+            ? "Échanger ou donner"
+            : "Proposer un échange"
+      }
       wide
     >
       {draft && (
@@ -89,19 +119,21 @@ function TradeForm({
   onClose: () => void;
   act: (a: CapitaleAction) => void;
 }) {
-  const others = g.players.filter((p) => p.id !== me && !p.bankrupt);
+  // Les coéquipiers d'abord
+  const others = g.players
+    .filter((p) => p.id !== me && !p.bankrupt)
+    .sort((a, b) => Number(isMate(g, me, b.id)) - Number(isMate(g, me, a.id)));
   const [partner, setPartner] = useState<string | null>(draft.partner ?? others[0]?.id ?? null);
   const [give, setGive] = useState<Offer>(draft.give);
   const [get, setGet] = useState<Offer>(draft.get);
   const mePl = g.players.find((p) => p.id === me)!;
   const other = g.players.find((p) => p.id === partner);
-  const empty =
-    give.cash === 0 &&
-    give.squares.length === 0 &&
-    give.jailCards === 0 &&
-    get.cash === 0 &&
-    get.squares.length === 0 &&
-    get.jailCards === 0;
+  const giveEmpty = give.cash === 0 && give.squares.length === 0 && give.jailCards === 0;
+  const getEmpty = get.cash === 0 && get.squares.length === 0 && get.jailCards === 0;
+  const empty = giveEmpty && getEmpty;
+  // Entre coéquipiers, un don sans contrepartie part tout de suite
+  const gift = Boolean(other && isMate(g, me, other.id) && teamRules(g).gifts && draft.replaces === undefined && getEmpty);
+  const winner = other ? tradeWinner(g, me, other.id, give, get) : null;
 
   const side = (owner: string, offer: Offer, setOffer: (o: Offer) => void, cashMax: number, cards: number, title: string) => (
     <div className="cap-trade-side">
@@ -173,6 +205,8 @@ function TradeForm({
               >
                 {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={26} />}
                 <span>{s?.name}</span>
+                {teamIn(g, p.id) !== null && <TeamMark team={teamIn(g, p.id)!} size={14} />}
+                {isMate(g, me, p.id) && <em className="cap-partner-mate">équipe</em>}
               </button>
             );
           })}
@@ -184,7 +218,17 @@ function TradeForm({
           {side(other.id, get, setGet, other.cash, other.jailCards.length, `Tu demandes à ${seat(other.id)?.name ?? "?"}`)}
         </div>
       )}
+      {winner && (
+        <p className={winner === me ? "cap-trade-win" : "cap-trade-danger"}>
+          {winner === me
+            ? "Monopole : avec ce marché, tu gagnes la partie !"
+            : `Attention : avec ce marché, ${seat(winner)?.name ?? "l'autre"} gagne la partie (Monopole) !`}
+        </p>
+      )}
       <p className="hint">
+        {other && isMate(g, me, other.id) && teamRules(g).gifts
+          ? "Entre coéquipiers, ce que tu donnes sans rien demander part tout de suite, sans réponse à attendre. "
+          : ""}
         Un titre hypothéqué reçu coûte 10 % d'intérêts tout de suite. Une rue bâtie ne s'échange pas : revends d'abord ses bâtiments.
       </p>
       <div className="overlay-actions">
@@ -193,11 +237,12 @@ function TradeForm({
           disabled={!other || empty}
           onClick={() => {
             if (!other) return;
-            act({ type: "propose", to: other.id, give, get, ...(draft.replaces !== undefined ? { replaces: draft.replaces } : {}) });
+            if (gift) act({ type: "gift", to: other.id, give });
+            else act({ type: "propose", to: other.id, give, get, ...(draft.replaces !== undefined ? { replaces: draft.replaces } : {}) });
             onClose();
           }}
         >
-          Envoyer la proposition
+          {gift ? `Donner à ${seat(other!.id)?.name ?? "?"}` : "Envoyer la proposition"}
         </button>
         <button className="btn btn-ghost" onClick={onClose}>
           Annuler
@@ -214,19 +259,25 @@ export function Offers({
   seat,
   act,
   onCounter,
+  name,
+  children,
 }: {
   g: CapitaleView;
   me: string | null;
   seat: Seat;
   act: (a: CapitaleAction) => void;
   onCounter: (t: Trade) => void;
+  name: (id: string) => string;
+  /** Ce qui s'ajoute au-dessus (l'aide à un coéquipier en dette) */
+  children?: ReactNode;
 }) {
   if (!me) return null;
   const mine = g.trades.filter((t) => t.to === me || t.from === me);
-  if (mine.length === 0) return null;
   return (
     <div className="cap-offers">
+      {children}
       {mine.map((t) => {
+        const winner = tradeWinner(g, t.from, t.to, t.give, t.get);
         const incoming = t.to === me;
         const other = seat(incoming ? t.from : t.to);
         return (
@@ -251,6 +302,13 @@ export function Offers({
                 </>
               )}
             </p>
+            {winner && (
+              <p className={winner === me ? "cap-trade-win" : "cap-trade-danger"}>
+                {winner === me
+                  ? "Monopole : avec ce marché, tu gagnes la partie !"
+                  : `Attention : avec ce marché, ${name(winner)} gagne la partie (Monopole) !`}
+              </p>
+            )}
             <div className="cap-offer-actions">
               {incoming ? (
                 <>

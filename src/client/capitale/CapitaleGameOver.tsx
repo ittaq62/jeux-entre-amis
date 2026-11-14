@@ -1,7 +1,8 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect } from "react";
-import { BUYABLE } from "../../shared/games/capitale/board.ts";
+import { BUYABLE, groupOf, sideName, SQUARES, teamName } from "../../shared/games/capitale/board.ts";
+import { teamPlay, teamRules } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleRoomView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -10,6 +11,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { money } from "./boardUi.ts";
+import { teamColor, teamIn, TeamMark } from "./teamsUi.tsx";
 
 interface Props {
   room: CapitaleRoomView;
@@ -50,7 +52,47 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
   const names = winners.map((id) => seatOf(id)?.name ?? "?").join(" et ");
-  const title = won ? "Fortune faite !" : `${names} ${winners.length > 1 ? "remportent" : "remporte"} la partie.`;
+  const outcome = g.outcome ?? null;
+  const mono = outcome?.monopoly ?? null;
+  // En équipes (victoire d'équipe) : l'équipe gagnante, et la fortune de chacune
+  const teamWin = teamPlay(g) && teamRules(g).win && outcome?.teamWorth !== undefined;
+  const winTeam = teamWin ? (outcome?.team ?? null) : null;
+  const myTeam = teamIn(g, me);
+  const monoTeam = mono ? teamIn(g, mono.player) : null;
+  const what = mono
+    ? mono.kind === "stations"
+      ? "les quatre gares"
+      : mono.kind === "side"
+        ? `tout ${sideName(mono.side ?? 0)}`
+        : "trois quartiers complets"
+    : "";
+  const title = mono
+    ? won
+      ? "Monopole ! Tu as gagné."
+      : teamWin && monoTeam !== null
+        ? `Monopole pour les ${teamName(monoTeam)}.`
+        : `Monopole pour ${seatOf(mono.player)?.name ?? "?"}.`
+    : teamWin
+      ? winTeam === null
+        ? "Égalité entre les équipes de tête."
+        : winTeam === myTeam
+          ? "Victoire de ton équipe !"
+          : `Victoire des ${teamName(winTeam)}.`
+      : won
+        ? "Fortune faite !"
+        : `${names} ${winners.length > 1 ? "remportent" : "remporte"} la partie.`;
+  const why = mono
+    ? `${teamWin && monoTeam !== null ? `L'équipe réunit` : `${mono.player === me ? "Tu réunis" : `${seatOf(mono.player)?.name ?? "?"} réunit`}`} ${what} : la partie s'arrête net.`
+    : teamWin && outcome?.reason === "bankrupt"
+      ? "Il ne reste qu'une équipe en jeu."
+      : teamWin && (outcome?.reason === "time" || outcome?.reason === "rounds")
+        ? "On additionne les fortunes de chaque équipe."
+        : null;
+  const teamOrder = teamWin
+    ? Object.entries(outcome!.teamWorth!)
+        .map(([k, worth]) => ({ team: Number(k), worth, rank: ranks[ranking.find((id) => teamIn(g, id) === Number(k)) ?? ""] ?? 99 }))
+        .sort((a, b) => a.rank - b.rank || b.worth - a.worth)
+    : [];
   const voted = room.rematch.includes(room.you.userId);
 
   return (
@@ -78,6 +120,29 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
           </div>
         </div>
 
+        {why && <p className="cap-end-why">{why}</p>}
+        {mono && (
+          <ul className="cap-end-squares" aria-label="Les titres de la victoire">
+            {mono.squares.map((i) => (
+              <li key={i} style={{ ["--group" as string]: groupOf(i)?.color ?? "#7d8a96" }}>
+                {SQUARES[i]!.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {teamOrder.length > 0 && (
+          <ol className="cap-end-teams">
+            {teamOrder.map((x) => (
+              <li key={x.team} className={x.rank === 1 ? "is-winner" : ""} style={{ ["--team" as string]: teamColor(x.team) }}>
+                <TeamMark team={x.team} size={18} />
+                <strong>{teamName(x.team)}</strong>
+                {x.team === myTeam && <em>ton équipe</em>}
+                <span className="num">{money(x.worth)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+
         <ol className="score-lines">
           {ranking.map((id) => {
             const seat = seatOf(id);
@@ -87,6 +152,7 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
               <li key={id} className={`${ranks[id] === 1 ? "is-winner" : ""} ${id === me ? "is-me" : ""} ${p.bankrupt ? "is-out" : ""}`}>
                 <span className="score-rank num">{ranks[id]}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
+                {teamIn(g, id) !== null && <TeamMark team={teamIn(g, id)!} size={15} />}
                 <span className="score-name">
                   {seat?.name}
                   {seat?.admin && <AdminBadge />}
