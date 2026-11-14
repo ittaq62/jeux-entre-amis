@@ -2829,8 +2829,9 @@
   display: none;
 }
 
-.cap-bright.is-phone.has-strip .cap-board-zone {
-  top: 124px;
+/* Le plateau commence sous les joueurs, quelle que soit leur hauteur (trois rangées à six, la ligne des équipes) */
+.cap-bright.is-phone .cap-board-zone {
+  top: var(--cap-top, 96px);
 }
 
 /* Un coéquipier en dette : l'aide d'un bouton */
@@ -3012,20 +3013,15 @@
   display: none;
 }
 
+/* Trois équipes : l'une sous l'autre, les noms gardent toute la largeur */
 .cap-teams-grid.is-3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
 }
 
 .cap-team-move {
   min-width: 30px;
   padding: 0 6px;
   line-height: 0;
-}
-
-@media (max-width: 720px) {
-  .cap-teams-grid.is-3 {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Avant une partie de tournée : avec qui l'on joue, et les règles du jour */
@@ -3042,4 +3038,12 @@
 .table-pick-seats .team-mark {
   margin-left: -10px;
   align-self: flex-end;
+}
+
+/* Un écran moins large : les noms des équipes s'effacent, il reste la forme, le nom de l'équipe et sa fortune */
+@media (max-width: 1280px) {
+  .cap-teambar-names,
+  .cap-teambar-vs {
+    display: none;
+  }
 }

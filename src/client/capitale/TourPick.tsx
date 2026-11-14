@@ -12,6 +12,9 @@ import { pawnColor, seatTeams, TeamMark, teamRulesText } from "./teamsUi.tsx";
 // à tous les jeux (voir TablePick). Chaque joueur y garde la couleur de son pion ; en équipes, une teinte de son équipe,
 // avec la forme de l'équipe, et un rappel de qui joue avec qui et des règles d'équipe.
 
+/** La première lettre en capitale : les règles d'équipe commencent une phrase */
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 function SeatToken({ color, token }: { color: string; token: string }) {
   const thumbs = useMemo(() => tokenThumbnails(color, 96), [color]);
   const src = thumbs[token as keyof typeof thumbs];
@@ -74,7 +77,7 @@ export function TourPick({
                   )
                 </span>
               ))}
-              . {teamRulesText({ settings }).join(" ; ")}.
+              . {capitalize(teamRulesText({ settings }).join(" ; "))}.
             </p>
           )}
           {settings.monopoly && (

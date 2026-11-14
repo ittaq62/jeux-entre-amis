@@ -100,6 +100,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [journalOpen, setJournalOpen] = useState(false);
   const [citiesOpen, setCitiesOpen] = useState(false);
   const [monoOpen, setMonoOpen] = useState(false);
+  /** Sur téléphone : la hauteur des joueurs en haut, sous laquelle commence le plateau */
+  const [topH, setTopH] = useState<number | null>(null);
   /** La fiche d'une case ouverte au milieu de l'écran */
   const [city, setCity] = useState<number | null>(null);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
@@ -392,7 +394,10 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const facts = tip ? squareFacts(g, tip.square, (id) => name(id)) : null;
 
   return (
-    <div className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""} ${teams || g.settings.monopoly ? "has-strip" : ""}`}>
+    <div
+      className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}`}
+      style={phone && topH ? { ["--cap-top" as string]: `${topH + 4}px` } : undefined}
+    >
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <Icon name="menu" />
@@ -509,6 +514,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           onPick={(id) => setLook((l) => ({ id, n: (l?.n ?? 0) + 1 }))}
           mono={mono}
           onMonopoly={() => setMonoOpen(true)}
+          onHeight={setTopH}
           footer={
             phone && (teams || g.settings.monopoly) ? (
               <div className="cap-strip">

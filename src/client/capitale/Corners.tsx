@@ -50,6 +50,7 @@ export function Corners({
   mono,
   onMonopoly,
   footer,
+  onHeight,
 }: {
   g: CapitaleView;
   room: CapitaleRoomView;
@@ -68,9 +69,19 @@ export function Corners({
   onMonopoly: () => void;
   /** Sous les joueurs, sur téléphone : les équipes */
   footer?: ReactNode;
+  /** Sur téléphone, la hauteur des joueurs en haut (le plateau commence dessous) */
+  onHeight?: (h: number) => void;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!phone || !el || !onHeight) return;
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [phone, onHeight]);
   return (
-    <div className={`cap-corners ${phone ? "is-phone" : ""}`}>
+    <div className={`cap-corners ${phone ? "is-phone" : ""}`} ref={box}>
       {g.players.map((p, k) => {
         const s = seat(p.id);
         const acting = g.actor === p.id;
