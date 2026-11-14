@@ -133,16 +133,10 @@ export function Garage({ room, send }: Props) {
   const seatId = room.you.seatId;
   const seat = room.seats.find((s) => s.id === seatId);
   const choice = seatId ? room.garage?.choices[seatId] : undefined;
-  const { balance, has } = useMyItems();
-  const [buying, setBuying] = useState<ShopItem | null>(null);
   const set = usePrefs((s) => s.set);
   const savedVehicle = usePrefs((s) => s.bolidesVehicle);
   const savedSkin = usePrefs((s) => s.bolidesSkin);
   const [pending, setPending] = useState<{ vehicle?: VehicleId; skin?: SkinId }>({});
-  /** Ce qu'on regarde sans l'avoir (un véhicule ou un skin verrouillé) */
-  const [peek, setPeek] = useState<{ vehicle?: VehicleId; skin?: SkinId }>({});
-  const vehicle = peek.vehicle ?? pending.vehicle ?? choice?.vehicle ?? "kart";
-  const skin = peek.skin ?? pending.skin ?? choice?.skin ?? "usine";
   const applied = useRef(false);
 
   // À l'arrivée à la table, on reprend le dernier choix de cet appareil (le serveur vérifie qu'on le possède)
@@ -166,17 +160,62 @@ export function Garage({ room, send }: Props) {
 
   if (!seatId) return null;
 
+  return (
+    <GarageSheet
+      vehicle={pending.vehicle ?? choice?.vehicle ?? "kart"}
+      skin={pending.skin ?? choice?.skin ?? "usine"}
+      color={color}
+      avatar={avatar}
+      name={seat?.name ?? ""}
+      onVehicle={(id) => {
+        setPending((p) => ({ ...p, vehicle: id }));
+        set({ bolidesVehicle: id });
+        send({ t: "garage", vehicle: id });
+      }}
+      onSkin={(id) => {
+        setPending((p) => ({ ...p, skin: id }));
+        set({ bolidesSkin: id });
+        send({ t: "garage", skin: id });
+      }}
+    />
+  );
+}
+
+/**
+ * Le garage lui-même : le véhicule en 3D, ses qualités, et le choix du véhicule et du skin parmi ceux qu'on a ; un
+ * véhicule ou un skin verrouillé se regarde, puis s'achète sur place. Au salon de Bolides, et dans l'attente d'une tournée.
+ */
+export function GarageSheet({
+  vehicle: chosenVehicle,
+  skin: chosenSkin,
+  color,
+  avatar,
+  name,
+  onVehicle,
+  onSkin,
+}: {
+  vehicle: VehicleId;
+  skin: SkinId;
+  color: string;
+  avatar: AvatarConfig;
+  name: string;
+  onVehicle: (id: VehicleId) => void;
+  onSkin: (id: SkinId) => void;
+}) {
+  const { balance, has } = useMyItems();
+  const [buying, setBuying] = useState<ShopItem | null>(null);
+  /** Ce qu'on regarde sans l'avoir (un véhicule ou un skin verrouillé) */
+  const [peek, setPeek] = useState<{ vehicle?: VehicleId; skin?: SkinId }>({});
+  const vehicle = peek.vehicle ?? chosenVehicle;
+  const skin = peek.skin ?? chosenSkin;
+
   const applyVehicle = (id: VehicleId) => {
     setPeek((p) => ({ ...p, vehicle: undefined }));
-    setPending((p) => ({ ...p, vehicle: id }));
-    set({ bolidesVehicle: id });
-    send({ t: "garage", vehicle: id });
+    onVehicle(id);
   };
   const applySkin = (id: SkinId) => {
     setPeek((p) => ({ ...p, skin: undefined }));
-    setPending((p) => ({ ...p, skin: id }));
-    set({ bolidesSkin: id });
-    send({ t: "garage", skin: id });
+    onSkin(id);
   };
   const pickVehicle = (id: VehicleId) => (has(vehicleItem(id)) ? applyVehicle(id) : setPeek((p) => ({ ...p, vehicle: id })));
   const pickSkin = (id: SkinId) => (has(kartItem(id)) ? applySkin(id) : setPeek((p) => ({ ...p, skin: id })));
@@ -187,7 +226,7 @@ export function Garage({ room, send }: Props) {
     <section className="rules-sheet panel garage">
       <h2 className="garage-title">Ton garage</h2>
       <div className="garage-top">
-        <VehiclePreview vehicle={vehicle} skin={skin} color={color} avatar={avatar} name={seat?.name ?? ""} />
+        <VehiclePreview vehicle={vehicle} skin={skin} color={color} avatar={avatar} name={name} />
         <div className="garage-info">
           <strong className="garage-name">{info.name}</strong>
           <p className="hint">{info.blurb}</p>

@@ -107,9 +107,9 @@ function ClubPicker({
 
 /**
  * Le vestiaire de chacun : son ballon (qu'il est seul à voir) et la célébration de ses buts (que toute la table voit).
- * Ce qui est verrouillé s'achète sur place, avec ses points.
+ * Ce qui est verrouillé s'achète sur place, avec ses points. Au salon de Crampons, et dans l'attente d'une tournée.
  */
-function Locker({ kit, onBuy }: { kit: KitColors; onBuy: (item: ShopItem) => void }) {
+export function Locker({ kit, onBuy }: { kit: KitColors; onBuy: (item: ShopItem) => void }) {
   const { balance, has } = useMyItems();
   const set = usePrefs((p) => p.set);
   const savedBall = usePrefs((p) => p.cramponsBall);
