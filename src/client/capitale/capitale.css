@@ -3400,3 +3400,26 @@
     font-size: 11px;
   }
 }
+
+/* Un écran en 16:9 : le plateau, moins large, laisse de la place au-dessus de lui plutôt qu'à côté ; les boutons de la
+   vue y passent en ligne, le menu des villes s'ouvre dessous */
+@media (max-aspect-ratio: 19/10) {
+  .cap-bright.is-land .cap-tools {
+    bottom: auto;
+    flex-direction: row-reverse;
+  }
+
+  .cap-bright.is-land .cap-tools .cap-filter-menu {
+    top: calc(100% + 8px);
+    right: 0;
+    max-height: calc(100dvh - 120px);
+  }
+}
+
+/* Le plus petit des téléphones couchés : en prison, les choix prennent la place de l'éventail de billets ; le total
+   reste */
+@media (max-height: 339px) {
+  .cap-bright.is-land .cap-bar:has(.cap-jail) .cap-hand-fan {
+    display: none;
+  }
+}
