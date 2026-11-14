@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
+import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { PAWN_COLORS } from "./boardUi.ts";
 import { tokenThumbnails } from "./scene/tokens.ts";
@@ -51,6 +52,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
   const update = (patch: Partial<CapitaleSettings>) => send({ t: "settings", settings: patch });
   const seatIndex = room.seats.findIndex((x) => x.id === room.you.seatId);
   const mine = seatIndex >= 0 ? room.seats[seatIndex] : undefined;
+  const setPrefs = usePrefs((p) => p.set);
 
   return (
     <TableLobby
@@ -68,7 +70,10 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             <TokenPicker
               color={PAWN_COLORS[seatIndex % PAWN_COLORS.length]!}
               current={mine.token ?? "pion"}
-              onPick={(token) => send({ t: "token", token })}
+              onPick={(token) => {
+                setPrefs({ capitaleToken: token });
+                send({ t: "token", token });
+              }}
             />
           )}
 

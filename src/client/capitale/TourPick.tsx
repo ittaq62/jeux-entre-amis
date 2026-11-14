@@ -3,6 +3,7 @@ import type { CapitaleClientMessage, CapitaleRoomView } from "../../shared/proto
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useCountdown } from "../lib/countdown.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { PAWN_COLORS } from "./boardUi.ts";
 import { TokenPicker } from "./CapitaleLobby.tsx";
 import { tokenThumbnails } from "./scene/tokens.ts";
@@ -30,6 +31,7 @@ export function TourPick({
   const mine = index >= 0 ? room.seats[index] : undefined;
   const ready = room.ready ?? [];
   const meReady = ready.includes(room.you.userId);
+  const setPrefs = usePrefs((p) => p.set);
   return (
     <div className="felt center-screen tour-waiting">
       <div className="tour-waiting-card cap-pick">
@@ -39,7 +41,10 @@ export function TourPick({
           <TokenPicker
             color={PAWN_COLORS[index % PAWN_COLORS.length]!}
             current={mine.token ?? "pion"}
-            onPick={(token) => send({ t: "token", token })}
+            onPick={(token) => {
+              setPrefs({ capitaleToken: token });
+              send({ t: "token", token });
+            }}
           />
         )}
         <ul className="cap-pick-seats">

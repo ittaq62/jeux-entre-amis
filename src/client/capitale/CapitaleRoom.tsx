@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { tokenItem } from "../../shared/shop.ts";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { CapitaleLobby } from "./CapitaleLobby.tsx";
 import { CapitaleTable } from "./CapitaleTable.tsx";
@@ -25,6 +28,17 @@ export function CapitaleRoom({ code }: { code: string }) {
     if (view && lastStatus.current !== "playing" && view.status === "playing") setLobbyOpen(false);
     lastStatus.current = view?.status;
   }, [view]);
+
+  // Le pion choisi en dernier sur cet appareil : repris à chaque table où l'on s'assoit (s'il est à soi), tant que la
+  // partie n'a pas commencé (le serveur ne change plus les pions en cours de partie)
+  const capitaleToken = usePrefs((p) => p.capitaleToken);
+  const { has } = useMyItems();
+  const mySeat = view?.seats.find((s) => s.id === view.you.seatId);
+  const mySeatToken = mySeat && view?.status !== "playing" ? (mySeat.token ?? "pion") : null;
+  const owned = capitaleToken !== null && has(tokenItem(capitaleToken));
+  useEffect(() => {
+    if (mySeatToken !== null && capitaleToken && owned && mySeatToken !== capitaleToken) send({ t: "token", token: capitaleToken });
+  }, [mySeatToken, capitaleToken, owned, send]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion au salon…" : "Arrivée à la table…"} />;

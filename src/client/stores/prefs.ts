@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
+import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
+import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
@@ -33,6 +35,10 @@ interface Prefs {
   /** Crampons : le ballon et la célébration de ses buts, choisis sur cet appareil et repris à chaque match */
   cramponsBall: BallId | null;
   cramponsFete: FeteId | null;
+  /** Bataille navale : le thème de sa flotte, choisi en dernier sur cet appareil et repris à chaque table */
+  navalSkin: NavalSkinId | null;
+  /** Capitale : son pion, choisi en dernier sur cet appareil et repris à chaque table */
+  capitaleToken: TokenId | null;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -66,6 +72,8 @@ export const usePrefs = create<Prefs>((set, get) => ({
   unoBack: null,
   cramponsBall: null,
   cramponsFete: null,
+  navalSkin: null,
+  capitaleToken: null,
   ...load(),
   set: (patch) => {
     set(patch);

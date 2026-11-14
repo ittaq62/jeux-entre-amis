@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { useBoxSize } from "../lib/viewport.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { Board, type BoardPointer } from "./Board.tsx";
 import { SIDE_MIN } from "./NavalTable.tsx";
 import { SkinPicker } from "./SkinPicker.tsx";
@@ -44,6 +45,7 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
   const touching = g.settings.touching;
   const [fleet, setFleet] = useState<Placement[]>(() => (board.ships ?? []).map(({ kind, x, y, dir }) => ({ kind, x, y, dir })));
   const [selected, setSelected] = useState<number | null>(null);
+  const setPrefs = usePrefs((p) => p.set);
   const [ghost, setGhostState] = useState<Ghost | null>(null);
   // Copie immédiate du fantôme : le relâchement arrive souvent dans la même image que le dernier
   // mouvement, avant que React ait redessiné, et doit quand même voir la dernière position.
@@ -175,6 +177,7 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
     <SkinPicker
       current={room.seats.find((s) => s.id === me)?.skin ?? "marine"}
       onPick={(skin) => {
+        setPrefs({ navalSkin: skin });
         send({ t: "skin", skin });
         setSkinsOpen(false);
       }}

@@ -10,6 +10,7 @@ import {
 } from "../../shared/games/naval/engine.ts";
 import { NAVAL_MAX_PLAYERS, type NavalClientMessage, type NavalRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
+import { usePrefs } from "../stores/prefs.ts";
 import { SkinPicker } from "./SkinPicker.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
@@ -45,6 +46,7 @@ interface Props {
 
 /** Le salon d'une table de bataille navale : le salon commun et les réglages de la bataille. */
 export function NavalLobby({ room, send, ...rest }: Props) {
+  const setPrefs = usePrefs((p) => p.set);
   const s = room.settings.naval;
   const isHost = room.you.isHost;
   const update = (patch: Partial<NavalSettings>) => send({ t: "settings", settings: patch });
@@ -91,7 +93,10 @@ export function NavalLobby({ room, send, ...rest }: Props) {
           {room.you.seatId && (
             <SkinPicker
               current={room.seats.find((s) => s.id === room.you.seatId)?.skin ?? "marine"}
-              onPick={(skin) => send({ t: "skin", skin })}
+              onPick={(skin) => {
+                setPrefs({ navalSkin: skin });
+                send({ t: "skin", skin });
+              }}
             />
           )}
 

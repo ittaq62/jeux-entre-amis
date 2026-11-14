@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { navalItem } from "../../shared/shop.ts";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { NavalLobby } from "./NavalLobby.tsx";
 import { NavalTable } from "./NavalTable.tsx";
@@ -24,6 +27,15 @@ export function NavalRoom({ code }: { code: string }) {
     if (view && lastStatus.current !== "playing" && view.status === "playing") setLobbyOpen(false);
     lastStatus.current = view?.status;
   }, [view]);
+
+  // Le thème de flotte choisi en dernier sur cet appareil : repris à chaque table où l'on s'assoit (s'il est à soi)
+  const navalSkin = usePrefs((p) => p.navalSkin);
+  const { has } = useMyItems();
+  const mySeatSkin = view?.seats.find((s) => s.id === view.you.seatId)?.skin ?? (view?.you.seatId ? "marine" : null);
+  const owned = navalSkin !== null && has(navalItem(navalSkin));
+  useEffect(() => {
+    if (mySeatSkin !== null && navalSkin && owned && mySeatSkin !== navalSkin) send({ t: "skin", skin: navalSkin });
+  }, [mySeatSkin, navalSkin, owned, send]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion au salon…" : "Arrivée à la table…"} />;
