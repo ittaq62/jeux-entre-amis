@@ -757,7 +757,9 @@ export type TourServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la tournée depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 /** Ce qu'une table de jeu de la tournée renvoie à la fin de sa partie */
 export interface TableReport {

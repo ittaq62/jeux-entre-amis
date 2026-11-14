@@ -2,12 +2,18 @@ import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import type { MecheEvent, Refusal } from "../../shared/games/meche/engine.ts";
-import type { ChatMessage, MecheClientMessage, MecheRoomView, MecheServerMessage } from "../../shared/protocol.ts";
+import {
+  SOCKET_REPLACED,
+  type ChatMessage,
+  type MecheClientMessage,
+  type MecheRoomView,
+  type MecheServerMessage,
+} from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { announceSeatChanges } from "../game/AwayNote.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
+import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
@@ -65,7 +71,7 @@ export function useMecheRoom(code: string) {
       .then(() => {
         if (cancelled) return;
         socket.current = new LiveSocket<MecheServerMessage, MecheClientMessage>(`/rooms/${code}/ws`, {
-          fatalCodes: [4003, 4004],
+          fatalCodes: [4003, 4004, SOCKET_REPLACED],
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {
@@ -123,6 +129,9 @@ export function useMecheRoom(code: string) {
                 break;
               case "closed":
                 setFatal(msg.reason);
+                break;
+              case "replaced":
+                setFatal(REPLACED_MESSAGE);
                 break;
             }
           },

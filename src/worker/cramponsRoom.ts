@@ -28,6 +28,7 @@ import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { ownedItems } from "./shop.ts";
 import { recordGame, type EloResults } from "./users.ts";
+import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
 
 const AWAY_AFTER_MS = 8000;
@@ -101,6 +102,8 @@ interface CramponsData {
 interface Attachment {
   userId: string;
   user: PublicUser;
+  /** Un autre appareil du même compte a pris sa place */
+  replaced?: boolean;
 }
 
 /** Une table de Crampons : le salon commun, puis un match que le serveur arbitre de bout en bout. */
@@ -249,6 +252,8 @@ export class CramponsRoom extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [user.id]);
     server.serializeAttachment({ userId: user.id, user } satisfies Attachment);
+    // Un seul appareil par compte : s'il était déjà là ailleurs, l'ancien appareil est prévenu et laisse la place
+    replaceOlder(this.ctx.getWebSockets(user.id), server);
     await this.onJoin(user, server);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -317,7 +322,7 @@ export class CramponsRoom extends DurableObject<Env> {
   private connectedUsers(except?: WebSocket): Map<string, PublicUser> {
     const out = new Map<string, PublicUser>();
     for (const ws of this.ctx.getWebSockets()) {
-      if (ws === except || ws.readyState !== WebSocket.OPEN) continue;
+      if (ws === except || !isLive(ws)) continue;
       const att = ws.deserializeAttachment() as Attachment | null;
       if (att) out.set(att.userId, att.user);
     }
@@ -326,7 +331,7 @@ export class CramponsRoom extends DurableObject<Env> {
 
   private isConnected(userId: string | null): boolean {
     if (!userId) return false;
-    return this.ctx.getWebSockets(userId).some((ws) => ws.readyState === WebSocket.OPEN);
+    return this.ctx.getWebSockets(userId).some((ws) => isLive(ws));
   }
 
   override async webSocketClose(ws: WebSocket) {
@@ -340,8 +345,9 @@ export class CramponsRoom extends DurableObject<Env> {
   private async onSocketGone(ws: WebSocket) {
     const d = this.data;
     const att = ws.deserializeAttachment() as Attachment | null;
-    if (!d || !att) return;
-    const stillHere = this.ctx.getWebSockets(att.userId).some((o) => o !== ws && o.readyState === WebSocket.OPEN);
+    // Remplacée par un autre appareil du même compte : il est toujours là, rien ne change pour lui
+    if (!d || !att || att.replaced) return;
+    const stillHere = this.ctx.getWebSockets(att.userId).some((o) => o !== ws && isLive(o));
     if (stillHere) return;
     const now = Date.now();
     const seat = d.seats.find((s) => s.userId === att.userId);
@@ -385,6 +391,7 @@ export class CramponsRoom extends DurableObject<Env> {
       return;
     }
     const att = ws.deserializeAttachment() as Attachment;
+    if (att.replaced) return;
     const userId = att.userId;
     const isHost = userId === d.hostId;
     const isAdmin = Boolean(att.user.admin);
@@ -961,7 +968,7 @@ export class CramponsRoom extends DurableObject<Env> {
   private broadcast(events: MatchEvent[], except?: WebSocket) {
     const connected = this.connectedUsers(except);
     for (const ws of this.ctx.getWebSockets()) {
-      if (ws === except || ws.readyState !== WebSocket.OPEN) continue;
+      if (ws === except || !isLive(ws)) continue;
       const att = ws.deserializeAttachment() as Attachment | null;
       if (!att) continue;
       this.send(ws, { t: "room", room: this.viewFor(att.userId, connected), events });

@@ -1,12 +1,18 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
-import type { CapitaleClientMessage, CapitaleRoomView, CapitaleServerMessage, ChatMessage } from "../../shared/protocol.ts";
+import {
+  SOCKET_REPLACED,
+  type CapitaleClientMessage,
+  type CapitaleRoomView,
+  type CapitaleServerMessage,
+  type ChatMessage,
+} from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { announceSeatChanges } from "../game/AwayNote.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
+import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play, vibrate } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
@@ -65,7 +71,7 @@ export function useCapitaleRoom(code: string) {
       .then(() => {
         if (cancelled) return;
         socket.current = new LiveSocket<CapitaleServerMessage, CapitaleClientMessage>(`/rooms/${code}/ws`, {
-          fatalCodes: [4003, 4004],
+          fatalCodes: [4003, 4004, SOCKET_REPLACED],
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {
@@ -116,6 +122,9 @@ export function useCapitaleRoom(code: string) {
                 break;
               case "closed":
                 setFatal(msg.reason);
+                break;
+              case "replaced":
+                setFatal(REPLACED_MESSAGE);
                 break;
             }
           },

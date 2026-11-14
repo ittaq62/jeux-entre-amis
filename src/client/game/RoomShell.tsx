@@ -1,14 +1,22 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
+import { REPLACED_MESSAGE } from "../lib/socket.ts";
 import { ChatPanel } from "./ChatPanel.tsx";
 
 export function RoomError({ message }: { message: string }) {
+  // Le même compte joue maintenant sur un autre appareil : on peut reprendre la place ici (l'autre sera prévenu à son tour)
+  const elsewhere = message === REPLACED_MESSAGE;
   return (
     <div className="felt center-screen">
       <div className="panel panel-pad stack center-text" style={{ maxWidth: 420 }}>
-        <h2>Oups</h2>
+        <h2>{elsewhere ? "Tu joues ailleurs" : "Oups"}</h2>
         <p className="hint">{message}</p>
-        <Link href="/" className="btn btn-primary">
+        {elsewhere && (
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            Jouer ici
+          </button>
+        )}
+        <Link href="/" className={elsewhere ? "btn btn-ghost" : "btn btn-primary"}>
           Retour à l'accueil
         </Link>
       </div>

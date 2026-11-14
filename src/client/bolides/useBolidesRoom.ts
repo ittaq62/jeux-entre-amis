@@ -2,12 +2,18 @@ import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { ACHIEVEMENT_BY_ID } from "../../shared/achievements.ts";
 import type { BolidesEvent } from "../../shared/games/bolides/race.ts";
 import type { KartNet } from "../../shared/games/bolides/view.ts";
-import type { BolidesClientMessage, BolidesRoomView, BolidesServerMessage, ChatMessage } from "../../shared/protocol.ts";
+import {
+  SOCKET_REPLACED,
+  type BolidesClientMessage,
+  type BolidesRoomView,
+  type BolidesServerMessage,
+  type ChatMessage,
+} from "../../shared/protocol.ts";
 import { Chip } from "../components/Chip.tsx";
 import { announceSeatChanges } from "../game/AwayNote.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { LiveSocket, type SocketStatus } from "../lib/socket.ts";
+import { LiveSocket, REPLACED_MESSAGE, type SocketStatus } from "../lib/socket.ts";
 import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
@@ -53,7 +59,7 @@ export function useBolidesRoom(code: string) {
       .then(() => {
         if (cancelled) return;
         socket.current = new LiveSocket<BolidesServerMessage, BolidesClientMessage>(`/rooms/${code}/ws`, {
-          fatalCodes: [4003, 4004],
+          fatalCodes: [4003, 4004, SOCKET_REPLACED],
           onStatus: setStatus,
           onMessage: (msg) => {
             switch (msg.t) {
@@ -110,6 +116,9 @@ export function useBolidesRoom(code: string) {
                 break;
               case "closed":
                 setFatal(msg.reason);
+                break;
+              case "replaced":
+                setFatal(REPLACED_MESSAGE);
                 break;
             }
           },

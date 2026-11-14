@@ -225,6 +225,12 @@ export interface ChatMessage {
 
 export const CHAT_MAX = 240;
 
+/**
+ * Un seul appareil par compte à une table : quand le compte s'y connecte ailleurs, l'ancienne connexion reçoit
+ * « replaced » puis se ferme avec ce code, et le navigateur ne cherche pas à revenir tout seul.
+ */
+export const SOCKET_REPLACED = 4005;
+
 export const REACTIONS = ["😂", "😡", "😱", "🔥", "👏", "😭", "🤡", "😎"] as const;
 export const TAUNTS = [
   "Tu vas le regretter",
@@ -399,7 +405,9 @@ export type BricksServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export interface CapitaleRoomSettings {
   visibility: Visibility;
@@ -462,7 +470,9 @@ export type CapitaleServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export interface MecheRoomSettings {
   visibility: Visibility;
@@ -519,7 +529,9 @@ export type MecheServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export interface BolidesRoomSettings {
   visibility: Visibility;
@@ -587,7 +599,9 @@ export type BolidesServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export interface CramponsRoomSettings {
   visibility: Visibility;
@@ -645,7 +659,9 @@ export type CramponsServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export type NavalServerMessage =
   | { t: "room"; room: NavalRoomView; events: NavalEvent[] }
@@ -654,7 +670,9 @@ export type NavalServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export type RoomServerMessage =
   | { t: "room"; room: RoomView; events: UnoEvent[] }
@@ -663,7 +681,9 @@ export type RoomServerMessage =
   | { t: "achievements"; unlocks: AchievementUnlock[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "closed"; reason: string };
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
 
 export interface RoomSummary {
   code: string;

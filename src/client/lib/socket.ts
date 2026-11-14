@@ -1,5 +1,9 @@
 export type SocketStatus = "connecting" | "open" | "reconnecting" | "closed";
 
+/** Ce qu'on dit à l'appareil qui a laissé sa place : le même compte a rejoint la partie ailleurs */
+export const REPLACED_MESSAGE =
+  "Tu as rejoint cette partie depuis un autre appareil (ou un autre onglet) : c'est là-bas que tu joues maintenant.";
+
 export interface SocketOptions<In> {
   onMessage: (msg: In) => void;
   onStatus?: (status: SocketStatus) => void;
@@ -55,7 +59,8 @@ export class LiveSocket<In, Out> {
       }, 25_000);
     };
     ws.onmessage = (e) => {
-      if (e.data === "pong") return;
+      // Une connexion qu'on a déjà quittée ne parle plus
+      if (this.ws !== ws || e.data === "pong") return;
       try {
         this.opts.onMessage(JSON.parse(e.data as string) as In);
       } catch (err) {
@@ -66,6 +71,9 @@ export class LiveSocket<In, Out> {
       if (this.pingTimer) clearInterval(this.pingTimer);
       if (this.ws !== ws) return;
       if (this.stopped || this.opts.fatalCodes?.includes(e.code)) {
+        // Pour de bon : pas même quand l'onglet redevient visible (sinon deux appareils du même compte se
+        // reprendraient la place chacun leur tour)
+        this.stopped = true;
         this.setStatus("closed");
         return;
       }
