@@ -12,7 +12,7 @@ import { play, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { awayTurnNote } from "./AwayNote.tsx";
 import { Center } from "./Center.tsx";
-import { placeCenter, rowSeats } from "./centerLayout.ts";
+import { arcSeats, placeCenter, rowSeats } from "./centerLayout.ts";
 import { EmotePicker } from "./ChatPanel.tsx";
 import { useFx } from "./fx.ts";
 import { FxLayer } from "./FxLayer.tsx";
@@ -38,6 +38,10 @@ interface TableProps {
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+/** Écran bas : la place de l'étiquette de couleur, à droite de la défausse */
+const SHORT_LABEL_W = 62;
+/** La place d'un siège d'adversaire (portrait, nom, éventail et nombre de cartes) */
+const SEAT_BOX = { compact: { w: 76, h: 108 }, wide: { w: 100, h: 126 } } as const;
 
 export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: TableProps) {
   const inTour = useTourBridge() !== null;
@@ -50,14 +54,17 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   const { w, h } = useViewport();
   const compact = w < 720 || h < 600;
   const portrait = h > w * 1.15;
-  // En équipe, les mains des coéquipiers : dans la barre du haut si elles tiennent à côté du titre et des boutons
+  // En équipe, les mains des coéquipiers : sur leur ligne sous la barre du haut, ou dans la barre sur un écran bas
   const short = h < 500 && w > h;
-  const partnerCard = compact ? (short ? 28 : 30) : clamp(h / 19, 34, 44);
+  const partnerCard = compact ? (short ? 28 : 30) : clamp(h / 17, 36, 50);
   const headerRef = useRef<HTMLElement>(null);
   const [headerRoom, setHeaderRoom] = useState({ inline: 0, row: 0 });
   // Téléphone en paysage : la hauteur manque, les cartes se règlent sur elle pour laisser de la place à la table
   const handW = compact ? clamp(portrait ? w / 4.5 : w / 5.6, 58, short ? Math.max(58, h / 5.6) : 90) : clamp(h / 8.4, 78, 112);
-  const pileW = compact ? clamp(portrait ? w / 4.6 : w / 5.2, 62, short ? Math.max(62, h / 6.2) : 88) : clamp(h / 7.8, 84, 116);
+  // Téléphone tenu droit mais bas : les piles se règlent aussi sur la hauteur, pour laisser passer les sièges de côté
+  const pileW = compact
+    ? clamp(portrait ? Math.min(w / 4.6, h / 9.6) : w / 5.2, 62, short ? Math.max(62, h / 6.2) : 88)
+    : clamp(h / 7.8, 84, 116);
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const [colorFor, setColorFor] = useState<Card | null>(null);
@@ -78,19 +85,30 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     return () => ro.disconnect();
   }, []);
 
-  // La place libre dans la barre du haut, sans compter les mains des coéquipiers elles-mêmes
+  // La place pour les mains des coéquipiers : une ligne entière, et au milieu de la barre du haut, autant de chaque côté
+  // de l'axe de la table entre le titre (à gauche) et les boutons (à droite), avec une marge de chaque côté
   const hasPartners = g.partners.length > 0;
   useLayoutEffect(() => {
     const el = headerRef.current;
     if (!el || !hasPartners) return;
     const measure = () => {
       const style = getComputedStyle(el);
-      const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      const gap = parseFloat(style.columnGap) || 0;
-      const fixed = [...el.children].filter((c) => !c.matches(".partner-bar, .table-menu, .emote-catcher")) as HTMLElement[];
-      const used = fixed.reduce((sum, c) => sum + c.scrollWidth, 0) + gap * fixed.length;
-      const row = el.clientWidth - pad;
-      setHeaderRoom((prev) => (prev.inline === row - used && prev.row === row ? prev : { inline: row - used, row }));
+      const box = el.getBoundingClientRect();
+      const left = box.left + parseFloat(style.paddingLeft);
+      const right = box.right - parseFloat(style.paddingRight);
+      const mid = box.left + box.width / 2;
+      let leftEnd = left;
+      let rightStart = right;
+      for (const c of el.children) {
+        if (c.matches(".partner-bar, .table-menu, .emote-catcher")) continue;
+        const r = c.getBoundingClientRect();
+        if (r.right <= mid) leftEnd = Math.max(leftEnd, r.right);
+        else if (r.left >= mid) rightStart = Math.min(rightStart, r.left);
+        else leftEnd = rightStart = mid;
+      }
+      const inline = Math.max(0, 2 * Math.min(mid - leftEnd, rightStart - mid) - 2 * 14);
+      const row = right - left;
+      setHeaderRoom((prev) => (prev.inline === inline && prev.row === row ? prev : { inline, row }));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -121,24 +139,20 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   const positions = useMemo(() => {
     const n = ordered.length;
-    if (short && myIndex >= 0) return rowSeats(n, area.w, area.h / 2, pileW * 2 + clamp(w * 0.05, 18, 40));
-    const padX = compact ? 50 : 82;
-    const padY = compact ? 52 : 70;
+    // Écran bas : l'étiquette de couleur passe à droite de la défausse, les sièges s'en écartent d'autant
+    if (short && myIndex >= 0) return rowSeats(n, area.w, area.h / 2, pileW * 2 + clamp(w * 0.05, 18, 40) + 2 * SHORT_LABEL_W);
+    const padX = compact ? 46 : 82;
+    // Le siège du haut tient tout entier sur le tapis : sous les mains des coéquipiers, il garde ses distances
+    const padY = compact ? (hasPartners ? 62 : 52) : hasPartners ? 76 : 70;
+    if (myIndex >= 0) return arcSeats(n, area, { x: padX, y: padY }, portrait, SEAT_BOX[compact ? "compact" : "wide"]);
+    // Spectateur : tout le monde autour de la table
     const rx = Math.max(40, area.w / 2 - padX);
-    // En portrait, l'arc des sièges descend plus bas : le bas du tapis est libre, les sièges des côtés s'y espacent
-    const cy = myIndex >= 0 && portrait ? area.h * 0.62 : area.h / 2;
-    const ry = Math.max(40, cy - padY);
+    const ry = Math.max(40, area.h / 2 - padY);
     return ordered.map((_, k) => {
-      let theta: number;
-      if (myIndex < 0) theta = -Math.PI / 2 - ((k + 0.5) / n) * Math.PI * 2;
-      else {
-        // En portrait, les adversaires descendent le long des bords pour occuper la hauteur
-        const spread = portrait ? 1.5 : 1.2;
-        theta = (1 + (spread - 1) / 2) * Math.PI - ((k + 1) / (n + 1)) * spread * Math.PI;
-      }
-      return { x: area.w / 2 + rx * Math.cos(theta), y: cy - ry * Math.sin(theta) };
+      const theta = -Math.PI / 2 - ((k + 0.5) / n) * Math.PI * 2;
+      return { x: area.w / 2 + rx * Math.cos(theta), y: area.h / 2 - ry * Math.sin(theta) };
     });
-  }, [ordered, area, compact, myIndex, portrait, short, pileW, w]);
+  }, [ordered, area, compact, myIndex, portrait, short, pileW, w, hasPartners]);
 
   // La pioche et la défausse : au milieu, ou un peu plus bas si un siège les touche
   const centerY = useMemo(
@@ -148,9 +162,9 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
         base: area.h * (portrait && ordered.length > 1 ? 0.57 : 0.5),
         cx: area.w / 2,
         block: { w: pileW * 2 + clamp(w * 0.05, 18, 40), h: pileW * 1.4 },
-        below: 30,
+        below: short ? 0 : 30,
         seats: positions,
-        seat: compact ? { w: 76, h: 108 } : { w: 100, h: 126 },
+        seat: SEAT_BOX[compact ? "compact" : "wide"],
         margin: 4,
       }),
     [area, portrait, ordered.length, pileW, w, positions, compact],
@@ -299,8 +313,12 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   // La pioche et les cartes qui volent : avec le dos de ce joueur
   return (
     <CardBackSkin.Provider value={mySeat?.back ?? "classique"}>
-      <div className="table-root felt" ref={scope}>
-        <header className={`table-top ${hasPartners ? "has-partners" : ""}`} ref={headerRef}>
+      <div className={`table-root felt ${short ? "is-short" : ""}`} ref={scope}>
+        <header
+          className={`table-top ${hasPartners ? "has-partners" : ""}`}
+          ref={headerRef}
+          style={hasPartners ? { ["--partner-h" as string]: `${Math.round(partnerCard * 1.4 + 10)}px` } : undefined}
+        >
           <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
             <Icon name="menu" />
           </button>
@@ -328,6 +346,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               short={short}
               tall={portrait && h >= 760}
               card={partnerCard}
+              minCard={compact ? 24 : 32}
               inlineRoom={headerRoom.inline}
               rowRoom={headerRoom.row}
             />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeCenter, rowSeats, type CenterLayoutInput } from "./centerLayout.ts";
+import { arcSeats, placeCenter, rowSeats, type CenterLayoutInput } from "./centerLayout.ts";
 
 // Relevé sur la vraie table, au PC en 1366 × 625, à 6 joueurs : le siège du haut touchait la pioche
 const pc625: CenterLayoutInput = {
@@ -30,6 +30,13 @@ describe("la pioche et la défausse", () => {
     // Le haut des piles passe sous le bas du siège du haut, et l'étiquette tient encore sur le tapis
     expect(y - pc625.block.h / 2).toBeGreaterThanOrEqual(70 + 126 / 2 + 4);
     expect(y + pc625.block.h / 2 + pc625.below).toBeLessThanOrEqual(pc625.areaH);
+  });
+
+  it("remontent un peu sur un tapis bas, pour que l'étiquette de couleur ne déborde pas", () => {
+    const low = { ...pc625, areaH: 140, base: 70, block: { w: 142, h: 88 }, seats: [] };
+    const y = placeCenter(low);
+    expect(y + low.block.h / 2 + low.below).toBeLessThanOrEqual(low.areaH - 4);
+    expect(y - low.block.h / 2).toBeGreaterThanOrEqual(0);
   });
 
   it("ne sortent jamais du tapis, même quand la place manque", () => {
@@ -69,5 +76,29 @@ describe("les sièges en paysage sur un écran bas", () => {
     const seats = rowSeats(5, 844, 67, 142);
     const xs = seats.map((s) => s.x);
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
+  });
+});
+
+describe("l'arc des sièges", () => {
+  const seat = { w: 76, h: 108 };
+  const touching = (seats: { x: number; y: number }[]) =>
+    seats.some((a, i) => seats.some((b, j) => j > i && Math.abs(a.x - b.x) < seat.w && Math.abs(a.y - b.y) < seat.h));
+
+  it("au téléphone tenu droit, à 6 sous les mains des coéquipiers, s'ouvre jusqu'à ce qu'aucun siège n'en touche un autre", () => {
+    // Relevé sur la vraie table en 360 × 640 : 299 px de tapis sous les mains des coéquipiers
+    const seats = arcSeats(5, { w: 360, h: 299 }, { x: 46, y: 62 }, true, seat);
+    expect(touching(seats)).toBe(false);
+    for (const s of seats) {
+      expect(s.y - seat.h / 2).toBeGreaterThanOrEqual(0);
+      expect(s.y + seat.h / 2).toBeLessThanOrEqual(299);
+    }
+  });
+
+  it("garde l'arc habituel quand il y a la place", () => {
+    const roomy = arcSeats(3, { w: 390, h: 520 }, { x: 46, y: 62 }, true, seat);
+    const usual = arcSeats(3, { w: 390, h: 520 }, { x: 46, y: 62 }, true, { w: 1, h: 1 });
+    expect(roomy).toEqual(usual);
+    // Le suivant à gauche, le dernier à droite
+    expect(roomy[0]!.x).toBeLessThan(roomy[2]!.x);
   });
 });

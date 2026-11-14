@@ -544,6 +544,14 @@ html:has(.bolides-root) body {
   transition: background 0.4s;
 }
 
+/* Écran bas (téléphone en paysage) : pas la place sous la défausse, l'étiquette passe à sa droite */
+.table-root.is-short .pile-color {
+  bottom: auto;
+  top: 50%;
+  left: calc(100% + 8px);
+  translate: 0 -50%;
+}
+
 .pending-badge {
   position: absolute;
   top: -18px;
@@ -1697,12 +1705,12 @@ html:has(.bolides-root) body {
 }
 
 /*
- * Les mains des coéquipiers ont leur place à elles, en haut : dans la barre si elles y tiennent, sinon sur une ligne
- * juste dessous (la barre passe à la ligne et la table descend d'autant : rien ne se chevauche).
+ * Les mains des coéquipiers ont leur place à elles, centrées sur l'axe de la table : sur une ligne sous la barre du
+ * haut, avec de l'air au-dessus et en dessous (la table descend d'autant : rien ne se chevauche). Sur un écran bas
+ * seulement, au milieu de la barre du haut, entre le titre et les boutons.
  */
 .table-top.has-partners {
   flex-wrap: wrap;
-  row-gap: 4px;
 }
 
 .table-top.has-partners .team-note {
@@ -1721,15 +1729,36 @@ html:has(.bolides-root) body {
   min-width: 0;
 }
 
+/* Écran bas : la couleur d'équipe est déjà sur les cadres et les sièges, la pastille cède sa place aux mains, et le
+   rappel des règles passe à la ligne sous le code de la table */
+.table-root.is-short .table-top.has-partners .team-note {
+  display: none;
+}
+
+.table-root.is-short .table-top.has-partners .table-title .hint {
+  max-width: 9.5em;
+}
+
+.table-root.is-short .partner-name {
+  font-size: 11.5px;
+}
+
+.table-top:has(.partner-bar.is-inline) {
+  min-height: calc(var(--partner-h) + 16px + var(--safe-top));
+}
+
 .partner-bar.is-inline {
-  flex: 0 1 auto;
-  margin: 0 auto;
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--safe-top) / 2);
+  translate: -50% -50%;
 }
 
 .partner-bar.is-row {
   order: 1;
   flex: 1 0 100%;
   flex-wrap: wrap;
+  margin: 10px 0 8px;
 }
 
 .partner-bar.is-stacked {
