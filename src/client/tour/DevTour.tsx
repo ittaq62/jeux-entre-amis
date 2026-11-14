@@ -1,10 +1,11 @@
 // Une page réservée au développement : l'entracte et la fin d'une tournée, avec des parties inventées, pour régler l'affichage
-// sans jouer une tournée entière. /dev/tournee?vue=fin&equipes=1&joueurs=8&titres=5&jeux=5
+// sans jouer une tournée entière. /dev/tournee?vue=fin&equipes=1&joueurs=8&titres=5&jeux=5 (&perso=1 : des joueurs habillés)
 // Le tirage de l'entracte : &programme=7 (nombre de jeux au programme) &tire=bolides (le jeu qui sort) ; &invite=1 : on
 // n'est pas l'hôte
 
 import { useMemo, useState } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
+import type { AvatarWear } from "../../shared/wardrobe.ts";
 import type { GameId } from "../../shared/protocol.ts";
 import {
   DEFAULT_CAPITALE_TEAM,
@@ -29,6 +30,14 @@ const TITLES: TourTitle[] = [
   { id: "brave", label: "Le courageux", userId: "u4", name: "Josiane", detail: "", stat: "2×", unit: "dernier, et toujours là" },
 ];
 
+/** De quoi habiller un joueur sur deux (la garde-robe du personnage) */
+const DRESSES: AvatarWear[] = [
+  { hat: "viking", extra: "lunettes-coeur", outfit: "cape", bg: "nuit", frame: "cadre-or", fx: "etincelles" },
+  { hair: "afro", outfit: "collier-fleurs", bg: "couchant", frame: "lauriers" },
+  { hat: "sorcier", face: "barbe", outfit: "smoking", fx: "flammes", frame: "neon" },
+  { hat: "casque-audio", extra: "visiere", outfit: "capuche", bg: "arc-en-ciel" },
+];
+
 function mockView(
   kind: "entracte" | "fin",
   teams: boolean,
@@ -38,6 +47,7 @@ function mockView(
   program: GameId[],
   drawn: GameId,
   host: boolean,
+  dressed = false,
 ): TourView {
   let seed = 7;
   const rand = () => ((seed = (seed * 16807) % 2147483647), seed / 2147483647);
@@ -45,7 +55,7 @@ function mockView(
     userId: `u${i}`,
     kind: i === 0 ? "human" : "bot",
     name,
-    avatar: seededAvatar(name),
+    avatar: dressed && i % 2 === 0 ? { ...seededAvatar(name), wear: DRESSES[(i / 2) % DRESSES.length]! } : seededAvatar(name),
     photo: 0,
     admin: false,
     connected: true,
@@ -125,12 +135,13 @@ export function DevTour() {
   const programCount = Math.min(GAMES.length, Math.max(1, Number(params.get("programme") ?? 5)));
   const drawnParam = params.get("tire");
   const host = params.get("invite") !== "1";
+  const dressed = params.get("perso") === "1";
   const [replay, setReplay] = useState(0);
   const view = useMemo(() => {
     const program = GAMES.slice(0, programCount);
     const drawn = program.find((g) => g === drawnParam) ?? program[Math.min(2, program.length - 1)]!;
-    return mockView(kind, teams, players, titles, played, program, drawn, host);
-  }, [kind, teams, players, titles, played, programCount, drawnParam, host]);
+    return mockView(kind, teams, players, titles, played, program, drawn, host, dressed);
+  }, [kind, teams, players, titles, played, programCount, drawnParam, host, dressed]);
   const props = { view, send: () => {}, serverOffset: 0, unread: 0, onOpenChat: () => {}, onLeave: () => setReplay((n) => n + 1) };
   return kind === "fin" ? <TourFinale key={replay} {...props} /> : <TourIntermission key={replay} {...props} />;
 }

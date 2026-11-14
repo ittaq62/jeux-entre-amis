@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AVATAR_SKINS, type AvatarConfig } from "../../../shared/avatar.ts";
 import { AvatarDrawing, AvatarFace } from "../../components/Avatar.tsx";
+import { ensureWear } from "../../components/wearLoader.ts";
 import { photoUrl } from "../../lib/api.ts";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -39,6 +40,8 @@ export async function faceCanvas(
     // Hors du rendu de React : l'avatar se dessine dans sa propre petite racine
     await new Promise((r) => setTimeout(r, 0));
     const url = seat.userId ? photoUrl(seat.userId, seat.photo) : null;
+    // Ce qu'il porte (chapeau, tenue…) se dessine d'un coup : ses dessins doivent être là avant
+    if (!url) await ensureWear(seat.avatar);
     const img = await loadImage(url ?? svgUrl(svgOf(AvatarDrawing, { avatar: seat.avatar, size })));
     const c = document.createElement("canvas");
     c.width = size;
@@ -73,6 +76,7 @@ export async function headCanvas(avatar: AvatarConfig): Promise<HTMLCanvasElemen
   g.fillRect(0, 0, HEAD_W, HEAD_H);
   try {
     await new Promise((r) => setTimeout(r, 0));
+    await ensureWear(avatar);
     const img = await loadImage(svgUrl(svgOf(AvatarFace, { avatar, size: 256 })));
     const size = HEAD_W * FACE_SPAN;
     g.drawImage(img, HEAD_W * 0.25 - size / 2, HEAD_H * 0.5 - size / 2, size, size);

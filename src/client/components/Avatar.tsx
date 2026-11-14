@@ -1,6 +1,7 @@
 import { memo, useId } from "react";
 import { AVATAR_BACKGROUNDS, AVATAR_HAIR_COLORS, AVATAR_SKINS, type AvatarConfig } from "../../shared/avatar.ts";
 import { photoUrl } from "../lib/api.ts";
+import { useWear } from "./wearLoader.ts";
 
 interface Props {
   avatar: AvatarConfig;
@@ -32,12 +33,19 @@ export const Avatar = memo(function Avatar({ avatar, size = 48, userId, photo = 
   return <AvatarDrawing avatar={avatar} size={size} className={className} title={title} />;
 });
 
+/** En dessous de cette taille, les effets restent immobiles : en pastille, ils ne feraient que du bruit */
+const FX_MOVING_MIN = 40;
+
 export function AvatarDrawing({ avatar, size = 48, className, title }: Omit<Props, "userId" | "photo">) {
   const clip = useId();
+  // Ce qu'il porte (wardrobe.ts) : dessiné seulement une fois les dessins arrivés ; avant, le portrait de base
+  const W = useWear(avatar);
+  const on = W ? avatar.wear : undefined;
   const bg = AVATAR_BACKGROUNDS[avatar.bg] ?? AVATAR_BACKGROUNDS[0]!;
   const skin = AVATAR_SKINS[avatar.skin] ?? AVATAR_SKINS[0]!;
   const shade = "rgba(0,0,0,0.12)";
   const hair = AVATAR_HAIR_COLORS[avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!;
+  const big = size >= FX_MOVING_MIN;
   return (
     <svg viewBox="0 0 100 100" width={size} height={size} className={`avatar ${className ?? ""}`} role="img" aria-label={title ?? "Avatar"}>
       <defs>
@@ -51,23 +59,44 @@ export function AvatarDrawing({ avatar, size = 48, className, title }: Omit<Prop
       </defs>
       <g clipPath={`url(#${clip})`}>
         <rect width="100" height="100" fill={bg} />
+        {W && on?.bg && <W.WearBackdrop id={on.bg} uid={clip} />}
         <rect width="100" height="100" fill={`url(#${clip}-bg)`} />
-        {/* Epaules */}
-        <path d="M14 104 C16 82 34 76 50 76 C66 76 84 82 86 104 Z" fill="rgba(0,0,0,0.25)" />
-        <Hair kind={avatar.hair} color={hair} back />
+        {W && on?.fx && <W.WearFx id={on.fx} layer="back" big={big} />}
+        {/* Epaules, ou la tenue */}
+        {W && on?.outfit ? (
+          <W.WearOutfit id={on.outfit} layer="back" uid={clip} />
+        ) : (
+          <path d="M14 104 C16 82 34 76 50 76 C66 76 84 82 86 104 Z" fill="rgba(0,0,0,0.25)" />
+        )}
+        {W && on?.hair ? <W.WearHair id={on.hair} layer="back" color={hair} /> : <Hair kind={avatar.hair} color={hair} back />}
         {/* Oreilles et tete */}
         <circle cx="23" cy="56" r="7" fill={skin} />
         <circle cx="77" cy="56" r="7" fill={skin} />
         <circle cx="50" cy="55" r="28" fill={skin} />
         <path d="M24 62 C28 80 72 80 76 62 C72 76 28 76 24 62 Z" fill={shade} />
-        <Hair kind={avatar.hair} color={hair} />
-        <Extra kind={avatar.extra} under />
-        <Eyes kind={avatar.eyes} />
-        <Mouth kind={avatar.mouth} />
-        <Extra kind={avatar.extra} />
-        <Hat kind={avatar.hat} />
+        {W && on?.hair ? <W.WearHair id={on.hair} layer="front" color={hair} /> : <Hair kind={avatar.hair} color={hair} />}
+        {W && on?.outfit && <W.WearOutfit id={on.outfit} layer="front" uid={clip} />}
+        <FaceFeatures avatar={avatar} W={W} hair={hair} uid={clip} />
+        {W && on?.hat ? <W.WearHat id={on.hat} /> : <Hat kind={avatar.hat} />}
+        {W && on?.frame && <W.WearFrame id={on.frame} uid={clip} />}
+        {W && on?.fx && <W.WearFx id={on.fx} layer="front" big={big} />}
       </g>
     </svg>
+  );
+}
+
+/** Les traits : barbe, joues, yeux, bouche, nez, lunettes (ceux de la garde-robe à la place de ceux de base) */
+function FaceFeatures({ avatar, W, hair, uid }: { avatar: AvatarConfig; W: ReturnType<typeof useWear>; hair: string; uid: string }) {
+  const on = W ? avatar.wear : undefined;
+  return (
+    <>
+      {!(W && on?.extra) && <Extra kind={avatar.extra} under />}
+      {W && on?.face && <W.WearFace id={on.face} layer="under" color={hair} />}
+      {W && on?.eyes ? <W.WearEyes id={on.eyes} /> : <Eyes kind={avatar.eyes} />}
+      {W && on?.mouth ? <W.WearMouth id={on.mouth} /> : <Mouth kind={avatar.mouth} />}
+      {W && on?.face && <W.WearFace id={on.face} layer="over" color={hair} />}
+      {W && on?.extra ? <W.WearExtra id={on.extra} uid={uid} /> : <Extra kind={avatar.extra} />}
+    </>
   );
 }
 
@@ -76,12 +105,12 @@ export function AvatarDrawing({ avatar, size = 48, className, title }: Omit<Prop
  * tête en 3D. Le carré montré est centré sur le milieu de la tête dessinée.
  */
 export function AvatarFace({ avatar, size = 128 }: { avatar: AvatarConfig; size?: number }) {
+  const uid = useId();
+  const W = useWear(avatar);
+  const hair = AVATAR_HAIR_COLORS[avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!;
   return (
     <svg viewBox="20 25 60 60" width={size} height={size} xmlns="http://www.w3.org/2000/svg">
-      <Extra kind={avatar.extra} under />
-      <Eyes kind={avatar.eyes} />
-      <Mouth kind={avatar.mouth} />
-      <Extra kind={avatar.extra} />
+      <FaceFeatures avatar={avatar} W={W} hair={hair} uid={uid} />
     </svg>
   );
 }
