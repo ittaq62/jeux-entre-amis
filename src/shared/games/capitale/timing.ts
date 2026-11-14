@@ -25,7 +25,13 @@ function durationOf(e: CapitaleEvent): number {
     case "card":
       return cardReadMs(e.deck, e.card);
     case "money":
+    case "teamFree":
       return 260;
+    case "gift":
+      return 320;
+    case "monopoly":
+      // Le temps de voir les titres de la victoire s'allumer avant le bilan
+      return 1800;
     case "upgrade":
     case "special":
       return 520;

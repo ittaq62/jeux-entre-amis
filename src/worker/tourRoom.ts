@@ -17,6 +17,8 @@ import { random, randomSeed } from "../shared/rng.ts";
 import {
   adoptedVariant,
   baseVariant,
+  cleanCapitaleTeam,
+  DEFAULT_CAPITALE_TEAM,
   defaultTourSettings,
   drawGame,
   drawVariant,
@@ -184,6 +186,8 @@ export class TourRoom extends DurableObject<Env> {
         // Tournées ouvertes avant les règles au choix et les votes, puis avant « pas de UNO d'avance »
         d.settings.rules ??= "base";
         d.settings.noEarlyUno ??= false;
+        // … et avant les règles d'équipe de Capitale
+        d.settings.capitaleTeam ??= { ...DEFAULT_CAPITALE_TEAM };
         d.ready ??= [];
         if (d.next) {
           d.next.variant ??= baseVariant(d.next.game);
@@ -721,6 +725,7 @@ export class TourRoom extends DurableObject<Env> {
         if (patch.botLevel === "easy" || patch.botLevel === "normal" || patch.botLevel === "hard") d.settings.botLevel = patch.botLevel;
         if (patch.rules === "base" || patch.rules === "random" || patch.rules === "vote") d.settings.rules = patch.rules;
         if (typeof patch.noEarlyUno === "boolean") d.settings.noEarlyUno = patch.noEarlyUno;
+        if (patch.capitaleTeam !== undefined) d.settings.capitaleTeam = cleanCapitaleTeam(patch.capitaleTeam, d.settings.capitaleTeam);
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -1036,6 +1041,7 @@ export class TourRoom extends DurableObject<Env> {
           variant,
           looks,
           noEarlyUno: d.settings.noEarlyUno,
+          capitaleTeam: d.settings.capitaleTeam,
         },
       });
       if (this.data !== d || d.status !== "intermission") return;

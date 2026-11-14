@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { botAction, botAnswer, botBid } from "../shared/games/capitale/bot.ts";
-import { SQUARES, type SpecialKind } from "../shared/games/capitale/board.ts";
+import { botAction, botAnswer, botBid, botRescue } from "../shared/games/capitale/bot.ts";
+import { sideName, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
 import {
   actorOf,
   applyAction,
@@ -11,6 +11,10 @@ import {
   DEFAULT_SETTINGS,
   expireTrade,
   GAME_MINUTES,
+  TEAM_COUNTS,
+  teammates,
+  teamOf,
+  teamPlay,
   timeUp,
   TURN_SECONDS,
   type BotLevel,
@@ -19,6 +23,7 @@ import {
   type CapitaleSettings,
   type CapitaleState,
   type Offer,
+  type TeamCount,
 } from "../shared/games/capitale/engine.ts";
 import { batchMs } from "../shared/games/capitale/timing.ts";
 import { FREE_TOKENS, isTokenId, TOKEN_BY_ID, type TokenId } from "../shared/games/capitale/tokens.ts";
@@ -43,7 +48,7 @@ import {
   type RoomSummary,
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
-import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { TOUR_BOT_LEVELS, tourCapitaleSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -78,6 +83,8 @@ interface Seat {
   disconnectedAt: number | null;
   /** Le pion choisi */
   token?: TokenId;
+  /** En équipes : son équipe (0, 1 ou 2) */
+  team?: number;
 }
 
 type TimerKind =
@@ -92,7 +99,8 @@ type TimerKind =
   | "seatCleanup"
   | "cleanup"
   | "emote"
-  | "tourStart";
+  | "tourStart"
+  | "help";
 
 interface Timer {
   at: number;
@@ -129,6 +137,8 @@ interface CapitaleData {
   pickUntil?: number | null;
   ready?: string[];
   botKey: string;
+  /** La dette pour laquelle les bots coéquipiers ont déjà prévu d'aider (une seule fois par décision) */
+  helpKey?: string;
   /** Dernier tour où chaque bot a proposé un échange (un par tour au plus) */
   botTraded: Record<string, number>;
   rematch: string[];
@@ -161,6 +171,8 @@ export class CapitaleRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.data = (await ctx.storage.get<CapitaleData>("room")) ?? null;
+      // Un salon ouvert avant les règles d'équipe et le Monopole : les réglages manquants prennent leur valeur par défaut
+      if (this.data) this.data.settings.capitale = { ...DEFAULT_SETTINGS, ...this.data.settings.capitale };
     });
   }
 
@@ -227,11 +239,14 @@ export class CapitaleRoom extends DurableObject<Env> {
           token: FREE_TOKENS[(k + 1) % FREE_TOKENS.length],
         })),
       ];
+      // En tournée par équipes : l'équipe de chacun, montrée dès la fenêtre du choix des pions
+      const teams = opts.tour.teams;
+      if (teams) for (const s of d.seats) if (teams[s.id] !== undefined) s.team = teams[s.id];
       d.settings.maxPlayers = Math.min(CAPITALE_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
       // Les règles de la tournée (variante), en version courte
       d.settings.capitale = {
         ...d.settings.capitale,
-        ...variantSettings("capitale", opts.tour.variant),
+        ...tourCapitaleSettings(opts.tour),
         end: "timed",
         minutes: TOUR_MINUTES,
         botLevel: TOUR_BOT_LEVELS[opts.tour.botLevel]?.capitale ?? d.settings.capitale.botLevel,
@@ -343,17 +358,49 @@ export class CapitaleRoom extends DurableObject<Env> {
     const d = this.data!;
     const seat = this.newHumanSeat(user);
     if (d.seats.length < d.settings.maxPlayers) {
+      const team = this.emptierTeam();
+      if (team !== undefined) seat.team = team;
       d.seats.push(seat);
       return seat;
     }
-    // Table pleine : on prend la place d'un bot
+    // Table pleine : on prend la place d'un bot (et son équipe)
     for (let i = d.seats.length - 1; i >= 0; i--) {
       if (d.seats[i]!.kind === "bot") {
+        if (d.seats[i]!.team !== undefined) seat.team = d.seats[i]!.team;
         d.seats[i] = seat;
         return seat;
       }
     }
     return null;
+  }
+
+  /** En équipes : l'équipe la moins remplie (la première à égalité), pour qui s'assoit ; rien hors équipes */
+  private emptierTeam(): number | undefined {
+    const d = this.data!;
+    const count = d.settings.capitale.teamCount;
+    if (!count || d.tour) return undefined;
+    const sizes = Array.from({ length: count }, (_, t) => d.seats.filter((s) => s.team === t).length);
+    return sizes.indexOf(Math.min(...sizes));
+  }
+
+  /** Les équipes des sièges, réparties à tour de rôle (au changement du nombre d'équipes) */
+  private dealTeams() {
+    const d = this.data!;
+    const count = d.settings.capitale.teamCount;
+    d.seats.forEach((s, i) => {
+      if (count) s.team = i % count;
+      else delete s.team;
+    });
+  }
+
+  /** Pourquoi les équipes ne permettent pas encore de jouer (tailles inégales, moins de deux par équipe), ou null */
+  private teamProblem(seats: Seat[]): string | null {
+    const d = this.data!;
+    const count = d.settings.capitale.teamCount;
+    if (!count || d.tour) return null;
+    const sizes = Array.from({ length: count }, (_, t) => seats.filter((s) => s.team === t).length);
+    if (sizes.every((n) => n === sizes[0]) && sizes[0]! >= 2) return null;
+    return `En équipes, il faut au moins deux joueurs par équipe, autant dans chacune : c'est ${sizes.join(" contre ")} pour l'instant.`;
   }
 
   private connectedUsers(except?: WebSocket): Map<string, PublicUser> {
@@ -495,6 +542,18 @@ export class CapitaleRoom extends DurableObject<Env> {
         return this.afterChange([], now);
       }
 
+      case "team": {
+        const count = d.settings.capitale.teamCount;
+        if (d.status === "playing" || d.tour || !count) return;
+        const target = d.seats.find((s) => s.id === msg.seatId);
+        if (!target) return;
+        if (target !== seat && !isHost) return error("Seul l'hôte place les autres joueurs dans les équipes.");
+        const team = Math.floor(Number(msg.team));
+        if (!(team >= 0 && team < count) || target.team === team) return;
+        target.team = team;
+        return this.afterChange([], now);
+      }
+
       case "token": {
         if (!seat || d.status === "playing" || !this.allowMessage(`token:${userId}`, 150)) return;
         const info = isTokenId(msg.token) ? TOKEN_BY_ID.get(msg.token) : undefined;
@@ -556,7 +615,17 @@ export class CapitaleRoom extends DurableObject<Env> {
     switch (msg.t) {
       case "settings": {
         if (d.status === "playing") return error("On ne change pas les règles en pleine partie.");
+        const teamsBefore = d.settings.capitale.teamCount;
         d.settings.capitale = mergeSettings(d.settings.capitale, msg.settings ?? {});
+        const teamCount = d.settings.capitale.teamCount;
+        if (teamCount !== teamsBefore) {
+          // Deux équipes : une table de 4 ou 6 ; trois équipes : de 6
+          const max = d.settings.maxPlayers;
+          if (teamCount === 2 && max % 2 === 1) d.settings.maxPlayers = Math.min(CAPITALE_MAX_PLAYERS, max + 1);
+          if (teamCount === 2 && d.settings.maxPlayers < 4) d.settings.maxPlayers = 4;
+          if (teamCount === 3) d.settings.maxPlayers = CAPITALE_MAX_PLAYERS;
+          this.dealTeams();
+        }
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -589,6 +658,7 @@ export class CapitaleRoom extends DurableObject<Env> {
           missed: 0,
           disconnectedAt: null,
           token: this.botToken(),
+          ...(this.emptierTeam() !== undefined ? { team: this.emptierTeam() } : {}),
         });
         return this.afterChange([], now);
       }
@@ -686,18 +756,23 @@ export class CapitaleRoom extends DurableObject<Env> {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux joueurs : ajoute un bot !" });
       return this.afterChange([], now);
     }
+    const problem = this.teamProblem(d.seats);
+    if (problem) {
+      if (ws) this.send(ws, { t: "error", message: problem });
+      return this.afterChange([], now);
+    }
     for (const s of d.seats) {
       s.autoplay = false;
       s.missed = 0;
       s.disconnectedAt = null;
     }
-    const { state, events } = createGame(
-      d.seats.map((s) => s.id),
-      d.settings.capitale,
-      randomSeed(),
-    );
-    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
-    state.teams = d.tour?.teams ?? null;
+    // Les équipes : celles de la tournée, ou celles de la table ; le tour passe d'une équipe à l'autre
+    const teams = d.tour
+      ? (d.tour.teams ?? null)
+      : d.settings.capitale.teamCount
+        ? Object.fromEntries(d.seats.map((s) => [s.id, s.team ?? 0]))
+        : null;
+    const { state, events } = createGame(alternate(d.seats, teams), d.settings.capitale, randomSeed(), teams);
     d.capitale = state;
     d.status = "playing";
     d.startedAt = now;
@@ -753,15 +828,46 @@ export class CapitaleRoom extends DurableObject<Env> {
   /** Quelques messages dans le chat pour les grands moments */
   private narrate(events: CapitaleEvent[]) {
     const name = (id: string) => this.seatById(id)?.name ?? "?";
+    const g = this.data!.capitale!;
     for (const e of events) {
       if (e.type === "bankrupt") {
         this.systemChat(
-          e.to === "bank" ? `${name(e.player)} fait faillite.` : `${name(e.player)} fait faillite : ${name(e.to)} récupère tout.`,
+          e.to === "bank"
+            ? `${name(e.player)} fait faillite.`
+            : e.heir
+              ? `${name(e.player)} fait faillite : ${name(e.to)}, de son équipe, reprend ses titres.`
+              : `${name(e.player)} fait faillite : ${name(e.to)} récupère tout.`,
         );
       } else if (e.type === "timeUp") {
-        this.systemChat("C'est l'heure : ce tour est le dernier, puis on compte les fortunes.");
+        this.systemChat(
+          teamPlay(g) && g.settings.teamWin
+            ? "C'est l'heure : ce tour est le dernier, puis on additionne les fortunes de chaque équipe."
+            : "C'est l'heure : ce tour est le dernier, puis on compte les fortunes.",
+        );
+      } else if (e.type === "monopoly") {
+        const what =
+          e.kind === "stations" ? "les quatre gares" : e.kind === "side" ? `tout ${sideName(e.side ?? 0)}` : "trois quartiers complets";
+        this.systemChat(
+          e.team !== null
+            ? `Monopole pour les ${teamName(e.team)} ! Leur équipe réunit ${what}.`
+            : `Monopole ! ${name(e.player)} réunit ${what}.`,
+        );
+      } else if (e.type === "gift") {
+        const parts = [
+          ...e.give.squares.map((i) => SQUARES[i]!.name),
+          ...(e.give.cash > 0 ? [`${e.give.cash}`] : []),
+          ...(e.give.jailCards > 0 ? [`${e.give.jailCards > 1 ? "des cartes" : "une carte"} de sortie de prison`] : []),
+        ];
+        this.systemChat(`${name(e.from)} donne ${parts.join(", ")} à ${name(e.to)}.`);
       } else if (e.type === "gameOver") {
-        const g = this.data!.capitale!;
+        const team = g.outcome?.team;
+        if (teamPlay(g) && g.settings.teamWin && g.outcome?.teamWorth) {
+          if (team !== null && team !== undefined) {
+            const members = e.ranking.filter((id) => teamOf(g, id) === team).map(name);
+            this.systemChat(`Les ${teamName(team)} remportent la partie : bravo à ${members.join(" et ")} !`);
+          } else this.systemChat("Égalité entre les équipes de tête !");
+          continue;
+        }
         const winners = e.ranking.filter((id) => g.ranks?.[id] === 1).map(name);
         if (winners.length > 0) this.systemChat(`${winners.join(" et ")} ${winners.length > 1 ? "remportent" : "remporte"} la partie !`);
       } else if (e.type === "auctionEnd" && e.winner) {
@@ -847,6 +953,20 @@ export class CapitaleRoom extends DurableObject<Env> {
       }
     }
 
+    // En équipes : un bot coéquipier donne à celui qui est en dette ce qui lui manque (avant qu'il hypothèque ou fasse faillite)
+    d.timers = d.timers.filter((t) => t.kind !== "help" || t.key === `${g.decision}`);
+    if (g.step === "debt" && d.helpKey !== `${g.decision}`) {
+      const debtor = g.debts[0]!.debtor;
+      const helper = teammates(g, debtor).find(
+        (m) => this.seatById(m.id)?.kind === "bot" && botRescue(g, m.id, d.settings.capitale.botLevel),
+      );
+      if (helper) {
+        d.helpKey = `${g.decision}`;
+        const quick = this.plays(this.seatById(debtor));
+        this.addTimer({ at: ready + (quick ? 350 : 1300), kind: "help", seatId: helper.id, key: d.helpKey });
+      }
+    }
+
     // Les propositions d'échange : un bot répond, une offre à un joueur finit par s'effacer
     const live = new Set(g.trades.map((t) => t.id));
     d.timers = d.timers.filter((t) => (t.kind !== "answer" && t.kind !== "tradeExpiry") || live.has(t.trade!));
@@ -877,6 +997,9 @@ export class CapitaleRoom extends DurableObject<Env> {
       } else if (e.type === "gameOver") {
         seatId = e.ranking[0] ?? null;
         pool = ["😎", "👏", "Bien joué"];
+      } else if (e.type === "gift") {
+        seatId = e.to;
+        pool = ["Merci !", "👏", "😎"];
       }
       const seat = seatId ? this.seatById(seatId) : undefined;
       if (seat?.kind === "bot" && random(d) < 0.35) {
@@ -956,7 +1079,8 @@ export class CapitaleRoom extends DurableObject<Env> {
       case "bot": {
         if (!playing || !seat || t.key !== `${d.actionSeq}` || actorOf(g) !== seat.id || !this.plays(seat)) return null;
         const allowTrade = seat.kind === "bot" && d.botTraded[seat.id] !== g.turnId;
-        const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade });
+        // Le remplaçant d'un absent ne donne rien à sa place
+        const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade, allowGift: seat.kind === "bot" });
         if (action?.type === "propose") d.botTraded[seat.id] = g.turnId;
         return this.apply(g, seat.id, action);
       }
@@ -1042,6 +1166,15 @@ export class CapitaleRoom extends DurableObject<Env> {
         await this.startTourGame(Date.now());
         return null;
       }
+      case "help": {
+        if (!playing || !seat || seat.kind !== "bot" || t.key !== `${g.decision}`) return null;
+        const action = botRescue(g, seat.id, this.botLevel(seat));
+        if (!action) return null;
+        const res = applyAction(g, seat.id, action);
+        if (!res.ok) return null;
+        d.actionSeq += 1;
+        return res.events;
+      }
     }
   }
 
@@ -1067,7 +1200,7 @@ export class CapitaleRoom extends DurableObject<Env> {
         rank: g.ranks?.[p.id] ?? g.players.length,
         score: p.stats.netWorth,
         eliminated: p.bankrupt,
-        team: null,
+        team: teamPlay(g) ? teamOf(g, p.id) : null,
         stats: { ...p.stats },
       };
     });
@@ -1153,6 +1286,7 @@ export class CapitaleRoom extends DurableObject<Env> {
             : null,
         isHost: s.userId === d.hostId,
         token: s.token ?? "pion",
+        ...(s.team !== undefined ? { team: s.team as 0 | 1 | 2 } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
       hostId: d.hostId,
@@ -1310,6 +1444,8 @@ function sanitizeAction(raw: unknown): CapitaleAction | null {
     case "reject":
     case "cancel":
       return { type: a.type, trade: Number(a.trade) };
+    case "gift":
+      return { type: "gift", to: String(a.to ?? ""), give: sanitizeOffer(a.give) };
     default:
       return null;
   }
@@ -1320,9 +1456,31 @@ function mergeSettings(current: CapitaleSettings, patch: Partial<CapitaleSetting
   if (patch.end === "timed" || patch.end === "bankrupt") next.end = patch.end;
   if ((GAME_MINUTES as readonly number[]).includes(patch.minutes as number)) next.minutes = patch.minutes!;
   if ((TURN_SECONDS as readonly number[]).includes(patch.turnSeconds as number)) next.turnSeconds = patch.turnSeconds!;
-  for (const key of ["freeParking", "doubleGo", "noRentInJail", "quickStart", "specials"] as const) {
+  for (const key of [
+    "freeParking",
+    "doubleGo",
+    "noRentInJail",
+    "quickStart",
+    "specials",
+    "monopoly",
+    "teamGifts",
+    "teamHeir",
+    "teamWin",
+  ] as const) {
     if (typeof patch[key] === "boolean") next[key] = patch[key];
   }
   if (patch.botLevel === "facile" || patch.botLevel === "moyen" || patch.botLevel === "fort") next.botLevel = patch.botLevel;
+  if ((TEAM_COUNTS as readonly number[]).includes(patch.teamCount as number)) next.teamCount = patch.teamCount as TeamCount;
+  if (patch.teamRent === "free" || patch.teamRent === "half" || patch.teamRent === "full") next.teamRent = patch.teamRent;
   return next;
+}
+
+/** L'ordre du tour : les équipes à tour de rôle (le premier de chaque, puis le deuxième…), chacun dans l'ordre des sièges */
+function alternate(seats: Seat[], teams: Record<string, number> | null): string[] {
+  if (!teams) return seats.map((s) => s.id);
+  const ids = [...new Set(seats.map((s) => teams[s.id] ?? -1))];
+  const crews = ids.map((t) => seats.filter((s) => (teams[s.id] ?? -1) === t).map((s) => s.id));
+  const out: string[] = [];
+  for (let k = 0; out.length < seats.length; k++) for (const c of crews) if (c[k]) out.push(c[k]!);
+  return out;
 }

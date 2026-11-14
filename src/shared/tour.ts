@@ -7,7 +7,7 @@ import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { CramponsConfig } from "./games/crampons/view.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
-import type { BotLevel as CapitaleBotLevel, CapitaleSettings } from "./games/capitale/engine.ts";
+import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
 import type { BotLevel as MecheBotLevel, MecheSettings } from "./games/meche/engine.ts";
 import type { UnoSettings } from "./games/uno/engine.ts";
 import type { Looks } from "./looks.ts";
@@ -94,6 +94,28 @@ export interface TourSettings {
    * soient les règles de base, tirées au sort ou votées, et n'est jamais tiré avec elles.
    */
   noEarlyUno: boolean;
+  /**
+   * Capitale en équipes : le loyer entre coéquipiers, les dons, l'héritage et la victoire d'équipe. Réglés à part par
+   * l'hôte comme « pas de UNO d'avance » : jamais tirés ni votés avec les règles.
+   */
+  capitaleTeam: CapitaleTeamRules;
+}
+
+/** Les règles d'équipe de Capitale qu'une tournée confie à ses tables */
+export type CapitaleTeamRules = Pick<CapitaleSettings, "teamRent" | "teamGifts" | "teamHeir" | "teamWin">;
+export const DEFAULT_CAPITALE_TEAM: CapitaleTeamRules = { teamRent: "free", teamGifts: true, teamHeir: true, teamWin: true };
+
+/** Les règles d'équipe de Capitale reçues de l'hôte, complétées et vérifiées */
+export function cleanCapitaleTeam(raw: unknown, base: CapitaleTeamRules = DEFAULT_CAPITALE_TEAM): CapitaleTeamRules {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const rents: TeamRent[] = ["free", "half", "full"];
+  const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
+  return {
+    teamRent: rents.includes(r.teamRent as TeamRent) ? (r.teamRent as TeamRent) : base.teamRent,
+    teamGifts: bool(r.teamGifts, base.teamGifts),
+    teamHeir: bool(r.teamHeir, base.teamHeir),
+    teamWin: bool(r.teamWin, base.teamWin),
+  };
 }
 
 export function defaultTourSettings(visibility: Visibility): TourSettings {
@@ -107,6 +129,7 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
     botLevel: "normal",
     rules: "base",
     noEarlyUno: false,
+    capitaleTeam: { ...DEFAULT_CAPITALE_TEAM },
   };
 }
 
@@ -336,6 +359,12 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
   },
   { id: "depart-rapide", name: "Départ rapide", blurb: "Chacun commence avec deux titres tirés au sort.", settings: { quickStart: true } },
   {
+    id: "monopole",
+    name: "Monopole",
+    blurb: "Trois quartiers complets, toutes les rues d'un côté ou les quatre gares : la partie s'arrête net, victoire.",
+    settings: { monopoly: true },
+  },
+  {
     id: "prison-sans-loyer",
     name: "Prison sans loyer",
     blurb: "Un propriétaire en prison ne touche plus ses loyers.",
@@ -431,6 +460,17 @@ export function findVariant(game: GameId, id: string | null | undefined): TourVa
  */
 export function tourUnoSettings(init: { variant: string | null | undefined; noEarlyUno?: boolean }): Partial<UnoSettings> {
   return { ...variantSettings("uno", init.variant), noEarlyUno: init.noEarlyUno === true };
+}
+
+/**
+ * Les réglages d'une table de Capitale de la tournée : la variante retenue, puis les règles d'équipe telles que l'hôte
+ * les a choisies (elles ne servent que si la partie se joue en équipes).
+ */
+export function tourCapitaleSettings(init: {
+  variant: string | null | undefined;
+  capitaleTeam?: CapitaleTeamRules;
+}): Partial<CapitaleSettings> {
+  return { ...variantSettings("capitale", init.variant), ...cleanCapitaleTeam(init.capitaleTeam) };
 }
 
 /** Les réglages à appliquer à la table pour cette variante (rien si elle est inconnue) */
@@ -733,7 +773,7 @@ export interface TourView {
 export type TourClientMessage =
   | {
       t: "settings";
-      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "noEarlyUno">>;
+      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "noEarlyUno" | "capitaleTeam">>;
       visibility?: Visibility;
       maxPlayers?: number;
     }
@@ -805,6 +845,8 @@ export interface TourInit {
   looks?: Record<string, Looks>;
   /** UNO : pas de UNO d'avance, réglé à part par l'hôte (absent des tournées plus anciennes) */
   noEarlyUno?: boolean;
+  /** Capitale en équipes : les règles d'équipe choisies par l'hôte (absentes des tournées plus anciennes) */
+  capitaleTeam?: CapitaleTeamRules;
 }
 
 /** Le nom de chaque titre, pour la feuille d'une tournée passée */

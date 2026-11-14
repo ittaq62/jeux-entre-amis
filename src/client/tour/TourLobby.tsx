@@ -156,7 +156,7 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           />
         ) : undefined
       }
-      seatNote={(seat) => (s.teams && seat.team !== undefined ? TOUR_TEAMS[seat.team] : null)}
+      seatNote={(seat) => (s.teams && seat.team !== undefined ? TOUR_TEAMS[seat.team as 0 | 1] : null)}
       aside={
         <>
           {s.teams && room.seats.length > 0 && (

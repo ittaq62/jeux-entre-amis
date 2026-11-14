@@ -16,7 +16,10 @@ import {
   fitsGame,
   gameVariants,
   resolveVariant,
+  cleanCapitaleTeam,
+  DEFAULT_CAPITALE_TEAM,
   TOUR_GAMES,
+  tourCapitaleSettings,
   variantSettings,
   voteNeed,
   sanitizeEnd,
@@ -250,6 +253,20 @@ describe("règles des jeux", () => {
     }
     // Tournées plus anciennes : l'option n'existait pas, on garde l'annonce d'avance
     expect(tourUnoSettings({ variant: "no-mercy" })).toEqual({ variant: "nomercy", noEarlyUno: false });
+  });
+
+  it("Capitale : les règles d'équipe de l'hôte s'ajoutent à la variante, Monopole compris, jamais tirées avec elle", () => {
+    for (const v of gameVariants("capitale")) {
+      expect(variantSettings("capitale", v.id)).not.toHaveProperty("teamRent");
+      expect(variantSettings("capitale", v.id)).not.toHaveProperty("teamWin");
+    }
+    expect(variantSettings("capitale", "monopole")).toEqual({ monopoly: true });
+    const rules = { teamRent: "half" as const, teamGifts: false, teamHeir: true, teamWin: false };
+    expect(tourCapitaleSettings({ variant: "monopole", capitaleTeam: rules })).toEqual({ monopoly: true, ...rules });
+    // Tournées plus anciennes : les règles d'équipe par défaut
+    expect(tourCapitaleSettings({ variant: "classique" })).toEqual(DEFAULT_CAPITALE_TEAM);
+    // Ce qui arrive du salon est vérifié, le reste garde sa valeur
+    expect(cleanCapitaleTeam({ teamRent: "tout", teamGifts: "oui", teamWin: false })).toEqual({ ...DEFAULT_CAPITALE_TEAM, teamWin: false });
   });
 
   it("adopte une variante dès la moitié des voix des joueurs présents", () => {

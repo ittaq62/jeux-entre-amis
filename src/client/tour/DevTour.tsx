@@ -6,7 +6,14 @@
 import { useMemo, useState } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
 import type { GameId } from "../../shared/protocol.ts";
-import { tourPoints, type TourGameView, type TourMemberView, type TourTitle, type TourView } from "../../shared/tour.ts";
+import {
+  DEFAULT_CAPITALE_TEAM,
+  tourPoints,
+  type TourGameView,
+  type TourMemberView,
+  type TourTitle,
+  type TourView,
+} from "../../shared/tour.ts";
 import { TourFinale } from "./TourFinale.tsx";
 import { TourIntermission } from "./TourIntermission.tsx";
 import "./tour.css";
@@ -86,6 +93,7 @@ function mockView(
       botLevel: "normal",
       rules: "base",
       noEarlyUno: false,
+      capitaleTeam: { ...DEFAULT_CAPITALE_TEAM },
     },
     hostId: host ? "u0" : "u1",
     members,

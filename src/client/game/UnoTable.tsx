@@ -313,8 +313,8 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             </span>
           </div>
           {mySeat?.team !== undefined && (
-            <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team] }}>
-              Équipe {TOUR_TEAMS[mySeat.team]}
+            <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team as 0 | 1] }}>
+              Équipe {TOUR_TEAMS[mySeat.team as 0 | 1]}
             </p>
           )}
           {hasPartners && mySeat?.team !== undefined && headerRoom.row > 0 && (
@@ -323,7 +323,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               seats={room.seats}
               players={g.players}
               turn={g.phase === "playing" ? g.turn : null}
-              teamColor={TOUR_TEAM_COLORS[mySeat.team]}
+              teamColor={TOUR_TEAM_COLORS[mySeat.team as 0 | 1]}
               compact={compact}
               short={short}
               tall={portrait && h >= 760}
@@ -403,7 +403,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partner}
                   onCatch={() => act({ type: "catch", target: p.id })}
                   mercyLimit={g.mercyLimit}
-                  teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team] : undefined}
+                  teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team as 0 | 1] : undefined}
                   partner={partner}
                 />
               </div>

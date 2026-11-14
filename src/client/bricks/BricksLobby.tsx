@@ -145,7 +145,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
               : "Il faut deux joueurs dans chaque équipe."
             : undefined
       }
-      seatNote={teamsReady ? (seat) => `équipe ${BRICK_TEAMS[seat.team ?? 0]}` : undefined}
+      seatNote={teamsReady ? (seat) => `équipe ${BRICK_TEAMS[(seat.team ?? 0) as 0 | 1]}` : undefined}
       aside={
         <>
           {teamsReady && <TeamsPanel room={room} send={send} names={BRICK_TEAMS} colors={["#e0574a", "#5b8fe8"]} />}

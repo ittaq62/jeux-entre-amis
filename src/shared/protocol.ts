@@ -169,8 +169,8 @@ export interface SeatView {
   isHost: boolean;
   /** Administrateur du site */
   admin: boolean;
-  /** Bataille navale en équipes : 0 bâbord, 1 tribord */
-  team?: 0 | 1;
+  /** En équipes : 0 et 1 (bâbord et tribord à la bataille navale, Rouges et Bleus en tournée), 2 pour la troisième équipe de Capitale */
+  team?: 0 | 1 | 2;
   /** Capitale : le pion choisi */
   token?: TokenId;
   /** Bataille navale : le thème de la flotte */
@@ -474,7 +474,9 @@ export type CapitaleClientMessage =
   /** Choisir son pion, avant la partie (seulement ceux qu'il possède) */
   | { t: "token"; token: TokenId }
   /** Tournée : prêt à jouer, sans attendre la fin du choix des pions */
-  | { t: "ready" };
+  | { t: "ready" }
+  /** En équipes : changer d'équipe (soi-même, ou n'importe qui pour l'hôte) */
+  | { t: "team"; seatId: string; team: number };
 
 export type CapitaleServerMessage =
   | { t: "room"; room: CapitaleRoomView; events: CapitaleEvent[] }

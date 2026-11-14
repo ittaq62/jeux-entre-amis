@@ -84,7 +84,7 @@ export function NavalLobby({ room, send, ...rest }: Props) {
             ? "Il faut quatre joueurs pour jouer en équipes : ajoute des bots."
             : "Il faut deux marins dans chaque équipe."
       }
-      seatNote={teamsReady ? (seat) => `équipe ${TEAM_NAMES[seat.team ?? 0]}` : undefined}
+      seatNote={teamsReady ? (seat) => `équipe ${TEAM_NAMES[(seat.team ?? 0) as 0 | 1]}` : undefined}
       aside={teamsReady ? <TeamsPanel room={room} send={send} names={TEAM_NAMES} colors={["#e0574a", "#4fbf83"]} /> : undefined}
       rules={
         <section className="rules-sheet panel">

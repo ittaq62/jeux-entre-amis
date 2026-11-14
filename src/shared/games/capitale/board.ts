@@ -109,6 +109,17 @@ export const SIDES: { groups: GroupId[]; squares: number[] }[] = [0, 1, 2, 3].ma
   return { groups: [...new Set(squares.map((i) => SQUARES[i]!.group!))], squares };
 });
 
+/** Les équipes : les deux premières sont celles de la tournée (mêmes noms, mêmes couleurs) ; une troisième aux tables */
+export const CAPITALE_TEAMS = [
+  { name: "Rouges", color: "#d4453c" },
+  { name: "Bleus", color: "#3f7fd8" },
+  { name: "Verts", color: "#2e9d59" },
+] as const;
+export const teamName = (team: number) => CAPITALE_TEAMS[team]?.name ?? `Équipe ${team + 1}`;
+
+/** Le nom d'un côté du plateau, par ses deux quartiers : « le côté rose et orange » */
+export const sideName = (side: number) => `le côté ${(SIDES[side]?.groups ?? []).map((g) => GROUPS[g].name.toLowerCase()).join(" et ")}`;
+
 /** Monopole : la partie s'arrête net pour qui réunit trois quartiers complets, toutes les rues d'un côté, ou les quatre gares */
 export const MONOPOLY_GROUPS = 3;
 export type MonopolyKind = "groups" | "side" | "stations";
