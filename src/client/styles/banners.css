@@ -75,9 +75,30 @@
 
 /* Une carte jouée : posée sur la pile (son image fixe), elle part en fait de la pioche (--fx, --fy) */
 .scatter-play {
+  z-index: 3;
   width: 96px;
   rotate: var(--r);
-  animation: scatter-play 9s linear var(--d) infinite both;
+  animation:
+    scatter-play 9s linear var(--d) infinite both,
+    scatter-stack 9s linear var(--d) infinite both;
+}
+
+/* La dernière carte posée passe au-dessus des autres : chacune est la plus récente 3 s, puis la deuxième, puis la plus ancienne */
+@keyframes scatter-stack {
+  0%,
+  33.3% {
+    z-index: 3;
+  }
+
+  33.4%,
+  66.6% {
+    z-index: 2;
+  }
+
+  66.7%,
+  100% {
+    z-index: 1;
+  }
 }
 
 .scatter-play:not(.is-first) {
