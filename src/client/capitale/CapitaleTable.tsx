@@ -519,6 +519,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           serverOffset={serverOffset}
           turn={turn}
           phone={phone}
+          // Couché à cinq ou six, sous 412 px de haut : les joueurs se serrent pour tenir au-dessus du bouton des réactions
+          dense={landscape && g.players.length > 4 && h < 412}
           onPick={(id) => setLook((l) => ({ id, n: (l?.n ?? 0) + 1 }))}
           mono={mono}
           onMonopoly={() => setMonoOpen(true)}

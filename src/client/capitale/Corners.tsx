@@ -46,6 +46,7 @@ export function Corners({
   serverOffset,
   turn,
   phone,
+  dense = false,
   onPick,
   mono,
   onMonopoly,
@@ -61,6 +62,8 @@ export function Corners({
   /** Le joueur dont c'est le tour, tel qu'on le montre */
   turn: string | null;
   phone: boolean;
+  /** Téléphone couché à cinq ou six : les joueurs plus serrés, pour tenir en une colonne sur la hauteur de l'écran */
+  dense?: boolean;
   /** Un clic sur un joueur : la caméra va voir son pion */
   onPick: (id: string) => void;
   /** Au Monopole : où en est le camp de chaque joueur (son équipe, ou lui) */
@@ -81,7 +84,7 @@ export function Corners({
     return () => ro.disconnect();
   }, [phone, onHeight]);
   return (
-    <div className={`cap-corners ${phone ? "is-phone" : ""}`} ref={box}>
+    <div className={`cap-corners ${phone ? "is-phone" : ""}${dense ? " is-dense" : ""}`} ref={box}>
       {g.players.map((p, k) => {
         const s = seat(p.id);
         const acting = g.actor === p.id;
@@ -102,15 +105,20 @@ export function Corners({
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && !p.bankrupt && onPick(p.id)}
           >
             <span className="cap-corner-avatar" data-cap-anchor={p.id}>
-              {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={phone ? 34 : 52} />}
+              {s && <Avatar avatar={s.avatar} userId={s.userId} photo={s.photo} size={dense ? 28 : phone ? 34 : 52} />}
               {team !== null && (
                 <span className="cap-corner-team">
-                  <TeamMark team={team} size={phone ? 15 : 20} />
+                  <TeamMark team={team} size={dense ? 13 : phone ? 15 : 20} />
                 </span>
               )}
               {acting && room.deadline && (
                 <span className="cap-corner-timer">
-                  <TimerRing size={phone ? 42 : 62} deadline={room.deadline} total={g.settings.turnSeconds} offset={serverOffset} />
+                  <TimerRing
+                    size={dense ? 36 : phone ? 42 : 62}
+                    deadline={room.deadline}
+                    total={g.settings.turnSeconds}
+                    offset={serverOffset}
+                  />
                 </span>
               )}
               <AnimatePresence>

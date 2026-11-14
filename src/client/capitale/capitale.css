@@ -3296,3 +3296,66 @@
   max-height: calc(100% - 16px);
   overflow-y: auto;
 }
+
+/* Couché, les cartes des joueurs : « À toi ! », « joue » plus petit, pour ne pas cacher le nom ni sortir en haut de la
+   colonne */
+.cap-bright.is-land .cap-corner-arrow {
+  top: -10px;
+  right: -4px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+/* « avec toi » en haut à droite de la carte : le badge du joueur suivant, posé sur le bas de celle-ci, ne le cache
+   pas ; quand c'est au coéquipier de jouer, son badge prend la place */
+.cap-bright.is-land .cap-mate.is-phone {
+  top: 5px;
+}
+
+.cap-bright.is-land .cap-corner.is-turn .cap-mate.is-phone {
+  display: none;
+}
+
+/* À cinq ou six, les joueurs se serrent pour tenir au-dessus du bouton des réactions */
+.cap-corners.is-phone.is-dense {
+  gap: 4px;
+}
+
+.cap-corners.is-phone.is-dense .cap-corner {
+  padding: 3px 8px 3px 3px;
+}
+
+.cap-corners.is-phone.is-dense .cap-corner-name {
+  font-size: 10px;
+}
+
+.cap-corners.is-phone.is-dense .cap-corner-cash {
+  font-size: 16px;
+}
+
+.cap-corners.is-phone.is-dense .cap-mate.is-phone {
+  right: 5px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+/* Le plus petit des téléphones couchés : six joueurs tiennent encore au-dessus du bouton des réactions */
+@media (max-height: 339px) {
+  .cap-bright.is-land .cap-corners.is-phone.is-dense {
+    gap: 3px;
+    padding-top: 10px;
+  }
+
+  .cap-corners.is-phone.is-dense .cap-corner {
+    padding: 2px 8px 2px 2px;
+  }
+
+  .cap-corners.is-phone.is-dense .cap-corner-name {
+    font-size: 9px;
+  }
+
+  .cap-corners.is-phone.is-dense .cap-corner-cash {
+    font-size: 14px;
+  }
+}
