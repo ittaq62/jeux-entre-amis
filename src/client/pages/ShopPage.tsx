@@ -4,6 +4,7 @@ import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleI
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import { FETE_BY_ID, type FeteId } from "../../shared/games/crampons/boutique.ts";
 import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.ts";
+import { bombInfo, type BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
 import type { GameId } from "../../shared/protocol.ts";
@@ -17,6 +18,8 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { CramponsLook, isCramponsKind } from "../crampons/CramponsLook.tsx";
+import { BombArt } from "../meche/bombs/BombArt.tsx";
+import { BombShow } from "../meche/bombs/BombShow.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { useSession } from "../stores/session.ts";
@@ -36,6 +39,7 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   },
   { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
   { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
+  { kind: "bombe", game: "meche", title: "Mèche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -60,6 +64,7 @@ export function ShopPage() {
       return <span className="shop-swatch" style={{ "--a": a, "--b": b } as CSSProperties} />;
     }
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} />;
+    if (item.kind === "bombe") return <BombArt id={item.ref as BombId} className="bomb-thumb" />;
     return null;
   };
 
@@ -71,6 +76,7 @@ export function ShopPage() {
       return club ? `Note ${club.rating}, en ${FORMATION_NAMES[club.formation]}` : null;
     }
     if (item.kind === "fete") return FETE_BY_ID.get(item.ref as FeteId)?.blurb ?? null;
+    if (item.kind === "bombe") return bombInfo(item.ref as BombId).blurb;
     return null;
   };
 
@@ -88,6 +94,8 @@ export function ShopPage() {
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
+    // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)
+    if (item.kind === "bombe") return <BombShow bomb={item.ref as BombId} loud avatar={user?.avatar} />;
     return look(item);
   };
 

@@ -8,9 +8,11 @@ import {
   type Pace,
   type FuseChoice,
 } from "../../shared/games/meche/engine.ts";
+import { bombInfo } from "../../shared/games/meche/bombs.ts";
 import { MECHE_MAX_PLAYERS, type MecheClientMessage, type MecheRoomView } from "../../shared/protocol.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { BombPicker } from "./bombs/BombPicker.tsx";
 
 /** Les trois façons de faire brûler la mèche, et ce qu'on lit sous le choix */
 const MODES: { value: FuseChoice; label: string; rule: string }[] = [
@@ -83,6 +85,9 @@ export function MecheLobby({ room, send, ...rest }: Props) {
       shareTitle="Viens jouer à Mèche"
       startLabel="Allumer la mèche"
       hostWillStart="va allumer la mèche"
+      // La bombe de chacun, vue de toute la table (la dynamite, celle de tout le monde, ne se dit pas)
+      seatNote={(seat) => (seat.bomb ? bombInfo(seat.bomb).name : null)}
+      aside={room.you.seatId ? <BombPicker /> : null}
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
