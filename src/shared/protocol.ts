@@ -101,6 +101,8 @@ export interface AdminOverview {
   announcement: Announcement | null;
   /** Jeux (et tournée) encore en bêta : visibles seulement des admins et de leurs invités */
   betaGames: TableGame[];
+  /** Signalements encore « nouveau » : la pastille de l'onglet */
+  newReports: number;
 }
 
 export type AdminUserAction =

@@ -15,6 +15,7 @@ import {
   type TableGame,
   type Visibility,
 } from "../shared/protocol.ts";
+import { REPORTS_PER_HOUR } from "../shared/report.ts";
 import { findUser, findUsers, recentGames, siteCounts } from "./admin.ts";
 import {
   BANNED_MESSAGE,
@@ -45,6 +46,16 @@ import {
 } from "./users.ts";
 import { albumState, craftCard, openPack, sellDoubles } from "./cards.ts";
 import { buyItem, ownedItems, shopState } from "./shop.ts";
+import {
+  addReport,
+  deleteReport,
+  isReportStatus,
+  listReports,
+  readReport,
+  readReportFilters,
+  REPORT_BODY_MAX,
+  setReportStatus,
+} from "./reports.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -485,6 +496,30 @@ app.get("/rooms/:code/ws", withSession, withProfile, async (c) => {
 app.get("/hub/ws", withSession, withProfile, async (c) => upgradeTo(c, hub(c)));
 
 // ---------------------------------------------------------------------------
+// Signalements
+// ---------------------------------------------------------------------------
+
+/** Un bug, un problème ou une idée, depuis la fin d'une partie ou d'une tournée. L'auteur est le compte de la session. */
+app.post("/reports", withSession, withProfile, async (c) => {
+  const text = await c.req.text();
+  if (text.length > REPORT_BODY_MAX) return c.json({ error: "C'est trop long." }, 413);
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Lu comme un signalement vide : l'erreur dit ce qui manque
+  }
+  const read = readReport(body);
+  if ("error" in read) return c.json({ error: read.error }, 400);
+  const user = c.get("user");
+  if (!(await rateLimit(c.env.DB, `report:${user.id}`, REPORTS_PER_HOUR, 3600_000))) {
+    return c.json({ error: "Tu as déjà envoyé plusieurs signalements cette heure-ci. Réessaie un peu plus tard." }, 429);
+  }
+  await addReport(c.env.DB, user.id, read.report, Date.now());
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Administration
 // ---------------------------------------------------------------------------
 
@@ -622,6 +657,23 @@ app.delete("/admin/rooms/:code", withSession, withAdmin, async (c) => {
   const closed = await (await roomStub(c, code)).adminClose();
   // Une table deja disparue peut encore trainer dans la liste du hub
   if (!closed) await hub(c).removeRoom(code);
+  return c.json({ ok: true });
+});
+
+app.get("/admin/reports", withSession, withAdmin, async (c) => {
+  return c.json(await listReports(c.env.DB, readReportFilters(c.req.query())));
+});
+
+app.patch("/admin/reports/:id", withSession, withAdmin, async (c) => {
+  const body = await c.req.json<{ status?: unknown }>().catch(() => ({}) as { status?: unknown });
+  if (!isReportStatus(body.status)) return c.json({ error: "État inconnu." }, 400);
+  const report = await setReportStatus(c.env.DB, param(c, "id"), body.status, Date.now());
+  if (!report) return c.json({ error: "Signalement introuvable." }, 404);
+  return c.json({ report });
+});
+
+app.delete("/admin/reports/:id", withSession, withAdmin, async (c) => {
+  if (!(await deleteReport(c.env.DB, param(c, "id")))) return c.json({ error: "Signalement introuvable." }, 404);
   return c.json({ ok: true });
 });
 

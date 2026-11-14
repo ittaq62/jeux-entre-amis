@@ -37,11 +37,12 @@ export async function siteCounts(db: D1Database) {
          (SELECT COUNT(*) FROM users WHERE pseudo IS NOT NULL AND created_at > ?1) AS newThisWeek,
          (SELECT COUNT(*) FROM users WHERE banned_at IS NOT NULL) AS banned,
          (SELECT COUNT(*) FROM games) AS games,
-         (SELECT COUNT(*) FROM games WHERE ended_at > ?2) AS gamesToday`,
+         (SELECT COUNT(*) FROM games WHERE ended_at > ?2) AS gamesToday,
+         (SELECT COUNT(*) FROM reports WHERE status = 'new') AS newReports`,
     )
     .bind(now - 7 * DAY, now - DAY)
-    .first<{ accounts: number; newThisWeek: number; banned: number; games: number; gamesToday: number }>();
-  return row ?? { accounts: 0, newThisWeek: 0, banned: 0, games: 0, gamesToday: 0 };
+    .first<{ accounts: number; newThisWeek: number; banned: number; games: number; gamesToday: number; newReports: number }>();
+  return row ?? { accounts: 0, newThisWeek: 0, banned: 0, games: 0, gamesToday: 0, newReports: 0 };
 }
 
 export async function recentGames(db: D1Database, limit = 12): Promise<AdminGame[]> {
