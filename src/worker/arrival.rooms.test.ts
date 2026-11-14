@@ -99,6 +99,20 @@ describe.each(GAMES)("$game", ({ game, Room, bots }) => {
     expect(seated(again.ws.view())).toBe(true);
   });
 
+  it("à la fin, la revanche est aux joueurs : celle d'un spectateur est ignorée", async () => {
+    const { bench, host } = await table([["hote", "ami"]]);
+    await start(bench, host);
+    const watcher = await bench.arrive(user("ami"), "?regarder");
+    finish(bench);
+    await bench.send(watcher.ws, { t: "rematch" });
+    expect(bench.data<{ rematch: string[] }>().rematch).toEqual([]);
+    expect(bench.data<{ status: string }>().status).toBe("finished");
+    // L'hôte, seul joueur : sa revanche relance la partie, et le spectateur reste spectateur
+    await bench.send(host, { t: "rematch" });
+    expect(host.view<LobbyRoom>().status).toBe("playing");
+    expect(seated(watcher.ws.view())).toBe(false);
+  });
+
   it("un lien au salon assoit, comme avant", async () => {
     const { bench } = await table();
     const { ws } = await bench.arrive(user("ami"));

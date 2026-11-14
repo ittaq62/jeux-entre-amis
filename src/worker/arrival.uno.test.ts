@@ -68,6 +68,20 @@ describe("UNO : « Regarder » ne fait jamais asseoir", () => {
     expect(seated(again.ws.view())).toBe(true);
   });
 
+  it("à la fin, la revanche est aux joueurs : celle d'un spectateur est ignorée", async () => {
+    const { bench, host } = await table([["hote", "ami"]]);
+    await bench.send(host, { t: "settings", settings: {}, maxPlayers: 2 });
+    await bench.send(host, { t: "start" });
+    const watcher = await bench.arrive(user("ami"), "?regarder");
+    bench.data<{ status: string }>().status = "finished";
+    await bench.send(watcher.ws, { t: "rematch" });
+    expect(bench.data<{ rematch: string[] }>().rematch).toEqual([]);
+    expect(bench.data<{ status: string }>().status).toBe("finished");
+    await bench.send(host, { t: "rematch" });
+    expect(host.view<RoomView>().status).toBe("playing");
+    expect(seated(watcher.ws.view())).toBe(false);
+  });
+
   it("un lien (une invitation) au salon assoit, comme avant", async () => {
     const { bench } = await table();
     const { ws } = await bench.arrive(user("ami"));
