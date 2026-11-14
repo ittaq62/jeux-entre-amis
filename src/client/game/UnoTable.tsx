@@ -12,6 +12,7 @@ import { play, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { awayTurnNote } from "./AwayNote.tsx";
 import { Center } from "./Center.tsx";
+import { placeCenter, rowSeats } from "./centerLayout.ts";
 import { EmotePicker } from "./ChatPanel.tsx";
 import { useFx } from "./fx.ts";
 import { FxLayer } from "./FxLayer.tsx";
@@ -54,8 +55,9 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   const partnerCard = compact ? (short ? 28 : 30) : clamp(h / 19, 34, 44);
   const headerRef = useRef<HTMLElement>(null);
   const [headerRoom, setHeaderRoom] = useState({ inline: 0, row: 0 });
-  const handW = compact ? clamp(portrait ? w / 4.5 : w / 5.6, 58, 90) : clamp(h / 8.4, 78, 112);
-  const pileW = compact ? clamp(portrait ? w / 4.6 : w / 5.2, 62, 88) : clamp(h / 7.8, 84, 116);
+  // Téléphone en paysage : la hauteur manque, les cartes se règlent sur elle pour laisser de la place à la table
+  const handW = compact ? clamp(portrait ? w / 4.5 : w / 5.6, 58, short ? Math.max(58, h / 5.6) : 90) : clamp(h / 8.4, 78, 112);
+  const pileW = compact ? clamp(portrait ? w / 4.6 : w / 5.2, 62, short ? Math.max(62, h / 6.2) : 88) : clamp(h / 7.8, 84, 116);
   const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const [colorFor, setColorFor] = useState<Card | null>(null);
@@ -119,10 +121,13 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   const positions = useMemo(() => {
     const n = ordered.length;
+    if (short && myIndex >= 0) return rowSeats(n, area.w, area.h / 2, pileW * 2 + clamp(w * 0.05, 18, 40));
     const padX = compact ? 50 : 82;
     const padY = compact ? 52 : 70;
     const rx = Math.max(40, area.w / 2 - padX);
-    const ry = Math.max(40, area.h / 2 - padY);
+    // En portrait, l'arc des sièges descend plus bas : le bas du tapis est libre, les sièges des côtés s'y espacent
+    const cy = myIndex >= 0 && portrait ? area.h * 0.62 : area.h / 2;
+    const ry = Math.max(40, cy - padY);
     return ordered.map((_, k) => {
       let theta: number;
       if (myIndex < 0) theta = -Math.PI / 2 - ((k + 0.5) / n) * Math.PI * 2;
@@ -131,9 +136,25 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
         const spread = portrait ? 1.5 : 1.2;
         theta = (1 + (spread - 1) / 2) * Math.PI - ((k + 1) / (n + 1)) * spread * Math.PI;
       }
-      return { x: area.w / 2 + rx * Math.cos(theta), y: area.h / 2 - ry * Math.sin(theta) * (myIndex < 0 ? 1 : 1) };
+      return { x: area.w / 2 + rx * Math.cos(theta), y: cy - ry * Math.sin(theta) };
     });
-  }, [ordered, area, compact, myIndex, portrait]);
+  }, [ordered, area, compact, myIndex, portrait, short, pileW, w]);
+
+  // La pioche et la défausse : au milieu, ou un peu plus bas si un siège les touche
+  const centerY = useMemo(
+    () =>
+      placeCenter({
+        areaH: area.h,
+        base: area.h * (portrait && ordered.length > 1 ? 0.57 : 0.5),
+        cx: area.w / 2,
+        block: { w: pileW * 2 + clamp(w * 0.05, 18, 40), h: pileW * 1.4 },
+        below: 30,
+        seats: positions,
+        seat: compact ? { w: 76, h: 108 } : { w: 100, h: 126 },
+        margin: 4,
+      }),
+    [area, portrait, ordered.length, pileW, w, positions, compact],
+  );
 
   function act(action: UnoAction) {
     unlockAudio();
@@ -368,7 +389,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               </div>
             );
           })}
-          <div className="center-slot" style={portrait && ordered.length > 1 ? { top: "57%" } : undefined}>
+          <div className="center-slot" style={{ top: centerY }}>
             <Center game={g} pileWidth={pileW} canDraw={canDraw} onDraw={() => act({ type: "draw" })} />
           </div>
         </div>
