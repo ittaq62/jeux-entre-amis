@@ -10,6 +10,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { formatSprint } from "../lib/countdown.ts";
@@ -150,7 +151,16 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       <AppHeader />
       <main className="profile">
         <section className="profile-head">
-          <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={88} />
+          {profile.friendship === "self" ? (
+            <Link href="/personnage" className="profile-avatar-edit" aria-label="Modifier mon personnage" title="Modifier mon personnage">
+              <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={88} />
+              <span className="profile-avatar-pen" aria-hidden="true">
+                <Icon name="smile" size={15} />
+              </span>
+            </Link>
+          ) : (
+            <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={88} />
+          )}
           <div className="profile-id">
             <h1>
               {user.pseudo}
@@ -217,9 +227,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
           </div>
           <div className="row-actions">
             {profile.friendship === "self" && (
-              <Link href="/compte" className="btn">
-                Modifier mon profil
-              </Link>
+              <>
+                <Link href="/personnage" className="btn btn-primary">
+                  Mon personnage
+                </Link>
+                <Link href="/compte" className="btn">
+                  Modifier mon profil
+                </Link>
+              </>
             )}
             {profile.friendship === "none" && (
               <button className="btn btn-primary" onClick={() => void addFriend()}>

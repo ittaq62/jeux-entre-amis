@@ -997,6 +997,334 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Mon personnage (CharacterPage.tsx)                                  */
+/* ------------------------------------------------------------------ */
+
+.perso {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.perso-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 15px;
+}
+
+.perso-balance strong {
+  color: var(--gold-light);
+  font-family: var(--font-card);
+  font-size: 21px;
+}
+
+.perso-balance a {
+  margin-left: 6px;
+  font-size: 14px;
+}
+
+.perso-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.perso-stage {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 18px 18px;
+}
+
+.perso-preview .avatar {
+  box-shadow:
+    0 0 0 4px var(--panel),
+    0 0 0 5.5px var(--gold-deep);
+}
+
+.perso-sizes {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+}
+
+.perso-sizes > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.perso-photo {
+  margin: 0;
+  text-align: center;
+}
+
+.perso-trying {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  background: var(--gold-tint);
+  border: 1px solid rgba(226, 189, 110, 0.3);
+}
+
+.perso-trying-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--gold-light);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.perso-trying ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perso-trying li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.perso-trying li > span {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.perso-trying .hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+}
+
+.perso-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.perso-actions .row-actions {
+  justify-content: center;
+}
+
+.perso-controls {
+  min-width: 0;
+}
+
+.perso-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.perso-tabs button {
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.perso-tabs button[aria-selected="true"] {
+  border-color: var(--gold);
+  background: var(--gold-tint);
+  color: var(--gold-light);
+}
+
+.perso-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.perso-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.perso-grid.is-swatches {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+}
+
+.perso-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.perso-option.is-named {
+  background: var(--panel-raised);
+  border-color: var(--line-soft);
+}
+
+.perso-option:hover {
+  border-color: rgba(226, 189, 110, 0.45);
+}
+
+.perso-option.is-selected {
+  border-color: var(--gold);
+  background: var(--gold-tint);
+}
+
+.perso-option-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.perso-option-price {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(5, 17, 12, 0.85);
+  color: var(--gold);
+  font-family: var(--font-card);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .perso {
+    padding: 18px 12px 0;
+    gap: 12px;
+  }
+
+  .perso .page-heading h1 {
+    font-size: 26px;
+  }
+
+  .perso-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* L'aperçu reste collé en haut pendant qu'on fait défiler les choix, les boutons au bas de l'écran */
+  .perso-stage {
+    top: calc(60px + var(--safe-top));
+    z-index: 5;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 10px 12px;
+    gap: 8px 16px;
+    box-shadow: 0 12px 20px -14px rgba(0, 0, 0, 0.9);
+  }
+
+  .perso-preview .avatar {
+    width: 104px;
+    height: 104px;
+  }
+
+  .perso-sizes {
+    gap: 12px;
+  }
+
+  .perso-photo,
+  .perso-trying {
+    flex-basis: 100%;
+  }
+
+  .perso-trying {
+    padding: 8px 10px;
+  }
+
+  .perso-trying .hint {
+    display: none;
+  }
+
+  .perso-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    padding: 10px 12px calc(10px + var(--safe-bottom));
+    background: rgba(5, 17, 12, 0.96);
+    border-top: 1px solid rgba(226, 189, 110, 0.18);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .perso-actions .btn-block {
+    width: auto;
+    flex: 1;
+    order: 2;
+  }
+
+  .perso-actions .row-actions {
+    order: 1;
+    flex-wrap: nowrap;
+  }
+
+  .perso-actions .error-text {
+    flex-basis: 100%;
+    margin: 0;
+  }
+
+  .perso-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -12px 12px;
+    padding: 0 12px 4px;
+    scrollbar-width: none;
+  }
+
+  .perso-grid {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 6px;
+  }
+
+  .perso-controls {
+    padding-bottom: 80px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Accueil                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -2402,6 +2730,44 @@
     0 0 0 3px var(--night),
     0 0 0 5px var(--gold),
     0 14px 28px -10px rgba(0, 0, 0, 0.8);
+}
+
+/* Mon compte : pas encore de photo */
+.photo-empty {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--line-strong);
+  color: var(--text-faint);
+}
+
+/* Son propre avatar mène à l'éditeur du personnage */
+.profile-avatar-edit {
+  position: relative;
+  display: block;
+  flex: none;
+  border-radius: 50%;
+}
+
+.profile-avatar-pen {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--gold-ink);
+  box-shadow: 0 0 0 3px var(--night);
+}
+
+.profile-avatar-edit:hover .profile-avatar-pen {
+  background: var(--gold-light);
 }
 
 .profile-id {

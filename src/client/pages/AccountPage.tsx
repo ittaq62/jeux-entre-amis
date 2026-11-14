@@ -4,7 +4,7 @@ import { PSEUDO_MAX, validatePseudo } from "../../shared/app.ts";
 import type { MeResponse } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { AvatarEditor } from "../components/AvatarEditor.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { Check, Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { play } from "../lib/sound.ts";
@@ -36,12 +36,12 @@ export function AccountPage() {
   const prefs = usePrefs();
   const [, navigate] = useLocation();
   const [pseudo, setPseudo] = useState(user.pseudo);
-  const [avatar, setAvatar] = useState(user.avatar);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const dirty = pseudo.trim() !== user.pseudo || JSON.stringify(avatar) !== JSON.stringify(user.avatar);
+  // Le personnage se change sur sa propre page (/personnage) : ici, seulement le pseudo
+  const dirty = pseudo.trim() !== user.pseudo;
 
   async function save() {
     const problem = validatePseudo(pseudo);
@@ -49,7 +49,7 @@ export function AccountPage() {
     setSaving(true);
     setError(null);
     try {
-      apply(await api.patch<MeResponse>("/me", { pseudo, avatar }));
+      apply(await api.patch<MeResponse>("/me", { pseudo }));
       toast({ title: "Profil enregistré" });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Une erreur est survenue.");
@@ -102,11 +102,35 @@ export function AccountPage() {
             <span className="field-label">Pseudo</span>
             <input className="input" value={pseudo} maxLength={PSEUDO_MAX} onChange={(e) => setPseudo(e.target.value)} />
           </label>
+          {error && <p className="error-text">{error}</p>}
+          {dirty && (
+            <button className="btn btn-primary" disabled={saving} onClick={() => void save()}>
+              {saving ? <span className="spinner" /> : "Enregistrer le pseudo"}
+            </button>
+          )}
           <div className="photo-row">
-            <Avatar avatar={avatar} userId={user.id} photo={user.photo} size={64} />
+            <Avatar avatar={user.avatar} size={64} />
+            <div className="stack-sm">
+              <strong>Ton personnage</strong>
+              <span className="hint">Son visage, sa coiffure, sa tenue, son fond… et ce qui se trouve à la boutique.</span>
+              <span className="row-actions">
+                <Link href="/personnage?retour=/compte" className="btn btn-sm btn-primary">
+                  Personnaliser mon personnage
+                </Link>
+              </span>
+            </div>
+          </div>
+          <div className="photo-row">
+            {user.photo > 0 ? (
+              <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={64} />
+            ) : (
+              <span className="photo-empty" aria-hidden="true">
+                <Icon name="camera" size={24} />
+              </span>
+            )}
             <div className="stack-sm">
               <strong>Photo de profil</strong>
-              <span className="hint">Facultative : elle remplace ton avatar dessiné.</span>
+              <span className="hint">Facultative : elle remplace ton personnage dessiné.</span>
               <span className="row-actions">
                 <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
                   {user.photo ? "Changer de photo" : "Ajouter une photo"}
@@ -130,11 +154,6 @@ export function AccountPage() {
               }}
             />
           </div>
-          <AvatarEditor value={avatar} onChange={setAvatar} />
-          {error && <p className="error-text">{error}</p>}
-          <button className="btn btn-primary" disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? <span className="spinner" /> : "Enregistrer"}
-          </button>
         </section>
 
         <section className="sheet panel">
