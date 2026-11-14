@@ -34,6 +34,7 @@ export function CramponsGameOver({
   const v = room.crampons!;
   const [a, b] = v.stats;
   const title = v.winner === null ? "Match nul" : `Victoire ${deClub(v.teams[v.winner].name)}`;
+  const seated = room.you.seatId !== null;
   const asked = room.rematch.includes(room.you.userId);
   const sa = v.shootout?.kicks[0].filter(Boolean).length;
   const sb = v.shootout?.kicks[1].filter(Boolean).length;
@@ -78,20 +79,27 @@ export function CramponsGameOver({
             ))}
           </tbody>
         </table>
-        {inTour && (
+        {inTour ? (
           <p className="tour-next-note">
             <span className="spinner" /> La tournée continue : le classement arrive.
           </p>
+        ) : (
+          !seated && (
+            <p className="hint" style={{ margin: 0 }}>
+              Tu regardes ce match : reste pour voir le suivant.
+            </p>
+          )
         )}
         <div className="cr-over-actions">
-          {!inTour && (
+          {/* La revanche est aux joueurs : le serveur ignore celle d'un spectateur */}
+          {!inTour && seated && (
             <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
               {asked ? "En attente des autres" : "Revanche"}
             </button>
           )}
-          {room.you.isHost && !inTour && (
+          {!inTour && (
             <button className="btn" onClick={onShowLobby}>
-              Changer les règles
+              {room.you.isHost ? "Changer les règles" : "Voir le salon"}
             </button>
           )}
           <button className="btn btn-ghost" onClick={onLeave}>
