@@ -42,7 +42,7 @@ import {
 import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -114,6 +114,9 @@ interface NavalData {
   results?: EloResults | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 interface Attachment {
@@ -274,8 +277,11 @@ export class NavalRoom extends DurableObject<Env> {
     if (!seat) this.systemChat(`${user.pseudo} observe la bataille.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      return this.startTourGame(now);
+    if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      // Tout le monde est là : une fenêtre pour choisir ses skins, puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + TOUR_PICK_MS;
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
@@ -483,6 +489,15 @@ export class NavalRoom extends DurableObject<Env> {
         return this.afterChange([], now, ws);
       }
 
+      case "ready": {
+        // Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins
+        if (!d.tour || d.status !== "lobby" || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        const humans = d.seats.filter((s) => s.kind === "human");
+        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        return this.afterChange([], now);
+      }
+
       case "skin": {
         if (!seat || !this.allowMessage(`skin:${userId}`, 150)) return;
         const info = isSkinId(msg.skin) ? SKIN_BY_ID.get(msg.skin) : undefined;
@@ -636,6 +651,8 @@ export class NavalRoom extends DurableObject<Env> {
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     // Il faut au moins un vrai joueur à la table : une partie entre bots seuls ne compte pas
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
@@ -1028,6 +1045,8 @@ export class NavalRoom extends DurableObject<Env> {
       results: d.results ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
     };
   }
 

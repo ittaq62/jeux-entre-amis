@@ -210,6 +210,9 @@ export interface RoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 export interface ChatMessage {
@@ -264,6 +267,8 @@ export type RoomClientMessage =
   /** Le dos de ses cartes */
   | { t: "back"; back: string }
   | { t: "leave" }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
   | { t: "close" };
 
 /** Ce que tous les salons ont en commun, quel que soit le jeu : sert au salon d'attente partagé. */
@@ -306,6 +311,9 @@ export interface NavalRoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 /** Messages communs à tous les salons (le salon d'attente partagé n'envoie que ceux-là) */
@@ -340,6 +348,8 @@ export type NavalClientMessage =
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
   | { t: "close" };
 
 export interface BricksRoomSettings {
@@ -559,6 +569,9 @@ export interface BolidesRoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
   /** Le véhicule et le skin de chaque pilote assis */
   garage: { choices: Record<string, { vehicle: VehicleId; skin: KartSkinId }> };
 }
@@ -582,6 +595,8 @@ export type BolidesClientMessage =
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
   | { t: "close" };
 
 export type BolidesServerMessage =
@@ -628,6 +643,9 @@ export interface CramponsRoomView {
   results?: Record<string, EloResult> | null;
   quick: boolean;
   tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 export type CramponsClientMessage =
@@ -649,6 +667,8 @@ export type CramponsClientMessage =
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
   | { t: "close" };
 
 export type CramponsServerMessage =

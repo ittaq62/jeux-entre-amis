@@ -230,6 +230,34 @@ export function Locker({ kit, onBuy }: { kit: KitColors; onBuy: (item: ShopItem)
   );
 }
 
+/**
+ * Juste avant un match de tournée : son ballon et sa célébration, vus avec le maillot de son équipe. Les choix sont
+ * gardés sur l'appareil ; la table reprend la célébration (voir CramponsRoom), le ballon ne se voit que chez soi.
+ */
+export function TourLocker({ room }: { room: CramponsRoomView }) {
+  const s = room.settings.crampons;
+  const set = usePrefs((p) => p.set);
+  const home = clubBy(s.clubs[0]);
+  const away = clubBy(s.clubs[1]);
+  const kits = useMemo(() => matchKits(home, away), [home, away]);
+  const kit = kits[(room.you.seatId ? room.teams[room.you.seatId] : undefined) ?? 0];
+  const [buying, setBuying] = useState<ShopItem | null>(null);
+  return (
+    <>
+      <Locker kit={kit} onBuy={setBuying} />
+      <BuyModal
+        item={buying}
+        preview={buying ? <CramponsLook item={buying} big kit={kit} /> : undefined}
+        onClose={() => setBuying(null)}
+        onBought={(item) => {
+          if (item.kind === "ballon") set({ cramponsBall: item.ref as BallId });
+          if (item.kind === "fete") set({ cramponsFete: item.ref as FeteId });
+        }}
+      />
+    </>
+  );
+}
+
 /** Sous chaque joueur de l'affiche : son club et sa note (une étoile pour un club de légende) */
 function MatchupTag({ club }: { club: Club }) {
   return (

@@ -45,7 +45,7 @@ import {
 import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -64,8 +64,6 @@ const TRADE_EXPIRES_MS = 60_000;
 /** La version de la tournée dure 20 minutes */
 const TOUR_MINUTES = 20;
 const CHAT_KEEP = 80;
-/** Tournée : le temps de choisir son pion une fois tout le monde arrivé */
-const PICK_MS = 12_000;
 
 interface Seat {
   id: string;
@@ -311,7 +309,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
     if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId)) && !d.pickUntil) {
       // Tout le monde est là : quelques secondes pour choisir son pion, puis la partie part (plus tôt si tous sont prêts)
-      d.pickUntil = now + PICK_MS;
+      d.pickUntil = now + TOUR_PICK_MS;
       d.timers = d.timers.filter((t) => t.kind !== "tourStart");
       d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }

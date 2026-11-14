@@ -6,7 +6,8 @@ import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import { CramponsLobby } from "./CramponsLobby.tsx";
+import { TablePick } from "../tour/TablePick.tsx";
+import { CramponsLobby, TourLocker } from "./CramponsLobby.tsx";
 import { CramponsMatch } from "./CramponsMatch.tsx";
 import { useCramponsRoom } from "./useCramponsRoom.ts";
 import "./crampons.css";
@@ -14,7 +15,7 @@ import "./crampons.css";
 /** Une table de Crampons : le salon, puis le match. */
 export function CramponsRoom({ code }: { code: string }) {
   const [, navigate] = useLocation();
-  const { view, status, chat, fatal, send, me, listeners } = useCramponsRoom(code);
+  const { view, status, chat, fatal, send, serverOffset, me, listeners } = useCramponsRoom(code);
   const [chatOpen, setChatOpen] = useState(false);
   const [lobbyOpen, setLobbyOpen] = useState(false);
   const lastStatus = useRef(view?.status);
@@ -68,7 +69,14 @@ export function CramponsRoom({ code }: { code: string }) {
           onShowLobby={() => !bridge && setLobbyOpen(true)}
         />
       ) : bridge ? (
-        bridge.waiting
+        view.status === "lobby" ? (
+          // Juste avant le match de tournée : son ballon et sa célébration
+          <TablePick game="crampons" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
+            <TourLocker room={view} />
+          </TablePick>
+        ) : (
+          bridge.waiting
+        )
       ) : (
         <CramponsLobby
           room={view}

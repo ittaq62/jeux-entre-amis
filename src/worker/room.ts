@@ -38,7 +38,7 @@ import {
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { variantSettings, type TourInit } from "../shared/tour.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { lookOf } from "../shared/looks.ts";
 import { unoItem } from "../shared/shop.ts";
 import { ownsItem } from "./shop.ts";
@@ -125,6 +125,9 @@ interface RoomData {
   results?: EloResults | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 interface Attachment {
@@ -305,8 +308,11 @@ export class GameRoom extends DurableObject<Env> {
     if (!seat) this.systemChat(`${user.pseudo} regarde la partie.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      return this.startTourGame(now);
+    if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      // Tout le monde est là : une fenêtre pour choisir ses skins, puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + TOUR_PICK_MS;
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
@@ -469,6 +475,15 @@ export class GameRoom extends DurableObject<Env> {
         const valid = (REACTIONS as readonly string[]).includes(msg.emote) || (TAUNTS as readonly string[]).includes(msg.emote);
         if (!valid || !this.allowMessage(`emote:${userId}`, 900)) return;
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
+      }
+
+      case "ready": {
+        // Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins
+        if (!d.tour || d.status !== "lobby" || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        const humans = d.seats.filter((s) => s.kind === "human");
+        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        return this.afterChange([], now);
       }
 
       case "back": {
@@ -654,6 +669,8 @@ export class GameRoom extends DurableObject<Env> {
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     // Il faut au moins un vrai joueur à la table : une partie entre bots seuls ne compte pas
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
@@ -1089,6 +1106,8 @@ export class GameRoom extends DurableObject<Env> {
       results: d.results ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
     };
   }
 

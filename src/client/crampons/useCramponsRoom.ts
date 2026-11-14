@@ -30,6 +30,7 @@ export function useCramponsRoom(code: string) {
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [serverOffset, setServerOffset] = useState(0);
   const socket = useRef<LiveSocket<CramponsServerMessage, CramponsClientMessage> | null>(null);
   const viewRef = useRef<CramponsRoomView | null>(null);
   const listeners = useRef<MatchListeners>({});
@@ -39,6 +40,7 @@ export function useCramponsRoom(code: string) {
     viewRef.current = next;
     if (events.length > 0) listeners.current.onEvents?.(events);
     setView(next);
+    setServerOffset(next.serverNow - Date.now());
     announceSeatChanges(prev, next, next.you.userId);
   }, []);
 
@@ -122,5 +124,5 @@ export function useCramponsRoom(code: string) {
   }, [code, onRoom]);
 
   const send = useCallback((msg: CramponsClientMessage) => socket.current?.send(msg), []);
-  return { view, status, chat, fatal, send, me, listeners };
+  return { view, status, chat, fatal, send, serverOffset, me, listeners };
 }

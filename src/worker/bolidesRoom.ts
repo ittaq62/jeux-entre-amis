@@ -46,7 +46,7 @@ import {
 import { randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, TOUR_GUEST_PREFIX, variantSettings, type TourInit } from "../shared/tour.ts";
 import type { RoomInit } from "./room.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -105,6 +105,9 @@ interface BolidesData {
   cup?: { tracks: BaseTrackId[]; index: number; points: Record<string, number>; last: Record<string, number> } | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 interface Attachment {
@@ -264,9 +267,11 @@ export class BolidesRoom extends DurableObject<Env> {
     if (!seat) this.systemChat(`${user.pseudo} regarde la course.`);
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      await this.startTourGame(now);
-      return;
+    if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      // Tout le monde est là : une fenêtre pour choisir ses skins, puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + TOUR_PICK_MS;
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
@@ -431,6 +436,15 @@ export class BolidesRoom extends DurableObject<Env> {
         const valid = (REACTIONS as readonly string[]).includes(msg.emote) || (TAUNTS as readonly string[]).includes(msg.emote);
         if (!valid || !this.allowMessage(`emote:${userId}`, 900)) return;
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
+      }
+
+      case "ready": {
+        // Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins
+        if (!d.tour || d.status !== "lobby" || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        const humans = d.seats.filter((s) => s.kind === "human");
+        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        return this.afterChange([], now);
       }
 
       case "garage": {
@@ -614,6 +628,8 @@ export class BolidesRoom extends DurableObject<Env> {
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
       await abortToTour(this.env, d.tour!.code, d.code);
@@ -987,6 +1003,8 @@ export class BolidesRoom extends DurableObject<Env> {
       results: d.results ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
     };
   }
 

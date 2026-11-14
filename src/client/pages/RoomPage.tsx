@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import type { RoomSummary, TableGame } from "../../shared/protocol.ts";
+import { BackPicker } from "../game/BackPicker.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { RoomLobby } from "../game/RoomLobby.tsx";
 import { UnoTable } from "../game/UnoTable.tsx";
@@ -9,6 +10,7 @@ import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TablePick } from "../tour/TablePick.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { unoItem } from "../../shared/shop.ts";
@@ -90,6 +92,7 @@ function UnoRoom({ code }: { code: string }) {
 
   // Le dos de cartes choisi en dernier sur cet appareil : repris à chaque table où l'on s'assoit (s'il est à soi)
   const unoBack = usePrefs((p) => p.unoBack);
+  const setPrefs = usePrefs((p) => p.set);
   const { has } = useMyItems();
   const mySeatBack = view?.seats.find((s) => s.id === view.you.seatId)?.back ?? (view?.you.seatId ? "classique" : null);
   const owned = unoBack !== null && has(unoItem(unoBack));
@@ -135,7 +138,20 @@ function UnoRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
-        bridge.waiting
+        view.status === "lobby" ? (
+          // Juste avant la partie de tournée : le dos de ses cartes
+          <TablePick game="uno" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
+            <BackPicker
+              current={mySeatBack ?? "classique"}
+              onPick={(back) => {
+                setPrefs({ unoBack: back });
+                send({ t: "back", back });
+              }}
+            />
+          </TablePick>
+        ) : (
+          bridge.waiting
+        )
       ) : (
         <RoomLobby
           room={view}

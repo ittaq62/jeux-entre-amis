@@ -6,8 +6,10 @@ import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TablePick } from "../tour/TablePick.tsx";
 import { NavalLobby } from "./NavalLobby.tsx";
 import { NavalTable } from "./NavalTable.tsx";
+import { SkinPicker } from "./SkinPicker.tsx";
 import { useNavalRoom } from "./useNavalRoom.ts";
 import "./naval.css";
 
@@ -30,6 +32,7 @@ export function NavalRoom({ code }: { code: string }) {
 
   // Le thème de flotte choisi en dernier sur cet appareil : repris à chaque table où l'on s'assoit (s'il est à soi)
   const navalSkin = usePrefs((p) => p.navalSkin);
+  const setPrefs = usePrefs((p) => p.set);
   const { has } = useMyItems();
   const mySeatSkin = view?.seats.find((s) => s.id === view.you.seatId)?.skin ?? (view?.you.seatId ? "marine" : null);
   const owned = navalSkin !== null && has(navalItem(navalSkin));
@@ -68,7 +71,20 @@ export function NavalRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
-        bridge.waiting
+        view.status === "lobby" ? (
+          // Juste avant la partie de tournée : le thème de sa flotte
+          <TablePick game="naval" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
+            <SkinPicker
+              current={mySeatSkin ?? "marine"}
+              onPick={(skin) => {
+                setPrefs({ navalSkin: skin });
+                send({ t: "skin", skin });
+              }}
+            />
+          </TablePick>
+        ) : (
+          bridge.waiting
+        )
       ) : (
         <NavalLobby
           room={view}

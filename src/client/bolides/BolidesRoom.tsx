@@ -3,8 +3,10 @@ import { useLocation } from "wouter";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TablePick } from "../tour/TablePick.tsx";
 import { BolidesLobby } from "./BolidesLobby.tsx";
 import { BolidesRace } from "./BolidesRace.tsx";
+import { Garage } from "./Garage.tsx";
 import { useBolidesRoom } from "./useBolidesRoom.ts";
 import "./bolides.css";
 
@@ -56,7 +58,14 @@ export function BolidesRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
-        bridge.waiting
+        view.status === "lobby" ? (
+          // Juste avant la course de tournée : son véhicule et son skin
+          <TablePick game="bolides" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
+            <Garage room={view} send={send} />
+          </TablePick>
+        ) : (
+          bridge.waiting
+        )
       ) : (
         <BolidesLobby
           room={view}
