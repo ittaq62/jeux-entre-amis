@@ -1655,8 +1655,14 @@ a.shop-item {
     radial-gradient(ellipse 90% 85% at 50% 45%, #2f6b4c 0%, #1c4733 55%, #0d2a1d 100%);
 }
 
+/* L'image du plateau, et par-dessus ce qui s'y passe (banners.css) */
 .capitale-preview {
+  position: relative;
+}
+
+.capitale-preview-board {
   display: block;
+  width: 100%;
   height: auto;
   filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
 }

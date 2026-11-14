@@ -580,3 +580,74 @@
     opacity: 0;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Capitale : les dés roulent, le pion fait le tour du plateau        */
+/* (les @keyframes sont calculées dans CapitalePreview.tsx)           */
+/* ------------------------------------------------------------------ */
+
+.capitale-preview-life {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.cap-pv-die-shadow {
+  fill: rgba(70, 45, 20, 0.22);
+}
+
+.cap-pv-die-top {
+  fill: #fffdf7;
+}
+
+.cap-pv-die-left {
+  fill: #e6dccb;
+}
+
+.cap-pv-die-right {
+  fill: #cfc3ae;
+}
+
+.cap-pv-die polygon {
+  stroke: #9c8d76;
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+.cap-pv-pip {
+  fill: #2e2620;
+}
+
+.cap-pv-pawn-shadow {
+  fill: rgba(40, 25, 10, 0.32);
+}
+
+.cap-pv-pawn-body {
+  stroke: #3a2068;
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+
+.cap-pv-pawn-shine {
+  fill: rgba(255, 255, 255, 0.55);
+}
+
+.cap-pv-cash {
+  opacity: 0;
+}
+
+.cap-pv-cash-note {
+  fill: #3f9a5a;
+  stroke: #e9f7e4;
+  stroke-width: 2;
+}
+
+.cap-pv-cash-text {
+  fill: #ffffff;
+  font-family: var(--font-text);
+  font-size: 16px;
+  font-weight: 800;
+}
