@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState, type ReactNode } from "react";
+import { JOINS_STARTED, lateJoinHint, maySit } from "../../shared/lateJoin.ts";
 import { MIN_PLAYERS, type LobbyClientMessage, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
@@ -65,7 +66,10 @@ export function TableLobby({
   const link = `${location.origin}/salon/${room.code}`;
   const emptySeats = Math.max(0, room.settings.maxPlayers - room.seats.length);
   const finished = room.status === "finished";
+  const playing = room.status === "playing";
   const seated = room.you.seatId !== null;
+  // Une partie lancée ne se rejoint que si l'hôte le permet et que le jeu le sait (Crampons) : le serveur décide aussi
+  const canTakeSeat = maySit({ started: playing, lateJoin: Boolean(room.settings.lateJoin), midGame: JOINS_STARTED[room.game] });
   const host = room.seats.find((x) => x.isHost);
   // Ceux qui sont déjà là, assis ou spectateurs : pas besoin de les inviter
   const here = useMemo(
@@ -217,10 +221,19 @@ export function TableLobby({
                 </li>
               ))}
             </ul>
-            {!seated && (room.seats.length < room.settings.maxPlayers || (tour && room.seats.some((x) => x.kind === "bot"))) && (
-              <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
-                {tour ? "Jouer la tournée" : "Prendre une place"}
-              </button>
+            {!seated &&
+              canTakeSeat &&
+              (room.seats.length < room.settings.maxPlayers || (tour && room.seats.some((x) => x.kind === "bot"))) && (
+                <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
+                  {tour ? "Jouer la tournée" : playing ? "Entrer sur le terrain" : "Prendre une place"}
+                </button>
+              )}
+            {!seated && !canTakeSeat && (
+              <p className="hint" style={{ marginTop: 12 }}>
+                {room.settings.lateJoin
+                  ? "La partie est lancée : tu la regardes, et tu pourras t'asseoir à la suivante."
+                  : "La table n'accepte plus personne en cours de route : tu regardes, et tu pourras t'asseoir à la prochaine partie."}
+              </p>
             )}
             {room.spectators.length > 0 && (
               <p className="hint" style={{ marginTop: 12 }}>
@@ -279,47 +292,66 @@ export function RulesHeading({ room }: { room: LobbyRoom }) {
   );
 }
 
-/** Nombre de places et ouverture de la table : les mêmes pour tous les jeux. */
+/** Nombre de places, ouverture de la table, et ce qu'on peut faire une fois la partie lancée : les mêmes pour tous les jeux. */
 export function TableSize({ room, send, max }: { room: LobbyRoom; send: (msg: LobbyClientMessage) => void; max: number }) {
   const isHost = room.you.isHost;
+  const late = Boolean(room.settings.lateJoin);
   return (
-    <div className="rules-two">
-      <div className="field">
-        <span className="field-label">Joueurs au plus</span>
-        <div className="stepper">
-          <button
-            className="btn btn-icon btn-sm"
-            disabled={!isHost || room.settings.maxPlayers <= Math.max(MIN_PLAYERS, room.seats.filter((x) => x.kind === "human").length)}
-            onClick={() => send({ t: "settings", settings: {}, maxPlayers: room.settings.maxPlayers - 1 })}
-            aria-label="Une place de moins"
-          >
-            −
-          </button>
-          <strong className="num">{room.settings.maxPlayers}</strong>
-          <button
-            className="btn btn-icon btn-sm"
-            disabled={!isHost || room.settings.maxPlayers >= max}
-            onClick={() => send({ t: "settings", settings: {}, maxPlayers: room.settings.maxPlayers + 1 })}
-            aria-label="Une place de plus"
-          >
-            +
-          </button>
+    <>
+      <div className="rules-two">
+        <div className="field">
+          <span className="field-label">Joueurs au plus</span>
+          <div className="stepper">
+            <button
+              className="btn btn-icon btn-sm"
+              disabled={!isHost || room.settings.maxPlayers <= Math.max(MIN_PLAYERS, room.seats.filter((x) => x.kind === "human").length)}
+              onClick={() => send({ t: "settings", settings: {}, maxPlayers: room.settings.maxPlayers - 1 })}
+              aria-label="Une place de moins"
+            >
+              −
+            </button>
+            <strong className="num">{room.settings.maxPlayers}</strong>
+            <button
+              className="btn btn-icon btn-sm"
+              disabled={!isHost || room.settings.maxPlayers >= max}
+              onClick={() => send({ t: "settings", settings: {}, maxPlayers: room.settings.maxPlayers + 1 })}
+              aria-label="Une place de plus"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <span className="field-label">Qui peut venir</span>
+          <Options
+            label="Qui peut venir"
+            value={room.settings.visibility}
+            disabled={!isHost}
+            onChange={(visibility) => send({ t: "settings", settings: {}, visibility })}
+            options={[
+              { value: "private", label: "Mes invités" },
+              { value: "public", label: "Tout le monde" },
+            ]}
+          />
         </div>
       </div>
       <div className="field">
-        <span className="field-label">Qui peut venir</span>
-        <Options
-          label="Qui peut venir"
-          value={room.settings.visibility}
+        <span className="field-label">Rejoindre en cours de route</span>
+        <Options<"yes" | "no">
+          label="Rejoindre en cours de route"
+          value={late ? "yes" : "no"}
           disabled={!isHost}
-          onChange={(visibility) => send({ t: "settings", settings: {}, visibility })}
+          onChange={(v) => send({ t: "settings", settings: {}, lateJoin: v === "yes" })}
           options={[
-            { value: "private", label: "Mes invités" },
-            { value: "public", label: "Tout le monde" },
+            { value: "yes", label: "Oui" },
+            { value: "no", label: "Non" },
           ]}
         />
+        <p className="hint" style={{ margin: 0 }}>
+          {lateJoinHint(room.game, late)}
+        </p>
       </div>
-    </div>
+    </>
   );
 }
 

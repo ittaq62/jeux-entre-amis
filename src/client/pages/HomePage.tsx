@@ -10,6 +10,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Modal } from "../components/ui.tsx";
+import { lateJoinTag, TableLinks } from "../components/TableLinks.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
@@ -19,6 +20,7 @@ import { CramponsPreview } from "../crampons/CramponsPreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { tableHref } from "../lib/arrival.ts";
 import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -77,7 +79,8 @@ export function HomePage() {
         game === "tour"
           ? await api.post<{ code: string; created: boolean }>("/tours/quick")
           : await api.post<{ code: string; created: boolean }>("/rooms/quick", { game });
-      navigate(`/salon/${res.code}`);
+      // Une partie rapide, c'est pour jouer : y compris dans une tournée déjà lancée qui accueille en cours de route
+      navigate(tableHref(res.code, "play"));
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Impossible de trouver une partie." });
       setBusy(null);
@@ -120,6 +123,8 @@ export function HomePage() {
   // Quand on cherche un jeu, les tables ouvertes se limitent à lui
   const rooms = lobby.filter((r) => (r.game === "tour" ? tourOn : games.includes(r.game)) && (!searching || found.has(r.game)));
   const accepted = friends.filter((f) => f.status === "accepted");
+  // Une table fermée en cours de route se regarde quand on y a un ami : les pseudos assis le disent
+  const friendNames = new Set(accepted.map((f) => f.user.pseudo));
   const sortedFriends = accepted.slice().sort((a, b) => Number(b.user.id in online) - Number(a.user.id in online));
 
   return (
@@ -179,7 +184,7 @@ export function HomePage() {
               ) : (
                 <ul className="rows">
                   {rooms.map((room) => (
-                    <RoomRow key={room.code} room={room} showGame={games.length > 1} />
+                    <RoomRow key={room.code} room={room} showGame={games.length > 1} friendNames={friendNames} />
                   ))}
                 </ul>
               )}
@@ -224,9 +229,9 @@ export function HomePage() {
                           </span>
                         </Link>
                         {room && (
-                          <Link href={`/salon/${room.code}`} className="btn btn-sm">
-                            {room.status === "playing" ? "Regarder" : "Rejoindre"}
-                          </Link>
+                          <span className="row-actions">
+                            <TableLinks code={room.code} game={room.game} status={room.status} lateJoin={room.lateJoin} />
+                          </span>
                         )}
                       </li>
                     );
@@ -443,8 +448,21 @@ const NAVAL_MODES: Record<string, string> = {
   "11": "11 contre 11",
 };
 
-function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
+function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame: boolean; friendNames: Set<string> }) {
   const seats = room.humans + room.bots;
+  // Fermée en cours de route, elle ne se regarde que si l'un de ses joueurs est un ami (le serveur décide aussi)
+  const links = (
+    <span className="row-actions">
+      <TableLinks
+        code={room.code}
+        game={room.game}
+        status={room.status}
+        lateJoin={room.lateJoin}
+        canWatch={room.names.some((n) => friendNames.has(n))}
+        joinLabel={room.game === "tour" ? "Rejoindre" : "S'asseoir"}
+      />
+    </span>
+  );
   if (room.game === "tour") {
     const programme = room.variant
       .split(",")
@@ -458,12 +476,10 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
           <strong>{room.hostName ? `Tournée de ${room.hostName}` : "Tournée ouverte"}</strong>
           <span className="hint">
             {programme}, {room.humans + room.bots} sur {room.maxPlayers}
-            {room.status === "playing" ? ", en cours" : ""}
+            {room.status === "playing" ? ", en cours" : ""} · {lateJoinTag(room.lateJoin)}
           </span>
         </span>
-        <Link href={`/salon/${room.code}`} className="btn btn-sm">
-          Rejoindre
-        </Link>
+        {links}
       </li>
     );
   }
@@ -482,7 +498,7 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>
         <span className="hint">
           {showGame ? `${GAME_NAMES[room.game as GameId]} ${variant}` : variant}, {seats} sur {room.maxPlayers}
-          {room.status === "playing" ? ", partie en cours" : ""}
+          {room.status === "playing" ? ", partie en cours" : ""} · {lateJoinTag(room.lateJoin)}
           <span className="seat-dots" aria-hidden="true">
             {Array.from({ length: room.maxPlayers }, (_, i) => (
               <span key={i} className={i < room.humans ? "is-human" : i < seats ? "is-bot" : ""} />
@@ -490,9 +506,7 @@ function RoomRow({ room, showGame }: { room: RoomSummary; showGame: boolean }) {
           </span>
         </span>
       </span>
-      <Link href={`/salon/${room.code}`} className="btn btn-sm">
-        {room.status === "playing" ? "Regarder" : "S'asseoir"}
-      </Link>
+      {links}
     </li>
   );
 }

@@ -18,6 +18,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Check, ConfirmButton, Loading, Modal, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { tableHref } from "../lib/arrival.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
 
@@ -335,7 +336,7 @@ function RoomLine({ room, onClosed }: { room: AdminRoom; onClosed: () => void })
         </span>
       </span>
       <span className="row-actions">
-        <Link href={`/salon/${room.code}`} className="btn btn-sm">
+        <Link href={tableHref(room.code, "watch")} className="btn btn-sm">
           Regarder
         </Link>
         <ConfirmButton className="btn btn-sm btn-danger" confirm="Sûr ?" onConfirm={() => void close()}>

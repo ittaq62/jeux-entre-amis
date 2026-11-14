@@ -56,7 +56,7 @@ export function lobbyRoomOf(view: TourView): LobbyRoom {
     code: view.code,
     game: "tour",
     status: view.status === "lobby" ? "lobby" : view.status === "finished" ? "finished" : "playing",
-    settings: { visibility: view.settings.visibility, maxPlayers: view.settings.maxPlayers },
+    settings: { visibility: view.settings.visibility, maxPlayers: view.settings.maxPlayers, lateJoin: Boolean(view.settings.lateJoin) },
     seats,
     spectators: [...watchers, ...view.spectators],
     you: {

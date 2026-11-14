@@ -4,6 +4,7 @@ import type { PublicUser } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
+import { TableLinks } from "../components/TableLinks.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
@@ -164,11 +165,7 @@ export function FriendsPage() {
                       </span>
                     </Link>
                     <span className="row-actions">
-                      {room && (
-                        <Link href={`/salon/${room.code}`} className="btn btn-sm">
-                          Rejoindre
-                        </Link>
-                      )}
+                      {room && <TableLinks code={room.code} game={room.game} status={room.status} lateJoin={room.lateJoin} />}
                       <button
                         className="btn btn-sm btn-ghost"
                         onClick={() => void remove(f.user.id)}

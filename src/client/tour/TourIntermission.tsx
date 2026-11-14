@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
 import { fitsGame, type TourClientMessage, type TourView } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
-import { ConfirmButton } from "../components/ui.tsx";
+import { lateJoinHint } from "../../shared/lateJoin.ts";
+import { ConfirmButton, Options } from "../components/ui.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -30,6 +31,7 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
   // Comme au serveur : une place libre, ou un bot qui la cède
   const seated = view.members.filter((m) => m.role === "player" && !m.left);
   const canSit = seated.length < view.settings.maxPlayers || seated.some((m) => m.kind === "bot");
+  const lateJoin = Boolean(view.settings.lateJoin);
   const seatOf = (id: string) => view.members.find((m) => m.userId === id);
   const [now, setNow] = useState(() => Date.now() + serverOffset);
   useEffect(() => {
@@ -110,10 +112,32 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
                 </ConfirmButton>
               </div>
             )}
-            {view.you.member && view.you.role === "spectator" && canSit && (
+            {isHost && (
+              <div className="field tour-late">
+                <span className="field-label">Rejoindre en cours de route</span>
+                <Options<"yes" | "no">
+                  label="Rejoindre en cours de route"
+                  value={lateJoin ? "yes" : "no"}
+                  onChange={(v) => send({ t: "settings", settings: {}, lateJoin: v === "yes" })}
+                  options={[
+                    { value: "yes", label: "Oui" },
+                    { value: "no", label: "Non" },
+                  ]}
+                />
+                <p className="hint" style={{ margin: 0 }}>
+                  {lateJoinHint("tour", lateJoin)}
+                </p>
+              </div>
+            )}
+            {view.you.member && view.you.role === "spectator" && canSit && lateJoin && (
               <button className="btn" onClick={() => send({ t: "sit" })}>
                 Jouer au prochain jeu
               </button>
+            )}
+            {view.you.member && view.you.role === "spectator" && !lateJoin && (
+              <p className="hint" style={{ margin: 0 }}>
+                La tournée n'accepte plus de joueurs en cours de route : tu la suis, sans y entrer.
+              </p>
             )}
             {view.you.role === "player" && view.members.find((m) => m.userId === view.you.userId)?.waiting && (
               <p className="hint" style={{ margin: 0 }}>
