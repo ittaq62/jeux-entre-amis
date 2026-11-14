@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { GAME_NAMES } from "../../shared/protocol.ts";
 import { teamScores, TOUR_TEAM_COLORS, TOUR_TEAMS, type TourClientMessage, type TourView } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { GameTicket, playedGames, rulesName, Standings, standingsOf, TeamDuel, TourTop } from "./TourParts.tsx";
 import { TourTrophies } from "./TourTrophies.tsx";
@@ -168,7 +169,16 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
             Retour à l'accueil
           </button>
         </div>
-        {!view.you.isHost && <p className="hint center-text tour-finale-note">L'hôte peut relancer une tournée avec la même bande.</p>}
+        <p className="hint center-text tour-finale-note">
+          {!view.you.isHost && <span>L'hôte peut relancer une tournée avec la même bande.</span>}
+          <ReportButton
+            game="tour"
+            variant={`La Tournée, ${games.length} jeu${games.length > 1 ? "x" : ""}${view.settings.teams ? ", en équipes" : ""}`}
+            code={null}
+            tour={view.code}
+            role={view.you.role === "player" ? "player" : view.you.role === "spectator" ? "watcher" : null}
+          />
+        </p>
       </main>
     </div>
   );

@@ -9,6 +9,7 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { money } from "./boardUi.ts";
 import { teamColor, teamIn, TeamMark } from "./teamsUi.tsx";
@@ -197,6 +198,12 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
             </button>
           )}
         </div>
+        <ReportButton
+          game="capitale"
+          variant={`Capitale, ${g.settings.end === "timed" ? `partie de ${g.settings.minutes} minutes` : "jusqu'à la faillite"}`}
+          code={room.code}
+          role={room.you.seatId ? "player" : "watcher"}
+        />
       </motion.div>
     </motion.div>
   );

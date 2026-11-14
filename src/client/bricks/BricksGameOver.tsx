@@ -11,6 +11,7 @@ import { formatSprint } from "../lib/countdown.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useSession } from "../stores/session.ts";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
@@ -64,6 +65,18 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
     return () => clearTimeout(t);
   }, [sprint, mySprint, pseudo]);
 
+  const report = (
+    <ReportButton
+      game="bricks"
+      variant={
+        g.mode === "sprint"
+          ? "Briques, 40 lignes en solo"
+          : `Briques, ${g.mode === "duel" ? "en duel" : g.mode === "teams" ? "en équipes" : "en mêlée"}${g.settings.series > 1 ? `, en ${g.settings.series} manches gagnantes` : ""}`
+      }
+      code={room.code}
+      role={me ? "player" : "watcher"}
+    />
+  );
   const actions = inTour ? (
     <>
       <p className="tour-next-note">
@@ -140,6 +153,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
             </dl>
           )}
           {actions}
+          {report}
         </motion.div>
       </motion.div>
     );
@@ -211,6 +225,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
           })}
         </ol>
         {actions}
+        {report}
       </motion.div>
     </motion.div>
   );

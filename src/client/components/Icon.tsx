@@ -50,6 +50,7 @@ const PATHS = {
   swap: "M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13",
   list: "M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01",
   cards: "M8 3h11a2 2 0 0 1 2 2v12M4 7h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z",
+  flag: "M5 21V4M5 4c2.5-1.3 5-1.3 7.5 0S17.5 5.3 20 4v10c-2.5 1.3-5 1.3-7.5 0S7.5 12.7 5 14",
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -170,6 +170,87 @@
   cursor: default;
 }
 
+/* « Signaler un problème » : discret, sous les boutons d'une fin de partie, dans la couleur de ce qui l'entoure */
+.report-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 28px;
+  margin: -4px 0 -6px -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  opacity: 0.62;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition:
+    opacity 0.15s,
+    text-decoration-color 0.15s;
+}
+
+.report-link:hover,
+.report-link:focus-visible {
+  opacity: 1;
+  text-decoration-color: currentColor;
+}
+
+.report-link svg {
+  flex: none;
+}
+
+.report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-text {
+  min-height: 0;
+  padding: 10px 14px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.report-joined {
+  margin: -2px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.report-error {
+  margin: 0;
+}
+
+.report-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.report-thanks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.report-thanks p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
 .badge {
   position: absolute;
   top: 2px;

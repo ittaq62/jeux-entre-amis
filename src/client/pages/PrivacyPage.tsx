@@ -25,6 +25,11 @@ export function PrivacyPage() {
             <strong>Tes amis</strong> et les demandes en cours.
           </li>
           <li>
+            <strong>Tes signalements</strong>, si tu en envoies un depuis la fin d'une partie : ton texte, le jeu et la table, la version du
+            site, et ton appareil en clair (téléphone, tablette ou PC, son système, son navigateur et la taille de l'écran). Ni adresse IP
+            ni rien d'autre. Seul l'administrateur du site les lit ; ils partent avec ton compte si tu le supprimes.
+          </li>
+          <li>
             Un <strong>cookie de session</strong>, indispensable pour rester connecté (30 jours). Aucun cookie publicitaire ni de mesure
             d'audience.
           </li>

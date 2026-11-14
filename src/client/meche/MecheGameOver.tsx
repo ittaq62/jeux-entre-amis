@@ -7,6 +7,7 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
@@ -133,6 +134,12 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
             </button>
           )}
         </div>
+        <ReportButton
+          game="meche"
+          variant={`${modeName}${g.settings.source === "marabout" ? ", au Marabout" : ""}`}
+          code={room.code}
+          role={room.you.seatId ? "player" : "watcher"}
+        />
       </motion.div>
     </motion.div>
   );

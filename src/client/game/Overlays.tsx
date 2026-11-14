@@ -6,6 +6,7 @@ import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { EloLine } from "./EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
@@ -212,6 +213,12 @@ export function GameOver({
             .
           </p>
         )}
+        <ReportButton
+          game="uno"
+          variant={`${g.settings.variant === "nomercy" ? "UNO No Mercy" : "UNO classique"}${g.settings.endMode === "points" ? `, en ${g.settings.targetScore} points` : ""}`}
+          code={room.code}
+          role={me ? "player" : "watcher"}
+        />
       </motion.div>
     </motion.div>
   );

@@ -9,6 +9,7 @@ import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { kartColor, raceTime } from "./BolidesRace.tsx";
 
@@ -176,6 +177,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
             </button>
           )}
         </div>
+        <ReportButton game="bolides" variant={`Bolides, ${summary}`} code={room.code} role={room.you.seatId ? "player" : "watcher"} />
       </motion.div>
     </motion.div>
   );

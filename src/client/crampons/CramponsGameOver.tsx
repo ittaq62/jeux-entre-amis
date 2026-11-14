@@ -1,6 +1,8 @@
 import { deClub } from "../../shared/games/crampons/clubs.ts";
+import { LEVEL_NAMES } from "../../shared/games/crampons/view.ts";
 import type { TeamStats } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 
 const ROWS: [string, (s: TeamStats, total: TeamStats) => string][] = [
@@ -96,6 +98,12 @@ export function CramponsGameOver({
             {inTour ? "Quitter la tournée" : "Quitter"}
           </button>
         </div>
+        <ReportButton
+          game="crampons"
+          variant={`Crampons, ${room.settings.crampons.side} contre ${room.settings.crampons.side}, mi-temps de ${room.settings.crampons.halfMinutes} min, ${LEVEL_NAMES[room.settings.crampons.level] ?? ""}`}
+          code={room.code}
+          role={room.you.seatId ? "player" : "watcher"}
+        />
       </div>
     </div>
   );

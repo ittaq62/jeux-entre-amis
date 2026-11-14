@@ -8,6 +8,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { TEAM_NAMES } from "./NavalLobby.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 
 interface Props {
@@ -140,6 +141,12 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
             </button>
           )}
         </div>
+        <ReportButton
+          game="naval"
+          variant={`Bataille navale, ${g.mode === "duel" ? "en duel" : g.mode === "teams" ? "en équipes" : "en mêlée"}, grille ${g.settings.grid}×${g.settings.grid}`}
+          code={room.code}
+          role={room.you.seatId ? "player" : "watcher"}
+        />
       </motion.div>
     </motion.div>
   );
