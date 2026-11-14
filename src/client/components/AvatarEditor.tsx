@@ -8,19 +8,20 @@ import {
   AVATAR_SKINS,
   randomAvatar,
   type AvatarConfig,
+  type AvatarPart,
 } from "../../shared/avatar.ts";
 import { AvatarDrawing } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
 
-const TABS: (keyof AvatarConfig)[] = ["skin", "hair", "hairColor", "eyes", "mouth", "hat", "extra", "bg"];
-const SWATCHES: Partial<Record<keyof AvatarConfig, string[]>> = {
+const TABS: AvatarPart[] = ["skin", "hair", "hairColor", "eyes", "mouth", "hat", "extra", "bg"];
+const SWATCHES: Partial<Record<AvatarPart, string[]>> = {
   bg: AVATAR_BACKGROUNDS,
   skin: AVATAR_SKINS,
   hairColor: AVATAR_HAIR_COLORS,
 };
 
 export function AvatarEditor({ value, onChange }: { value: AvatarConfig; onChange: (v: AvatarConfig) => void }) {
-  const [tab, setTab] = useState<keyof AvatarConfig>("hair");
+  const [tab, setTab] = useState<AvatarPart>("hair");
   const [spin, setSpin] = useState(0);
   const swatches = SWATCHES[tab];
   return (

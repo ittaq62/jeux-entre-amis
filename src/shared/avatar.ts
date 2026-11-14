@@ -1,3 +1,5 @@
+import { cleanWear, type AvatarWear, type WearSlot } from "./wardrobe.ts";
+
 /** Avatar dessine a partir de quelques choix : fond, teint, yeux, bouche, chapeau, accessoire. */
 export interface AvatarConfig {
   bg: number;
@@ -8,7 +10,12 @@ export interface AvatarConfig {
   mouth: number;
   hat: number;
   extra: number;
+  /** Ce qu'il porte en plus, pris dans la garde-robe (wardrobe.ts) : absent tant qu'on n'a rien choisi */
+  wear?: AvatarWear;
 }
+
+/** Les parties du portrait de base, chacune un numéro */
+export type AvatarPart = Exclude<keyof AvatarConfig, "wear">;
 
 export const AVATAR_BACKGROUNDS = [
   "#c0392b",
@@ -40,7 +47,7 @@ export const AVATAR_PARTS = {
   extra: 7,
 } as const;
 
-export const AVATAR_PART_LABELS: Record<keyof AvatarConfig, string> = {
+export const AVATAR_PART_LABELS: Record<AvatarPart, string> = {
   bg: "Fond",
   skin: "Teint",
   hair: "Coiffure",
@@ -76,14 +83,33 @@ export function seededAvatar(seed: string): AvatarConfig {
   });
 }
 
+/**
+ * Le portrait de base doit être complet et juste (sinon null : le compte garde son avatar tiré au sort). La
+ * garde-robe, elle, ne fait jamais tout rejeter : ce qui n'est pas au catalogue est simplement oublié.
+ */
 export function sanitizeAvatar(input: unknown): AvatarConfig | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Record<string, unknown>;
   const out = {} as AvatarConfig;
-  for (const key of Object.keys(AVATAR_PARTS) as (keyof AvatarConfig)[]) {
+  for (const key of Object.keys(AVATAR_PARTS) as AvatarPart[]) {
     const v = raw[key];
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v >= AVATAR_PARTS[key]) return null;
     out[key] = v;
   }
+  const wear = cleanWear(raw.wear);
+  if (wear) out.wear = wear;
   return out;
 }
+
+/** Le même avatar avec une place de la garde-robe changée (`null` : la vider) */
+export function wearing(avatar: AvatarConfig, slot: WearSlot, id: string | null): AvatarConfig {
+  const wear: AvatarWear = { ...avatar.wear };
+  if (id) wear[slot] = id;
+  else delete wear[slot];
+  const { wear: _old, ...base } = avatar;
+  return Object.keys(wear).length > 0 ? { ...base, wear } : base;
+}
+
+/** Porte-t-il quelque chose de la garde-robe ? */
+export const hasWear = (avatar: Pick<AvatarConfig, "wear"> | null | undefined): boolean =>
+  Boolean(avatar?.wear && Object.keys(avatar.wear).length > 0);

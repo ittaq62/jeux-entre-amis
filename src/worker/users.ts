@@ -22,6 +22,7 @@ import type { FriendEntry, GameId, Me, PublicUser, TableGame } from "../shared/p
 import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
 import { rankingPoints } from "../shared/ranking.ts";
+import { usableWear } from "../shared/shop.ts";
 import type { UserRow } from "./auth.ts";
 import { albumSummary } from "./cards.ts";
 import { randomId } from "./util.ts";
@@ -32,6 +33,24 @@ export function parseAvatar(raw: string, seed: string): AvatarConfig {
   } catch {
     return seededAvatar(seed);
   }
+}
+
+/**
+ * L'avatar enregistré, sans ce qui s'achète (quand ses achats sont effacés) : le nouveau JSON, ou null s'il n'y a
+ * rien à changer (rien de payant sur lui, ou un avatar jamais enregistré).
+ */
+export function withoutPaidWear(raw: string): string | null {
+  let clean: AvatarConfig | null = null;
+  try {
+    clean = sanitizeAvatar(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+  if (!clean?.wear) return null;
+  const { wear, ...base } = clean;
+  const free = usableWear(wear, new Set());
+  if (free && Object.keys(free).length === Object.keys(wear).length) return null;
+  return JSON.stringify(free ? { ...base, wear: free } : base);
 }
 
 export function toPublic(row: Pick<UserRow, "id" | "pseudo" | "avatar" | "photo_version"> & { is_admin?: number }): PublicUser {

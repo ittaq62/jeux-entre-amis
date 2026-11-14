@@ -15,8 +15,9 @@ import { CLUBS } from "./games/crampons/clubs.ts";
 import { BOMBS, type BombId } from "./games/meche/bombs.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
+import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
 
-export type ShopKind = "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe";
+export type ShopKind = "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe";
 
 export interface ShopItem {
   id: string;
@@ -38,8 +39,11 @@ export const ballItem = (id: BallId) => `ballon:${id}`;
 export const feteItem = (id: FeteId) => `fete:${id}`;
 /** Mèche : ce qui saute au bout de la mèche */
 export const bombItem = (id: BombId) => `bombe:${id}`;
+/** Le personnage de profil : ce qu'il porte (wardrobe.ts) */
+export const wearItem = (id: string) => `perso:${id}`;
 
 export const SHOP_ITEMS: ShopItem[] = [
+  ...WEAR.map((i): ShopItem => ({ id: wearItem(i.id), kind: "perso", ref: i.id, name: i.name, price: i.price })),
   ...NAVAL_SKINS.map((s): ShopItem => ({ id: navalItem(s.id), kind: "naval", ref: s.id, name: s.name, price: s.price })),
   ...TOKENS.map((t): ShopItem => ({ id: tokenItem(t.id), kind: "token", ref: t.id, name: t.name, price: t.price })),
   ...VEHICLE_IDS.map((id): ShopItem => ({
@@ -68,6 +72,25 @@ export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));
 /** Un article s'utilise s'il est offert à tous, ou si le joueur l'a déjà. Un article inconnu ne s'utilise pas. */
 export function canUse(item: string, owned: ReadonlySet<string>): boolean {
   return SHOP_BY_ID.get(item)?.price === 0 || owned.has(item);
+}
+
+/** La première chose que porte le personnage sans l'avoir (ni offerte ni achetée), null si tout est à lui */
+export function unownedWear(wear: AvatarWear | undefined, owned: ReadonlySet<string>): WearInfo | null {
+  for (const slot of WEAR_SLOTS) {
+    const info = wear?.[slot] ? WEAR_BY_ID.get(wear[slot]!) : undefined;
+    if (info && !canUse(wearItem(info.id), owned)) return info;
+  }
+  return null;
+}
+
+/** Ce qu'il porte, sans ce qui n'est plus à lui (undefined s'il ne lui reste rien) */
+export function usableWear(wear: AvatarWear | undefined, owned: ReadonlySet<string>): AvatarWear | undefined {
+  const out: AvatarWear = {};
+  for (const slot of WEAR_SLOTS) {
+    const id = wear?.[slot];
+    if (id && WEAR_BY_ID.get(id)?.slot === slot && canUse(wearItem(id), owned)) out[slot] = id;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export interface ShopResponse {

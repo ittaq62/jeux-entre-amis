@@ -1,6 +1,7 @@
 import { Hono, type Context, type Next } from "hono";
 import { normalizePseudo, validatePseudo, isRoomCode } from "../shared/app.ts";
 import { sanitizeAvatar } from "../shared/avatar.ts";
+import { unownedWear } from "../shared/shop.ts";
 import {
   ANNOUNCE_MAX,
   BAN_REASON_MAX,
@@ -40,9 +41,10 @@ import {
   toPublic,
   tourSheet,
   userProfile,
+  withoutPaidWear,
 } from "./users.ts";
 import { albumState, craftCard, openPack, sellDoubles } from "./cards.ts";
-import { buyItem, shopState } from "./shop.ts";
+import { buyItem, ownedItems, shopState } from "./shop.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -201,6 +203,9 @@ app.patch("/me", withSession, async (c) => {
   if (body.avatar !== undefined) {
     const clean = sanitizeAvatar(body.avatar);
     if (!clean) return c.json({ error: "Avatar invalide." }, 400);
+    // Ce qu'il porte doit être à lui : offert à tous, ou acheté (ce qui est inconnu a déjà été oublié)
+    const missing = clean.wear ? unownedWear(clean.wear, await ownedItems(c.env.DB, user.id)) : null;
+    if (missing) return c.json({ error: `« ${missing.name} » n'est pas encore à toi : achète-le d'abord.` }, 403);
     avatar = JSON.stringify(clean);
   }
   try {
@@ -559,7 +564,9 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
         db.prepare("UPDATE users SET photo_version = 0 WHERE id = ?").bind(id),
       ]);
       break;
-    case "resetStats":
+    case "resetStats": {
+      // Ses achats s'effacent : son personnage ne garde que ce qui est offert à tous
+      const avatar = withoutPaidWear(target.avatar);
       await db.batch([
         db.prepare("DELETE FROM user_stats WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM achievements WHERE user_id = ?").bind(id),
@@ -567,8 +574,10 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
         db.prepare("DELETE FROM user_cards WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM card_progress WHERE user_id = ?").bind(id),
         db.prepare("DELETE FROM point_ledger WHERE user_id = ?").bind(id),
+        ...(avatar !== null ? [db.prepare("UPDATE users SET avatar = ? WHERE id = ?").bind(avatar, id)] : []),
       ]);
       break;
+    }
     case "setAdmin":
       if (id === me.id && !body.on) return c.json({ error: "Tu ne peux pas te retirer toi-même le rôle d'admin." }, 400);
       await db
