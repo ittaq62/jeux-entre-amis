@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { BOMBE_FLY_MS, BOMBE_MS, BOMBE_RADIUS, hazardPos, type Hazard } from "../../../shared/games/bolides/items.ts";
 import type { Kart } from "../../../shared/games/bolides/physics.ts";
 import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
-import { backOut, bombBlink } from "./fxCurves.ts";
+import { backOut, bombBlink, launchGap, launchLeft, type LaunchGap } from "./fxCurves.ts";
 import { ItemModels, type ItemModel } from "./itemModels.ts";
 import { oilSheenTexture, oilTexture, sparkTexture } from "./textures.ts";
 
@@ -79,6 +79,8 @@ interface Live extends Prefab {
   landed: boolean;
   landT: number;
   last: { x: number; y: number; z: number } | null;
+  /** L'écart entre le nez du kart qui l'a lancé et sa course, au moment où on l'a vu (undefined : pas encore vu) */
+  launch: LaunchGap | null | undefined;
 }
 
 interface Shock {
@@ -221,6 +223,8 @@ export class ItemFx {
   private tmpS = new THREE.Vector3();
   private tmpC = new THREE.Color();
   private time = 0;
+  /** Les pilotes, dans l'ordre des karts montrés (pour retrouver qui a lancé quoi) */
+  private racers: readonly string[] = [];
 
   constructor(private h: FxHost) {
     const { keep, items } = h;
@@ -419,8 +423,9 @@ export class ItemFx {
     return out;
   }
 
-  /** Ce qui est sur la route : on sort de la réserve les nouveaux, on y remet ceux qui ont disparu */
-  setHazards(list: Hazard[]) {
+  /** Ce qui est sur la route : on sort de la réserve les nouveaux, on y remet ceux qui ont disparu. `racers` : les pilotes, dans l'ordre des karts */
+  setHazards(list: Hazard[], racers: readonly string[] = this.racers) {
+    this.racers = racers;
     const ids = new Set(list.map((h) => h.id));
     for (const [id, item] of this.live) {
       if (ids.has(id)) continue;
@@ -433,7 +438,7 @@ export class ItemFx {
       if (this.live.has(hz.id)) continue;
       const pool = this.pools.get(hz.kind)!;
       const prefab = pool.pop() ?? this.makePrefab(hz.kind);
-      this.live.set(hz.id, { ...prefab, hz, born: this.time, landed: false, landT: 0, last: null });
+      this.live.set(hz.id, { ...prefab, hz, born: this.time, landed: false, landT: 0, last: null, launch: undefined });
       if (hz.kind === "huile") {
         const y = pointAt(this.h.track, hz.s, hz.d).y;
         prefab.root.position.set(hz.x, y + 0.1, hz.z);
@@ -609,11 +614,11 @@ export class ItemFx {
   /** Une image */
   update(dt: number, serverNow: number, karts: readonly { kart: Kart }[], camera: THREE.Vector3) {
     this.time += dt;
-    this.updateHazards(serverNow, dt);
+    this.updateHazards(serverNow, dt, karts);
     this.updateEffects(dt, karts, camera);
   }
 
-  private updateHazards(now: number, dt: number) {
+  private updateHazards(now: number, dt: number, karts: readonly { kart: Kart }[]) {
     const { track: t, puff, reduced } = this.h;
     const time = this.time;
     for (const item of this.live.values()) {
@@ -628,6 +633,15 @@ export class ItemFx {
       }
       root.visible = Boolean(p);
       if (!p) continue;
+      // Il part du nez du kart qui l'a lancé, puis rejoint sa course en douceur
+      if (item.launch === undefined) item.launch = launchGap(hz, p, now, karts[this.racers.indexOf(hz.owner)]?.kart);
+      if (item.launch) {
+        const left = launchLeft(time - item.born, item.launch.ease);
+        p.x += item.launch.x * left;
+        p.y += item.launch.y * left;
+        p.z += item.launch.z * left;
+        if (left <= 0) item.launch = null;
+      }
       const pop = Math.max(0.02, backOut((time - item.born) / 0.16));
       const age = now - hz.at;
       const scale = SIZE[hz.kind];

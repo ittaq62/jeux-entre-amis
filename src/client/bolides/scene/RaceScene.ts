@@ -603,9 +603,9 @@ export class RaceScene {
     if (this.crateShown[i]) this.setCrates(this.crateShown.map((on, k) => (k === i ? false : on)));
   }
 
-  /** Les pièges sur la route */
-  setHazards(list: Hazard[]) {
-    this.fx?.setHazards(list);
+  /** Les pièges sur la route ; `racers` : les pilotes, dans l'ordre des karts montrés (un objet part du kart qui le lance) */
+  setHazards(list: Hazard[], racers?: readonly string[]) {
+    this.fx?.setHazards(list, racers);
   }
 
   /** Une explosion : une boule de feu, une onde qui s'étend au sol, de la fumée */

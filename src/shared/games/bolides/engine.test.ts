@@ -1928,3 +1928,67 @@ describe("ce que voient les joueurs", () => {
     expect(standings(race)[0]!.id).toBe(race.ranking![0]);
   });
 });
+
+describe("les objets lancés par un joueur", () => {
+  /** Un joueur contre un bot ; il roule jusqu'à s en envoyant sa position comme son navigateur (s ne voyage pas) */
+  const setup = () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const t = getTrack("port");
+    const a = racerOf(race, "a")!;
+    let now = race.goAt;
+    const driveTo = (s: number, d = 2) => {
+      for (let at = 5; at <= s; at += 5) {
+        const p = pointAt(t, at, d);
+        const k = newKart(t, p.x, p.z, Math.atan2(p.tx, p.tz));
+        k.dist = at;
+        k.v = 25;
+        now += 200;
+        reportKart(race, "a", decodeKart(encodeKart(k), a.kart)!, now);
+      }
+      return now;
+    };
+    return { race, t, a, driveTo };
+  };
+
+  it("le serveur sait où en est le kart d'un joueur le long de la route, même si cela ne voyage pas", () => {
+    const { t, a, driveTo } = setup();
+    driveTo(300);
+    expect(Math.abs(deltaS(t, 300, a.kart.s))).toBeLessThan(1);
+    expect(Math.abs(deltaS(t, 300, a.kart.goodS))).toBeLessThan(1);
+  });
+
+  it("pétard, boule, bombe et flaque lancée devant partent de son kart, pas de la ligne de départ", () => {
+    const { race, t, a, driveTo } = setup();
+    const now = driveTo(300);
+    const throwIt = (kind: ItemKind, flip = false) => {
+      a.item = kind;
+      a.uses = 1;
+      useItem(race, "a", now, flip);
+      return race.hazards.at(-1)!;
+    };
+    // Le pétard et la boule partent juste devant lui, dans sa voie
+    const petard = throwIt("petard");
+    expect(petard.kind === "petard" && deltaS(t, 300, petard.s0)).toBeCloseTo(3, 0);
+    expect(petard.kind === "petard" && petard.d).toBeCloseTo(2, 1);
+    const start = hazardPos(t, petard, now)!;
+    expect(Math.hypot(start.x - a.kart.x, start.z - a.kart.z)).toBeLessThan(4);
+    const ball = throwIt("bowling");
+    expect(ball.kind === "bowling" && deltaS(t, 300, ball.s0)).toBeCloseTo(4, 0);
+    // La bombe retombe devant lui, la flaque lancée devant aussi
+    const bomb = throwIt("bombe");
+    expect(bomb.kind === "bombe" && deltaS(t, 300, bomb.s)).toBeCloseTo(32, 0);
+    const oil = throwIt("huile", true);
+    expect(oil.kind === "huile" && deltaS(t, 300, oil.s)).toBeCloseTo(22, 0);
+  });
+
+  it("un bot qui prend le volant d'un joueur parti repart de là où il était, sans bond", () => {
+    const { race, a, driveTo } = setup();
+    const now = driveTo(300);
+    a.bot = true;
+    driveBots(race, now + 600, new Map());
+    // En un peu plus d'une demi-seconde, il avance de quelques mètres, pas de la moitié du circuit
+    expect(a.kart.dist).toBeGreaterThan(300);
+    expect(a.kart.dist).toBeLessThan(330);
+  });
+});

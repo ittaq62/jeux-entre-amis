@@ -296,7 +296,7 @@ export class RaceRuntime {
     if (this.ticks.length === 0) this.serverOffset = this.offsetTarget = serverOffset;
     const now = this.serverNow;
     this.scene.setCrates(view.boxes.map((at) => at <= now));
-    this.scene.setHazards(view.hazards);
+    this.scene.setHazards(view.hazards, this.ids);
     const me = this.mine >= 0 ? view.racers[this.mine] : undefined;
     // Son kart revient entre ses mains (au départ, ou de retour après une coupure) : on repart de la dernière position connue
     if (me && !me.bot && !this.driver) {

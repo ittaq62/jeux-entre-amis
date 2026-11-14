@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_KINDS, rouletteStrip } from "../../../shared/games/bolides/items.ts";
-import { backOut, bombBlink, flatScale, giantScale, keyframes } from "./fxCurves.ts";
+import { hazardPos, ITEM_KINDS, PETARD_SPEED, rouletteStrip, type Hazard } from "../../../shared/games/bolides/items.ts";
+import { getTrack, pointAt } from "../../../shared/games/bolides/track.ts";
+import { backOut, bombBlink, flatScale, giantScale, keyframes, launchGap, launchLeft } from "./fxCurves.ts";
 
 describe("les courbes des objets", () => {
   it("un rebond part de zéro, dépasse, et finit sur 1", () => {
@@ -65,5 +66,57 @@ describe("la roue des objets", () => {
         for (let i = 1; i < strip.length; i++) expect(strip[i]).not.toBe(strip[i - 1]);
       }
     }
+  });
+});
+
+describe("le départ d'un objet lancé", () => {
+  const t = getTrack("port");
+  /** Un kart montré à s, dans la voie d, qui roule à v le long de la route */
+  const kartOn = (s: number, d: number) => {
+    const p = pointAt(t, s, d);
+    return { x: p.x, y: p.y, z: p.z, air: 0, h: Math.atan2(p.tx, p.tz) };
+  };
+  const petard = (s0: number, speed = PETARD_SPEED): Hazard => ({ id: 1, kind: "petard", s0, d: 2, speed, owner: "a", at: 10_000 });
+
+  it("le pétard apparaît au nez du kart, reste toujours devant lui, puis rejoint sa course", () => {
+    // Le serveur l'a fait partir 3 m devant la dernière position reçue (s = 300) ; le temps de l'aller-retour, le kart
+    // montré chez le joueur a avancé de 4,5 m : sans rien faire, le pétard apparaîtrait dans le kart
+    const hz = petard(303);
+    const v = 30;
+    const first = hazardPos(t, hz, hz.at)!;
+    const gap = launchGap(hz, first, hz.at, kartOn(304.5, 2))!;
+    expect(gap).not.toBeNull();
+    for (let ms = 0; ms <= 1000; ms += 20) {
+      const kart = kartOn(304.5 + (v * ms) / 1000, 2);
+      const p = hazardPos(t, hz, hz.at + ms)!;
+      const left = launchLeft(ms / 1000, gap.ease);
+      const x = p.x + gap.x * left - kart.x;
+      const z = p.z + gap.z * left - kart.z;
+      // Devant le kart (au-delà de son nez), dans son axe
+      const ahead = x * Math.sin(kart.h) + z * Math.cos(kart.h);
+      expect(ahead).toBeGreaterThan(1.5);
+      expect(Math.abs(x * Math.cos(kart.h) - z * Math.sin(kart.h))).toBeLessThan(0.5);
+      // Rattrapé : il est exactement sur sa course
+      if (ms / 1000 >= gap.ease) expect(left).toBe(0);
+    }
+  });
+
+  it("lancé derrière soi, il part de l'arrière du kart", () => {
+    const hz = petard(297, -PETARD_SPEED);
+    const kart = kartOn(301, 2);
+    const first = hazardPos(t, hz, hz.at)!;
+    const gap = launchGap(hz, first, hz.at, kart)!;
+    const x = first.x + gap.x - kart.x;
+    const z = first.z + gap.z - kart.z;
+    expect(x * Math.sin(kart.h) + z * Math.cos(kart.h)).toBeCloseTo(-1.6, 1);
+  });
+
+  it("rien à rattraper pour une flaque, un objet lancé depuis longtemps, ou sans savoir qui l'a lancé", () => {
+    const hz = petard(303);
+    const first = hazardPos(t, hz, hz.at)!;
+    expect(launchGap(hz, first, hz.at + 2000, kartOn(304.5, 2))).toBeNull();
+    expect(launchGap(hz, first, hz.at, undefined)).toBeNull();
+    const oil: Hazard = { id: 2, kind: "huile", x: first.x, z: first.z, s: 300, d: 2, owner: "a", at: 10_000 };
+    expect(launchGap(oil, first, oil.at, kartOn(320, 2))).toBeNull();
   });
 });

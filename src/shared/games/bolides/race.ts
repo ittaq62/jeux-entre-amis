@@ -458,7 +458,14 @@ export function reportKart(
   const reach = TOP_SPEED * CLASS_SPEED[race.settings.speed] * 1.6 * elapsed + 4;
   const before = r.kart;
   const dist = Math.max(before.dist - reach, Math.min(before.dist + reach, k.dist));
-  r.kart = { ...k, dist };
+  // Où il est le long de la route : ça ne voyage pas, on le retrouve d'après sa position. Sans cela, le serveur le
+  // croirait toute la course sur la grille : ses objets partiraient de la ligne de départ, et un bot qui reprendrait
+  // son volant ferait un bond
+  const t = trackOf(race);
+  const here = locate(t, k.x, k.z, before.i);
+  r.kart = { ...k, dist, i: here.i, s: here.s };
+  // Le dernier endroit où il roulait normalement : c'est là que le drone le ramènerait si un bot conduisait pour lui
+  if (Math.abs(k.d) <= t.half && k.air === 0 && k.spin === 0 && k.v > 6 && k.fall === 0 && k.rescue === 0) r.kart.goodS = here.s;
   r.seen = now;
   // L'heure de cette position, telle que le joueur l'a notée (jamais dans le futur, ni trop loin dans le passé)
   r.stateAt = at !== undefined && Number.isFinite(at) ? Math.max(now - 400, Math.min(now, at)) : now;
