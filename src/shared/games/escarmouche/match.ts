@@ -1,0 +1,712 @@
+// Une partie d'Escarmouche, telle que le serveur la mène : les soldats, leurs balles (cherchées là où le tireur voyait
+// ses cibles), les grenades, les éliminations et les retours au combat, la zone, les drapeaux, et la fin.
+
+import { getMap, MAP_IDS, type MapId } from "./maps.ts";
+import { goalOf, MODE_INFO, type EscarmoucheSettings, type Mode } from "./rules.ts";
+import { DT, eyeOf, forward, heightOf, newSoldier, respawnSoldier, stepSoldier, type Cmd, type Soldier, type StepOut } from "./soldier.ts";
+import { damageAt, GRENADE, grenadeDamage, isPrimaryId, KNIFE, WEAPONS, type PrimaryId, type WeaponId } from "./weapons.ts";
+import { rayBox, World } from "./world.ts";
+import { random, type RngHolder } from "../../rng.ts";
+
+export const COUNTDOWN = 4;
+export const RESPAWN = 4;
+export const SHIELD = 1.5;
+export const MAX_HP = 100;
+const REGEN_DELAY = 4.5;
+const REGEN_RATE = 30;
+const ASSIST_WINDOW = 8;
+const FLAG_REACH = 1.4;
+const FLAG_RETURN = 20;
+/** Les points de chacun au tableau */
+export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone: 1 };
+/** Une balle ne va pas plus loin */
+const RANGE = 300;
+
+export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute";
+
+/** Une partie de corps touchée : 0 la tête, 1 le tronc, 2 les jambes */
+export type Part = 0 | 1 | 2;
+
+export type EscEvent =
+  /** Une balle : d'où elle part (le tireur `i`), où elle s'arrête ; `n` la face du mur touché (1 à 6), 0 : rien ou un soldat */
+  | { k: "shot"; i: number; w: WeaponId; x: number; y: number; z: number; n: number }
+  | { k: "hit"; a: number; v: number; d: number; p: Part; x: number; y: number; z: number }
+  | { k: "kill"; a: number; v: number; w: KillWeapon; h: boolean; as: number }
+  | { k: "spawn"; i: number }
+  | { k: "throw"; i: number }
+  | { k: "boom"; i: number; x: number; y: number; z: number }
+  | { k: "knife"; i: number; v: number }
+  | { k: "reload"; i: number }
+  | { k: "flag"; f: "take" | "drop" | "return" | "capture"; team: number; i: number }
+  | { k: "zone"; owner: number; contested: boolean }
+  | { k: "streak"; i: number; n: number }
+  | { k: "live" }
+  | { k: "over" };
+
+export interface FighterStats {
+  kills: number;
+  deaths: number;
+  assists: number;
+  headshots: number;
+  damage: number;
+  shots: number;
+  hits: number;
+  captures: number;
+  returns: number;
+  zone: number;
+  best: number;
+  knives: number;
+  grenadeKills: number;
+}
+
+export interface Fighter {
+  id: string;
+  /** L'équipe (0 ou 1) ; en chacun pour soi, son propre numéro */
+  team: number;
+  bot: boolean;
+  s: Soldier;
+  hp: number;
+  respawnAt: number;
+  shieldUntil: number;
+  hurtAt: number;
+  /** L'arme principale de sa prochaine vie */
+  next: PrimaryId;
+  /** Ceux qui l'ont touché depuis sa dernière mort (pour les passes décisives) */
+  damagers: { i: number; at: number }[];
+  /** Le drapeau qu'il porte (l'équipe à qui il est), -1 s'il n'en porte pas */
+  carrying: number;
+  points: number;
+  streak: number;
+  stats: FighterStats;
+}
+
+export interface Grenade {
+  id: number;
+  owner: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  boom: number;
+}
+
+export interface FlagState {
+  at: "home" | "carried" | "dropped";
+  carrier: number;
+  x: number;
+  y: number;
+  z: number;
+  since: number;
+}
+
+export interface Match extends RngHolder {
+  map: MapId;
+  mode: Mode;
+  settings: EscarmoucheSettings;
+  t: number;
+  phase: "countdown" | "live" | "over";
+  liveAt: number;
+  endAt: number;
+  goal: number;
+  fighters: Fighter[];
+  grenades: Grenade[];
+  nextGrenade: number;
+  /** Le score de chaque équipe (modes en équipes) */
+  scores: [number, number];
+  flags: [FlagState, FlagState] | null;
+  zone: { owner: number; contested: boolean; acc: [number, number] } | null;
+  /** À la fin : l'équipe gagnante (ou le soldat, en chacun pour soi), null pour une égalité */
+  winner: number | null;
+  ranks: number[] | null;
+}
+
+export interface Pose {
+  x: number;
+  y: number;
+  z: number;
+  crouch: boolean;
+  alive: boolean;
+}
+
+/** Où étaient les soldats au moment où le tireur les voyait (retour dans le temps) ; null : là où ils sont */
+export type PoseAt = (vt: number) => ((i: number) => Pose | null) | null;
+
+const worlds = new Map<MapId, World>();
+export function worldOf(map: MapId): World {
+  let w = worlds.get(map);
+  if (!w) {
+    w = new World(getMap(map).boxes);
+    worlds.set(map, w);
+  }
+  return w;
+}
+
+export const isTeamMode = (mode: Mode) => MODE_INFO[mode].teams;
+
+function newStats(): FighterStats {
+  return {
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+    headshots: 0,
+    damage: 0,
+    shots: 0,
+    hits: 0,
+    captures: 0,
+    returns: 0,
+    zone: 0,
+    best: 0,
+    knives: 0,
+    grenadeKills: 0,
+  };
+}
+
+/** L'arme permise par l'arsenal de la partie */
+export function allowedPrimary(settings: EscarmoucheSettings, want: PrimaryId): PrimaryId | "pistolet" {
+  if (settings.arsenal === "precision") return "precision";
+  if (settings.arsenal === "pompe") return "pompe";
+  if (settings.arsenal === "pistolet") return "pistolet";
+  return want;
+}
+
+export interface FighterInit {
+  id: string;
+  team: number;
+  bot: boolean;
+  primary: PrimaryId;
+}
+
+export function createMatch(settings: EscarmoucheSettings, players: FighterInit[], seed: number): Match {
+  const holder: RngHolder = { rng: seed >>> 0 };
+  const map = settings.map === "hasard" ? MAP_IDS[Math.floor(random(holder) * MAP_IDS.length)]! : settings.map;
+  const teams = isTeamMode(settings.mode);
+  const m: Match = {
+    rng: holder.rng,
+    map,
+    mode: settings.mode,
+    settings: { ...settings, map },
+    t: 0,
+    phase: "countdown",
+    liveAt: COUNTDOWN,
+    endAt: COUNTDOWN + settings.minutes * 60,
+    goal: goalOf(settings),
+    fighters: [],
+    grenades: [],
+    nextGrenade: 1,
+    scores: [0, 0],
+    flags: null,
+    zone: null,
+    winner: null,
+    ranks: null,
+  };
+  const gm = getMap(map);
+  if (settings.mode === "drapeau") {
+    m.flags = [0, 1].map((t) => ({ at: "home", carrier: -1, ...gm.flags[t]!, since: 0 })) as [FlagState, FlagState];
+  }
+  if (settings.mode === "zone") m.zone = { owner: -1, contested: false, acc: [0, 0] };
+  players.forEach((p, i) => {
+    const team = teams ? (p.team === 1 ? 1 : 0) : i;
+    const f: Fighter = {
+      id: p.id,
+      team,
+      bot: p.bot,
+      s: newSoldier(0, 0, 0, 0, allowedPrimary(settings, p.primary)),
+      hp: MAX_HP,
+      respawnAt: 0,
+      shieldUntil: 0,
+      hurtAt: -100,
+      next: isPrimaryId(p.primary) ? p.primary : "fa",
+      damagers: [],
+      carrying: -1,
+      points: 0,
+      streak: 0,
+      stats: newStats(),
+    };
+    m.fighters.push(f);
+  });
+  // Chacun part d'un point de sa base (ou d'un point au hasard en chacun pour soi), sans se marcher dessus
+  const used = new Set<string>();
+  m.fighters.forEach((f, i) => {
+    const list = teams ? gm.spawns[f.team]! : gm.ffa;
+    let sp = list[i % list.length]!;
+    for (let k = 0; k < list.length && used.has(`${sp.x},${sp.z}`); k++) sp = list[(i + k + 1) % list.length]!;
+    used.add(`${sp.x},${sp.z}`);
+    placeAt(f, sp.x, sp.y, sp.z, sp.yaw, m);
+    f.shieldUntil = 0;
+  });
+  return m;
+}
+
+function placeAt(f: Fighter, x: number, y: number, z: number, yaw: number, m: Match) {
+  respawnSoldier(f.s, x, y, z, yaw, allowedPrimary(m.settings, f.next));
+  f.hp = MAX_HP;
+  f.damagers = [];
+  f.carrying = -1;
+  f.shieldUntil = m.t + SHIELD;
+  f.hurtAt = -100;
+}
+
+export function fighterIndex(m: Match, id: string): number {
+  return m.fighters.findIndex((f) => f.id === id);
+}
+
+function enemies(m: Match, a: number, b: number): boolean {
+  if (a === b) return false;
+  if (!isTeamMode(m.mode)) return true;
+  return m.fighters[a]!.team !== m.fighters[b]!.team;
+}
+
+/** La boîte d'une partie du corps : tête, tronc, jambes */
+export function partBox(
+  p: { x: number; y: number; z: number; crouch: boolean },
+  part: Part,
+): [number, number, number, number, number, number] {
+  const h = heightOf(p);
+  if (part === 0) return [p.x - 0.16, p.y + h - 0.3, p.z - 0.16, p.x + 0.16, p.y + h + 0.02, p.z + 0.16];
+  if (part === 1) return [p.x - 0.27, p.y + h * 0.48, p.z - 0.27, p.x + 0.27, p.y + h - 0.3, p.z + 0.27];
+  return [p.x - 0.22, p.y, p.z - 0.22, p.x + 0.22, p.y + h * 0.48, p.z + 0.22];
+}
+
+/** Un rayon contre un soldat : la partie touchée la plus proche, ou null */
+export function rayFighter(
+  ox: number,
+  oy: number,
+  oz: number,
+  d: [number, number, number],
+  pose: Pose,
+  max: number,
+): { t: number; part: Part } | null {
+  let best: { t: number; part: Part } | null = null;
+  for (const part of [0, 1, 2] as Part[]) {
+    const b = partBox(pose, part);
+    const hit = rayBox(ox, oy, oz, d[0], d[1], d[2], b[0], b[1], b[2], b[3], b[4], b[5], best ? best.t : max);
+    if (hit && (!best || hit.t < best.t)) best = { t: hit.t, part };
+  }
+  return best;
+}
+
+function poseOf(f: Fighter): Pose {
+  return { x: f.s.x, y: f.s.y, z: f.s.z, crouch: f.s.crouch, alive: f.s.alive };
+}
+
+/**
+ * Le serveur joue une commande d'un soldat : son pas, puis ce que son arme a fait. Les balles cherchent leurs cibles là
+ * où le tireur les voyait (`poseAt(cmd.vt)`), sans remonter plus loin que ce que la salle garde.
+ */
+export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, ev: EscEvent[]): StepOut {
+  const f = m.fighters[i]!;
+  const world = worldOf(m.map);
+  const out = stepSoldier(f.s, cmd, world, m.phase === "live");
+  if (!f.s.alive) return out;
+  const past = out.shots.length > 0 || out.melee ? (poseAt?.(cmd.vt) ?? null) : null;
+  const pose = (j: number): Pose | null => {
+    const g = m.fighters[j]!;
+    if (!g.s.alive) return null;
+    return past ? past(j) : poseOf(g);
+  };
+  if (out.shots.length > 0) f.shieldUntil = 0;
+  for (const shot of out.shots) {
+    f.stats.shots += 1;
+    const w = WEAPONS[shot.weapon];
+    let anyHit = false;
+    shot.dirs.forEach((d, p) => {
+      const wall = world.raycast(shot.ox, shot.oy, shot.oz, d[0], d[1], d[2], RANGE);
+      let tMax = wall ? wall.t : RANGE;
+      let target = -1;
+      let part: Part = 1;
+      for (let j = 0; j < m.fighters.length; j++) {
+        if (!enemies(m, i, j)) continue;
+        const pj = pose(j);
+        if (!pj?.alive) continue;
+        const hit = rayFighter(shot.ox, shot.oy, shot.oz, d, pj, tMax);
+        if (hit && hit.t < tMax) {
+          tMax = hit.t;
+          target = j;
+          part = hit.part;
+        }
+      }
+      const x = shot.ox + d[0] * tMax;
+      const y = shot.oy + d[1] * tMax;
+      const z = shot.oz + d[2] * tMax;
+      if (p < 4) {
+        const n = target < 0 && wall && tMax === wall.t ? 1 + wall.axis * 2 + (wall.sign > 0 ? 1 : 0) : 0;
+        ev.push({ k: "shot", i, w: shot.weapon, x: r2(x), y: r2(y), z: r2(z), n });
+      }
+      if (target >= 0) {
+        anyHit = true;
+        const base = damageAt(w, tMax);
+        const mult = part === 0 ? w.head : part === 2 ? w.legs : 1;
+        hurt(m, target, i, base * mult, part, shot.weapon, ev, x, y, z);
+      }
+    });
+    if (anyHit) f.stats.hits += 1;
+  }
+  if (out.melee) {
+    const [fx, , fz] = forward(f.s.yaw, 0);
+    let best = -1;
+    let bestD = KNIFE.reach;
+    for (let j = 0; j < m.fighters.length; j++) {
+      if (!enemies(m, i, j)) continue;
+      const pj = pose(j);
+      if (!pj?.alive) continue;
+      const dx = pj.x - f.s.x;
+      const dz = pj.z - f.s.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > bestD || Math.abs(pj.y - f.s.y) > 1.2) continue;
+      if (dist > 0.01 && (dx * fx + dz * fz) / dist < KNIFE.cone) continue;
+      best = j;
+      bestD = dist;
+    }
+    ev.push({ k: "knife", i, v: best });
+    if (best >= 0) {
+      const v = m.fighters[best]!;
+      const [vx, , vz] = forward(v.s.yaw, 0);
+      const back = vx * fx + vz * fz > 0.5;
+      const pj = pose(best)!;
+      hurt(m, best, i, back ? KNIFE.back : KNIFE.damage, 1, "couteau", ev, pj.x, pj.y + 1.1, pj.z);
+    }
+  }
+  if (out.grenade) {
+    const g = out.grenade;
+    m.grenades.push({ id: m.nextGrenade++, owner: i, ...g, boom: m.t + GRENADE.fuse });
+    ev.push({ k: "throw", i });
+  }
+  if (out.reloaded) ev.push({ k: "reload", i });
+  return out;
+}
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Des dégâts : rien sur un soldat qui vient d'arriver, rien entre coéquipiers */
+export function hurt(
+  m: Match,
+  v: number,
+  a: number,
+  amount: number,
+  part: Part,
+  w: KillWeapon,
+  ev: EscEvent[],
+  x: number,
+  y: number,
+  z: number,
+) {
+  const fv = m.fighters[v]!;
+  if (!fv.s.alive || m.phase !== "live") return;
+  if (fv.shieldUntil > m.t && a !== v) return;
+  if (a >= 0 && a !== v && !enemies(m, a, v)) return;
+  const dmg = Math.round(amount * (m.settings.hardcore ? 1.5 : 1));
+  if (dmg <= 0) return;
+  fv.hp -= dmg;
+  fv.hurtAt = m.t;
+  if (a >= 0 && a !== v) {
+    const fa = m.fighters[a]!;
+    fa.stats.damage += Math.min(dmg, dmg + Math.min(0, fv.hp));
+    const known = fv.damagers.find((d) => d.i === a);
+    if (known) known.at = m.t;
+    else fv.damagers.push({ i: a, at: m.t });
+  }
+  ev.push({ k: "hit", a, v, d: dmg, p: part, x: r2(x), y: r2(y), z: r2(z) });
+  if (fv.hp <= 0) kill(m, v, a, w, part === 0, ev);
+}
+
+function kill(m: Match, v: number, a: number, w: KillWeapon, head: boolean, ev: EscEvent[]) {
+  const fv = m.fighters[v]!;
+  fv.hp = 0;
+  fv.s.alive = false;
+  fv.s.vx = fv.s.vz = 0;
+  fv.respawnAt = m.t + RESPAWN;
+  fv.stats.deaths += 1;
+  fv.streak = 0;
+  dropFlag(m, v, ev);
+  let assist = -1;
+  if (a >= 0 && a !== v) {
+    const fa = m.fighters[a]!;
+    fa.stats.kills += 1;
+    if (head) fa.stats.headshots += 1;
+    if (w === "couteau") fa.stats.knives += 1;
+    if (w === "grenade") fa.stats.grenadeKills += 1;
+    fa.points += POINTS.kill;
+    fa.streak += 1;
+    fa.stats.best = Math.max(fa.stats.best, fa.streak);
+    if (fa.streak >= 3 && fa.streak % 2 === 1) ev.push({ k: "streak", i: a, n: fa.streak });
+    if (m.mode === "equipes") m.scores[fa.team === 1 ? 1 : 0] += 1;
+    for (const d of fv.damagers) {
+      if (d.i === a || d.i === v || m.t - d.at > ASSIST_WINDOW) continue;
+      const fd = m.fighters[d.i]!;
+      fd.stats.assists += 1;
+      fd.points += POINTS.assist;
+      if (assist < 0) assist = d.i;
+    }
+  }
+  fv.damagers = [];
+  ev.push({ k: "kill", a, v, w, h: head, as: assist });
+}
+
+function dropFlag(m: Match, v: number, ev: EscEvent[]) {
+  const fv = m.fighters[v]!;
+  if (!m.flags || fv.carrying < 0) return;
+  const flag = m.flags[fv.carrying]!;
+  const world = worldOf(m.map);
+  // Le drapeau tombe au sol, sous le porteur
+  const down = world.raycast(fv.s.x, fv.s.y + 0.5, fv.s.z, 0, -1, 0, 40);
+  flag.at = "dropped";
+  flag.carrier = -1;
+  flag.x = fv.s.x;
+  flag.y = down ? fv.s.y + 0.5 - down.t : fv.s.y;
+  flag.z = fv.s.z;
+  flag.since = m.t;
+  ev.push({ k: "flag", f: "drop", team: fv.carrying, i: v });
+  fv.carrying = -1;
+}
+
+/** Le meilleur point pour revenir au combat : loin des adversaires, sans tomber sur quelqu'un */
+function spawnPoint(m: Match, i: number) {
+  const gm = getMap(m.map);
+  const f = m.fighters[i]!;
+  const list = isTeamMode(m.mode) ? gm.spawns[f.team]! : gm.ffa;
+  let best = list[0]!;
+  let bestScore = -Infinity;
+  for (const sp of list) {
+    let near = 60;
+    let blocked = false;
+    for (let j = 0; j < m.fighters.length; j++) {
+      const g = m.fighters[j]!;
+      if (j === i || !g.s.alive) continue;
+      const d = Math.hypot(g.s.x - sp.x, g.s.z - sp.z);
+      if (d < 1.2) blocked = true;
+      if (enemies(m, i, j)) near = Math.min(near, d);
+    }
+    const score = (blocked ? -100 : 0) + near + random(m) * 6;
+    if (score > bestScore) {
+      bestScore = score;
+      best = sp;
+    }
+  }
+  return best;
+}
+
+/** Un pas du monde : les grenades, les retours au combat, la santé qui revient, la zone, les drapeaux, la fin */
+export function worldStep(m: Match, ev: EscEvent[]) {
+  if (m.phase === "over") return;
+  m.t += DT;
+  if (m.phase === "countdown" && m.t >= m.liveAt) {
+    m.phase = "live";
+    ev.push({ k: "live" });
+  }
+  const world = worldOf(m.map);
+  stepGrenades(m, world, ev);
+  for (let i = 0; i < m.fighters.length; i++) {
+    const f = m.fighters[i]!;
+    if (!f.s.alive) {
+      if (m.phase === "live" && m.t >= f.respawnAt) {
+        const sp = spawnPoint(m, i);
+        placeAt(f, sp.x, sp.y, sp.z, sp.yaw, m);
+        ev.push({ k: "spawn", i });
+      }
+      continue;
+    }
+    if (f.s.y < -10) {
+      hurt(m, i, -1, 999, 1, "chute", ev, f.s.x, f.s.y, f.s.z);
+      continue;
+    }
+    if (!m.settings.hardcore && f.hp < MAX_HP && m.t - f.hurtAt > REGEN_DELAY) f.hp = Math.min(MAX_HP, f.hp + REGEN_RATE * DT);
+  }
+  if (m.phase !== "live") return;
+  if (m.zone) stepZone(m, ev);
+  if (m.flags) stepFlags(m, ev);
+  checkEnd(m, ev);
+}
+
+function stepGrenades(m: Match, world: World, ev: EscEvent[]) {
+  for (const g of m.grenades) {
+    g.vy -= 17 * DT;
+    const p = { x: g.x, y: g.y - 0.07, z: g.z };
+    const v = [g.vx, g.vy, g.vz];
+    for (const axis of [0, 1, 2] as const) {
+      const d = v[axis]! * DT;
+      const moved = world.moveAxis(p, 0.07, 0.14, axis, d);
+      if (Math.abs(moved - d) > 1e-6) {
+        v[axis] = -v[axis]! * 0.35;
+        for (const o of [0, 1, 2]) if (o !== axis) v[o] = v[o]! * 0.7;
+      }
+    }
+    g.x = p.x;
+    g.y = p.y + 0.07;
+    g.z = p.z;
+    [g.vx, g.vy, g.vz] = v as [number, number, number];
+  }
+  const due = m.grenades.filter((g) => m.t >= g.boom);
+  if (due.length === 0) return;
+  m.grenades = m.grenades.filter((g) => m.t < g.boom);
+  for (const g of due) {
+    ev.push({ k: "boom", i: g.owner, x: r2(g.x), y: r2(g.y), z: r2(g.z) });
+    for (let j = 0; j < m.fighters.length; j++) {
+      const f = m.fighters[j]!;
+      if (!f.s.alive) continue;
+      const cy = f.s.y + heightOf(f.s) * 0.6;
+      const dist = Math.hypot(f.s.x - g.x, cy - g.y, f.s.z - g.z);
+      if (dist >= GRENADE.radius) continue;
+      // Un mur entre la grenade et le soldat le protège (sa tête comme son buste)
+      if (!world.clear(g.x, g.y, g.z, f.s.x, cy, f.s.z) && !world.clear(g.x, g.y + 0.1, g.z, f.s.x, eyeOf(f.s), f.s.z)) continue;
+      const dmg = grenadeDamage(dist) * (j === g.owner ? GRENADE.self : 1);
+      hurt(m, j, g.owner, dmg, 1, "grenade", ev, f.s.x, cy, f.s.z);
+    }
+  }
+}
+
+function stepZone(m: Match, ev: EscEvent[]) {
+  const z = m.zone!;
+  const c = getMap(m.map).zone;
+  const present: [boolean, boolean] = [false, false];
+  const inside: number[] = [];
+  m.fighters.forEach((f, i) => {
+    if (!f.s.alive || f.s.y > 3) return;
+    if ((f.s.x - c.x) ** 2 + (f.s.z - c.z) ** 2 > c.r * c.r) return;
+    present[f.team === 1 ? 1 : 0] = true;
+    inside.push(i);
+    f.stats.zone += DT;
+  });
+  const contested = present[0] && present[1];
+  const owner = contested ? z.owner : present[0] ? 0 : present[1] ? 1 : z.owner;
+  if (owner !== z.owner || contested !== z.contested) {
+    z.owner = owner;
+    z.contested = contested;
+    ev.push({ k: "zone", owner, contested });
+  }
+  if (contested || (!present[0] && !present[1])) return;
+  const holder: 0 | 1 = present[0] ? 0 : 1;
+  z.acc[holder] += DT;
+  while (z.acc[holder]! >= 1) {
+    z.acc[holder] -= 1;
+    m.scores[holder] += 1;
+    for (const i of inside) m.fighters[i]!.points += POINTS.zone;
+  }
+}
+
+function stepFlags(m: Match, ev: EscEvent[]) {
+  const gm = getMap(m.map);
+  const flags = m.flags!;
+  for (let ft = 0; ft < 2; ft++) {
+    const F = flags[ft]!;
+    if (F.at === "carried") {
+      const c = m.fighters[F.carrier];
+      if (!c || !c.s.alive || c.carrying !== ft) {
+        F.at = "dropped";
+        F.carrier = -1;
+        F.since = m.t;
+        continue;
+      }
+      F.x = c.s.x;
+      F.y = c.s.y;
+      F.z = c.s.z;
+      const home = gm.flags[c.team === 1 ? 1 : 0]!;
+      const own = flags[c.team === 1 ? 1 : 0]!;
+      if (own.at === "home" && Math.hypot(c.s.x - home.x, c.s.z - home.z) < FLAG_REACH + 0.3 && Math.abs(c.s.y - home.y) < 2) {
+        m.scores[c.team === 1 ? 1 : 0] += 1;
+        c.stats.captures += 1;
+        c.points += POINTS.capture;
+        c.carrying = -1;
+        ev.push({ k: "flag", f: "capture", team: ft, i: F.carrier });
+        Object.assign(F, { at: "home", carrier: -1, ...gm.flags[ft]!, since: m.t });
+      }
+      continue;
+    }
+    if (F.at === "dropped" && m.t - F.since > FLAG_RETURN) {
+      Object.assign(F, { at: "home", carrier: -1, ...gm.flags[ft]!, since: m.t });
+      ev.push({ k: "flag", f: "return", team: ft, i: -1 });
+      continue;
+    }
+    for (let i = 0; i < m.fighters.length; i++) {
+      const f = m.fighters[i]!;
+      if (!f.s.alive) continue;
+      if (Math.hypot(f.s.x - F.x, f.s.z - F.z) > FLAG_REACH || Math.abs(f.s.y - F.y) > 2.2) continue;
+      if (f.team !== ft && f.carrying < 0) {
+        F.at = "carried";
+        F.carrier = i;
+        f.carrying = ft;
+        f.points += POINTS.take;
+        ev.push({ k: "flag", f: "take", team: ft, i });
+        break;
+      }
+      if (f.team === ft && F.at === "dropped") {
+        Object.assign(F, { at: "home", carrier: -1, ...gm.flags[ft]!, since: m.t });
+        f.stats.returns += 1;
+        f.points += POINTS.ret;
+        ev.push({ k: "flag", f: "return", team: ft, i });
+        break;
+      }
+    }
+  }
+}
+
+function checkEnd(m: Match, ev: EscEvent[]) {
+  const teams = isTeamMode(m.mode);
+  const reached = teams ? m.scores.some((s) => s >= m.goal) : m.fighters.some((f) => f.stats.kills >= m.goal);
+  if (!reached && m.t < m.endAt) return;
+  finish(m);
+  ev.push({ k: "over" });
+}
+
+/** La fin : le classement de chacun (à égalité, la même place) */
+export function finish(m: Match) {
+  m.phase = "over";
+  m.grenades = [];
+  const n = m.fighters.length;
+  if (isTeamMode(m.mode)) {
+    const [a, b] = m.scores;
+    m.winner = a === b ? null : a > b ? 0 : 1;
+    m.ranks = m.fighters.map((f) => (m.winner === null || f.team === m.winner ? 1 : 2));
+    return;
+  }
+  const key = (f: Fighter) => f.stats.kills * 1000 - f.stats.deaths;
+  const order = [...m.fighters.keys()].sort((p, q) => key(m.fighters[q]!) - key(m.fighters[p]!));
+  const ranks = new Array<number>(n).fill(n);
+  order.forEach((idx, k) => {
+    const prev = order[k - 1];
+    ranks[idx] = prev !== undefined && key(m.fighters[prev]!) === key(m.fighters[idx]!) ? ranks[prev]! : k + 1;
+  });
+  m.ranks = ranks;
+  const first = order.filter((idx) => ranks[idx] === 1);
+  m.winner = first.length === 1 ? first[0]! : null;
+}
+
+/**
+ * Un soldat de plus en pleine partie (quelqu'un qui rejoint en cours de route) : il arrive aussitôt à un point
+ * d'apparition de son équipe. Renvoie son numéro.
+ */
+export function addFighter(m: Match, p: FighterInit): number {
+  const i = m.fighters.length;
+  const team = isTeamMode(m.mode) ? (p.team === 1 ? 1 : 0) : Math.max(i, ...m.fighters.map((f) => f.team + 1));
+  m.fighters.push({
+    id: p.id,
+    team,
+    bot: p.bot,
+    s: newSoldier(0, 0, 0, 0, allowedPrimary(m.settings, p.primary)),
+    hp: MAX_HP,
+    respawnAt: 0,
+    shieldUntil: 0,
+    hurtAt: -100,
+    next: isPrimaryId(p.primary) ? p.primary : "fa",
+    damagers: [],
+    carrying: -1,
+    points: 0,
+    streak: 0,
+    stats: newStats(),
+  });
+  const sp = spawnPoint(m, i);
+  placeAt(m.fighters[i]!, sp.x, sp.y, sp.z, sp.yaw, m);
+  return i;
+}
+
+/** Le choix de l'arme pour la prochaine vie */
+export function chooseNext(m: Match, i: number, primary: PrimaryId) {
+  const f = m.fighters[i];
+  if (f) f.next = primary;
+}
+
+/** Un soldat qu'on garde de côté (le retour dans le temps n'a besoin que de la pose) */
+export function snapshotPose(m: Match): Pose[] {
+  return m.fighters.map(poseOf);
+}
