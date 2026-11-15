@@ -55,6 +55,9 @@ export interface UnoView {
   round: number;
   lastRound: RoundResult | null;
   ranking: string[] | null;
+  /** À une table en équipes (on gagne ensemble) : l'équipe de chacun, et à la fin la place de chacun, celle de son équipe */
+  teams: Record<string, number> | null;
+  teamRanks: Record<string, number> | null;
   turnId: number;
   mercyLimit: number | null;
 }
@@ -109,6 +112,8 @@ export function viewFor(s: UnoState, viewerId: string | null, partnerIds: readon
     round: s.round,
     lastRound: s.lastRound,
     ranking: s.ranking,
+    teams: s.teamWin && s.teams ? s.teams : null,
+    teamRanks: s.teamRanks ?? null,
     turnId: s.turnId,
     mercyLimit: effectiveRules(s.settings).noMercy ? 25 : null,
   };

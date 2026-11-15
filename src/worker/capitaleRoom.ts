@@ -49,6 +49,7 @@ import {
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, tourCapitaleSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -673,8 +674,17 @@ export class CapitaleRoom extends DurableObject<Env> {
           if (d.status === "playing") return this.afterChange([], now);
         }
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine partie.") : undefined;
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const drawn = d.tour
+          ? null
+          : hostDraw("capitale", d.settings.randomRules, d.settings.capitale, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.capitale = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
         const teamsBefore = d.settings.capitale.teamCount;
-        d.settings.capitale = mergeSettings(d.settings.capitale, msg.settings ?? {});
+        d.settings.capitale = mergeSettings(d.settings.capitale, hostPatch("capitale", d.settings.randomRules, msg.settings));
         const teamCount = d.settings.capitale.teamCount;
         if (teamCount !== teamsBefore) {
           // Deux équipes : une table de 4 ou 6 ; trois équipes : de 6
@@ -824,6 +834,10 @@ export class CapitaleRoom extends DurableObject<Env> {
       s.missed = 0;
       s.disconnectedAt = null;
     }
+    // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.capitale = applyDrawnRules("capitale", d.settings.capitale, DEFAULT_SETTINGS, d.settings.randomRules);
+    }
     // Les équipes : celles de la tournée, ou celles de la table ; le tour passe d'une équipe à l'autre
     const teams = d.tour
       ? (d.tour.teams ?? null)
@@ -849,6 +863,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     if (d.endsAt) this.addTimer({ at: d.endsAt, kind: "timeUp" });
     const first = this.seatById(state.players[state.turn]!.id);
     this.systemChat(`La partie commence : ${first?.name ?? "?"} lance les dés en premier.`);
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("capitale", d.settings.randomRules, "start"));
     return this.afterChange(events, now);
   }
 
@@ -872,6 +887,11 @@ export class CapitaleRoom extends DurableObject<Env> {
         finished = !d.recorded;
         if (finished) d.recorded = true;
         if (finished && d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
+        // Règles au hasard : on tire tout de suite celles de la partie suivante, pour que chacun les lise avant
+        if (finished && d.settings.randomRules && !d.tour) {
+          d.settings.randomRules = drawRules("capitale", Math.random, d.settings.randomRules);
+          this.systemChat(drawNotice("capitale", d.settings.randomRules, "next"));
+        }
       }
     }
     this.schedule(now);

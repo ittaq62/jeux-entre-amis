@@ -44,6 +44,9 @@ export interface MecheView {
   wordsPlayed: number;
   ranking: string[] | null;
   ranks: Record<string, number> | null;
+  /** À une table en équipes : l'équipe de chacun, et à la fin la place de chacun, celle de son équipe */
+  teams: Record<string, number> | null;
+  teamRanks: Record<string, number> | null;
 }
 
 /**
@@ -87,5 +90,7 @@ export function mecheView(g: MecheGame): MecheView {
     wordsPlayed: g.used.length,
     ranking: g.ranking,
     ranks: g.ranks,
+    teams: g.teamWin && g.teams ? g.teams : null,
+    teamRanks: g.teamRanks ?? null,
   };
 }

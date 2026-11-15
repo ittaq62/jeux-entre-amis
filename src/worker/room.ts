@@ -52,6 +52,17 @@ import {
   type ArrivalIntent,
 } from "../shared/lateJoin.ts";
 import { tourUnoSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
+import {
+  alternateTeams,
+  dealTeams,
+  emptierTeam,
+  TABLE_TEAM_COUNTS,
+  tableTeamName,
+  teamProblem,
+  teamTableSize,
+  type TableTeamCount,
+} from "../shared/games/teams.ts";
 import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { lookOf } from "../shared/looks.ts";
@@ -95,8 +106,8 @@ interface Seat {
   autoplay: false | "away" | "afk";
   missed: number;
   disconnectedAt: number | null;
-  /** En tournée par équipes : son équipe ; il voit la main de ses coéquipiers */
-  team?: 0 | 1;
+  /** En équipes (tournée, ou table en équipes) : son équipe ; il voit la main de ses coéquipiers */
+  team?: number;
   /** Le dos de ses cartes, que voient ses adversaires */
   back?: BackId;
 }
@@ -388,17 +399,27 @@ export class GameRoom extends DurableObject<Env> {
   private seatHuman(user: PublicUser): Seat | null {
     const d = this.data!;
     const seat = this.newHumanSeat(user);
+    const count = this.teamCount();
     if (d.seats.length < d.settings.maxPlayers) {
+      if (count) seat.team = emptierTeam(d.seats, count);
       d.seats.push(seat);
       return seat;
     }
+    // Table pleine : on prend la place d'un bot (et son équipe)
     for (let i = d.seats.length - 1; i >= 0; i--) {
       if (d.seats[i]!.kind === "bot") {
+        if (d.seats[i]!.team !== undefined) seat.team = d.seats[i]!.team;
         d.seats[i] = seat;
         return seat;
       }
     }
     return null;
+  }
+
+  /** Le nombre d'équipes de la table (0 : chacun pour soi, et toujours 0 à une table de tournée) */
+  private teamCount(): number {
+    const d = this.data!;
+    return d.tour ? 0 : (d.settings.uno.teamCount ?? 0);
   }
 
   private connectedUsers(except?: WebSocket): Map<string, PublicUser> {
@@ -582,6 +603,19 @@ export class GameRoom extends DurableObject<Env> {
         return this.afterChange([], now, ws);
       }
 
+      case "team": {
+        // En équipes : chacun choisit la sienne, l'hôte place aussi les bots et les autres joueurs
+        const count = this.teamCount();
+        if (d.status === "playing" || !count) return;
+        const target = d.seats.find((s) => s.id === msg.seatId);
+        if (!target) return;
+        if (target !== seat && !isHost) return error("Seul l'hôte place les autres joueurs dans les équipes.");
+        const team = Math.floor(Number(msg.team));
+        if (!(team >= 0 && team < count) || target.team === team) return;
+        target.team = team;
+        return this.afterChange([], now);
+      }
+
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
@@ -608,7 +642,23 @@ export class GameRoom extends DurableObject<Env> {
           if (d.status === "playing") return this.afterChange([], now);
         }
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine partie.") : undefined;
-        d.settings.uno = mergeSettings(d.settings.uno, msg.settings ?? {});
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const drawn = d.tour
+          ? null
+          : hostDraw("uno", d.settings.randomRules, d.settings.uno, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.uno = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        const teamsBefore = this.teamCount();
+        d.settings.uno = mergeSettings(d.settings.uno, hostPatch("uno", d.settings.randomRules, msg.settings));
+        if (d.tour) d.settings.uno.teamCount = 0;
+        const teamCount = this.teamCount();
+        if (teamCount !== teamsBefore) {
+          d.settings.maxPlayers = teamTableSize(d.settings.maxPlayers, teamCount, MAX_PLAYERS);
+          dealTeams(d.seats, teamCount);
+        }
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -642,6 +692,7 @@ export class GameRoom extends DurableObject<Env> {
           autoplay: false,
           missed: 0,
           disconnectedAt: null,
+          ...(this.teamCount() ? { team: emptierTeam(d.seats, this.teamCount()) } : {}),
         });
         return this.afterChange([], now);
       }
@@ -749,18 +800,33 @@ export class GameRoom extends DurableObject<Env> {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux joueurs : ajoute un bot !" });
       return this.afterChange([], now);
     }
+    const count = this.teamCount();
+    const problem = teamProblem(d.seats, count);
+    if (problem) {
+      if (ws) this.send(ws, { t: "error", message: problem });
+      return this.afterChange([], now);
+    }
     for (const s of d.seats) {
       s.autoplay = false;
       s.missed = 0;
       s.disconnectedAt = null;
     }
+    // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
+    if (d.settings.randomRules && !d.tour)
+      d.settings.uno = applyDrawnRules("uno", d.settings.uno, DEFAULT_SETTINGS, d.settings.randomRules);
+    // En équipes à une table : on joue à tour de rôle d'une équipe à l'autre, et on gagne ensemble
+    const tableTeams = count ? Object.fromEntries(d.seats.map((s) => [s.id, s.team ?? 0])) : null;
     const { state, events } = createGame(
-      d.seats.map((s) => s.id),
+      alternateTeams(
+        d.seats.map((s) => s.id),
+        tableTeams,
+      ),
       d.settings.uno,
       randomSeed(),
     );
-    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
-    state.teams = d.tour?.teams ?? null;
+    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
+    state.teams = d.tour?.teams ?? tableTeams;
+    state.teamWin = tableTeams !== null;
     d.uno = state;
     d.status = "playing";
     d.startedAt = now;
@@ -772,6 +838,8 @@ export class GameRoom extends DurableObject<Env> {
     d.nextRoundAt = null;
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat(`La partie commence ! ${variantLabel(d.settings.uno)}.`);
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("uno", d.settings.randomRules, "start"));
+    if (tableTeams) this.systemChat(teamsNotice(d.settings.uno));
     return this.afterChange(events, now);
   }
 
@@ -791,8 +859,17 @@ export class GameRoom extends DurableObject<Env> {
         finished = !d.recorded;
         if (finished) d.recorded = true;
         const winner = d.seats.find((s) => s.id === d.uno!.ranking?.[0]);
-        if (winner) this.systemChat(`${winner.name} remporte la partie !`);
+        const winners = d.uno.teamRanks ? d.seats.filter((s) => d.uno!.teamRanks![s.id] === 1) : [];
+        const team = winners[0]?.team;
+        if (team !== undefined && winners.length > 1) {
+          this.systemChat(`Les ${tableTeamName(team)} remportent la partie : ${winners.map((s) => s.name).join(" et ")} !`);
+        } else if (winner) this.systemChat(`${winner.name} remporte la partie !`);
         if (finished && d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
+        // Règles au hasard : on tire tout de suite celles de la partie suivante, pour que chacun les lise avant
+        if (finished && d.settings.randomRules && !d.tour) {
+          d.settings.randomRules = drawRules("uno", Math.random, d.settings.randomRules);
+          this.systemChat(drawNotice("uno", d.settings.randomRules, "next"));
+        }
       } else if (d.uno.phase === "roundOver" && d.nextRoundAt === null) {
         d.nextRoundAt = now + NEXT_ROUND_MS;
         this.addTimer({ at: d.nextRoundAt, kind: "nextRound" });
@@ -1063,9 +1140,11 @@ export class GameRoom extends DurableObject<Env> {
         name: seat?.name ?? "?",
         isBot: seat?.kind !== "human",
         absent: Boolean(seat?.autoplay),
-        rank: ranking.indexOf(p.id) + 1,
+        // En équipes à une table, chacun prend la place de son équipe
+        rank: g.teamRanks?.[p.id] ?? ranking.indexOf(p.id) + 1,
         score: p.score,
         eliminated: p.eliminated,
+        team: g.teamRanks ? (g.teams?.[p.id] ?? null) : null,
         stats: p.stats,
       };
     });
@@ -1157,7 +1236,7 @@ export class GameRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
-        ...(s.team !== undefined ? { team: s.team } : {}),
+        ...(s.team !== undefined ? { team: s.team as 0 | 1 | 2 } : {}),
         ...(s.back && s.back !== "classique" ? { back: s.back } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
@@ -1253,6 +1332,17 @@ export class GameRoom extends DurableObject<Env> {
   }
 }
 
+/** L'annonce des équipes au début de la partie : comment on gagne ensemble */
+function teamsNotice(s: UnoSettings): string {
+  const how =
+    s.endMode === "points"
+      ? `les points des coéquipiers s'additionnent, la première équipe à ${s.targetScore} gagne`
+      : s.endMode === "ranking"
+        ? "la première équipe à avoir vidé toutes ses mains gagne"
+        : "la première main vidée fait gagner toute son équipe";
+  return `En équipes : chacun voit la main de ses coéquipiers, on ne dénonce pas un coéquipier, et ${how}.`;
+}
+
 function variantLabel(s: UnoSettings): string {
   const base = s.variant === "nomercy" ? "Mode No Mercy, sans pitié" : "UNO classique";
   return s.noEarlyUno ? `${base}, et pas de UNO d'avance : on le crie avec sa dernière carte` : base;
@@ -1291,6 +1381,7 @@ function mergeSettings(current: UnoSettings, patch: Partial<UnoSettings>): UnoSe
   for (const key of ["stacking", "drawUntilPlayable", "sevenZero", "jumpIn", "noEarlyUno"] as const) {
     if (typeof patch[key] === "boolean") next[key] = patch[key];
   }
+  if ((TABLE_TEAM_COUNTS as readonly number[]).includes(patch.teamCount as number)) next.teamCount = patch.teamCount as TableTeamCount;
   if (patch.endMode === "first" || patch.endMode === "ranking" || patch.endMode === "points") next.endMode = patch.endMode;
   if (typeof patch.targetScore === "number" && [100, 200, 300, 500, 750, 1000, 1500, 2000].includes(patch.targetScore)) {
     next.targetScore = patch.targetScore;

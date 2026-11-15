@@ -4,7 +4,7 @@
 // la sienne, qui ne brûle que pendant son tour. Dans tous les cas, celui qui traîne ne fait jamais sauter le suivant.
 // Tout se décide ici, sans réseau ni horloge : l'heure est passée en paramètre, le hasard vient de la partie.
 
-import { oneTeamLeft, type Teams } from "../teams.ts";
+import { oneTeamLeft, teamRanks, teamsByBest, type TableTeamCount, type Teams } from "../teams.ts";
 import { random } from "../../rng.ts";
 import { LETTRES } from "./lettres.ts";
 import { normalizeWord } from "./words.ts";
@@ -38,6 +38,8 @@ export interface MecheSettings {
   /** Un grand mot rapporte une passe */
   passes: boolean;
   botLevel: BotLevel;
+  /** À une table : le nombre d'équipes (0 ou absent, chacun pour soi). En tournée, ce sont les équipes de la tournée */
+  teamCount?: TableTeamCount;
 }
 
 export const DEFAULT_SETTINGS: MecheSettings = {
@@ -220,8 +222,11 @@ export type PlayedSettings = Omit<MecheSettings, "mode"> & { mode: FuseMode };
 export interface MecheGame {
   settings: PlayedSettings;
   players: MechePlayer[];
-  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  /** En équipes (tournée ou table) : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
   teams?: Teams;
+  /** À une table en équipes : on gagne ensemble, chacun prend la place de son équipe (`teamRanks`) */
+  teamWin?: boolean;
+  teamRanks?: Record<string, number> | null;
   /** Celui qui tient la mèche (ou qui la recevra à la prochaine) */
   holder: number;
   /** Les lettres à placer ; vides entre deux mèches */
@@ -505,4 +510,6 @@ function finish(g: MecheGame, survivors: MechePlayer[]) {
   const ordered = [...g.players].sort((a, b) => a.place! - b.place!);
   g.ranking = ordered.map((p) => p.id);
   g.ranks = Object.fromEntries(ordered.map((p) => [p.id, p.place!]));
+  // En équipes à une table : l'équipe qui reste gagne, les autres dans l'ordre où elles ont perdu leur dernier joueur
+  g.teamRanks = g.teamWin && g.teams ? teamRanks(teamsByBest(g.ranking, g.teams), g.teams) : null;
 }

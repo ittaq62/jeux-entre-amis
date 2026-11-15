@@ -41,6 +41,7 @@ import {
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -599,7 +600,16 @@ export class NavalRoom extends DurableObject<Env> {
         }
         if (d.status === "playing")
           return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine bataille.") : undefined;
-        d.settings.naval = mergeSettings(d.settings.naval, msg.settings ?? {});
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const drawn = d.tour
+          ? null
+          : hostDraw("naval", d.settings.randomRules, d.settings.naval, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.naval = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        d.settings.naval = mergeSettings(d.settings.naval, hostPatch("naval", d.settings.randomRules, msg.settings));
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -751,6 +761,9 @@ export class NavalRoom extends DurableObject<Env> {
       s.missed = 0;
       s.disconnectedAt = null;
     }
+    // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
+    if (d.settings.randomRules && !d.tour)
+      d.settings.naval = applyDrawnRules("naval", d.settings.naval, DEFAULT_SETTINGS, d.settings.randomRules);
     const { state, events } = createGame(
       order.map((s) => s.id),
       d.settings.naval,
@@ -770,6 +783,7 @@ export class NavalRoom extends DurableObject<Env> {
     // Les bots ont placé leur flotte avant même qu'on s'assoie
     for (const s of d.seats) if (s.kind === "bot") events.push(...forceReady(state, s.id));
     this.systemChat("Branle-bas de combat : placez vos navires !");
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("naval", d.settings.randomRules, "start"));
     return this.afterChange(events, now);
   }
 
@@ -795,6 +809,11 @@ export class NavalRoom extends DurableObject<Env> {
         if (finished && d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
         const winners = (g.ranking ?? []).filter((id) => g.ranks?.[id] === 1).map((id) => this.seatById(id)?.name ?? "?");
         if (winners.length > 0) this.systemChat(`${winners.join(" et ")} ${winners.length > 1 ? "remportent" : "remporte"} la bataille !`);
+        // Règles au hasard : on tire tout de suite celles de la partie suivante, pour que chacun les lise avant
+        if (finished && d.settings.randomRules && !d.tour) {
+          d.settings.randomRules = drawRules("naval", Math.random, d.settings.randomRules);
+          this.systemChat(drawNotice("naval", d.settings.randomRules, "next"));
+        }
       }
     }
     this.schedule(now);

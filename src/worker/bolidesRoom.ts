@@ -45,6 +45,7 @@ import {
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, TOUR_GUEST_PREFIX, variantSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
@@ -566,7 +567,15 @@ export class BolidesRoom extends DurableObject<Env> {
           if (d.status === "playing") return this.afterChange([], now);
         }
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine course.") : undefined;
-        d.settings.bolides = mergeSettings(d.settings.bolides, msg.settings ?? {});
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const current = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+        const drawn = d.tour ? null : hostDraw("bolides", d.settings.randomRules, current, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.bolides = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        d.settings.bolides = mergeSettings(d.settings.bolides, hostPatch("bolides", d.settings.randomRules, msg.settings));
         // De nouvelles règles : le prochain départ recommence un Grand Prix
         d.cup = null;
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
@@ -710,6 +719,15 @@ export class BolidesRoom extends DurableObject<Env> {
       seat.disconnectedAt = null;
     }
     const bots = new Set(d.seats.filter((s) => s.kind === "bot").map((s) => s.id));
+    // Règles au hasard : celles tirées pour cette course (le même tirage pour tout un Grand Prix)
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.bolides = applyDrawnRules(
+        "bolides",
+        { ...DEFAULT_SETTINGS, ...d.settings.bolides },
+        DEFAULT_SETTINGS,
+        d.settings.randomRules,
+      );
+    }
     const settings = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
     if (settings.cup && !d.tour) {
       // La course suivante du Grand Prix, ou un nouveau Grand Prix (quatre circuits tirés au sort)
@@ -749,6 +767,7 @@ export class BolidesRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat("En piste !");
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("bolides", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange([], now);
   }
@@ -827,6 +846,12 @@ export class BolidesRoom extends DurableObject<Env> {
         const best = Object.entries(cup.points).sort((a, b) => b[1] - a[1])[0];
         if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte le Grand Prix !`);
       }
+    }
+    // Règles au hasard : on tire tout de suite celles de la course suivante (d'un Grand Prix fini), pour que chacun les lise avant
+    const cupGoesOn = Boolean(cup && cup.index + 1 < cup.tracks.length);
+    if (d.settings.randomRules && !d.tour && !cupGoesOn) {
+      d.settings.randomRules = drawRules("bolides", Math.random, d.settings.randomRules);
+      this.systemChat(drawNotice("bolides", d.settings.randomRules, "next"));
     }
     await this.afterChange([], now);
   }

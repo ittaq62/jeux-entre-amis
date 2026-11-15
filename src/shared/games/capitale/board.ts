@@ -1,6 +1,8 @@
 // Capitale : le plateau (40 cases sur les villes de France), les groupes de couleur, les bâtiments et les cartes.
 // La structure, les prix et les loyers de base sont ceux de la règle classique ; la ville, les noms et les textes sont à nous.
 
+import { TABLE_TEAMS } from "../teams.ts";
+
 export type GroupId = "brun" | "ciel" | "rose" | "orange" | "rouge" | "jaune" | "vert" | "bleu";
 export type DeckId = "hasard" | "courrier";
 
@@ -110,11 +112,7 @@ export const SIDES: { groups: GroupId[]; squares: number[] }[] = [0, 1, 2, 3].ma
 });
 
 /** Les équipes : les deux premières sont celles de la tournée (mêmes noms, mêmes couleurs) ; une troisième aux tables */
-export const CAPITALE_TEAMS = [
-  { name: "Rouges", color: "#d4453c" },
-  { name: "Bleus", color: "#3f7fd8" },
-  { name: "Verts", color: "#2e9d59" },
-] as const;
+export const CAPITALE_TEAMS = TABLE_TEAMS;
 export const teamName = (team: number) => CAPITALE_TEAMS[team]?.name ?? `Équipe ${team + 1}`;
 
 /** Le nom d'un côté du plateau, par ses deux quartiers : « le côté rose et orange » */

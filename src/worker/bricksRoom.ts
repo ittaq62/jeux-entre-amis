@@ -43,6 +43,7 @@ import {
 } from "../shared/protocol.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, recordSprint, type EloResults } from "./users.ts";
@@ -642,7 +643,21 @@ export class BricksRoom extends DurableObject<Env> {
           if (d.status === "playing") return this.afterChange(now);
         }
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine partie.") : undefined;
-        d.settings.bricks = mergeSettings(d.settings.bricks, msg.settings ?? {});
+        // Règles au hasard (pas en solo) : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const drawn = d.tour
+          ? null
+          : hostDraw("bricks", d.settings.randomRules, d.settings.bricks, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.bricks = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        d.settings.bricks = mergeSettings(d.settings.bricks, hostPatch("bricks", d.settings.randomRules, msg.settings));
+        // Le solo 40 lignes n'a pas de règles à tirer
+        if (d.settings.bricks.sprint && d.settings.randomRules) {
+          d.settings.randomRules = null;
+          this.systemChat("Le solo 40 lignes se joue avec ses règles : plus de règles tirées au sort.");
+        }
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -785,6 +800,9 @@ export class BricksRoom extends DurableObject<Env> {
 
   private async startGame(now: number, ws?: WebSocket) {
     const d = this.data!;
+    // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
+    const drawn = d.settings.randomRules && !d.tour && !d.settings.bricks.sprint ? d.settings.randomRules : null;
+    if (drawn) d.settings.bricks = applyDrawnRules("bricks", d.settings.bricks, DEFAULT_SETTINGS, drawn);
     const s = d.settings.bricks;
     d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
     this.ensureHost();
@@ -845,6 +863,7 @@ export class BricksRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat(mode === "sprint" ? "Quarante lignes, le plus vite possible : à vos marques !" : "Que la meilleure pile gagne !");
+    if (drawn) this.systemChat(drawNotice("bricks", drawn, "start"));
     this.startRound(now);
     await this.afterChange(now);
     for (const p of d.match.players) this.sendSnapshot(p.id, true);
@@ -1161,6 +1180,11 @@ export class BricksRoom extends DurableObject<Env> {
     } else {
       const winners = m.ranking.filter((id) => m.ranks![id] === 1).map((id) => this.seatById(id)?.name ?? "?");
       this.systemChat(`${winners.join(" et ")} ${winners.length > 1 ? "remportent" : "remporte"} la partie !`);
+    }
+    // Règles au hasard : on tire tout de suite celles de la partie suivante, pour que chacun les lise avant
+    if (d.settings.randomRules && !d.tour && m.mode !== "sprint") {
+      d.settings.randomRules = drawRules("bricks", Math.random, d.settings.randomRules);
+      this.systemChat(drawNotice("bricks", d.settings.randomRules, "next"));
     }
     void now;
   }

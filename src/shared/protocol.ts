@@ -149,6 +149,8 @@ export interface RoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   uno: UnoSettings;
 }
 
@@ -259,7 +261,14 @@ export interface AchievementUnlock {
 }
 
 export type RoomClientMessage =
-  | { t: "settings"; settings: Partial<UnoSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<UnoSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -273,6 +282,8 @@ export type RoomClientMessage =
   | { t: "sit" }
   /** Le dos de ses cartes */
   | { t: "back"; back: string }
+  /** En équipes : changer d'équipe (soi-même, ou n'importe qui pour l'hôte) */
+  | { t: "team"; seatId: string; team: number }
   | { t: "leave" }
   /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
   | { t: "ready" }
@@ -283,7 +294,7 @@ export interface LobbyRoom {
   code: string;
   game: TableGame;
   status: RoomStatus;
-  settings: { visibility: Visibility; maxPlayers: number; lateJoin?: boolean };
+  settings: { visibility: Visibility; maxPlayers: number; lateJoin?: boolean; randomRules?: string | null };
   seats: SeatView[];
   spectators: SpectatorView[];
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
@@ -294,6 +305,8 @@ export interface NavalRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   naval: NavalSettings;
 }
 
@@ -327,7 +340,14 @@ export interface NavalRoomView {
 
 /** Messages communs à tous les salons (le salon d'attente partagé n'envoie que ceux-là) */
 export type LobbyClientMessage =
-  | { t: "settings"; settings: Record<string, never>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Record<string, never>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -339,7 +359,14 @@ export type LobbyClientMessage =
   | { t: "close" };
 
 export type NavalClientMessage =
-  | { t: "settings"; settings: Partial<NavalSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<NavalSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -366,6 +393,8 @@ export interface BricksRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   bricks: BricksSettings;
 }
 
@@ -390,7 +419,14 @@ export interface BricksRoomView {
 }
 
 export type BricksClientMessage =
-  | { t: "settings"; settings: Partial<BricksSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<BricksSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -435,6 +471,8 @@ export interface CapitaleRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   capitale: CapitaleSettings;
 }
 
@@ -468,7 +506,14 @@ export interface CapitaleRoomView {
 }
 
 export type CapitaleClientMessage =
-  | { t: "settings"; settings: Partial<CapitaleSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<CapitaleSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -504,6 +549,8 @@ export interface MecheRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   meche: MecheSettings;
 }
 
@@ -533,7 +580,14 @@ export interface MecheRoomView {
 }
 
 export type MecheClientMessage =
-  | { t: "settings"; settings: Partial<MecheSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<MecheSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
@@ -545,6 +599,8 @@ export type MecheClientMessage =
   | { t: "pass"; turn: number }
   /** La bombe qu'il allume */
   | { t: "bomb"; bomb: BombId }
+  /** En équipes : changer d'équipe (soi-même, ou n'importe qui pour l'hôte) */
+  | { t: "team"; seatId: string; team: number }
   /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
   | { t: "ready" }
   | { t: "chat"; text: string }
@@ -574,6 +630,8 @@ export interface BolidesRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   bolides: BolidesSettings;
 }
 
@@ -605,7 +663,14 @@ export interface BolidesRoomView {
 }
 
 export type BolidesClientMessage =
-  | { t: "settings"; settings: Partial<BolidesSettings>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<BolidesSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   /** Choisir son véhicule et son skin (s'il les possède) */
   | { t: "garage"; vehicle?: VehicleId; skin?: KartSkinId }
   | { t: "addBot" }
@@ -651,6 +716,8 @@ export interface CramponsRoomSettings {
   maxPlayers: number;
   /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
   lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
   crampons: CramponsConfig;
 }
 
@@ -679,7 +746,14 @@ export interface CramponsRoomView {
 }
 
 export type CramponsClientMessage =
-  | { t: "settings"; settings: Partial<CramponsConfig>; visibility?: Visibility; maxPlayers?: number; lateJoin?: boolean }
+  | {
+      t: "settings";
+      settings: Partial<CramponsConfig>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
   /** Choisir son équipe */
   | { t: "team"; team: 0 | 1 }
   /** La célébration de ses buts, s'il l'a (les autres s'achètent à la boutique) */

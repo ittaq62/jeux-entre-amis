@@ -1,4 +1,4 @@
-import { oneTeamLeft, type Teams } from "../teams.ts";
+import { oneTeamLeft, teamRanks, teamsByBest, type TableTeamCount, type Teams } from "../teams.ts";
 import { buildClassicDeck, cardPoints, COLORS, drawValue, isDrawCard, isWild, sameFace, type Card, type Color } from "./cards.ts";
 import { buildNoMercyDeck, MERCY_BONUS, MERCY_LIMIT } from "./nomercy.ts";
 import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
@@ -26,6 +26,8 @@ export interface UnoSettings {
    * absent des parties plus anciennes (on pouvait alors l'annoncer d'avance).
    */
   noEarlyUno?: boolean;
+  /** À une table : le nombre d'équipes (0 ou absent, chacun pour soi). En tournée, ce sont les équipes de la tournée */
+  teamCount?: TableTeamCount;
   endMode: EndMode;
   targetScore: number;
   /** Secondes par tour, 0 = sans chrono (gere par le salon) */
@@ -130,8 +132,15 @@ export interface RoundResult {
 export interface UnoState {
   settings: UnoSettings;
   players: UnoPlayer[];
-  /** En tournée par équipes : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
+  /** En équipes (tournée ou table) : l'équipe de chacun ; quand il ne reste qu'une équipe en jeu, la partie s'arrête */
   teams?: Teams;
+  /**
+   * À une table en équipes : on gagne ensemble. Aux points, l'objectif se compte par équipe (les points de ses joueurs
+   * additionnés) ; à la fin, chaque joueur prend la place de son équipe (`teamRanks`). En tournée, chacun garde sa place.
+   */
+  teamWin?: boolean;
+  /** Fin de partie en équipes à une table : la place de chacun, celle de son équipe */
+  teamRanks?: Record<string, number> | null;
   drawPile: Card[];
   discard: Card[];
   color: Color;
@@ -967,7 +976,7 @@ function endRound(s: UnoState, winner: number, ev: UnoEvent[]) {
   s.lastRound = { round: s.round, winner: winnerPlayer?.id ?? null, points, hands, scores };
   ev.push({ type: "roundOver", winner: winnerPlayer?.id ?? null, points });
 
-  const reachedTarget = winnerPlayer !== null && winnerPlayer.score >= s.settings.targetScore;
+  const reachedTarget = winnerPlayer !== null && sideScore(s, winnerPlayer.id) >= s.settings.targetScore;
   if (s.settings.endMode === "points" && !reachedTarget) {
     s.phase = "roundOver";
     s.turnId += 1;
@@ -975,6 +984,7 @@ function endRound(s: UnoState, winner: number, ev: UnoEvent[]) {
   }
   s.phase = "gameOver";
   s.ranking = computeRanking(s, winner);
+  s.teamRanks = computeTeamRanks(s);
   s.turnId += 1;
   ev.push({ type: "gameOver", ranking: s.ranking });
 }
@@ -995,9 +1005,42 @@ function endGameByRanking(s: UnoState, ev: UnoEvent[]) {
   s.pendingDraw = 0;
   s.phase = "gameOver";
   s.ranking = computeRanking(s, -1);
+  s.teamRanks = computeTeamRanks(s);
   s.turnId += 1;
   ev.push({ type: "roundOver", winner: lastRound.winner, points: 0 });
   ev.push({ type: "gameOver", ranking: s.ranking });
+}
+
+/** Les points d'un joueur, ou ceux de son équipe quand on gagne ensemble */
+export function sideScore(s: UnoState, id: string): number {
+  const team = s.teamWin ? s.teams?.[id] : undefined;
+  if (team === undefined) return s.players.find((pl) => pl.id === id)?.score ?? 0;
+  return s.players.filter((pl) => s.teams![pl.id] === team).reduce((n, pl) => n + pl.score, 0);
+}
+
+/**
+ * Les places en équipes (table seulement) : premier à finir, l'équipe de celui qui a fini ; jusqu'au dernier, la
+ * première équipe à avoir vidé toutes ses mains (celle qui en a encore finit dernière) ; aux points, le total de
+ * l'équipe. Les ex aequo se départagent par leur meilleur joueur.
+ */
+function computeTeamRanks(s: UnoState): Record<string, number> | null {
+  const teams = s.teams;
+  if (!s.teamWin || !teams || !s.ranking) return null;
+  const best = teamsByBest(s.ranking, teams);
+  let order = best;
+  if (s.settings.endMode === "ranking") {
+    // L'instant où chaque équipe a fini : la sortie de son dernier joueur (jamais, s'il en reste un en jeu)
+    const doneAt = (t: number) => {
+      const crew = s.players.map((pl, i) => ({ pl, i })).filter(({ pl }) => teams[pl.id] === t);
+      if (crew.some(({ pl }) => !pl.out || pl.eliminated)) return Infinity;
+      return Math.max(...crew.map(({ i }) => s.finishOrder.indexOf(i)));
+    };
+    order = best.slice().sort((a, b) => doneAt(a) - doneAt(b) || best.indexOf(a) - best.indexOf(b));
+  } else if (s.settings.endMode === "points") {
+    const total = (t: number) => s.players.filter((pl) => teams[pl.id] === t).reduce((n, pl) => n + pl.score, 0);
+    order = best.slice().sort((a, b) => total(b) - total(a) || best.indexOf(a) - best.indexOf(b));
+  }
+  return teamRanks(order, teams);
 }
 
 function handPoints(pl: UnoPlayer): number {

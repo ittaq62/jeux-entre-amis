@@ -25,6 +25,7 @@ import { randomSeed } from "../shared/rng.ts";
 import { lookOf } from "../shared/looks.ts";
 import { canUse, clubItem, feteItem } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { ownedItems } from "./shop.ts";
@@ -612,7 +613,15 @@ export class CramponsRoom extends DurableObject<Env> {
             if (missing) return error(`${missing.name} se débloque à la boutique.`);
           }
         }
-        d.settings.crampons = mergeConfig(d.settings.crampons, msg.settings ?? {});
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const current = { ...DEFAULT_CONFIG, ...d.settings.crampons };
+        const drawn = d.tour ? null : hostDraw("crampons", d.settings.randomRules, current, DEFAULT_CONFIG, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.crampons = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        d.settings.crampons = mergeConfig(d.settings.crampons, hostPatch("crampons", d.settings.randomRules, msg.settings));
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -722,6 +731,15 @@ export class CramponsRoom extends DurableObject<Env> {
       seat.autoplay = false;
       seat.disconnectedAt = null;
     }
+    // Règles au hasard : celles tirées pour ce match (affichées au salon depuis le tirage)
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.crampons = applyDrawnRules(
+        "crampons",
+        { ...DEFAULT_CONFIG, ...d.settings.crampons },
+        DEFAULT_CONFIG,
+        d.settings.randomRules,
+      );
+    }
     const cfg = d.settings.crampons;
     d.match = createMatch(
       cfg,
@@ -737,6 +755,7 @@ export class CramponsRoom extends DurableObject<Env> {
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.lastKey = stateKey(d.match);
     this.systemChat("Coup d'envoi !");
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("crampons", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange([], now);
   }
@@ -802,6 +821,11 @@ export class CramponsRoom extends DurableObject<Env> {
     this.systemChat(
       `Fin du match : ${m.score[0]} - ${m.score[1]}${m.winner !== null ? `, victoire ${deClub(name(m.winner))}` : ", match nul"}.`,
     );
+    // Règles au hasard : on tire tout de suite celles du match suivant, pour que chacun les lise avant
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.randomRules = drawRules("crampons", Math.random, d.settings.randomRules);
+      this.systemChat(drawNotice("crampons", d.settings.randomRules, "next"));
+    }
     await this.afterChange([], now);
   }
 

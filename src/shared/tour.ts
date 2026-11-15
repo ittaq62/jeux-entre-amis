@@ -494,6 +494,12 @@ export function variantSettings(game: GameId, id: string | null | undefined): ob
   return Object.assign({}, base.settings, ...extra.map((m) => m.settings));
 }
 
+/** Les réglages que touchent les variantes d'un jeu et ses règles à part (« grid », « shots »…) */
+export function variantKeys(game: GameId): string[] {
+  const all = [...VARIANTS[game], ...(MODIFIERS[game] ?? [])];
+  return [...new Set(all.flatMap((v) => Object.keys(v.settings)))];
+}
+
 /** Une variante au hasard, puis chaque règle à part tirée de son côté */
 export function drawVariant(game: GameId, random: () => number): string {
   const all = VARIANTS[game];

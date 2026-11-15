@@ -42,6 +42,17 @@ import { lookOf } from "../shared/looks.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { bombItem, canUse } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
+import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
+import {
+  alternateTeams,
+  dealTeams,
+  emptierTeam,
+  TABLE_TEAM_COUNTS,
+  tableTeamName,
+  teamProblem,
+  teamTableSize,
+  type TableTeamCount,
+} from "../shared/games/teams.ts";
 import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { ownedItems } from "./shop.ts";
@@ -108,6 +119,8 @@ interface Seat {
   disconnectedAt: number | null;
   /** La bombe qu'il allume (absent : la dynamite) */
   bomb?: BombId;
+  /** À une table en équipes : son équipe */
+  team?: number;
 }
 
 type TimerKind = "light" | "boom" | "away" | "seatCleanup" | "cleanup" | "tourStart";
@@ -360,17 +373,27 @@ export class MecheRoom extends DurableObject<Env> {
   private seatHuman(user: PublicUser): Seat | null {
     const d = this.data!;
     const seat = this.newHumanSeat(user);
+    const count = this.teamCount();
     if (d.seats.length < d.settings.maxPlayers) {
+      if (count) seat.team = emptierTeam(d.seats, count);
       d.seats.push(seat);
       return seat;
     }
+    // Table pleine : on prend la place d'un bot (et son équipe)
     for (let i = d.seats.length - 1; i >= 0; i--) {
       if (d.seats[i]!.kind === "bot") {
+        if (d.seats[i]!.team !== undefined) seat.team = d.seats[i]!.team;
         d.seats[i] = seat;
         return seat;
       }
     }
     return null;
+  }
+
+  /** Le nombre d'équipes de la table (0 : chacun pour soi, et toujours 0 à une table de tournée) */
+  private teamCount(): number {
+    const d = this.data!;
+    return d.tour ? 0 : (d.settings.meche.teamCount ?? 0);
   }
 
   private connectedUsers(except?: WebSocket): Map<string, PublicUser> {
@@ -544,6 +567,19 @@ export class MecheRoom extends DurableObject<Env> {
         return this.afterChange([], now, ws);
       }
 
+      case "team": {
+        // En équipes : chacun choisit la sienne, l'hôte place aussi les bots et les autres joueurs
+        const count = this.teamCount();
+        if (d.status === "playing" || !count) return;
+        const target = d.seats.find((s) => s.id === msg.seatId);
+        if (!target) return;
+        if (target !== seat && !isHost) return error("Seul l'hôte place les autres joueurs dans les équipes.");
+        const team = Math.floor(Number(msg.team));
+        if (!(team >= 0 && team < count) || target.team === team) return;
+        target.team = team;
+        return this.afterChange([], now);
+      }
+
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
@@ -569,7 +605,22 @@ export class MecheRoom extends DurableObject<Env> {
           if (d.status === "playing") return this.afterChange([], now);
         }
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine partie.") : undefined;
-        d.settings.meche = mergeSettings(d.settings.meche, msg.settings ?? {});
+        // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
+        const current = { ...DEFAULT_SETTINGS, ...d.settings.meche };
+        const drawn = d.tour ? null : hostDraw("meche", d.settings.randomRules, current, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        if (drawn) {
+          d.settings.randomRules = drawn.draw;
+          d.settings.meche = drawn.settings;
+          this.systemChat(drawn.notice);
+        }
+        const teamsBefore = this.teamCount();
+        d.settings.meche = mergeSettings(d.settings.meche, hostPatch("meche", d.settings.randomRules, msg.settings));
+        if (d.tour) d.settings.meche.teamCount = 0;
+        const teamCount = this.teamCount();
+        if (teamCount !== teamsBefore) {
+          d.settings.maxPlayers = teamTableSize(d.settings.maxPlayers, teamCount, MECHE_MAX_PLAYERS);
+          dealTeams(d.seats, teamCount);
+        }
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -599,6 +650,7 @@ export class MecheRoom extends DurableObject<Env> {
           photo: 0,
           autoplay: false,
           disconnectedAt: null,
+          ...(this.teamCount() ? { team: emptierTeam(d.seats, this.teamCount()) } : {}),
         });
         return this.afterChange([], now);
       }
@@ -743,6 +795,12 @@ export class MecheRoom extends DurableObject<Env> {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux joueurs : ajoute un bot !" });
       return this.afterChange([], now);
     }
+    const count = this.teamCount();
+    const problem = teamProblem(d.seats, count);
+    if (problem) {
+      if (ws) this.send(ws, { t: "error", message: problem });
+      return this.afterChange([], now);
+    }
     // Les mots d'abord : une partie ne démarre pas sans eux
     try {
       await Promise.all([loadDictionary(this.env), loadVocabulary(this.env)]);
@@ -755,14 +813,24 @@ export class MecheRoom extends DurableObject<Env> {
       seat.autoplay = false;
       seat.disconnectedAt = null;
     }
+    // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.meche = applyDrawnRules("meche", { ...DEFAULT_SETTINGS, ...d.settings.meche }, DEFAULT_SETTINGS, d.settings.randomRules);
+    }
+    // En équipes à une table : la mèche passe d'une équipe à l'autre, et on gagne ensemble
+    const tableTeams = count ? Object.fromEntries(d.seats.map((s) => [s.id, s.team ?? 0])) : null;
     d.game = newGame(
-      d.seats.map((s) => s.id),
+      alternateTeams(
+        d.seats.map((s) => s.id),
+        tableTeams,
+      ),
       { ...DEFAULT_SETTINGS, ...d.settings.meche },
       now,
       randomSeed(),
     );
-    // En tournée par équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
-    d.game.teams = d.tour?.teams ?? null;
+    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
+    d.game.teams = d.tour?.teams ?? tableTeams;
+    d.game.teamWin = tableTeams !== null;
     // La première bombe sur la table : celle de qui allumera la première mèche
     d.roundBomb = this.bombOf(holderOf(d.game).id);
     d.status = "playing";
@@ -778,6 +846,10 @@ export class MecheRoom extends DurableObject<Env> {
         ? `La partie commence ! Le hasard a choisi : ${FUSE_NAMES[d.game.settings.mode]}.`
         : "La partie commence !",
     );
+    if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("meche", d.settings.randomRules, "start"));
+    if (tableTeams) {
+      this.systemChat("En équipes : la mèche passe d'une équipe à l'autre, et la dernière équipe qui a encore des allumettes gagne.");
+    }
     return this.afterChange([], now);
   }
 
@@ -815,7 +887,16 @@ export class MecheRoom extends DurableObject<Env> {
     d.timers = d.timers.filter((t) => t.kind !== "boom" && t.kind !== "light");
     if (d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
     const winner = g.ranking?.[0];
-    if (winner) this.systemChat(`${this.seatById(winner)?.name ?? "?"} remporte la partie !`);
+    const winners = g.teamRanks ? d.seats.filter((s) => g.teamRanks![s.id] === 1) : [];
+    const team = winners[0]?.team;
+    if (team !== undefined && winners.length > 1) {
+      this.systemChat(`Les ${tableTeamName(team)} remportent la partie : ${winners.map((s) => s.name).join(" et ")} !`);
+    } else if (winner) this.systemChat(`${this.seatById(winner)?.name ?? "?"} remporte la partie !`);
+    // Règles au hasard : on tire tout de suite celles de la partie suivante, pour que chacun les lise avant
+    if (d.settings.randomRules && !d.tour) {
+      d.settings.randomRules = drawRules("meche", Math.random, d.settings.randomRules);
+      this.systemChat(drawNotice("meche", d.settings.randomRules, "next"));
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1015,10 +1096,11 @@ export class MecheRoom extends DurableObject<Env> {
           name: seat?.name ?? "?",
           isBot: seat?.kind !== "human",
           absent: Boolean(seat?.autoplay),
-          rank: g.ranks?.[p.id] ?? g.players.length,
+          // En équipes à une table, chacun prend la place de son équipe
+          rank: g.teamRanks?.[p.id] ?? g.ranks?.[p.id] ?? g.players.length,
           score: p.stats.words,
           eliminated: false,
-          team: null,
+          team: g.teamRanks ? (g.teams?.[p.id] ?? null) : null,
           stats: p.stats,
         };
       });
@@ -1108,6 +1190,7 @@ export class MecheRoom extends DurableObject<Env> {
             ? s.disconnectedAt + AWAY_AFTER_MS
             : null,
         isHost: s.userId === d.hostId,
+        ...(s.team !== undefined ? { team: s.team as 0 | 1 | 2 } : {}),
         ...(s.bomb ? { bomb: s.bomb } : {}),
       })),
       spectators: [...connected.values()].filter((u) => !seatedUsers.has(u.id)).map((u) => ({ userId: u.id, name: u.pseudo })),
@@ -1224,5 +1307,6 @@ function mergeSettings(current: MecheSettings, patch: Partial<MecheSettings>): M
   if (patch.source === "hasard" || patch.source === "marabout") next.source = patch.source;
   if (typeof patch.passes === "boolean") next.passes = patch.passes;
   if (patch.botLevel === "facile" || patch.botLevel === "moyen" || patch.botLevel === "fort") next.botLevel = patch.botLevel;
+  if ((TABLE_TEAM_COUNTS as readonly number[]).includes(patch.teamCount as number)) next.teamCount = patch.teamCount as TableTeamCount;
   return next;
 }
