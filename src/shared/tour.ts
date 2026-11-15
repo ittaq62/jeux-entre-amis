@@ -352,7 +352,12 @@ const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
 ];
 
 const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
-  { id: "classique", name: "Classique", blurb: "Les règles officielles, en 20 minutes : le plus riche gagne.", settings: {} },
+  {
+    id: "classique",
+    name: "Classique",
+    blurb: "Les règles de base avec les bâtiments spéciaux, en 20 minutes : le plus riche gagne.",
+    settings: {},
+  },
   {
     id: "cagnotte",
     name: "Cagnotte",
