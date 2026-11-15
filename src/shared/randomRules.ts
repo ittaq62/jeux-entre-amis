@@ -19,7 +19,7 @@ const ALSO_DRAWN: Partial<Record<GameId, string[]>> = {
 
 /** Les descriptions propres aux tables, quand celle de la tournée parle de la tournée */
 const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
-  capitale: { classique: "Les règles de base, avec les bâtiments spéciaux." },
+  capitale: { classique: "Les règles de base : rachat des villes, catastrophes, construction équilibrée et bâtiments spéciaux." },
 };
 
 /** Les réglages que fixe le tirage : ceux-là ne se choisissent plus à la main tant que les règles sont au hasard */

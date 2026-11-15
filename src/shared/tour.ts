@@ -426,7 +426,8 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
   {
     id: "classique",
     name: "Classique",
-    blurb: "Les règles de base avec les bâtiments spéciaux, en 20 minutes : le plus riche gagne.",
+    blurb:
+      "Les règles de base (rachat des villes, catastrophes, construction équilibrée, bâtiments spéciaux), en 20 minutes : le plus riche gagne.",
     settings: {},
   },
   {
@@ -447,6 +448,18 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
     name: "Prison sans loyer",
     blurb: "Un propriétaire en prison ne touche plus ses loyers.",
     settings: { noRentInJail: true },
+  },
+  {
+    id: "batisseurs",
+    name: "Bâtisseurs libres",
+    blurb: "L'ancienne façon de bâtir : une rue seule monte jusqu'à l'immeuble, sans construction équilibrée, et pas de rachat.",
+    settings: { evenBuild: false, buyout: false },
+  },
+  {
+    id: "ciel-serein",
+    name: "Ciel serein",
+    blurb: "Pas de catastrophes dans les paquets : ni séisme, ni tempête, ni cession forcée.",
+    settings: { disasters: false },
   },
 ];
 
