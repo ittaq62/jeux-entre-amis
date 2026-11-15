@@ -1462,7 +1462,11 @@ export class MatchRuntime {
       h: a.p[k * 4 + 2]! + wrapAngle(b.p[k * 4 + 2]! - a.p[k * 4 + 2]!) * f,
       v: a.p[k * 4 + 3]!,
       act: b.acts[k]!,
+      // Le ralenti remontre le jeu d'avant le but : personne n'y fête ni n'y baisse la tête. Sans ça, l'équipe qui encaisse
+      // gardait la pose « déçu » du direct, qui passe avant tout geste : le gardien battu glissait debout, les mains sur les
+      // hanches, au lieu de plonger
       cheer: false,
+      sad: false,
     }));
     return {
       ...base,
