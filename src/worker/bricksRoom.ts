@@ -1391,6 +1391,7 @@ export class BricksRoom extends DurableObject<Env> {
           userId: seat?.kind === "human" ? seat.userId : null,
           name: seat?.name ?? "?",
           isBot: seat?.kind !== "human",
+          absent: Boolean(seat?.autoplay),
           rank: m.ranks?.[p.id] ?? m.players.length,
           score: p.stats.sent,
           eliminated: false,

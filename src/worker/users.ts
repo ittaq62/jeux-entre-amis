@@ -25,6 +25,7 @@ import { rankingPoints } from "../shared/ranking.ts";
 import { usableWear } from "../shared/shop.ts";
 import type { UserRow } from "./auth.ts";
 import { albumSummary } from "./cards.ts";
+import { recordPlayDays } from "./streak.ts";
 import { randomId } from "./util.ts";
 
 export function parseAvatar(raw: string, seed: string): AvatarConfig {
@@ -235,6 +236,8 @@ export interface GameRecordPlayer {
   rank: number;
   score: number;
   eliminated: boolean;
+  /** Plus à la table à la fin (parti, déconnecté, absent : un bot jouait pour lui) : la partie ne compte pas pour sa série */
+  absent?: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
   stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats | BolidesRecordStats | CramponsRecordStats;
@@ -537,6 +540,12 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
     }
   }
   await db.batch(statements);
+  // La série de chacun : à part, pour que la partie reste enregistrée même si ça échoue
+  try {
+    await recordPlayDays(db, { game: rec.game, startedAt: rec.startedAt, endedAt: rec.endedAt, players: humans });
+  } catch (err) {
+    console.error("Série : jours de jeu non notés", err);
+  }
   return { unlocked, elo };
 }
 

@@ -1062,6 +1062,7 @@ export class GameRoom extends DurableObject<Env> {
         userId: seat?.kind === "human" ? seat.userId : null,
         name: seat?.name ?? "?",
         isBot: seat?.kind !== "human",
+        absent: Boolean(seat?.autoplay),
         rank: ranking.indexOf(p.id) + 1,
         score: p.score,
         eliminated: p.eliminated,

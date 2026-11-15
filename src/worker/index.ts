@@ -56,6 +56,7 @@ import {
   REPORT_BODY_MAX,
   setReportStatus,
 } from "./reports.ts";
+import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -75,6 +76,8 @@ type Ctx = Context<AppEnv>;
 const app = new Hono<AppEnv>().basePath("/api");
 
 const MAX_PHOTO_BYTES = 120 * 1024;
+/** L'accueil s'ouvre souvent dans une heure ; au-delà, c'est une boucle */
+const STREAK_CLAIMS_PER_HOUR = 120;
 const PHOTO_TYPES = new Set(["image/webp", "image/jpeg", "image/png"]);
 
 // Toute requete qui modifie quelque chose doit venir du site lui-meme
@@ -289,7 +292,26 @@ app.get("/profile/:pseudo", withSession, async (c) => {
     const entry = (await listFriends(c.env.DB, me.id)).find((f) => f.user.id === user.id);
     if (entry) friendship = entry.status;
   }
-  return c.json({ ...profile, friendship });
+  // Sa série, avec le défi de sa semaine (les jeux ouverts à lui) ; le profil s'affiche même si elle est illisible
+  const streak = await streakStatus(c.env.DB, user.id, Date.now(), await visibleGames(c.env, user)).catch((err: unknown) => {
+    console.error("Série illisible", err);
+    return null;
+  });
+  return c.json({ ...profile, friendship, streak });
+});
+
+// ---------------------------------------------------------------------------
+// La série
+// ---------------------------------------------------------------------------
+
+/**
+ * L'accueil vient de s'ouvrir : le jour est compté et payé une seule fois, le défi de la semaine aussi. Rien n'est lu
+ * dans la requête : le jour vient de l'horloge du serveur, les montants de src/shared/streak.ts.
+ */
+app.post("/streak/claim", withSession, withProfile, async (c) => {
+  const user = c.get("user");
+  if (!(await rateLimit(c.env.DB, `streak:${user.id}`, STREAK_CLAIMS_PER_HOUR, 3600_000))) return c.json({ error: "Doucement !" }, 429);
+  return c.json(await claimStreak(c.env.DB, user.id, Date.now(), await visibleGames(c.env, user)));
 });
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
@@ -611,6 +633,13 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
         db.prepare("DELETE FROM point_ledger WHERE user_id = ?").bind(id),
         ...(avatar !== null ? [db.prepare("UPDATE users SET avatar = ? WHERE id = ?").bind(avatar, id)] : []),
       ]);
+      // Sa série repart de zéro (à part : la remise à zéro passe même si ces tables manquent encore)
+      await db
+        .batch([
+          db.prepare("DELETE FROM user_streaks WHERE user_id = ?").bind(id),
+          db.prepare("DELETE FROM play_days WHERE user_id = ?").bind(id),
+        ])
+        .catch((err: unknown) => console.error("Série non effacée", err));
       break;
     }
     case "setAdmin":

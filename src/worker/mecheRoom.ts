@@ -1014,6 +1014,7 @@ export class MecheRoom extends DurableObject<Env> {
           userId: seat?.kind === "human" ? seat.userId : null,
           name: seat?.name ?? "?",
           isBot: seat?.kind !== "human",
+          absent: Boolean(seat?.autoplay),
           rank: g.ranks?.[p.id] ?? g.players.length,
           score: p.stats.words,
           eliminated: false,
