@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { isBallId, type BallId } from "../../shared/games/crampons/boutique.ts";
 import { HALF_L } from "../../shared/games/crampons/pitch.ts";
 import { CramponsScene, type SceneFrame } from "./scene/CramponsScene.ts";
-import type { FootballerView, Kit } from "./scene/footballers.ts";
+import { KICK_CONTACT, type FootballerView, type Kit } from "./scene/footballers.ts";
 
 // Les rouges attaquent, en rayures sombres ; les adversaires en blanc et bleu
 const KITS: [Kit, Kit] = [
@@ -53,6 +53,187 @@ function composition(): FootballerView[] {
   return [...reds, ...blues];
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// &film : la même action en mouvement, pour la vidéo de l'accueil (public/crampons-film.mp4). Un pilote, à 1200 × 900,
+// appelle window.__film.step() image par image (30 par seconde de film) et enregistre ce que rend le canevas. L'image où
+// le ballon touche la lucarne est l'affiche (public/crampons-apercu.webp) : la boucle part d'elle, va jusqu'à la fin de
+// la fête, revient en fondu (15 images) au début de l'élan et s'arrête juste avant elle, donc elle reprend sans saut.
+// Encodée en H.264, 800 × 600, 24 images par seconde (ffmpeg -crf 33), muette.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const FPS = 30;
+/** Le buteur prend son élan, frappe (le pied touche le ballon à KICK_CONTACT), le ballon vole jusqu'à la lucarne */
+const RUN = 0.6;
+const CONTACT = RUN + KICK_CONTACT;
+const FLIGHT = 0.45;
+const POSTER = CONTACT + FLIGHT;
+/** Après le but : la fête, puis la vidéo revient en fondu au début de l'élan */
+const AFTER = 2.6;
+/** Le ralenti, du moment où le pied arme au ballon dans le filet */
+const SLOW_FROM = CONTACT - 0.1;
+const SLOW_TO = POSTER + 0.05;
+const SLOW = 0.4;
+
+const BALL_FROM = { x: 38.3, y: 0.16, z: 4.6 };
+const BALL_TO = { x: GOAL - 0.6, y: 2.05, z: -2.75 };
+
+interface Film {
+  /** L'image suivante : rendue et renvoyée en PNG, avec son temps de jeu ; null quand le film est fini */
+  step: () => { png: string; g: number; poster: boolean } | null;
+}
+
+const lerp = (a: number, b: number, k: number) => a + (b - a) * Math.min(1, Math.max(0, k));
+const ease = (k: number) => {
+  const c = Math.min(1, Math.max(0, k));
+  return c * c * (3 - 2 * c);
+};
+
+/** Où en est la scène au temps de jeu g (en secondes depuis le début de l'élan) */
+function filmPlayers(g: number): FootballerView[] {
+  const toGoal = (x: number, z: number) => Math.atan2(-z, GOAL - x);
+  const party = g >= POSTER + 0.3;
+  // Le buteur : l'élan, la frappe, puis il part fêter le but vers l'avant
+  const sx = g < RUN ? lerp(35.9, 37.5, g / RUN) : lerp(37.5, 37.7, (g - RUN) / 0.4);
+  const sz = g < RUN ? lerp(6.6, 5.3, g / RUN) : lerp(5.3, 5.15, (g - RUN) / 0.4);
+  const runAway = ease((g - POSTER - 0.45) / 1.3);
+  const striker = party
+    ? view({
+        x: lerp(sx, 40.6, runAway),
+        z: lerp(sz, 3.9, runAway),
+        team: 0,
+        h: toGoal(sx, sz) - 0.35,
+        v: runAway < 1 ? 3.2 : 0,
+        cheer: true,
+      })
+    : g < RUN
+      ? view({ x: sx, z: sz, team: 0, h: toGoal(37.6, 5.2) - 0.12, v: 6.5 })
+      : view({ x: sx, z: sz, team: 0, h: toGoal(37.6, 5.2) - 0.12, act: "kick", kickT: g - RUN });
+  // Le coéquipier qui suit l'action, puis rejoint le buteur
+  const mateDir = toGoal(42.2, -6.5) - 0.2;
+  const mx = 42.2 + Math.cos(mateDir) * 9.5 * (Math.min(g, POSTER + 0.2) - POSTER);
+  const mz = -6.5 + Math.sin(mateDir) * 9.5 * (Math.min(g, POSTER + 0.2) - POSTER);
+  const join = ease((g - POSTER - 0.5) / 1.6);
+  const mate = view({
+    x: lerp(mx, 42.4, join),
+    z: lerp(mz, 1.2, join),
+    team: 0,
+    h: join > 0 ? Math.atan2(1.2 - mz, 42.4 - mx) : mateDir,
+    v: party ? (join < 1 ? 7 : 0) : 9.5,
+    cheer: party,
+  });
+  // Le gardien : prêt au milieu de son but, il plonge vers sa lucarne, puis retombe
+  const diveK = (g - (CONTACT + 0.03)) / (FLIGHT - 0.03);
+  const keeper =
+    diveK < 0
+      ? view({ x: GOAL - 1.0, z: 0.25, team: 1, keeper: true, h: Math.PI, v: 0 })
+      : g < POSTER + 0.4
+        ? view({
+            x: GOAL - lerp(1.0, 1.15, diveK),
+            z: lerp(0.25, -1.4, diveK) + (g > POSTER ? -(g - POSTER) * 1.2 : 0),
+            team: 1,
+            keeper: true,
+            h: Math.PI,
+            act: "dive",
+            dirX: 0,
+            dirZ: -1,
+          })
+        : view({ x: GOAL - 1.2, z: -1.9, team: 1, keeper: true, h: Math.PI, act: "down" });
+  // Le défenseur qui tente le tacle, trop tard : il court, glisse, reste assis
+  const slideH = Math.atan2(1.6, -1.5);
+  const tackler =
+    g < 0.45
+      ? view({ x: lerp(41.2, 40.3, g / 0.45), z: lerp(1.3, 2.3, g / 0.45), team: 1, h: slideH, v: 7 })
+      : view({
+          x: lerp(40.3, 39.4, ease((g - 0.45) / 0.7)),
+          z: lerp(2.3, 3.5, ease((g - 0.45) / 0.7)),
+          team: 1,
+          h: slideH,
+          act: "slide",
+          dirX: -0.6,
+          dirZ: 0.8,
+        });
+  // Deux défenseurs qui reviennent, puis s'arrêtent, dépités
+  const back = (x: number, z: number, h: number, v: number) => {
+    const t = Math.min(g, POSTER + 0.35) - POSTER;
+    return view({ x: x + Math.cos(h) * v * t, z: z + Math.sin(h) * v * t, team: 1, h, v: g < POSTER + 0.35 ? v : 0, sad: party });
+  };
+  const reds = [striker, mate];
+  const blues = [keeper, tackler, back(45.5, 7.8, toGoal(45.5, 7.8) + 0.5, 8.5), back(47.6, -4.4, Math.atan2(2, -1), 6)];
+  const hidden = (team: 0 | 1) => view({ x: -40, z: 0, team, off: true });
+  while (reds.length < 11) reds.push(hidden(0));
+  while (blues.length < 11) blues.push(hidden(1));
+  return [...reds, ...blues];
+}
+
+/** Le ballon au temps de jeu g : posé, frappé, en lucarne, dans le filet */
+function filmBall(g: number): SceneFrame["ball"] {
+  if (g < CONTACT) return { ...BALL_FROM, vx: 0, vz: 0 };
+  if (g < POSTER) {
+    const k = (g - CONTACT) / FLIGHT;
+    return {
+      x: lerp(BALL_FROM.x, BALL_TO.x, k),
+      y: lerp(BALL_FROM.y, BALL_TO.y, k) + Math.sin(k * Math.PI) * 0.9,
+      z: lerp(BALL_FROM.z, BALL_TO.z, k),
+      vx: 34,
+      vz: -12,
+    };
+  }
+  // Il gonfle le filet, puis tombe au fond du but
+  const k = (g - POSTER) / 0.14;
+  if (k < 1) return { x: lerp(BALL_TO.x, GOAL + 1.3, k), y: lerp(BALL_TO.y, 1.75, k), z: lerp(BALL_TO.z, -2.95, k), vx: 10, vz: -1 };
+  const fall = g - POSTER - 0.14;
+  const y = Math.max(0.16, 1.75 - 4.9 * fall * fall);
+  return { x: GOAL + 1.3 + Math.min(fall, 0.5) * 0.4, y, z: -2.95, vx: y > 0.16 ? 2 : 0, vz: 0 };
+}
+
+const WARMUP = 120;
+
+function frameAt(g: number): SceneFrame {
+  return {
+    players: filmPlayers(g),
+    ball: filmBall(g),
+    active: -1,
+    attackSide: 1,
+    excitement: g < POSTER ? 0.55 : lerp(0.55, 1, (g - POSTER) / 0.3),
+    cuts: 0,
+    charge: 0,
+    aim: null,
+    receiver: -1,
+  };
+}
+
+function film(scene: CramponsScene, canvas: HTMLCanvasElement): Film {
+  let g = 0;
+  let started = false;
+  let posterDone = false;
+  const once = new Set<string>();
+  const event = (key: string, at: number, run: () => void) => {
+    if (g >= at && !once.has(key)) {
+      once.add(key);
+      run();
+    }
+  };
+  return {
+    step() {
+      if (g > POSTER + AFTER) return null;
+      // Avant la première image, la caméra se pose sur son plan et le public s'installe
+      if (!started) for (let i = 0; i < WARMUP; i++) scene.render(1 / FPS, frameAt(0));
+      // Le temps de jeu avance moins vite pendant le ralenti, et y entre et en sort en douceur
+      const rate = g < SLOW_FROM ? 1 : g < SLOW_TO ? SLOW : lerp(SLOW, 1, (g - SLOW_TO) / 0.25);
+      const dt = started ? rate / FPS : 1 / FPS;
+      if (started) g += dt;
+      started = true;
+      event("frappe", CONTACT, () => scene.impact(BALL_FROM.x, BALL_FROM.z, 0.8));
+      event("filet", POSTER + 0.05, () => scene.shakeNet(1));
+      event("fete", POSTER + 0.2, () => scene.celebrate(1, [KITS[0].shirt, "#ffffff"]));
+      scene.render(dt, frameAt(g));
+      const poster = !posterDone && g >= POSTER;
+      if (poster) posterDone = true;
+      return { png: canvas.toDataURL("image/png"), g, poster };
+    },
+  };
+}
+
 export function DevAffiche() {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -80,6 +261,10 @@ export function DevAffiche() {
     });
     scene.resize(innerWidth, innerHeight);
     scene.setShot({ kind: "free", x: cx, y: cy, z: cz, tx, ty, tz });
+    if (params.has("film")) {
+      (window as unknown as { __film: Film }).__film = film(scene, canvas.current!);
+      return () => scene.dispose();
+    }
     // Le ballon a quitté le pied du buteur et arrive dans la lucarne : on le fait voler un instant pour que sa traînée se dessine
     const from = { x: 38.3, y: 0.25, z: 4.6 };
     const to = { x: GOAL - 0.6, y: 2.05, z: -2.75 };
