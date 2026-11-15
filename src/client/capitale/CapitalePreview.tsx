@@ -2,49 +2,49 @@
 // en SVG, une partie qui tourne : les dés roulent au centre, un pion avance case par case et fait le tour du plateau, puis
 // touche ses 200 F en repassant par le Départ. Les animations sont en CSS (des @keyframes calculées ici une fois pour toutes).
 
-/** Le centre de chaque case sur l'image (720 × 540), du Départ (0) à la dernière avant lui (39), et la taille du pion à
- *  cette profondeur : relevés en perspective depuis les quatre coins du plateau de l'image. */
+/** Là où se tient un pion sur chaque case de l'image (720 × 540), du Départ (0) à la dernière avant lui (39), et la taille
+ *  du pion à cette profondeur : projetés depuis la scène 3D qui a rendu l'image (même caméra). */
 const TRACK: [number, number, number][] = [
-  [356.5, 471.1, 1],
-  [312.2, 432.5, 0.963],
-  [281.3, 405.6, 0.938],
-  [251.4, 379.6, 0.914],
-  [222.6, 354.6, 0.891],
-  [194.7, 330.3, 0.868],
-  [167.8, 306.8, 0.847],
-  [141.7, 284.2, 0.827],
-  [116.5, 262.2, 0.807],
-  [92, 240.9, 0.788],
-  [59.7, 212.7, 0.763],
-  [102, 186.7, 0.741],
-  [131.8, 168.4, 0.726],
-  [160.8, 150.6, 0.711],
-  [189, 133.3, 0.696],
-  [216.5, 116.5, 0.682],
-  [243.2, 100.1, 0.669],
-  [269.2, 84.1, 0.656],
-  [294.6, 68.6, 0.643],
-  [319.3, 53.4, 0.631],
-  [352.2, 33.2, 0.615],
-  [385.7, 54.2, 0.632],
-  [410.7, 70, 0.645],
-  [436.5, 86.2, 0.659],
-  [463, 102.9, 0.673],
-  [490.3, 120, 0.687],
-  [518.4, 137.7, 0.702],
-  [547.2, 155.8, 0.718],
-  [577, 174.5, 0.734],
-  [607.6, 193.8, 0.75],
-  [651.3, 221.3, 0.775],
-  [618.9, 248.8, 0.798],
-  [594.4, 269.5, 0.817],
-  [569.2, 290.9, 0.835],
-  [543.2, 312.9, 0.855],
-  [516.4, 335.6, 0.875],
-  [488.8, 359, 0.897],
-  [460.2, 383.2, 0.919],
-  [430.7, 408.3, 0.941],
-  [400.2, 434.1, 0.965],
+  [360, 465.5, 0.97],
+  [314, 432.7, 0.947],
+  [287.6, 401.5, 0.925],
+  [253.4, 378.7, 0.908],
+  [229.3, 349.9, 0.888],
+  [201.9, 325.7, 0.871],
+  [171, 305.4, 0.856],
+  [150.1, 279.9, 0.838],
+  [121.2, 261.1, 0.825],
+  [97.6, 240.1, 0.81],
+  [73.2, 211.8, 0.79],
+  [110.3, 184.9, 0.771],
+  [143.7, 169, 0.759],
+  [169.9, 148.8, 0.745],
+  [198.3, 131.7, 0.733],
+  [228.8, 117.3, 0.723],
+  [252.2, 99, 0.71],
+  [281.1, 85.5, 0.7],
+  [302.9, 68.4, 0.688],
+  [327.1, 53.7, 0.678],
+  [360, 37.6, 0.666],
+  [392.9, 53.7, 0.678],
+  [414, 70.4, 0.689],
+  [442, 83.5, 0.699],
+  [467.8, 99, 0.71],
+  [491.2, 117.3, 0.723],
+  [521.7, 131.7, 0.733],
+  [550.1, 148.8, 0.745],
+  [576.3, 169, 0.759],
+  [609.7, 184.9, 0.771],
+  [646.8, 211.8, 0.79],
+  [622.4, 240.1, 0.81],
+  [598.8, 261.1, 0.825],
+  [569.9, 279.9, 0.838],
+  [549, 305.4, 0.856],
+  [518.1, 325.7, 0.871],
+  [490.7, 349.9, 0.888],
+  [466.7, 378.7, 0.908],
+  [432.4, 401.5, 0.925],
+  [406, 432.7, 0.947],
 ];
 
 /** Les lancers d'un tour de plateau : 40 cases en tout, le pion revient au Départ et la boucle reprend sans saut */
@@ -62,15 +62,16 @@ const HOP = 0.27; // un saut de case
 const REST = 0.8; // le temps de regarder où l'on est tombé
 const PERIOD = ROLLS.length * (ROLL + REST) + TRACK.length * HOP;
 
-/** Les deux dés, posés sur ceux de l'image (qu'une tache de la couleur de la place efface), et leur forme vue du ciel */
+/** Les deux dés, sur la rose des vents de la place (l'image a été rendue sans les siens), et leur forme vue du ciel */
 const DICE = [
-  { x: 352, y: 198, lean: -4, spin: 1, late: 0 },
-  { x: 374, y: 212, lean: 5, spin: -1, late: 0.06 },
+  { x: 349.3, y: 200.2, lean: -4, spin: 1, late: 0 },
+  { x: 370.7, y: 213.8, lean: 5, spin: -1, late: 0.06 },
 ];
-// Le dessus du dé : un carré du plateau, vu en perspective (demi-côtés le long des deux bords du plateau), et sa hauteur
-const HU = [-6.1, -4.4];
-const HV = [6, -4.2];
-const DIE_H = 9.5;
+// Le dessus du dé : un carré du plateau, vu en perspective (demi-côtés le long des deux bords du plateau), et sa hauteur ;
+// projetés depuis la scène, un dixième plus gros que les dés du jeu pour qu'on les lise
+const HU = [-6.1, -4.3];
+const HV = [6, -4.3];
+const DIE_H = 12;
 const at = (u: number, v: number, lift = 0) => [HU[0]! * u + HV[0]! * v, HU[1]! * u + HV[1]! * v - lift] as const;
 const pts = (list: (readonly [number, number])[]) => list.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
 // Le dé est dessiné autour de son milieu : la face du dessus au-dessus, celle du dessous en dessous
@@ -234,18 +235,12 @@ export function CapitalePreview({ px }: { px: number }) {
       <svg className="capitale-preview-life" viewBox="0 0 720 540" aria-hidden="true">
         <style>{KEYFRAMES}</style>
         <defs>
-          <radialGradient id="cap-pv-plaza">
-            <stop offset="0.62" stopColor="#f6e4c3" />
-            <stop offset="1" stopColor="#f6e4c3" stopOpacity="0" />
-          </radialGradient>
           <linearGradient id="cap-pv-pawn" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stopColor="#b48cf2" />
             <stop offset="0.45" stopColor="#8a5ad8" />
             <stop offset="1" stopColor="#5a3399" />
           </linearGradient>
         </defs>
-        {/* Les dés de l'image, effacés : les nôtres roulent à leur place */}
-        <ellipse cx={363} cy={206} rx={30} ry={21} fill="url(#cap-pv-plaza)" />
         <Die index={0} />
         <Die index={1} />
         {/* Le pion (son ombre reste au sol pendant qu'il saute) */}
