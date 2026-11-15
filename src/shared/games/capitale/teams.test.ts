@@ -118,11 +118,11 @@ describe("les équipes", () => {
     }
   });
 
-  it("le monument demande le quartier entier à soi : celui de l'équipe ne suffit pas, il faut d'abord se donner la rue", () => {
+  it("l'obélisque demande le quartier entier à soi : celui de l'équipe ne suffit pas, il faut d'abord se donner la rue", () => {
     const s = game();
     own(s, "a", 1);
     own(s, "b", 3);
-    expect(canPlaceSpecial(s, "a", 1, "monument")).toBe("Il faut tout le quartier pour un monument.");
+    expect(canPlaceSpecial(s, "a", 1, "monument")).toBe("Il faut tout le quartier pour un obélisque.");
     act(s, "b", gift("a", 0, [3]));
     expect(canPlaceSpecial(s, "a", 1, "monument")).toBeNull();
   });

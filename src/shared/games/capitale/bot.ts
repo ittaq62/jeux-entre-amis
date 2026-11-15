@@ -333,7 +333,7 @@ function bestUpgrade(s: CapitaleState, playerId: string, level: BotLevel, keep: 
 }
 
 /**
- * Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un monument, une nuisance chez le meilleur loyer adverse,
+ * Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un obélisque, une nuisance chez le meilleur loyer adverse,
  * un parc, un stade. Sans `allowAttack` (le bot d'un joueur absent), il se défend et bâtit chez lui, mais n'attaque personne
  */
 function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number, allowAttack: boolean): CapitaleAction | null {
@@ -354,7 +354,7 @@ function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: 
   if (level === "facile") return null;
   const place = (index: number, kind: SpecialKind): CapitaleAction | null =>
     canPlaceSpecial(s, playerId, index, kind) === null ? { type: "special", square: index, kind } : null;
-  // Le monument, dès qu'un quartier complet le permet : sur la rue la plus chère
+  // L'obélisque, dès qu'un quartier complet le permet : sur la rue la plus chère
   for (const g of GROUP_ORDER) {
     if (!ownsGroup(s, playerId, g) || !affordable(specialPrice("monument", GROUPS[g].squares[0]!), 1.2)) continue;
     for (const i of [...GROUPS[g].squares].reverse()) {

@@ -248,7 +248,7 @@ describe("la ville : améliorer ses rues, les bâtiments spéciaux", () => {
     expect(P(s, "a").stats.houses).toBe(5);
   });
 
-  it("le monument demande tout le quartier et double ses loyers ; un bâtiment spécial par tour", () => {
+  it("l'obélisque demande tout le quartier et double ses loyers ; un bâtiment spécial par tour", () => {
     const s = game();
     own(s, "a", 1, 3);
     expect(rentFor(s, 1, { diceTotal: 7 })).toBe(4);
@@ -449,7 +449,7 @@ describe("échanges", () => {
     expect(P(s, "a").stats.trades).toBe(1);
   });
 
-  it("pas d'échange d'une rue construite, ni d'un quartier qui a son monument", () => {
+  it("pas d'échange d'une rue construite, ni d'un quartier qui a son obélisque", () => {
     const s = game();
     own(s, "a", 1, 3);
     lvl(s, 3, 1);
@@ -673,7 +673,7 @@ describe("bots", () => {
     P(s, "a").cash = 3000;
     expect(botAction(s, "a", "fort")).toMatchObject({ type: "special", square: 39, kind: "centrale" });
     expect(botAction(s, "a", "fort", { allowAttack: false })).toEqual({ type: "endTurn" });
-    // Chez b, le remplaçant d'un absent fait raser la centrale, puis bâtit chez lui : le monument du quartier complet
+    // Chez b, le remplaçant d'un absent fait raser la centrale, puis bâtit chez lui : l'obélisque du quartier complet
     act(s, "a", { type: "special", square: 39, kind: "centrale" });
     Object.assign(s, { step: "manage", turn: 1, turnId: s.turnId + 1 });
     expect(botAction(s, "b", "moyen", { allowAttack: false })).toEqual({ type: "raze", square: 39 });

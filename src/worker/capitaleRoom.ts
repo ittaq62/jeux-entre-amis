@@ -964,7 +964,7 @@ export class CapitaleRoom extends DurableObject<Env> {
       } else if (e.type === "trade" && e.status === "accepted") {
         this.systemChat(`Marché conclu entre ${name(e.trade.from)} et ${name(e.trade.to)}.`);
       } else if (e.type === "special" && (SPECIALS[e.kind].nuisance || e.kind === "monument")) {
-        // Une nuisance (jamais chez un coéquipier) ou un monument : de quoi changer les loyers de toute la table
+        // Une nuisance (jamais chez un coéquipier) ou un obélisque : de quoi changer les loyers de toute la table
         const owner = g.deeds[e.square]?.owner;
         this.systemChat(
           SPECIALS[e.kind].nuisance
@@ -1187,7 +1187,7 @@ export class CapitaleRoom extends DurableObject<Env> {
       case "bot": {
         if (!playing || !seat || t.key !== `${d.actionSeq}` || actorOf(g) !== seat.id || !this.plays(seat)) return null;
         const allowTrade = seat.kind === "bot" && d.botTraded[seat.id] !== g.turnId;
-        // Le remplaçant d'un absent ne donne rien à sa place ; il se défend (raser, parc, monument) mais n'attaque personne
+        // Le remplaçant d'un absent ne donne rien à sa place ; il se défend (raser, parc, obélisque) mais n'attaque personne
         const realBot = seat.kind === "bot";
         const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade, allowGift: realBot, allowAttack: realBot });
         if (action?.type === "propose") d.botTraded[seat.id] = g.turnId;

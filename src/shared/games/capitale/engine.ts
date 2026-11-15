@@ -735,7 +735,7 @@ export function rentFor(s: CapitaleState, index: number, ctx: RentContext): numb
   if (s.settings.noRentInJail && owner.inJail) return 0;
   if (sq.kind === "property") {
     // Le niveau, sinon le terrain nu (doublé avec tout le quartier) ; une centrale ramène au terrain nu, une décharge
-    // divise par deux, le monument du propriétaire double tout le quartier
+    // divise par deux, l'obélisque du propriétaire double tout le quartier
     const full = ownsGroup(s, deed.owner, sq.group!);
     const nuisance = nuisanceOn(s, index);
     const level = nuisance === "centrale" ? 0 : levelOf(s, index);
@@ -1327,8 +1327,8 @@ export function canPlaceSpecial(s: CapitaleState, playerId: string, index: numbe
     if (here.some((b) => b.kind === "parc")) return "Un parc protège ce quartier.";
   } else {
     if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
-    if (kind === "monument" && !ownsGroup(s, playerId, sq.group!)) return "Il faut tout le quartier pour un monument.";
-    if (kind === "monument" && here.some((b) => b.kind === "monument")) return "Le quartier a déjà son monument.";
+    if (kind === "monument" && !ownsGroup(s, playerId, sq.group!)) return "Il faut tout le quartier pour un obélisque.";
+    if (kind === "monument" && here.some((b) => b.kind === "monument")) return "Le quartier a déjà son obélisque.";
     if (kind === "parc" && here.some((b) => b.kind === "parc")) return "Le quartier a déjà son parc.";
     if (kind === "parc" && here.some((b) => SPECIALS[b.kind].nuisance)) return "Fais d'abord raser la nuisance du quartier.";
     if (kind === "stade" && hasStadium(s, playerId)) return "Tu as déjà un stade.";
@@ -1482,7 +1482,7 @@ export function tradeProblem(s: CapitaleState, playerId: string, index: number):
   if (own) return `Il faut d'abord revendre ${SPECIALS[own].the} de ${name}.`;
   const g = groupOf(index);
   if (g && districtSpecials(s, g.id).some((b) => b.kind === "monument"))
-    return `Il y a un monument dans le quartier de ${name} : il faut le revendre avant.`;
+    return `Il y a un obélisque dans le quartier de ${name} : il faut le revendre avant.`;
   return null;
 }
 
