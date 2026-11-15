@@ -102,7 +102,6 @@ function mockView(
       once: false,
       botLevel: "normal",
       rules: "base",
-      noEarlyUno: false,
       capitaleTeam: { ...DEFAULT_CAPITALE_TEAM },
     },
     hostId: host ? "u0" : "u1",

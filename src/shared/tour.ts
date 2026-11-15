@@ -88,15 +88,14 @@ export interface TourSettings {
   /** Chaque jeu coché ne se joue qu'une fois : la tournée s'arrête quand ils sont tous passés */
   once: boolean;
   botLevel: TourBotLevel;
+  /**
+   * Comment se choisissent les règles. UNO : « pas de UNO d'avance » en fait partie (une règle à part, tirée au sort
+   * ou votée oui ou non) ; de base, on joue la règle habituelle.
+   */
   rules: TourRulesMode;
   /**
-   * UNO : pas de UNO d'avance. Un réglage à part, choisi par l'hôte : il vaut pour chaque partie de UNO, quelles que
-   * soient les règles de base, tirées au sort ou votées, et n'est jamais tiré avec elles.
-   */
-  noEarlyUno: boolean;
-  /**
    * Capitale en équipes : le loyer entre coéquipiers, les dons, l'héritage et la victoire d'équipe. Réglés à part par
-   * l'hôte comme « pas de UNO d'avance » : jamais tirés ni votés avec les règles.
+   * l'hôte : jamais tirés ni votés avec les règles.
    */
   capitaleTeam: CapitaleTeamRules;
   /** Rejoindre en cours de route : qui arrive pendant la tournée peut la jouer dès le prochain jeu, ou la regarder ; sinon seuls les amis des joueurs la suivent */
@@ -130,7 +129,6 @@ export function defaultTourSettings(visibility: Visibility): TourSettings {
     once: false,
     botLevel: "normal",
     rules: "base",
-    noEarlyUno: false,
     capitaleTeam: { ...DEFAULT_CAPITALE_TEAM },
   };
 }
@@ -300,11 +298,22 @@ const NAVAL_VARIANTS: VariantOf<NavalSettings>[] = [
   { id: "eclair", name: "Éclair", blurb: "Petite grille 8 × 8 : ça va très vite.", settings: { grid: 8 } },
 ];
 
+/** Une règle à part qu'on annonce toujours, par oui ou par non, et que les règles votées soumettent au vote */
+interface AskedRule {
+  /** La question du vote */
+  question: string;
+  /** Ce qui se joue quand elle n'est pas retenue : la règle habituelle */
+  offName: string;
+  offBlurb: string;
+}
+
+type Modifier = VariantOf<object> & { chance: number; asked?: AskedRule };
+
 /**
- * Les règles à part, tirées chacune de leur côté par-dessus la variante : à la bataille navale, les navires collés.
- * Une variante tirée s'écrit alors « salve+colles ».
+ * Les règles à part, tirées chacune de leur côté par-dessus la variante : à la bataille navale, les navires collés ;
+ * au UNO, pas de UNO d'avance (Classique comme No Mercy). Une variante tirée s'écrit alors « salve+colles ».
  */
-const MODIFIERS: Partial<Record<GameId, (VariantOf<object> & { chance: number })[]>> = {
+const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
   naval: [
     {
       id: "colles",
@@ -314,11 +323,73 @@ const MODIFIERS: Partial<Record<GameId, (VariantOf<object> & { chance: number })
       chance: 0.5,
     },
   ],
+  uno: [
+    {
+      id: "sans-avance",
+      name: "pas de UNO d'avance",
+      blurb: "On crie UNO avec sa dernière carte seule en main, plus avec deux.",
+      settings: { noEarlyUno: true } satisfies Partial<UnoSettings>,
+      chance: 0.5,
+      asked: {
+        question: "Pas de UNO d'avance ?",
+        offName: "UNO d'avance permis",
+        offBlurb: "On peut crier UNO dès qu'il ne reste que deux cartes en main, comme d'habitude.",
+      },
+    },
+  ],
 };
 
 /** Les règles à part d'un jeu, sans leurs réglages */
 export function gameModifiers(game: GameId): TourVariant[] {
   return (MODIFIERS[game] ?? []).map(({ id, name, blurb }) => ({ id, name, blurb }));
+}
+
+/** Une règle à part qu'on vote oui ou non (règles votées) et qu'on annonce toujours, retenue ou non */
+export interface TourAskedRule extends TourVariant, AskedRule {}
+
+/** Les règles à part d'un jeu qu'on vote oui ou non : au UNO, « pas de UNO d'avance » */
+export function askedRules(game: GameId): TourAskedRule[] {
+  return (MODIFIERS[game] ?? []).flatMap(({ id, name, blurb, asked }) => (asked ? [{ id, name, blurb, ...asked }] : []));
+}
+
+/** Le nom d'une règle à part selon qu'elle est retenue ou non : « pas de UNO d'avance », « UNO d'avance permis » */
+export function askedLabel(game: GameId, rule: string, on: boolean): string {
+  const r = askedRules(game).find((a) => a.id === rule);
+  return r ? (on ? r.name : r.offName) : rule;
+}
+
+/** Les règles à part que retient une variante (« no-mercy+sans-avance » : sans-avance) */
+export function variantModifiers(id: string | null | undefined): string[] {
+  return (id ?? "").split("+").slice(1);
+}
+
+/**
+ * La variante et les règles à part retenues, écrites dans l'ordre du jeu (« no-mercy+sans-avance ») ; les règles à
+ * part inconnues sont laissées de côté
+ */
+export function composeVariant(game: GameId, base: string, extras: string[]): string {
+  const [head] = base.split("+");
+  const mods = (MODIFIERS[game] ?? []).filter((m) => extras.includes(m.id)).map((m) => m.id);
+  return [head!, ...mods].join("+");
+}
+
+/**
+ * Pour l'affichage : la variante sans les règles annoncées par oui ou non, et chacune de celles-ci, retenue ou non.
+ * Au UNO : « No Mercy », puis « pas de UNO d'avance : oui ».
+ */
+export function splitAsked(
+  game: GameId,
+  id: string | null | undefined,
+): { rest: string | null; asked: { rule: TourAskedRule; on: boolean }[] } {
+  if (!findVariant(game, id)) return { rest: null, asked: [] };
+  const asked = askedRules(game);
+  const mods = variantModifiers(id);
+  const rest = composeVariant(
+    game,
+    id!,
+    mods.filter((m) => !asked.some((a) => a.id === m)),
+  );
+  return { rest, asked: asked.map((rule) => ({ rule, on: mods.includes(rule.id) })) };
 }
 
 /** Une variante et ses règles à part : « salve+colles » */
@@ -462,11 +533,12 @@ export function findVariant(game: GameId, id: string | null | undefined): TourVa
 }
 
 /**
- * Les réglages d'une table de UNO de la tournée : la variante retenue (de base, tirée ou votée), puis « pas de UNO
- * d'avance » tel que l'hôte l'a choisi, jamais tiré avec la variante.
+ * Les réglages d'une table de UNO de la tournée : la variante retenue (de base, tirée ou votée), « pas de UNO d'avance »
+ * compris (« classique+sans-avance ») ; sinon la règle habituelle. L'ancien réglage de l'hôte (`noEarlyUno` envoyé
+ * à part par les tournées d'avant) est ignoré.
  */
-export function tourUnoSettings(init: { variant: string | null | undefined; noEarlyUno?: boolean }): Partial<UnoSettings> {
-  return { ...variantSettings("uno", init.variant), noEarlyUno: init.noEarlyUno === true };
+export function tourUnoSettings(init: { variant: string | null | undefined }): Partial<UnoSettings> {
+  return { noEarlyUno: false, ...variantSettings("uno", init.variant) };
 }
 
 /**
@@ -537,6 +609,91 @@ export function resolveVariant(game: GameId, votes: Record<string, string>, vote
   const best = Math.max(...counts.map(([, n]) => n));
   const top = counts.filter(([, n]) => n === best).map(([v]) => v);
   return top[Math.min(top.length - 1, Math.floor(random() * top.length))]!;
+}
+
+/** Une règle à part votée oui ou non : les voix de chacun, et la décision une fois prise (null : vote ouvert) */
+export interface TourRuleVote {
+  votes: Record<string, boolean>;
+  value: boolean | null;
+}
+
+/** Les voix pour et contre une règle à part, en ne comptant que les votants présents */
+export function tallyRule(votes: Record<string, boolean>, voters: string[]): { yes: number; no: number } {
+  let yes = 0;
+  let no = 0;
+  for (const id of voters) {
+    if (votes[id] === true) yes++;
+    else if (votes[id] === false) no++;
+  }
+  return { yes, no };
+}
+
+/**
+ * Comme pour les variantes : la réponse qui a déjà la moitié des voix est adoptée tout de suite. Si le oui et le non
+ * l'ont tous les deux (des votants sont partis), rien n'est décidé avant le départ.
+ */
+export function adoptedRule(votes: Record<string, boolean>, voters: string[]): boolean | null {
+  const need = voteNeed(voters.length);
+  const { yes, no } = tallyRule(votes, voters);
+  if (yes >= need && yes > no) return true;
+  if (no >= need && no > yes) return false;
+  return null;
+}
+
+/** Au départ : la règle à part si le oui l'emporte ; à égalité, ou sans aucune voix, la règle habituelle */
+export function resolveRule(votes: Record<string, boolean>, voters: string[]): boolean {
+  const { yes, no } = tallyRule(votes, voters);
+  return yes > no;
+}
+
+/** Règles votées : les règles à part ouvertes au vote pour ce jeu (aucune voix, rien de décidé) */
+export function openRuleVotes(game: GameId): Record<string, TourRuleVote> {
+  return Object.fromEntries(askedRules(game).map((r) => [r.id, { votes: {}, value: null }]));
+}
+
+/** Le jeu tiré pour la suite, tel que la tournée le garde et l'envoie aux écrans */
+export interface TourNext {
+  game: GameId;
+  /** L'heure du départ (null : en pause) */
+  at: number | null;
+  /** Les règles retenues, règles à part comprises (« no-mercy+sans-avance ») ; null tant qu'un vote est ouvert */
+  variant: string | null;
+  /** Les voix de chacun pour une variante */
+  votes: Record<string, string>;
+  /** Règles votées : la variante déjà adoptée, pendant que les règles à part restent au vote (absente des tournées d'avant) */
+  base?: string | null;
+  /** Règles votées : chaque règle à part votée oui ou non (UNO : pas de UNO d'avance) ; absente des tournées d'avant */
+  extras?: Record<string, TourRuleVote>;
+}
+
+/** Une des variantes proposées au vote (pas une variante déjà composée avec ses règles à part) */
+export function isBaseVariant(game: GameId, id: unknown): id is string {
+  return typeof id === "string" && VARIANTS[game].some((v) => v.id === id);
+}
+
+/** Règles votées : les règles retenues une fois tout décidé (la variante et chaque règle à part), sinon null */
+export function settledVariant(next: Pick<TourNext, "game" | "base" | "extras">): string | null {
+  if (!next.base) return null;
+  const extras = Object.entries(next.extras ?? {});
+  if (extras.some(([, e]) => e.value === null)) return null;
+  return composeVariant(
+    next.game,
+    next.base,
+    extras.filter(([, e]) => e.value).map(([id]) => id),
+  );
+}
+
+/**
+ * Règles votées, au départ : ce qui est déjà décidé reste ; sinon la variante la plus votée (au hasard entre les ex
+ * aequo, celle de base sans voix), et chaque règle à part si le oui l'emporte (la règle habituelle à égalité)
+ */
+export function resolveVoted(next: TourNext, voters: string[], random: () => number): string {
+  if (next.variant) return next.variant;
+  const base = next.base ?? resolveVariant(next.game, next.votes, voters, random);
+  const extras = Object.entries(next.extras ?? {})
+    .filter(([, e]) => e.value ?? resolveRule(e.votes, voters))
+    .map(([id]) => id);
+  return composeVariant(next.game, base, extras);
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +924,7 @@ export interface TourView {
    * Jeu tiré pour la suite et l'heure du départ (null : en pause). Les règles : la variante retenue, ou null
    * tant que le vote est ouvert ; les voix de chacun.
    */
-  next: { game: GameId; at: number | null; variant: string | null; votes: Record<string, string> } | null;
+  next: TourNext | null;
   /** Joueurs présents qui peuvent voter (bots et spectateurs exclus), et ceux qui sont prêts à lancer */
   voters: string[];
   ready: string[];
@@ -786,7 +943,7 @@ export interface TourView {
 export type TourClientMessage =
   | {
       t: "settings";
-      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "noEarlyUno" | "capitaleTeam">>;
+      settings: Partial<Pick<TourSettings, "games" | "end" | "teams" | "once" | "botLevel" | "rules" | "capitaleTeam">>;
       visibility?: Visibility;
       maxPlayers?: number;
       lateJoin?: boolean;
@@ -810,6 +967,10 @@ export type TourClientMessage =
   | { t: "vote"; variant: string }
   /** Hôte : choisir lui-même les règles du jeu tiré */
   | { t: "pickVariant"; variant: string }
+  /** Règles votées : la voix d'un joueur, oui ou non, pour une règle à part (UNO : « sans-avance ») */
+  | { t: "voteRule"; rule: string; on: boolean }
+  /** Hôte : décider lui-même d'une règle à part */
+  | { t: "pickRule"; rule: string; on: boolean }
   | { t: "pause" }
   | { t: "resume" }
   /** Hôte : finir la tournée (à l'entracte), ou après le jeu en cours */
@@ -853,12 +1014,10 @@ export interface TourInit {
   botLevel: TourBotLevel;
   /** Équipe de chacun (comptes et bots) quand le jeu se joue en 2 contre 2 */
   teams: Record<string, 0 | 1> | null;
-  /** Les règles du jeu (id de variante) */
+  /** Les règles du jeu (id de variante, avec ses règles à part : « classique+sans-avance ») */
   variant: string;
   /** Les skins de chaque joueur (par compte), déjà vérifiés par la tournée ; absents des tournées plus anciennes */
   looks?: Record<string, Looks>;
-  /** UNO : pas de UNO d'avance, réglé à part par l'hôte (absent des tournées plus anciennes) */
-  noEarlyUno?: boolean;
   /** Capitale en équipes : les règles d'équipe choisies par l'hôte (absentes des tournées plus anciennes) */
   capitaleTeam?: CapitaleTeamRules;
 }

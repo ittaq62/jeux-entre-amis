@@ -1144,7 +1144,30 @@
   max-width: 42ch;
 }
 
-/* Au UNO, « pas de UNO d'avance » : réglé à part, rappelé sous les règles */
+/* Au UNO, « pas de UNO d'avance » : tiré au sort ou voté, dit sur la carte, retenu ou non */
+.rules-asked {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  max-width: 42ch;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.rules-asked strong {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.rules-asked.is-on strong {
+  color: #b3261e;
+}
+
+/* À Capitale en équipes : les règles d'équipe, réglées à part, rappelées sous les règles */
 .rules-fixed {
   margin: 0;
   max-width: min(380px, 100%);
@@ -1279,6 +1302,67 @@
   width: var(--fill, 0%);
   background: var(--gold);
   transition: width 0.35s ease;
+}
+
+/* Ce que le vote a déjà décidé, pendant qu'on vote encore le reste */
+.rules-vote-done {
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  background: var(--gold-tint);
+  text-align: center;
+  font-size: 14px;
+}
+
+.rules-vote-done strong {
+  font-family: var(--font-card);
+  font-size: 17px;
+  color: var(--gold-light);
+}
+
+/* Une règle à part votée oui ou non : les deux réponses côte à côte, comptées comme les variantes */
+.rules-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.rules-ask-head {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.rules-ask-head strong {
+  font-family: var(--font-card);
+  font-size: 17px;
+  color: var(--gold-light);
+}
+
+.rules-ask-head .hint {
+  font-size: 13px;
+}
+
+.rules-ask-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.rules-ask-row .rules-option {
+  padding-block: 8px;
+}
+
+.rules-ask-host {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 /* Le vote « prêt » */

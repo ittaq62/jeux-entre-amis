@@ -27,7 +27,9 @@ import {
 import { cleanLooks, usableLooks, type Looks } from "../shared/looks.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import {
+  adoptedRule,
   adoptedVariant,
+  askedLabel,
   baseVariant,
   cleanCapitaleTeam,
   DEFAULT_CAPITALE_TEAM,
@@ -39,8 +41,11 @@ import {
   fitsGame,
   GAME_SEATS,
   INTERMISSION_MS,
-  resolveVariant,
+  isBaseVariant,
+  openRuleVotes,
+  resolveVoted,
   sanitizeEnd,
+  settledVariant,
   teamScores,
   TOUR_BOT_NAMES,
   TOUR_GAMES,
@@ -58,6 +63,7 @@ import {
   type TourClientMessage,
   type TourGameLine,
   type TourGameResult,
+  type TourNext,
   type TourServerMessage,
   type TourSettings,
   type TourStatus,
@@ -135,7 +141,7 @@ interface TourData {
   games: TourGame[];
   current: { index: number; game: GameId; code: string } | null;
   /** Le jeu tiré, l'heure du départ, ses règles (null : vote ouvert) et les voix pour ses règles */
-  next: { game: GameId; at: number | null; variant: string | null; votes: Record<string, string> } | null;
+  next: TourNext | null;
   /** Joueurs prêts à lancer, au salon ou à l'entracte */
   ready: string[];
   startedAt: number | null;
@@ -196,15 +202,23 @@ export class TourRoom extends DurableObject<Env> {
         d.settings.once ??= false;
         d.settings.botLevel ??= "normal";
         d.botCounter ??= 0;
-        // Tournées ouvertes avant les règles au choix et les votes, puis avant « pas de UNO d'avance »
+        // Tournées ouvertes avant les règles au choix et les votes
         d.settings.rules ??= "base";
-        d.settings.noEarlyUno ??= false;
+        // … et quand « pas de UNO d'avance » était un réglage de l'hôte : il fait désormais partie des règles (tirées
+        // au sort ou votées), l'ancien choix est oublié
+        delete (d.settings as { noEarlyUno?: unknown }).noEarlyUno;
         // … et avant les règles d'équipe de Capitale
         d.settings.capitaleTeam ??= { ...DEFAULT_CAPITALE_TEAM };
         d.ready ??= [];
         if (d.next) {
-          d.next.variant ??= baseVariant(d.next.game);
+          // Seulement si le champ manque : null, c'est un vote encore ouvert (qu'un réveil de la tournée ne doit pas clore)
+          if (d.next.variant === undefined) d.next.variant = baseVariant(d.next.game);
           d.next.votes ??= {};
+          // Un vote ouvert avant les règles à part votées : la variante adoptée reste, les règles à part s'ouvrent au vote
+          if (d.settings.rules === "vote" && d.next.base === undefined) {
+            d.next.base = d.next.variant;
+            d.next.extras = d.next.variant === null ? openRuleVotes(d.next.game) : {};
+          }
         }
         for (const g of d.games) g.variant ??= baseVariant(g.game);
       }
@@ -456,18 +470,42 @@ export class TourRoom extends DurableObject<Env> {
     return true;
   }
 
-  /** Les règles du jeu tiré, dès qu'une variante a la moitié des voix */
+  /** Les règles du jeu tiré, dès qu'une variante a la moitié des voix (les règles à part se votent à côté) */
   private adoptIfMajority() {
     const d = this.data!;
-    if (!d.next || d.next.variant !== null) return;
+    if (!d.next || d.next.variant !== null || d.next.base) return;
     const v = adoptedVariant(
       d.next.votes,
       this.voters().map((m) => m.userId),
     );
     const variant = v ? findVariant(d.next.game, v) : null;
     if (!variant) return;
-    d.next.variant = variant.id;
+    d.next.base = variant.id;
     this.systemChat(`Règles adoptées : ${variant.name} !`);
+    this.settleVote();
+  }
+
+  /** Une règle à part votée oui ou non, dès qu'une réponse a la moitié des voix */
+  private adoptRuleIfMajority(rule: string) {
+    const d = this.data!;
+    const vote = d.next?.extras?.[rule];
+    if (!d.next || !vote || vote.value !== null) return;
+    const value = adoptedRule(
+      vote.votes,
+      this.voters().map((m) => m.userId),
+    );
+    if (value === null) return;
+    vote.value = value;
+    this.systemChat(`Règle adoptée : ${askedLabel(d.next.game, rule, value)} !`);
+    this.settleVote();
+  }
+
+  /** Règles votées : tout est décidé (la variante et chaque règle à part), les règles du jeu tiré sont connues */
+  private settleVote() {
+    const d = this.data!;
+    if (!d.next) return;
+    const variant = settledVariant(d.next);
+    if (variant) d.next.variant = variant;
   }
 
   private playerCount(): number {
@@ -671,11 +709,23 @@ export class TourRoom extends DurableObject<Env> {
       }
 
       case "vote": {
-        if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote" || d.next.variant !== null) return;
-        if (!member || !this.voters().includes(member) || !findVariant(d.next.game, msg.variant)) return;
+        if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote" || d.next.variant !== null || d.next.base) return;
+        if (!member || !this.voters().includes(member) || !isBaseVariant(d.next.game, msg.variant)) return;
         if (d.next.votes[userId] === msg.variant || !this.allowMessage(`vote:${userId}`, 150)) return;
         d.next.votes = { ...d.next.votes, [userId]: msg.variant };
         this.adoptIfMajority();
+        return this.afterChange();
+      }
+
+      case "voteRule": {
+        // Comme le vote des variantes : seuls les vrais joueurs présents votent, et la moitié des voix décide
+        if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote" || d.next.variant !== null) return;
+        const vote = typeof msg.rule === "string" ? d.next.extras?.[msg.rule] : undefined;
+        if (!vote || vote.value !== null || typeof msg.on !== "boolean") return;
+        if (!member || !this.voters().includes(member)) return;
+        if (vote.votes[userId] === msg.on || !this.allowMessage(`voteRule:${userId}`, 150)) return;
+        vote.votes = { ...vote.votes, [userId]: msg.on };
+        this.adoptRuleIfMajority(msg.rule);
         return this.afterChange();
       }
 
@@ -793,7 +843,8 @@ export class TourRoom extends DurableObject<Env> {
         if (typeof patch.once === "boolean") d.settings.once = patch.once;
         if (patch.botLevel === "easy" || patch.botLevel === "normal" || patch.botLevel === "hard") d.settings.botLevel = patch.botLevel;
         if (patch.rules === "base" || patch.rules === "random" || patch.rules === "vote") d.settings.rules = patch.rules;
-        if (typeof patch.noEarlyUno === "boolean") d.settings.noEarlyUno = patch.noEarlyUno;
+        // « Pas de UNO d'avance » n'est plus un réglage de l'hôte (il est tiré ou voté avec les règles) : un ancien
+        // écran qui l'envoie encore n'y change rien
         if (patch.capitaleTeam !== undefined) d.settings.capitaleTeam = cleanCapitaleTeam(patch.capitaleTeam, d.settings.capitaleTeam);
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
@@ -819,10 +870,21 @@ export class TourRoom extends DurableObject<Env> {
 
       case "pickVariant": {
         if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote") return;
-        const variant = findVariant(d.next.game, msg.variant);
+        const variant = isBaseVariant(d.next.game, msg.variant) ? findVariant(d.next.game, msg.variant) : null;
         if (!variant) return;
-        d.next.variant = variant.id;
+        d.next.base = variant.id;
         this.systemChat(`L'hôte choisit les règles : ${variant.name}.`);
+        this.settleVote();
+        return this.afterChange();
+      }
+
+      case "pickRule": {
+        if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote" || typeof msg.on !== "boolean") return;
+        const vote = typeof msg.rule === "string" ? d.next.extras?.[msg.rule] : undefined;
+        if (!vote) return;
+        vote.value = msg.on;
+        this.systemChat(`L'hôte décide : ${askedLabel(d.next.game, msg.rule, msg.on)}.`);
+        this.settleVote();
         return this.afterChange();
       }
 
@@ -996,8 +1058,13 @@ export class TourRoom extends DurableObject<Env> {
     d.notice = null;
     // Les règles : celles de base, tirées avec le jeu, ou laissées au vote (avec un peu plus de temps)
     const rules = d.settings.rules;
+    // (au UNO, « pas de UNO d'avance » est tiré à part avec la variante, ou voté oui ou non à côté d'elle)
     const variant = rules === "random" ? drawVariant(game, () => random(d)) : rules === "vote" ? null : baseVariant(game);
     d.next = { game, at: now + delay + (rules === "vote" ? VOTE_EXTRA_MS : 0), variant, votes: {} };
+    if (rules === "vote") {
+      d.next.base = null;
+      d.next.extras = openRuleVotes(game);
+    }
     d.ready = [];
     this.addTimer({ at: d.next.at!, kind: "launch" });
   }
@@ -1020,15 +1087,12 @@ export class TourRoom extends DurableObject<Env> {
       }
       let game = d.next.game;
       let botNote = "";
-      // Les règles : déjà retenues, ou la plus votée au moment du départ
-      let variant =
-        d.next.variant ??
-        resolveVariant(
-          game,
-          d.next.votes,
-          this.voters().map((m) => m.userId),
-          () => random(d),
-        );
+      // Les règles : déjà retenues, ou la plus votée au moment du départ (règles à part comprises)
+      let variant = resolveVoted(
+        d.next,
+        this.voters().map((m) => m.userId),
+        () => random(d),
+      );
       if (!fitsGame(game, players.length)) {
         // Le nombre de joueurs a changé depuis le tirage
         const other = this.nextDraw(players.length);
@@ -1109,7 +1173,6 @@ export class TourRoom extends DurableObject<Env> {
           teams,
           variant,
           looks,
-          noEarlyUno: d.settings.noEarlyUno,
           capitaleTeam: d.settings.capitaleTeam,
         },
       });
@@ -1370,7 +1433,20 @@ export class TourRoom extends DurableObject<Env> {
       },
       games: d.games,
       current: d.current,
-      next: d.next && { ...d.next, votes: Object.fromEntries(Object.entries(d.next.votes).filter(([id]) => voters.includes(id))) },
+      next: d.next && {
+        ...d.next,
+        votes: Object.fromEntries(Object.entries(d.next.votes).filter(([id]) => voters.includes(id))),
+        ...(d.next.extras
+          ? {
+              extras: Object.fromEntries(
+                Object.entries(d.next.extras).map(([rule, e]) => [
+                  rule,
+                  { ...e, votes: Object.fromEntries(Object.entries(e.votes).filter(([id]) => voters.includes(id))) },
+                ]),
+              ),
+            }
+          : {}),
+      },
       voters,
       ready: counts(d.ready),
       startedAt: d.startedAt,

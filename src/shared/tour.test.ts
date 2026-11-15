@@ -8,8 +8,21 @@ import { DEFAULT_SETTINGS as CAPITALE_DEFAULTS } from "./games/capitale/engine.t
 import { DEFAULT_SETTINGS as NAVAL_DEFAULTS } from "./games/naval/engine.ts";
 import { DEFAULT_SETTINGS as UNO_DEFAULTS } from "./games/uno/engine.ts";
 import {
+  adoptedRule,
   adoptedVariant,
+  askedLabel,
+  askedRules,
   baseVariant,
+  composeVariant,
+  defaultTourSettings,
+  gameModifiers,
+  isBaseVariant,
+  openRuleVotes,
+  resolveRule,
+  resolveVoted,
+  settledVariant,
+  splitAsked,
+  type TourNext,
   drawGame,
   drawVariant,
   findVariant,
@@ -233,26 +246,44 @@ describe("règles des jeux", () => {
     expect(variantSettings("naval", "eclair+colles")).toEqual({ grid: 8, touching: true });
     expect(variantSettings("naval", "eclair")).toEqual({ grid: 8 });
     expect(findVariant("naval", "salve+inconnue")).toBeNull();
-    // Les autres jeux n'ont pas de règle à part
-    for (let i = 0; i < 50; i++) expect(drawVariant("uno", rand)).not.toContain("+");
+    // Les autres jeux n'ont pas de règle à part (sauf le UNO, plus bas)
+    for (const game of ["bricks", "capitale", "meche", "bolides", "crampons"] as const) {
+      expect(gameModifiers(game)).toEqual([]);
+      for (let i = 0; i < 30; i++) expect(drawVariant(game, rand)).not.toContain("+");
+    }
   });
 
-  it("UNO : « pas de UNO d'avance » reste le choix de l'hôte, quelle que soit la variante, même tirée au sort", () => {
-    const rand = () => random(holder);
+  it("UNO : « pas de UNO d'avance » est tiré au sort à part, avec chaque variante, Classique comme No Mercy", () => {
     const holder = { rng: 11 };
-    // Aucune variante ne le règle d'elle-même
+    const rand = () => random(holder);
+    // Aucune variante ne le règle d'elle-même : c'est une règle à part, comme les navires collés
     for (const v of gameVariants("uno")) expect(variantSettings("uno", v.id)).not.toHaveProperty("noEarlyUno");
-    for (let i = 0; i < 100; i++) {
+    const seen = new Map<string, number>();
+    for (let i = 0; i < 600; i++) {
       const variant = drawVariant("uno", rand);
-      for (const noEarlyUno of [true, false]) {
-        const s = tourUnoSettings({ variant, noEarlyUno });
-        expect(s.noEarlyUno).toBe(noEarlyUno);
-        // La variante tirée garde ses propres règles : No Mercy reste No Mercy, avec ou sans l'option
-        expect(s).toMatchObject(variantSettings("uno", variant));
-      }
+      seen.set(variant, (seen.get(variant) ?? 0) + 1);
+      const s = tourUnoSettings({ variant });
+      expect(s.noEarlyUno).toBe(variant.endsWith("+sans-avance"));
+      // La variante tirée garde ses propres règles : No Mercy reste No Mercy, avec ou sans
+      expect(s).toMatchObject(variantSettings("uno", variant.split("+")[0]));
     }
-    // Tournées plus anciennes : l'option n'existait pas, on garde l'annonce d'avance
+    // Chaque variante, avec et sans : une fois sur deux à peu près
+    expect(seen.size).toBe(gameVariants("uno").length * 2);
+    const on = [...seen].filter(([v]) => v.endsWith("+sans-avance")).reduce((n, [, k]) => n + k, 0);
+    expect(on).toBeGreaterThan(600 * 0.35);
+    expect(on).toBeLessThan(600 * 0.65);
+    expect(findVariant("uno", "no-mercy+sans-avance")?.name).toBe("No Mercy, pas de UNO d'avance");
+    expect(tourUnoSettings({ variant: "no-mercy+sans-avance" })).toEqual({ variant: "nomercy", noEarlyUno: true });
+    expect(tourUnoSettings({ variant: "classique+sans-avance" })).toEqual({ noEarlyUno: true });
     expect(tourUnoSettings({ variant: "no-mercy" })).toEqual({ variant: "nomercy", noEarlyUno: false });
+  });
+
+  it("UNO : l'ancien réglage de l'hôte n'existe plus, et la table ignore celui qu'une ancienne tournée enverrait encore", () => {
+    expect(defaultTourSettings("private")).not.toHaveProperty("noEarlyUno");
+    const old = { variant: "classique", noEarlyUno: true } as { variant: string };
+    expect(tourUnoSettings(old)).toEqual({ noEarlyUno: false });
+    // … et une variante inconnue (d'une version plus récente) retombe sur la règle habituelle
+    expect(tourUnoSettings({ variant: "classique+inconnue" })).toEqual({ noEarlyUno: false });
   });
 
   it("Capitale : les règles d'équipe de l'hôte s'ajoutent à la variante, Monopole compris, jamais tirées avec elle", () => {
@@ -292,6 +323,102 @@ describe("règles des jeux", () => {
     for (let i = 0; i < 40; i++) {
       expect(["pioche", "sept-zero"]).toContain(resolveVariant("uno", { a: "pioche", b: "sept-zero" }, ["a", "b"], rand));
     }
+  });
+});
+
+describe("règles à part votées oui ou non", () => {
+  const rng = { rng: 5 };
+  const rand = () => random(rng);
+  const next = (over: Partial<TourNext> = {}): TourNext => ({
+    game: "uno",
+    at: 0,
+    variant: null,
+    votes: {},
+    base: null,
+    extras: openRuleVotes("uno"),
+    ...over,
+  });
+
+  it("au UNO, seulement « pas de UNO d'avance » ; les navires collés ne se votent pas", () => {
+    expect(askedRules("uno").map((r) => r.id)).toEqual(["sans-avance"]);
+    expect(askedRules("uno")[0]!.question).toBe("Pas de UNO d'avance ?");
+    expect(askedRules("naval")).toEqual([]);
+    expect(openRuleVotes("uno")).toEqual({ "sans-avance": { votes: {}, value: null } });
+    expect(openRuleVotes("naval")).toEqual({});
+    expect(askedLabel("uno", "sans-avance", true)).toBe("pas de UNO d'avance");
+    expect(askedLabel("uno", "sans-avance", false)).toBe("UNO d'avance permis");
+  });
+
+  it("écrit la variante et ses règles à part dans l'ordre du jeu, et les sépare pour l'affichage", () => {
+    expect(composeVariant("uno", "no-mercy", ["sans-avance"])).toBe("no-mercy+sans-avance");
+    expect(composeVariant("uno", "no-mercy", [])).toBe("no-mercy");
+    expect(composeVariant("uno", "pioche+sans-avance", ["inconnue"])).toBe("pioche");
+    expect(composeVariant("naval", "salve", ["colles"])).toBe("salve+colles");
+    expect(splitAsked("uno", "no-mercy+sans-avance")).toMatchObject({ rest: "no-mercy", asked: [{ on: true }] });
+    expect(splitAsked("uno", "classique")).toMatchObject({ rest: "classique", asked: [{ on: false }] });
+    // Les navires collés ne se disent pas à part : ils restent dans le nom
+    expect(splitAsked("naval", "salve+colles")).toEqual({ rest: "salve+colles", asked: [] });
+    expect(splitAsked("uno", "triche")).toEqual({ rest: null, asked: [] });
+    // Au vote des variantes, seulement celles proposées
+    expect(isBaseVariant("uno", "no-mercy")).toBe(true);
+    expect(isBaseVariant("uno", "no-mercy+sans-avance")).toBe(false);
+    expect(isBaseVariant("uno", 3)).toBe(false);
+  });
+
+  it("adopte le oui ou le non dès la moitié des voix des joueurs présents, jamais à égalité", () => {
+    // Deux joueurs : une voix suffit, comme pour les variantes
+    expect(adoptedRule({ a: true }, ["a", "b"])).toBe(true);
+    expect(adoptedRule({ a: false }, ["a", "b"])).toBe(false);
+    expect(adoptedRule({}, ["a", "b"])).toBeNull();
+    // Quatre joueurs : deux voix
+    expect(adoptedRule({ a: true }, ["a", "b", "c", "d"])).toBeNull();
+    expect(adoptedRule({ a: true, b: true }, ["a", "b", "c", "d"])).toBe(true);
+    expect(adoptedRule({ a: true, b: false }, ["a", "b", "c", "d"])).toBeNull();
+    // Les voix d'un absent (déconnecté, parti) ou d'un spectateur ne comptent pas
+    expect(adoptedRule({ a: true, z: true }, ["a", "b", "c"])).toBeNull();
+    // Des votants partis : le oui et le non ont tous les deux la moitié, rien n'est décidé avant le départ
+    expect(adoptedRule({ a: true, b: false }, ["a", "b"])).toBeNull();
+  });
+
+  it("au départ : le oui s'il l'emporte ; à égalité ou sans voix, la règle habituelle", () => {
+    expect(resolveRule({}, ["a", "b"])).toBe(false);
+    expect(resolveRule({ a: true, b: false }, ["a", "b", "c"])).toBe(false);
+    expect(resolveRule({ a: true, b: true, c: false }, ["a", "b", "c"])).toBe(true);
+    expect(resolveRule({ a: false }, ["a", "b"])).toBe(false);
+    // Le oui d'un absent ne compte pas
+    expect(resolveRule({ z: true }, ["a"])).toBe(false);
+  });
+
+  it("les règles sont connues quand la variante et chaque règle à part sont décidées", () => {
+    expect(settledVariant(next())).toBeNull();
+    expect(settledVariant(next({ base: "no-mercy" }))).toBeNull();
+    expect(settledVariant(next({ extras: { "sans-avance": { votes: {}, value: true } } }))).toBeNull();
+    expect(settledVariant(next({ base: "no-mercy", extras: { "sans-avance": { votes: {}, value: true } } }))).toBe("no-mercy+sans-avance");
+    expect(settledVariant(next({ base: "pioche", extras: { "sans-avance": { votes: {}, value: false } } }))).toBe("pioche");
+    // Un jeu sans règle à part votée : la variante suffit
+    expect(settledVariant({ game: "naval", base: "salve", extras: {} })).toBe("salve");
+    // Tournée d'avant : pas de règles à part en jeu
+    expect(settledVariant({ game: "uno", base: "pioche" })).toBe("pioche");
+  });
+
+  it("au départ, garde ce qui est décidé et tranche le reste avec les voix des présents", () => {
+    const voters = ["a", "b", "c"];
+    // Tout décidé : rien ne change
+    expect(resolveVoted(next({ variant: "sept-zero+sans-avance" }), voters, rand)).toBe("sept-zero+sans-avance");
+    // Variante adoptée, le oui l'emporte au départ
+    const yes = { "sans-avance": { votes: { a: true, b: true, c: false }, value: null } };
+    expect(resolveVoted(next({ base: "pioche", extras: yes }), voters, rand)).toBe("pioche+sans-avance");
+    // Égalité (le troisième n'a pas voté) : la règle habituelle
+    const tie = { "sans-avance": { votes: { a: true, b: false }, value: null } };
+    expect(resolveVoted(next({ votes: { a: "no-mercy", b: "no-mercy" }, extras: tie }), voters, rand)).toBe("no-mercy");
+    // Personne n'a voté : celles de base, sans la règle à part
+    expect(resolveVoted(next(), voters, rand)).toBe("classique");
+    // Le oui d'un joueur parti entre-temps ne compte plus
+    const gone = { "sans-avance": { votes: { z: true }, value: null } };
+    expect(resolveVoted(next({ extras: gone }), voters, rand)).toBe("classique");
+    // Décidé par l'hôte : reste, quelles que soient les voix
+    const imposed = { "sans-avance": { votes: { a: false, b: false }, value: true } };
+    expect(resolveVoted(next({ extras: imposed }), voters, rand)).toBe("classique+sans-avance");
   });
 });
 

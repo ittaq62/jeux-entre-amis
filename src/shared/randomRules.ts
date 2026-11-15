@@ -1,7 +1,8 @@
 // Les règles au hasard d'une table : les mêmes variantes que la tournée (`tour.ts`), tirées par le serveur. Le tirage
 // se voit au salon avant la partie, s'applique au lancement, et un nouveau tirage est fait à la fin de chaque partie
-// pour la suivante. Les réglages de la table qui ne sont pas des règles (chrono, bots, places, équipes, « pas de UNO
-// d'avance »…) restent ceux de l'hôte.
+// pour la suivante. Les réglages de la table qui ne sont pas des règles (chrono, bots, places, équipes…) restent ceux de
+// l'hôte. Au UNO, « pas de UNO d'avance » est une règle : au hasard, il est tiré à part (comme à la tournée), sinon
+// l'hôte le coche.
 
 import type { GameId } from "./protocol.ts";
 import { drawVariant, findVariant, gameModifiers, variantKeys, variantSettings, type TourVariant } from "./tour.ts";

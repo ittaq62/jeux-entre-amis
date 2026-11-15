@@ -262,7 +262,7 @@ export class GameRoom extends DurableObject<Env> {
         d.seats = [...mixed, ...others];
       }
       d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
-      // Les règles choisies par la tournée (variante), et « pas de UNO d'avance », réglé à part par l'hôte
+      // Les règles choisies par la tournée (variante, « pas de UNO d'avance » compris s'il a été tiré ou voté)
       d.settings.uno = { ...d.settings.uno, ...tourUnoSettings(opts.tour) };
       d.hostId = d.seats[0]?.userId ?? opts.host.id;
       d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });

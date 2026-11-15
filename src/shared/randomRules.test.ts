@@ -44,6 +44,15 @@ describe("règles au hasard d'une table", () => {
     }
   });
 
+  it("au UNO, « pas de UNO d'avance » tombe parfois, parfois pas, avec les deux jeux de cartes", () => {
+    const rnd = seeded(13);
+    const seen = new Set(Array.from({ length: 300 }, () => drawRules("uno", rnd)));
+    for (const base of ["classique", "no-mercy"]) {
+      expect(seen).toContain(base);
+      expect(seen).toContain(`${base}+sans-avance`);
+    }
+  });
+
   it("chaque jeu peut tomber sur chacune de ses variantes", () => {
     for (const game of TOUR_GAMES) {
       const rnd = seeded(11);
@@ -77,13 +86,17 @@ describe("règles au hasard d'une table", () => {
   it("garde les réglages de l'hôte qui ne sont pas des règles, et remet les autres à leur valeur habituelle", () => {
     const host = { ...UNO_DEFAULTS, jumpIn: true, stacking: false, turnSeconds: 60, endMode: "points" as const, noEarlyUno: true };
     const out = applyDrawnRules("uno", host, UNO_DEFAULTS, "classique");
-    // Classique : les +2 et les +4 se cumulent, pas d'interception
+    // Classique : les +2 et les +4 se cumulent, pas d'interception, et le UNO d'avance permis (rien tiré à part)
     expect(out.stacking).toBe(true);
     expect(out.jumpIn).toBe(false);
-    // Le chrono, la fin de partie et « pas de UNO d'avance » restent ceux de l'hôte
+    expect(out.noEarlyUno).toBe(false);
+    // Le chrono et la fin de partie restent ceux de l'hôte
     expect(out.turnSeconds).toBe(60);
     expect(out.endMode).toBe("points");
-    expect(out.noEarlyUno).toBe(true);
+    // « Pas de UNO d'avance » tiré à part, Classique comme No Mercy, quel que soit le choix de l'hôte
+    const off = { ...host, noEarlyUno: false };
+    expect(applyDrawnRules("uno", off, UNO_DEFAULTS, "classique+sans-avance")).toMatchObject({ noEarlyUno: true, variant: "classic" });
+    expect(applyDrawnRules("uno", off, UNO_DEFAULTS, "no-mercy+sans-avance")).toMatchObject({ noEarlyUno: true, variant: "nomercy" });
 
     const naval = applyDrawnRules(
       "naval",
@@ -113,7 +126,9 @@ describe("règles au hasard d'une table", () => {
   it("pendant un tirage, l'hôte ne règle plus à la main ce que le tirage décide", () => {
     expect(drawnKeys("naval").sort()).toEqual(["arsenal", "grid", "shots", "touching"]);
     expect(drawnKeys("uno")).toContain("stacking");
-    expect(drawnKeys("uno")).not.toContain("noEarlyUno");
+    // Au UNO, « pas de UNO d'avance » est tiré à part : il se verrouille avec le reste
+    expect(drawnKeys("uno")).toContain("noEarlyUno");
+    expect(withoutDrawnKeys("uno", { noEarlyUno: true, turnSeconds: 15 })).toEqual({ turnSeconds: 15 });
     expect(drawnKeys("capitale")).not.toContain("teamCount");
     expect(withoutDrawnKeys("naval", { grid: 8, turnSeconds: 15 })).toEqual({ turnSeconds: 15 });
     expect(hostPatch("naval", "salve", { grid: 8, botLevel: "mousse" })).toEqual({ botLevel: "mousse" });
@@ -141,6 +156,9 @@ describe("règles au hasard d'une table", () => {
     );
     expect(drawNotice("naval", "salve+colles", "next")).toContain(
       "Pour la prochaine partie, règles tirées au sort : Salve, navires collés.",
+    );
+    expect(drawNotice("uno", "no-mercy+sans-avance", "start")).toContain(
+      "Règles tirées au sort pour cette partie : No Mercy, pas de UNO d'avance. ",
     );
     // À une table, Capitale ne dure pas les 20 minutes de la tournée : c'est l'hôte qui règle la durée
     expect(drawnRules("capitale", "classique")!.blurb).not.toContain("20 minutes");

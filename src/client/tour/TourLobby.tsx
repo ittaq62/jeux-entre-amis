@@ -2,6 +2,7 @@ import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol
 import {
   DEFAULT_CAPITALE_TEAM,
   END_CHOICES,
+  askedRules,
   gameModifiers,
   gameVariants,
   RULES_MODES,
@@ -245,44 +246,26 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             <p className="hint" style={{ margin: 0 }}>
               {RULES_MODES[s.rules].hint}
             </p>
-            {s.games.includes("uno") && (
-              <div className="rule-list">
-                <div className="rule-row" onClick={() => isHost && update({ noEarlyUno: !s.noEarlyUno })}>
-                  <Check label="UNO : pas de UNO d'avance" checked={Boolean(s.noEarlyUno)} disabled={!isHost} onChange={() => {}} />
-                  <span>
-                    <strong>UNO : pas de UNO d'avance</strong>
-                    <span className="hint">
-                      On crie UNO avec sa dernière carte seule en main, plus avec deux. Un réglage à part : il vaut pour chaque partie de
-                      UNO, Classique comme No Mercy
-                      {s.rules === "random"
-                        ? ", et n'est jamais tiré au sort avec les règles."
-                        : s.rules === "vote"
-                          ? ", hors du vote."
-                          : "."}
-                    </span>
-                  </span>
-                </div>
-              </div>
-            )}
             {s.rules !== "base" && (
               <ul className="variant-list">
-                {s.games.map((g) => (
-                  <li key={g}>
-                    <strong>{GAME_NAMES[g]}</strong> :{" "}
-                    {gameVariants(g)
-                      .map((v) => v.name)
-                      .join(", ")}
-                    {gameModifiers(g).length > 0 && s.rules === "random" && (
-                      <span className="hint">
-                        {" "}
-                        · tiré à part :{" "}
-                        {gameModifiers(g)
-                          .map((m) => m.name)
-                          .join(", ")}
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {s.games.map((g) => {
+                  // Au hasard, chaque règle à part est tirée de son côté ; votées, celles qu'on demande se votent oui ou non
+                  const extra = s.rules === "random" ? gameModifiers(g) : askedRules(g);
+                  return (
+                    <li key={g}>
+                      <strong>{GAME_NAMES[g]}</strong> :{" "}
+                      {gameVariants(g)
+                        .map((v) => v.name)
+                        .join(", ")}
+                      {extra.length > 0 && (
+                        <span className="hint">
+                          {" "}
+                          · {s.rules === "random" ? "tiré à part" : "voté à part, oui ou non"} : {extra.map((m) => m.name).join(", ")}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
