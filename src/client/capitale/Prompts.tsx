@@ -1,5 +1,14 @@
 import { motion } from "motion/react";
-import { DECK_NAMES, DECKS, GROUPS, JAIL_FINE, SQUARES, type CardEffect, type DeckId } from "../../shared/games/capitale/board.ts";
+import {
+  DECK_NAMES,
+  DECKS,
+  DISASTERS,
+  GROUPS,
+  JAIL_FINE,
+  SQUARES,
+  type CardEffect,
+  type DeckId,
+} from "../../shared/games/capitale/board.ts";
 import type { CapitaleAction } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
@@ -169,8 +178,20 @@ function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move
       return { text: "Sortie de prison gardée", tone: "good" };
     case "repairs":
       return { text: `${money(e.level)} par niveau`, tone: "bad" };
+    case "grant":
+      return { text: `+${money(e.level)} par niveau`, tone: "good" };
     case "eachPlayer":
       return e.amount > 0 ? { text: `+${money(e.amount)} de chacun`, tone: "good" } : { text: `${money(-e.amount)} à chacun`, tone: "bad" };
+    case "perTitle":
+      return e.amount > 0
+        ? { text: `+${money(e.amount)} par titre`, tone: "good" }
+        : { text: `${money(-e.amount)} par titre`, tone: "bad" };
+    case "richToPoor":
+      return { text: `${money(e.amount)} du plus riche au plus pauvre`, tone: "move" };
+    case "bestRent":
+      return { text: `Un loyer, ${money(e.max)} au plus`, tone: "good" };
+    case "disaster":
+      return { text: DISASTERS[e.disaster].who, tone: "bad" };
   }
 }
 

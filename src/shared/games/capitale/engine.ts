@@ -6,11 +6,14 @@ import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 import {
   BUYABLE,
   DECKS,
+  BUYOUT_RATE,
   FREE_LEVELS,
+  FREE_LEVELS_EVEN,
   GO_SALARY,
   GROUP_ORDER,
   GROUPS,
   groupOf,
+  isDisaster,
   isSpecialKind,
   JAIL_FINE,
   JAIL_SQUARE,
@@ -30,6 +33,7 @@ import {
   upgradeCost,
   UTILITIES,
   type DeckId,
+  type DisasterKind,
   type GroupId,
   type MonopolyKind,
   type SpecialKind,
@@ -58,8 +62,14 @@ export interface CapitaleSettings {
   doubleGo: boolean;
   noRentInJail: boolean;
   quickStart: boolean;
-  /** Bâtiments spéciaux : gratte-ciel, parc, stade, et des nuisances chez les autres */
+  /** Bâtiments spéciaux : obélisque, parc, stade, et des nuisances chez les autres */
   specials: boolean;
+  /** Rachat : arrêté sur la ville d'un adversaire, on peut la lui racheter, plus chère que sa valeur */
+  buyout: boolean;
+  /** Catastrophes : des cartes qui abattent des niveaux ou font changer un titre de mains */
+  disasters: boolean;
+  /** Construction équilibrée : deux maisons au plus sans le quartier, et dans un quartier complet aucune rue ne prend plus d'un niveau d'avance */
+  evenBuild: boolean;
   /** Monopole : trois quartiers complets, un côté entier du plateau ou les quatre gares, et la partie s'arrête net */
   monopoly: boolean;
   botLevel: BotLevel;
@@ -84,6 +94,9 @@ export const DEFAULT_SETTINGS: CapitaleSettings = {
   noRentInJail: false,
   quickStart: false,
   specials: true,
+  buyout: true,
+  disasters: true,
+  evenBuild: true,
   monopoly: false,
   botLevel: "moyen",
   teamCount: 0,
@@ -103,6 +116,18 @@ export function teamRules(s: { settings: Partial<CapitaleSettings> }) {
     gifts: s.settings.teamGifts ?? false,
     heir: s.settings.teamHeir ?? false,
     win: s.settings.teamWin ?? false,
+  };
+}
+
+/**
+ * Les règles arrivées avec la revue de Capitale (rachat, catastrophes, construction équilibrée). Une partie commencée
+ * avant elles n'a pas ces réglages : elle se finit avec la règle d'alors.
+ */
+export function newRules(s: { settings: Partial<CapitaleSettings> }) {
+  return {
+    buyout: s.settings.buyout ?? false,
+    disasters: s.settings.disasters ?? false,
+    evenBuild: s.settings.evenBuild ?? false,
   };
 }
 
@@ -139,6 +164,8 @@ export interface CapitaleStats {
   /** Groupes de couleur complets, au plus fort de la partie */
   monopolies: number;
   netWorth: number;
+  /** Villes rachetées à un adversaire (absent des parties d'avant le rachat) */
+  buyouts?: number;
 }
 
 export interface CapitalePlayer {
@@ -174,7 +201,11 @@ export type MoneyReason =
   | "bankrupt"
   | "special"
   | "ticket"
-  | "gift";
+  | "gift"
+  /** Un rachat : le prix va au propriétaire */
+  | "buyout"
+  /** Une expropriation : la banque paie le titre */
+  | "expropriation";
 
 export interface Offer {
   cash: number;
@@ -208,7 +239,7 @@ export interface Auction {
   bids: number;
 }
 
-export type Step = "roll" | "buy" | "auction" | "debt" | "manage" | "over";
+export type Step = "roll" | "buy" | "buyout" | "auction" | "debt" | "manage" | "over";
 
 /** Ce qu'un camp a réuni pour gagner au Monopole */
 export interface MonopolyWin {
@@ -247,7 +278,13 @@ export interface CapitaleState {
   site: { turnId: number; upgraded: number[]; special: boolean };
   /** Cagnotte de l'Aire de repos (règle maison) */
   pot: number;
+  /** La pioche de chaque paquet (la carte du dessus en premier) */
   decks: Record<DeckId, number[]>;
+  /**
+   * La défausse : les cartes déjà tirées, remélangées quand la pioche est vide. Absente d'une partie commencée avant la
+   * vraie pioche : son paquet tourne comme avant (la carte tirée repart dessous).
+   */
+  discards?: Record<DeckId, number[]>;
   turn: number;
   turnId: number;
   step: Step;
@@ -258,6 +295,8 @@ export interface CapitaleState {
   doublesInRow: number;
   rollAgain: boolean;
   pendingBuy: number | null;
+  /** Arrêté sur la ville d'un adversaire : on peut la lui racheter (absent des parties d'avant le rachat) */
+  pendingBuyout?: number | null;
   auction: Auction | null;
   debts: Debt[];
   trades: Trade[];
@@ -292,6 +331,22 @@ export type CapitaleEvent =
   | { type: "mortgage"; player: string; square: number }
   | { type: "unmortgage"; player: string; square: number }
   | { type: "card"; player: string; deck: DeckId; card: number }
+  /** La pioche était vide : la défausse est remélangée */
+  | { type: "reshuffle"; deck: DeckId }
+  /**
+   * Une catastrophe : les rues qui perdent un niveau (et leur nouveau niveau), ou le titre qui change de mains (`title`,
+   * repris par la banque, ou cédé à `to`). Rien de touché : `hits` vide et pas de titre.
+   */
+  | {
+      type: "disaster";
+      player: string;
+      kind: DisasterKind;
+      hits: { square: number; owner: string; level: number }[];
+      title?: number;
+      to?: string;
+    }
+  /** Un rachat : la ville passe à celui qui l'a rachetée, le prix va à son ancien propriétaire */
+  | { type: "buyout"; player: string; from: string; square: number; price: number }
   | { type: "jail"; player: string; reason: "square" | "card" | "doubles" }
   | { type: "leaveJail"; player: string; how: "pay" | "card" | "doubles" | "forced" }
   | { type: "debt"; player: string; amount: number; creditor: Account }
@@ -313,6 +368,9 @@ export type CapitaleAction =
   | { type: "useJailCard" }
   | { type: "buy" }
   | { type: "decline" }
+  /** Racheter la ville adverse où l'on vient de s'arrêter, ou la laisser */
+  | { type: "buyout" }
+  | { type: "skipBuyout" }
   | { type: "bid"; amount: number }
   | { type: "pass" }
   | { type: "upgrade"; square: number }
@@ -364,6 +422,12 @@ function freshDeed(index: number): Deed | null {
   return sq.kind === "property" ? { owner: null, mortgaged: false, level: 0, special: null } : { owner: null, mortgaged: false };
 }
 
+/** Un paquet neuf, mélangé : toutes ses cartes, sans les catastrophes si la règle n'est pas jouée */
+function freshPile(holder: RngHolder, deck: DeckId, settings: Partial<CapitaleSettings>): number[] {
+  const cards = DECKS[deck].flatMap((c, i) => (isDisaster(c) && !settings.disasters ? [] : [i]));
+  return shuffle(holder, cards);
+}
+
 export function createGame(
   playerIds: string[],
   settings: CapitaleSettings,
@@ -389,16 +453,8 @@ export function createGame(
     deeds: SQUARES.map((s) => freshDeed(s.index)),
     site: { turnId: 0, upgraded: [], special: false },
     pot: 0,
-    decks: {
-      hasard: shuffle(
-        holder,
-        DECKS.hasard.map((_, i) => i),
-      ),
-      courrier: shuffle(
-        holder,
-        DECKS.courrier.map((_, i) => i),
-      ),
-    },
+    decks: { hasard: freshPile(holder, "hasard", settings), courrier: freshPile(holder, "courrier", settings) },
+    discards: { hasard: [], courrier: [] },
     turn: randomInt(holder, playerIds.length),
     turnId: 1,
     step: "roll",
@@ -408,6 +464,7 @@ export function createGame(
     doublesInRow: 0,
     rollAgain: false,
     pendingBuy: null,
+    pendingBuyout: null,
     auction: null,
     debts: [],
     trades: [],
@@ -843,6 +900,8 @@ function land(s: CapitaleState, p: CapitalePlayer, events: CapitaleEvent[], ctx:
         return;
       }
       charge(s, p, deed.owner, Math.floor(rent * factor), "rent", events, sq.index);
+      // Le loyer payé, on peut racheter la ville (si la règle est jouée, et si rien ne la protège)
+      if (factor === 1 && sq.kind === "property" && newRules(s).buyout) s.pendingBuyout = sq.index;
       return;
     }
     case "tax":
@@ -862,12 +921,33 @@ function land(s: CapitaleState, p: CapitalePlayer, events: CapitaleEvent[], ctx:
   }
 }
 
-function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: CapitaleEvent[], depth: number) {
+/** La pioche est vide : la défausse est remélangée, sans jamais remettre dessus la carte qu'on vient de tirer */
+function reshuffle(s: CapitaleState, deck: DeckId, events: CapitaleEvent[]) {
+  const discard = s.discards![deck];
+  if (discard.length === 0) return;
+  const last = discard[discard.length - 1];
+  const pile = shuffle(s, [...discard]);
+  if (pile.length > 1 && pile[0] === last) [pile[0], pile[pile.length - 1]] = [pile[pile.length - 1]!, pile[0]!];
+  s.decks[deck] = pile;
+  s.discards![deck] = [];
+  events.push({ type: "reshuffle", deck });
+}
+
+/** Une carte « sortie de prison » rendue : dans la défausse (sous le paquet, pour une partie d'avant la vraie pioche) */
+function returnJailCard(s: CapitaleState, deck: DeckId) {
+  (s.discards ? s.discards[deck] : s.decks[deck]).push(JAIL_CARD_INDEX[deck]);
+}
+
+/** Tirer la carte du dessus d'un paquet et l'appliquer (exportée pour les tests) */
+export function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: CapitaleEvent[], depth: number) {
+  if (s.discards && s.decks[deck].length === 0) reshuffle(s, deck, events);
   const pile = s.decks[deck];
   const card = pile.shift();
   if (card === undefined) return;
   const { effect } = DECKS[deck][card]!;
+  // La carte de prison se garde ; les autres vont à la défausse (ou repartent sous le paquet, à l'ancienne)
   if (effect.kind === "jailFree") p.jailCards.push(deck);
+  else if (s.discards) s.discards[deck].push(card);
   else pile.push(card);
   s.lastCard = { deck, card, player: p.id };
   events.push({ type: "card", player: p.id, deck, card });
@@ -897,18 +977,12 @@ function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: Cap
       return;
     case "jailFree":
       return;
-    case "repairs": {
-      // Comme la règle classique : un gratte-ciel compte comme un hôtel, les autres niveaux comme des maisons
-      let levels = 0;
-      let towers = 0;
-      for (const i of ownedBy(s, p.id)) {
-        const l = levelOf(s, i);
-        if (l === MAX_LEVEL) towers += 1;
-        else levels += l;
-      }
-      charge(s, p, taxAccount(s), levels * effect.level + towers * effect.tower, "card", events);
+    case "repairs":
+      charge(s, p, taxAccount(s), buildingsCount(s, p.id, effect.level, effect.tower), "card", events);
       return;
-    }
+    case "grant":
+      pay(s, "bank", p.id, buildingsCount(s, p.id, effect.level, effect.tower), "card", events);
+      return;
     case "eachPlayer":
       for (const other of s.players) {
         if (other === p || other.bankrupt) continue;
@@ -916,7 +990,148 @@ function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: Cap
         else charge(s, p, other.id, -effect.amount, "card", events);
       }
       return;
+    case "perTitle": {
+      const total = ownedBy(s, p.id).length * Math.abs(effect.amount);
+      if (effect.amount > 0) pay(s, "bank", p.id, total, "card", events);
+      else charge(s, p, taxAccount(s), total, "card", events);
+      return;
+    }
+    case "richToPoor": {
+      // Les joueurs en jeu, du plus riche au plus pauvre (à égalité, dans l'ordre du tour)
+      const live = s.players.filter((x) => !x.bankrupt).sort((a, b) => netWorth(s, b.id) - netWorth(s, a.id));
+      const rich = live[0];
+      const poor = live[live.length - 1];
+      if (rich && poor && rich !== poor) charge(s, rich, poor.id, effect.amount, "card", events);
+      return;
+    }
+    case "bestRent": {
+      const best = Math.max(0, ...ownedBy(s, p.id).map((i) => rentFor(s, i, { diceTotal: 7 })));
+      pay(s, "bank", p.id, Math.min(effect.max, best), "card", events);
+      return;
+    }
+    case "disaster":
+      disaster(s, p, effect.disaster, events);
+      return;
   }
+}
+
+/** Ce que coûtent des travaux (ou rapporte une prime) : tant par niveau, tant par monument (comme un hôtel de la règle classique) */
+function buildingsCount(s: CapitaleState, playerId: string, perLevel: number, perTower: number): number {
+  let levels = 0;
+  let towers = 0;
+  for (const i of ownedBy(s, playerId)) {
+    const l = levelOf(s, i);
+    if (l === MAX_LEVEL) towers += 1;
+    else levels += l;
+  }
+  return levels * perLevel + towers * perTower;
+}
+
+// ---------------------------------------------------------------------------
+// Les catastrophes
+// ---------------------------------------------------------------------------
+
+/** Les rues construites d'un joueur */
+const builtStreets = (s: CapitaleState, playerId: string) => ownedBy(s, playerId).filter((i) => levelOf(s, i) > 0);
+
+/** La plus haute de ces rues : le plus de niveaux, puis le plus gros loyer, puis la plus loin sur le plateau */
+function tallest(s: CapitaleState, squares: number[]): number | undefined {
+  const rent = (i: number) => rentFor(s, i, { diceTotal: 7 });
+  return [...squares].sort((a, b) => levelOf(s, b) - levelOf(s, a) || rent(b) - rent(a) || b - a)[0];
+}
+
+/** Les titres qu'une catastrophe peut faire changer de mains : ceux qu'on pourrait échanger (sans construction, sans obélisque) */
+function looseTitles(s: CapitaleState, playerId: string): number[] {
+  return ownedBy(s, playerId)
+    .filter((i) => tradeProblem(s, playerId, i) === null)
+    .sort((a, b) => SQUARES[a]!.price! - SQUARES[b]!.price! || a - b);
+}
+
+/** Le joueur adverse (pas un coéquipier) le plus pauvre encore en jeu, ou personne */
+export function poorestRival(s: CapitaleState, playerId: string): CapitalePlayer | undefined {
+  return s.players
+    .filter((x) => !x.bankrupt && !allies(s, x.id, playerId))
+    .sort((a, b) => netWorth(s, a.id) - netWorth(s, b.id) || s.players.indexOf(a) - s.players.indexOf(b))[0];
+}
+
+/** La rue adverse visée par un arrêté de péril : construite, pas un monument (classé), au plus gros loyer */
+export function perilTarget(s: CapitaleState, playerId: string): number | undefined {
+  const rent = (i: number) => rentFor(s, i, { diceTotal: 7 });
+  return BUYABLE.filter((i) => {
+    const owner = s.deeds[i]!.owner;
+    const level = levelOf(s, i);
+    return owner && !allies(s, owner, playerId) && !playerOf(s, owner)?.bankrupt && level > 0 && level < MAX_LEVEL;
+  }).sort((a, b) => rent(b) - rent(a) || levelOf(s, b) - levelOf(s, a) || b - a)[0];
+}
+
+/** Le titre qu'une cession ferait passer à l'adversaire le plus pauvre : le moins cher, sauf s'il le ferait gagner au Monopole */
+export function cessionTitle(s: CapitaleState, playerId: string, to: string): number | undefined {
+  const titles = looseTitles(s, playerId);
+  if (!s.settings.monopoly) return titles[0];
+  return titles.find((i) => !monopolyProgress(s, to).winning.includes(i)) ?? titles[0];
+}
+
+function disaster(s: CapitaleState, p: CapitalePlayer, kind: DisasterKind, events: CapitaleEvent[]) {
+  const hits: { square: number; owner: string; level: number }[] = [];
+  const knock = (i: number) => {
+    const d = s.deeds[i]!;
+    d.level = Math.max(0, (d.level ?? 0) - 1);
+    hits.push({ square: i, owner: d.owner!, level: d.level });
+  };
+  switch (kind) {
+    case "seisme": {
+      const i = tallest(s, builtStreets(s, p.id));
+      if (i !== undefined) knock(i);
+      break;
+    }
+    case "incendie": {
+      const built = builtStreets(s, p.id);
+      if (built.length > 0) knock(built[randomInt(s, built.length)]!);
+      break;
+    }
+    case "tempete":
+      for (const x of s.players) {
+        if (x.bankrupt) continue;
+        const i = tallest(s, builtStreets(s, x.id));
+        if (i !== undefined) knock(i);
+      }
+      break;
+    case "crue": {
+      const built = GROUP_ORDER.filter((g) => GROUPS[g].squares.some((i) => s.deeds[i]!.owner && levelOf(s, i) > 0));
+      if (built.length === 0) break;
+      const g = built[randomInt(s, built.length)]!;
+      for (const i of GROUPS[g].squares) if (s.deeds[i]!.owner && levelOf(s, i) > 0) knock(i);
+      break;
+    }
+    case "peril": {
+      const i = perilTarget(s, p.id);
+      if (i !== undefined) knock(i);
+      break;
+    }
+    case "expropriation": {
+      const i = looseTitles(s, p.id)[0];
+      if (i === undefined) break;
+      const d = s.deeds[i]!;
+      // La banque paie le titre ; hypothéqué, elle garde ce qu'elle avait prêté
+      const price = d.mortgaged ? SQUARES[i]!.price! - mortgageValue(i) : SQUARES[i]!.price!;
+      s.deeds[i] = freshDeed(i);
+      events.push({ type: "disaster", player: p.id, kind, hits, title: i });
+      pay(s, "bank", p.id, price, "expropriation", events, i);
+      return;
+    }
+    case "cession": {
+      const to = poorestRival(s, p.id);
+      const i = to ? cessionTitle(s, p.id, to.id) : undefined;
+      if (!to || i === undefined) break;
+      // Le titre passe tel quel (hypothéqué ou non, sans intérêts : c'est le sort qui le donne)
+      s.deeds[i]!.owner = to.id;
+      events.push({ type: "disaster", player: p.id, kind, hits, title: i, to: to.id });
+      dropOwnNuisance(s, i, events);
+      to.stats.monopolies = Math.max(to.stats.monopolies, monopoliesOf(s, to.id));
+      return;
+    }
+  }
+  events.push({ type: "disaster", player: p.id, kind, hits });
 }
 
 // ---------------------------------------------------------------------------
@@ -926,9 +1141,13 @@ function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, events: Cap
 /** L'étape suivante, selon ce qui reste à régler : enchère, dettes, achat, nouveau lancer, puis gestion */
 function resume(s: CapitaleState) {
   if (s.step === "over") return;
+  // Un rachat qu'on ne peut plus faire (pas assez d'argent, la ville a changé) ne se propose pas
+  if (s.pendingBuyout != null && s.debts.length === 0 && !s.auction && buyoutProblem(s, currentPlayer(s).id, s.pendingBuyout) !== null)
+    s.pendingBuyout = null;
   if (s.auction) s.step = "auction";
   else if (s.debts.length > 0) s.step = "debt";
   else if (s.pendingBuy !== null) s.step = "buy";
+  else if (s.pendingBuyout != null && buyoutProblem(s, currentPlayer(s).id, s.pendingBuyout) === null) s.step = "buyout";
   else if (s.rollAgain) s.step = "roll";
   else if (s.step !== "roll" || s.dice !== null) s.step = "manage";
   const key = `${s.turnId}|${s.step}|${actorOf(s)}`;
@@ -956,6 +1175,7 @@ function nextTurn(s: CapitaleState, events: CapitaleEvent[]) {
   s.doublesInRow = 0;
   s.rollAgain = false;
   s.pendingBuy = null;
+  s.pendingBuyout = null;
   events.push({ type: "turn", player: s.players[i]!.id });
   if (s.round > MAX_ROUNDS) finishGame(s, events, "rounds");
 }
@@ -1038,7 +1258,7 @@ function manageRight(s: CapitaleState, playerId: string): "full" | "raise" | nul
   if (s.step === "over" || s.step === "auction") return null;
   if (s.debts.length > 0) return s.debts[0]!.debtor === playerId ? "raise" : null;
   if (currentPlayer(s).id !== playerId) return null;
-  return s.step === "roll" || s.step === "buy" || s.step === "manage" ? "full" : null;
+  return s.step === "roll" || s.step === "buy" || s.step === "buyout" || s.step === "manage" ? "full" : null;
 }
 
 /** Le bâtiment spécial du tour est-il déjà posé ? */
@@ -1063,9 +1283,20 @@ export function canUpgrade(s: CapitaleState, playerId: string, index: number): s
   if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
   if (deed.mortgaged) return "Cette rue est hypothéquée.";
   const level = deed.level ?? 0;
-  if (level >= MAX_LEVEL) return "Le gratte-ciel est déjà là : c'est le plus haut niveau.";
-  if (level >= FREE_LEVELS && !ownsGroup(s, playerId, sq.group!))
+  if (level >= MAX_LEVEL) return "Le monument est déjà là : c'est le plus haut niveau.";
+  const even = newRules(s).evenBuild;
+  const full = ownsGroup(s, playerId, sq.group!);
+  if (!full && level >= (even ? FREE_LEVELS_EVEN : FREE_LEVELS))
     return `Pour monter plus haut, il faut tout le quartier ${GROUPS[sq.group!].name.toLowerCase()}.`;
+  // Construction équilibrée : dans un quartier complet, pas plus d'un niveau d'avance sur la rue la moins bâtie
+  if (even && full) {
+    const others = GROUPS[sq.group!].squares.filter((i) => i !== index);
+    const low = Math.min(...others.map((i) => levelOf(s, i)));
+    if (level > low) {
+      const behind = others.filter((i) => levelOf(s, i) === low).map((i) => SQUARES[i]!.name);
+      return `Construction équilibrée : monte d'abord ${behind.join(" et ")}.`;
+    }
+  }
   if (upgradedThisTurn(s, index)) return "Une amélioration par rue et par tour.";
   if (playerOf(s, playerId)!.cash < upgradeCost(index)) return `Il faut ${upgradeCost(index)}.`;
   return null;
@@ -1126,6 +1357,61 @@ export function canMortgage(s: CapitaleState, playerId: string, index: number): 
   const own = ownSpecial(s, index);
   if (own) return `Revends d'abord ${SPECIALS[own].the}.`;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Le rachat
+// ---------------------------------------------------------------------------
+
+/** Ce que vaut une ville au prix coûtant : son titre, ses niveaux et le bâtiment spécial de son propriétaire */
+export function cityValue(s: CapitaleState, index: number): number {
+  const own = ownSpecial(s, index);
+  return (SQUARES[index]!.price ?? 0) + levelOf(s, index) * upgradeCost(index) + (own ? specialPrice(own, index) : 0);
+}
+
+/** Le prix d'un rachat : la valeur de la ville, majorée de moitié */
+export const buyoutPrice = (s: CapitaleState, index: number) => Math.round(cityValue(s, index) * BUYOUT_RATE);
+
+/**
+ * Ce qui protège une ville du rachat, sans parler d'argent : un coéquipier, une hypothèque, un monument (niveau 5),
+ * l'obélisque du quartier, ou un stade quand on en a déjà un
+ */
+export function buyoutShield(s: CapitaleState, playerId: string, index: number): string | null {
+  if (!newRules(s).buyout) return "Le rachat n'est pas de la partie.";
+  const sq = SQUARES[index];
+  const deed = s.deeds[index];
+  if (!sq || sq.kind !== "property" || !deed) return "On ne rachète que les villes.";
+  const owner = deed.owner ? playerOf(s, deed.owner) : undefined;
+  if (!owner || owner.id === playerId || owner.bankrupt) return "Cette ville n'est pas à un adversaire.";
+  if (allies(s, playerId, owner.id)) return "Pas de rachat entre coéquipiers : ils peuvent se donner leurs titres.";
+  if (deed.mortgaged) return "Une ville hypothéquée ne se rachète pas.";
+  if (levelOf(s, index) >= MAX_LEVEL) return "Un monument ne se rachète pas.";
+  if (districtSpecials(s, sq.group!).some((b) => b.kind === "monument")) return "L'obélisque protège tout son quartier du rachat.";
+  if (ownSpecial(s, index) === "stade" && hasStadium(s, playerId)) return "Tu as déjà un stade : pas de second.";
+  return null;
+}
+
+/** Peut-on racheter cette ville maintenant (arrêté dessus, avec de quoi payer) ? */
+export function buyoutProblem(s: CapitaleState, playerId: string, index: number): string | null {
+  const shield = buyoutShield(s, playerId, index);
+  if (shield) return shield;
+  const price = buyoutPrice(s, index);
+  if (playerOf(s, playerId)!.cash < price) return `Il faut ${price}.`;
+  return null;
+}
+
+/** Le rachat : le prix au propriétaire, la ville avec ses niveaux et son bâtiment spécial (parc, stade) au racheteur */
+function executeBuyout(s: CapitaleState, p: CapitalePlayer, index: number, events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  const from = deed.owner!;
+  const price = buyoutPrice(s, index);
+  pay(s, p.id, from, price, "buyout", events, index);
+  if (deed.special && deed.special.by === from) deed.special = { ...deed.special, by: p.id };
+  deed.owner = p.id;
+  events.push({ type: "buyout", player: p.id, from, square: index, price });
+  dropOwnNuisance(s, index, events);
+  p.stats.buyouts = (p.stats.buyouts ?? 0) + 1;
+  p.stats.monopolies = Math.max(p.stats.monopolies, monopoliesOf(s, p.id));
 }
 
 function touchSite(s: CapitaleState) {
@@ -1311,7 +1597,7 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   } else {
     // Les titres redeviennent libres
     for (const i of ownedBy(s, p.id)) s.deeds[i] = freshDeed(i);
-    for (const deck of p.jailCards) s.decks[deck].push(JAIL_CARD_INDEX[deck]);
+    for (const deck of p.jailCards) returnJailCard(s, deck);
   }
   if (live) live.stats.bankrupted += 1;
   p.jailCards = [];
@@ -1336,6 +1622,7 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   }
   if (wasCurrent) {
     s.pendingBuy = null;
+    s.pendingBuyout = null;
     s.rollAgain = false;
     nextTurn(s, events);
   }
@@ -1348,6 +1635,7 @@ function finishGame(s: CapitaleState, events: CapitaleEvent[], reason: Outcome["
   s.debts = [];
   s.trades = [];
   s.pendingBuy = null;
+  s.pendingBuyout = null;
   for (const p of s.players) {
     p.stats.netWorth = netWorth(s, p.id);
     p.stats.monopolies = Math.max(p.stats.monopolies, p.bankrupt ? 0 : monopoliesOf(s, p.id));
@@ -1467,7 +1755,7 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       if (!isTurn || s.step !== "roll" || !p.inJail) return fail("Tu n'es pas en prison.");
       const deck = p.jailCards.shift();
       if (!deck) return fail("Tu n'as pas de carte « sortie de prison ».");
-      s.decks[deck].push(JAIL_CARD_INDEX[deck]);
+      returnJailCard(s, deck);
       p.inJail = false;
       p.jailTurns = 0;
       events.push({ type: "leaveJail", player: p.id, how: "card" });
@@ -1491,6 +1779,20 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       s.auction = { square: s.pendingBuy, high: null, out: [], bids: 0 };
       s.pendingBuy = null;
       events.push({ type: "auction", square: s.auction.square });
+      break;
+    }
+    case "buyout": {
+      const index = s.pendingBuyout;
+      if (!isTurn || s.step !== "buyout" || index == null) return fail("Rien à racheter pour l'instant.");
+      const problem = buyoutProblem(s, playerId, index);
+      if (problem) return fail(problem);
+      s.pendingBuyout = null;
+      executeBuyout(s, p, index, events);
+      break;
+    }
+    case "skipBuyout": {
+      if (!isTurn || s.step !== "buyout") return fail("Rien à racheter pour l'instant.");
+      s.pendingBuyout = null;
       break;
     }
     case "bid": {

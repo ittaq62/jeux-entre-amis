@@ -35,6 +35,13 @@ function durationOf(e: CapitaleEvent): number {
     case "upgrade":
     case "special":
       return 520;
+    case "disaster":
+      // Le temps de voir les étages tomber, ou le titre changer de mains
+      return e.hits.length > 0 || e.title !== undefined ? 1100 : 400;
+    case "buyout":
+      return 700;
+    case "reshuffle":
+      return 450;
     case "buy":
     case "auctionEnd":
     case "sell":

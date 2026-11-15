@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid, botRescue } from "../shared/games/capitale/bot.ts";
-import { sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
+import { DISASTERS, sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
 import {
   actorOf,
   applyAction,
@@ -948,6 +948,17 @@ export class CapitaleRoom extends DurableObject<Env> {
         }
         const winners = e.ranking.filter((id) => g.ranks?.[id] === 1).map(name);
         if (winners.length > 0) this.systemChat(`${winners.join(" et ")} ${winners.length > 1 ? "remportent" : "remporte"} la partie !`);
+      } else if (e.type === "buyout") {
+        this.systemChat(`${name(e.player)} rachète ${SQUARES[e.square]!.name} à ${name(e.from)} pour ${e.price}.`);
+      } else if (e.type === "disaster" && (e.to || e.hits.length > 1 || e.hits.some((h) => h.owner !== e.player))) {
+        // Une catastrophe qui touche d'autres joueurs que celui qui tire (tempête, crue, péril, cession)
+        const what = DISASTERS[e.kind].name;
+        if (e.to && e.title !== undefined)
+          this.systemChat(`${what} : ${SQUARES[e.title]!.name} passe de ${name(e.player)} à ${name(e.to)}.`);
+        else if (e.hits.length > 0)
+          this.systemChat(
+            `${what} : ${e.hits.map((h) => `${SQUARES[h.square]!.name} (${name(h.owner)})`).join(", ")} ${e.hits.length > 1 ? "perdent" : "perd"} un niveau.`,
+          );
       } else if (e.type === "auctionEnd" && e.winner) {
         this.systemChat(`${name(e.winner)} remporte ${SQUARES[e.square]!.name} aux enchères pour ${e.amount}.`);
       } else if (e.type === "trade" && e.status === "accepted") {
@@ -1084,6 +1095,13 @@ export class CapitaleRoom extends DurableObject<Env> {
         // Le bot qui subit une nuisance le fait savoir
         seatId = this.data!.capitale?.deeds[e.square]?.owner ?? null;
         pool = ["😡", "Coup bas !", "😤"];
+      } else if (e.type === "buyout") {
+        // Le bot à qui on rachète sa ville
+        seatId = e.from;
+        pool = ["😤", "Rends-la-moi !", "😡"];
+      } else if (e.type === "disaster" && e.hits.length > 0) {
+        seatId = e.hits[0]!.owner;
+        pool = ["😱", "Ma ville !", "😭"];
       } else if (e.type === "gameOver") {
         seatId = e.ranking[0] ?? null;
         pool = ["😎", "👏", "Bien joué"];
@@ -1486,6 +1504,8 @@ function safeAction(g: CapitaleState, seatId: string): CapitaleAction | null {
       return { type: "roll" };
     case "buy":
       return { type: "decline" };
+    case "buyout":
+      return { type: "skipBuyout" };
     case "manage":
       return { type: "endTurn" };
     case "debt":
@@ -1512,6 +1532,8 @@ function sanitizeAction(raw: unknown): CapitaleAction | null {
     case "useJailCard":
     case "buy":
     case "decline":
+    case "buyout":
+    case "skipBuyout":
     case "pass":
     case "bankrupt":
     case "endTurn":
@@ -1556,6 +1578,9 @@ function mergeSettings(current: CapitaleSettings, patch: Partial<CapitaleSetting
     "noRentInJail",
     "quickStart",
     "specials",
+    "buyout",
+    "disasters",
+    "evenBuild",
     "monopoly",
     "teamGifts",
     "teamHeir",

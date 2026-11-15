@@ -51,7 +51,7 @@ const alone = (s: CapitaleState) => s.players.slice(1).forEach((p) => (p.bankrup
 const cardIndex = (deck: "hasard" | "courrier", start: string) => DECKS[deck].findIndex((c) => c.text.startsWith(start));
 
 describe("plateau", () => {
-  it("a 40 cases, 28 titres, 8 groupes et deux paquets de 16 cartes", () => {
+  it("a 40 cases, 28 titres, 8 groupes et deux paquets de plus de 30 cartes, toutes différentes", () => {
     expect(SQUARES).toHaveLength(40);
     expect(SQUARES.every((s, i) => s.index === i)).toBe(true);
     expect(BUYABLE).toHaveLength(28);
@@ -60,8 +60,10 @@ describe("plateau", () => {
         .flatMap((g) => g.squares)
         .sort((x, y) => x - y),
     ).toEqual(SQUARES.filter((s) => s.kind === "property").map((s) => s.index));
-    expect(DECKS.hasard).toHaveLength(16);
-    expect(DECKS.courrier).toHaveLength(16);
+    expect(DECKS.hasard).toHaveLength(38);
+    expect(DECKS.courrier).toHaveLength(36);
+    const texts = [...DECKS.hasard, ...DECKS.courrier].map((c) => c.text);
+    expect(new Set(texts).size).toBe(texts.length);
     expect(SQUARES[39]!.name).toBe("Paris");
   });
 });
@@ -128,7 +130,7 @@ describe("tour de jeu", () => {
     expect(s.rollAgain).toBe(false);
   });
 
-  it("on sort de prison en payant ou avec une carte, qui retourne dans son paquet", () => {
+  it("on sort de prison en payant ou avec une carte, qui retourne à la défausse de son paquet", () => {
     const s = game();
     Object.assign(P(s, "a"), { position: 10, inJail: true });
     act(s, "a", { type: "payJail" });
@@ -140,7 +142,7 @@ describe("tour de jeu", () => {
     Object.assign(P(t, "a"), { position: 10, inJail: true, jailCards: ["hasard"] });
     act(t, "a", { type: "useJailCard" });
     expect(P(t, "a").inJail).toBe(false);
-    expect(t.decks.hasard).toHaveLength(16);
+    expect(t.discards!.hasard).toEqual([jailCard]);
   });
 
   it("refuser d'acheter lance une enchère : le plus offrant l'emporte", () => {
@@ -224,8 +226,8 @@ describe("loyers", () => {
 });
 
 describe("la ville : améliorer ses rues, les bâtiments spéciaux", () => {
-  it("une amélioration par rue et par tour ; au-delà du niveau 3, il faut tout le quartier", () => {
-    const s = game();
+  it("à l'ancienne (sans construction équilibrée) : une amélioration par rue et par tour, au-delà du niveau 3 il faut le quartier", () => {
+    const s = game(2, { evenBuild: false });
     own(s, "a", 1);
     act(s, "a", { type: "upgrade", square: 1 });
     expect(s.deeds[1]!.level).toBe(1);

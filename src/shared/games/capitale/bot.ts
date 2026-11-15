@@ -24,6 +24,8 @@ import {
 } from "./board.ts";
 import {
   allies,
+  buyoutPrice,
+  buyoutProblem,
   canMortgage,
   canPlaceSpecial,
   canRaze,
@@ -251,6 +253,11 @@ export function botAction(
             : left >= reserve(s, playerId, level) || keen;
       return buy ? { type: "buy" } : { type: "decline" };
     }
+    case "buyout": {
+      // Le remplaçant d'un absent ne dépense pas son argent à racheter à sa place
+      if (opts.allowAttack === false || s.pendingBuyout == null) return { type: "skipBuyout" };
+      return wantsBuyout(s, playerId, s.pendingBuyout, level) ? { type: "buyout" } : { type: "skipBuyout" };
+    }
     case "manage":
       return (
         manage(s, playerId, level, {
@@ -387,6 +394,43 @@ function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: 
     }
   }
   return null;
+}
+
+/**
+ * Racheter la ville adverse où l'on vient de s'arrêter ? Ce qu'elle vaut pour soi (le quartier qu'elle complète, ses
+ * niveaux, son loyer, le quartier adverse qu'elle casse) contre son prix, en gardant sa réserve. Au Monopole : toujours
+ * si elle fait gagner son camp ou si elle manque à un adversaire pour gagner.
+ */
+export function wantsBuyout(s: CapitaleState, playerId: string, index: number, level: BotLevel): boolean {
+  if (buyoutProblem(s, playerId, index) !== null) return false;
+  const p = playerOf(s, playerId)!;
+  const price = buyoutPrice(s, index);
+  const owner = s.deeds[index]!.owner!;
+  if (wins(s, playerId, index)) return true;
+  const g = groupOf(index)!;
+  const breaks = ownsGroup(s, owner, g.id);
+  const blocksWin = level !== "facile" && s.settings.monopoly && rivalNeeds(s, playerId, owner, index);
+  const rent = rentFor(s, index, { diceTotal: 8 });
+  const worth =
+    valueFor(s, playerId, index, level) +
+    levelOf(s, index) * upgradeCost(index) * (level === "facile" ? 0.6 : 0.9) +
+    rent * (level === "fort" ? 1.4 : 1) +
+    (breaks ? (SQUARES[index]!.price ?? 0) * (level === "fort" ? 1 : level === "moyen" ? 0.6 : 0.2) : 0) +
+    (blocksWin ? 2000 : 0);
+  const threshold = level === "fort" ? 0.95 : level === "moyen" ? 1.05 : 1.35;
+  const keep = blocksWin ? 0 : level === "facile" ? 300 : reserve(s, playerId, level);
+  return worth >= price * threshold && p.cash - price >= keep;
+}
+
+/** Ce titre fait-il partie de ce qu'il faut à ce camp adverse pour gagner au Monopole (le lui reprendre l'éloigne) ? */
+function rivalNeeds(s: CapitaleState, playerId: string, owner: string, index: number): boolean {
+  if (allies(s, playerId, owner)) return false;
+  const before = monopolyProgress(s, owner).closest;
+  const d = s.deeds[index]!;
+  d.owner = playerId;
+  const after = monopolyProgress(s, owner).closest;
+  d.owner = owner;
+  return before <= 2 && after > before;
 }
 
 /** Trouver de quoi payer : hypothéquer ce qui est hors des groupes complets, revendre des niveaux, sinon la faillite */
