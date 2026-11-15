@@ -8,6 +8,7 @@ import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace, COLOR_HEX } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { StreakChip } from "../components/StreakChip.tsx";
 import { Modal } from "../components/ui.tsx";
 import { lateJoinTag, TableLinks } from "../components/TableLinks.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
@@ -144,9 +145,12 @@ export function HomePage() {
       <AppHeader />
       <main className="home">
         <div className="home-top">
-          <h1 className="home-greeting">
-            <span className="script-word">{greeting()},</span> {user.pseudo}
-          </h1>
+          <div className="home-hello">
+            <h1 className="home-greeting">
+              <span className="script-word">{greeting()},</span> {user.pseudo}
+            </h1>
+            <StreakChip />
+          </div>
           <GameSearch value={query} onChange={setQuery} />
         </div>
         <p className="visually-hidden" role="status">
