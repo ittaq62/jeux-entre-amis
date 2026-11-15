@@ -1,9 +1,11 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import {
+  FREE_LEVELS,
+  FREE_LEVELS_EVEN,
   GROUP_ORDER,
   GROUPS,
-  LEVEL_NAMES,
+  levelName,
   MAX_LEVEL,
   mortgageValue,
   SPECIAL_ORDER,
@@ -16,12 +18,15 @@ import {
   UTILITIES,
 } from "../../shared/games/capitale/board.ts";
 import {
+  buyoutPrice,
+  buyoutShield,
   canMortgage,
   canPlaceSpecial,
   canRaze,
   canSell,
   canUpgrade,
   levelOf,
+  newRules,
   rentFor,
   type CapitaleAction,
 } from "../../shared/games/capitale/engine.ts";
@@ -132,6 +137,7 @@ export function CityPanel({
   const up = mine && rights === "full" ? canUpgrade(s, me!, index) : "Ce n'est pas le moment.";
   const sp = deed?.special ?? null;
   const group = GROUPS[sq.group!];
+  const free = newRules(g).evenBuild ? FREE_LEVELS_EVEN : FREE_LEVELS;
 
   return (
     <Pop onClose={onClose} wide className="is-city">
@@ -141,12 +147,15 @@ export function CityPanel({
         <b className="num">{deed?.owner ? money(rent) : money(sq.price!)}</b>
         {deed?.mortgaged && <em>hypothéquée</em>}
       </div>
-      {/* Les cinq niveaux, de la maison au gratte-ciel, avec le loyer de chacun */}
+      {/* Les cinq niveaux, de la maison au monument de la ville, avec le loyer de chacun */}
       <ol className="cap-levels">
         {[1, 2, 3, 4, 5].map((l) => (
-          <li key={l} className={`${l <= level ? "is-done" : ""} ${l === level + 1 ? "is-next" : ""}`}>
-            <img src={levelThumb(l, sq.group!, deed?.owner ? colorOf(g, deed.owner) : color, 120)} alt="" width={52} height={52} />
-            <span className="cap-level-name">{LEVEL_NAMES[l]}</span>
+          <li
+            key={l}
+            className={`${l <= level ? "is-done" : ""} ${l === level + 1 ? "is-next" : ""} ${l === MAX_LEVEL ? "is-landmark" : ""}`}
+          >
+            <img src={levelThumb(l, index, deed?.owner ? colorOf(g, deed.owner) : color, 120)} alt="" width={52} height={52} />
+            <span className="cap-level-name">{levelName(index, l)}</span>
             <b className="num">{money(sq.rents![l]!)}</b>
           </li>
         ))}
@@ -159,8 +168,11 @@ export function CityPanel({
             {level < MAX_LEVEL && <em>loyer → {money(sq.rents![level + 1]!)}</em>}
           </button>
           {up && level < MAX_LEVEL && <p className="cap-why">{up}</p>}
-          {level >= 3 && level < MAX_LEVEL && !up && (
-            <p className="hint">Il faut tout le quartier {group.name.toLowerCase()} pour dépasser le niveau 3.</p>
+          {level >= free && level < MAX_LEVEL && !up && (
+            <p className="hint">
+              Il faut tout le quartier {group.name.toLowerCase()} pour dépasser le niveau {free}
+              {newRules(g).evenBuild ? ", et le monter rue par rue (construction équilibrée)." : "."}
+            </p>
           )}
           <div className="cap-city-small">
             {rights && level > 0 && canSell(s, me!, index) === null && (
@@ -173,10 +185,31 @@ export function CityPanel({
         </div>
       )}
       {!mine && <p className="cap-pop-text">{facts.what}</p>}
+      {!mine && me && deed?.owner && newRules(g).buyout && <BuyoutNote g={g} index={index} me={me} />}
       {g.settings.specials && deed?.owner && (
         <SpecialSection g={g} index={index} me={me} act={act} rights={rights} name={name} mine={mine} special={sp} />
       )}
     </Pop>
+  );
+}
+
+/** Chez un adversaire : ce que coûterait le rachat de sa ville, ou ce qui la protège */
+function BuyoutNote({ g, index, me }: { g: CapitaleView; index: number; me: string }) {
+  const s = asState(g);
+  const shield = buyoutShield(s, me, index);
+  if (shield && /coéquipier|pas à un adversaire/.test(shield)) return null;
+  return (
+    <p className={`cap-buyout-note ${shield ? "is-shielded" : ""}`}>
+      {shield ? (
+        <>
+          <Icon name="lock" size={15} /> {shield}
+        </>
+      ) : (
+        <>
+          Rachat : <b className="num">{money(buyoutPrice(s, index))}</b>, à payer à son propriétaire quand tu t'y arrêtes.
+        </>
+      )}
+    </p>
   );
 }
 

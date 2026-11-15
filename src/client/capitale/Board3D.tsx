@@ -22,6 +22,8 @@ interface Props {
   turn: string | null;
   dice: { values: [number, number] | null; rollId: number };
   card: { deck: DeckId; id: number } | null;
+  /** Une catastrophe : les rues touchées tremblent (id change à chaque fois) */
+  quake?: { squares: number[]; id: number } | null;
   highlight: number | null;
   phone: boolean;
   reduced: boolean;
@@ -49,6 +51,7 @@ export function Board3D({
   turn,
   dice,
   card,
+  quake = null,
   highlight,
   phone,
   reduced,
@@ -144,6 +147,10 @@ export function Board3D({
   useEffect(() => {
     if (card) scene.current?.drawCard(card.deck);
   }, [card]);
+
+  useEffect(() => {
+    if (quake) scene.current?.quake(quake.squares);
+  }, [quake]);
 
   useEffect(() => scene.current?.setCloseUps({ dice: diceZoom, follow }), [diceZoom, follow, version]);
 

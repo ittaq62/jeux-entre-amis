@@ -140,7 +140,7 @@ export interface Special {
 export interface Deed {
   owner: string | null;
   mortgaged: boolean;
-  /** Les terrains : leur niveau, de 0 (terrain nu) à 5 (le gratte-ciel) */
+  /** Les terrains : leur niveau, de 0 (terrain nu) à 5 (le monument de la ville) */
   level?: number;
   /** Les terrains : un bâtiment spécial au plus */
   special?: Special | null;
@@ -152,7 +152,7 @@ export interface CapitaleStats {
   bought: number;
   /** Niveaux ajoutés à ses rues */
   houses: number;
-  /** Gratte-ciel atteints */
+  /** Monuments (niveau 5) atteints */
   hotels: number;
   trades: number;
   jail: number;
@@ -1472,7 +1472,7 @@ const sanitizeOffer = (o: Offer): Offer => ({
   jailCards: Math.max(0, Math.floor(Number(o?.jailCards) || 0)),
 });
 
-/** Ce qui empêche de céder un titre : ses propres bâtiments sur la rue, ou un gratte-ciel dans son quartier */
+/** Ce qui empêche de céder un titre : ses niveaux ou ses propres bâtiments sur la rue, ou un obélisque dans son quartier */
 export function tradeProblem(s: CapitaleState, playerId: string, index: number): string | null {
   const deed = s.deeds[index];
   if (!deed || deed.owner !== playerId) return `${SQUARES[index]?.name ?? "Ce titre"} n'appartient pas à ce joueur.`;

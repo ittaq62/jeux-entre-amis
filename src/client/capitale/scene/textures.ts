@@ -654,6 +654,10 @@ export interface FacadeLook {
   curtain?: boolean;
   /** Fenêtres plus étroites (maisons de pierre, chalets) */
   narrow?: boolean;
+  /** Fenêtres en plein cintre (briques du Midi, pierre romane) */
+  arched?: boolean;
+  /** Les joints d'un appareil de pierre de taille */
+  ashlar?: boolean;
 }
 
 const facadeCache = new Map<string, THREE.CanvasTexture>();
@@ -673,6 +677,14 @@ export function facadeTexture(look: FacadeLook): THREE.CanvasTexture {
         ctx.fillStyle = mix(look.wall, row * 7 + col * 3 > 40 ? "#ffffff" : "#000000", ((row * 13 + col * 7) % 5) * 0.025);
         ctx.fillRect(col * 16 + off + 1, row * 8 + 1, 14, 6);
       }
+    }
+  }
+  if (look.ashlar) {
+    // Des assises de pierre : une ligne tous les 16 px, des joints décalés
+    ctx.fillStyle = mix(look.wall, "#000000", 0.1);
+    for (let row = 0; row < 8; row++) {
+      ctx.fillRect(0, row * 16, S, 1.5);
+      for (let col = 0; col < 4; col++) ctx.fillRect(col * 32 + (row % 2 ? 16 : 0), row * 16, 1.5, 16);
     }
   }
   const glass = look.glass ?? "#46627a";
@@ -718,17 +730,37 @@ export function facadeTexture(look: FacadeLook): THREE.CanvasTexture {
         ctx.fillRect(wx + ww + 2, wy + 6 + n * 10, 14, 2);
       }
     }
-    ctx.fillStyle = frame;
-    ctx.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
     const g = ctx.createLinearGradient(wx, wy, wx + ww, wy + wh);
     g.addColorStop(0, mix(glass, "#ffffff", 0.3));
     g.addColorStop(0.6, glass);
     g.addColorStop(1, mix(glass, "#000000", 0.2));
-    ctx.fillStyle = g;
-    ctx.fillRect(wx, wy, ww, wh);
-    ctx.fillStyle = frame;
-    ctx.fillRect(wx + ww / 2 - 2, wy, 4, wh);
-    ctx.fillRect(wx, wy + wh * 0.38, ww, 3);
+    if (look.arched) {
+      // Un plein cintre : l'encadrement, puis le verre, arrondis en haut
+      const arch = (pad: number) => {
+        ctx.beginPath();
+        ctx.moveTo(wx - pad, wy + wh + pad);
+        ctx.lineTo(wx - pad, wy + ww / 2);
+        ctx.arc(wx + ww / 2, wy + ww / 2, ww / 2 + pad, Math.PI, 0);
+        ctx.lineTo(wx + ww + pad, wy + wh + pad);
+        ctx.closePath();
+      };
+      ctx.fillStyle = frame;
+      arch(4);
+      ctx.fill();
+      ctx.fillStyle = g;
+      arch(0);
+      ctx.fill();
+      ctx.fillStyle = frame;
+      ctx.fillRect(wx + ww / 2 - 2, wy, 4, wh);
+    } else {
+      ctx.fillStyle = frame;
+      ctx.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
+      ctx.fillStyle = g;
+      ctx.fillRect(wx, wy, ww, wh);
+      ctx.fillStyle = frame;
+      ctx.fillRect(wx + ww / 2 - 2, wy, 4, wh);
+      ctx.fillRect(wx, wy + wh * 0.38, ww, 3);
+    }
     if (look.balcony) {
       ctx.fillStyle = "#2c2a27";
       ctx.fillRect(wx - 10, wy + wh - 4, ww + 20, 4);

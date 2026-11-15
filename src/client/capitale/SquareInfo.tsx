@@ -1,14 +1,5 @@
-import {
-  GO_SALARY,
-  GROUPS,
-  JAIL_FINE,
-  LEVEL_NAMES,
-  SPECIALS,
-  SQUARES,
-  STATION_RENTS,
-  teamName,
-} from "../../shared/games/capitale/board.ts";
-import { levelOf, rentFor, teamRules } from "../../shared/games/capitale/engine.ts";
+import { GO_SALARY, GROUPS, JAIL_FINE, levelName, SPECIALS, SQUARES, STATION_RENTS, teamName } from "../../shared/games/capitale/board.ts";
+import { buyoutPrice, buyoutShield, levelOf, newRules, rentFor, teamRules } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { asState, colorOf, money } from "./boardUi.ts";
 import { isMate, teamIn } from "./teamsUi.tsx";
@@ -61,10 +52,15 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
       const group = GROUPS[sq.group!];
       const level = levelOf(s, index);
       const sp = deed?.special;
+      // Chez un adversaire : le prix du rachat, ou ce qui protège la ville
+      const shield = g.you && deed?.owner && newRules(g).buyout ? buyoutShield(s, g.you, index) : "x";
+      const buyout =
+        shield === null ? `Rachat : ${money(buyoutPrice(s, index))}` : shield && /monument|obélisque/.test(shield) ? shield : null;
       const extras = [
-        level > 0 ? `${LEVEL_NAMES[level]} (niveau ${level})` : null,
+        level > 0 ? `${levelName(index, level)} (niveau ${level})` : null,
         sp ? `${SPECIALS[sp.kind].name} : ${SPECIALS[sp.kind].effect.toLowerCase()}` : null,
         deed?.mortgaged ? "Hypothéquée : pas de loyer." : null,
+        buyout,
       ].filter(Boolean);
       return {
         title: sq.name,
@@ -112,8 +108,10 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         kind: "Carte",
         what:
           sq.deck === "hasard"
-            ? "On tire une carte Hasard : le plus souvent, un voyage vers une autre case."
-            : "On tire une carte Courrier : le plus souvent, de l'argent à toucher ou à payer.",
+            ? g.settings.disasters
+              ? "On tire une carte Hasard : un voyage, un coup de chance, un coup dur, ou une catastrophe."
+              : "On tire une carte Hasard : le plus souvent, un voyage vers une autre case."
+            : "On tire une carte Courrier : de l'argent à toucher ou à payer, parfois une mauvaise nouvelle.",
       };
     case "go":
       return { title: "Départ", band: "#d6433a", kind: "Coin", what: `Chaque passage par Départ rapporte ${money(GO_SALARY)}.` };

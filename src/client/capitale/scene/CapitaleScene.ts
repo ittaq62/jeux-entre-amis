@@ -4,6 +4,8 @@ import { SQUARES, type DeckId, type SpecialKind } from "../../../shared/games/ca
 import { play } from "../../lib/sound.ts";
 import type { TokenId } from "../../../shared/games/capitale/tokens.ts";
 import * as B from "./buildings.ts";
+import * as LM from "./landmarks.ts";
+import * as S from "./streets.ts";
 import * as C from "./city.ts";
 import { tokenModel } from "./tokens.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
@@ -822,18 +824,23 @@ export class CapitaleScene {
       o.shown = { owner: d.owner, mortgaged: d.mortgaged };
       return;
     }
-    // Le niveau : les bâtiments poussent, de la maison au gratte-ciel
+    // Le niveau : les bâtiments poussent, de la maison au monument de la ville
     const level = d.level ?? 0;
-    const setKey = level > 0 ? `${level}:${d.owner}` : "";
+    // Un bâtiment spécial occupe le fond de la parcelle : les bâtiments de la rue lui laissent la place
+    const yard = Boolean(d.special);
+    const setKey = level > 0 ? `${level}:${d.owner}:${yard ? 1 : 0}` : "";
     if (setKey !== o.setKey) {
-      const grew = level > Number(o.setKey.split(":")[0] || 0);
+      const before = Number(o.setKey.split(":")[0] || 0);
+      const grew = level > before;
+      // Seule la place a changé (un bâtiment spécial posé ou enlevé) : les bâtiments se déplacent sans repousser
+      const moved = level === before && o.setKey.split(":")[1] === String(d.owner);
       o.setKey = setKey;
-      if (o.set) this.removeObj(o.set, animate);
+      if (o.set) this.removeObj(o.set, animate && !moved);
       o.set = null;
       if (level > 0) {
-        o.set = this.levelSet(level, p, color);
+        o.set = this.levelSet(level, p, color, yard);
         o.root.add(o.set);
-        if (animate) {
+        if (animate && !moved) {
           o.set.children.forEach((b, k) => this.rise(b, level === 5 ? 1.1 : 0.55, k * 0.08, grew));
           this.dust(o.root, 0, 0, p.room * 0.8);
           this.lookAtSoon(o.root.position.clone());
@@ -868,27 +875,28 @@ export class CapitaleScene {
   }
 
   /** Les bâtiments d'un niveau, à leur place dans la parcelle (repère de la parcelle, façade vers +z) */
-  private levelSet(level: number, p: C.Parcel, color: string): THREE.Group {
+  private levelSet(level: number, p: C.Parcel, color: string, yard = false): THREE.Group {
     const g = new THREE.Group();
-    const group = p.group!;
-    const s = Math.min(1.45, Math.max(0.8, p.room / 0.42));
-    const d = p.room * 0.42;
+    const i = p.square;
+    const s = Math.min(1.45, Math.max(0.8, p.room / 0.42)) * (yard ? 0.88 : 1);
+    // Avec un bâtiment spécial au fond à gauche, tout glisse vers l'avant et la droite
+    const shift = yard ? 0.06 : 0;
+    // Les positions suivent l'échelle de la parcelle : deux bâtiments côte à côte ne se touchent jamais
     const put = (o: THREE.Object3D, x: number, z: number, k = 1) => {
-      o.position.set(x, 0, z);
+      o.position.set((x + shift) * s, 0, (z + shift) * s);
       o.scale.setScalar(s * k);
       g.add(o);
     };
-    if (level === 1) put(B.maison(group, color), 0, 0.05);
+    // La ville à son style, niveau par niveau : une maison, deux maisons, un immeuble, deux immeubles, le monument
+    if (level === 1) put(S.cityHouse(i, color), 0, 0.04);
     else if (level === 2) {
-      put(B.maison(group, color), -d, 0.08);
-      put(B.maison(group, color), d, -0.04);
-    } else if (level === 3) {
-      put(B.immeuble(group, color), -d * 0.45, -0.05);
-      put(B.maison(group, color), d, 0.12, 0.85);
-    } else if (level === 4) {
-      put(B.immeuble(group, color), -d * 0.6, 0);
-      put(B.immeuble(group, color), d * 0.6, 0.05);
-    } else put(B.gratteCiel(group, color, p.square === 39), 0, 0, 1.05);
+      put(S.cityHouse(i, color, 0), -0.165, 0.05, 0.88);
+      put(S.cityHouse(i, color, 1), 0.155, -0.01, 0.88);
+    } else if (level === 3) put(S.cityBlock(i, color), 0, 0.01, 1);
+    else if (level === 4) {
+      put(S.cityBlock(i, color, 2), -0.17, 0.02, 0.86);
+      put(S.cityBlock(i, color, 1), 0.165, -0.03, 0.86);
+    } else put(LM.landmark(i, color), 0, 0, 1.12);
     return g;
   }
 
@@ -1142,6 +1150,33 @@ export class CapitaleScene {
     if (!animate) return done();
     const sy = o.scale.y;
     this.tween(0.35, (t) => o.scale.set(1 - t * 0.2, Math.max(0.001, sy * (1 - easeInOut(t))), 1 - t * 0.2), done, delay);
+  }
+
+  /** Une catastrophe : les rues touchées tremblent dans un nuage de poussière (rien en effets réduits) */
+  quake(squares: number[]) {
+    if (this.opts.reduced) return;
+    this.dirty = true;
+    for (const i of squares) {
+      const lot = this.lots.get(i);
+      if (!lot) continue;
+      const root = lot.root;
+      const x0 = root.position.x;
+      const z0 = root.position.z;
+      this.tween(
+        0.8,
+        (t) => {
+          const k = Math.sin(t * Math.PI * 11) * 0.035 * (1 - t);
+          root.position.x = x0 + k;
+          root.position.z = z0 - k * 0.6;
+        },
+        () => {
+          root.position.x = x0;
+          root.position.z = z0;
+        },
+      );
+      this.dust(root, 0, 0, lot.parcel.room * 1.2);
+      this.lookAtSoon(root.position.clone());
+    }
   }
 
   /** Un nuage de poussière au pied d'une construction */

@@ -1,6 +1,8 @@
 import * as THREE from "three";
-import type { GroupId, SpecialKind } from "../../../shared/games/capitale/board.ts";
+import type { SpecialKind } from "../../../shared/games/capitale/board.ts";
 import * as B from "./buildings.ts";
+import { landmark } from "./landmarks.ts";
+import { cityBlock, cityHouse } from "./streets.ts";
 
 // Les vignettes des bâtiments pour les menus : chaque modèle 3D rendu une fois en petite image, vu de trois quarts.
 
@@ -44,11 +46,12 @@ function render(key: string, make: () => THREE.Object3D, size: number): string {
   return url;
 }
 
-/** La vignette d'un niveau de rue (une maison, un immeuble, le gratte-ciel), ou "" si le WebGL manque */
-export function levelThumb(level: number, group: GroupId, color: string, size = 160): string {
+/** La vignette d'un niveau d'une rue (une maison, un immeuble, le monument de la ville), ou "" si le WebGL manque */
+export function levelThumb(level: number, index: number, color: string, size = 160): string {
   return render(
-    `l${level}|${group}|${color}|${size}`,
-    () => (level >= 5 ? B.gratteCiel(group, color, false) : level >= 3 ? B.immeuble(group, color) : B.maison(group, color)),
+    `l${level}|${index}|${color}|${size}`,
+    () =>
+      level >= 5 ? landmark(index, color) : level >= 3 ? cityBlock(index, color, level === 4 ? 1 : 0) : cityHouse(index, color, level - 1),
     size,
   );
 }

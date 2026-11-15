@@ -1,5 +1,14 @@
 import { useMemo, useState } from "react";
-import { GROUPS, SPECIAL_ORDER, specialPrice, SPECIALS, teamName } from "../../shared/games/capitale/board.ts";
+import {
+  BUYOUT_RATE,
+  DISASTERS,
+  GROUPS,
+  SPECIAL_ORDER,
+  specialPrice,
+  SPECIALS,
+  teamName,
+  type DisasterKind,
+} from "../../shared/games/capitale/board.ts";
 import {
   DEFAULT_SETTINGS,
   type BotLevel,
@@ -29,13 +38,28 @@ const BOT_HINTS: Record<BotLevel, string> = {
   fort: "Rafle les terrains, monte vite ses rues, pose ses nuisances chez le plus riche et négocie.",
 };
 
-type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart" | "specials";
+type HouseRule = "freeParking" | "doubleGo" | "noRentInJail" | "quickStart" | "specials" | "buyout" | "disasters" | "evenBuild";
 
 const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   {
+    key: "evenBuild",
+    label: "Construction équilibrée",
+    desc: "Sans tout le quartier, deux maisons au plus ; dans un quartier complet, aucune rue ne prend plus d'un niveau d'avance.",
+  },
+  {
+    key: "buyout",
+    label: "Rachat des villes",
+    desc: `Arrêté chez un adversaire, le loyer payé, on peut lui racheter sa ville : sa valeur plus ${Math.round((BUYOUT_RATE - 1) * 100)} %.`,
+  },
+  {
+    key: "disasters",
+    label: "Catastrophes",
+    desc: "Dans les paquets : séisme, incendie, tempête, crue, arrêté de péril, expropriation, cession forcée.",
+  },
+  {
     key: "specials",
     label: "Bâtiments spéciaux",
-    desc: "Monument (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
+    desc: "Obélisque (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
   },
   {
     key: "freeParking",
@@ -47,7 +71,7 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   { key: "quickStart", label: "Départ rapide", desc: "Chacun reçoit deux titres tirés au sort pour commencer." },
 ];
 
-/** Le monument vaut quatre niveaux de son quartier : de 200 (brun, ciel) à 800 (vert, bleu) */
+/** L'obélisque vaut quatre niveaux de son quartier : de 200 (brun, ciel) à 800 (vert, bleu) */
 const LEVEL_COSTS = Object.values(GROUPS).map((g) => g.houseCost);
 const MONUMENT_PRICES = `${4 * Math.min(...LEVEL_COSTS)} à ${4 * Math.max(...LEVEL_COSTS)}`;
 
@@ -73,6 +97,50 @@ function SpecialRules({ monopoly }: { monopoly: boolean }) {
         </li>
       </ul>
     </details>
+  );
+}
+
+const DISASTER_ORDER: DisasterKind[] = ["seisme", "incendie", "tempete", "crue", "peril", "expropriation", "cession"];
+
+/** Le rachat et les catastrophes, en détail, repliés sous les règles maison */
+function NewRules({ s }: { s: CapitaleSettings }) {
+  return (
+    <>
+      {s.buyout && (
+        <details className="cap-special-rules">
+          <summary>Le rachat : le prix et ce qui protège une ville</summary>
+          <ul>
+            <li className="cap-special-limits hint">
+              Le prix : le titre, ses niveaux et le bâtiment du propriétaire (parc, stade), au prix coûtant, plus{" "}
+              {Math.round((BUYOUT_RATE - 1) * 100)} %. Tout va au propriétaire. Proposé seulement si l'on a l'argent, juste après le loyer ;
+              les niveaux et le bâtiment suivent la ville.
+            </li>
+            <li className="cap-special-limits hint">
+              Protégées : un monument (niveau 5), une ville hypothéquée, tout le quartier d'un obélisque, et la ville d'un coéquipier. Pas
+              de second stade.{s.monopoly && " Au Monopole, un rachat peut faire gagner : surveillez vos rues."}
+            </li>
+          </ul>
+        </details>
+      )}
+      {s.disasters && (
+        <details className="cap-special-rules">
+          <summary>Les catastrophes : qui est touché</summary>
+          <ul className="is-two">
+            {DISASTER_ORDER.map((k) => (
+              <li key={k} className={k === "peril" ? "" : "is-nuisance"}>
+                <strong>{DISASTERS[k].name}</strong>
+                <span className="hint">{DISASTERS[k].who}.</span>
+              </li>
+            ))}
+            <li className="cap-special-limits hint">
+              Une catastrophe abat des niveaux, jamais un bâtiment spécial ; un niveau perdu ne se rembourse pas. L'arrêté de péril épargne
+              les monuments (classés) et les coéquipiers. Expropriation et cession ne prennent qu'un titre sans construction ni obélisque
+              {s.monopoly ? ", et la cession évite de faire gagner l'adversaire au Monopole quand elle le peut" : ""}.
+            </li>
+          </ul>
+        </details>
+      )}
+    </>
   );
 }
 
@@ -219,10 +287,12 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                 </div>
               ))}
             </div>
+            <NewRules s={s} />
             {s.specials && <SpecialRules monopoly={Boolean(s.monopoly)} />}
             <p className="hint" style={{ margin: 0 }}>
-              La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au gratte-ciel. Au-delà de l'immeuble, il faut
-              tout le quartier. Le reste suit la règle : enchères, prison, hypothèques.
+              La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au monument de la ville (la tour Eiffel à
+              Paris). {s.evenBuild ? "Sans tout le quartier, deux maisons au plus." : "Au-delà de l'immeuble, il faut tout le quartier."} Le
+              reste suit la règle : enchères, prison, hypothèques.
             </p>
           </div>
 

@@ -1746,6 +1746,10 @@
   box-shadow: inset 0 0 0 2px #48c47c;
 }
 
+.cap-levels li.is-landmark .cap-level-name {
+  color: #8a5a1c;
+}
+
 .cap-levels li.is-next {
   opacity: 1;
   box-shadow: inset 0 0 0 2px #f0a63a;
@@ -1817,6 +1821,11 @@
 
 .cap-special-rules li {
   display: contents;
+}
+
+/* Deux colonnes seulement : le nom, puis qui est touché (les catastrophes) */
+.cap-special-rules ul.is-two {
+  grid-template-columns: auto 1fr;
 }
 
 .cap-special-rules li.is-nuisance strong {
@@ -2287,6 +2296,56 @@
   }
 }
 
+/* Le rachat : le prix en grand, ce qu'il comprend */
+.cap-buyout-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 20px 0;
+}
+
+.cap-buyout-price span {
+  font-weight: 700;
+  color: #6a7b85;
+}
+
+.cap-buyout-price b {
+  font-family: var(--font-card);
+  font-size: 52px;
+  line-height: 1;
+  color: #8a3a0e;
+}
+
+.cap-buyout-price em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7b85;
+  text-align: center;
+}
+
+.cap-buyout-note {
+  margin: 10px 20px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #fff6e4;
+  box-shadow: inset 0 0 0 2px #f6d9a3;
+  color: #6b4a14;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cap-buyout-note.is-shielded {
+  background: #eef2f5;
+  box-shadow: inset 0 0 0 2px #d6dee4;
+  color: #4a5a64;
+}
+
+.cap-buyout-note svg {
+  vertical-align: -2px;
+}
+
 /* L'enchère */
 .cap-auction-high {
   display: flex;
@@ -2588,6 +2647,61 @@
   font-size: 13px;
   font-weight: 700;
   color: #6a7b85;
+}
+
+/* Ce qu'annonce la carte : un coup de chance, un coup dur, une catastrophe, un voyage */
+.cap-card-tone {
+  margin-top: -6px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.cap-card-tone.is-chance {
+  background: #dff5e6;
+  color: #17703f;
+}
+
+.cap-card-tone.is-malchance {
+  background: #fde4e0;
+  color: #b3261e;
+}
+
+.cap-card-tone.is-voyage {
+  background: #e3eefb;
+  color: #1f4f8a;
+}
+
+.cap-card-tone.is-catastrophe {
+  background: #2b2233;
+  color: #ffd66b;
+}
+
+/* Une catastrophe : des bandes de chantier en haut et en bas de la carte */
+.cap-card.tone-catastrophe .cap-card-face.is-front::before,
+.cap-card.tone-catastrophe .cap-card-face.is-front::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  right: 13px;
+  height: 9px;
+  background: repeating-linear-gradient(-45deg, #2b2233 0 8px, #f2c14e 8px 16px);
+  opacity: 0.9;
+}
+
+.cap-card.tone-catastrophe .cap-card-face.is-front::before {
+  top: 13px;
+}
+
+.cap-card.tone-catastrophe .cap-card-face.is-front::after {
+  bottom: 13px;
+}
+
+.cap-card.tone-catastrophe .cap-card-art {
+  background: radial-gradient(circle at 40% 35%, #fff7dd, #f6dfa0 70%);
 }
 
 /* Le temps qu'il reste avant que la carte agisse */

@@ -1,20 +1,25 @@
 import { motion } from "motion/react";
 import {
+  BUYOUT_RATE,
+  CARD_TONE_NAMES,
+  cardTone,
   DECK_NAMES,
   DECKS,
-  DISASTERS,
   GROUPS,
   JAIL_FINE,
+  LANDMARKS,
+  levelName,
   SQUARES,
   type CardEffect,
   type DeckId,
+  type DisasterKind,
 } from "../../shared/games/capitale/board.ts";
-import type { CapitaleAction } from "../../shared/games/capitale/engine.ts";
+import { buyoutPrice, cityValue, levelOf, ownSpecial, type CapitaleAction } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
-import { money } from "./boardUi.ts";
+import { asState, money } from "./boardUi.ts";
 import { CardArt } from "./CardArt.tsx";
 import { Band, Pop } from "./CityPanel.tsx";
 import { Note } from "./Money.tsx";
@@ -48,8 +53,8 @@ export function BuyPrompt({
       <p className="cap-pop-ask">Tu l'achètes ?</p>
       {sq.kind === "property" ? (
         <p className="cap-pop-text">
-          Loyer de départ <b className="num">{money(sq.rents![0])}</b>, et jusqu'à <b className="num">{money(sq.rents![5])}</b> avec un
-          gratte-ciel.
+          Loyer de départ <b className="num">{money(sq.rents![0])}</b>, et jusqu'à <b className="num">{money(sq.rents![5])}</b> avec{" "}
+          {LANDMARKS[index] ?? "son monument"}.
           {group && (
             <>
               {" "}
@@ -71,6 +76,63 @@ export function BuyPrompt({
         </button>
       </div>
       {cash < sq.price! && <p className="cap-why">Pas assez d'argent : hypothèque un titre (Mes villes), ou laisse-la aux enchères.</p>}
+    </Pop>
+  );
+}
+
+/**
+ * Arrêté chez un adversaire, le loyer payé : lui racheter sa ville. Le prix en grand, ce qu'il comprend, ce qu'on y
+ * gagne (ses niveaux, son loyer), et le propriétaire qui touche tout.
+ */
+export function BuyoutPrompt({
+  g,
+  index,
+  cash,
+  busy,
+  act,
+  name,
+}: {
+  g: CapitaleView;
+  index: number;
+  cash: number;
+  busy: boolean;
+  act: (a: CapitaleAction) => void;
+  name: (id: string) => string;
+}) {
+  const s = asState(g);
+  const sq = SQUARES[index]!;
+  const owner = g.deeds[index]!.owner!;
+  const price = buyoutPrice(s, index);
+  const level = levelOf(s, index);
+  const own = ownSpecial(s, index);
+  const group = GROUPS[sq.group!];
+  const mine = group.squares.filter((i) => i !== index && g.deeds[i]!.owner === g.you).length;
+  const completes = mine === group.squares.length - 1;
+  return (
+    <Pop className="is-buyout">
+      <Band g={g} index={index} name={name} />
+      <p className="cap-pop-ask">Racheter la ville ?</p>
+      <div className="cap-buyout-price">
+        <span>Prix du rachat</span>
+        <b className="num">{money(price)}</b>
+        <em>
+          valeur {money(cityValue(s, index))} + {Math.round((BUYOUT_RATE - 1) * 100)} %, payés à {name(owner)}
+        </em>
+      </div>
+      <p className="cap-pop-text">
+        {level > 0 ? `${levelName(index, level)} (niveau ${level})` : "Terrain nu"}
+        {own ? `, avec ${own === "parc" ? "son parc" : "son stade"}` : ""} : tout passe à toi.
+        {completes && <strong> Elle complète ton quartier {group.name.toLowerCase()} !</strong>}
+      </p>
+      <div className="cap-pop-buttons">
+        <button className="cap-cta is-green" disabled={cash < price || busy} onClick={() => act({ type: "buyout" })}>
+          <span>Racheter</span>
+          <b className="num">{money(price)}</b>
+        </button>
+        <button className="cap-cta is-grey" disabled={busy} onClick={() => act({ type: "skipBuyout" })}>
+          <span>Non merci</span>
+        </button>
+      </div>
     </Pop>
   );
 }
@@ -161,6 +223,17 @@ export function DebtPrompt({
   );
 }
 
+/** Ce que fait une catastrophe, en deux ou trois mots */
+const DISASTER_CHIPS: Record<DisasterKind, string> = {
+  seisme: "−1 niveau",
+  incendie: "−1 niveau",
+  tempete: "−1 niveau chacun",
+  crue: "Un quartier −1 niveau",
+  peril: "Chez un adversaire −1 niveau",
+  expropriation: "Un titre repris",
+  cession: "Un titre cédé",
+};
+
 /** Ce que fait une carte, en quelques mots, pour la pastille sous son texte */
 function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move" } {
   switch (e.kind) {
@@ -187,11 +260,11 @@ function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move
         ? { text: `+${money(e.amount)} par titre`, tone: "good" }
         : { text: `${money(-e.amount)} par titre`, tone: "bad" };
     case "richToPoor":
-      return { text: `${money(e.amount)} du plus riche au plus pauvre`, tone: "move" };
+      return { text: `${money(e.amount)} au plus pauvre`, tone: "move" };
     case "bestRent":
       return { text: `Un loyer, ${money(e.max)} au plus`, tone: "good" };
     case "disaster":
-      return { text: DISASTERS[e.disaster].who, tone: "bad" };
+      return { text: DISASTER_CHIPS[e.disaster], tone: "bad" };
   }
 }
 
@@ -228,9 +301,10 @@ export function CardShow({
   const c = DECKS[card.deck][card.card];
   if (!c) return null;
   const chip = effectChip(c.effect);
+  const tone = cardTone(c.effect);
   return (
     <motion.div
-      className={`cap-card deck-${card.deck} ${still ? "is-still" : ""}`}
+      className={`cap-card deck-${card.deck} tone-${tone} ${still ? "is-still" : ""}`}
       role="status"
       aria-label={`Carte ${DECK_NAMES[card.deck]} : ${c.text}`}
       onClick={onClose}
@@ -259,6 +333,7 @@ export function CardShow({
             <DeckMark deck={card.deck} />
           </span>
           <span className="cap-card-deck">{DECK_NAMES[card.deck]}</span>
+          <span className={`cap-card-tone is-${tone}`}>{CARD_TONE_NAMES[tone]}</span>
           <span className="cap-card-art">
             <CardArt deck={card.deck} card={card.card} />
           </span>

@@ -15,7 +15,7 @@ export interface Square {
   /** Prix d'achat (terrains, gares, réseaux) */
   price?: number;
   group?: GroupId;
-  /** Terrain : loyer nu, puis aux niveaux 1 à 5 (de la maison au gratte-ciel) */
+  /** Terrain : loyer nu, puis aux niveaux 1 à 5 (de la maison au monument de la ville) */
   rents?: [number, number, number, number, number, number];
   /** Impôts et péage */
   tax?: number;
@@ -134,7 +134,7 @@ export const unmortgageCost = (index: number) => Math.ceil(mortgageValue(index) 
 export const mortgageInterest = (index: number) => unmortgageCost(index) - mortgageValue(index);
 
 // ---------------------------------------------------------------------------
-// Améliorer une rue : un bouton, un niveau de plus, de la maison au gratte-ciel
+// Améliorer une rue : un bouton, un niveau de plus, de la maison au monument de la ville
 // ---------------------------------------------------------------------------
 
 /** Le plus haut niveau : le monument de la ville (le loyer de l'hôtel de la règle classique) */
@@ -437,11 +437,11 @@ export const DECKS: Record<DeckId, Card[]> = {
       effect: { kind: "disaster", disaster: "incendie" },
     },
     {
-      text: "Expropriation pour le nouveau tramway : la banque reprend votre titre le moins cher, sans construction, et vous le paie à son prix.",
+      text: "Expropriation pour le tramway : la banque reprend votre titre le moins cher et vous le paie.",
       effect: { kind: "disaster", disaster: "expropriation" },
     },
     {
-      text: "Procès perdu : votre titre le moins cher, sans construction, revient au joueur adverse le plus pauvre.",
+      text: "Procès perdu : votre titre le moins cher revient au joueur adverse le plus pauvre.",
       effect: { kind: "disaster", disaster: "cession" },
     },
   ],

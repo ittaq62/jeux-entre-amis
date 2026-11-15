@@ -35,6 +35,30 @@ const CARD_CUES: Partial<Record<CardArtKey, Cue[]>> = {
   bank: [{ name: "capBigMoney", volume: 0.7 }],
   chest: [{ name: "capBigMoney", volume: 0.7 }],
   umbrella: [{ name: "capBigMoney", volume: 0.6 }],
+  quake: [{ name: "bigHit", volume: 0.7 }],
+  fire: [{ name: "bigHit", volume: 0.6 }],
+  storm: [{ name: "bigHit", volume: 0.6 }],
+  flood: [{ name: "bigHit", rate: 0.8, volume: 0.6 }],
+  bug: [{ name: "capLose" }],
+  danger: [{ name: "buzzer", volume: 0.5 }],
+  gavel: [{ name: "capGavel" }],
+  tram: [{ name: "capGavel", volume: 0.7 }],
+  letter: [{ name: "capLose" }],
+  leak: [{ name: "capLose" }],
+  radiator: [{ name: "capLose" }],
+  tire: [{ name: "capLose" }],
+  phone: [{ name: "capLose" }],
+  glasses: [{ name: "capLose" }],
+  ticket: [{ name: "tourApplause", volume: 0.6 }],
+  pumpkin: [{ name: "tourApplause", volume: 0.5 }],
+  camera: [{ name: "tourApplause", volume: 0.5 }],
+  vinyl: [{ name: "capCoins" }],
+  scales: [{ name: "capBills" }],
+  castle: [{ name: "capBigMoney", volume: 0.6 }],
+  wine: [{ name: "wild", volume: 0.4 }],
+  mountain: [{ name: "wild", volume: 0.4 }],
+  sign: [{ name: "wild", volume: 0.4 }],
+  coffee: [{ name: "wild", volume: 0.4 }],
 };
 
 function cardCues(deck: DeckId, card: number): Cue[] {
@@ -77,6 +101,8 @@ export const CAPITALE_SOUNDS: SoundName[] = [
   "pop",
   "tick",
   "buzzer",
+  "bigHit",
+  "shuffle",
 ];
 
 /**
@@ -104,7 +130,7 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
           play("capCoins", { delay: delay + 120 });
         } else if (e.reason === "card") {
           play(e.to === "bank" || e.to === "pot" ? "capBills" : "capCoins", { delay });
-        } else if (e.reason === "trade" || e.reason === "gift") {
+        } else if (e.reason === "trade" || e.reason === "gift" || e.reason === "buyout" || e.reason === "expropriation") {
           play("capBills", { delay });
         } else if (e.reason === "tax" || e.reason === "jail" || e.reason === "interest") {
           play("capBills", { delay, rate: 0.9 });
@@ -164,6 +190,20 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
         return;
       case "gift":
         play("capDeal", { delay, volume: 0.8 });
+        return;
+      case "reshuffle":
+        play("shuffle", { delay, volume: 0.7 });
+        return;
+      case "disaster":
+        // Les étages qui tombent ; rien quand la catastrophe ne touche personne
+        if (e.hits.length > 0) {
+          play("bigHit", { delay: delay + 80, volume: 0.8 });
+          play("capBuildBig", { delay: delay + 260, rate: 0.7, volume: 0.6 });
+        } else if (e.title !== undefined) play("capGavel", { delay });
+        return;
+      case "buyout":
+        play("capDeal", { delay });
+        play("capBigMoney", { delay: delay + 180, volume: 0.7 });
         return;
       case "monopoly":
         // Monopole : la partie s'arrête net, le gong des enchères puis les applaudissements

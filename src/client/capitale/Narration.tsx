@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { LEVEL_NAMES, sideName, SPECIALS, SQUARES, teamName } from "../../shared/games/capitale/board.ts";
+import { DECK_NAMES, DISASTERS, LANDMARKS, LEVEL_NAMES, sideName, SPECIALS, SQUARES, teamName } from "../../shared/games/capitale/board.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import type { SeatView } from "../../shared/protocol.ts";
@@ -108,7 +108,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       return {
         text:
           e.level === 5
-            ? `${say(e.player, "élève", "élèves")} un gratte-ciel à ${sq(e.square)} !`
+            ? `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "un monument"} à ${sq(e.square)} !`
             : `${say(e.player, "améliore", "améliores")} ${sq(e.square)} : ${LEVEL_NAMES[e.level]!.toLowerCase()}`,
         tone: e.level === 5 ? "big" : "info",
         who: e.player,
@@ -214,6 +214,38 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     }
     case "timeUp":
       return { text: "C'est l'heure : ce tour est le dernier", tone: "big", who: null };
+    case "reshuffle":
+      return { text: `Le paquet ${DECK_NAMES[e.deck]} est épuisé : on remélange toutes ses cartes`, tone: "info", who: null };
+    case "buyout":
+      return {
+        text: isMe(e.from)
+          ? `${name(e.player)} te rachète ${sq(e.square)} pour ${money(e.price)} !`
+          : `${say(e.player, "rachète", "rachètes")} ${sq(e.square)} à ${isMe(e.from) ? "toi" : name(e.from)} pour ${money(e.price)} !`,
+        tone: isMe(e.from) ? "bad" : "big",
+        who: e.player,
+      };
+    case "disaster": {
+      const what = DISASTERS[e.kind].name;
+      if (e.kind === "expropriation")
+        return e.title !== undefined
+          ? { text: `${what} : la banque reprend ${sq(e.title)} ${of(e.player)}`, tone: isMe(e.player) ? "bad" : "info", who: e.player }
+          : { text: `${what} : rien à reprendre ${of(e.player)}`, tone: "info", who: e.player };
+      if (e.kind === "cession")
+        return e.title !== undefined && e.to
+          ? {
+              text: `${what} : ${sq(e.title)} passe ${of(e.player)} à ${isMe(e.to) ? "toi" : name(e.to)}`,
+              tone: isMe(e.player) ? "bad" : isMe(e.to) ? "good" : "info",
+              who: e.player,
+            }
+          : { text: `${what} : rien à céder, ouf !`, tone: "info", who: e.player };
+      if (e.hits.length === 0) return { text: `${what} : plus de peur que de mal, rien n'est touché`, tone: "info", who: e.player };
+      const list = e.hits.map((h) => `${sq(h.square)}${isMe(h.owner) ? " (à toi)" : ""}`).join(", ");
+      return {
+        text: `${what} : ${list} ${e.hits.length > 1 ? "perdent" : "perd"} un niveau`,
+        tone: e.hits.some((h) => isMe(h.owner)) ? "bad" : "big",
+        who: e.player,
+      };
+    }
     default:
       return null;
   }

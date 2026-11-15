@@ -25,7 +25,7 @@ type Seat = (id: string) => SeatView | undefined;
 
 const EMPTY: Offer = { cash: 0, squares: [], jailCards: 0 };
 
-/** Les titres qu'un joueur peut céder : sans ses bâtiments dessus, sans gratte-ciel dans le quartier */
+/** Les titres qu'un joueur peut céder : sans ses bâtiments dessus, sans obélisque dans le quartier */
 function tradable(g: CapitaleView, playerId: string): number[] {
   return SQUARES.filter((sq) => tradeProblem(asState(g), playerId, sq.index) === null).map((sq) => sq.index);
 }

@@ -30,7 +30,7 @@ export function mat(color: string, opts: { rough?: number; metal?: number; flat?
 }
 
 const wallCache = new Map<string, THREE.Material>();
-function wallMat(look: FacadeLook) {
+export function wallMat(look: FacadeLook) {
   const key = JSON.stringify(look);
   let m = wallCache.get(key);
   if (!m) {
@@ -44,7 +44,7 @@ function wallMat(look: FacadeLook) {
   return m;
 }
 
-function shadowed<T extends THREE.Object3D>(o: T, receive = true, cast = true): T {
+export function shadowed<T extends THREE.Object3D>(o: T, receive = true, cast = true): T {
   o.traverse((c) => {
     if ((c as THREE.Mesh).isMesh) {
       c.castShadow = cast;
@@ -142,7 +142,7 @@ export function facadeBox(w: number, h: number, d: number, look: FacadeLook, top
 }
 
 /** Un toit à deux pans, le faîtage parallèle à la façade */
-function gableRoof(w: number, d: number, h: number, color: string, overhang = 0.03): THREE.Mesh {
+export function gableRoof(w: number, d: number, h: number, color: string, overhang = 0.03): THREE.Mesh {
   const shape = new THREE.Shape();
   const half = d / 2 + overhang;
   shape.moveTo(-half, 0);
@@ -156,7 +156,7 @@ function gableRoof(w: number, d: number, h: number, color: string, overhang = 0.
 }
 
 /** Un toit à quatre pans */
-function hipRoof(w: number, d: number, h: number, color: string): THREE.Mesh {
+export function hipRoof(w: number, d: number, h: number, color: string): THREE.Mesh {
   const geo = new THREE.ConeGeometry(1, h, 4, 1);
   geo.rotateY(Math.PI / 4);
   geo.scale((w / 2 + 0.03) / Math.SQRT1_2, 1, (d / 2 + 0.03) / Math.SQRT1_2);
@@ -165,7 +165,7 @@ function hipRoof(w: number, d: number, h: number, color: string): THREE.Mesh {
 }
 
 /** Un toit mansardé (zinc) : un tronc de pyramide */
-function mansardRoof(w: number, d: number, h: number, color: string): THREE.Mesh {
+export function mansardRoof(w: number, d: number, h: number, color: string): THREE.Mesh {
   const geo = new THREE.CylinderGeometry(0.62, 1, h, 4, 1);
   geo.rotateY(Math.PI / 4);
   geo.scale((w / 2 + 0.015) / Math.SQRT1_2, 1, (d / 2 + 0.015) / Math.SQRT1_2);
@@ -173,13 +173,13 @@ function mansardRoof(w: number, d: number, h: number, color: string): THREE.Mesh
   return new THREE.Mesh(geo, mat(color, { flat: true, rough: 0.55, metal: 0.25 }));
 }
 
-function box(w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
+export function box(w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
   const geo = new THREE.BoxGeometry(w, h, d);
   geo.translate(x, y + h / 2, z);
   return new THREE.Mesh(geo, m);
 }
 
-function cyl(rTop: number, rBottom: number, h: number, m: THREE.Material, seg = 10, x = 0, y = 0, z = 0): THREE.Mesh {
+export function cyl(rTop: number, rBottom: number, h: number, m: THREE.Material, seg = 10, x = 0, y = 0, z = 0): THREE.Mesh {
   const geo = new THREE.CylinderGeometry(rTop, rBottom, h, seg);
   geo.translate(x, y + h / 2, z);
   return new THREE.Mesh(geo, m);

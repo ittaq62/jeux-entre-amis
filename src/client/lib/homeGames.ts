@@ -67,7 +67,7 @@ export const HOME_GAMES: HomeGame[] = [
   {
     id: "capitale",
     name: "Capitale",
-    desc: "Achète les villes de France, de Guéret à Paris, bâtis ta ville case par case jusqu'aux gratte-ciel, pose une décharge chez les autres et ruine-les à coups de loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.",
+    desc: "Achète les villes de France, de Guéret à Paris, bâtis chaque ville jusqu'à son monument (la tour Eiffel à Paris), rachète celles des autres, pose une décharge chez eux et ruine-les à coups de loyers. En partie rapide ou jusqu'à la faillite, de 2 à 6.",
     keywords: "plateau immobilier argent dés construire stratégie",
     players: seats("capitale"),
     quick: "Partie rapide",

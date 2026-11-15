@@ -33,7 +33,7 @@ import { CAPITALE_SOUNDS, eventTimes, HOP_MS } from "./fx.ts";
 import { breakdown, Hand, Note } from "./Money.tsx";
 import { describe, Journal, Narrator, pushLine, type Line } from "./Narration.tsx";
 import { Offers, TradeModal, type TradeDraft } from "./Panels.tsx";
-import { AuctionPrompt, BuyPrompt, CardShow, DebtPrompt, JailChoices } from "./Prompts.tsx";
+import { AuctionPrompt, BuyoutPrompt, BuyPrompt, CardShow, DebtPrompt, JailChoices } from "./Prompts.tsx";
 import { squareFacts, SquareTip } from "./SquareInfo.tsx";
 import type { EventBatch } from "./useCapitaleRoom.ts";
 import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
@@ -72,6 +72,8 @@ const DEED_EVENTS = new Set<CapitaleEvent["type"]>([
   "unmortgage",
   "trade",
   "bankrupt",
+  "disaster",
+  "buyout",
 ]);
 
 let billSeq = 0;
@@ -140,6 +142,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   /** La carte tirée, au milieu : le temps de la lire (read), puis elle s'en va quand elle agit */
   const [card, setCard] = useState<{ deck: DeckId; card: number; player: string; key: number; read: number } | null>(null);
   const [drawn, setDrawn] = useState<{ deck: DeckId; id: number } | null>(null);
+  const [quake, setQuake] = useState<{ squares: number[]; id: number } | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [deeds, setDeeds] = useState<(Deed | null)[]>(() => g.deeds);
   const [turn, setTurn] = useState<string | null>(() => g.players[g.turn]?.id ?? null);
@@ -254,6 +257,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             });
           }
         }, t);
+      } else if (e.type === "disaster" && e.hits.length > 0) {
+        const squares = e.hits.map((h) => h.square);
+        later(() => setQuake({ squares, id: batch.id * 100 + i }), t + 80);
       } else if (e.type === "card") {
         const key = batch.id * 100 + i;
         const read = cardReadMs(e.deck, e.card);
@@ -297,7 +303,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const name = (id: string | null | undefined) => (id ? (seat(id)?.name ?? "?") : "?");
   const timeLeft = useCountdown(room.endsAt, serverOffset);
   const auctionLeft = useCountdown(room.auctionDeadline, serverOffset);
-  const highlight = g.auction ? g.auction.square : g.step === "buy" ? g.pendingBuy : null;
+  const highlight = g.auction ? g.auction.square : g.step === "buy" ? g.pendingBuy : g.step === "buyout" ? (g.pendingBuyout ?? null) : null;
   const tokenKey = room.seats.map((s) => `${s.id}:${s.token ?? ""}`).join(",");
   const tokens = useMemo(() => Object.fromEntries(room.seats.map((s) => [s.id, s.token])), [tokenKey]);
   const debt = g.debts[0];
@@ -368,6 +374,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       prompt = <DebtPrompt amount={myDebt.amount} to={creditor(myDebt.creditor)} onCities={() => setCitiesOpen(true)} act={act} />;
     } else if (myTurn && g.step === "buy" && g.pendingBuy !== null && !busy) {
       prompt = <BuyPrompt g={g} index={g.pendingBuy} cash={meP?.cash ?? 0} busy={busy} act={act} name={name} />;
+    } else if (myTurn && g.step === "buyout" && g.pendingBuyout != null && !busy) {
+      prompt = <BuyoutPrompt g={g} index={g.pendingBuyout} cash={meP?.cash ?? 0} busy={busy} act={act} name={name} />;
     }
   }
 
@@ -496,6 +504,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             turn={turn}
             dice={dice}
             card={drawn}
+            quake={quake}
             highlight={highlight}
             phone={phone}
             reduced={reduced}
