@@ -26,7 +26,8 @@ export const RARITY: Record<Rarity, RarityInfo> = {
   legendaire: { name: "Légendaire", gems: 5, sell: 200, craft: 2500 },
 };
 
-export type CardFamily = "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche";
+export type CardFamily =
+  "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche" | "culbute";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -37,6 +38,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "briques", name: "Les Briques", note: "Celles qui tombent mal" },
   { id: "meche", name: "La Mèche", note: "Vite, un mot" },
   { id: "crampons", name: "Les Crampons", note: "Du gazon plein les chaussettes" },
+  { id: "culbute", name: "La Culbute", note: "Ça vole bas, au village" },
   { id: "escarmouche", name: "L'Escarmouche", note: "Ça sent la poudre au hameau" },
 ];
 
@@ -47,6 +49,7 @@ export type CardArt =
   | { kind: "uno"; face: "zero" | "skip" | "reverse" | "draw2" | "wild" | "wild4" }
   | { kind: "brick"; piece: "O" | "T" | "S" | "L" | "I" | "gris" }
   | { kind: "meche"; subject: "allumette" | "dynamite" | "meche" | "mot" | "boum" }
+  | { kind: "culbute"; subject: string }
   /** Capitale Builder : un bâtiment de la carte, photographié à l'ouverture de l'album (pas sur la planche d'images) */
   | { kind: "builder"; subject: "commerce" | "vague" | "centrale" }
   | {
@@ -841,6 +844,112 @@ export const CARDS: CardDef[] = [
     name: "La Médaille",
     quote: "Pour services rendus, sans jamais lâcher la gâchette.",
     art: { kind: "escarmouche", subject: "medaille" },
+  },
+
+  // La Culbute (arrivée après les autres : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "culbute-tarte",
+    family: "culbute",
+    rarity: "commune",
+    name: "La Tarte à la crème",
+    quote: "Elle ne fait pas mal. C'est la fierté qui en prend un coup.",
+    art: { kind: "culbute", subject: "tarte" },
+  },
+  {
+    id: "culbute-petard",
+    family: "culbute",
+    rarity: "commune",
+    name: "Le Pétard",
+    quote: "Il traînait depuis le 14 juillet. Il n'attendait que ça.",
+    art: { kind: "culbute", subject: "petard" },
+  },
+  {
+    id: "culbute-baguette",
+    family: "culbute",
+    rarity: "commune",
+    name: "La Baguette",
+    quote: "Bien cuite, elle porte loin. Pas tradition, attention.",
+    art: { kind: "culbute", subject: "baguette" },
+  },
+  {
+    id: "culbute-gateau",
+    family: "culbute",
+    rarity: "commune",
+    name: "La Part de gâteau",
+    quote: "Vingt-cinq pourcents de moins, et pas une miette de regret.",
+    art: { kind: "culbute", subject: "gateau" },
+  },
+  {
+    id: "culbute-ginette",
+    family: "culbute",
+    rarity: "peu-commune",
+    name: "Ginette et son sac",
+    quote: "Personne ne sait ce qu'il y a dedans. Elle non plus.",
+    art: { kind: "culbute", subject: "ginette" },
+  },
+  {
+    id: "culbute-lucien",
+    family: "culbute",
+    rarity: "peu-commune",
+    name: "Lucien et son accordéon",
+    quote: "Il ne connaît qu'un air. Il le joue jusqu'au bout de l'estrade.",
+    art: { kind: "culbute", subject: "lucien" },
+  },
+  {
+    id: "culbute-raymond",
+    family: "culbute",
+    rarity: "peu-commune",
+    name: "Raymond le pointeur",
+    quote: "Il ne tire jamais. Sauf sur toi.",
+    art: { kind: "culbute", subject: "raymond" },
+  },
+  {
+    id: "culbute-marcel",
+    family: "culbute",
+    rarity: "rare",
+    name: "Marcel et sa chaise",
+    quote: "Il ne la plie que pour la déplier sur quelqu'un.",
+    art: { kind: "culbute", subject: "marcel" },
+  },
+  {
+    id: "culbute-huguette",
+    family: "culbute",
+    rarity: "rare",
+    name: "Huguette et son tricot",
+    quote: "Une maille à l'endroit, une maille à l'envers, et tu ne bouges plus.",
+    art: { kind: "culbute", subject: "huguette" },
+  },
+  {
+    id: "culbute-kiosque",
+    family: "culbute",
+    rarity: "rare",
+    name: "Le Kiosque",
+    quote: "La fanfare y jouait le dimanche. Maintenant, on s'y bat.",
+    art: { kind: "culbute", subject: "kiosque" },
+  },
+  {
+    id: "culbute-simone",
+    family: "culbute",
+    rarity: "epique",
+    name: "Simone et son éventail",
+    quote: "Un coup de vent, et tu es déjà au bout de la place.",
+    art: { kind: "culbute", subject: "simone" },
+  },
+  {
+    id: "culbute-clocher",
+    family: "culbute",
+    rarity: "epique",
+    name: "Le Toit du clocher",
+    quote: "La vue est magnifique. Le retour, beaucoup moins.",
+    art: { kind: "culbute", subject: "clocher" },
+  },
+  {
+    id: "culbute-vol",
+    family: "culbute",
+    rarity: "legendaire",
+    name: "La Culbute",
+    quote: "À 150 %, on ne tombe plus : on décolle.",
+    art: { kind: "culbute", subject: "vol" },
   },
 ];
 

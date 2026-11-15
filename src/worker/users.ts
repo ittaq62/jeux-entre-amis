@@ -6,6 +6,7 @@ import {
   earnedMecheAchievements,
   earnedBolidesAchievements,
   earnedCramponsAchievements,
+  earnedCulbuteAchievements,
   earnedEscarmoucheAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
@@ -14,6 +15,7 @@ import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/c
 import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
 import type { BolidesSettings, RacerStats } from "../shared/games/bolides/race.ts";
 import type { CramponsConfig } from "../shared/games/crampons/view.ts";
+import type { CulbuteConfig, CulbuteRecordStats } from "../shared/games/culbute/view.ts";
 import type { EscarmoucheSettings, Mode as EscarmoucheMode } from "../shared/games/escarmouche/rules.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
@@ -250,6 +252,7 @@ export interface GameRecordPlayer {
     | MecheStats
     | BolidesRecordStats
     | CramponsRecordStats
+    | CulbuteRecordStats
     | EscarmoucheRecordStats;
 }
 
@@ -307,6 +310,7 @@ export type GameRecord = {
   | { game: "meche"; settings: MecheSettings; mode: FuseMode }
   | { game: "bolides"; settings: BolidesSettings; mode: TrackId }
   | { game: "crampons"; settings: CramponsConfig; mode: string }
+  | { game: "culbute"; settings: CulbuteConfig; mode: string }
   | { game: "escarmouche"; settings: EscarmoucheSettings; mode: EscarmoucheMode }
 );
 
@@ -409,6 +413,19 @@ function mergeEscarmoucheTotals(raw: string | null, stats: EscarmoucheRecordStat
     totals[key] = (totals[key] ?? 0) + stats[key];
   totals.bestKills = Math.max(totals.bestKills ?? 0, stats.kills);
   totals.bestStreak = Math.max(totals.bestStreak ?? 0, stats.best);
+  return totals;
+}
+
+/** Cumul des stats de Culbute : tout s'additionne, sauf le meilleur combat */
+function mergeCulbuteTotals(raw: string | null, stats: CulbuteRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of ["kos", "falls", "dealt", "taken", "items"] as const) totals[key] = (totals[key] ?? 0) + stats[key];
+  totals.bestKos = Math.max(totals.bestKos ?? 0, stats.kos);
   return totals;
 }
 
@@ -557,6 +574,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as CramponsRecordStats;
       totals = mergeCramponsTotals(prev?.totals ?? null, stats);
       earnedIds = earnedCramponsAchievements({ won, played, stats });
+    } else if (rec.game === "culbute") {
+      const stats = p.stats as CulbuteRecordStats;
+      totals = mergeCulbuteTotals(prev?.totals ?? null, stats);
+      earnedIds = earnedCulbuteAchievements({ won, played, mode: rec.settings.mode, stocks: rec.settings.stocks, stats });
     } else if (rec.game === "escarmouche") {
       const stats = p.stats as EscarmoucheRecordStats;
       totals = mergeEscarmoucheTotals(prev?.totals ?? null, stats);
@@ -929,6 +950,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const meche = statRows.results.find((r) => r.game === "meche");
   const bolides = statRows.results.find((r) => r.game === "bolides");
   const crampons = statRows.results.find((r) => r.game === "crampons");
+  const culbute = statRows.results.find((r) => r.game === "culbute");
   const escarmouche = statRows.results.find((r) => r.game === "escarmouche");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
@@ -947,6 +969,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     meche: { ...statsSummary(meche), totals: totalsOf(meche) },
     bolides: { ...statsSummary(bolides), totals: totalsOf(bolides) },
     crampons: { ...statsSummary(crampons), totals: totalsOf(crampons) },
+    culbute: { ...statsSummary(culbute), totals: totalsOf(culbute) },
     escarmouche: { ...statsSummary(escarmouche), totals: totalsOf(escarmouche) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({

@@ -73,7 +73,7 @@ describe("la boutique", () => {
 
   it("la migration garde acquis chaque article payant de l'ancien système", () => {
     // Les dos de cartes UNO, tout Crampons, Mèche et le personnage sont arrivés après : l'ancien système ne les connaissait pas
-    const later = new Set(["uno", "club", "ballon", "fete", "bombe", "perso", "camo"]);
+    const later = new Set(["uno", "club", "ballon", "fete", "bombe", "perso", "camo", "tenue"]);
     for (const item of SHOP_ITEMS.filter((i) => i.price > 0 && !later.has(i.kind))) expect(migration).toContain(`'${item.id}'`);
   });
 });

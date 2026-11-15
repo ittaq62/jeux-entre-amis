@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CONFIG as CULBUTE_DEFAULTS } from "./games/culbute/view.ts";
 import { DEFAULT_SETTINGS as ESCARMOUCHE_DEFAULTS } from "./games/escarmouche/rules.ts";
 import { DEFAULT_CONFIG } from "./games/crampons/view.ts";
 import { DEFAULT_SETTINGS as BOLIDES_DEFAULTS } from "./games/bolides/race.ts";
@@ -197,6 +198,7 @@ describe("règles des jeux", () => {
     meche: MECHE_DEFAULTS,
     bolides: BOLIDES_DEFAULTS,
     crampons: DEFAULT_CONFIG,
+    culbute: CULBUTE_DEFAULTS,
     escarmouche: ESCARMOUCHE_DEFAULTS,
   };
 
@@ -249,7 +251,7 @@ describe("règles des jeux", () => {
     expect(variantSettings("naval", "eclair")).toEqual({ grid: 8 });
     expect(findVariant("naval", "salve+inconnue")).toBeNull();
     // Les autres jeux n'ont pas de règle à part (sauf le UNO, plus bas)
-    for (const game of ["bricks", "capitale", "meche", "bolides", "crampons"] as const) {
+    for (const game of ["bricks", "capitale", "meche", "bolides", "crampons", "culbute"] as const) {
       expect(gameModifiers(game)).toEqual([]);
       for (let i = 0; i < 30; i++) expect(drawVariant(game, rand)).not.toContain("+");
     }

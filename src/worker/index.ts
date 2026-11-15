@@ -67,6 +67,7 @@ export { CapitaleRoom } from "./capitaleRoom.ts";
 export { MecheRoom } from "./mecheRoom.ts";
 export { BolidesRoom } from "./bolidesRoom.ts";
 export { CramponsRoom } from "./cramponsRoom.ts";
+export { CulbuteRoom } from "./culbuteRoom.ts";
 export { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 export { TourRoom } from "./tourRoom.ts";
 export { Hub } from "./hub.ts";
@@ -113,7 +114,7 @@ function siteUrl(c: Ctx) {
   return new URL(c.req.url).origin;
 }
 
-const ALL_GAMES: GameId[] = ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "escarmouche"];
+const ALL_GAMES: GameId[] = ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "escarmouche", "culbute"];
 const isBeta = (game: TableGame) => (BETA_GAMES as readonly TableGame[]).includes(game);
 
 const isGame = (value: unknown): value is GameId => (ALL_GAMES as unknown[]).includes(value);

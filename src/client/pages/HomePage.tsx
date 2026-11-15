@@ -17,6 +17,7 @@ import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
 import { CramponsPreview } from "../crampons/CramponsPreview.tsx";
+import { CulbutePreview } from "../culbute/CulbutePreview.tsx";
 import { EscarmouchePreview } from "../escarmouche/EscarmouchePreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
@@ -58,6 +59,7 @@ const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
   meche: { stage: "is-workshop", art: () => <MechePreview /> },
   bolides: { stage: "is-circuit", art: () => <BolidesPreview /> },
   crampons: { stage: "is-pitch", art: () => <CramponsPreview /> },
+  culbute: { stage: "is-arena", art: () => <CulbutePreview /> },
   escarmouche: { stage: "is-front", art: () => <EscarmouchePreview /> },
 };
 
@@ -524,6 +526,9 @@ const NAVAL_MODES: Record<string, string> = {
   "5": "5 contre 5",
   "7": "7 contre 7",
   "11": "11 contre 11",
+  vies: "aux vies",
+  temps: "au temps",
+  subite: "mort subite",
 };
 
 function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame: boolean; friendNames: Set<string> }) {

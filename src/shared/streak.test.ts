@@ -198,10 +198,10 @@ describe("les jours de jeu", () => {
 });
 
 describe("le défi de la semaine", () => {
-  const ALL = ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons"] as const;
+  const ALL = ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute"] as const;
 
   it("10 points par jeu, réussi quand chacun a été joué", () => {
-    expect(weekBonus([...ALL])).toBe(70);
+    expect(weekBonus([...ALL])).toBe(80);
     expect(weekDone([...ALL], new Set(ALL))).toBe(true);
     expect(weekDone([...ALL], new Set(ALL.slice(1)))).toBe(false);
     expect(weekBonus(["uno", "naval"])).toBe(20);

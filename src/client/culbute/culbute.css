@@ -1,0 +1,786 @@
+/* ------------------------------------------------------------------ */
+/* Culbute : le salon (choix du combattant) et l'écran de combat        */
+/* ------------------------------------------------------------------ */
+
+/* Le choix du combattant */
+.cb-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.cb-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.cb-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.cb-card:hover {
+  transform: translateY(-2px);
+}
+
+.cb-card.is-on {
+  border-color: var(--gold);
+  background: var(--gold-tint);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.cb-card strong {
+  font-size: 14px;
+}
+
+.cb-card-prop {
+  display: grid;
+  place-items: center;
+  min-height: 18px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.cb-styles,
+.cb-tenues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cb-style,
+.cb-tenue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cb-style.is-on,
+.cb-tenue.is-on {
+  border-color: var(--gold);
+  background: var(--gold-tint);
+}
+
+.cb-tenue.is-locked {
+  opacity: 0.75;
+}
+
+.cb-tenue small {
+  color: var(--gold-light);
+  font-size: 11px;
+}
+
+.cb-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.cb-style-blurb {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cb-prop-icon {
+  flex: none;
+}
+
+.cb-howto p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+
+.cb-howto.is-compact p {
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.cb-keys {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.cb-keys li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cb-keys kbd {
+  min-width: 112px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--panel-sunken);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* L'écran de combat */
+html:has(.cb-fight),
+html:has(.cb-fight) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.cb-fight {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #10141c;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.cb-stage,
+.culbute-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cb-top {
+  position: absolute;
+  top: calc(10px + var(--safe-top));
+  left: calc(12px + var(--safe-left, 0px));
+  right: calc(12px + var(--safe-right, 0px));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.cb-top-right {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.cb-icon-btn {
+  position: relative;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 12px;
+  background: rgba(10, 12, 18, 0.55);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+
+.cb-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--danger);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.cb-clock {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 12px;
+  background: rgba(10, 12, 18, 0.6);
+  font-family: var(--font-card);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* 3, 2, 1, Culbute ! */
+.cb-countdown {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-family: var(--font-title);
+  font-size: clamp(64px, 14vmin, 140px);
+  text-shadow:
+    0 4px 0 #b3261e,
+    0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: cb-pop 0.9s ease-out both;
+}
+
+.cb-countdown.is-go {
+  color: #ffe08a;
+  animation-duration: 1.2s;
+}
+
+@keyframes cb-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(1.8);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0;
+  }
+}
+
+/* Les pourcents de chacun, en bas */
+.cb-hud {
+  position: absolute;
+  left: 50%;
+  bottom: calc(10px + var(--safe-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: min(96vw, 1100px);
+  pointer-events: none;
+}
+
+.cb-card-hud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+  padding: 6px 12px 6px 6px;
+  border: 2px solid;
+  border-radius: 14px;
+  background: rgba(10, 12, 18, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.cb-card-hud.is-me {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.cb-card-hud.is-out {
+  opacity: 0.45;
+}
+
+.cb-card-text {
+  display: grid;
+  min-width: 0;
+}
+
+.cb-card-name {
+  overflow: hidden;
+  max-width: 88px;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cb-card-sub {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.cb-stocks {
+  display: flex;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.cb-stock {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8);
+}
+
+.cb-dmg {
+  margin-left: auto;
+  font-family: var(--font-card);
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(0, 0, 0, 0.4);
+  animation: cb-shake 0.25s ease-out;
+}
+
+@keyframes cb-shake {
+  0% {
+    transform: scale(1.35) rotate(-4deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(3deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* La jauge de charge, au-dessus de sa carte */
+.cb-charge {
+  position: absolute;
+  left: 50%;
+  bottom: calc(80px + var(--safe-bottom));
+  width: 160px;
+  height: 8px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  background: rgba(10, 12, 18, 0.6);
+  pointer-events: none;
+}
+
+.cb-charge span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffe08a, #ff6a3a);
+}
+
+/* Les commandes au doigt */
+.cb-touch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cb-stick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 46%;
+  height: 72%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.cb-stick-hint {
+  position: absolute;
+  left: calc(28px + var(--safe-left, 0px));
+  bottom: calc(40px + var(--safe-bottom));
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(10, 12, 18, 0.45);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.cb-stick-base,
+.cb-stick-knob {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.cb-stick-base {
+  width: 120px;
+  height: 120px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 12, 18, 0.25);
+}
+
+.cb-stick-knob {
+  width: 54px;
+  height: 54px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.cb-touch-buttons {
+  position: absolute;
+  right: var(--safe-right, 0px);
+  bottom: var(--safe-bottom);
+  width: 230px;
+  height: 210px;
+}
+
+.cb-touch-btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  pointer-events: auto;
+  touch-action: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.3),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  -webkit-touch-callout: none;
+}
+
+.cb-touch-btn:active {
+  filter: brightness(1.2);
+}
+
+/* Frapper et Spécial côte à côte : le pouce posé sur les deux fait la garde */
+.cb-touch-btn.is-atk {
+  right: 18px;
+  bottom: 22px;
+  width: 92px;
+  height: 92px;
+  background: rgba(214, 62, 50, 0.88);
+}
+
+.cb-touch-btn.is-spc {
+  right: 116px;
+  bottom: 16px;
+  width: 78px;
+  height: 78px;
+  background: rgba(58, 118, 214, 0.88);
+}
+
+.cb-touch-btn.is-jmp {
+  right: 34px;
+  bottom: 124px;
+  width: 70px;
+  height: 70px;
+  background: rgba(54, 156, 86, 0.88);
+}
+
+.cb-touch-tip {
+  position: absolute;
+  right: 112px;
+  bottom: 100px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  text-align: right;
+  pointer-events: none;
+}
+
+/* Au doigt, les cartes de pourcents montent en haut (les pouces sont en bas), sans les noms */
+.cb-fight.is-touch .cb-hud {
+  top: calc(8px + var(--safe-top));
+  bottom: auto;
+  flex-wrap: nowrap;
+  max-width: 62vw;
+  gap: 5px;
+}
+
+.cb-fight.is-touch .cb-card-hud {
+  min-width: 0;
+  gap: 4px;
+  padding: 2px 7px 2px 2px;
+  border-width: 1.5px;
+  border-radius: 10px;
+}
+
+.cb-fight.is-touch .cb-card-hud .avatar {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+.cb-fight.is-touch .cb-card-name {
+  display: none;
+}
+
+.cb-fight.is-touch .cb-stock {
+  width: 6px;
+  height: 6px;
+}
+
+.cb-fight.is-touch .cb-dmg {
+  font-size: 19px;
+}
+
+.cb-fight.is-touch .cb-charge {
+  bottom: auto;
+  top: calc(56px + var(--safe-top));
+}
+
+.cb-fight.is-touch .cb-top-left {
+  margin-top: 44px;
+}
+
+/* Le menu */
+.cb-menu {
+  position: absolute;
+  top: calc(58px + var(--safe-top));
+  right: calc(12px + var(--safe-right, 0px));
+  display: grid;
+  gap: 8px;
+  width: min(300px, 86vw);
+  padding: 12px;
+}
+
+.cb-menu-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cb-help-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.cb-help {
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+/* La feuille de fin */
+.cb-over {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(6, 8, 12, 0.5);
+  animation: cb-fade 0.4s ease-out both;
+}
+
+@keyframes cb-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.cb-over-card {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 18px 20px;
+  text-align: center;
+}
+
+.cb-over-card h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: clamp(26px, 5vw, 38px);
+}
+
+.cb-ranking {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.cb-ranking li {
+  display: grid;
+  grid-template-columns: 40px 36px 1fr;
+  grid-template-areas:
+    "rank face name"
+    "rank face stats";
+  align-items: center;
+  column-gap: 10px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--panel-sunken);
+}
+
+.cb-ranking li.is-first {
+  background: var(--gold-tint);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.cb-ranking li.is-me .cb-rank-name::after {
+  content: " (toi)";
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.cb-ranking .avatar {
+  grid-area: face;
+}
+
+.cb-rank {
+  grid-area: rank;
+  font-family: var(--font-card);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.cb-rank-name {
+  grid-area: name;
+  font-weight: 700;
+}
+
+.cb-rank-stats {
+  grid-area: stats;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.cb-over-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* L'accueil : la fiche du jeu et son illustration */
+.game-stage.is-arena {
+  background: linear-gradient(180deg, #7cc3ec 0%, #d8eef8 70%, #9c9384 100%);
+}
+
+.game-name.is-culbute {
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 #c0653a,
+    2px 2px 0 #b35a32,
+    3px 3px 0 #a5502b,
+    4px 4px 0 #974624,
+    5px 5px 0 #893c1d,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}
+
+.cb-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cb-preview .cb-pv-hit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cb-pv-burst 2.4s ease-in-out infinite;
+}
+
+.cb-preview .cb-pv-flyer {
+  animation: cb-pv-fly 2.4s ease-in-out infinite;
+}
+
+@keyframes cb-pv-burst {
+  0%,
+  100% {
+    transform: scale(0.85) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.12) rotate(12deg);
+  }
+}
+
+@keyframes cb-pv-fly {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(26px, -18px);
+  }
+}
+
+/* La boutique : une tenue */
+.cb-tenue-look {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+}
+
+.cb-tenue-prop {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* L'album : un Habitué et son accessoire */
+.tc-culbute-fighter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.tc-culbute-fighter .avatar {
+  width: 62% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+}
+
+.tc-culbute-prop {
+  position: absolute;
+  right: 10%;
+  bottom: 8%;
+  display: grid;
+  place-items: center;
+  width: 32%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 250, 236, 0.92);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.tc-culbute-prop svg {
+  width: 72%;
+  height: 72%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-preview .cb-pv-hit,
+  .cb-preview .cb-pv-flyer,
+  .cb-countdown,
+  .cb-dmg {
+    animation: none;
+  }
+}

@@ -317,6 +317,47 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Intouchable",
     description: "Gagner une partie sans être éliminé une seule fois.",
   },
+  // Culbute
+  {
+    id: "culbute-first-win",
+    game: "culbute",
+    chip: "1re",
+    tone: "red",
+    title: "Premier vol plané",
+    description: "Gagner un combat de Culbute.",
+  },
+  {
+    id: "culbute-regular",
+    game: "culbute",
+    chip: "25",
+    tone: "blue",
+    title: "Pilier de la place",
+    description: "Jouer 25 combats de Culbute.",
+  },
+  {
+    id: "culbute-flawless",
+    game: "culbute",
+    chip: "0",
+    tone: "green",
+    title: "Sans une égratignure",
+    description: "Gagner un combat aux vies (trois vies ou plus) sans en perdre une seule.",
+  },
+  {
+    id: "culbute-early",
+    game: "culbute",
+    chip: "<50",
+    tone: "black",
+    title: "Coup de maître",
+    description: "Sortir un adversaire qui avait moins de 50 %.",
+  },
+  {
+    id: "culbute-triple",
+    game: "culbute",
+    chip: "x3",
+    tone: "red",
+    title: "Jeu de quilles",
+    description: "Sortir trois adversaires ou plus dans un même combat.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -506,6 +547,25 @@ export function earnedEscarmoucheAchievements(o: EscarmoucheOutcome): string[] {
   add("escarmouche-knife", o.stats.knives >= 1);
   add("escarmouche-flag", o.stats.captures >= 1);
   add("escarmouche-untouchable", o.won && o.stats.deaths === 0);
+  return out;
+}
+
+export interface CulbuteOutcome {
+  won: boolean;
+  played: number;
+  mode: string;
+  stocks: number;
+  stats: { kos: number; lowKo: number; lostStock: number };
+}
+
+export function earnedCulbuteAchievements(o: CulbuteOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("culbute-first-win", o.won);
+  add("culbute-regular", o.played >= 25);
+  add("culbute-flawless", o.won && o.mode === "vies" && o.stocks >= 3 && o.stats.lostStock === 0);
+  add("culbute-early", o.stats.kos > 0 && o.stats.lowKo > 0 && o.stats.lowKo < 50);
+  add("culbute-triple", o.stats.kos >= 3);
   return out;
 }
 

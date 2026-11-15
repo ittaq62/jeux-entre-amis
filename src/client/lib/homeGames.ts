@@ -105,6 +105,16 @@ export const HOME_GAMES: HomeGame[] = [
     modal: "Ouvrir une table de Crampons",
   },
   {
+    id: "culbute",
+    name: "Culbute",
+    desc: "La bagarre des Habitués, en 3D vue de côté, de 2 à 8 : plus tes pourcents montent, plus tu voles loin. Fais sortir les autres de l'arène, reviens en sautant, accroche-toi au rebord. Ginette, Marcel, Huguette et les autres, ou ton propre personnage.",
+    keywords: "combat bagarre baston castagne plateformes arène habitués vies",
+    players: seats("culbute"),
+    quick: "Combat rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de Culbute",
+  },
+  {
     id: "escarmouche",
     name: "Escarmouche",
     desc: "Un jeu de tir à la première personne en 3D, de 2 à 8 soldats : chacun pour soi, en équipes, zone à tenir ou drapeau à ramener chez soi. Fusil d'assaut, pompe, précision et grenades, dans un hameau de pierre ou une gare de triage, à la souris ou au téléphone couché.",

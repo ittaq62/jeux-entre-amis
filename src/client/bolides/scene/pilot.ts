@@ -62,8 +62,8 @@ function shell(r: number, theta: number, gap = 0): THREE.BufferGeometry {
   return new THREE.SphereGeometry(r, 28, 14, Math.PI / 2 + gap, Math.PI * 2 - 2 * gap, 0, theta);
 }
 
-/** La coiffure (0 : rien), en une seule forme ; null si chauve */
-function hairGeometry(kind: number, hatCoversTop: boolean): THREE.BufferGeometry | null {
+/** La coiffure (0 : rien), en une seule forme ; null si chauve (sert aussi aux combattants de Culbute) */
+export function hairGeometry(kind: number, hatCoversTop: boolean): THREE.BufferGeometry | null {
   const parts: THREE.BufferGeometry[] = [];
   // La base de presque toutes les coiffures : une calotte sur le dessus et l'arrière, qui laisse le visage libre
   const base = () => {
@@ -135,8 +135,8 @@ function hairGeometry(kind: number, hatCoversTop: boolean): THREE.BufferGeometry
   return merged;
 }
 
-/** Le chapeau (0 : aucun), posé sur la tête */
-function hatGroup(kind: number, keep: Keep, shadows: boolean): THREE.Group | null {
+/** Le chapeau (0 : aucun), posé sur la tête (sert aussi aux combattants de Culbute) */
+export function hatGroup(kind: number, keep: Keep, shadows: boolean): THREE.Group | null {
   if (kind === 0) return null;
   const g = new THREE.Group();
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0) => {

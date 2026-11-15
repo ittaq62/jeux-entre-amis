@@ -20,6 +20,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { CramponsLook, isCramponsKind } from "../crampons/CramponsLook.tsx";
+import { TenueLook } from "../culbute/TenueLook.tsx";
 import { BombArt } from "../meche/bombs/BombArt.tsx";
 import { BombShow } from "../meche/bombs/BombShow.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
@@ -43,6 +44,7 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
   { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
   { kind: "bombe", game: "meche", title: "Mèche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
+  { kind: "tenue", game: "culbute", title: "Culbute", note: "Les tenues des Habitués, à choisir au salon avant le combat" },
   { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
 ];
 
@@ -69,6 +71,7 @@ export function ShopPage() {
     }
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} />;
     if (item.kind === "bombe") return <BombArt id={item.ref as BombId} className="bomb-thumb" />;
+    if (item.kind === "tenue") return <TenueLook item={item} />;
     if (item.kind === "camo") return <CamoSwatch camo={item.ref as CamoId} size={52} />;
     return null;
   };

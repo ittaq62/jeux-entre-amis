@@ -23,6 +23,7 @@ const CapitaleRoom = lazy(() => import("../capitale/CapitaleRoom.tsx").then((m) 
 const MecheRoom = lazy(() => import("../meche/MecheRoom.tsx").then((m) => ({ default: m.MecheRoom })));
 const BolidesRoom = lazy(() => import("../bolides/BolidesRoom.tsx").then((m) => ({ default: m.BolidesRoom })));
 const CramponsRoom = lazy(() => import("../crampons/CramponsRoom.tsx").then((m) => ({ default: m.CramponsRoom })));
+const CulbuteRoom = lazy(() => import("../culbute/CulbuteRoom.tsx").then((m) => ({ default: m.CulbuteRoom })));
 const EscarmoucheRoom = lazy(() => import("../escarmouche/EscarmoucheRoom.tsx").then((m) => ({ default: m.EscarmoucheRoom })));
 const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ default: m.TourRoom })));
 
@@ -71,6 +72,7 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
     game === "meche" ||
     game === "bolides" ||
     game === "crampons" ||
+    game === "culbute" ||
     game === "escarmouche"
   ) {
     return (
@@ -85,6 +87,8 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
           <MecheRoom code={code} />
         ) : game === "crampons" ? (
           <CramponsRoom code={code} />
+        ) : game === "culbute" ? (
+          <CulbuteRoom code={code} />
         ) : game === "escarmouche" ? (
           <EscarmoucheRoom code={code} />
         ) : (

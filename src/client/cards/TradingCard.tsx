@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEve
 import { CARDS, cardNumber, RARITY, type CardArt, type CardDef, type CardFamily } from "../../shared/cards.ts";
 import { SHIP_LENGTH } from "../../shared/games/naval/engine.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
+import { CulbuteCardArt } from "../culbute/CulbuteCardArt.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { Icon, type IconName } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
@@ -369,6 +370,7 @@ function Art({ art, width }: { art: CardArt; width: number }) {
   if (art.kind === "ship") return <ShipArt art={art} />;
   if (art.kind === "brick") return <BrickArt piece={art.piece} />;
   if (art.kind === "meche") return <MecheArt subject={art.subject} />;
+  if (art.kind === "culbute") return <CulbuteCardArt subject={art.subject} />;
   if (art.kind === "escarmouche") return <EscarmoucheArt subject={art.subject} />;
   if (art.kind === "builder") return <BuilderArt subject={art.subject} />;
   return (
@@ -400,6 +402,7 @@ const FAMILY_ICON: Record<CardFamily, IconName> = {
   briques: "layers",
   meche: "flame",
   crampons: "ball",
+  culbute: "smile",
   escarmouche: "shield",
 };
 

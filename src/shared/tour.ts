@@ -6,6 +6,7 @@ import type { BotLevel as BolidesBotLevel } from "./games/bolides/bot.ts";
 import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { CramponsConfig } from "./games/crampons/view.ts";
+import type { CulbuteConfig } from "./games/culbute/view.ts";
 import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
@@ -15,13 +16,13 @@ import type { Looks } from "./looks.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons", "escarmouche"];
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons", "escarmouche", "culbute"];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
  * l'hôte les coche s'il veut, ils ne le sont pas d'office
  */
 const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
-  (g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "escarmouche",
+  (g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "culbute" && g !== "escarmouche",
 );
 
 /** Nombre de joueurs qu'accueille chaque jeu */
@@ -33,6 +34,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   meche: { min: 2, max: 8 },
   bolides: { min: 2, max: 8 },
   crampons: { min: 2, max: 8 },
+  culbute: { min: 2, max: 8 },
   escarmouche: { min: 2, max: 8 },
 };
 
@@ -583,6 +585,25 @@ const ESCARMOUCHE_VARIANTS: VariantOf<EscarmoucheSettings>[] = [
   },
 ];
 
+const CULBUTE_VARIANTS: VariantOf<CulbuteConfig>[] = [
+  { id: "classique", name: "Aux vies", blurb: "Trois vies chacun, et quelques objets qui tombent du ciel.", settings: {} },
+  {
+    id: "temps",
+    name: "Au temps",
+    blurb: "Trois minutes : un point par adversaire sorti, un de moins à chaque chute.",
+    settings: { mode: "temps", minutes: 3 },
+  },
+  { id: "subite", name: "Mort subite", blurb: "Une seule vie, et tout le monde commence à 100 %.", settings: { mode: "subite" } },
+  { id: "sans-objets", name: "Sans objets", blurb: "Rien ne tombe du ciel : rien que les combattants.", settings: { items: "aucun" } },
+  { id: "pluie", name: "Pluie d'objets", blurb: "Il y a toujours quelque chose à ramasser.", settings: { items: "beaucoup" } },
+  {
+    id: "lune",
+    name: "Sur la lune",
+    blurb: "On saute plus haut et on retombe lentement : les combats durent en l'air.",
+    settings: { lune: true },
+  },
+];
+
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -591,6 +612,7 @@ const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   meche: MECHE_VARIANTS,
   bolides: BOLIDES_VARIANTS,
   crampons: CRAMPONS_VARIANTS,
+  culbute: CULBUTE_VARIANTS,
   escarmouche: ESCARMOUCHE_VARIANTS,
 };
 
@@ -641,6 +663,7 @@ export function variantSettings(game: "capitale", id: string | null | undefined)
 export function variantSettings(game: "meche", id: string | null | undefined): Partial<MecheSettings>;
 export function variantSettings(game: "bolides", id: string | null | undefined): Partial<BolidesSettings>;
 export function variantSettings(game: "crampons", id: string | null | undefined): Partial<CramponsConfig>;
+export function variantSettings(game: "culbute", id: string | null | undefined): Partial<CulbuteConfig>;
 export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);
@@ -888,6 +911,14 @@ const TITLE_RULES: TitleRule[] = [
     score: (c) => {
       const n = sum(c, "crampons", "myGoals");
       return n >= 2 ? { value: n, stat: `${n}`, unit: "buts marqués sur le terrain" } : null;
+    },
+  },
+  {
+    id: "cogneur",
+    label: "Le cogneur",
+    score: (c) => {
+      const n = sum(c, "culbute", "kos");
+      return n >= 3 ? { value: n, stat: `${n}`, unit: "adversaires sortis de l'arène" } : null;
     },
   },
   {

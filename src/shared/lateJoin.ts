@@ -28,6 +28,7 @@ export function intentQuery(intent: ArrivalIntent): string {
 export const JOINS_STARTED: Record<TableGame, boolean> = {
   tour: true,
   crampons: true,
+  culbute: false,
   escarmouche: true,
   uno: false,
   naval: false,

@@ -18,6 +18,7 @@
       { "name": "MECHE", "class_name": "MecheRoom" },
       { "name": "BOLIDES", "class_name": "BolidesRoom" },
       { "name": "CRAMPONS", "class_name": "CramponsRoom" },
+      { "name": "CULBUTE", "class_name": "CulbuteRoom" },
       { "name": "ESCARMOUCHE", "class_name": "EscarmoucheRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" },
@@ -33,6 +34,7 @@
     { "tag": "v7", "new_sqlite_classes": ["BolidesRoom"] },
     { "tag": "v8", "new_sqlite_classes": ["CramponsRoom"] },
     { "tag": "v9", "new_sqlite_classes": ["EscarmoucheRoom"] },
+    { "tag": "v10", "new_sqlite_classes": ["CulbuteRoom"] },
   ],
   "d1_databases": [
     {

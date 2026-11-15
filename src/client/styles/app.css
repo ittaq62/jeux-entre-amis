@@ -4077,6 +4077,10 @@ h3 .hint {
   --art: linear-gradient(165deg, #3d9150 0%, #164a24 100%);
 }
 
+.game-ticket.is-culbute {
+  --art: linear-gradient(165deg, #d9893b 0%, #6b3518 100%);
+}
+
 .game-ticket.is-escarmouche {
   --art: linear-gradient(165deg, #8a6a4a 0%, #2d2620 100%);
 }

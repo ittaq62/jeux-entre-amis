@@ -18,6 +18,7 @@ import { BolidesRoom } from "./bolidesRoom.ts";
 import { BricksRoom } from "./bricksRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
+import { CulbuteRoom } from "./culbuteRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -36,6 +37,7 @@ const GAMES: { game: GameId; Room: RoomClass; bots: boolean }[] = [
   { game: "meche", Room: MecheRoom as unknown as RoomClass, bots: true },
   { game: "bolides", Room: BolidesRoom as unknown as RoomClass, bots: true },
   { game: "crampons", Room: CramponsRoom as unknown as RoomClass, bots: false },
+  { game: "culbute", Room: CulbuteRoom as unknown as RoomClass, bots: true },
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
 ];
 
@@ -48,6 +50,7 @@ const DRAWN_TOGGLE: Record<GameId, string> = {
   meche: "passes",
   bolides: "items",
   crampons: "draw",
+  culbute: "lune",
   escarmouche: "hardcore",
 };
 
@@ -138,6 +141,7 @@ const FINISH: Record<GameId, (room: Record<string, (...a: unknown[]) => unknown>
     meche: (room) => room.finishGame!(Date.now()),
     bolides: (room) => room.finishGame!(Date.now()),
     crampons: (room) => room.finishGame!(Date.now()),
+    culbute: (room) => room.finishGame!(Date.now()),
     escarmouche: (room) => room.finishGame!(Date.now()),
   };
 

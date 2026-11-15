@@ -29,6 +29,7 @@ export function gameStub(env: Env, game: GameId, code: string) {
   if (game === "meche") return env.MECHE.get(env.MECHE.idFromName(code));
   if (game === "bolides") return env.BOLIDES.get(env.BOLIDES.idFromName(code));
   if (game === "crampons") return env.CRAMPONS.get(env.CRAMPONS.idFromName(code));
+  if (game === "culbute") return env.CULBUTE.get(env.CULBUTE.idFromName(code));
   if (game === "escarmouche") return env.ESCARMOUCHE.get(env.ESCARMOUCHE.idFromName(code));
   return env.ROOMS.get(env.ROOMS.idFromName(code));
 }

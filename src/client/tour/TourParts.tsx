@@ -59,6 +59,8 @@ export function GameTicket({
             <BolidesArt />
           ) : game === "crampons" ? (
             <CramponsArt />
+          ) : game === "culbute" ? (
+            <CulbuteArt />
           ) : game === "escarmouche" ? (
             <EscarmoucheArt />
           ) : (
@@ -81,6 +83,28 @@ function EscarmoucheArt() {
       <path d="M12 50H76L72 56H16Z" fill="#454b33" />
       <path d="M22 41H66" stroke="#c8392d" strokeWidth="4" />
       <path d="M30 28C34 24 40 23 44 23" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.5" fill="none" />
+    </>
+  );
+}
+
+/** Un habitué qui s'envole, et l'étoile du coup qui l'a fait culbuter */
+function CulbuteArt() {
+  return (
+    <>
+      <ellipse cx="34" cy="64" rx="26" ry="3.4" fill="rgba(0,0,0,0.25)" />
+      <path d="M10 60H58" stroke="#fbf5e6" strokeWidth="3" strokeLinecap="round" />
+      <path
+        d="M44 22L50 32L62 30L54 38L60 48L48 44L44 56L40 44L28 48L34 38L26 30L38 32Z"
+        fill="#ffd25a"
+        stroke="#ff9a3a"
+        strokeWidth="1.4"
+      />
+      <g transform="rotate(28 76 30)">
+        <circle cx="76" cy="20" r="9" fill="#ffdbb4" />
+        <rect x="69" y="29" width="14" height="16" rx="5" fill="#c2185b" />
+        <path d="M70 34L62 28M82 34L90 26M72 45L68 54M80 45L86 52" stroke="#fbf5e6" strokeWidth="3" strokeLinecap="round" />
+      </g>
+      <path d="M56 26H64M54 34H62" stroke="#fbf5e6" strokeWidth="1.8" strokeLinecap="round" opacity="0.8" />
     </>
   );
 }
