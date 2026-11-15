@@ -1,7 +1,16 @@
-import { KEY_HELP } from "./controls.ts";
+import { bindingText, loadSettings, type CulbuteSettings } from "./bindings.ts";
 
-/** Comment on joue : la règle en deux phrases, puis les commandes au clavier, à la manette et au doigt */
-export function HowToPlay({ compact = false }: { compact?: boolean }) {
+/** Comment on joue : la règle en deux phrases, puis les commandes (celles réglées sur cet appareil), à la manette et au doigt */
+export function HowToPlay({ compact = false, settings }: { compact?: boolean; settings?: CulbuteSettings }) {
+  const s = settings ?? loadSettings();
+  const move = [bindingText(s, "left"), bindingText(s, "right"), bindingText(s, "up"), bindingText(s, "down")];
+  const rows = [
+    { keys: move.join(" · "), what: "Se déplacer (et diriger les coups)" },
+    { keys: bindingText(s, "attack"), what: "Frapper (tenir : coup chargé)" },
+    { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
+    { keys: bindingText(s, "jump"), what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi)" : ""}` },
+    { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive)" },
+  ];
   return (
     <div className={`cb-howto ${compact ? "is-compact" : ""}`}>
       <p>
@@ -12,16 +21,16 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <>
           <ul className="cb-keys">
-            {KEY_HELP.map((k) => (
-              <li key={k.keys}>
+            {rows.map((k) => (
+              <li key={k.what}>
                 <kbd>{k.keys}</kbd>
                 <span>{k.what}</span>
               </li>
             ))}
           </ul>
           <p className="hint">
-            Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Le stick
-            vers le bas en l'air fait tomber plus vite ; sur une plateforme fine, un coup vers le bas la traverse.
+            Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Vers le bas
+            en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers.
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, B pour le spécial, une gâchette pour la garde. Au doigt : le pouce

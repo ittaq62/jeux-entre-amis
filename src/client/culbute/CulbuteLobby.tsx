@@ -8,6 +8,7 @@ import { TOUR_TEAMS } from "../../shared/tour.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { CommandsButton } from "./CommandsPanel.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FighterPicker, pickLabel } from "./FighterPicker.tsx";
 
@@ -85,6 +86,7 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
           <HowToPlay compact />
+          <CommandsButton />
 
           <RandomRulesField room={room} game="culbute" send={send} />
 

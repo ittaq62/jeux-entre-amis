@@ -9,6 +9,8 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { loadSettings, type CulbuteSettings } from "./bindings.ts";
+import { CommandsPanel } from "./CommandsPanel.tsx";
 import { CulbuteGameOver } from "./CulbuteGameOver.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FightRuntime, type HudState } from "./runtime.ts";
@@ -39,8 +41,6 @@ const SOUNDS: SoundName[] = [
   "tourApplause",
   "bolidesSpring",
 ];
-
-const STICK_KEY = "culbute-saut-au-stick";
 
 /** Le dessin de chaque combattant, d'après les sièges de la table */
 export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[] {
@@ -241,7 +241,10 @@ export function CulbuteFight({
   const [hud, setHud] = useState<HudState | null>(null);
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
-  const [stickJump, setStickJump] = useState(() => localStorage.getItem(STICK_KEY) === "1");
+  const [commands, setCommands] = useState(false);
+  const [settings, setSettings] = useState<CulbuteSettings>(loadSettings);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [touch, setTouch] = useState(() => window.matchMedia?.("(pointer: coarse)").matches ?? false);
   const bridge = useTourBridge();
   const view = room.culbute!;
@@ -272,7 +275,7 @@ export function CulbuteFight({
         }
       },
     });
-    rt.controls.stickJump = stickJump;
+    rt.controls.setSettings(settingsRef.current);
     runtime.current = rt;
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
     return () => {
@@ -293,13 +296,12 @@ export function CulbuteFight({
   }, [looksKey]);
 
   useEffect(() => {
-    runtime.current?.setPaused(menu || help);
-  }, [menu, help]);
+    runtime.current?.setPaused(menu || help || commands);
+  }, [menu, help, commands]);
 
   useEffect(() => {
-    if (runtime.current) runtime.current.controls.stickJump = stickJump;
-    localStorage.setItem(STICK_KEY, stickJump ? "1" : "0");
-  }, [stickJump]);
+    runtime.current?.controls.setSettings(settings);
+  }, [settings]);
 
   // Au premier doigt posé, les commandes tactiles s'affichent
   useEffect(() => {
@@ -395,7 +397,7 @@ export function CulbuteFight({
           <div className="cb-touch-buttons">
             <TouchButton runtime={runtime} which="atk" label="Frapper" className="is-atk" />
             <TouchButton runtime={runtime} which="spc" label="Spécial" className="is-spc" />
-            {!stickJump && <TouchButton runtime={runtime} which="jmp" label="Saut" className="is-jmp" />}
+            {!settings.stickJump && <TouchButton runtime={runtime} which="jmp" label="Saut" className="is-jmp" />}
             <span className="cb-touch-tip">Frapper + Spécial : garde</span>
           </div>
         </div>
@@ -406,12 +408,9 @@ export function CulbuteFight({
           <button className="btn btn-ghost" onClick={() => (setHelp(true), setMenu(false))}>
             Comment jouer
           </button>
-          {touch && (
-            <label className="cb-menu-row">
-              <input type="checkbox" checked={stickJump} onChange={(e) => setStickJump(e.target.checked)} />
-              <span>Sauter en poussant le stick vers le haut (sans bouton Saut)</span>
-            </label>
-          )}
+          <button className="btn btn-ghost" onClick={() => (setCommands(true), setMenu(false))}>
+            Commandes
+          </button>
           {!bridge && room.status === "playing" && (
             <button className="btn btn-ghost" onClick={() => (onShowLobby(), setMenu(false))}>
               Voir le salon
@@ -428,13 +427,15 @@ export function CulbuteFight({
         <div className="cb-help-backdrop" onClick={() => setHelp(false)}>
           <div className="panel panel-pad cb-help" onClick={(e) => e.stopPropagation()}>
             <h2>Comment jouer</h2>
-            <HowToPlay />
+            <HowToPlay settings={settings} />
             <button className="btn btn-primary" onClick={() => setHelp(false)}>
               Compris
             </button>
           </div>
         </div>
       )}
+
+      {commands && <CommandsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setCommands(false)} />}
 
       {finished && view.ranks && (
         <CulbuteGameOver room={room} view={view} looks={looks} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />

@@ -48,6 +48,8 @@ export class CulbuteScene {
   private trailAt = new Map<number, number>();
   private sphereGeo: THREE.SphereGeometry | null = null;
   private starGeo: THREE.ShapeGeometry | null = null;
+  /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
+  fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
 
   constructor(host: HTMLElement, arena: ArenaId, scale: number, looks: FighterLook[]) {
     this.keep = <T extends { dispose: () => void }>(x: T) => {
@@ -316,6 +318,14 @@ export class CulbuteScene {
 
   /** Garder tout le monde à l'écran, d'assez près */
   private updateCamera(dt: number, frame: RenderFrame) {
+    if (this.fixedCam) {
+      const c = this.fixedCam;
+      this.camera.position.set(c.x, c.y, c.z);
+      this.camera.lookAt(c.tx, c.ty, c.tz);
+      this.sun.position.set(c.tx + 6, c.ty + 14, 10);
+      this.sun.target.position.set(c.tx, c.ty, 0);
+      return;
+    }
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
