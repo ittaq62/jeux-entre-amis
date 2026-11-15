@@ -3837,8 +3837,9 @@
 }
 
 .cap-build.is-phone .cap-build-card {
-  width: 62px;
-  padding: 3px 2px 4px;
+  width: 56px;
+  padding: 2px 2px 3px;
+  border-radius: 10px;
 }
 
 .cap-build.is-phone .cap-build-card-name {

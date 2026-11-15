@@ -413,10 +413,11 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
                   onClick={() => (setTool({ kind: "place", build: k, rot: 0 }), setSelected(null), setCursor(null))}
                   title={why ?? info.effect}
                 >
-                  <img src={buildThumb(k, square, color, 96)} alt="" width={phone ? 38 : 48} height={phone ? 38 : 48} draggable={false} />
+                  <img src={buildThumb(k, square, color, 96)} alt="" width={phone ? 32 : 48} height={phone ? 32 : 48} draggable={false} />
                   <span className="cap-build-card-name">{info.name}</span>
                   <span className="cap-build-card-meta">
-                    {info.w}×{info.d} · <span className="num">{money(buildCost(k, square))}</span>
+                    {!phone && `${info.w}×${info.d} · `}
+                    <span className="num">{money(buildCost(k, square))}</span>
                   </span>
                 </button>
               );

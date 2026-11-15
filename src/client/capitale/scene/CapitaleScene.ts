@@ -1102,9 +1102,16 @@ export class CapitaleScene {
     if (!this.builder || !TERRITORIES[square]) return;
     const box = this.builder.areaBox(square, this.state?.deeds[square] as never);
     const size = Math.max(box.w, box.d);
-    const zoom = THREE.MathUtils.clamp((size * 2.2) / (L.BOARD + 1), ZOOM_MIN_BUILDER, 1);
+    const zoom = THREE.MathUtils.clamp((size * (this.opts.phone ? 2.6 : 2.2)) / (L.BOARD + 1), ZOOM_MIN_BUILDER, 1);
     this.zoom = zoom;
-    this.pan.set(box.x + box.w / 2 - this.baseTarget.x, 0, box.z + box.d / 2 - this.baseTarget.z);
+    // Le chantier occupe le bas de l'écran : la ville se montre au-dessus (la cible avance vers la caméra)
+    const yaw = this.targetYaw();
+    const lift = size * (this.opts.phone ? 0.75 : 0.45);
+    this.pan.set(
+      box.x + box.w / 2 + Math.sin(yaw) * lift - this.baseTarget.x,
+      0,
+      box.z + box.d / 2 + Math.cos(yaw) * lift - this.baseTarget.z,
+    );
     this.clampPan();
     this.closeUp = null;
     this.pendingFollow = null;
