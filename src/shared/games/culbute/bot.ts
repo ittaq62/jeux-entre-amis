@@ -2,8 +2,8 @@
 // les éjecte, choisissent leur coup selon où est l'adversaire, se protègent quand ça chauffe, ramassent les objets.
 // Le niveau règle la vitesse de réaction, l'envie d'attaquer, la garde et la justesse.
 
-import { ARENAS, ledgesOf, type ArenaId } from "./arenas.ts";
-import { moveDef } from "./engine.ts";
+import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
+import { gravityOf, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
 import { ATK, JMP, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
@@ -214,6 +214,9 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     return out();
   }
 
+  // Il attend plus haut, posé sur une plateforme : on y monte (et, juste en dessous, on finit de monter)
+  if ((dy > 1.4 || (dy > 0.3 && airborne(me) && me.jumps > 0)) && climb(f, me, m, t)) return out();
+
   // Trop loin : on approche (ou on tire de loin)
   if (adx > r + 0.2 || Math.abs(dy) > 2.2) {
     const ranged = me.style === "raymond" || me.style === "lucien" || me.style === "huguette" || me.style === "ginette";
@@ -306,6 +309,70 @@ function nearest(me: Fighter, foes: Fighter[]): Fighter | null {
     }
   }
   return best;
+}
+
+/** La hauteur que gagne un grand saut depuis le sol, et un saut en l'air pris au sommet (avec un peu de marge) */
+function jumpReach(f: Fight, me: Fighter): { first: number; air: number } {
+  const st = STYLES[me.style];
+  const g = st.gravity * gravityOf(f);
+  const k = jumpOf(f, me);
+  const v1 = st.jump * k;
+  const v2 = st.airJump * k;
+  return { first: ((v1 * v1) / (2 * g)) * 0.9, air: ((v2 * v2) / (2 * g)) * 0.9 };
+}
+
+/**
+ * L'adversaire attend sur une plateforme plus haute (le toit du kiosque, une poutre) : on le rejoint, d'un grand saut
+ * puis d'un saut en l'air vers le sommet. Si c'est trop haut d'ici, on passe d'abord par une plateforme entre les deux
+ * (un banc, un étal). Faux s'il n'y a pas de chemin : il fait alors comme avant (il tape par en dessous).
+ */
+function climb(f: Fight, me: Fighter, m: BotMemory, t: Fighter): boolean {
+  if (airborne(t)) return false;
+  const plats = platformsAt(f.arena as ArenaId, f.scale, f.frame);
+  const top = plats[t.ground];
+  if (!top || top.kind === "solid") return false;
+  const st = STYLES[me.style];
+  const { first, air } = jumpReach(f, me);
+  const g = st.gravity * gravityOf(f);
+  // Jusqu'où il peut monter d'ici : l'élan qui lui reste, plus ses sauts
+  const rise = airborne(me) ? (Math.max(0, me.vy) ** 2 / (2 * g)) * 0.9 : first;
+  const reach = me.y + rise + (me.jumps > 0 ? air : 0);
+  let goal: PlatformNow | undefined = top;
+  if (reach < top.y + 0.3) {
+    // Une marche : une plateforme fine, plus haute que lui (en l'air : où il peut encore se poser) et à sa portée, la
+    // plus proche de celle de l'adversaire
+    const gap = (p: PlatformNow) => Math.max(0, p.x0 - top.x1, top.x0 - p.x1);
+    const above = airborne(me) ? me.y - 2.5 : me.y + 0.5;
+    goal = plats
+      .filter((p) => p !== top && p.kind !== "solid" && p.y > above && p.y < top.y && p.y <= reach - 0.3)
+      .sort((a, b) => gap(a) - gap(b) || b.y - a.y)[0];
+    if (!goal) return false;
+  }
+  // Où se poser dessus : au plus près, sans frôler le bord
+  const aim = Math.min(Math.max(goal === top ? t.x : me.x, goal.x0 + 0.5), goal.x1 - 0.5);
+  const dx = aim - me.x;
+  const dir = dx < 0 ? -1 : 1;
+  if (!airborne(me)) {
+    m.x = Math.abs(dx) > 0.3 ? dir : 0;
+    // Trop loin pour sauter dès maintenant : il s'en approche en courant (mais saute avant le bord d'un banc)
+    const on = plats[me.ground];
+    const edge = on && on.kind !== "solid" ? (dir > 0 ? on.x1 - me.x : me.x - on.x0) : Infinity;
+    if (Math.abs(dx) > 2.5 && edge > 1) {
+      m.next = Math.min(m.next, f.frame + 3);
+      return true;
+    }
+    // Un grand saut : le bouton tenu jusqu'au décollage
+    m.press = JMP;
+    m.held = JMP;
+    m.holdUntil = f.frame + JUMPSQUAT + 3;
+    return true;
+  }
+  m.x = Math.abs(dx) > 0.25 ? dir : 0;
+  // Pas encore au-dessus : le saut en l'air, au sommet du premier
+  if (me.y < goal.y + 0.2 && me.jumps > 0 && me.vy < 1) m.press = JMP;
+  // En l'air, il se reprend à chaque instant (le bon moment pour le second saut, l'endroit où se poser)
+  m.next = f.frame + 1;
+  return true;
 }
 
 function offstage(ft: Fighter, st: { x0: number; x1: number; y: number }): boolean {

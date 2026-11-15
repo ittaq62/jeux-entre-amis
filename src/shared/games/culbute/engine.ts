@@ -46,7 +46,7 @@ export const SHIELD_MAX = 50;
 const SHIELD_WEAR = 0.13;
 const SHIELD_REGEN = 0.09;
 const SHIELD_BREAK_STUN = 150;
-const JUMPSQUAT = 4;
+export const JUMPSQUAT = 4;
 const LAND_LAG = 4;
 const HELPLESS_LAG = 10;
 const SHIELD_DROP = 6;
@@ -99,8 +99,8 @@ const styleOf = (ft: Fighter): Style => STYLES[ft.style];
 /** Sur la lune : moins de pesanteur, des sauts un peu moins vifs (ils portent quand même plus haut) */
 const LUNE_GRAVITY = 0.55;
 const LUNE_JUMP = 0.8;
-const gravityOf = (f: Fight) => (f.settings.lune ? LUNE_GRAVITY : 1);
-const jumpOf = (f: Fight, ft: Fighter) => (f.settings.lune ? LUNE_JUMP : 1) * (ft.fastUntil > f.frame ? 1.1 : 1);
+export const gravityOf = (f: Fight) => (f.settings.lune ? LUNE_GRAVITY : 1);
+export const jumpOf = (f: Fight, ft: Fighter) => (f.settings.lune ? LUNE_JUMP : 1) * (ft.fastUntil > f.frame ? 1.1 : 1);
 
 // ---------------------------------------------------------------------------
 // La création du combat

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ArenaId } from "./arenas.ts";
 import { botInput, newBotMemory, type BotLevel } from "./bot.ts";
 import { createFight, DEFAULT_FIGHT_SETTINGS, stepFight } from "./engine.ts";
-import { HABITUE_IDS, type Fight, type FightEvent, type HabitueId } from "./model.ts";
+import { HABITUE_IDS, type Fight, type FightEvent, type Fighter, type HabitueId } from "./model.ts";
 
 function botFight(styles: HabitueId[], arena: ArenaId = "place", items: "aucun" | "peu" | "beaucoup" = "peu", seed = 1) {
   const f = createFight(
@@ -67,6 +67,37 @@ describe("Culbute : les bots", () => {
       }
     }
     expect(back / tries).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it("montent rejoindre celui qui attend en hauteur (le toit du kiosque, en passant par un banc)", () => {
+    let up = 0;
+    for (const style of HABITUE_IDS) {
+      for (const lune of [false, true]) {
+        const f = createFight(
+          { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", lune },
+          "place",
+          [
+            { id: "bot", team: 0, style },
+            { id: "idle", team: 1, style: "marcel" },
+          ],
+          4,
+        );
+        const mem = newBotMemory(7);
+        while (f.phase === "intro") stepFight(f, []);
+        const [me, idle] = f.fighters as [Fighter, Fighter];
+        // L'un au sol, loin ; l'autre immobile sur le toit du kiosque (la plateforme 3 de la place)
+        Object.assign(me, { x: -6, y: 0, ground: 0, state: "stand", vx: 0, vy: 0 });
+        Object.assign(idle, { x: 0, y: 5.1, ground: 3, state: "stand", vx: 0, vy: 0 });
+        let reached = false;
+        for (let k = 0; k < 10 * 60 && !reached; k++) {
+          stepFight(f, [botInput(f, 0, mem, "moyen"), { x: 0, y: 0, held: 0, pressed: 0 }]);
+          reached = me.ground === 3;
+        }
+        if (reached) up++;
+        else console.log("pas monté :", style, lune ? "(lune)" : "");
+      }
+    }
+    expect(up).toBeGreaterThanOrEqual(HABITUE_IDS.length * 2 - 1);
   });
 
   it("ne se jettent pas dans le vide tout seuls", () => {
