@@ -1793,6 +1793,58 @@
   background: transparent;
 }
 
+/* Salon : la liste des bâtiments spéciaux, repliée sous les règles maison */
+.cap-special-rules summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cap-special-rules summary:hover {
+  color: var(--gold-light);
+}
+
+.cap-special-rules ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.cap-special-rules li {
+  display: contents;
+}
+
+.cap-special-rules li.is-nuisance strong {
+  color: var(--danger);
+}
+
+.cap-special-rules .num {
+  font-family: var(--font-card);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cap-special-rules li.cap-special-limits {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
+  .cap-special-rules ul {
+    grid-template-columns: auto 1fr;
+  }
+
+  .cap-special-rules .hint {
+    grid-column: 1 / -1;
+    margin-bottom: 4px;
+  }
+}
+
 .cap-specials {
   margin: 16px 16px 0;
   padding-top: 12px;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { teamName } from "../../shared/games/capitale/board.ts";
+import { GROUPS, SPECIAL_ORDER, specialPrice, SPECIALS, teamName } from "../../shared/games/capitale/board.ts";
 import type { BotLevel, CapitaleSettings, EndMode, TeamCount } from "../../shared/games/capitale/engine.ts";
 import { TOKENS, type TokenId } from "../../shared/games/capitale/tokens.ts";
 import { SHOP_BY_ID, tokenItem } from "../../shared/shop.ts";
@@ -38,6 +38,35 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   { key: "noRentInJail", label: "Pas de loyer en prison", desc: "Un propriétaire derrière les barreaux ne touche plus ses loyers." },
   { key: "quickStart", label: "Départ rapide", desc: "Chacun reçoit deux titres tirés au sort pour commencer." },
 ];
+
+/** Le monument vaut quatre niveaux de son quartier : de 200 (brun, ciel) à 800 (vert, bleu) */
+const LEVEL_COSTS = Object.values(GROUPS).map((g) => g.houseCost);
+const MONUMENT_PRICES = `${4 * Math.min(...LEVEL_COSTS)} à ${4 * Math.max(...LEVEL_COSTS)}`;
+
+/** Les bâtiments spéciaux, leur prix et leur effet, repliés sous les règles maison */
+function SpecialRules({ monopoly }: { monopoly: boolean }) {
+  return (
+    <details className="cap-special-rules">
+      <summary>Les cinq bâtiments, leur prix et leur effet</summary>
+      <ul>
+        {SPECIAL_ORDER.map((k) => (
+          <li key={k} className={SPECIALS[k].nuisance ? "is-nuisance" : ""}>
+            <strong>{SPECIALS[k].name}</strong>
+            <span className="num">{k === "monument" ? MONUMENT_PRICES : specialPrice(k, 0)} ₣</span>
+            <span className="hint">
+              {SPECIALS[k].where} {SPECIALS[k].effect}
+            </span>
+          </li>
+        ))}
+        <li className="cap-special-limits hint">
+          Un bâtiment par rue et un seul par tour, un stade par joueur, rien sur une rue hypothéquée. Le propriétaire fait raser une
+          nuisance à son prix ; ses propres bâtiments se revendent à moitié prix et bloquent l'échange et l'hypothèque de leur rue.
+          {monopoly && " Au Monopole, seuls les titres comptent : un bâtiment ne remplace pas une rue."}
+        </li>
+      </ul>
+    </details>
+  );
+}
 
 interface Props {
   room: CapitaleRoomView;
@@ -171,6 +200,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                 </div>
               ))}
             </div>
+            {s.specials && <SpecialRules monopoly={Boolean(s.monopoly)} />}
             <p className="hint" style={{ margin: 0 }}>
               La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au gratte-ciel. Au-delà de l'immeuble, il faut
               tout le quartier. Le reste suit la règle : enchères, prison, hypothèques.
