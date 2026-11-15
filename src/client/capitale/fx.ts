@@ -1,4 +1,4 @@
-import { DECKS, type DeckId } from "../../shared/games/capitale/board.ts";
+import { DECKS, SPECIALS, type DeckId } from "../../shared/games/capitale/board.ts";
 import type { CapitaleEvent } from "../../shared/games/capitale/engine.ts";
 import { eventTimes } from "../../shared/games/capitale/timing.ts";
 import { play, type SoundName } from "../lib/sound.ts";
@@ -110,8 +110,10 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
           play("capBills", { delay, rate: 0.9 });
         } else if (e.reason === "sell" || e.reason === "mortgage") {
           play("capCoins", { delay, volume: 0.7 });
-        } else if (e.reason === "unmortgage") {
+        } else if (e.reason === "unmortgage" || e.reason === "special") {
           play("capBills", { delay });
+        } else if (e.reason === "ticket") {
+          play("capCoins", { delay, rate: 1.1 });
         }
         return;
       }
@@ -141,6 +143,14 @@ export function playCapitaleEvents(events: CapitaleEvent[], seat: string | null)
         return;
       case "sell":
         play("cardSlide", { delay });
+        return;
+      case "special":
+        // Le chantier sonne quand le bâtiment sort de terre (la scène 3D) ; une nuisance s'annonce en plus
+        if (SPECIALS[e.kind].nuisance) play("wild", { delay, volume: 0.5 });
+        return;
+      case "raze":
+        // Revendu ou rasé à ses frais ; rien pour ce qui disparaît d'office (faillite, rue reprise)
+        if (e.how !== "auto") play("cardSlide", { delay });
         return;
       case "trade":
         if (e.status === "proposed") play("pop", { delay });
