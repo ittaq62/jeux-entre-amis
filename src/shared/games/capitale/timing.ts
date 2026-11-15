@@ -40,6 +40,14 @@ function durationOf(e: CapitaleEvent): number {
       return e.hits.length > 0 || e.title !== undefined ? 1100 : 400;
     case "buyout":
       return 700;
+    case "build":
+      // Builder : le bâtiment sort de terre (les travaux des autres ne font attendre personne : voir le salon)
+      return 360;
+    case "demolish":
+      return e.how === "auto" ? 0 : 240;
+    case "relocate":
+    case "annex":
+      return 160;
     case "reshuffle":
       return 450;
     case "buy":

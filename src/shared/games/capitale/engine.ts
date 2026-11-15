@@ -38,6 +38,29 @@ import {
   type MonopolyKind,
   type SpecialKind,
 } from "./board.ts";
+import {
+  annexCost,
+  annexedOf,
+  annexProblem,
+  builderHasStadium,
+  builderRent,
+  builtCities,
+  buildCost,
+  cityHasStadium,
+  demolishProblem,
+  hasMonument,
+  knockable,
+  landValue,
+  levelEquivalent,
+  lotOf,
+  lotRefund,
+  lotValue,
+  placeProblem,
+  refundOf,
+  relocateProblem,
+  type BuildKind,
+  type Placed,
+} from "./builder.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
 export type EndMode = "bankrupt" | "timed";
@@ -72,6 +95,11 @@ export interface CapitaleSettings {
   evenBuild: boolean;
   /** Monopole : trois quartiers complets, un côté entier du plateau ou les quatre gares, et la partie s'arrête net */
   monopoly: boolean;
+  /**
+   * Builder : au centre du plateau, chaque ville a son territoire en cases, où l'on pose ses bâtiments librement (à tout
+   * moment), et le loyer suit ce qu'on y a bâti. Absent d'une partie d'avant : c'est la Capitale classique.
+   */
+  builder?: boolean;
   botLevel: BotLevel;
   /** À une table : le nombre d'équipes (0, chacun pour soi). En tournée, ce sont les équipes de la tournée */
   teamCount: TeamCount;
@@ -98,6 +126,7 @@ export const DEFAULT_SETTINGS: CapitaleSettings = {
   disasters: true,
   evenBuild: true,
   monopoly: false,
+  builder: false,
   botLevel: "moyen",
   teamCount: 0,
   teamRent: "free",
@@ -131,6 +160,9 @@ export function newRules(s: { settings: Partial<CapitaleSettings> }) {
   };
 }
 
+/** La partie se joue-t-elle en Builder (les bâtiments posés sur la carte) ? */
+export const isBuilder = (s: { settings: Partial<CapitaleSettings> }) => s.settings.builder === true;
+
 /** Le bâtiment spécial d'une rue, et qui l'a posé (le propriétaire, ou l'adversaire d'une nuisance) */
 export interface Special {
   kind: SpecialKind;
@@ -144,6 +176,10 @@ export interface Deed {
   level?: number;
   /** Les terrains : un bâtiment spécial au plus */
   special?: Special | null;
+  /** Builder : les bâtiments posés sur le territoire de la ville */
+  lot?: Placed[];
+  /** Builder : les cases de terrain vague annexées par la ville */
+  annexed?: number[];
 }
 
 export interface CapitaleStats {
@@ -205,7 +241,9 @@ export type MoneyReason =
   /** Un rachat : le prix va au propriétaire */
   | "buyout"
   /** Une expropriation : la banque paie le titre */
-  | "expropriation";
+  | "expropriation"
+  /** Builder : une case de terrain vague annexée */
+  | "annex";
 
 export interface Offer {
   cash: number;
@@ -310,6 +348,8 @@ export interface CapitaleState {
   rng: number;
   /** Dés imposés, pour les tests seulement : le salon ne s'en sert jamais */
   rigged?: [number, number][];
+  /** Builder : le numéro du dernier bâtiment posé */
+  buildSeq?: number;
 }
 
 export type CapitaleEvent =
@@ -341,12 +381,18 @@ export type CapitaleEvent =
       type: "disaster";
       player: string;
       kind: DisasterKind;
-      hits: { square: number; owner: string; level: number }[];
+      /** En Builder : `level` est le nombre de bâtiments qui restent, `building` celui qui est tombé */
+      hits: { square: number; owner: string; level: number; building?: Placed }[];
       title?: number;
       to?: string;
     }
   /** Un rachat : la ville passe à celui qui l'a rachetée, le prix va à son ancien propriétaire */
   | { type: "buyout"; player: string; from: string; square: number; price: number }
+  /** Builder : un bâtiment posé, déplacé (ou tourné), démoli (revendu, ou d'office à la faillite), une case annexée */
+  | { type: "build"; player: string; square: number; building: Placed; price: number }
+  | { type: "relocate"; player: string; square: number; building: Placed }
+  | { type: "demolish"; player: string; square: number; building: Placed; how: "sell" | "auto" }
+  | { type: "annex"; player: string; square: number; cell: number; price: number }
   | { type: "jail"; player: string; reason: "square" | "card" | "doubles" }
   | { type: "leaveJail"; player: string; how: "pay" | "card" | "doubles" | "forced" }
   | { type: "debt"; player: string; amount: number; creditor: Account }
@@ -385,6 +431,11 @@ export type CapitaleAction =
   | { type: "cancel"; trade: number }
   /** Donner à un coéquipier (règle des dons) */
   | { type: "gift"; to: string; give: Offer }
+  /** Builder : poser un bâtiment, le déplacer (ou le tourner), le démolir, annexer une case de terrain vague */
+  | { type: "build"; square: number; kind: BuildKind; x: number; z: number; rot: number }
+  | { type: "relocate"; square: number; id: number; x: number; z: number; rot: number }
+  | { type: "demolish"; square: number; id: number }
+  | { type: "annex"; square: number; cell: number }
   | { type: "bankrupt" }
   | { type: "endTurn" };
 
@@ -608,6 +659,8 @@ export function districtSpecials(s: CapitaleState, group: GroupId): (Special & {
 
 /** Ce qu'ont coûté les niveaux et les bâtiments spéciaux d'un joueur sur ses rues */
 function buildingsValue(s: CapitaleState, playerId: string): number {
+  // Builder : les bâtiments et le terrain annexé, au prix coûtant
+  if (isBuilder(s)) return ownedBy(s, playerId).reduce((n, i) => n + lotValue(s, i) + landValue(s, i), 0);
   let total = 0;
   for (const i of ownedBy(s, playerId)) {
     total += levelOf(s, i) * upgradeCost(i);
@@ -630,7 +683,9 @@ export function netWorth(s: CapitaleState, playerId: string): number {
 export function liquidity(s: CapitaleState, playerId: string): number {
   const p = playerOf(s, playerId);
   if (!p) return 0;
-  let total = p.cash + buildingsValue(s, playerId) / 2;
+  // Builder : les bâtiments se démolissent à moitié prix ; le terrain annexé ne se revend pas
+  const resale = isBuilder(s) ? ownedBy(s, playerId).reduce((n, i) => n + lotRefund(s, i), 0) : buildingsValue(s, playerId) / 2;
+  let total = p.cash + resale;
   for (const i of ownedBy(s, playerId)) if (!s.deeds[i]!.mortgaged) total += mortgageValue(i);
   return Math.floor(total);
 }
@@ -734,6 +789,8 @@ export function rentFor(s: CapitaleState, index: number, ctx: RentContext): numb
   if (!owner || owner.bankrupt) return 0;
   if (s.settings.noRentInJail && owner.inJail) return 0;
   if (sq.kind === "property") {
+    // Builder : le terrain nu, puis ce qu'on a bâti sur la carte
+    if (isBuilder(s)) return builderRent(s, index);
     // Le niveau, sinon le terrain nu (doublé avec tout le quartier) ; une centrale ramène au terrain nu, une décharge
     // divise par deux, l'obélisque du propriétaire double tout le quartier
     const full = ownsGroup(s, deed.owner, sq.group!);
@@ -843,7 +900,8 @@ function payTickets(s: CapitaleState, p: CapitalePlayer, from: number, steps: nu
   for (let k = 1; k <= steps; k++) {
     const i = (from + k) % 40;
     const d = s.deeds[i];
-    if (!d?.owner || d.owner === p.id || d.mortgaged || ownSpecial(s, i) !== "stade") continue;
+    const stadium = isBuilder(s) ? cityHasStadium(s, i) : ownSpecial(s, i) === "stade";
+    if (!d?.owner || d.owner === p.id || d.mortgaged || !stadium) continue;
     const owner = playerOf(s, d.owner);
     if (!owner || owner.bankrupt || (s.settings.noRentInJail && owner.inJail)) continue;
     // Un coéquipier paie le tarif d'équipe (rien quand le loyer entre coéquipiers est gratuit)
@@ -1019,6 +1077,14 @@ export function drawCard(s: CapitaleState, p: CapitalePlayer, deck: DeckId, even
 function buildingsCount(s: CapitaleState, playerId: string, perLevel: number, perTower: number): number {
   let levels = 0;
   let towers = 0;
+  if (isBuilder(s)) {
+    for (const i of ownedBy(s, playerId)) {
+      const eq = levelEquivalent(s, i);
+      levels += eq.levels;
+      towers += eq.towers;
+    }
+    return levels * perLevel + towers * perTower;
+  }
   for (const i of ownedBy(s, playerId)) {
     const l = levelOf(s, i);
     if (l === MAX_LEVEL) towers += 1;
@@ -1031,12 +1097,18 @@ function buildingsCount(s: CapitaleState, playerId: string, perLevel: number, pe
 // Les catastrophes
 // ---------------------------------------------------------------------------
 
-/** Les rues construites d'un joueur */
-const builtStreets = (s: CapitaleState, playerId: string) => ownedBy(s, playerId).filter((i) => levelOf(s, i) > 0);
+/** Les rues construites d'un joueur (en Builder : celles qui ont un bâtiment qu'une catastrophe peut abattre) */
+const builtStreets = (s: CapitaleState, playerId: string) =>
+  isBuilder(s) ? builtCities(s, playerId).filter((i) => knockable(s, i).length > 0) : ownedBy(s, playerId).filter((i) => levelOf(s, i) > 0);
+
+/** Une ville construite, à la portée d'une catastrophe */
+const struck = (s: CapitaleState, i: number) => (isBuilder(s) ? knockable(s, i).length > 0 : levelOf(s, i) > 0);
 
 /** La plus haute de ces rues : le plus de niveaux, puis le plus gros loyer, puis la plus loin sur le plateau */
 function tallest(s: CapitaleState, squares: number[]): number | undefined {
   const rent = (i: number) => rentFor(s, i, { diceTotal: 7 });
+  // Builder : la ville au plus gros loyer
+  if (isBuilder(s)) return [...squares].sort((a, b) => rent(b) - rent(a) || b - a)[0];
   return [...squares].sort((a, b) => levelOf(s, b) - levelOf(s, a) || rent(b) - rent(a) || b - a)[0];
 }
 
@@ -1060,7 +1132,9 @@ export function perilTarget(s: CapitaleState, playerId: string): number | undefi
   return BUYABLE.filter((i) => {
     const owner = s.deeds[i]!.owner;
     const level = levelOf(s, i);
-    return owner && !allies(s, owner, playerId) && !playerOf(s, owner)?.bankrupt && level > 0 && level < MAX_LEVEL;
+    // Builder : une ville où il reste un bâtiment à abattre (le monument est classé)
+    const target = isBuilder(s) ? knockable(s, i).length > 0 : level > 0 && level < MAX_LEVEL;
+    return owner && !allies(s, owner, playerId) && !playerOf(s, owner)?.bankrupt && target;
   }).sort((a, b) => rent(b) - rent(a) || levelOf(s, b) - levelOf(s, a) || b - a)[0];
 }
 
@@ -1072,9 +1146,18 @@ export function cessionTitle(s: CapitaleState, playerId: string, to: string): nu
 }
 
 function disaster(s: CapitaleState, p: CapitalePlayer, kind: DisasterKind, events: CapitaleEvent[]) {
-  const hits: { square: number; owner: string; level: number }[] = [];
-  const knock = (i: number) => {
+  const hits: { square: number; owner: string; level: number; building?: Placed }[] = [];
+  const knock = (i: number, random = false) => {
     const d = s.deeds[i]!;
+    if (isBuilder(s)) {
+      // Builder : un bâtiment tombe (le plus cher, ou un au hasard pour l'incendie), jamais le monument
+      const list = knockable(s, i);
+      const b = random ? list[randomInt(s, list.length)] : list[0];
+      if (!b) return;
+      d.lot = lotOf(d).filter((o) => o.id !== b.id);
+      hits.push({ square: i, owner: d.owner!, level: d.lot.length, building: { ...b } });
+      return;
+    }
     d.level = Math.max(0, (d.level ?? 0) - 1);
     hits.push({ square: i, owner: d.owner!, level: d.level });
   };
@@ -1086,7 +1169,7 @@ function disaster(s: CapitaleState, p: CapitalePlayer, kind: DisasterKind, event
     }
     case "incendie": {
       const built = builtStreets(s, p.id);
-      if (built.length > 0) knock(built[randomInt(s, built.length)]!);
+      if (built.length > 0) knock(built[randomInt(s, built.length)]!, true);
       break;
     }
     case "tempete":
@@ -1097,10 +1180,10 @@ function disaster(s: CapitaleState, p: CapitalePlayer, kind: DisasterKind, event
       }
       break;
     case "crue": {
-      const built = GROUP_ORDER.filter((g) => GROUPS[g].squares.some((i) => s.deeds[i]!.owner && levelOf(s, i) > 0));
+      const built = GROUP_ORDER.filter((g) => GROUPS[g].squares.some((i) => s.deeds[i]!.owner && struck(s, i)));
       if (built.length === 0) break;
       const g = built[randomInt(s, built.length)]!;
-      for (const i of GROUPS[g].squares) if (s.deeds[i]!.owner && levelOf(s, i) > 0) knock(i);
+      for (const i of GROUPS[g].squares) if (s.deeds[i]!.owner && struck(s, i)) knock(i);
       break;
     }
     case "peril": {
@@ -1272,6 +1355,7 @@ export function upgradedThisTurn(s: CapitaleState, index: number): boolean {
 }
 
 export function hasStadium(s: CapitaleState, playerId: string): boolean {
+  if (isBuilder(s)) return builderHasStadium(s, playerId);
   return ownedBy(s, playerId).some((i) => ownSpecial(s, i) === "stade");
 }
 
@@ -1279,6 +1363,7 @@ export function hasStadium(s: CapitaleState, playerId: string): boolean {
 export function canUpgrade(s: CapitaleState, playerId: string, index: number): string | null {
   const sq = SQUARES[index];
   const deed = s.deeds[index];
+  if (isBuilder(s)) return "En Builder, on pose ses bâtiments sur la carte de la ville.";
   if (!sq || sq.kind !== "property" || !deed) return "On n'améliore que les rues.";
   if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
   if (deed.mortgaged) return "Cette rue est hypothéquée.";
@@ -1304,6 +1389,7 @@ export function canUpgrade(s: CapitaleState, playerId: string, index: number): s
 
 /** Peut-on revendre un niveau de cette rue ? À moitié prix */
 export function canSell(s: CapitaleState, playerId: string, index: number): string | null {
+  if (isBuilder(s)) return "En Builder, on démolit ses bâtiments sur la carte de la ville.";
   const deed = s.deeds[index];
   if (!deed || deed.owner !== playerId) return "Cette rue n'est pas à toi.";
   if (!deed.level) return "Il n'y a rien à revendre ici.";
@@ -1313,6 +1399,7 @@ export function canSell(s: CapitaleState, playerId: string, index: number): stri
 /** Peut-on poser ce bâtiment spécial sur cette rue ? Une nuisance chez un adversaire, le reste chez soi */
 export function canPlaceSpecial(s: CapitaleState, playerId: string, index: number, kind: SpecialKind): string | null {
   if (!s.settings.specials) return "Les bâtiments spéciaux ne sont pas de la partie.";
+  if (isBuilder(s)) return "En Builder, les bâtiments spéciaux se posent sur la carte de ta ville.";
   const sq = SQUARES[index];
   const deed = s.deeds[index];
   if (!isSpecialKind(kind) || !sq || sq.kind !== "property" || !deed) return "Les bâtiments spéciaux se posent sur une rue.";
@@ -1342,6 +1429,7 @@ export function canPlaceSpecial(s: CapitaleState, playerId: string, index: numbe
 export function canRaze(s: CapitaleState, playerId: string, index: number): string | null {
   const deed = s.deeds[index];
   const sp = deed?.special;
+  if (isBuilder(s)) return "En Builder, on démolit ses bâtiments sur la carte de la ville.";
   if (!deed || !sp) return "Il n'y a pas de bâtiment spécial ici.";
   if (deed.owner !== playerId) return "Cette rue n'est pas à toi.";
   const cost = specialPrice(sp.kind, index);
@@ -1354,6 +1442,7 @@ export function canMortgage(s: CapitaleState, playerId: string, index: number): 
   if (!deed || deed.owner !== playerId) return "Ce titre n'est pas à toi.";
   if (deed.mortgaged) return "Déjà hypothéqué.";
   if (deed.level) return "Revends d'abord les niveaux de la rue.";
+  if (lotOf(deed).length > 0) return "Démolis d'abord les bâtiments de la ville.";
   const own = ownSpecial(s, index);
   if (own) return `Revends d'abord ${SPECIALS[own].the}.`;
   return null;
@@ -1365,6 +1454,8 @@ export function canMortgage(s: CapitaleState, playerId: string, index: number): 
 
 /** Ce que vaut une ville au prix coûtant : son titre, ses niveaux et le bâtiment spécial de son propriétaire */
 export function cityValue(s: CapitaleState, index: number): number {
+  // Builder : le titre, les bâtiments et le terrain annexé
+  if (isBuilder(s)) return (SQUARES[index]!.price ?? 0) + lotValue(s, index) + landValue(s, index);
   const own = ownSpecial(s, index);
   return (SQUARES[index]!.price ?? 0) + levelOf(s, index) * upgradeCost(index) + (own ? specialPrice(own, index) : 0);
 }
@@ -1385,7 +1476,8 @@ export function buyoutShield(s: CapitaleState, playerId: string, index: number):
   if (!owner || owner.id === playerId || owner.bankrupt) return "Cette ville n'est pas à un adversaire.";
   if (allies(s, playerId, owner.id)) return "Pas de rachat entre coéquipiers : ils peuvent se donner leurs titres.";
   if (deed.mortgaged) return "Une ville hypothéquée ne se rachète pas.";
-  if (levelOf(s, index) >= MAX_LEVEL) return "Un monument ne se rachète pas.";
+  if (levelOf(s, index) >= MAX_LEVEL || hasMonument(s, index)) return "Un monument ne se rachète pas.";
+  if (isBuilder(s) && cityHasStadium(s, index) && hasStadium(s, playerId)) return "Tu as déjà un stade : pas de second.";
   if (districtSpecials(s, sq.group!).some((b) => b.kind === "monument")) return "L'obélisque protège tout son quartier du rachat.";
   if (ownSpecial(s, index) === "stade" && hasStadium(s, playerId)) return "Tu as déjà un stade : pas de second.";
   return null;
@@ -1455,6 +1547,41 @@ function raze(s: CapitaleState, p: CapitalePlayer, index: number, how: "sell" | 
   events.push({ type: "raze", player: p.id, square: index, kind, how });
 }
 
+/** Builder : poser un bâtiment sur le territoire de la ville */
+function build(
+  s: CapitaleState,
+  p: CapitalePlayer,
+  index: number,
+  kind: BuildKind,
+  x: number,
+  z: number,
+  rot: number,
+  events: CapitaleEvent[],
+) {
+  const deed = s.deeds[index]!;
+  const price = buildCost(kind, index);
+  pay(s, p.id, "bank", price, "build", events, index);
+  s.buildSeq = (s.buildSeq ?? 0) + 1;
+  const building: Placed = { id: s.buildSeq, kind, x, z, rot: rot & 3 };
+  deed.lot = [...lotOf(deed), building];
+  p.stats.houses += 1;
+  if (kind === "monument") p.stats.hotels += 1;
+  // Ce que le joueur dont c'est le tour a bâti pendant son tour (les bots s'y limitent)
+  if (currentPlayer(s).id === p.id) {
+    touchSite(s);
+    s.site.upgraded.push(index);
+  }
+  events.push({ type: "build", player: p.id, square: index, building: { ...building }, price });
+}
+
+/** Builder : démolir un bâtiment ; la banque en rend la moitié */
+function demolish(s: CapitaleState, p: CapitalePlayer, index: number, b: Placed, how: "sell" | "auto", events: CapitaleEvent[]) {
+  const deed = s.deeds[index]!;
+  deed.lot = lotOf(deed).filter((o) => o.id !== b.id);
+  pay(s, "bank", p.id, refundOf(b.kind, index), "sell", events, index);
+  events.push({ type: "demolish", player: p.id, square: index, building: { ...b }, how });
+}
+
 /** La nuisance qu'un joueur (ou un coéquipier) avait posée sur une rue qui devient la sienne disparaît */
 function dropOwnNuisance(s: CapitaleState, index: number, events: CapitaleEvent[]) {
   const d = s.deeds[index];
@@ -1478,6 +1605,7 @@ export function tradeProblem(s: CapitaleState, playerId: string, index: number):
   if (!deed || deed.owner !== playerId) return `${SQUARES[index]?.name ?? "Ce titre"} n'appartient pas à ce joueur.`;
   const name = SQUARES[index]!.name;
   if (levelOf(s, index) > 0) return `${name} est construite : il faut d'abord revendre ses niveaux.`;
+  if (lotOf(deed).length > 0) return `${name} est construite : il faut d'abord démolir ses bâtiments.`;
   const own = ownSpecial(s, index);
   if (own) return `Il faut d'abord revendre ${SPECIALS[own].the} de ${name}.`;
   const g = groupOf(index);
@@ -1573,6 +1701,8 @@ function goBankrupt(s: CapitaleState, p: CapitalePlayer, creditor: Account, even
   for (const i of ownedBy(s, p.id)) {
     while (levelOf(s, i) > 0) sellLevel(s, p, i, events);
     if (ownSpecial(s, i)) raze(s, p, i, "sell", events);
+    // Builder : chaque bâtiment est démoli, la banque en rend la moitié
+    for (const b of [...lotOf(s.deeds[i])]) demolish(s, p, i, b, "auto", events);
   }
   for (const i of BUYABLE) if (s.deeds[i]!.special?.by === p.id) raze(s, p, i, "auto", events);
   const found = creditor !== "bank" && creditor !== "pot" ? playerOf(s, creditor) : undefined;
@@ -1934,6 +2064,51 @@ export function applyAction(s: CapitaleState, playerId: string, action: Capitale
       const problem = giftProblem(s, playerId, action.to, give);
       if (problem) return fail(problem);
       executeGift(s, p, playerOf(s, action.to)!, give, events);
+      break;
+    }
+    case "build": {
+      const { square: index, kind } = action;
+      const x = Math.floor(Number(action.x));
+      const z = Math.floor(Number(action.z));
+      const rot = Math.floor(Number(action.rot)) & 3;
+      const problem = placeProblem(s, playerId, index, kind, x, z, rot);
+      if (problem) return fail(problem);
+      build(s, p, index, kind, x, z, rot, events);
+      break;
+    }
+    case "relocate": {
+      const x = Math.floor(Number(action.x));
+      const z = Math.floor(Number(action.z));
+      const rot = Math.floor(Number(action.rot)) & 3;
+      const problem = relocateProblem(s, playerId, action.square, action.id, x, z, rot);
+      if (problem) return fail(problem);
+      const deed = s.deeds[action.square]!;
+      const moved: Placed = { ...lotOf(deed).find((b) => b.id === action.id)!, x, z, rot };
+      deed.lot = lotOf(deed).map((b) => (b.id === moved.id ? moved : b));
+      events.push({ type: "relocate", player: p.id, square: action.square, building: { ...moved } });
+      break;
+    }
+    case "demolish": {
+      const problem = demolishProblem(s, playerId, action.square, action.id);
+      if (problem) return fail(problem);
+      demolish(
+        s,
+        p,
+        action.square,
+        lotOf(s.deeds[action.square]).find((b) => b.id === action.id)!,
+        "sell",
+        events,
+      );
+      break;
+    }
+    case "annex": {
+      const problem = annexProblem(s, playerId, action.square, action.cell);
+      if (problem) return fail(problem);
+      const deed = s.deeds[action.square]!;
+      const price = annexCost(action.square);
+      pay(s, p.id, "bank", price, "annex", events, action.square);
+      deed.annexed = [...annexedOf(deed), action.cell];
+      events.push({ type: "annex", player: p.id, square: action.square, cell: action.cell, price });
       break;
     }
     case "bankrupt": {

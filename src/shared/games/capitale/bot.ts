@@ -56,6 +56,8 @@ import {
   type Offer,
   type Trade,
 } from "./engine.ts";
+import { lotValue, levelEquivalent } from "./builder.ts";
+import { builderMove, cheapestDemolition } from "./builderBot.ts";
 
 /** Un nombre entre 0 et 1 propre à la situation, sans toucher au hasard de la partie */
 function doubt(s: CapitaleState, salt: number): number {
@@ -122,8 +124,10 @@ function reserve(s: CapitaleState, playerId: string, level: BotLevel): number {
   // Ce que coûterait la pire carte de travaux : sans cette marge, on revend à moitié prix puis on rebâtit
   let repairs = 0;
   for (const i of ownedBy(s, playerId)) {
+    // Builder : ce qu'ont coûté ses bâtiments, en niveaux
+    const eq = s.settings.builder ? levelEquivalent(s, i) : null;
     const l = levelOf(s, i);
-    repairs += l === MAX_LEVEL ? 115 : l * 40;
+    repairs += eq ? eq.levels * 40 + eq.towers * 115 : l === MAX_LEVEL ? 115 : l * 40;
   }
   if (level === "moyen") return Math.min(400, 80 + risk * 0.4) + repairs * 0.5;
   return Math.min(500, 40 + risk * 0.6) + repairs * 0.6;
@@ -293,7 +297,11 @@ function manage(
     const g = groupOf(i);
     if (d.mortgaged && g && ownsGroup(s, playerId, g.id) && p.cash - unmortgageCost(i) >= keep) return { type: "unmortgage", square: i };
   }
-  if (level !== "facile" || p.cash >= 400) {
+  if (s.settings.builder) {
+    // Builder : bâtir sur la carte (ou annexer), quelques coups par tour
+    const move = level !== "facile" || p.cash >= 400 ? builderMove(s, playerId, level, keep, opts.allowAttack) : null;
+    if (move) return move;
+  } else if (level !== "facile" || p.cash >= 400) {
     const special = s.settings.specials && !specialUsed(s) ? specialMove(s, playerId, level, keep, opts.allowAttack) : null;
     if (special) return special;
     const up = bestUpgrade(s, playerId, level, keep);
@@ -413,7 +421,7 @@ export function wantsBuyout(s: CapitaleState, playerId: string, index: number, l
   const rent = rentFor(s, index, { diceTotal: 8 });
   const worth =
     valueFor(s, playerId, index, level) +
-    levelOf(s, index) * upgradeCost(index) * (level === "facile" ? 0.6 : 0.9) +
+    (s.settings.builder ? lotValue(s, index) : levelOf(s, index) * upgradeCost(index)) * (level === "facile" ? 0.6 : 0.9) +
     rent * (level === "fort" ? 1.4 : 1) +
     (breaks ? (SQUARES[index]!.price ?? 0) * (level === "fort" ? 1 : level === "moyen" ? 0.6 : 0.2) : 0) +
     (blocksWin ? 2000 : 0);
@@ -448,6 +456,11 @@ function raiseMoney(s: CapitaleState, playerId: string, level: BotLevel): Capita
     .sort((a, b) => full(a) - full(b) || valueFor(s, playerId, a, level) - valueFor(s, playerId, b, level));
   const first = loose[0];
   if (first !== undefined && !full(first)) return { type: "mortgage", square: first };
+  // Builder : démolir ce qui coûte le moins de loyer pour ce que ça rapporte
+  if (s.settings.builder) {
+    const demolition = cheapestDemolition(s, playerId);
+    if (demolition) return demolition;
+  }
   // Puis revendre : les bâtiments spéciaux, puis un niveau sur la rue la moins chère
   const special = mine.find((i) => ownSpecial(s, i) && canRaze(s, playerId, i) === null);
   if (special !== undefined) return { type: "raze", square: special };

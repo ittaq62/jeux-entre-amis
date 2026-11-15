@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid, botRescue } from "../shared/games/capitale/bot.ts";
-import { DISASTERS, sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
+import { DISASTERS, levelName, sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
+import { BUILDS, isBuildKind } from "../shared/games/capitale/builder.ts";
 import {
   actorOf,
   applyAction,
@@ -550,13 +551,15 @@ export class CapitaleRoom extends DurableObject<Env> {
         const action = sanitizeAction(msg.action);
         if (!action) return error("Action invalide.");
         if (!this.allowMessage(`action:${userId}`, 120)) return;
+        // Builder : on bâtit chez soi pendant le tour des autres ; ces travaux ne font pas attendre le joueur dont c'est le tour
+        const aside = BUILDER_ACTIONS.has(action.type) && actorOf(g) !== seat.id;
         const res = applyAction(g, seat.id, action);
         if (!res.ok) {
           error(res.error);
           return this.afterChange([], now);
         }
         seat.missed = 0;
-        d.actionSeq += 1;
+        if (!aside) d.actionSeq += 1;
         return this.afterChange(res.events, now);
       }
 
@@ -963,6 +966,15 @@ export class CapitaleRoom extends DurableObject<Env> {
         this.systemChat(`${name(e.winner)} remporte ${SQUARES[e.square]!.name} aux enchères pour ${e.amount}.`);
       } else if (e.type === "trade" && e.status === "accepted") {
         this.systemChat(`Marché conclu entre ${name(e.trade.from)} et ${name(e.trade.to)}.`);
+      } else if (e.type === "build" && e.building.kind === "monument") {
+        // Builder : le monument de la ville se dresse
+        this.systemChat(
+          `${name(e.player)} élève ${levelName(e.square, 5).replace(/^./, (c) => c.toLowerCase())} à ${SQUARES[e.square]!.name}.`,
+        );
+      } else if (e.type === "build" && BUILDS[e.building.kind].nuisance) {
+        this.systemChat(
+          `${name(e.player)} pose ${BUILDS[e.building.kind].one} à ${SQUARES[e.square]!.name} : ses voisins à deux cases perdent 30 %.`,
+        );
       } else if (e.type === "special" && (SPECIALS[e.kind].nuisance || e.kind === "monument")) {
         // Une nuisance (jamais chez un coéquipier) ou un obélisque : de quoi changer les loyers de toute la table
         const owner = g.deeds[e.square]?.owner;
@@ -1496,6 +1508,9 @@ export class CapitaleRoom extends DurableObject<Env> {
   }
 }
 
+/** Builder : les travaux qu'on fait chez soi à tout moment */
+const BUILDER_ACTIONS = new Set<CapitaleAction["type"]>(["build", "relocate", "demolish", "annex"]);
+
 /** Le coup le plus prudent à la place d'un joueur : lancer, laisser aux enchères, finir son tour, ou faillite s'il ne reste rien */
 function safeAction(g: CapitaleState, seatId: string): CapitaleAction | null {
   if (actorOf(g) !== seatId) return null;
@@ -1562,6 +1577,15 @@ function sanitizeAction(raw: unknown): CapitaleAction | null {
       return { type: a.type, trade: Number(a.trade) };
     case "gift":
       return { type: "gift", to: String(a.to ?? ""), give: sanitizeOffer(a.give) };
+    case "build":
+      if (!isBuildKind(a.kind)) return null;
+      return { type: "build", square: Number(a.square), kind: a.kind, x: Number(a.x), z: Number(a.z), rot: Number(a.rot) };
+    case "relocate":
+      return { type: "relocate", square: Number(a.square), id: Number(a.id), x: Number(a.x), z: Number(a.z), rot: Number(a.rot) };
+    case "demolish":
+      return { type: "demolish", square: Number(a.square), id: Number(a.id) };
+    case "annex":
+      return { type: "annex", square: Number(a.square), cell: Number(a.cell) };
     default:
       return null;
   }
@@ -1582,6 +1606,7 @@ function mergeSettings(current: CapitaleSettings, patch: Partial<CapitaleSetting
     "disasters",
     "evenBuild",
     "monopoly",
+    "builder",
     "teamGifts",
     "teamHeir",
     "teamWin",
