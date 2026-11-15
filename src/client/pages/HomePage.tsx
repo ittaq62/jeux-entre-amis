@@ -424,7 +424,9 @@ function GameSheet({
 /**
  * Ce que fait le décor d'une fiche : il bouge quand on le voit ; hors de l'écran, fiche masquée ou page cachée, il s'arrête
  * là où il en est (et reprend sans saut) ; avec « Effets réduits » ou si le système le demande, il montre son image fixe.
- * Les animations sont en CSS (is-paused, is-still dans banners.css) ; celles en SVG (la mer de la bataille navale) suivent ici.
+ * Les animations sont en CSS (is-paused, is-still dans banners.css) ; celles en SVG (la mer de la bataille navale) et les
+ * vidéos (le but de Crampons) suivent ici. Une vidéo ne se charge qu'en jouant, donc jamais hors de l'écran, avec
+ * « Effets réduits », ni quand le navigateur demande d'économiser les données.
  */
 function useStageMotion(stage: RefObject<HTMLDivElement | null>): "live" | "paused" | "still" {
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -459,6 +461,12 @@ function useStageMotion(stage: RefObject<HTMLDivElement | null>): "live" | "paus
       if (state === "live") svg.unpauseAnimations();
       else svg.pauseAnimations();
       if (state === "still") svg.setCurrentTime(0);
+    }
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+    for (const video of stage.current?.querySelectorAll("video") ?? []) {
+      // Le navigateur peut refuser de lancer une vidéo (mode économie d'énergie) : l'affiche reste
+      if (state === "live" && !saveData) video.play().catch(() => {});
+      else video.pause();
     }
   }, [state, stage]);
 
