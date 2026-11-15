@@ -1,6 +1,6 @@
 // L'illustration de Crampons sur l'accueil : une image du jeu lui-même, composée avec son moteur (DevAffiche) — un soir de
 // match, la frappe du numéro 9 file en lucarne, le gardien s'envole. La 3D ne se charge qu'à table. Par-dessus, en SVG aux
-// coordonnées de l'image (1200 × 900), ce qui vit : les flashs dans la foule, le ballon qui tourne et l'air qu'il fend.
+// coordonnées de l'image (1200 × 900), ce qui vit : la foule qui saute, les flashs, le ballon qui tourne et l'air qu'il fend.
 
 import type { CSSProperties } from "react";
 import "./crampons.css";
@@ -31,6 +31,64 @@ const FLASHES: [x: number, y: number, period: number, delay: number][] = [
   [1142, 252, 4.0, -3.2],
 ];
 
+// La foule qui saute : les tribunes de l'affiche découpées en cases, chacune une copie de l'image qui sursaute de quelques
+// pixels. Les cases voisines sautent presque ensemble (une onde qui traverse le stade) : pas de déchirure entre elles.
+/** Le bas des banderoles, de gauche à droite : la foule commence dessous (les banderoles ne sautent pas) */
+const BANNERS: [x: number, y: number][] = [
+  [0, 137],
+  [150, 127],
+  [235, 118],
+  [325, 112],
+  [420, 100],
+  [520, 92],
+  [630, 78],
+  [750, 57],
+  [850, 48],
+  [1000, 35],
+  [1200, 25],
+];
+const bannerAt = (x: number) => {
+  const i = Math.max(
+    1,
+    BANNERS.findIndex(([bx]) => bx >= x),
+  );
+  const [x0, y0] = BANNERS[i - 1]!;
+  const [x1, y1] = BANNERS[i] ?? BANNERS.at(-1)!;
+  return x1 === x0 ? y0 : y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+};
+/**
+ * Le bas de la foule, au moins un bond au-dessus de ce qui ne saute pas : la tête du 9 (y = 330), la barre du but
+ * (y = 370), la tête du défenseur de gauche (y = 400). Sinon la case, en sautant, en ferait monter un morceau
+ */
+const crowdBottom = (x0: number, x1: number) => {
+  const over = (a: number, b: number) => x1 > a && x0 < b;
+  if (over(370, 510)) return 318;
+  if (x1 > 585) return 358;
+  if (over(280, 345)) return 390;
+  return 400;
+};
+const HOP = 0.6;
+const CROWD = Array.from({ length: 20 }, (_, c) => {
+  const x = c * 60;
+  const top = Math.ceil(Math.max(bannerAt(x), bannerAt(x + 60))) + 4;
+  const bottom = crowdBottom(x, x + 60);
+  const tiers = Math.ceil((bottom - top) / 80);
+  return Array.from({ length: tiers }, (_, k) => {
+    const y = top + ((bottom - top) * k) / tiers;
+    const h = (bottom - top) / tiers;
+    // Une onde qui traverse le stade de gauche à droite, un peu en biais ; la hauteur du saut varie doucement
+    const cycles = ((x + 30) / 1200) * 0.9 + ((y + h / 2) / 400) * 0.25;
+    return {
+      x,
+      y: Math.round(y),
+      w: 60,
+      h: Math.round(h),
+      lift: (8 + Math.sin(x * 0.011) * 1.5).toFixed(1),
+      delay: (-cycles * HOP).toFixed(3),
+    };
+  });
+}).flat();
+
 /** Les traits d'air derrière le ballon : décalés de `side` sur son flanc, longs de `length` */
 const STREAKS = [
   { side: -10, length: 22, delay: -0.15 },
@@ -43,6 +101,17 @@ export function CramponsPreview() {
     <div className="crampons-preview">
       <div className="crampons-preview-frame">
         <img src={IMAGE} width={1200} height={900} alt="" loading="lazy" decoding="async" />
+        <div className="cr-pv-crowd" aria-hidden="true">
+          {CROWD.map(({ x, y, w, h, lift, delay }) => (
+            <div
+              key={`${x},${y}`}
+              className="cr-pv-fans"
+              style={{ "--x": x, "--y": y, "--w": w, "--h": h, "--lift": lift } as CSSProperties}
+            >
+              <i style={{ animationDelay: `${delay}s` }} />
+            </div>
+          ))}
+        </div>
         <svg className="crampons-preview-life" viewBox="0 0 1200 900" aria-hidden="true">
           <defs>
             <radialGradient id="cr-pv-flash">
