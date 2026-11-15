@@ -461,6 +461,13 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
     blurb: "Pas de catastrophes dans les paquets : ni séisme, ni tempête, ni cession forcée.",
     settings: { disasters: false },
   },
+  {
+    id: "builder",
+    name: "Builder",
+    blurb:
+      "Chaque ville a son territoire en cases, au centre du plateau : on y pose ses bâtiments où l'on veut, à tout moment, et on repousse ses frontières sur le terrain vague.",
+    settings: { builder: true },
+  },
 ];
 
 const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [

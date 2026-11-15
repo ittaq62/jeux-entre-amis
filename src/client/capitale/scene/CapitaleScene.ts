@@ -7,6 +7,9 @@ import * as B from "./buildings.ts";
 import * as LM from "./landmarks.ts";
 import * as S from "./streets.ts";
 import * as C from "./city.ts";
+import { BuilderCity, cellAt, type BuilderPreview } from "./builderCity.ts";
+import { baseCells, TERRITORIES } from "../../../shared/games/capitale/builderMap.ts";
+import type { Placed } from "../../../shared/games/capitale/builder.ts";
 import { tokenModel } from "./tokens.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
 import * as L from "./layout.ts";
@@ -33,6 +36,9 @@ export interface SceneDeed {
   /** Les rues : leur niveau (0 à 5) et leur bâtiment spécial */
   level?: number;
   special?: { kind: SpecialKind; by: string } | null;
+  /** Builder : les bâtiments posés et les cases annexées */
+  lot?: Placed[];
+  annexed?: number[];
 }
 
 export interface SceneState {
@@ -55,6 +61,10 @@ export interface SceneOptions {
   tagOf: (square: number) => { text: string; color: string | null; level: number; muted: boolean; mark?: number | null };
   /** La vue a été déplacée à la main (ou remise en place) : le bouton « Recentrer » apparaît ou s'en va */
   onView?: (moved: boolean) => void;
+  /** Builder : la carte des territoires au centre, au lieu de la ville en parcelles */
+  builder?: boolean;
+  /** Builder, en travaux : la case de la carte sous la souris (hover) ou touchée (tap), ou null hors de la carte */
+  onCell?: (kind: "hover" | "tap", cell: number | null) => void;
 }
 
 /** Les gros plans automatiques, au choix du joueur */
@@ -123,6 +133,8 @@ const HOP_SECONDS = 0.17;
 const JUMP_SECONDS = 0.55;
 /** Le zoom permis : de tout près (une rue) jusqu'à un peu plus loin que le plateau entier */
 const ZOOM_MIN = 0.3;
+/** En Builder, on s'approche plus près : une case de la carte */
+const ZOOM_MIN_BUILDER = 0.16;
 const ZOOM_MAX = 1.15;
 /** La distance des gros plans, en part de la vue d'ensemble */
 const DICE_CLOSE = 0.27;
@@ -192,6 +204,10 @@ export class CapitaleScene {
   /** Le pion à suivre dès que le gros plan sur les dés aura laissé lire le résultat */
   private pendingFollow: { id: string; seconds: number } | null = null;
 
+  /** Builder : la carte des territoires, et si l'on est en travaux (les clics visent les cases) */
+  private builder: BuilderCity | null = null;
+  private building = false;
+  private cellRay: { x: number; y: number } | null = null;
   private pawns = new Map<string, PawnObj>();
   private turnRing: THREE.Mesh;
   private lots = new Map<number, LotObj>();
@@ -224,7 +240,7 @@ export class CapitaleScene {
     DeckId,
     { geo: THREE.BufferGeometry; mats: THREE.Material[] }
   >;
-  private rotors: { obj: THREE.Group; speed: number }[] = [];
+  private rotors: { obj: THREE.Object3D; speed: number }[] = [];
   private flags: THREE.Object3D[] = [];
   private water: THREE.Mesh | null = null;
   private siren: THREE.Mesh | null = null;
@@ -278,7 +294,8 @@ export class CapitaleScene {
       this.boardTex.needsUpdate = true;
     });
     this.addBoard();
-    this.addCity();
+    if (opts.builder) this.addBuilderCity();
+    else this.addCity();
 
     this.turnRing = new THREE.Mesh(
       new THREE.RingGeometry(0.17, 0.215, 40),
@@ -529,11 +546,56 @@ export class CapitaleScene {
 
     // Les deux paquets de cartes, sur le parvis du kiosque
     const kiosk = C.KIOSK_PARCEL;
+    this.addDecks((deck) => C.parcelPoint(kiosk, deck === "hasard" ? -0.16 : 0.16, 0.12), kiosk.facing);
+
+    // La place : des réverbères et quelques arbres autour de la rose des vents
+    const plaza = C.PLAZA_PARCEL;
+    const spots: { x: number; z: number; s: number; kind: number }[] = [];
+    plaza.poly.forEach((v, k) => {
+      const x = plaza.center.x + (v.x - plaza.center.x) * 0.86;
+      const z = plaza.center.z + (v.z - plaza.center.z) * 0.86;
+      if (k % 2) spots.push({ x, z, s: 0.8, kind: 0 });
+      else {
+        const l = B.lamp();
+        l.position.set(x, 0, z);
+        this.decor.add(l);
+      }
+    });
+    this.decor.add(B.trees(spots));
+    this.addTraffic();
+  }
+
+  /** Builder : la carte des territoires, avec ses lots (gares, réseaux, banque, kiosque), ses jardins et la rocade */
+  private addBuilderCity() {
+    const city = new BuilderCity({
+      rise: (o, dur, delay = 0, sound = true) => this.rise(o, dur, delay, sound),
+      popIn: (o) => this.popIn(o),
+      remove: (o, animate) => this.removeObj(o, animate),
+      dust: (parent, x, z, size) => this.dust(parent, x, z, size),
+      lookAt: (p) => this.lookAtSoon(p),
+      flag: (cloth) => this.flags.push(cloth),
+      dirty: () => (this.dirty = true),
+      now: () => this.time,
+    });
+    this.builder = city;
+    this.scene.add(city.root);
+    this.pickables.push(city.pickable, city.root);
+    this.decor.add(city.decor);
+    for (const r of city.rotors) this.rotors.push(r);
+    this.water = city.water;
+    const kiosk = city.lotCenter("kiosk");
+    // Les paquets devant le kiosque, côté place
+    this.addDecks((deck) => ({ x: kiosk.x + (deck === "hasard" ? -0.17 : 0.17), z: kiosk.z + 0.2 }), 0);
+    this.addTraffic();
+  }
+
+  /** Les deux paquets de cartes, à leur place */
+  private addDecks(spotOf: (deck: DeckId) => { x: number; z: number }, facing: number) {
     for (const deck of ["hasard", "courrier"] as DeckId[]) {
       const g = new THREE.Group();
-      const spot = C.parcelPoint(kiosk, deck === "hasard" ? -0.16 : 0.16, 0.12);
+      const spot = spotOf(deck);
       g.position.set(spot.x, 0, spot.z);
-      g.rotation.y = kiosk.facing;
+      g.rotation.y = facing;
       const face = new THREE.MeshStandardMaterial({
         map: signTexture(
           deck === "hasard" ? "HASARD" : "COURRIER",
@@ -559,22 +621,10 @@ export class CapitaleScene {
       this.decks[deck] = g;
       this.decor.add(g);
     }
+  }
 
-    // La place : des réverbères et quelques arbres autour de la rose des vents
-    const plaza = C.PLAZA_PARCEL;
-    const spots: { x: number; z: number; s: number; kind: number }[] = [];
-    plaza.poly.forEach((v, k) => {
-      const x = plaza.center.x + (v.x - plaza.center.x) * 0.86;
-      const z = plaza.center.z + (v.z - plaza.center.z) * 0.86;
-      if (k % 2) spots.push({ x, z, s: 0.8, kind: 0 });
-      else {
-        const l = B.lamp();
-        l.position.set(x, 0, z);
-        this.decor.add(l);
-      }
-    });
-    this.decor.add(B.trees(spots));
-
+  /** La circulation sur la rocade, puis tout le décor qui ne bouge pas, fondu */
+  private addTraffic() {
     // La circulation : la rocade, dans les deux sens
     const colors = ["#d6433a", "#f2f2ee", "#2f5bb8", "#e8b12f", "#3c3f44", "#2fa864", "#e07a3a", "#9fb4c4"];
     const lanes = [
@@ -780,6 +830,7 @@ export class CapitaleScene {
       const lot = this.lots.get(i);
       if (lot) this.syncLot(lot, d, colorOf, first);
     }
+    this.builder?.sync(s.deeds, colorOf, !first && !this.opts.reduced);
     this.syncTags();
     if (this.filter) this.applyFilter();
   }
@@ -962,7 +1013,9 @@ export class CapitaleScene {
     this.potStack = null;
     if (count > 0) {
       this.potStack = B.coinStack(count);
-      const pot = C.parcelPoint(C.BANK_PARCEL, C.BANK_PARCEL.room * 0.6, C.BANK_PARCEL.room * 0.5);
+      const pot = this.builder
+        ? this.builder.lotCenter("bank").add(new THREE.Vector3(0.32, 0, 0.12))
+        : C.parcelPoint(C.BANK_PARCEL, C.BANK_PARCEL.room * 0.6, C.BANK_PARCEL.room * 0.5);
       this.potStack.position.set(pot.x, 0, pot.z);
       this.scene.add(this.potStack);
     }
@@ -974,7 +1027,7 @@ export class CapitaleScene {
     this.highlightFrame.visible = h !== null;
     if (h !== null) this.placeFrame(this.highlightFrame, L.squareRect(h));
     // La parcelle mise en avant : un contour doré, une flèche qui flotte au-dessus
-    const parcel = h !== null ? C.PARCEL_OF[h] : undefined;
+    const parcel = h !== null && !this.builder ? C.PARCEL_OF[h] : undefined;
     if (this.highlightRing) {
       this.scene.remove(this.highlightRing);
       this.highlightRing.geometry.dispose();
@@ -986,6 +1039,14 @@ export class CapitaleScene {
       this.scene.add(this.highlightRing);
       this.marker.position.set(parcel.center.x, 1, parcel.center.z);
     }
+    // Builder : le territoire de la ville, entouré d'or
+    if (this.builder && h !== null && TERRITORIES[h]) {
+      this.highlightRing = this.areaRing(h, "#ffb000", 0.08, 0.9);
+      if (this.highlightRing) this.scene.add(this.highlightRing);
+      const box = this.builder.areaBox(h, this.state?.deeds[h] as never);
+      this.marker.visible = true;
+      this.marker.position.set(box.x + box.w / 2, 1, box.z + box.d / 2);
+    }
     const hv = this.hover && this.hover.square !== h ? this.hover : null;
     this.hoverFrame.visible = hv !== null;
     if (hv) this.placeFrame(this.hoverFrame, L.squareRect(hv.square));
@@ -994,11 +1055,67 @@ export class CapitaleScene {
       this.hoverRing.geometry.dispose();
       this.hoverRing = null;
     }
-    const hp = hv ? C.PARCEL_OF[hv.square] : undefined;
+    const hp = hv && !this.builder ? C.PARCEL_OF[hv.square] : undefined;
     if (hp) {
       this.hoverRing = this.parcelRing(hp, "#46a8ff", 0.07, 0.85);
       this.scene.add(this.hoverRing);
     }
+    if (this.builder && hv && TERRITORIES[hv.square] && !this.building) {
+      this.hoverRing = this.areaRing(hv.square, "#46a8ff", 0.06, 0.85);
+      if (this.hoverRing) this.scene.add(this.hoverRing);
+    }
+  }
+
+  /** Builder : un liseré qui suit la frontière d'une ville (son territoire et ce qu'elle a annexé) */
+  private areaRing(square: number, color: string, t: number, opacity: number): THREE.Mesh | null {
+    const cells = new Set([...baseCells(square), ...(this.state?.deeds[square]?.annexed ?? [])]);
+    const geo = BuilderCity.border(cells, t, 0.02);
+    if (!geo) return null;
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+    m.position.y = 0.004;
+    m.renderOrder = 2;
+    return m;
+  }
+
+  // -------------------------------------------------------------------------
+  // Builder : les travaux
+  // -------------------------------------------------------------------------
+
+  /** En travaux, les clics et le survol visent les cases de la carte (et non plus les villes) */
+  setBuildMode(on: boolean) {
+    this.building = on && this.builder !== null;
+    this.dirty = true;
+    if (this.building && this.hover) {
+      this.hover = null;
+      this.updateFrames();
+      this.opts.onHover?.(null, 0, 0);
+    }
+  }
+
+  /** L'aperçu du bâtiment à poser, des cases à colorer, du bâtiment choisi */
+  setBuildPreview(p: BuilderPreview | null) {
+    this.builder?.setPreview(p);
+  }
+
+  /** La caméra va voir une ville : son territoire bien au milieu, d'assez près pour bâtir */
+  focusCity(square: number) {
+    if (!this.builder || !TERRITORIES[square]) return;
+    const box = this.builder.areaBox(square, this.state?.deeds[square] as never);
+    const size = Math.max(box.w, box.d);
+    const zoom = THREE.MathUtils.clamp((size * 2.2) / (L.BOARD + 1), ZOOM_MIN_BUILDER, 1);
+    this.zoom = zoom;
+    this.pan.set(box.x + box.w / 2 - this.baseTarget.x, 0, box.z + box.d / 2 - this.baseTarget.z);
+    this.clampPan();
+    this.closeUp = null;
+    this.pendingFollow = null;
+    this.grabbedAt = this.time;
+    this.viewChanged();
+  }
+
+  /** La case de la carte sous un point de l'écran */
+  private cellUnder(clientX: number, clientY: number): number | null {
+    const p = this.groundAt(clientX, clientY);
+    return p ? cellAt(p.x, p.z) : null;
   }
 
   // -------------------------------------------------------------------------
@@ -1158,6 +1275,20 @@ export class CapitaleScene {
     if (this.opts.reduced) return;
     this.dirty = true;
     for (const i of squares) {
+      if (this.builder) {
+        for (const root of this.builder.shake(i)) {
+          const x0 = root.position.x;
+          this.tween(
+            0.8,
+            (t) => (root.position.x = x0 + Math.sin(t * Math.PI * 11) * 0.03 * (1 - t)),
+            () => (root.position.x = x0),
+          );
+        }
+        const box = this.builder.areaBox(i, this.state?.deeds[i] as never);
+        this.dust(this.scene, box.x + box.w / 2, box.z + box.d / 2, Math.max(box.w, box.d) * 0.6);
+        this.lookAtSoon(new THREE.Vector3(box.x + box.w / 2, 0, box.z + box.d / 2));
+        continue;
+      }
       const lot = this.lots.get(i);
       if (!lot) continue;
       const root = lot.root;
@@ -1289,7 +1420,7 @@ export class CapitaleScene {
       const m = this.water.material as THREE.MeshStandardMaterial;
       m.color.setHSL(0.56, 0.52, 0.5 + Math.sin(this.time * 1.3) * 0.03);
     }
-    for (const l of this.living) {
+    for (const l of this.builder ? [...this.living, ...this.builder.living] : this.living) {
       if (l.kind === "jet") l.obj.scale.y = 0.75 + Math.sin(this.time * 3.1) * 0.25 + Math.sin(this.time * 7.7) * 0.06;
       else if (l.kind === "birds") l.obj.rotation.y = this.time * 0.9;
       else {
@@ -1497,7 +1628,10 @@ export class CapitaleScene {
   private onMove = (e: PointerEvent) => {
     const prev = this.touches.get(e.pointerId);
     if (!prev) {
-      if (e.pointerType === "mouse") this.hoverRay = { x: e.clientX, y: e.clientY };
+      if (e.pointerType === "mouse") {
+        if (this.building) this.cellRay = { x: e.clientX, y: e.clientY };
+        else this.hoverRay = { x: e.clientX, y: e.clientY };
+      }
       return;
     }
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1532,6 +1666,11 @@ export class CapitaleScene {
     this.pointer.down = false;
     this.renderer.domElement.style.cursor = "";
     if (!wasClick) return;
+    // En travaux : la case touchée (pour poser, choisir un bâtiment, annexer)
+    if (this.building) {
+      this.opts.onCell?.("tap", this.cellUnder(e.clientX, e.clientY));
+      return;
+    }
     const hit = this.pick(e.clientX, e.clientY);
     if (hit) this.opts.onSquare(hit.square);
   };
@@ -1578,7 +1717,7 @@ export class CapitaleScene {
 
   /** Zoome vers un point de l'écran (la souris, le milieu des deux doigts) */
   private zoomTo(zoom: number, at?: { x: number; y: number }) {
-    const next = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+    const next = THREE.MathUtils.clamp(zoom, this.builder ? ZOOM_MIN_BUILDER : ZOOM_MIN, ZOOM_MAX);
     const ratio = next / this.zoom;
     if (Math.abs(ratio - 1) < 1e-4) return;
     const point = at ? this.groundAt(at.x, at.y) : null;
@@ -1703,6 +1842,28 @@ export class CapitaleScene {
         return geo;
       });
     }
+    if (this.builder) {
+      for (const i of Object.keys(TERRITORIES).map(Number)) {
+        const on = kept(i);
+        for (const root of this.builder.cityObjects(i)) {
+          root.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (!m.isMesh) return;
+            if (!on && m.userData.mat0 === undefined) {
+              m.userData.mat0 = m.material;
+              m.material = this.ghostMat;
+            } else if (on && m.userData.mat0 !== undefined) {
+              m.material = m.userData.mat0 as THREE.Material;
+              delete m.userData.mat0;
+            }
+          });
+        }
+        this.setVeil(`b${i}:${(s?.deeds[i]?.annexed ?? []).length}`, this.filter !== null && !on, () => {
+          const geo = BuilderCity.veil(new Set([...baseCells(i), ...(s?.deeds[i]?.annexed ?? [])]), 0)!;
+          return geo;
+        });
+      }
+    }
     for (const [i, tint] of this.ringOwner) {
       tint.visible = ownerOf(i) !== null && kept(i);
       const r = L.squareRect(i);
@@ -1768,6 +1929,10 @@ export class CapitaleScene {
       }
       const ring = L.squareAt(h.point.x, h.point.z);
       if (ring !== null) return { square: ring, rect: L.squareRect(ring) };
+      if (this.builder) {
+        const sq = this.squareOfCell(cellAt(h.point.x, h.point.z));
+        return sq === null ? null : { square: sq, rect: L.squareRect(sq) };
+      }
       const parcel = C.parcelAt(h.point.x, h.point.z);
       if (parcel && parcel.square >= 0) return { square: parcel.square, rect: L.squareRect(parcel.square) };
       return null;
@@ -1775,7 +1940,24 @@ export class CapitaleScene {
     return null;
   }
 
+  /** Builder : la ville (ou la gare, le réseau) d'une case de la carte, annexions comprises */
+  private squareOfCell(cell: number | null): number | null {
+    if (cell === null) return null;
+    for (const [sq, r] of Object.entries(TERRITORIES)) {
+      const x = cell % 36;
+      const z = Math.floor(cell / 36);
+      if (x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) return Number(sq);
+    }
+    for (const [sq, d] of Object.entries(this.state?.deeds ?? {})) if (d.annexed?.includes(cell)) return Number(sq);
+    return null;
+  }
+
   private updateHover() {
+    if (this.cellRay) {
+      const ray = this.cellRay;
+      this.cellRay = null;
+      this.opts.onCell?.("hover", this.cellUnder(ray.x, ray.y));
+    }
     if (!this.hoverRay) return;
     const ray = this.hoverRay;
     const hit = this.pick(ray.x, ray.y);
@@ -1809,9 +1991,10 @@ export class CapitaleScene {
   private updateAnchors() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
+    const bank = this.builder ? this.builder.lotCenter("bank") : new THREE.Vector3(C.BANK_PARCEL.center.x, 0, C.BANK_PARCEL.center.z);
     const spots: Record<string, THREE.Vector3> = {
-      bank: new THREE.Vector3(C.BANK_PARCEL.center.x, 0.5, C.BANK_PARCEL.center.z),
-      pot: new THREE.Vector3(C.BANK_PARCEL.center.x, 0.12, C.BANK_PARCEL.center.z),
+      bank: new THREE.Vector3(bank.x, 0.5, bank.z),
+      pot: new THREE.Vector3(bank.x, 0.12, bank.z),
     };
     for (const [name, el] of Object.entries(this.anchors)) {
       const at = spots[name];
@@ -1858,6 +2041,7 @@ export class CapitaleScene {
       return true;
     });
     this.playDice();
+    this.builder?.update();
     this.updatePawns();
     this.updateLife(dt);
     this.updateHover();
@@ -1895,6 +2079,7 @@ export class CapitaleScene {
     el.removeEventListener("wheel", this.onWheel);
     this.ghostMat.dispose();
     this.veilMat.dispose();
+    this.builder?.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) m.geometry?.dispose();

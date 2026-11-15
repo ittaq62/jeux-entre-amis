@@ -420,16 +420,11 @@ function cityProblem(s: CapitaleState, playerId: string, index: number): string 
   return null;
 }
 
-/** Peut-on poser ce bâtiment là, dans cette ville ? */
-export function placeProblem(
-  s: CapitaleState,
-  playerId: string,
-  index: number,
-  kind: BuildKind,
-  x: number,
-  z: number,
-  rot: number,
-): string | null {
+/**
+ * Peut-on poser ce bâtiment dans cette ville, où que ce soit ? (le moment, la ville, le quartier, un seul monument, un
+ * seul stade ; et l'argent, sauf `cash: false`)
+ */
+export function kindProblem(s: CapitaleState, playerId: string, index: number, kind: BuildKind, cash = true): string | null {
   const right = rightProblem(s, playerId);
   if (right) return right;
   if (!isBuildKind(kind)) return "Ce bâtiment n'existe pas.";
@@ -442,11 +437,28 @@ export function placeProblem(
     return `Il faut tout le quartier ${GROUPS[g.id].name.toLowerCase()} pour ${info.one}.`;
   if (info.perCity && lotOf(s.deeds[index]).some((b) => b.kind === kind)) return `La ville a déjà ${info.the}.`;
   if (info.perPlayer && kind === "stade" && builderHasStadium(s, playerId)) return "Tu as déjà un stade.";
-  const fp = footprintProblem(s, index, footprint({ kind, x, z, rot }));
-  if (fp) return fp;
-  const price = buildCost(kind, index);
-  if (playerOf(s, playerId)!.cash < price) return `Il faut ${price}.`;
+  if (cash) {
+    const price = buildCost(kind, index);
+    if (playerOf(s, playerId)!.cash < price) return `Il faut ${price}.`;
+  }
   return null;
+}
+
+/** Peut-on poser ce bâtiment là, dans cette ville ? */
+export function placeProblem(
+  s: CapitaleState,
+  playerId: string,
+  index: number,
+  kind: BuildKind,
+  x: number,
+  z: number,
+  rot: number,
+): string | null {
+  return (
+    kindProblem(s, playerId, index, kind, false) ??
+    footprintProblem(s, index, footprint({ kind, x, z, rot })) ??
+    kindProblem(s, playerId, index, kind, true)
+  );
 }
 
 /** Peut-on déplacer (ou tourner) ce bâtiment ? Gratuit, dans la même ville ; une nuisance ne se déplace pas */

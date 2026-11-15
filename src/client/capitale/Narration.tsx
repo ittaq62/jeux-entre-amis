@@ -1,3 +1,4 @@
+import { BUILDS } from "../../shared/games/capitale/builder.ts";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { DECK_NAMES, DISASTERS, LANDMARKS, LEVEL_NAMES, sideName, SPECIALS, SQUARES, teamName } from "../../shared/games/capitale/board.ts";
@@ -128,6 +129,34 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     }
     case "sell":
       return { text: `${say(e.player, "revend", "revends")} un niveau de ${sq(e.square)}`, tone: "info", who: e.player };
+    case "build": {
+      // Builder : le monument, une nuisance, et ce que bâtissent les autres (le sien, on le voit pousser)
+      const info = BUILDS[e.building.kind];
+      if (e.building.kind === "monument")
+        return {
+          text: `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "le monument"} à ${sq(e.square)} !`,
+          tone: "big",
+          who: e.player,
+        };
+      if (info.nuisance)
+        return {
+          text: `${say(e.player, "pose", "poses")} ${info.one} à ${sq(e.square)} : ses voisins perdent 30 %`,
+          tone: "big",
+          who: e.player,
+        };
+      if (isMe(e.player)) return null;
+      return { text: `${name(e.player)} pose ${info.one} à ${sq(e.square)}`, tone: "info", who: e.player };
+    }
+    case "annex":
+      return {
+        text: `${say(e.player, "repousse", "repousses")} la frontière de ${sq(e.square)} d'une case (${money(e.price)})`,
+        tone: "info",
+        who: e.player,
+      };
+    case "demolish":
+      return e.how === "auto" || !isMe(e.player)
+        ? null
+        : { text: `Tu démolis ${BUILDS[e.building.kind].the} de ${sq(e.square)}`, tone: "info", who: e.player };
     case "raze":
       return e.how === "auto"
         ? null

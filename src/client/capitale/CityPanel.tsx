@@ -36,6 +36,9 @@ import { asState, colorOf, manageRights, money } from "./boardUi.ts";
 import { levelThumb, specialThumb } from "./scene/thumbs.ts";
 import { squareFacts } from "./SquareInfo.tsx";
 import { isMate, TeamMark } from "./teamsUi.tsx";
+import { annexedOf, BUILD_ORDER, BUILDS, cityRent, lotOf } from "../../shared/games/capitale/builder.ts";
+import { baseSize, maxAnnex } from "../../shared/games/capitale/builderMap.ts";
+import { buildThumb } from "./scene/thumbs.ts";
 
 // La fiche d'une case, en grand au milieu de l'écran : son loyer, ses niveaux, et un bouton pour l'améliorer.
 // « Mes villes » : toutes ses rues d'un coup d'œil, avec le bouton Améliorer sur chaque ligne.
@@ -99,6 +102,7 @@ export function CityPanel({
   act,
   name,
   onClose,
+  onBuild,
 }: {
   g: CapitaleView;
   index: number;
@@ -106,6 +110,8 @@ export function CityPanel({
   act: (a: CapitaleAction) => void;
   name: (id: string) => string;
   onClose: () => void;
+  /** Builder : ouvrir le chantier de la ville */
+  onBuild?: (index: number) => void;
 }) {
   const s = asState(g);
   const sq = SQUARES[index]!;
@@ -131,6 +137,8 @@ export function CityPanel({
       </Pop>
     );
   }
+
+  if (g.settings.builder) return <BuilderCityPanel g={g} index={index} me={me} act={act} name={name} onClose={onClose} onBuild={onBuild} />;
 
   const level = levelOf(s, index);
   const rent = deed?.owner && !deed.mortgaged ? rentFor(s, index, { diceTotal: 7 }) : 0;
@@ -189,6 +197,90 @@ export function CityPanel({
       {g.settings.specials && deed?.owner && (
         <SpecialSection g={g} index={index} me={me} act={act} rights={rights} name={name} mine={mine} special={sp} />
       )}
+    </Pop>
+  );
+}
+
+/**
+ * Builder : la fiche d'une ville, son loyer et ce qui y est bâti (combien de chaque, de cases prises) ; chez soi, le
+ * bouton du chantier, l'hypothèque ; chez un adversaire, le rachat
+ */
+function BuilderCityPanel({
+  g,
+  index,
+  me,
+  act,
+  name,
+  onClose,
+  onBuild,
+}: {
+  g: CapitaleView;
+  index: number;
+  me: string | null;
+  act: (a: CapitaleAction) => void;
+  name: (id: string) => string;
+  onClose: () => void;
+  onBuild?: (index: number) => void;
+}) {
+  const s = asState(g);
+  const sq = SQUARES[index]!;
+  const deed = g.deeds[index];
+  const mine = Boolean(me && deed?.owner === me);
+  const facts = squareFacts(g, index, name);
+  const rights = manageRights(g, me);
+  const cash = g.players.find((p) => p.id === me)?.cash ?? 0;
+  const lot = lotOf(deed);
+  const rent = deed?.owner && !deed.mortgaged ? rentFor(s, index, { diceTotal: 7 }) : 0;
+  const detail = cityRent(s, index);
+  const counts = BUILD_ORDER.map((k) => ({ k, n: lot.filter((b) => b.kind === k).length })).filter((x) => x.n > 0);
+  const area = baseSize(index) + annexedOf(deed).length;
+  const used = lot.reduce((n, b) => n + BUILDS[b.kind].w * BUILDS[b.kind].d, 0);
+  const color = deed?.owner ? colorOf(g, deed.owner) : me ? colorOf(g, me) : "#e2453c";
+  return (
+    <Pop onClose={onClose} wide className="is-city">
+      <Band g={g} index={index} name={name} />
+      <div className="cap-city-rent">
+        <span>{deed?.owner ? "Loyer" : "Prix"}</span>
+        <b className="num">{deed?.owner ? money(rent) : money(sq.price!)}</b>
+        {deed?.mortgaged && <em>hypothéquée</em>}
+      </div>
+      <p className="cap-pop-text">
+        Territoire de <b className="num">{area}</b> cases
+        {annexedOf(deed).length > 0 && ` (dont ${annexedOf(deed).length} annexées, ${maxAnnex(index)} au plus)`}, {used} bâties. Terrain nu
+        : {money(detail.bare)}
+        {detail.full ? ", quartier complet : tout est doublé." : "."}
+      </p>
+      {counts.length > 0 ? (
+        <ul className="cap-build-list">
+          {counts.map(({ k, n }) => (
+            <li key={k}>
+              <img src={buildThumb(k, index, color, 96)} alt="" width={40} height={40} />
+              <span>
+                {n > 1 ? `${n} × ` : ""}
+                {BUILDS[k].name}
+              </span>
+              <b className="num">{money(detail.buildings.filter((b) => b.kind === k).reduce((t, b) => t + b.rent, 0))}</b>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        deed?.owner && <p className="hint">Rien n'est encore bâti ici.</p>
+      )}
+      {mine && (
+        <div className="cap-city-actions">
+          {onBuild && (
+            <button className="cap-cta is-green" disabled={deed?.mortgaged} onClick={() => onBuild(index)}>
+              <span>Ouvrir le chantier</span>
+              <em>poser, déplacer, annexer</em>
+            </button>
+          )}
+          <div className="cap-city-small">
+            {rights && <MortgageButton g={g} index={index} me={me!} act={act} full={rights === "full"} cash={cash} />}
+          </div>
+        </div>
+      )}
+      {!mine && <p className="cap-pop-text">{facts.what}</p>}
+      {!mine && me && deed?.owner && newRules(g).buyout && <BuyoutNote g={g} index={index} me={me} />}
     </Pop>
   );
 }
@@ -335,12 +427,15 @@ export function MyCities({
   act,
   onOpen,
   onClose,
+  onBuild,
 }: {
   g: CapitaleView;
   me: string;
   act: (a: CapitaleAction) => void;
   onOpen: (square: number) => void;
   onClose: () => void;
+  /** Builder : ouvrir le chantier d'une ville */
+  onBuild?: (square: number) => void;
 }) {
   const s = asState(g);
   const rights = manageRights(g, me);
@@ -361,7 +456,10 @@ export function MyCities({
     <Pop onClose={onClose} wide>
       <h3 className="cap-pop-title">Mes villes</h3>
       {debt > 0 && (
-        <p className="cap-why">Tu dois {money(debt)} : revends des niveaux ou hypothèque. La dette se paie dès que l'argent suffit.</p>
+        <p className="cap-why">
+          Tu dois {money(debt)} : {onBuild ? "démolis des bâtiments" : "revends des niveaux"} ou hypothèque. La dette se paie dès que
+          l'argent suffit.
+        </p>
       )}
       {groups.length === 0 && <p className="hint">Tu n'as encore rien acheté.</p>}
       <div className="cap-cities">
@@ -382,7 +480,7 @@ export function MyCities({
                 <div key={i} className={`cap-city-row ${d.mortgaged ? "is-mortgaged" : ""}`}>
                   <button className="cap-city-name" onClick={() => onOpen(i)}>
                     <strong>{sq.name}</strong>
-                    {sq.kind === "property" && (
+                    {sq.kind === "property" && !onBuild && (
                       <span className="cap-dots" aria-label={`niveau ${level}`}>
                         {[1, 2, 3, 4, 5].map((l) => (
                           <i key={l} className={l <= level ? "is-on" : ""} />
@@ -393,7 +491,12 @@ export function MyCities({
                   <span className="cap-city-rentcell num">
                     {d.mortgaged ? "hypothéquée" : sq.kind === "utility" ? "× dés" : money(rentFor(s, i, { diceTotal: 7 }))}
                   </span>
-                  {sq.kind === "property" && level < MAX_LEVEL && (
+                  {sq.kind === "property" && onBuild && (
+                    <button className="cap-mini-cta" disabled={d.mortgaged} onClick={() => onBuild(i)} title="Ouvrir le chantier">
+                      Bâtir
+                    </button>
+                  )}
+                  {sq.kind === "property" && !onBuild && level < MAX_LEVEL && (
                     <button
                       className="cap-mini-cta"
                       disabled={up !== null}
@@ -409,7 +512,11 @@ export function MyCities({
           </section>
         ))}
       </div>
-      <p className="hint">Une amélioration par rue et par tour. Touche une rue pour ses bâtiments spéciaux, la revente ou l'hypothèque.</p>
+      <p className="hint">
+        {onBuild
+          ? "Builder : ouvre le chantier d'une ville pour y poser tes bâtiments, à tout moment. Touche une ville pour sa fiche et l'hypothèque."
+          : "Une amélioration par rue et par tour. Touche une rue pour ses bâtiments spéciaux, la revente ou l'hypothèque."}
+      </p>
     </Pop>
   );
 }

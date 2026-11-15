@@ -40,6 +40,8 @@ import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
 import { inTeams, sidesOf, teamIn } from "./teamsUi.tsx";
 import { useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote } from "../game/RandomRules.tsx";
+import { BuilderPanel, type CellHandler } from "./BuilderPanel.tsx";
+import type { BuilderPreview } from "./scene/builderCity.ts";
 
 interface Props {
   room: CapitaleRoomView;
@@ -74,6 +76,10 @@ const DEED_EVENTS = new Set<CapitaleEvent["type"]>([
   "bankrupt",
   "disaster",
   "buyout",
+  "build",
+  "relocate",
+  "demolish",
+  "annex",
 ]);
 
 let billSeq = 0;
@@ -116,6 +122,18 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const [tip, setTip] = useState<{ square: number; x: number; y: number } | null>(null);
   /** Le joueur dont on veut voir le pion (un clic sur son portrait) */
   const [look, setLook] = useState<{ id: string; n: number } | null>(null);
+  /** Builder : la ville dont on a ouvert le chantier, l'aperçu sur la carte, et la caméra qui va la voir */
+  const builder = Boolean(g.settings.builder);
+  const [site, setSite] = useState<number | null>(null);
+  const [preview, setPreview] = useState<BuilderPreview | null>(null);
+  const [focus, setFocus] = useState<{ square: number; n: number } | null>(null);
+  const cellHandler = useRef<CellHandler | null>(null);
+  const openSite = useCallback((i: number) => {
+    setCity(null);
+    setCitiesOpen(false);
+    setSite(i);
+    setFocus((f) => ({ square: i, n: (f?.n ?? 0) + 1 }));
+  }, []);
   const seat = useCallback((id: string) => room.seats.find((s) => s.id === id), [room.seats]);
   const act = useCallback((action: CapitaleAction) => send({ t: "action", action }), [send]);
 
@@ -181,7 +199,11 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       const meNow = now.players.find((p) => p.id === now.you);
       if (!meNow || now.actor !== now.you || now.step !== "manage") return;
       const landed = batch.events.some((e) => e.type === "move" && e.player === now.you && e.to === meNow.position && !e.jump);
-      if (landed && canUpgrade(asState(now), meNow.id, meNow.position) === null) setCity(meNow.position);
+      // Builder : sur sa propre ville, sa fiche s'ouvre avec le bouton du chantier
+      const own = now.settings.builder
+        ? now.deeds[meNow.position]?.owner === meNow.id && SQUARES[meNow.position]!.kind === "property"
+        : false;
+      if (landed && (own || canUpgrade(asState(now), meNow.id, meNow.position) === null)) setCity(meNow.position);
     };
     if (reduced || document.visibilityState !== "visible") {
       sync();
@@ -326,7 +348,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
     const mark = teamIn(g, d.owner);
     if (d.mortgaged) return { text: "hypothéquée", color, level: 0, muted: true, mark };
     if (sq.kind === "utility") return { text: "× dés", color, level: 0, muted: false, mark };
-    return { text: money(rentFor(shownState, i, { diceTotal: 7 })), color, level: d.level ?? 0, muted: false, mark };
+    return { text: money(rentFor(shownState, i, { diceTotal: 7 })), color, level: builder ? 0 : (d.level ?? 0), muted: false, mark };
   };
 
   // Au Monopole : où en est le camp de chacun (calculé sur les titres tels qu'on les montre)
@@ -408,6 +430,13 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
     );
 
   const playing = Boolean(meP && !meP.bankrupt) && g.step !== "over";
+  // Le chantier se ferme quand la ville n'est plus à moi (rachat, faillite) ou que la partie est finie
+  useEffect(() => {
+    if (site !== null && (!playing || g.deeds[site]?.owner !== me)) setSite(null);
+  }, [site, playing, g.deeds, me]);
+  useEffect(() => {
+    if (site === null) setPreview(null);
+  }, [site]);
   const facts = tip ? squareFacts(g, tip.square, (id) => name(id)) : null;
 
   return (
@@ -517,7 +546,28 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             tokens={tokens}
             name={(id) => (id === me ? "toi" : name(id))}
             look={look}
+            builder={builder}
+            building={site !== null}
+            preview={preview}
+            onCell={(kind, cell) => cellHandler.current?.(kind, cell)}
+            focus={focus}
           />
+          <AnimatePresence>
+            {site !== null && me && (
+              <BuilderPanel
+                key={site}
+                g={g}
+                square={site}
+                me={me}
+                phone={phone}
+                act={act}
+                cells={cellHandler}
+                onPreview={setPreview}
+                onSwitch={openSite}
+                onClose={() => setSite(null)}
+              />
+            )}
+          </AnimatePresence>
           <Narrator lines={lines} g={g} seat={seat} />
           {g.settings.freeParking && g.pot > 0 && <p className="cap-board-info">Cagnotte {money(g.pot)}</p>}
         </div>
@@ -568,8 +618,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             {main}
             {playing && !onTakeBack && (
               <div className="cap-bar-more">
-                <button className="cap-small" onClick={() => setCitiesOpen(true)}>
-                  <Icon name="build" size={18} /> Mes villes
+                <button className={`cap-small ${site !== null ? "is-on" : ""}`} onClick={() => setCitiesOpen(true)}>
+                  <Icon name="build" size={18} /> {builder ? "Bâtir" : "Mes villes"}
                 </button>
                 {!g.auction && (
                   <button className="cap-small" onClick={openTrade}>
@@ -588,7 +638,16 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       <AnimatePresence>{prompt}</AnimatePresence>
       <AnimatePresence>
         {city !== null && (
-          <CityPanel key={city} g={g} index={city} me={me} act={act} name={(id) => name(id)} onClose={() => setCity(null)} />
+          <CityPanel
+            key={city}
+            g={g}
+            index={city}
+            me={me}
+            act={act}
+            name={(id) => name(id)}
+            onClose={() => setCity(null)}
+            onBuild={builder ? openSite : undefined}
+          />
         )}
       </AnimatePresence>
       <AnimatePresence>
@@ -597,6 +656,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
             g={g}
             me={me}
             act={act}
+            onBuild={builder ? openSite : undefined}
             onOpen={(i) => {
               setCitiesOpen(false);
               setCity(i);

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { CARDS, cardNumber, RARITY, type CardArt, type CardDef, type CardFamily } from "../../shared/cards.ts";
 import { SHIP_LENGTH } from "../../shared/games/naval/engine.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
@@ -33,6 +33,22 @@ export function AtlasArt({ artKey }: { artKey: string }) {
       }}
     />
   );
+}
+
+/**
+ * Capitale Builder : le bâtiment est photographié en 3D à l'ouverture de l'album, sur son socle comme les autres
+ * (la 3D se charge à part, seulement si une de ces cartes s'affiche)
+ */
+function BuilderArt({ subject }: { subject: Extract<CardArt, { kind: "builder" }>["subject"] }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let live = true;
+    void import("../capitale/scene/thumbs.ts").then((m) => live && setSrc(m.albumThumb(subject)));
+    return () => {
+      live = false;
+    };
+  }, [subject]);
+  return <span className="tc-atlas" style={src ? { backgroundImage: `url(${src})`, backgroundSize: "contain" } : undefined} />;
 }
 
 function ShipArt({ art }: { art: Extract<CardArt, { kind: "ship" }> }) {
@@ -235,6 +251,7 @@ function Art({ art, width }: { art: CardArt; width: number }) {
   if (art.kind === "ship") return <ShipArt art={art} />;
   if (art.kind === "brick") return <BrickArt piece={art.piece} />;
   if (art.kind === "meche") return <MecheArt subject={art.subject} />;
+  if (art.kind === "builder") return <BuilderArt subject={art.subject} />;
   return (
     <span className="tc-uno">
       <CardFace card={UNO_FACES[art.face]} width={Math.round(width * 0.42)} />

@@ -11,6 +11,7 @@ import { colorOf } from "./boardUi.ts";
 import { CapitaleScene, type OwnerFilter } from "./scene/CapitaleScene.ts";
 import { teamName } from "../../shared/games/capitale/board.ts";
 import { teamIn, TeamMark } from "./teamsUi.tsx";
+import type { BuilderPreview } from "./scene/builderCity.ts";
 
 interface Props {
   g: CapitaleView;
@@ -38,6 +39,13 @@ interface Props {
   name: (id: string) => string;
   /** Un joueur à montrer sur le plateau (un clic sur son portrait) ; n change à chaque demande */
   look: { id: string; n: number } | null;
+  /** Builder : la carte des territoires au centre ; en travaux, les cases visées et l'aperçu de ce qu'on pose */
+  builder?: boolean;
+  building?: boolean;
+  preview?: BuilderPreview | null;
+  onCell?: (kind: "hover" | "tap", cell: number | null) => void;
+  /** La caméra va voir une ville (n change à chaque demande) */
+  focus?: { square: number; n: number } | null;
 }
 
 /** Les villes qu'on regarde : toutes, les siennes, celles des adversaires, celles d'une équipe, ou celles d'un joueur */
@@ -61,6 +69,11 @@ export function Board3D({
   tokens,
   name,
   look,
+  builder = false,
+  building = false,
+  preview = null,
+  onCell,
+  focus = null,
 }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const bank = useRef<HTMLSpanElement>(null);
@@ -77,8 +90,8 @@ export function Board3D({
   const hintSeen = usePrefs((s) => s.capViewHint);
   const setPrefs = usePrefs((s) => s.set);
   const [hint, setHint] = useState(false);
-  const click = useRef({ onSquare, onHover, tagOf });
-  click.current = { onSquare, onHover, tagOf };
+  const click = useRef({ onSquare, onHover, tagOf, onCell });
+  click.current = { onSquare, onHover, tagOf, onCell };
   const lastDice = useRef(dice);
   const thrown = useRef(dice.rollId);
   const me = g.you;
@@ -101,6 +114,8 @@ export function Board3D({
         onHover: (i, x, y) => click.current.onHover(i, x, y),
         tagOf: (i) => click.current.tagOf(i),
         onView: setMoved,
+        builder,
+        onCell: (kind, cell) => click.current.onCell?.(kind, cell),
       });
     } catch {
       setFailed(true);
@@ -117,7 +132,7 @@ export function Board3D({
       s.dispose();
       scene.current = null;
     };
-  }, [phone, reduced]);
+  }, [phone, reduced, builder]);
 
   useEffect(() => {
     scene.current?.setState({
@@ -157,6 +172,16 @@ export function Board3D({
   useEffect(() => {
     if (look) scene.current?.showPawn(look.id);
   }, [look]);
+
+  // Builder : les travaux (les clics visent les cases), l'aperçu, la caméra qui va voir la ville
+  useEffect(() => scene.current?.setBuildMode(building), [building, version]);
+  useEffect(() => scene.current?.setBuildPreview(preview), [preview, version]);
+  useEffect(() => {
+    if (focus) scene.current?.focusCity(focus.square);
+  }, [focus, version]);
+  useEffect(() => {
+    if (!building) scene.current?.resetView();
+  }, [building]);
 
   useEffect(() => {
     let f: OwnerFilter = null;

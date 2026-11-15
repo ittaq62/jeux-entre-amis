@@ -31,6 +31,7 @@ import { useMyItems } from "../stores/shop.ts";
 import { tokenThumbnails } from "./scene/tokens.ts";
 import { pawnColor, seatTeams, teamColor, TeamMark } from "./teamsUi.tsx";
 import { MONOPOLY_RULE, TeamRules } from "./TeamRules.tsx";
+import { BuilderRules } from "./BuilderRules.tsx";
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Prudent jusqu'à l'excès : il garde son argent et bâtit peu.",
@@ -70,6 +71,9 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   { key: "noRentInJail", label: "Pas de loyer en prison", desc: "Un propriétaire derrière les barreaux ne touche plus ses loyers." },
   { key: "quickStart", label: "Départ rapide", desc: "Chacun reçoit deux titres tirés au sort pour commencer." },
 ];
+
+/** En Builder, les bâtiments spéciaux se posent sur la carte, dans ses propres villes */
+const BUILDER_SPECIALS = "Le parc, le stade et deux nuisances (décharge, centrale) qui font perdre leurs voisins, à poser dans tes villes.";
 
 /** L'obélisque vaut quatre niveaux de son quartier : de 200 (brun, ciel) à 800 (vert, bleu) */
 const LEVEL_COSTS = Object.values(GROUPS).map((g) => g.houseCost);
@@ -204,6 +208,26 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
           )}
 
           <div className="field">
+            <span className="field-label">Version</span>
+            <Options<"classique" | "builder">
+              label="Version"
+              value={s.builder ? "builder" : "classique"}
+              disabled={!isHost || locked("builder")}
+              onChange={(v) => update({ builder: v === "builder" })}
+              options={[
+                { value: "classique", label: "Classique" },
+                { value: "builder", label: "Builder" },
+              ]}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {s.builder
+                ? "Builder : au centre du plateau, chaque ville a son territoire en cases. Tu y poses tes bâtiments où tu veux, à tout moment, même pendant le tour des autres, et tu repousses tes frontières sur le terrain vague."
+                : "Classique : chaque rue s'améliore d'un bouton, de la maison au monument de la ville."}
+            </p>
+            {s.builder && <BuilderRules specials={s.specials} monopoly={Boolean(s.monopoly)} />}
+          </div>
+
+          <div className="field">
             <span className="field-label">Fin de la partie</span>
             <Options<EndMode>
               label="Fin de la partie"
@@ -273,7 +297,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
           <div className="field">
             <span className="field-label">Règles maison</span>
             <div className="rule-list">
-              {HOUSE_RULES.map((r) => (
+              {HOUSE_RULES.filter((r) => !(s.builder && r.key === "evenBuild")).map((r) => (
                 <div
                   key={r.key}
                   className={`rule-row ${locked(r.key) ? "is-forced" : ""}`}
@@ -282,18 +306,20 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                   <Check label={r.label} checked={s[r.key]} disabled={!isHost || locked(r.key)} onChange={() => {}} />
                   <span>
                     <strong>{r.label}</strong>
-                    <span className="hint">{r.desc}</span>
+                    <span className="hint">{s.builder && r.key === "specials" ? BUILDER_SPECIALS : r.desc}</span>
                   </span>
                 </div>
               ))}
             </div>
             <NewRules s={s} />
-            {s.specials && <SpecialRules monopoly={Boolean(s.monopoly)} />}
-            <p className="hint" style={{ margin: 0 }}>
-              La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au monument de la ville (la tour Eiffel à
-              Paris). {s.evenBuild ? "Sans tout le quartier, deux maisons au plus." : "Au-delà de l'immeuble, il faut tout le quartier."} Le
-              reste suit la règle : enchères, prison, hypothèques.
-            </p>
+            {s.specials && !s.builder && <SpecialRules monopoly={Boolean(s.monopoly)} />}
+            {!s.builder && (
+              <p className="hint" style={{ margin: 0 }}>
+                La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au monument de la ville (la tour Eiffel à
+                Paris). {s.evenBuild ? "Sans tout le quartier, deux maisons au plus." : "Au-delà de l'immeuble, il faut tout le quartier."}{" "}
+                Le reste suit la règle : enchères, prison, hypothèques.
+              </p>
+            )}
           </div>
 
           <div className="field">

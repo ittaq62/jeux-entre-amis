@@ -3611,3 +3611,249 @@
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Builder : le chantier d'une ville, en bas du plateau                */
+/* ------------------------------------------------------------------ */
+
+.cap-build {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 12;
+  translate: -50% 0;
+  width: min(calc(100% - 24px), 780px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-radius: 16px;
+  background: rgba(255, 252, 244, 0.95);
+  color: var(--card-ink);
+  box-shadow: 0 14px 34px -16px rgba(20, 40, 60, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.cap-build-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 14px;
+}
+
+.cap-build-head strong {
+  font-size: 16px;
+}
+
+.cap-build-stat {
+  color: var(--muted, #6b6457);
+}
+
+.cap-build-stat b {
+  color: var(--card-ink);
+}
+
+.cap-build-full {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e6f4e3;
+  color: #2b7a3d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cap-build-spacer {
+  flex: 1;
+}
+
+.cap-build .cap-small {
+  padding: 6px 11px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px -4px rgba(20, 40, 60, 0.5);
+}
+
+.cap-build .cap-small:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cap-build .cap-small.is-on {
+  background: #ffe3a3;
+}
+
+.cap-build .cap-small.is-go {
+  background: #2fa864;
+  color: #fff;
+}
+
+.cap-build .cap-small.is-bad {
+  background: #e5483d;
+  color: #fff;
+}
+
+.cap-build-note {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8a6a1c;
+}
+
+.cap-build-note.is-bad,
+.cap-build-why {
+  color: #c2362c;
+}
+
+.cap-build-gain {
+  color: #2b7a3d;
+  font-weight: 700;
+}
+
+.cap-build-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-build-thumb {
+  flex: none;
+  border-radius: 10px;
+  background: #f1eadb;
+}
+
+.cap-build-hint {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+}
+
+.cap-build-palette {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.cap-build-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 78px;
+  padding: 4px 3px 5px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: #f4eedf;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cap-build-card:hover:not(:disabled) {
+  border-color: #ffb000;
+  background: #fff7e6;
+}
+
+.cap-build-card:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.cap-build-card.is-nuisance {
+  background: #f6e3dc;
+}
+
+.cap-build-card-name {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cap-build-card-meta {
+  font-size: 11px;
+  color: var(--muted, #6b6457);
+  white-space: nowrap;
+}
+
+.cap-build-tip {
+  flex: none;
+  align-self: center;
+  max-width: 190px;
+  margin: 0 0 0 6px;
+  font-size: 12px;
+}
+
+/* La fiche d'une ville en Builder : ce qui y est bâti */
+.cap-build-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.cap-build-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 10px;
+  background: #f4eedf;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cap-build-list li span {
+  flex: 1;
+}
+
+/* Au téléphone : plus serré ; couché, entre les deux colonnes */
+.cap-build.is-phone {
+  bottom: 4px;
+  gap: 4px;
+  padding: 6px 7px 7px;
+  border-radius: 13px;
+  width: calc(100% - 10px);
+}
+
+.cap-build.is-phone .cap-build-head {
+  font-size: 12px;
+  gap: 4px 8px;
+}
+
+.cap-build.is-phone .cap-build-head strong {
+  font-size: 14px;
+}
+
+.cap-build.is-phone .cap-build-hint {
+  font-size: 12px;
+}
+
+.cap-build.is-phone .cap-build-card {
+  width: 62px;
+  padding: 3px 2px 4px;
+}
+
+.cap-build.is-phone .cap-build-card-name {
+  font-size: 11px;
+}
+
+.cap-build.is-phone .cap-build-card-meta {
+  font-size: 10px;
+}
+
+.cap-build.is-phone .cap-small {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.cap-bright.is-land .cap-build .cap-build-full {
+  display: none;
+}

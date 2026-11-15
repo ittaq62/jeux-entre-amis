@@ -45,7 +45,9 @@ export type CardArt =
   | { kind: "ship"; ship: ShipKind; skin: NavalSkinId }
   | { kind: "uno"; face: "zero" | "skip" | "reverse" | "draw2" | "wild" | "wild4" }
   | { kind: "brick"; piece: "O" | "T" | "S" | "L" | "I" | "gris" }
-  | { kind: "meche"; subject: "allumette" | "dynamite" | "meche" | "mot" | "boum" };
+  | { kind: "meche"; subject: "allumette" | "dynamite" | "meche" | "mot" | "boum" }
+  /** Capitale Builder : un bâtiment de la carte, photographié à l'ouverture de l'album (pas sur la planche d'images) */
+  | { kind: "builder"; subject: "commerce" | "vague" | "centrale" };
 
 export interface CardDef {
   id: string;
@@ -321,6 +323,30 @@ export const CARDS: CardDef[] = [
     name: "La Décharge",
     quote: "Un cadeau à poser chez les amis.",
     art: atlas("build:decharge"),
+  },
+  {
+    id: "commerce",
+    family: "capitale",
+    rarity: "commune",
+    name: "Le Commerce",
+    quote: "Trois maisons autour, et la caisse sonne.",
+    art: { kind: "builder", subject: "commerce" },
+  },
+  {
+    id: "terrain-vague",
+    family: "capitale",
+    rarity: "peu-commune",
+    name: "Le Terrain vague",
+    quote: "Personne n'en voulait, jusqu'à ce que le voisin le veuille.",
+    art: { kind: "builder", subject: "vague" },
+  },
+  {
+    id: "centrale",
+    family: "capitale",
+    rarity: "rare",
+    name: "La Centrale",
+    quote: "Elle éclaire la ville et assombrit les voisins.",
+    art: { kind: "builder", subject: "centrale" },
   },
   {
     id: "fusee",
