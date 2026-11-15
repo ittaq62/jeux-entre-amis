@@ -1,0 +1,1009 @@
+/* ------------------------------------------------------------------ */
+/* Escarmouche : l'écran de combat                                     */
+/* ------------------------------------------------------------------ */
+
+html:has(.esc-root),
+html:has(.esc-root) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.esc-root {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #1b1714;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  font-family: var(--font-body, inherit);
+}
+
+.esc-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.esc-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.esc-hud button,
+.esc-hud .panel {
+  pointer-events: auto;
+}
+
+/* Le score et le temps */
+.esc-top {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.esc-teams {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  font-family: var(--font-title);
+}
+
+.esc-tscore,
+.esc-clock,
+.esc-solo {
+  min-width: 52px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(16, 14, 12, 0.6);
+  font-size: 24px;
+  text-align: center;
+}
+
+.esc-tscore.is-a {
+  border-bottom: 3px solid #d4453c;
+}
+
+.esc-tscore.is-b {
+  border-bottom: 3px solid #3f7fd8;
+}
+
+.esc-tscore.is-mine {
+  background: rgba(40, 34, 26, 0.85);
+}
+
+.esc-clock {
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.esc-solo small {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.esc-solo.is-lead {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.esc-solo.is-lead:empty {
+  display: none;
+}
+
+.esc-goal {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.esc-flags {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.esc-flag.is-taken {
+  animation: esc-blink 0.8s steps(2) infinite;
+}
+
+@keyframes esc-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Le fil des éliminations */
+.esc-feed {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.esc-feed li {
+  display: flex;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(16, 14, 12, 0.55);
+  animation: esc-in 0.25s ease-out;
+}
+
+.esc-feed-w {
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+@keyframes esc-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+
+.esc-banner {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 6px;
+  background: rgba(16, 14, 12, 0.7);
+  font-family: var(--font-title);
+  font-size: 20px;
+  white-space: nowrap;
+  animation: esc-banner 2.6s ease-out forwards;
+}
+
+.esc-banner.is-good {
+  color: #ffe08a;
+}
+
+.esc-banner.is-bad {
+  color: #ff8a7a;
+}
+
+@keyframes esc-banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.esc-countdown {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-title);
+  font-size: 96px;
+  color: #ffe9c2;
+}
+
+/* Le réticule : quatre traits écartés selon la dispersion */
+.esc-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  --gap: 10px;
+}
+
+.esc-cross i {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+  transition: transform 0.06s linear;
+}
+
+.esc-cross i:nth-child(1),
+.esc-cross i:nth-child(2) {
+  width: 2px;
+  height: 9px;
+  left: -1px;
+}
+
+.esc-cross i:nth-child(3),
+.esc-cross i:nth-child(4) {
+  width: 9px;
+  height: 2px;
+  top: -1px;
+}
+
+.esc-cross i:nth-child(1) {
+  bottom: var(--gap);
+}
+
+.esc-cross i:nth-child(2) {
+  top: var(--gap);
+}
+
+.esc-cross i:nth-child(3) {
+  right: var(--gap);
+}
+
+.esc-cross i:nth-child(4) {
+  left: var(--gap);
+}
+
+.esc-hit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background:
+    linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
+    linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+  -webkit-mask: radial-gradient(circle, transparent 5px, #000 6px);
+  mask: radial-gradient(circle, transparent 5px, #000 6px);
+  animation: esc-hit 0.22s ease-out forwards;
+}
+
+.esc-hit.is-head {
+  background:
+    linear-gradient(#ffd54a, #ffd54a) center / 2px 100% no-repeat,
+    linear-gradient(#ffd54a, #ffd54a) center / 100% 2px no-repeat;
+}
+
+.esc-hit.is-kill {
+  width: 34px;
+  height: 34px;
+  background:
+    linear-gradient(#ff4a3a, #ff4a3a) center / 3px 100% no-repeat,
+    linear-gradient(#ff4a3a, #ff4a3a) center / 100% 3px no-repeat;
+}
+
+@keyframes esc-hit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(45deg) scale(1.3);
+  }
+}
+
+.esc-aimed {
+  position: absolute;
+  top: calc(50% + 26px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #ff9c8f;
+  font-weight: 700;
+}
+
+/* La lunette : un cercle noir, et sa croix */
+.esc-scope {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)) 50% 50% / 1px 100% no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)) 50% 50% / 100% 1px no-repeat,
+    radial-gradient(circle at 50% 50%, transparent 0, transparent min(42vh, 42vw), #000 calc(min(42vh, 42vw) + 2px));
+}
+
+.esc-dmg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border-top: 6px solid rgba(220, 40, 30, 0.85);
+  animation: esc-dmg 1.5s ease-out forwards;
+}
+
+@keyframes esc-dmg {
+  to {
+    opacity: 0;
+  }
+}
+
+.esc-hurt {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(150, 0, 0, 0.75) 100%);
+  transition: opacity 0.15s linear;
+}
+
+/* La santé, l'arme et les munitions */
+.esc-health {
+  position: absolute;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-title);
+  font-size: 22px;
+}
+
+.esc-health-bar {
+  width: 180px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.esc-health-bar span {
+  display: block;
+  height: 100%;
+  background: #e8e2d2;
+  transition: width 0.15s linear;
+}
+
+.esc-health-bar span.is-low {
+  background: #e0503c;
+}
+
+.esc-carry {
+  font-size: 14px;
+  color: #ffe08a;
+}
+
+.esc-ammo {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.esc-ammo-name {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.esc-ammo-mag {
+  font-family: var(--font-title);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.esc-ammo-mag small {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.esc-ammo-nade {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.esc-reload {
+  width: 110px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.esc-reload span {
+  display: block;
+  height: 100%;
+  background: #ffe08a;
+}
+
+.esc-warn {
+  font-size: 13px;
+  color: #ffb38a;
+}
+
+/* Hors de combat */
+.esc-dead {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 16px 20px;
+  text-align: center;
+
+  text-shadow: none;
+  max-width: min(560px, 92vw);
+}
+
+.esc-dead h2 {
+  margin: 0 0 4px;
+}
+
+.esc-dead p {
+  margin: 0 0 8px;
+}
+
+.esc-next {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.esc-next-btn {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.esc-next-btn.is-on {
+  border-color: #b5793a;
+  background: rgba(181, 121, 58, 0.15);
+}
+
+.esc-spec {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(16, 14, 12, 0.6);
+  font-size: 14px;
+}
+
+.esc-click {
+  position: absolute;
+  top: 60%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(16, 14, 12, 0.75);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Le tableau des scores */
+.esc-board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: min(520px, 94vw);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 14px 18px;
+
+  text-shadow: none;
+}
+
+.esc-board h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.esc-board table,
+.esc-over-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.esc-board caption {
+  text-align: left;
+  font-weight: 800;
+  padding: 4px 0;
+}
+
+.esc-board th,
+.esc-board td,
+.esc-over-table th,
+.esc-over-table td {
+  padding: 3px 6px;
+  text-align: right;
+}
+
+.esc-board th:first-child,
+.esc-board td:first-child,
+.esc-over-table td:nth-child(2),
+.esc-over-table th:nth-child(2) {
+  text-align: left;
+}
+
+.esc-board tr.is-me,
+.esc-over-table tr.is-me {
+  background: rgba(181, 121, 58, 0.18);
+  font-weight: 700;
+}
+
+/* La pause */
+.esc-menu,
+.esc-over {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 8, 6, 0.55);
+  padding: 12px;
+}
+
+.esc-menu-card,
+.esc-over-card {
+  width: min(460px, 94vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 18px 20px;
+}
+
+.esc-over-card {
+  width: min(620px, 96vw);
+}
+
+.esc-menu-card h2,
+.esc-over-card h1 {
+  margin: 0 0 6px;
+}
+
+.esc-menu-actions,
+.esc-over-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.esc-menu-actions .btn {
+  flex: 1 1 45%;
+}
+
+.esc-settings {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.esc-settings label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.esc-settings .esc-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Le téléphone couché : le stick à gauche, la vue qui glisse à droite, les boutons sous le pouce droit */
+.esc-pad {
+  position: absolute;
+  inset: 0;
+}
+
+.esc-stick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 42%;
+  height: 72%;
+  touch-action: none;
+}
+
+.esc-stick {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.esc-stick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.esc-look-zone {
+  position: absolute;
+  right: 0;
+  top: 12%;
+  width: 58%;
+  height: 88%;
+  touch-action: none;
+}
+
+.esc-buttons {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: 250px;
+  height: 230px;
+  pointer-events: none;
+}
+
+.esc-btn {
+  position: absolute;
+  pointer-events: auto;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  background: rgba(16, 14, 12, 0.35);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.esc-btn.is-on {
+  background: rgba(255, 224, 138, 0.45);
+}
+
+.esc-btn:disabled {
+  opacity: 0.35;
+}
+
+.esc-fire {
+  right: 26px;
+  bottom: 40px;
+  width: 92px;
+  height: 92px;
+  background: rgba(200, 60, 40, 0.35);
+}
+
+.esc-fire-dot {
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin: auto;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+}
+
+.esc-ads {
+  right: 128px;
+  bottom: 96px;
+  width: 58px;
+  height: 58px;
+}
+
+.esc-jump {
+  right: 0;
+  bottom: 150px;
+  width: 54px;
+  height: 54px;
+}
+
+.esc-crouch {
+  right: 130px;
+  bottom: 22px;
+  width: 58px;
+  height: 58px;
+}
+
+.esc-reloadbtn {
+  right: 62px;
+  bottom: 168px;
+  width: 54px;
+  height: 54px;
+}
+
+.esc-swap {
+  right: 196px;
+  bottom: 60px;
+  width: 50px;
+  height: 50px;
+}
+
+.esc-nade {
+  right: 126px;
+  bottom: 166px;
+  width: 52px;
+  height: 52px;
+}
+
+.esc-knife {
+  right: 192px;
+  bottom: 128px;
+  width: 48px;
+  height: 48px;
+}
+
+.esc-touch-top {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  display: flex;
+  gap: 6px;
+}
+
+.esc-mini {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  background: rgba(16, 14, 12, 0.5);
+  color: #fff;
+  font-size: 12px;
+}
+
+.esc-rotate {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 14, 12, 0.92);
+  font-size: 20px;
+  text-align: center;
+}
+
+.esc-root.is-touch .esc-health {
+  bottom: auto;
+  top: max(44px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  font-size: 16px;
+}
+
+.esc-root.is-touch .esc-health-bar {
+  width: 110px;
+}
+
+.esc-root.is-touch .esc-ammo {
+  bottom: auto;
+  top: max(66px, env(safe-area-inset-top));
+  right: auto;
+  left: max(10px, env(safe-area-inset-left));
+  justify-items: start;
+}
+
+.esc-root.is-touch .esc-feed {
+  max-width: 42vw;
+  font-size: 10px;
+}
+
+.esc-root.is-touch .esc-feed li:nth-last-child(n + 4) {
+  display: none;
+}
+
+/* Un téléphone couché a peu de hauteur : les boutons se resserrent */
+@media (max-height: 460px) {
+  .esc-buttons {
+    transform: scale(0.78);
+    transform-origin: bottom right;
+  }
+
+  .esc-tscore,
+  .esc-clock,
+  .esc-solo {
+    font-size: 18px;
+    padding: 2px 9px;
+    min-width: 40px;
+  }
+
+  .esc-goal {
+    font-size: 10px;
+  }
+
+  .esc-countdown {
+    font-size: 64px;
+  }
+}
+
+.esc-root.is-touch .esc-ammo-mag {
+  font-size: 24px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Le salon : l'arsenal                                                */
+/* ------------------------------------------------------------------ */
+
+.esc-weapons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.esc-weapon {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  text-align: center;
+  cursor: pointer;
+}
+
+.esc-weapon small {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.esc-weapon.is-on {
+  border-color: #b5793a;
+  background: rgba(181, 121, 58, 0.12);
+}
+
+.esc-weapon:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.esc-camo-title {
+  margin: 12px 0 6px;
+  font-size: 15px;
+}
+
+.esc-camos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.esc-camo {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 74px;
+  padding: 6px 2px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.esc-camo.is-on {
+  border-color: #b5793a;
+}
+
+.esc-camo.is-locked {
+  opacity: 0.55;
+}
+
+.esc-camo small {
+  color: var(--text-soft);
+}
+
+.esc-howto p {
+  margin: 0 0 8px;
+}
+
+/* ------------------------------------------------------------------ */
+/* L'accueil : le hameau au couchant                                   */
+/* ------------------------------------------------------------------ */
+
+.game-stage.is-front {
+  background: linear-gradient(180deg, #3b4f6b 0%, #c99a6a 60%, #2a221d 100%);
+}
+
+.game-name.is-escarmouche {
+  font-size: min(60px, 12vw);
+  color: #f4e6cc;
+  text-shadow:
+    1px 1px 0 #6b4a2c,
+    2px 2px 0 #5f4127,
+    3px 3px 0 #533822,
+    4px 4px 0 #472f1c,
+    6px 8px 14px rgba(0, 0, 0, 0.5);
+}
+
+.esc-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.esc-preview-flash {
+  animation: esc-pv-flash 2.4s steps(1) infinite;
+}
+
+.esc-preview-tracer {
+  stroke-dasharray: 12 120;
+  animation: esc-pv-tracer 2.4s linear infinite;
+}
+
+.esc-preview-tracer.is-2 {
+  animation-delay: 0.12s;
+}
+
+.esc-preview-tracer.is-3 {
+  animation-delay: 0.24s;
+}
+
+.esc-preview-reply {
+  stroke-dasharray: 10 90;
+  animation: esc-pv-tracer 2.4s linear infinite;
+  animation-delay: 1.2s;
+}
+
+.esc-preview-window {
+  animation: esc-pv-window 2.4s steps(1) infinite;
+  animation-delay: 1.15s;
+}
+
+@keyframes esc-pv-flash {
+  0%,
+  4%,
+  10%,
+  14% {
+    opacity: 1;
+  }
+  2%,
+  7%,
+  12%,
+  18%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes esc-pv-tracer {
+  0% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  20% {
+    stroke-dashoffset: -110;
+    opacity: 1;
+  }
+  21%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes esc-pv-window {
+  0%,
+  6% {
+    fill: #fff3b0;
+  }
+  10%,
+  100% {
+    fill: #ffcf73;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .esc-preview * {
+    animation: none !important;
+  }
+}

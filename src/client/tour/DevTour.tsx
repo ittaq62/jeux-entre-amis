@@ -20,7 +20,7 @@ import { TourIntermission } from "./TourIntermission.tsx";
 import "./tour.css";
 
 const NAMES = ["Quentin", "Gaston", "Ginette", "Marcel", "Josiane", "Raymond", "Huguette", "Lucien-Alexandre"];
-const GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons"];
+const GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons", "escarmouche"];
 
 const TITLES: TourTitle[] = [
   { id: "collector", label: "Le collectionneur", userId: "u1", name: "Gaston", detail: "", stat: "3", unit: "jeux gagnés" },

@@ -3,6 +3,8 @@ import { seededAvatar } from "../../shared/avatar.ts";
 import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import { FETE_BY_ID, type FeteId } from "../../shared/games/crampons/boutique.ts";
+import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
+import { CamoSwatch, WeaponIcon } from "../escarmouche/WeaponIcon.tsx";
 import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.ts";
 import { bombInfo, type BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
@@ -41,6 +43,7 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
   { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
   { kind: "bombe", game: "meche", title: "Mèche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
+  { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -66,6 +69,7 @@ export function ShopPage() {
     }
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} />;
     if (item.kind === "bombe") return <BombArt id={item.ref as BombId} className="bomb-thumb" />;
+    if (item.kind === "camo") return <CamoSwatch camo={item.ref as CamoId} size={52} />;
     return null;
   };
 
@@ -78,6 +82,7 @@ export function ShopPage() {
     }
     if (item.kind === "fete") return FETE_BY_ID.get(item.ref as FeteId)?.blurb ?? null;
     if (item.kind === "bombe") return bombInfo(item.ref as BombId).blurb;
+    if (item.kind === "camo") return CAMO_BY_ID.get(item.ref as CamoId)?.blurb ?? null;
     return null;
   };
 
@@ -98,6 +103,7 @@ export function ShopPage() {
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)
     if (item.kind === "bombe") return <BombShow bomb={item.ref as BombId} loud avatar={user?.avatar} />;
+    if (item.kind === "camo") return <WeaponIcon weapon="fa" camo={item.ref as CamoId} size={260} />;
     return look(item);
   };
 

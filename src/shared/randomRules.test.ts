@@ -18,6 +18,7 @@ import {
   hostPatch,
   withoutDrawnKeys,
 } from "./randomRules.ts";
+import { DEFAULT_SETTINGS as ESCARMOUCHE_DEFAULTS } from "./games/escarmouche/rules.ts";
 import { random } from "./rng.ts";
 import { findVariant, TOUR_GAMES, variantSettings } from "./tour.ts";
 
@@ -29,6 +30,7 @@ const DEFAULTS: Record<GameId, object> = {
   meche: MECHE_DEFAULTS,
   bolides: BOLIDES_DEFAULTS,
   crampons: DEFAULT_CONFIG,
+  escarmouche: ESCARMOUCHE_DEFAULTS,
 };
 
 const seeded = (seed: number) => {

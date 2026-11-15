@@ -6,6 +6,7 @@ import type { BotLevel as BolidesBotLevel } from "./games/bolides/bot.ts";
 import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { CramponsConfig } from "./games/crampons/view.ts";
+import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
 import type { BotLevel as MecheBotLevel, MecheSettings } from "./games/meche/engine.ts";
@@ -14,12 +15,14 @@ import type { Looks } from "./looks.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons"];
+export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons", "escarmouche"];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
  * l'hôte les coche s'il veut, ils ne le sont pas d'office
  */
-const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter((g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons");
+const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
+  (g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "escarmouche",
+);
 
 /** Nombre de joueurs qu'accueille chaque jeu */
 export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
@@ -30,6 +33,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   meche: { min: 2, max: 8 },
   bolides: { min: 2, max: 8 },
   crampons: { min: 2, max: 8 },
+  escarmouche: { min: 2, max: 8 },
 };
 
 export const TOUR_MIN_PLAYERS = 2;
@@ -62,11 +66,39 @@ export const TOUR_BOT_LEVELS: Record<
     bolides: BolidesBotLevel;
     /** Crampons : le niveau de l'ordinateur, de 0 (Débutant) à 3 (Légende) */
     crampons: number;
+    escarmouche: EscarmoucheBotLevel;
   }
 > = {
-  easy: { label: "Facile", naval: "mousse", bricks: "apprenti", capitale: "facile", meche: "facile", bolides: "facile", crampons: 0 },
-  normal: { label: "Moyen", naval: "chasseur", bricks: "confirme", capitale: "moyen", meche: "moyen", bolides: "moyen", crampons: 1 },
-  hard: { label: "Fort", naval: "amiral", bricks: "expert", capitale: "fort", meche: "fort", bolides: "fort", crampons: 2 },
+  easy: {
+    label: "Facile",
+    naval: "mousse",
+    bricks: "apprenti",
+    capitale: "facile",
+    meche: "facile",
+    bolides: "facile",
+    crampons: 0,
+    escarmouche: "facile",
+  },
+  normal: {
+    label: "Moyen",
+    naval: "chasseur",
+    bricks: "confirme",
+    capitale: "moyen",
+    meche: "moyen",
+    bolides: "moyen",
+    crampons: 1,
+    escarmouche: "moyen",
+  },
+  hard: {
+    label: "Fort",
+    naval: "amiral",
+    bricks: "expert",
+    capitale: "fort",
+    meche: "fort",
+    bolides: "fort",
+    crampons: 2,
+    escarmouche: "fort",
+  },
 };
 
 /** Comment se choisissent les règles de chaque jeu */
@@ -523,6 +555,34 @@ const CRAMPONS_VARIANTS: VariantOf<CramponsConfig>[] = [
   },
 ];
 
+const ESCARMOUCHE_VARIANTS: VariantOf<EscarmoucheSettings>[] = [
+  { id: "classique", name: "Escarmouche", blurb: "Toutes les armes, la santé qui revient à l'abri.", settings: {} },
+  {
+    id: "precision",
+    name: "Tireurs d'élite",
+    blurb: "Tout le monde au fusil de précision : une balle à la tête suffit.",
+    settings: { arsenal: "precision" },
+  },
+  {
+    id: "pompe",
+    name: "Corps à corps",
+    blurb: "Fusils à pompe pour tout le monde : on se bat de près, dans les maisons.",
+    settings: { arsenal: "pompe" },
+  },
+  {
+    id: "pistolets",
+    name: "Duel au pistolet",
+    blurb: "Rien que des pistolets : la précision avant tout.",
+    settings: { arsenal: "pistolet" },
+  },
+  {
+    id: "sans-filet",
+    name: "Sans filet",
+    blurb: "Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.",
+    settings: { hardcore: true },
+  },
+];
+
 const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -531,6 +591,7 @@ const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   meche: MECHE_VARIANTS,
   bolides: BOLIDES_VARIANTS,
   crampons: CRAMPONS_VARIANTS,
+  escarmouche: ESCARMOUCHE_VARIANTS,
 };
 
 /** Les variantes d'un jeu, sans leurs réglages */
@@ -580,6 +641,7 @@ export function variantSettings(game: "capitale", id: string | null | undefined)
 export function variantSettings(game: "meche", id: string | null | undefined): Partial<MecheSettings>;
 export function variantSettings(game: "bolides", id: string | null | undefined): Partial<BolidesSettings>;
 export function variantSettings(game: "crampons", id: string | null | undefined): Partial<CramponsConfig>;
+export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);
   if (!base || !extra) return {};
@@ -826,6 +888,22 @@ const TITLE_RULES: TitleRule[] = [
     score: (c) => {
       const n = sum(c, "crampons", "myGoals");
       return n >= 2 ? { value: n, stat: `${n}`, unit: "buts marqués sur le terrain" } : null;
+    },
+  },
+  {
+    id: "sniper",
+    label: "Le tireur d'élite",
+    score: (c) => {
+      const n = sum(c, "escarmouche", "headshots");
+      return n >= 3 ? { value: n, stat: `${n}`, unit: "balles à la tête" } : null;
+    },
+  },
+  {
+    id: "grognard",
+    label: "Le grognard",
+    score: (c) => {
+      const n = sum(c, "escarmouche", "kills");
+      return n >= 8 ? { value: n, stat: `${n}`, unit: "adversaires éliminés au combat" } : null;
     },
   },
   {

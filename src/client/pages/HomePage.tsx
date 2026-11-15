@@ -17,6 +17,7 @@ import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
 import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
 import { CramponsPreview } from "../crampons/CramponsPreview.tsx";
+import { EscarmouchePreview } from "../escarmouche/EscarmouchePreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -57,6 +58,7 @@ const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
   meche: { stage: "is-workshop", art: () => <MechePreview /> },
   bolides: { stage: "is-circuit", art: () => <BolidesPreview /> },
   crampons: { stage: "is-pitch", art: () => <CramponsPreview /> },
+  escarmouche: { stage: "is-front", art: () => <EscarmouchePreview /> },
 };
 
 function greeting() {

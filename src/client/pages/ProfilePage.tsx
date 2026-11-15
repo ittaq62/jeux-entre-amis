@@ -41,6 +41,7 @@ interface Profile {
   meche: GameStats;
   bolides: GameStats;
   crampons: GameStats;
+  escarmouche?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -121,11 +122,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const bot = bolides.totals;
   const showBolides = games.includes("bolides") || bolides.played > 0;
   const showCrampons = games.includes("crampons") || (profile.crampons?.played ?? 0) > 0;
+  const escarmouche = profile.escarmouche ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const et = escarmouche.totals as Record<string, number>;
+  const showEscarmouche = games.includes("escarmouche") || escarmouche.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
-  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "tour"] as TableGame[]).filter(
+  const shelfGames = (["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "escarmouche", "tour"] as TableGame[]).filter(
     (g) =>
       g === "uno" ||
       (g === "naval"
@@ -138,9 +142,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               ? showMeche
               : g === "crampons"
                 ? showCrampons
-                : g === "bolides"
-                  ? showBolides
-                  : showTour),
+                : g === "escarmouche"
+                  ? showEscarmouche
+                  : g === "bolides"
+                    ? showBolides
+                    : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -225,6 +231,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{bolides.points.toLocaleString("fr-FR")}</strong> points à Bolides
                 <span className="profile-elo">
                   Elo <strong className="num">{bolides.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showEscarmouche && escarmouche.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{escarmouche.points.toLocaleString("fr-FR")}</strong> points à Escarmouche
+                <span className="profile-elo">
+                  Elo <strong className="num">{escarmouche.elo}</strong>
                 </span>
               </p>
             )}
@@ -403,6 +417,25 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </section>
             )}
 
+            {showEscarmouche && (
+              <section className="carnet panel">
+                <h2>Le front</h2>
+                <p className="carnet-summary">
+                  {escarmouche.played === 0
+                    ? "Aucune partie d'Escarmouche pour l'instant."
+                    : `${escarmouche.played} partie${escarmouche.played > 1 ? "s" : ""}, ${escarmouche.won} gagnée${escarmouche.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Adversaires éliminés" value={et.kills} strong />
+                  <LedgerRow label="Balles à la tête" value={et.headshots} />
+                  <LedgerRow label="Passes décisives" value={et.assists} />
+                  <LedgerRow label="Fois éliminé" value={et.deaths} />
+                  <LedgerRow label="Drapeaux rapportés" value={et.captures} />
+                  <LedgerRow label="Meilleure série" value={et.bestStreak} />
+                </dl>
+              </section>
+            )}
+
             {showTour && (
               <section className="carnet panel">
                 <h2>Les tournées</h2>
@@ -531,6 +564,12 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 const dayMonth = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
 
 const NAVAL_MODES: Record<string, string> = { duel: "en duel", melee: "en mêlée", teams: "en équipes" };
+const ESC_MODES: Record<string, string> = {
+  solo: "chacun pour soi",
+  equipes: "en équipes",
+  zone: "zone à tenir",
+  drapeau: "capture du drapeau",
+};
 
 function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "naval") return `bataille navale ${NAVAL_MODES[g.variant] ?? ""}`.trim();
@@ -539,6 +578,7 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "meche")
     return g.variant === "rallonge" ? "Mèche à rallonge" : g.variant === "chacun" ? "Mèche, chacun la sienne" : "Mèche";
   if (g.game === "crampons") return `Crampons, ${g.variant} contre ${g.variant}`;
+  if (g.game === "escarmouche") return `Escarmouche, ${ESC_MODES[g.variant] ?? "combat"}`;
   if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }

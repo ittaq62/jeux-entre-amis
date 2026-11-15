@@ -1,0 +1,371 @@
+// Les sons d'Escarmouche, fabriqués à la volée (aucun fichier) : chaque arme a sa détonation, qui claque de près et
+// gronde de loin ; le rechargement, les pas, la grenade, les touches. Ils viennent de là où ça se passe.
+
+import { audioOut } from "../lib/sound.ts";
+import { usePrefs } from "../stores/prefs.ts";
+import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+
+export type EscSoundName =
+  | `shot-${WeaponId}`
+  | "far"
+  | "reload"
+  | "pump"
+  | "empty"
+  | "swap"
+  | "step"
+  | "land"
+  | "hit"
+  | "head"
+  | "hurt"
+  | "kill"
+  | "boom"
+  | "bounce"
+  | "throw"
+  | "knife"
+  | "flag-take"
+  | "flag-score"
+  | "flag-back"
+  | "beep"
+  | "go"
+  | "zone";
+
+interface ShotSpec {
+  thump: number;
+  thumpDecay: number;
+  noiseDecay: number;
+  cut: number;
+  tail: number;
+  crack: number;
+  gain: number;
+}
+
+const SHOTS: Record<WeaponId, ShotSpec> = {
+  fa: { thump: 85, thumpDecay: 0.07, noiseDecay: 0.05, cut: 5200, tail: 0.45, crack: 0.5, gain: 0.9 },
+  pm: { thump: 120, thumpDecay: 0.05, noiseDecay: 0.035, cut: 6200, tail: 0.3, crack: 0.4, gain: 0.75 },
+  pompe: { thump: 55, thumpDecay: 0.13, noiseDecay: 0.1, cut: 3200, tail: 0.75, crack: 0.3, gain: 1 },
+  precision: { thump: 70, thumpDecay: 0.1, noiseDecay: 0.06, cut: 7000, tail: 1.1, crack: 0.9, gain: 1 },
+  pistolet: { thump: 140, thumpDecay: 0.05, noiseDecay: 0.04, cut: 5600, tail: 0.32, crack: 0.45, gain: 0.7 },
+};
+
+/** Un petit bruit blanc toujours le même */
+function noiseGen(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return (s / 4294967296) * 2 - 1;
+  };
+}
+
+function lowpassK(fc: number, sr: number) {
+  return 1 - Math.exp((-2 * Math.PI * fc) / sr);
+}
+
+export class EscSound {
+  private ctx: AudioContext | null;
+  private out: GainNode | null;
+  private buffers = new Map<EscSoundName, AudioBuffer>();
+  private last = new Map<string, number>();
+
+  constructor() {
+    const a = audioOut();
+    this.ctx = a?.ctx ?? null;
+    this.out = a?.out ?? null;
+    if (this.ctx) this.build(this.ctx);
+  }
+
+  private make(len: number, fill: (data: Float32Array, sr: number) => void): AudioBuffer {
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, Math.max(1, Math.floor(len * sr)), sr);
+    fill(buf.getChannelData(0), sr);
+    // On ramène le plus fort à 0,9 : tous les sons au même niveau de départ
+    const d = buf.getChannelData(0);
+    let peak = 0;
+    for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]!));
+    if (peak > 0) for (let i = 0; i < d.length; i++) d[i] = (d[i]! / peak) * 0.9;
+    return buf;
+  }
+
+  private shot(spec: ShotSpec, far: boolean) {
+    return this.make(spec.tail + 0.15, (d, sr) => {
+      const n = noiseGen(far ? 77 : 13);
+      const k = lowpassK(far ? 900 : spec.cut, sr);
+      const kTail = lowpassK(far ? 500 : 1400, sr);
+      let lp = 0;
+      let lpTail = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const w = n();
+        lp += k * (w - lp);
+        lpTail += kTail * (w - lpTail);
+        const body = lp * Math.exp(-t / spec.noiseDecay);
+        const crack = far ? 0 : w * spec.crack * Math.exp(-t / 0.004);
+        const f = spec.thump * (1 + 1.5 * Math.exp(-t / 0.02));
+        const thump = Math.sin(2 * Math.PI * f * t) * Math.exp(-t / spec.thumpDecay) * (far ? 0.6 : 1.1);
+        // La queue : l'écho entre les murs, qui s'éteint
+        const tail = lpTail * 0.35 * Math.exp(-t / (spec.tail * 0.35)) * Math.min(1, t / 0.02);
+        d[i] = (body + crack + thump + tail) * spec.gain;
+      }
+    });
+  }
+
+  private click(len: number, freq: number, seed: number) {
+    return this.make(len, (d, sr) => {
+      const n = noiseGen(seed);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        d[i] = (n() * 0.6 + Math.sin(2 * Math.PI * freq * t) * 0.5) * Math.exp(-t / 0.008);
+      }
+    });
+  }
+
+  private tone(len: number, notes: [number, number][], kind: "sine" | "square" = "sine") {
+    return this.make(len, (d, sr) => {
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        let v = 0;
+        for (const [f, at] of notes) {
+          if (t < at) continue;
+          const u = t - at;
+          const s = Math.sin(2 * Math.PI * f * u);
+          v += (kind === "square" ? Math.sign(s) * 0.4 : s) * Math.exp(-u / 0.12) * Math.min(1, u / 0.004);
+        }
+        d[i] = v;
+      }
+    });
+  }
+
+  private build(ctx: AudioContext) {
+    void ctx;
+    for (const [id, spec] of Object.entries(SHOTS) as [WeaponId, ShotSpec][]) this.buffers.set(`shot-${id}`, this.shot(spec, false));
+    this.buffers.set("far", this.shot(SHOTS.fa, true));
+    // Le rechargement : le chargeur qui sort, celui qui entre, la culasse
+    this.buffers.set(
+      "reload",
+      this.make(0.9, (d, sr) => {
+        const n = noiseGen(5);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          let v = 0;
+          for (const [at, f] of [
+            [0.05, 1800],
+            [0.42, 1300],
+            [0.47, 2400],
+            [0.75, 900],
+          ] as const) {
+            if (t >= at) v += (n() * 0.7 + Math.sin(2 * Math.PI * f * (t - at)) * 0.4) * Math.exp(-(t - at) / 0.012);
+          }
+          d[i] = v;
+        }
+      }),
+    );
+    this.buffers.set(
+      "pump",
+      this.make(0.35, (d, sr) => {
+        const n = noiseGen(9);
+        let lp = 0;
+        const k = lowpassK(2500, sr);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += k * (n() - lp);
+          const a = Math.exp(-t / 0.02) + (t > 0.16 ? Math.exp(-(t - 0.16) / 0.02) : 0);
+          d[i] = lp * a;
+        }
+      }),
+    );
+    this.buffers.set("empty", this.click(0.05, 3000, 3));
+    this.buffers.set("swap", this.click(0.12, 900, 4));
+    this.buffers.set(
+      "step",
+      this.make(0.12, (d, sr) => {
+        const n = noiseGen(11);
+        let lp = 0;
+        const k = lowpassK(700, sr);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += k * (n() - lp);
+          d[i] = lp * Math.exp(-t / 0.03) * Math.min(1, t / 0.005);
+        }
+      }),
+    );
+    this.buffers.set(
+      "land",
+      this.make(0.2, (d, sr) => {
+        const n = noiseGen(12);
+        let lp = 0;
+        const k = lowpassK(400, sr);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += k * (n() - lp);
+          d[i] = (lp + Math.sin(2 * Math.PI * 60 * t) * 0.3) * Math.exp(-t / 0.05);
+        }
+      }),
+    );
+    this.buffers.set("hit", this.tone(0.08, [[2200, 0]]));
+    this.buffers.set(
+      "head",
+      this.tone(0.35, [
+        [1760, 0],
+        [2637, 0.005],
+      ]),
+    );
+    this.buffers.set(
+      "hurt",
+      this.make(0.25, (d, sr) => {
+        const n = noiseGen(21);
+        let lp = 0;
+        const k = lowpassK(300, sr);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += k * (n() - lp);
+          d[i] = (lp * 0.8 + Math.sin(2 * Math.PI * 70 * t) * 0.6) * Math.exp(-t / 0.06);
+        }
+      }),
+    );
+    this.buffers.set(
+      "kill",
+      this.tone(0.4, [
+        [880, 0],
+        [1320, 0.07],
+      ]),
+    );
+    this.buffers.set(
+      "boom",
+      this.make(2.2, (d, sr) => {
+        const n = noiseGen(31);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const k = lowpassK(2800 * Math.exp(-t / 0.25) + 120, sr);
+          lp += k * (n() - lp);
+          const rumble = Math.sin(2 * Math.PI * (38 + 30 * Math.exp(-t / 0.1)) * t) * Math.exp(-t / 0.5);
+          d[i] = lp * Math.exp(-t / 0.55) * 1.4 + rumble * 0.9;
+        }
+      }),
+    );
+    this.buffers.set("bounce", this.click(0.06, 1500, 41));
+    this.buffers.set(
+      "throw",
+      this.make(0.3, (d, sr) => {
+        const n = noiseGen(51);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const k = lowpassK(600 + 2400 * Math.sin(Math.min(1, t / 0.3) * Math.PI), sr);
+          lp += k * (n() - lp);
+          d[i] = lp * Math.sin(Math.min(1, t / 0.3) * Math.PI);
+        }
+      }),
+    );
+    this.buffers.set(
+      "knife",
+      this.make(0.22, (d, sr) => {
+        const n = noiseGen(61);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const k = lowpassK(1200 + 5000 * (t / 0.22), sr);
+          lp += k * (n() - lp);
+          d[i] = lp * Math.sin((t / 0.22) * Math.PI);
+        }
+      }),
+    );
+    this.buffers.set(
+      "flag-take",
+      this.tone(
+        0.6,
+        [
+          [523, 0],
+          [659, 0.1],
+          [784, 0.2],
+        ],
+        "square",
+      ),
+    );
+    this.buffers.set(
+      "flag-score",
+      this.tone(
+        1,
+        [
+          [523, 0],
+          [659, 0.12],
+          [784, 0.24],
+          [1046, 0.36],
+        ],
+        "square",
+      ),
+    );
+    this.buffers.set(
+      "flag-back",
+      this.tone(
+        0.5,
+        [
+          [784, 0],
+          [523, 0.12],
+        ],
+        "square",
+      ),
+    );
+    this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
+    this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
+    this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+  }
+
+  /** L'oreille : là où est le joueur, et où il regarde */
+  setListener(x: number, y: number, z: number, yaw: number) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const l = ctx.listener;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    if (l.positionX) {
+      const t = ctx.currentTime;
+      l.positionX.setValueAtTime(x, t);
+      l.positionY.setValueAtTime(y, t);
+      l.positionZ.setValueAtTime(z, t);
+      l.forwardX.setValueAtTime(fx, t);
+      l.forwardY.setValueAtTime(0, t);
+      l.forwardZ.setValueAtTime(fz, t);
+      l.upX.setValueAtTime(0, t);
+      l.upY.setValueAtTime(1, t);
+      l.upZ.setValueAtTime(0, t);
+    } else {
+      l.setPosition(x, y, z);
+      l.setOrientation(fx, 0, fz, 0, 1, 0);
+    }
+  }
+
+  /** Un son, d'un endroit du monde (sinon dans la tête du joueur) */
+  play(name: EscSoundName, opts: { at?: { x: number; y: number; z: number }; volume?: number; rate?: number; gap?: number } = {}) {
+    const prefs = usePrefs.getState();
+    const ctx = this.ctx;
+    if (!prefs.sound || !ctx || !this.out) return;
+    const buf = this.buffers.get(name);
+    if (!buf) return;
+    // Pas deux fois le même son en même temps (au même endroit)
+    const key = `${name}:${opts.at ? `${Math.round(opts.at.x)},${Math.round(opts.at.z)}` : "me"}`;
+    const now = performance.now();
+    if (now - (this.last.get(key) ?? -1e9) < (opts.gap ?? 25)) return;
+    this.last.set(key, now);
+    if (ctx.state === "suspended") void ctx.resume();
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
+    const gain = ctx.createGain();
+    gain.gain.value = prefs.volume * (opts.volume ?? 1) * 0.8;
+    src.connect(gain);
+    if (opts.at) {
+      const p = ctx.createPanner();
+      p.panningModel = "equalpower";
+      p.distanceModel = "inverse";
+      p.refDistance = 4;
+      p.rolloffFactor = 1.1;
+      p.maxDistance = 200;
+      p.positionX.value = opts.at.x;
+      p.positionY.value = opts.at.y;
+      p.positionZ.value = opts.at.z;
+      gain.connect(p).connect(this.out);
+    } else gain.connect(this.out);
+    src.start();
+  }
+}

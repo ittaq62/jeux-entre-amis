@@ -252,6 +252,71 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Festival offensif",
     description: "Gagner un match avec cinq buts d'écart ou plus.",
   },
+  // Escarmouche
+  {
+    id: "escarmouche-first-win",
+    game: "escarmouche",
+    chip: "1re",
+    tone: "red",
+    title: "Baptême du feu",
+    description: "Gagner une partie d'Escarmouche.",
+  },
+  {
+    id: "escarmouche-regular",
+    game: "escarmouche",
+    chip: "25",
+    tone: "blue",
+    title: "Vieux briscard",
+    description: "Jouer 25 parties d'Escarmouche.",
+  },
+  {
+    id: "escarmouche-ace",
+    game: "escarmouche",
+    chip: "10",
+    tone: "red",
+    title: "As de la gâchette",
+    description: "Éliminer dix adversaires dans une même partie.",
+  },
+  {
+    id: "escarmouche-sharp",
+    game: "escarmouche",
+    chip: "×5",
+    tone: "black",
+    title: "Œil de lynx",
+    description: "Cinq éliminations d'une balle à la tête dans une même partie.",
+  },
+  {
+    id: "escarmouche-streak",
+    game: "escarmouche",
+    chip: "5",
+    tone: "black",
+    title: "Série noire",
+    description: "Éliminer cinq adversaires d'affilée sans tomber.",
+  },
+  {
+    id: "escarmouche-knife",
+    game: "escarmouche",
+    chip: "1",
+    tone: "ivory",
+    title: "Sans un bruit",
+    description: "Éliminer un adversaire au couteau.",
+  },
+  {
+    id: "escarmouche-flag",
+    game: "escarmouche",
+    chip: "1",
+    tone: "green",
+    title: "Porte-drapeau",
+    description: "Rapporter le drapeau adverse chez soi.",
+  },
+  {
+    id: "escarmouche-untouchable",
+    game: "escarmouche",
+    chip: "0",
+    tone: "green",
+    title: "Intouchable",
+    description: "Gagner une partie sans être éliminé une seule fois.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -421,6 +486,26 @@ export function earnedCramponsAchievements(o: CramponsOutcome): string[] {
   add("crampons-clean", o.won && o.stats.conceded === 0);
   add("crampons-hat-trick", o.stats.myGoals >= 3);
   add("crampons-rout", o.won && o.stats.goals - o.stats.conceded >= 5);
+  return out;
+}
+
+export interface EscarmoucheOutcome {
+  won: boolean;
+  played: number;
+  stats: { kills: number; deaths: number; headshots: number; best: number; knives: number; captures: number };
+}
+
+export function earnedEscarmoucheAchievements(o: EscarmoucheOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("escarmouche-first-win", o.won);
+  add("escarmouche-regular", o.played >= 25);
+  add("escarmouche-ace", o.stats.kills >= 10);
+  add("escarmouche-sharp", o.stats.headshots >= 5);
+  add("escarmouche-streak", o.stats.best >= 5);
+  add("escarmouche-knife", o.stats.knives >= 1);
+  add("escarmouche-flag", o.stats.captures >= 1);
+  add("escarmouche-untouchable", o.won && o.stats.deaths === 0);
   return out;
 }
 

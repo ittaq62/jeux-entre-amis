@@ -28,6 +28,7 @@ export function intentQuery(intent: ArrivalIntent): string {
 export const JOINS_STARTED: Record<TableGame, boolean> = {
   tour: true,
   crampons: true,
+  escarmouche: true,
   uno: false,
   naval: false,
   bricks: false,
@@ -128,6 +129,7 @@ export function lateJoinHint(game: TableGame, on: boolean): string {
       ? "Qui arrive pendant la tournée choisit : la jouer dès le prochain jeu, ou la regarder."
       : "Une fois la tournée lancée, plus personne n'y entre. Seuls les amis d'un joueur peuvent la suivre.";
   if (!on) return "Une fois la partie lancée, plus personne ne s'assoit. Seuls les amis d'un joueur peuvent la regarder.";
+  if (game === "escarmouche") return "Qui arrive pendant la partie choisit : rejoindre le combat tout de suite, ou regarder.";
   if (JOINS_STARTED[game]) return "Qui arrive pendant le match choisit : entrer sur le terrain tout de suite, ou regarder.";
   return `On n'entre pas dans une partie de ${GAME_NAMES[game as GameId]} déjà lancée : qui arrive la regarde, et s'assoit à la suivante.`;
 }

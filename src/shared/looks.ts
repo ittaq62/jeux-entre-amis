@@ -5,10 +5,11 @@
 import { isSkinId as isKartSkinId, isVehicleId, type SkinId as KartSkinId, type VehicleId } from "./games/bolides/garage.ts";
 import { isTokenId, type TokenId } from "./games/capitale/tokens.ts";
 import { isFeteId, type FeteId } from "./games/crampons/boutique.ts";
+import { isCamoId, type CamoId } from "./games/escarmouche/camos.ts";
 import { isBombId, type BombId } from "./games/meche/bombs.ts";
 import { isSkinId as isNavalSkinId, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { isBackId, type BackId } from "./games/uno/backs.ts";
-import { bombItem, canUse, feteItem, kartItem, navalItem, tokenItem, unoItem, vehicleItem } from "./shop.ts";
+import { bombItem, camoItem, canUse, feteItem, kartItem, navalItem, tokenItem, unoItem, vehicleItem } from "./shop.ts";
 
 /** Le ballon de Crampons n'y est pas : chacun ne voit que le sien, sur son appareil, sans passer par la table */
 export interface Looks {
@@ -19,6 +20,7 @@ export interface Looks {
   bolidesSkin?: KartSkinId;
   cramponsFete?: FeteId;
   mecheBomb?: BombId;
+  escarmoucheCamo?: CamoId;
 }
 
 /** Seulement des articles connus, chacun à sa place ; le reste est oublié */
@@ -32,6 +34,7 @@ export function cleanLooks(raw: unknown): Looks {
   if (isKartSkinId(o.bolidesSkin)) out.bolidesSkin = o.bolidesSkin;
   if (isFeteId(o.cramponsFete)) out.cramponsFete = o.cramponsFete;
   if (isBombId(o.mecheBomb)) out.mecheBomb = o.mecheBomb;
+  if (isCamoId(o.escarmoucheCamo)) out.escarmoucheCamo = o.escarmoucheCamo;
   return out;
 }
 
@@ -45,6 +48,7 @@ export function usableLooks(looks: Looks, owned: ReadonlySet<string>): Looks {
   if (looks.bolidesSkin && canUse(kartItem(looks.bolidesSkin), owned)) out.bolidesSkin = looks.bolidesSkin;
   if (looks.cramponsFete && canUse(feteItem(looks.cramponsFete), owned)) out.cramponsFete = looks.cramponsFete;
   if (looks.mecheBomb && canUse(bombItem(looks.mecheBomb), owned)) out.mecheBomb = looks.mecheBomb;
+  if (looks.escarmoucheCamo && canUse(camoItem(looks.escarmoucheCamo), owned)) out.escarmoucheCamo = looks.escarmoucheCamo;
   return out;
 }
 

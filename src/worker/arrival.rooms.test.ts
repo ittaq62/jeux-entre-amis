@@ -15,6 +15,7 @@ import { BolidesRoom } from "./bolidesRoom.ts";
 import { BricksRoom } from "./bricksRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
+import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket, type RoomLike } from "./roomHarness.ts";
@@ -36,6 +37,7 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "meche", Room: MecheRoom as unknown as RoomClass, bots: true },
   { game: "bolides", Room: BolidesRoom as unknown as RoomClass, bots: true },
   { game: "crampons", Room: CramponsRoom as unknown as RoomClass, bots: false },
+  { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
 ];
 
 const open: { stopLoop?: () => void }[] = [];
@@ -150,6 +152,12 @@ describe.each(GAMES)("$game", ({ game, Room, bots }) => {
       // Crampons : l'ordinateur lui confie un joueur de son équipe, tout de suite
       expect(seated(player.ws.view())).toBe(true);
       expect(bench.data<{ match: { humans: { id: string }[] } }>().match.humans.map((h) => h.id)).toContain("joueur");
+      await bench.send(watcher.ws, { t: "sit" });
+      expect(seated(watcher.ws.view())).toBe(true);
+    } else if (game === "escarmouche") {
+      // Escarmouche : il rejoint le combat tout de suite, avec son propre soldat (ou celui d'un bot si les rangs sont pleins)
+      expect(seated(player.ws.view())).toBe(true);
+      expect(bench.data<{ match: { fighters: { id: string }[] } }>().match.fighters.map((f) => f.id)).toContain("joueur");
       await bench.send(watcher.ws, { t: "sit" });
       expect(seated(watcher.ws.view())).toBe(true);
     } else {

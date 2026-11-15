@@ -104,6 +104,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de Crampons",
   },
+  {
+    id: "escarmouche",
+    name: "Escarmouche",
+    desc: "Un jeu de tir à la première personne en 3D, de 2 à 8 soldats : chacun pour soi, en équipes, zone à tenir ou drapeau à ramener chez soi. Fusil d'assaut, pompe, précision et grenades, dans un hameau de pierre ou une gare de triage, à la souris ou au téléphone couché.",
+    keywords: "fps tir tireur arme armes fusil soldat militaire guerre combat shooter drapeau",
+    players: seats("escarmouche"),
+    quick: "Combat rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table d'Escarmouche",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

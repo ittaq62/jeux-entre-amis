@@ -12,12 +12,13 @@ import {
 import { TOKENS, type TokenId } from "./games/capitale/tokens.ts";
 import { BALLS, FETES, type BallId, type FeteId } from "./games/crampons/boutique.ts";
 import { CLUBS } from "./games/crampons/clubs.ts";
+import { CAMOS, type CamoId } from "./games/escarmouche/camos.ts";
 import { BOMBS, type BombId } from "./games/meche/bombs.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
 
-export type ShopKind = "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe";
+export type ShopKind = "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe" | "camo";
 
 export interface ShopItem {
   id: string;
@@ -39,6 +40,8 @@ export const ballItem = (id: BallId) => `ballon:${id}`;
 export const feteItem = (id: FeteId) => `fete:${id}`;
 /** Mèche : ce qui saute au bout de la mèche */
 export const bombItem = (id: BombId) => `bombe:${id}`;
+/** Escarmouche : le camouflage des armes */
+export const camoItem = (id: CamoId) => `camo:${id}`;
 /** Le personnage de profil : ce qu'il porte (wardrobe.ts) */
 export const wearItem = (id: string) => `perso:${id}`;
 
@@ -65,6 +68,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   ...BALLS.map((b): ShopItem => ({ id: ballItem(b.id), kind: "ballon", ref: b.id, name: b.name, price: b.price })),
   ...FETES.map((f): ShopItem => ({ id: feteItem(f.id), kind: "fete", ref: f.id, name: f.name, price: f.price })),
   ...BOMBS.map((b): ShopItem => ({ id: bombItem(b.id), kind: "bombe", ref: b.id, name: b.name, price: b.price })),
+  ...CAMOS.map((c): ShopItem => ({ id: camoItem(c.id), kind: "camo", ref: c.id, name: c.name, price: c.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

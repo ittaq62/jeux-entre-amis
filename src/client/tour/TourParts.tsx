@@ -59,6 +59,8 @@ export function GameTicket({
             <BolidesArt />
           ) : game === "crampons" ? (
             <CramponsArt />
+          ) : game === "escarmouche" ? (
+            <EscarmoucheArt />
           ) : (
             <NavalArt />
           )}
@@ -66,6 +68,20 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Un casque, et une rafale qui file */
+function EscarmoucheArt() {
+  return (
+    <>
+      <ellipse cx="44" cy="64" rx="26" ry="3.4" fill="rgba(0,0,0,0.25)" />
+      <path d="M58 34H90M60 41H84M58 48H92" stroke="#ffd98a" strokeWidth="1.6" strokeLinecap="round" opacity="0.85" />
+      <path d="M18 50C18 30 30 20 44 20C58 20 70 30 70 50Z" fill="#5f6648" />
+      <path d="M12 50H76L72 56H16Z" fill="#454b33" />
+      <path d="M22 41H66" stroke="#c8392d" strokeWidth="4" />
+      <path d="M30 28C34 24 40 23 44 23" stroke="#fbf5e6" strokeWidth="2" strokeLinecap="round" opacity="0.5" fill="none" />
+    </>
   );
 }
 

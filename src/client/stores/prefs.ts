@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
+import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
+import type { PrimaryId } from "../../shared/games/escarmouche/weapons.ts";
 import type { BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
@@ -43,6 +45,16 @@ interface Prefs {
   capitaleToken: TokenId | null;
   /** Mèche : la bombe qu'on allume, choisie en dernier sur cet appareil et reprise à chaque table */
   mecheBomb: BombId | null;
+  /** Escarmouche : le camouflage et l'arme principale choisis sur cet appareil, repris à chaque table */
+  escarmoucheCamo: CamoId | null;
+  escarmouchePrimary: PrimaryId | null;
+  /** Escarmouche : la sensibilité de la souris et du doigt (1 : normale), l'axe vertical inversé, le champ de vision */
+  escMouse: number;
+  escTouch: number;
+  escInvert: boolean;
+  escFov: number;
+  /** Au doigt : la vue ralentit et colle un peu à l'adversaire visé */
+  escAssist: boolean;
   set: (patch: Partial<Omit<Prefs, "set">>) => void;
 }
 
@@ -79,6 +91,13 @@ export const usePrefs = create<Prefs>((set, get) => ({
   navalSkin: null,
   capitaleToken: null,
   mecheBomb: null,
+  escarmoucheCamo: null,
+  escarmouchePrimary: null,
+  escMouse: 1,
+  escTouch: 1,
+  escInvert: false,
+  escFov: 78,
+  escAssist: true,
   ...load(),
   set: (patch) => {
     set(patch);
@@ -101,5 +120,6 @@ export function deviceLooks(p: ReturnType<typeof usePrefs.getState>): Looks {
     ...(p.bolidesSkin ? { bolidesSkin: p.bolidesSkin } : {}),
     ...(p.cramponsFete ? { cramponsFete: p.cramponsFete } : {}),
     ...(p.mecheBomb ? { mecheBomb: p.mecheBomb } : {}),
+    ...(p.escarmoucheCamo ? { escarmoucheCamo: p.escarmoucheCamo } : {}),
   };
 }

@@ -6,6 +6,7 @@ import {
   earnedMecheAchievements,
   earnedBolidesAchievements,
   earnedCramponsAchievements,
+  earnedEscarmoucheAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
 } from "../shared/achievements.ts";
@@ -13,6 +14,7 @@ import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/c
 import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
 import type { BolidesSettings, RacerStats } from "../shared/games/bolides/race.ts";
 import type { CramponsConfig } from "../shared/games/crampons/view.ts";
+import type { EscarmoucheSettings, Mode as EscarmoucheMode } from "../shared/games/escarmouche/rules.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
 import type { BricksStats } from "../shared/games/bricks/view.ts";
@@ -240,7 +242,35 @@ export interface GameRecordPlayer {
   absent?: boolean;
   /** Équipe en 2 contre 2 */
   team?: number | null;
-  stats: PlayerStats | NavalRecordStats | BricksStats | CapitaleStats | MecheStats | BolidesRecordStats | CramponsRecordStats;
+  stats:
+    | PlayerStats
+    | NavalRecordStats
+    | BricksStats
+    | CapitaleStats
+    | MecheStats
+    | BolidesRecordStats
+    | CramponsRecordStats
+    | EscarmoucheRecordStats;
+}
+
+/** Stats d'une partie d'Escarmouche pour un soldat */
+export interface EscarmoucheRecordStats {
+  kills: number;
+  deaths: number;
+  assists: number;
+  headshots: number;
+  damage: number;
+  shots: number;
+  hits: number;
+  captures: number;
+  returns: number;
+  zone: number;
+  /** Sa meilleure série d'éliminations sans tomber */
+  best: number;
+  knives: number;
+  grenadeKills: number;
+  points: number;
+  won: number;
 }
 
 /** Stats d'un match de Crampons pour un joueur : celles de son équipe, et ses propres buts */
@@ -277,6 +307,7 @@ export type GameRecord = {
   | { game: "meche"; settings: MecheSettings; mode: FuseMode }
   | { game: "bolides"; settings: BolidesSettings; mode: TrackId }
   | { game: "crampons"; settings: CramponsConfig; mode: string }
+  | { game: "escarmouche"; settings: EscarmoucheSettings; mode: EscarmoucheMode }
 );
 
 /** Cumul des stats de Briques : on additionne, sauf les records (combo, meilleur 40 lignes). */
@@ -350,6 +381,34 @@ function mergeCramponsTotals(raw: string | null, stats: CramponsRecordStats): Re
   for (const key of ["goals", "conceded", "shots", "onTarget", "passes", "passesOk", "myGoals"] as const)
     totals[key] = (totals[key] ?? 0) + stats[key];
   totals.bestGoals = Math.max(totals.bestGoals ?? 0, stats.myGoals);
+  return totals;
+}
+
+/** Cumul des stats d'Escarmouche : tout s'additionne, sauf les records d'une partie */
+function mergeEscarmoucheTotals(raw: string | null, stats: EscarmoucheRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of [
+    "kills",
+    "deaths",
+    "assists",
+    "headshots",
+    "damage",
+    "shots",
+    "hits",
+    "captures",
+    "returns",
+    "zone",
+    "knives",
+    "grenadeKills",
+  ] as const)
+    totals[key] = (totals[key] ?? 0) + stats[key];
+  totals.bestKills = Math.max(totals.bestKills ?? 0, stats.kills);
+  totals.bestStreak = Math.max(totals.bestStreak ?? 0, stats.best);
   return totals;
 }
 
@@ -498,6 +557,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as CramponsRecordStats;
       totals = mergeCramponsTotals(prev?.totals ?? null, stats);
       earnedIds = earnedCramponsAchievements({ won, played, stats });
+    } else if (rec.game === "escarmouche") {
+      const stats = p.stats as EscarmoucheRecordStats;
+      totals = mergeEscarmoucheTotals(prev?.totals ?? null, stats);
+      earnedIds = earnedEscarmoucheAchievements({ won, played, stats });
     } else if (rec.game === "bolides") {
       const stats = p.stats as BolidesRecordStats;
       totals = mergeBolidesTotals(prev?.totals ?? null, stats, rec.mode, rec.settings.laps);
@@ -866,6 +929,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const meche = statRows.results.find((r) => r.game === "meche");
   const bolides = statRows.results.find((r) => r.game === "bolides");
   const crampons = statRows.results.find((r) => r.game === "crampons");
+  const escarmouche = statRows.results.find((r) => r.game === "escarmouche");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -883,6 +947,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     meche: { ...statsSummary(meche), totals: totalsOf(meche) },
     bolides: { ...statsSummary(bolides), totals: totalsOf(bolides) },
     crampons: { ...statsSummary(crampons), totals: totalsOf(crampons) },
+    escarmouche: { ...statsSummary(escarmouche), totals: totalsOf(escarmouche) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

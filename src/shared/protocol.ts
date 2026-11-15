@@ -19,8 +19,14 @@ import type { NavalAction, NavalEvent, NavalSettings } from "./games/naval/engin
 import type { NavalView } from "./games/naval/view.ts";
 import type { UnoAction, UnoEvent, UnoSettings } from "./games/uno/engine.ts";
 import type { UnoView } from "./games/uno/view.ts";
+import type { CamoId } from "./games/escarmouche/camos.ts";
+import type { EscEvent } from "./games/escarmouche/match.ts";
+import type { EscarmoucheSettings } from "./games/escarmouche/rules.ts";
+import type { CmdNet } from "./games/escarmouche/soldier.ts";
+import type { EscarmoucheView, EscMe, EscTick } from "./games/escarmouche/view.ts";
+import type { PrimaryId } from "./games/escarmouche/weapons.ts";
 
-export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons";
+export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons" | "escarmouche";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
@@ -33,11 +39,21 @@ export const GAME_NAMES: Record<GameId, string> = {
   meche: "Mèche",
   bolides: "Bolides",
   crampons: "Crampons",
+  escarmouche: "Escarmouche",
 };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
 /** Jeux (et tournée) en bêta tant que l'admin ne les a pas ouverts à tous */
-export const BETA_GAMES = ["naval", "bricks", "tour", "capitale", "meche", "bolides", "crampons"] as const satisfies readonly TableGame[];
+export const BETA_GAMES = [
+  "naval",
+  "bricks",
+  "tour",
+  "capitale",
+  "meche",
+  "bolides",
+  "crampons",
+  "escarmouche",
+] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------
 // Comptes
@@ -778,6 +794,83 @@ export type CramponsClientMessage =
 export type CramponsServerMessage =
   | { t: "room"; room: CramponsRoomView; events: MatchEvent[] }
   | ({ t: "tick"; now: number } & CramponsTick)
+  | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
+  | { t: "emote"; seatId: string | null; userId: string; emote: string }
+  | { t: "achievements"; unlocks: AchievementUnlock[] }
+  | { t: "error"; message: string }
+  | { t: "kicked" }
+  | { t: "closed"; reason: string }
+  /** Le même compte vient de rejoindre la table depuis un autre appareil : c'est là-bas qu'il joue désormais */
+  | { t: "replaced" };
+
+export interface EscarmoucheRoomSettings {
+  visibility: Visibility;
+  maxPlayers: number;
+  /** Rejoindre en cours de route : qui arrive pendant la partie peut jouer (si le jeu le permet) ou regarder ; sinon seuls les amis des joueurs regardent */
+  lateJoin?: boolean;
+  /** Règles au hasard : le tirage du serveur pour la partie qui vient (ou en cours) ; absent ou null : règles au choix de l'hôte */
+  randomRules?: string | null;
+  escarmouche: EscarmoucheSettings;
+}
+
+export const ESCARMOUCHE_MAX_PLAYERS = 8;
+
+export interface EscarmoucheRoomView {
+  code: string;
+  game: "escarmouche";
+  status: RoomStatus;
+  settings: EscarmoucheRoomSettings;
+  seats: SeatView[];
+  spectators: SpectatorView[];
+  hostId: string;
+  you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
+  /** Dans quelle équipe joue chaque siège (modes en équipes) */
+  teams: Record<string, 0 | 1>;
+  /** L'arme principale et le camouflage de chaque siège */
+  arsenal: Record<string, { primary: PrimaryId; camo: CamoId }>;
+  escarmouche: EscarmoucheView | null;
+  serverNow: number;
+  rematch: string[];
+  results?: Record<string, EloResult> | null;
+  quick: boolean;
+  tour?: string | null;
+  /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont prêts */
+  pickUntil?: number | null;
+  ready?: string[];
+}
+
+export type EscarmoucheClientMessage =
+  | {
+      t: "settings";
+      settings: Partial<EscarmoucheSettings>;
+      visibility?: Visibility;
+      maxPlayers?: number;
+      lateJoin?: boolean;
+      randomRules?: boolean;
+    }
+  /** Choisir son équipe (l'hôte peut changer celle d'un bot) */
+  | { t: "team"; team: 0 | 1; seatId?: string }
+  /** Son arme principale (pour sa prochaine vie, en pleine partie) et son camouflage (s'il l'a) */
+  | { t: "arsenal"; primary?: PrimaryId; camo?: CamoId }
+  | { t: "addBot" }
+  | { t: "removeSeat"; seatId: string }
+  | { t: "kick"; userId: string }
+  | { t: "start" }
+  /** Ses derniers pas (1/60 s chacun), envoyés par petits paquets */
+  | { t: "cmd"; c: CmdNet[] }
+  | { t: "chat"; text: string }
+  | { t: "emote"; emote: string }
+  | { t: "rematch" }
+  | { t: "sit" }
+  | { t: "leave" }
+  /** Tournée : prêt à jouer, sans attendre la fin de la fenêtre de choix des skins */
+  | { t: "ready" }
+  | { t: "close" };
+
+export type EscarmoucheServerMessage =
+  | { t: "room"; room: EscarmoucheRoomView; events: EscEvent[] }
+  /** Tout le monde, vingt fois par seconde, à l'heure du serveur ; `me` : son propre soldat en entier */
+  | ({ t: "tick"; now: number; me?: EscMe } & EscTick)
   | { t: "chat"; messages: ChatMessage[]; reset?: boolean }
   | { t: "emote"; seatId: string | null; userId: string; emote: string }
   | { t: "achievements"; unlocks: AchievementUnlock[] }
