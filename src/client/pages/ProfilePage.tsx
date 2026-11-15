@@ -5,12 +5,14 @@ import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
 import { TABLE_NAMES, type GameId, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { CARD_BY_ID, CARDS } from "../../shared/cards.ts";
+import type { StreakStatus } from "../../shared/streak.ts";
 import { TradingCard } from "../cards/TradingCard.tsx";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { StreakCarnet } from "../components/StreakCarnet.tsx";
 import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { formatSprint } from "../lib/countdown.ts";
@@ -42,6 +44,8 @@ interface Profile {
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
+  /** Absente si le serveur n'a pas pu la lire */
+  streak?: StreakStatus | null;
   achievements: { id: string; at: number }[];
   recent: {
     id: string;
@@ -253,6 +257,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 
         <div className="profile-grid">
           <div className="profile-col">
+            {profile.streak && <StreakCarnet streak={profile.streak} self={profile.friendship === "self"} />}
             {profile.album.count > 0 && (
               <section className="carnet panel">
                 <h2>L'album</h2>
@@ -276,7 +281,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   : `${stats.played} partie${stats.played > 1 ? "s" : ""}, ${stats.won} gagnée${stats.won > 1 ? "s" : ""} (${rate} %).`}
               </p>
               <dl className="ledger">
-                <LedgerRow label="Meilleure série" value={stats.bestStreak} strong />
+                <LedgerRow label="Meilleure série de victoires" value={stats.bestStreak} strong />
                 <LedgerRow label="Cartes posées" value={t.played} />
                 <LedgerRow label="Cartes piochées" value={t.drawn} />
                 <LedgerRow label="Pénalités infligées" value={t.plusGiven} />
