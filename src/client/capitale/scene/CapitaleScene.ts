@@ -841,7 +841,7 @@ export class CapitaleScene {
         o.set = this.levelSet(level, p, color, yard);
         o.root.add(o.set);
         if (animate && !moved) {
-          o.set.children.forEach((b, k) => this.rise(b, level === 5 ? 1.1 : 0.55, k * 0.08, grew));
+          this.rise(o.set, level === 5 ? 1.1 : 0.55, 0, grew);
           this.dust(o.root, 0, 0, p.room * 0.8);
           this.lookAtSoon(o.root.position.clone());
         }
@@ -897,7 +897,8 @@ export class CapitaleScene {
       put(S.cityBlock(i, color, 2), -0.17, 0.02, 0.86);
       put(S.cityBlock(i, color, 1), 0.165, -0.03, 0.86);
     } else put(LM.landmark(i, color), 0, 0, 1.12);
-    return g;
+    // Les bâtiments de la parcelle fondus ensemble : une seule passe par matière (deux immeubles, deux maisons)
+    return B.bake(g);
   }
 
   /** Le modèle d'un bâtiment spécial, avec ce qui bouge dedans */
