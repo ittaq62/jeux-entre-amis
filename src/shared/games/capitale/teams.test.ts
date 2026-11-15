@@ -104,6 +104,39 @@ describe("les équipes", () => {
     expect(P(s, "b").cash).toBe(1500);
   });
 
+  it("le billet du stade d'un coéquipier suit le loyer d'équipe : moitié prix ou plein", () => {
+    for (const [teamRent, ticket] of [
+      ["half", STADIUM_TICKET / 2],
+      ["full", STADIUM_TICKET],
+    ] as const) {
+      const s = game(undefined, { teamRent });
+      own(s, "b", 1);
+      s.deeds[1]!.special = { kind: "stade", by: "b" };
+      P(s, "a").position = 0;
+      rollAs(s, "a", [2, 3]);
+      expect(P(s, "b").cash).toBe(1500 + ticket);
+    }
+  });
+
+  it("le monument demande le quartier entier à soi : celui de l'équipe ne suffit pas, il faut d'abord se donner la rue", () => {
+    const s = game();
+    own(s, "a", 1);
+    own(s, "b", 3);
+    expect(canPlaceSpecial(s, "a", 1, "monument")).toBe("Il faut tout le quartier pour un monument.");
+    act(s, "b", gift("a", 0, [3]));
+    expect(canPlaceSpecial(s, "a", 1, "monument")).toBeNull();
+  });
+
+  it("on ne donne pas une rue avec son bâtiment spécial ; une nuisance subie part avec la rue", () => {
+    const s = game();
+    own(s, "b", 6, 8);
+    s.deeds[6]!.special = { kind: "stade", by: "b" };
+    s.deeds[8]!.special = { kind: "decharge", by: "c" };
+    expect(fails(s, "b", gift("a", 0, [6]))).toBe("Il faut d'abord revendre le stade de Mende.");
+    act(s, "b", gift("a", 0, [8]));
+    expect(s.deeds[8]).toMatchObject({ owner: "a", special: { kind: "decharge", by: "c" } });
+  });
+
   it("pas de nuisance chez un coéquipier", () => {
     const s = game();
     own(s, "b", 39);
@@ -198,6 +231,27 @@ describe("les équipes", () => {
     expect(P(s, "c").stats.bankrupted).toBe(1);
     expect(P(s, "a").jailCards).toEqual(["courrier"]);
     expect(s.step).not.toBe("over");
+  });
+
+  it("héritage et bâtiments spéciaux : les siens revendus, la nuisance adverse reste, celles qu'il avait posées disparaissent", () => {
+    const s = game();
+    own(s, "c", 37, 39);
+    s.deeds[39]!.level = 5;
+    own(s, "b", 1, 3, 6);
+    s.deeds[6]!.special = { kind: "stade", by: "b" };
+    s.deeds[1]!.special = { kind: "decharge", by: "c" };
+    s.deeds[37]!.special = { kind: "centrale", by: "b" };
+    Object.assign(P(s, "b"), { position: 33, cash: 100 });
+    rollAs(s, "b", [2, 4]);
+    const events = act(s, "b", { type: "bankrupt" });
+    expect(events).toContainEqual({ type: "raze", player: "b", square: 6, kind: "stade", how: "sell" });
+    expect(events).toContainEqual({ type: "raze", player: "b", square: 37, kind: "centrale", how: "auto" });
+    expect([1, 3, 6].map((i) => s.deeds[i]!.owner)).toEqual(["a", "a", "a"]);
+    expect(s.deeds[6]!.special).toBeNull();
+    expect(s.deeds[1]!.special).toEqual({ kind: "decharge", by: "c" });
+    expect(s.deeds[37]!.special).toBeNull();
+    // Le stade revendu (100) s'ajoute à l'argent qui part chez le créancier
+    expect(P(s, "c").cash).toBe(1500 + 100 + 100);
   });
 
   it("sans héritage, le créancier prend tout comme d'habitude", () => {

@@ -302,6 +302,48 @@ describe("la ville : améliorer ses rues, les bâtiments spéciaux", () => {
     expect(applyAction(t, "a", { type: "special", square: 6, kind: "decharge" }).ok).toBe(false);
   });
 
+  it("son bâtiment se revend à moitié prix, même pendant une dette ; une nuisance attend son tour pour être rasée", () => {
+    const s = game();
+    own(s, "a", 6, 8);
+    own(s, "b", 37, 39);
+    lvl(s, 39, 1);
+    spec(s, 6, "stade", "a");
+    spec(s, 8, "decharge", "b");
+    Object.assign(P(s, "a"), { position: 33, cash: 100 });
+    rollAs(s, "a", [2, 4]);
+    expect(s.step).toBe("debt");
+    const refused = (action: CapitaleAction) => {
+      const r = applyAction(s, "a", action);
+      return r.ok ? null : r.error;
+    };
+    expect(refused({ type: "raze", square: 8 })).toBe("Tu fais raser une nuisance pendant ton tour.");
+    expect(refused({ type: "special", square: 8, kind: "parc" })).toBe("Tu poses un bâtiment spécial pendant ton tour.");
+    // Le stade revendu (100) couvre la dette de 200 envers b
+    const events = act(s, "a", { type: "raze", square: 6 });
+    expect(events).toContainEqual({ type: "money", from: "bank", to: "a", amount: 100, reason: "sell", square: 6 });
+    expect(s.deeds[6]!.special).toBeNull();
+    expect(s.step).toBe("manage");
+    expect(P(s, "a").cash).toBe(0);
+    expect(P(s, "b").cash).toBe(1700);
+  });
+
+  it("son bâtiment empêche d'hypothéquer sa rue, pas une nuisance subie ; plus rien ne se pose sur une rue hypothéquée", () => {
+    const s = game();
+    own(s, "a", 6, 8);
+    spec(s, 6, "stade", "a");
+    spec(s, 8, "decharge", "b");
+    const r = applyAction(s, "a", { type: "mortgage", square: 6 });
+    expect(r.ok ? null : r.error).toBe("Revends d'abord le stade.");
+    act(s, "a", { type: "mortgage", square: 8 });
+    expect(s.deeds[8]!.mortgaged).toBe(true);
+    expect(s.deeds[8]!.special).toEqual({ kind: "decharge", by: "b" });
+    own(s, "a", 9);
+    act(s, "a", { type: "mortgage", square: 9 });
+    newTurn(s, "b");
+    const late = applyAction(s, "b", { type: "special", square: 9, kind: "centrale" });
+    expect(late.ok ? null : late.error).toBe("Cette rue est hypothéquée.");
+  });
+
   it("on revend un niveau à moitié prix ; on n'hypothèque pas une rue construite ; on lève l'hypothèque à +10 %", () => {
     const s = game();
     own(s, "a", 1, 3);
@@ -619,6 +661,23 @@ describe("bots", () => {
     }
     expect(wins).toBeGreaterThanOrEqual(13);
   }, 60_000);
+
+  it("le bot d'un joueur absent se défend mais ne pose pas de nuisance à sa place", () => {
+    const s = game();
+    own(s, "b", 37, 39);
+    lvl(s, 37, 4);
+    lvl(s, 39, 4);
+    Object.assign(s, { step: "manage", dice: [1, 2] });
+    P(s, "a").cash = 3000;
+    expect(botAction(s, "a", "fort")).toMatchObject({ type: "special", square: 39, kind: "centrale" });
+    expect(botAction(s, "a", "fort", { allowAttack: false })).toEqual({ type: "endTurn" });
+    // Chez b, le remplaçant d'un absent fait raser la centrale, puis bâtit chez lui : le monument du quartier complet
+    act(s, "a", { type: "special", square: 39, kind: "centrale" });
+    Object.assign(s, { step: "manage", turn: 1, turnId: s.turnId + 1 });
+    expect(botAction(s, "b", "moyen", { allowAttack: false })).toEqual({ type: "raze", square: 39 });
+    act(s, "b", { type: "raze", square: 39 });
+    expect(botAction(s, "b", "moyen", { allowAttack: false })).toMatchObject({ type: "special", kind: "monument" });
+  });
 
   it("le bot n'achète pas au-delà de ses moyens et paie ses dettes", () => {
     const s = game();

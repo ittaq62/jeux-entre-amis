@@ -60,6 +60,20 @@ describe("Monopole", () => {
     expect(s.ranks!.a).toBe(1);
   });
 
+  it("seuls les titres comptent : un bâtiment spécial ne remplace pas un titre, une nuisance n'empêche pas la victoire", () => {
+    const s = game();
+    own(s, "a", 1, 3, 37, 39, 11, 13);
+    s.deeds[3]!.special = { kind: "monument", by: "a" };
+    s.deeds[13]!.special = { kind: "stade", by: "a" };
+    s.deeds[37]!.special = { kind: "centrale", by: "b" };
+    expect(monopolyOf(s, "a")).toBeNull();
+    P(s, "a").position = 10;
+    rollAs(s, "a", [1, 3]);
+    const events = act(s, "a", { type: "buy" });
+    expect(events).toContainEqual({ type: "monopoly", player: "a", team: null, kind: "groups", squares: [1, 3, 11, 13, 14, 37, 39] });
+    expect(s.step).toBe("over");
+  });
+
   it("toutes les rues d'un côté, même avec moins d'argent que les autres", () => {
     const s = game();
     own(s, "a", 11, 13, 14, 16, 18);
