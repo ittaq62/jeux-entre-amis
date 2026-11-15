@@ -1,7 +1,8 @@
-// L'illustration de Crampons sur l'accueil : un but filmé dans le jeu lui-même, avec son moteur (DevAffiche, &film) — un soir
-// de match, le numéro 9 frappe, le ballon file en lucarne au ralenti, le gardien s'envole, la foule explose. La 3D ne se
-// charge qu'à table : ici, c'est une courte vidéo muette en boucle (public/crampons-film.mp4), posée sur son affiche
-// (public/crampons-apercu.webp, l'image où le ballon touche la lucarne, par laquelle la vidéo commence et finit).
+// L'illustration de Crampons sur l'accueil : un but joué par le vrai moteur du jeu et filmé avec sa 3D (DevAffiche, &film) —
+// un soir de match, le numéro 9 file vers le but, frappe en lucarne, le gardien s'envole pour rien, puis le gros plan du
+// buteur qui fête avec les siens devant la tribune qui saute. La 3D ne se charge qu'à table : ici, c'est une courte vidéo
+// muette en boucle (public/crampons-film.mp4), posée sur son affiche (public/crampons-apercu.webp, l'image où le ballon
+// arrive en lucarne, par laquelle la vidéo commence et finit).
 // La vidéo ne se charge et ne joue que quand la fiche est à l'écran (HomePage, useStageMotion) ; avec « Effets réduits »,
 // on ne voit que l'affiche.
 
