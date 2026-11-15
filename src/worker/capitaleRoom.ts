@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid, botRescue } from "../shared/games/capitale/bot.ts";
-import { sideName, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
+import { sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
 import {
   actorOf,
   applyAction,
@@ -932,6 +932,14 @@ export class CapitaleRoom extends DurableObject<Env> {
         this.systemChat(`${name(e.winner)} remporte ${SQUARES[e.square]!.name} aux enchères pour ${e.amount}.`);
       } else if (e.type === "trade" && e.status === "accepted") {
         this.systemChat(`Marché conclu entre ${name(e.trade.from)} et ${name(e.trade.to)}.`);
+      } else if (e.type === "special" && (SPECIALS[e.kind].nuisance || e.kind === "monument")) {
+        // Une nuisance (jamais chez un coéquipier) ou un monument : de quoi changer les loyers de toute la table
+        const owner = g.deeds[e.square]?.owner;
+        this.systemChat(
+          SPECIALS[e.kind].nuisance
+            ? `${name(e.player)} pose ${SPECIALS[e.kind].one} à ${SQUARES[e.square]!.name}, chez ${owner ? name(owner) : "?"}.`
+            : `${name(e.player)} élève ${SPECIALS[e.kind].one} à ${SQUARES[e.square]!.name} : les loyers du quartier doublent.`,
+        );
       }
     }
   }
@@ -1052,6 +1060,10 @@ export class CapitaleRoom extends DurableObject<Env> {
       } else if (e.type === "bankrupt") {
         seatId = e.player;
         pool = ["😭", "😡"];
+      } else if (e.type === "special" && SPECIALS[e.kind].nuisance) {
+        // Le bot qui subit une nuisance le fait savoir
+        seatId = this.data!.capitale?.deeds[e.square]?.owner ?? null;
+        pool = ["😡", "Coup bas !", "😤"];
       } else if (e.type === "gameOver") {
         seatId = e.ranking[0] ?? null;
         pool = ["😎", "👏", "Bien joué"];
@@ -1137,8 +1149,9 @@ export class CapitaleRoom extends DurableObject<Env> {
       case "bot": {
         if (!playing || !seat || t.key !== `${d.actionSeq}` || actorOf(g) !== seat.id || !this.plays(seat)) return null;
         const allowTrade = seat.kind === "bot" && d.botTraded[seat.id] !== g.turnId;
-        // Le remplaçant d'un absent ne donne rien à sa place
-        const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade, allowGift: seat.kind === "bot" });
+        // Le remplaçant d'un absent ne donne rien à sa place ; il se défend (raser, parc, monument) mais n'attaque personne
+        const realBot = seat.kind === "bot";
+        const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade, allowGift: realBot, allowAttack: realBot });
         if (action?.type === "propose") d.botTraded[seat.id] = g.turnId;
         return this.apply(g, seat.id, action);
       }
