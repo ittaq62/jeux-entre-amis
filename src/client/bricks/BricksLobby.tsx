@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
-import type { BotLevel, BricksSettings, BricksWin } from "../../shared/games/bricks/engine.ts";
+import { DEFAULT_SETTINGS, type BotLevel, type BricksSettings, type BricksWin } from "../../shared/games/bricks/engine.ts";
 import { BRICKS_MAX_PLAYERS, type BricksClientMessage, type BricksRoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
@@ -104,7 +106,9 @@ interface Props {
 
 /** Le salon d'une table de Briques : le salon commun, et les règles de la partie. */
 export function BricksLobby({ room, send, ...rest }: Props) {
-  const s = room.settings.bricks;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("bricks", room.settings.bricks, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "bricks");
   const isHost = room.you.isHost;
   const update = (patch: Partial<BricksSettings>) => send({ t: "settings", settings: patch });
   const teamsReady = !s.sprint && s.teams && room.settings.maxPlayers === 4;
@@ -175,6 +179,8 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             </p>
           </div>
 
+          {!s.sprint && <RandomRulesField room={room} game="bricks" send={send} />}
+
           {!s.sprint && (
             <>
               <div className="field">
@@ -182,7 +188,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
                 <Options<BricksWin>
                   label="Victoire"
                   value={s.win}
-                  disabled={!isHost}
+                  disabled={!isHost || locked("win")}
                   onChange={(win) => update({ win })}
                   options={[
                     { value: "survival", label: "Dernier debout" },
@@ -203,7 +209,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
                     <Options<2 | 3>
                       label="Durée d'une manche"
                       value={s.minutes}
-                      disabled={!isHost}
+                      disabled={!isHost || locked("minutes")}
                       onChange={(minutes) => update({ minutes })}
                       options={[
                         { value: 2, label: "2 min" },
@@ -234,11 +240,11 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             {toggles
               .filter((r) => !(s.sprint && (r.key === "messy" || r.key === "teams")))
               .map((r) => {
-                const off = !isHost || r.disabled;
+                const off = !isHost || r.disabled || locked(r.key);
                 return (
                   <div
                     key={r.key}
-                    className={`rule-row ${r.disabled ? "is-forced" : ""}`}
+                    className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
                     onClick={() => !off && update({ [r.key]: !s[r.key] })}
                   >
                     <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />
@@ -256,7 +262,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             <Options<1 | 3 | 5>
               label="Pièces suivantes affichées"
               value={s.previews}
-              disabled={!isHost}
+              disabled={!isHost || locked("previews")}
               onChange={(previews) => update({ previews })}
               options={[
                 { value: 1, label: "1" },

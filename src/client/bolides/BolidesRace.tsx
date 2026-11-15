@@ -18,6 +18,7 @@ import { faceCanvas, headCanvas } from "./scene/faces.ts";
 import { KART_COLORS } from "./scene/kart.ts";
 import { screenLayers } from "./screenFx.ts";
 import type { RaceListeners } from "./useBolidesRoom.ts";
+import { DrawnRulesNote } from "../game/RandomRules.tsx";
 
 interface Props {
   room: BolidesRoomView;
@@ -347,6 +348,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
+                <DrawnRulesNote room={room} />
                 {/* Pas pendant le chargement : les feux attendraient quelqu'un parti regarder le salon */}
                 {!inTour && !loading && (
                   <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>

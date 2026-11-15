@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 import { GROUPS, SPECIAL_ORDER, specialPrice, SPECIALS, teamName } from "../../shared/games/capitale/board.ts";
-import type { BotLevel, CapitaleSettings, EndMode, TeamCount } from "../../shared/games/capitale/engine.ts";
+import {
+  DEFAULT_SETTINGS,
+  type BotLevel,
+  type CapitaleSettings,
+  type EndMode,
+  type TeamCount,
+} from "../../shared/games/capitale/engine.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { TOKENS, type TokenId } from "../../shared/games/capitale/tokens.ts";
 import { SHOP_BY_ID, tokenItem } from "../../shared/shop.ts";
 import { CAPITALE_MAX_PLAYERS, type CapitaleClientMessage, type CapitaleRoomView } from "../../shared/protocol.ts";
@@ -79,7 +87,9 @@ interface Props {
 
 /** Le salon d'une table de Capitale : le salon commun et les règles de la partie. */
 export function CapitaleLobby({ room, send, ...rest }: Props) {
-  const s = room.settings.capitale;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("capitale", room.settings.capitale, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "capitale");
   const isHost = room.you.isHost;
   const update = (patch: Partial<CapitaleSettings>) => send({ t: "settings", settings: patch });
   const seatIndex = room.seats.findIndex((x) => x.id === room.you.seatId);
@@ -111,6 +121,8 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          <RandomRulesField room={room} game="capitale" send={send} />
 
           {mine && (
             <TokenPicker
@@ -154,8 +166,11 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                 : "Le dernier joueur à ne pas avoir fait faillite gagne. Compte une à trois heures."}
             </p>
             <div className="rule-list">
-              <div className="rule-row" onClick={() => isHost && update({ monopoly: !s.monopoly })}>
-                <Check label="Monopole" checked={Boolean(s.monopoly)} disabled={!isHost} onChange={() => {}} />
+              <div
+                className={`rule-row ${locked("monopoly") ? "is-forced" : ""}`}
+                onClick={() => isHost && !locked("monopoly") && update({ monopoly: !s.monopoly })}
+              >
+                <Check label="Monopole" checked={Boolean(s.monopoly)} disabled={!isHost || locked("monopoly")} onChange={() => {}} />
                 <span>
                   <strong>Monopole</strong>
                   <span className="hint">{MONOPOLY_RULE} En plus de la fin choisie : la table montre à chacun où il en est.</span>
@@ -191,8 +206,12 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             <span className="field-label">Règles maison</span>
             <div className="rule-list">
               {HOUSE_RULES.map((r) => (
-                <div key={r.key} className="rule-row" onClick={() => isHost && update({ [r.key]: !s[r.key] })}>
-                  <Check label={r.label} checked={s[r.key]} disabled={!isHost} onChange={() => {}} />
+                <div
+                  key={r.key}
+                  className={`rule-row ${locked(r.key) ? "is-forced" : ""}`}
+                  onClick={() => isHost && !locked(r.key) && update({ [r.key]: !s[r.key] })}
+                >
+                  <Check label={r.label} checked={s[r.key]} disabled={!isHost || locked(r.key)} onChange={() => {}} />
                   <span>
                     <strong>{r.label}</strong>
                     <span className="hint">{r.desc}</span>

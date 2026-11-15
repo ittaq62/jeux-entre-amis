@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { tableTeamName } from "../../shared/games/teams.ts";
 import type { RoomView, SeatView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
@@ -8,6 +9,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { usePrefs } from "../stores/prefs.ts";
+import { CrewMark } from "./Crews.tsx";
 import { EloLine } from "./EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 
@@ -99,11 +101,15 @@ export function GameOver({
   const g = room.uno!;
   const ranking = g.ranking ?? [];
   const me = room.you.seatId;
-  const won = ranking[0] === me;
+  // En équipes à une table, on gagne ensemble : chacun a la place de son équipe
+  const teamRanks = g.teamRanks ?? null;
+  const rankOf = (id: string, i: number) => teamRanks?.[id] ?? i + 1;
+  const won = teamRanks ? me !== null && teamRanks[me] === 1 : ranking[0] === me;
   const reduced = usePrefs((s) => s.reducedEffects);
   const r = g.lastRound;
   const winner = seatOf(room, ranking[0] ?? "");
-  const placed = ranking.map((id, i) => ({ id, rank: i + 1, isBot: seatOf(room, id)?.kind !== "human" }));
+  const winTeam = teamRanks && g.teams ? g.teams[ranking[0] ?? ""] : undefined;
+  const placed = ranking.map((id, i) => ({ id, rank: rankOf(id, i), isBot: seatOf(room, id)?.kind !== "human" }));
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
 
@@ -121,7 +127,15 @@ export function GameOver({
         <div className="gameover-head">
           {winner && <Avatar avatar={winner.avatar} userId={winner.userId} photo={winner.photo} size={64} />}
           <div>
-            <h2>{won ? "Tu remportes la partie." : `${winner?.name ?? "?"} remporte la partie.`}</h2>
+            <h2>
+              {winTeam !== undefined
+                ? won
+                  ? `Ton équipe remporte la partie : les ${tableTeamName(winTeam)}.`
+                  : `Les ${tableTeamName(winTeam)} remportent la partie.`
+                : won
+                  ? "Tu remportes la partie."
+                  : `${winner?.name ?? "?"} remporte la partie.`}
+            </h2>
             <p className="hint" style={{ margin: "4px 0 0" }}>
               {g.settings.variant === "nomercy" ? "No Mercy" : "UNO classique"}
               {g.round > 1 ? `, en ${g.round} manches` : ""}
@@ -144,11 +158,14 @@ export function GameOver({
             const p = g.players.find((pl) => pl.id === id);
             const left = r?.hands[id] ?? [];
             return (
-              <li key={id} className={`${i === 0 ? "is-winner" : ""} ${id === me ? "is-me" : ""} ${p?.eliminated ? "is-out" : ""}`}>
-                <span className="score-rank num">{i + 1}</span>
+              <li
+                key={id}
+                className={`${rankOf(id, i) === 1 ? "is-winner" : ""} ${id === me ? "is-me" : ""} ${p?.eliminated ? "is-out" : ""}`}
+              >
+                <span className="score-rank num">{rankOf(id, i)}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
                 <span className="score-name">
-                  {seat?.name}
+                  {teamRanks && g.teams?.[id] !== undefined && <CrewMark team={g.teams[id]!} size={13} />} {seat?.name}
                   {seat?.admin && <AdminBadge />}
                 </span>
                 {g.settings.endMode === "points" ? (

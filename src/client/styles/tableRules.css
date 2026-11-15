@@ -1,0 +1,108 @@
+/* ------------------------------------------------------------------ */
+/* Règles au hasard d'une table : la carte du tirage au salon,          */
+/* et son rappel dans le menu de la partie                              */
+/* ------------------------------------------------------------------ */
+
+.drawn-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px 15px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.8);
+  min-width: 0;
+}
+
+.drawn-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.drawn-name {
+  font-family: var(--font-card);
+  font-size: 22px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.drawn-blurb {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.drawn-card .drawn-again {
+  margin-top: 6px;
+  align-self: flex-start;
+}
+
+/* Les réglages que le tirage décide : visibles, mais plus au choix */
+.random-rules ~ .field .options button:disabled,
+.random-rules ~ .rule-list .rule-row.is-forced {
+  cursor: default;
+}
+
+/* Dans le menu de la partie, au-dessus des choix */
+.menu-drawn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 280px;
+  margin: 2px 2px 6px;
+  padding: 10px 12px 11px;
+  border-radius: 8px;
+  background: var(--panel-sunken);
+  /* Des couleurs à elle : certaines tables (Capitale) écrivent à l'encre sombre */
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.menu-drawn .drawn-label {
+  color: var(--gold);
+  opacity: 1;
+}
+
+.menu-drawn .hint {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+/* En-tête de la table : le nom des règles tirées, sans pousser le reste */
+.drawn-chip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------------ */
+/* Les équipes d'une table (UNO, Mèche)                                 */
+/* ------------------------------------------------------------------ */
+
+.crew-mark {
+  flex: none;
+  display: inline-block;
+  vertical-align: -2px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+
+.crews-panel .team-name::before {
+  display: none;
+}
+
+/* Trois équipes : l'une sous l'autre, les noms gardent toute la largeur */
+.crews-grid.is-3 {
+  grid-template-columns: 1fr;
+}
+
+.crew-move {
+  min-width: 30px;
+  padding: 0 6px;
+  line-height: 0;
+}

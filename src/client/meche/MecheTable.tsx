@@ -11,6 +11,8 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
 import { AwayNote } from "../game/AwayNote.tsx";
+import { CrewMark } from "../game/Crews.tsx";
+import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 import { EmotePicker } from "../game/ChatPanel.tsx";
 import type { EmoteBubble } from "../game/useRoom.ts";
 import { MECHE_SOUNDS, play, preloadSounds, startLoop, stopLoop, vibrate } from "../lib/sound.ts";
@@ -566,7 +568,7 @@ export function MecheTable({
         <div className="table-title">
           <span className="table-code">{room.code}</span>
           <span className="hint">
-            Mèche, {g.wordsPlayed} mot{g.wordsPlayed > 1 ? "s" : ""}
+            {drawnName(room) ?? "Mèche"}, {g.wordsPlayed} mot{g.wordsPlayed > 1 ? "s" : ""}
           </span>
         </div>
         <div className="table-top-actions">
@@ -592,6 +594,7 @@ export function MecheTable({
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
+                <DrawnRulesNote room={room} />
                 {!inTour && (
                   <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                     <Icon name="users" size={18} /> Voir le salon et les règles
@@ -1214,6 +1217,7 @@ function MecheSeat({
       </div>
       <div className="meche-seat-info">
         <div className="meche-seat-name">
+          {seat.team !== undefined && <CrewMark team={seat.team} size={13} />}
           <span>{isMe ? "Toi" : seat.name}</span>
           {seat.admin && <AdminBadge />}
         </div>

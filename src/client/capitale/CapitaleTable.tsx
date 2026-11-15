@@ -39,6 +39,7 @@ import type { EventBatch } from "./useCapitaleRoom.ts";
 import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
 import { inTeams, sidesOf, teamIn } from "./teamsUi.tsx";
 import { useViewport } from "../lib/viewport.ts";
+import { DrawnRulesNote } from "../game/RandomRules.tsx";
 
 interface Props {
   room: CapitaleRoomView;
@@ -462,6 +463,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
+                <DrawnRulesNote room={room} />
                 {!inTour && (
                   <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                     <Icon name="users" size={18} /> Voir le salon et les règles

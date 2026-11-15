@@ -1,6 +1,6 @@
 // L'affichage autour du match : le rappel des touches, qui change selon qu'on a le ballon, le mini-terrain, et l'aide.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { HALF_L, HALF_W } from "../../shared/games/crampons/pitch.ts";
 import { keyLabel, type ActionId, type Bindings, type TouchPad } from "./bindings.ts";
 import type { Scheme } from "./controls.ts";
@@ -124,12 +124,15 @@ export function HowTo({
   bindings,
   onClose,
   onSettings,
+  rules,
 }: {
   touch: boolean;
   touchPad: TouchPad;
   bindings: Bindings;
   onClose: () => void;
   onSettings: () => void;
+  /** Les règles tirées au sort du match en cours, à relire */
+  rules?: ReactNode;
 }) {
   const label = (id: ActionId) => bindings[id].slice(0, 1).map(keyLabel);
   const moves = [bindings.up, bindings.left, bindings.down, bindings.right].map((b) => (b[0] ? keyLabel(b[0]) : "—"));
@@ -147,6 +150,7 @@ export function HowTo({
     <div className="cr-howto" role="dialog" aria-label="Comment jouer">
       <div className="cr-howto-card panel">
         <h2>Comment jouer</h2>
+        {rules}
         {touch ? (
           <ul className="cr-howto-touch">
             <li>

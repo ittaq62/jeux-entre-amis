@@ -1,10 +1,12 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect } from "react";
+import { tableTeamName } from "../../shared/games/teams.ts";
 import type { MecheRoomView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
+import { CrewMark } from "../game/Crews.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
@@ -30,7 +32,8 @@ const sheetIn = (wait: number) => ({
 export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wait = 1.4 }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.meche!;
-  const ranks = g.ranks ?? {};
+  // En équipes à une table, on gagne ensemble : chacun a la place de son équipe
+  const ranks = g.teamRanks ?? g.ranks ?? {};
   const ranking = g.ranking ?? [];
   const me = room.you.seatId;
   const won = me !== null && ranks[me] === 1;
@@ -54,7 +57,15 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
   const voted = room.rematch.includes(room.you.userId);
-  const title = won ? "Dernier debout !" : `${winner?.name ?? "?"} remporte la partie.`;
+  const winTeam = g.teamRanks && g.teams ? g.teams[ranking[0] ?? ""] : undefined;
+  const title =
+    winTeam !== undefined
+      ? won
+        ? `Ton équipe tient bon : les ${tableTeamName(winTeam)} gagnent !`
+        : `Les ${tableTeamName(winTeam)} remportent la partie.`
+      : won
+        ? "Dernier debout !"
+        : `${winner?.name ?? "?"} remporte la partie.`;
   const modeName = g.settings.mode === "rallonge" ? "Mèche à rallonge" : g.settings.mode === "chacun" ? "Chacun sa mèche" : "Mèche";
   const summary = `${modeName}, ${g.fuse} explosion${g.fuse > 1 ? "s" : ""} et ${g.wordsPlayed} mot${g.wordsPlayed > 1 ? "s" : ""}${
     g.settings.source === "marabout" ? ", au Marabout" : ""
@@ -91,7 +102,7 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
                 <span className="score-rank num">{ranks[id]}</span>
                 {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={28} />}
                 <span className="score-name">
-                  {seat?.name}
+                  {g.teams?.[id] !== undefined && <CrewMark team={g.teams[id]!} size={13} />} {seat?.name}
                   {seat?.admin && <AdminBadge />}
                 </span>
                 <span className="meche-sheet-stats">

@@ -23,6 +23,7 @@ import { Commentator } from "./commentary.ts";
 import { MatchRuntime, type HudState } from "./runtime.ts";
 import { StadiumSound } from "./stadiumSound.ts";
 import type { MatchListeners } from "./useCramponsRoom.ts";
+import { DrawnRulesNote } from "../game/RandomRules.tsx";
 
 interface Banner {
   id: number;
@@ -748,6 +749,7 @@ export function CramponsMatch({
             closeHelp();
             setPanel(true);
           }}
+          rules={<DrawnRulesNote room={room} />}
         />
       )}
       {panel && <SettingsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setPanel(false)} />}

@@ -21,6 +21,7 @@ import { SHOWN_ROWS } from "./draw.ts";
 import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
+import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 
 interface Props {
   room: BricksRoomView;
@@ -180,7 +181,10 @@ export function BricksTable({
         </button>
         <div className="table-title">
           <span className="table-code">{room.code}</span>
-          <span className="hint">Briques, {modeLabel}</span>
+          <span className="hint">
+            Briques, {modeLabel}
+            {drawnName(room) ? ` · ${drawnName(room)}` : ""}
+          </span>
         </div>
         <RoundHud room={room} serverOffset={serverOffset} meId={meId} />
         <div className="table-top-actions">
@@ -206,6 +210,7 @@ export function BricksTable({
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
               >
+                <DrawnRulesNote room={room} />
                 <button className="menu-item" onClick={() => (setMenuOpen(false), setKeysOpen(true))}>
                   <Icon name="settings" size={18} /> Touches et réglages
                 </button>

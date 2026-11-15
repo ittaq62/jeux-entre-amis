@@ -24,7 +24,9 @@ import { Seat, TimerRing } from "./Seat.tsx";
 import type { EmoteBubble } from "./useRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
-import { TOUR_TEAM_COLORS, TOUR_TEAMS } from "../../shared/tour.ts";
+import { tableTeamName } from "../../shared/games/teams.ts";
+import { crewColor } from "./Crews.tsx";
+import { DrawnRulesNote, drawnName } from "./RandomRules.tsx";
 
 interface TableProps {
   room: RoomView;
@@ -325,14 +327,14 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           <div className="table-title">
             <span className="table-code">{room.code}</span>
             <span className="hint">
-              {g.settings.variant === "nomercy" ? "No Mercy" : "Classique"}
+              {drawnName(room) ?? (g.settings.variant === "nomercy" ? "No Mercy" : "Classique")}
               {rules.earlyUno ? "" : " · sans UNO d'avance"}
               {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
             </span>
           </div>
           {mySeat?.team !== undefined && (
-            <p className="team-note" style={{ ["--team-color" as string]: TOUR_TEAM_COLORS[mySeat.team as 0 | 1] }}>
-              Équipe {TOUR_TEAMS[mySeat.team as 0 | 1]}
+            <p className="team-note" style={{ ["--team-color" as string]: crewColor(mySeat.team) }}>
+              Équipe {tableTeamName(mySeat.team)}
             </p>
           )}
           {hasPartners && mySeat?.team !== undefined && headerRoom.row > 0 && (
@@ -341,7 +343,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               seats={room.seats}
               players={g.players}
               turn={g.phase === "playing" ? g.turn : null}
-              teamColor={TOUR_TEAM_COLORS[mySeat.team as 0 | 1]}
+              teamColor={crewColor(mySeat.team)}
               compact={compact}
               short={short}
               tall={portrait && h >= 760}
@@ -374,6 +376,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: -8, opacity: 0 }}
                 >
+                  <DrawnRulesNote room={room} />
                   {!inTour && (
                     <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                       <Icon name="users" size={18} /> Voir le salon et les règles
@@ -422,7 +425,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   vulnerable={vulnerable === p.id && me !== null && !myPlayer?.out && !partner}
                   onCatch={() => act({ type: "catch", target: p.id })}
                   mercyLimit={g.mercyLimit}
-                  teamColor={seat.team !== undefined ? TOUR_TEAM_COLORS[seat.team as 0 | 1] : undefined}
+                  teamColor={seat.team !== undefined ? crewColor(seat.team) : undefined}
                   partner={partner}
                 />
               </div>

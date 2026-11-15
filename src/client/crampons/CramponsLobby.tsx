@@ -10,6 +10,7 @@ import {
   type KitColors,
 } from "../../shared/games/crampons/clubs.ts";
 import {
+  DEFAULT_CONFIG,
   HALF_CHOICES,
   LEVEL_NAMES,
   SIDE_CHOICES,
@@ -18,6 +19,8 @@ import {
   type WeatherId,
 } from "../../shared/games/crampons/view.ts";
 import { CRAMPONS_MAX_PLAYERS, type CramponsClientMessage, type CramponsRoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { ballItem, clubItem, feteItem, SHOP_BY_ID, type ShopItem } from "../../shared/shop.ts";
 import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
@@ -281,7 +284,9 @@ interface Props {
 }
 
 export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackToGame }: Props) {
-  const s = room.settings.crampons;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("crampons", { ...DEFAULT_CONFIG, ...room.settings.crampons }, DEFAULT_CONFIG, tableDraw(room));
+  const locked = drawLock(room, "crampons");
   const isHost = room.you.isHost;
   const update = (settings: Partial<CramponsConfig>) => send({ t: "settings", settings });
   const mine = room.you.seatId ? room.teams[room.you.seatId] : undefined;
@@ -395,12 +400,14 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               onFormation={(f) => setFormation(1, f)}
             />
 
+            <RandomRulesField room={room} game="crampons" send={send} />
+
             <div className="field">
               <span className="field-label">Durée d'une mi-temps</span>
               <Options<number>
                 label="Durée d'une mi-temps"
                 value={s.halfMinutes}
-                disabled={!isHost}
+                disabled={!isHost || locked("halfMinutes")}
                 onChange={(halfMinutes) => update({ halfMinutes })}
                 options={HALF_CHOICES.map((n) => ({ value: n, label: `${n} min` }))}
               />
@@ -411,7 +418,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               <Options<number>
                 label="Joueurs par équipe"
                 value={s.side}
-                disabled={!isHost}
+                disabled={!isHost || locked("side")}
                 onChange={(side) => update({ side })}
                 options={SIDE_CHOICES.map((n) => ({ value: n, label: `${n} contre ${n}` }))}
               />
@@ -436,7 +443,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               <Options<CramponsConfig["draw"]>
                 label="En cas de match nul"
                 value={s.draw}
-                disabled={!isHost}
+                disabled={!isHost || locked("draw")}
                 onChange={(draw) => update({ draw })}
                 options={[
                   { value: "none", label: "Match nul" },

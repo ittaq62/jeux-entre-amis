@@ -1,8 +1,12 @@
-import { effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
+import { tableTeamName } from "../../shared/games/teams.ts";
+import { DEFAULT_SETTINGS, effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
 import { MAX_PLAYERS, type RoomClientMessage, type RoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { BackPicker } from "./BackPicker.tsx";
+import { CrewCountField, crewProblem, CrewsPanel } from "./Crews.tsx";
+import { drawLock, RandomRulesField, tableDraw } from "./RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "./TableLobby.tsx";
 
 interface LobbyProps {
@@ -31,9 +35,13 @@ const MERCY_FREE = new Set(["jumpIn", "noEarlyUno"]);
 
 /** Le salon d'une table de UNO : le salon commun et les règles du UNO. */
 export function RoomLobby({ room, send, ...rest }: LobbyProps) {
-  const s = room.settings.uno;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("uno", room.settings.uno, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "uno");
   const isHost = room.you.isHost;
   const rules = effectiveRules(s);
+  const count = room.tour ? 0 : (s.teamCount ?? 0);
+  const problem = room.seats.length >= 2 ? crewProblem(room, count) : null;
   const update = (patch: Partial<UnoSettings>) => send({ t: "settings", settings: patch });
   const setPrefs = usePrefs((p) => p.set);
   const mine = room.seats.find((seat) => seat.id === room.you.seatId);
@@ -46,9 +54,15 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
       shareTitle="Viens jouer au UNO"
       startLabel="Distribuer les cartes"
       hostWillStart="va distribuer les cartes"
+      canStart={room.seats.length >= 2 && !problem}
+      startHint={problem ?? undefined}
+      seatNote={count ? (seat) => (seat.team !== undefined ? tableTeamName(seat.team) : null) : undefined}
+      aside={count ? <CrewsPanel room={room} send={send} count={count} /> : undefined}
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          <RandomRulesField room={room} game="uno" send={send} />
 
           {mine && (
             <BackPicker
@@ -65,7 +79,7 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
             <Options
               label="Jeu"
               value={s.variant}
-              disabled={!isHost}
+              disabled={!isHost || locked("variant")}
               onChange={(variant) => update({ variant })}
               options={[
                 { value: "classic", label: "Classique, 108 cartes" },
@@ -82,14 +96,17 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
           <div className="rule-list">
             {HOUSE_RULES.map((r) => {
               const forced = rules.noMercy && !MERCY_FREE.has(r.key);
+              const drawn = locked(r.key);
               const checked = forced || Boolean(s[r.key]);
-              const toggle = () => isHost && !forced && update({ [r.key]: !s[r.key] });
+              const toggle = () => isHost && !forced && !drawn && update({ [r.key]: !s[r.key] });
               return (
-                <div key={r.key} className={`rule-row ${forced ? "is-forced" : ""}`} onClick={toggle}>
-                  <Check label={r.label} checked={checked} disabled={!isHost || forced} onChange={() => {}} />
+                <div key={r.key} className={`rule-row ${forced || drawn ? "is-forced" : ""}`} onClick={toggle}>
+                  <Check label={r.label} checked={checked} disabled={!isHost || forced || drawn} onChange={() => {}} />
                   <span>
                     <strong>{r.label}</strong>
-                    <span className="hint">{forced ? "Toujours en vigueur en No Mercy." : r.desc}</span>
+                    <span className="hint">
+                      {forced ? "Toujours en vigueur en No Mercy." : drawn ? `${r.desc} Décidé par le tirage.` : r.desc}
+                    </span>
                   </span>
                 </div>
               );
@@ -119,6 +136,22 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
               />
             )}
           </div>
+
+          {!room.tour && (
+            <CrewCountField
+              count={count}
+              max={MAX_PLAYERS}
+              disabled={!isHost}
+              onChange={(teamCount) => update({ teamCount })}
+              win={
+                s.endMode === "points"
+                  ? "On voit la main de ses coéquipiers, et leurs points s'additionnent pour l'objectif."
+                  : s.endMode === "ranking"
+                    ? "On voit la main de ses coéquipiers ; la première équipe à avoir vidé toutes ses mains gagne."
+                    : "On voit la main de ses coéquipiers ; la première main vidée fait gagner toute l'équipe."
+              }
+            />
+          )}
 
           <div className="field">
             <span className="field-label">Temps pour jouer</span>

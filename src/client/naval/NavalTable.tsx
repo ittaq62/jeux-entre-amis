@@ -21,6 +21,7 @@ import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { PlacementBoard } from "./Placement.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useBoxSize, useViewport } from "../lib/viewport.ts";
+import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 
 interface Props {
   room: NavalRoomView;
@@ -114,7 +115,10 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
       {center ?? (
         <div className="table-title">
           <span className="table-code">{room.code}</span>
-          <span className="hint">Bataille navale, {modeLabel.toLowerCase()}</span>
+          <span className="hint">
+            Bataille navale, {modeLabel.toLowerCase()}
+            {drawnName(room) ? ` · ${drawnName(room)}` : ""}
+          </span>
         </div>
       )}
       <div className="table-top-actions">
@@ -140,6 +144,7 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -8, opacity: 0 }}
             >
+              <DrawnRulesNote room={room} />
               {!inTour && (
                 <button className="menu-item" onClick={() => (setMenuOpen(false), onShowLobby())}>
                   <Icon name="users" size={18} /> Voir le salon et les règles

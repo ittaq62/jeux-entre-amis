@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import type { BotLevel } from "../../shared/games/bolides/bot.ts";
 import type { SpeedClass } from "../../shared/games/bolides/physics.ts";
 import { ITEM_KINDS, ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
-import { LAP_CHOICES, type BolidesSettings } from "../../shared/games/bolides/race.ts";
+import { DEFAULT_SETTINGS, LAP_CHOICES, type BolidesSettings } from "../../shared/games/bolides/race.ts";
 import { getTrack, TRACK_IDS, TRACKS, type TrackId } from "../../shared/games/bolides/track.ts";
 import { BOLIDES_MAX_PLAYERS, type BolidesClientMessage, type BolidesRoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { Garage } from "./Garage.tsx";
@@ -64,7 +66,9 @@ export function TrackMap({ id, className = "" }: { id: TrackId; className?: stri
 
 /** Le salon d'une table de Bolides : le salon commun et les règles de la course. */
 export function BolidesLobby({ room, send, ...rest }: Props) {
-  const s = room.settings.bolides;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("bolides", { ...DEFAULT_SETTINGS, ...room.settings.bolides }, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "bolides");
   const isHost = room.you.isHost;
   const update = (patch: Partial<BolidesSettings>) => send({ t: "settings", settings: patch });
   const shown = s.track === "hasard" ? null : s.track;
@@ -118,6 +122,8 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
               </ul>
             </details>
 
+            <RandomRulesField room={room} game="bolides" send={send} />
+
             <div className="field">
               <span className="field-label">Circuit</span>
               <Options<TrackId | "hasard">
@@ -155,7 +161,7 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
               <Options<number>
                 label="Tours"
                 value={s.laps}
-                disabled={!isHost}
+                disabled={!isHost || locked("laps")}
                 onChange={(laps) => update({ laps })}
                 options={LAP_CHOICES.map((n) => ({ value: n, label: String(n) }))}
               />
@@ -166,7 +172,7 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
               <Options<SpeedClass>
                 label="Vitesse"
                 value={s.speed}
-                disabled={!isHost}
+                disabled={!isHost || locked("speed")}
                 onChange={(speed) => update({ speed })}
                 options={[
                   { value: "balade", label: "Balade" },
@@ -182,8 +188,11 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
             <div className="field">
               <span className="field-label">Règle maison</span>
               <div className="rule-list">
-                <div className="rule-row" onClick={() => isHost && update({ items: !s.items })}>
-                  <Check label="Les caisses d'objets" checked={s.items} disabled={!isHost} onChange={() => {}} />
+                <div
+                  className={`rule-row ${locked("items") ? "is-forced" : ""}`}
+                  onClick={() => isHost && !locked("items") && update({ items: !s.items })}
+                >
+                  <Check label="Les caisses d'objets" checked={s.items} disabled={!isHost || locked("items")} onChange={() => {}} />
                   <span>
                     <strong>Les caisses d'objets</strong>
                     <span className="hint">

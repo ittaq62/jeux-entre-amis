@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SETTINGS,
   FLEETS,
   SHIP_LENGTH,
   SHIP_NAME,
@@ -9,6 +10,8 @@ import {
   type Targeting,
 } from "../../shared/games/naval/engine.ts";
 import { NAVAL_MAX_PLAYERS, type NavalClientMessage, type NavalRoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { SkinPicker } from "./SkinPicker.tsx";
@@ -47,7 +50,9 @@ interface Props {
 /** Le salon d'une table de bataille navale : le salon commun et les réglages de la bataille. */
 export function NavalLobby({ room, send, ...rest }: Props) {
   const setPrefs = usePrefs((p) => p.set);
-  const s = room.settings.naval;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("naval", room.settings.naval, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "naval");
   const isHost = room.you.isHost;
   const update = (patch: Partial<NavalSettings>) => send({ t: "settings", settings: patch });
   const teamsReady = s.teams && room.settings.maxPlayers === 4;
@@ -90,6 +95,8 @@ export function NavalLobby({ room, send, ...rest }: Props) {
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
 
+          <RandomRulesField room={room} game="naval" send={send} />
+
           {room.you.seatId && (
             <SkinPicker
               current={room.seats.find((s) => s.id === room.you.seatId)?.skin ?? "marine"}
@@ -105,7 +112,7 @@ export function NavalLobby({ room, send, ...rest }: Props) {
             <Options<GridSize>
               label="Grille"
               value={s.grid}
-              disabled={!isHost}
+              disabled={!isHost || locked("grid")}
               onChange={(grid) => update({ grid })}
               options={[
                 { value: 8, label: "Petite, 8×8" },
@@ -123,7 +130,7 @@ export function NavalLobby({ room, send, ...rest }: Props) {
             <Options<ShotRule>
               label="Tirs"
               value={s.shots}
-              disabled={!isHost}
+              disabled={!isHost || locked("shots")}
               onChange={(shots) => update({ shots })}
               options={[
                 { value: "single", label: "Un tir chacun" },
@@ -156,11 +163,11 @@ export function NavalLobby({ room, send, ...rest }: Props) {
 
           <div className="rule-list">
             {toggles.map((r) => {
-              const off = !isHost || r.disabled;
+              const off = !isHost || r.disabled || locked(r.key);
               return (
                 <div
                   key={r.key}
-                  className={`rule-row ${r.disabled ? "is-forced" : ""}`}
+                  className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
                   onClick={() => !off && update({ [r.key]: !s[r.key] })}
                 >
                   <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />

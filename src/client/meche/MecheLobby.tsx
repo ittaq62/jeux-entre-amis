@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SETTINGS,
   LONG_WORD,
   LIVES_CHOICES,
   type BotLevel,
@@ -9,8 +10,12 @@ import {
   type FuseChoice,
 } from "../../shared/games/meche/engine.ts";
 import { bombInfo } from "../../shared/games/meche/bombs.ts";
+import { tableTeamName } from "../../shared/games/teams.ts";
 import { MECHE_MAX_PLAYERS, type MecheClientMessage, type MecheRoomView } from "../../shared/protocol.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { Check, Options } from "../components/ui.tsx";
+import { CrewCountField, crewProblem, CrewsPanel } from "../game/Crews.tsx";
+import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { BombPicker } from "./bombs/BombPicker.tsx";
 
@@ -72,8 +77,13 @@ interface Props {
 
 /** Le salon d'une table de Mèche : le salon commun et les règles de la partie. */
 export function MecheLobby({ room, send, ...rest }: Props) {
-  const s = room.settings.meche;
   const isHost = room.you.isHost;
+  // Règles au hasard : ce que le tirage décide s'affiche tel qu'il sera joué, et ne se règle plus à la main
+  const s = applyDrawnRules("meche", { ...DEFAULT_SETTINGS, ...room.settings.meche }, DEFAULT_SETTINGS, tableDraw(room));
+  const locked = drawLock(room, "meche");
+  const off = (key: string) => !isHost || locked(key);
+  const count = room.tour ? 0 : (s.teamCount ?? 0);
+  const problem = room.seats.length >= 2 ? crewProblem(room, count) : null;
   const mode = MODES.find((m) => m.value === s.mode) ?? MODES[0]!;
   const update = (patch: Partial<MecheSettings>) => send({ t: "settings", settings: patch });
 
@@ -85,12 +95,27 @@ export function MecheLobby({ room, send, ...rest }: Props) {
       shareTitle="Viens jouer à Mèche"
       startLabel="Allumer la mèche"
       hostWillStart="va allumer la mèche"
-      // La bombe de chacun, vue de toute la table (la dynamite, celle de tout le monde, ne se dit pas)
-      seatNote={(seat) => (seat.bomb ? bombInfo(seat.bomb).name : null)}
-      aside={room.you.seatId ? <BombPicker /> : null}
+      canStart={room.seats.length >= 2 && !problem}
+      startHint={problem ?? undefined}
+      // La bombe de chacun, vue de toute la table (la dynamite, celle de tout le monde, ne se dit pas), et son équipe
+      seatNote={(seat) =>
+        [count && seat.team !== undefined ? tableTeamName(seat.team) : null, seat.bomb ? bombInfo(seat.bomb).name : null]
+          .filter(Boolean)
+          .join(", ") || null
+      }
+      aside={
+        count || room.you.seatId ? (
+          <>
+            {count > 0 && <CrewsPanel room={room} send={send} count={count} />}
+            {room.you.seatId && <BombPicker />}
+          </>
+        ) : null
+      }
       rules={
         <section className="rules-sheet panel">
           <RulesHeading room={room} />
+
+          <RandomRulesField room={room} game="meche" send={send} />
 
           <div className="meche-howto">
             <p>
@@ -105,7 +130,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             <Options<FuseChoice>
               label="Mode de jeu"
               value={mode.value}
-              disabled={!isHost}
+              disabled={off("mode")}
               onChange={(next) => update({ mode: next })}
               options={MODES.map(({ value, label }) => ({ value, label }))}
             />
@@ -119,7 +144,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             <Options<number>
               label="Allumettes de chacun"
               value={s.lives}
-              disabled={!isHost}
+              disabled={off("lives")}
               onChange={(lives) => update({ lives })}
               options={LIVES_CHOICES.map((n) => ({ value: n, label: String(n) }))}
             />
@@ -130,7 +155,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             <Options<Pace>
               label="Rythme de la mèche"
               value={s.pace}
-              disabled={!isHost}
+              disabled={off("pace")}
               onChange={(pace) => update({ pace })}
               options={[
                 { value: "pose", label: "Posé" },
@@ -148,7 +173,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             <Options<Difficulty>
               label="Difficulté des lettres"
               value={s.difficulty}
-              disabled={!isHost}
+              disabled={off("difficulty")}
               onChange={(difficulty) => update({ difficulty })}
               options={[
                 { value: "simple", label: "Simples" },
@@ -166,7 +191,7 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             <Options<LetterSource>
               label="D'où viennent les lettres"
               value={s.source}
-              disabled={!isHost}
+              disabled={off("source")}
               onChange={(source) => update({ source })}
               options={[
                 { value: "hasard", label: "Au hasard" },
@@ -181,8 +206,11 @@ export function MecheLobby({ room, send, ...rest }: Props) {
           <div className="field">
             <span className="field-label">Règle maison</span>
             <div className="rule-list">
-              <div className="rule-row" onClick={() => isHost && update({ passes: !s.passes })}>
-                <Check label="Les passes" checked={s.passes} disabled={!isHost} onChange={() => {}} />
+              <div
+                className={`rule-row ${locked("passes") ? "is-forced" : ""}`}
+                onClick={() => !off("passes") && update({ passes: !s.passes })}
+              >
+                <Check label="Les passes" checked={s.passes} disabled={off("passes")} onChange={() => {}} />
                 <span>
                   <strong>Les passes</strong>
                   <span className="hint">
@@ -193,6 +221,16 @@ export function MecheLobby({ room, send, ...rest }: Props) {
               </div>
             </div>
           </div>
+
+          {!room.tour && (
+            <CrewCountField
+              count={count}
+              max={MECHE_MAX_PLAYERS}
+              disabled={!isHost}
+              onChange={(teamCount) => update({ teamCount })}
+              win="La mèche passe d'une équipe à l'autre ; la dernière équipe qui a encore des allumettes gagne, ensemble."
+            />
+          )}
 
           <div className="field">
             <span className="field-label">Niveau des bots</span>
