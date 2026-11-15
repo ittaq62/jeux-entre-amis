@@ -64,7 +64,7 @@ export function DevCulbute() {
           palette: avatarPalette(AVATAR_BACKGROUNDS[avatar.bg] ?? "#3f7fd8", style),
           color: PLAYER_COLORS[slot]!,
           me: play,
-          skirt: false,
+          outfit: "moi",
         };
       }
       return {
@@ -75,7 +75,7 @@ export function DevCulbute() {
         palette: PALETTES[style][tenue],
         color: PLAYER_COLORS[slot % PLAYER_COLORS.length]!,
         me: play && slot === 0,
-        skirt: style === "ginette" || style === "huguette" || style === "simone",
+        outfit: style,
       };
     });
     const scene = new CulbuteScene(host.current!, arena, f.scale, looks);

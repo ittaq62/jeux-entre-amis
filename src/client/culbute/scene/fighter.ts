@@ -1,6 +1,7 @@
-// Un combattant de Culbute en 3D : un petit bonhomme à grosse tête (celle de l'avatar, ses cheveux et son chapeau),
-// des bras et des jambes qui se plient vers des points visés, et l'accessoire de son style dans la main. Chaque coup
-// a sa posture : il arme, frappe, puis revient ; le serveur dit où il en est, le dessin fait le reste.
+// Un combattant de Culbute en 3D : un petit personnage à grosse tête (celle de l'avatar, ses cheveux et son chapeau),
+// habillé selon qui il est (la robe à pois de Ginette, le gilet tricoté de Marcel, le châle de Huguette…), des bras et
+// des jambes qui se plient vers des points visés, et l'accessoire de son style dans la main. Chaque coup a sa posture :
+// il arme, frappe, puis revient, et l'accessoire laisse une traînée ; le serveur dit où il en est, le dessin fait le reste.
 
 import * as THREE from "three";
 import { AVATAR_HAIR_COLORS, AVATAR_SKINS, type AvatarConfig } from "../../../shared/avatar.ts";
@@ -12,7 +13,8 @@ import { STYLES } from "../../../shared/games/culbute/styles.ts";
 import { F_CREAM, F_FAST, F_INTANG } from "../../../shared/games/culbute/view.ts";
 import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import type { RenderFighter } from "../runtime.ts";
-import { accordionModel, itemModel, propModel, std, type Accordion, type Keep } from "./props.ts";
+import { cloth, dotsTexture, knitTexture, limb, loft, merge, mitten, shoe } from "./body.ts";
+import { accordionModel, itemModel, propModel, type Accordion, type Keep } from "./props.ts";
 
 export interface FighterLook {
   slot: number;
@@ -23,8 +25,8 @@ export interface FighterLook {
   /** La couleur du joueur (son repère, sa garde) */
   color: string;
   me: boolean;
-  /** Une jupe (Ginette, Huguette, Simone) */
-  skirt: boolean;
+  /** Ses habits : ceux d'un Habitué, ou un haut et un pantalon pour son propre personnage */
+  outfit: HabitueId | "moi";
   /** La peau de sa tête, avec les traits de l'avatar (dessinée à part, elle arrive un peu après) */
   head?: HTMLCanvasElement | null;
 }
@@ -52,8 +54,8 @@ const SHOULDER_Y = 0.92;
 const SHOULDER_X = 0.25;
 const UPPER = 0.26;
 const FORE = 0.25;
-const THIGH = 0.27;
-const SHIN = 0.25;
+const THIGH = 0.235;
+const SHIN = 0.215;
 
 const REST: Pose = {
   crouch: 0,
@@ -226,6 +228,140 @@ function timeline(style: HabitueId, move: string): { first: number; last: number
 /** Les coups de Lucien où l'accordéon se déplie loin devant */
 const STRETCH: Record<string, number> = { s: 0.9, as: 0.8, cs: 1.1, ps: 1.9 };
 
+/** Ce que porte chacun : robe ou pantalon, manches, gilet tricoté, collier, nœud papillon, châle… */
+interface Outfit {
+  /** 0 : un pantalon ; 1 : une jupe aux genoux ; 2 : une jupe longue */
+  skirt: 0 | 1 | 2;
+  short: boolean;
+  /** Les manches de la couleur de la touche (la chemise de Lucien sous son gilet) */
+  accentSleeves: boolean;
+  belly: number;
+  knit: boolean;
+  collar: string | null;
+  necklace: string | null;
+  bowtie: boolean;
+  shawl: boolean;
+  buttons: boolean;
+  pattern: "dots" | "flowers" | null;
+  shoe: number;
+}
+
+const OUTFITS: Record<HabitueId | "moi", Outfit> = {
+  ginette: {
+    skirt: 1,
+    short: false,
+    accentSleeves: false,
+    belly: 0.25,
+    knit: false,
+    collar: "#f6f1e6",
+    necklace: "#f6f1e6",
+    bowtie: false,
+    shawl: false,
+    buttons: false,
+    pattern: "dots",
+    shoe: 0x4a2a24,
+  },
+  marcel: {
+    skirt: 0,
+    short: false,
+    accentSleeves: false,
+    belly: 1,
+    knit: true,
+    collar: "#e8e2d4",
+    necklace: null,
+    bowtie: false,
+    shawl: false,
+    buttons: true,
+    pattern: null,
+    shoe: 0x3a2a20,
+  },
+  huguette: {
+    skirt: 2,
+    short: false,
+    accentSleeves: false,
+    belly: 0.1,
+    knit: false,
+    collar: null,
+    necklace: null,
+    bowtie: false,
+    shawl: true,
+    buttons: false,
+    pattern: "flowers",
+    shoe: 0x2a2228,
+  },
+  raymond: {
+    skirt: 0,
+    short: true,
+    accentSleeves: false,
+    belly: 0.45,
+    knit: false,
+    collar: null,
+    necklace: null,
+    bowtie: false,
+    shawl: false,
+    buttons: false,
+    pattern: null,
+    shoe: 0xe8e2d4,
+  },
+  simone: {
+    skirt: 2,
+    short: false,
+    accentSleeves: false,
+    belly: 0,
+    knit: false,
+    collar: null,
+    necklace: "#f2c94c",
+    bowtie: false,
+    shawl: false,
+    buttons: false,
+    pattern: null,
+    shoe: 0x1c1a20,
+  },
+  lucien: {
+    skirt: 0,
+    short: false,
+    accentSleeves: true,
+    belly: 0.3,
+    knit: false,
+    collar: null,
+    necklace: null,
+    bowtie: true,
+    shawl: false,
+    buttons: true,
+    pattern: null,
+    shoe: 0x2a1e18,
+  },
+  moi: {
+    skirt: 0,
+    short: true,
+    accentSleeves: false,
+    belly: 0,
+    knit: false,
+    collar: null,
+    necklace: null,
+    bowtie: false,
+    shawl: false,
+    buttons: false,
+    pattern: null,
+    shoe: 0xf4efe2,
+  },
+};
+
+interface Arm {
+  upper: THREE.Mesh;
+  fore: THREE.Mesh;
+  hand: THREE.Mesh;
+}
+
+interface Leg {
+  thigh: THREE.Mesh;
+  shin: THREE.Mesh;
+  shoe: THREE.Mesh;
+}
+
+/** Le bout d'un accessoire qui frappe laisse une traînée claire : on garde ses dernières positions */
+const TRAIL = 9;
+
 export class FighterModel {
   readonly group = new THREE.Group();
   private root = new THREE.Group();
@@ -234,13 +370,15 @@ export class FighterModel {
   private body = new THREE.Group();
   private torso = new THREE.Group();
   private head = new THREE.Group();
-  private arms: { upper: THREE.Mesh; fore: THREE.Mesh; elbow: THREE.Mesh; hand: THREE.Mesh; side: number }[] = [];
-  private legs: { thigh: THREE.Mesh; shin: THREE.Mesh; knee: THREE.Mesh; foot: THREE.Mesh; side: number }[] = [];
+  private skirt: THREE.Mesh | null = null;
+  private arms: Arm[] = [];
+  private legs: Leg[] = [];
   private prop: THREE.Group;
   private accordion: Accordion | null = null;
   private skull: THREE.Mesh;
   private mats: THREE.MeshStandardMaterial[] = [];
   private shieldBubble: THREE.Mesh;
+  private shieldMat: THREE.ShaderMaterial;
   private cream: THREE.Mesh;
   private stars = new THREE.Group();
   private yarn: THREE.Mesh;
@@ -258,6 +396,10 @@ export class FighterModel {
   private wasAir = false;
   private scale = 1;
   private disposables: { dispose: () => void }[] = [];
+  /** La traînée du coup : un ruban entre la main et le bout de l'accessoire, sur les dernières images */
+  readonly trail: THREE.Mesh;
+  private trailPts: { a: THREE.Vector3; b: THREE.Vector3; age: number }[] = [];
+  private trailColor = new THREE.Color();
   readonly look: FighterLook;
 
   constructor(look: FighterLook) {
@@ -268,17 +410,24 @@ export class FighterModel {
     };
     const keep = this.keep;
     const st = STYLES[look.style];
+    const fit = OUTFITS[look.outfit];
     this.scale = st.hgt / HEIGHT;
-    const mat = (c: THREE.ColorRepresentation, r = 0.75) => {
-      const m = keep(std(c, r));
+    const mat = (c: THREE.ColorRepresentation, r = 0.82, rim = 0.32, map?: THREE.Texture) => {
+      const m = keep(cloth(c, r, rim, map));
       this.mats.push(m);
       return m;
     };
-    const skin = AVATAR_SKINS[look.avatar.skin] ?? AVATAR_SKINS[0]!;
-    const top = mat(look.palette.top);
-    const bottom = mat(look.palette.bottom);
-    const skinMat = mat(skin, 0.65);
-    const shoe = mat(0x23232a, 0.6);
+    const geo = <T extends THREE.BufferGeometry>(g: T) => keep(g);
+    const skinHex = AVATAR_SKINS[look.avatar.skin] ?? AVATAR_SKINS[0]!;
+    const p = look.palette;
+    const topMat = mat(p.top, 0.85, 0.32, fit.knit ? keep(knitTexture(p.top, shade(p.top, -0.35))) : undefined);
+    const bottomMat = mat(p.bottom, 0.8);
+    const accentMat = mat(p.accent, 0.7);
+    const skinMat = mat(skinHex, 0.62, 0.22);
+    const shoeMat = mat(fit.shoe, 0.45, 0.25);
+    // Sous une jupe : des bas, un peu plus foncés que la peau
+    const legMat = fit.skirt > 0 ? mat(shade(skinHex, -0.18), 0.55, 0.28) : bottomMat;
+    const sleeveMat = fit.accentSleeves ? accentMat : topMat;
 
     this.group.add(this.root);
     this.root.add(this.spinner);
@@ -286,33 +435,156 @@ export class FighterModel {
     this.body.position.y = -PIVOT;
     this.body.add(this.torso);
     this.torso.position.y = HIPS_Y;
-    // Le buste, une ceinture, et une jupe pour celles qui en portent
-    const chest = new THREE.Mesh(keep(new THREE.CapsuleGeometry(0.24, 0.22, 6, 14)), top);
-    chest.position.y = 0.26;
-    chest.scale.set(1.05, 1, 0.82);
+
+    // Le buste : un tronc galbé, un peu de ventre pour certains
+    const b = fit.belly;
+    const chest = new THREE.Mesh(
+      geo(
+        loft([
+          [-0.12, 0.17, 0.14],
+          [-0.04, 0.215, 0.17, b * 0.01],
+          [0.06, 0.238 + b * 0.025, 0.19 + b * 0.055, b * 0.045],
+          [0.16, 0.245 + b * 0.02, 0.195 + b * 0.045, b * 0.035],
+          [0.26, 0.25, 0.185, b * 0.01],
+          [0.34, 0.245, 0.17],
+          [0.41, 0.205, 0.145],
+          [0.46, 0.12, 0.095],
+        ]),
+      ),
+      topMat,
+    );
     chest.castShadow = true;
     this.torso.add(chest);
-    const belt = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.235, 0.235, 0.06, 16)), mat(look.palette.accent, 0.6));
-    belt.position.y = 0.08;
-    belt.scale.set(1.05, 1, 0.82);
-    this.torso.add(belt);
-    if (look.skirt) {
-      const skirt = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.22, 0.36, 0.34, 16, 1, true)), bottom);
-      skirt.material.side = THREE.DoubleSide;
-      skirt.position.y = -0.1;
-      skirt.scale.z = 0.85;
-      skirt.castShadow = true;
-      this.torso.add(skirt);
+    // Le devant du buste à cette hauteur (pour y poser des boutons)
+    const front = (y: number) => (y < 0.26 ? 0.19 : 0.19 - (y - 0.26) * 0.25) + b * 0.1 * Math.exp(-(((y - 0.08) / 0.14) ** 2));
+
+    if (fit.skirt === 0) {
+      // Le pantalon : le bassin, et une ceinture
+      const hips = new THREE.Mesh(
+        geo(
+          loft([
+            [-0.2, 0.15, 0.12],
+            [-0.14, 0.2, 0.155],
+            [-0.04, 0.218, 0.172, b * 0.01],
+            [0.04, 0.222, 0.176, b * 0.02],
+          ]),
+        ),
+        bottomMat,
+      );
+      hips.castShadow = true;
+      this.torso.add(hips);
+      const belt = new THREE.Mesh(geo(new THREE.TorusGeometry(1, 0.11, 6, 26)), mat(0x2a2228, 0.5, 0.2));
+      belt.rotation.x = Math.PI / 2;
+      belt.scale.set(0.224, 0.18 + b * 0.02, 0.21);
+      belt.position.set(0, 0.035, b * 0.015);
+      this.torso.add(belt);
+    } else {
+      // La jupe, évasée, avec ses motifs
+      const long = fit.skirt === 2;
+      const hem = long ? -0.42 : -0.3;
+      const skirtTex = fit.pattern ? keep(dotsTexture(p.bottom, shade(p.bottom, 0.45), fit.pattern === "flowers")) : undefined;
+      const skirtMat = mat(p.bottom, 0.8, 0.3, skirtTex);
+      skirtMat.side = THREE.DoubleSide;
+      this.skirt = new THREE.Mesh(
+        geo(
+          loft(
+            [
+              [hem, long ? 0.36 : 0.34, long ? 0.3 : 0.29, 0.02],
+              [hem * 0.55, long ? 0.3 : 0.29, long ? 0.25 : 0.24, 0.015],
+              [-0.06, 0.245, 0.195, 0.01],
+              [0.04, 0.225, 0.18, b * 0.02],
+              [0.1, 0.215, 0.175, b * 0.03],
+            ],
+            24,
+            true,
+          ),
+        ),
+        skirtMat,
+      );
+      this.skirt.castShadow = true;
+      this.torso.add(this.skirt);
+      // Un ourlet clair
+      const trim = new THREE.Mesh(geo(new THREE.TorusGeometry(1, 0.06, 5, 30)), accentMat);
+      trim.rotation.x = Math.PI / 2;
+      trim.scale.set(long ? 0.36 : 0.34, long ? 0.3 : 0.29, 0.25);
+      trim.position.set(0, hem + 0.01, 0.02);
+      this.skirt.add(trim);
+    }
+
+    // Le col, le collier, les boutons, le nœud papillon, le châle
+    if (fit.collar) {
+      const collar = new THREE.Mesh(geo(new THREE.TorusGeometry(1, 0.32, 6, 22)), mat(fit.collar, 0.75));
+      collar.rotation.x = Math.PI / 2 - 0.25;
+      collar.scale.set(0.13, 0.11, 0.1);
+      collar.position.set(0, 0.42, 0.02);
+      this.torso.add(collar);
+    }
+    if (fit.necklace) {
+      const pearl = mat(fit.necklace, 0.25, 0.45);
+      pearl.metalness = fit.necklace === "#f2c94c" ? 0.7 : 0.1;
+      const beads = merge(
+        Array.from({ length: 13 }, (_, i) => {
+          const a = Math.PI * 0.18 + (i / 12) * Math.PI * 0.64;
+          const s = new THREE.SphereGeometry(0.024, 8, 6);
+          s.translate(Math.cos(a) * 0.15, 0.4 - Math.sin(a) * 0.075, Math.sin(a) * 0.15 + 0.005);
+          return s;
+        }),
+      );
+      this.torso.add(new THREE.Mesh(geo(beads), pearl));
+    }
+    if (fit.buttons) {
+      const btn = merge(
+        [0.1, 0.2, 0.3].map((y) => {
+          const s = new THREE.SphereGeometry(0.022, 8, 6);
+          s.scale(1, 1, 0.5);
+          s.translate(0, y, front(y) + 0.004);
+          return s;
+        }),
+      );
+      this.torso.add(new THREE.Mesh(geo(btn), mat(fit.accentSleeves ? p.bottom : p.accent, 0.4, 0.2)));
+    }
+    if (fit.bowtie) {
+      const bow = merge(
+        [-1, 1].map((side) => {
+          const c = new THREE.ConeGeometry(0.05, 0.09, 8);
+          c.rotateZ((side * Math.PI) / 2);
+          c.translate(side * 0.045, 0.43, 0.13);
+          return c;
+        }),
+      );
+      this.torso.add(new THREE.Mesh(geo(bow), mat(p.bottom, 0.5)));
+    }
+    if (fit.shawl) {
+      const shawlMat = mat(p.accent, 0.95, 0.3, keep(knitTexture(p.accent, shade(p.accent, -0.3))));
+      shawlMat.side = THREE.DoubleSide;
+      const shawl = new THREE.Mesh(
+        geo(
+          loft(
+            [
+              [0.14, 0.27, 0.21, -0.01],
+              [0.24, 0.28, 0.215],
+              [0.34, 0.27, 0.2],
+              [0.42, 0.22, 0.165],
+              [0.47, 0.14, 0.11],
+            ],
+            24,
+            true,
+          ),
+        ),
+        shawlMat,
+      );
+      shawl.castShadow = true;
+      this.torso.add(shawl);
     }
 
     // La tête : la peau de l'avatar (posée plus tard), les oreilles, les cheveux, le chapeau
-    this.head.position.set(0, 0.7, 0.02);
+    this.head.position.set(0, 0.74, 0.02);
     this.torso.add(this.head);
-    this.skull = new THREE.Mesh(keep(new THREE.SphereGeometry(HEAD_R, 28, 18)), skinMat);
+    this.skull = new THREE.Mesh(geo(new THREE.SphereGeometry(HEAD_R, 36, 24)), skinMat);
     this.skull.castShadow = true;
     this.head.add(this.skull);
     for (const side of [-1, 1]) {
-      const ear = new THREE.Mesh(keep(new THREE.SphereGeometry(HEAD_R * 0.24, 10, 8)), skinMat);
+      const ear = new THREE.Mesh(geo(new THREE.SphereGeometry(HEAD_R * 0.24, 12, 8)), skinMat);
       ear.position.set(side * HEAD_R * 0.97, -HEAD_R * 0.05, -HEAD_R * 0.05);
       ear.scale.set(0.55, 1, 0.85);
       this.head.add(ear);
@@ -320,13 +592,8 @@ export class FighterModel {
     const hatCoversTop = [1, 2, 4, 5, 7].includes(look.avatar.hat);
     const hairGeo = hairGeometry(look.avatar.hair, hatCoversTop);
     if (hairGeo) {
-      const hairMat = keep(
-        new THREE.MeshStandardMaterial({
-          color: AVATAR_HAIR_COLORS[look.avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!,
-          roughness: 0.85,
-          side: THREE.DoubleSide,
-        }),
-      );
+      const hairMat = keep(cloth(AVATAR_HAIR_COLORS[look.avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!, 0.75, 0.35));
+      hairMat.side = THREE.DoubleSide;
       this.mats.push(hairMat);
       const hair = new THREE.Mesh(keep(hairGeo), hairMat);
       hair.castShadow = true;
@@ -335,35 +602,62 @@ export class FighterModel {
     const hat = hatGroup(look.avatar.hat, keep, true);
     if (hat) this.head.add(hat);
     // La tarte en pleine figure
-    this.cream = new THREE.Mesh(keep(new THREE.SphereGeometry(HEAD_R * 0.75, 14, 10)), keep(std(0xfffaf0, 0.5)));
+    this.cream = new THREE.Mesh(geo(new THREE.SphereGeometry(HEAD_R * 0.75, 16, 12)), keep(cloth(0xfffaf0, 0.5, 0.2)));
     this.cream.position.set(0, -0.02, HEAD_R * 0.62);
     this.cream.scale.set(1.1, 0.9, 0.5);
     this.cream.visible = false;
     this.head.add(this.cream);
     // Les étoiles de la tête qui tourne
     const starMat = keep(new THREE.MeshBasicMaterial({ color: 0xffd84a, side: THREE.DoubleSide }));
-    for (let i = 0; i < 3; i++) this.stars.add(new THREE.Mesh(keep(starShape(0.09)), starMat));
+    for (let i = 0; i < 3; i++) this.stars.add(new THREE.Mesh(geo(starShape(0.09)), starMat));
     this.stars.position.y = HEAD_R + 0.18;
     this.stars.visible = false;
     this.head.add(this.stars);
 
-    // Bras et jambes : des os étirés entre les articulations
-    for (const side of [-1, 1]) {
-      const upper = bone(0.075, top, keep);
-      const fore = bone(0.068, top, keep);
-      const elbow = new THREE.Mesh(keep(new THREE.SphereGeometry(0.075, 10, 8)), top);
-      const hand = new THREE.Mesh(keep(new THREE.SphereGeometry(0.085, 12, 8)), skinMat);
-      hand.castShadow = true;
-      this.body.add(upper, fore, elbow, hand);
-      this.arms.push({ upper, fore, elbow, hand, side });
-      const thigh = bone(0.095, bottom, keep);
-      const shin = bone(0.085, bottom, keep);
-      const knee = new THREE.Mesh(keep(new THREE.SphereGeometry(0.09, 10, 8)), bottom);
-      const foot = new THREE.Mesh(keep(new THREE.SphereGeometry(0.11, 10, 8)), shoe);
-      foot.scale.set(0.9, 0.65, 1.5);
-      foot.castShadow = true;
-      this.body.add(thigh, shin, knee, foot);
-      this.legs.push({ thigh, shin, knee, foot, side });
+    // Les bras : manche, avant-bras (la peau sous une manche courte), main en moufle
+    for (let side = 0; side < 2; side++) {
+      const upperMat = fit.short ? skinMat : sleeveMat;
+      const upper = new THREE.Mesh(geo(limb((u) => 0.088 - u * 0.012, UPPER)), upperMat);
+      const fore = new THREE.Mesh(geo(limb((u) => 0.074 - u * 0.012, FORE)), fit.short ? skinMat : sleeveMat);
+      upper.userData.len = UPPER;
+      fore.userData.len = FORE;
+      if (fit.short) {
+        // La manche courte, qui couvre le haut du bras
+        const sleeve = new THREE.Mesh(
+          geo(
+            loft(
+              [
+                [-0.05, 0.11, 0.11],
+                [0.06, 0.112, 0.112],
+                [0.13, 0.105, 0.105],
+              ],
+              16,
+              true,
+            ),
+          ),
+          sleeveMat,
+        );
+        sleeve.material.side = THREE.DoubleSide;
+        upper.add(sleeve);
+      } else {
+        // Le poignet de la manche
+        const cuff = new THREE.Mesh(geo(new THREE.TorusGeometry(0.066, 0.018, 6, 16)), fit.knit ? topMat : accentMat);
+        cuff.rotation.x = Math.PI / 2;
+        cuff.position.y = FORE - 0.01;
+        fore.add(cuff);
+      }
+      const hand = new THREE.Mesh(geo(mitten(0.11)), skinMat);
+      for (const m of [upper, fore, hand]) m.castShadow = true;
+      this.body.add(upper, fore, hand);
+      this.arms.push({ upper, fore, hand });
+      const thigh = new THREE.Mesh(geo(limb((u) => 0.105 - u * 0.018, THIGH)), legMat);
+      const shin = new THREE.Mesh(geo(limb((u) => 0.085 - u * 0.02, SHIN)), legMat);
+      thigh.userData.len = THIGH;
+      shin.userData.len = SHIN;
+      const foot = new THREE.Mesh(geo(shoe(0.3, 0.19)), shoeMat);
+      for (const m of [thigh, shin, foot]) m.castShadow = true;
+      this.body.add(thigh, shin, foot);
+      this.legs.push({ thigh, shin, shoe: foot });
     }
 
     // L'accessoire de son style
@@ -375,24 +669,59 @@ export class FighterModel {
     }
 
     // La pelote qui le ligote (pris au lasso ou dans le tricot)
-    this.yarn = new THREE.Mesh(keep(new THREE.TorusGeometry(0.34, 0.05, 6, 18)), keep(std(0xe86aa6, 0.95)));
+    this.yarn = new THREE.Mesh(geo(new THREE.TorusGeometry(0.34, 0.05, 6, 18)), keep(cloth(0xe86aa6, 0.95)));
     this.yarn.rotation.x = Math.PI / 2;
     this.yarn.position.y = 0.75;
     this.yarn.visible = false;
     this.body.add(this.yarn);
 
-    // La garde : une bulle à la couleur du joueur
-    this.shieldBubble = new THREE.Mesh(
-      keep(new THREE.SphereGeometry(0.85, 24, 16)),
-      keep(new THREE.MeshBasicMaterial({ color: look.color, transparent: true, opacity: 0.32, depthWrite: false })),
+    // La garde : une bulle à la couleur du joueur, plus vive sur les bords
+    this.shieldMat = keep(
+      new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: new THREE.Color(look.color) }, uPower: { value: 1 } },
+        vertexShader: `varying vec3 vN; varying vec3 vV;
+void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `uniform vec3 uColor; uniform float uPower; varying vec3 vN; varying vec3 vV;
+void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mix(uColor, vec3(1.0), f * 0.5), (0.16 + f * 0.7) * uPower); }`,
+        transparent: true,
+        depthWrite: false,
+      }),
     );
+    this.shieldBubble = new THREE.Mesh(geo(new THREE.SphereGeometry(0.85, 32, 20)), this.shieldMat);
     this.shieldBubble.position.y = 0.78;
     this.shieldBubble.visible = false;
     this.group.add(this.shieldBubble);
 
+    // La traînée des coups
+    const trailGeo = geo(new THREE.BufferGeometry());
+    trailGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(TRAIL * 2 * 3), 3));
+    trailGeo.setAttribute("alpha", new THREE.BufferAttribute(new Float32Array(TRAIL * 2), 1));
+    const idx: number[] = [];
+    for (let i = 0; i < TRAIL - 1; i++) {
+      const a = i * 2;
+      idx.push(a, a + 1, a + 3, a, a + 3, a + 2);
+    }
+    trailGeo.setIndex(idx);
+    this.trail = new THREE.Mesh(
+      trailGeo,
+      keep(
+        new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: this.trailColor } },
+          vertexShader: `attribute float alpha; varying float vA; void main() { vA = alpha; gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0); }`,
+          fragmentShader: `uniform vec3 uColor; varying float vA; void main() { gl_FragColor = vec4(uColor, vA); }`,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      ),
+    );
+    this.trail.frustumCulled = false;
+    this.trail.visible = false;
+    this.trailColor.set(look.color).lerp(new THREE.Color(0xffffff), 0.55);
+
     // Son nom au-dessus de la tête, et un petit repère à sa couleur
     this.marker = nameTag(look.me ? "Toi" : look.name, look.color, keep);
-    this.marker.position.y = HEIGHT + 0.55;
+    this.marker.position.y = HEIGHT + 0.5;
     this.group.add(this.marker);
 
     this.root.scale.setScalar(this.scale);
@@ -405,7 +734,7 @@ export class FighterModel {
     const tex = this.keep(new THREE.CanvasTexture(canvas));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
-    const mat = this.keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.65 }));
+    const mat = this.keep(cloth(0xffffff, 0.6, 0.22, tex));
     this.mats.push(mat);
     this.skull.material = mat;
   }
@@ -600,6 +929,8 @@ export class FighterModel {
     if (!visible) {
       this.lastX = f.x;
       this.lastY = f.y;
+      this.trailPts.length = 0;
+      this.trail.visible = false;
       return;
     }
     // Sa vitesse, d'après ses positions successives (lissée)
@@ -627,52 +958,67 @@ export class FighterModel {
     // Les tours sur soi-même : autour du milieu du corps
     this.spinner.position.y = PIVOT + pose.liftY;
     this.spinner.rotation.set(pose.spinX, pose.spinY, 0);
+    // Un peu d'écrasement à l'atterrissage, un peu d'étirement en montant
+    const squash = this.landing * 0.09 - Math.min(0.08, Math.max(0, this.vy) * 0.006);
+    this.body.scale.set(1 + squash * 0.6, 1 - squash, 1 + squash * 0.6);
     this.torso.position.y = HIPS_Y - pose.crouch;
     this.torso.rotation.set(pose.lean, pose.twist, 0);
     this.head.rotation.set(-0.06 - pose.lean * 0.4, -f.face * 0.32, pose.headTilt);
+    // La jupe suit le mouvement : elle traîne un peu derrière
+    if (this.skirt) {
+      const sway = Math.max(-0.35, Math.min(0.35, -Math.abs(this.vx) * 0.03 + this.vy * 0.012));
+      this.skirt.rotation.x = sway - pose.lean * 0.5;
+      this.skirt.scale.y = 1 + Math.max(-0.12, Math.min(0.1, -this.vy * 0.006));
+    }
 
     // Les bras : de l'épaule à la main visée, le coude vers l'extérieur et en arrière
     this.torso.updateMatrix();
-    const shoulderL = new THREE.Vector3();
     for (let i = 0; i < 2; i++) {
       const arm = this.arms[i]!;
       const side = i === 0 ? -1 : 1;
-      shoulderL.set(side * SHOULDER_X, SHOULDER_Y - HIPS_Y, 0).applyMatrix4(this.torso.matrix);
+      const shoulder = new THREE.Vector3(side * SHOULDER_X, SHOULDER_Y - HIPS_Y, 0).applyMatrix4(this.torso.matrix);
       const target = new THREE.Vector3(...pose.hands[i]!);
       target.y -= pose.crouch * 0.5;
-      const elbow = ik(shoulderL, target, UPPER, FORE, new THREE.Vector3(side * 0.8, -0.4, -0.5));
-      stretch(arm.upper, shoulderL, elbow);
+      const elbow = ik(shoulder, target, UPPER, FORE, new THREE.Vector3(side * 0.8, -0.4, -0.5));
+      stretch(arm.upper, shoulder, elbow);
       stretch(arm.fore, elbow, target);
-      arm.elbow.position.copy(elbow);
+      // La main dans le prolongement de l'avant-bras, le pouce vers le haut
       arm.hand.position.copy(target);
+      const dir = new THREE.Vector3().subVectors(target, elbow).normalize();
+      arm.hand.quaternion.setFromUnitVectors(DOWN, dir);
     }
-    // Les jambes : de la hanche au pied visé, le genou vers l'avant
+    // Les jambes : de la hanche à la cheville, le genou vers l'avant ; la chaussure à plat (ou dans l'axe du tibia en l'air)
     for (let i = 0; i < 2; i++) {
       const leg = this.legs[i]!;
       const side = i === 0 ? -1 : 1;
-      const hip = new THREE.Vector3(side * 0.12, HIPS_Y - pose.crouch, 0);
+      const hip = new THREE.Vector3(side * 0.1, HIPS_Y - pose.crouch - 0.03, 0);
       const foot = new THREE.Vector3(...pose.feet[i]!);
-      const knee = ik(hip, foot, THIGH, SHIN, new THREE.Vector3(0, 0.1, 1));
+      const ankle = foot.clone().add(new THREE.Vector3(0, 0.06, -0.02));
+      const knee = ik(hip, ankle, THIGH, SHIN, new THREE.Vector3(0, 0.1, 1));
       stretch(leg.thigh, hip, knee);
-      stretch(leg.shin, knee, foot);
-      leg.knee.position.copy(knee);
-      leg.foot.position.copy(foot).add(new THREE.Vector3(0, 0.04, 0.05));
+      stretch(leg.shin, knee, ankle);
+      const shinUp = new THREE.Vector3().subVectors(knee, ankle).normalize();
+      const lift = Math.min(1, Math.max(0, foot.y * 4));
+      const up = new THREE.Vector3(0, 1, 0).lerp(shinUp, lift).normalize();
+      leg.shoe.quaternion.setFromUnitVectors(UP, up);
+      leg.shoe.position.copy(ankle).add(new THREE.Vector3(0, -0.06, -0.05).applyQuaternion(leg.shoe.quaternion));
     }
 
     // L'accessoire dans la main droite, le long de l'avant-bras ; un objet tenu le remplace
     const hand = this.arms[0]!.hand.position;
-    const elbowP = this.arms[0]!.elbow.position;
+    const elbowP = new THREE.Vector3().copy(this.arms[0]!.fore.position);
     const along = new THREE.Vector3().subVectors(hand, elbowP).normalize();
+    const grip = hand.clone().addScaledVector(along, 0.07);
     const holding = f.item !== "";
     this.setHeld(f.item);
     const shown = this.held.model ?? this.prop;
     this.prop.visible = !holding && !this.accordion;
     if (this.held.model) this.held.model.visible = holding;
-    shown.position.copy(hand);
-    shown.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along);
+    shown.position.copy(grip);
+    shown.quaternion.setFromUnitVectors(UP, along);
     if (this.look.style === "ginette" && !holding) {
       // Le sac pend à son anse, sauf quand il frappe
-      const hang = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0));
+      const hang = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(0, -1, 0));
       if (strike < 0.3) shown.quaternion.slerp(hang, 0.85 - strike * 2);
     }
     if (this.accordion) {
@@ -695,10 +1041,17 @@ export class FighterModel {
       a.bellows.scale.x = Math.max(0.08, left.distanceTo(right) - 0.1);
     }
 
+    // La traînée du coup : de la main au bout de l'accessoire, tant qu'il frappe
+    this.updateTrail(dt, f.state === "move" && strike > 0.05 && strike < 1, grip, along);
+
     // La garde, la tarte, les étoiles, la laine
     const shielding = f.state === "shield" || f.state === "shieldstun";
     this.shieldBubble.visible = shielding;
-    if (shielding) this.shieldBubble.scale.setScalar(0.45 + (0.55 * Math.max(0, f.shield)) / 50);
+    if (shielding) {
+      const k = Math.max(0, f.shield) / 50;
+      this.shieldBubble.scale.setScalar(0.45 + 0.55 * k);
+      this.shieldMat.uniforms.uPower!.value = 0.75 + 0.25 * Math.sin(time * 9) * (k < 0.3 ? 1 : 0.2);
+    }
     this.cream.visible = (f.flags & F_CREAM) !== 0;
     this.stars.visible = f.state === "dizzy";
     if (this.stars.visible)
@@ -723,6 +1076,35 @@ export class FighterModel {
     this.root.visible = !blink || Math.floor(time * 12) % 2 === 0;
   }
 
+  /** Le ruban de la traînée, en coordonnées du monde (il reste en place quand le combattant avance) */
+  private updateTrail(dt: number, active: boolean, grip: THREE.Vector3, along: THREE.Vector3) {
+    for (const p of this.trailPts) p.age += dt;
+    while (this.trailPts.length > 0 && this.trailPts[0]!.age > 0.14) this.trailPts.shift();
+    if (active) {
+      this.body.updateWorldMatrix(true, false);
+      const reach = this.look.style === "raymond" ? 0.18 : this.look.style === "lucien" ? 0.35 : 0.55;
+      const a = this.body.localToWorld(grip.clone());
+      const b = this.body.localToWorld(grip.clone().addScaledVector(along, reach));
+      this.trailPts.push({ a, b, age: 0 });
+      if (this.trailPts.length > TRAIL) this.trailPts.shift();
+    }
+    const n = this.trailPts.length;
+    this.trail.visible = n >= 2;
+    if (n < 2) return;
+    const pos = this.trail.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const alpha = this.trail.geometry.getAttribute("alpha") as THREE.BufferAttribute;
+    for (let i = 0; i < TRAIL; i++) {
+      const p = this.trailPts[Math.min(n - 1, Math.max(0, i - (TRAIL - n)))]!;
+      pos.setXYZ(i * 2, p.a.x, p.a.y, p.a.z + 0.05);
+      pos.setXYZ(i * 2 + 1, p.b.x, p.b.y, p.b.z + 0.05);
+      const k = i < TRAIL - n ? 0 : Math.max(0, 1 - p.age / 0.14) * ((i - (TRAIL - n) + 1) / n);
+      alpha.setX(i * 2, k * 0.25);
+      alpha.setX(i * 2 + 1, k * 0.75);
+    }
+    pos.needsUpdate = true;
+    alpha.needsUpdate = true;
+  }
+
   private setHeld(kind: ItemKind | "") {
     if (kind === this.held.kind) return;
     if (this.held.model) this.body.remove(this.held.model);
@@ -739,23 +1121,24 @@ export class FighterModel {
   }
 }
 
-/** Un os : un cylindre de longueur 1 le long de y, à étirer et orienter */
-function bone(radius: number, mat: THREE.Material, keep: Keep): THREE.Mesh {
-  const geo = keep(new THREE.CylinderGeometry(radius, radius * 0.9, 1, 8));
-  geo.translate(0, 0.5, 0);
-  const m = new THREE.Mesh(geo, mat);
-  m.castShadow = true;
-  return m;
-}
-
 const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
 
+/** Un membre entre deux articulations : construit à sa longueur, il ne s'étire presque jamais */
 function stretch(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
   const dir = new THREE.Vector3().subVectors(b, a);
   const len = dir.length();
   m.position.copy(a);
   m.quaternion.setFromUnitVectors(UP, dir.divideScalar(len || 1));
-  m.scale.set(1, len, 1);
+  m.scale.set(1, len / ((m.userData.len as number | undefined) ?? 1), 1);
+}
+
+/** Une couleur un peu plus claire (k > 0) ou plus foncée (k < 0) */
+function shade(c: THREE.ColorRepresentation, k: number): string {
+  const col = new THREE.Color(c);
+  if (k > 0) col.lerp(new THREE.Color(0xffffff), k);
+  else col.multiplyScalar(1 + k);
+  return `#${col.getHexString()}`;
 }
 
 /** L'articulation du milieu (coude, genou) : deux os de longueurs données, plié du côté de `pole` */

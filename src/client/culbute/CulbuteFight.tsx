@@ -59,7 +59,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
         palette: avatarPalette(AVATAR_BACKGROUNDS[seat.avatar.bg] ?? "#3f7fd8", f.style),
         color,
         me: seat.id === room.you.seatId,
-        skirt: false,
+        outfit: "moi",
       };
     }
     const who = pick.who === "moi" ? f.style : pick.who;
@@ -71,7 +71,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
       palette: PALETTES[who][(pick.who !== "moi" && pick.tenue) || "dimanche"],
       color,
       me: seat?.id === room.you.seatId,
-      skirt: who === "ginette" || who === "huguette" || who === "simone",
+      outfit: who,
     };
   });
 }

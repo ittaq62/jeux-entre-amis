@@ -2,7 +2,8 @@
 // caméra de côté qui garde tout le monde à l'écran en s'approchant quand on se bat de près.
 
 import * as THREE from "three";
-import { blastOf, type ArenaId } from "../../../shared/games/culbute/arenas.ts";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import type { RenderFrame } from "../runtime.ts";
@@ -47,6 +48,11 @@ export class CulbuteScene {
   private camLook = new THREE.Vector3(0, 2, 0);
   private trailAt = new Map<number, number>();
   private sphereGeo: THREE.SphereGeometry | null = null;
+  /** Sous chaque combattant, une ombre ronde sur la plateforme où il retombera */
+  private blobs: THREE.Mesh[] = [];
+  private blobMat: THREE.MeshBasicMaterial;
+  private envMap: THREE.Texture | null = null;
+  private blobGeo: THREE.BufferGeometry | null = null;
   private starGeo: THREE.ShapeGeometry | null = null;
   /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
   fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
@@ -60,7 +66,7 @@ export class CulbuteScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.25 : 1.75));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.92;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className = "culbute-canvas";
@@ -78,6 +84,30 @@ export class CulbuteScene {
     cam.far = 50;
     this.sun.shadow.bias = -0.0008;
     this.scene.add(this.hemi, this.sun, this.sun.target);
+    // Un éclairage d'ambiance venu de partout : les volumes des combattants se lisent mieux
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      this.scene.environment = this.envMap;
+    } catch {
+      // Sans carte d'environnement, la lumière du soleil et du ciel suffit
+    }
+    const blobTex = new THREE.CanvasTexture(
+      (() => {
+        const c = document.createElement("canvas");
+        c.width = c.height = 64;
+        const g = c.getContext("2d")!;
+        const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grd.addColorStop(0, "rgba(0,0,0,0.55)");
+        grd.addColorStop(0.6, "rgba(0,0,0,0.3)");
+        grd.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 64, 64);
+        return c;
+      })(),
+    );
+    this.blobMat = this.keep(new THREE.MeshBasicMaterial({ map: this.keep(blobTex), transparent: true, depthWrite: false }));
     this.arenaId = arena;
     this.scale = scale;
     this.buildArena();
@@ -90,7 +120,7 @@ export class CulbuteScene {
 
   private buildArena() {
     if (this.arena) {
-      this.scene.remove(this.arena.group);
+      this.scene.remove(this.arena.group, this.arena.dome);
       for (const d of this.arenaKeep) d.dispose();
       this.arenaKeep = [];
     }
@@ -99,15 +129,16 @@ export class CulbuteScene {
       return x;
     };
     this.arena = buildArena(this.arenaId, this.scale, keep);
-    this.scene.add(this.arena.group);
-    this.scene.background = this.arena.sky;
-    this.scene.fog = new THREE.Fog(this.arena.fog, 38, 95);
+    this.scene.add(this.arena.group, this.arena.dome);
+    this.scene.background = this.arena.fog;
+    this.scene.fog = new THREE.Fog(this.arena.fog, 42, 120);
     const l = this.arena.light;
     this.hemi.color.setHex(l.sky);
     this.hemi.groundColor.setHex(l.ground);
-    this.hemi.intensity = l.ambient * 2;
+    this.hemi.intensity = l.ambient * 0.95;
     this.sun.color.setHex(l.sunColor);
     this.sun.intensity = l.sun;
+    this.scene.environmentIntensity = l.env;
   }
 
   setArena(id: ArenaId, scale: number) {
@@ -119,15 +150,19 @@ export class CulbuteScene {
 
   setLooks(looks: FighterLook[]) {
     for (const f of this.fighters) {
-      this.scene.remove(f.group);
+      this.scene.remove(f.group, f.trail);
       f.dispose();
     }
     for (const p of this.pads) this.scene.remove(p);
+    for (const b of this.blobs) this.scene.remove(b);
     this.looks = looks;
     this.fighters = looks.map((l) => new FighterModel(l));
     this.pads = looks.map(() => this.respawnPad());
-    for (const f of this.fighters) this.scene.add(f.group);
+    if (!this.blobGeo) this.blobGeo = this.keep(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
+    this.blobs = looks.map(() => new THREE.Mesh(this.blobGeo!, this.blobMat));
+    for (const f of this.fighters) this.scene.add(f.group, f.trail);
     for (const p of this.pads) this.scene.add(p);
+    for (const b of this.blobs) this.scene.add(b);
     // Les visages arrivent un peu après (dessinés à part)
     looks.forEach((l, i) => {
       void headCanvas(l.avatar).then((c) => {
@@ -169,6 +204,7 @@ export class CulbuteScene {
     this.arena.update(this.time, []);
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camLook);
+    this.arena.dome.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -179,6 +215,7 @@ export class CulbuteScene {
       const m = this.fighters[i];
       if (!m) return;
       m.update(dt, f, this.time);
+      this.placeBlob(i, f, frame.plats);
       const pad = this.pads[i]!;
       pad.visible = f.state === "respawn";
       if (pad.visible) pad.position.set(f.x, f.y + Math.sin(this.time * 2) * 0.03, 0);
@@ -205,7 +242,23 @@ export class CulbuteScene {
       }
     }
     this.updateCamera(dt, frame);
+    this.arena.dome.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** L'ombre ronde : sur la plateforme juste sous ses pieds, plus petite et plus pâle quand il est haut */
+  private placeBlob(i: number, f: RenderFrame["fighters"][number], plats: PlatformNow[]) {
+    const b = this.blobs[i];
+    if (!b) return;
+    let floor = -Infinity;
+    for (const p of plats) if (f.x >= p.x0 - 0.1 && f.x <= p.x1 + 0.1 && p.y <= f.y + 0.05 && p.y > floor) floor = p.y;
+    const visible = f.state !== "dead" && f.state !== "out" && Number.isFinite(floor);
+    b.visible = visible;
+    if (!visible) return;
+    const h = f.y - floor;
+    const k = Math.max(0.25, 1 - h / 7);
+    b.position.set(f.x, floor + 0.015, 0);
+    b.scale.set(1.15 * k, 1, 0.7 * k);
   }
 
   private syncShots(frame: RenderFrame, dt: number) {
@@ -322,7 +375,8 @@ export class CulbuteScene {
       const c = this.fixedCam;
       this.camera.position.set(c.x, c.y, c.z);
       this.camera.lookAt(c.tx, c.ty, c.tz);
-      this.sun.position.set(c.tx + 6, c.ty + 14, 10);
+      const d = this.arena.light.dir;
+      this.sun.position.set(c.tx + d.x, c.ty + d.y, d.z);
       this.sun.target.position.set(c.tx, c.ty, 0);
       return;
     }
@@ -367,7 +421,8 @@ export class CulbuteScene {
     const s = this.shake * this.shake * 0.5;
     this.camera.position.set(this.camPos.x + (Math.random() - 0.5) * s, this.camPos.y + (Math.random() - 0.5) * s, this.camPos.z);
     this.camera.lookAt(this.camLook);
-    this.sun.position.set(this.camLook.x + 6, this.camLook.y + 14, 10);
+    const d = this.arena.light.dir;
+    this.sun.position.set(this.camLook.x + d.x, this.camLook.y + d.y, d.z);
     this.sun.target.position.set(this.camLook.x, this.camLook.y, 0);
   }
 
@@ -523,6 +578,7 @@ export class CulbuteScene {
     for (const d of this.keepList) d.dispose();
     for (const d of this.arenaKeep) d.dispose();
     for (const e of this.effects) this.scene.remove(e.obj);
+    this.envMap?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
