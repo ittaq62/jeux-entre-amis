@@ -919,7 +919,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       if (e.k !== "hit") continue;
       const v = m.fighters[e.v];
       const mem = v?.bot ? this.memories.get(v.id) : undefined;
-      if (mem) botHurt(mem, e.a, m.t);
+      const by = e.a >= 0 ? m.fighters[e.a] : undefined;
+      if (mem && by) botHurt(mem, e.a, m.t, by.s.x, by.s.z);
     }
 
     // L'envoi : la même partie pour tout le monde, et à chacun son propre soldat

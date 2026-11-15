@@ -280,12 +280,59 @@ interface LevelParams {
   grenade: number;
   /** Tolérance pour presser la détente (multiplie l'angle de la cible) */
   loose: number;
+  /** Le tremblement de la visée qui ne s'en va jamais (degrés) */
+  wobble: number;
+  /** La part du temps où il tient la détente quand il vise juste (des rafales, puis il souffle) */
+  duty: number;
+  /** Combien de temps il garde en tête un adversaire qu'il ne voit plus (s) */
+  memory: number;
+  /** Les chances qu'il parte vers là où est vraiment un adversaire (sinon, il patrouille) */
+  hunt: number;
 }
 
 export const BOT_PARAMS: Record<BotLevel, LevelParams> = {
-  facile: { reaction: 0.75, turn: 200, error: 7, settle: 1.1, fov: 55, head: 0, grenade: 0, loose: 2.6 },
-  moyen: { reaction: 0.42, turn: 360, error: 4, settle: 2, fov: 62, head: 0.15, grenade: 0.04, loose: 1.6 },
-  fort: { reaction: 0.24, turn: 560, error: 2.2, settle: 3.2, fov: 70, head: 0.35, grenade: 0.07, loose: 1.1 },
+  facile: {
+    reaction: 1.3,
+    turn: 130,
+    error: 15,
+    settle: 0.6,
+    fov: 45,
+    head: 0,
+    grenade: 0,
+    loose: 3.4,
+    wobble: 4.5,
+    duty: 0.4,
+    memory: 0.6,
+    hunt: 0,
+  },
+  moyen: {
+    reaction: 0.7,
+    turn: 240,
+    error: 8,
+    settle: 1.3,
+    fov: 55,
+    head: 0.08,
+    grenade: 0.025,
+    loose: 2.2,
+    wobble: 1.8,
+    duty: 0.65,
+    memory: 1,
+    hunt: 0.25,
+  },
+  fort: {
+    reaction: 0.32,
+    turn: 420,
+    error: 3.5,
+    settle: 2.8,
+    fov: 65,
+    head: 0.25,
+    grenade: 0.05,
+    loose: 1.4,
+    wobble: 0.6,
+    duty: 0.85,
+    memory: 1.5,
+    hunt: 0.5,
+  },
 };
 
 export interface BotMemory {
@@ -312,9 +359,13 @@ export interface BotMemory {
   role: "attaque" | "defense";
   wander: number;
   seq: number;
-  /** Le dernier adversaire qui l'a touché, et quand */
+  /** Le dernier adversaire qui l'a touché, quand, et d'où venait le coup (pas sa position d'après) */
   hurtBy: number;
   hurtAt: number;
+  hurtX: number;
+  hurtZ: number;
+  /** Son niveau (pour choisir où aller) */
+  level?: BotLevel;
 }
 
 export function newBotMemory(i: number, yaw: number): BotMemory {
@@ -344,6 +395,8 @@ export function newBotMemory(i: number, yaw: number): BotMemory {
     seq: 0,
     hurtBy: -1,
     hurtAt: -10,
+    hurtX: 0,
+    hurtZ: 0,
   };
 }
 
@@ -371,6 +424,7 @@ function enemy(m: Match, a: number, b: number) {
 
 /** La commande d'un bot pour ce pas */
 export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel, now: number): Cmd {
+  mem.level = level;
   const f = m.fighters[i]!;
   const s = f.s;
   const P = BOT_PARAMS[level];
@@ -400,7 +454,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
       const d = Math.hypot(dx, dz, g.s.y - s.y);
       if (d > 80) continue;
       const toward = Math.abs(wrapAngle(Math.atan2(-dx, -dz) - s.yaw));
-      const aware = toward < (P.fov * Math.PI) / 180 || d < 4 || (mem.hurtBy === j && t - mem.hurtAt < 2) || j === mem.target;
+      const aware = toward < (P.fov * Math.PI) / 180 || d < 3 || (mem.hurtBy === j && t - mem.hurtAt < 1.5);
       if (!aware) continue;
       const chest = g.s.y + heightOf(g.s) * 0.7;
       if (!world.clear(s.x, eye, s.z, g.s.x, chest, g.s.z) && !world.clear(s.x, eye, s.z, g.s.x, eyeOf(g.s), g.s.z)) continue;
@@ -418,7 +472,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
       mem.errPitch = (rand(mem) * 2 - 1) * e * 0.5;
     }
     if (best >= 0) mem.seenAt = t;
-    else if (t - mem.seenAt > 1.2) mem.target = -1;
+    else if (t - mem.seenAt > P.memory) mem.target = -1;
   }
 
   const target = mem.target >= 0 ? m.fighters[mem.target] : undefined;
@@ -498,17 +552,19 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     const k = Math.exp(-P.settle * (1 / 60));
     mem.errYaw *= k;
     mem.errPitch *= k;
-    const aimYaw = wantYaw + mem.errYaw;
-    const aimPitch = wantPitch + mem.errPitch;
+    // Une main qui tremble, toujours un peu : plus il est novice, plus elle tremble
+    const wob = (P.wobble * Math.PI) / 180;
+    const ph = i * 1.7;
+    const aimYaw = wantYaw + mem.errYaw + wob * (Math.sin(t * 2.3 + ph) * 0.7 + Math.sin(t * 5.1 + ph * 2) * 0.3);
+    const aimPitch = wantPitch + mem.errPitch + wob * 0.6 * Math.sin(t * 3.1 + ph * 3);
     turnToward(mem, aimYaw, aimPitch, P.turn);
     const off = Math.hypot(wrapAngle(mem.aimYaw - wantYaw), mem.aimPitch - wantPitch);
     const size = Math.atan2(0.32, Math.max(1, Math.hypot(dist, ty - eye)));
     onTarget = off < size * P.loose;
   } else {
-    // Sans adversaire en vue : il regarde où il va, et vers celui qui vient de le toucher
+    // Sans adversaire en vue : il regarde où il va, et d'où venait le coup qu'il vient de prendre
     if (mem.hurtBy >= 0 && t - mem.hurtAt < 1.5) {
-      const g = m.fighters[mem.hurtBy]!;
-      wantYaw = Math.atan2(-(g.s.x - s.x), -(g.s.z - s.z));
+      wantYaw = Math.atan2(-(mem.hurtX - s.x), -(mem.hurtZ - s.z));
     } else if (mvx !== 0 || mvz !== 0) wantYaw = Math.atan2(-mvx, -mvz);
     turnToward(mem, wantYaw, wantPitch, P.turn * 0.6);
   }
@@ -549,14 +605,19 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   if (t < mem.crouchUntil) b |= B.crouch;
   if (!visible && mz > 0.8 && ml > 0.9 && !jump) b |= B.sprint;
   const mag = s.mag[s.slot];
-  if (visible && onTarget && t >= mem.fireAt && mag > 0 && dist < (w.id === "pompe" ? 22 : 90)) {
+  // Des rafales courtes, puis une pause : il ne vide pas son chargeur d'un trait
+  const period = 1.3;
+  const burst = ((t + i * 0.37) % period) / period < P.duty;
+  if (visible && onTarget && burst && t >= mem.fireAt && mag > 0 && dist < (w.id === "pompe" ? 22 : 90)) {
     if (w.auto) b |= B.fire;
     else {
       mem.fireToggle = !mem.fireToggle;
       if (mem.fireToggle) b |= B.fire;
     }
   }
-  if (visible && w.id === "precision" && dist > 10) b |= B.ads;
+  // Épauler : toujours à la lunette ; à distance, un bot fort épaule, un moyen une fois sur deux, un facile jamais
+  const shoulder = level === "fort" ? dist > 8 : level === "moyen" ? dist > 14 && (mem.seq >> 7) % 2 === 0 : false;
+  if (visible && ((w.id === "precision" && dist > 10) || (shoulder && w.id !== "pompe"))) b |= B.ads;
   if (visible && level !== "facile" && dist > 7 && dist < 18 && w.id !== "precision" && rand(mem) < P.grenade / 60) b |= B.grenade;
   if (mag === 0 && s.res[s.slot] > 0 && s.reloadEnd === 0) b |= B.reload;
   else if (!visible && mag < w.mag * 0.4 && s.res[s.slot] > 0 && s.reloadEnd === 0) b |= B.reload;
@@ -574,11 +635,13 @@ function turnToward(mem: BotMemory, yaw: number, pitch: number, degPerSec: numbe
   mem.aimPitch += Math.max(-max, Math.min(max, dp));
 }
 
-/** Le bot vient d'être touché : il se retourne vers le tireur */
-export function botHurt(mem: BotMemory, by: number, t: number) {
+/** Le bot vient d'être touché : il se retourne vers là où était le tireur à ce moment-là */
+export function botHurt(mem: BotMemory, by: number, t: number, x: number, z: number) {
   if (by < 0) return;
   mem.hurtBy = by;
   mem.hurtAt = t;
+  mem.hurtX = x;
+  mem.hurtZ = z;
 }
 
 /** Où aller quand rien ne presse : selon le mode, chercher les adversaires, tenir la zone, prendre ou défendre un drapeau */
@@ -619,9 +682,12 @@ function pickGoal(m: Match, i: number, mem: BotMemory) {
     }
     return set(enemyFlag.x, enemyFlag.y, enemyFlag.z, 4);
   }
-  // Chercher quelqu'un : un adversaire au hasard (on sait à peu près où il est), ou un coin de la carte
+  // Chercher quelqu'un : là où il s'est fait tirer dessus, parfois (un bot fort) là où est un adversaire, ou un coin
+  // de la carte. Un bot facile ne sait jamais où sont les autres : il patrouille.
+  if (mem.hurtBy >= 0 && t - mem.hurtAt < 6 && rand(mem) < 0.6) return set(mem.hurtX, 0, mem.hurtZ, 4);
+  const hunt = BOT_PARAMS[mem.level ?? "moyen"].hunt;
   const foes = m.fighters.filter((g, j) => g.s.alive && enemy(m, i, j));
-  if (foes.length > 0 && rand(mem) < 0.65) {
+  if (foes.length > 0 && rand(mem) < hunt) {
     const g = foes[Math.floor(rand(mem) * foes.length)]!;
     return set(g.s.x + (rand(mem) - 0.5) * 6, g.s.y, g.s.z + (rand(mem) - 0.5) * 6, 5 + rand(mem) * 3);
   }
