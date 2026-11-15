@@ -1,5 +1,6 @@
 import { GO_SALARY, GROUPS, JAIL_FINE, levelName, SPECIALS, SQUARES, STATION_RENTS, teamName } from "../../shared/games/capitale/board.ts";
 import { buyoutPrice, buyoutShield, levelOf, newRules, rentFor, teamRules } from "../../shared/games/capitale/engine.ts";
+import { baseSize } from "../../shared/games/capitale/builderMap.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { asState, colorOf, money } from "./boardUi.ts";
 import { isMate, teamIn } from "./teamsUi.tsx";
@@ -56,8 +57,14 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
       const shield = g.you && deed?.owner && newRules(g).buyout ? buyoutShield(s, g.you, index) : "x";
       const buyout =
         shield === null ? `Rachat : ${money(buyoutPrice(s, index))}` : shield && /monument|obélisque/.test(shield) ? shield : null;
+      // Builder : ce qui est bâti sur la carte, et la taille du territoire
+      const lot = deed?.lot ?? [];
+      const cells = baseSize(index) + (deed?.annexed?.length ?? 0);
+      const built =
+        g.settings.builder && deed?.owner ? `${lot.length} bâtiment${lot.length > 1 ? "s" : ""}, territoire de ${cells} cases` : null;
       const extras = [
         level > 0 ? `${levelName(index, level)} (niveau ${level})` : null,
+        built,
         sp ? `${SPECIALS[sp.kind].name} : ${SPECIALS[sp.kind].effect.toLowerCase()}` : null,
         deed?.mortgaged ? "Hypothéquée : pas de loyer." : null,
         buyout,
@@ -68,7 +75,7 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         kind: `Rue · quartier ${group.name.toLowerCase()}`,
         what: deed?.owner
           ? `Elle est ${ownerText}.${payNote}`
-          : `À vendre. Ensuite, chaque adversaire qui s'arrête ici te paie un loyer, et tu peux l'améliorer.`,
+          : `À vendre. Ensuite, chaque adversaire qui s'arrête ici te paie un loyer, et tu peux ${g.settings.builder ? `bâtir sur ses ${baseSize(index)} cases` : "l'améliorer"}.`,
         figure: deed?.owner ? { label: "Loyer", value: money(rent) } : { label: "Prix", value: money(sq.price!) },
         ...(owner ? { owner } : {}),
         ...(extras.length > 0 ? { extra: extras.join(" · ") } : {}),

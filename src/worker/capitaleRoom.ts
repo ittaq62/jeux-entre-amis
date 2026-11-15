@@ -2,7 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { botAction, botAnswer, botBid, botRescue } from "../shared/games/capitale/bot.ts";
 import { DISASTERS, levelName, sideName, SPECIALS, SQUARES, teamName, type SpecialKind } from "../shared/games/capitale/board.ts";
-import { BUILDS, isBuildKind } from "../shared/games/capitale/builder.ts";
+import { BUILDS, footprint, isBuildKind, lotOf, NUISANCE_REACH } from "../shared/games/capitale/builder.ts";
+import { MAP_CITIES, rectGap } from "../shared/games/capitale/builderMap.ts";
 import {
   actorOf,
   applyAction,
@@ -1106,6 +1107,16 @@ export class CapitaleRoom extends DurableObject<Env> {
       } else if (e.type === "special" && SPECIALS[e.kind].nuisance) {
         // Le bot qui subit une nuisance le fait savoir
         seatId = this.data!.capitale?.deeds[e.square]?.owner ?? null;
+        pool = ["😡", "Coup bas !", "😤"];
+      } else if (e.type === "build" && BUILDS[e.building.kind].nuisance) {
+        // Builder : le bot voisin dont les bâtiments perdent à cause de la nuisance le fait savoir
+        const g = this.data!.capitale;
+        const rect = footprint(e.building);
+        const hit = MAP_CITIES.find((i) => {
+          const d = g?.deeds[i];
+          return d?.owner && d.owner !== e.player && lotOf(d).some((b) => rectGap(footprint(b), rect) <= NUISANCE_REACH);
+        });
+        seatId = hit !== undefined ? (g?.deeds[hit]?.owner ?? null) : null;
         pool = ["😡", "Coup bas !", "😤"];
       } else if (e.type === "buyout") {
         // Le bot à qui on rachète sa ville
