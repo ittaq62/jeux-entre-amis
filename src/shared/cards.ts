@@ -26,7 +26,7 @@ export const RARITY: Record<Rarity, RarityInfo> = {
   legendaire: { name: "Légendaire", gems: 5, sell: 200, craft: 2500 },
 };
 
-export type CardFamily = "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons";
+export type CardFamily = "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -37,6 +37,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "briques", name: "Les Briques", note: "Celles qui tombent mal" },
   { id: "meche", name: "La Mèche", note: "Vite, un mot" },
   { id: "crampons", name: "Les Crampons", note: "Du gazon plein les chaussettes" },
+  { id: "escarmouche", name: "L'Escarmouche", note: "Ça sent la poudre au hameau" },
 ];
 
 export type CardArt =
@@ -47,7 +48,12 @@ export type CardArt =
   | { kind: "brick"; piece: "O" | "T" | "S" | "L" | "I" | "gris" }
   | { kind: "meche"; subject: "allumette" | "dynamite" | "meche" | "mot" | "boum" }
   /** Capitale Builder : un bâtiment de la carte, photographié à l'ouverture de l'album (pas sur la planche d'images) */
-  | { kind: "builder"; subject: "commerce" | "vague" | "centrale" };
+  | { kind: "builder"; subject: "commerce" | "vague" | "centrale" }
+  | {
+      kind: "escarmouche";
+      subject:
+        "casque" | "douille" | "sacs" | "pistolet" | "pompe" | "grenade" | "couteau" | "lunette" | "drapeau" | "clocher" | "medaille";
+    };
 
 export interface CardDef {
   id: string;
@@ -745,6 +751,96 @@ export const CARDS: CardDef[] = [
     name: "La Lucarne",
     quote: "Là où les chouettes font leur nid.",
     art: atlas("foot:lucarne"),
+  },
+
+  // L'Escarmouche (arrivée après les autres : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "casque",
+    family: "escarmouche",
+    rarity: "commune",
+    name: "Le Casque",
+    quote: "Il a sauvé plus d'une tête. Pas la tienne.",
+    art: { kind: "escarmouche", subject: "casque" },
+  },
+  {
+    id: "douille",
+    family: "escarmouche",
+    rarity: "commune",
+    name: "La Douille",
+    quote: "Elle tinte toujours au moment où tout se tait.",
+    art: { kind: "escarmouche", subject: "douille" },
+  },
+  {
+    id: "sacs",
+    family: "escarmouche",
+    rarity: "commune",
+    name: "Les Sacs de sable",
+    quote: "Ils arrêtent tout, sauf la grenade.",
+    art: { kind: "escarmouche", subject: "sacs" },
+  },
+  {
+    id: "pistolet",
+    family: "escarmouche",
+    rarity: "commune",
+    name: "Le Pistolet",
+    quote: "Pour quand le chargeur est vide. C'est-à-dire souvent.",
+    art: { kind: "escarmouche", subject: "pistolet" },
+  },
+  {
+    id: "pompe",
+    family: "escarmouche",
+    rarity: "peu-commune",
+    name: "Le Fusil à pompe",
+    quote: "De près, il ne discute pas.",
+    art: { kind: "escarmouche", subject: "pompe" },
+  },
+  {
+    id: "grenade",
+    family: "escarmouche",
+    rarity: "peu-commune",
+    name: "La Grenade",
+    quote: "Lancée trop court, rendue à l'expéditeur.",
+    art: { kind: "escarmouche", subject: "grenade" },
+  },
+  {
+    id: "couteau",
+    family: "escarmouche",
+    rarity: "peu-commune",
+    name: "Le Couteau",
+    quote: "Silencieux. Sauf quand il rate.",
+    art: { kind: "escarmouche", subject: "couteau" },
+  },
+  {
+    id: "lunette",
+    family: "escarmouche",
+    rarity: "rare",
+    name: "La Lunette",
+    quote: "Elle a vu ton casque dépasser à deux cents mètres.",
+    art: { kind: "escarmouche", subject: "lunette" },
+  },
+  {
+    id: "drapeau",
+    family: "escarmouche",
+    rarity: "rare",
+    name: "Le Drapeau",
+    quote: "Tout le monde le veut. Personne ne le garde.",
+    art: { kind: "escarmouche", subject: "drapeau" },
+  },
+  {
+    id: "clocher",
+    family: "escarmouche",
+    rarity: "epique",
+    name: "Le Clocher",
+    quote: "La plus belle vue du hameau. La pire cachette.",
+    art: { kind: "escarmouche", subject: "clocher" },
+  },
+  {
+    id: "medaille",
+    family: "escarmouche",
+    rarity: "legendaire",
+    name: "La Médaille",
+    quote: "Pour services rendus, sans jamais lâcher la gâchette.",
+    art: { kind: "escarmouche", subject: "medaille" },
   },
 ];
 

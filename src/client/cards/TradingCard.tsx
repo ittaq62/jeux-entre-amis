@@ -246,11 +246,130 @@ function MecheArt({ subject }: { subject: Extract<CardArt, { kind: "meche" }>["s
   );
 }
 
+/** Les dessins de l'Escarmouche : l'équipement du soldat et les lieux du combat */
+function EscarmoucheArt({ subject }: { subject: Extract<CardArt, { kind: "escarmouche" }>["subject"] }) {
+  const olive = "#5f6648";
+  const dark = "#2b2d25";
+  const metal = "#3a3d42";
+  return (
+    <svg className="tc-svg" viewBox="-60 -60 120 120" aria-hidden="true">
+      {subject === "casque" && (
+        <g>
+          <ellipse cx="0" cy="34" rx="44" ry="7" fill="rgba(0,0,0,.3)" />
+          <path d="M-38 22C-38 -14 -20 -32 0 -32C20 -32 38 -14 38 22Z" fill={olive} stroke={dark} strokeWidth="2.5" />
+          <path d="M-48 22H48L42 32H-42Z" fill="#4a5036" stroke={dark} strokeWidth="2.5" />
+          <path d="M-32 8H32" stroke="#c8392d" strokeWidth="7" />
+          <path d="M-20 -20C-12 -26 -4 -27 2 -27" stroke="#fbf5e6" strokeWidth="3" strokeLinecap="round" opacity="0.4" fill="none" />
+        </g>
+      )}
+      {subject === "douille" && (
+        <g transform="rotate(-28)">
+          <rect x="-10" y="-30" width="20" height="56" rx="2" fill="#c99a3a" stroke="#7d5a1c" strokeWidth="2" />
+          <rect x="-12" y="22" width="24" height="7" rx="1.5" fill="#b0832c" stroke="#7d5a1c" strokeWidth="2" />
+          <path d="M-6 -24V18" stroke="#f3d48a" strokeWidth="3" strokeLinecap="round" opacity="0.7" />
+          <path d="M22 -40l8 -8M30 -30l10 -2M12 -44l2 -10" stroke="#ffe1a8" strokeWidth="2.5" strokeLinecap="round" />
+        </g>
+      )}
+      {subject === "sacs" && (
+        <g>
+          {[
+            [-30, 22],
+            [0, 22],
+            [30, 22],
+            [-15, 2],
+            [15, 2],
+            [0, -18],
+          ].map(([x, y], i) => (
+            <rect key={i} x={x! - 15} y={y! - 9} width="30" height="18" rx="8" fill="#a68a5c" stroke="#5e4a2c" strokeWidth="2" />
+          ))}
+          <path d="M-50 32H50" stroke="#5e4a2c" strokeWidth="2" />
+        </g>
+      )}
+      {subject === "pistolet" && (
+        <g transform="translate(-4 4)">
+          <path d="M-34 -16H34V-2H8L2 30H-16L-8 -2H-34Z" fill={metal} stroke="#16181b" strokeWidth="2.5" strokeLinejoin="round" />
+          <rect x="-34" y="-22" width="66" height="8" fill="#26292d" />
+          <path d="M-4 -2C-4 8 6 10 8 4" fill="none" stroke="#16181b" strokeWidth="2.5" />
+          <circle cx="-38" cy="-12" r="3" fill="#ffd28a" />
+        </g>
+      )}
+      {subject === "pompe" && (
+        <g transform="rotate(-12)">
+          <path d="M-54 6L-24 0L-18 -6H8V8H-14L-22 18H-50Z" fill="#6b4a2c" stroke={dark} strokeWidth="2" />
+          <rect x="8" y="-8" width="48" height="7" fill={metal} stroke="#16181b" strokeWidth="1.5" />
+          <rect x="12" y="1" width="26" height="9" rx="2" fill="#6b4a2c" stroke={dark} strokeWidth="2" />
+          {[-8, 0, 8].map((dy, i) => (
+            <path key={i} d={`M58 ${-4 + dy * 0.3}l14 ${dy}`} stroke="#ffd98a" strokeWidth="2" strokeLinecap="round" />
+          ))}
+        </g>
+      )}
+      {subject === "grenade" && (
+        <g>
+          <ellipse cx="0" cy="40" rx="26" ry="5" fill="rgba(0,0,0,.3)" />
+          <rect x="-20" y="-16" width="40" height="52" rx="16" fill="#4d5a35" stroke={dark} strokeWidth="2.5" />
+          {[-4, 8, 20].map((y) => (
+            <path key={y} d={`M-19 ${y}H19`} stroke={dark} strokeWidth="1.5" opacity="0.6" />
+          ))}
+          <rect x="-8" y="-28" width="16" height="12" fill={metal} stroke="#16181b" strokeWidth="2" />
+          <path d="M8 -26C24 -30 28 -10 18 -2" fill="none" stroke="#9aa0a6" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="-14" cy="-36" r="6" fill="none" stroke="#9aa0a6" strokeWidth="2.5" />
+        </g>
+      )}
+      {subject === "couteau" && (
+        <g transform="rotate(-35)">
+          <path d="M-6 -50C4 -40 6 -18 6 4H-6Z" fill="#c4c9ce" stroke="#6e737a" strokeWidth="2" />
+          <path d="M-2 -44V0" stroke="#fff" strokeWidth="1.5" opacity="0.6" />
+          <rect x="-14" y="4" width="28" height="6" rx="2" fill={metal} />
+          <rect x="-7" y="10" width="14" height="38" rx="4" fill="#3b2a1c" stroke="#1d140c" strokeWidth="2" />
+        </g>
+      )}
+      {subject === "lunette" && (
+        <g>
+          <circle r="44" fill="#1a2028" stroke="#0b0d10" strokeWidth="5" />
+          <circle r="38" fill="#4d6a7a" opacity="0.55" />
+          <path d="M-38 0H-6M6 0H38M0 -38V-6M0 6V38" stroke="#0b0d10" strokeWidth="1.6" />
+          <circle r="2.5" fill="#d8402f" />
+          <path d="M-20 18l8 -12 6 6 10 -16 16 22Z" fill="#2e2724" opacity="0.8" />
+        </g>
+      )}
+      {subject === "drapeau" && (
+        <g>
+          <rect x="-26" y="-48" width="4" height="96" fill="#2f2f2f" />
+          <path d="M-22 -46C0 -54 10 -36 36 -44V-6C10 2 0 -16 -22 -8Z" fill="#c8392d" stroke="#7d1f19" strokeWidth="2" />
+          <ellipse cx="-24" cy="46" rx="18" ry="4" fill="#3f7fd8" />
+        </g>
+      )}
+      {subject === "clocher" && (
+        <g>
+          <path d="M-40 50V10L-20 -6V50Z" fill="#7b7262" />
+          <rect x="-18" y="-14" width="36" height="64" fill="#9a9080" stroke="#5c5548" strokeWidth="2" />
+          <path d="M-22 -14L0 -56L22 -14Z" fill="#4a5058" stroke="#2c3036" strokeWidth="2" />
+          <circle cx="0" cy="6" r="9" fill="#efe8d6" stroke="#5c5548" strokeWidth="2" />
+          <path d="M0 6V0M0 6h5" stroke="#1d1d1d" strokeWidth="1.6" strokeLinecap="round" />
+          <rect x="-6" y="22" width="12" height="16" rx="6" fill="#2b2620" />
+          <circle cx="2" cy="28" r="1.6" fill="#ffd28a" />
+          <path d="M8 26l26 -10" stroke="#ffe1a8" strokeWidth="1.6" strokeLinecap="round" />
+        </g>
+      )}
+      {subject === "medaille" && (
+        <g>
+          <path d="M-18 -56H-2L6 -14H-10Z" fill="#c8392d" />
+          <path d="M18 -56H2L-6 -14H10Z" fill="#3f7fd8" />
+          <circle cx="0" cy="12" r="30" fill="#e8c25a" stroke="#9a7420" strokeWidth="3" />
+          <circle cx="0" cy="12" r="22" fill="none" stroke="#b58a24" strokeWidth="2" />
+          <path d="M0 -2L4 8H15L6 14L9 25L0 18L-9 25L-6 14L-15 8H-4Z" fill="#fff0a8" stroke="#9a7420" strokeWidth="1.5" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
 function Art({ art, width }: { art: CardArt; width: number }) {
   if (art.kind === "atlas") return <AtlasArt artKey={art.key} />;
   if (art.kind === "ship") return <ShipArt art={art} />;
   if (art.kind === "brick") return <BrickArt piece={art.piece} />;
   if (art.kind === "meche") return <MecheArt subject={art.subject} />;
+  if (art.kind === "escarmouche") return <EscarmoucheArt subject={art.subject} />;
   if (art.kind === "builder") return <BuilderArt subject={art.subject} />;
   return (
     <span className="tc-uno">
@@ -281,6 +400,7 @@ const FAMILY_ICON: Record<CardFamily, IconName> = {
   briques: "layers",
   meche: "flame",
   crampons: "ball",
+  escarmouche: "shield",
 };
 
 /** Six couleurs de mur pour les Habitués, données dans l'ordre pour que deux voisins n'aient jamais la même */

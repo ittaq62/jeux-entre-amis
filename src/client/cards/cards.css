@@ -344,6 +344,13 @@
     linear-gradient(180deg, #17304a 0, #2b5d78 60%, #48a65a 60%, #2c7a3c 100%);
 }
 
+/* Le hameau au couchant, de la fumée au loin */
+.fam-escarmouche .tc-art {
+  background:
+    radial-gradient(circle at 70% 70%, rgba(255, 214, 150, 0.45), transparent 45%),
+    linear-gradient(180deg, #34465f 0, #8d6b4c 62%, #3a2d24 100%);
+}
+
 /* Les cartes pas encore dans l'album : on voit à quoi on joue, mais éteintes */
 .tc.is-missing {
   --rim: linear-gradient(160deg, #39473f, #26312b);
