@@ -1,5 +1,6 @@
 // L'atelier des cartes (uniquement en développement, sur /dev/cartes) : chaque sujet en 3D est photographié, et on en
 // tire la planche d'images de l'album, à ranger dans src/client/cards/cards-atlas.webp.
+// /dev/cartes?seulement=build: ne refait que les cases dont la clé commence ainsi, par-dessus la planche actuelle.
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -17,11 +18,14 @@ import { ICON_POSE, ItemModels } from "../bolides/scene/itemModels.ts";
 import { KartModel } from "../bolides/scene/kart.ts";
 import { PilotModel, type PilotRig } from "../bolides/scene/pilot.ts";
 import * as B from "../capitale/scene/buildings.ts";
+import { skyscraper } from "../capitale/scene/landmarks.ts";
+import { cityBlock, cityHouse, smallTree } from "../capitale/scene/streets.ts";
 import { tokenModel } from "../capitale/scene/tokens.ts";
 import { ballTexture } from "../crampons/scene/CramponsScene.ts";
 import { Footballers, type FootballerView, type Kit } from "../crampons/scene/footballers.ts";
 import { buildGoal, netTexture } from "../crampons/scene/stadium.ts";
 import { ATLAS_CELL, ATLAS_COLS, ATLAS_KEYS, ATLAS_ROWS } from "./atlasKeys.ts";
+import atlasUrl from "./cards-atlas.webp";
 
 /** On dessine en grand, puis on réduit : des bords bien nets */
 const RENDER = ATLAS_CELL * 3;
@@ -287,11 +291,12 @@ async function subject(key: string, items: ItemModels): Promise<Shot> {
     root.rotation.set(pose.rot[0], pose.rot[1], pose.rot[2]);
     return { object: root, dir: new THREE.Vector3(0, 0, 1), zoom: 1.1 };
   }
-  const object =
+  // Les bâtiments de Capitale, chacun posé sur son socle de jouet : le pavé, un rond de pelouse
+  const subject =
     id === "maison"
-      ? B.maison("rose", "#e2453c")
+      ? withTree(cityHouse(27, "#e2453c"))
       : id === "immeuble"
-        ? B.immeuble("ciel", "#2f80ed")
+        ? cityBlock(39, "#2f80ed")
         : id === "parc"
           ? B.parc().group
           : id === "decharge"
@@ -300,8 +305,46 @@ async function subject(key: string, items: ItemModels): Promise<Shot> {
               ? B.station("#e2453c")
               : id === "stade"
                 ? B.stade("#2f80ed")
-                : B.gratteCiel("bleu", "#e2bd6e", true);
-  return { object, dir: new THREE.Vector3(0.75, 0.62, 1).normalize(), zoom: 1.08 };
+                : skyscraper("#e2bd6e");
+  const wide = id === "gare";
+  return {
+    object: diorama(subject, wide ? 0.6 : 0.36),
+    dir: new THREE.Vector3(0.75, 0.55, 1).normalize(),
+    zoom: id === "gratte-ciel" ? 1.12 : 1.04,
+  };
+}
+
+/** Un sujet sur son socle rond : une galette de pierre claire, une pelouse, un liseré doré */
+function diorama(subject: THREE.Object3D, r: number): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.04, 0.05, 48), B.mat("#efe3c8", { rough: 0.8 }));
+  stone.position.y = -0.03;
+  const gold = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.045, r * 1.045, 0.012, 48), B.mat("#d9b24a", { metal: 0.7, rough: 0.35 }));
+  gold.position.y = -0.052;
+  const lawn = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.94, r * 0.94, 0.012, 48), B.mat("#86b85f", { rough: 1 }));
+  lawn.position.y = -0.004;
+  g.add(stone, gold, lawn, subject);
+  return g;
+}
+
+/** Une maison et son arbre */
+function withTree(house: THREE.Object3D): THREE.Group {
+  const g = new THREE.Group();
+  g.add(house);
+  const t = smallTree(1.3);
+  t.position.set(0.24, 0, 0.08);
+  g.add(t);
+  return g;
+}
+
+/** La planche actuelle de l'album, en image */
+function currentAtlas(): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = atlasUrl;
+  });
 }
 
 async function photograph(): Promise<HTMLCanvasElement> {
@@ -329,7 +372,12 @@ async function photograph(): Promise<HTMLCanvasElement> {
   out.height = ATLAS_ROWS * ATLAS_CELL;
   const g = out.getContext("2d")!;
   g.imageSmoothingQuality = "high";
+  // Seulement certaines cases : on repart de la planche actuelle, les autres cases restent telles quelles
+  const only = new URLSearchParams(location.search).get("seulement");
+  if (only) g.drawImage(await currentAtlas(), 0, 0, out.width, out.height);
   for (const [i, key2] of ATLAS_KEYS.entries()) {
+    if (only && !key2.startsWith(only)) continue;
+    if (only) g.clearRect((i % ATLAS_COLS) * ATLAS_CELL, Math.floor(i / ATLAS_COLS) * ATLAS_CELL, ATLAS_CELL, ATLAS_CELL);
     const shot = await subject(key2, items);
     scene.add(shot.object);
     const camera = new THREE.PerspectiveCamera(26, 1, 0.01, 200);
@@ -361,7 +409,7 @@ export function DevCards() {
     void photograph().then((atlas) => {
       box.current?.replaceChildren(atlas);
       atlas.style.width = "100%";
-      const data = atlas.toDataURL("image/webp", 0.86);
+      const data = atlas.toDataURL("image/webp", 0.9);
       setUrl(data);
       (window as unknown as { __atlas?: string }).__atlas = data;
     });

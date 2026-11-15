@@ -306,8 +306,13 @@
   background: radial-gradient(circle at 50% 45%, #d04a1c, #5a1408 60%, #200703);
 }
 
+/* La Capitale : un ciel clair, le soleil, la silhouette de la ville (clochers, toits, une tour de fer), le carton du plateau */
 .fam-capitale .tc-art {
-  background: linear-gradient(180deg, #a7dcf2 0, #dff3fa 62%, #9fd18b 62%, #6faf61 100%);
+  background:
+    radial-gradient(circle at 80% 16%, rgba(255, 247, 214, 0.95) 0 0.7em, rgba(255, 240, 200, 0.4) 0.8em, transparent 2.8em),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40'%3E%3Cpath fill='%23b9d5e4' d='M0 40V30h8v-6h6v6h4V20l5-5 5 5v20zM28 40V26h10v14zM40 40V18h3V8h2v10h3v22zM50 40V28l6-6 6 6v12zM64 40V22h4l2-6 2 6h4v18zM78 40V30h12V24h8v16zM100 40V27h5V14l3-8 3 8v13h5v13zM118 40V24h12v16zM132 40V30l7-7 7 7v10zM148 40V20h3l2-4 2 4h3v20zM160 40V28h10v12zM172 40V12l1.5-4 1.5 4v4h3v24zM180 40V26h6v-4h4v4h6v14zM196 40V30h4v10z'/%3E%3Cpath fill='%23a3c6d9' d='M174 40l-4-14h3l1-10 1 10h3l-4 14z' opacity='0.0'/%3E%3C/svg%3E")
+      center 62% / 100% auto no-repeat,
+    linear-gradient(180deg, #86c9ea 0, #d6eef8 62%, #eadcbc 62%, #dccaa1 86%, #cdb88c 100%);
 }
 
 .fam-circuit .tc-art {
