@@ -208,7 +208,8 @@ export function botAction(
   s: CapitaleState,
   playerId: string,
   level: BotLevel,
-  opts: { allowTrade?: boolean; allowGift?: boolean } = {},
+  /** Le bot d'un joueur absent ne propose pas d'échange, ne donne rien et ne pose pas de nuisance à sa place */
+  opts: { allowTrade?: boolean; allowGift?: boolean; allowAttack?: boolean } = {},
 ): CapitaleAction | null {
   const p = playerOf(s, playerId);
   if (!p || p.bankrupt) return null;
@@ -251,7 +252,13 @@ export function botAction(
       return buy ? { type: "buy" } : { type: "decline" };
     }
     case "manage":
-      return manage(s, playerId, level, opts.allowTrade ?? false, opts.allowGift ?? false) ?? { type: "endTurn" };
+      return (
+        manage(s, playerId, level, {
+          allowTrade: opts.allowTrade ?? false,
+          allowGift: opts.allowGift ?? false,
+          allowAttack: opts.allowAttack ?? true,
+        }) ?? { type: "endTurn" }
+      );
     default:
       return null;
   }
@@ -261,9 +268,14 @@ export function botAction(
  * Gestion de fin de tour : donner à un coéquipier le titre qui complète son quartier, lever des hypothèques, améliorer,
  * poser un bâtiment spécial, éventuellement proposer un échange
  */
-function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade: boolean, allowGift: boolean): CapitaleAction | null {
+function manage(
+  s: CapitaleState,
+  playerId: string,
+  level: BotLevel,
+  opts: { allowTrade: boolean; allowGift: boolean; allowAttack: boolean },
+): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
-  if (allowGift) {
+  if (opts.allowGift) {
     const gift = giftMove(s, playerId);
     if (gift) return gift;
   }
@@ -275,7 +287,7 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
     if (d.mortgaged && g && ownsGroup(s, playerId, g.id) && p.cash - unmortgageCost(i) >= keep) return { type: "unmortgage", square: i };
   }
   if (level !== "facile" || p.cash >= 400) {
-    const special = s.settings.specials && !specialUsed(s) ? specialMove(s, playerId, level, keep) : null;
+    const special = s.settings.specials && !specialUsed(s) ? specialMove(s, playerId, level, keep, opts.allowAttack) : null;
     if (special) return special;
     const up = bestUpgrade(s, playerId, level, keep);
     if (up) return up;
@@ -284,7 +296,7 @@ function manage(s: CapitaleState, playerId: string, level: BotLevel, allowTrade:
   for (const i of ownedBy(s, playerId)) {
     if (s.deeds[i]!.mortgaged && p.cash - unmortgageCost(i) >= keep * 2) return { type: "unmortgage", square: i };
   }
-  if (allowTrade && level !== "facile") return proposeTrade(s, playerId, level);
+  if (opts.allowTrade && level !== "facile") return proposeTrade(s, playerId, level);
   return null;
 }
 
@@ -313,8 +325,11 @@ function bestUpgrade(s: CapitaleState, playerId: string, level: BotLevel, keep: 
   return best ? { type: "upgrade", square: best.square } : null;
 }
 
-/** Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un monument, une nuisance chez le meilleur loyer adverse, un parc, un stade */
-function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
+/**
+ * Le bâtiment spécial du tour : raser une nuisance qui coûte cher, un monument, une nuisance chez le meilleur loyer adverse,
+ * un parc, un stade. Sans `allowAttack` (le bot d'un joueur absent), il se défend et bâtit chez lui, mais n'attaque personne
+ */
+function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: number, allowAttack: boolean): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   const affordable = (price: number, margin = 1) => p.cash - price >= keep * margin;
   const mine = ownedBy(s, playerId).filter((i) => SQUARES[i]!.kind === "property");
@@ -341,10 +356,12 @@ function specialMove(s: CapitaleState, playerId: string, level: BotLevel, keep: 
     }
   }
   // Une nuisance sur la rue adverse qui rapporte le plus (jamais chez un coéquipier)
-  const target = BUYABLE.filter((i) => {
-    const d = s.deeds[i]!;
-    return SQUARES[i]!.kind === "property" && d.owner && !allies(s, d.owner, playerId) && !d.mortgaged && !d.special;
-  }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }))[0];
+  const target = !allowAttack
+    ? undefined
+    : BUYABLE.filter((i) => {
+        const d = s.deeds[i]!;
+        return SQUARES[i]!.kind === "property" && d.owner && !allies(s, d.owner, playerId) && !d.mortgaged && !d.special;
+      }).sort((a, b) => rentFor(s, b, { diceTotal: 8 }) - rentFor(s, a, { diceTotal: 8 }))[0];
   if (target !== undefined) {
     const rent = rentFor(s, target, { diceTotal: 8 });
     const kind: SpecialKind | null =
