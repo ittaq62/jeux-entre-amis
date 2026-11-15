@@ -751,3 +751,16 @@
     translate: var(--bx) var(--by);
   }
 }
+
+/* Le travelling : la caméra s'approche lentement de l'action (le ballon en lucarne, le gardien), puis recule. Tout le cadre
+   bouge d'un bloc, sans à-coup ; agrandi seulement (jamais en dessous de 1), il ne découvre aucun bord */
+.crampons-preview-frame {
+  transform-origin: 54% 47%;
+  animation: cr-pv-push 9s ease-in-out infinite alternate;
+}
+
+@keyframes cr-pv-push {
+  to {
+    scale: 1.08;
+  }
+}

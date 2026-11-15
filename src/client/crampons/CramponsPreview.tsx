@@ -1,6 +1,7 @@
 // L'illustration de Crampons sur l'accueil : une image du jeu lui-même, composée avec son moteur (DevAffiche) — un soir de
 // match, la frappe du numéro 9 file en lucarne, le gardien s'envole. La 3D ne se charge qu'à table. Par-dessus, en SVG aux
-// coordonnées de l'image (1200 × 900), ce qui vit : les flashs dans la foule, le ballon qui tourne et l'air qu'il fend.
+// coordonnées de l'image (1200 × 900), ce qui vit : les flashs dans la foule, le ballon qui tourne et l'air qu'il fend ;
+// et la caméra s'approche lentement de l'action, puis recule (banners.css).
 
 import type { CSSProperties } from "react";
 import "./crampons.css";
