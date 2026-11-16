@@ -10,6 +10,8 @@ import {
   bunting,
   cloud,
   cobbleTex,
+  fireflies,
+  flock,
   haloTexture,
   house,
   island,
@@ -315,12 +317,28 @@ function belfryPlatform(keep: Keep, w: number, stone: THREE.Material, slate: THR
   g.add(box(keep, w + 0.2, 0.22, 1.6, slate, 0, -0.11, -0.3));
   for (const side of [-1, 1]) g.add(box(keep, 0.32, 3.0, 0.32, stone, side * (w / 2 - 0.2), -1.6, -0.75));
   g.add(box(keep, w, 0.3, 0.4, stone, 0, -0.4, -0.75));
-  const bell = new THREE.Mesh(
-    keep(new THREE.LatheGeometry([0.05, 0.18, 0.24, 0.3, 0.42, 0.5].map((r, i) => new THREE.Vector2(r, -i * 0.15)))),
-    mat(keep, 0xc59a3a, 0.3, 0.85),
-  );
-  bell.position.set(0, -0.7, -0.75);
-  bell.castShadow = true;
+  const bronze = keep(new THREE.MeshStandardMaterial({ color: 0xd8a64a, roughness: 0.32, metalness: 0.7, side: THREE.DoubleSide }));
+  const profile = [
+    [0.0, 0.0],
+    [0.16, -0.01],
+    [0.25, -0.06],
+    [0.29, -0.16],
+    [0.29, -0.3],
+    [0.31, -0.42],
+    [0.37, -0.53],
+    [0.46, -0.62],
+    [0.5, -0.67],
+    [0.47, -0.69],
+  ].map(([r, y]) => new THREE.Vector2(r!, y!));
+  const bell = new THREE.Group();
+  const shell = new THREE.Mesh(keep(new THREE.LatheGeometry(profile, 28)), bronze);
+  shell.castShadow = true;
+  const clapper = new THREE.Mesh(keep(new THREE.SphereGeometry(0.09, 10, 8)), mat(keep, 0x4a3a2a, 0.5, 0.6));
+  clapper.position.y = -0.6;
+  const yoke = box(keep, 0.9, 0.14, 0.18, mat(keep, 0x5a3a24, 0.85), 0, 0.07, 0);
+  bell.add(shell, clapper, yoke);
+  bell.position.set(0, -0.62, -0.75);
+  bell.userData.bell = true;
   g.add(bell);
   return g;
 }
@@ -368,6 +386,8 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
   const rnd = seeded(id.length * 7 + 3);
   const W = x1 - x0;
   let update: ArenaScene["update"] = () => {};
+  /** Ce qui vit dans le décor : les oiseaux, les lucioles */
+  const lives: { group?: THREE.Group; update: (time: number) => void }[] = [];
   /** Le décor de fond, fusionné matière par matière (beaucoup moins d'appels de dessin) */
   const scenery = new THREE.Group();
   group.add(scenery);
@@ -466,6 +486,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         cloud(keep, cm, 30, 12, -50, 3.6, 3),
         cloud(keep, cm, -34, 11, -48, 3, 4),
       );
+      lives.push(flock(keep, 0x55606e, 61, 11.5, -26));
       break;
     }
     case "bal": {
@@ -492,7 +513,8 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       const pp = pleats.geometry.getAttribute("position") as THREE.BufferAttribute;
       for (let i = 0; i < pp.count; i++) pp.setZ(i, Math.sin(pp.getX(i) * 9) * 0.06 + (pp.getY(i) < 0 ? 0.04 : 0));
       pleats.geometry.computeVertexNormals();
-      pleats.position.set((x0 + x1) / 2, -0.75, 1.38);
+      // Un peu en avant : la motte, bosselée, ne doit pas percer la draperie
+      pleats.position.set((x0 + x1) / 2, -0.75, 1.56);
       group.add(pleats);
       const wood = mat(keep, 0xffffff, 0.8, 0, plankTex(keep, "#b98a5a", [1, 0.3]));
       const rope = mat(keep, 0xd8c7a0, 0.9);
@@ -553,6 +575,9 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         t.position.set(-24 + i * 7 + rnd(), -1.52, -11 - rnd() * 1.5);
         scenery.add(t);
       }
+      const flies = fireflies(keep, 46, 73, { x0: -26, x1: 26, y0: -0.8, y1: 4.5, z0: -10.5, z1: -5 });
+      group.add(flies.points);
+      lives.push({ update: flies.update });
       // La lune, les étoiles, et les feux d'artifice
       const moonMesh = new THREE.Mesh(
         keep(new THREE.SphereGeometry(3, 24, 16)),
@@ -699,6 +724,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       );
       const cm = cloudMat(0xffffff);
       group.add(cloud(keep, cm, -20, 15, -44, 3.6, 5), cloud(keep, cm, 6, 18, -48, 4.2, 6), cloud(keep, cm, 26, 13, -42, 3, 7));
+      lives.push(flock(keep, 0x5a6270, 67, 12, -27, 4));
       break;
     }
     case "clocher":
@@ -779,17 +805,49 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         cloud(keep, cm, 34, 8, -58, 5, 10),
         cloud(keep, cm, -40, -2, -55, 4.6, 11),
       );
+      lives.push(flock(keep, 0x3a2a3a, 79, 5.5, -22, 6));
+      const bells: THREE.Object3D[] = [];
+      group.traverse((o) => {
+        if (o.userData.bell) bells.push(o);
+      });
       update = (time) => {
         minHand.rotation.z = -time * 0.25;
         hourHand.rotation.z = -time * 0.02 - 1.2;
+        // La cloche sonne de temps en temps : elle se balance, puis s'apaise
+        const since = time % 24;
+        for (const b of bells) b.rotation.z = since < 6 ? Math.sin(since * 4.2) * 0.32 * (1 - since / 6) : 0;
       };
       break;
     }
   }
 
   bake(scenery, keep);
+  for (const l of lives) if (l.group) group.add(l.group);
+
+  // Les nuages dérivent lentement (les plus loin, plus lentement), et s'effacent avant de revenir de l'autre côté
+  const clouds = group.children
+    .filter((o) => o.userData.cloud)
+    .map((o) => ({ o, x: o.position.x, s: o.scale.clone(), v: 0.5 * (40 / -o.position.z) }));
+  // Les lampions vacillent un peu, chacun à son rythme
+  const flickers: THREE.Object3D[] = [];
+  group.traverse((o) => {
+    if (o.userData.flicker !== undefined) flickers.push(o);
+  });
 
   const fullUpdate: ArenaScene["update"] = (time, plats) => {
+    for (const c of clouds) {
+      const x = ((((c.x + time * c.v + 75) % 150) + 150) % 150) - 75;
+      const fade = Math.min(1, (75 - Math.abs(x)) / 14);
+      c.o.position.x = x;
+      c.o.scale.copy(c.s).multiplyScalar(Math.max(0.001, fade));
+    }
+    for (const o of flickers) {
+      const ph = o.userData.flicker as number;
+      const v = 0.86 + 0.09 * Math.sin(time * 6.1 + ph) + 0.05 * Math.sin(time * 15.3 + ph * 2.3);
+      if (o instanceof THREE.Sprite) o.material.opacity = 0.55 * v;
+      else if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.1 * v;
+    }
+    for (const l of lives) l.update(time);
     for (let i = 0; i < def.platforms.length; i++) {
       if (!def.platforms[i]!.move) continue;
       const p = plats[i];

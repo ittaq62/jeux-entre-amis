@@ -269,7 +269,119 @@ export function cloud(keep: Keep, material: THREE.Material, x: number, y: number
   const m = new THREE.Mesh(keep(merged), material);
   m.scale.set(s * 1.2, s, s * 0.7);
   m.position.set(x, y, z);
+  m.userData.cloud = true;
   return m;
+}
+
+/** Une volée d'oiseaux en V qui traverse le ciel de temps en temps : ils battent des ailes, puis planent un peu */
+export function flock(
+  keep: Keep,
+  color: number,
+  seed: number,
+  y: number,
+  z: number,
+  count = 5,
+): { group: THREE.Group; update: (time: number) => void } {
+  const rnd = seeded(seed);
+  const group = new THREE.Group();
+  const m = keep(new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+  // Une aile : un triangle effilé, du corps vers le bout, un peu en arrière
+  const wing = keep(new THREE.BufferGeometry());
+  wing.setAttribute("position", new THREE.Float32BufferAttribute([0.2, 0, 0, -0.16, 0, 0, -0.14, 0, 0.66], 3));
+  wing.computeVertexNormals();
+  const body = keep(new THREE.SphereGeometry(0.09, 6, 4));
+  body.scale(2.6, 0.8, 0.8);
+  const birds: { g: THREE.Group; l: THREE.Mesh; r: THREE.Mesh; dy: number; ph: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const g = new THREE.Group();
+    const l = new THREE.Mesh(wing, m);
+    const r = new THREE.Mesh(wing, m);
+    r.scale.z = -1;
+    g.add(new THREE.Mesh(body, m), l, r);
+    // En V : le premier devant, les autres derrière lui de part et d'autre
+    const rank = Math.ceil(i / 2);
+    const side = i % 2 ? 1 : -1;
+    g.position.set(-rank * 1.25, 0, side * rank * 0.9);
+    g.scale.setScalar(0.85 + rnd() * 0.3);
+    group.add(g);
+    birds.push({ g, l, r, dy: rank * 0.18 + rnd() * 0.25, ph: rnd() * 6.3 });
+  }
+  const period = 30 + rnd() * 14;
+  const offset = rnd() * period;
+  const crossing = 20;
+  group.visible = false;
+  const update = (time: number) => {
+    const t = time + offset;
+    const u = (t % period) / crossing;
+    group.visible = u < 1;
+    if (!group.visible) return;
+    // Une fois de gauche à droite, la fois suivante de droite à gauche
+    const dir = Math.floor(t / period) % 2 ? -1 : 1;
+    group.position.set(dir * (-50 + 100 * u), y + Math.sin(t * 0.45) * 0.9, z);
+    // Un peu tournés vers nous : on voit leurs ailes s'ouvrir (de profil, elles ne seraient qu'un trait)
+    group.rotation.y = (dir > 0 ? -0.6 : Math.PI + 0.6) + Math.sin(t * 0.3) * 0.1;
+    for (const b of birds) {
+      const glide = Math.min(1, Math.max(0, (0.55 - Math.sin(t * 0.6 + b.ph)) * 2.5));
+      const flap = 0.08 + Math.sin(t * 10.5 + b.ph) * 0.6 * glide;
+      b.l.rotation.x = -flap;
+      b.r.rotation.x = flap;
+      b.g.position.y = b.dy + Math.sin(t * 1.3 + b.ph) * 0.12 - flap * 0.05;
+    }
+  };
+  return { group, update };
+}
+
+/** Des lucioles qui flânent et clignotent dans le noir, devant les arbres */
+export function fireflies(
+  keep: Keep,
+  n: number,
+  seed: number,
+  area: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number },
+): { points: THREE.Points; update: (time: number) => void } {
+  const rnd = seeded(seed);
+  const geo = keep(new THREE.BufferGeometry());
+  const pos = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const base = Array.from({ length: n }, () => ({
+    x: area.x0 + rnd() * (area.x1 - area.x0),
+    y: area.y0 + rnd() * (area.y1 - area.y0),
+    z: area.z0 + rnd() * (area.z1 - area.z0),
+    ph: rnd() * 6.3,
+    w: 0.6 + rnd() * 0.9,
+  }));
+  const points = new THREE.Points(
+    geo,
+    keep(
+      new THREE.PointsMaterial({
+        // Rapetisse avec l'éloignement (mais pas en unités du monde : 2,2 donne un halo d'une demi-unité environ)
+        size: 2.2,
+        map: haloTexture(keep),
+        vertexColors: true,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    ),
+  );
+  const update = (time: number) => {
+    base.forEach((b, i) => {
+      pos[i * 3] = b.x + Math.sin(time * 0.31 * b.w + b.ph) * 1.2;
+      pos[i * 3 + 1] = b.y + Math.sin(time * 0.53 * b.w + b.ph * 2) * 0.6;
+      pos[i * 3 + 2] = b.z + Math.cos(time * 0.27 * b.w + b.ph) * 0.8;
+      const on = Math.max(0, Math.sin(time * 1.1 * b.w + b.ph));
+      const k = on * on * on;
+      col[i * 3] = 0.85 * k;
+      col[i * 3 + 1] = 1.0 * k;
+      col[i * 3 + 2] = 0.45 * k;
+    });
+    (geo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    (geo.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
+  };
+  update(0);
+  return { points, update };
 }
 
 export function mergeParts(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -638,6 +750,7 @@ export function lanterns(keep: Keep, a: THREE.Vector3, b: THREE.Vector3, sag: nu
     );
     lamp.scale.y = 1.25;
     lamp.position.copy(p).add(new THREE.Vector3(0, -0.24, 0));
+    lamp.userData.flicker = i * 1.7 + a.x * 0.3;
     g.add(lamp);
     const glow = new THREE.Sprite(
       keep(
@@ -653,6 +766,7 @@ export function lanterns(keep: Keep, a: THREE.Vector3, b: THREE.Vector3, sag: nu
     );
     glow.position.copy(lamp.position);
     glow.scale.setScalar(1.3);
+    glow.userData.flicker = i * 1.7 + a.x * 0.3;
     g.add(glow);
   }
   return g;
