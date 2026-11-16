@@ -5,25 +5,37 @@
 // qu'elles gagnent d'un côté, elles le perdent de l'autre).
 
 export type WeaponId =
-  | "fa"
-  | "pm"
-  | "pompe"
-  | "precision"
-  | "pistolet"
-  | "carabine"
-  | "fm"
-  | "mitraillette"
-  | "rafale"
-  | "double"
-  | "revolver"
-  | "pa";
+  "fa" | "pm" | "pompe" | "precision" | "pistolet" | "carabine" | "fm" | "mitraillette" | "rafale" | "double" | "revolver" | "pa";
 
-export const PRIMARY_IDS = ["fa", "pm", "pompe", "precision", "carabine", "fm", "mitraillette", "rafale", "double"] as const satisfies readonly WeaponId[];
+export const PRIMARY_IDS = [
+  "fa",
+  "pm",
+  "pompe",
+  "precision",
+  "carabine",
+  "fm",
+  "mitraillette",
+  "rafale",
+  "double",
+] as const satisfies readonly WeaponId[];
 export type PrimaryId = (typeof PRIMARY_IDS)[number];
 export const SECONDARY_IDS = ["pistolet", "revolver", "pa"] as const satisfies readonly WeaponId[];
 export type SecondaryId = (typeof SECONDARY_IDS)[number];
 /** L'ordre compte : c'est le numéro de l'arme dans ce qui voyage (les nouvelles s'ajoutent à la fin) */
-export const WEAPON_IDS: WeaponId[] = ["fa", "pm", "pompe", "precision", "pistolet", "carabine", "fm", "mitraillette", "rafale", "double", "revolver", "pa"];
+export const WEAPON_IDS: WeaponId[] = [
+  "fa",
+  "pm",
+  "pompe",
+  "precision",
+  "pistolet",
+  "carabine",
+  "fm",
+  "mitraillette",
+  "rafale",
+  "double",
+  "revolver",
+  "pa",
+];
 
 export interface WeaponDef {
   id: WeaponId;

@@ -4,7 +4,18 @@
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
 import { goalOf, MODE_INFO, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { DT, eyeOf, forward, heightOf, newSoldier, respawnSoldier, stepSoldier, type Cmd, type Soldier, type StepOut } from "./soldier.ts";
-import { damageAt, GRENADE, grenadeDamage, isPrimaryId, isSecondaryId, KNIFE, WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "./weapons.ts";
+import {
+  damageAt,
+  GRENADE,
+  grenadeDamage,
+  isPrimaryId,
+  isSecondaryId,
+  KNIFE,
+  WEAPONS,
+  type PrimaryId,
+  type SecondaryId,
+  type WeaponId,
+} from "./weapons.ts";
 import { rayBox, World } from "./world.ts";
 import { random, type RngHolder } from "../../rng.ts";
 
@@ -692,7 +703,15 @@ export function addFighter(m: Match, p: FighterInit): number {
     id: p.id,
     team,
     bot: p.bot,
-    s: newSoldier(0, 0, 0, 0, allowedPrimary(m.settings, p.primary), GRENADE.count, allowedSecondary(m.settings, p.secondary ?? "pistolet")),
+    s: newSoldier(
+      0,
+      0,
+      0,
+      0,
+      allowedPrimary(m.settings, p.primary),
+      GRENADE.count,
+      allowedSecondary(m.settings, p.secondary ?? "pistolet"),
+    ),
     hp: MAX_HP,
     respawnAt: 0,
     shieldUntil: 0,

@@ -140,7 +140,14 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
 
 export function encodeMe(m: Match, i: number): EscMe {
   const f = m.fighters[i]!;
-  return { i, s: f.s, hp: Math.ceil(f.hp), back: f.s.alive ? 0 : Math.max(0, f.respawnAt - m.t), next: f.next, nextSecondary: f.nextSecondary };
+  return {
+    i,
+    s: f.s,
+    hp: Math.ceil(f.hp),
+    back: f.s.alive ? 0 : Math.max(0, f.respawnAt - m.t),
+    next: f.next,
+    nextSecondary: f.nextSecondary,
+  };
 }
 
 /** Un soldat lu dans `p` */

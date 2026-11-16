@@ -33,7 +33,21 @@ describe("la boutique", () => {
   });
 
   it("chaque catégorie garde de quoi jouer sans rien acheter, et a quelque chose à vendre", () => {
-    for (const kind of ["perso", "naval", "token", "vehicle", "kart", "uno", "club", "ballon", "fete", "bombe", "camo", "arme", "uniforme"] as const) {
+    for (const kind of [
+      "perso",
+      "naval",
+      "token",
+      "vehicle",
+      "kart",
+      "uno",
+      "club",
+      "ballon",
+      "fete",
+      "bombe",
+      "camo",
+      "arme",
+      "uniforme",
+    ] as const) {
       const items = SHOP_ITEMS.filter((i) => i.kind === kind);
       expect(items.some((i) => i.price === 0)).toBe(true);
       expect(items.some((i) => i.price > 0)).toBe(true);

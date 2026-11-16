@@ -22,7 +22,8 @@ import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
 
-export type ShopKind = "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe" | "camo" | "tenue" | "arme" | "uniforme";
+export type ShopKind =
+  "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe" | "camo" | "tenue" | "arme" | "uniforme";
 
 export interface ShopItem {
   id: string;
