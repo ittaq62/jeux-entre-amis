@@ -240,6 +240,24 @@ html:has(.cb-fight) body {
   letter-spacing: 0.04em;
 }
 
+/* Le coup qui fait sortir : un éclair blanc */
+.cb-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.85), rgba(255, 246, 210, 0.55) 60%, rgba(255, 255, 255, 0.3));
+  pointer-events: none;
+  animation: cb-flash 0.32s ease-out both;
+}
+
+@keyframes cb-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 /* 3, 2, 1, Culbute ! */
 .cb-countdown {
   position: absolute;
@@ -953,7 +971,12 @@ html:has(.cb-fight) body {
 
 @media (prefers-reduced-motion: reduce) {
   .cb-countdown,
-  .cb-dmg {
+  .cb-dmg,
+  .cb-flash {
     animation: none;
+  }
+
+  .cb-flash {
+    display: none;
   }
 }

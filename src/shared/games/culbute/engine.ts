@@ -1896,6 +1896,80 @@ export function stepSolo(f: Fight, slot: number, inp: Input) {
   pending = [];
 }
 
+/** Un coup de son propre combattant, deviné sur l'appareil */
+export interface PredictedHit {
+  v: number;
+  x: number;
+  y: number;
+  dmg: number;
+  power: number;
+  shield: boolean;
+  ko: boolean;
+}
+
+/**
+ * Sur l'appareil : les coups de son combattant qui touchent les autres, tels qu'on les voit (leurs positions sont
+ * recopiées dans `f` avant l'appel). Seul l'attaquant change : son arrêt sur image commence tout de suite, comme il le
+ * fera sur le serveur ; les autres ne bougent pas (le serveur dira ce qu'il leur arrive).
+ */
+export function predictHits(f: Fight, slot: number): PredictedHit[] {
+  const a = f.fighters[slot];
+  if (!a || a.state !== "move" || a.hitstop > 0 || f.phase !== "fight") return [];
+  const def = moveDef(a.style, a.move);
+  if (!def) return [];
+  const active = hitboxActive(a, def);
+  if (active.length === 0) return [];
+  const charge = def.charge ? a.charge / def.charge.max : 0;
+  const out: PredictedHit[] = [];
+  for (const v of f.fighters) {
+    if (!canHit(f, a, v) || a.hitIds.includes(v.slot)) continue;
+    const box = hurtbox(v);
+    let hit: HitDef | null = null;
+    let hx = 0;
+    let hy = 0;
+    for (const hd of active) {
+      if (hd.pull) continue;
+      for (const side of hd.both ? [1, -1] : [1]) {
+        const cx = a.x + a.face * side * hd.x;
+        const cy = a.y + hd.y;
+        if (circleHitsBox(cx, cy, hd.r, ...box)) {
+          hit = hd;
+          hx = cx;
+          hy = cy;
+          break;
+        }
+      }
+      if (hit) break;
+    }
+    if (!hit) continue;
+    const dmg = Math.round(hit.dmg * (1 + CHARGE_BONUS * charge) * 10) / 10;
+    const shielded = v.state === "shield" || v.state === "shieldstun";
+    let stop: number;
+    let ko = false;
+    let power: number;
+    if (shielded) {
+      stop = Math.round(clamp(3 + hit.dmg * 0.3, 3, 10));
+      power = clamp(hit.dmg / 20, 0, 1);
+    } else {
+      const speed = (hit.kb + (hit.kbg * (v.dmg + dmg)) / 100) * (200 / (100 + styleOf(v).weight)) * (1 + 0.15 * charge);
+      let ang = hit.ang;
+      if (ang < 0 && !isAirborne(v)) ang = 40;
+      const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;
+      if (speed > 18) {
+        const probe: Fighter = { ...v, kx: Math.cos(ang * deg) * speed * dirX, ky: Math.sin(ang * deg) * speed };
+        ko = willLeave(f, probe);
+      }
+      stop = ko ? KO_STOP : Math.round(clamp(4 + dmg * 0.5, 4, 16));
+      power = ko ? 1 : clamp(speed / 50, 0, 1);
+    }
+    a.hitstop = stop;
+    a.hitIds.push(v.slot);
+    a.hitAt.push(a.mt);
+    out.push({ v: v.slot, x: hx, y: hy, dmg, power, shield: shielded, ko });
+  }
+  return out;
+}
+
 /** Le temps de combat restant (au temps), en secondes */
 export function timeLeft(f: Fight): number {
   if (f.phase === "intro") return f.limit / 60;

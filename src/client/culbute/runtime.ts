@@ -3,10 +3,11 @@
 // prises en compte), montrer les autres un peu en retard pour qu'ils glissent sans à-coups, et tout dessiner.
 
 import { platformsAt, type ArenaId, type PlatformNow } from "../../shared/games/culbute/arenas.ts";
-import { createFight, INTRO_FRAMES, stepSolo } from "../../shared/games/culbute/engine.ts";
+import { createFight, INTRO_FRAMES, predictHits, stepSolo, type PredictedHit } from "../../shared/games/culbute/engine.ts";
 import type { Fight, FightEvent, Input, ItemKind } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage } from "../../shared/games/culbute/net.ts";
 import {
+  F_INTANG,
   FIGHTER_STRIDE,
   HELD_ITEMS,
   ITEM_STRIDE,
@@ -111,6 +112,10 @@ export class FightRuntime {
   private fps = 60;
   private disposed = false;
   private looksKey = "";
+  /** La dernière image montrée : les autres tels qu'on les voit, pour deviner ses propres coups */
+  private lastFrame: RenderFrame | null = null;
+  /** Ses coups devinés (on ne rejouera pas l'étincelle quand le serveur les confirmera) */
+  private predicted: { v: number; at: number; ko: boolean }[] = [];
 
   constructor(
     host: HTMLElement,
@@ -220,10 +225,12 @@ export class FightRuntime {
         life: 999,
       });
     }
+    this.syncOthers();
     for (const u of this.unacked) {
       this.prevX = me.x;
       this.prevY = me.y;
       stepSolo(solo, this.mySlot, u.input);
+      predictHits(solo, this.mySlot);
     }
     if (this.unacked.length === 0) {
       this.prevX = me.x;
@@ -240,6 +247,58 @@ export class FightRuntime {
       this.offX = 0;
       this.offY = 0;
     }
+  }
+
+  /** Les autres, dans son combat anticipé, là où on les voit à l'écran */
+  private syncOthers() {
+    const solo = this.solo;
+    const frame = this.lastFrame;
+    if (!solo || !frame) return;
+    for (const r of frame.fighters) {
+      if (r.slot === this.mySlot) continue;
+      const o = solo.fighters[r.slot];
+      if (!o) continue;
+      o.x = r.x;
+      o.y = r.y;
+      o.face = r.face;
+      o.state = r.state;
+      o.dmg = r.dmg;
+      o.shield = r.shield;
+      o.intangUntil = (r.flags & F_INTANG) !== 0 ? solo.frame + 2 : 0;
+      o.ground = r.state === "stand" || r.state === "land" || r.state === "shield" || r.state === "squat" ? 0 : -1;
+    }
+  }
+
+  /** Ses coups qui touchent, montrés tout de suite (le serveur confirmera un peu plus tard) */
+  private showPredicted(hits: PredictedHit[]) {
+    const frame = this.lastFrame;
+    if (hits.length === 0 || !frame) return;
+    const now = performance.now();
+    const events: FightEvent[] = hits.map((h) => ({
+      k: "hit",
+      a: this.mySlot,
+      v: h.v,
+      dmg: h.dmg,
+      x: h.x,
+      y: h.y,
+      power: h.power,
+      kind: h.shield ? "shield" : "hit",
+      ...(h.ko ? { ko: true } : {}),
+    }));
+    for (const h of hits) this.predicted.push({ v: h.v, at: now, ko: h.ko });
+    for (const e of events) this.scene.effect(e, frame);
+    this.opts.onEvents(events, frame);
+  }
+
+  /** Un coup confirmé par le serveur : déjà montré s'il avait été deviné */
+  private alreadyShown(e: FightEvent): boolean {
+    if (e.k !== "hit" || e.a !== this.mySlot || this.mySlot < 0) return false;
+    const now = performance.now();
+    this.predicted = this.predicted.filter((p) => now - p.at < 900);
+    const i = this.predicted.findIndex((p) => p.v === e.v && (p.ko || !e.ko));
+    if (i < 0) return false;
+    this.predicted.splice(i, 1);
+    return true;
   }
 
   private shownMe(): [number, number] {
@@ -266,6 +325,8 @@ export class FightRuntime {
         this.prevX = me.x;
         this.prevY = me.y;
         stepSolo(this.solo, this.mySlot, input);
+        this.syncOthers();
+        this.showPredicted(predictHits(this.solo, this.mySlot));
       }
       this.sinceSend++;
     }
@@ -416,8 +477,10 @@ export class FightRuntime {
     }
     const frame = this.frameAt(at);
     if (!frame) return;
+    this.lastFrame = frame;
     const due: FightEvent[] = [];
-    while (this.pending.length > 0 && this.pending[0]!.f <= at + 1) due.push(...this.pending.shift()!.events);
+    while (this.pending.length > 0 && this.pending[0]!.f <= at + 1)
+      for (const e of this.pending.shift()!.events) if (!this.alreadyShown(e)) due.push(e);
     if (due.length > 0) {
       for (const e of due) this.scene.effect(e, frame);
       this.opts.onEvents(due, frame);

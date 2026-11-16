@@ -60,6 +60,8 @@ export class CulbuteScene {
   private grounded: boolean[] = [];
   private lastXs: number[] = [];
   private dustAt: number[] = [];
+  /** Le coup qui fait sortir : la caméra plonge sur l'impact le temps de l'arrêt sur image */
+  private koCam: { x: number; y: number; age: number } | null = null;
   /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
   fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
 
@@ -414,14 +416,23 @@ export class CulbuteScene {
     maxX = Math.min(maxX, b.right - 2);
     minY = Math.max(minY, b.bottom + 1);
     maxY = Math.min(maxY, b.top);
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    let cx = (minX + maxX) / 2;
+    let cy = (minY + maxY) / 2;
     const tan = Math.tan((this.camera.fov * Math.PI) / 360);
     const halfW = Math.max(5.8, (maxX - minX) / 2);
     const halfH = Math.max(3.4, (maxY - minY) / 2);
     const dist = Math.min(52, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)));
-    const want = new THREE.Vector3(cx, cy + dist * 0.09, dist);
-    const k = Math.min(1, dt * 3.2);
+    let want = new THREE.Vector3(cx, cy + dist * 0.09, dist);
+    let k = Math.min(1, dt * 3.2);
+    if (this.koCam) {
+      this.koCam.age += dt;
+      if (this.koCam.age < 0.5) {
+        cx = this.koCam.x;
+        cy = this.koCam.y;
+        want = new THREE.Vector3(cx + 0.4, cy + 0.5, 7.2);
+        k = Math.min(1, dt * 16);
+      } else this.koCam = null;
+    }
     this.camPos.lerp(want, k);
     this.camLook.lerp(new THREE.Vector3(cx, cy, 0), k);
     this.shake = Math.max(0, this.shake - dt * 2.2);
@@ -624,6 +635,14 @@ export class CulbuteScene {
         this.fighters[e.v]?.hit(e.power);
         this.spark(e.x, e.y, e.power, e.power > 0.55 ? 0xffa53a : 0xfff2a8);
         if (e.power > 0.45) this.shake = Math.max(this.shake, 0.3 + e.power * 0.6);
+        if (e.ko) {
+          // Le coup de grâce : la caméra plonge, un grand éclair, une onde
+          this.koCam = { x: e.x, y: e.y, age: 0 };
+          this.flare(e.x, e.y, 4.5, 0xffe9b0, 0.45);
+          this.wave(e.x, e.y, 3.5, 0xffe08a, 0.5);
+          this.rays(e.x, e.y, 16, 3.2, 0xffffff, 0.5, 0.1);
+          this.shake = 0.5;
+        }
         break;
       }
       case "ko": {

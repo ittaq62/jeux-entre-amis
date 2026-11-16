@@ -80,6 +80,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
 function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: number } | null {
   switch (e.k) {
     case "hit":
+      if (e.ko) return { name: "bigHit", volume: 1 };
       if (e.kind === "shield") return { name: "bolidesClang", volume: 0.5 };
       if (e.kind === "counter") return { name: "tourChip" };
       if (e.kind === "push") return e.a < 0 ? { name: "bolidesSpring", volume: 0.5 } : { name: "wild", volume: 0.5 };
@@ -243,6 +244,7 @@ export function CulbuteFight({
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const [commands, setCommands] = useState(false);
+  const [flash, setFlash] = useState(0);
   const [settings, setSettings] = useState<CulbuteSettings>(loadSettings);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -273,6 +275,8 @@ export function CulbuteFight({
         for (const e of events) {
           const s = soundOf(e, mySlot);
           if (s) play(s.name, { volume: s.volume ?? 0.8 });
+          // Le coup qui fait sortir : un éclair blanc sur tout l'écran
+          if (e.k === "hit" && e.ko) setFlash((n) => n + 1);
         }
       },
     });
@@ -327,6 +331,7 @@ export function CulbuteFight({
   return (
     <div className={`cb-fight ${touch && seated ? "is-touch" : ""}`}>
       <div ref={host} className="cb-stage" />
+      {flash > 0 && <div className="cb-flash" key={flash} aria-hidden="true" />}
 
       <header className="cb-top">
         <div className="cb-top-left">

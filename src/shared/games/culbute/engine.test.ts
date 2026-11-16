@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ARENA_IDS, ARENAS, blastOf, ledgesOf } from "./arenas.ts";
-import { createFight, DEFAULT_FIGHT_SETTINGS, INTRO_FRAMES, moveDef, stepFight, stepSolo, type Entrant } from "./engine.ts";
+import { createFight, DEFAULT_FIGHT_SETTINGS, INTRO_FRAMES, moveDef, predictHits, stepFight, stepSolo, type Entrant } from "./engine.ts";
 import { ATK, HABITUE_IDS, JMP, NO_INPUT, SHD, SPC, type Fight, type FightEvent, type HabitueId, type Input } from "./model.ts";
 import { CHARGE_DECIDE, MOVE_SLOTS } from "./moves.ts";
 import { STYLES } from "./styles.ts";
@@ -389,6 +389,30 @@ describe("Culbute : le combat", () => {
     expect(b.x).toBeCloseTo(a.x, 6);
     expect(b.y).toBeCloseTo(a.y, 6);
     expect(b.state).toBe(a.state);
+  });
+
+  it("l'appareil devine ses propres coups qui touchent, avec le même arrêt sur image que le serveur", () => {
+    for (const before of [0, 150]) {
+      const f = duel();
+      skipIntro(f);
+      faceToFace(f, 1.6);
+      f.fighters[1]!.dmg = before;
+      const solo: Fight = JSON.parse(JSON.stringify(f));
+      let predicted: ReturnType<typeof predictHits> = [];
+      let serverStop = 0;
+      for (let k = 0; k < 20 && serverStop === 0; k++) {
+        const inp = tap(ATK, 1, 0)(k);
+        stepFight(f, [inp, NO_INPUT]);
+        if (f.fighters[0]!.hitstop > 0) serverStop = f.fighters[0]!.hitstop;
+        stepSolo(solo, 0, inp);
+        if (predicted.length === 0) predicted = predictHits(solo, 0);
+      }
+      expect(predicted.length, `${before} %`).toBe(1);
+      expect(predicted[0]!.v).toBe(1);
+      expect(solo.fighters[0]!.hitstop).toBe(serverStop);
+      // Déjà touché : le même coup ne se devine pas deux fois
+      expect(predictHits(solo, 0)).toHaveLength(0);
+    }
   });
 
   it("les objets tombent du ciel et se posent", () => {
