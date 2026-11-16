@@ -50,12 +50,12 @@ function faceToFace(f: Fight, gap: number) {
 }
 
 describe("Culbute : les données", () => {
-  it("chaque style a ses quinze coups, et les attaques au sol de côté, haut et bas ne frappent pas avant la décision de charge", () => {
+  it("chaque style a ses quinze coups ; les attaques au sol partent vite, les chargées après la décision de charge", () => {
     for (const id of HABITUE_IDS) {
       const st = STYLES[id];
       for (const slot of MOVE_SLOTS) expect(st.moves[slot], `${id} ${slot}`).toBeDefined();
       for (const slot of ["s", "u", "d"] as const) {
-        for (const hit of st.moves[slot].hits) expect(hit.from, `${id} ${slot}`).toBeGreaterThanOrEqual(CHARGE_DECIDE);
+        for (const hit of st.moves[slot].hits) expect(hit.from, `${id} ${slot}`).toBeLessThan(CHARGE_DECIDE);
       }
       for (const slot of ["cs", "cu", "cd"] as const) {
         const m = st.moves[slot];
@@ -103,15 +103,25 @@ describe("Culbute : le combat", () => {
     expect(launches[2]).toBeGreaterThan(launches[1]!);
   });
 
-  it("un appui bref reste une attaque normale, un appui tenu devient l'attaque chargée", () => {
+  it("un appui bref reste une attaque normale (elle part dès qu'on relâche), un appui tenu devient l'attaque chargée", () => {
     const f = duel();
     skipIntro(f);
     run(f, 1, [tap(ATK, 1, 0)]);
-    run(f, CHARGE_DECIDE + 2);
+    run(f, 5);
     expect(f.fighters[0]!.move).toBe("s");
+    expect(f.fighters[0]!.mt).toBeGreaterThanOrEqual(5);
+    // Tenu trois images de plus, le même coup attend, puis part au relâchement
+    const r = duel();
+    skipIntro(r);
+    run(r, 7, [hold(ATK, 7, 1, 0)]);
+    const late = r.fighters[0]!;
+    expect(late.move).toBe("s");
+    expect(late.mt).toBeLessThan(5);
+    run(r, 3);
+    expect(late.mt).toBeGreaterThanOrEqual(5);
     const g = duel();
     skipIntro(g);
-    run(g, CHARGE_DECIDE + 4, [hold(ATK, CHARGE_DECIDE + 4, 1, 0)]);
+    run(g, CHARGE_DECIDE + 12, [hold(ATK, CHARGE_DECIDE + 12, 1, 0)]);
     expect(g.fighters[0]!.move).toBe("cs");
     expect(g.fighters[0]!.charge).toBeGreaterThan(0);
   });
@@ -362,8 +372,9 @@ describe("Culbute : le combat", () => {
   it("l'appareil anticipe son combattant comme le serveur le calcule (sans les autres)", () => {
     const f = duel();
     skipIntro(f);
-    // Loin l'un de l'autre : personne ne se touche
-    f.fighters[1]!.x = 6;
+    // Loin l'un de l'autre : personne ne se touche (et le premier reste sur le plateau)
+    f.fighters[0]!.x = 4;
+    f.fighters[1]!.x = -6;
     const solo: Fight = JSON.parse(JSON.stringify(f));
     const script = (k: number): Input => {
       const bits = k === 5 ? JMP : k === 30 ? ATK : k === 70 ? SPC : 0;

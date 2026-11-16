@@ -46,13 +46,13 @@ export const SHIELD_MAX = 50;
 const SHIELD_WEAR = 0.13;
 const SHIELD_REGEN = 0.09;
 const SHIELD_BREAK_STUN = 150;
-export const JUMPSQUAT = 4;
+export const JUMPSQUAT = 3;
 const LAND_LAG = 4;
 const HELPLESS_LAG = 10;
 const SHIELD_DROP = 6;
-const ROLL_FRAMES = 26;
-const DODGE_FRAMES = 22;
-const AIRDODGE_FRAMES = 30;
+const ROLL_FRAMES = 24;
+const DODGE_FRAMES = 20;
+const AIRDODGE_FRAMES = 28;
 const DOWN_FRAMES = 32;
 const TECH_FRAMES = 20;
 const LEDGE_MAX = 300;
@@ -68,6 +68,8 @@ const CANCEL_WINDOW = 4;
 export const INTRO_FRAMES = 180;
 export const OVER_FRAMES = 150;
 const BOUNCE_VY = 17;
+/** L'arrêt sur image du coup qui fait sortir */
+export const KO_STOP = 30;
 const TRAP_STUCK = 70;
 const ITEM_LIFE = 1200;
 const GATEAU_HEAL = 25;
@@ -477,7 +479,7 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     }
     case "roll": {
       const dir = ft.wait;
-      ft.vx = ft.t >= 2 && ft.t <= 19 ? dir * 7.5 : 0;
+      ft.vx = ft.t >= 2 && ft.t <= 17 ? dir * 10 : 0;
       if (ft.t >= ROLL_FRAMES) setState(ft, "stand");
       return;
     }
@@ -569,12 +571,15 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
 
 function groundMove(ft: Fighter, x: number, st: Style, sm: number) {
   if (Math.abs(x) > 0.2) {
-    const target = (Math.abs(x) < 0.65 ? st.walk : st.run) * sign(x) * sm;
-    const acc = 70 * DT;
+    const run = Math.abs(x) >= 0.65;
+    const target = (run ? st.run : st.walk) * sign(x) * sm;
+    // Le départ en courant : un élan immédiat (ou un demi-tour sec), pas une lente mise en route
+    if (run && (Math.abs(ft.vx) < st.run * 0.5 * sm || sign(ft.vx) !== sign(x))) ft.vx = target * 0.85;
+    const acc = 120 * DT;
     ft.vx += clamp(target - ft.vx, -acc, acc);
     ft.face = x < 0 ? -1 : 1;
   } else {
-    const fr = 55 * DT;
+    const fr = 85 * DT;
     ft.vx = Math.abs(ft.vx) <= fr ? 0 : ft.vx - sign(ft.vx) * fr;
   }
 }
@@ -602,8 +607,8 @@ function startAirdodge(ft: Fighter, x: number, y: number) {
   ft.fastfall = false;
   const m = Math.hypot(x, y);
   if (m > 0.4) {
-    ft.vx = (x / m) * 9.5;
-    ft.vy = (y / m) * 9.5;
+    ft.vx = (x / m) * 12;
+    ft.vy = (y / m) * 12;
   } else {
     ft.vx *= 0.3;
     ft.vy = 0;
@@ -911,12 +916,18 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
     setState(ft, isAirborne(ft) ? "air" : "stand");
     return;
   }
-  // Attaque au sol tenue jusqu'ici : elle devient l'attaque chargée de sa direction (avant de frapper)
-  if (ft.mt === CHARGE_DECIDE - 1 && !isAirborne(ft) && inp.held & ATK) {
-    const charged = ft.move === "g:bagS" ? "g:bagC" : CHARGED_OF[ft.move as MoveSlot];
-    if (charged) {
+  // Une attaque au sol qui peut se charger : tant que le bouton est tenu, elle attend juste avant de frapper ; relâché,
+  // elle part aussitôt ; tenu assez longtemps, elle devient l'attaque chargée de sa direction
+  const charged = ft.move === "g:bagS" ? "g:bagC" : CHARGED_OF[ft.move as MoveSlot];
+  if (charged && !isAirborne(ft) && inp.held & ATK) {
+    if (ft.t >= CHARGE_DECIDE - 1) {
       ft.move = charged;
       advanceCharged(f, ft, moveDef(ft.style, charged)!, inp, solo);
+      return;
+    }
+    const first = def.hits.length > 0 ? Math.min(...def.hits.map((hd) => hd.from)) : def.frames;
+    if (ft.mt >= first - 1) {
+      ft.vx *= 0.86;
       return;
     }
   }
@@ -1032,7 +1043,7 @@ function grapple(f: Fight, ft: Fighter, solo: boolean) {
     ft.ledge = best;
     ft.wait = 18;
   } else {
-    ft.vy = 13.5;
+    ft.vy = 17.5;
     ft.ground = -1;
   }
 }
@@ -1358,7 +1369,7 @@ function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
   }
   const vdef = v.state === "move" ? moveDef(v.style, v.move) : null;
   const armored = vdef?.armor && v.mt >= vdef.armor[0] && v.mt <= vdef.armor[1];
-  const stop = Math.round(clamp(3 + dmg * 0.45, 3, 15));
+  const stop = Math.round(clamp(4 + dmg * 0.5, 4, 16));
   if (a && !src.projectile) a.hitstop = stop;
   v.hitstop = stop;
   if (armored) {
@@ -1409,12 +1420,55 @@ function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
   v.stun = Math.max(6, Math.round(speed * HITSTUN_K));
   v.wait = 0;
   v.fastfall = false;
+  // Le coup qui va le sortir : un long arrêt sur image, le temps que l'écran s'approche (attaquant et victime figés)
+  const ko = speed > 18 && willLeave(f, v);
+  if (ko) {
+    v.hitstop = KO_STOP;
+    if (a && !src.projectile) a.hitstop = KO_STOP;
+  }
   // Un gros coup fait lâcher ce qu'on tient
   if (speed > 25 && v.item) {
     f.items.push({ id: f.nextId++, kind: v.item, x: v.x, y: v.y + 0.6, vx: -src.dirX * 2, vy: 6, ground: false, life: ITEM_LIFE });
     v.item = "";
   }
-  pending.push({ k: "hit", a: src.attacker, v: v.slot, dmg, x: src.x, y: src.y, power: clamp(speed / 50, 0, 1), kind: "hit" });
+  pending.push({
+    k: "hit",
+    a: src.attacker,
+    v: v.slot,
+    dmg,
+    x: src.x,
+    y: src.y,
+    power: ko ? 1 : clamp(speed / 50, 0, 1),
+    kind: "hit",
+    ...(ko ? { ko: true } : {}),
+  });
+}
+
+/** Lancé ainsi, sortira-t-il de l'arène (par un côté ou par le haut) ? On suit sa course sans qu'il ne fasse rien */
+function willLeave(f: Fight, v: Fighter): boolean {
+  const b = blastOf(f.arena as ArenaId, f.scale);
+  const st = styleOf(v);
+  const g = st.gravity * gravityOf(f);
+  const cap = st.fall * (f.settings.lune ? 0.7 : 1);
+  let x = v.x;
+  let y = v.y;
+  let vy = 0;
+  let kx = v.kx;
+  let ky = v.ky;
+  for (let i = 0; i < 240; i++) {
+    vy = Math.max(-cap, vy - g * DT);
+    const k = Math.hypot(kx, ky);
+    if (k > 0) {
+      const nk = Math.max(0, k - KB_DECAY * DT);
+      kx *= nk / k;
+      ky *= nk / k;
+    }
+    x += kx * DT;
+    y += (vy + ky) * DT;
+    if (x < b.left || x > b.right || y > b.top) return true;
+    if (k < 1 && vy + ky < 0) return false;
+  }
+  return false;
 }
 
 function detectHits(f: Fight, inputs: Input[]) {

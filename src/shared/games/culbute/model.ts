@@ -237,7 +237,18 @@ export interface Trap {
 export type FightPhase = "intro" | "fight" | "over";
 
 export type FightEvent =
-  | { k: "hit"; a: number; v: number; dmg: number; x: number; y: number; power: number; kind: "hit" | "shield" | "counter" | "push" }
+  | {
+      k: "hit";
+      a: number;
+      v: number;
+      dmg: number;
+      x: number;
+      y: number;
+      power: number;
+      kind: "hit" | "shield" | "counter" | "push";
+      /** Ce coup va le faire sortir de l'arène (l'écran s'en approche) */
+      ko?: boolean;
+    }
   | { k: "ko"; v: number; by: number; x: number; y: number; side: "left" | "right" | "top" | "bottom" }
   | { k: "back"; v: number }
   | { k: "out"; v: number; rank: number }
