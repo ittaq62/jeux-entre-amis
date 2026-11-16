@@ -165,8 +165,12 @@ export function DevEscarmouche() {
         const target = world(spots[1]!);
         const from = scene.viewMuzzle(shots.clone());
         scene.effects.tracer(from, new THREE.Vector3(target.x, 1.3, target.z), 1);
-        scene.effects.flash(from, 0.32);
+        scene.viewFlash(weapon);
+        scene.ejectShell(weapon);
+        scene.effects.glow(from, 8, 60);
         scene.effects.blood(new THREE.Vector3(target.x, 1.3, target.z));
+        const kinds = ["metal", "stone", "wood", "dirt"] as const;
+        scene.effects.impact(new THREE.Vector3(target.x + 1.2, 0.02, target.z), 1, 1, kinds[Math.floor(t) % 4]);
       }
       if (!closeUp && Math.floor(t / 4) !== Math.floor((t - dt) / 4)) {
         const b = world({ d: 20, s: 4, team: 0, yaw: 0 });

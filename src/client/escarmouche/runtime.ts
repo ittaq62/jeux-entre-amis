@@ -27,12 +27,13 @@ import {
 } from "../../shared/games/escarmouche/soldier.ts";
 import { P_STRIDE, PF, readFighter, SC_STRIDE, type EscMe, type EscTick, type FighterNet } from "../../shared/games/escarmouche/view.ts";
 import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
-import type { World } from "../../shared/games/escarmouche/world.ts";
+import type { Mat, World } from "../../shared/games/escarmouche/world.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
+import type { Surface } from "./scene/effects.ts";
 import { pickQuality } from "./scene/quality.ts";
 import { ffaKit, TEAM_KITS } from "./scene/soldiers.ts";
 
@@ -415,7 +416,8 @@ export class BattleRuntime {
         }
         if (e.n > 0) {
           const axis = (e.n - 1) >> 1;
-          this.scene.effects.impact(at, axis, (e.n - 1) & 1 ? 1 : -1, "#8a7f6c");
+          const sign = (e.n - 1) & 1 ? 1 : -1;
+          this.scene.effects.impact(at, axis, sign, this.surfaceAt(at, axis, sign));
         }
         return;
       }
@@ -901,6 +903,14 @@ export class BattleRuntime {
     return best;
   }
 
+  /** La matière de la face touchée en ce point (un tout petit rayon tiré vers elle) */
+  private surfaceAt(at: THREE.Vector3, axis: number, sign: number): Surface {
+    if (axis < 0) return "dirt";
+    const n = [axis === 0 ? sign : 0, axis === 1 ? sign : 0, axis === 2 ? sign : 0] as const;
+    const hit = this.world.raycast(at.x + n[0] * 0.05, at.y + n[1] * 0.05, at.z + n[2] * 0.05, -n[0], -n[1], -n[2], 0.12);
+    return surfaceOf(hit ? this.world.boxes[hit.box]?.m : undefined);
+  }
+
   /** Ses propres tirs : vus et entendus tout de suite, avant même que le serveur les juge */
   private localEffects(out: StepOut, cmd: Cmd) {
     const s = this.pred!;
@@ -912,10 +922,13 @@ export class BattleRuntime {
         const t = hit?.t ?? 150;
         const end = this.tmp.set(shot.ox + d[0] * t, shot.oy + d[1] * t, shot.oz + d[2] * t);
         this.scene.effects.tracer(muzzle, end, 1);
-        if (hit) this.scene.effects.impact(end, hit.axis, hit.sign, "#8a7f6c");
+        if (hit) this.scene.effects.impact(end, hit.axis, hit.sign, surfaceOf(this.world.boxes[hit.box]?.m));
       });
-      this.scene.effects.flash(muzzle, shot.weapon === "pompe" ? 0.5 : 0.32);
-      this.scene.effects.glow(muzzle, 6, 50);
+      this.scene.viewFlash(shot.weapon);
+      this.scene.effects.glow(muzzle, 8, 60);
+      if (Math.random() < 0.35) this.scene.effects.muzzleSmoke(muzzle);
+      if (shot.weapon === "pompe") setTimeout(() => this.scene.ejectShell("pompe"), 380);
+      else this.scene.ejectShell(shot.weapon);
       this.sound.play(`shot-${shot.weapon}`, { gap: 20 });
       if (shot.weapon === "pompe" || shot.weapon === "precision") setTimeout(() => this.sound.play("pump", { volume: 0.6 }), 380);
       const k = ((w.kick * (s.ads ? 0.55 : 1) * (s.crouch ? 0.8 : 1)) / 180) * Math.PI;
@@ -1026,5 +1039,29 @@ export class BattleRuntime {
       board: board ? rows : [],
       ping: this.ping,
     });
+  }
+}
+
+/** Ce que devient une balle selon ce qu'elle touche : des étincelles, des éclats de pierre, des copeaux, de la terre */
+function surfaceOf(m: Mat | undefined): Surface {
+  switch (m) {
+    case "metal":
+    case "rouille":
+    case "wagon":
+    case "wagon2":
+      return "metal";
+    case "bois":
+    case "planche":
+    case "caisse":
+      return "wood";
+    case "herbe":
+    case "terre":
+    case "sol":
+    case "gravier":
+    case "foin":
+    case "sacs":
+      return "dirt";
+    default:
+      return "stone";
   }
 }

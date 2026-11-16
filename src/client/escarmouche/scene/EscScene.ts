@@ -8,7 +8,7 @@ import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
 import { UNIFORM_BY_ID, type UniformId } from "../../../shared/games/escarmouche/uniforms.ts";
 import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
-import { Effects } from "./effects.ts";
+import { Effects, flashTexture } from "./effects.ts";
 import { buildGrenade, buildGun, buildKnife, type Gun } from "./guns.ts";
 import { buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -68,6 +68,11 @@ export class EscScene {
   private vmTrash: { dispose: () => void }[] = [];
   private vmKnife: THREE.Group;
   private vmNade: THREE.Mesh;
+  /** La flamme de son arme (sur l'arme, dans son propre dessin) et les douilles qui sautent */
+  private vmFlash = new THREE.Group();
+  private vmFlashUntil = 0;
+  private shells: { mesh: THREE.Mesh; vel: THREE.Vector3; spin: THREE.Vector3; age: number }[] = [];
+  private shellNext = 0;
   private grenades: THREE.Mesh[] = [];
   private flags: { group: THREE.Group; cloth: THREE.Mesh; stand: THREE.Mesh }[] = [];
   private zone: { ring: THREE.Mesh; wall: THREE.Mesh } | null = null;
@@ -200,6 +205,35 @@ export class EscScene {
     this.vmNade = buildGrenade();
     this.vmNade.visible = false;
     this.vmScene.add(this.vmNade);
+    // La flamme de son arme : une étoile vue de face, deux langues vues de côté
+    const star = flashTexture();
+    const flashMat = new THREE.MeshBasicMaterial({
+      map: star,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), flashMat);
+    this.vmFlash.add(front);
+    for (const r of [0, Math.PI / 2]) {
+      const side = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.26), flashMat);
+      side.geometry.rotateX(Math.PI / 2);
+      side.geometry.translate(0, 0, -0.11);
+      side.rotation.z = r;
+      this.vmFlash.add(side);
+    }
+    this.vmFlash.visible = false;
+    this.vmScene.add(this.vmFlash);
+    // Les douilles : un petit cylindre de laiton (ou une cartouche rouge du fusil à pompe)
+    const brass = new THREE.MeshStandardMaterial({ color: "#c79a3e", roughness: 0.3, metalness: 0.9 });
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.02, 8), brass);
+      m.visible = false;
+      this.vmScene.add(m);
+      this.shells.push({ mesh: m, vel: new THREE.Vector3(), spin: new THREE.Vector3(), age: 9 });
+    }
 
     // Le traitement de l'image (qualité haute seulement)
     if (q === "haut")
@@ -498,6 +532,54 @@ export class EscScene {
     }
   }
 
+  /** Son arme vient de tirer : la flamme, sur l'arme même */
+  viewFlash(weapon: WeaponId) {
+    const big =
+      weapon === "pompe" || weapon === "double" ? 1.6 : weapon === "precision" || weapon === "carabine" || weapon === "fm" ? 1.25 : 1;
+    const small = weapon === "pistolet" || weapon === "pa" || weapon === "mitraillette" ? 0.75 : 1;
+    this.vmFlash.scale.setScalar(big * small * (0.85 + Math.random() * 0.35));
+    this.vmFlash.children[0]!.rotation.z = Math.random() * Math.PI;
+    this.vmFlashUntil = this.t + 0.045;
+  }
+
+  /** Une douille saute par la fenêtre d'éjection */
+  ejectShell(weapon: WeaponId) {
+    if (!this.vmGun || weapon === "revolver" || weapon === "double") return;
+    const s = this.shells[this.shellNext]!;
+    this.shellNext = (this.shellNext + 1) % this.shells.length;
+    this.vmGun.eject.getWorldPosition(s.mesh.position);
+    const shotgun = weapon === "pompe";
+    (s.mesh.material as THREE.MeshStandardMaterial).color.set(shotgun ? "#a3261e" : "#c79a3e");
+    s.mesh.scale.set(shotgun ? 2.4 : 1, shotgun ? 2.2 : weapon === "pistolet" || weapon === "pa" ? 0.8 : 1.3, shotgun ? 2.4 : 1);
+    s.vel.set(0.9 + Math.random() * 0.5, 0.8 + Math.random() * 0.5, 0.15 + Math.random() * 0.25);
+    s.spin.set(Math.random() * 20, Math.random() * 10, 10 + Math.random() * 20);
+    s.mesh.rotation.set(0, 0, Math.PI / 2);
+    s.mesh.visible = true;
+    s.age = 0;
+  }
+
+  private updateViewFx(dt: number) {
+    const on = this.vmGun !== null && this.vmRoot.visible && this.t < this.vmFlashUntil;
+    this.vmFlash.visible = on;
+    if (on) {
+      this.vmGun!.muzzle.getWorldPosition(this.vmFlash.position);
+      this.vmGun!.group.getWorldQuaternion(this.vmFlash.quaternion);
+    }
+    for (const s of this.shells) {
+      if (!s.mesh.visible) continue;
+      s.age += dt;
+      if (s.age > 0.7) {
+        s.mesh.visible = false;
+        continue;
+      }
+      s.vel.y -= 7 * dt;
+      s.mesh.position.addScaledVector(s.vel, dt);
+      s.mesh.rotation.x += s.spin.x * dt;
+      s.mesh.rotation.y += s.spin.y * dt;
+      s.mesh.rotation.z += s.spin.z * dt;
+    }
+  }
+
   /** Le bout du canon de son arme, dans le monde (pour la flamme et la traçante) */
   viewMuzzle(out: THREE.Vector3): THREE.Vector3 {
     if (!this.vmGun) return out.copy(this.camera.position);
@@ -514,7 +596,8 @@ export class EscScene {
 
   render(dt: number) {
     this.t += dt;
-    this.effects.update(dt);
+    this.effects.update(dt, this.camera);
+    this.updateViewFx(dt);
     this.skyMat.uniforms.time!.value = this.t;
     if (this.post) {
       this.post.render(dt);
