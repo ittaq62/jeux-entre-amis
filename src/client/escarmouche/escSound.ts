@@ -138,7 +138,7 @@ export class EscSound {
   }
 
   /** L'ambiance de la carte, en boucle sous le combat */
-  startAmbience(light: "soir" | "gris" | "aube") {
+  startAmbience(light: "soir" | "gris" | "aube" | "nuit") {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const sr = ctx.sampleRate;
@@ -219,7 +219,59 @@ export class EscSound {
       const g = ctx.createGain();
       g.gain.value = 0;
       g.connect(pan).connect(this.out);
-      if (light === "aube") {
+      if (light === "nuit") {
+        if (Math.random() < 0.25) {
+          // Une chouette : un hou bref, puis un long hou-ou qui tremble
+          for (const [k, len] of [
+            [0, 0.28],
+            [0.55, 0.9],
+          ] as const) {
+            const o = ctx.createOscillator();
+            o.type = "sine";
+            const at = t0 + k;
+            o.frequency.setValueAtTime(380, at);
+            o.frequency.linearRampToValueAtTime(330, at + len);
+            const vib = ctx.createOscillator();
+            vib.frequency.value = 7;
+            const vg = ctx.createGain();
+            vg.gain.value = 9;
+            vib.connect(vg).connect(o.frequency);
+            const og = ctx.createGain();
+            og.gain.setValueAtTime(0, at);
+            og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.08);
+            og.gain.exponentialRampToValueAtTime(0.0001, at + len);
+            o.connect(og).connect(pan);
+            og.connect(this.verbIn!);
+            o.start(at);
+            vib.start(at);
+            o.stop(at + len + 0.05);
+            vib.stop(at + len + 0.05);
+          }
+        } else {
+          // Des grillons : des trilles aiguës, par petites salves
+          const bursts = 3 + Math.floor(Math.random() * 4);
+          const f0 = 4200 + Math.random() * 600;
+          for (let k = 0; k < bursts; k++) {
+            const at = t0 + k * 0.22;
+            const o = ctx.createOscillator();
+            o.frequency.value = f0;
+            const am = ctx.createOscillator();
+            am.frequency.value = 48;
+            const ag = ctx.createGain();
+            ag.gain.value = 0.5;
+            const og = ctx.createGain();
+            og.gain.setValueAtTime(0, at);
+            og.gain.linearRampToValueAtTime(level() * 0.03, at + 0.02);
+            og.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+            am.connect(ag).connect(og.gain);
+            o.connect(og).connect(pan);
+            o.start(at);
+            am.start(at);
+            o.stop(at + 0.16);
+            am.stop(at + 0.16);
+          }
+        }
+      } else if (light === "aube") {
         // Une mouette : deux ou trois cris qui glissent vers le grave
         const cries = 2 + Math.floor(Math.random() * 2);
         for (let k = 0; k < cries; k++) {

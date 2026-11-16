@@ -22,7 +22,7 @@ import {
   type Match,
   type Pose,
 } from "./match.ts";
-import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
+import { DEFAULT_SETTINGS, mergeSettings, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import {
   B,
   copySoldier,
@@ -1205,5 +1205,51 @@ describe("Escarmouche : le ravitaillement", () => {
     Object.assign(s, { x: a.x + 1, y: 0, z: a.z });
     run(m, 0.5);
     expect(s.res[0]).toBe(WEAPONS.fa.mag);
+  });
+});
+
+describe("Escarmouche : de nuit", () => {
+  it("le réglage « de nuit » est accepté, et rien d'autre qu'un oui ou un non", () => {
+    expect(mergeSettings(DEFAULT_SETTINGS, { night: true }).night).toBe(true);
+    expect(mergeSettings({ ...DEFAULT_SETTINGS, night: true }, { night: "oui" as unknown as boolean }).night).toBe(true);
+    expect(DEFAULT_SETTINGS.night).toBe(false);
+  });
+
+  it("de nuit, un bot ne voit pas un ennemi au loin… sauf s'il vient de tirer", () => {
+    // Deux places à une cinquantaine de mètres, sans rien entre elles
+    const w = worldOf("hameau");
+    let spot: { z: number; x0: number; x1: number } | null = null;
+    for (let z = -20; z <= 20 && !spot; z += 0.5)
+      for (let x0 = -40; x0 <= -20 && !spot; x0 += 1) {
+        const x1 = x0 + 48;
+        if (w.overlaps(x0 - 0.4, 0.05, z - 0.4, x0 + 0.4, 1.8, z + 0.4) || w.overlaps(x1 - 0.4, 0.05, z - 0.4, x1 + 0.4, 1.8, z + 0.4))
+          continue;
+        if (w.clear(x0, 1.5, z, x1, 1.2, z) && w.clear(x0, 1.5, z, x1, 1.6, z)) spot = { z, x0, x1 };
+      }
+    expect(spot).not.toBeNull();
+    const look = (night: boolean, fired: boolean) => {
+      const m = createMatch(
+        settings({ mode: "solo", map: "hameau", night, botLevel: "fort" }),
+        [
+          { id: "bot-0", team: 0, bot: true, primary: "fa" },
+          { id: "b", team: 1, bot: false, primary: "fa" },
+        ],
+        2,
+      );
+      live(m);
+      Object.assign(m.fighters[0]!.s, { x: spot!.x0, y: 0, z: spot!.z, yaw: -Math.PI / 2, vx: 0, vz: 0 });
+      Object.assign(m.fighters[1]!.s, { x: spot!.x1, y: 0, z: spot!.z, vx: 0, vz: 0 });
+      const mem = newBotMemory(0, -Math.PI / 2);
+      for (let k = 0; k < 30; k++) {
+        if (fired) m.fighters[1]!.lastFight = m.t;
+        worldStep(m, []);
+        Object.assign(m.fighters[0]!.s, { x: spot!.x0, z: spot!.z, vx: 0, vz: 0 });
+        botCommand(m, 0, mem, "fort", k * 16);
+      }
+      return mem.target;
+    };
+    expect(look(false, false)).toBe(1);
+    expect(look(true, false)).toBe(-1);
+    expect(look(true, true)).toBe(1);
   });
 });

@@ -455,6 +455,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
       const dz = g.s.z - s.z;
       const d = Math.hypot(dx, dz, g.s.y - s.y);
       if (d > 80) continue;
+      if (m.settings.night && d > 35 && t - g.lastFight > 1.5) continue;
       const toward = Math.abs(wrapAngle(Math.atan2(-dx, -dz) - s.yaw));
       const aware = toward < (P.fov * Math.PI) / 180 || d < 3 || (mem.hurtBy === j && t - mem.hurtAt < 1.5);
       if (!aware) continue;

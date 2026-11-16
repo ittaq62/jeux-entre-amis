@@ -107,18 +107,19 @@ export class EscScene {
   readonly low: boolean;
   private tmp = new THREE.Vector3();
 
-  constructor(canvas: HTMLCanvasElement, gm: GameMap, opts: { quality: Quality; teams: boolean }) {
+  constructor(canvas: HTMLCanvasElement, gm: GameMap, opts: { quality: Quality; teams: boolean; night?: boolean }) {
     const q = opts.quality;
     this.quality = q;
     this.low = q === "bas";
-    const light: Light = gm.light;
+    const light: Light = opts.night ? "nuit" : gm.light;
+    const night = light === "nuit";
     const look = SKIES[light];
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q === "moyen", powerPreference: "high-performance" });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q === "bas" ? 1.25 : q === "moyen" ? 1.5 : 1.75);
     this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = light === "soir" ? 1.12 : 1.15;
+    this.renderer.toneMappingExposure = night ? 1.3 : light === "soir" ? 1.12 : 1.15;
     this.renderer.autoClear = false;
     if (q !== "bas") {
       this.renderer.shadowMap.enabled = true;
@@ -133,10 +134,16 @@ export class EscScene {
     // La lumière : le ciel tout autour (plus doux là où les matières le reflètent), et le soleil
     const hemi = new THREE.HemisphereLight(look.zenith, look.ground, q === "bas" ? 1.3 : 1.0);
     hemi.color.lerp(new THREE.Color(look.horizon), 0.5);
+    // La nuit : la clarté bleutée de la lune, assez pour y voir
+    if (night) {
+      hemi.color.set("#3d4d72");
+      hemi.groundColor.set("#14171f");
+      hemi.intensity = q === "bas" ? 2.6 : 2.1;
+    }
     this.scene.add(hemi);
     this.sunDir = sunDirection(light);
-    this.rayPower = light === "gris" ? 0 : light === "aube" ? 0.9 : 1;
-    this.sun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7);
+    this.rayPower = light === "gris" || night ? 0 : light === "aube" ? 0.9 : 1;
+    this.sun = new THREE.DirectionalLight(look.sunColor, night ? 0.85 : light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7);
     this.sun.position.copy(this.sunDir).multiplyScalar(90);
     if (q !== "bas") {
       this.sun.castShadow = true;
@@ -166,11 +173,16 @@ export class EscScene {
 
     // Le ciel, qui suit la caméra, et le pays tout autour
     this.skyMat = skyMaterial(light);
+    // La nuit sur la gare : il bruine, le ciel est couvert, pas d'étoiles
+    if (night && gm.light === "gris") {
+      this.skyMat.uniforms.clouds!.value = 0.85;
+      this.skyMat.uniforms.stars!.value = 0.15;
+    }
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), this.skyMat);
     this.sky.renderOrder = -1;
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
-    this.distant = buildDistant(gm, q, light);
+    this.distant = buildDistant(gm, q, gm.light);
     this.scene.add(this.distant.group);
 
     this.map = buildMap(gm, q);
@@ -185,7 +197,8 @@ export class EscScene {
     // Les flaques et les taches au sol
     const decals = buildDecals(gm, worldOf(gm.id), q);
     if (decals) this.scene.add(decals);
-    if (light === "gris" && q !== "bas") {
+    if (night) this.lightLamps(gm, q);
+    if (gm.light === "gris" && q !== "bas") {
       this.rain = new Rain(q === "haut" ? 1500 : 700);
       this.scene.add(this.rain.lines);
     }
@@ -227,8 +240,13 @@ export class EscScene {
     // L'arme en main, dessinée par-dessus le reste, éclairée comme la scène
     const vmHemi = new THREE.HemisphereLight(look.zenith, look.ground, 1.3);
     vmHemi.color.lerp(new THREE.Color(look.horizon), 0.5);
+    if (night) {
+      vmHemi.color.set("#5a6d9a");
+      vmHemi.groundColor.set("#1c2029");
+      vmHemi.intensity = 3.2;
+    }
     this.vmScene.add(vmHemi);
-    const vmSun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.3 : 1.8);
+    const vmSun = new THREE.DirectionalLight(look.sunColor, night ? 3.2 : light === "soir" ? 2.3 : 1.8);
     vmSun.position.set(-1, 2, 1);
     this.vmScene.add(vmSun);
     this.vmScene.add(this.vmRoot);
@@ -276,11 +294,13 @@ export class EscScene {
         this.camera,
         this.vmScene,
         this.vmCam,
-        light === "soir"
-          ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
-          : light === "aube"
-            ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
-            : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
+        night
+          ? { tint: "#dfe7ff", saturation: 0.8, contrast: 1.1, bloom: 0.55 }
+          : light === "soir"
+            ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
+            : light === "aube"
+              ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
+              : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
       );
     void opts.teams;
   }
@@ -410,6 +430,43 @@ export class EscScene {
       sp.group.rotation.y = 0.6 + k;
       sp.ring.position.set(p.x, p.y + 0.04, p.z);
     });
+  }
+
+  /**
+   * La nuit, les lampadaires s'allument : une vraie lumière chaude (sauf en qualité basse), le halo de l'ampoule, et la
+   * flaque de lumière au sol
+   */
+  private lightLamps(gm: GameMap, q: Quality) {
+    const halo = glowTexture();
+    for (const d of gm.decor) {
+      if (d.k !== "lamp") continue;
+      if (q !== "bas") {
+        const lamp = new THREE.PointLight("#ffcf8a", q === "haut" ? 34 : 26, d.h * 4.5, 1.6);
+        lamp.position.set(d.x, d.h - 0.35, d.z);
+        this.scene.add(lamp);
+      }
+      const bulb = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: halo, color: "#ffd9a0", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      bulb.position.set(d.x, d.h - 0.2, d.z);
+      bulb.scale.setScalar(1.8);
+      this.scene.add(bulb);
+      const pool = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: halo,
+          color: "#ffcf8a",
+          transparent: true,
+          opacity: q === "bas" ? 0.45 : 0.16,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(d.x, 0.04, d.z);
+      pool.scale.setScalar(d.h * 2.4);
+      this.scene.add(pool);
+    }
   }
 
   /** Les caisses cassées (leurs boîtes) : à leur place, quelques planches */
@@ -922,6 +979,25 @@ function markMaterial(): THREE.SpriteMaterial {
   t.colorSpace = THREE.SRGBColorSpace;
   markMat = new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
   return markMat;
+}
+
+/** Une tache de lumière ronde, pleine au centre et qui s'efface (le halo d'une ampoule, sa flaque au sol) */
+let glowTex: THREE.CanvasTexture | null = null;
+function glowTexture(): THREE.CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.25, "rgba(255,255,255,0.55)");
+  grad.addColorStop(0.6, "rgba(255,255,255,0.12)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  glowTex = new THREE.CanvasTexture(c);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  return glowTex;
 }
 
 /** Deux caisses de munitions vert armée, l'une sur l'autre, cerclées de jaune, aux poignées de corde */

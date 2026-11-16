@@ -70,6 +70,8 @@ export interface EscarmoucheSettings {
   arsenal: Arsenal;
   /** Sans filet : pas de réticule, pas de regain de santé, des dégâts plus lourds */
   hardcore: boolean;
+  /** De nuit : la lune et les lampadaires pour seule lumière ; les bots voient moins loin */
+  night: boolean;
 }
 
 export const DEFAULT_SETTINGS: EscarmoucheSettings = {
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: EscarmoucheSettings = {
   botLevel: "facile",
   arsenal: "libre",
   hardcore: false,
+  night: false,
 };
 
 export const ARSENAL_NAMES: Record<Arsenal, string> = {
@@ -101,6 +104,7 @@ export function mergeSettings(current: EscarmoucheSettings, patch: Partial<Escar
     next.arsenal = patch.arsenal;
   }
   if (typeof patch.hardcore === "boolean") next.hardcore = patch.hardcore;
+  if (typeof patch.night === "boolean") next.night = patch.night;
   return next;
 }
 

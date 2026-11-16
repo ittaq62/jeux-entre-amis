@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 
-export type Light = "soir" | "gris" | "aube";
+export type Light = "soir" | "gris" | "aube" | "nuit";
 
 export interface SkyLook {
   zenith: string;
@@ -59,6 +59,22 @@ export const SKIES: Record<Light, SkyLook> = {
     fogNear: 34,
     fogFar: 250,
   },
+  // La nuit : un ciel d'encre et d'étoiles, la lune pâle, quelques nuages qu'elle éclaire par en dessous
+  nuit: {
+    zenith: "#060b17",
+    horizon: "#1b2639",
+    ground: "#0b0e13",
+    sunColor: "#c9d7ff",
+    sun: [-0.35, 0.55, -0.62],
+    sunSize: 0.02,
+    glow: 0.4,
+    clouds: 0.3,
+    cloudLit: "#56627c",
+    cloudShade: "#121824",
+    fog: "#0c1220",
+    fogNear: 16,
+    fogFar: 150,
+  },
   // La gare un matin couvert : des gris bleutés, un soleil voilé, des nuages bas et lourds
   gris: {
     zenith: "#56677a",
@@ -99,6 +115,7 @@ uniform float glow;
 uniform float clouds;
 uniform float time;
 uniform float disk;
+uniform float stars;
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -126,6 +143,7 @@ void main() {
   float s = max(dot(d, sunDir), 0.0);
   // Le halo : large et doux, plus serré tout près du disque
   col += sunColor * glow * (pow(s, 6.0) * 0.28 + pow(s, 48.0) * 0.55);
+  float cover = 0.0;
   if (h > 0.0 && clouds > 0.0) {
     vec2 uv = d.xz / (h + 0.18) * 1.4 + vec2(time * 0.006, time * 0.002);
     float n = fbm(uv);
@@ -136,6 +154,21 @@ void main() {
     cc += sunColor * pow(s, 10.0) * 0.9 * (1.0 - c * 0.5);
     float fade = smoothstep(0.0, 0.2, h);
     col = mix(col, cc, c * fade * 0.95);
+    cover = c * fade;
+  }
+  // Les étoiles : une sur soixante-dix cases du ciel, à une place au hasard dans sa case, plus ou moins brillante,
+  // qui scintille ; cachées derrière les nuages
+  if (stars > 0.0 && h > 0.0) {
+    vec2 sp = vec2(atan(d.z, d.x) * 130.0, d.y * 130.0);
+    vec2 cell = floor(sp);
+    float r = hash(cell);
+    if (r > 0.986) {
+      vec2 at = cell + 0.5 + (vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5) * 0.6;
+      float mag = (r - 0.986) / 0.014;
+      float tw = 0.65 + 0.35 * sin(time * 1.9 + r * 300.0);
+      float star = smoothstep(0.42, 0.0, length(sp - at)) * (0.35 + 1.9 * mag * mag) * tw;
+      col += vec3(0.86, 0.9, 1.0) * star * stars * smoothstep(0.02, 0.25, h) * (1.0 - cover);
+    }
   }
   // Le disque du soleil, très clair : il fait briller l'image autour de lui
   float sd = smoothstep(cos(sunSize), cos(sunSize * 0.6), s);
@@ -173,7 +206,9 @@ export function skyMaterial(light: Light, disk = 9): THREE.ShaderMaterial {
       glow: { value: k.glow },
       clouds: { value: k.clouds },
       time: { value: 0 },
-      disk: { value: disk },
+      // La lune brille moins qu'un soleil
+      disk: { value: light === "nuit" ? disk * 0.4 : disk },
+      stars: { value: light === "nuit" ? 1 : 0 },
     },
   });
 }

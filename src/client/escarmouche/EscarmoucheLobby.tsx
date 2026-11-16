@@ -459,6 +459,18 @@ export function EscarmoucheLobby({ room, send, ...rest }: Props) {
                     <span className="hint">Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.</span>
                   </span>
                 </div>
+                <div
+                  className={`rule-row ${locked("night") ? "is-forced" : ""}`}
+                  onClick={() => isHost && !locked("night") && update({ night: !s.night })}
+                >
+                  <Check label="De nuit" checked={Boolean(s.night)} disabled={!isHost || locked("night")} onChange={() => {}} />
+                  <span>
+                    <strong>De nuit</strong>
+                    <span className="hint">
+                      La lune et les lampadaires pour seule lumière : les éclairs des tirs se voient de loin, les bots voient moins bien.
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
 

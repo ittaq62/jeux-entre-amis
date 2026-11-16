@@ -300,6 +300,7 @@ export class BattleRuntime {
     this.scene = new EscScene(o.canvas, this.gm, {
       quality: pickQuality(usePrefs.getState().escQuality, o.touch),
       teams: isTeamMode(v.mode),
+      night: Boolean(v.settings.night),
     });
     this.controls.attach(o.canvas);
     this.applyPrefs();
@@ -333,7 +334,7 @@ export class BattleRuntime {
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    this.sound.startAmbience(this.gm.light);
+    this.sound.startAmbience(this.room.escarmouche?.settings.night ? "nuit" : this.gm.light);
     const loop = () => {
       if (!this.running) return;
       this.frame();
