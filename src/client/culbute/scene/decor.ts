@@ -257,7 +257,7 @@ export function cloud(keep: Keep, material: THREE.Material, x: number, y: number
   const n = 5 + Math.floor(rnd() * 3);
   for (let i = 0; i < n; i++) {
     const r = (0.55 + rnd() * 0.5) * (1 - Math.abs(i - n / 2) / n);
-    const g = new THREE.IcosahedronGeometry(r, 2);
+    const g = puff(new THREE.IcosahedronGeometry(r, 3), r, rnd() * 10);
     g.translate((i - (n - 1) / 2) * 0.62, r * 0.35 + rnd() * 0.2, (rnd() - 0.5) * 0.4);
     parts.push(g);
   }
@@ -265,7 +265,6 @@ export function cloud(keep: Keep, material: THREE.Material, x: number, y: number
   // Le dessous à plat
   const pos = merged.getAttribute("position") as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) if (pos.getY(i) < 0) pos.setY(i, pos.getY(i) * 0.25);
-  merged.computeVertexNormals();
   const m = new THREE.Mesh(keep(merged), material);
   m.scale.set(s * 1.2, s, s * 0.7);
   m.position.set(x, y, z);
@@ -382,6 +381,23 @@ export function fireflies(
   };
   update(0);
   return { points, update };
+}
+
+/**
+ * Une boule douce et un peu bosselée (feuillage, nuage) : chaque point s'écarte un peu du centre selon une houle
+ * régulière (les points confondus bougent ensemble : pas de fente), et garde la normale lisse de la sphère
+ */
+function puff(g: THREE.BufferGeometry, r: number, phase: number): THREE.BufferGeometry {
+  const pos = g.getAttribute("position") as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = v.clone().normalize();
+    const bump = Math.sin(n.x * 5.3 + phase) * Math.sin(n.y * 4.7 + phase * 1.3) * Math.sin(n.z * 5.9 + phase * 0.7);
+    v.addScaledVector(n, bump * r * 0.09);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
 }
 
 export function mergeParts(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -685,8 +701,8 @@ export function house(keep: Keep, o: HouseOpts, cache: Map<string, THREE.Materia
   return g;
 }
 
-/** Un arbre au feuillage touffu : un tronc, et des boules de feuilles de deux verts */
-export function tree(keep: Keep, h: number, leaf: number, seed: number, cache: Map<string, THREE.Material>): THREE.Group {
+/** Un arbre au feuillage touffu : un tronc, et des boules de feuilles de deux verts, plus claires en haut (`glint` : leur reflet) */
+export function tree(keep: Keep, h: number, leaf: number, seed: number, cache: Map<string, THREE.Material>, glint = 0xfff2a0): THREE.Group {
   const g = new THREE.Group();
   const rnd = seeded(seed);
   let trunkMat = cache.get("tronc");
@@ -698,13 +714,13 @@ export function tree(keep: Keep, h: number, leaf: number, seed: number, cache: M
   trunk.position.y = h / 2;
   trunk.castShadow = true;
   g.add(trunk);
-  const light = new THREE.Color(leaf).lerp(new THREE.Color(0xfff2a0), 0.18);
+  const light = new THREE.Color(leaf).lerp(new THREE.Color(glint), 0.18);
   const dark = new THREE.Color(leaf).multiplyScalar(0.72);
   const parts: THREE.BufferGeometry[] = [];
   const n = 7 + Math.floor(rnd() * 4);
   for (let i = 0; i < n; i++) {
     const r = h * (0.22 + rnd() * 0.12);
-    const s = new THREE.IcosahedronGeometry(r, 1);
+    const s = puff(new THREE.IcosahedronGeometry(r, 3), r, rnd() * 10);
     const a = rnd() * Math.PI * 2;
     const up = rnd();
     s.translate(Math.cos(a) * h * 0.28 * (1 - up * 0.5), h * (0.95 + up * 0.45), Math.sin(a) * h * 0.2);
@@ -712,7 +728,7 @@ export function tree(keep: Keep, h: number, leaf: number, seed: number, cache: M
   }
   let leafMat = cache.get("feuilles");
   if (!leafMat) {
-    leafMat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }));
+    leafMat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
     cache.set("feuilles", leafMat);
   }
   const crown = new THREE.Mesh(keep(mergeParts(parts)), leafMat);

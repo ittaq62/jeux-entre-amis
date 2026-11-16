@@ -575,7 +575,8 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       scenery.add(night);
       scenery.add(townGround(keep, mat(keep, 0x2c3a34, 1), 0x3a3030, 0x24222e, 0x2f4a3a, -1.52, 53, fog));
       for (let i = 0; i < 8; i++) {
-        const t = tree(keep, 4.5 + rnd(), 0x1d2c2a, 70 + i, cache);
+        // La nuit : un vert bleuté, un reflet de lune
+        const t = tree(keep, 4.5 + rnd(), 0x1c3a3c, 70 + i, cache, 0x9fb4ff);
         t.position.set(-24 + i * 7 + rnd(), -1.52, -11 - rnd() * 1.5);
         scenery.add(t);
       }
