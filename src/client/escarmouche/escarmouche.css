@@ -156,6 +156,14 @@ html:has(.esc-root) body {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
+.esc-cq-pt.is-down {
+  opacity: 0.5;
+}
+
+.esc-cq-pt.is-down b {
+  text-decoration: line-through;
+}
+
 .esc-cq-pt.is-shaky {
   animation: esc-blink 0.8s steps(2) infinite;
 }

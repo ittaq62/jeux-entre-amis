@@ -13,7 +13,7 @@ import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from
 import { buildCrates, buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
-import { POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
+import { DEPOT_NAMES, POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
 import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
 import { buildDistant, type Distant } from "./distant.ts";
 import { worldOf } from "../../../shared/games/escarmouche/match.ts";
@@ -70,6 +70,8 @@ export class EscScene {
   private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite; cross: THREE.Sprite }>();
   /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
   private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
+  /** Sabotage : les deux dépôts (debout, piégés, détruits), leur lettre, leur feu rouge */
+  private depots: { whole: THREE.Group; wreck: THREE.Group; beacon: THREE.Sprite; letter: THREE.Sprite; at: THREE.Vector3 }[] = [];
   /** Les caisses de munitions de ses lieux de ravitaillement, et le cercle discret autour */
   private supplies: { group: THREE.Group; ring: THREE.Mesh }[] = [];
   /** Les caisses en bois : debout, ou quelques planches au sol */
@@ -420,6 +422,53 @@ export class EscScene {
       const d = this.camera.position.distanceTo(s.mark.position);
       s.mark.scale.setScalar(Math.max(0.3, d * 0.028) * (1 + Math.sin(this.t * 6) * 0.06));
     }
+  }
+
+  /**
+   * Sabotage : les dépôts de munitions (une pile de caisses bâchées, un poste radio et son antenne) ; piégé, son feu
+   * rouge clignote de plus en plus vite ; détruit, il n'en reste que des caisses noircies
+   */
+  setDepots(at: readonly { x: number; y: number; z: number }[], state: readonly number[] | null) {
+    if (!state) return;
+    if (this.depots.length === 0) {
+      const halo = glowTexture();
+      at.forEach((p, k) => {
+        const whole = buildDepot(this.low);
+        whole.position.set(p.x, p.y, p.z);
+        whole.rotation.y = k * 1.3 + 0.4;
+        const wreck = buildDepotWreck();
+        wreck.position.copy(whole.position);
+        wreck.rotation.y = whole.rotation.y;
+        wreck.visible = false;
+        const beacon = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: halo, color: "#ff3020", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+        );
+        beacon.position.set(p.x, p.y + 1.55, p.z);
+        beacon.scale.setScalar(0.9);
+        beacon.visible = false;
+        const letter = new THREE.Sprite(letterMaterial(DEPOT_NAMES[k] ?? "?"));
+        letter.position.set(p.x, p.y + 3.4, p.z);
+        letter.renderOrder = 10;
+        this.scene.add(whole, wreck, beacon, letter);
+        this.depots.push({ whole, wreck, beacon, letter, at: new THREE.Vector3(p.x, p.y + 3.4, p.z) });
+      });
+    }
+    const cam = this.camera.position;
+    this.depots.forEach((d, k) => {
+      const st = state[k * 2] ?? 0;
+      const left = (state[k * 2 + 1] ?? 0) / 10;
+      d.whole.visible = st !== 2;
+      d.wreck.visible = st === 2;
+      d.letter.visible = st !== 2;
+      // Le feu rouge : de plus en plus vite à mesure que l'heure approche
+      const rate = st === 1 ? 1.2 + (1 - Math.min(1, left / 25)) * 7 : 0;
+      const on = st === 1 && Math.sin(this.t * rate * Math.PI * 2) > 0;
+      d.beacon.visible = on;
+      const color = st === 1 ? (on ? "#ff5a3a" : "#ffb020") : TEAM_HEX[1];
+      (d.letter.material as THREE.SpriteMaterial).color.set(color);
+      const s = Math.max(0.9, cam.distanceTo(d.at) * 0.04);
+      d.letter.scale.set(s, s, 1);
+    });
   }
 
   /** Ses lieux de ravitaillement : des caisses de munitions vert armée, un cercle au sol pour en voir la portée */
@@ -1012,6 +1061,62 @@ function glowTexture(): THREE.CanvasTexture {
   glowTex = new THREE.CanvasTexture(c);
   glowTex.colorSpace = THREE.SRGBColorSpace;
   return glowTex;
+}
+
+/** Un dépôt de munitions : des caisses bâchées, cerclées de bandes rouges et blanches, un poste radio et son antenne */
+function buildDepot(low: boolean): THREE.Group {
+  const g = new THREE.Group();
+  const olive = new THREE.MeshStandardMaterial({ color: "#4b5134", roughness: 0.85 });
+  const tarp = new THREE.MeshStandardMaterial({ color: "#5d6146", roughness: 0.95 });
+  const red = new THREE.MeshStandardMaterial({ color: "#b8241c", roughness: 0.6 });
+  const white = new THREE.MeshStandardMaterial({ color: "#e8e4da", roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: "#26282a", roughness: 0.5, metalness: 0.5 });
+  const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, ry = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.y = ry;
+    g.add(b);
+    return b;
+  };
+  box(1.3, 0.6, 0.8, olive, -0.35, 0.3, 0);
+  box(1.0, 0.55, 0.75, olive, 0.6, 0.28, 0.2, 0.2);
+  box(1.1, 0.5, 0.7, tarp, -0.2, 0.85, 0.05, -0.1);
+  // Les bandes de danger
+  for (let k = 0; k < 5; k++) box(0.14, 0.12, 0.82, k % 2 ? white : red, -0.9 + k * 0.28, 0.42, 0);
+  // Le poste radio, son antenne, son voyant
+  box(0.4, 0.3, 0.3, dark, 0.55, 0.7, 0.15, 0.2);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.8, 5), dark);
+  ant.position.set(0.66, 1.25, 0.1);
+  g.add(ant);
+  g.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.castShadow = !low;
+      o.receiveShadow = true;
+    }
+  });
+  return g;
+}
+
+/** Ce qu'il reste d'un dépôt qui a sauté : des caisses noircies, éventrées, de travers */
+function buildDepotWreck(): THREE.Group {
+  const g = new THREE.Group();
+  const burnt = new THREE.MeshStandardMaterial({ color: "#1d1b18", roughness: 0.95 });
+  const ash = new THREE.MeshStandardMaterial({ color: "#3a3631", roughness: 1 });
+  for (const [w, h, d, x, z, ry, rz] of [
+    [1.1, 0.35, 0.7, -0.4, 0.1, 0.3, 0.25],
+    [0.8, 0.3, 0.6, 0.6, -0.3, -0.5, -0.3],
+    [0.5, 0.2, 0.9, 0.1, 0.6, 1.1, 0.1],
+  ] as const) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), burnt);
+    b.position.set(x, h / 2, z);
+    b.rotation.set(0, ry, rz);
+    g.add(b);
+  }
+  const scorch = new THREE.Mesh(new THREE.CircleGeometry(2.4, 20), ash);
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.position.y = 0.02;
+  g.add(scorch);
+  return g;
 }
 
 /** Deux caisses de munitions vert armée, l'une sur l'autre, cerclées de jaune, aux poignées de corde */

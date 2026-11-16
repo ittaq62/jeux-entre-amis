@@ -496,7 +496,21 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
       }
     }
   }
-  const rescueAt = rescue >= 0 ? m.fighters[rescue]!.s : null;
+  // Sabotage : un attaquant va poser sa charge sur le dépôt debout le plus proche, un défenseur court désamorcer
+  let sabAt: { x: number; y: number; z: number } | null = null;
+  if (m.sab && !visible && rescue < 0) {
+    const want = f.team === 1 ? 1 : 0;
+    let bestD = f.team === 1 ? 60 : 14;
+    m.sab.deps.forEach((d, k) => {
+      const c = getMap(m.map).depots[k]!;
+      const dd = Math.hypot(c.x - s.x, c.z - s.z);
+      if (d.state === want && dd < bestD) {
+        bestD = dd;
+        sabAt = c;
+      }
+    });
+  }
+  const rescueAt = rescue >= 0 ? m.fighters[rescue]!.s : sabAt;
   if (rescueAt && (!mem.goal || Math.hypot(mem.goal.x - rescueAt.x, mem.goal.z - rescueAt.z) > 0.5)) {
     mem.goal = { x: rescueAt.x, y: rescueAt.y, z: rescueAt.z };
     mem.goalUntil = t + 6;
@@ -698,6 +712,28 @@ function pickGoal(m: Match, i: number, mem: BotMemory) {
     const a = rand(mem) * Math.PI * 2;
     const r = rand(mem) * gm.zone.r * 0.6;
     return set(gm.zone.x + Math.cos(a) * r, 0, gm.zone.z + Math.sin(a) * r, 4 + rand(mem) * 3);
+  }
+  if (m.mode === "sabotage" && m.sab) {
+    // Attaquer le dépôt debout le plus proche ; défendre : garder un dépôt debout, ou courir à celui qu'on piège
+    const deps = gm.depots;
+    const live = m.sab.deps.map((d, k) => ({ d, k })).filter(({ d }) => d.state !== 2);
+    if (live.length > 0) {
+      let pick = live[Math.floor(rand(mem) * live.length)]!;
+      if (f.team !== 1) {
+        const up = live.filter(({ d }) => d.state === 0);
+        const from = up.length > 0 ? up : live;
+        pick = from.reduce((a, b) =>
+          Math.hypot(deps[a.k]!.x - f.s.x, deps[a.k]!.z - f.s.z) < Math.hypot(deps[b.k]!.x - f.s.x, deps[b.k]!.z - f.s.z) ? a : b,
+        );
+      } else {
+        const armed = live.find(({ d }) => d.state === 1);
+        if (armed) pick = armed;
+      }
+      const c = deps[pick.k]!;
+      const a = rand(mem) * Math.PI * 2;
+      const r = f.team === 1 ? 2 + rand(mem) * 5 : rand(mem) * 1.5;
+      return set(c.x + Math.cos(a) * r, c.y, c.z + Math.sin(a) * r, 4 + rand(mem) * 3);
+    }
   }
   if (m.mode === "conquete" && m.cq) {
     // Le drapeau le plus pressant : pas encore à nous, ou à nous mais qu'on est en train de nous prendre ; tout près,

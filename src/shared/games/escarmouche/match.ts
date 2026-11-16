@@ -51,6 +51,12 @@ export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone
 export const CONQUEST = { r: 5, dy: 3, speed: 1 / 6, back: 1 / 12, bleed: 5, max: 3 };
 export const POINT_NAMES = ["A", "B", "C"] as const;
 /**
+ * Le sabotage : accroupi contre un dépôt (à `reach`), un attaquant y pose une charge en `plant` secondes, un défenseur
+ * la désamorce en `defuse` ; posée, elle saute au bout de `fuse` secondes et souffle tout autour
+ */
+export const SABOTAGE = { reach: 1.7, plant: 2.5, defuse: 3.5, fuse: 25, radius: 8, damage: 160, arm: 20, saved: 25, blown: 40 };
+export const DEPOT_NAMES = ["A", "B"] as const;
+/**
  * Le ravitaillement : près de sa base (et, en conquête, d'un drapeau de son équipe), un chargeur de plus pour chaque
  * arme toutes les `every` secondes et une grenade toutes les `nade` ; sur un soldat tombé, en passant tout près, un
  * chargeur et sa grenade, une seule fois
@@ -63,7 +69,7 @@ export const TEAMSPAWN = { calm: 3, gap: 1.3 };
 /** Une balle ne va pas plus loin */
 const RANGE = 300;
 
-export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute" | "bidon" | "mortier";
+export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute" | "bidon" | "mortier" | "charge";
 
 /** Les bidons d'essence : ce qu'ils encaissent, leur souffle, le temps avant qu'un autre ne les remplace */
 export const BARREL = { hp: 45, radius: 6, damage: 120, back: 40, chain: 0.18 };
@@ -90,7 +96,9 @@ export type EscEvent =
   /** `i` a relevé son coéquipier `v` */
   | { k: "revive"; i: number; v: number }
   | { k: "throw"; i: number }
-  | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" }
+  | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" | "charge" }
+  /** Sabotage : `i` pose une charge sur le dépôt `d`, la désamorce, ou le dépôt saute */
+  | { k: "sab"; d: number; s: "arm" | "defuse" | "boom"; i: number }
   /** Un bidon saute (ou un nouveau le remplace) */
   | { k: "barrel"; b: number; up: boolean }
   /** Une caisse en bois (sa boîte) vole en éclats, ou revient */
@@ -169,6 +177,9 @@ export interface Fighter {
   supplyAt: number;
   nadeAt: number;
   looted: boolean;
+  /** Sabotage : le dépôt où il pose (ou désamorce) une charge (-1 aucun), et depuis combien de temps */
+  sabOn: number;
+  sabT: number;
   stats: FighterStats;
 }
 
@@ -245,6 +256,8 @@ export interface Match extends RngHolder {
   scores: [number, number];
   flags: [FlagState, FlagState] | null;
   zone: { owner: number; contested: boolean; acc: [number, number] } | null;
+  /** Sabotage : chaque dépôt (0 debout, 1 piégé, 2 détruit), quand il saute, qui l'a piégé */
+  sab: { deps: Depot[] } | null;
   /** Conquête : chaque drapeau (son équipe, -1 personne ; sa jauge de -1, aux rouges, à 1, aux bleus) */
   cq: { pts: CqPoint[]; bleed: [number, number] } | null;
   /** À la fin : l'équipe gagnante (ou le soldat, en chacun pour soi), null pour une égalité */
@@ -254,6 +267,12 @@ export interface Match extends RngHolder {
   crates: Crate[];
   blasts: Blast[];
   marks: Mark[];
+}
+
+export interface Depot {
+  state: 0 | 1 | 2;
+  boomAt: number;
+  by: number;
 }
 
 export interface CqPoint {
@@ -347,6 +366,7 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     flags: null,
     zone: null,
     cq: null,
+    sab: null,
     winner: null,
     ranks: null,
     barrels: [],
@@ -374,6 +394,16 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       bleed: [0, 0],
     };
     m.scores = [m.goal, m.goal];
+  }
+  if (settings.mode === "sabotage") {
+    // Les rouges attaquent avec leurs renforts, les bleus défendent leurs deux dépôts
+    m.sab = {
+      deps: [
+        { state: 0, boomAt: 0, by: -1 },
+        { state: 0, boomAt: 0, by: -1 },
+      ],
+    };
+    m.scores = [m.goal, 2];
   }
   players.forEach((p, i) => {
     const team = teams ? (p.team === 1 ? 1 : 0) : i;
@@ -413,6 +443,8 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       supplyAt: 0,
       nadeAt: 0,
       looted: true,
+      sabOn: -1,
+      sabT: 0,
       lastFight: -100,
       stats: newStats(),
     };
@@ -470,6 +502,7 @@ export function upgradeMatch(m: Match): Match {
   }
   if (!Array.isArray(m.marks)) m.marks = [];
   if (m.cq === undefined) m.cq = null;
+  if (m.sab === undefined) m.sab = null;
   const fresh = newSoldier(0, 0, 0, 0, "fa");
   for (const f of m.fighters) {
     if (typeof f.spotReady !== "number") f.spotReady = 0;
@@ -482,6 +515,8 @@ export function upgradeMatch(m: Match): Match {
     if (typeof f.supplyAt !== "number") f.supplyAt = 0;
     if (typeof f.nadeAt !== "number") f.nadeAt = 0;
     if (typeof f.looted !== "boolean") f.looted = true;
+    if (typeof f.sabOn !== "number") f.sabOn = -1;
+    if (typeof f.sabT !== "number") f.sabT = 0;
     if (!f.nextMuzzle) f.nextMuzzle = "aucun";
     if (!f.nextExtra) f.nextExtra = "aucun";
     if (typeof f.stats.revives !== "number") f.stats.revives = 0;
@@ -1142,6 +1177,8 @@ export function worldStep(m: Match, ev: EscEvent[]) {
         placeAt(f, sp.x, sp.y, sp.z, sp.yaw, m);
         // Conquête : chaque retour au combat coûte un ticket à son équipe (un coéquipier relevé n'en coûte pas)
         if (m.cq) m.scores[f.team === 1 ? 1 : 0] = Math.max(0, m.scores[f.team === 1 ? 1 : 0] - 1);
+        // Sabotage : chaque renfort des attaquants est compté
+        if (m.sab && f.team !== 1) m.scores[0] = Math.max(0, m.scores[0] - 1);
         ev.push(onFlag ? { k: "spawn", i, fl: -2 - f.spawnOn } : near ? { k: "spawn", i, on: f.spawnOn } : { k: "spawn", i });
       }
       continue;
@@ -1157,6 +1194,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   stepSupply(m, ev);
   if (m.zone) stepZone(m, ev);
   if (m.cq) stepConquest(m, ev);
+  if (m.sab) stepSabotage(m, world, ev);
   if (m.flags) stepFlags(m, ev);
   checkEnd(m, ev);
 }
@@ -1215,6 +1253,67 @@ function stepZone(m: Match, ev: EscEvent[]) {
     m.scores[holder] += 1;
     for (const i of inside) m.fighters[i]!.points += POINTS.zone;
   }
+}
+
+/**
+ * Le sabotage : un attaquant accroupi contre un dépôt debout y pose une charge, un défenseur accroupi contre un dépôt
+ * piégé la désamorce ; une charge posée saute à son heure, et souffle tout autour
+ */
+function stepSabotage(m: Match, world: World, ev: EscEvent[]) {
+  const sab = m.sab!;
+  const at = getMap(m.map).depots;
+  for (let i = 0; i < m.fighters.length; i++) {
+    const f = m.fighters[i]!;
+    const s = f.s;
+    let on = -1;
+    if (s.alive && s.crouch && s.ground && s.mantleEnd === 0) {
+      sab.deps.forEach((d, k) => {
+        const c = at[k]!;
+        const want = f.team === 1 ? 1 : 0;
+        if (d.state !== want || on >= 0) return;
+        if (Math.hypot(c.x - s.x, c.z - s.z) <= SABOTAGE.reach && Math.abs(c.y - s.y) < 1.2) on = k;
+      });
+    }
+    if (on < 0) {
+      f.sabOn = -1;
+      f.sabT = 0;
+      continue;
+    }
+    if (f.sabOn !== on) {
+      f.sabOn = on;
+      f.sabT = 0;
+    }
+    f.sabT += DT;
+    const d = sab.deps[on]!;
+    if (f.team !== 1 && f.sabT >= SABOTAGE.plant) {
+      d.state = 1;
+      d.boomAt = m.t + SABOTAGE.fuse;
+      d.by = i;
+      f.points += SABOTAGE.arm;
+      f.sabOn = -1;
+      f.sabT = 0;
+      ev.push({ k: "sab", d: on, s: "arm", i });
+    } else if (f.team === 1 && f.sabT >= SABOTAGE.defuse) {
+      d.state = 0;
+      d.boomAt = 0;
+      d.by = -1;
+      f.points += SABOTAGE.saved;
+      f.sabOn = -1;
+      f.sabT = 0;
+      ev.push({ k: "sab", d: on, s: "defuse", i });
+    }
+  }
+  sab.deps.forEach((d, k) => {
+    if (d.state !== 1 || m.t < d.boomAt) return;
+    d.state = 2;
+    m.scores[1] = Math.max(0, m.scores[1] - 1);
+    const c = at[k]!;
+    const by = d.by;
+    if (m.fighters[by]) m.fighters[by]!.points += SABOTAGE.blown;
+    ev.push({ k: "sab", d: k, s: "boom", i: by });
+    ev.push({ k: "boom", i: by, x: r2(c.x), y: r2(c.y + 0.6), z: r2(c.z), w: "charge" });
+    blast(m, world, c.x, c.y + 0.6, c.z, by, SABOTAGE.radius, SABOTAGE.damage, "charge", 1, ev);
+  });
 }
 
 /**
@@ -1388,11 +1487,13 @@ function stepFlags(m: Match, ev: EscEvent[]) {
 
 function checkEnd(m: Match, ev: EscEvent[]) {
   const teams = isTeamMode(m.mode);
-  const reached = m.cq
-    ? m.scores.some((s) => s <= 0)
-    : teams
-      ? m.scores.some((s) => s >= m.goal)
-      : m.fighters.some((f) => f.stats.kills >= m.goal);
+  const reached = m.sab
+    ? m.scores[1] <= 0 || (m.scores[0] <= 0 && !m.sab.deps.some((d) => d.state === 1) && !m.fighters.some((f) => f.team !== 1 && f.s.alive))
+    : m.cq
+      ? m.scores.some((s) => s <= 0)
+      : teams
+        ? m.scores.some((s) => s >= m.goal)
+        : m.fighters.some((f) => f.stats.kills >= m.goal);
   if (!reached && m.t < m.endAt) return;
   finish(m);
   ev.push({ k: "over" });
@@ -1405,7 +1506,8 @@ export function finish(m: Match) {
   const n = m.fighters.length;
   if (isTeamMode(m.mode)) {
     const [a, b] = m.scores;
-    m.winner = a === b ? null : a > b ? 0 : 1;
+    // Sabotage : les attaquants gagnent s'ils ont fait sauter les deux dépôts ; sinon, les défenseurs
+    m.winner = m.sab ? (b <= 0 ? 0 : 1) : a === b ? null : a > b ? 0 : 1;
     m.ranks = m.fighters.map((f) => (m.winner === null || f.team === m.winner ? 1 : 2));
     return;
   }
@@ -1464,6 +1566,8 @@ export function addFighter(m: Match, p: FighterInit): number {
     supplyAt: 0,
     nadeAt: 0,
     looted: true,
+    sabOn: -1,
+    sabT: 0,
     lastFight: -100,
     stats: newStats(),
   });

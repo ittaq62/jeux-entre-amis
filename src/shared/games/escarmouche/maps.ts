@@ -96,6 +96,8 @@ export interface GameMap {
   zone: { x: number; z: number; r: number };
   /** Les trois drapeaux de la conquête : A du côté ouest, B au centre, C du côté est */
   points: [Point3, Point3, Point3];
+  /** Les deux dépôts du sabotage, du côté est (les bleus les défendent) */
+  depots: [Point3, Point3];
   /** L'heure et le temps qu'il fait : seulement pour l'image */
   light: "soir" | "gris" | "aube" | "neige";
   /** La mer, au nord, au-delà du quai (seulement pour l'image) */
@@ -614,6 +616,10 @@ function hameau(): GameMap {
       { x: 41, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 27, y: 0, z: 16 },
+      { x: 24, y: 0, z: -9 },
+    ],
     points: [
       { x: -22, y: 0, z: 16.5 },
       { x: 0, y: 0, z: 0 },
@@ -779,6 +785,10 @@ function gare(): GameMap {
       { x: 46, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 24, y: 0, z: 15 },
+      { x: 27, y: 0, z: -16 },
+    ],
     points: [
       { x: -20, y: 0, z: 12.5 },
       { x: 0, y: 0.4, z: 0 },
@@ -933,6 +943,10 @@ function port(): GameMap {
       { x: 44, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 27, y: 0, z: 20 },
+      { x: 28, y: 0, z: -14 },
+    ],
     points: [
       { x: -25, y: 0, z: -2 },
       { x: 0, y: 0, z: 0 },
@@ -1077,6 +1091,10 @@ function col(): GameMap {
       { x: 44, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 27, y: 0, z: 20 },
+      { x: 30, y: 0, z: -23 },
+    ],
     points: [
       { x: -24, y: 0, z: -4 },
       { x: 0, y: 0, z: 0 },

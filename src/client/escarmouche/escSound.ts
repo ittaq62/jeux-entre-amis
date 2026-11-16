@@ -38,7 +38,8 @@ export type EscSoundName =
   | "shell"
   | "revive"
   | "shot-quiet"
-  | "crate";
+  | "crate"
+  | "beep";
 
 interface ShotSpec {
   thump: number;
@@ -626,6 +627,17 @@ export class EscSound {
           const thump = Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t / 0.025);
           const click = n() * 0.35 * Math.exp(-Math.abs(t - 0.03) / 0.004);
           d[i] = (lp * Math.exp(-t / 0.04) + thump * 0.6 + click) * 0.8;
+        }
+      }),
+    );
+    // Le bip d'une charge posée : court et aigu
+    this.buffers.set(
+      "beep",
+      this.make(0.09, (d, sr) => {
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const env = Math.min(1, t / 0.004) * Math.exp(-t / 0.05);
+          d[i] = (Math.sign(Math.sin(2 * Math.PI * 1850 * t)) * 0.35 + Math.sin(2 * Math.PI * 3700 * t) * 0.15) * env;
         }
       }),
     );

@@ -14,6 +14,7 @@ import {
   matchWorld,
   RESUPPLY,
   REVIVE,
+  SABOTAGE,
   upgradeMatch,
   waitingRescue,
   worldOf,
@@ -77,6 +78,17 @@ describe("Escarmouche : les cartes", () => {
       for (const p of gm.points) {
         expect(w.overlaps(p.x - 0.5, p.y + 0.02, p.z - 0.5, p.x + 0.5, p.y + 1.78, p.z + 0.5), `${p.x},${p.z}`).toBe(false);
         expect(w.overlaps(p.x - 0.2, p.y - 0.1, p.z - 0.2, p.x + 0.2, p.y + 0.01, p.z + 0.2), `${p.x},${p.z}`).toBe(true);
+      }
+    });
+
+    it(`${id} : les deux dépôts du sabotage sont posés au sol, dégagés, du côté des bleus, loin de leurs points d'apparition`, () => {
+      const gm = getMap(id);
+      const w = worldOf(id);
+      for (const p of gm.depots) {
+        expect(p.x).toBeGreaterThan(10);
+        expect(w.overlaps(p.x - 0.8, p.y + 0.02, p.z - 0.8, p.x + 0.8, p.y + 1.78, p.z + 0.8), `${p.x},${p.z}`).toBe(false);
+        expect(w.overlaps(p.x - 0.2, p.y - 0.1, p.z - 0.2, p.x + 0.2, p.y + 0.01, p.z + 0.2), `${p.x},${p.z}`).toBe(true);
+        for (const sp of gm.spawns[1]) expect(Math.hypot(sp.x - p.x, sp.z - p.z)).toBeGreaterThan(10);
       }
     });
 
@@ -372,6 +384,7 @@ describe("Escarmouche : les bots", () => {
     ["drapeau", "gare"],
     ["conquete", "port"],
     ["zone", "col"],
+    ["sabotage", "gare"],
   ] as [Mode, MapId][]) {
     it(`${mode} sur ${map} : six bots jouent deux minutes, se déplacent, tirent et s'éliminent`, () => {
       const m = createMatch(
@@ -1252,5 +1265,126 @@ describe("Escarmouche : de nuit", () => {
     expect(look(false, false)).toBe(1);
     expect(look(true, false)).toBe(-1);
     expect(look(true, true)).toBe(1);
+  });
+});
+
+describe("Escarmouche : le sabotage", () => {
+  function raid() {
+    const m = createMatch(
+      settings({ mode: "sabotage", map: "hameau" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 0, bot: false, primary: "fa" },
+        { id: "c", team: 1, bot: false, primary: "fa" },
+      ],
+      8,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    Object.assign(m.fighters[0]!.s, { x: -40, y: 0, z: 0, vx: 0, vz: 0 });
+    Object.assign(m.fighters[1]!.s, { x: -40, y: 0, z: 3, vx: 0, vz: 0 });
+    Object.assign(m.fighters[2]!.s, { x: 40, y: 0, z: 0, vx: 0, vz: 0 });
+    return m;
+  }
+  const at = (m: Match, i: number, d: number, dx = 0.8) => {
+    const c = getMap(m.map).depots[d]!;
+    Object.assign(m.fighters[i]!.s, { x: c.x + dx, y: c.y, z: c.z, vx: 0, vz: 0 });
+  };
+  const crouch = (m: Match, i: number, seconds: number, ev: EscEvent[] = []) => {
+    for (let k = 0; k < Math.round(seconds / DT); k++) {
+      worldStep(m, ev);
+      applyCmd(m, i, idle(k + 1, { b: B.crouch }), null, ev);
+    }
+    return ev;
+  };
+
+  it("au départ : deux dépôts debout, les renforts des attaquants pleins", () => {
+    const m = raid();
+    expect(m.sab!.deps.map((d) => d.state)).toEqual([0, 0]);
+    expect(m.scores).toEqual([m.goal, 2]);
+  });
+
+  it("un attaquant accroupi contre un dépôt y pose une charge, qui saute à son heure et souffle autour", () => {
+    const m = raid();
+    at(m, 0, 0);
+    const ev = crouch(m, 0, SABOTAGE.plant + 0.1);
+    expect(m.sab!.deps[0]!.state).toBe(1);
+    expect(ev.some((e) => e.k === "sab" && e.s === "arm" && e.d === 0 && e.i === 0)).toBe(true);
+    // Un défenseur tout près quand ça saute
+    Object.assign(m.fighters[0]!.s, { x: -40, z: 0 });
+    at(m, 2, 0, 2.5);
+    const boom: EscEvent[] = [];
+    for (let k = 0; k < Math.round((SABOTAGE.fuse + 0.2) / DT); k++) worldStep(m, boom);
+    expect(m.sab!.deps[0]!.state).toBe(2);
+    expect(m.scores[1]).toBe(1);
+    expect(boom.some((e) => e.k === "sab" && e.s === "boom" && e.d === 0)).toBe(true);
+    expect(boom.some((e) => e.k === "kill" && e.v === 2 && e.w === "charge")).toBe(true);
+  });
+
+  it("un défenseur désamorce une charge posée ; un attaquant ne peut pas « désamorcer », ni un défenseur poser", () => {
+    const m = raid();
+    at(m, 0, 1);
+    crouch(m, 0, SABOTAGE.plant + 0.1);
+    expect(m.sab!.deps[1]!.state).toBe(1);
+    Object.assign(m.fighters[0]!.s, { x: -40, z: 0 });
+    at(m, 2, 1);
+    const ev = crouch(m, 2, SABOTAGE.defuse + 0.1);
+    expect(m.sab!.deps[1]!.state).toBe(0);
+    expect(ev.some((e) => e.k === "sab" && e.s === "defuse" && e.i === 2)).toBe(true);
+    // Le défenseur accroupi contre un dépôt debout : rien
+    crouch(m, 2, SABOTAGE.plant + 0.5);
+    expect(m.sab!.deps[1]!.state).toBe(0);
+  });
+
+  it("chaque renfort des attaquants est compté, ceux des défenseurs non", () => {
+    const m = raid();
+    const ev: EscEvent[] = [];
+    while (m.fighters[0]!.s.alive) hurt(m, 0, 2, 50, 1, "fa", ev, 0, 1, 0);
+    while (m.fighters[2]!.s.alive) hurt(m, 2, 0, 50, 1, "fa", ev, 0, 1, 0);
+    giveUp(m, 0);
+    for (let k = 0; k < Math.round(6 / DT); k++) worldStep(m, ev);
+    expect(m.fighters[0]!.s.alive && m.fighters[2]!.s.alive).toBe(true);
+    expect(m.scores).toEqual([m.goal - 1, 2]);
+  });
+
+  it("les deux dépôts détruits : les attaquants gagnent ; le temps écoulé : les défenseurs", () => {
+    const m = raid();
+    m.sab!.deps[0]!.state = 2;
+    m.scores[1] = 1;
+    m.sab!.deps[1] = { state: 1, boomAt: m.t + 0.1, by: 0 };
+    const ev: EscEvent[] = [];
+    for (let k = 0; k < 20 && m.phase !== "over"; k++) worldStep(m, ev);
+    expect(m.phase).toBe("over");
+    expect(m.winner).toBe(0);
+
+    const m2 = raid();
+    m2.endAt = m2.t + 0.05;
+    for (let k = 0; k < 10 && m2.phase !== "over"; k++) worldStep(m2, []);
+    expect(m2.winner).toBe(1);
+  });
+
+  it("plus de renforts, plus personne debout et aucune charge posée : les défenseurs gagnent", () => {
+    const m = raid();
+    m.scores[0] = 0;
+    const ev: EscEvent[] = [];
+    for (const i of [0, 1]) while (m.fighters[i]!.s.alive) hurt(m, i, 2, 50, 1, "fa", ev, 0, 1, 0);
+    worldStep(m, ev);
+    expect(m.phase).toBe("over");
+    expect(m.winner).toBe(1);
+  });
+
+  it("ce qui voyage : l'état des dépôts, le compte à rebours, la charge en cours", () => {
+    const m = raid();
+    at(m, 0, 0);
+    crouch(m, 0, 1);
+    expect(encodeMe(m, 0).sab?.[0]).toBe(0);
+    expect(encodeMe(m, 0).sab?.[1]).toBeGreaterThan(0.3);
+    crouch(m, 0, SABOTAGE.plant);
+    const t = encodeTick(m, []);
+    expect(t.sb?.[0]).toBe(1);
+    expect(t.sb?.[1]).toBeGreaterThan(200);
+    const old = raid() as unknown as Record<string, unknown>;
+    delete old.sab;
+    expect(upgradeMatch(old as unknown as Match).sab).toBeNull();
   });
 });

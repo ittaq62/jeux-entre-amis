@@ -3,7 +3,7 @@
 // entier, pour se recaler sur ce que le serveur a retenu de ses pas.
 
 import type { MapId } from "./maps.ts";
-import { isTeamMode, REVIVE, TEAMSPAWN, waitingRescue, type EscEvent, type FighterStats, type Match } from "./match.ts";
+import { isTeamMode, REVIVE, SABOTAGE, TEAMSPAWN, waitingRescue, type EscEvent, type FighterStats, type Match } from "./match.ts";
 import type { EscarmoucheSettings, Mode } from "./rules.ts";
 import type { Soldier } from "./soldier.ts";
 import { WEAPON_IDS, type PrimaryId, type SecondaryId, type WeaponId } from "./weapons.ts";
@@ -82,6 +82,8 @@ export interface EscTick {
   z?: [number, number];
   /** Conquête : par drapeau, l'équipe qui le tient (-1 personne) et sa jauge (-100 rouges, 100 bleus) */
   cq?: number[];
+  /** Sabotage : par dépôt, son état (0 debout, 1 piégé, 2 détruit) et, piégé, les dixièmes de seconde avant qu'il saute */
+  sb?: number[];
   /** Les grenades en vol : id, x, y, z (cm) */
   g: number[];
   /** Les ennemis repérés : par trois, la cible, l'équipe à qui elle est montrée, celui qui l'a repérée */
@@ -108,6 +110,8 @@ export interface EscMe {
   reviving?: [number, number];
   /** Celui qui le relève, et où il en est */
   rescue?: [number, number];
+  /** Sabotage : le dépôt où il pose (ou désamorce) une charge, et où il en est (0 à 1) */
+  sab?: [number, number];
   /** Tombé, il attend qu'un coéquipier tout près le relève */
   waiting?: boolean;
 }
@@ -159,6 +163,7 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
   if (m.flags) tick.f = m.flags.flatMap((F) => [F.at === "home" ? 0 : F.at === "carried" ? 1 : 2, F.carrier, cm(F.x), cm(F.y), cm(F.z)]);
   if (m.zone) tick.z = [m.zone.owner, m.zone.contested ? 1 : 0];
   if (m.cq) tick.cq = m.cq.pts.flatMap((p) => [p.owner, Math.round(p.v * 100)]);
+  if (m.sab) tick.sb = m.sab.deps.flatMap((d) => [d.state, d.state === 1 ? Math.max(0, Math.round((d.boomAt - m.t) * 10)) : 0]);
   if (m.marks.length > 0) tick.mk = m.marks.flatMap((k) => [k.target, k.team, k.by]);
   const down = m.barrels.filter((b) => b.downUntil > 0).map((b) => b.box);
   if (down.length > 0) tick.bd = down;
@@ -179,6 +184,7 @@ export function encodeMe(m: Match, i: number): EscMe {
     spawnOn: f.spawnOn,
   };
   if (f.reviving >= 0) me.reviving = [f.reviving, Math.min(1, f.reviveT / REVIVE.time)];
+  if (f.sabOn >= 0) me.sab = [f.sabOn, Math.min(1, f.sabT / (f.team === 1 ? SABOTAGE.defuse : SABOTAGE.plant))];
   const r = m.fighters.findIndex((g) => g.reviving === i);
   if (r >= 0) me.rescue = [r, Math.min(1, m.fighters[r]!.reviveT / REVIVE.time)];
   if (!f.s.alive && m.t >= f.respawnAt && waitingRescue(m, i)) me.waiting = true;

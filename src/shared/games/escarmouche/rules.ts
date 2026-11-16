@@ -2,8 +2,8 @@
 
 import { isMapId, type MapId } from "./maps.ts";
 
-export type Mode = "solo" | "equipes" | "conquete" | "zone" | "drapeau";
-export const MODES: Mode[] = ["solo", "equipes", "conquete", "zone", "drapeau"];
+export type Mode = "solo" | "equipes" | "conquete" | "sabotage" | "zone" | "drapeau";
+export const MODES: Mode[] = ["solo", "equipes", "conquete", "sabotage", "zone", "drapeau"];
 
 export type BotLevel = "facile" | "moyen" | "fort";
 export const BOT_LEVELS: BotLevel[] = ["facile", "moyen", "fort"];
@@ -39,6 +39,15 @@ export const MODE_INFO: Record<
     teams: true,
     goals: [60, 100, 150],
     unit: "tickets",
+  },
+  sabotage: {
+    name: "Sabotage",
+    short: "Sabotage",
+    blurb:
+      "Les rouges attaquent, les bleus défendent deux dépôts de munitions. Accroupi contre un dépôt, on pose une charge qui saute 25 s plus tard, sauf si un défenseur la désamorce. Les renforts des attaquants sont comptés.",
+    teams: true,
+    goals: [40, 60, 90],
+    unit: "renforts",
   },
   zone: {
     name: "Zone à tenir",

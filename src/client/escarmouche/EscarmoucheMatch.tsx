@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { MAP_NAMES } from "../../shared/games/escarmouche/maps.ts";
-import { isTeamMode, POINT_NAMES, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
+import { DEPOT_NAMES, isTeamMode, POINT_NAMES, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
 import { MODE_INFO } from "../../shared/games/escarmouche/rules.ts";
 import { B } from "../../shared/games/escarmouche/soldier.ts";
 import { PRIMARY_IDS, SECONDARY_IDS, WEAPONS, type PrimaryId, type SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
@@ -40,6 +40,7 @@ const KILL_WEAPON: Record<KillWeapon, string> = {
   chute: "chute",
   bidon: "bidon d'essence",
   mortier: "tir de mortier",
+  charge: "charge explosive",
 };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -649,7 +650,21 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                 ))}
               </div>
             )}
-            {!h.cq && (
+            {h.sab && (
+              <div className="esc-cq" title={`Sabotage · ${h.teamScores[0]} renforts pour les attaquants`}>
+                {h.sab.deps.map((d, k) => (
+                  <span
+                    key={k}
+                    className={`esc-cq-pt ${d.state === 1 ? "is-shaky" : ""} ${d.state === 2 ? "is-down" : ""}`}
+                    style={{ borderColor: d.state === 1 ? "#ffb020" : d.state === 2 ? "rgba(160,160,160,.6)" : TEAM_HEX[1] }}
+                  >
+                    <b style={{ color: d.state === 1 ? "#ffb020" : d.state === 2 ? "#999" : TEAM_HEX[1] }}>{DEPOT_NAMES[k]}</b>
+                    {d.state === 1 && <i style={{ width: `${Math.round((d.left / 25) * 100)}%`, background: "#ffb020" }} />}
+                  </span>
+                ))}
+              </div>
+            )}
+            {!h.cq && !h.sab && (
               <div className="esc-goal hint">
                 {MODE_INFO[v.mode].short} · objectif {v.goal} {MODE_INFO[v.mode].unit}
                 {h.zone &&
@@ -713,6 +728,19 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
           {hitFresh && <div className={`esc-hit is-${h.hitKind}`} />}
           {h.aimed && h.alive && <div className="esc-aimed">{h.aimed}</div>}
           {h.scoped && <div className="esc-scope" />}
+          {h.alive && h.sab?.act && (
+            <div className="esc-reviving">
+              <span className="esc-gauge">
+                <i style={{ width: `${Math.round(h.sab.act.k * 100)}%`, background: "#ffb020" }} />
+              </span>
+              <small>{h.sab.act.label}</small>
+            </div>
+          )}
+          {h.alive && !h.sab?.act && h.sab?.hint && (
+            <div className="esc-reviving">
+              <small>{h.sab.hint}</small>
+            </div>
+          )}
           {h.alive && h.team?.reviving && (
             <div className="esc-reviving">
               <span className="esc-gauge">

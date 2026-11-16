@@ -18,6 +18,8 @@ import {
   POINT_NAMES,
   worldWithout,
   RESUPPLY,
+  DEPOT_NAMES,
+  SABOTAGE,
 } from "../../shared/games/escarmouche/match.ts";
 import {
   B,
@@ -111,6 +113,8 @@ export interface HudState {
   flags: { at: number; carrier: number }[] | null;
   carrying: number;
   zone: { owner: number; contested: boolean; inside: boolean } | null;
+  /** Sabotage : chaque dépôt (son état, les secondes avant qu'il saute), la charge en cours, le conseil */
+  sab: { deps: { state: number; left: number }[]; act: { label: string; k: number } | null; hint: string | null } | null;
   /** Conquête : chaque drapeau (qui le tient, sa jauge de -1 à 1), celui où l'on se tient (-1 aucun) */
   cq: { pts: { owner: number; v: number }[]; inside: number } | null;
   banner: { id: number; text: string; tone: "info" | "good" | "bad" } | null;
@@ -252,6 +256,9 @@ export class BattleRuntime {
   private spawnOn = -1;
   private revivingNow: [number, number] | null = null;
   private rescueNow: [number, number] | null = null;
+  /** Sabotage : le dépôt où l'on pose (ou désamorce) une charge, et où on en est ; le prochain bip de chaque dépôt */
+  private sabNow: [number, number] | null = null;
+  private beepAt = [0, 0];
   private waiting = false;
   private nearFallen: string | null = null;
   /** Les bidons de la carte (leur boîte dans le monde) */
@@ -450,6 +457,7 @@ export class BattleRuntime {
     this.spawnOn = me.spawnOn ?? -1;
     this.revivingNow = me.reviving ?? null;
     this.rescueNow = me.rescue ?? null;
+    this.sabNow = me.sab ?? null;
     this.waiting = Boolean(me.waiting);
     const s = me.s;
     // Le serveur compte plus loin que nous (une connexion d'avant) : on reprend à son compte
@@ -636,6 +644,11 @@ export class BattleRuntime {
         const at = this.tmp.set(e.x, e.y, e.z);
         this.scene.effects.explosion(at);
         if (e.w === "bidon") this.scene.effects.fire(at, 7);
+        if (e.w === "charge") {
+          this.scene.effects.explosion(this.tmp2.copy(at).add(this.tmp3.set(-0.9, 0.4, 0.7)));
+          this.scene.effects.explosion(this.tmp2.copy(at).add(this.tmp3.set(0.7, 1.2, -0.5)));
+          this.scene.effects.fire(at, 14);
+        }
         if (e.w === "obus") this.scene.effects.explosion(this.tmp2.copy(at).add(this.tmp3.set(0.8, 0, -0.6)));
         this.sound.play("boom", { at, volume: e.w === "obus" ? 1.2 : 1 });
         const d = at.distanceTo(this.scene.camera.position);
@@ -743,6 +756,26 @@ export class BattleRuntime {
           this.say(e.team === mine ? "Votre drapeau est revenu à sa place." : "Le drapeau adverse est revenu chez lui.", "info");
         } else if (e.f === "drop") {
           this.say(e.team === mine ? "Votre drapeau est tombé : allez le reprendre !" : "Le drapeau adverse est tombé.", "info");
+        }
+        return;
+      }
+      case "sab": {
+        const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
+        const name = DEPOT_NAMES[e.d] ?? "?";
+        const attack = mine !== 1;
+        if (e.s === "arm") {
+          this.sound.play("beep", { volume: 0.7 });
+          this.say(
+            attack ? `Charge posée sur le dépôt ${name} !` : `Le dépôt ${name} est piégé : désamorcez-le !`,
+            attack ? "good" : "bad",
+          );
+          if (e.i === this.me) this.award("Charge posée", SABOTAGE.arm);
+        } else if (e.s === "defuse") {
+          this.say(attack ? `Ils ont désamorcé le dépôt ${name}` : `Charge désamorcée sur le dépôt ${name}`, attack ? "bad" : "good");
+          if (e.i === this.me) this.award("Charge désamorcée", SABOTAGE.saved);
+        } else {
+          this.say(attack ? `Dépôt ${name} détruit !` : `On a perdu le dépôt ${name}`, attack ? "good" : "bad");
+          if (e.i === this.me) this.award("Dépôt détruit", SABOTAGE.blown);
         }
         return;
       }
@@ -1121,6 +1154,18 @@ export class BattleRuntime {
     }
     if (v.mode === "zone") this.scene.setZone(this.gm.zone, this.latest?.z?.[0] ?? -1, this.latest?.z?.[1] === 1);
     if (v.mode === "conquete") this.scene.setPoints(this.gm.points, this.latest?.cq ?? null, CONQUEST.r);
+    if (v.mode === "sabotage") {
+      const sb = this.latest?.sb ?? null;
+      this.scene.setDepots(this.gm.depots, sb);
+      // Le bip des charges posées, de plus en plus pressé
+      this.gm.depots.forEach((d, k) => {
+        if (!sb || sb[k * 2] !== 1) return;
+        const left = (sb[k * 2 + 1] ?? 0) / 10;
+        if (nowMs < this.beepAt[k]!) return;
+        this.beepAt[k] = nowMs + 1000 * Math.max(0.14, Math.min(1, left / 22));
+        this.sound.play("beep", { at: { x: d.x, y: d.y + 1, z: d.z }, volume: 0.5 });
+      });
+    }
     // La douleur à l'image : pâle et rougie sur les bords quand on vient d'être touché, ou qu'il reste peu de vie
     const hurtK =
       this.me >= 0 && s?.alive ? Math.max(0, 1 - (nowMs - this.hurtAt) / 650) * 0.55 + Math.max(0, (40 - this.hp) / 40) * 0.45 : 0;
@@ -1135,17 +1180,27 @@ export class BattleRuntime {
         this.radarDots,
         flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : [],
         v.mode === "zone" ? { ...this.gm.zone, color: zoneOwner >= 0 ? TEAM_HEX[zoneOwner === 1 ? 1 : 0] : "rgba(240,236,220,.8)" } : null,
-        v.mode === "conquete" && this.latest?.cq
-          ? this.gm.points.map((p, k) => {
-              const owner = this.latest!.cq![k * 2] ?? -1;
-              return {
+        v.mode === "sabotage" && this.latest?.sb
+          ? this.gm.depots
+              .map((p, k) => ({ p, k, st: this.latest!.sb![k * 2] ?? 0 }))
+              .filter(({ st }) => st !== 2)
+              .map(({ p, k, st }) => ({
                 x: p.x,
                 z: p.z,
-                letter: POINT_NAMES[k] ?? "?",
-                color: owner >= 0 ? TEAM_HEX[owner === 1 ? 1 : 0] : "rgba(240,236,220,.9)",
-              };
-            })
-          : [],
+                letter: DEPOT_NAMES[k] ?? "?",
+                color: st === 1 ? (Math.floor(nowMs / 300) % 2 ? "#ff5a3a" : "#ffb020") : TEAM_HEX[1],
+              }))
+          : v.mode === "conquete" && this.latest?.cq
+            ? this.gm.points.map((p, k) => {
+                const owner = this.latest!.cq![k * 2] ?? -1;
+                return {
+                  x: p.x,
+                  z: p.z,
+                  letter: POINT_NAMES[k] ?? "?",
+                  color: owner >= 0 ? TEAM_HEX[owner === 1 ? 1 : 0] : "rgba(240,236,220,.9)",
+                };
+              })
+            : [],
       );
     }
     if (this.compassCanvas) drawCompass(this.compassCanvas, this.yaw);
@@ -1252,6 +1307,20 @@ export class BattleRuntime {
       best = { yaw, pitch, off };
     }
     return best;
+  }
+
+  /** Sabotage : tout près d'un dépôt où l'on a quelque chose à faire, le conseil pour s'y mettre */
+  private sabHint(s: { x: number; y: number; z: number }, sb: readonly number[] | null): string | null {
+    if (!sb || this.me < 0) return null;
+    const defend = this.teamOf(this.me) === 1;
+    for (let k = 0; k < this.gm.depots.length; k++) {
+      const d = this.gm.depots[k]!;
+      if (sb[k * 2] !== (defend ? 1 : 0)) continue;
+      if (Math.hypot(d.x - s.x, d.z - s.z) > SABOTAGE.reach + 0.6 || Math.abs(d.y - s.y) > 1.2) continue;
+      const how = this.controls.scheme === "tactile" ? "Accroupis-toi" : "Accroupis-toi (C)";
+      return defend ? `${how} pour désamorcer la charge` : `${how} pour poser la charge`;
+    }
+    return null;
   }
 
   /** Ce soldat tire-t-il au silencieux (avec son arme principale) ? */
@@ -1407,6 +1476,22 @@ export class BattleRuntime {
       flags: flagsRaw ? [0, 1].map((k) => ({ at: flagsRaw[k * 5]!, carrier: flagsRaw[k * 5 + 1]! })) : null,
       carrying: myFighter?.carrying ?? -1,
       zone: v.mode === "zone" ? { owner: tick?.z?.[0] ?? -1, contested: tick?.z?.[1] === 1, inside: inZone } : null,
+      sab:
+        v.mode === "sabotage"
+          ? {
+              deps: this.gm.depots.map((_, k) => ({ state: tick?.sb?.[k * 2] ?? 0, left: (tick?.sb?.[k * 2 + 1] ?? 0) / 10 })),
+              act: this.sabNow
+                ? {
+                    k: this.sabNow[1],
+                    label:
+                      this.teamOf(this.me) === 1
+                        ? `Désamorçage du dépôt ${DEPOT_NAMES[this.sabNow[0]] ?? "?"}`
+                        : `Charge sur le dépôt ${DEPOT_NAMES[this.sabNow[0]] ?? "?"}`,
+                  }
+                : null,
+              hint: s?.alive && !this.sabNow ? this.sabHint(s, tick?.sb ?? null) : null,
+            }
+          : null,
       cq:
         v.mode === "conquete"
           ? {
