@@ -5,9 +5,9 @@
 // restent à part.
 
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
+import { fuse } from "./fuse.ts";
 import { camoTexture } from "./textures.ts";
 
 const std = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
@@ -158,37 +158,6 @@ function curvedMag(p: THREE.Object3D, mat: THREE.Material, w = 0.04, d = 0.072) 
   box(w, 0.1, d, mat, 0, -0.045, 0, p, 0.16);
   box(w, 0.08, d * 0.96, mat, 0, -0.125, -0.024, p, 0.42);
   box(w + 0.006, 0.012, d + 0.008, darkMetal, 0, -0.165, -0.044, p, 0.42);
-}
-
-/** Les pièces fixes, fondues par matière : bien moins d'appels de dessin */
-function fuse(parent: THREE.Object3D) {
-  const groups = new Map<THREE.Material, THREE.BufferGeometry[]>();
-  const meshes: THREE.Mesh[] = [];
-  for (const c of [...parent.children]) {
-    if (c instanceof THREE.Mesh && !(c.material as THREE.Material).transparent && c.material !== redDot) {
-      c.updateMatrix();
-      const geo = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
-      geo.applyMatrix4(c.matrix);
-      for (const name of Object.keys(geo.attributes))
-        if (name !== "position" && name !== "normal" && name !== "uv") geo.deleteAttribute(name);
-      const list = groups.get(c.material as THREE.Material) ?? [];
-      list.push(geo);
-      groups.set(c.material as THREE.Material, list);
-      meshes.push(c);
-    } else if (!(c instanceof THREE.Mesh) && c.children.length > 0) fuse(c);
-  }
-  for (const m of meshes) {
-    parent.remove(m);
-    m.geometry.dispose();
-  }
-  for (const [mat, list] of groups) {
-    const merged = mergeGeometries(list, false);
-    for (const g of list) g.dispose();
-    if (!merged) continue;
-    const mesh = new THREE.Mesh(merged, mat);
-    mesh.castShadow = true;
-    parent.add(mesh);
-  }
 }
 
 /** Une arme, dans son camouflage */

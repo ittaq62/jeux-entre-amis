@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
 import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
+import { isUniformId, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import { getMap, isMapId, type MapId } from "../../shared/games/escarmouche/maps.ts";
 import { WEAPON_IDS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import { useSession } from "../stores/session.ts";
@@ -51,6 +52,7 @@ export function DevEscarmouche() {
   const low = params.has("tel");
   const closeUp = params.has("soldat");
   const gallery = params.has("armes");
+  const tenue: UniformId = isUniformId(params.get("tenue")) ? (params.get("tenue") as UniformId) : "perso";
   const views = VIEWS[map];
 
   useEffect(() => {
@@ -68,18 +70,25 @@ export function DevEscarmouche() {
     const rz = -Math.sin(v.yaw);
     const avatars: AvatarConfig[] = [user?.avatar ?? seededAvatar("dev-1"), seededAvatar("dev-2"), seededAvatar("dev-3")];
     const spots = closeUp
-      ? [{ d: 2.6, s: 0, team: 0, yaw: v.yaw + Math.PI + 0.5 }]
+      ? [
+          { d: 2.9, s: -0.95, team: 0, yaw: v.yaw + Math.PI + 0.35 },
+          { d: 2.9, s: 0, team: 0, yaw: v.yaw + Math.PI },
+          { d: 2.9, s: 0.95, team: 1, yaw: v.yaw + Math.PI - 0.35 },
+        ]
       : [
           { d: 7, s: -2.5, team: 0, yaw: v.yaw + Math.PI * 0.8 },
           { d: 11, s: 2.2, team: 1, yaw: v.yaw + Math.PI + 0.3 },
           { d: 16, s: -0.5, team: 1, yaw: v.yaw - 0.4 },
         ];
+    const tenues: UniformId[] =
+      closeUp && params.get("tenues")
+        ? (params.get("tenues")!.split(",").filter(isUniformId) as UniformId[]).concat(["treillis", "nuit", "perso"])
+        : [tenue, "treillis", "nuit"];
+    scene.setLocalLook(avatars[0]!, tenue);
     spots.forEach((p, i) => {
       scene.ensureSoldier(
         i,
-        TEAM_KITS[p.team as 0 | 1],
-        avatars[i]!,
-        camo,
+        { avatar: avatars[i]!, tenue: tenues[i]!, band: TEAM_KITS[p.team as 0 | 1].band, camo },
         i === 0 ? (user?.pseudo ?? "Soldat") : `Bot ${i}`,
         p.team ? "#3f7fd8" : "#d4453c",
       );
@@ -116,14 +125,14 @@ export function DevEscarmouche() {
             z: w.z,
             yaw: p.yaw,
             pitch: 0,
-            speed: i === 1 ? 4.5 : 0,
-            crouch: i === 2,
+            speed: i === 1 && !closeUp ? 4.5 : 0,
+            crouch: i === 2 && !closeUp,
             ground: true,
             sprint: false,
             ads: i === 0,
             reload: false,
             alive: true,
-            weapon: i === 1 ? "pm" : weapon,
+            weapon: i === 1 ? "pm" : i === 2 && closeUp ? "pistolet" : weapon,
             carrying: -1,
             shield: false,
           },
@@ -132,8 +141,8 @@ export function DevEscarmouche() {
           null,
         );
       });
-      const cy = closeUp ? 1.35 : v.y;
-      scene.setView(v.x, cy, v.z, v.yaw, closeUp ? -0.1 : v.pitch, 78);
+      const cy = closeUp ? 1.2 : v.y;
+      scene.setView(v.x, cy, v.z, v.yaw, closeUp ? 0.0 : v.pitch, closeUp ? 50 : 78);
       scene.updateViewmodel({
         weapon,
         camo,
@@ -173,7 +182,7 @@ export function DevEscarmouche() {
       window.removeEventListener("resize", fit);
       scene.dispose();
     };
-  }, [map, view, weapon, camo, low, closeUp, gallery, user, views]);
+  }, [map, view, weapon, camo, low, closeUp, gallery, tenue, user, views]);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000" }}>

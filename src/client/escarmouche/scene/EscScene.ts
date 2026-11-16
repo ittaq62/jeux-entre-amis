@@ -3,13 +3,17 @@
 
 import * as THREE from "three";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
+import { seededAvatar } from "../../../shared/avatar.ts";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
+import { UNIFORM_BY_ID, type UniformId } from "../../../shared/games/escarmouche/uniforms.ts";
 import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { Effects } from "./effects.ts";
 import { buildGrenade, buildGun, buildKnife, type Gun } from "./guns.ts";
 import { buildMap, type MapMesh } from "./mapMesh.ts";
-import { nameSprite, SoldierModel, type Kit, type SoldierPose } from "./soldiers.ts";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { fuse } from "./fuse.ts";
+import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
 import { skyTexture } from "./textures.ts";
 
 export const TEAM_HEX = ["#d4453c", "#3f7fd8"] as const;
@@ -56,6 +60,9 @@ export class EscScene {
   private vmRoot = new THREE.Group();
   private vmGun: Gun | null = null;
   private vmKey = "";
+  private vmLook: { avatar: AvatarConfig; tenue: UniformId } = { avatar: seededAvatar("soldat"), tenue: "perso" };
+  private vmLookKey = "";
+  private vmTrash: { dispose: () => void }[] = [];
   private vmKnife: THREE.Group;
   private vmNade: THREE.Mesh;
   private grenades: THREE.Mesh[] = [];
@@ -244,14 +251,14 @@ export class EscScene {
   }
 
   /** Un soldat apparaît (ou change d'allure) */
-  ensureSoldier(i: number, kit: Kit, avatar: AvatarConfig, camo: CamoId, name: string, nameColor: string) {
+  ensureSoldier(i: number, look: SoldierLook, name: string, nameColor: string) {
     const known = this.soldiers.get(i);
-    if (known && known.model.kit.band === kit.band && known.model.kit.uniform === kit.uniform) {
-      known.model.setCamo(camo);
+    if (known && known.model.key === soldierKey(look)) {
+      known.model.setCamo(look.camo);
       return;
     }
     if (known) this.removeSoldier(i);
-    const model = new SoldierModel(kit, avatar, camo, this.low);
+    const model = new SoldierModel(look, this.low);
     const label = nameSprite(name, nameColor);
     this.scene.add(model.root);
     this.scene.add(label);
@@ -347,29 +354,82 @@ export class EscScene {
     (this.zone.wall.material as THREE.MeshBasicMaterial).color.set(color);
   }
 
+  /** Son personnage et sa tenue : les manches et les mains de son arme en main */
+  setLocalLook(avatar: AvatarConfig, tenue: UniformId) {
+    const key = `${tenue}|${JSON.stringify(avatar)}`;
+    if (key === this.vmLookKey) return;
+    this.vmLookKey = key;
+    this.vmLook = { avatar, tenue };
+  }
+
   private setViewGun(weapon: WeaponId, camo: CamoId) {
-    const key = `${weapon}:${camo}`;
+    const key = `${weapon}:${camo}:${this.vmLookKey}`;
     if (key === this.vmKey) return;
-    if (this.vmGun) this.vmRoot.remove(this.vmGun.group);
+    if (this.vmGun) {
+      this.vmRoot.remove(this.vmGun.group);
+      this.vmGun.group.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.geometry.dispose();
+      });
+    }
+    for (const d of this.vmTrash) d.dispose();
+    this.vmTrash = [];
+    const keep = <T extends { dispose: () => void }>(x: T) => {
+      this.vmTrash.push(x);
+      return x;
+    };
     this.vmGun = buildGun(weapon, camo, this.low);
     this.vmGun.group.scale.setScalar(0.62);
     this.vmRoot.add(this.vmGun.group);
-    // Les mains gantées, et un bout de manche
-    const glove = new THREE.MeshLambertMaterial({ color: "#2a2620" });
-    const sleeve = new THREE.MeshLambertMaterial({ color: "#5d5640" });
-    const hand = (x: number, y: number, z: number, rx: number) => {
-      const h = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.08, 0.11), glove);
-      h.position.set(x, y, z);
-      h.rotation.x = rx;
-      this.vmGun!.group.add(h);
-      const s = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.3), sleeve);
-      s.position.set(x + 0.02, y - 0.06, z + 0.2);
-      s.rotation.x = rx - 0.25;
-      this.vmGun!.group.add(s);
-    };
     const gun = this.vmGun;
-    hand(0.01, -0.02, 0.03, 0.3);
-    hand(-0.02, gun.pistol ? -0.01 : 0.0, gun.pistol ? -0.02 : gun.front, 0.15);
+    // Les bras dans la tenue choisie, et les mains : nues dans sa propre tenue, gantées sinon
+    const u = UNIFORM_BY_ID.get(this.vmLook.tenue) ?? UNIFORM_BY_ID.get("perso")!;
+    const m = uniformMats(u, this.vmLook.avatar, keep);
+    const arms = new THREE.Group();
+    const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    // La main droite tient la poignée ; la gauche, le garde-main (ou la poignée, pour une arme de poing)
+    const grip = V(0.012, -0.03, 0.03);
+    const support = gun.pistol ? V(-0.03, -0.045, 0.02) : V(0, 0.005, gun.front);
+    const rWrist = grip.clone().add(V(0.02, -0.04, 0.07));
+    const rElbow = V(0.15, -0.2, 0.32);
+    const lWrist = support.clone().add(gun.pistol ? V(-0.03, -0.04, 0.06) : V(-0.03, -0.035, 0.06));
+    const lElbow = gun.pistol ? V(-0.16, -0.22, 0.3) : V(-0.2, -0.17, support.z + 0.3);
+    segment(rElbow.clone().add(V(0.08, -0.12, 0.32)), rElbow, 0.062, m.coat, arms);
+    segment(rElbow, rWrist, 0.05, m.coat, arms);
+    segment(lElbow.clone().add(V(-0.08, -0.14, 0.32)), lElbow, 0.062, m.coat, arms);
+    segment(lElbow, lWrist, 0.05, m.coat, arms);
+    // Le poignet de la manche, un ton plus sombre
+    for (const [w, e] of [
+      [rWrist, rElbow],
+      [lWrist, lElbow],
+    ] as const) {
+      const cuffA = w.clone().lerp(e, 0.05);
+      const cuffB = w.clone().lerp(e, 0.16);
+      segment(cuffA, cuffB, 0.054, m.pouch, arms);
+    }
+    const piece = (w: number, h: number, d: number, at: THREE.Vector3, rx = 0, ry = 0, rz = 0) => {
+      const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.45), m.glove);
+      mesh.position.copy(at);
+      mesh.rotation.set(rx, ry, rz);
+      arms.add(mesh);
+    };
+    // La main droite : la paume sur le flanc droit de la poignée, les doigts qui l'entourent devant, le pouce dessus
+    piece(0.032, 0.085, 0.075, grip.clone().add(V(0.03, 0.0, 0.0)), -0.28);
+    piece(0.07, 0.07, 0.03, grip.clone().add(V(0.0, -0.005, -0.04)), -0.28);
+    segment(grip.clone().add(V(0.035, 0.035, 0.02)), grip.clone().add(V(-0.01, 0.045, -0.02)), 0.012, m.glove, arms);
+    // L'index, tendu le long du pontet
+    segment(grip.clone().add(V(0.025, 0.02, -0.03)), grip.clone().add(V(0.02, 0.02, -0.075)), 0.01, m.glove, arms);
+    if (gun.pistol) {
+      // Les deux mains sur la poignée : la gauche enveloppe la droite
+      piece(0.035, 0.08, 0.075, support.clone().add(V(-0.02, 0.0, 0.0)), -0.28);
+      piece(0.07, 0.06, 0.03, support.clone().add(V(0.01, 0.0, -0.045)), -0.28);
+    } else {
+      // La main gauche sous le garde-main : la paume dessous, les doigts qui remontent à gauche, le pouce à droite
+      piece(0.07, 0.03, 0.09, support.clone().add(V(0.0, -0.01, 0.0)));
+      piece(0.025, 0.06, 0.08, support.clone().add(V(-0.04, 0.025, 0.0)));
+      segment(support.clone().add(V(0.03, -0.005, 0.03)), support.clone().add(V(0.042, 0.035, -0.02)), 0.011, m.glove, arms);
+    }
+    fuse(arms, false);
+    gun.group.add(arms);
     this.vmKey = key;
   }
 

@@ -410,3 +410,60 @@ export function skyTexture(light: "soir" | "gris"): THREE.CanvasTexture {
   cache.set(key, t);
   return t;
 }
+
+/** Le tissu d'une tenue : sa couleur, son motif (taches, petits carrés, feuillage) et un grain de toile */
+export function clothTexture(base: string, spots: string[], pattern: "uni" | "taches" | "pixels" | "feuillu"): THREE.CanvasTexture {
+  const key = `cloth:${base}:${spots.join(",")}:${pattern}`;
+  const known = cache.get(key);
+  if (known) return known;
+  const size = 128;
+  const [c, g] = canvas(size);
+  const r = rng(base.charCodeAt(1) * 131 + base.charCodeAt(3) * 7 + pattern.length);
+  g.fillStyle = base;
+  g.fillRect(0, 0, size, size);
+  if (pattern === "taches" && spots.length > 0) {
+    for (let i = 0; i < 34; i++) {
+      g.fillStyle = spots[i % spots.length]!;
+      g.beginPath();
+      const x = r() * size;
+      const y = r() * size;
+      const rx = 6 + r() * 14;
+      const ry = 4 + r() * 8;
+      // Chaque tache se répète de l'autre côté du bord : le motif se raccorde
+      for (const [ox, oy] of [
+        [0, 0],
+        [size, 0],
+        [-size, 0],
+        [0, size],
+        [0, -size],
+      ] as const) {
+        g.ellipse(x + ox, y + oy, rx, ry, r() * 3, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+  } else if (pattern === "pixels" && spots.length > 0) {
+    for (let i = 0; i < 90; i++) {
+      g.fillStyle = spots[i % spots.length]!;
+      g.fillRect(Math.floor((r() * size) / 6) * 6, Math.floor((r() * size) / 6) * 6, 6 * (1 + Math.floor(r() * 3)), 6);
+    }
+  } else if (pattern === "feuillu" && spots.length > 0) {
+    for (let i = 0; i < 160; i++) {
+      g.fillStyle = spots[i % spots.length]!;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 2 + r() * 5, 1 + r() * 2.5, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  // La trame de la toile, et un peu d'usure
+  g.globalAlpha = 0.07;
+  g.fillStyle = "#000";
+  for (let y = 0; y < size; y += 2) g.fillRect(0, y, size, 1);
+  g.globalAlpha = 1;
+  grain(g, size, r, 900, 0.12);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  cache.set(key, t);
+  return t;
+}

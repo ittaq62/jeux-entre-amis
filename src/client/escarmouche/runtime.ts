@@ -262,13 +262,21 @@ export class BattleRuntime {
     v.fighters.forEach((f, i) => {
       if (i === this.me) {
         this.scene.removeSoldier(i);
+        const seat = room.seats.find((s) => s.id === f.id);
+        this.scene.setLocalLook(seat?.avatar ?? seededAvatar(f.id), room.arsenal[f.id]?.tenue ?? "perso");
         return;
       }
       const seat = room.seats.find((s) => s.id === f.id);
       const kit = teams ? TEAM_KITS[f.team === 1 ? 1 : 0] : ffaKit(i);
-      const camo = room.arsenal[f.id]?.camo ?? "usine";
+      const arsenal = room.arsenal[f.id];
+      const look = {
+        avatar: seat?.avatar ?? seededAvatar(f.id),
+        tenue: arsenal?.tenue ?? "perso",
+        band: kit.band,
+        camo: arsenal?.camo ?? "usine",
+      };
       const color = teams ? TEAM_HEX[f.team === 1 ? 1 : 0] : kit.band;
-      this.scene.ensureSoldier(i, kit, seat?.avatar ?? seededAvatar(f.id), camo, seat?.name ?? "Soldat", color);
+      this.scene.ensureSoldier(i, look, seat?.name ?? "Soldat", color);
     });
   }
 

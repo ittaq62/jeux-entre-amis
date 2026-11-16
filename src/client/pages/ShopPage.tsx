@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
@@ -30,6 +30,9 @@ import { BuyModal } from "../shop/BuyModal.tsx";
 import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
 import { useSession } from "../stores/session.ts";
 import { useMyItems } from "../stores/shop.ts";
+
+/** L'aperçu d'Escarmouche en trois dimensions, chargé seulement quand on ouvre un article */
+const EscPreview3D = lazy(() => import("../escarmouche/EscPreview3D.tsx"));
 
 const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] = [
   { kind: "uno", game: "uno", title: "UNO", note: "Le dos de tes cartes" },
@@ -82,7 +85,12 @@ export function ShopPage() {
     if (item.kind === "bombe") return <BombArt id={item.ref as BombId} className="bomb-thumb" />;
     if (item.kind === "tenue") return <TenueLook item={item} />;
     if (item.kind === "camo") return <CamoSwatch camo={item.ref as CamoId} size={52} />;
-    if (item.kind === "arme") return <WeaponIcon weapon={item.ref as WeaponId} size={96} />;
+    if (item.kind === "arme")
+      return (
+        <span style={{ display: "inline-flex", padding: "4px 8px", borderRadius: 8, background: "rgba(236, 231, 219, 0.92)" }}>
+          <WeaponIcon weapon={item.ref as WeaponId} size={96} />
+        </span>
+      );
     if (item.kind === "uniforme") return <TenueSwatch tenue={item.ref as UniformId} size={56} />;
     return null;
   };
@@ -120,18 +128,29 @@ export function ShopPage() {
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)
     if (item.kind === "bombe") return <BombShow bomb={item.ref as BombId} loud avatar={user?.avatar} />;
-    if (item.kind === "camo") return <WeaponIcon weapon="fa" camo={item.ref as CamoId} size={260} />;
+    if (item.kind === "camo")
+      return (
+        <Suspense fallback={<WeaponIcon weapon="fa" camo={item.ref as CamoId} size={260} />}>
+          <EscPreview3D weapon="fa" camo={item.ref as CamoId} width={300} height={170} />
+        </Suspense>
+      );
     if (item.kind === "arme") {
       const id = item.ref as WeaponId;
       return (
         <span style={{ display: "grid", justifyItems: "center", gap: 8 }}>
-          <WeaponIcon weapon={id} size={260} />
+          <Suspense fallback={<WeaponIcon weapon={id} size={260} />}>
+            <EscPreview3D weapon={id} camo="usine" width={300} height={170} />
+          </Suspense>
           <WeaponBars weapon={id} />
-          <small className="hint">{WEAPONS[id].blurb}</small>
         </span>
       );
     }
-    if (item.kind === "uniforme") return <TenueSwatch tenue={item.ref as UniformId} size={180} />;
+    if (item.kind === "uniforme")
+      return (
+        <Suspense fallback={<TenueSwatch tenue={item.ref as UniformId} size={180} />}>
+          <EscPreview3D tenue={item.ref as UniformId} weapon="fa" camo="usine" width={240} height={300} />
+        </Suspense>
+      );
     return look(item);
   };
 

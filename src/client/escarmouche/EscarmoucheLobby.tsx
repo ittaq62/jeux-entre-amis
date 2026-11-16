@@ -31,7 +31,10 @@ import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
+import { lazy, Suspense } from "react";
 import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "./WeaponIcon.tsx";
+
+const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Ils mettent du temps à réagir et visent large : idéal pour découvrir.",
@@ -127,6 +130,11 @@ export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: 
       {forced && (
         <p className="hint">Pour cette partie, tout le monde a la même arme : {ARSENAL_NAMES[forced as Arsenal].toLowerCase()}.</p>
       )}
+      <div className="esc-soldier-preview">
+        <Suspense fallback={<TenueSwatch tenue={mine.tenue} size={120} />}>
+          <EscPreview3D tenue={mine.tenue} weapon={mine.primary} camo={mine.camo} width={200} height={250} />
+        </Suspense>
+      </div>
       <h3 className="esc-camo-title">Arme principale</h3>
       <div className="esc-weapons">
         {PRIMARY_IDS.map((id) => (

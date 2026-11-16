@@ -935,3 +935,11 @@ html:has(.esc-root) body {
 .esc-howto p {
   margin: 0 0 8px;
 }
+
+.esc-soldier-preview {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 6px;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 85%, rgba(181, 121, 58, 0.22), transparent 70%);
+}
