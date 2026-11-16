@@ -669,6 +669,11 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                   {h.killer.head ? ", d'une balle à la tête" : ""}
                 </p>
               )}
+              {h.killer?.hp != null && h.killer.hp > 0 && (
+                <p className="hint">
+                  Il lui restait {h.killer.hp} de vie{h.killer.hp < 30 ? " : il s'en est fallu de peu." : "."}
+                </p>
+              )}
               <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
               {!forced && (
                 <div className="esc-next">

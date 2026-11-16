@@ -89,6 +89,8 @@ export class EscScene {
   private rain: Rain | null = null;
   private sunDir: THREE.Vector3;
   private shadowSpan = 30;
+  /** La force des rayons du soleil : franche au couchant et à l'aube, nulle sous un ciel couvert */
+  private rayPower = 0;
   private size: [number, number] = [1, 1];
   readonly quality: Quality;
   private resolution = 1;
@@ -124,6 +126,7 @@ export class EscScene {
     hemi.color.lerp(new THREE.Color(look.horizon), 0.5);
     this.scene.add(hemi);
     this.sunDir = sunDirection(light);
+    this.rayPower = light === "gris" ? 0 : light === "aube" ? 0.9 : 1;
     this.sun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7);
     this.sun.position.copy(this.sunDir).multiplyScalar(90);
     if (q !== "bas") {
@@ -649,6 +652,11 @@ export class EscScene {
     this.skyMat.uniforms.time!.value = this.t;
     this.map.update(this.t);
     if (this.post) {
+      // Le soleil à l'écran : ses rayons ne valent que s'il est devant soi, et faiblissent vers les bords
+      const p = this.tmp.copy(this.sunDir).multiplyScalar(300).add(this.camera.position).project(this.camera);
+      const facing = this.tmp.set(0, 0, -1).applyQuaternion(this.camera.quaternion).dot(this.sunDir);
+      const onScreen = Math.max(0, 1 - Math.max(Math.abs(p.x), Math.abs(p.y)) / 1.6);
+      this.post.setSun(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5, facing > 0 ? onScreen * Math.min(1, facing * 2) * this.rayPower : 0);
       this.post.render(dt);
       return;
     }

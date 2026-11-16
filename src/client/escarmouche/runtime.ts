@@ -82,7 +82,7 @@ export interface HudState {
   back: number;
   next: PrimaryId;
   nextSecondary: SecondaryId;
-  killer: { name: string; weapon: KillWeapon; head: boolean } | null;
+  killer: { name: string; weapon: KillWeapon; head: boolean; hp: number | null } | null;
   teamScores: [number, number];
   myTeam: number;
   mine: { kills: number; deaths: number; points: number };
@@ -554,7 +554,8 @@ export class BattleRuntime {
         } else if (e.as === this.me && e.v !== this.me) this.award(`Aide contre ${this.nameOf(e.v)}`, POINTS.assist);
         if (e.a === this.me && e.v !== this.me) this.streak++;
         if (e.v === this.me) {
-          this.killer = e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h } : null;
+          this.killer =
+            e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h, hp: this.fighterAt(e.a)?.hp ?? null } : null;
           this.nemesis = e.a >= 0 && e.a !== e.v ? e.a : -1;
           this.multi = 0;
           this.streak = 0;

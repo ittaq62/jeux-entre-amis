@@ -77,11 +77,59 @@ const GRADE = {
   `,
 };
 
+/**
+ * Les rayons du soleil : ce qui brille autour du soleil (le ciel entre les toits, entre les feuilles) s'étire vers
+ * nous en rayons ; les murs et les arbres, sombres, les coupent d'eux-mêmes
+ */
+const RAYS = {
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+    sun: { value: new THREE.Vector2(0.5, 0.5) },
+    strength: { value: 0 },
+    tint: { value: new THREE.Color(1, 0.85, 0.65) },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 sun;
+    uniform float strength;
+    uniform vec3 tint;
+    varying vec2 vUv;
+    void main() {
+      vec4 base = texture2D(tDiffuse, vUv);
+      if (strength <= 0.001) {
+        gl_FragColor = base;
+        return;
+      }
+      vec2 step = (vUv - sun) / 36.0;
+      vec2 uv = vUv;
+      float decay = 1.0;
+      vec3 acc = vec3(0.0);
+      for (int i = 0; i < 36; i++) {
+        uv -= step;
+        vec3 c = texture2D(tDiffuse, uv).rgb;
+        float l = max(0.0, dot(c, vec3(0.3, 0.55, 0.15)) - 1.35);
+        acc += c * l * decay;
+        decay *= 0.955;
+      }
+      float fall = 1.0 - smoothstep(0.0, 0.85, length(vUv - sun));
+      gl_FragColor = vec4(base.rgb + acc * tint * strength * fall * 0.028, base.a);
+    }
+  `,
+};
+
 export class Post {
   readonly composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
   private ao: GTAOPass;
+  private rays: ShaderPass;
   private t = 0;
 
   constructor(
@@ -105,6 +153,8 @@ export class Post {
     this.composer.addPass(new ViewmodelPass(vmScene, vmCam));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), look.bloom, 0.55, 0.92);
     this.composer.addPass(this.bloom);
+    this.rays = new ShaderPass(RAYS);
+    this.composer.addPass(this.rays);
     this.grade = new ShaderPass(GRADE);
     (this.grade.uniforms.tint!.value as THREE.Color).set(look.tint);
     this.grade.uniforms.saturation!.value = look.saturation;
@@ -124,6 +174,12 @@ export class Post {
     this.grade.uniforms.hurt!.value = k;
   }
 
+  /** Où est le soleil à l'écran (0 à 1), et la force de ses rayons (0 : hors du champ ou derrière soi) */
+  setSun(x: number, y: number, strength: number) {
+    (this.rays.uniforms.sun!.value as THREE.Vector2).set(x, y);
+    this.rays.uniforms.strength!.value = strength;
+  }
+
   render(dt: number) {
     this.t += dt;
     this.grade.uniforms.time!.value = this.t % 100;
@@ -135,6 +191,7 @@ export class Post {
     this.composer.renderTarget2.dispose();
     this.bloom.dispose();
     this.ao.dispose();
+    this.rays.material.dispose();
     this.grade.material.dispose();
   }
 }
