@@ -1219,7 +1219,7 @@ function pummel(f: Fight, a: Fighter) {
   pending.push({ k: "hit", a: a.slot, v: v.slot, dmg, x: v.x, y: v.y + 0.9, power: 0.12, kind: "hit" });
 }
 
-/** La projection part : celui qu'on tenait est éjecté (sans influence possible) */
+/** La projection part : celui qu'on tenait est éjecté (il peut infléchir sa trajectoire, comme sous un coup) */
 function throwHeld(f: Fight, a: Fighter, thr: (typeof THROWS)[string]) {
   const v = f.fighters[a.holding];
   a.holding = -1;
@@ -1244,7 +1244,6 @@ function throwHeld(f: Fight, a: Fighter, thr: (typeof THROWS)[string]) {
       projectile: false,
     },
     v,
-    [],
   );
 }
 
@@ -1560,7 +1559,7 @@ function hitboxActive(ft: Fighter, def: MoveDef): HitDef[] {
 
 const STOMP_AIR: HitDef = { from: 6, to: 8, x: 0, y: -0.05, r: 0.65, dmg: 12, ang: -80, kb: 8, kbg: 12 };
 
-function applyHit(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
+function applyHit(f: Fight, src: HitSource, v: Fighter) {
   const a = src.attacker >= 0 ? f.fighters[src.attacker] : undefined;
   const vdef = v.state === "move" ? moveDef(v.style, v.move) : null;
   // Simone pare et rend le coup
@@ -1583,7 +1582,7 @@ function applyHit(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
         charge: 0,
         projectile: false,
       };
-      if (vulnerable(f, a)) launch(f, back, a, inputs);
+      if (vulnerable(f, a)) launch(f, back, a);
     }
     return;
   }
@@ -1617,11 +1616,11 @@ function applyHit(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
     if (v.shield <= 0) breakShield(v);
     return;
   }
-  launch(f, src, v, inputs);
+  launch(f, src, v);
 }
 
 /** Les pourcents, puis l'éjection d'autant plus forte qu'ils sont hauts */
-function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
+function launch(f: Fight, src: HitSource, v: Fighter) {
   const a = src.attacker >= 0 ? f.fighters[src.attacker] : undefined;
   if (v.holding >= 0) {
     const w = f.fighters[v.holding];
@@ -1678,15 +1677,7 @@ function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
     ang = 40;
     speed *= 0.8;
   }
-  let rad = ang * deg;
-  // L'influence : le stick tenu au moment du coup infléchit un peu la trajectoire
-  const inp = inputs[v.slot];
-  if (inp && speed > 15) {
-    const lx = Math.cos(rad) * src.dirX;
-    const ly = Math.sin(rad);
-    const perp = inp.x * -ly + inp.y * lx;
-    rad += clamp(perp, -1, 1) * 10 * deg * (src.dirX < 0 ? -1 : 1);
-  }
+  const rad = ang * deg;
   v.kx = Math.cos(rad) * speed * src.dirX;
   v.ky = Math.sin(rad) * speed;
   v.vx = 0;
@@ -1725,6 +1716,26 @@ function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
   });
 }
 
+/** L'influence : jusqu'à tant de degrés de plus ou de moins, selon le stick tenu en travers de la trajectoire */
+export const DI_MAX = 14;
+
+/** Éjecté : on tourne un peu son élan vers le côté où l'on tient le stick (seulement pour un vrai coup) */
+function influence(v: Fighter, inp: Input) {
+  const speed = Math.hypot(v.kx, v.ky);
+  if (speed <= 15) return;
+  const lx = v.kx / speed;
+  const ly = v.ky / speed;
+  // La part du stick perpendiculaire à l'élan : positive, elle le tourne dans le sens inverse des aiguilles d'une montre
+  const perp = clamp(inp.x * -ly + inp.y * lx, -1, 1);
+  if (perp === 0) return;
+  const a = perp * DI_MAX * deg;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  v.kx = speed * (lx * c - ly * s);
+  v.ky = speed * (lx * s + ly * c);
+  if (v.ky > 1) v.ground = -1;
+}
+
 /** Lancé ainsi, sortira-t-il de l'arène (par un côté ou par le haut) ? On suit sa course sans qu'il ne fasse rien */
 function willLeave(f: Fight, v: Fighter): boolean {
   const b = blastOf(f.arena as ArenaId, f.scale);
@@ -1752,7 +1763,7 @@ function willLeave(f: Fight, v: Fighter): boolean {
   return false;
 }
 
-function detectHits(f: Fight, inputs: Input[]) {
+function detectHits(f: Fight) {
   const found: { src: HitSource; v: Fighter }[] = [];
   const taken = new Set<string>();
   for (const a of f.fighters) {
@@ -1815,10 +1826,10 @@ function detectHits(f: Fight, inputs: Input[]) {
       });
     }
   }
-  for (const { src, v } of found) applyHit(f, src, v, inputs);
+  for (const { src, v } of found) applyHit(f, src, v);
 }
 
-function explode(f: Fight, p: Projectile, inputs: Input[]) {
+function explode(f: Fight, p: Projectile) {
   const r = 1.7;
   pending.push({ k: "boom", x: p.x, y: p.y, r });
   for (const v of f.fighters) {
@@ -1841,12 +1852,11 @@ function explode(f: Fight, p: Projectile, inputs: Input[]) {
         projectile: true,
       },
       v,
-      inputs,
     );
   }
 }
 
-function updateProjectiles(f: Fight, plats: PlatformNow[], inputs: Input[]) {
+function updateProjectiles(f: Fight, plats: PlatformNow[]) {
   const b = blastOf(f.arena as ArenaId, f.scale);
   const keep: Projectile[] = [];
   for (const p of f.projectiles) {
@@ -1886,7 +1896,7 @@ function updateProjectiles(f: Fight, plats: PlatformNow[], inputs: Input[]) {
             p.vx *= 0.995;
             p.x += q.dx;
           } else if (p.boom) {
-            explode(f, p, inputs);
+            explode(f, p);
             gone = true;
           } else gone = true;
           break;
@@ -1897,13 +1907,13 @@ function updateProjectiles(f: Fight, plats: PlatformNow[], inputs: Input[]) {
     for (const q of plats) {
       if (q.kind !== "solid") continue;
       if (p.x > q.x0 && p.x < q.x1 && p.y < q.y - 0.1 && p.y > q.bottom) {
-        if (p.boom) explode(f, p, inputs);
+        if (p.boom) explode(f, p);
         gone = true;
       }
     }
     if (gone) continue;
     if (p.life <= 0) {
-      if (p.boom) explode(f, p, inputs);
+      if (p.boom) explode(f, p);
       continue;
     }
     if (p.x < b.left || p.x > b.right || p.y < b.bottom || p.y > b.top + 4) continue;
@@ -1919,7 +1929,7 @@ function updateProjectiles(f: Fight, plats: PlatformNow[], inputs: Input[]) {
       if (!circleHitsBox(p.x, p.y, p.r, ...hurtbox(v))) continue;
       p.hits.push(v.slot);
       if (p.boom) {
-        explode(f, p, inputs);
+        explode(f, p);
         used = true;
         break;
       }
@@ -1948,7 +1958,6 @@ function updateProjectiles(f: Fight, plats: PlatformNow[], inputs: Input[]) {
           projectile: true,
         },
         v,
-        inputs,
       );
       if (p.kind === "tarte" && !countered && v.state === "hurt") v.creamUntil = f.frame + 180;
       if (!p.pierce || countered) {
@@ -2097,6 +2106,8 @@ export function updateFighter(f: Fight, ft: Fighter, inp: Input, plats: Platform
   if (ft.state === "out") return;
   if (ft.hitstop > 0) {
     ft.hitstop--;
+    // Le coup encaissé, à la fin de l'arrêt sur image : le stick tenu infléchit la trajectoire (on a le temps de réagir)
+    if (ft.hitstop === 0 && ft.state === "hurt") influence(ft, inp);
     if (inp.pressed) {
       ft.buf |= inp.pressed;
       ft.bufT = BUFFER_FRAMES + ft.hitstop;
@@ -2154,8 +2165,8 @@ export function stepFight(f: Fight, inputs: Input[]): FightEvent[] {
   const plats = platformsNow(f);
   for (const ft of f.fighters) updateFighter(f, ft, inputs[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }, plats, false);
   holdInPlace(f);
-  updateProjectiles(f, plats, inputs);
-  detectHits(f, inputs);
+  updateProjectiles(f, plats);
+  detectHits(f);
   updateTraps(f);
   if (f.settings.items !== "aucun" && f.frame >= f.itemAt) {
     spawnItem(f, plats);

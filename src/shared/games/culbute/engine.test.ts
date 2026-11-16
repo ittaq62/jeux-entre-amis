@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ARENA_IDS, ARENAS, blastOf, ledgesOf } from "./arenas.ts";
-import { createFight, DEFAULT_FIGHT_SETTINGS, INTRO_FRAMES, moveDef, predictHits, stepFight, stepSolo, type Entrant } from "./engine.ts";
+import {
+  createFight,
+  DEFAULT_FIGHT_SETTINGS,
+  DI_MAX,
+  INTRO_FRAMES,
+  moveDef,
+  predictHits,
+  stepFight,
+  stepSolo,
+  type Entrant,
+} from "./engine.ts";
 import {
   ATK,
   GRB,
@@ -115,6 +125,32 @@ describe("Culbute : le combat", () => {
     }
     expect(launches[1]).toBeGreaterThan(launches[0]!);
     expect(launches[2]).toBeGreaterThan(launches[1]!);
+  });
+
+  it("l'influence : le stick tenu en travers à la fin de l'arrêt sur image infléchit la trajectoire (pas celui d'avant)", () => {
+    /** Le même coup à 120 % ; le stick à l'opposé jusqu'à la dernière image de l'arrêt, puis (x, y) ; l'angle de l'élan */
+    const launchAngle = (x: number, y: number) => {
+      const f = duel();
+      skipIntro(f);
+      faceToFace(f, 1.6);
+      const v = f.fighters[1]!;
+      v.dmg = 120;
+      const before = { x: -x, y: -y, held: 0, pressed: 0 };
+      for (let k = 0; k < 40 && v.state !== "hurt"; k++) stepFight(f, [hold(ATK, 4, 1, 0)(k), before]);
+      expect(v.hitstop).toBeGreaterThan(1);
+      while (v.hitstop > 1) stepFight(f, [NO_INPUT, before]);
+      stepFight(f, [NO_INPUT, { x, y, held: 0, pressed: 0 }]);
+      expect(v.hitstop).toBe(0);
+      return Math.atan2(v.ky, v.kx);
+    };
+    const base = launchAngle(0, 0);
+    // Tout à fait en travers de l'élan : l'inflexion entière, d'un côté ou de l'autre
+    const up = launchAngle(-Math.sin(base), Math.cos(base));
+    const down = launchAngle(Math.sin(base), -Math.cos(base));
+    expect(((up - base) * 180) / Math.PI).toBeCloseTo(DI_MAX, 3);
+    expect(((base - down) * 180) / Math.PI).toBeCloseTo(DI_MAX, 3);
+    // Dans le sens de l'élan : rien ne change
+    expect(launchAngle(Math.cos(base), Math.sin(base))).toBeCloseTo(base, 6);
   });
 
   it("un appui bref reste une attaque normale (elle part dès qu'on relâche), un appui tenu devient l'attaque chargée", () => {
