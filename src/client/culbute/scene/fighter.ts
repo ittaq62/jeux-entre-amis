@@ -25,6 +25,8 @@ export interface FighterLook {
   /** La couleur du joueur (son repère, sa garde) */
   color: string;
   me: boolean;
+  /** Un bot : au-dessus de sa tête, seulement un repère à sa couleur (son nom est en bas de l'écran) */
+  bot?: boolean;
   /** Ses habits : ceux d'un Habitué, ou un haut et un pantalon pour son propre personnage */
   outfit: HabitueId | "moi";
   /** La peau de sa tête, avec les traits de l'avatar (dessinée à part, elle arrive un peu après) */
@@ -720,7 +722,7 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     this.trailColor.set(look.color).lerp(new THREE.Color(0xffffff), 0.55);
 
     // Son nom au-dessus de la tête, et un petit repère à sa couleur
-    this.marker = nameTag(look.me ? "Toi" : look.name, look.color, keep);
+    this.marker = nameTag(look.me ? "Toi" : look.bot ? "" : look.name, look.color, keep);
     this.marker.position.y = HEIGHT + 0.5;
     this.group.add(this.marker);
 
@@ -1171,37 +1173,44 @@ function starShape(r: number): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(s);
 }
 
-/** Le nom du combattant, sur une petite étiquette à sa couleur, toujours tournée vers nous */
+/** Le nom du combattant sur une petite étiquette à sa couleur, ou rien qu'un repère (un bot), toujours tournés vers nous */
 function nameTag(text: string, color: string, keep: Keep): THREE.Group {
   const g = new THREE.Group();
   const c = document.createElement("canvas");
   c.width = 256;
   c.height = 72;
   const ctx = c.getContext("2d")!;
-  ctx.font = "700 40px 'Libre Franklin Variable', system-ui, sans-serif";
-  const w = Math.min(240, ctx.measureText(text).width + 36);
-  ctx.fillStyle = "rgba(20, 18, 24, 0.72)";
-  roundRect(ctx, (256 - w) / 2, 6, w, 48, 24);
-  ctx.fill();
+  // Le repère : une petite flèche à la couleur du joueur, cerclée de blanc
   ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(116, 54);
-  ctx.lineTo(140, 54);
-  ctx.lineTo(128, 70);
+  ctx.moveTo(114, 50);
+  ctx.lineTo(142, 50);
+  ctx.lineTo(128, 68);
   ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text.length > 12 ? `${text.slice(0, 11)}…` : text, 128, 31);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 5;
-  roundRect(ctx, (256 - w) / 2, 6, w, 48, 24);
   ctx.stroke();
+  ctx.fill();
+  if (text) {
+    ctx.font = "800 34px 'Libre Franklin Variable', system-ui, sans-serif";
+    const label = text.length > 12 ? `${text.slice(0, 11)}…` : text;
+    const w = Math.min(240, ctx.measureText(label).width + 30);
+    ctx.fillStyle = "rgba(18, 16, 22, 0.78)";
+    roundRect(ctx, (256 - w) / 2, 6, w, 40, 20);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    roundRect(ctx, (256 - w) / 2, 6, w, 40, 20);
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 128, 27);
+  }
   const tex = keep(new THREE.CanvasTexture(c));
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })));
-  sprite.scale.set(1.3, 0.366, 1);
+  sprite.scale.set(1.05, 0.295, 1);
   sprite.renderOrder = 10;
   g.add(sprite);
   return g;

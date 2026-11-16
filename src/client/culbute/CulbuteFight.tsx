@@ -71,6 +71,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
       palette: PALETTES[who][(pick.who !== "moi" && pick.tenue) || "dimanche"],
       color,
       me: seat?.id === room.you.seatId,
+      bot: seat?.kind === "bot",
       outfit: who,
     };
   });

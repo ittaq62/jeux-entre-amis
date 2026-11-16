@@ -398,10 +398,10 @@ export class CulbuteScene {
       maxY = 3;
     }
     // Le plateau reste un peu dans le cadre, même quand on se bat tout au bord
-    minX = Math.min(minX - 2.8, -3 * this.scale);
-    maxX = Math.max(maxX + 2.8, 3 * this.scale);
-    minY = Math.min(minY - 1.6, -1.2);
-    maxY = Math.max(maxY + 1.4, 3.5);
+    minX = Math.min(minX - 2.4, -3 * this.scale);
+    maxX = Math.max(maxX + 2.4, 3 * this.scale);
+    minY = Math.min(minY - 1.4, -1.0);
+    maxY = Math.max(maxY + 1.2, 3.2);
     const b = blastOf(this.arenaId, this.scale);
     minX = Math.max(minX, b.left + 2);
     maxX = Math.min(maxX, b.right - 2);
@@ -410,9 +410,9 @@ export class CulbuteScene {
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const tan = Math.tan((this.camera.fov * Math.PI) / 360);
-    const halfW = Math.max(6.5, (maxX - minX) / 2);
-    const halfH = Math.max(3.8, (maxY - minY) / 2);
-    const dist = Math.min(52, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)) * 1.05);
+    const halfW = Math.max(5.8, (maxX - minX) / 2);
+    const halfH = Math.max(3.4, (maxY - minY) / 2);
+    const dist = Math.min(52, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)));
     const want = new THREE.Vector3(cx, cy + dist * 0.09, dist);
     const k = Math.min(1, dt * 3.2);
     this.camPos.lerp(want, k);

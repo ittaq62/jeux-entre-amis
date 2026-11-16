@@ -199,18 +199,20 @@ function awningPlatform(keep: Keep, w: number, a: string, b: string): THREE.Grou
   });
   stripe.repeat.set(w / 2.4, 1);
   const canvas = keep(new THREE.MeshStandardMaterial({ map: stripe, roughness: 0.9, side: THREE.DoubleSide }));
-  const top = new THREE.Mesh(keep(new THREE.CylinderGeometry(1, 1, w, 20, 1, true, -Math.PI / 2 - 0.55, 1.1)), canvas);
+  // Une toile bombée : le dessus à la hauteur de la plateforme, qui retombe devant et derrière
+  const top = new THREE.Mesh(keep(new THREE.CylinderGeometry(1, 1, w, 24, 1, true, Math.PI / 2 - 0.8, 1.6)), canvas);
   top.rotation.z = Math.PI / 2;
   top.scale.set(0.35, 1, 1.2);
-  top.position.set(0, -0.32, -0.3);
+  top.position.set(0, -0.35, -0.2);
   top.castShadow = true;
+  top.receiveShadow = true;
   g.add(top);
   const frill = keep(new THREE.MeshStandardMaterial({ color: a, roughness: 0.9 }));
-  const n = Math.floor(w / 0.32);
+  const n = Math.floor(w / 0.3);
   for (let i = 0; i < n; i++) {
-    const c = new THREE.Mesh(keep(new THREE.ConeGeometry(0.15, 0.24, 3)), frill);
+    const c = new THREE.Mesh(keep(new THREE.ConeGeometry(0.14, 0.22, 3)), frill);
     c.rotation.x = Math.PI;
-    c.position.set(-w / 2 + 0.16 + (i * (w - 0.32)) / (n - 1), -0.42, 0.62);
+    c.position.set(-w / 2 + 0.15 + (i * (w - 0.3)) / (n - 1), -0.2, 0.64);
     g.add(c);
   }
   const pole = mat(keep, 0x5d4037, 0.8);
@@ -323,6 +325,38 @@ function belfryPlatform(keep: Keep, w: number, stone: THREE.Material, slate: THR
   return g;
 }
 
+/** Le sol du village, derrière l'arène : une grande île à lui, pavée ou herbue, qui part loin dans la brume */
+function townGround(
+  keep: Keep,
+  top: THREE.Material,
+  earth: number,
+  rock: number,
+  grass: number | undefined,
+  y: number,
+  seed: number,
+  haze: THREE.Color,
+): THREE.Group {
+  const g = new THREE.Group();
+  const ground = new THREE.Mesh(keep(new THREE.PlaneGeometry(170, 60)), top);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, y, -39);
+  ground.receiveShadow = true;
+  g.add(ground);
+  // La falaise du village est loin : ses couleurs se perdent un peu dans l'air
+  const far = (c: number) => new THREE.Color(c).lerp(haze, 0.45).getHex();
+  const cliff = island(
+    keep,
+    -85,
+    85,
+    y,
+    { top, rim: top, earth: far(earth), rock: far(rock), grass: grass === undefined ? undefined : far(grass), depth: 9 },
+    seed,
+  );
+  cliff.position.z = -9.6;
+  g.add(cliff);
+  return g;
+}
+
 export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
   const def = ARENAS[id];
   const group = new THREE.Group();
@@ -356,7 +390,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       const sun = new THREE.Vector3(0.45, 0.5, -0.75);
       dome = skyDome(keep, { top: 0x2f7fd6, horizon: 0xd8eef9, bottom: 0xc4dceb, sun, glow: 0xfff1c8, glowSize: 0.6 });
       fog = new THREE.Color(0xcfe6f3);
-      light = { sun: 2.3, sunColor: 0xfff0d6, sky: 0xdcecff, ground: 0x8a7a5a, ambient: 0.6, dir: new THREE.Vector3(5, 12, 9), env: 0.45 };
+      light = { sun: 2.4, sunColor: 0xfff0d6, sky: 0xdcecff, ground: 0x8a7a5a, ambient: 0.55, dir: new THREE.Vector3(5, 12, 9), env: 0.25 };
       const stage = island(
         keep,
         x0,
@@ -386,7 +420,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       group.add(kiosque);
       // La place : les maisons, l'église, les platanes, les réverbères, des fanions, des nuages
       scenery.add(
-        street(keep, cache, -34, 34, -10, -0.6, 3, {
+        street(keep, cache, -34, 34, -12.6, -0.6, 3, {
           walls: ["#efe0c4", "#e8c99c", "#f3e8d4", "#d9b48e", "#e9d2a8", "#f0d9c0"],
           roofs: ["#b5523b", "#a8483a", "#c0653a"],
           shutters: ["#3f7fd8", "#5f8a5a", "#7a9cc4", "#c0653a"],
@@ -394,33 +428,36 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
           floors: [2, 3],
         }),
       );
-      const back = street(keep, cache, -40, 40, -19, 0.4, 9, {
+      const back = street(keep, cache, -40, 40, -21, 0.4, 9, {
         walls: ["#e6d6bc", "#dcc29e", "#ece2d0"],
         roofs: ["#b5523b", "#a8483a"],
         shutters: ["#6f8faf", "#7a8a6a"],
         floors: [2, 4],
       });
       scenery.add(back);
+      scenery.add(
+        townGround(keep, mat(keep, 0xffffff, 0.95, 0, cobbleTex(keep, "#a39a88", [60, 24])), 0x8a6440, 0x6e6a66, 0x6aa84f, -0.62, 51, fog),
+      );
       const ch = church(keep, cache);
-      ch.position.set(4, 0.2, -16);
+      ch.position.set(4, 0.2, -18.5);
       scenery.add(ch);
       // Les platanes, entre la place et les maisons, sur les côtés (le kiosque reste dégagé)
       for (const tx of [-21, -15, -9.5, 9.5, 15, 21]) {
         const t = tree(keep, 3.8 + rnd() * 1.2, 0x5f9a46, 40 + Math.round(tx), cache);
-        t.position.set(tx * scale + (rnd() - 0.5), -0.4, -7.4 - rnd() * 0.6);
+        t.position.set(tx * scale + (rnd() - 0.5), -0.62, -10.4 - rnd() * 0.6);
         scenery.add(t);
       }
       const glowMat = keep(new THREE.MeshStandardMaterial({ color: 0xfff2c4, emissive: 0xffe6a0, emissiveIntensity: 0.6 }));
       for (const lx of [-12, 12]) {
         const l = lamp(keep, iron, glowMat);
-        l.position.set(lx * scale, -0.4, -4);
+        l.position.set(lx * scale, -0.62, -9.4);
         scenery.add(l);
       }
       scenery.add(
-        bunting(keep, new THREE.Vector3(-16, 7.2, -8.8), new THREE.Vector3(0, 7.6, -8.8), 1.2, [0xe2483d, 0xf4efe2, 0x3f7fd8, 0xf2c94c]),
+        bunting(keep, new THREE.Vector3(-16, 7.4, -11.2), new THREE.Vector3(0, 7.8, -11.2), 1.2, [0xe2483d, 0xf4efe2, 0x3f7fd8, 0xf2c94c]),
       );
       scenery.add(
-        bunting(keep, new THREE.Vector3(0, 7.6, -8.8), new THREE.Vector3(16, 7.2, -8.8), 1.2, [0x2f9e6a, 0xf2c94c, 0xe86aa6, 0xf4efe2]),
+        bunting(keep, new THREE.Vector3(0, 7.8, -11.2), new THREE.Vector3(16, 7.4, -11.2), 1.2, [0x2f9e6a, 0xf2c94c, 0xe86aa6, 0xf4efe2]),
       );
       const cm = cloudMat(0xffffff);
       group.add(
@@ -498,7 +535,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
           12,
         ),
       );
-      const night = street(keep, cache, -40, 40, -14, -1.5, 17, {
+      const night = street(keep, cache, -40, 40, -14.5, -1.5, 17, {
         walls: ["#5a5a7a", "#4f5170", "#615f7c"],
         roofs: ["#3a2f45", "#40354a"],
         shutters: ["#2a3050"],
@@ -510,9 +547,10 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         if (o instanceof THREE.Mesh && o.material === cache.get("vitre")) o.material = lit;
       });
       scenery.add(night);
+      scenery.add(townGround(keep, mat(keep, 0x2c3a34, 1), 0x3a3030, 0x24222e, 0x2f4a3a, -1.52, 53, fog));
       for (let i = 0; i < 8; i++) {
-        const t = tree(keep, 4.5 + rnd(), 0x2a3e3a, 70 + i, cache);
-        t.position.set(-24 + i * 7 + rnd(), -1.5, -8 - rnd() * 2);
+        const t = tree(keep, 4.5 + rnd(), 0x1d2c2a, 70 + i, cache);
+        t.position.set(-24 + i * 7 + rnd(), -1.52, -11 - rnd() * 1.5);
         scenery.add(t);
       }
       // La lune, les étoiles, et les feux d'artifice
@@ -588,7 +626,15 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       const sun = new THREE.Vector3(-0.5, 0.55, -0.68);
       dome = skyDome(keep, { top: 0x3b8ee0, horizon: 0xe3f2fa, bottom: 0xc8deea, sun, glow: 0xfff6d6, glowSize: 0.5 });
       fog = new THREE.Color(0xd8ecf6);
-      light = { sun: 2.4, sunColor: 0xffecc8, sky: 0xdbefff, ground: 0x9a8566, ambient: 0.6, dir: new THREE.Vector3(-5, 12, 9), env: 0.45 };
+      light = {
+        sun: 2.4,
+        sunColor: 0xffecc8,
+        sky: 0xdbefff,
+        ground: 0x9a8566,
+        ambient: 0.55,
+        dir: new THREE.Vector3(-5, 12, 9),
+        env: 0.25,
+      };
       const stage = island(
         keep,
         x0,
@@ -617,7 +663,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         group.add(s);
       }
       scenery.add(
-        street(keep, cache, -36, 36, -10, -0.6, 21, {
+        street(keep, cache, -36, 36, -12.6, -0.6, 21, {
           walls: ["#f3e6cf", "#eccaa0", "#dfe6ea", "#ecd3aa", "#f0dcc6"],
           roofs: ["#8a5a44", "#9a4a3a", "#b5523b"],
           shutters: ["#3f7fd8", "#2f9e6a", "#e2483d", "#7a9cc4"],
@@ -626,23 +672,26 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         }),
       );
       scenery.add(
-        street(keep, cache, -44, 44, -20, 0.4, 27, {
+        street(keep, cache, -44, 44, -21, 0.4, 27, {
           walls: ["#e6dac4", "#e2cfb0", "#dde2e4"],
           roofs: ["#8a5a44", "#9a4a3a"],
           shutters: ["#6f8faf", "#7a8a6a"],
           floors: [3, 4],
         }),
       );
+      scenery.add(
+        townGround(keep, mat(keep, 0xffffff, 0.95, 0, cobbleTex(keep, "#b4a58c", [60, 24])), 0x8a6440, 0x75706a, 0x78b04f, -0.62, 57, fog),
+      );
       for (let i = 0; i < 7; i++) {
         const t = tree(keep, 4 + rnd() * 1.2, 0x6aa84f, 90 + i, cache);
-        t.position.set(-24 + i * 8 + rnd() * 2, -0.4, -6 - rnd());
+        t.position.set(-24 + i * 8 + rnd() * 2, -0.62, -10.4 - rnd());
         scenery.add(t);
       }
       scenery.add(
         bunting(
           keep,
-          new THREE.Vector3(-20, 7.5, -8.5),
-          new THREE.Vector3(20, 7.5, -8.5),
+          new THREE.Vector3(-20, 7.6, -11.2),
+          new THREE.Vector3(20, 7.6, -11.2),
           1.6,
           [0xe2483d, 0xf2c94c, 0x3f7fd8, 0x2f9e6a, 0xf4efe2],
           26,
@@ -658,7 +707,7 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       dome = skyDome(keep, { top: 0x352a68, horizon: 0xffb27a, bottom: 0x8a5a7a, sun, glow: 0xffc27a, glowSize: 1.6 });
       fog = new THREE.Color(0xe9a07c);
       light = { sun: 2.6, sunColor: 0xffb47a, sky: 0xffcfa6, ground: 0x6a5a7e, ambient: 0.6, dir: new THREE.Vector3(9, 6, 7), env: 0.4 };
-      const stone = mat(keep, 0xffffff, 0.95, 0, stoneTex(keep, "#d7c8a8", [W / 2.5, 5]));
+      const stone = mat(keep, 0xffffff, 0.95, 0, stoneTex(keep, "#c4b08c", [W / 2.5, 5]));
       const slate = mat(keep, 0xffffff, 0.6, 0.1, slateTex(keep, "#596274", [W / 1.5, 2]));
       // Le haut de la tour : une corniche de pierre, puis la tour qui descend loin dans le vide
       const stage = new THREE.Group();
@@ -694,16 +743,6 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       group.add(stage);
       platforms[0] = stage;
       thin(1, (w) => belfryPlatform(keep, w, stone, slate));
-      // La flèche, derrière
-      const spire = new THREE.Mesh(keep(new THREE.ConeGeometry(2.2, 7, 8)), slate);
-      spire.position.set(0, 8.4, -2.4);
-      spire.castShadow = true;
-      group.add(spire);
-      const cross = new THREE.Group();
-      const gold = mat(keep, 0xd9b34a, 0.35, 0.8);
-      cross.add(box(keep, 0.12, 1.2, 0.12, gold, 0, 0, 0), box(keep, 0.7, 0.12, 0.12, gold, 0, 0.2, 0));
-      cross.position.set(0, 12.5, -2.4);
-      group.add(cross);
       // Le village tout en bas, dans la lumière du soir
       const below = new THREE.Group();
       below.add(

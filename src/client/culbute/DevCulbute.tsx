@@ -75,6 +75,7 @@ export function DevCulbute() {
         palette: PALETTES[style][tenue],
         color: PLAYER_COLORS[slot % PLAYER_COLORS.length]!,
         me: play && slot === 0,
+        bot: !(play && slot === 0),
         outfit: style,
       };
     });
@@ -140,6 +141,13 @@ export function DevCulbute() {
         for (let i = 0; i < k; i++) step();
       },
       render: () => scene.render(1 / 60, frameOf(f, play ? 0 : -1)),
+      /** Les effets en attente, puis `n` images : ce qu'on verrait un instant plus tard */
+      settle: (n = 60) => {
+        const frame = frameOf(f, play ? 0 : -1);
+        for (const e of pending) scene.effect(e, frame);
+        pending = [];
+        for (let i = 0; i < n; i++) scene.render(1 / 60, frameOf(f, play ? 0 : -1));
+      },
     };
     return () => {
       cancelAnimationFrame(raf);
