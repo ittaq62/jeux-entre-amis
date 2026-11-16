@@ -18,7 +18,7 @@ import { MechePreview } from "../meche/MechePreview.tsx";
 import { BolidesPreview } from "../bolides/BolidesPreview.tsx";
 import { CramponsPreview } from "../crampons/CramponsPreview.tsx";
 import { CulbutePreview } from "../culbute/CulbutePreview.tsx";
-import { EscarmouchePreview } from "../escarmouche/EscarmouchePreview.tsx";
+import { EscarmouchePreview, EscarmoucheTitle } from "../escarmouche/EscarmouchePreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -49,8 +49,9 @@ const PLAYED: { card: Card; dx: number; dy: number; r: number; glow?: string }[]
 const PLAY_EVERY = 3;
 const FIRST_PLAY = 0.8;
 
-// Le coin de décor de chaque fiche. Ses textes sont dans HOME_GAMES : un nouveau jeu, c'est une entrée ici et une là-bas.
-const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
+// Le coin de décor de chaque fiche, et son titre quand il est dessiné. Ses textes sont dans HOME_GAMES : un nouveau jeu, c'est une
+// entrée ici et une là-bas.
+const LOOK: Record<TableGame, { stage: string; art: () => ReactNode; title?: () => ReactNode }> = {
   tour: { stage: "is-stage", art: () => <TourPreview /> },
   uno: { stage: "", art: () => <TableScatter /> },
   naval: { stage: "is-sea", art: () => <NavalPreview px={290} /> },
@@ -60,7 +61,7 @@ const LOOK: Record<TableGame, { stage: string; art: () => ReactNode }> = {
   bolides: { stage: "is-circuit", art: () => <BolidesPreview /> },
   crampons: { stage: "is-pitch", art: () => <CramponsPreview /> },
   culbute: { stage: "is-arena", art: () => <CulbutePreview /> },
-  escarmouche: { stage: "is-front", art: () => <EscarmouchePreview /> },
+  escarmouche: { stage: "is-front", art: () => <EscarmouchePreview />, title: () => <EscarmoucheTitle /> },
 };
 
 function greeting() {
@@ -407,7 +408,7 @@ function GameSheet({
         {look.art()}
       </div>
       <div className="game-sheet">
-        <h2 className={`game-name is-${game.id}`}>{game.name}</h2>
+        <h2 className={`game-name is-${game.id}`}>{look.title ? look.title() : game.name}</h2>
         {isBeta && (
           <p className="beta-note">
             <span className="beta-tag">Bêta</span> Visible seulement pour toi et tes invités, tant que tu ne l'ouvres pas à tous depuis la

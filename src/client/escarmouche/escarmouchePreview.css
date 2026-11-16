@@ -1,0 +1,151 @@
+/* ------------------------------------------------------------------ */
+/* L'accueil : le lever du jour sur le Hameau, et le titre au pochoir  */
+/* Les styles de base sont l'image fixe (« Effets réduits ») ; ce qui  */
+/* bouge s'arrête hors de l'écran (banners.css).                       */
+/* ------------------------------------------------------------------ */
+
+.game-stage.is-front {
+  overflow: hidden;
+  background: linear-gradient(180deg, #25302b 0%, #857f56 48%, #e6bd76 62%, #33331f 66%, #1b1c12 100%);
+}
+
+.esc-preview {
+  position: absolute;
+  inset: 0;
+}
+
+.esc-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Un peu d'ombre dans les coins, comme une vieille épreuve */
+.esc-preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 85% 80% at 50% 48%, transparent 58%, rgba(10, 12, 7, 0.5) 100%);
+}
+
+/* La fumée monte et se couche lentement dans le vent */
+.esc-pv-smoke {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: esc-pv-smoke 21s ease-in-out infinite alternate;
+}
+
+.esc-pv-smoke.is-2 {
+  animation-duration: 26s;
+  animation-delay: -8s;
+}
+
+.esc-pv-smoke.is-3 {
+  animation-duration: 31s;
+  animation-delay: -15s;
+}
+
+@keyframes esc-pv-smoke {
+  to {
+    transform: translate(24px, -6px) scale(1.06, 1.04) skewX(-3deg);
+  }
+}
+
+.esc-pv-rays {
+  animation: esc-pv-rays 9s ease-in-out infinite alternate;
+}
+
+@keyframes esc-pv-rays {
+  to {
+    opacity: 0.45;
+  }
+}
+
+.esc-pv-mist {
+  animation: esc-pv-mist 28s ease-in-out infinite alternate;
+}
+
+@keyframes esc-pv-mist {
+  to {
+    transform: translateX(-60px);
+  }
+}
+
+/* La fusée éclairante descend en se balançant, sa lueur tremble un peu */
+.esc-pv-flare {
+  animation: esc-pv-flare 13s ease-in-out infinite alternate;
+}
+
+@keyframes esc-pv-flare {
+  to {
+    transform: translate(18px, 34px);
+  }
+}
+
+.esc-pv-flare-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: esc-pv-flicker 1.3s ease-in-out infinite alternate;
+}
+
+@keyframes esc-pv-flicker {
+  to {
+    opacity: 0.78;
+    transform: scale(0.94);
+  }
+}
+
+/* Des grains de poussière qui montent dans la lumière */
+.esc-pv-mote {
+  opacity: 0.55;
+  animation: esc-pv-mote var(--d) linear infinite;
+  animation-delay: var(--t);
+}
+
+@keyframes esc-pv-mote {
+  0% {
+    opacity: 0;
+    transform: translate(0, 12px);
+  }
+  25% {
+    opacity: 0.85;
+  }
+  75% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), -60px);
+  }
+}
+
+/* Le titre : de la peinture sable passée au pochoir, une ombre de tôle dessous */
+.game-name.is-escarmouche {
+  font-size: min(70px, 14vw);
+  rotate: -2deg;
+  text-shadow: none;
+}
+
+.esc-title {
+  display: block;
+  height: 0.96em;
+  width: auto;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.esc-title text {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 200px;
+}
+
+.esc-title-paint {
+  fill: #e9d6a4;
+}
+
+.esc-title-shadow {
+  fill: #0a0f09;
+  opacity: 0.75;
+}
