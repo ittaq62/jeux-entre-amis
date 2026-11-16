@@ -1,0 +1,122 @@
+/* ------------------------------------------------------------------ */
+/* L'accueil : l'affiche de Culbute (image du jeu) et ce qui y vit     */
+/* Les styles de base sont l'image fixe (« Effets réduits ») ; tout    */
+/* s'arrête hors de l'écran (banners.css).                             */
+/* ------------------------------------------------------------------ */
+
+.game-stage.is-arena {
+  overflow: hidden;
+  background: linear-gradient(180deg, #9cc6ea 0%, #e9dcc4 62%, #b9ab92 100%);
+}
+
+.cb-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* La caméra s'approche lentement du coup, puis recule */
+.cb-preview-frame {
+  position: absolute;
+  inset: 0;
+  transform-origin: 52% 58%;
+  animation: cb-pv-travel 11s ease-in-out infinite alternate;
+}
+
+@keyframes cb-pv-travel {
+  to {
+    scale: 1.06;
+  }
+}
+
+.cb-preview picture,
+.cb-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cb-preview img {
+  object-fit: cover;
+  object-position: 50% 50%;
+}
+
+.cb-pv-life {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.cb-pv-life.is-tall {
+  display: none;
+}
+
+@media (min-width: 821px) {
+  .cb-pv-life.is-wide {
+    display: none;
+  }
+
+  .cb-pv-life.is-tall {
+    display: block;
+  }
+}
+
+/* L'éclat du coup palpite, son onde s'élargit et s'efface */
+.cb-pv-burst {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cb-pv-burst 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes cb-pv-burst {
+  to {
+    transform: scale(1.12) rotate(6deg);
+  }
+}
+
+.cb-pv-star-out {
+  fill: #ffd34d;
+  stroke: #ff8a2a;
+  stroke-width: 4;
+  stroke-linejoin: round;
+}
+
+.cb-pv-star-in {
+  fill: #fffbea;
+}
+
+.cb-pv-wave {
+  fill: none;
+  stroke: #fffaf0;
+  opacity: 0.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cb-pv-wave 1.8s ease-out infinite;
+}
+
+@keyframes cb-pv-wave {
+  from {
+    opacity: 0.95;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+/* Les traits de vitesse derrière Marcel */
+.cb-pv-streak {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  opacity: 0.85;
+  stroke-dasharray: 60 40;
+  animation: cb-pv-streak 0.7s linear infinite;
+}
+
+@keyframes cb-pv-streak {
+  to {
+    stroke-dashoffset: -100;
+  }
+}

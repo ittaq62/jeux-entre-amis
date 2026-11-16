@@ -884,11 +884,7 @@ html:has(.cb-fight) body {
   gap: 8px;
 }
 
-/* L'accueil : la fiche du jeu et son illustration */
-.game-stage.is-arena {
-  background: linear-gradient(180deg, #7cc3ec 0%, #d8eef8 70%, #9c9384 100%);
-}
-
+/* L'accueil : le titre du jeu (l'affiche est dans culbutePreview.css) */
 .game-name.is-culbute {
   color: #ffffff;
   text-shadow:
@@ -898,42 +894,6 @@ html:has(.cb-fight) body {
     4px 4px 0 #974624,
     5px 5px 0 #893c1d,
     8px 10px 16px rgba(0, 0, 0, 0.5);
-}
-
-.cb-preview {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.cb-preview .cb-pv-hit {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: cb-pv-burst 2.4s ease-in-out infinite;
-}
-
-.cb-preview .cb-pv-flyer {
-  animation: cb-pv-fly 2.4s ease-in-out infinite;
-}
-
-@keyframes cb-pv-burst {
-  0%,
-  100% {
-    transform: scale(0.85) rotate(0deg);
-  }
-  50% {
-    transform: scale(1.12) rotate(12deg);
-  }
-}
-
-@keyframes cb-pv-fly {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(26px, -18px);
-  }
 }
 
 /* La boutique : une tenue */
@@ -992,8 +952,6 @@ html:has(.cb-fight) body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cb-preview .cb-pv-hit,
-  .cb-preview .cb-pv-flyer,
   .cb-countdown,
   .cb-dmg {
     animation: none;
