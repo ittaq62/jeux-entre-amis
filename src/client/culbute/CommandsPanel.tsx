@@ -161,7 +161,7 @@ export function CommandsPanel({
           </label>
           <p className="hint">
             La manette marche toujours : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour
-            saisir, une autre gâchette pour la garde.
+            saisir, une autre gâchette pour la garde, Retour pour narguer.
           </p>
         </section>
 
