@@ -477,7 +477,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
 
   const target = mem.target >= 0 ? m.fighters[mem.target] : undefined;
   const visible = target !== undefined && target.s.alive && t - mem.seenAt < 0.25;
-  const w = WEAPONS[s.slot === 0 ? s.primary : "pistolet"];
+  const w = WEAPONS[s.slot === 0 ? s.primary : s.secondary];
 
   // Où aller
   if (!mem.goal || t >= mem.goalUntil || (mem.path.length === 0 && t >= mem.repathAt)) pickGoal(m, i, mem);

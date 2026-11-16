@@ -3,7 +3,8 @@ import type { SkinId, VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
 import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
-import type { PrimaryId } from "../../shared/games/escarmouche/weapons.ts";
+import type { UniformId } from "../../shared/games/escarmouche/uniforms.ts";
+import type { PrimaryId, SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
 import type { BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
@@ -48,6 +49,10 @@ interface Prefs {
   /** Escarmouche : le camouflage et l'arme principale choisis sur cet appareil, repris à chaque table */
   escarmoucheCamo: CamoId | null;
   escarmouchePrimary: PrimaryId | null;
+  escarmoucheSecondary: SecondaryId | null;
+  escarmoucheTenue: UniformId | null;
+  /** Escarmouche : la qualité de l'image (auto : selon l'appareil) */
+  escQuality: "auto" | "bas" | "moyen" | "haut";
   /** Escarmouche : la sensibilité de la souris et du doigt (1 : normale), l'axe vertical inversé, le champ de vision */
   escMouse: number;
   escTouch: number;
@@ -93,6 +98,9 @@ export const usePrefs = create<Prefs>((set, get) => ({
   mecheBomb: null,
   escarmoucheCamo: null,
   escarmouchePrimary: null,
+  escarmoucheSecondary: null,
+  escarmoucheTenue: null,
+  escQuality: "auto",
   escMouse: 1,
   escTouch: 1,
   escInvert: false,
@@ -121,5 +129,6 @@ export function deviceLooks(p: ReturnType<typeof usePrefs.getState>): Looks {
     ...(p.cramponsFete ? { cramponsFete: p.cramponsFete } : {}),
     ...(p.mecheBomb ? { mecheBomb: p.mecheBomb } : {}),
     ...(p.escarmoucheCamo ? { escarmoucheCamo: p.escarmoucheCamo } : {}),
+    ...(p.escarmoucheTenue ? { escarmoucheTenue: p.escarmoucheTenue } : {}),
   };
 }

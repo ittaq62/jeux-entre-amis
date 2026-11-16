@@ -24,7 +24,8 @@ import type { EscEvent } from "./games/escarmouche/match.ts";
 import type { EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { CmdNet } from "./games/escarmouche/soldier.ts";
 import type { EscarmoucheView, EscMe, EscTick } from "./games/escarmouche/view.ts";
-import type { PrimaryId } from "./games/escarmouche/weapons.ts";
+import type { UniformId } from "./games/escarmouche/uniforms.ts";
+import type { PrimaryId, SecondaryId } from "./games/escarmouche/weapons.ts";
 
 export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons" | "escarmouche" | "culbute";
 
@@ -828,8 +829,8 @@ export interface EscarmoucheRoomView {
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   /** Dans quelle équipe joue chaque siège (modes en équipes) */
   teams: Record<string, 0 | 1>;
-  /** L'arme principale et le camouflage de chaque siège */
-  arsenal: Record<string, { primary: PrimaryId; camo: CamoId }>;
+  /** Les armes, le camouflage et la tenue de chaque siège */
+  arsenal: Record<string, { primary: PrimaryId; secondary: SecondaryId; camo: CamoId; tenue: UniformId }>;
   escarmouche: EscarmoucheView | null;
   serverNow: number;
   rematch: string[];
@@ -852,8 +853,8 @@ export type EscarmoucheClientMessage =
     }
   /** Choisir son équipe (l'hôte peut changer celle d'un bot) */
   | { t: "team"; team: 0 | 1; seatId?: string }
-  /** Son arme principale (pour sa prochaine vie, en pleine partie) et son camouflage (s'il l'a) */
-  | { t: "arsenal"; primary?: PrimaryId; camo?: CamoId }
+  /** Ses armes (pour sa prochaine vie, en pleine partie), son camouflage et sa tenue (s'il les a) */
+  | { t: "arsenal"; primary?: PrimaryId; secondary?: SecondaryId; camo?: CamoId; tenue?: UniformId }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }

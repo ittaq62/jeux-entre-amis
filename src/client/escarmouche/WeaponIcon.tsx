@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
+import { UNIFORM_BY_ID, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 
 /** Les taches d'un camouflage, toujours les mêmes (tirées d'un nombre) */
@@ -81,6 +82,34 @@ const SHAPES: Record<WeaponId, { body: string; metal: string }> = {
     body: "M36 16 L80 16 L80 24 L58 24 L54 40 L42 40 L46 24 L36 24 Z",
     metal: "M80 17 L88 17 L88 22 L80 22 Z",
   },
+  carabine: {
+    body: "M4 24 L28 21 L34 18 L74 18 L76 24 L48 26 L40 32 L12 34 L4 30 Z",
+    metal: "M74 20 L112 20 L112 22.5 L74 22.5 Z M42 10 L64 10 L66 13 L40 13 Z M50 26 L56 26 L55 36 L50 36 Z",
+  },
+  fm: {
+    body: "M6 22 L28 20 L32 16 L80 16 L82 22 L60 26 L56 30 L46 30 L48 26 L32 27 L26 32 L10 34 L6 30 Z",
+    metal: "M82 19 L118 19 L118 22 L82 22 Z M100 22 L96 34 L99 34 L104 22 Z M50 30 C50 40 66 40 66 30 Z M40 11 L54 11 L54 16 L40 16 Z",
+  },
+  mitraillette: {
+    body: "M30 20 L44 18 L46 15 L76 15 L78 24 L58 25 L56 32 L48 32 L50 25 L42 25 L36 28 L30 28 Z",
+    metal: "M78 18 L90 18 L90 21 L78 21 Z M60 24 L65 24 L66 42 L61 42 Z",
+  },
+  rafale: {
+    body: "M30 22 L48 20 L50 15 L92 15 L94 23 L72 25 L68 32 L60 32 L62 25 L52 25 L46 30 L32 31 Z",
+    metal: "M94 18 L112 18 L112 21 L94 21 Z M56 10 L74 10 L74 15 L56 15 Z M40 25 L48 25 L47 38 L42 38 Z",
+  },
+  double: {
+    body: "M4 26 L30 22 L36 19 L58 19 L58 27 L36 28 L28 34 L8 35 L4 31 Z",
+    metal: "M58 18 L114 18 L114 21.5 L58 21.5 Z M58 22 L114 22 L114 25.5 L58 25.5 Z",
+  },
+  revolver: {
+    body: "M40 18 L52 18 L54 15 L82 15 L82 21 L60 21 L58 26 L50 26 L48 40 L38 40 L42 26 Z",
+    metal: "M82 16 L96 16 L96 20 L82 20 Z M52 20 C52 28 62 28 62 20 Z",
+  },
+  pa: {
+    body: "M36 16 L82 16 L82 24 L60 24 L56 40 L44 40 L48 24 L36 24 Z",
+    metal: "M82 17 L90 17 L90 22 L82 22 Z M56 24 L60 24 L60 46 L56 46 Z",
+  },
 };
 
 /** Une arme vue de côté, dans son camouflage */
@@ -107,6 +136,29 @@ export function CamoSwatch({ camo, size = 34 }: { camo: CamoId; size?: number })
         <CamoPattern id={`sw-${uid}`} camo={camo} />
       </defs>
       <rect x="1" y="1" width="38" height="38" rx="7" fill={`url(#sw-${uid})`} stroke="rgba(0,0,0,.35)" />
+    </svg>
+  );
+}
+
+/** Une tenue en petit : la silhouette du soldat, à ses couleurs (la tenue du personnage prend sa couleur de profil) */
+export function TenueSwatch({ tenue, size = 34, own = "#c0392b" }: { tenue: UniformId; size?: number; own?: string }) {
+  const u = UNIFORM_BY_ID.get(tenue) ?? UNIFORM_BY_ID.get("perso")!;
+  const coat = u.coat ?? own;
+  return (
+    <svg className="esc-camo-swatch" viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
+      <rect x="1" y="1" width="38" height="38" rx="7" fill="#2b2f33" />
+      <path d="M13 38 L14 26 L26 26 L27 38 Z" fill={u.trousers} />
+      <path d="M11 27 C11 19 14 16 20 16 C26 16 29 19 29 27 Z" fill={coat} />
+      {u.spots.slice(0, 3).map((c, i) => (
+        <circle key={i} cx={14 + i * 6} cy={21 + (i % 2) * 3} r={2.2} fill={c} />
+      ))}
+      {u.vest && <rect x="15" y="18" width="10" height="8" rx="2" fill={u.vest} />}
+      {u.accent && <circle cx="20" cy="21" r="1.4" fill={u.accent} />}
+      <circle cx="20" cy="11" r="5" fill="#e0ac69" />
+      {u.helmet && <path d="M14.5 10 C14.5 5 25.5 5 25.5 10 Z" fill={u.helmet} />}
+      {u.pattern === "feuillu" && (
+        <path d="M10 22 l3 -3 l2 3 l3 -4 l2 4 l3 -3 l2 3 l3 -3 l2 3" stroke="#5f7238" strokeWidth="2" fill="none" />
+      )}
     </svg>
   );
 }

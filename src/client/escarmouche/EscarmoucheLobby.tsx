@@ -1,4 +1,5 @@
-import { CAMOS, type CamoId } from "../../shared/games/escarmouche/camos.ts";
+import { CAMO_BY_ID, CAMOS, type CamoId } from "../../shared/games/escarmouche/camos.ts";
+import { UNIFORM_BY_ID, UNIFORMS, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import { MAP_IDS, MAP_NAMES, type MapId } from "../../shared/games/escarmouche/maps.ts";
 import {
   ARSENAL_NAMES,
@@ -11,18 +12,26 @@ import {
   type EscarmoucheSettings,
   type Mode,
 } from "../../shared/games/escarmouche/rules.ts";
-import { PRIMARY_IDS, WEAPONS, type PrimaryId } from "../../shared/games/escarmouche/weapons.ts";
+import {
+  PRIMARY_IDS,
+  SECONDARY_IDS,
+  WEAPONS,
+  type PrimaryId,
+  type SecondaryId,
+  type WeaponId,
+} from "../../shared/games/escarmouche/weapons.ts";
 import { TABLE_TEAMS } from "../../shared/games/teams.ts";
 import { ESCARMOUCHE_MAX_PLAYERS, type EscarmoucheClientMessage, type EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { applyDrawnRules } from "../../shared/randomRules.ts";
-import { camoItem } from "../../shared/shop.ts";
+import { camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
+import { toast } from "../lib/toast.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
-import { CamoSwatch, WeaponIcon } from "./WeaponIcon.tsx";
+import { CamoSwatch, TenueSwatch, WeaponIcon } from "./WeaponIcon.tsx";
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Ils mettent du temps à réagir et visent large : idéal pour découvrir.",
@@ -42,7 +51,60 @@ interface Props {
   onBackToGame?: () => void;
 }
 
-/** L'arme et le camouflage de son soldat : ce qu'il emporte à chaque retour au combat */
+/** Ce qui distingue une arme des autres, ramené à des barres (0 à 1) : dégâts, cadence, portée, mobilité */
+export function weaponBars(id: WeaponId): [string, number][] {
+  const w = WEAPONS[id];
+  const perShot = w.dmg[0] * w.pellets;
+  const rate = (w.burst ? w.burst / (w.interval + (w.burst - 1) * (w.burstGap ?? 0.07)) : 1 / w.interval) * 60;
+  return [
+    ["Dégâts", Math.min(1, perShot / 120)],
+    ["Cadence", Math.min(1, rate / 1000)],
+    ["Portée", Math.min(1, (w.range[0] + w.range[1]) / 90)],
+    ["Mobilité", Math.min(1, Math.max(0, (w.move - 0.8) / 0.3))],
+  ];
+}
+
+function WeaponCard({
+  id,
+  on,
+  locked,
+  camo,
+  disabled,
+  onPick,
+}: {
+  id: WeaponId;
+  on: boolean;
+  locked: boolean;
+  camo: CamoId;
+  disabled: boolean;
+  onPick: () => void;
+}) {
+  const w = WEAPONS[id];
+  return (
+    <button
+      className={`esc-weapon ${on ? "is-on" : ""} ${locked ? "is-locked" : ""}`}
+      disabled={disabled}
+      onClick={onPick}
+      aria-pressed={on}
+      title={locked ? `${w.name} : ${w.price} points à la boutique` : w.blurb}
+    >
+      <WeaponIcon weapon={id} camo={camo} />
+      <strong>{w.name}</strong>
+      <span className="esc-bars">
+        {weaponBars(id).map(([label, v]) => (
+          <span key={label} className="esc-bar">
+            <small>{label}</small>
+            <i style={{ width: `${Math.round(v * 100)}%` }} />
+          </span>
+        ))}
+      </span>
+      <small>{w.blurb}</small>
+      {locked && <span className="esc-lock">Boutique · {w.price} pts</span>}
+    </button>
+  );
+}
+
+/** Les armes, la tenue et le camouflage de son soldat : ce qu'il emporte à chaque retour au combat */
 export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: (msg: EscarmoucheClientMessage) => void }) {
   const seatId = room.you.seatId;
   const mine = seatId ? room.arsenal[seatId] : undefined;
@@ -50,39 +112,89 @@ export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: 
   const setPrefs = usePrefs((p) => p.set);
   const forced = room.settings.escarmouche.arsenal !== "libre" ? room.settings.escarmouche.arsenal : null;
   if (!seatId || !mine) return null;
+  const locked = (item: string, name: string, price: number) => {
+    if (has(item)) return false;
+    toast({ title: `${name} se débloque à la boutique`, body: `${price} points, avec ceux gagnés en jouant.`, duration: 3200 });
+    return true;
+  };
   const pickPrimary = (primary: PrimaryId) => {
+    if (locked(weaponItem(primary), WEAPONS[primary].name, WEAPONS[primary].price)) return;
     setPrefs({ escarmouchePrimary: primary });
     send({ t: "arsenal", primary });
   };
+  const pickSecondary = (secondary: SecondaryId) => {
+    if (locked(weaponItem(secondary), WEAPONS[secondary].name, WEAPONS[secondary].price)) return;
+    setPrefs({ escarmoucheSecondary: secondary });
+    send({ t: "arsenal", secondary });
+  };
   const pickCamo = (camo: CamoId) => {
-    if (!has(camoItem(camo))) return;
+    const c = CAMO_BY_ID.get(camo)!;
+    if (locked(camoItem(camo), `Le camouflage ${c.name}`, c.price)) return;
     setPrefs({ escarmoucheCamo: camo });
     send({ t: "arsenal", camo });
+  };
+  const pickTenue = (tenue: UniformId) => {
+    const u = UNIFORM_BY_ID.get(tenue)!;
+    if (locked(uniformItem(tenue), `La tenue ${u.name}`, u.price)) return;
+    setPrefs({ escarmoucheTenue: tenue });
+    send({ t: "arsenal", tenue });
   };
   return (
     <section className="lobby-section panel esc-arsenal" aria-label="Ton arsenal">
       <h2>
-        Ton arsenal <span className="hint">le pistolet, une grenade et le couteau en plus</span>
+        Ton arsenal <span className="hint">une grenade et le couteau en plus</span>
       </h2>
       {forced && (
         <p className="hint">Pour cette partie, tout le monde a la même arme : {ARSENAL_NAMES[forced as Arsenal].toLowerCase()}.</p>
       )}
+      <h3 className="esc-camo-title">Arme principale</h3>
       <div className="esc-weapons">
         {PRIMARY_IDS.map((id) => (
-          <button
+          <WeaponCard
             key={id}
-            className={`esc-weapon ${mine.primary === id ? "is-on" : ""}`}
+            id={id}
+            on={mine.primary === id}
+            locked={!has(weaponItem(id))}
+            camo={mine.camo}
             disabled={forced !== null}
-            onClick={() => pickPrimary(id)}
-            aria-pressed={mine.primary === id}
-          >
-            <WeaponIcon weapon={id} camo={mine.camo} />
-            <strong>{WEAPONS[id].name}</strong>
-            <small>{WEAPONS[id].blurb}</small>
-          </button>
+            onPick={() => pickPrimary(id)}
+          />
         ))}
       </div>
-      <h3 className="esc-camo-title">Camouflage</h3>
+      <h3 className="esc-camo-title">Arme de poing</h3>
+      <div className="esc-weapons is-small">
+        {SECONDARY_IDS.map((id) => (
+          <WeaponCard
+            key={id}
+            id={id}
+            on={mine.secondary === id}
+            locked={!has(weaponItem(id))}
+            camo={mine.camo}
+            disabled={forced === "pistolet"}
+            onPick={() => pickSecondary(id)}
+          />
+        ))}
+      </div>
+      <h3 className="esc-camo-title">Tenue</h3>
+      <div className="esc-camos">
+        {UNIFORMS.map((u) => {
+          const owned = has(uniformItem(u.id));
+          return (
+            <button
+              key={u.id}
+              className={`esc-camo is-tenue ${mine.tenue === u.id ? "is-on" : ""} ${owned ? "" : "is-locked"}`}
+              onClick={() => pickTenue(u.id)}
+              title={owned ? u.blurb : `${u.name} : ${u.price} points à la boutique`}
+              aria-pressed={mine.tenue === u.id}
+            >
+              <TenueSwatch tenue={u.id} />
+              <span>{u.name}</span>
+              {!owned && <small>{u.price} pts</small>}
+            </button>
+          );
+        })}
+      </div>
+      <h3 className="esc-camo-title">Camouflage des armes</h3>
       <div className="esc-camos">
         {CAMOS.map((c) => {
           const owned = has(camoItem(c.id));

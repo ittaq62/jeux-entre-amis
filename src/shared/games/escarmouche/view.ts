@@ -6,7 +6,7 @@ import type { MapId } from "./maps.ts";
 import { isTeamMode, type EscEvent, type FighterStats, type Match } from "./match.ts";
 import type { EscarmoucheSettings, Mode } from "./rules.ts";
 import type { Soldier } from "./soldier.ts";
-import { WEAPON_IDS, type PrimaryId, type WeaponId } from "./weapons.ts";
+import { WEAPON_IDS, type PrimaryId, type SecondaryId, type WeaponId } from "./weapons.ts";
 
 /** L'état d'ensemble : il change rarement */
 export interface EscarmoucheView {
@@ -89,6 +89,7 @@ export interface EscMe {
   /** Secondes de partie avant son retour, s'il est hors combat */
   back: number;
   next: PrimaryId;
+  nextSecondary: SecondaryId;
 }
 
 const cm = (v: number) => Math.round(v * 100);
@@ -108,7 +109,7 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
     if (s.reloadEnd > 0) bits |= PF.reload;
     if (s.throwEnd > s.clock || s.meleeEnd > s.clock || s.switchEnd > s.clock) bits |= PF.busy;
     if (f.carrying >= 0) bits |= PF.carry;
-    const weapon: WeaponId = s.slot === 0 ? s.primary : "pistolet";
+    const weapon: WeaponId = s.slot === 0 ? s.primary : s.secondary;
     p.push(
       cm(s.x),
       cm(s.y),
@@ -139,7 +140,7 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
 
 export function encodeMe(m: Match, i: number): EscMe {
   const f = m.fighters[i]!;
-  return { i, s: f.s, hp: Math.ceil(f.hp), back: f.s.alive ? 0 : Math.max(0, f.respawnAt - m.t), next: f.next };
+  return { i, s: f.s, hp: Math.ceil(f.hp), back: f.s.alive ? 0 : Math.max(0, f.respawnAt - m.t), next: f.next, nextSecondary: f.nextSecondary };
 }
 
 /** Un soldat lu dans `p` */

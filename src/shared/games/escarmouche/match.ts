@@ -4,7 +4,7 @@
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
 import { goalOf, MODE_INFO, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { DT, eyeOf, forward, heightOf, newSoldier, respawnSoldier, stepSoldier, type Cmd, type Soldier, type StepOut } from "./soldier.ts";
-import { damageAt, GRENADE, grenadeDamage, isPrimaryId, KNIFE, WEAPONS, type PrimaryId, type WeaponId } from "./weapons.ts";
+import { damageAt, GRENADE, grenadeDamage, isPrimaryId, isSecondaryId, KNIFE, WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "./weapons.ts";
 import { rayBox, World } from "./world.ts";
 import { random, type RngHolder } from "../../rng.ts";
 
@@ -71,6 +71,8 @@ export interface Fighter {
   hurtAt: number;
   /** L'arme principale de sa prochaine vie */
   next: PrimaryId;
+  /** L'arme de poing de sa prochaine vie */
+  nextSecondary: SecondaryId;
   /** Ceux qui l'ont touché depuis sa dernière mort (pour les passes décisives) */
   damagers: { i: number; at: number }[];
   /** Le drapeau qu'il porte (l'équipe à qui il est), -1 s'il n'en porte pas */
@@ -164,11 +166,16 @@ function newStats(): FighterStats {
 }
 
 /** L'arme permise par l'arsenal de la partie */
-export function allowedPrimary(settings: EscarmoucheSettings, want: PrimaryId): PrimaryId | "pistolet" {
+export function allowedPrimary(settings: EscarmoucheSettings, want: PrimaryId): WeaponId {
   if (settings.arsenal === "precision") return "precision";
   if (settings.arsenal === "pompe") return "pompe";
   if (settings.arsenal === "pistolet") return "pistolet";
   return want;
+}
+
+/** L'arme de poing permise par l'arsenal (en duel au pistolet, tout le monde a le même) */
+export function allowedSecondary(settings: EscarmoucheSettings, want: SecondaryId): SecondaryId {
+  return settings.arsenal === "pistolet" ? "pistolet" : want;
 }
 
 export interface FighterInit {
@@ -176,6 +183,7 @@ export interface FighterInit {
   team: number;
   bot: boolean;
   primary: PrimaryId;
+  secondary?: SecondaryId;
 }
 
 export function createMatch(settings: EscarmoucheSettings, players: FighterInit[], seed: number): Match {
@@ -212,12 +220,13 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       id: p.id,
       team,
       bot: p.bot,
-      s: newSoldier(0, 0, 0, 0, allowedPrimary(settings, p.primary)),
+      s: newSoldier(0, 0, 0, 0, allowedPrimary(settings, p.primary), GRENADE.count, allowedSecondary(settings, p.secondary ?? "pistolet")),
       hp: MAX_HP,
       respawnAt: 0,
       shieldUntil: 0,
       hurtAt: -100,
       next: isPrimaryId(p.primary) ? p.primary : "fa",
+      nextSecondary: isSecondaryId(p.secondary) ? p.secondary : "pistolet",
       damagers: [],
       carrying: -1,
       points: 0,
@@ -240,7 +249,7 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
 }
 
 function placeAt(f: Fighter, x: number, y: number, z: number, yaw: number, m: Match) {
-  respawnSoldier(f.s, x, y, z, yaw, allowedPrimary(m.settings, f.next));
+  respawnSoldier(f.s, x, y, z, yaw, allowedPrimary(m.settings, f.next), allowedSecondary(m.settings, f.nextSecondary));
   f.hp = MAX_HP;
   f.damagers = [];
   f.carrying = -1;
@@ -683,12 +692,13 @@ export function addFighter(m: Match, p: FighterInit): number {
     id: p.id,
     team,
     bot: p.bot,
-    s: newSoldier(0, 0, 0, 0, allowedPrimary(m.settings, p.primary)),
+    s: newSoldier(0, 0, 0, 0, allowedPrimary(m.settings, p.primary), GRENADE.count, allowedSecondary(m.settings, p.secondary ?? "pistolet")),
     hp: MAX_HP,
     respawnAt: 0,
     shieldUntil: 0,
     hurtAt: -100,
     next: isPrimaryId(p.primary) ? p.primary : "fa",
+    nextSecondary: isSecondaryId(p.secondary) ? p.secondary : "pistolet",
     damagers: [],
     carrying: -1,
     points: 0,
@@ -700,10 +710,12 @@ export function addFighter(m: Match, p: FighterInit): number {
   return i;
 }
 
-/** Le choix de l'arme pour la prochaine vie */
-export function chooseNext(m: Match, i: number, primary: PrimaryId) {
+/** Le choix des armes pour la prochaine vie */
+export function chooseNext(m: Match, i: number, pick: { primary?: PrimaryId; secondary?: SecondaryId }) {
   const f = m.fighters[i];
-  if (f) f.next = primary;
+  if (!f) return;
+  if (pick.primary) f.next = pick.primary;
+  if (pick.secondary) f.nextSecondary = pick.secondary;
 }
 
 /** Un soldat qu'on garde de côté (le retour dans le temps n'a besoin que de la pose) */

@@ -2,7 +2,7 @@
 // fait autorité ; le téléphone (ou l'ordinateur) du joueur joue les mêmes pas en avance pour ne pas attendre le réseau,
 // puis se recale sur ce que le serveur a vraiment retenu. Tout est donc calculé ici, de la même façon des deux côtés.
 
-import { GRENADE, KNIFE, WEAPONS, type PrimaryId, type WeaponDef, type WeaponId } from "./weapons.ts";
+import { GRENADE, KNIFE, WEAPONS, type SecondaryId, type WeaponDef, type WeaponId } from "./weapons.ts";
 import type { World } from "./world.ts";
 
 /** Un pas de simulation */
@@ -104,9 +104,12 @@ export interface Soldier {
   /** Son horloge propre (s) : elle avance d'un pas à chaque commande jouée */
   clock: number;
   alive: boolean;
-  /** 0 : l'arme principale ; 1 : le pistolet */
+  /** 0 : l'arme principale ; 1 : l'arme de poing */
   slot: 0 | 1;
-  primary: PrimaryId | "pistolet";
+  primary: WeaponId;
+  secondary: SecondaryId;
+  /** Les balles qui restent à tirer dans la rafale en cours */
+  burst: number;
   mag: [number, number];
   res: [number, number];
   /** Fin du rechargement, du changement d'arme, du lancer, du coup de couteau (à son horloge), 0 si rien en cours */
@@ -130,7 +133,7 @@ export interface Soldier {
 }
 
 export function weaponOf(s: Soldier): WeaponDef {
-  return WEAPONS[s.slot === 0 ? s.primary : "pistolet"];
+  return WEAPONS[s.slot === 0 ? s.primary : s.secondary];
 }
 
 export function heightOf(s: { crouch: boolean }): number {
@@ -146,11 +149,12 @@ export function newSoldier(
   y: number,
   z: number,
   yaw: number,
-  primary: PrimaryId | "pistolet",
+  primary: WeaponId,
   grenades = GRENADE.count,
+  secondary: SecondaryId = "pistolet",
 ): Soldier {
   const p = WEAPONS[primary];
-  const q = WEAPONS.pistolet;
+  const q = WEAPONS[secondary];
   return {
     x,
     y,
@@ -166,6 +170,8 @@ export function newSoldier(
     alive: true,
     slot: 0,
     primary,
+    secondary,
+    burst: 0,
     mag: [p.mag, q.mag],
     res: [p.reserve, q.reserve],
     reloadEnd: 0,
@@ -384,6 +390,7 @@ function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
     s.slot = want;
     s.switchEnd = c + SWITCH_TIME;
     s.reloadEnd = 0;
+    s.burst = 0;
     s.ads = false;
     out.swapped = true;
   }
@@ -392,16 +399,24 @@ function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
   const ready = c >= s.switchEnd && !busy;
   // Recharger : à la demande, ou tout seul en tirant à vide
   const wantsReload = (pressed & B.reload) !== 0 || ((b & B.fire) !== 0 && s.mag[k] === 0);
-  if (wantsReload && ready && s.reloadEnd === 0 && s.mag[k] < w.mag && s.res[k] > 0) {
+  if (wantsReload && ready && s.reloadEnd === 0 && s.mag[k] < w.mag && s.res[k] > 0 && s.burst === 0) {
     s.reloadEnd = c + w.reload;
     s.ads = false;
     out.reloaded = true;
   }
-  // Tirer
-  const trigger = w.auto ? (b & B.fire) !== 0 : (pressed & B.fire) !== 0;
+  // Tirer : en continu, coup par coup, ou par rafales (une pression lance toute la rafale)
+  let trigger: boolean;
+  if (w.burst) {
+    if (pressed & B.fire && s.burst === 0 && c >= s.nextFire) s.burst = w.burst;
+    trigger = s.burst > 0;
+  } else trigger = w.auto ? (b & B.fire) !== 0 : (pressed & B.fire) !== 0;
+  if (s.mag[k] === 0) s.burst = 0;
   if (trigger && ready && s.reloadEnd === 0 && s.mag[k] > 0 && c >= s.nextFire) {
     s.mag[k] -= 1;
-    s.nextFire = c + w.interval;
+    if (w.burst) {
+      s.burst -= 1;
+      s.nextFire = c + (s.burst > 0 ? (w.burstGap ?? 0.07) : w.interval);
+    } else s.nextFire = c + w.interval;
     s.sprint = false;
     s.firedAt = c;
     const spread = spreadOf(s);
@@ -416,13 +431,14 @@ function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
     s.shots += 1;
     s.bloom = Math.min(w.bloomMax, s.bloom + w.bloom);
     out.shots.push({ weapon: w.id, ox: s.x, oy: eyeOf(s), oz: s.z, dirs });
-  } else if (!(b & B.fire)) {
+  } else if (!(b & B.fire) && s.burst === 0) {
     s.bloom = Math.max(0, s.bloom - w.bloomDecay * DT);
   }
   // Le couteau
   if (pressed & B.melee && !busy && c >= s.switchEnd) {
     s.meleeEnd = c + KNIFE.time;
     s.reloadEnd = 0;
+    s.burst = 0;
     s.ads = false;
     out.melee = true;
   }
@@ -446,11 +462,19 @@ function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
 }
 
 /** Le soldat prend une nouvelle vie : une autre arme, des chargeurs pleins */
-export function respawnSoldier(s: Soldier, x: number, y: number, z: number, yaw: number, primary: PrimaryId | "pistolet") {
+export function respawnSoldier(
+  s: Soldier,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  primary: WeaponId,
+  secondary: SecondaryId = "pistolet",
+) {
   const clock = s.clock;
   const seq = s.seq;
   const shots = s.shots;
-  Object.assign(s, newSoldier(x, y, z, yaw, primary));
+  Object.assign(s, newSoldier(x, y, z, yaw, primary, GRENADE.count, secondary));
   s.clock = clock;
   s.seq = seq;
   s.shots = shots;

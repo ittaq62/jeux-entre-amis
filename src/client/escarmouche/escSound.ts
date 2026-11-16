@@ -45,6 +45,13 @@ const SHOTS: Record<WeaponId, ShotSpec> = {
   pompe: { thump: 55, thumpDecay: 0.13, noiseDecay: 0.1, cut: 3200, tail: 0.75, crack: 0.3, gain: 1 },
   precision: { thump: 70, thumpDecay: 0.1, noiseDecay: 0.06, cut: 7000, tail: 1.1, crack: 0.9, gain: 1 },
   pistolet: { thump: 140, thumpDecay: 0.05, noiseDecay: 0.04, cut: 5600, tail: 0.32, crack: 0.45, gain: 0.7 },
+  carabine: { thump: 75, thumpDecay: 0.09, noiseDecay: 0.055, cut: 6400, tail: 0.8, crack: 0.75, gain: 0.95 },
+  fm: { thump: 80, thumpDecay: 0.08, noiseDecay: 0.06, cut: 4600, tail: 0.5, crack: 0.45, gain: 0.95 },
+  mitraillette: { thump: 135, thumpDecay: 0.04, noiseDecay: 0.03, cut: 6800, tail: 0.25, crack: 0.35, gain: 0.7 },
+  rafale: { thump: 90, thumpDecay: 0.065, noiseDecay: 0.045, cut: 5600, tail: 0.42, crack: 0.55, gain: 0.85 },
+  double: { thump: 50, thumpDecay: 0.15, noiseDecay: 0.11, cut: 3000, tail: 0.85, crack: 0.3, gain: 1 },
+  revolver: { thump: 95, thumpDecay: 0.09, noiseDecay: 0.06, cut: 4800, tail: 0.6, crack: 0.6, gain: 0.9 },
+  pa: { thump: 150, thumpDecay: 0.04, noiseDecay: 0.03, cut: 6000, tail: 0.25, crack: 0.4, gain: 0.65 },
 };
 
 /** Un petit bruit blanc toujours le même */
