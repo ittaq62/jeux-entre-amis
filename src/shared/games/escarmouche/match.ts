@@ -60,6 +60,12 @@ export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute" | "bidon" | 
 
 /** Les bidons d'essence : ce qu'ils encaissent, leur souffle, le temps avant qu'un autre ne les remplace */
 export const BARREL = { hp: 45, radius: 6, damage: 120, back: 40, chain: 0.18 };
+/**
+ * Les caisses en bois : elles volent en éclats sous une explosion (le souffle compte `blast` fois), ou à force de
+ * balles (chacune compte `bullet` de ses dégâts) ; celles qui étaient posées dessus tombent avec. Une caisse neuve
+ * revient au bout de `back` secondes, quand personne ne se tient à sa place.
+ */
+export const CRATE = { hp: 80, bullet: 0.35, blast: 2, back: 45 };
 /** Les récompenses de série : à 3 éliminations d'affilée, les jumelles ; à 5, un tir de mortier */
 export const REWARDS = { scout: 3, scoutTime: 10, mortar: 5, shells: 3, shellDelay: 2.6, shellGap: 0.55, radius: 7, damage: 140 };
 /** Repérer : combien de temps le repère reste, l'angle autour du viseur, l'attente entre deux */
@@ -80,6 +86,8 @@ export type EscEvent =
   | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" }
   /** Un bidon saute (ou un nouveau le remplace) */
   | { k: "barrel"; b: number; up: boolean }
+  /** Une caisse en bois (sa boîte) vole en éclats, ou revient */
+  | { k: "crate"; b: number; up: boolean }
   /** Des ennemis viennent d'être repérés, par un soldat ou par les jumelles */
   | { k: "spot"; i: number; v: number[] }
   /** Une récompense de série */
@@ -161,6 +169,13 @@ export interface Barrel {
   downUntil: number;
 }
 
+/** Une caisse en bois : sa boîte dans le monde, ce qu'elle encaisse encore, et quand elle reviendra si elle est cassée */
+export interface Crate {
+  box: number;
+  hp: number;
+  downUntil: number;
+}
+
 /** Une explosion à venir (un bidon qui s'enflamme, un obus qui tombe) */
 export interface Blast {
   at: number;
@@ -223,6 +238,7 @@ export interface Match extends RngHolder {
   winner: number | null;
   ranks: number[] | null;
   barrels: Barrel[];
+  crates: Crate[];
   blasts: Blast[];
   marks: Mark[];
 }
@@ -321,12 +337,14 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     winner: null,
     ranks: null,
     barrels: [],
+    crates: [],
     blasts: [],
     marks: [],
   };
   const gm = getMap(map);
   gm.boxes.forEach((b, box) => {
     if (b.m === "bidon") m.barrels.push({ box, x: (b.x0 + b.x1) / 2, y: b.y0 + 0.5, z: (b.z0 + b.z1) / 2, hp: BARREL.hp, downUntil: 0 });
+    if (b.m === "caisse") m.crates.push({ box, hp: CRATE.hp, downUntil: 0 });
   });
   if (settings.mode === "drapeau") {
     m.flags = [0, 1].map((t) => ({ at: "home", carrier: -1, ...gm.flags[t]!, since: 0 })) as [FlagState, FlagState];
@@ -428,6 +446,12 @@ export function upgradeMatch(m: Match): Match {
     });
   }
   if (!Array.isArray(m.blasts)) m.blasts = [];
+  if (!Array.isArray(m.crates)) {
+    m.crates = [];
+    getMap(m.map).boxes.forEach((b, box) => {
+      if (b.m === "caisse") m.crates.push({ box, hp: CRATE.hp, downUntil: 0 });
+    });
+  }
   if (!Array.isArray(m.marks)) m.marks = [];
   if (m.cq === undefined) m.cq = null;
   const fresh = newSoldier(0, 0, 0, 0, "fa");
@@ -498,7 +522,7 @@ function poseOf(f: Fighter): Pose {
  */
 export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, ev: EscEvent[]): StepOut {
   const f = m.fighters[i]!;
-  const world = worldOf(m.map);
+  const world = matchWorld(m);
   const out = stepSoldier(f.s, cmd, world, m.phase === "live");
   if (!f.s.alive) return out;
   const past = out.shots.length > 0 || out.melee ? (poseAt?.(cmd.vt) ?? null) : null;
@@ -536,7 +560,9 @@ export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, e
         const n = target < 0 && wall && tMax === wall.t ? 1 + wall.axis * 2 + (wall.sign > 0 ? 1 : 0) : 0;
         ev.push({ k: "shot", i, w: shot.weapon, x: r2(x), y: r2(y), z: r2(z), n });
       }
-      if (target < 0 && wall && tMax === wall.t && world.boxes[wall.box]?.m === "bidon") hitBarrel(m, wall.box, damageAt(w, tMax), i);
+      const struck = target < 0 && wall && tMax === wall.t ? world.boxes[wall.box] : undefined;
+      if (struck?.m === "bidon") hitBarrel(m, wall!.box, damageAt(w, tMax), i);
+      else if (struck?.m === "caisse") hitCrate(m, wall!.box, damageAt(w, tMax) * CRATE.bullet, ev);
       if (target >= 0) {
         anyHit = true;
         const base = damageAt(w, tMax);
@@ -626,6 +652,86 @@ function hitBarrel(m: Match, box: number, dmg: number, by: number) {
   if (b.hp <= 0) m.blasts.push({ at: m.t + BARREL.chain, x: b.x, y: b.y, z: b.z, owner: by, kind: "bidon", barrel: box });
 }
 
+/** Une caisse touchée : elle encaisse, puis vole en éclats */
+function hitCrate(m: Match, box: number, dmg: number, ev: EscEvent[]) {
+  const c = m.crates.find((k) => k.box === box);
+  if (!c || c.downUntil > 0) return;
+  c.hp -= dmg;
+  if (c.hp <= 0) breakCrate(m, c, ev);
+}
+
+/** Une caisse vole en éclats ; celles qui étaient posées dessus tombent avec elle */
+function breakCrate(m: Match, c: Crate, ev: EscEvent[]) {
+  if (c.downUntil > 0) return;
+  c.hp = 0;
+  c.downUntil = m.t + CRATE.back;
+  ev.push({ k: "crate", b: c.box, up: false });
+  const boxes = getMap(m.map).boxes;
+  const b = boxes[c.box]!;
+  for (const o of m.crates) {
+    const a = boxes[o.box]!;
+    if (o.downUntil > 0 || Math.abs(a.y0 - b.y1) > 0.05) continue;
+    if (a.x0 < b.x1 && a.x1 > b.x0 && a.z0 < b.z1 && a.z1 > b.z0) breakCrate(m, o, ev);
+  }
+}
+
+/** Les caisses cassées qui reviennent : quand leur temps est passé, que rien ne manque dessous et que la place est libre */
+function stepCrates(m: Match, ev: EscEvent[]) {
+  const boxes = getMap(m.map).boxes;
+  for (const c of m.crates) {
+    if (c.downUntil <= 0 || m.t < c.downUntil) continue;
+    const b = boxes[c.box]!;
+    const under = m.crates.some((o) => {
+      const a = boxes[o.box]!;
+      return o.downUntil > 0 && Math.abs(b.y0 - a.y1) < 0.05 && a.x0 < b.x1 && a.x1 > b.x0 && a.z0 < b.z1 && a.z1 > b.z0;
+    });
+    const taken = m.fighters.some(
+      (f) =>
+        f.s.alive &&
+        f.s.x + 0.4 > b.x0 &&
+        f.s.x - 0.4 < b.x1 &&
+        f.s.z + 0.4 > b.z0 &&
+        f.s.z - 0.4 < b.z1 &&
+        f.s.y < b.y1 &&
+        f.s.y + 1.9 > b.y0,
+    );
+    if (under || taken) {
+      c.downUntil = m.t + 1;
+      continue;
+    }
+    c.downUntil = 0;
+    c.hp = CRATE.hp;
+    ev.push({ k: "crate", b: c.box, up: true });
+  }
+}
+
+const holed = new Map<string, World>();
+/**
+ * Le monde d'une carte sans certaines boîtes (les caisses cassées) : les mêmes numéros de boîtes, celles qui manquent
+ * enfouies loin sous le sol. Le serveur et l'écran (pour prévoir ses pas) s'en servent de la même façon.
+ */
+export function worldWithout(map: MapId, gone: readonly number[]): World {
+  if (gone.length === 0) return worldOf(map);
+  const key = `${map}:${[...gone].sort((a, b) => a - b).join(",")}`;
+  let w = holed.get(key);
+  if (!w) {
+    const set = new Set(gone);
+    w = new World(getMap(map).boxes.map((b, i) => (set.has(i) ? { ...b, y0: -80, y1: -79.9 } : b)));
+    if (holed.size >= 32) holed.delete(holed.keys().next().value!);
+    holed.set(key, w);
+  }
+  return w;
+}
+
+/** Le monde de cette partie : la carte, moins ses caisses cassées */
+export function matchWorld(m: Match): World {
+  if (!m.crates.some((c) => c.downUntil > 0)) return worldOf(m.map);
+  return worldWithout(
+    m.map,
+    m.crates.filter((c) => c.downUntil > 0).map((c) => c.box),
+  );
+}
+
 /** Le souffle d'une explosion : les soldats à portée (sauf derrière un mur), et les bidons voisins */
 function blast(
   m: Match,
@@ -656,6 +762,18 @@ function blast(
     if (b.downUntil > 0 || b.hp <= 0) continue;
     const dist = Math.hypot(b.x - x, b.y - y, b.z - z);
     if (dist < radius * 0.8) hitBarrel(m, b.box, damage * (1 - dist / radius), owner);
+  }
+  // Les caisses : le souffle compte depuis leur point le plus proche
+  const boxes = getMap(m.map).boxes;
+  for (const c of m.crates) {
+    if (c.downUntil > 0) continue;
+    const b = boxes[c.box]!;
+    const dist = Math.hypot(
+      x - Math.max(b.x0, Math.min(b.x1, x)),
+      y - Math.max(b.y0, Math.min(b.y1, y)),
+      z - Math.max(b.z0, Math.min(b.z1, z)),
+    );
+    if (dist < radius * 0.8) hitCrate(m, c.box, damage * CRATE.blast * (1 - dist / radius), ev);
   }
 }
 
@@ -887,7 +1005,7 @@ function dropFlag(m: Match, v: number, ev: EscEvent[]) {
   const fv = m.fighters[v]!;
   if (!m.flags || fv.carrying < 0) return;
   const flag = m.flags[fv.carrying]!;
-  const world = worldOf(m.map);
+  const world = matchWorld(m);
   // Le drapeau tombe au sol, sous le porteur
   const down = world.raycast(fv.s.x, fv.s.y + 0.5, fv.s.z, 0, -1, 0, 40);
   flag.at = "dropped";
@@ -934,9 +1052,10 @@ export function worldStep(m: Match, ev: EscEvent[]) {
     m.phase = "live";
     ev.push({ k: "live" });
   }
-  const world = worldOf(m.map);
+  const world = matchWorld(m);
   stepGrenades(m, world, ev);
   stepBlasts(m, world, ev);
+  stepCrates(m, ev);
   if (m.marks.length > 0) m.marks = m.marks.filter((k) => k.until > m.t && m.fighters[k.target]?.s.alive);
   for (let i = 0; i < m.fighters.length; i++) {
     const f = m.fighters[i]!;

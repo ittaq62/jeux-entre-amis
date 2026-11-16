@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot.ts";
-import { getMap, MAP_IDS, type MapId } from "./maps.ts";
+import { getMap, MAP_IDS, yawToward, type MapId } from "./maps.ts";
 import {
   applyCmd,
   chooseNext,
   chooseSpawn,
   CONQUEST,
+  CRATE,
   createMatch,
   finish,
   giveUp,
   hurt,
+  matchWorld,
   REVIVE,
   upgradeMatch,
   waitingRescue,
@@ -20,7 +22,20 @@ import {
   type Pose,
 } from "./match.ts";
 import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
-import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
+import {
+  B,
+  copySoldier,
+  decodeCmd,
+  DT,
+  encodeCmd,
+  eyeOf,
+  forward,
+  newSoldier,
+  quantizeCmd,
+  RADIUS,
+  stepSoldier,
+  type Cmd,
+} from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
 import { damageAt, WEAPONS, withAttachments } from "./weapons.ts";
 import { World } from "./world.ts";
@@ -972,5 +987,138 @@ describe("Escarmouche : la conquête", () => {
     const old = duelMatch("equipes") as unknown as Record<string, unknown>;
     delete old.cq;
     expect(upgradeMatch(old as unknown as Match).cq).toBeNull();
+  });
+});
+
+describe("Escarmouche : les caisses en bois", () => {
+  function duo(map: MapId = "gare") {
+    const m = createMatch(
+      settings({ mode: "solo", map }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      3,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    Object.assign(m.fighters[1]!.s, { x: 45, y: 0, z: 0, vx: 0, vz: 0 });
+    return m;
+  }
+
+  /** Une caisse posée au sol, et une place dégagée à 4 m d'où on la vise en plein */
+  function aimAtCrate(m: Match) {
+    const world = worldOf(m.map);
+    const boxes = getMap(m.map).boxes;
+    for (const c of m.crates) {
+      const b = boxes[c.box]!;
+      if (b.y0 > 0.01) continue;
+      const cx = (b.x0 + b.x1) / 2;
+      const cz = (b.z0 + b.z1) / 2;
+      for (const [dx, dz] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const x = cx + dx * 4;
+        const z = cz + dz * 4;
+        if (world.overlaps(x - 0.35, 0.02, z - 0.35, x + 0.35, 1.78, z + 0.35)) continue;
+        if (!world.overlaps(x - 0.2, -0.1, z - 0.2, x + 0.2, 0.01, z + 0.2)) continue;
+        const ey = eyeOf(newSoldier(x, 0, z, 0, "fa"));
+        const yaw = yawToward(-dx, -dz);
+        const pitch = Math.atan2(0.6 - ey, 4);
+        const [fx, fy, fz] = forward(yaw, pitch);
+        const hit = world.raycast(x, ey, z, fx, fy, fz, 10);
+        if (hit && hit.box === c.box) return { c, x, z, yaw, pitch, cx, cz };
+      }
+    }
+    return null;
+  }
+
+  for (const id of MAP_IDS) {
+    it(`${id} : chaque caisse de la carte est suivie par la partie`, () => {
+      const m = duo(id);
+      expect(m.crates.length).toBe(getMap(id).boxes.filter((b) => b.m === "caisse").length);
+      expect(m.crates.every((c) => c.hp === CRATE.hp && c.downUntil === 0)).toBe(true);
+    });
+  }
+
+  it("à force de balles, une caisse vole en éclats : on passe au travers, puis elle revient quand la place est libre", () => {
+    const m = duo();
+    const aim = aimAtCrate(m)!;
+    expect(aim).toBeTruthy();
+    Object.assign(m.fighters[0]!.s, { x: aim.x, y: 0, z: aim.z, vx: 0, vz: 0 });
+    const ev: EscEvent[] = [];
+    for (let k = 0; k < 60 && aim.c.downUntil === 0; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(k + 1, { yaw: aim.yaw, pitch: aim.pitch, b: k % 2 ? 0 : B.fire | B.ads }), null, ev);
+    }
+    expect(aim.c.downUntil).toBeGreaterThan(m.t);
+    expect(ev.some((e) => e.k === "crate" && e.b === aim.c.box && !e.up)).toBe(true);
+    const s = m.fighters[0]!.s;
+    const [fx, fy, fz] = forward(aim.yaw, aim.pitch);
+    expect(matchWorld(m).raycast(s.x, eyeOf(s), s.z, fx, fy, fz, 10)?.box).not.toBe(aim.c.box);
+    expect(worldOf(m.map).raycast(s.x, eyeOf(s), s.z, fx, fy, fz, 10)?.box).toBe(aim.c.box);
+    expect(encodeTick(m, []).cr).toContain(aim.c.box);
+
+    // Quelqu'un se tient à sa place : elle attend qu'il parte
+    Object.assign(m.fighters[0]!.s, { x: aim.cx, y: 0, z: aim.cz });
+    const back: EscEvent[] = [];
+    while (m.t < m.liveAt + CRATE.back + 3) worldStep(m, back);
+    expect(back.some((e) => e.k === "crate" && e.up)).toBe(false);
+    Object.assign(m.fighters[0]!.s, { x: aim.x, y: 0, z: aim.z });
+    for (let k = 0; k < 90; k++) worldStep(m, back);
+    expect(back.some((e) => e.k === "crate" && e.b === aim.c.box && e.up)).toBe(true);
+    expect(aim.c.hp).toBe(CRATE.hp);
+    expect(matchWorld(m)).toBe(worldOf(m.map));
+  });
+
+  it("une explosion casse les caisses voisines, pas celles qui sont loin", () => {
+    const m = duo();
+    const boxes = getMap(m.map).boxes;
+    const aim = aimAtCrate(m)!;
+    const b = boxes[aim.c.box]!;
+    // Un obus à un mètre de la caisse, du côté dégagé
+    const x = aim.cx + (aim.x - aim.cx) * 0.4;
+    const z = aim.cz + (aim.z - aim.cz) * 0.4;
+    m.blasts.push({ at: m.t, x, y: 0.2, z, owner: 0, kind: "obus", barrel: -1 });
+    const ev: EscEvent[] = [];
+    worldStep(m, ev);
+    expect(aim.c.downUntil).toBeGreaterThan(0);
+    expect(ev.some((e) => e.k === "crate" && e.b === aim.c.box && !e.up)).toBe(true);
+    for (const c of m.crates) {
+      const o = boxes[c.box]!;
+      const d = Math.hypot((o.x0 + o.x1) / 2 - x, (o.z0 + o.z1) / 2 - z);
+      if (d > 12) expect(c.downUntil, `${o.x0},${o.z0}`).toBe(0);
+    }
+    expect(b.m).toBe("caisse");
+  });
+
+  it("une caisse posée sur une autre tombe avec elle", () => {
+    const m = duo();
+    const boxes = getMap(m.map).boxes;
+    // Deux caisses empilées, comme on en poserait : la seconde sur la première
+    const low = m.crates[0]!;
+    const l = boxes[low.box]!;
+    const fake = { ...l, y0: l.y1, y1: l.y1 + (l.y1 - l.y0) };
+    boxes.push(fake);
+    try {
+      const high = { box: boxes.length - 1, hp: CRATE.hp, downUntil: 0 };
+      m.crates.push(high);
+      m.blasts.push({ at: m.t, x: (l.x0 + l.x1) / 2, y: 0.2, z: l.z1 + 0.6, owner: 0, kind: "obus", barrel: -1 });
+      worldStep(m, []);
+      expect(low.downUntil).toBeGreaterThan(0);
+      expect(high.downUntil).toBeGreaterThan(0);
+    } finally {
+      boxes.pop();
+    }
+  });
+
+  it("une partie d'avant les caisses reprend avec toutes ses caisses", () => {
+    const m = duo() as unknown as Record<string, unknown>;
+    delete m.crates;
+    const up = upgradeMatch(m as unknown as Match);
+    expect(up.crates.length).toBe(getMap("gare").boxes.filter((b) => b.m === "caisse").length);
   });
 });

@@ -3,7 +3,7 @@
 // qui dépendent de leur niveau. Ils jouent avec les mêmes commandes qu'un humain.
 
 import { getMap, type MapId } from "./maps.ts";
-import { CONQUEST, isTeamMode, worldOf, type Match } from "./match.ts";
+import { CONQUEST, isTeamMode, matchWorld, worldOf, type Match } from "./match.ts";
 import type { BotLevel } from "./rules.ts";
 import { B, eyeOf, heightOf, MAX_PITCH, RADIUS, wrapAngle, type Cmd } from "./soldier.ts";
 import { WEAPONS, type PrimaryId } from "./weapons.ts";
@@ -430,7 +430,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   const f = m.fighters[i]!;
   const s = f.s;
   const P = BOT_PARAMS[level];
-  const world = worldOf(m.map);
+  const world = matchWorld(m);
   const nav = navOf(m.map);
   const cmd: Cmd = { s: ++mem.seq, mx: 0, mz: 0, yaw: mem.aimYaw, pitch: mem.aimPitch, b: 0, vt: now };
   if (!s.alive || m.phase === "over") {

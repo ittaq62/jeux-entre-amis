@@ -10,7 +10,7 @@ import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { Effects, flashTexture } from "./effects.ts";
 import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from "./guns.ts";
-import { buildMap, type MapMesh } from "./mapMesh.ts";
+import { buildCrates, buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
 import { POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
@@ -68,6 +68,8 @@ export class EscScene {
   private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite; cross: THREE.Sprite }>();
   /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
   private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
+  /** Les caisses en bois : debout, ou quelques planches au sol */
+  private crates = new Map<number, { whole: THREE.Mesh; wreck: THREE.Group; down: boolean }>();
   private vmRoot = new THREE.Group();
   private vmGun: Gun | null = null;
   private vmKey = "";
@@ -170,6 +172,10 @@ export class EscScene {
 
     this.map = buildMap(gm, q);
     this.scene.add(this.map.group);
+    for (const [i, c] of buildCrates(gm, q)) {
+      this.scene.add(c.whole, c.wreck);
+      this.crates.set(i, { ...c, down: false });
+    }
     // L'herbe des prés, la bruine du matin sur la gare
     this.grass = buildGrass(gm, worldOf(gm.id), q);
     if (this.grass) this.scene.add(this.grass);
@@ -378,6 +384,17 @@ export class EscScene {
     }
   }
 
+  /** Les caisses cassées (leurs boîtes) : à leur place, quelques planches */
+  setCrates(down: ReadonlySet<number>) {
+    for (const [i, c] of this.crates) {
+      const isDown = down.has(i);
+      if (isDown === c.down) continue;
+      c.down = isDown;
+      c.whole.visible = !isDown;
+      c.wreck.visible = isDown;
+    }
+  }
+
   /** Les bidons de la carte, debout ou qui ont sauté */
   setBarrels(boxes: { i: number; x: number; z: number }[], down: ReadonlySet<number>) {
     for (const b of boxes) {
@@ -569,18 +586,22 @@ export class EscScene {
     const rElbow = V(0.15, -0.2, 0.32);
     const lWrist = support.clone().add(gun.pistol ? V(-0.03, -0.04, 0.06) : V(-0.03, -0.035, 0.06));
     const lElbow = gun.pistol ? V(-0.16, -0.22, 0.3) : V(-0.2, -0.17, support.z + 0.3);
-    segment(rElbow.clone().add(V(0.08, -0.12, 0.32)), rElbow, 0.062, m.coat, arms);
-    segment(rElbow, rWrist, 0.05, m.coat, arms);
-    segment(lElbow.clone().add(V(-0.08, -0.14, 0.32)), lElbow, 0.062, m.coat, arms);
-    segment(lElbow, lWrist, 0.05, m.coat, arms);
-    // Le poignet de la manche, un ton plus sombre
+    // Les manches : plus fines, elles s'affinent vers le poignet, avec les plis du tissu ; le coude arrondi
+    limb(rElbow.clone().add(V(0.08, -0.12, 0.32)), rElbow, 0.056, 0.047, m.coat, arms, 2);
+    limb(rElbow, rWrist, 0.046, 0.034, m.coat, arms, 3);
+    limb(lElbow.clone().add(V(-0.08, -0.14, 0.32)), lElbow, 0.056, 0.047, m.coat, arms, 2);
+    limb(lElbow, lWrist, 0.046, 0.034, m.coat, arms, 3);
+    for (const e of [rElbow, lElbow]) {
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.047, 12, 8), m.coat);
+      ball.position.copy(e);
+      arms.add(ball);
+    }
+    // Le poignet de la manche, un ton plus sombre, un peu évasé
     for (const [w, e] of [
       [rWrist, rElbow],
       [lWrist, lElbow],
     ] as const) {
-      const cuffA = w.clone().lerp(e, 0.05);
-      const cuffB = w.clone().lerp(e, 0.16);
-      segment(cuffA, cuffB, 0.054, m.pouch, arms);
+      limb(w.clone().lerp(e, 0.03), w.clone().lerp(e, 0.15), 0.039, 0.037, m.pouch, arms);
     }
     const piece = (w: number, h: number, d: number, at: THREE.Vector3, rx = 0, ry = 0, rz = 0) => {
       const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.45), m.glove);
@@ -588,21 +609,57 @@ export class EscScene {
       mesh.rotation.set(rx, ry, rz);
       arms.add(mesh);
     };
-    // La main droite : la paume sur le flanc droit de la poignée, les doigts qui l'entourent devant, le pouce dessus
-    piece(0.032, 0.085, 0.075, grip.clone().add(V(0.03, 0.0, 0.0)), -0.28);
-    piece(0.07, 0.07, 0.03, grip.clone().add(V(0.0, -0.005, -0.04)), -0.28);
-    segment(grip.clone().add(V(0.035, 0.035, 0.02)), grip.clone().add(V(-0.01, 0.045, -0.02)), 0.012, m.glove, arms);
-    // L'index, tendu le long du pontet
-    segment(grip.clone().add(V(0.025, 0.02, -0.03)), grip.clone().add(V(0.02, 0.02, -0.075)), 0.01, m.glove, arms);
+    /** Un doigt : des phalanges qui suivent les points donnés */
+    const finger = (pts: THREE.Vector3[], r: number) => {
+      for (let k = 1; k < pts.length; k++) segment(pts[k - 1]!, pts[k]!, r * (1 - k * 0.06), m.glove, arms, 6);
+    };
+    // Le repère de la poignée (inclinée) : la main droite s'y referme
+    const frame = new THREE.Object3D();
+    frame.position.set(0, -0.015, 0.012);
+    frame.rotation.x = -0.28;
+    frame.updateMatrix();
+    const P = (x: number, y: number, z: number) => V(x, y, z).applyMatrix4(frame.matrix);
+    // La main droite : la paume sur le flanc droit de la poignée, trois doigts qui l'entourent devant, l'index le
+    // long du pontet, le pouce par-dessus
+    piece(0.026, 0.078, 0.07, P(0.031, 0.0, 0.004));
+    piece(0.03, 0.05, 0.05, P(0.03, -0.01, 0.04), 0.2);
+    [0.008, -0.016, -0.038].forEach((y, k) => {
+      const r = [0.0098, 0.0094, 0.0084][k]!;
+      finger([P(0.028, y, -0.012), P(0.014, y, -0.034), P(-0.012, y, -0.034), P(-0.026, y, -0.016)], r);
+    });
+    finger([P(0.028, 0.034, -0.006), V(0.02, -0.006, -0.05), V(0.012, -0.01, -0.072)], 0.0095);
+    finger([P(0.03, 0.04, 0.026), P(0.004, 0.058, 0.012), P(-0.016, 0.056, -0.004)], 0.0105);
     if (gun.pistol) {
       // Les deux mains sur la poignée : la gauche enveloppe la droite
-      piece(0.035, 0.08, 0.075, support.clone().add(V(-0.02, 0.0, 0.0)), -0.28);
-      piece(0.07, 0.06, 0.03, support.clone().add(V(0.01, 0.0, -0.045)), -0.28);
+      piece(0.03, 0.075, 0.07, P(-0.032, -0.006, 0.004));
+      [-0.004, -0.026, -0.046].forEach((y) =>
+        finger([P(-0.03, y, -0.014), P(-0.03, y, -0.04), P(0.0, y, -0.048), P(0.024, y, -0.04)], 0.0092),
+      );
+      finger([P(-0.03, 0.03, 0.02), P(-0.02, 0.05, -0.02)], 0.0105);
     } else {
-      // La main gauche sous le garde-main : la paume dessous, les doigts qui remontent à gauche, le pouce à droite
-      piece(0.07, 0.03, 0.09, support.clone().add(V(0.0, -0.01, 0.0)));
-      piece(0.025, 0.06, 0.08, support.clone().add(V(-0.04, 0.025, 0.0)));
-      segment(support.clone().add(V(0.03, -0.005, 0.03)), support.clone().add(V(0.042, 0.035, -0.02)), 0.011, m.glove, arms);
+      // La main gauche sous le garde-main : la paume dessous, quatre doigts qui remontent à gauche, le pouce à droite
+      piece(0.058, 0.026, 0.085, support.clone().add(V(0.004, -0.008, 0.0)));
+      [-0.03, -0.01, 0.01, 0.03].forEach((dz, k) => {
+        const z = support.z + dz;
+        const r = [0.0092, 0.0098, 0.0094, 0.0084][k]!;
+        finger(
+          [
+            V(-0.026, support.y - 0.006, z),
+            V(-0.042, support.y + 0.018, z),
+            V(-0.04, support.y + 0.04, z - 0.004),
+            V(-0.03, support.y + 0.054, z - 0.008),
+          ],
+          r,
+        );
+      });
+      finger(
+        [
+          V(0.026, support.y - 0.004, support.z + 0.03),
+          V(0.04, support.y + 0.02, support.z),
+          V(0.036, support.y + 0.036, support.z - 0.026),
+        ],
+        0.0105,
+      );
     }
     fuse(arms, false);
     gun.group.add(arms);
@@ -764,6 +821,26 @@ export class EscScene {
     this.env.dispose();
     this.renderer.dispose();
   }
+}
+
+/** Un bras, une manche : un tronc de cône du coude au poignet, qui s'affine, avec `folds` plis du tissu */
+function limb(from: THREE.Vector3, to: THREE.Vector3, r0: number, r1: number, mat: THREE.Material, parent: THREE.Object3D, folds = 0) {
+  const d = new THREE.Vector3().subVectors(to, from);
+  const len = d.length();
+  const pts: THREE.Vector2[] = [new THREE.Vector2(0.0001, 0)];
+  const n = folds > 0 ? 16 : 4;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    let r = r0 + (r1 - r0) * t;
+    if (folds > 0) r *= 1 + 0.07 * Math.sin(t * Math.PI * folds * 2) * Math.sin(t * Math.PI);
+    pts.push(new THREE.Vector2(r, t * len));
+  }
+  pts.push(new THREE.Vector2(0.0001, len));
+  const m = new THREE.Mesh(new THREE.LatheGeometry(pts, 14), mat);
+  m.position.copy(from);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  parent.add(m);
+  return m;
 }
 
 /** La lettre d'un drapeau de la conquête : blanche dans un rond, teintée ensuite aux couleurs de qui le tient */

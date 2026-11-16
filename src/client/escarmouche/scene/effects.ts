@@ -439,6 +439,41 @@ export class Effects {
     h.rotateZ(Math.random() * Math.PI * 2);
   }
 
+  /** Une caisse vole en éclats : des esquilles de bois dans tous les sens, un nuage de poussière */
+  splinters(min: THREE.Vector3, max: THREE.Vector3) {
+    const c = this.tmp2.addVectors(min, max).multiplyScalar(0.5);
+    this.color.set("#9a7448");
+    for (let i = 0; i < 34; i++) {
+      const at = this.tmp.set(
+        min.x + Math.random() * (max.x - min.x),
+        min.y + Math.random() * (max.y - min.y),
+        min.z + Math.random() * (max.z - min.z),
+      );
+      const dx = at.x - c.x;
+      const dz = at.z - c.z;
+      const s = 2 + Math.random() * 3.5;
+      this.chips.emit(
+        at,
+        dx * s + (Math.random() - 0.5) * 2,
+        1.5 + Math.random() * 4,
+        dz * s + (Math.random() - 0.5) * 2,
+        this.color,
+        0.7 + Math.random() * 0.6,
+      );
+    }
+    for (let i = 0; i < 4; i++) {
+      const at = this.tmp.set(c.x + (Math.random() - 0.5) * 0.8, min.y + 0.3 + Math.random() * 0.5, c.z + (Math.random() - 0.5) * 0.8);
+      this.puff(at, "#8d7f6c", 0.6, 1.2, 0.6, 0.45, 1.1, 3);
+    }
+    // Les trous de balles qu'elle portait partent avec elle
+    for (const h of this.holes) {
+      if (!h.visible) continue;
+      const p = h.position;
+      if (p.x > min.x - 0.05 && p.x < max.x + 0.05 && p.y > min.y - 0.05 && p.y < max.y + 0.05 && p.z > min.z - 0.05 && p.z < max.z + 0.05)
+        h.visible = false;
+    }
+  }
+
   /** Un feu qui brûle là quelques secondes (la carcasse d'un bidon) */
   fire(at: THREE.Vector3, seconds: number) {
     this.fires.push({ at: at.clone(), until: this.now + seconds, next: 0, kind: "feu" });

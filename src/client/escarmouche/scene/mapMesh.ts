@@ -139,7 +139,7 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
   const bags: THREE.Box3[] = [];
   const bales: THREE.Box3[] = [];
   gm.boxes.forEach((bx, i) => {
-    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur") return;
+    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse") return;
     // Les sacs de sable et les bottes de foin ont leur propre forme
     if (bx.m === "sacs" || bx.m === "foin") {
       (bx.m === "sacs" ? bags : bales).push(new THREE.Box3(new THREE.Vector3(bx.x0, bx.y0, bx.z0), new THREE.Vector3(bx.x1, bx.y1, bx.z1)));
@@ -194,6 +194,47 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
       });
     },
   };
+}
+
+/**
+ * Les caisses en bois de la carte, chacune son maillage (elle peut voler en éclats), et ce qui en reste : quelques
+ * planches éparpillées au sol, cachées tant qu'elle tient debout
+ */
+export function buildCrates(gm: GameMap, q: Quality): Map<number, { whole: THREE.Mesh; wreck: THREE.Group }> {
+  const out = new Map<number, { whole: THREE.Mesh; wreck: THREE.Group }>();
+  const mat = paintMaterial("caisse", q);
+  const plank = paintMaterial("planche", q);
+  gm.boxes.forEach((bx, i) => {
+    if (bx.m !== "caisse") return;
+    const b = new Bucket();
+    addBox(b, bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.caisse ?? 3, tintOf(i), bx.y0 <= 0.001);
+    const whole = new THREE.Mesh(b.geometry(), mat);
+    whole.castShadow = true;
+    whole.receiveShadow = true;
+    const wreck = new THREE.Group();
+    // Toujours le même désordre pour la même caisse
+    let seed = i * 9301 + 49297;
+    const rnd = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    const w = bx.x1 - bx.x0;
+    const d = bx.z1 - bx.z0;
+    const floor = bx.y0 <= 0.001 ? 0 : bx.y0;
+    for (let k = 0; k < 6; k++) {
+      const len = 0.5 + rnd() * 0.7;
+      const pb = new Bucket();
+      addBox(pb, -len / 2, 0, -0.07, len / 2, 0.035, 0.07, 1.5, tintOf(i + k), false);
+      const piece = new THREE.Mesh(pb.geometry(), k % 3 === 0 ? mat : plank);
+      piece.position.set(bx.x0 + w * (0.1 + rnd() * 0.8), floor + 0.02 + k * 0.012, bx.z0 + d * (0.1 + rnd() * 0.8));
+      piece.rotation.set((rnd() - 0.5) * 0.25, rnd() * Math.PI, (rnd() - 0.5) * 0.25);
+      piece.castShadow = q !== "bas";
+      wreck.add(piece);
+    }
+    wreck.visible = false;
+    out.set(i, { whole, wreck });
+  });
+  return out;
 }
 
 const leafMats = new Map<string, THREE.Material>();

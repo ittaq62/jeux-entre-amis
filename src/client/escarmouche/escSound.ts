@@ -37,7 +37,8 @@ export type EscSoundName =
   | "spot"
   | "shell"
   | "revive"
-  | "shot-quiet";
+  | "shot-quiet"
+  | "crate";
 
 interface ShotSpec {
   thump: number;
@@ -551,6 +552,30 @@ export class EscSound {
           const thump = Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t / 0.025);
           const click = n() * 0.35 * Math.exp(-Math.abs(t - 0.03) / 0.004);
           d[i] = (lp * Math.exp(-t / 0.04) + thump * 0.6 + click) * 0.8;
+        }
+      }),
+    );
+    // Une caisse qui vole en éclats : le craquement sec des planches, puis des morceaux qui retombent
+    this.buffers.set(
+      "crate",
+      this.make(0.9, (d, sr) => {
+        const n = noiseGen(2024);
+        let lp = 0;
+        let lp2 = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const x = n();
+          lp += lowpassK(2200, sr) * (x - lp);
+          lp2 += lowpassK(600, sr) * (x - lp2);
+          const crack = (x - lp) * Math.exp(-t / 0.03) * 1.2;
+          const body = lp * Math.exp(-t / 0.12) * 1.4 + Math.sin(2 * Math.PI * 180 * t) * Math.exp(-t / 0.06) * 0.5;
+          // Les morceaux qui retombent : de petits chocs secs, de plus en plus rares
+          let fall = 0;
+          for (const at of [0.22, 0.31, 0.38, 0.52, 0.61, 0.74]) {
+            const dt = t - at;
+            if (dt > 0 && dt < 0.03) fall += (x - lp2) * Math.exp(-dt / 0.006) * 0.5 * (1 - at);
+          }
+          d[i] = (crack + body + fall) * 0.85;
         }
       }),
     );

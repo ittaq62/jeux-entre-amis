@@ -16,6 +16,7 @@ import {
   POINTS,
   CONQUEST,
   POINT_NAMES,
+  worldWithout,
 } from "../../shared/games/escarmouche/match.ts";
 import {
   B,
@@ -624,6 +625,14 @@ export class BattleRuntime {
       }
       case "barrel":
         return;
+      case "crate": {
+        if (e.up) return;
+        const b = this.gm.boxes[e.b];
+        if (!b) return;
+        this.scene.effects.splinters(new THREE.Vector3(b.x0, b.y0, b.z0), new THREE.Vector3(b.x1, b.y1, b.z1));
+        this.sound.play("crate", { at: { x: (b.x0 + b.x1) / 2, y: b.y0 + 0.6, z: (b.z0 + b.z1) / 2 }, gap: 60 });
+        return;
+      }
       case "revive": {
         const at = this.fighterAt(e.v);
         if (at) this.sound.play("revive", { at: { x: at.x, y: at.y + 0.5, z: at.z }, volume: 0.6 });
@@ -1005,6 +1014,10 @@ export class BattleRuntime {
       for (let k = 0; k + 2 < mk.length; k += 3) if (teams ? mk[k + 1] === myTeam : mk[k + 2] === this.me) this.marked.add(mk[k]!);
     }
     this.scene.setBarrels(this.barrelBoxes, new Set(this.latest?.bd ?? []));
+    // Les caisses cassées : à l'image, et dans le monde où l'on prévoit ses pas (on passe là où elles étaient)
+    const broken = this.latest?.cr ?? [];
+    this.scene.setCrates(new Set(broken));
+    this.world = worldWithout(v.map, broken);
     for (let i = 0; i < v.fighters.length; i++) {
       if (i === this.me) continue;
       const f = this.fighterAt(i, rt);
