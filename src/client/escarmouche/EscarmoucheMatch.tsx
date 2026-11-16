@@ -3,11 +3,13 @@ import { MAP_NAMES } from "../../shared/games/escarmouche/maps.ts";
 import { isTeamMode, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
 import { MODE_INFO } from "../../shared/games/escarmouche/rules.ts";
 import { B } from "../../shared/games/escarmouche/soldier.ts";
-import { PRIMARY_IDS, WEAPONS, type PrimaryId } from "../../shared/games/escarmouche/weapons.ts";
+import { PRIMARY_IDS, SECONDARY_IDS, WEAPONS, type PrimaryId, type SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
+import { weaponItem } from "../../shared/shop.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TEAM_NAMES } from "./EscarmoucheLobby.tsx";
 import { BattleRuntime, type HudState } from "./runtime.ts";
@@ -414,6 +416,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const [board, setBoard] = useState(false);
   const [touch] = useState(() => window.matchMedia("(pointer: coarse)").matches);
   const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth);
+  const { has } = useMyItems();
   const v = room.escarmouche!;
   const over = room.status === "finished" || v.phase === "over";
   const mapKey = `${v.map}:${room.escarmouche?.liveAt}:${room.code}`;
@@ -466,6 +469,10 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
     usePrefs.getState().set({ escarmouchePrimary: primary });
     send({ t: "arsenal", primary });
   };
+  const pickNextSecondary = (secondary: SecondaryId) => {
+    usePrefs.getState().set({ escarmoucheSecondary: secondary });
+    send({ t: "arsenal", secondary });
+  };
 
   const resume = () => {
     setMenu(false);
@@ -480,6 +487,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const hurt = h ? Math.max(0, 1 - (performance.now() - h.hurtAt) / 600) : 0;
   const low = h && h.alive ? Math.max(0, (45 - h.hp) / 45) : 0;
   const forced = v.settings.arsenal !== "libre";
+  const myCamo = room.arsenal[room.you.seatId ?? ""]?.camo ?? "usine";
 
   return (
     <div className={`esc-root ${touch ? "is-touch" : ""}`}>
@@ -619,9 +627,23 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
               <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
               {!forced && (
                 <div className="esc-next">
-                  {PRIMARY_IDS.map((id) => (
+                  {PRIMARY_IDS.filter((id) => has(weaponItem(id))).map((id) => (
                     <button key={id} className={`esc-next-btn ${h.next === id ? "is-on" : ""}`} onClick={() => pickNext(id)}>
-                      <WeaponIcon weapon={id} size={84} camo={room.arsenal[room.you.seatId ?? ""]?.camo ?? "usine"} />
+                      <WeaponIcon weapon={id} size={84} camo={myCamo} />
+                      <span>{WEAPONS[id].name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {v.settings.arsenal !== "pistolet" && SECONDARY_IDS.some((id) => id !== "pistolet" && has(weaponItem(id))) && (
+                <div className="esc-next is-small">
+                  {SECONDARY_IDS.filter((id) => has(weaponItem(id))).map((id) => (
+                    <button
+                      key={id}
+                      className={`esc-next-btn ${h.nextSecondary === id ? "is-on" : ""}`}
+                      onClick={() => pickNextSecondary(id)}
+                    >
+                      <WeaponIcon weapon={id} size={56} camo={myCamo} />
                       <span>{WEAPONS[id].name}</span>
                     </button>
                   ))}

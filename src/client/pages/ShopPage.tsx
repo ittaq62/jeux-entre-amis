@@ -4,7 +4,9 @@ import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleI
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import { FETE_BY_ID, type FeteId } from "../../shared/games/crampons/boutique.ts";
 import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
-import { CamoSwatch, WeaponIcon } from "../escarmouche/WeaponIcon.tsx";
+import { UNIFORM_BY_ID, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
+import { WEAPONS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "../escarmouche/WeaponIcon.tsx";
 import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.ts";
 import { bombInfo, type BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
@@ -45,6 +47,13 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
   { kind: "bombe", game: "meche", title: "Mèche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
   { kind: "tenue", game: "culbute", title: "Culbute", note: "Les tenues des Habitués, à choisir au salon avant le combat" },
+  {
+    kind: "arme",
+    game: "escarmouche",
+    title: "Escarmouche",
+    note: "Des armes de plus, chacune sa façon de se battre : à choisir au salon",
+  },
+  { kind: "uniforme", game: "escarmouche", title: "Escarmouche", note: "Les tenues de ton soldat : ta tête reste la tienne" },
   { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
 ];
 
@@ -73,6 +82,8 @@ export function ShopPage() {
     if (item.kind === "bombe") return <BombArt id={item.ref as BombId} className="bomb-thumb" />;
     if (item.kind === "tenue") return <TenueLook item={item} />;
     if (item.kind === "camo") return <CamoSwatch camo={item.ref as CamoId} size={52} />;
+    if (item.kind === "arme") return <WeaponIcon weapon={item.ref as WeaponId} size={96} />;
+    if (item.kind === "uniforme") return <TenueSwatch tenue={item.ref as UniformId} size={56} />;
     return null;
   };
 
@@ -86,6 +97,8 @@ export function ShopPage() {
     if (item.kind === "fete") return FETE_BY_ID.get(item.ref as FeteId)?.blurb ?? null;
     if (item.kind === "bombe") return bombInfo(item.ref as BombId).blurb;
     if (item.kind === "camo") return CAMO_BY_ID.get(item.ref as CamoId)?.blurb ?? null;
+    if (item.kind === "arme") return WEAPONS[item.ref as WeaponId].blurb;
+    if (item.kind === "uniforme") return UNIFORM_BY_ID.get(item.ref as UniformId)?.blurb ?? null;
     return null;
   };
 
@@ -107,6 +120,17 @@ export function ShopPage() {
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)
     if (item.kind === "bombe") return <BombShow bomb={item.ref as BombId} loud avatar={user?.avatar} />;
     if (item.kind === "camo") return <WeaponIcon weapon="fa" camo={item.ref as CamoId} size={260} />;
+    if (item.kind === "arme") {
+      const id = item.ref as WeaponId;
+      return (
+        <span style={{ display: "grid", justifyItems: "center", gap: 8 }}>
+          <WeaponIcon weapon={id} size={260} />
+          <WeaponBars weapon={id} />
+          <small className="hint">{WEAPONS[id].blurb}</small>
+        </span>
+      );
+    }
+    if (item.kind === "uniforme") return <TenueSwatch tenue={item.ref as UniformId} size={180} />;
     return look(item);
   };
 

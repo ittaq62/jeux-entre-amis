@@ -26,7 +26,7 @@ import {
   type StepOut,
 } from "../../shared/games/escarmouche/soldier.ts";
 import { P_STRIDE, PF, readFighter, SC_STRIDE, type EscMe, type EscTick, type FighterNet } from "../../shared/games/escarmouche/view.ts";
-import { WEAPONS, type PrimaryId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import type { World } from "../../shared/games/escarmouche/world.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -78,6 +78,7 @@ export interface HudState {
   spread: number;
   back: number;
   next: PrimaryId;
+  nextSecondary: SecondaryId;
   killer: { name: string; weapon: KillWeapon; head: boolean } | null;
   teamScores: [number, number];
   myTeam: number;
@@ -155,6 +156,7 @@ export class BattleRuntime {
   private hp = 100;
   private back = 0;
   private next: PrimaryId = "fa";
+  private nextSecondary: SecondaryId = "pistolet";
   private err = new THREE.Vector3();
   private yaw = 0;
   private pitch = 0;
@@ -334,6 +336,7 @@ export class BattleRuntime {
     this.hp = me.hp;
     this.back = me.back;
     this.next = me.next;
+    this.nextSecondary = me.nextSecondary;
     const s = me.s;
     // Le serveur compte plus loin que nous (une connexion d'avant) : on reprend à son compte
     if (s.seq > this.seq) {
@@ -573,7 +576,7 @@ export class BattleRuntime {
     const s = this.pred;
     const alive = Boolean(s?.alive) && this.me >= 0;
     const w = s ? weaponOf(s) : WEAPONS.fa;
-    const scoped = alive && s!.ads && w.id === "precision";
+    const scoped = alive && s!.ads && (w.id === "precision" || w.id === "carabine");
 
     // Viser : la souris ou le doigt tournent la vue tout de suite ; au doigt, une aide colle un peu à l'adversaire
     const assist = this.touch && prefs.escAssist && alive ? this.assistTarget(rt) : null;
@@ -986,6 +989,7 @@ export class BattleRuntime {
       spread: Math.max(4, spread),
       back: this.back,
       next: this.next,
+      nextSecondary: this.nextSecondary,
       killer: this.killer,
       teamScores: tick?.ts ?? [0, 0],
       myTeam: this.me >= 0 ? this.teamOf(this.me) : -1,

@@ -50,6 +50,7 @@ export class EscScene {
   private map: MapMesh;
   private sky: THREE.Mesh;
   private sun: THREE.DirectionalLight;
+  private env: THREE.Texture;
   readonly effects: Effects;
   private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite }>();
   private vmRoot = new THREE.Group();
@@ -107,6 +108,34 @@ export class EscScene {
     }
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
+
+    // Le reflet du ciel sur le métal et les surfaces lisses : une petite sphère de ciel avec son soleil, filtrée une fois
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const envScene = new THREE.Scene();
+    envScene.add(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(10, 32, 16),
+        new THREE.MeshBasicMaterial({ map: skyTexture(gm.light), side: THREE.BackSide }),
+      ),
+    );
+    const sunBlob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.9, 12, 8),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(this.sun.color).multiplyScalar(gm.light === "soir" ? 14 : 6) }),
+    );
+    sunBlob.position.copy(this.sun.position).normalize().multiplyScalar(9);
+    envScene.add(sunBlob);
+    this.env = pmrem.fromScene(envScene, 0.02).texture;
+    pmrem.dispose();
+    envScene.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+      }
+    });
+    this.scene.environment = this.env;
+    this.scene.environmentIntensity = 0.7;
+    this.vmScene.environment = this.env;
+    this.vmScene.environmentIntensity = 0.9;
 
     // Le ciel, qui suit la caméra, et des collines au loin
     const skyMat = new THREE.MeshBasicMaterial({ map: skyTexture(gm.light), side: THREE.BackSide, fog: false, depthWrite: false });
@@ -338,8 +367,9 @@ export class EscScene {
       s.rotation.x = rx - 0.25;
       this.vmGun!.group.add(s);
     };
+    const gun = this.vmGun;
     hand(0.01, -0.02, 0.03, 0.3);
-    hand(-0.02, 0.0, weapon === "pistolet" ? -0.02 : -0.4, 0.15);
+    hand(-0.02, gun.pistol ? -0.01 : 0.0, gun.pistol ? -0.02 : gun.front, 0.15);
     this.vmKey = key;
   }
 
@@ -349,9 +379,9 @@ export class EscScene {
     const gun = this.vmGun!;
     this.vmRoot.visible = v.alive && !v.scoped;
     // À la hanche : en bas à droite, assez loin pour ne pas boucher la vue ; épaulée : le viseur au milieu de l'écran
-    const hip = v.weapon === "pistolet" ? new THREE.Vector3(0.17, -0.17, -0.42) : new THREE.Vector3(0.2, -0.21, -0.5);
-    const sight = (v.weapon === "precision" ? 0.15 : v.weapon === "pistolet" ? 0.1 : 0.13) * 0.62;
-    const ads = new THREE.Vector3(0, -sight - 0.012, v.weapon === "pistolet" ? -0.34 : -0.4);
+    const hip = gun.pistol ? new THREE.Vector3(0.17, -0.17, -0.42) : new THREE.Vector3(0.2, -0.21, -0.5);
+    const sight = gun.sight * 0.62;
+    const ads = new THREE.Vector3(0, -sight, gun.pistol ? -0.34 : -0.4);
     const p = hip.lerp(ads, v.ads);
     const bob = Math.sin(v.bob) * v.bobAmp * (1 - v.ads * 0.8);
     p.x += Math.cos(v.bob * 0.5) * v.bobAmp * 0.5 * (1 - v.ads) - v.swayX * 0.04;
@@ -370,9 +400,15 @@ export class EscScene {
       gun.group.rotation.z = r * 0.6;
       gun.group.rotation.x -= r * 0.35;
       gun.group.position.y -= r * 0.06;
-      if (gun.mag) gun.mag.position.y = (v.weapon === "pompe" ? 0.025 : -0.06) - r * 0.14;
-    } else if (gun.mag)
-      gun.mag.position.y = v.weapon === "pompe" ? 0.025 : v.weapon === "pistolet" ? -0.02 : v.weapon === "pm" ? -0.1 : -0.06;
+      if (gun.mag) gun.mag.position.y = gun.magRest.y - r * 0.16;
+      if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = gun.hingeAxis === "x" ? -r * 0.55 : r * 1.3;
+    } else {
+      if (gun.mag) gun.mag.position.y = gun.magRest.y;
+      if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = 0;
+    }
+    // La pompe recule puis revient après chaque coup
+    if (gun.pump)
+      gun.pump.position.z = gun.pumpRest + (v.kick > 0 && v.kick < 0.85 ? Math.sin(((0.85 - v.kick) / 0.85) * Math.PI) * 0.09 : 0);
     // Le couteau et la grenade passent devant
     this.vmKnife.visible = v.alive && v.melee >= 0;
     if (this.vmKnife.visible) {
@@ -411,6 +447,7 @@ export class EscScene {
   dispose() {
     for (const i of [...this.soldiers.keys()]) this.removeSoldier(i);
     this.map.dispose();
+    this.env.dispose();
     this.renderer.dispose();
   }
 }

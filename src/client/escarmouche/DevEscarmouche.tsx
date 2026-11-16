@@ -11,6 +11,7 @@ import { WEAPON_IDS, type WeaponId } from "../../shared/games/escarmouche/weapon
 import { useSession } from "../stores/session.ts";
 import { EscScene } from "./scene/EscScene.ts";
 import { TEAM_KITS } from "./scene/soldiers.ts";
+import { buildGun } from "./scene/guns.ts";
 import * as THREE from "three";
 
 interface View {
@@ -49,6 +50,7 @@ export function DevEscarmouche() {
   const camo = (params.get("camo") ?? "usine") as CamoId;
   const low = params.has("tel");
   const closeUp = params.has("soldat");
+  const gallery = params.has("armes");
   const views = VIEWS[map];
 
   useEffect(() => {
@@ -82,6 +84,19 @@ export function DevEscarmouche() {
         p.team ? "#3f7fd8" : "#d4453c",
       );
     });
+    // La galerie : les douze armes alignées devant la caméra, sur trois rangs
+    if (gallery) {
+      WEAPON_IDS.forEach((id, k) => {
+        const gun = buildGun(id, camo, low);
+        const col = k % 4;
+        const row = Math.floor(k / 4);
+        const d = 2.3;
+        const side = (col - 1.5) * 1.12;
+        gun.group.position.set(v.x + fx * d + rx * side, v.y + 0.42 - row * 0.4, v.z + fz * d + rz * side);
+        gun.group.rotation.y = v.yaw - Math.PI / 2;
+        scene.scene.add(gun.group);
+      });
+    }
     const world = (p: (typeof spots)[number]) => ({ x: v.x + fx * p.d + rx * p.s, z: v.z + fz * p.d + rz * p.s });
     let t = 0;
     let last = performance.now();
@@ -133,7 +148,7 @@ export function DevEscarmouche() {
         sprint: false,
         melee: -1,
         throwing: -1,
-        alive: !closeUp,
+        alive: !closeUp && !gallery,
         scoped: false,
       });
       // Des effets qui partent tout seuls : une rafale vers le soldat bleu, une explosion de temps en temps
@@ -158,7 +173,7 @@ export function DevEscarmouche() {
       window.removeEventListener("resize", fit);
       scene.dispose();
     };
-  }, [map, view, weapon, camo, low, closeUp, user, views]);
+  }, [map, view, weapon, camo, low, closeUp, gallery, user, views]);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000" }}>

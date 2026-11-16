@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
 import { UNIFORM_BY_ID, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
-import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { WEAPONS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 
 /** Les taches d'un camouflage, toujours les mêmes (tirées d'un nombre) */
 function blotches(seed: number, n: number, w: number, h: number) {
@@ -160,5 +160,34 @@ export function TenueSwatch({ tenue, size = 34, own = "#c0392b" }: { tenue: Unif
         <path d="M10 22 l3 -3 l2 3 l3 -4 l2 4 l3 -3 l2 3 l3 -3 l2 3" stroke="#5f7238" strokeWidth="2" fill="none" />
       )}
     </svg>
+  );
+}
+
+/** Ce qui distingue une arme des autres, ramené à des barres (0 à 1) : dégâts, cadence, portée, mobilité */
+export function weaponBars(id: WeaponId): [string, number][] {
+  const w = WEAPONS[id];
+  const perShot = w.dmg[0] * w.pellets;
+  const rate = (w.burst ? w.burst / (w.interval + (w.burst - 1) * (w.burstGap ?? 0.07)) : 1 / w.interval) * 60;
+  return [
+    ["Dégâts", Math.min(1, perShot / 120)],
+    ["Cadence", Math.min(1, rate / 1000)],
+    ["Portée", Math.min(1, (w.range[0] + w.range[1]) / 90)],
+    ["Mobilité", Math.min(1, Math.max(0, (w.move - 0.8) / 0.3))],
+  ];
+}
+
+/** Les quatre barres d'une arme, en petit */
+export function WeaponBars({ weapon }: { weapon: WeaponId }) {
+  return (
+    <span style={{ display: "grid", gap: 3, width: "100%", maxWidth: 220 }}>
+      {weaponBars(weapon).map(([label, v]) => (
+        <span key={label} style={{ display: "grid", gridTemplateColumns: "62px 1fr", alignItems: "center", gap: 6, fontSize: 11 }}>
+          <small style={{ textAlign: "left", color: "var(--text-soft)" }}>{label}</small>
+          <span style={{ height: 6, borderRadius: 3, background: "rgba(127, 127, 127, 0.25)", overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", width: `${Math.round(v * 100)}%`, background: "#b5793a" }} />
+          </span>
+        </span>
+      ))}
+    </span>
   );
 }

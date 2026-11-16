@@ -31,7 +31,7 @@ import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
-import { CamoSwatch, TenueSwatch, WeaponIcon } from "./WeaponIcon.tsx";
+import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "./WeaponIcon.tsx";
 
 const BOT_HINTS: Record<BotLevel, string> = {
   facile: "Ils mettent du temps à réagir et visent large : idéal pour découvrir.",
@@ -49,19 +49,6 @@ interface Props {
   onOpenChat: () => void;
   onLeave: () => void;
   onBackToGame?: () => void;
-}
-
-/** Ce qui distingue une arme des autres, ramené à des barres (0 à 1) : dégâts, cadence, portée, mobilité */
-export function weaponBars(id: WeaponId): [string, number][] {
-  const w = WEAPONS[id];
-  const perShot = w.dmg[0] * w.pellets;
-  const rate = (w.burst ? w.burst / (w.interval + (w.burst - 1) * (w.burstGap ?? 0.07)) : 1 / w.interval) * 60;
-  return [
-    ["Dégâts", Math.min(1, perShot / 120)],
-    ["Cadence", Math.min(1, rate / 1000)],
-    ["Portée", Math.min(1, (w.range[0] + w.range[1]) / 90)],
-    ["Mobilité", Math.min(1, Math.max(0, (w.move - 0.8) / 0.3))],
-  ];
 }
 
 function WeaponCard({
@@ -90,14 +77,7 @@ function WeaponCard({
     >
       <WeaponIcon weapon={id} camo={camo} />
       <strong>{w.name}</strong>
-      <span className="esc-bars">
-        {weaponBars(id).map(([label, v]) => (
-          <span key={label} className="esc-bar">
-            <small>{label}</small>
-            <i style={{ width: `${Math.round(v * 100)}%` }} />
-          </span>
-        ))}
-      </span>
+      <WeaponBars weapon={id} />
       <small>{w.blurb}</small>
       {locked && <span className="esc-lock">Boutique · {w.price} pts</span>}
     </button>

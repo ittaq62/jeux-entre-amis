@@ -867,6 +867,35 @@ html:has(.esc-root) body {
   cursor: default;
 }
 
+.esc-weapons.is-small {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+}
+
+.esc-weapon {
+  position: relative;
+}
+
+.esc-weapon.is-locked > :not(.esc-lock) {
+  opacity: 0.5;
+}
+
+.esc-lock {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(20, 22, 18, 0.85);
+  color: #f0d9a8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.esc-next.is-small {
+  margin-top: 6px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .esc-camo-title {
   margin: 12px 0 6px;
   font-size: 15px;
