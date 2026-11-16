@@ -36,7 +36,8 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
           </p>
           <p className="hint">
             La garde s'use et rétrécit ; levée au tout dernier moment, elle pare le coup (un tintement clair) et l'attaquant reste figé un
-            instant : à toi de punir. Un même coup répété s'use aussi, il pousse moins : varie tes attaques.
+            instant : à toi de punir. Un même coup répété s'use aussi, il pousse moins : varie tes attaques. Éjecté, tiens la direction en
+            travers de ta trajectoire (vers le haut, vers l'arène) : tu iras un peu moins loin.
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour saisir, une autre
