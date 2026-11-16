@@ -388,6 +388,11 @@ export function CulbuteFight({
           {hud.countdown === 0 ? "Culbute !" : hud.countdown}
         </div>
       )}
+      {hud?.phase === 2 && !finished && (
+        <div className="cb-countdown is-end" aria-live="polite">
+          Terminé !
+        </div>
+      )}
 
       {hud && (
         <footer className="cb-hud" aria-label="Les combattants">
