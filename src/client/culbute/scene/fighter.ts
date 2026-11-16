@@ -10,7 +10,7 @@ import { moveDef } from "../../../shared/games/culbute/engine.ts";
 import type { HabitueId, ItemKind } from "../../../shared/games/culbute/model.ts";
 import type { PoseId } from "../../../shared/games/culbute/moves.ts";
 import { STYLES } from "../../../shared/games/culbute/styles.ts";
-import { F_CREAM, F_FAST, F_INTANG } from "../../../shared/games/culbute/view.ts";
+import { F_CREAM, F_FAST, F_INTANG, F_STOP } from "../../../shared/games/culbute/view.ts";
 import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import type { RenderFighter } from "../runtime.ts";
 import { cloth, dotsTexture, knitTexture, limb, loft, merge, mitten, shoe } from "./body.ts";
@@ -992,6 +992,12 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
 
     const { pose, strike, charging } = this.pose(f, time);
     this.group.position.set(f.x, f.y, 0);
+    // Figé par un coup reçu : il tremble, d'autant plus que le coup est fort
+    if (f.state === "hurt" && (f.flags & F_STOP) !== 0) {
+      const amp = Math.min(0.09, 0.025 + this.flash * 0.25);
+      this.group.position.x += Math.sin(time * 95) * amp;
+      this.group.position.y += Math.cos(time * 71) * amp * 0.4;
+    }
     // Tourné vers où il regarde, un peu de trois quarts vers nous
     const wanted = f.face * (Math.PI / 2 - 0.42);
     this.yaw += (wanted - this.yaw) * Math.min(1, dt * 18);
