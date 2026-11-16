@@ -1,4 +1,5 @@
-// Les cartes d'Escarmouche : Le Hameau (un village de pierre) et La Gare de triage (wagons, quais, hangar).
+// Les cartes d'Escarmouche : Le Hameau (un village de pierre), La Gare de triage (wagons, quais, hangar), Le Port
+// (conteneurs, portique) et Le Col (un col enneigé : chalet, scierie, chapelle en ruine).
 // Chaque carte est symétrique par un demi-tour autour de son centre : ce que voit une équipe depuis sa base, l'autre le
 // voit depuis la sienne. Une base de chaque côté, la zone au centre : les quatre modes s'y jouent.
 //
@@ -6,8 +7,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port"];
+export type MapId = "hameau" | "gare" | "port" | "col";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col"];
 
 export interface Spawn {
   x: number;
@@ -45,6 +46,8 @@ export type Decor =
   /** Un toit en pointe (clocher, beffroi) */
   | { k: "spire"; x0: number; z0: number; x1: number; z1: number; y: number; h: number; m: Mat }
   | { k: "tree"; x: number; z: number; h: number; r: number }
+  /** Un sapin sous la neige */
+  | { k: "pine"; x: number; z: number; h: number; r: number }
   /** Une voie ferrée le long de x */
   | { k: "rail"; x0: number; x1: number; z: number }
   | { k: "lamp"; x: number; z: number; h: number }
@@ -94,7 +97,7 @@ export interface GameMap {
   /** Les trois drapeaux de la conquête : A du côté ouest, B au centre, C du côté est */
   points: [Point3, Point3, Point3];
   /** L'heure et le temps qu'il fait : seulement pour l'image */
-  light: "soir" | "gris" | "aube";
+  light: "soir" | "gris" | "aube" | "neige";
   /** La mer, au nord, au-delà du quai (seulement pour l'image) */
   sea?: boolean;
 }
@@ -105,6 +108,10 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     blurb: "Un village de pierre : la halle au centre, des ruelles, et des maisons à étage pour tirer d'en haut.",
   },
   gare: { name: "La Gare de triage", blurb: "Des wagons garés, un hangar, une passerelle au-dessus des voies : de longues lignes de tir." },
+  col: {
+    name: "Le Col",
+    blurb: "Un col sous la neige : le chalet à étage, la scierie et ses grumes, la chapelle en ruine au milieu, des rochers et des sapins.",
+  },
   port: {
     name: "Le Port",
     blurb: "Des rangées de conteneurs, un entrepôt, la capitainerie et le grand portique au milieu : on grimpe, on contourne, on surprend.",
@@ -172,6 +179,7 @@ class Builder {
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
       case "tree":
+      case "pine":
       case "lamp":
       case "tower":
         this.decor.push({ ...d, x: -d.x, z: -d.z });
@@ -414,6 +422,12 @@ class Builder {
   /** Un bidon d'essence, debout : il explose quand on tire dessus */
   barrel(x: number, z: number) {
     this.box(x - 0.3, 0, z - 0.3, x + 0.3, 0.95, z + 0.3, "bidon");
+  }
+
+  /** Un sapin : son tronc arrête les balles, ses branches ne sont que du décor */
+  pine(x: number, z: number, h = 8, r = 2.2) {
+    this.box(x - 0.25, 0, z - 0.25, x + 0.25, h * 0.6, z + 0.25, "bois");
+    this.add({ k: "pine", x, z, h, r });
   }
 
   tree(x: number, z: number, h = 7, r = 2.6) {
@@ -929,18 +943,161 @@ function port(): GameMap {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Le Col
+// ---------------------------------------------------------------------------
+
+function colSide(b: Builder) {
+  // La base : une cabane de rondins fermée, une palissade, des sacs de sable et une congère devant
+  b.block(-47.5, -15.5, -41.5, -11, 3.2, "bois", { m: "neige", axis: "x" });
+  b.box(-47.7, 0, 11.5, -40.5, 1.6, 11.8, "bois");
+  b.crate(-46.8, 9.6);
+  b.crate(-45.4, 9.7, 1.2, 2.4);
+  b.sandbags(-37.6, -3.5, -37, 3.5);
+  b.box(-36.4, 0, 6.5, -33.4, 0.9, 7.6, "neige");
+  b.add({ k: "lamp", x: -38.5, z: -7, h: 5 });
+
+  // Le chalet : deux niveaux de rondins, l'escalier le long du mur nord, des fenêtres sur la vallée
+  b.house(-31, 14, -23, 21, {
+    floors: 2,
+    open: [
+      { side: "s", at: -28.6, w: 1.4, kind: "door" },
+      { side: "e", at: 15.6, w: 1.3, kind: "door" },
+      { side: "s", at: -25.6, w: 1.4, kind: "win" },
+      { side: "w", at: 15.4, w: 1.4, kind: "win" },
+      { side: "s", at: -29.8, w: 1.5, kind: "win", floor: 1 },
+      { side: "s", at: -26.4, w: 1.6, kind: "win", floor: 1 },
+      { side: "e", at: 16.2, w: 1.6, kind: "win", floor: 1 },
+      { side: "w", at: 16.4, w: 1.6, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -30.6, dir: 1, c0: 19.2, c1: 20.7 },
+    wall: "bois",
+    roof: "neige",
+    roofAxis: "x",
+  });
+
+  // La scierie : un toit sur poteaux, les grumes empilées, la scie, des caisses
+  for (const [x, z] of [
+    [-30, -24],
+    [-18.3, -24],
+    [-30, -17.3],
+    [-18.3, -17.3],
+  ] as const)
+    b.box(x, 0, z, x + 0.3, 4, z + 0.3, "bois");
+  b.box(-30.3, 4, -24.3, -18, 4.2, -17, "planche");
+  b.add({ k: "roof", x0: -30.6, z0: -24.6, x1: -17.7, z1: -16.7, y: 4.2, h: 1.6, axis: "x", m: "neige" });
+  b.box(-28, 0, -23.2, -22, 0.9, -21.6, "bois");
+  b.box(-27.4, 0.9, -23.1, -23, 1.7, -22, "bois");
+  b.box(-25.4, 0, -19.6, -21.2, 0.9, -18.7, "metal");
+  b.crate(-20, -22.6);
+  b.crate(-19.4, -20.4, 1.2, 2.4);
+  // Des grumes dehors, sur le chemin : un abri bas
+  b.box(-14, 0, -12.2, -9.2, 1.1, -10.8, "bois");
+
+  // La chapelle : le clocher, plein, et son toit en pointe
+  b.block(-7, 20, -2.6, 24.4, 8, "pierre");
+  b.add({ k: "spire", x0: -7.3, z0: 19.7, x1: -2.3, z1: 24.7, y: 8, h: 4, m: "neige" });
+
+  // Le milieu : les murs bas d'une chapelle en ruine, ouverts de chaque côté (l'autre moitié par le demi-tour)
+  b.box(-5, 0, -4.5, -4.6, 2.4, -1.2, "pierre");
+  b.box(-5, 0, 1.2, -4.6, 1.4, 4.5, "pierre");
+  b.box(-4.6, 0, -4.5, -1.4, 1.8, -4.1, "pierre");
+  b.box(1.6, 0, -4.5, 4.6, 1.1, -4.1, "pierre");
+
+  // Des rochers, des congères, des barrières de bois : de quoi se mettre à l'abri
+  b.box(-20, 0, 2, -17.5, 1.6, 4.2, "pierre");
+  b.box(-19.2, 1.6, 2.5, -18, 2.3, 3.6, "pierre");
+  b.box(-36, 0, 18, -33, 1.3, 21, "pierre");
+  b.box(-10, 0, -24, -6.5, 2, -21, "pierre");
+  b.box(-26, 0, 2, -23, 0.9, 3, "neige");
+  b.box(-9, 0, 6, -6, 1, 7, "neige");
+  b.box(-33, 0, -6, -30.5, 0.85, -5, "neige");
+  b.box(-40, 0, 16, -33, 0.9, 16.2, "bois");
+  b.box(-22, 0, -8, -16, 0.9, -7.8, "bois");
+
+  // Les sapins, l'étang gelé, les bidons, une caisse, un lampadaire
+  for (const [x, z, h] of [
+    [-37, -21, 9],
+    [-41, 24, 8],
+    [-17, 23, 10],
+    [-13, -4, 7],
+    [-23.5, -12.5, 8],
+    [-44, 19, 7],
+    [-27, 27, 9],
+    [-34, -27, 8],
+  ] as const)
+    b.pine(x, z, h);
+  b.add({ k: "patch", x0: -20, z0: 8, x1: -12, z1: 13, m: "glace" });
+  b.barrel(-26, 7);
+  b.barrel(-13.5, -14.6);
+  b.barrel(-34, 10);
+  b.crate(-16, 4.6);
+  b.add({ k: "lamp", x: -14, z: 9.6, h: 5 });
+}
+
+function col(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "neige");
+  fence(b, -48, -30, 48, 30);
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    colSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -4, 0, -4),
+      b.spawn(-46, 4, 0, 4),
+      b.spawn(-43, -7, 0, -7),
+      b.spawn(-43, 7, 0, 7),
+      b.spawn(-41, -3, 0, -3),
+      b.spawn(-41, 3, 0, 3),
+      b.spawn(-45, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-21.5, 9.5, 0, 9.5),
+      b.spawn(-22, -14, 0, -14),
+      b.spawn(-9, -18, 0, -18),
+      b.spawn(-12, 2, 0, 0),
+    );
+    ffa.push(b.spawn(-35, -14, 0, -14), b.spawn(-6, 15, 0, 15));
+  }
+  b.s = 1;
+  return {
+    id: "col",
+    ...MAP_NAMES.col,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    points: [
+      { x: -24, y: 0, z: -4 },
+      { x: 0, y: 0, z: 0 },
+      { x: 24, y: 0, z: 4 },
+    ],
+    light: "neige",
+  };
+}
+
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {
   let m = cache.get(id);
   if (!m) {
-    m = id === "gare" ? gare() : id === "port" ? port() : hameau();
+    m = id === "gare" ? gare() : id === "port" ? port() : id === "col" ? col() : hameau();
     cache.set(id, m);
   }
   return m;
 }
 
 export function isMapId(v: unknown): v is MapId {
-  return v === "hameau" || v === "gare" || v === "port";
+  return v === "hameau" || v === "gare" || v === "port" || v === "col";
 }

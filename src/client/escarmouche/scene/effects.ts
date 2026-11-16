@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { softDot } from "./textures.ts";
 
 /** Ce que touche une balle : il décide de ce qui en jaillit */
-export type Surface = "metal" | "stone" | "wood" | "dirt";
+export type Surface = "metal" | "stone" | "wood" | "dirt" | "snow";
 
 interface Puff {
   sprite: THREE.Sprite;
@@ -194,6 +194,7 @@ const SURFACE: Record<Surface, { dust: string; chip: string; hole: string; size:
   stone: { dust: "#b5a88f", chip: "#7a7062", hole: "#ffffff", size: 0.09 },
   wood: { dust: "#8b6a46", chip: "#5c3f26", hole: "#c9a37a", size: 0.08 },
   dirt: { dust: "#7d6a50", chip: "#4a3c2c", hole: "#ffffff", size: 0.12 },
+  snow: { dust: "#f2f5f8", chip: "#ffffff", hole: "#aebdcc", size: 0.12 },
 };
 
 export class Effects {

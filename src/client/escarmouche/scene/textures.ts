@@ -40,6 +40,52 @@ function shade(hex: string, k: number): string {
 type Painter = (g: CanvasRenderingContext2D, size: number, r: () => number) => void;
 
 const PAINT: Partial<Record<Mat, Painter>> = {
+  // La neige : un blanc bleuté, des creux plus bleus, des traces de pas et des grains qui brillent
+  neige: (g, size, r) => {
+    g.fillStyle = "#eef2f6";
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = `rgba(${r() < 0.6 ? "170,190,215" : "255,255,255"},${0.06 + r() * 0.1})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 8 + r() * 50, 5 + r() * 26, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = r() * size;
+      const y = r() * size;
+      g.fillStyle = "rgba(150,170,200,.16)";
+      g.beginPath();
+      g.ellipse(x, y, 3.5, 7, 0.3, 0, Math.PI * 2);
+      g.ellipse(x + 9, y + 13, 3.5, 7, 0.3, 0, Math.PI * 2);
+      g.fill();
+    }
+    grain(g, size, r, 2600, 0.06);
+  },
+  // La glace : un bleu pâle, des reflets, des fêlures blanches
+  glace: (g, size, r) => {
+    g.fillStyle = "#b9d3e2";
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 16; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.05 + r() * 0.1})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 10 + r() * 40, 4 + r() * 14, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.strokeStyle = "rgba(255,255,255,.55)";
+    g.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      let x = r() * size;
+      let y = r() * size;
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) {
+        x += (r() - 0.5) * 40;
+        y += (r() - 0.5) * 40;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  },
   pierre: (g, size, r) => {
     g.fillStyle = "#8d8577";
     g.fillRect(0, 0, size, size);
@@ -290,6 +336,8 @@ export const TILE: Partial<Record<Mat, number>> = {
   foin: 1.2,
   caisse: 1.2,
   sol: 3,
+  neige: 4,
+  glace: 3,
 };
 
 const cache = new Map<string, THREE.CanvasTexture>();

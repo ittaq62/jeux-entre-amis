@@ -18,6 +18,7 @@ import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type Soldie
 import { buildDistant, type Distant } from "./distant.ts";
 import { worldOf } from "../../../shared/games/escarmouche/match.ts";
 import { buildDecals } from "./decals.ts";
+import { Snow } from "./snow.ts";
 import { buildGrass, grassTime } from "./grass.ts";
 import { Post } from "./post.ts";
 import { Rain } from "./rain.ts";
@@ -96,6 +97,7 @@ export class EscScene {
   private post: Post | null = null;
   private grass: THREE.Mesh | null = null;
   private rain: Rain | null = null;
+  private snow: Snow | null = null;
   private sunDir: THREE.Vector3;
   private shadowSpan = 30;
   /** La force des rayons du soleil : franche au couchant et à l'aube, nulle sous un ciel couvert */
@@ -119,7 +121,7 @@ export class EscScene {
     this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = night ? 1.3 : light === "soir" ? 1.12 : 1.15;
+    this.renderer.toneMappingExposure = night ? 1.3 : light === "neige" ? 1.02 : light === "soir" ? 1.12 : 1.15;
     this.renderer.autoClear = false;
     if (q !== "bas") {
       this.renderer.shadowMap.enabled = true;
@@ -142,8 +144,11 @@ export class EscScene {
     }
     this.scene.add(hemi);
     this.sunDir = sunDirection(light);
-    this.rayPower = light === "gris" || night ? 0 : light === "aube" ? 0.9 : 1;
-    this.sun = new THREE.DirectionalLight(look.sunColor, night ? 0.85 : light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7);
+    this.rayPower = light === "gris" || night ? 0 : light === "neige" ? 0.4 : light === "aube" ? 0.9 : 1;
+    this.sun = new THREE.DirectionalLight(
+      look.sunColor,
+      night ? 0.85 : light === "neige" ? 2 : light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7,
+    );
     this.sun.position.copy(this.sunDir).multiplyScalar(90);
     if (q !== "bas") {
       this.sun.castShadow = true;
@@ -173,8 +178,8 @@ export class EscScene {
 
     // Le ciel, qui suit la caméra, et le pays tout autour
     this.skyMat = skyMaterial(light);
-    // La nuit sur la gare : il bruine, le ciel est couvert, pas d'étoiles
-    if (night && gm.light === "gris") {
+    // La nuit sur la gare et sur le col : il bruine ou il neige, le ciel est couvert, pas d'étoiles
+    if (night && (gm.light === "gris" || gm.light === "neige")) {
       this.skyMat.uniforms.clouds!.value = 0.85;
       this.skyMat.uniforms.stars!.value = 0.15;
     }
@@ -198,6 +203,11 @@ export class EscScene {
     const decals = buildDecals(gm, worldOf(gm.id), q);
     if (decals) this.scene.add(decals);
     if (night) this.lightLamps(gm, q);
+    // La neige qui tombe sur le col
+    if (gm.light === "neige") {
+      this.snow = new Snow(q === "haut" ? 1800 : q === "moyen" ? 900 : 300);
+      this.scene.add(this.snow.points);
+    }
     if (gm.light === "gris" && q !== "bas") {
       this.rain = new Rain(q === "haut" ? 1500 : 700);
       this.scene.add(this.rain.lines);
@@ -296,11 +306,13 @@ export class EscScene {
         this.vmCam,
         night
           ? { tint: "#dfe7ff", saturation: 0.8, contrast: 1.1, bloom: 0.55 }
-          : light === "soir"
-            ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
-            : light === "aube"
-              ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
-              : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
+          : light === "neige"
+            ? { tint: "#f1f6ff", saturation: 0.9, contrast: 1.08, bloom: 0.2 }
+            : light === "soir"
+              ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
+              : light === "aube"
+                ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
+                : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
       );
     void opts.teams;
   }
@@ -873,6 +885,7 @@ export class EscScene {
     this.effects.update(dt, this.camera);
     grassTime.value = this.t;
     this.rain?.update(dt, this.camera);
+    this.snow?.update(dt, this.camera);
     this.updateViewFx(dt);
     this.skyMat.uniforms.time!.value = this.t;
     this.map.update(this.t);
@@ -901,6 +914,7 @@ export class EscScene {
       (this.grass.material as THREE.Material).dispose();
     }
     this.rain?.dispose();
+    this.snow?.dispose();
     this.post?.dispose();
     this.skyMat.dispose();
     this.env.dispose();

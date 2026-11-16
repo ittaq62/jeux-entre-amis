@@ -47,7 +47,8 @@ export interface Distant {
   dispose(): void;
 }
 
-export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "aube"): Distant {
+export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "aube" | "neige"): Distant {
+  const winter = light === "neige";
   const group = new THREE.Group();
   const { x0, x1, z0, z1 } = gm.bounds;
   const pad = 3;
@@ -58,8 +59,8 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
     if (d <= 0) return -0.3;
     // La mer au nord : le fond descend sous l'eau, et remonte au loin en falaises de l'autre côté de la baie
     if (gm.sea && z > z1 + pad) return -6 + smooth(260, 420, z - z1) * (20 + fbm(x * 0.006, z * 0.006) * 50);
-    const hills = smooth(0, 60, d) * (1.5 + fbm(x * 0.012, z * 0.012) * 16);
-    const far = smooth(110, 360, d) * (25 + fbm(x * 0.004 + 9, z * 0.004 - 4, 5) * 110);
+    const hills = smooth(0, 60, d) * (1.5 + fbm(x * 0.012, z * 0.012) * 16) * (winter ? 1.6 : 1);
+    const far = smooth(110, 360, d) * (25 + fbm(x * 0.004 + 9, z * 0.004 - 4, 5) * 110) * (winter ? 1.7 : 1);
     return hills + far;
   };
 
@@ -93,10 +94,17 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
     const crop = hash(px, pz);
     c.copy(crop < 0.3 ? wheat : crop < 0.48 ? plowed : crop < 0.75 ? meadow : grass);
     const woods = fbm(x * 0.018 + 50, z * 0.018 - 20);
-    if (woods > 0.56 && d > 10) c.lerp(forest, smooth(0.56, 0.62, woods));
-    c.lerp(grass, 1 - smooth(4, 20, d));
-    if (h > 40) c.lerp(rock, smooth(40, 80, h));
-    if (h > 95) c.lerp(snow, smooth(95, 120, h));
+    if (winter) {
+      // L'hiver : la neige partout, les bois sombres qui la percent, la roche nue sur les pentes raides
+      c.copy(snow);
+      if (woods > 0.56 && d > 10) c.lerp(new THREE.Color("#2c3a2c"), smooth(0.56, 0.64, woods) * 0.8);
+      if (h > 60 && fbm(x * 0.03, z * 0.03) > 0.55) c.lerp(rock, 0.55);
+    } else {
+      if (woods > 0.56 && d > 10) c.lerp(forest, smooth(0.56, 0.62, woods));
+      c.lerp(grass, 1 - smooth(4, 20, d));
+      if (h > 40) c.lerp(rock, smooth(40, 80, h));
+      if (h > 95) c.lerp(snow, smooth(95, 120, h));
+    }
     c.multiplyScalar(0.92 + hash(x * 0.3, z * 0.3) * 0.16);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
@@ -140,7 +148,9 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
   const crowns = new THREE.InstancedMesh(crownGeo, crownMat, spots.length * 2);
   const m = new THREE.Matrix4();
   const quat = new THREE.Quaternion();
-  const leaf = [new THREE.Color("#3e5126"), new THREE.Color("#4a5d2b"), new THREE.Color("#33421f"), new THREE.Color("#58642e")];
+  const leaf = winter
+    ? [new THREE.Color("#2e3d30"), new THREE.Color("#3a4a3b"), new THREE.Color("#c9d3d6"), new THREE.Color("#28352a")]
+    : [new THREE.Color("#3e5126"), new THREE.Color("#4a5d2b"), new THREE.Color("#33421f"), new THREE.Color("#58642e")];
   spots.forEach((p, i) => {
     const h = 7 * p.s;
     m.compose(new THREE.Vector3(p.x, p.h - 0.2, p.z), quat, new THREE.Vector3(p.s, h * 0.45, p.s));

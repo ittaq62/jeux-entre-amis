@@ -138,7 +138,7 @@ export class EscSound {
   }
 
   /** L'ambiance de la carte, en boucle sous le combat */
-  startAmbience(light: "soir" | "gris" | "aube" | "nuit") {
+  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige") {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const sr = ctx.sampleRate;
@@ -164,7 +164,7 @@ export class EscSound {
     src.connect(gain).connect(this.out);
     src.start();
     const level = () => usePrefs.getState().volume * (usePrefs.getState().sound ? 1 : 0);
-    gain.gain.setTargetAtTime(level() * (light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
+    gain.gain.setTargetAtTime(level() * (light === "neige" ? 0.62 : light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
     const nodes: AudioNode[] = [src, gain];
     if (light === "aube") {
       // Le clapotis contre le quai : un bruit grave qui va et vient
@@ -219,7 +219,29 @@ export class EscSound {
       const g = ctx.createGain();
       g.gain.value = 0;
       g.connect(pan).connect(this.out);
-      if (light === "nuit") {
+      if (light === "neige") {
+        // Un corbeau au loin : deux ou trois croassements rauques
+        const caws = 2 + Math.floor(Math.random() * 2);
+        for (let k = 0; k < caws; k++) {
+          const o = ctx.createOscillator();
+          o.type = "sawtooth";
+          const at = t0 + k * 0.42;
+          o.frequency.setValueAtTime(520 + Math.random() * 60, at);
+          o.frequency.exponentialRampToValueAtTime(380, at + 0.26);
+          const f = ctx.createBiquadFilter();
+          f.type = "bandpass";
+          f.frequency.value = 900;
+          f.Q.value = 2.2;
+          const og = ctx.createGain();
+          og.gain.setValueAtTime(0, at);
+          og.gain.linearRampToValueAtTime(level() * 0.04, at + 0.03);
+          og.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
+          o.connect(f).connect(og).connect(pan);
+          og.connect(this.verbIn!);
+          o.start(at);
+          o.stop(at + 0.32);
+        }
+      } else if (light === "nuit") {
         if (Math.random() < 0.25) {
           // Une chouette : un hou bref, puis un long hou-ou qui tremble
           for (const [k, len] of [

@@ -1470,6 +1470,8 @@ function surfaceOf(m: Mat | undefined): Surface {
     case "foin":
     case "sacs":
       return "dirt";
+    case "neige":
+      return "snow";
     default:
       return "stone";
   }

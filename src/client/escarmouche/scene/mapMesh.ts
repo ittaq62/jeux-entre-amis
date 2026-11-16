@@ -22,6 +22,8 @@ const LOOK: Partial<Record<Mat, { rough: number; metal?: number; bump: number }>
   crepi: { rough: 0.96, bump: 0.7 },
   crepi2: { rough: 0.96, bump: 0.7 },
   bois: { rough: 0.82, bump: 1.1 },
+  neige: { rough: 0.88, bump: 0.45 },
+  glace: { rough: 0.1, metal: 0.15, bump: 0.15 },
   planche: { rough: 0.8, bump: 1.0 },
   tuile: { rough: 0.72, bump: 1.4 },
   beton: { rough: 0.9, bump: 0.6 },
@@ -144,6 +146,21 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   const bales: THREE.Box3[] = [];
   gm.boxes.forEach((bx, i) => {
     if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse") return;
+    // Les congères : de la neige amoncelée, arrondie (pas un bloc)
+    if (bx.m === "neige" && bx.y0 >= -0.01 && bx.y1 - bx.y0 < 1.4) {
+      const w = bx.x1 - bx.x0;
+      const h = bx.y1 - bx.y0;
+      const d = bx.z1 - bx.z0;
+      const mound = new THREE.Mesh(
+        new RoundedBoxGeometry(w + 0.2, h + 0.25, d + 0.2, q === "bas" ? 2 : 4, Math.min(h * 0.6, w / 2, d / 2) + 0.1),
+        matMaterial("neige", q, false),
+      );
+      mound.position.set((bx.x0 + bx.x1) / 2, bx.y0 + h / 2 - 0.12, (bx.z0 + bx.z1) / 2);
+      mound.castShadow = true;
+      mound.receiveShadow = true;
+      group.add(mound);
+      return;
+    }
     // Les sacs de sable et les bottes de foin ont leur propre forme
     if (bx.m === "sacs" || bx.m === "foin") {
       (bx.m === "sacs" ? bags : bales).push(new THREE.Box3(new THREE.Vector3(bx.x0, bx.y0, bx.z0), new THREE.Vector3(bx.x1, bx.y1, bx.z1)));
@@ -276,6 +293,58 @@ function barkMaterial(q: Quality): THREE.Material {
 const LEAVES = ["#3f5226", "#4b5f2b", "#55682f", "#36461f", "#5f6f33"];
 
 /** Un arbre : son tronc rond (il cache le pied carré qui arrête les balles), trois branches, sept grappes de feuilles */
+/** Un sapin sous la neige : son tronc, des étages de branches en cônes, la neige posée sur chacun */
+function pine(d: Extract<Decor, { k: "pine" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const trunkH = d.h * 0.35;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, trunkH, low ? 6 : 8), barkMaterial(q));
+  trunk.position.set(d.x, trunkH / 2, d.z);
+  trunk.castShadow = true;
+  group.add(trunk);
+  const parts: THREE.BufferGeometry[] = [];
+  const green = new THREE.Color("#25402c");
+  const dark = new THREE.Color("#1a2e20");
+  const white = new THREE.Color("#eef3f6");
+  const tiers = low ? 3 : 4;
+  for (let k = 0; k < tiers; k++) {
+    const t = k / tiers;
+    const r = d.r * (1 - t * 0.7);
+    const h = d.h * 0.36;
+    const g = new THREE.ConeGeometry(r, h, low ? 7 : 11, 2);
+    const y = trunkH * 0.7 + k * d.h * 0.17 + h / 2;
+    g.translate(d.x, y, d.z);
+    g.rotateY(0);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(pos.count * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      // La neige sur le haut de chaque étage et au bout des branches, plus sombre dessous
+      const ly = (pos.getY(i) - (y - h / 2)) / h;
+      const edge = Math.sin(pos.getX(i) * 9.1 + pos.getZ(i) * 7.3 + k) * 0.5 + 0.5;
+      c.copy(ly < 0.15 ? dark : green);
+      if (ly > 0.35 + edge * 0.3) c.lerp(white, 0.85);
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    parts.push(g.index ? g.toNonIndexed() : g);
+  }
+  const merged = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  if (!merged) return;
+  merged.computeVertexNormals();
+  const crown = new THREE.Mesh(
+    merged,
+    low
+      ? new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })
+      : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }),
+  );
+  crown.castShadow = true;
+  crown.receiveShadow = q === "haut";
+  group.add(crown);
+}
+
 function tree(d: Extract<Decor, { k: "tree" }>, group: THREE.Group, q: Quality) {
   const low = q === "bas";
   const trunkH = d.h * 0.62;
@@ -585,6 +654,10 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
     }
     case "tree": {
       tree(d, group, q);
+      return;
+    }
+    case "pine": {
+      pine(d, group, q);
       return;
     }
     case "rail": {

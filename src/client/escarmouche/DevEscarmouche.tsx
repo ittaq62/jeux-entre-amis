@@ -45,6 +45,12 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  col: [
+    { name: "La base ouest, vers la ruine", x: -43, y: 1.7, z: 1.5, yaw: -Math.PI / 2, pitch: -0.02 },
+    { name: "Devant le chalet", x: -18, y: 1.7, z: 6, yaw: Math.atan2(27 - 18, -(17.5 - 6)), pitch: 0.05 },
+    { name: "Dans la ruine", x: -3.5, y: 1.7, z: -2, yaw: -Math.PI / 2 - 0.3, pitch: 0 },
+    { name: "Sous la scierie", x: -24, y: 1.7, z: -14.5, yaw: Math.atan2(-(-20 + 24), -(-21 + 14.5)), pitch: -0.05 },
+  ],
 };
 
 export function DevEscarmouche() {

@@ -22,6 +22,10 @@ export type Mat =
   | "gravier"
   | "foin"
   | "caisse"
+  /** La neige du col (le sol, les congères, les toits) */
+  | "neige"
+  /** La glace d'un étang gelé (seulement à l'image) */
+  | "glace"
   /** Des sacs de sable (dessinés sac par sac) */
   | "sacs"
   /** Un bidon d'essence : il explose quand on tire dessus */

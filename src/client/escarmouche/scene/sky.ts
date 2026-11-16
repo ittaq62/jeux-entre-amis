@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 
-export type Light = "soir" | "gris" | "aube" | "nuit";
+export type Light = "soir" | "gris" | "aube" | "nuit" | "neige";
 
 export interface SkyLook {
   zenith: string;
@@ -74,6 +74,22 @@ export const SKIES: Record<Light, SkyLook> = {
     fog: "#0c1220",
     fogNear: 16,
     fogFar: 150,
+  },
+  // Le col en hiver : un ciel blanc et bleuté, un soleil pâle derrière les nuages de neige, l'horizon qui se fond
+  neige: {
+    zenith: "#9cb0c4",
+    horizon: "#e2e8ed",
+    ground: "#b9c1c7",
+    sunColor: "#fff3e4",
+    sun: [0.45, 0.42, 0.55],
+    sunSize: 0.04,
+    glow: 0.7,
+    clouds: 0.6,
+    cloudLit: "#f3f6f8",
+    cloudShade: "#98a4b0",
+    fog: "#dbe3e9",
+    fogNear: 24,
+    fogFar: 170,
   },
   // La gare un matin couvert : des gris bleutés, un soleil voilé, des nuages bas et lourds
   gris: {
