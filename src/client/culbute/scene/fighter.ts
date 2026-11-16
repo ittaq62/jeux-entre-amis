@@ -987,10 +987,11 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
         let pose: Pose;
         const mt = f.mt;
         if (tl.charge >= 0 && Math.abs(mt - tl.charge) < 0.5 && f.charge > 0) {
-          // La charge : il tremble, l'arme en arrière
+          // La charge : l'arme loin en arrière, ramassé sur lui-même, il tremble de plus en plus
           charging = true;
-          const shake = Math.sin(time * 60) * 0.015;
-          pose = with_(W, { twist: W.twist + shake * 4, crouch: W.crouch + 0.04 });
+          const ck = Math.min(1, f.charge / 60);
+          const shake = Math.sin(time * 60) * (0.015 + ck * 0.025);
+          pose = with_(W, { twist: W.twist * (1 + ck * 0.35) + shake * 4, crouch: W.crouch + 0.05 + ck * 0.08, lean: W.lean - ck * 0.12 });
         } else if (mt < tl.first) pose = blend(moveBase, W, ease(Math.min(1, mt / tl.first)));
         else if (mt <= tl.last + 1) {
           strike = Math.min(1, (mt - tl.first + 1) / Math.max(1.5, (tl.last - tl.first + 1) * 0.5));
@@ -1166,8 +1167,17 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
 
     // L'éclair d'un coup reçu, la charge qui monte, le café qui donne des ailes
     this.flash = Math.max(0, this.flash - dt);
-    const glow = this.flash > 0 ? 0.9 : charging ? 0.25 + 0.2 * Math.sin(time * 30) : (f.flags & F_FAST) !== 0 ? 0.12 : 0;
-    const glowColor = this.flash > 0 ? 0xffffff : charging ? 0xffc040 : 0x8fd3ff;
+    // La charge : une lueur dorée qui enfle et bat de plus en plus vite
+    const ck = Math.min(1, f.charge / 60);
+    const glow =
+      this.flash > 0
+        ? 0.9
+        : charging
+          ? 0.16 + ck * 0.22 + (0.06 + ck * 0.06) * Math.sin(time * (18 + ck * 22))
+          : (f.flags & F_FAST) !== 0
+            ? 0.12
+            : 0;
+    const glowColor = this.flash > 0 ? 0xffffff : charging ? (ck > 0.85 ? 0xffc860 : 0xff9a30) : 0x8fd3ff;
     for (const m of this.mats) {
       m.emissive.setHex(glowColor);
       m.emissiveIntensity = glow;

@@ -89,6 +89,9 @@ export class CulbuteScene {
   private grounded: boolean[] = [];
   private lastXs: number[] = [];
   private dustAt: number[] = [];
+  /** La charge de chacun : la dernière étincelle aspirée, et s'il a déjà jeté l'éclair de la charge pleine */
+  private chargeAt: number[] = [];
+  private chargeFull: boolean[] = [];
   /** Le coup qui fait sortir : la caméra plonge sur l'impact le temps de l'arrêt sur image */
   private koCam: { x: number; y: number; age: number } | null = null;
   /** Par-dessus l'image : les bulles des combattants sortis du cadre, au bord de l'écran, tournées vers eux */
@@ -275,6 +278,7 @@ export class CulbuteScene {
       m.update(dt, f, this.time);
       this.placeBlob(i, f, frame.plats);
       this.dust(i, f, dt);
+      this.charging(i, f);
       const pad = this.pads[i]!;
       pad.visible = f.state === "respawn";
       if (pad.visible) pad.position.set(f.x, f.y + Math.sin(this.time * 2) * 0.03, 0);
@@ -647,7 +651,7 @@ export class CulbuteScene {
   }
 
   /** Un éclat de lumière qui gonfle et s'éteint */
-  private flare(x: number, y: number, size: number, color: number, life: number) {
+  private flare(x: number, y: number, size: number, color: number, life: number, z = 0.7) {
     const mat = new THREE.SpriteMaterial({
       map: this.glowTex(),
       color,
@@ -656,10 +660,58 @@ export class CulbuteScene {
       blending: THREE.AdditiveBlending,
     });
     const m = new THREE.Sprite(mat);
-    m.position.set(x, y, 0.7);
+    m.position.set(x, y, z);
     this.add(m, life, (k) => {
       m.scale.setScalar(size * (0.6 + k * 0.6));
       mat.opacity = (1 - k) ** 2;
+      if (k >= 1) mat.dispose();
+    });
+  }
+
+  /**
+   * Un coup qu'on charge : des étincelles aspirées vers lui, de plus en plus vite et dorées, une lueur qui enfle ; chargé
+   * à fond, un éclair et un anneau
+   */
+  private charging(i: number, f: RenderFrame["fighters"][number]) {
+    const on = f.state === "move" && f.charge > 0;
+    if (!on) {
+      this.chargeFull[i] = false;
+      return;
+    }
+    const k = Math.min(1, f.charge / 60);
+    const cx = f.x;
+    const cy = f.y + 0.9;
+    const every = 0.09 - k * 0.05;
+    if (this.time - (this.chargeAt[i] ?? 0) > every) {
+      this.chargeAt[i] = this.time;
+      this.gather(cx, cy, k > 0.66 ? 0xfff0c0 : k > 0.33 ? 0xffd25a : 0xffa040, 0.9 + k * 0.6);
+      // Un halo qui bat derrière lui (pas devant : on doit encore le voir)
+      this.flare(cx, cy, 1.1 + k * 1.1, 0xff9a30, 0.12, -0.6);
+    }
+    if (k >= 1 && !this.chargeFull[i]) {
+      this.chargeFull[i] = true;
+      this.flare(cx, cy, 2.6, 0xffe08a, 0.25, -0.6);
+      this.wave(cx, cy, 2.4, 0xffe08a, 0.35);
+    }
+  }
+
+  /** Une étincelle qui part d'un peu plus loin et file vers le centre en s'effaçant */
+  private gather(x: number, y: number, color: number, radius: number) {
+    const mat = new THREE.SpriteMaterial({
+      map: this.glowTex(),
+      color,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const m = new THREE.Sprite(mat);
+    const a = Math.random() * Math.PI * 2;
+    const r = radius * (0.8 + Math.random() * 0.4);
+    this.add(m, 0.22, (k) => {
+      const d = r * (1 - k) ** 1.6;
+      m.position.set(x + Math.cos(a) * d, y + Math.sin(a) * d, 0.75);
+      m.scale.setScalar(0.32 * (1 - k * 0.5));
+      mat.opacity = Math.min(1, k * 4) * (1 - k * 0.3);
       if (k >= 1) mat.dispose();
     });
   }
