@@ -17,6 +17,7 @@ import { POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
 import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
 import { buildDistant, type Distant } from "./distant.ts";
 import { worldOf } from "../../../shared/games/escarmouche/match.ts";
+import { buildDecals } from "./decals.ts";
 import { buildGrass, grassTime } from "./grass.ts";
 import { Post } from "./post.ts";
 import { Rain } from "./rain.ts";
@@ -181,6 +182,9 @@ export class EscScene {
     // L'herbe des prés, la bruine du matin sur la gare
     this.grass = buildGrass(gm, worldOf(gm.id), q);
     if (this.grass) this.scene.add(this.grass);
+    // Les flaques et les taches au sol
+    const decals = buildDecals(gm, worldOf(gm.id), q);
+    if (decals) this.scene.add(decals);
     if (light === "gris" && q !== "bas") {
       this.rain = new Rain(q === "haut" ? 1500 : 700);
       this.scene.add(this.rain.lines);
@@ -655,11 +659,11 @@ export class EscScene {
     finger([P(0.03, 0.04, 0.026), P(0.004, 0.058, 0.012), P(-0.016, 0.056, -0.004)], 0.0105);
     if (gun.pistol) {
       // Les deux mains sur la poignée : la gauche enveloppe la droite
-      piece(0.03, 0.075, 0.07, P(-0.032, -0.006, 0.004));
-      [-0.004, -0.026, -0.046].forEach((y) =>
-        finger([P(-0.03, y, -0.014), P(-0.03, y, -0.04), P(0.0, y, -0.048), P(0.024, y, -0.04)], 0.0092),
+      piece(0.022, 0.062, 0.058, P(-0.027, -0.008, 0.004));
+      [-0.006, -0.026, -0.044].forEach((y, k) =>
+        finger([P(-0.025, y, -0.016), P(-0.025, y, -0.039), P(0.0, y, -0.045), P(0.02, y, -0.037)], [0.0084, 0.0082, 0.0074][k]!),
       );
-      finger([P(-0.03, 0.03, 0.02), P(-0.02, 0.05, -0.02)], 0.0105);
+      finger([P(-0.026, 0.026, 0.018), P(-0.018, 0.044, -0.016)], 0.0094);
     } else {
       // La main gauche sous le garde-main : la paume dessous, quatre doigts qui remontent à gauche, le pouce à droite
       piece(0.058, 0.026, 0.085, support.clone().add(V(0.004, -0.008, 0.0)));
