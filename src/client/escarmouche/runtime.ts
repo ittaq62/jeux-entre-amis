@@ -209,6 +209,8 @@ export class BattleRuntime {
   private fastFor = 0;
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
+  private tmp3 = new THREE.Vector3();
+  private tmp4 = new THREE.Vector3();
 
   constructor(o: RuntimeOpts) {
     this.room = o.room;
@@ -255,6 +257,7 @@ export class BattleRuntime {
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
+    this.sound.startAmbience(this.gm.light);
     const loop = () => {
       if (!this.running) return;
       this.frame();
@@ -269,6 +272,7 @@ export class BattleRuntime {
     window.removeEventListener("resize", this.fit);
     this.controls.dispose();
     this.scene.dispose();
+    this.sound.dispose();
   }
 
   /** La table a changé : les soldats, leurs camps, leurs camouflages */
@@ -428,6 +432,17 @@ export class BattleRuntime {
             this.lastShots.set(e.i, performance.now());
           }
           this.scene.effects.tracer(from, at, 0.8);
+          // La balle passe tout près : elle siffle
+          if (this.me >= 0 && this.pred?.alive) {
+            const cam = this.scene.camera.position;
+            const seg = this.tmp3.subVectors(at, from);
+            const len = seg.length();
+            if (len > 1) {
+              const k = Math.max(0, Math.min(1, this.tmp4.subVectors(cam, from).dot(seg) / (len * len)));
+              const close = this.tmp4.copy(from).addScaledVector(seg, k);
+              if (k > 0.05 && k < 0.98 && close.distanceTo(cam) < 2.2) this.sound.play("whiz", { at: close, volume: 0.7, gap: 60 });
+            }
+          }
         }
         if (e.n > 0) {
           const axis = (e.n - 1) >> 1;

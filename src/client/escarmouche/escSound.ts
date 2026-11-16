@@ -1,5 +1,7 @@
 // Les sons d'Escarmouche, fabriqués à la volée (aucun fichier) : chaque arme a sa détonation, qui claque de près et
-// gronde de loin ; le rechargement, les pas, la grenade, les touches. Ils viennent de là où ça se passe.
+// gronde de loin ; le rechargement, les pas, la grenade, les touches. Ils viennent de là où ça se passe : plus on est
+// loin, plus ils s'assourdissent et plus l'écho des murs l'emporte. Une ambiance tourne derrière (le vent, les
+// oiseaux du hameau, les tôles et les pigeons de la gare), et les balles qui frôlent sifflent.
 
 import { audioOut } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -27,7 +29,8 @@ export type EscSoundName =
   | "flag-back"
   | "beep"
   | "go"
-  | "zone";
+  | "zone"
+  | "whiz";
 
 interface ShotSpec {
   thump: number;
@@ -54,6 +57,20 @@ const SHOTS: Record<WeaponId, ShotSpec> = {
   pa: { thump: 150, thumpDecay: 0.04, noiseDecay: 0.03, cut: 6000, tail: 0.25, crack: 0.4, gain: 0.65 },
 };
 
+/** Ce que chaque son envoie dans l'écho (0 : rien, un clic d'interface par exemple) */
+const WET: Partial<Record<string, number>> = {
+  shot: 0.32,
+  far: 0.6,
+  boom: 0.55,
+  pump: 0.12,
+  reload: 0.08,
+  step: 0.06,
+  land: 0.08,
+  bounce: 0.15,
+  knife: 0.1,
+  whiz: 0.1,
+};
+
 /** Un petit bruit blanc toujours le même */
 function noiseGen(seed: number) {
   let s = seed >>> 0;
@@ -72,12 +89,145 @@ export class EscSound {
   private out: GainNode | null;
   private buffers = new Map<EscSoundName, AudioBuffer>();
   private last = new Map<string, number>();
+  /** L'écho : une réverbération faite d'un bruit qui s'éteint, où chaque son envoie un peu de lui-même */
+  private verb: ConvolverNode | null = null;
+  private verbIn: GainNode | null = null;
+  private ear = { x: 0, y: 0, z: 0 };
+  private ambience: { nodes: AudioNode[]; timer: number } | null = null;
 
   constructor() {
     const a = audioOut();
     this.ctx = a?.ctx ?? null;
     this.out = a?.out ?? null;
-    if (this.ctx) this.build(this.ctx);
+    if (this.ctx) {
+      this.build(this.ctx);
+      this.buildVerb(this.ctx);
+    }
+  }
+
+  private buildVerb(ctx: AudioContext) {
+    const len = 2.2;
+    const sr = ctx.sampleRate;
+    const ir = ctx.createBuffer(2, Math.floor(len * sr), sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      const n = noiseGen(ch ? 991 : 313);
+      let lp = 0;
+      const k = lowpassK(2600, sr);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        lp += k * (n() - lp);
+        // Des premières réflexions sur les façades, puis la queue qui s'éteint
+        const early = t < 0.09 && i % Math.floor(sr * (0.011 + ch * 0.003)) < 30 ? 0.6 : 0;
+        d[i] = (lp * 1.6 + early * n()) * Math.exp(-t / 0.42) * Math.min(1, t / 0.008);
+      }
+    }
+    this.verb = ctx.createConvolver();
+    this.verb.buffer = ir;
+    this.verbIn = ctx.createGain();
+    this.verbIn.gain.value = 0.55;
+    this.verbIn.connect(this.verb).connect(this.out!);
+  }
+
+  /** L'ambiance de la carte, en boucle sous le combat */
+  startAmbience(light: "soir" | "gris") {
+    const ctx = this.ctx;
+    if (!ctx || !this.out || this.ambience) return;
+    const sr = ctx.sampleRate;
+    // Le vent : un bruit très filtré qui enfle et retombe
+    const wind = ctx.createBuffer(1, sr * 8, sr);
+    const d = wind.getChannelData(0);
+    const n = noiseGen(4711);
+    let lp = 0;
+    let lp2 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const t = i / sr;
+      lp += lowpassK(380, sr) * (n() - lp);
+      lp2 += lowpassK(120, sr) * (lp - lp2);
+      // L'enveloppe boucle sans couture sur huit secondes
+      const swell = 0.55 + 0.45 * Math.sin((t / 8) * Math.PI * 2) * Math.sin((t / 8) * Math.PI * 6 + 1);
+      d[i] = (lp * 0.6 + lp2 * 2.2) * swell;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = wind;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain).connect(this.out);
+    src.start();
+    const level = () => usePrefs.getState().volume * (usePrefs.getState().sound ? 1 : 0);
+    gain.gain.setTargetAtTime(level() * (light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
+    // Les bruits de fond, de temps en temps : des oiseaux le soir au hameau, des tôles et des pigeons à la gare
+    const chirp = () => {
+      if (!this.ctx || !this.out || level() === 0) return;
+      const t0 = ctx.currentTime + 0.05;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = Math.random() * 1.6 - 0.8;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(pan).connect(this.out);
+      if (light === "soir") {
+        const notes = 2 + Math.floor(Math.random() * 4);
+        const base = 2600 + Math.random() * 1600;
+        for (let k = 0; k < notes; k++) {
+          const o = ctx.createOscillator();
+          const at = t0 + k * (0.09 + Math.random() * 0.05);
+          o.frequency.setValueAtTime(base * (1 + Math.random() * 0.2), at);
+          o.frequency.exponentialRampToValueAtTime(base * 1.5, at + 0.06);
+          const og = ctx.createGain();
+          og.gain.setValueAtTime(0, at);
+          og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.01);
+          og.gain.exponentialRampToValueAtTime(0.0001, at + 0.08);
+          o.connect(og).connect(pan);
+          o.start(at);
+          o.stop(at + 0.1);
+        }
+      } else if (Math.random() < 0.55) {
+        // Une tôle qui cogne au loin, avec son écho
+        const o = ctx.createOscillator();
+        o.type = "triangle";
+        o.frequency.value = 180 + Math.random() * 140;
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(level() * 0.06, t0);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
+        o.connect(og).connect(pan);
+        og.connect(this.verbIn!);
+        o.start(t0);
+        o.stop(t0 + 1);
+      } else {
+        // Un pigeon : deux roucoulements graves
+        for (let k = 0; k < 2; k++) {
+          const o = ctx.createOscillator();
+          const at = t0 + k * 0.45;
+          o.frequency.setValueAtTime(420, at);
+          o.frequency.linearRampToValueAtTime(330, at + 0.3);
+          const og = ctx.createGain();
+          og.gain.setValueAtTime(0, at);
+          og.gain.linearRampToValueAtTime(level() * 0.035, at + 0.06);
+          og.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
+          o.connect(og).connect(pan);
+          o.start(at);
+          o.stop(at + 0.36);
+        }
+      }
+    };
+    const timer = window.setInterval(() => {
+      if (Math.random() < 0.45) chirp();
+    }, 2600);
+    this.ambience = { nodes: [src, gain], timer };
+  }
+
+  dispose() {
+    if (this.ambience) {
+      window.clearInterval(this.ambience.timer);
+      for (const n of this.ambience.nodes) {
+        if (n instanceof AudioBufferSourceNode) n.stop();
+        n.disconnect();
+      }
+      this.ambience = null;
+    }
+    this.verbIn?.disconnect();
+    this.verb?.disconnect();
   }
 
   private make(len: number, fill: (data: Float32Array, sr: number) => void): AudioBuffer {
@@ -316,6 +466,22 @@ export class EscSound {
     this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
     this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
     this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+    // Une balle qui frôle : un souffle aigu qui file et retombe
+    this.buffers.set(
+      "whiz",
+      this.make(0.22, (d, sr) => {
+        const n = noiseGen(5150);
+        let bp = 0;
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const fc = 5200 - t * 14000;
+          lp += lowpassK(Math.max(900, fc), sr) * (n() - lp);
+          bp = lp - bp * 0.2;
+          d[i] = bp * Math.sin(Math.min(1, t / 0.22) * Math.PI) ** 2;
+        }
+      }),
+    );
   }
 
   /** L'oreille : là où est le joueur, et où il regarde */
@@ -325,6 +491,7 @@ export class EscSound {
     const l = ctx.listener;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
+    this.ear = { x, y, z };
     if (l.positionX) {
       const t = ctx.currentTime;
       l.positionX.setValueAtTime(x, t);
@@ -360,7 +527,20 @@ export class EscSound {
     src.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
     const gain = ctx.createGain();
     gain.gain.value = prefs.volume * (opts.volume ?? 1) * 0.8;
-    src.connect(gain);
+    // Plus c'est loin, plus c'est sourd (les aigus se perdent) et plus l'écho domine
+    const dist = opts.at ? Math.hypot(opts.at.x - this.ear.x, opts.at.y - this.ear.y, opts.at.z - this.ear.z) : 0;
+    if (opts.at && dist > 6) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = Math.max(700, 16000 * Math.exp(-dist / 28));
+      src.connect(lp).connect(gain);
+    } else src.connect(gain);
+    const wet = WET[name.startsWith("shot-") ? "shot" : name] ?? 0;
+    if (wet > 0 && this.verbIn) {
+      const send = ctx.createGain();
+      send.gain.value = wet * (opts.at ? Math.min(2.2, 1 + dist / 30) : 1);
+      gain.connect(send).connect(this.verbIn);
+    }
     if (opts.at) {
       const p = ctx.createPanner();
       p.panningModel = "equalpower";
