@@ -8,6 +8,21 @@
   gap: 12px;
 }
 
+.cb-stage-view {
+  max-height: 240px;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(255, 236, 196, 0.22), rgba(0, 0, 0, 0) 70%), var(--panel-sunken);
+  overflow: hidden;
+}
+
+.cb-tenue-stage {
+  display: block;
+  width: min(300px, 70vw);
+  border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(255, 236, 196, 0.25), rgba(0, 0, 0, 0) 70%), var(--panel-sunken);
+  overflow: hidden;
+}
+
 .cb-roster {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
@@ -279,67 +294,108 @@ html:has(.cb-fight) body {
 }
 
 .cb-card-hud {
+  --c: #ffffff;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 150px;
-  padding: 6px 12px 6px 6px;
-  border: 2px solid;
-  border-radius: 14px;
-  background: rgba(10, 12, 18, 0.7);
+  min-width: 172px;
+  padding: 7px 14px 7px 58px;
+  border-radius: 16px;
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--c) 55%, transparent) 0 46px, transparent 46px),
+    linear-gradient(180deg, rgba(28, 26, 36, 0.88), rgba(12, 12, 18, 0.82));
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 2px var(--c);
   backdrop-filter: blur(4px);
 }
 
 .cb-card-hud.is-me {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 2px var(--c),
+    0 0 0 3px rgba(255, 255, 255, 0.75);
 }
 
 .cb-card-hud.is-out {
   opacity: 0.45;
+  filter: grayscale(0.7);
+}
+
+.cb-card-face {
+  position: absolute;
+  left: -4px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.9),
+    0 4px 10px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
 }
 
 .cb-card-text {
   display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
 .cb-card-name {
   overflow: hidden;
-  max-width: 88px;
+  max-width: 92px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .cb-card-sub {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 12px;
+  font-weight: 700;
 }
 
 .cb-stocks {
   display: flex;
-  gap: 3px;
-  margin-top: 2px;
+  gap: 4px;
 }
 
 .cb-stock {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8);
+  background: var(--c);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .cb-dmg {
   margin-left: auto;
   font-family: var(--font-card);
-  font-size: 32px;
-  font-weight: 800;
+  font-size: 40px;
+  font-style: italic;
+  font-weight: 900;
   line-height: 1;
+  letter-spacing: -0.02em;
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.55);
+  paint-order: stroke fill;
   text-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.6),
-    0 0 12px rgba(0, 0, 0, 0.4);
+    0 3px 0 rgba(0, 0, 0, 0.45),
+    0 0 14px rgba(0, 0, 0, 0.35);
   animation: cb-shake 0.25s ease-out;
+}
+
+.cb-dmg small {
+  margin-left: 1px;
+  font-size: 0.5em;
+  font-style: normal;
 }
 
 @keyframes cb-shake {
@@ -503,14 +559,23 @@ html:has(.cb-fight) body {
 .cb-fight.is-touch .cb-card-hud {
   min-width: 0;
   gap: 4px;
-  padding: 2px 7px 2px 2px;
-  border-width: 1.5px;
-  border-radius: 10px;
+  padding: 3px 8px 3px 30px;
+  border-radius: 11px;
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--c) 55%, transparent) 0 24px, transparent 24px),
+    linear-gradient(180deg, rgba(28, 26, 36, 0.88), rgba(12, 12, 18, 0.82));
 }
 
-.cb-fight.is-touch .cb-card-hud .avatar {
-  width: 22px !important;
-  height: 22px !important;
+.cb-fight.is-touch .cb-card-face {
+  left: -3px;
+  bottom: 1px;
+  width: 28px;
+  height: 28px;
+}
+
+.cb-fight.is-touch .cb-card-face .avatar {
+  width: 26px !important;
+  height: 26px !important;
 }
 
 .cb-fight.is-touch .cb-card-name {
@@ -523,7 +588,8 @@ html:has(.cb-fight) body {
 }
 
 .cb-fight.is-touch .cb-dmg {
-  font-size: 19px;
+  font-size: 21px;
+  -webkit-text-stroke-width: 1px;
 }
 
 .cb-fight.is-touch .cb-charge {

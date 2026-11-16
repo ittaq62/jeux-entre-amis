@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { AVATAR_BACKGROUNDS } from "../../shared/avatar.ts";
 import { avatarPalette, HABITUES, PALETTES } from "../../shared/games/culbute/fighters.ts";
 import type { FightEvent } from "../../shared/games/culbute/model.ts";
@@ -362,23 +362,34 @@ export function CulbuteFight({
               <div
                 key={f.slot}
                 className={`cb-card-hud ${f.out ? "is-out" : ""} ${look.me ? "is-me" : ""}`}
-                style={{ borderColor: look.color }}
+                style={{ "--c": look.color } as CSSProperties}
               >
-                <AvatarDrawing avatar={look.avatar} size={34} />
+                <span className="cb-card-face">
+                  <AvatarDrawing avatar={look.avatar} size={46} />
+                </span>
                 <div className="cb-card-text">
-                  <span className="cb-card-name">{look.name}</span>
+                  <span className="cb-card-name">{look.me ? "Toi" : look.name}</span>
                   {timed ? (
                     <span className="cb-card-sub num">{f.score > 0 ? `+${f.score}` : f.score} pts</span>
                   ) : (
                     <span className="cb-stocks" aria-label={`${f.stocks} vie${f.stocks > 1 ? "s" : ""}`}>
-                      {Array.from({ length: Math.min(5, Math.max(0, f.stocks)) }, (_, i) => (
-                        <span key={i} className="cb-stock" style={{ background: look.color }} />
-                      ))}
+                      {f.stocks > 5 ? (
+                        <span className="cb-card-sub num">× {f.stocks}</span>
+                      ) : (
+                        Array.from({ length: Math.max(0, f.stocks) }, (_, i) => <span key={i} className="cb-stock" />)
+                      )}
                     </span>
                   )}
                 </div>
                 <span className="cb-dmg num" style={{ color: dmgColor(f.dmg) }} key={Math.floor(f.dmg)}>
-                  {f.out ? "—" : `${Math.floor(f.dmg)}%`}
+                  {f.out ? (
+                    "—"
+                  ) : (
+                    <>
+                      {Math.floor(f.dmg)}
+                      <small>%</small>
+                    </>
+                  )}
                 </span>
               </div>
             );

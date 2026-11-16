@@ -22,7 +22,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { CardBack } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { CramponsLook, isCramponsKind } from "../crampons/CramponsLook.tsx";
-import { TenueLook } from "../culbute/TenueLook.tsx";
+import { TenueLook, TenueStage } from "../culbute/TenueLook.tsx";
 import { BombArt } from "../meche/bombs/BombArt.tsx";
 import { BombShow } from "../meche/bombs/BombShow.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
@@ -116,6 +116,7 @@ export function ShopPage() {
       );
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
+    if (item.kind === "tenue") return <TenueStage item={item} />;
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)
     if (item.kind === "bombe") return <BombShow bomb={item.ref as BombId} loud avatar={user?.avatar} />;

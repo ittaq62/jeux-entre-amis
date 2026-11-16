@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TenueStage } from "./TenueLook.tsx";
 import { HABITUES, isFighterPick, PALETTES, TENUES, type FighterPick, type TenueId } from "../../shared/games/culbute/fighters.ts";
 import { HABITUE_IDS, type HabitueId } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage, CulbuteRoomView } from "../../shared/games/culbute/net.ts";
@@ -8,6 +9,7 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { useSession } from "../stores/session.ts";
 import { useMyItems } from "../stores/shop.ts";
+import { FighterStageView, lookOfPick } from "./FighterStageView.tsx";
 
 const STORE = "culbute-combattant";
 
@@ -91,6 +93,8 @@ export function FighterPicker({ room, send }: { room: CulbuteRoomView; send: (ms
   const { has } = useMyItems();
   const seat = room.seats.find((s) => s.id === room.you.seatId);
   const [buying, setBuying] = useState<ShopItem | null>(null);
+  /** La tenue survolée : la vitrine la montre avant qu'on la choisisse (ou qu'on l'achète) */
+  const [trying, setTrying] = useState<TenueId | null>(null);
   const current = seat?.fighter ?? null;
 
   // Le choix fait sur cet appareil, repris en arrivant à la table
@@ -110,10 +114,18 @@ export function FighterPicker({ room, send }: { room: CulbuteRoomView; send: (ms
   const style = current.who === "moi" ? current.style : current.who;
   const tenue: TenueId = current.who !== "moi" ? (current.tenue ?? "dimanche") : "dimanche";
   const st = STYLES[style];
+  const meLook = me ? { name: me.pseudo, avatar: me.avatar } : null;
+  const shown = lookOfPick(current, meLook, current.who !== "moi" ? (trying ?? tenue) : undefined);
 
   return (
     <section className="lobby-section panel cb-picker" aria-label="Ton combattant">
       <span className="field-label">Ton combattant</span>
+      <FighterStageView
+        look={shown}
+        ratio={16 / 9}
+        className="cb-stage-view"
+        label={`${shown.name}${current.who !== "moi" ? `, tenue ${TENUES.find((t) => t.id === (trying ?? tenue))?.name ?? ""}` : ""}`}
+      />
       <div className="cb-roster" role="radiogroup" aria-label="Combattant">
         {HABITUE_IDS.map((id) => (
           <button
@@ -177,6 +189,10 @@ export function FighterPicker({ room, send }: { room: CulbuteRoomView; send: (ms
                   aria-pressed={tenue === t.id}
                   className={`cb-tenue ${tenue === t.id ? "is-on" : ""} ${owned ? "" : "is-locked"}`}
                   title={owned ? t.name : `${t.name} : ${t.price} points à la boutique`}
+                  onMouseEnter={() => setTrying(t.id)}
+                  onMouseLeave={() => setTrying(null)}
+                  onFocus={() => setTrying(t.id)}
+                  onBlur={() => setTrying(null)}
                   onClick={() => {
                     if (!owned) setBuying(SHOP_BY_ID.get(item) ?? null);
                     else choose(t.id === "dimanche" ? { who: current.who as HabitueId } : { who: current.who as HabitueId, tenue: t.id });
@@ -203,6 +219,7 @@ export function FighterPicker({ room, send }: { room: CulbuteRoomView; send: (ms
       </p>
       <BuyModal
         item={buying}
+        preview={buying ? <TenueStage item={buying} /> : undefined}
         onClose={() => setBuying(null)}
         onBought={(item) => {
           const [, who, t] = item.id.split(":") as [string, HabitueId, TenueId];
