@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
+import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import type { RenderFrame } from "../runtime.ts";
@@ -94,6 +95,8 @@ export class CulbuteScene {
   private overlay = new THREE.Scene();
   private overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
   private bubbles: THREE.Sprite[] = [];
+  /** Les combattants déjà arrivés pendant l'introduction */
+  private landed = new Set<number>();
   /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
   fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
 
@@ -265,9 +268,10 @@ export class CulbuteScene {
   render(dt: number, frame: RenderFrame) {
     this.time += dt;
     this.arena.update(this.time, frame.plats);
-    frame.fighters.forEach((f, i) => {
+    frame.fighters.forEach((raw, i) => {
       const m = this.fighters[i];
       if (!m) return;
+      const f = this.entrance(raw, i, frame.frame);
       m.update(dt, f, this.time);
       this.placeBlob(i, f, frame.plats);
       this.dust(i, f, dt);
@@ -332,6 +336,27 @@ export class CulbuteScene {
       any = true;
     });
     return any;
+  }
+
+  /**
+   * L'entrée en scène, pendant le compte à rebours : chacun tombe du ciel à son tour, et atterrit dans la poussière
+   * (seulement à l'affichage : le combat, lui, les a déjà posés)
+   */
+  private entrance(f: RenderFrame["fighters"][number], i: number, frame: number): RenderFrame["fighters"][number] {
+    if (frame >= INTRO_FRAMES || f.state === "dead" || f.state === "out") return f;
+    const start = 12 + i * 9;
+    const k = (frame - start) / 26;
+    if (k >= 1) {
+      if (!this.landed.has(i)) {
+        this.landed.add(i);
+        this.puff(f.x - 0.4, f.y + 0.15, 0xe6dccb, 0.3, 0.6);
+        this.puff(f.x + 0.4, f.y + 0.15, 0xe6dccb, 0.3, 0.6);
+      }
+      return f;
+    }
+    this.landed.delete(i);
+    const drop = k < 0 ? 40 : (1 - k) * (1 - k) * 11;
+    return { ...f, y: f.y + drop, state: "air" };
   }
 
   /** L'ombre ronde : sur la plateforme juste sous ses pieds, plus petite et plus pâle quand il est haut */

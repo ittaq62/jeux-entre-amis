@@ -846,6 +846,16 @@ html:has(.cb-fight) body {
   font-size: clamp(26px, 5vw, 38px);
 }
 
+.cb-victory {
+  max-height: 210px;
+  margin: -6px -6px 0;
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 224, 138, 0.35), rgba(0, 0, 0, 0) 65%),
+    linear-gradient(180deg, rgba(255, 236, 196, 0.12), rgba(0, 0, 0, 0));
+  overflow: hidden;
+}
+
 .cb-ranking {
   display: grid;
   gap: 6px;

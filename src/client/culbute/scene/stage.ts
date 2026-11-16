@@ -56,6 +56,8 @@ export class FighterStage {
   private step = 0;
   private stepAt = 0;
   private still = false;
+  /** La vitrine du salon (quelques coups), ou la victoire (des sauts de joie) */
+  private mode: "show" | "victory" = "show";
   private visible = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -142,6 +144,12 @@ export class FighterStage {
     if (!this.raf) this.frame(0);
   }
 
+  setMode(mode: "show" | "victory") {
+    this.mode = mode;
+    this.step = 0;
+    this.stepAt = this.time;
+  }
+
   /** Animations coupées : une seule image, de trois quarts */
   setStill(on: boolean) {
     this.still = on;
@@ -178,7 +186,22 @@ export class FighterStage {
     }
     this.time += dt;
     const f = idle();
-    if (!this.still) {
+    this.holder.position.y = 0;
+    if (!this.still && this.mode === "victory") {
+      // La victoire : deux sauts de joie bras levés, puis un tour sur lui-même, et on recommence
+      const cycle = this.time % 2.6;
+      const up = moveDef(this.look.style, "cu");
+      const armsUp = up ? Math.max(...up.hits.map((h) => h.from)) + 1 : 14;
+      if (cycle < 1.4) {
+        const k = (cycle % 0.7) / 0.7;
+        this.holder.position.y = Math.sin(k * Math.PI) * 0.75;
+        f.state = "move";
+        f.move = "cu";
+        f.mt = armsUp;
+      }
+      const spin = cycle >= 1.6 && cycle < 2.3 ? ((cycle - 1.6) / 0.7) * Math.PI * 2 : 0;
+      this.holder.rotation.y = -0.7 + Math.sin(this.time * 0.8) * 0.2 + spin;
+    } else if (!this.still) {
       const cur = SHOW[this.step % SHOW.length]!;
       const elapsed = this.time - this.stepAt;
       const def = cur.move ? moveDef(this.look.style, cur.move) : null;

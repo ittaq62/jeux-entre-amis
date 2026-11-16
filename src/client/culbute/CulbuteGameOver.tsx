@@ -5,6 +5,7 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { FighterStageView } from "./FighterStageView.tsx";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 
 const place = (r: number) => (r === 1 ? "1er" : `${r}e`);
@@ -44,6 +45,9 @@ export function CulbuteGameOver({
   return (
     <div className="cb-over">
       <div className="cb-over-card panel">
+        {winners.length > 0 && looks[winners[0]!] && (
+          <FighterStageView look={looks[winners[0]!]!} mode="victory" ratio={16 / 7} className="cb-victory" label={title} />
+        )}
         <h1>{title}</h1>
         <p className="hint" style={{ margin: 0 }}>
           {MODE_NAMES[view.config.mode]} · {ARENAS[view.arena].name}

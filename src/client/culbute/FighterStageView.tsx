@@ -46,8 +46,11 @@ export function FighterStageView({
   fallback,
   label,
   className,
+  mode = "show",
 }: {
   look: FighterLook;
+  /** Montrer quelques coups (le salon, la boutique), ou fêter la victoire (la fin du combat) */
+  mode?: "show" | "victory";
   ratio?: number;
   fallback?: ReactNode;
   label: string;
@@ -100,6 +103,7 @@ export function FighterStageView({
     stage.current?.setLook(JSON.parse(lookKey) as FighterLook);
   }, [lookKey]);
   useEffect(() => stage.current?.setStill(reduced), [reduced]);
+  useEffect(() => stage.current?.setMode(mode), [mode]);
 
   if (failed) return fallback ? <>{fallback}</> : null;
   return (
