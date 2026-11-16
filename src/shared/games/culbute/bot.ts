@@ -225,8 +225,9 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     if (L.edgeguard && airborne(t) && Math.abs(edge - me.x) < 1.2 && Math.abs(dy) < 4 && rnd(m) < 0.5) {
       // Un projectile, ou le souffle de Simone, sur celui qui revient
       if (["raymond", "lucien", "simone", "ginette", "huguette"].includes(me.style)) {
-        // Tourné vers lui : le spécial neutre part ; sinon on se retourne d'abord
-        if (me.face === toward) m.press = SPC;
+        // Arrêté et tourné vers lui : le spécial neutre part ; sinon on freine, ou on se retourne d'abord
+        if (Math.abs(me.vx) > 1) m.x = 0;
+        else if (me.face === toward) m.press = SPC;
         else m.x = toward * 0.3;
         return out();
       }

@@ -40,7 +40,7 @@ import { STYLES, type Style } from "./styles.ts";
 /** L'éjection s'use de tant de m/s chaque seconde (deux fois plus vite en glissant au sol) */
 export const KB_DECAY = 46;
 /** Images d'étourdissement par m/s d'éjection */
-export const HITSTUN_K = 0.7;
+export const HITSTUN_K = 0.8;
 /** Au-delà de cette éjection, on tombe à terre en touchant le sol (sauf à amortir avec la garde) */
 const TUMBLE = 17;
 export const SHIELD_MAX = 50;
@@ -928,6 +928,23 @@ function physics(f: Fight, ft: Fighter, plats: PlatformNow[], solo: boolean) {
 
   if (!isAirborne(ft)) {
     const p = plats[ft.ground];
+    // Pendant un coup au sol (sans élan), une garde, une roulade ou un atterrissage, on s'arrête au bord au lieu de glisser
+    // dans le vide (on ne tombe d'un bord qu'en y allant exprès)
+    const sticky =
+      (ft.state === "move" && !def?.push) ||
+      ft.state === "shield" ||
+      ft.state === "shieldstun" ||
+      ft.state === "land" ||
+      ft.state === "squat" ||
+      ft.state === "dodge" ||
+      ft.state === "roll" ||
+      ft.state === "tech" ||
+      ft.state === "down" ||
+      ft.state === "holding";
+    if (p && sticky && ft.ky <= 0.5 && Math.abs(ft.kx) < 4 && (ft.x < p.x0 || ft.x > p.x1)) {
+      ft.x = clamp(ft.x, p.x0, p.x1);
+      ft.vx = 0;
+    }
     if (ft.ky > 0.5) {
       ft.ground = -1;
     } else if (!p || ft.x < p.x0 - 0.05 || ft.x > p.x1 + 0.05) {
