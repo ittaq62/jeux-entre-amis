@@ -555,10 +555,19 @@ html:has(.cb-fight) body {
   background: rgba(54, 156, 86, 0.88);
 }
 
+.cb-touch-btn.is-grb {
+  right: 130px;
+  bottom: 112px;
+  width: 52px;
+  height: 52px;
+  font-size: 11px;
+  background: rgba(196, 128, 46, 0.88);
+}
+
 .cb-touch-tip {
   position: absolute;
-  right: 112px;
-  bottom: 100px;
+  right: 190px;
+  bottom: 104px;
   color: rgba(255, 255, 255, 0.6);
   font-size: 11px;
   text-align: right;

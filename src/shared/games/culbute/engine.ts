@@ -12,6 +12,7 @@ import {
   ATK,
   clamp,
   DT,
+  GRB,
   ITEM_KINDS,
   JMP,
   SHD,
@@ -70,6 +71,24 @@ export const OVER_FRAMES = 150;
 const BOUNCE_VY = 17;
 /** L'arrêt sur image du coup qui fait sortir */
 export const KO_STOP = 30;
+/** La saisie : la main tendue (images actives), sa portée */
+const GRAB_FROM = 6;
+const GRAB_TO = 8;
+const GRAB_X = 0.75;
+const GRAB_Y = 0.8;
+const GRAB_R = 0.55;
+/** Combien de temps on tient quelqu'un avant qu'il ne se dégage seul (plus il a de pourcents, plus c'est long) */
+const HOLD_MIN = 75;
+const HOLD_MAX = 210;
+/** Chaque appui de celui qui est tenu l'aide à se dégager */
+const MASH = 5;
+/** Les projections : l'image où il part, et comment */
+const THROWS: Record<string, { at: number; dmg: number; ang: number; kb: number; kbg: number; back?: boolean }> = {
+  "g:tF": { at: 10, dmg: 8, ang: 35, kb: 8, kbg: 15 },
+  "g:tB": { at: 13, dmg: 10, ang: 38, kb: 8.5, kbg: 17, back: true },
+  "g:tU": { at: 11, dmg: 7, ang: 90, kb: 8.5, kbg: 12 },
+  "g:tD": { at: 12, dmg: 6, ang: 72, kb: 6, kbg: 6 },
+};
 const TRAP_STUCK = 70;
 const ITEM_LIFE = 1200;
 const GATEAU_HEAL = 25;
@@ -161,6 +180,8 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     rank: 0,
     stats: { kos: 0, falls: 0, dealt: 0, taken: 0, items: 0, lowKo: 999, bestStreak: 0 },
     lastKb: 0,
+    holding: -1,
+    holder: -1,
   };
 }
 
@@ -344,6 +365,9 @@ function jumpFromGround(ft: Fighter) {
   setState(ft, "squat");
 }
 
+/** Le pas en cours est-il celui de l'appareil (son seul combattant) ? */
+let soloStep = false;
+
 function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
   const st = styleOf(ft);
   const press = ft.buf;
@@ -354,6 +378,11 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
 
   switch (ft.state) {
     case "stand": {
+      if (press & GRB) {
+        consume(ft, GRB);
+        startMove(ft, "g:grab");
+        return;
+      }
       if (press & SHD || inp.held & SHD) {
         consume(ft, SHD);
         startShield(ft, x, y);
@@ -438,6 +467,12 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       ft.shield -= SHIELD_WEAR;
       if (ft.shield <= 0) {
         breakShield(ft);
+        return;
+      }
+      // Frapper (ou Saisir) depuis la garde : une saisie
+      if (press & (ATK | GRB)) {
+        consume(ft, ATK | GRB);
+        startMove(ft, "g:grab");
         return;
       }
       if (press & JMP) {
@@ -532,6 +567,52 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     }
     case "caught": {
       if (ft.t >= ft.wait) setState(ft, isAirborne(ft) ? "air" : "stand");
+      return;
+    }
+    case "holding": {
+      ft.vx = 0;
+      const v = f.fighters[ft.holding];
+      // Sur l'appareil, celui qu'on tient est vu en retard : on fait confiance au serveur
+      if (!soloStep && (!v || v.state !== "held" || v.holder !== ft.slot)) {
+        ft.holding = -1;
+        setState(ft, "stand");
+        return;
+      }
+      ft.wait--;
+      if (ft.wait <= 0) {
+        if (v) letGo(f, ft, v);
+        else setState(ft, "stand");
+        return;
+      }
+      if (ft.t >= 6) {
+        const fwd = x * ft.face;
+        const throwKey = fwd > 0.6 ? "g:tF" : fwd < -0.6 ? "g:tB" : y > 0.6 ? "g:tU" : y < -0.6 ? "g:tD" : null;
+        if (throwKey) {
+          consume(ft, ATK | GRB);
+          startHeldMove(ft, throwKey);
+          return;
+        }
+        if (press & (ATK | GRB)) {
+          consume(ft, ATK | GRB);
+          startHeldMove(ft, "g:pummel");
+          return;
+        }
+      }
+      return;
+    }
+    case "held": {
+      ft.vx = 0;
+      ft.vy = 0;
+      ft.kx = 0;
+      ft.ky = 0;
+      const h = f.fighters[ft.holder];
+      if (!soloStep && (!h || h.holding !== ft.slot)) {
+        ft.holder = -1;
+        setState(ft, isAirborne(ft) ? "air" : "stand");
+        return;
+      }
+      // Il se débat : chaque appui, chaque coup de stick rapproche le moment où il se dégage
+      if (h && (inp.pressed !== 0 || Math.abs(x - ft.px) > 0.7 || Math.abs(y - ft.py) > 0.7)) h.wait -= MASH;
       return;
     }
     case "ledge": {
@@ -812,7 +893,7 @@ function land(f: Fight, ft: Fighter, pi: number, plats: PlatformNow[], fallSpeed
 
 function physics(f: Fight, ft: Fighter, plats: PlatformNow[], solo: boolean) {
   const st = styleOf(ft);
-  if (ft.state === "ledge" || ft.state === "dead" || ft.state === "out" || ft.state === "respawn") return;
+  if (ft.state === "ledge" || ft.state === "dead" || ft.state === "out" || ft.state === "respawn" || ft.state === "held") return;
   const def = ft.state === "move" ? moveDef(ft.style, ft.move) : null;
   // Pesanteur
   if (isAirborne(ft)) {
@@ -981,6 +1062,14 @@ function advanceCharged(f: Fight, ft: Fighter, def: MoveDef, inp: Input, solo: b
     return;
   }
   if (def.special === "trap" && ft.mt === 12) layTrap(f, ft, solo);
+  if (ft.move === "g:grab" && ft.mt >= GRAB_FROM && ft.mt <= GRAB_TO && !solo && tryGrab(f, ft)) return;
+  if (ft.move === "g:pummel" && ft.mt === 5 && !solo) pummel(f, ft);
+  const thr = THROWS[ft.move];
+  if (thr && ft.mt === thr.at) {
+    if (thr.back) ft.face = ft.face === 1 ? -1 : 1;
+    if (!solo) throwHeld(f, ft, thr);
+    else ft.holding = -1;
+  }
   if (def.shoot && ft.mt === def.shoot.at && !solo) shoot(f, ft, def.shoot.kind, def);
   if (def.shoot && ft.mt === def.shoot.at && def.shoot.kind === "item") {
     // L'objet quitte la main (sur l'appareil aussi : on ne le voit plus dans la main)
@@ -998,10 +1087,127 @@ function advanceCharged(f: Fight, ft: Fighter, def: MoveDef, inp: Input, solo: b
   }
   ft.mt++;
   if (ft.mt >= def.frames) {
+    // Après la petite tape, on le tient toujours
+    if (ft.move === "g:pummel" && ft.holding >= 0) {
+      const wait = ft.wait;
+      setState(ft, "holding");
+      ft.wait = wait;
+      ft.t = 6;
+      return;
+    }
     if (ft.move === "g:climb" || ft.move === "g:ledgeAtk") ft.intangUntil = Math.max(ft.intangUntil, f.frame + 2);
     if (isAirborne(ft)) setState(ft, def.helpless ? "helpless" : "air");
     else setState(ft, "stand");
   }
+}
+
+/** Une projection ou une petite tape : le coup commence sans lâcher celui qu'on tient */
+function startHeldMove(ft: Fighter, key: string) {
+  const holding = ft.holding;
+  const wait = ft.wait;
+  startMove(ft, key);
+  ft.holding = holding;
+  ft.wait = wait;
+}
+
+/** La main tendue attrape-t-elle quelqu'un ? Seulement au sol (en garde aussi), le plus proche */
+function tryGrab(f: Fight, a: Fighter): boolean {
+  const cx = a.x + a.face * GRAB_X;
+  const cy = a.y + GRAB_Y;
+  let best: Fighter | null = null;
+  for (const v of f.fighters) {
+    if (!canHit(f, a, v) || isAirborne(v) || v.state === "held" || v.state === "holding" || v.state === "ledge") continue;
+    if (!circleHitsBox(cx, cy, GRAB_R, ...hurtbox(v))) continue;
+    if (!best || Math.abs(v.x - a.x) < Math.abs(best.x - a.x)) best = v;
+  }
+  if (!best) return false;
+  const v = best;
+  setState(a, "holding");
+  a.holding = v.slot;
+  a.wait = Math.round(clamp(HOLD_MIN + v.dmg * 0.7, HOLD_MIN, HOLD_MAX));
+  a.vx = 0;
+  // Celui qu'on tient lâche ce qu'il faisait (sa saisie, son coup, sa garde)
+  if (v.holding >= 0) {
+    const w = f.fighters[v.holding];
+    if (w) letGo(f, v, w);
+  }
+  setState(v, "held");
+  v.holder = a.slot;
+  v.vx = v.vy = v.kx = v.ky = 0;
+  v.hitstop = 0;
+  v.face = a.face === 1 ? -1 : 1;
+  pending.push({ k: "grab", a: a.slot, v: v.slot });
+  return true;
+}
+
+/** Celui qu'on tient reste dans ses mains (calé après que tout le monde a bougé) */
+function holdInPlace(f: Fight) {
+  for (const v of f.fighters) {
+    if (v.state !== "held") continue;
+    const h = f.fighters[v.holder];
+    if (!h) continue;
+    v.x = h.x + h.face * 0.82;
+    v.y = h.y + 0.12;
+    v.ground = h.ground;
+    v.face = h.face === 1 ? -1 : 1;
+  }
+}
+
+/** Une petite tape : quelques pourcents, sans le lâcher */
+function pummel(f: Fight, a: Fighter) {
+  const v = f.fighters[a.holding];
+  if (!v || v.state !== "held") return;
+  const dmg = 1.6;
+  v.dmg = Math.min(999, Math.round((v.dmg + dmg) * 10) / 10);
+  v.stats.taken += dmg;
+  a.stats.dealt += dmg;
+  v.lastBy = a.slot;
+  v.lastAt = f.frame;
+  a.hitstop = 4;
+  v.hitstop = 4;
+  pending.push({ k: "hit", a: a.slot, v: v.slot, dmg, x: v.x, y: v.y + 0.9, power: 0.12, kind: "hit" });
+}
+
+/** La projection part : celui qu'on tenait est éjecté (sans influence possible) */
+function throwHeld(f: Fight, a: Fighter, thr: (typeof THROWS)[string]) {
+  const v = f.fighters[a.holding];
+  a.holding = -1;
+  if (!v || v.state !== "held") return;
+  v.holder = -1;
+  setState(v, "air");
+  v.ground = -1;
+  const dirX = a.face;
+  launch(
+    f,
+    {
+      attacker: a.slot,
+      x: v.x,
+      y: v.y + 0.8,
+      dirX,
+      dmg: thr.dmg,
+      ang: thr.ang,
+      kb: thr.kb,
+      kbg: thr.kbg,
+      pull: false,
+      charge: 0,
+      projectile: false,
+    },
+    v,
+    [],
+  );
+}
+
+/** On se dégage : chacun recule d'un pas */
+function letGo(f: Fight, holder: Fighter, v: Fighter) {
+  holder.holding = -1;
+  v.holder = -1;
+  setState(holder, "land");
+  holder.wait = 10;
+  holder.vx = -holder.face * 4;
+  setState(v, isAirborne(v) ? "air" : "land");
+  v.wait = 6;
+  v.kx = holder.face * 7;
+  void f;
 }
 
 function tryGrabLedgeAt(f: Fight, ft: Fighter, li: number, solo: boolean): boolean {
@@ -1358,6 +1564,22 @@ function applyHit(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
 /** Les pourcents, puis l'éjection d'autant plus forte qu'ils sont hauts */
 function launch(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
   const a = src.attacker >= 0 ? f.fighters[src.attacker] : undefined;
+  if (v.holding >= 0) {
+    const w = f.fighters[v.holding];
+    v.holding = -1;
+    if (w && w.state === "held") {
+      w.holder = -1;
+      setState(w, isAirborne(w) ? "air" : "stand");
+    }
+  }
+  if (v.state === "held" && src.attacker !== v.holder) {
+    const h = f.fighters[v.holder];
+    if (h && h.holding === v.slot) {
+      h.holding = -1;
+      setState(h, "stand");
+    }
+  }
+  v.holder = -1;
   const st = styleOf(v);
   const dmg = Math.round(src.dmg * (1 + CHARGE_BONUS * src.charge) * 10) / 10;
   v.dmg = Math.min(999, Math.round((v.dmg + dmg) * 10) / 10);
@@ -1834,6 +2056,7 @@ export function updateFighter(f: Fight, ft: Fighter, inp: Input, plats: Platform
   }
   ft.t++;
   if (ft.state !== "shield" && ft.shield < SHIELD_MAX && ft.state !== "dizzy") ft.shield = Math.min(SHIELD_MAX, ft.shield + SHIELD_REGEN);
+  soloStep = solo;
   control(f, ft, inp, plats);
   physics(f, ft, plats, solo);
   advanceMove(f, ft, inp, solo);
@@ -1868,6 +2091,7 @@ export function stepFight(f: Fight, inputs: Input[]): FightEvent[] {
   }
   const plats = platformsNow(f);
   for (const ft of f.fighters) updateFighter(f, ft, inputs[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }, plats, false);
+  holdInPlace(f);
   updateProjectiles(f, plats, inputs);
   detectHits(f, inputs);
   updateTraps(f);

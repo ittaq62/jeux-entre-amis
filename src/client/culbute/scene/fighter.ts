@@ -210,6 +210,12 @@ function keyPoses(pose: PoseId, base: Pose): [Pose, Pose] {
       return [with_(base, { hands: [R(-0.2, 0.1, 0.4), R(0.2, 0.1, 0.4)], crouch: 0.2 }), base];
     case "pickup":
       return [with_(base, { crouch: 0.15 }), with_(base, { hands: [R(-0.15, 0.1, 0.45), L], crouch: 0.3, lean: 0.6 })];
+    case "grab":
+      // Les deux mains tendues devant, pour attraper
+      return [
+        with_(base, { hands: [R(-0.28, 0.75, -0.1), R(0.28, 0.75, -0.1)], crouch: 0.06, twist: 0.15 }),
+        with_(base, { hands: [R(-0.14, 0.85, 0.78), R(0.14, 0.85, 0.78)], lean: 0.3, feet: [R(-0.12, 0, 0.25), base.feet[1]] }),
+      ];
   }
 }
 
@@ -865,6 +871,39 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
       case "dizzy":
         return {
           pose: with_(REST, { lean: Math.sin(time * 5) * 0.2, headTilt: Math.sin(time * 6) * 0.35, crouch: 0.05 }),
+          strike,
+          charging,
+        };
+      case "holding":
+        // Il le tient à bout de bras, un peu penché en arrière
+        return {
+          pose: with_(REST, {
+            lean: -0.08,
+            crouch: 0.05,
+            hands: [
+              [-0.16, 0.9, 0.6],
+              [0.16, 0.9, 0.6],
+            ],
+          }),
+          strike,
+          charging,
+        };
+      case "held":
+        // Soulevé, il gigote
+        return {
+          pose: with_(REST, {
+            liftY: 0.12,
+            lean: -0.15 + Math.sin(time * 16) * 0.06,
+            headTilt: Math.sin(time * 11) * 0.2,
+            hands: [
+              [-0.42, 1.0 + Math.sin(time * 18) * 0.12, 0.1],
+              [0.42, 1.0 - Math.sin(time * 18) * 0.12, 0.1],
+            ],
+            feet: [
+              [-0.14, 0.12 + Math.max(0, Math.sin(time * 14)) * 0.15, 0.05],
+              [0.14, 0.12 + Math.max(0, -Math.sin(time * 14)) * 0.15, -0.05],
+            ],
+          }),
           strike,
           charging,
         };

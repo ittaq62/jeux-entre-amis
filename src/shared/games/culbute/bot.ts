@@ -4,7 +4,7 @@
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
 import { gravityOf, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
-import { ATK, JMP, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
+import { ATK, GRB, JMP, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -24,14 +24,18 @@ interface LevelInfo {
   recover: number;
   /** Il tient le stick vers l'arène quand on l'éjecte */
   influence: boolean;
+  /** Les chances de saisir un adversaire en garde (un quart de ça s'il ne se protège pas) */
+  grab: number;
+  /** Tenu, ses chances d'appuyer à chaque image pour se dégager */
+  mash: number;
   /** Il garde l'adversaire hors de l'arène */
   edgeguard: boolean;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
-  facile: { think: 20, attack: 0.35, guard: 0.08, charge: 0.15, recover: 0.75, influence: false, edgeguard: false },
-  moyen: { think: 11, attack: 0.6, guard: 0.3, charge: 0.4, recover: 0.95, influence: true, edgeguard: false },
-  fort: { think: 5, attack: 0.85, guard: 0.55, charge: 0.6, recover: 1, influence: true, edgeguard: true },
+  facile: { think: 20, attack: 0.35, guard: 0.08, charge: 0.15, recover: 0.75, influence: false, edgeguard: false, grab: 0.15, mash: 0.08 },
+  moyen: { think: 11, attack: 0.6, guard: 0.3, charge: 0.4, recover: 0.95, influence: true, edgeguard: false, grab: 0.5, mash: 0.2 },
+  fort: { think: 5, attack: 0.85, guard: 0.55, charge: 0.6, recover: 1, influence: true, edgeguard: true, grab: 0.85, mash: 0.4 },
 };
 
 /** Ce dont un bot se souvient d'un pas à l'autre (perdu si le serveur redémarre, sans gravité) */
@@ -126,6 +130,23 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
       m.y = 0;
     }
     return out();
+  }
+
+  // Tenu : il se débat (plus ou moins vite selon son niveau)
+  if (me.state === "held") {
+    m.holdUntil = 0;
+    const mash = rnd(m) < L.mash;
+    return { x: rnd(m) < 0.5 ? -1 : 1, y: 0, held: 0, pressed: mash ? ATK : 0 };
+  }
+  // Il en tient un : une petite tape ou deux, puis la projection qui l'arrange
+  if (me.state === "holding") {
+    m.holdUntil = 0;
+    if (me.t < 8 || f.frame < m.next) return { x: 0, y: 0, held: 0, pressed: 0 };
+    m.next = f.frame + L.think;
+    const v = f.fighters[me.holding];
+    if (!v) return { x: 0, y: 0, held: 0, pressed: 0 };
+    if (v.dmg < 40 && rnd(m) < 0.35) return { x: 0, y: 0, held: 0, pressed: ATK };
+    return throwToward(f, me, v);
   }
 
   // On tient les boutons d'une charge ou d'une garde jusqu'au bout
@@ -238,6 +259,16 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     else if (dy > 1.4 && airborne(me) && me.jumps > 0 && me.vy < 0 && rnd(m) < 0.5) m.press = JMP;
     // Ne pas se jeter dans le vide pour courir après quelqu'un
     if (!airborne(me) && nearEdge(me, st, toward)) m.x = 0;
+    // Il court vers un bord : il y repensera vite (sinon il le passe avant d'avoir réfléchi)
+    if (!airborne(me) && m.x !== 0 && (toward < 0 ? me.x - st.x0 : st.x1 - me.x) < 4.5) m.next = Math.min(m.next, f.frame + 2);
+    return out();
+  }
+
+  // À portée d'un adversaire au sol : une saisie, surtout s'il se cache derrière sa garde
+  const shielding = t.state === "shield" || t.state === "shieldstun";
+  if (!airborne(me) && !airborne(t) && adx < 1.25 && Math.abs(dy) < 0.5 && rnd(m) < (shielding ? L.grab : L.grab * 0.25)) {
+    if (me.face !== toward) m.x = toward * 0.3;
+    else m.press = GRB;
     return out();
   }
 
@@ -375,12 +406,24 @@ function climb(f: Fight, me: Fighter, m: BotMemory, t: Fighter): boolean {
   return true;
 }
 
+/** La projection qui l'envoie vers le bord le plus proche (ou vers le haut, quand il a beaucoup de pourcents) */
+function throwToward(f: Fight, me: Fighter, v: Fighter): Input {
+  const st = stage(f);
+  const edge = me.x < (st.x0 + st.x1) / 2 ? -1 : 1;
+  if (v.dmg > 130 && Math.abs(me.x) < (st.x1 - st.x0) * 0.2) return { x: 0, y: 1, held: 0, pressed: 0 };
+  if (v.dmg < 35) return { x: 0, y: -1, held: 0, pressed: 0 };
+  // Vers le bord le plus proche : en avant s'il y fait face, sinon par-dessus l'épaule
+  return { x: edge, y: 0, held: 0, pressed: 0 };
+}
+
 function offstage(ft: Fighter, st: { x0: number; x1: number; y: number }): boolean {
   return ft.x < st.x0 - 0.2 || ft.x > st.x1 + 0.2 || ft.y < st.y - 0.6;
 }
 
+/** Près du bord, dans ce sens : la marge grandit avec la vitesse (il faut le temps de freiner) */
 function nearEdge(ft: Fighter, st: { x0: number; x1: number }, dir: number): boolean {
-  return dir < 0 ? ft.x < st.x0 + 1.2 : ft.x > st.x1 - 1.2;
+  const margin = 1.0 + Math.abs(ft.vx) * 0.14;
+  return dir < 0 ? ft.x < st.x0 + margin : ft.x > st.x1 - margin;
 }
 
 /** Hors de l'arène : vers le rebord le plus proche, en sautant puis avec le spécial vers le haut */

@@ -103,6 +103,8 @@ function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: numbe
       return { name: "capBankrupt", volume: 0.7 };
     case "trap":
       return { name: "capDiceHit", volume: 0.6 };
+    case "grab":
+      return { name: "capDiceHit", volume: 0.55 };
     case "go":
       return { name: "brickGo" };
     case "end":
@@ -198,7 +200,7 @@ function TouchButton({
   className,
 }: {
   runtime: MutableRefObject<FightRuntime | null>;
-  which: "atk" | "spc" | "jmp";
+  which: "atk" | "spc" | "jmp" | "grb";
   label: string;
   className: string;
 }) {
@@ -415,6 +417,7 @@ export function CulbuteFight({
             <TouchButton runtime={runtime} which="atk" label="Frapper" className="is-atk" />
             <TouchButton runtime={runtime} which="spc" label="Spécial" className="is-spc" />
             {!settings.stickJump && <TouchButton runtime={runtime} which="jmp" label="Saut" className="is-jmp" />}
+            <TouchButton runtime={runtime} which="grb" label="Saisir" className="is-grb" />
             <span className="cb-touch-tip">Frapper + Spécial : garde</span>
           </div>
         </div>

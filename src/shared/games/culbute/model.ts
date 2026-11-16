@@ -18,6 +18,8 @@ export const ATK = 1;
 export const SPC = 2;
 export const JMP = 4;
 export const SHD = 8;
+/** Saisir (une touche à part, ou la garde avec Frapper) */
+export const GRB = 16;
 
 /** Ce que le joueur demande pendant un pas : le stick (de -1 à 1, y vers le haut) et ses boutons */
 export interface Input {
@@ -49,7 +51,11 @@ export type FState =
   | "caught"
   | "dead"
   | "respawn"
-  | "out";
+  | "out"
+  /** Il en tient un autre (saisi) */
+  | "holding"
+  /** Il est tenu */
+  | "held";
 
 export const STATES: FState[] = [
   "stand",
@@ -72,6 +78,8 @@ export const STATES: FState[] = [
   "dead",
   "respawn",
   "out",
+  "holding",
+  "held",
 ];
 
 /** Les objets qui tombent dans l'arène */
@@ -156,6 +164,9 @@ export interface Fighter {
   stats: FighterStats;
   /** Le dernier coup reçu, en vitesse d'éjection (pour l'affichage) */
   lastKb: number;
+  /** Celui qu'il tient (sa place), ou -1 ; celui qui le tient, ou -1 */
+  holding: number;
+  holder: number;
 }
 
 export interface FighterStats {
@@ -258,6 +269,7 @@ export type FightEvent =
   | { k: "throw"; v: number; kind: string }
   | { k: "break"; v: number }
   | { k: "trap"; v: number }
+  | { k: "grab"; a: number; v: number }
   | { k: "go" }
   | { k: "end" };
 

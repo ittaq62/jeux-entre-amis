@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { ARENA_IDS, ARENAS, blastOf, ledgesOf } from "./arenas.ts";
 import { createFight, DEFAULT_FIGHT_SETTINGS, INTRO_FRAMES, moveDef, predictHits, stepFight, stepSolo, type Entrant } from "./engine.ts";
-import { ATK, HABITUE_IDS, JMP, NO_INPUT, SHD, SPC, type Fight, type FightEvent, type HabitueId, type Input } from "./model.ts";
+import {
+  ATK,
+  GRB,
+  HABITUE_IDS,
+  JMP,
+  NO_INPUT,
+  SHD,
+  SPC,
+  type Fight,
+  type FightEvent,
+  type Fighter,
+  type HabitueId,
+  type Input,
+} from "./model.ts";
 import { CHARGE_DECIDE, MOVE_SLOTS } from "./moves.ts";
 import { STYLES } from "./styles.ts";
 
@@ -413,6 +426,49 @@ describe("Culbute : le combat", () => {
       // Déjà touché : le même coup ne se devine pas deux fois
       expect(predictHits(solo, 0)).toHaveLength(0);
     }
+  });
+
+  it("la saisie attrape même en garde ; une direction projette, et se débattre aide à se dégager", () => {
+    const f = duel("ginette", "marcel");
+    skipIntro(f);
+    faceToFace(f, 1.3);
+    const shielding = (): Input => ({ x: 0, y: 0, held: SHD, pressed: 0 });
+    const events = run(f, 14, [tap(GRB), shielding]);
+    const [a, v] = f.fighters as [Fighter, Fighter];
+    expect(events.some((e) => e.k === "grab")).toBe(true);
+    expect(a.state).toBe("holding");
+    expect(v.state).toBe("held");
+    expect(Math.abs(v.x - a.x)).toBeLessThan(1.2);
+    // Projection vers l'avant : il part, avec des pourcents
+    const before = v.dmg;
+    run(f, 40, [stick(1)]);
+    expect(v.dmg).toBeGreaterThan(before);
+    expect(v.holder).toBe(-1);
+    expect(a.holding).toBe(-1);
+    // Se débattre écourte la prise
+    const hold = (mash: boolean) => {
+      const g = duel("ginette", "marcel");
+      skipIntro(g);
+      faceToFace(g, 1.3);
+      run(g, 12, [tap(GRB)]);
+      let n = 0;
+      while (g.fighters[1]!.state === "held" && n < 400) {
+        run(g, 1, [() => NO_INPUT, () => (mash && n % 4 === 0 ? { x: 0, y: 0, held: ATK, pressed: ATK } : NO_INPUT)]);
+        n++;
+      }
+      return n;
+    };
+    expect(hold(true)).toBeLessThan(hold(false));
+  });
+
+  it("depuis la garde, Frapper saisit", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.3);
+    run(f, 6, [() => ({ x: 0, y: 0, held: SHD, pressed: 0 })]);
+    expect(f.fighters[0]!.state).toBe("shield");
+    run(f, 1, [() => ({ x: 0, y: 0, held: SHD | ATK, pressed: ATK })]);
+    expect(f.fighters[0]!.move).toBe("g:grab");
   });
 
   it("les objets tombent du ciel et se posent", () => {

@@ -5,7 +5,7 @@ import { keyLabel } from "../crampons/bindings.ts";
 
 export { keyLabel };
 
-export type ActionId = "up" | "down" | "left" | "right" | "attack" | "special" | "jump" | "shield";
+export type ActionId = "up" | "down" | "left" | "right" | "attack" | "special" | "jump" | "shield" | "grab";
 
 /** Une touche (`KeyW`, `Space`…) ou un bouton de souris (`Mouse0` gauche, `Mouse1` molette, `Mouse2` droit) */
 export type Binding = string;
@@ -20,7 +20,7 @@ export interface CulbuteSettings {
   stickJump: boolean;
 }
 
-export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "special", "jump", "shield"];
+export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "special", "jump", "shield", "grab"];
 
 export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "left", label: "Gauche" },
@@ -31,6 +31,7 @@ export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "special", label: "Spécial", note: "haut + Spécial : remonter vers l'arène" },
   { id: "jump", label: "Sauter", note: "deux fois, une au sol et une en l'air" },
   { id: "shield", label: "Garde", note: "avec une direction : esquive ou roulade" },
+  { id: "grab", label: "Saisir", note: "aussi : Frapper pendant la garde ; puis une direction pour projeter" },
 ];
 
 const MOVES_ZQSD = {
@@ -44,19 +45,20 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "souris",
     name: "ZQSD et souris",
-    note: "Clic gauche pour frapper, clic droit pour le spécial, Espace pour sauter, Maj pour la garde",
+    note: "Clic gauche pour frapper, clic droit pour le spécial, Espace pour sauter, Maj pour la garde, E pour saisir",
     bindings: {
       ...MOVES_ZQSD,
       attack: ["Mouse0", "KeyJ"],
       special: ["Mouse2", "KeyK"],
       jump: ["Space"],
       shield: ["ShiftLeft", "Mouse1"],
+      grab: ["KeyE", "Mouse3"],
     },
   },
   {
     id: "fleches",
     name: "Flèches et clavier",
-    note: "La main droite sur les flèches, la gauche sur X, C, Espace et V",
+    note: "La main droite sur les flèches, la gauche sur X, C, Espace, V et B",
     bindings: {
       up: ["ArrowUp"],
       down: ["ArrowDown"],
@@ -66,18 +68,20 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
       special: ["KeyC"],
       jump: ["Space"],
       shield: ["KeyV", "ShiftLeft"],
+      grab: ["KeyB"],
     },
   },
   {
     id: "lettres",
     name: "ZQSD et lettres",
-    note: "Sans souris : J pour frapper, K pour le spécial, Espace pour sauter, L pour la garde",
+    note: "Sans souris : J pour frapper, K pour le spécial, Espace pour sauter, L pour la garde, U pour saisir",
     bindings: {
       ...MOVES_ZQSD,
       attack: ["KeyJ"],
       special: ["KeyK"],
       jump: ["Space", "KeyI"],
       shield: ["KeyL", "ShiftLeft"],
+      grab: ["KeyU"],
     },
   },
 ];

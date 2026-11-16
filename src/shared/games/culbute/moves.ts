@@ -26,7 +26,8 @@ export type PoseId =
   | "cast"
   | "blow"
   | "climb"
-  | "pickup";
+  | "pickup"
+  | "grab";
 
 export interface HitDef {
   /** Les images où le coup frappe (comptées depuis le début du coup, bornes comprises) */
@@ -113,6 +114,15 @@ export const CHARGE_BONUS = 0.4;
 
 // Les coups communs à tout le monde
 export const GENERIC: Record<string, MoveDef> = {
+  /** Saisir celui qui est devant soi (même en garde) ; raté, on reste un instant les bras tendus */
+  grab: { name: "Saisie", frames: 26, pose: "grab", hits: [] },
+  /** Une petite tape à celui qu'on tient */
+  pummel: { name: "Petite tape", frames: 14, pose: "jab", hits: [] },
+  /** Les projections : il part à l'image `at` de la projection (voir THROWS dans engine.ts) */
+  tF: { name: "Projection en avant", frames: 24, pose: "throw", hits: [] },
+  tB: { name: "Projection en arrière", frames: 28, pose: "spin", hits: [] },
+  tU: { name: "Projection en l'air", frames: 26, pose: "smashUp", hits: [] },
+  tD: { name: "Projection au sol", frames: 26, pose: "slam", hits: [] },
   /** Se hisser sur le plateau en frappant */
   ledgeAtk: { name: "Remontée en frappant", frames: 32, pose: "climb", hits: [h(18, 21, 0.9, 0.5, 0.65, 7, 35, 8, 4)], intang: [0, 16] },
   /** Se hisser, tout simplement */

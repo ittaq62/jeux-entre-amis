@@ -650,8 +650,8 @@ export class CulbuteRoom extends DurableObject<Env> {
         input: {
           x: num(data[i], -1, 1),
           y: num(data[i + 1], -1, 1),
-          held: num(data[i + 2], 0, 15) | 0,
-          pressed: num(data[i + 3], 0, 15) | 0,
+          held: num(data[i + 2], 0, 31) | 0,
+          pressed: num(data[i + 3], 0, 31) | 0,
         },
       });
     }

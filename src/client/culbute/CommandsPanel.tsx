@@ -160,7 +160,8 @@ export function CommandsPanel({
             <span>La touche Haut fait aussi sauter</span>
           </label>
           <p className="hint">
-            La manette marche toujours : stick gauche, A pour sauter, X pour frapper, B pour le spécial, une gâchette pour la garde.
+            La manette marche toujours : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour
+            saisir, une autre gâchette pour la garde.
           </p>
         </section>
 

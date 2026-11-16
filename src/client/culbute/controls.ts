@@ -2,12 +2,12 @@
 // (un stick sous le pouce gauche, trois boutons sous le droit, la garde en posant le pouce sur Frapper et Spécial à la fois).
 // Une fois par image, tout devient une seule commande : le stick, les boutons tenus et ceux qu'on vient d'enfoncer.
 
-import { ATK, JMP, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
+import { ATK, GRB, JMP, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
 import { ACTION_IDS, loadSettings, type ActionId, type CulbuteSettings } from "./bindings.ts";
 
 export type Scheme = "clavier" | "manette" | "tactile";
 
-const BITS: Partial<Record<ActionId, number>> = { attack: ATK, special: SPC, jump: JMP, shield: SHD };
+const BITS: Partial<Record<ActionId, number>> = { attack: ATK, special: SPC, jump: JMP, shield: SHD, grab: GRB };
 
 /** Un clic sur l'interface (boutons, menus, discussion) n'est pas un coup */
 const UI = "button, a, input, textarea, select, label, summary, [role='dialog'], [role='menu'], .panel";
@@ -24,7 +24,7 @@ export class CulbuteControls {
   private settings: CulbuteSettings;
   /** Pendant que l'aide, le menu ou les réglages sont ouverts, le combat n'écoute plus */
   paused = false;
-  readonly touch = { sx: 0, sy: 0, atk: false, spc: false, jmp: false, taps: 0 };
+  readonly touch = { sx: 0, sy: 0, atk: false, spc: false, jmp: false, grb: false, taps: 0 };
 
   constructor(settings: CulbuteSettings = loadSettings()) {
     this.settings = settings;
@@ -100,7 +100,10 @@ export class CulbuteControls {
   };
 
   private onMouseUp = (e: MouseEvent) => {
-    this.held.delete(`Mouse${e.button}`);
+    const code = `Mouse${e.button}`;
+    this.held.delete(code);
+    // Les boutons de côté de la souris feraient revenir le navigateur en arrière
+    if (!this.paused && this.byCode.has(code) && e.button >= 3) e.preventDefault();
   };
 
   /** Le clic droit sert au combat : pas de menu du navigateur, sauf sur l'interface */
@@ -115,10 +118,10 @@ export class CulbuteControls {
   };
 
   /** Un doigt sur un bouton de l'écran */
-  touchButton(which: "atk" | "spc" | "jmp", down: boolean) {
+  touchButton(which: "atk" | "spc" | "jmp" | "grb", down: boolean) {
     this.scheme = "tactile";
     this.touch[which] = down;
-    if (down) this.touch.taps |= which === "atk" ? ATK : which === "spc" ? SPC : JMP;
+    if (down) this.touch.taps |= which === "atk" ? ATK : which === "spc" ? SPC : which === "grb" ? GRB : JMP;
   }
 
   /** L'action est-elle tenue, ou vient-elle d'être enfoncée ? */
@@ -154,7 +157,8 @@ export class CulbuteControls {
     // La touche du haut fait sauter (un appui, un saut)
     if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP;
 
-    // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, les gâchettes pour la garde
+    // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite
+    // pour saisir, les autres gâchettes pour la garde
     const gp = [...(navigator.getGamepads?.() ?? [])].find((p) => p && p.connected) ?? null;
     if (gp) {
       const pb = (i: number) => Boolean(gp.buttons[i]?.pressed);
@@ -164,7 +168,8 @@ export class CulbuteControls {
       if (pb(0) || pb(3)) pad |= JMP;
       if (pb(2)) pad |= ATK;
       if (pb(1)) pad |= SPC;
-      if (pb(4) || pb(5) || pb(6) || pb(7)) pad |= SHD;
+      if (pb(4) || pb(6) || pb(7)) pad |= SHD;
+      if (pb(5)) pad |= GRB;
       if (Math.hypot(ax, ay) > 0.2) {
         x = ax;
         y = -ay;
@@ -187,7 +192,7 @@ export class CulbuteControls {
       x = t.sx;
       y = t.sy;
     }
-    let touchHeld = (t.atk ? ATK : 0) | (t.spc ? SPC : 0) | (t.jmp ? JMP : 0);
+    let touchHeld = (t.atk ? ATK : 0) | (t.spc ? SPC : 0) | (t.jmp ? JMP : 0) | (t.grb ? GRB : 0);
     if (t.atk && t.spc) touchHeld = SHD | (t.jmp ? JMP : 0);
     if (this.settings.stickJump && t.sy > 0.65) touchHeld |= JMP;
     let touchTaps = t.taps;
