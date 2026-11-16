@@ -6,7 +6,17 @@
 import * as THREE from "three";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { getMap, type GameMap } from "../../shared/games/escarmouche/maps.ts";
-import { isTeamMode, partBox, rayFighter, worldOf, type EscEvent, type KillWeapon, POINTS } from "../../shared/games/escarmouche/match.ts";
+import {
+  isTeamMode,
+  partBox,
+  rayFighter,
+  worldOf,
+  type EscEvent,
+  type KillWeapon,
+  POINTS,
+  CONQUEST,
+  POINT_NAMES,
+} from "../../shared/games/escarmouche/match.ts";
 import {
   B,
   copySoldier,
@@ -99,6 +109,8 @@ export interface HudState {
   flags: { at: number; carrier: number }[] | null;
   carrying: number;
   zone: { owner: number; contested: boolean; inside: boolean } | null;
+  /** Conquête : chaque drapeau (qui le tient, sa jauge de -1 à 1), celui où l'on se tient (-1 aucun) */
+  cq: { pts: { owner: number; v: number }[]; inside: number } | null;
   banner: { id: number; text: string; tone: "info" | "good" | "bad" } | null;
   /** Les médailles du moment, et les points qu'elles rapportent */
   awards: { id: number; text: string; pts: number }[];
@@ -249,6 +261,9 @@ export class BattleRuntime {
   private hudAt = 0;
   private stepTimers = new Map<number, number>();
   private lastShots = new Map<number, number>();
+  /** Conquête : le drapeau où l'on se tient (-1 aucun), et l'alerte des derniers tickets déjà donnée */
+  private insidePoint = -1;
+  private ticketWarned = false;
   /** Le dernier tir entendu de chacun (pas au silencieux) : il le montre au radar un moment */
   private radarPing = new Map<number, number>();
   private lastBeep = -1;
@@ -618,6 +633,7 @@ export class BattleRuntime {
       }
       case "spawn": {
         if (e.i === this.me && e.on !== undefined && e.on >= 0) this.say(`De retour auprès de ${this.nameOf(e.on)}`, "info");
+        if (e.i === this.me && e.fl !== undefined) this.say(`De retour sur ${POINT_NAMES[e.fl] ?? "le drapeau"}`, "info");
         return;
       }
       case "spot": {
@@ -689,6 +705,21 @@ export class BattleRuntime {
           this.say(e.team === mine ? "Votre drapeau est revenu à sa place." : "Le drapeau adverse est revenu chez lui.", "info");
         } else if (e.f === "drop") {
           this.say(e.team === mine ? "Votre drapeau est tombé : allez le reprendre !" : "Le drapeau adverse est tombé.", "info");
+        }
+        return;
+      }
+      case "cq": {
+        const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
+        const name = POINT_NAMES[e.p] ?? "?";
+        if (e.owner >= 0) {
+          const ours = e.owner === mine;
+          this.sound.play("zone", { volume: 0.5 });
+          this.say(ours ? `${name} est à nous !` : `L'adversaire a pris ${name} !`, ours ? "good" : "bad");
+          if (ours && this.insidePoint === e.p) this.award(`${name} pris`, POINTS.flag);
+        } else {
+          const lost = e.was === mine;
+          this.say(lost ? `On perd ${name} !` : `${name} neutralisé`, lost ? "bad" : "good");
+          if (!lost && this.insidePoint === e.p) this.award(`${name} neutralisé`, POINTS.neutral);
         }
         return;
       }
@@ -1037,6 +1068,7 @@ export class BattleRuntime {
       );
     }
     if (v.mode === "zone") this.scene.setZone(this.gm.zone, this.latest?.z?.[0] ?? -1, this.latest?.z?.[1] === 1);
+    if (v.mode === "conquete") this.scene.setPoints(this.gm.points, this.latest?.cq ?? null, CONQUEST.r);
     // La douleur à l'image : pâle et rougie sur les bords quand on vient d'être touché, ou qu'il reste peu de vie
     const hurtK =
       this.me >= 0 && s?.alive ? Math.max(0, 1 - (nowMs - this.hurtAt) / 650) * 0.55 + Math.max(0, (40 - this.hp) / 40) * 0.45 : 0;
@@ -1051,6 +1083,17 @@ export class BattleRuntime {
         this.radarDots,
         flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : [],
         v.mode === "zone" ? { ...this.gm.zone, color: zoneOwner >= 0 ? TEAM_HEX[zoneOwner === 1 ? 1 : 0] : "rgba(240,236,220,.8)" } : null,
+        v.mode === "conquete" && this.latest?.cq
+          ? this.gm.points.map((p, k) => {
+              const owner = this.latest!.cq![k * 2] ?? -1;
+              return {
+                x: p.x,
+                z: p.z,
+                letter: POINT_NAMES[k] ?? "?",
+                color: owner >= 0 ? TEAM_HEX[owner === 1 ? 1 : 0] : "rgba(240,236,220,.9)",
+              };
+            })
+          : [],
       );
     }
     if (this.compassCanvas) drawCompass(this.compassCanvas, this.yaw);
@@ -1267,6 +1310,18 @@ export class BattleRuntime {
     const inZone =
       v.mode === "zone" && s?.alive ? (s.x - this.gm.zone.x) ** 2 + (s.z - this.gm.zone.z) ** 2 <= this.gm.zone.r ** 2 && s.y < 3 : false;
     const myFighter = this.me >= 0 && tick ? readFighter(tick.p, this.me) : null;
+    // Conquête : le drapeau où l'on se tient ; et l'alerte quand les tickets de son équipe s'épuisent
+    this.insidePoint =
+      v.mode === "conquete" && s?.alive
+        ? this.gm.points.findIndex((p) => (s.x - p.x) ** 2 + (s.z - p.z) ** 2 <= CONQUEST.r ** 2 && Math.abs(s.y - p.y) <= CONQUEST.dy)
+        : -1;
+    if (v.mode === "conquete" && tick && this.me >= 0) {
+      const left = tick.ts[this.teamOf(this.me) === 1 ? 1 : 0];
+      if (left <= 20 && left > 0 && !this.ticketWarned) {
+        this.ticketWarned = true;
+        this.say(`Plus que ${left} tickets !`, "bad");
+      }
+    }
     this.ping = this.minLag === null ? 0 : Math.round(this.jitter);
     this.onHud({
       seated: this.me >= 0,
@@ -1300,6 +1355,13 @@ export class BattleRuntime {
       flags: flagsRaw ? [0, 1].map((k) => ({ at: flagsRaw[k * 5]!, carrier: flagsRaw[k * 5 + 1]! })) : null,
       carrying: myFighter?.carrying ?? -1,
       zone: v.mode === "zone" ? { owner: tick?.z?.[0] ?? -1, contested: tick?.z?.[1] === 1, inside: inZone } : null,
+      cq:
+        v.mode === "conquete"
+          ? {
+              pts: this.gm.points.map((_, k) => ({ owner: tick?.cq?.[k * 2] ?? -1, v: (tick?.cq?.[k * 2 + 1] ?? 0) / 100 })),
+              inside: this.insidePoint,
+            }
+          : null,
       banner: now < this.bannerUntil ? this.banner : null,
       awards: this.awards.filter((a) => now - a.at < 2600),
       suppress: this.suppress,

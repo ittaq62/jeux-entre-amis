@@ -72,6 +72,12 @@ export interface Hole {
   kind: "door" | "win" | "big";
 }
 
+export interface Point3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface GameMap {
   id: MapId;
   name: string;
@@ -85,6 +91,8 @@ export interface GameMap {
   /** Le drapeau de chaque équipe, chez elle */
   flags: [{ x: number; y: number; z: number }, { x: number; y: number; z: number }];
   zone: { x: number; z: number; r: number };
+  /** Les trois drapeaux de la conquête : A du côté ouest, B au centre, C du côté est */
+  points: [Point3, Point3, Point3];
   /** L'heure et le temps qu'il fait : seulement pour l'image */
   light: "soir" | "gris" | "aube";
   /** La mer, au nord, au-delà du quai (seulement pour l'image) */
@@ -592,6 +600,11 @@ function hameau(): GameMap {
       { x: 41, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    points: [
+      { x: -22, y: 0, z: 16.5 },
+      { x: 0, y: 0, z: 0 },
+      { x: 22, y: 0, z: -16.5 },
+    ],
     light: "soir",
   };
 }
@@ -752,6 +765,11 @@ function gare(): GameMap {
       { x: 46, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    points: [
+      { x: -20, y: 0, z: 12.5 },
+      { x: 0, y: 0.4, z: 0 },
+      { x: 20, y: 0, z: -12.5 },
+    ],
     light: "gris",
   };
 }
@@ -901,6 +919,11 @@ function port(): GameMap {
       { x: 44, y: 0, z: 0 },
     ],
     zone: { x: 0, z: 0, r: 6 },
+    points: [
+      { x: -25, y: 0, z: -2 },
+      { x: 0, y: 0, z: 0 },
+      { x: 25, y: 0, z: 2 },
+    ],
     light: "aube",
     sea: true,
   };

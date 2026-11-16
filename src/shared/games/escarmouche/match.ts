@@ -41,7 +41,14 @@ const ASSIST_WINDOW = 8;
 const FLAG_REACH = 1.4;
 const FLAG_RETURN = 20;
 /** Les points de chacun au tableau */
-export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone: 1, revive: 6 };
+export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone: 1, revive: 6, flag: 20, neutral: 10 };
+/**
+ * La conquête : un drapeau se prend en restant tout près (r, dy), d'autant plus vite qu'on y est nombreux (jusqu'à
+ * `max`) ; laissé seul, il revient peu à peu à qui le tenait. L'équipe qui tient plus de drapeaux que l'autre lui fait
+ * perdre un ticket toutes les `bleed` secondes par drapeau d'avance.
+ */
+export const CONQUEST = { r: 5, dy: 3, speed: 1 / 6, back: 1 / 12, bleed: 5, max: 3 };
+export const POINT_NAMES = ["A", "B", "C"] as const;
 /** Relever un coéquipier tombé : s'accroupir tout près de lui, un moment ; il repart avec un peu de vie */
 export const REVIVE = { reach: 1.7, time: 1.4, hp: 60, near: 15, wait: 8 };
 /** Revenir auprès d'un coéquipier : seulement s'il n'est pas au combat depuis quelques secondes */
@@ -66,7 +73,7 @@ export type EscEvent =
   | { k: "shot"; i: number; w: WeaponId; x: number; y: number; z: number; n: number }
   | { k: "hit"; a: number; v: number; d: number; p: Part; x: number; y: number; z: number }
   | { k: "kill"; a: number; v: number; w: KillWeapon; h: boolean; as: number }
-  | { k: "spawn"; i: number; on?: number }
+  | { k: "spawn"; i: number; on?: number; fl?: number }
   /** `i` a relevé son coéquipier `v` */
   | { k: "revive"; i: number; v: number }
   | { k: "throw"; i: number }
@@ -83,6 +90,8 @@ export type EscEvent =
   | { k: "reload"; i: number }
   | { k: "flag"; f: "take" | "drop" | "return" | "capture"; team: number; i: number }
   | { k: "zone"; owner: number; contested: boolean }
+  /** Conquête : le drapeau `p` change de mains (`owner` -1 : neutralisé), il était à `was` */
+  | { k: "cq"; p: number; owner: number; was: number }
   | { k: "streak"; i: number; n: number }
   | { k: "live" }
   | { k: "over" };
@@ -208,12 +217,19 @@ export interface Match extends RngHolder {
   scores: [number, number];
   flags: [FlagState, FlagState] | null;
   zone: { owner: number; contested: boolean; acc: [number, number] } | null;
+  /** Conquête : chaque drapeau (son équipe, -1 personne ; sa jauge de -1, aux rouges, à 1, aux bleus) */
+  cq: { pts: CqPoint[]; bleed: [number, number] } | null;
   /** À la fin : l'équipe gagnante (ou le soldat, en chacun pour soi), null pour une égalité */
   winner: number | null;
   ranks: number[] | null;
   barrels: Barrel[];
   blasts: Blast[];
   marks: Mark[];
+}
+
+export interface CqPoint {
+  owner: number;
+  v: number;
 }
 
 export interface Pose {
@@ -301,6 +317,7 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     scores: [0, 0],
     flags: null,
     zone: null,
+    cq: null,
     winner: null,
     ranks: null,
     barrels: [],
@@ -315,6 +332,18 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     m.flags = [0, 1].map((t) => ({ at: "home", carrier: -1, ...gm.flags[t]!, since: 0 })) as [FlagState, FlagState];
   }
   if (settings.mode === "zone") m.zone = { owner: -1, contested: false, acc: [0, 0] };
+  if (settings.mode === "conquete") {
+    // Chaque équipe tient déjà le drapeau de son côté ; celui du centre est à prendre. Les tickets partent du haut.
+    m.cq = {
+      pts: [
+        { owner: 0, v: -1 },
+        { owner: -1, v: 0 },
+        { owner: 1, v: 1 },
+      ],
+      bleed: [0, 0],
+    };
+    m.scores = [m.goal, m.goal];
+  }
   players.forEach((p, i) => {
     const team = teams ? (p.team === 1 ? 1 : 0) : i;
     const f: Fighter = {
@@ -400,6 +429,7 @@ export function upgradeMatch(m: Match): Match {
   }
   if (!Array.isArray(m.blasts)) m.blasts = [];
   if (!Array.isArray(m.marks)) m.marks = [];
+  if (m.cq === undefined) m.cq = null;
   const fresh = newSoldier(0, 0, 0, 0, "fa");
   for (const f of m.fighters) {
     if (typeof f.spotReady !== "number") f.spotReady = 0;
@@ -745,6 +775,11 @@ function besideTeammate(m: Match, i: number, world: World): { x: number; y: numb
 export function chooseSpawn(m: Match, i: number, target: number) {
   const f = m.fighters[i];
   if (!f) return;
+  // Conquête : -2 pour A, -3 pour B, -4 pour C (on y reviendra s'il est à son équipe et pas attaqué)
+  if (target <= -2) {
+    f.spawnOn = m.cq && -2 - target < m.cq.pts.length ? target : -1;
+    return;
+  }
   const g = target >= 0 ? m.fighters[target] : null;
   f.spawnOn = g && target !== i && g.team === f.team && isTeamMode(m.mode) ? target : -1;
 }
@@ -907,10 +942,14 @@ export function worldStep(m: Match, ev: EscEvent[]) {
     const f = m.fighters[i]!;
     if (!f.s.alive) {
       if (m.phase === "live" && m.t >= f.respawnAt && !waitingRescue(m, i)) {
-        const near = besideTeammate(m, i, world);
-        const sp = near ?? spawnPoint(m, i);
+        if (m.cq && f.bot) f.spawnOn = botFlagSpawn(m, i);
+        const onFlag = m.cq && f.spawnOn <= -2 ? flagSpawn(m, i, world) : null;
+        const near = onFlag ? null : besideTeammate(m, i, world);
+        const sp = onFlag ?? near ?? spawnPoint(m, i);
         placeAt(f, sp.x, sp.y, sp.z, sp.yaw, m);
-        ev.push(near ? { k: "spawn", i, on: f.spawnOn } : { k: "spawn", i });
+        // Conquête : chaque retour au combat coûte un ticket à son équipe (un coéquipier relevé n'en coûte pas)
+        if (m.cq) m.scores[f.team === 1 ? 1 : 0] = Math.max(0, m.scores[f.team === 1 ? 1 : 0] - 1);
+        ev.push(onFlag ? { k: "spawn", i, fl: -2 - f.spawnOn } : near ? { k: "spawn", i, on: f.spawnOn } : { k: "spawn", i });
       }
       continue;
     }
@@ -923,6 +962,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   if (m.phase !== "live") return;
   if (isTeamMode(m.mode)) stepRevive(m, ev);
   if (m.zone) stepZone(m, ev);
+  if (m.cq) stepConquest(m, ev);
   if (m.flags) stepFlags(m, ev);
   checkEnd(m, ev);
 }
@@ -983,6 +1023,119 @@ function stepZone(m: Match, ev: EscEvent[]) {
   }
 }
 
+/**
+ * La conquête : chaque drapeau penche vers l'équipe la plus nombreuse tout près de lui. Il faut d'abord le neutraliser
+ * (ramener sa jauge à zéro), puis le prendre. Les tickets de l'équipe qui en tient le moins fondent.
+ */
+function stepConquest(m: Match, ev: EscEvent[]) {
+  const cq = m.cq!;
+  const at = getMap(m.map).points;
+  const held: [number, number] = [0, 0];
+  cq.pts.forEach((p, k) => {
+    const c = at[k]!;
+    const n: [number, number] = [0, 0];
+    const inside: number[] = [];
+    m.fighters.forEach((f, i) => {
+      if (!f.s.alive || Math.abs(f.s.y - c.y) > CONQUEST.dy) return;
+      if ((f.s.x - c.x) ** 2 + (f.s.z - c.z) ** 2 > CONQUEST.r ** 2) return;
+      n[f.team === 1 ? 1 : 0] += 1;
+      inside.push(i);
+      f.stats.zone += DT;
+    });
+    const diff = Math.max(-CONQUEST.max, Math.min(CONQUEST.max, n[1] - n[0]));
+    if (diff !== 0) p.v += diff * CONQUEST.speed * DT;
+    else if (n[0] + n[1] === 0) {
+      // Laissé seul, il revient à qui le tenait (ou au neutre)
+      const home = p.owner === 0 ? -1 : p.owner === 1 ? 1 : 0;
+      const step = CONQUEST.back * DT;
+      p.v = p.v < home ? Math.min(home, p.v + step) : Math.max(home, p.v - step);
+    }
+    p.v = Math.max(-1, Math.min(1, p.v));
+    const was = p.owner;
+    if ((p.owner === 0 && p.v > 0) || (p.owner === 1 && p.v < 0)) p.owner = -1;
+    else if (p.owner !== 0 && p.v <= -1) p.owner = 0;
+    else if (p.owner !== 1 && p.v >= 1) p.owner = 1;
+    if (p.owner !== was) {
+      const by = p.owner >= 0 ? p.owner : was === 0 ? 1 : 0;
+      for (const i of inside) {
+        const f = m.fighters[i]!;
+        if ((f.team === 1 ? 1 : 0) !== by) continue;
+        f.points += p.owner >= 0 ? POINTS.flag : POINTS.neutral;
+        if (p.owner >= 0) f.stats.captures += 1;
+      }
+      ev.push({ k: "cq", p: k, owner: p.owner, was });
+    }
+    if (p.owner === 0) held[0] += 1;
+    if (p.owner === 1) held[1] += 1;
+  });
+  for (const t of [0, 1] as const) {
+    const lead = held[t === 0 ? 1 : 0] - held[t];
+    if (lead <= 0) {
+      cq.bleed[t] = 0;
+      continue;
+    }
+    cq.bleed[t] += (lead / CONQUEST.bleed) * DT;
+    while (cq.bleed[t] >= 1) {
+      cq.bleed[t] -= 1;
+      m.scores[t] = Math.max(0, m.scores[t] - 1);
+    }
+  }
+}
+
+/** Conquête : une place libre près du drapeau choisi, s'il est à son équipe et qu'aucun adversaire n'y rôde */
+function flagSpawn(m: Match, i: number, world: World): { x: number; y: number; z: number; yaw: number } | null {
+  const f = m.fighters[i]!;
+  const k = -2 - f.spawnOn;
+  const p = m.cq?.pts[k];
+  const c = getMap(m.map).points[k];
+  if (!p || !c || p.owner !== f.team) return null;
+  for (let j = 0; j < m.fighters.length; j++) {
+    const g = m.fighters[j]!;
+    if (g.s.alive && enemies(m, i, j) && Math.hypot(g.s.x - c.x, g.s.z - c.z) < CONQUEST.r + 4) return null;
+  }
+  // Le regard vers le camp d'en face
+  const yaw = f.team === 1 ? Math.PI / 2 : -Math.PI / 2;
+  const a0 = random(m) * Math.PI * 2;
+  for (let ring = 0; ring < 2; ring++) {
+    for (let a = 0; a < 8; a++) {
+      const ang = a0 + (a / 8) * Math.PI * 2 + ring * 0.4;
+      const r = 2 + ring * 1.6;
+      const x = c.x + Math.cos(ang) * r;
+      const z = c.z + Math.sin(ang) * r;
+      const y = c.y;
+      if (world.overlaps(x - 0.3, y + 0.02, z - 0.3, x + 0.3, y + 1.78, z + 0.3)) continue;
+      if (!world.overlaps(x - 0.2, y - 0.1, z - 0.2, x + 0.2, y + 0.01, z + 0.2)) continue;
+      if (!world.clear(c.x, y + 1, c.z, x, y + 1, z)) continue;
+      if (m.fighters.some((g, j) => j !== i && g.s.alive && Math.hypot(g.s.x - x, g.s.z - z) < 0.8)) continue;
+      return { x, y, z, yaw };
+    }
+  }
+  return null;
+}
+
+/** Conquête : où revient un bot (le drapeau de son équipe le plus proche d'un drapeau à prendre, parfois la base) */
+function botFlagSpawn(m: Match, i: number): number {
+  const f = m.fighters[i]!;
+  const pts = m.cq!.pts;
+  const at = getMap(m.map).points;
+  const owned = pts.map((_, k) => k).filter((k) => pts[k]!.owner === f.team);
+  const want = pts.map((_, k) => k).filter((k) => pts[k]!.owner !== f.team);
+  if (owned.length === 0 || random(m) < 0.25) return -1;
+  if (want.length === 0) return -2 - owned[Math.floor(random(m) * owned.length)]!;
+  let best = owned[0]!;
+  let bestD = Infinity;
+  for (const o of owned) {
+    for (const w of want) {
+      const d = Math.hypot(at[o]!.x - at[w]!.x, at[o]!.z - at[w]!.z);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+  }
+  return -2 - best;
+}
+
 function stepFlags(m: Match, ev: EscEvent[]) {
   const gm = getMap(m.map);
   const flags = m.flags!;
@@ -1041,7 +1194,11 @@ function stepFlags(m: Match, ev: EscEvent[]) {
 
 function checkEnd(m: Match, ev: EscEvent[]) {
   const teams = isTeamMode(m.mode);
-  const reached = teams ? m.scores.some((s) => s >= m.goal) : m.fighters.some((f) => f.stats.kills >= m.goal);
+  const reached = m.cq
+    ? m.scores.some((s) => s <= 0)
+    : teams
+      ? m.scores.some((s) => s >= m.goal)
+      : m.fighters.some((f) => f.stats.kills >= m.goal);
   if (!reached && m.t < m.endAt) return;
   finish(m);
   ev.push({ k: "over" });

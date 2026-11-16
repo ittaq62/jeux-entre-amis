@@ -5,6 +5,7 @@ import {
   applyCmd,
   chooseNext,
   chooseSpawn,
+  CONQUEST,
   createMatch,
   finish,
   giveUp,
@@ -47,6 +48,19 @@ describe("Escarmouche : les cartes", () => {
         );
         expect(sp.x).toBeGreaterThan(gm.bounds.x0);
         expect(sp.x).toBeLessThan(gm.bounds.x1);
+      }
+    });
+
+    it(`${id} : les trois drapeaux de la conquête sont posés au sol, dégagés, et symétriques`, () => {
+      const gm = getMap(id);
+      const w = worldOf(id);
+      const [a, , c] = gm.points;
+      expect(a.x).toBe(-c.x);
+      expect(a.z).toBe(-c.z);
+      expect(Math.abs(gm.points[1].x) + Math.abs(gm.points[1].z)).toBe(0);
+      for (const p of gm.points) {
+        expect(w.overlaps(p.x - 0.5, p.y + 0.02, p.z - 0.5, p.x + 0.5, p.y + 1.78, p.z + 0.5), `${p.x},${p.z}`).toBe(false);
+        expect(w.overlaps(p.x - 0.2, p.y - 0.1, p.z - 0.2, p.x + 0.2, p.y + 0.01, p.z + 0.2), `${p.x},${p.z}`).toBe(true);
       }
     });
 
@@ -340,6 +354,7 @@ describe("Escarmouche : les bots", () => {
     ["equipes", "gare"],
     ["zone", "hameau"],
     ["drapeau", "gare"],
+    ["conquete", "port"],
   ] as [Mode, MapId][]) {
     it(`${mode} sur ${map} : six bots jouent deux minutes, se déplacent, tirent et s'éliminent`, () => {
       const m = createMatch(
@@ -357,6 +372,7 @@ describe("Escarmouche : les bots", () => {
       let shots = 0;
       let kills = 0;
       let moved = 0;
+      let cqTaken = 0;
       for (let step = 0; step < 60 * 120 && m.phase !== "over"; step++) {
         const ev: EscEvent[] = [];
         worldStep(m, ev);
@@ -364,6 +380,7 @@ describe("Escarmouche : les bots", () => {
         for (const e of ev) {
           if (e.k === "shot") shots++;
           if (e.k === "kill") kills++;
+          if (e.k === "cq" && e.owner >= 0) cqTaken++;
         }
         if (step === 60 * 10) moved = m.fighters.filter((f, i) => Math.hypot(f.s.x - start[i]!.x, f.s.z - start[i]!.z) > 5).length;
       }
@@ -371,6 +388,11 @@ describe("Escarmouche : les bots", () => {
       expect(shots).toBeGreaterThan(20);
       expect(kills).toBeGreaterThan(2);
       if (mode === "zone") expect(m.scores[0] + m.scores[1]).toBeGreaterThan(5);
+      // Conquête : des drapeaux ont changé de mains, et des tickets se sont perdus
+      if (mode === "conquete") {
+        expect(cqTaken).toBeGreaterThan(0);
+        expect(m.scores[0] + m.scores[1]).toBeLessThan(2 * m.goal - 5);
+      }
       finish(m);
       expect(m.ranks).toHaveLength(6);
     });
@@ -780,5 +802,175 @@ describe("Escarmouche : les accessoires", () => {
     while (m.fighters[0]!.s.alive) hurt(m, 0, 1, 60, 1, "fa", [], 0, 1, 0);
     for (let k = 0; k < 60 * 5; k++) worldStep(m, []);
     expect(m.fighters[0]!.s.mag[0]).toBe(45);
+  });
+});
+
+describe("Escarmouche : la conquête", () => {
+  function conquest() {
+    const m = createMatch(
+      settings({ mode: "conquete", map: "port" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 0, bot: false, primary: "fa" },
+        { id: "c", team: 1, bot: false, primary: "fa" },
+      ],
+      5,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    // Tout le monde loin des drapeaux, sur le quai
+    Object.assign(m.fighters[0]!.s, { x: -12, y: 0, z: 24, vx: 0, vz: 0 });
+    Object.assign(m.fighters[1]!.s, { x: -10, y: 0, z: 24, vx: 0, vz: 0 });
+    Object.assign(m.fighters[2]!.s, { x: 12, y: 0, z: -24, vx: 0, vz: 0 });
+    return m;
+  }
+  const run = (m: Match, seconds: number, ev: EscEvent[] = []) => {
+    for (let k = 0; k < Math.round(seconds / DT); k++) worldStep(m, ev);
+    return ev;
+  };
+  const put = (m: Match, i: number, k: number) => {
+    const c = getMap(m.map).points[k]!;
+    Object.assign(m.fighters[i]!.s, { x: c.x + 0.5 * i, y: c.y, z: c.z + 1, vx: 0, vz: 0 });
+  };
+  const down = (m: Match, v: number, by: number, ev: EscEvent[]) => {
+    while (m.fighters[v]!.s.alive) hurt(m, v, by, 50, 1, "fa", ev, 0, 1, 0);
+  };
+
+  it("au départ : chaque équipe tient son drapeau, celui du centre est libre, les tickets sont pleins", () => {
+    const m = conquest();
+    expect(m.cq!.pts.map((p) => p.owner)).toEqual([0, -1, 1]);
+    expect(m.goal).toBe(100);
+    expect(m.scores).toEqual([m.goal, m.goal]);
+  });
+
+  it("seul près du drapeau libre, on le prend en quelques secondes ; à deux, deux fois plus vite", () => {
+    const m = conquest();
+    put(m, 0, 1);
+    const ev = run(m, 1 / CONQUEST.speed - 0.5);
+    expect(m.cq!.pts[1]!.owner).toBe(-1);
+    run(m, 0.7, ev);
+    expect(m.cq!.pts[1]!.owner).toBe(0);
+    expect(ev.some((e) => e.k === "cq" && e.p === 1 && e.owner === 0 && e.was === -1)).toBe(true);
+    expect(m.fighters[0]!.stats.captures).toBe(1);
+
+    const m2 = conquest();
+    put(m2, 0, 1);
+    put(m2, 1, 1);
+    run(m2, 1 / CONQUEST.speed / 2 + 0.2);
+    expect(m2.cq!.pts[1]!.owner).toBe(0);
+  });
+
+  it("le drapeau adverse : il faut d'abord le neutraliser, puis le prendre ; laissé seul, il revient à qui le tenait", () => {
+    const m = conquest();
+    put(m, 0, 2);
+    const ev = run(m, 1 / CONQUEST.speed + 0.2);
+    expect(m.cq!.pts[2]!.owner).toBe(-1);
+    expect(ev.some((e) => e.k === "cq" && e.p === 2 && e.owner === -1 && e.was === 1)).toBe(true);
+    run(m, 1 / CONQUEST.speed + 0.2, ev);
+    expect(m.cq!.pts[2]!.owner).toBe(0);
+
+    // A, à moitié attaqué puis laissé : il revient aux rouges
+    const m2 = conquest();
+    put(m2, 2, 0);
+    run(m2, 2);
+    expect(m2.cq!.pts[0]!.v).toBeGreaterThan(-0.8);
+    Object.assign(m2.fighters[2]!.s, { x: 12, y: 0, z: -24 });
+    run(m2, 6);
+    expect(m2.cq!.pts[0]!.v).toBe(-1);
+    expect(m2.cq!.pts[0]!.owner).toBe(0);
+  });
+
+  it("à nombre égal, le drapeau ne bouge pas", () => {
+    const m = conquest();
+    put(m, 0, 1);
+    put(m, 2, 1);
+    run(m, 5);
+    expect(m.cq!.pts[1]!.v).toBe(0);
+    expect(m.cq!.pts[1]!.owner).toBe(-1);
+  });
+
+  it("l'équipe qui tient plus de drapeaux fait fondre les tickets de l'autre", () => {
+    const m = conquest();
+    m.cq!.pts[1] = { owner: 0, v: -1 };
+    run(m, CONQUEST.bleed * 4 + 0.1);
+    expect(m.scores[1]).toBe(m.goal - 4);
+    expect(m.scores[0]).toBe(m.goal);
+    // Trois contre zéro : trois fois plus vite
+    m.cq!.pts[2] = { owner: 0, v: -1 };
+    const before = m.scores[1];
+    run(m, CONQUEST.bleed * 2 + 0.1);
+    expect(before - m.scores[1]).toBe(6);
+  });
+
+  it("chaque retour au combat coûte un ticket ; un coéquipier relevé n'en coûte pas", () => {
+    const m = conquest();
+    const ev: EscEvent[] = [];
+    down(m, 2, 0, ev);
+    run(m, 6, ev);
+    expect(m.fighters[2]!.s.alive).toBe(true);
+    expect(m.scores[1]).toBe(m.goal - 1);
+
+    // Relevé par son coéquipier : pas de ticket perdu
+    Object.assign(m.fighters[2]!.s, { x: 12, y: 0, z: -24 });
+    Object.assign(m.fighters[1]!.s, { x: -11, y: 0, z: 24 });
+    down(m, 1, 2, ev);
+    for (let k = 0; k < 100; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(k + 1, { b: B.crouch }), null, ev);
+    }
+    expect(m.fighters[1]!.s.alive).toBe(true);
+    expect(m.scores[0]).toBe(m.goal);
+  });
+
+  it("revenir sur un drapeau de son équipe ; s'il est attaqué, retour à la base", () => {
+    const m = conquest();
+    const ev: EscEvent[] = [];
+    chooseSpawn(m, 0, -2);
+    expect(m.fighters[0]!.spawnOn).toBe(-2);
+    Object.assign(m.fighters[1]!.s, { x: 40, y: 0, z: -24 });
+    down(m, 0, 2, ev);
+    giveUp(m, 0);
+    run(m, 6, ev);
+    const a = getMap("port").points[0]!;
+    const f = m.fighters[0]!;
+    expect(f.s.alive).toBe(true);
+    expect(Math.hypot(f.s.x - a.x, f.s.z - a.z)).toBeLessThan(CONQUEST.r);
+    expect(ev.some((e) => e.k === "spawn" && e.i === 0 && e.fl === 0)).toBe(true);
+
+    // Un ennemi sur A : on revient à la base
+    put(m, 2, 0);
+    down(m, 0, 2, ev);
+    giveUp(m, 0);
+    run(m, 6, ev);
+    expect(f.s.alive).toBe(true);
+    expect(f.s.x).toBeLessThan(-38);
+
+    // Un drapeau qui n'existe pas : la base
+    chooseSpawn(m, 2, -9);
+    expect(m.fighters[2]!.spawnOn).toBe(-1);
+  });
+
+  it("plus de tickets : la partie s'arrête, l'autre équipe gagne", () => {
+    const m = conquest();
+    m.scores[1] = 1;
+    m.cq!.pts[1] = { owner: 0, v: -1 };
+    const ev = run(m, CONQUEST.bleed + 0.2);
+    expect(m.phase).toBe("over");
+    expect(m.winner).toBe(0);
+    expect(ev.some((e) => e.k === "over")).toBe(true);
+  });
+
+  it("ce qui voyage : les drapeaux et leur jauge ; une partie relue sans conquête reçoit cq = null", () => {
+    const m = conquest();
+    put(m, 0, 1);
+    run(m, 1);
+    const t = encodeTick(m, []);
+    expect(t.cq).toHaveLength(6);
+    expect(t.cq![0]).toBe(0);
+    expect(t.cq![2]).toBe(-1);
+    expect(t.cq![3]).toBeLessThan(0);
+    const old = duelMatch("equipes") as unknown as Record<string, unknown>;
+    delete old.cq;
+    expect(upgradeMatch(old as unknown as Match).cq).toBeNull();
   });
 });

@@ -47,6 +47,7 @@ export class Radar {
     dots: RadarDot[],
     flags: { x: number; z: number; color: string }[],
     zone: { x: number; z: number; r: number; color: string } | null,
+    points: { x: number; z: number; letter: string; color: string }[] = [],
   ) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const size = c.clientWidth || 150;
@@ -88,6 +89,27 @@ export class Radar {
         g.beginPath();
         g.arc(zx, zy, zone.r * k, 0, Math.PI * 2);
         g.stroke();
+      }
+      // Conquête : chaque drapeau, sa lettre dans un rond aux couleurs de qui le tient (au bord, s'il est loin)
+      for (const p of points) {
+        let [px, py] = toScreen(p.x, p.z);
+        const off = Math.hypot(px - r, py - r);
+        if (off > r - 9) {
+          px = r + ((px - r) / off) * (r - 9);
+          py = r + ((py - r) / off) * (r - 9);
+        }
+        g.beginPath();
+        g.arc(px, py, 7, 0, Math.PI * 2);
+        g.fillStyle = "rgba(0,0,0,.55)";
+        g.fill();
+        g.lineWidth = 2;
+        g.strokeStyle = p.color;
+        g.stroke();
+        g.fillStyle = p.color;
+        g.font = "bold 9px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(p.letter, px, py + 0.5);
       }
       for (const f of flags) {
         const [fx, fy] = toScreen(f.x, f.z);

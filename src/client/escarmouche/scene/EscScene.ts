@@ -13,6 +13,7 @@ import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from
 import { buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
+import { POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
 import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
 import { buildDistant, type Distant } from "./distant.ts";
 import { worldOf } from "../../../shared/games/escarmouche/match.ts";
@@ -83,6 +84,7 @@ export class EscScene {
   private grenades: THREE.Mesh[] = [];
   private flags: { group: THREE.Group; cloth: THREE.Mesh; stand: THREE.Mesh }[] = [];
   private zone: { ring: THREE.Mesh; wall: THREE.Mesh } | null = null;
+  private points: { cloth: THREE.Mesh; ring: THREE.Mesh; letter: THREE.Sprite; at: THREE.Vector3 }[] = [];
   private basePixelRatio: number;
   private skyMat: THREE.ShaderMaterial;
   private distant: Distant;
@@ -463,6 +465,71 @@ export class EscScene {
     (this.zone.wall.material as THREE.MeshBasicMaterial).color.set(color);
   }
 
+  /**
+   * Conquête : les trois drapeaux. Le drapeau monte le long du mât à mesure qu'une équipe le prend, aux couleurs de
+   * celle vers qui il penche ; le cercle au sol et la lettre (vue à travers les murs) sont aux couleurs de qui le tient,
+   * et clignotent tant qu'il n'est pas tenu bien en main.
+   */
+  setPoints(at: readonly { x: number; y: number; z: number }[], state: readonly number[] | null, r: number) {
+    if (!state) return;
+    if (this.points.length === 0) {
+      at.forEach((p, k) => {
+        const group = new THREE.Group();
+        group.position.set(p.x, p.y, p.z);
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.05, 4.2, 8),
+          new THREE.MeshStandardMaterial({ color: "#3a3a38", roughness: 0.45, metalness: 0.7 }),
+        );
+        pole.position.y = 2.1;
+        pole.castShadow = !this.low;
+        const foot = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.32, 0.42, 0.22, 12),
+          new THREE.MeshStandardMaterial({ color: "#8c8a83", roughness: 0.9 }),
+        );
+        foot.position.y = 0.11;
+        const cloth = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.1, 0.7, 8, 2),
+          new THREE.MeshStandardMaterial({ color: "#f2efe6", side: THREE.DoubleSide, roughness: 0.9 }),
+        );
+        cloth.position.set(0.55, 1, 0);
+        cloth.castShadow = !this.low;
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(r - 0.16, r, 64),
+          new THREE.MeshBasicMaterial({ color: "#f2efe6", transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        const letter = new THREE.Sprite(letterMaterial(POINT_NAMES[k] ?? "?"));
+        letter.position.y = 5.2;
+        letter.renderOrder = 10;
+        group.add(pole, foot, cloth, ring, letter);
+        this.scene.add(group);
+        this.points.push({ cloth, ring, letter, at: new THREE.Vector3(p.x, p.y + 5.2, p.z) });
+      });
+    }
+    const cam = this.camera.position;
+    this.points.forEach((pt, k) => {
+      const owner = state[k * 2] ?? -1;
+      const v = (state[k * 2 + 1] ?? 0) / 100;
+      const lean = v < -0.01 ? 0 : v > 0.01 ? 1 : -1;
+      (pt.cloth.material as THREE.MeshStandardMaterial).color.set(lean >= 0 ? TEAM_HEX[lean as 0 | 1] : "#f2efe6");
+      pt.cloth.position.y = 0.75 + 3.0 * Math.abs(v);
+      const pos = pt.cloth.geometry.attributes.position as THREE.BufferAttribute;
+      for (let n = 0; n < pos.count; n++) {
+        const x = pos.getX(n);
+        pos.setZ(n, Math.sin(this.t * 4 + x * 5 + k) * 0.09 * (x + 0.55));
+      }
+      pos.needsUpdate = true;
+      const held = owner >= 0 ? TEAM_HEX[owner === 1 ? 1 : 0] : "#f2efe6";
+      const shaky = owner >= 0 ? Math.abs(v - (owner === 1 ? 1 : -1)) > 0.02 : Math.abs(v) > 0.02;
+      const color = shaky && Math.floor(this.t * 4) % 2 === 0 ? "#ffb020" : held;
+      (pt.ring.material as THREE.MeshBasicMaterial).color.set(color);
+      (pt.letter.material as THREE.SpriteMaterial).color.set(color);
+      const s = Math.max(0.9, cam.distanceTo(pt.at) * 0.04);
+      pt.letter.scale.set(s, s, 1);
+    });
+  }
+
   /** Son personnage et sa tenue : les manches et les mains de son arme en main */
   setLocalLook(avatar: AvatarConfig, tenue: UniformId) {
     const key = `${tenue}|${JSON.stringify(avatar)}`;
@@ -697,6 +764,28 @@ export class EscScene {
     this.env.dispose();
     this.renderer.dispose();
   }
+}
+
+/** La lettre d'un drapeau de la conquête : blanche dans un rond, teintée ensuite aux couleurs de qui le tient */
+function letterMaterial(letter: string): THREE.SpriteMaterial {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  g.beginPath();
+  g.arc(32, 32, 26, 0, Math.PI * 2);
+  g.fillStyle = "rgba(0,0,0,.5)";
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = "#fff";
+  g.stroke();
+  g.fillStyle = "#fff";
+  g.font = "bold 32px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(letter, 32, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
 }
 
 let markMat: THREE.SpriteMaterial | null = null;

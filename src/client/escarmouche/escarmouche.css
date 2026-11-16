@@ -118,6 +118,48 @@ html:has(.esc-root) body {
   font-weight: 700;
 }
 
+/* Conquête : les trois drapeaux sous le score */
+.esc-cq {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.esc-cq-pt {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.esc-cq-pt b {
+  position: relative;
+  font-size: 12px;
+  z-index: 1;
+}
+
+.esc-cq-pt i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  opacity: 0.9;
+}
+
+.esc-cq-pt.is-here {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.esc-cq-pt.is-shaky {
+  animation: esc-blink 0.8s steps(2) infinite;
+}
+
 .esc-flag.is-taken {
   animation: esc-blink 0.8s steps(2) infinite;
 }

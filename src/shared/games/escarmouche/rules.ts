@@ -2,8 +2,8 @@
 
 import { isMapId, type MapId } from "./maps.ts";
 
-export type Mode = "solo" | "equipes" | "zone" | "drapeau";
-export const MODES: Mode[] = ["solo", "equipes", "zone", "drapeau"];
+export type Mode = "solo" | "equipes" | "conquete" | "zone" | "drapeau";
+export const MODES: Mode[] = ["solo", "equipes", "conquete", "zone", "drapeau"];
 
 export type BotLevel = "facile" | "moyen" | "fort";
 export const BOT_LEVELS: BotLevel[] = ["facile", "moyen", "fort"];
@@ -30,6 +30,15 @@ export const MODE_INFO: Record<
     teams: true,
     goals: [30, 50, 75],
     unit: "éliminations",
+  },
+  conquete: {
+    name: "Conquête",
+    short: "Conquête",
+    blurb:
+      "Trois drapeaux à prendre et à tenir. Chaque retour au combat coûte un ticket à son équipe, et celle qui tient le plus de drapeaux fait fondre les tickets de l'autre.",
+    teams: true,
+    goals: [60, 100, 150],
+    unit: "tickets",
   },
   zone: {
     name: "Zone à tenir",

@@ -3,7 +3,7 @@
 // qui dépendent de leur niveau. Ils jouent avec les mêmes commandes qu'un humain.
 
 import { getMap, type MapId } from "./maps.ts";
-import { isTeamMode, worldOf, type Match } from "./match.ts";
+import { CONQUEST, isTeamMode, worldOf, type Match } from "./match.ts";
 import type { BotLevel } from "./rules.ts";
 import { B, eyeOf, heightOf, MAX_PITCH, RADIUS, wrapAngle, type Cmd } from "./soldier.ts";
 import { WEAPONS, type PrimaryId } from "./weapons.ts";
@@ -697,6 +697,29 @@ function pickGoal(m: Match, i: number, mem: BotMemory) {
     const a = rand(mem) * Math.PI * 2;
     const r = rand(mem) * gm.zone.r * 0.6;
     return set(gm.zone.x + Math.cos(a) * r, 0, gm.zone.z + Math.sin(a) * r, 4 + rand(mem) * 3);
+  }
+  if (m.mode === "conquete" && m.cq) {
+    // Le drapeau le plus pressant : pas encore à nous, ou à nous mais qu'on est en train de nous prendre ; tout près,
+    // de préférence. Tous tranquilles : en garder un.
+    const mine = f.team === 1 ? 1 : 0;
+    const side = mine === 0 ? -1 : 1;
+    let best = -1;
+    let bestScore = Infinity;
+    m.cq.pts.forEach((p, k) => {
+      const threat = p.owner === mine ? Math.abs(p.v - side) : 2;
+      if (p.owner === mine && threat < 0.15) return;
+      const c = gm.points[k]!;
+      const score = Math.hypot(c.x - f.s.x, c.z - f.s.z) - threat * 15 + rand(mem) * 20;
+      if (score < bestScore) {
+        bestScore = score;
+        best = k;
+      }
+    });
+    if (best < 0) best = Math.floor(rand(mem) * gm.points.length);
+    const c = gm.points[best]!;
+    const a = rand(mem) * Math.PI * 2;
+    const r = rand(mem) * CONQUEST.r * 0.6;
+    return set(c.x + Math.cos(a) * r, c.y, c.z + Math.sin(a) * r, 4 + rand(mem) * 3);
   }
   if (m.mode === "drapeau" && m.flags) {
     const mine = f.team === 1 ? 1 : 0;

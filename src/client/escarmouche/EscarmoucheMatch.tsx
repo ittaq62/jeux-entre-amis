@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { MAP_NAMES } from "../../shared/games/escarmouche/maps.ts";
-import { isTeamMode, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
+import { isTeamMode, POINT_NAMES, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
 import { MODE_INFO } from "../../shared/games/escarmouche/rules.ts";
 import { B } from "../../shared/games/escarmouche/soldier.ts";
 import { PRIMARY_IDS, SECONDARY_IDS, WEAPONS, type PrimaryId, type SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
@@ -537,15 +537,31 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                 <span className="esc-solo is-lead">{h.leader ? `${h.leader.name} · ${h.leader.kills}` : ""}</span>
               </div>
             )}
-            <div className="esc-goal hint">
-              {MODE_INFO[v.mode].short} · objectif {v.goal} {MODE_INFO[v.mode].unit}
-              {h.zone &&
-                (h.zone.contested
-                  ? " · zone disputée"
-                  : h.zone.owner >= 0
-                    ? ` · zone aux ${TEAM_NAMES[h.zone.owner as 0 | 1]}`
-                    : " · zone libre")}
-            </div>
+            {h.cq && (
+              <div className="esc-cq" title={`Conquête · ${v.goal} tickets au départ`}>
+                {h.cq.pts.map((p, k) => (
+                  <span
+                    key={k}
+                    className={`esc-cq-pt ${h.cq!.inside === k ? "is-here" : ""} ${p.owner >= 0 && Math.abs(p.v) < 0.98 ? "is-shaky" : ""}`}
+                    style={{ borderColor: p.owner >= 0 ? TEAM_HEX[p.owner as 0 | 1] : "rgba(242,239,230,.7)" }}
+                  >
+                    <b style={{ color: p.owner >= 0 ? TEAM_HEX[p.owner as 0 | 1] : "#f2efe6" }}>{POINT_NAMES[k]}</b>
+                    <i style={{ width: `${Math.round(Math.abs(p.v) * 100)}%`, background: p.v < 0 ? TEAM_HEX[0] : TEAM_HEX[1] }} />
+                  </span>
+                ))}
+              </div>
+            )}
+            {!h.cq && (
+              <div className="esc-goal hint">
+                {MODE_INFO[v.mode].short} · objectif {v.goal} {MODE_INFO[v.mode].unit}
+                {h.zone &&
+                  (h.zone.contested
+                    ? " · zone disputée"
+                    : h.zone.owner >= 0
+                      ? ` · zone aux ${TEAM_NAMES[h.zone.owner as 0 | 1]}`
+                      : " · zone libre")}
+              </div>
+            )}
             {h.flags && (
               <div className="esc-flags">
                 {h.flags.map((f, t) => (
@@ -646,6 +662,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                 <span className="num">{Math.ceil(h.hp)}</span>
                 {h.carrying >= 0 && <span className="esc-carry">⚑ Tu portes le drapeau !</span>}
                 {h.zone?.inside && <span className="esc-carry">Dans la zone</span>}
+                {h.cq && h.cq.inside >= 0 && <span className="esc-carry">{cqLabel(h.cq, h.myTeam)}</span>}
               </div>
               <div className="esc-ammo">
                 <span className="esc-ammo-name">{WEAPONS[h.weapon].name}</span>
@@ -708,12 +725,26 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
               ) : (
                 <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
               )}
-              {h.team && h.team.mates.length > 0 && (
+              {h.team && (h.team.mates.length > 0 || h.cq) && (
                 <div className="esc-spawnon">
                   <span className="hint">Revenir :</span>
-                  <button className={`btn btn-sm ${h.team.spawnOn < 0 ? "is-on" : ""}`} onClick={() => send({ t: "spawnOn", target: -1 })}>
+                  <button
+                    className={`btn btn-sm ${h.team.spawnOn === -1 ? "is-on" : ""}`}
+                    onClick={() => send({ t: "spawnOn", target: -1 })}
+                  >
                     À la base
                   </button>
+                  {h.cq?.pts.map((p, k) => (
+                    <button
+                      key={`cq-${k}`}
+                      className={`btn btn-sm ${h.team!.spawnOn === -2 - k ? "is-on" : ""}`}
+                      disabled={p.owner !== h.myTeam}
+                      title={p.owner !== h.myTeam ? "Ce drapeau n'est pas à ton équipe" : "Si personne ne l'attaque à ton retour"}
+                      onClick={() => send({ t: "spawnOn", target: -2 - k })}
+                    >
+                      Sur {POINT_NAMES[k]}
+                    </button>
+                  ))}
                   {h.team.mates.map((mate) => (
                     <button
                       key={mate.i}
@@ -823,4 +854,17 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
       {over && <GameOver room={room} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />}
     </div>
   );
+}
+
+/** Conquête : ce qui se passe au drapeau où l'on se tient */
+function cqLabel(cq: NonNullable<HudState["cq"]>, team: number): string {
+  const p = cq.pts[cq.inside];
+  const name = POINT_NAMES[cq.inside] ?? "?";
+  if (!p) return "";
+  const side = team === 1 ? 1 : -1;
+  if (p.owner === team && Math.abs(p.v - side) < 0.02) return `${name} est à vous`;
+  const pct = Math.round(Math.abs(p.v) * 100);
+  if (p.owner >= 0 && p.owner !== team) return `Neutralisation de ${name} · ${100 - pct} %`;
+  if (p.owner === team) return `On vous prend ${name} : tenez bon !`;
+  return Math.sign(p.v) === side ? `Prise de ${name} · ${pct} %` : `Neutralisation de ${name} · ${100 - pct} %`;
 }
