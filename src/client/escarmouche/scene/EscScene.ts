@@ -14,7 +14,10 @@ import { buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
 import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
-import { skyTexture } from "./textures.ts";
+import { buildDistant, type Distant } from "./distant.ts";
+import { Post } from "./post.ts";
+import type { Quality } from "./quality.ts";
+import { SKIES, skyEnvironment, skyMaterial, sunDirection, type Light } from "./sky.ts";
 
 export const TEAM_HEX = ["#d4453c", "#3f7fd8"] as const;
 
@@ -69,102 +72,100 @@ export class EscScene {
   private flags: { group: THREE.Group; cloth: THREE.Mesh; stand: THREE.Mesh }[] = [];
   private zone: { ring: THREE.Mesh; wall: THREE.Mesh } | null = null;
   private basePixelRatio: number;
+  private skyMat: THREE.ShaderMaterial;
+  private distant: Distant;
+  private post: Post | null = null;
+  private sunDir: THREE.Vector3;
+  private shadowSpan = 30;
+  private size: [number, number] = [1, 1];
+  readonly quality: Quality;
   private resolution = 1;
   private t = 0;
   readonly low: boolean;
   private tmp = new THREE.Vector3();
 
-  constructor(canvas: HTMLCanvasElement, gm: GameMap, opts: { low: boolean; teams: boolean }) {
-    this.low = opts.low;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !opts.low, powerPreference: "high-performance" });
-    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, opts.low ? 1.25 : 1.75);
+  constructor(canvas: HTMLCanvasElement, gm: GameMap, opts: { quality: Quality; teams: boolean }) {
+    const q = opts.quality;
+    this.quality = q;
+    this.low = q === "bas";
+    const light: Light = gm.light;
+    const look = SKIES[light];
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q === "moyen", powerPreference: "high-performance" });
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q === "bas" ? 1.25 : q === "moyen" ? 1.5 : 1.75);
     this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = gm.light === "soir" ? 1.05 : 1.15;
+    this.renderer.toneMappingExposure = light === "soir" ? 1.12 : 1.15;
     this.renderer.autoClear = false;
-    if (!opts.low) {
+    if (q !== "bas") {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     }
-    this.camera = new THREE.PerspectiveCamera(78, 1, 0.05, 400);
+    this.camera = new THREE.PerspectiveCamera(78, 1, 0.05, 600);
     this.camera.rotation.order = "YXZ";
     this.vmCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
 
-    // La lumière : un soleil bas le soir au hameau, un ciel couvert à la gare
-    const fogColor = gm.light === "soir" ? "#b9a993" : "#9ea4a6";
-    this.scene.fog = new THREE.Fog(fogColor, 45, 190);
-    this.scene.background = new THREE.Color(fogColor);
-    const hemi = new THREE.HemisphereLight(gm.light === "soir" ? "#cfd8e6" : "#c4cbd1", gm.light === "soir" ? "#5a4a36" : "#4b4a44", 1.1);
+    // La brume, de la couleur de l'horizon : le loin se fond dans le ciel
+    this.scene.fog = new THREE.Fog(look.fog, look.fogNear, look.fogFar);
+    // La lumière : le ciel tout autour (plus doux là où les matières le reflètent), et le soleil
+    const hemi = new THREE.HemisphereLight(look.zenith, look.ground, q === "bas" ? 1.3 : 1.0);
+    hemi.color.lerp(new THREE.Color(look.horizon), 0.5);
     this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight(gm.light === "soir" ? "#ffd7a3" : "#e6e9ec", gm.light === "soir" ? 2.2 : 1.4);
-    this.sun.position.set(gm.light === "soir" ? -60 : 30, gm.light === "soir" ? 42 : 80, gm.light === "soir" ? 35 : -40);
-    if (!opts.low) {
+    this.sunDir = sunDirection(light);
+    this.sun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.8 : 1.7);
+    this.sun.position.copy(this.sunDir).multiplyScalar(90);
+    if (q !== "bas") {
       this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(2048, 2048);
+      const size = q === "haut" ? 2048 : 1024;
+      this.sun.shadow.mapSize.set(size, size);
+      // Les ombres suivent le joueur : bien plus fines que si elles couvraient toute la carte
+      this.shadowSpan = q === "haut" ? 34 : 30;
       const cam = this.sun.shadow.camera;
-      const span = Math.max(gm.bounds.x1 - gm.bounds.x0, gm.bounds.z1 - gm.bounds.z0) * 0.62;
-      cam.left = -span;
-      cam.right = span;
-      cam.top = span;
-      cam.bottom = -span;
+      cam.left = -this.shadowSpan;
+      cam.right = this.shadowSpan;
+      cam.top = this.shadowSpan;
+      cam.bottom = -this.shadowSpan;
       cam.near = 1;
       cam.far = 220;
-      this.sun.shadow.bias = -0.0006;
-      this.sun.shadow.normalBias = 0.04;
+      this.sun.shadow.bias = -0.0004;
+      this.sun.shadow.normalBias = 0.035;
     }
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    // Le reflet du ciel sur le métal et les surfaces lisses : une petite sphère de ciel avec son soleil, filtrée une fois
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const envScene = new THREE.Scene();
-    envScene.add(
-      new THREE.Mesh(
-        new THREE.SphereGeometry(10, 32, 16),
-        new THREE.MeshBasicMaterial({ map: skyTexture(gm.light), side: THREE.BackSide }),
-      ),
-    );
-    const sunBlob = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 12, 8),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(this.sun.color).multiplyScalar(gm.light === "soir" ? 14 : 6) }),
-    );
-    sunBlob.position.copy(this.sun.position).normalize().multiplyScalar(9);
-    envScene.add(sunBlob);
-    this.env = pmrem.fromScene(envScene, 0.02).texture;
-    pmrem.dispose();
-    envScene.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.geometry.dispose();
-        (o.material as THREE.Material).dispose();
-      }
-    });
+    // Le reflet du ciel sur le métal et les surfaces lisses
+    this.env = skyEnvironment(this.renderer, light);
     this.scene.environment = this.env;
-    this.scene.environmentIntensity = 0.7;
+    this.scene.environmentIntensity = 0.85;
     this.vmScene.environment = this.env;
-    this.vmScene.environmentIntensity = 0.9;
+    this.vmScene.environmentIntensity = 1.0;
 
-    // Le ciel, qui suit la caméra, et des collines au loin
-    const skyMat = new THREE.MeshBasicMaterial({ map: skyTexture(gm.light), side: THREE.BackSide, fog: false, depthWrite: false });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), skyMat);
+    // Le ciel, qui suit la caméra, et le pays tout autour
+    this.skyMat = skyMaterial(light);
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), this.skyMat);
     this.sky.renderOrder = -1;
+    this.sky.frustumCulled = false;
     this.scene.add(this.sky);
-    this.addHills(gm);
+    this.distant = buildDistant(gm, q, light);
+    this.scene.add(this.distant.group);
 
-    this.map = buildMap(gm, opts.low);
+    this.map = buildMap(gm, q);
     this.scene.add(this.map.group);
-    this.effects = new Effects(opts.low);
+    this.effects = new Effects(this.low);
     this.scene.add(this.effects.group);
 
     // Les drapeaux et la zone
     for (let t = 0; t < 2; t++) {
       const group = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), new THREE.MeshLambertMaterial({ color: "#2f2f2f" }));
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6),
+        new THREE.MeshStandardMaterial({ color: "#2f2f2f", roughness: 0.4, metalness: 0.7 }),
+      );
       pole.position.y = 1.2;
       group.add(pole);
       const cloth = new THREE.Mesh(
         new THREE.PlaneGeometry(0.9, 0.55, 6, 2),
-        new THREE.MeshLambertMaterial({ color: TEAM_HEX[t], side: THREE.DoubleSide }),
+        new THREE.MeshStandardMaterial({ color: TEAM_HEX[t], side: THREE.DoubleSide, roughness: 0.9 }),
       );
       cloth.position.set(0.45, 2.05, 0);
       group.add(cloth);
@@ -172,7 +173,7 @@ export class EscScene {
       this.scene.add(group);
       const stand = new THREE.Mesh(
         new THREE.CylinderGeometry(0.9, 1, 0.12, 20),
-        new THREE.MeshLambertMaterial({ color: TEAM_HEX[t], emissive: TEAM_HEX[t], emissiveIntensity: 0.25 }),
+        new THREE.MeshStandardMaterial({ color: TEAM_HEX[t], emissive: TEAM_HEX[t], emissiveIntensity: 0.6, roughness: 0.5 }),
       );
       stand.visible = false;
       this.scene.add(stand);
@@ -185,9 +186,11 @@ export class EscScene {
       this.grenades.push(g);
     }
 
-    // L'arme en main, dessinée par-dessus le reste
-    this.vmScene.add(new THREE.HemisphereLight("#dfe5ee", "#4d4639", 1.4));
-    const vmSun = new THREE.DirectionalLight("#fff1dc", 1.6);
+    // L'arme en main, dessinée par-dessus le reste, éclairée comme la scène
+    const vmHemi = new THREE.HemisphereLight(look.zenith, look.ground, 1.3);
+    vmHemi.color.lerp(new THREE.Color(look.horizon), 0.5);
+    this.vmScene.add(vmHemi);
+    const vmSun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.3 : 1.8);
     vmSun.position.set(-1, 2, 1);
     this.vmScene.add(vmSun);
     this.vmScene.add(this.vmRoot);
@@ -197,22 +200,20 @@ export class EscScene {
     this.vmNade = buildGrenade();
     this.vmNade.visible = false;
     this.vmScene.add(this.vmNade);
-    void opts.teams;
-  }
 
-  private addHills(gm: GameMap) {
-    const mat = new THREE.MeshLambertMaterial({ color: gm.light === "soir" ? "#6e7262" : "#6d7470", flatShading: true });
-    const cx = (gm.bounds.x0 + gm.bounds.x1) / 2;
-    const cz = (gm.bounds.z0 + gm.bounds.z1) / 2;
-    for (let k = 0; k < 18; k++) {
-      const a = (k / 18) * Math.PI * 2 + Math.sin(k * 3.1) * 0.1;
-      const r = 150 + Math.sin(k * 7.3) * 20;
-      const h = 18 + (Math.sin(k * 5.7) + 1) * 14;
-      const hill = new THREE.Mesh(new THREE.ConeGeometry(38 + (k % 3) * 12, h, 6), mat);
-      hill.position.set(cx + Math.cos(a) * r, h / 2 - 2, cz + Math.sin(a) * r);
-      hill.rotation.y = k;
-      this.scene.add(hill);
-    }
+    // Le traitement de l'image (qualité haute seulement)
+    if (q === "haut")
+      this.post = new Post(
+        this.renderer,
+        this.scene,
+        this.camera,
+        this.vmScene,
+        this.vmCam,
+        light === "soir"
+          ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
+          : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
+      );
+    void opts.teams;
   }
 
   resize(w: number, h: number) {
@@ -221,12 +222,15 @@ export class EscScene {
     this.camera.updateProjectionMatrix();
     this.vmCam.aspect = w / h;
     this.vmCam.updateProjectionMatrix();
+    this.size = [w, h];
+    this.post?.setSize(w, h, this.renderer.getPixelRatio());
   }
 
   /** Moins de pixels quand l'appareil peine */
   setResolution(scale: number) {
     this.resolution = scale;
     this.renderer.setPixelRatio(this.basePixelRatio * scale);
+    this.post?.setSize(this.size[0], this.size[1], this.renderer.getPixelRatio());
   }
 
   get pixelScale() {
@@ -248,6 +252,14 @@ export class EscScene {
     }
     this.sky.position.copy(this.camera.position);
     this.camera.updateMatrixWorld();
+    // Le soleil et sa carte d'ombres suivent le joueur, calés sur la grille des texels pour ne pas scintiller
+    if (this.sun.castShadow) {
+      const texel = (this.shadowSpan * 2) / this.sun.shadow.mapSize.x;
+      const tx = Math.round(x / texel) * texel;
+      const tz = Math.round(z / texel) * texel;
+      this.sun.target.position.set(tx, 0, tz);
+      this.sun.position.set(tx + this.sunDir.x * 90, this.sunDir.y * 90, tz + this.sunDir.z * 90);
+    }
   }
 
   /** Un soldat apparaît (ou change d'allure) */
@@ -495,9 +507,20 @@ export class EscScene {
     return out.applyMatrix4(this.camera.matrixWorld);
   }
 
+  /** La douleur, de 0 à 1 (l'image pâlit et rougit sur les bords, en qualité haute) */
+  setHurt(k: number) {
+    this.post?.setHurt(k);
+  }
+
   render(dt: number) {
     this.t += dt;
     this.effects.update(dt);
+    this.skyMat.uniforms.time!.value = this.t;
+    if (this.post) {
+      this.post.render(dt);
+      return;
+    }
+    this.renderer.setRenderTarget(null);
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     this.renderer.clearDepth();
@@ -507,6 +530,9 @@ export class EscScene {
   dispose() {
     for (const i of [...this.soldiers.keys()]) this.removeSoldier(i);
     this.map.dispose();
+    this.distant.dispose();
+    this.post?.dispose();
+    this.skyMat.dispose();
     this.env.dispose();
     this.renderer.dispose();
   }

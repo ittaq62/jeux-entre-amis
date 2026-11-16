@@ -467,3 +467,81 @@ export function clothTexture(base: string, spots: string[], pattern: "uni" | "ta
   cache.set(key, t);
   return t;
 }
+
+/** Le relief d'une matière, tiré de sa toile : le clair dépasse, le sombre (les joints, les fentes) s'enfonce */
+export function normalTexture(m: Mat, size = 256, strength = 1): THREE.CanvasTexture | null {
+  const src = matTexture(m, size);
+  return src ? normalFrom(src, `normal:${m}:${size}:${strength}`, strength) : null;
+}
+
+/** Le relief tiré de n'importe quelle toile */
+export function normalFrom(src: THREE.CanvasTexture, key: string, strength = 1): THREE.CanvasTexture {
+  const known = cache.get(key);
+  if (known) return known;
+  const img = src.image as HTMLCanvasElement;
+  const w = img.width;
+  const h = img.height;
+  const data = img.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const height = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) height[i] = (data[i * 4]! * 0.3 + data[i * 4 + 1]! * 0.55 + data[i * 4 + 2]! * 0.15) / 255;
+  const [c, g] = canvas(w);
+  const out = g.createImageData(w, h);
+  const at = (x: number, y: number) => height[((y + h) % h) * w + ((x + w) % w)]!;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // Sobel : la pente du relief dans les deux sens (la toile se raccorde aux bords)
+      const dx = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
+      const dy = at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
+      const nx = -dx * strength * 2;
+      const ny = dy * strength * 2;
+      const len = Math.hypot(nx, ny, 1);
+      const o = (y * w + x) * 4;
+      out.data[o] = ((nx / len) * 0.5 + 0.5) * 255;
+      out.data[o + 1] = ((ny / len) * 0.5 + 0.5) * 255;
+      out.data[o + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+      out.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(out, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.NoColorSpace;
+  t.anisotropy = 4;
+  cache.set(key, t);
+  return t;
+}
+
+/** Des planches verticales claires (volets, portes) : on les teint de la couleur voulue */
+export function boardTexture(size = 128): THREE.CanvasTexture {
+  const key = `board:${size}`;
+  const known = cache.get(key);
+  if (known) return known;
+  const [c, g] = canvas(size);
+  const r = rng(4242);
+  g.fillStyle = "#d8d8d4";
+  g.fillRect(0, 0, size, size);
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = shade("#dcdcd6", 0.86 + r() * 0.16);
+    g.fillRect((i * size) / n + 1, 0, size / n - 2, size);
+    g.strokeStyle = "rgba(60,60,60,.18)";
+    for (let k = 0; k < 4; k++) {
+      const x = (i * size) / n + 2 + r() * (size / n - 4);
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.bezierCurveTo(x + r() * 3 - 1.5, size / 3, x + r() * 3 - 1.5, (2 * size) / 3, x, size);
+      g.stroke();
+    }
+  }
+  // Les barres et l'écharpe du volet
+  g.fillStyle = "rgba(0,0,0,.18)";
+  g.fillRect(0, size * 0.16, size, size * 0.06);
+  g.fillRect(0, size * 0.78, size, size * 0.06);
+  grain(g, size, r, 900, 0.1);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  cache.set(key, t);
+  return t;
+}

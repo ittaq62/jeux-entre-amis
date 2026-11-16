@@ -17,8 +17,15 @@ export interface Spawn {
 }
 
 export type Decor =
-  /** Un toit à deux pans, le faîte le long de `axis` */
-  | { k: "roof"; x0: number; z0: number; x1: number; z1: number; y: number; h: number; axis: "x" | "z"; m: Mat }
+  /** Un toit à deux pans, le faîte le long de `axis` (ses pignons dans la matière des murs) */
+  | { k: "roof"; x0: number; z0: number; x1: number; z1: number; y: number; h: number; axis: "x" | "z"; m: Mat; wall?: Mat }
+  /**
+   * Une maison, pour l'habiller : ses ouvertures (encadrements, volets, portes ouvertes), ses angles, son soubassement,
+   * sa corniche. `blind` : un bâtiment où l'on n'entre pas, aux fenêtres closes.
+   */
+  | { k: "house"; x0: number; z0: number; x1: number; z1: number; top: number; wall: Mat; open: Hole[]; blind?: boolean }
+  /** Un wagon (ou un plat, s'il est bas) : roues, bogies, portes, tampons, échelle */
+  | { k: "wagon"; x0: number; x1: number; z0: number; z1: number; h: number; m: Mat }
   /** Un toit en pointe (clocher, beffroi) */
   | { k: "spire"; x0: number; z0: number; x1: number; z1: number; y: number; h: number; m: Mat }
   | { k: "tree"; x: number; z: number; h: number; r: number }
@@ -36,6 +43,18 @@ export type Decor =
   | { k: "wire"; x0: number; z0: number; x1: number; z1: number }
   /** Une horloge sur une façade : centre, direction vers où elle regarde */
   | { k: "clock"; x: number; y: number; z: number; nx: number; nz: number };
+
+/** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
+export interface Hole {
+  axis: "x" | "z";
+  a0: number;
+  a1: number;
+  c: number;
+  out: 1 | -1;
+  y0: number;
+  y1: number;
+  kind: "door" | "win" | "big";
+}
 
 export interface GameMap {
   id: MapId;
@@ -135,6 +154,19 @@ class Builder {
         return;
       case "clock":
         this.decor.push({ ...d, x: -d.x, z: -d.z, nx: -d.nx, nz: -d.nz });
+        return;
+      case "house":
+        this.decor.push({
+          ...d,
+          x0: sx(d.x1),
+          x1: sx(d.x0),
+          z0: sx(d.z1),
+          z1: sx(d.z0),
+          open: d.open.map((h) => ({ ...h, a0: -h.a1, a1: -h.a0, c: -h.c, out: h.out === 1 ? -1 : 1 })),
+        });
+        return;
+      case "wagon":
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
     }
   }
@@ -277,7 +309,22 @@ class Builder {
       h: span * 0.42,
       axis: o.roofAxis,
       m: o.roof,
+      wall: o.wall,
     });
+    // L'habillage : chaque ouverture, du côté où elle donne
+    const where: Record<Side, { axis: "x" | "z"; c: number; out: 1 | -1 }> = {
+      s: { axis: "x", c: z0 + WALL / 2, out: -1 },
+      n: { axis: "x", c: z1 - WALL / 2, out: 1 },
+      w: { axis: "z", c: x0 + WALL / 2, out: -1 },
+      e: { axis: "z", c: x1 - WALL / 2, out: 1 },
+    };
+    const open: Hole[] = (["n", "s", "e", "w"] as Side[]).flatMap((side) =>
+      holesFor(side).map((h, i) => {
+        const p = o.open.filter((q) => q.side === side)[i]!;
+        return { ...where[side], a0: h.a, a1: h.b, y0: h.y0, y1: h.y1, kind: p.kind };
+      }),
+    );
+    this.add({ k: "house", x0, z0, x1, z1, top: top + 0.25, wall: o.wall, open });
   }
 
   /** Un bâtiment plein, où l'on n'entre pas */
@@ -285,7 +332,20 @@ class Builder {
     this.box(x0, 0, z0, x1, h, z1, m);
     if (roof) {
       const span = roof.axis === "x" ? z1 - z0 : x1 - x0;
-      this.add({ k: "roof", x0: x0 - 0.35, z0: z0 - 0.35, x1: x1 + 0.35, z1: z1 + 0.35, y: h, h: span * 0.42, axis: roof.axis, m: roof.m });
+      this.add({
+        k: "roof",
+        x0: x0 - 0.35,
+        z0: z0 - 0.35,
+        x1: x1 + 0.35,
+        z1: z1 + 0.35,
+        y: h,
+        h: span * 0.42,
+        axis: roof.axis,
+        m: roof.m,
+        wall: m,
+      });
+      // Un bâtiment où l'on n'entre pas : ses fenêtres sont closes, on les dessine quand même
+      this.add({ k: "house", x0, z0, x1, z1, top: h, wall: m, open: [], blind: true });
     }
   }
 
@@ -294,7 +354,7 @@ class Builder {
   }
 
   sandbags(x0: number, z0: number, x1: number, z1: number, h = 1.1) {
-    this.box(x0, 0, z0, x1, h, z1, "terre");
+    this.box(x0, 0, z0, x1, h, z1, "sacs");
   }
 
   tree(x: number, z: number, h = 7, r = 2.6) {
@@ -488,6 +548,7 @@ function hameau(): GameMap {
 /** Un wagon couvert garé sur sa voie (centre z), de x0 à x1 */
 function boxcar(b: Builder, x0: number, x1: number, z: number, m: Mat = "wagon") {
   b.box(x0, 0, z - 1.5, x1, 3.8, z + 1.5, m);
+  b.add({ k: "wagon", x0, x1, z0: z - 1.5, z1: z + 1.5, h: 3.8, m });
 }
 
 function gareSide(b: Builder) {
@@ -546,6 +607,7 @@ function gareSide(b: Builder) {
   // Les wagons sur les voies
   boxcar(b, -30, -18, -6);
   b.box(-26, 0, 4.8, -14, 1.3, 7.2, "wagon2");
+  b.add({ k: "wagon", x0: -26, x1: -14, z0: 4.8, z1: 7.2, h: 1.3, m: "wagon2" });
   b.crate(-20, 6, 1.4, 1.4, 1.3);
   boxcar(b, -38, -26, 12, "wagon2");
   b.box(-36, 0, -13.4, -24, 3.2, -10.6, "metal");

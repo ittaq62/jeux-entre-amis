@@ -59,7 +59,7 @@ export function DevEscarmouche() {
     const c = canvas.current;
     if (!c) return;
     const gm = getMap(map);
-    const scene = new EscScene(c, gm, { low, teams: true });
+    const scene = new EscScene(c, gm, { quality: low ? "bas" : params.get("q") === "moyen" ? "moyen" : "haut", teams: true });
     const fit = () => scene.resize(window.innerWidth, window.innerHeight);
     fit();
     window.addEventListener("resize", fit);

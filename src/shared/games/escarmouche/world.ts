@@ -22,6 +22,8 @@ export type Mat =
   | "gravier"
   | "foin"
   | "caisse"
+  /** Des sacs de sable (dessinés sac par sac) */
+  | "sacs"
   | "invisible";
 
 export interface Box {

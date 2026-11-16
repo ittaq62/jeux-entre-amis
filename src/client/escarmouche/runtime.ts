@@ -33,6 +33,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
+import { pickQuality } from "./scene/quality.ts";
 import { ffaKit, TEAM_KITS } from "./scene/soldiers.ts";
 
 /** Les boutons qui ne comptent qu'au moment de l'appui (gardés jusqu'au prochain pas) */
@@ -210,7 +211,10 @@ export class BattleRuntime {
     const v = o.room.escarmouche!;
     this.gm = getMap(v.map);
     this.world = worldOf(v.map);
-    this.scene = new EscScene(o.canvas, this.gm, { low: o.touch, teams: isTeamMode(v.mode) });
+    this.scene = new EscScene(o.canvas, this.gm, {
+      quality: pickQuality(usePrefs.getState().escQuality, o.touch),
+      teams: isTeamMode(v.mode),
+    });
     this.controls.attach(o.canvas);
     this.applyPrefs();
     this.setRoom(o.room);
