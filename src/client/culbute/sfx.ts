@@ -1,6 +1,7 @@
 // Les bruits des coups de Culbute, fabriqués à la volée (rien à télécharger) : un coup sourd et un claquement dont la
 // force suit celle du coup, un tintement sur la garde, une grosse détonation pour une sortie, un froissement pour une
-// saisie. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
+// saisie ; et ceux du corps (le souffle d'un coup qui part, le saut, la réception, le rebord). Ils passent par la
+// sortie générale du site (le réglage du son les coupe comme les autres).
 
 import { audioOut } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -178,4 +179,75 @@ export function parry() {
     osc.stop(t0 + d + 0.05);
   }
   slap(ctx, dest, t0, 6000, 0.8, vol * 0.25, 0.06, "highpass");
+}
+
+/** Les bruits du corps ont chacun leur garde-fou (ils ne doivent pas étouffer ceux des coups) */
+const lastBody = new Map<string, number>();
+function bodyThrottle(kind: string, ms: number): boolean {
+  const now = performance.now();
+  if (now - (lastBody.get(kind) ?? 0) < ms) return false;
+  lastBody.set(kind, now);
+  return true;
+}
+
+/** Un souffle qui balaie : le bruit d'un coup qui part (plus il est fort, plus il est ample et grave) */
+export function whoosh(power: number, gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("whoosh", 35)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.003;
+  const p = Math.max(0, Math.min(1, power));
+  const d = 0.1 + p * 0.1;
+  const src = ctx.createBufferSource();
+  src.buffer = noise(ctx);
+  const f = ctx.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = 1.4;
+  const pitch = 0.9 + Math.random() * 0.2;
+  f.frequency.setValueAtTime((700 - p * 250) * pitch, t0);
+  f.frequency.exponentialRampToValueAtTime((2600 - p * 900) * pitch, t0 + d * 0.6);
+  f.frequency.exponentialRampToValueAtTime((1200 - p * 400) * pitch, t0 + d);
+  const g = ctx.createGain();
+  env(g, vol * gain * (0.16 + p * 0.16), d * 0.45, d * 0.75, t0);
+  src.connect(f).connect(g).connect(dest);
+  src.start(t0, Math.random() * 0.5);
+  src.stop(t0 + d * 1.3 + 0.05);
+}
+
+/** Un saut : un petit « hop » qui monte */
+export function hop(gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("hop", 40)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.003;
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(320 * (0.95 + Math.random() * 0.1), t0);
+  osc.frequency.exponentialRampToValueAtTime(640, t0 + 0.07);
+  const g = ctx.createGain();
+  env(g, vol * gain * 0.07, 0.006, 0.07, t0);
+  osc.connect(g).connect(dest);
+  osc.start(t0);
+  osc.stop(t0 + 0.1);
+  slap(ctx, dest, t0, 1600, 1.1, vol * gain * 0.07, 0.05);
+}
+
+/** Une réception : un pas sourd sur le sol */
+export function land(gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("land", 40)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.003;
+  thump(ctx, dest, t0, 120, 55, vol * gain * 0.22, 0.08);
+  slap(ctx, dest, t0, 700, 0.8, vol * gain * 0.1, 0.05, "lowpass");
+}
+
+/** La main qui attrape le rebord : une petite claque sèche */
+export function ledge(gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("ledge", 60)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.003;
+  slap(ctx, dest, t0, 1900, 1.6, vol * gain * 0.2, 0.045);
+  thump(ctx, dest, t0, 200, 120, vol * gain * 0.08, 0.04);
 }

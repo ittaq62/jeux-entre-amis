@@ -77,6 +77,8 @@ export interface RuntimeOptions {
   onHud: (hud: HudState) => void;
   /** Ce qui arrive, au moment où l'image le montre */
   onEvents: (events: FightEvent[], frame: RenderFrame) => void;
+  /** Chaque image montrée (les bruits du corps s'y lisent) */
+  onFrame?: (frame: RenderFrame) => void;
 }
 
 export class FightRuntime {
@@ -487,6 +489,7 @@ export class FightRuntime {
       this.opts.onEvents(due, frame);
     }
     this.scene.render(dt, frame);
+    this.opts.onFrame?.(frame);
     if (import.meta.env.DEV) (window as unknown as { __cbFrame: RenderFrame }).__cbFrame = frame;
     if (now - this.hudAt > 100) {
       this.hudAt = now;

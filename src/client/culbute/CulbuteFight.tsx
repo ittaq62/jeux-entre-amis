@@ -16,6 +16,7 @@ import { CulbuteGameOver } from "./CulbuteGameOver.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FightRuntime, type HudState } from "./runtime.ts";
 import { FightMusic } from "./music.ts";
+import { Foley } from "./foley.ts";
 import * as sfx from "./sfx.ts";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import type { FightListeners } from "./useCulbuteRoom.ts";
@@ -269,6 +270,7 @@ export function CulbuteFight({
   // Une boucle de combat par écran : elle survit aux mises à jour du salon, et repart à la revanche
   useEffect(() => {
     if (!host.current) return;
+    const foley = new Foley(view.fighters.map((f) => f.style));
     const rt = new FightRuntime(host.current, view, {
       mySeat: room.you.seatId,
       looks: looksRef.current,
@@ -287,6 +289,7 @@ export function CulbuteFight({
           if (e.k === "hit" && e.ko) setFlash((n) => n + 1);
         }
       },
+      onFrame: (frame) => foley.frame(frame),
     });
     rt.controls.setSettings(settingsRef.current);
     runtime.current = rt;
