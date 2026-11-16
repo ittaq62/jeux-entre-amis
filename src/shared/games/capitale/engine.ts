@@ -1233,7 +1233,9 @@ function resume(s: CapitaleState) {
   else if (s.pendingBuyout != null && buyoutProblem(s, currentPlayer(s).id, s.pendingBuyout) === null) s.step = "buyout";
   else if (s.rollAgain) s.step = "roll";
   else if (s.step !== "roll" || s.dice !== null) s.step = "manage";
-  const key = `${s.turnId}|${s.step}|${actorOf(s)}`;
+  // Relancer après un double est une nouvelle décision, même tour, même étape, même joueur : sans le compte des doubles,
+  // le salon ne relancerait pas le chrono et un joueur absent à qui l'on a fait un double bloquerait la table
+  const key = `${s.turnId}|${s.step}|${actorOf(s)}|${s.doublesInRow}`;
   if (key !== s.decisionKey) {
     s.decisionKey = key;
     s.decision += 1;

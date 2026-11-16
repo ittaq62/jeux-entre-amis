@@ -13,14 +13,19 @@ vi.mock("cloudflare:workers", () => ({
 
 import type { CapitaleState } from "../shared/games/capitale/engine.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
-import { Bench, FakeState, fakeEnv, installWorkerGlobals, user } from "./roomHarness.ts";
+import { Bench, FakeState, fakeEnv, fixedSeeds, installWorkerGlobals, user } from "./roomHarness.ts";
 
 installWorkerGlobals();
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("Capitale : une partie enregistrée avant la revue", () => {
   it("se recharge et se joue jusqu'au bout, sans rachat ni catastrophe, son vieux paquet tournant comme avant", async () => {
+    // Toujours la même partie : une partie au hasard peut finir tôt par une faillite, sans rien dire du rechargement
+    fixedSeeds(1);
     vi.useFakeTimers();
     let now = Date.now();
     vi.setSystemTime(now);
@@ -65,6 +70,7 @@ describe("Capitale : une partie enregistrée avant la revue", () => {
       await room.alarm();
     }
     const end = current();
+    expect(end.step).toBe("over");
     expect(end.turnId).toBeGreaterThan(40);
     expect(draws.size).toBeGreaterThan(3);
     expect(steps.has("buyout")).toBe(false);
@@ -75,6 +81,7 @@ describe("Capitale : une partie enregistrée avant la revue", () => {
   }, 30_000);
 
   it("une nouvelle partie, avec rachat et catastrophes, ne se bloque jamais : un rachat laissé en suspens se refuse au bout du temps", async () => {
+    fixedSeeds(1);
     vi.useFakeTimers();
     let now = Date.now();
     vi.setSystemTime(now);
@@ -97,6 +104,7 @@ describe("Capitale : une partie enregistrée avant la revue", () => {
       vi.setSystemTime(now);
       await room.alarm();
     }
+    expect(current().step).toBe("over");
     expect(current().turnId).toBeGreaterThan(60);
     expect(current().discards).toBeDefined();
     expect(events.has("card")).toBe(true);

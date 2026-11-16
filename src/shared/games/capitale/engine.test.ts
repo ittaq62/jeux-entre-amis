@@ -106,6 +106,21 @@ describe("tour de jeu", () => {
     expect(s.step).toBe("manage");
   });
 
+  it("relancer après un double est une nouvelle décision, même tour, même étape, même joueur (le salon y relance le chrono)", () => {
+    const s = game();
+    own(s, "a", ...BUYABLE);
+    P(s, "a").position = 10;
+    const first = s.decision;
+    rollAs(s, "a", [1, 1]);
+    expect(s.step).toBe("roll");
+    expect(actorOf(s)).toBe("a");
+    expect(s.decision).toBeGreaterThan(first);
+    const second = s.decision;
+    rollAs(s, "a", [2, 2]);
+    expect(s.step).toBe("roll");
+    expect(s.decision).toBeGreaterThan(second);
+  });
+
   it("en prison : trois essais, puis on paie 50 et on avance", () => {
     const s = game();
     alone(s);

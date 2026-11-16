@@ -2,8 +2,22 @@
 // connexions qui gardent ce qu'elles reçoivent, une fausse base (les amitiés) et un faux hub. Seulement pour les tests ;
 // le module « cloudflare:workers » est remplacé par le fichier de test (vi.mock).
 
+import { vi } from "vitest";
 import type { PublicUser } from "../shared/protocol.ts";
+import { randomInt } from "../shared/rng.ts";
 import { encodeHeaderJson } from "./util.ts";
+
+/**
+ * Les graines que tirent la salle et ses parties (son hasard, les dés, les bots) : une suite fixe, pour qu'une partie se
+ * rejoue à l'identique d'un passage à l'autre. À défaire avec `vi.restoreAllMocks()`.
+ */
+export function fixedSeeds(seed: number) {
+  const holder = { rng: seed };
+  return vi.spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+    if (array instanceof Uint32Array) for (let i = 0; i < array.length; i++) array[i] = randomInt(holder, 2 ** 32);
+    return array;
+  });
+}
 
 const OPEN = 1;
 const CLOSED = 3;
