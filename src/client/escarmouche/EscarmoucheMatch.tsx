@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { MAP_NAMES } from "../../shared/games/escarmouche/maps.ts";
 import { isTeamMode, POINT_NAMES, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
 import { MODE_INFO } from "../../shared/games/escarmouche/rules.ts";
@@ -17,6 +17,10 @@ import { BattleRuntime, type HudState } from "./runtime.ts";
 import { TEAM_HEX } from "./scene/EscScene.ts";
 import type { BattleListeners } from "./useEscarmoucheRoom.ts";
 import { WeaponIcon } from "./WeaponIcon.tsx";
+import { ffaKit } from "./scene/soldiers.ts";
+import { seededAvatar } from "../../shared/avatar.ts";
+
+const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
 const KILL_WEAPON: Record<KillWeapon, string> = {
   fa: "fusil d'assaut",
@@ -259,6 +263,99 @@ function Board({ room, hud }: { room: EscarmoucheRoomView; hud: HudState }) {
   );
 }
 
+/**
+ * Le podium : les trois meilleurs soldats de la partie, en trois dimensions dans leur tenue et avec leur arme, sur
+ * leurs marches ; puis les distinctions (le plus d'éliminations, le plus précis, les relèves, les drapeaux…)
+ */
+function Podium({ room, order }: { room: EscarmoucheRoomView; order: number[] }) {
+  const v = room.escarmouche!;
+  const teams = isTeamMode(v.mode);
+  const stats = v.stats;
+  if (!stats || order.length === 0) return null;
+  const score = (i: number) => (teams ? (stats[i]?.points ?? 0) : (stats[i]?.kills ?? 0));
+  // En équipes, aux points ; chacun pour soi, au classement
+  const best = teams ? [...order].sort((a, b) => score(b) - score(a)) : order;
+  const top = best.slice(0, 3);
+  const seatOf = (i: number) => room.seats.find((s) => s.id === v.fighters[i]?.id);
+  const name = (i: number) => seatOf(i)?.name ?? "?";
+  const small = typeof window !== "undefined" && window.innerHeight < 560;
+  const size = small ? { width: 86, height: 104 } : { width: 132, height: 168 };
+  // Les marches : le deuxième à gauche, le premier au milieu, le troisième à droite
+  const steps = [top[1], top[0], top[2]];
+  const awards: { title: string; who: number; what: string }[] = [];
+  const most = (key: (i: number) => number, min: number) => {
+    let who = -1;
+    let n = min - 1;
+    stats.forEach((_, i) => {
+      if (key(i) > n) {
+        n = key(i);
+        who = i;
+      }
+    });
+    return who >= 0 ? { who, n } : null;
+  };
+  const kills = most((i) => stats[i]!.kills, 1);
+  if (kills) awards.push({ title: "Le plus d'éliminations", who: kills.who, what: `${kills.n}` });
+  const aim = most((i) => (stats[i]!.shots >= 15 ? stats[i]!.hits / stats[i]!.shots : -1), 0);
+  if (aim) awards.push({ title: "Tireur d'élite", who: aim.who, what: `${Math.round(aim.n * 100)} %` });
+  const heads = most((i) => stats[i]!.headshots, 2);
+  if (heads) awards.push({ title: "Tirs à la tête", who: heads.who, what: `${heads.n}` });
+  const revives = most((i) => stats[i]!.revives ?? 0, 1);
+  if (revives) awards.push({ title: "Secouriste", who: revives.who, what: `${revives.n} relevé${revives.n > 1 ? "s" : ""}` });
+  const caps = most((i) => stats[i]!.captures, 1);
+  if (caps) awards.push({ title: "Preneur de drapeaux", who: caps.who, what: `${caps.n}` });
+  const nades = most((i) => stats[i]!.grenadeKills, 1);
+  if (nades) awards.push({ title: "Grenadier", who: nades.who, what: `${nades.n}` });
+  const streak = most((i) => stats[i]!.best, 3);
+  if (streak) awards.push({ title: "Meilleure série", who: streak.who, what: `${streak.n} d'affilée` });
+  return (
+    <div className="esc-podium-wrap">
+      <div className="esc-podium">
+        {steps.map((i, k) => {
+          if (i === undefined) return <div key={k} className="esc-podium-col is-empty" />;
+          const f = v.fighters[i]!;
+          const seat = seatOf(i);
+          const gear = room.arsenal[f.id];
+          const rank = k === 1 ? 1 : k === 0 ? 2 : 3;
+          return (
+            <div key={k} className={`esc-podium-col is-${rank}`}>
+              <Suspense fallback={<div style={{ ...size }} />}>
+                <EscPreview3D
+                  tenue={gear?.tenue ?? "treillis"}
+                  weapon={gear?.primary ?? "fa"}
+                  camo={gear?.camo ?? "usine"}
+                  gear={gear ? { muzzle: gear.muzzle, extra: gear.extra } : undefined}
+                  avatar={seat?.avatar ?? seededAvatar(f.id)}
+                  band={teams ? TEAM_HEX[f.team === 1 ? 1 : 0] : ffaKit(i).band}
+                  {...size}
+                />
+              </Suspense>
+              <span className="esc-podium-name" style={teams ? { color: TEAM_HEX[f.team === 1 ? 1 : 0] } : undefined}>
+                {name(i)}
+              </span>
+              <span className="esc-podium-step">
+                <b>{rank}</b>
+                <small>{teams ? `${score(i)} pts` : `${score(i)} élim.`}</small>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {awards.length > 0 && (
+        <div className="esc-awards-end">
+          {awards.slice(0, 5).map((a) => (
+            <span key={a.title} className="esc-award-chip">
+              <small>{a.title}</small>
+              <b>{name(a.who)}</b>
+              <em>{a.what}</em>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GameOver({
   room,
   send,
@@ -300,6 +397,7 @@ function GameOver({
             {myResult.delta})
           </p>
         )}
+        <Podium room={room} order={order} />
         <table className="esc-over-table">
           <thead>
             <tr>

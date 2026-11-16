@@ -1254,3 +1254,123 @@ html:has(.esc-root) body {
   border-color: #b5793a;
   background: rgba(181, 121, 58, 0.25);
 }
+
+/* La fin de partie : le podium des trois meilleurs, et les distinctions */
+.esc-podium-wrap {
+  display: grid;
+  gap: 10px;
+  margin: 6px 0 10px;
+}
+
+.esc-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 6px;
+}
+
+.esc-podium-col {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.esc-podium-col canvas {
+  display: block;
+}
+
+.esc-podium-name {
+  font-weight: 700;
+  font-size: 14px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.esc-podium-step {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  width: 100%;
+  padding-top: 4px;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+}
+
+.esc-podium-step b {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.esc-podium-step small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.esc-podium-col.is-1 .esc-podium-step {
+  height: 58px;
+  background: linear-gradient(180deg, rgba(240, 196, 70, 0.55), rgba(240, 196, 70, 0.12));
+}
+
+.esc-podium-col.is-2 .esc-podium-step {
+  height: 42px;
+  background: linear-gradient(180deg, rgba(205, 210, 220, 0.45), rgba(205, 210, 220, 0.1));
+}
+
+.esc-podium-col.is-3 .esc-podium-step {
+  height: 30px;
+  background: linear-gradient(180deg, rgba(200, 130, 70, 0.45), rgba(200, 130, 70, 0.1));
+}
+
+.esc-awards-end {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.esc-award-chip {
+  display: grid;
+  justify-items: center;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  line-height: 1.2;
+}
+
+.esc-award-chip small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.esc-award-chip b {
+  font-size: 13px;
+}
+
+.esc-award-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: #ffd56a;
+}
+
+@media (max-height: 560px) {
+  .esc-podium-name {
+    font-size: 12px;
+  }
+
+  .esc-podium-col.is-1 .esc-podium-step {
+    height: 40px;
+  }
+
+  .esc-podium-col.is-2 .esc-podium-step {
+    height: 30px;
+  }
+
+  .esc-podium-col.is-3 .esc-podium-step {
+    height: 22px;
+  }
+}

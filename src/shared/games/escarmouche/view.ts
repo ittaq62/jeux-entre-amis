@@ -20,8 +20,8 @@ export interface EscarmoucheView {
   fighters: { id: string; team: number; bot: boolean }[];
   winner: number | null;
   ranks: number[] | null;
-  /** À la fin : ce qu'a fait chacun */
-  stats: FighterStats[] | null;
+  /** À la fin : ce qu'a fait chacun, et ses points */
+  stats: (FighterStats & { points?: number })[] | null;
 }
 
 export function escarmoucheView(m: Match): EscarmoucheView {
@@ -36,7 +36,7 @@ export function escarmoucheView(m: Match): EscarmoucheView {
     fighters: m.fighters.map((f) => ({ id: f.id, team: f.team, bot: f.bot })),
     winner: m.winner,
     ranks: m.ranks,
-    stats: m.phase === "over" ? m.fighters.map((f) => ({ ...f.stats, zone: Math.round(f.stats.zone) })) : null,
+    stats: m.phase === "over" ? m.fighters.map((f) => ({ ...f.stats, zone: Math.round(f.stats.zone), points: f.points })) : null,
   };
 }
 
