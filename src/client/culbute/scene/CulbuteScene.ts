@@ -638,8 +638,11 @@ export class CulbuteScene {
         this.spark(e.x, e.y, e.power, e.power > 0.55 ? 0xffa53a : 0xfff2a8);
         if (e.power > 0.45) this.shake = Math.max(this.shake, 0.3 + e.power * 0.6);
         if (e.ko) {
-          // Le coup de grâce : la caméra plonge, un grand éclair, une onde
-          this.koCam = { x: e.x, y: e.y, age: 0 };
+          // Le coup de grâce : la caméra plonge (seulement si ça ne détourne pas le regard de quelqu'un qui se bat
+          // ailleurs : on est l'un des deux, ils ne sont plus que deux, ou on regarde sans jouer), un grand éclair, une onde
+          const mine = this.looks.findIndex((l) => l.me);
+          const alive = frame.fighters.filter((f) => f.state !== "dead" && f.state !== "out").length;
+          if (mine < 0 || e.a === mine || e.v === mine || alive <= 2) this.koCam = { x: e.x, y: e.y, age: 0 };
           this.flare(e.x, e.y, 4.5, 0xffe9b0, 0.45);
           this.wave(e.x, e.y, 3.5, 0xffe08a, 0.5);
           this.rays(e.x, e.y, 16, 3.2, 0xffffff, 0.5, 0.1);
