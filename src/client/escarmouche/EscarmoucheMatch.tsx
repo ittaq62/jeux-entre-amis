@@ -684,7 +684,11 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                 )}
                 {h.mag === 0 && h.reloading < 0 && (
                   <span className="esc-warn">
-                    {h.res > 0 ? (touch ? "Recharge !" : "R pour recharger") : "Plus de munitions : change d'arme"}
+                    {h.res > 0
+                      ? touch
+                        ? "Recharge !"
+                        : "R pour recharger"
+                      : "Plus de munitions : change d'arme, ravitaille-toi à ta base ou sur un soldat tombé"}
                   </span>
                 )}
               </div>

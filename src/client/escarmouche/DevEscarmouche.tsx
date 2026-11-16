@@ -146,10 +146,16 @@ export function DevEscarmouche() {
             sprint: false,
             ads: i === 0,
             reload: false,
-            alive: true,
+            // ?mort : ils tombent et se relèvent en boucle ; ?mort=fixe : ils restent à terre
+            alive: !params.has("mort") || (params.get("mort") !== "fixe" && t % 4 < 1),
             weapon: i === 1 ? "pm" : i === 2 && closeUp ? "pistolet" : weapon,
             carrying: -1,
             shield: false,
+            fall: [
+              { dx: Math.sin(p.yaw), dz: Math.cos(p.yaw), head: false, blast: false },
+              { dx: -Math.sin(p.yaw), dz: -Math.cos(p.yaw), head: true, blast: false },
+              { dx: Math.cos(p.yaw), dz: -Math.sin(p.yaw), head: false, blast: true },
+            ][i % 3],
           },
           dt,
           true,

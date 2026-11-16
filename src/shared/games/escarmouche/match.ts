@@ -22,6 +22,7 @@ import {
   isPrimaryId,
   isSecondaryId,
   KNIFE,
+  WEAPONS,
   type PrimaryId,
   type ExtraId,
   type MuzzleId,
@@ -49,6 +50,12 @@ export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone
  */
 export const CONQUEST = { r: 5, dy: 3, speed: 1 / 6, back: 1 / 12, bleed: 5, max: 3 };
 export const POINT_NAMES = ["A", "B", "C"] as const;
+/**
+ * Le ravitaillement : près de sa base (et, en conquête, d'un drapeau de son équipe), un chargeur de plus pour chaque
+ * arme toutes les `every` secondes et une grenade toutes les `nade` ; sur un soldat tombé, en passant tout près, un
+ * chargeur et sa grenade, une seule fois
+ */
+export const RESUPPLY = { reach: 4, every: 1.2, nade: 6, loot: 1.3 };
 /** Relever un coéquipier tombé : s'accroupir tout près de lui, un moment ; il repart avec un peu de vie */
 export const REVIVE = { reach: 1.7, time: 1.4, hp: 60, near: 15, wait: 8 };
 /** Revenir auprès d'un coéquipier : seulement s'il n'est pas au combat depuis quelques secondes */
@@ -98,6 +105,8 @@ export type EscEvent =
   | { k: "reload"; i: number }
   | { k: "flag"; f: "take" | "drop" | "return" | "capture"; team: number; i: number }
   | { k: "zone"; owner: number; contested: boolean }
+  /** `i` se ravitaille : `n` balles, `g` grenades, à sa base (`from` -1) ou sur le soldat tombé `from` */
+  | { k: "ammo"; i: number; n: number; g: number; from: number }
   /** Conquête : le drapeau `p` change de mains (`owner` -1 : neutralisé), il était à `was` */
   | { k: "cq"; p: number; owner: number; was: number }
   | { k: "streak"; i: number; n: number }
@@ -156,6 +165,10 @@ export interface Fighter {
   giveUp: boolean;
   /** Son dernier coup tiré ou reçu : il est « au combat » quelques secondes après */
   lastFight: number;
+  /** Le ravitaillement : son prochain chargeur, sa prochaine grenade ; tombé, si on lui a déjà pris ses munitions */
+  supplyAt: number;
+  nadeAt: number;
+  looted: boolean;
   stats: FighterStats;
 }
 
@@ -397,6 +410,9 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       spawnOn: -1,
       diedAt: -100,
       giveUp: false,
+      supplyAt: 0,
+      nadeAt: 0,
+      looted: true,
       lastFight: -100,
       stats: newStats(),
     };
@@ -463,6 +479,9 @@ export function upgradeMatch(m: Match): Match {
     if (typeof f.lastFight !== "number") f.lastFight = -100;
     if (typeof f.diedAt !== "number") f.diedAt = -100;
     if (typeof f.giveUp !== "boolean") f.giveUp = false;
+    if (typeof f.supplyAt !== "number") f.supplyAt = 0;
+    if (typeof f.nadeAt !== "number") f.nadeAt = 0;
+    if (typeof f.looted !== "boolean") f.looted = true;
     if (!f.nextMuzzle) f.nextMuzzle = "aucun";
     if (!f.nextExtra) f.nextExtra = "aucun";
     if (typeof f.stats.revives !== "number") f.stats.revives = 0;
@@ -902,6 +921,60 @@ export function chooseSpawn(m: Match, i: number, target: number) {
   f.spawnOn = g && target !== i && g.team === f.team && isTeamMode(m.mode) ? target : -1;
 }
 
+/** Les balles d'un chargeur de plus pour chacune de ses armes (sans dépasser ce qu'il peut porter) ; combien en tout */
+function addMags(s: Soldier): number {
+  let n = 0;
+  for (const k of [0, 1] as const) {
+    const w = k === 0 ? defOf(s, s.primary) : WEAPONS[s.secondary];
+    const add = Math.max(0, Math.min(w.mag, w.reserve - s.res[k]));
+    s.res[k] += add;
+    n += add;
+  }
+  return n;
+}
+
+/** Les lieux de ravitaillement d'une équipe : sa base ; en conquête, ses drapeaux ; chacun pour soi, les deux bases */
+export function supplyPoints(m: Match, team: number): { x: number; y: number; z: number }[] {
+  const gm = getMap(m.map);
+  if (!isTeamMode(m.mode)) return [gm.flags[0], gm.flags[1]];
+  const out = [gm.flags[team === 1 ? 1 : 0]];
+  if (m.cq) m.cq.pts.forEach((p, k) => p.owner === team && out.push(gm.points[k]!));
+  return out;
+}
+
+/** Se ravitailler : à sa base ou sur un drapeau de son équipe, et sur les soldats tombés qu'on enjambe */
+function stepSupply(m: Match, ev: EscEvent[]) {
+  for (let i = 0; i < m.fighters.length; i++) {
+    const f = m.fighters[i]!;
+    const s = f.s;
+    if (!s.alive) continue;
+    for (let j = 0; j < m.fighters.length; j++) {
+      const g = m.fighters[j]!;
+      if (j === i || g.s.alive || g.looted || g.s.y < -5) continue;
+      if (Math.hypot(g.s.x - s.x, g.s.z - s.z) > RESUPPLY.loot || Math.abs(g.s.y - s.y) > 1.2) continue;
+      g.looted = true;
+      const n = addMags(s);
+      const gr = s.grenades < GRENADE.count ? 1 : 0;
+      s.grenades += gr;
+      if (n > 0 || gr > 0) ev.push({ k: "ammo", i, n, g: gr, from: j });
+    }
+    const near = supplyPoints(m, f.team).some((p) => Math.hypot(p.x - s.x, p.z - s.z) < RESUPPLY.reach && Math.abs(p.y - s.y) < 2.5);
+    if (!near) continue;
+    let n = 0;
+    let gr = 0;
+    if (m.t >= f.supplyAt) {
+      n = addMags(s);
+      if (n > 0) f.supplyAt = m.t + RESUPPLY.every;
+    }
+    if (s.grenades < GRENADE.count && m.t >= f.nadeAt) {
+      s.grenades += 1;
+      gr = 1;
+      f.nadeAt = m.t + RESUPPLY.nade;
+    }
+    if (n > 0 || gr > 0) ev.push({ k: "ammo", i, n, g: gr, from: -1 });
+  }
+}
+
 /** Les récompenses de série */
 function reward(m: Match, a: number, ev: EscEvent[]) {
   const fa = m.fighters[a]!;
@@ -973,6 +1046,7 @@ function kill(m: Match, v: number, a: number, w: KillWeapon, head: boolean, ev: 
   fv.respawnAt = m.t + RESPAWN;
   fv.diedAt = m.t;
   fv.giveUp = false;
+  fv.looted = false;
   fv.stats.deaths += 1;
   fv.streak = 0;
   dropFlag(m, v, ev);
@@ -1080,6 +1154,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   }
   if (m.phase !== "live") return;
   if (isTeamMode(m.mode)) stepRevive(m, ev);
+  stepSupply(m, ev);
   if (m.zone) stepZone(m, ev);
   if (m.cq) stepConquest(m, ev);
   if (m.flags) stepFlags(m, ev);
@@ -1386,6 +1461,9 @@ export function addFighter(m: Match, p: FighterInit): number {
     spawnOn: -1,
     diedAt: -100,
     giveUp: false,
+    supplyAt: 0,
+    nadeAt: 0,
+    looted: true,
     lastFight: -100,
     stats: newStats(),
   });

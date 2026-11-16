@@ -12,6 +12,7 @@ import {
   giveUp,
   hurt,
   matchWorld,
+  RESUPPLY,
   REVIVE,
   upgradeMatch,
   waitingRescue,
@@ -1120,5 +1121,89 @@ describe("Escarmouche : les caisses en bois", () => {
     delete m.crates;
     const up = upgradeMatch(m as unknown as Match);
     expect(up.crates.length).toBe(getMap("gare").boxes.filter((b) => b.m === "caisse").length);
+  });
+});
+
+describe("Escarmouche : le ravitaillement", () => {
+  function pair(mode: Mode = "equipes") {
+    const m = createMatch(
+      settings({ mode, map: "hameau" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      6,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    Object.assign(m.fighters[0]!.s, { x: -20, y: 0, z: 17, vx: 0, vz: 0 });
+    Object.assign(m.fighters[1]!.s, { x: 20, y: 0, z: -17, vx: 0, vz: 0 });
+    return m;
+  }
+  const run = (m: Match, seconds: number, ev: EscEvent[] = []) => {
+    for (let k = 0; k < Math.round(seconds / DT); k++) worldStep(m, ev);
+    return ev;
+  };
+
+  it("à sa base, un chargeur de plus à chaque instant jusqu'au plein, et la grenade revient ; loin de la base, rien", () => {
+    const m = pair();
+    const s = m.fighters[0]!.s;
+    s.res = [0, 0];
+    s.grenades = 0;
+    run(m, 3);
+    expect(s.res).toEqual([0, 0]);
+    const home = getMap("hameau").flags[0];
+    Object.assign(s, { x: home.x + 1, z: home.z + 1 });
+    const ev = run(m, RESUPPLY.every * 2 + 0.1);
+    expect(s.res[0]).toBe(WEAPONS.fa.mag * 3);
+    expect(s.grenades).toBe(1);
+    expect(ev.some((e) => e.k === "ammo" && e.i === 0 && e.from === -1 && e.n > 0)).toBe(true);
+    run(m, 60);
+    expect(s.res[0]).toBe(WEAPONS.fa.reserve);
+    expect(s.res[1]).toBe(WEAPONS.pistolet.reserve);
+    // À la base adverse : rien
+    s.res = [0, 0];
+    const theirs = getMap("hameau").flags[1];
+    Object.assign(s, { x: theirs.x - 1, z: theirs.z + 1 });
+    run(m, 3);
+    expect(s.res).toEqual([0, 0]);
+  });
+
+  it("sur un soldat tombé, on prend ses munitions en passant, une seule fois", () => {
+    const m = pair("solo");
+    const [a, b] = m.fighters;
+    a!.s.res = [0, 0];
+    a!.s.grenades = 0;
+    const ev: EscEvent[] = [];
+    while (b!.s.alive) hurt(m, 1, 0, 50, 1, "fa", ev, 0, 1, 0);
+    Object.assign(a!.s, { x: b!.s.x + 0.6, z: b!.s.z });
+    worldStep(m, ev);
+    expect(a!.s.res[0]).toBe(WEAPONS.fa.mag);
+    expect(a!.s.grenades).toBe(1);
+    expect(ev.some((e) => e.k === "ammo" && e.i === 0 && e.from === 1)).toBe(true);
+    worldStep(m, ev);
+    expect(a!.s.res[0]).toBe(WEAPONS.fa.mag);
+  });
+
+  it("en conquête, un drapeau de son équipe ravitaille ; celui de l'adversaire, non", () => {
+    const m = createMatch(
+      settings({ mode: "conquete", map: "port" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      6,
+    );
+    live(m);
+    const s = m.fighters[0]!.s;
+    Object.assign(m.fighters[1]!.s, { x: 12, y: 0, z: -24 });
+    const [a, , c] = getMap("port").points;
+    Object.assign(s, { x: c.x + 1, y: 0, z: c.z, vx: 0, vz: 0 });
+    s.res = [0, 0];
+    run(m, 0.5);
+    expect(s.res[0]).toBe(0);
+    Object.assign(s, { x: a.x + 1, y: 0, z: a.z });
+    run(m, 0.5);
+    expect(s.res[0]).toBe(WEAPONS.fa.mag);
   });
 });

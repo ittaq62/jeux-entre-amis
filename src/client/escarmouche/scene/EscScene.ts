@@ -68,6 +68,8 @@ export class EscScene {
   private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite; cross: THREE.Sprite }>();
   /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
   private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
+  /** Les caisses de munitions de ses lieux de ravitaillement, et le cercle discret autour */
+  private supplies: { group: THREE.Group; ring: THREE.Mesh }[] = [];
   /** Les caisses en bois : debout, ou quelques planches au sol */
   private crates = new Map<number, { whole: THREE.Mesh; wreck: THREE.Group; down: boolean }>();
   private vmRoot = new THREE.Group();
@@ -382,6 +384,28 @@ export class EscScene {
       const d = this.camera.position.distanceTo(s.mark.position);
       s.mark.scale.setScalar(Math.max(0.3, d * 0.028) * (1 + Math.sin(this.t * 6) * 0.06));
     }
+  }
+
+  /** Ses lieux de ravitaillement : des caisses de munitions vert armée, un cercle au sol pour en voir la portée */
+  setSupply(points: readonly { x: number; y: number; z: number }[], reach: number) {
+    while (this.supplies.length < points.length) {
+      const group = buildAmmoCrates(this.low);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(reach - 0.08, reach, 48),
+        new THREE.MeshBasicMaterial({ color: "#d9c25a", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      this.scene.add(group, ring);
+      this.supplies.push({ group, ring });
+    }
+    this.supplies.forEach((sp, k) => {
+      const p = points[k];
+      sp.group.visible = sp.ring.visible = Boolean(p);
+      if (!p) return;
+      sp.group.position.set(p.x + 1.3, p.y, p.z + 1.3);
+      sp.group.rotation.y = 0.6 + k;
+      sp.ring.position.set(p.x, p.y + 0.04, p.z);
+    });
   }
 
   /** Les caisses cassées (leurs boîtes) : à leur place, quelques planches */
@@ -894,6 +918,49 @@ function markMaterial(): THREE.SpriteMaterial {
   t.colorSpace = THREE.SRGBColorSpace;
   markMat = new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
   return markMat;
+}
+
+/** Deux caisses de munitions vert armée, l'une sur l'autre, cerclées de jaune, aux poignées de corde */
+function buildAmmoCrates(low: boolean): THREE.Group {
+  const g = new THREE.Group();
+  const olive = new THREE.MeshStandardMaterial({ color: "#4a5233", roughness: 0.8 });
+  const dark = new THREE.MeshStandardMaterial({ color: "#2f3421", roughness: 0.85 });
+  const yellow = new THREE.MeshStandardMaterial({ color: "#d8b23a", roughness: 0.6 });
+  const steel = new THREE.MeshStandardMaterial({ color: "#3a3836", roughness: 0.45, metalness: 0.7 });
+  const crate = (w: number, h: number, d: number, y: number, ry: number) => {
+    const c = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), olive);
+    body.position.y = h / 2;
+    c.add(body);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, 0.04, d + 0.02), dark);
+    lid.position.y = h - 0.02;
+    c.add(lid);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.01, 0.05, d + 0.01), yellow);
+    band.position.y = h * 0.45;
+    c.add(band);
+    if (!low)
+      for (const s of [-1, 1]) {
+        const latch = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.02), steel);
+        latch.position.set(s * w * 0.3, h - 0.06, d / 2 + 0.01);
+        c.add(latch);
+        const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.012, 5, 10, Math.PI), dark);
+        handle.position.set(s * (w / 2 + 0.01), h * 0.7, 0);
+        handle.rotation.set(0, Math.PI / 2, 0);
+        c.add(handle);
+      }
+    c.position.y = y;
+    c.rotation.y = ry;
+    g.add(c);
+  };
+  crate(0.75, 0.42, 0.45, 0, 0);
+  crate(0.6, 0.34, 0.38, 0.42, 0.25);
+  g.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.castShadow = !low;
+      o.receiveShadow = true;
+    }
+  });
+  return g;
 }
 
 /** Un bidon d'essence rouge cerclé, et sa carcasse ouverte et noircie */

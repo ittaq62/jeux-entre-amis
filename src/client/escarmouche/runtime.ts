@@ -17,6 +17,7 @@ import {
   CONQUEST,
   POINT_NAMES,
   worldWithout,
+  RESUPPLY,
 } from "../../shared/games/escarmouche/match.ts";
 import {
   B,
@@ -262,6 +263,11 @@ export class BattleRuntime {
   private hudAt = 0;
   private stepTimers = new Map<number, number>();
   private lastShots = new Map<number, number>();
+  /** Le dernier ravitaillement (pour ne pas l'annoncer à chaque chargeur) */
+  private suppliedAt = -1e9;
+  /** Vers où tombe chacun (la dernière fois qu'il a été éliminé), et la dernière explosion */
+  private falls = new Map<number, { dx: number; dz: number; head: boolean; blast: boolean }>();
+  private lastBoom: { x: number; z: number; t: number } | null = null;
   /** Conquête : le drapeau où l'on se tient (-1 aucun), et l'alerte des derniers tickets déjà donnée */
   private insidePoint = -1;
   private ticketWarned = false;
@@ -557,6 +563,19 @@ export class BattleRuntime {
         return;
       }
       case "kill": {
+        // Vers où il tombe : poussé depuis le tireur, ou depuis l'explosion qui l'a eu
+        {
+          const vpos = this.fighterAt(e.v);
+          const blast = e.w === "grenade" || e.w === "mortier" || e.w === "bidon";
+          const boom = this.lastBoom && performance.now() - this.lastBoom.t < 600 ? this.lastBoom : null;
+          const from = blast && boom ? boom : e.a >= 0 && e.a !== e.v ? this.fighterAt(e.a) : null;
+          if (vpos) {
+            const dx = from ? vpos.x - from.x : Math.random() - 0.5;
+            const dz = from ? vpos.z - from.z : Math.random() - 0.5;
+            const l = Math.hypot(dx, dz) || 1;
+            this.falls.set(e.v, { dx: dx / l, dz: dz / l, head: e.h, blast });
+          }
+        }
         const line: FeedLine = {
           id: ++this.feedSeq,
           killer: e.a >= 0 && e.a !== e.v ? this.nameOf(e.a) : null,
@@ -612,6 +631,7 @@ export class BattleRuntime {
         return;
       }
       case "boom": {
+        this.lastBoom = { x: e.x, z: e.z, t: performance.now() };
         const at = this.tmp.set(e.x, e.y, e.z);
         this.scene.effects.explosion(at);
         if (e.w === "bidon") this.scene.effects.fire(at, 7);
@@ -625,6 +645,14 @@ export class BattleRuntime {
       }
       case "barrel":
         return;
+      case "ammo": {
+        if (e.i !== this.me) return;
+        this.sound.play("reload", { volume: 0.35, gap: 400 });
+        if (e.from >= 0) this.award(`Munitions de ${this.nameOf(e.from)}`);
+        else if (performance.now() - this.suppliedAt > 4000) this.award(e.g > 0 && e.n === 0 ? "Grenade" : "Ravitaillé");
+        this.suppliedAt = performance.now();
+        return;
+      }
       case "crate": {
         if (e.up) return;
         const b = this.gm.boxes[e.b];
@@ -1014,6 +1042,15 @@ export class BattleRuntime {
       for (let k = 0; k + 2 < mk.length; k += 3) if (teams ? mk[k + 1] === myTeam : mk[k + 2] === this.me) this.marked.add(mk[k]!);
     }
     this.scene.setBarrels(this.barrelBoxes, new Set(this.latest?.bd ?? []));
+    // Ses lieux de ravitaillement : sa base (les deux, chacun pour soi), et ses drapeaux en conquête
+    if (this.me >= 0) {
+      const team = this.teamOf(this.me);
+      const cq = this.latest?.cq;
+      const pts = isTeamMode(v.mode)
+        ? [this.gm.flags[team === 1 ? 1 : 0], ...this.gm.points.filter((_, k) => cq && cq[k * 2] === team)]
+        : [this.gm.flags[0], this.gm.flags[1]];
+      this.scene.setSupply(pts, RESUPPLY.reach);
+    }
     // Les caisses cassées : à l'image, et dans le monde où l'on prévoit ses pas (on passe là où elles étaient)
     const broken = this.latest?.cr ?? [];
     this.scene.setCrates(new Set(broken));
@@ -1055,6 +1092,7 @@ export class BattleRuntime {
           weapon: f.weapon,
           carrying: f.carrying,
           shield: (f.bits & PF.shield) !== 0,
+          fall: alive ? undefined : this.falls.get(i),
         },
         dt,
         ally || inSight || this.me < 0,

@@ -59,6 +59,8 @@ export interface SoldierPose {
   weapon: WeaponId;
   carrying: number;
   shield: boolean;
+  /** Sa chute : vers où le coup l'a poussé (dans le monde), une balle dans la tête, le souffle d'une explosion */
+  fall?: { dx: number; dz: number; head: boolean; blast: boolean };
 }
 
 type Keep = <T extends { dispose: () => void }>(x: T) => T;
@@ -294,6 +296,11 @@ export class SoldierModel {
   private phase = 0;
   private deadFor = -1;
   private fallSide = 1;
+  /** Sa chute : en arrière ou en avant, le quart de tour qu'il fait en tombant, d'où il part et vers où */
+  private fallBack = true;
+  private fallTwist = 0;
+  private fallYaw = 0;
+  private fallDir = { dx: 0, dz: 1, head: false, blast: false };
   private disposables: { dispose: () => void }[] = [];
   private mats: UniformMats;
   private bandMat: THREE.MeshStandardMaterial;
@@ -526,32 +533,18 @@ export class SoldierModel {
     this.root.position.set(p.x, p.y, p.z);
     this.root.rotation.set(0, p.yaw, 0);
     if (!p.alive) {
-      // Les genoux lâchent, il bascule sur le côté et en arrière, reste un moment au sol, puis disparaît
-      if (this.deadFor < 0) {
-        this.deadFor = 0;
-        this.fallSide = Math.random() < 0.5 ? -1 : 1;
-      }
-      this.deadFor += dt;
-      const f = Math.min(1, this.deadFor / 0.55);
-      const e = f * f * (3 - 2 * f);
-      this.hips.rotation.set(-e * 1.4, 0, this.fallSide * e * 0.35);
-      this.hips.position.y = 0.95 - e * 0.7;
-      this.spine.rotation.x = -e * 0.25;
-      this.aim.rotation.x = -0.9 * e;
-      for (const [k, leg] of this.legs.entries()) {
-        leg.thigh.rotation.x = e * (k === 0 ? 0.9 : 0.4);
-        leg.shin.rotation.x = -e * (k === 0 ? 1.4 : 0.6);
-      }
-      this.head.rotation.x = -e * 0.4;
-      // Le corps reste là tant qu'un coéquipier peut venir le relever
-      this.root.visible = this.deadFor < 9;
+      this.fallDown(p, dt);
       this.flag.visible = false;
       this.alive = false;
       return;
     }
     if (!this.alive) {
       this.hips.rotation.set(0, 0, 0);
+      this.hips.position.set(0, 0.95, 0);
       this.spine.rotation.set(0, 0, 0);
+      this.head.rotation.set(0, 0, 0);
+      this.aim.rotation.set(0, 0, 0);
+      if (this.gun) this.gun.group.rotation.set(0, 0, 0);
       this.alive = true;
     }
     this.deadFor = -1;
@@ -622,6 +615,75 @@ export class SoldierModel {
     }
     // Celui qui vient d'arriver clignote un peu : il ne craint rien pendant ce temps-là
     this.root.visible = !p.shield || Math.floor(performance.now() / 120) % 3 !== 0;
+  }
+
+  /**
+   * La chute : le coup le pousse (il recule d'un pas, le buste rejeté), les genoux lâchent, il pivote vers où il
+   * tombe et bascule, en arrière si le coup venait de devant, en avant s'il venait de dos ; il touche le sol avec un
+   * petit rebond, la tête ballotte. Une balle dans la tête : il s'effondre net. Une explosion : il est projeté.
+   */
+  private fallDown(p: SoldierPose, dt: number) {
+    if (this.deadFor < 0) {
+      this.deadFor = 0;
+      this.fallSide = Math.random() < 0.5 ? -1 : 1;
+      const ang = Math.random() * Math.PI * 2;
+      this.fallDir = p.fall ?? { dx: Math.sin(ang), dz: Math.cos(ang), head: false, blast: false };
+      // La poussée, vue depuis le soldat (l'avant est vers -z)
+      const c = Math.cos(p.yaw);
+      const s = Math.sin(p.yaw);
+      const lx = this.fallDir.dx * c - this.fallDir.dz * s;
+      const lz = this.fallDir.dx * s + this.fallDir.dz * c;
+      this.fallBack = lz >= 0;
+      const tw = this.fallBack ? Math.atan2(lx, lz) : Math.atan2(-lx, -lz);
+      this.fallTwist = Math.max(-1, Math.min(1, tw));
+      this.fallYaw = p.yaw;
+    }
+    this.deadFor += dt;
+    const { dx, dz, head, blast } = this.fallDir;
+    const t = this.deadFor * (head ? 1.35 : 1);
+    const clamp = (v: number) => Math.max(0, Math.min(1, v));
+    const smooth = (v: number) => {
+      const k = clamp(v);
+      return k * k * (3 - 2 * k);
+    };
+    // Un petit dépassement à l'arrivée au sol, puis il se pose
+    const land = (v: number) => {
+      const k = clamp(v);
+      const c1 = 1.9;
+      return 1 + (c1 + 1) * (k - 1) ** 3 + c1 * (k - 1) ** 2;
+    };
+    const sign = this.fallBack ? 1 : -1;
+    // Il glisse un peu dans le sens du coup ; une explosion le soulève et le jette plus loin
+    const push = (blast ? 1.5 : head ? 0.25 : 0.5) * (1 - (1 - clamp(t / 0.7)) ** 2);
+    const lift = blast ? Math.sin(Math.PI * clamp(t / 0.55)) * 0.55 : 0;
+    this.root.position.set(p.x + dx * push, p.y + lift, p.z + dz * push);
+    this.root.rotation.set(0, this.fallYaw + this.fallTwist * smooth(t / 0.6), 0);
+    // Le coup : le buste rejeté (sauf une balle dans la tête : tout lâche d'un coup)
+    const jolt = head ? 0 : Math.sin(Math.PI * clamp(t / 0.16)) * 0.4;
+    // Les genoux lâchent
+    const buckle = smooth((t - (head ? 0 : 0.06)) / 0.38);
+    // Il bascule et touche le sol
+    const topple = land((t - 0.28) / 0.5);
+    const flat = smooth((t - 0.28) / 0.5);
+    this.hips.rotation.set(sign * 1.45 * topple, 0, this.fallSide * 0.22 * flat);
+    this.hips.position.set(0, 0.95 - buckle * 0.38 - flat * 0.4, 0);
+    this.spine.rotation.set(sign * (jolt + 0.15 * flat), this.fallSide * 0.12 * flat, 0);
+    // Les jambes plient en tombant, puis se détendent au sol
+    for (const [k, leg] of this.legs.entries()) {
+      const bend = buckle * (1 - flat * 0.65);
+      leg.thigh.rotation.x = bend * (k === 0 ? 0.95 : 0.55) + flat * (this.fallBack ? 0.15 : -0.1) * (k === 0 ? 1 : -1);
+      leg.shin.rotation.x = -bend * (k === 0 ? 1.5 : 0.9);
+    }
+    // Les bras lâchent l'arme qui pend, puis retombent au sol : au-dessus de la tête sur le dos, le long du corps face
+    // contre terre
+    this.aim.rotation.set(-0.9 * buckle * (1 - flat) + (this.fallBack ? 1.85 : -1.25) * flat, 0, 0);
+    if (this.gun) this.gun.group.rotation.set(0, 0, 1.2 * buckle);
+    // La tête suit avec un temps de retard, et ballotte un peu au choc
+    const after = t - 0.78;
+    const wobble = after > 0 ? Math.sin(after * 17) * Math.exp(-after * 6) * 0.35 : 0;
+    this.head.rotation.set(sign * (0.35 * buckle + 0.25 * flat) + wobble, this.fallSide * 0.4 * flat, 0);
+    // Le corps reste là tant qu'un coéquipier peut venir le relever
+    this.root.visible = this.deadFor < 9;
   }
 
   /** Où est sa tête (pour son nom) */
