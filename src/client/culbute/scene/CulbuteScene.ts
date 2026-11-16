@@ -47,13 +47,19 @@ export class CulbuteScene {
   private camPos = new THREE.Vector3(0, 3, 26);
   private camLook = new THREE.Vector3(0, 2, 0);
   private trailAt = new Map<number, number>();
-  private sphereGeo: THREE.SphereGeometry | null = null;
   /** Sous chaque combattant, une ombre ronde sur la plateforme où il retombera */
   private blobs: THREE.Mesh[] = [];
   private blobMat: THREE.MeshBasicMaterial;
   private envMap: THREE.Texture | null = null;
   private blobGeo: THREE.BufferGeometry | null = null;
   private starGeo: THREE.ShapeGeometry | null = null;
+  private ringGeo: THREE.RingGeometry | null = null;
+  private rayGeo: THREE.PlaneGeometry | null = null;
+  private smokeTex: THREE.CanvasTexture | null = null;
+  private haloTex: THREE.CanvasTexture | null = null;
+  private grounded: boolean[] = [];
+  private lastXs: number[] = [];
+  private dustAt: number[] = [];
   /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
   fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
 
@@ -216,6 +222,7 @@ export class CulbuteScene {
       if (!m) return;
       m.update(dt, f, this.time);
       this.placeBlob(i, f, frame.plats);
+      this.dust(i, f, dt);
       const pad = this.pads[i]!;
       pad.visible = f.state === "respawn";
       if (pad.visible) pad.position.set(f.x, f.y + Math.sin(this.time * 2) * 0.03, 0);
@@ -435,22 +442,65 @@ export class CulbuteScene {
     this.effects.push({ obj, age: 0, life, tick });
   }
 
-  /** Un petit nuage qui s'étire et s'efface */
-  private puff(x: number, y: number, color: number, size: number, life: number) {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false });
-    const m = new THREE.Mesh(this.sphere(), mat);
-    m.position.set(x, y, 0.1);
-    m.scale.setScalar(size);
-    this.add(m, life, (k) => {
-      m.scale.setScalar(size * (1 + k * 1.2));
-      mat.opacity = 0.7 * (1 - k);
+  /** Un petit nuage doux qui s'étire et s'efface */
+  puff(x: number, y: number, color: number, size: number, life: number) {
+    const mat = new THREE.SpriteMaterial({ map: this.smoke(), color, transparent: true, opacity: 0.85, depthWrite: false });
+    mat.rotation = Math.random() * Math.PI * 2;
+    const m = new THREE.Sprite(mat);
+    m.position.set(x, y, 0.25);
+    m.scale.setScalar(size * 2);
+    const drift = (Math.random() - 0.5) * 0.6;
+    this.add(m, life, (k, dt) => {
+      m.scale.setScalar(size * 2 * (1 + k * 1.3));
+      m.position.y += dt * 0.5;
+      m.position.x += dt * drift;
+      mat.opacity = 0.85 * (1 - k) ** 1.4;
       if (k >= 1) mat.dispose();
     });
   }
 
-  private sphere() {
-    if (!this.sphereGeo) this.sphereGeo = this.keep(new THREE.SphereGeometry(1, 10, 8));
-    return this.sphereGeo;
+  /** La fumée : une tache ronde aux bords bosselés */
+  private smoke(): THREE.Texture {
+    if (!this.smokeTex) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d")!;
+      for (const [x, y, r] of [
+        [32, 34, 22],
+        [22, 28, 14],
+        [42, 26, 15],
+        [30, 22, 13],
+        [40, 38, 13],
+      ] as const) {
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, "rgba(255,255,255,0.9)");
+        grd.addColorStop(0.6, "rgba(255,255,255,0.45)");
+        grd.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = grd;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+      }
+      this.smokeTex = this.keep(new THREE.CanvasTexture(c));
+      this.smokeTex.colorSpace = THREE.SRGBColorSpace;
+    }
+    return this.smokeTex;
+  }
+
+  private glowTex(): THREE.Texture {
+    if (!this.haloTex) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d")!;
+      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grd.addColorStop(0, "rgba(255,255,255,1)");
+      grd.addColorStop(0.25, "rgba(255,255,255,0.6)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 64, 64);
+      this.haloTex = this.keep(new THREE.CanvasTexture(c));
+    }
+    return this.haloTex;
   }
 
   private star() {
@@ -467,18 +517,92 @@ export class CulbuteScene {
     return this.starGeo;
   }
 
-  /** L'étincelle d'un coup : plus il est fort, plus elle est grande et chaude */
+  private ring() {
+    if (!this.ringGeo) this.ringGeo = this.keep(new THREE.RingGeometry(0.82, 1, 40));
+    return this.ringGeo;
+  }
+
+  private ray() {
+    if (!this.rayGeo) {
+      const g = new THREE.PlaneGeometry(1, 1);
+      g.translate(0.5, 0, 0);
+      this.rayGeo = this.keep(g);
+    }
+    return this.rayGeo;
+  }
+
+  /** Un éclat de lumière qui gonfle et s'éteint */
+  private flare(x: number, y: number, size: number, color: number, life: number) {
+    const mat = new THREE.SpriteMaterial({
+      map: this.glowTex(),
+      color,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const m = new THREE.Sprite(mat);
+    m.position.set(x, y, 0.7);
+    this.add(m, life, (k) => {
+      m.scale.setScalar(size * (0.6 + k * 0.6));
+      mat.opacity = (1 - k) ** 2;
+      if (k >= 1) mat.dispose();
+    });
+  }
+
+  /** Une onde : un anneau qui s'élargit en s'amincissant */
+  private wave(x: number, y: number, size: number, color: number, life: number) {
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+    const m = new THREE.Mesh(this.ring(), mat);
+    m.position.set(x, y, 0.65);
+    this.add(m, life, (k) => {
+      m.scale.setScalar(size * (0.25 + k * 1.1));
+      mat.opacity = (1 - k) ** 1.5;
+      if (k >= 1) mat.dispose();
+    });
+  }
+
+  /** Des traits qui partent du point d'impact */
+  private rays(x: number, y: number, n: number, len: number, color: number, life: number, width = 0.07) {
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(this.ray(), mat);
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      m.position.set(x, y, 0.62);
+      m.rotation.z = a;
+      const l = len * (0.7 + Math.random() * 0.6);
+      this.add(m, life, (k) => {
+        // Le trait jaillit, puis se détache du centre
+        m.scale.set(l * Math.min(1, k * 3), width * (1 - k), 1);
+        m.position.set(x + Math.cos(a) * l * k * 0.6, y + Math.sin(a) * l * k * 0.6, 0.62);
+        mat.opacity = 1 - k;
+        if (k >= 1) mat.dispose();
+      });
+    }
+  }
+
+  /** L'étincelle d'un coup : plus il est fort, plus elle est grande, chaude et accompagnée */
   private spark(x: number, y: number, power: number, color: number) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide });
     const m = new THREE.Mesh(this.star(), mat);
     m.position.set(x, y, 0.6);
     const size = 0.35 + power * 0.9;
     m.rotation.z = Math.random() * Math.PI;
-    this.add(m, 0.22 + power * 0.15, (k) => {
+    const spin = (Math.random() - 0.5) * 4;
+    this.add(m, 0.22 + power * 0.15, (k, dt) => {
       m.scale.setScalar(size * (0.6 + k * 0.8));
+      m.rotation.z += dt * spin;
       mat.opacity = 1 - k * k;
       if (k >= 1) mat.dispose();
     });
+    this.flare(x, y, 1.2 + power * 2.2, color, 0.2 + power * 0.15);
+    if (power > 0.25) this.wave(x, y, 0.8 + power * 1.6, 0xffffff, 0.25 + power * 0.15);
+    if (power > 0.4) this.rays(x, y, 5 + Math.round(power * 4), 0.6 + power * 1.1, 0xffffff, 0.22 + power * 0.1);
   }
 
   effect(e: FightEvent, frame: RenderFrame) {
@@ -503,46 +627,57 @@ export class CulbuteScene {
         break;
       }
       case "ko": {
-        // Le grand éclair de la sortie, du bord de l'arène vers le milieu
-        const mat = new THREE.MeshBasicMaterial({
-          color: 0xfff6c2,
+        // La sortie : un grand faisceau du bord vers le milieu, une explosion à la couleur de celui qui sort
+        const color = new THREE.Color(this.looks[e.v]?.color ?? "#ffd25a").getHex();
+        const mat = new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55) }, uFade: { value: 1 } },
+          vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+          fragmentShader: `uniform vec3 uColor; uniform float uFade; varying vec2 vUv;
+void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159), 0.5)) * uFade; gl_FragColor = vec4(uColor, a * 0.85); }`,
           transparent: true,
-          opacity: 1,
           depthWrite: false,
           side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
         });
-        const ray = new THREE.Mesh(new THREE.ConeGeometry(1.6, 16, 12, 1, true), mat);
+        const ray = new THREE.Mesh(new THREE.ConeGeometry(1.5, 16, 24, 1, true), mat);
         const dir = new THREE.Vector3(-e.x, 3 - e.y, 0).normalize();
         ray.position.set(e.x + dir.x * 8, e.y + dir.y * 8, 0.5);
         ray.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
-        this.add(ray, 0.6, (k) => {
-          mat.opacity = 1 - k;
+        this.add(ray, 0.75, (k) => {
+          mat.uniforms.uFade!.value = (1 - k) ** 1.5;
           ray.scale.set(1 - k * 0.6, 1, 1 - k * 0.6);
           if (k >= 1) {
             mat.dispose();
             ray.geometry.dispose();
           }
         });
+        this.flare(e.x, e.y, 9, color, 0.6);
+        this.flare(e.x, e.y, 5, 0xffffff, 0.35);
+        this.wave(e.x, e.y, 5, color, 0.6);
+        this.wave(e.x, e.y, 3, 0xffffff, 0.4);
+        this.rays(e.x, e.y, 14, 4.5, color, 0.55, 0.16);
         this.spark(e.x, e.y, 1.6, 0xffd25a);
         this.shake = 1.1;
         break;
       }
       case "boom": {
-        const mat = new THREE.MeshBasicMaterial({ color: 0xff9a3a, transparent: true, opacity: 0.9, depthWrite: false });
-        const m = new THREE.Mesh(this.sphere(), mat);
-        m.position.set(e.x, e.y, 0.3);
-        this.add(m, 0.45, (k) => {
-          m.scale.setScalar(e.r * (0.3 + k * 0.9));
-          mat.opacity = 0.9 * (1 - k);
-          mat.color.setHex(k < 0.4 ? 0xffd25a : 0xff7a2a);
-          if (k >= 1) mat.dispose();
-        });
-        for (let i = 0; i < 6; i++) this.puff(e.x + (Math.random() - 0.5) * 2, e.y + Math.random() * 1.5, 0x777777, 0.4, 0.9);
+        this.flare(e.x, e.y, e.r * 3.2, 0xff9a3a, 0.5);
+        this.wave(e.x, e.y, e.r * 1.6, 0xffd25a, 0.4);
+        this.rays(e.x, e.y, 10, e.r * 1.2, 0xffd25a, 0.35, 0.12);
+        for (let i = 0; i < 8; i++)
+          this.puff(
+            e.x + (Math.random() - 0.5) * e.r,
+            e.y + Math.random() * e.r * 0.8,
+            0x6a6460,
+            0.45 + Math.random() * 0.3,
+            0.9 + Math.random() * 0.4,
+          );
         this.shake = Math.max(this.shake, 0.8);
         break;
       }
       case "item":
-        this.spark(e.x, e.y, 0.2, 0xffffff);
+        this.flare(e.x, e.y, 1.6, 0xffffff, 0.35);
+        this.wave(e.x, e.y, 1, 0xffffff, 0.3);
         break;
       case "pick": {
         const f = frame.fighters[e.v];
@@ -565,11 +700,37 @@ export class CulbuteScene {
       }
       case "back": {
         const f = frame.fighters[e.v];
-        if (f) this.puff(f.x, f.y + 0.6, 0xffffff, 0.6, 0.6);
+        if (f) {
+          this.puff(f.x, f.y + 0.6, 0xffffff, 0.6, 0.6);
+          this.flare(f.x, f.y + 0.8, 3, new THREE.Color(this.looks[e.v]?.color ?? "#ffffff").getHex(), 0.5);
+        }
         break;
       }
       default:
         break;
+    }
+  }
+
+  /** La poussière : à l'atterrissage, et de temps en temps sous les pieds de celui qui court */
+  private dust(i: number, f: RenderFrame["fighters"][number], dt: number) {
+    const was = this.grounded[i] ?? true;
+    const on =
+      f.state === "stand" || f.state === "land" || f.state === "squat" || f.state === "shield" || f.state === "dodge" || f.state === "roll";
+    const lastX = this.lastXs[i] ?? f.x;
+    const vx = dt > 0 ? (f.x - lastX) / dt : 0;
+    this.lastXs[i] = f.x;
+    this.grounded[i] = on;
+    const color = this.arenaId === "bal" ? 0x9a8f9c : 0xe6dccb;
+    if (on && !was && f.state === "land") {
+      this.puff(f.x - 0.35, f.y + 0.1, color, 0.22, 0.5);
+      this.puff(f.x + 0.35, f.y + 0.1, color, 0.22, 0.5);
+    }
+    if (on && Math.abs(vx) > 5.5 && Math.abs(vx) < 30) {
+      const at = this.dustAt[i] ?? 0;
+      if (this.time - at > 0.16) {
+        this.dustAt[i] = this.time;
+        this.puff(f.x - Math.sign(vx) * 0.25, f.y + 0.08, color, 0.14, 0.4);
+      }
     }
   }
 

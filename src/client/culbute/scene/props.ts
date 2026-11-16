@@ -2,7 +2,9 @@
 // qu'on ramasse : des formes simples, assez lisibles pour un écran de téléphone.
 
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { HabitueId, ItemKind } from "../../../shared/games/culbute/model.ts";
+import { knitTexture } from "./body.ts";
 
 export type Keep = <T extends { dispose: () => void }>(x: T) => T;
 
@@ -22,56 +24,110 @@ function mesh(keep: Keep, geo: THREE.BufferGeometry, mat: THREE.Material, x = 0,
  */
 export function propModel(style: HabitueId, color: string, accent: string, keep: Keep): THREE.Group {
   const g = new THREE.Group();
-  const main = keep(std(color, 0.6));
+  const main = keep(std(color, 0.55));
   const acc = keep(std(accent, 0.5));
   const dark = keep(std(0x2a2a30, 0.5, 0.2));
+  const metal = keep(std(0xc4ccd4, 0.28, 0.85));
+  const gold = keep(std(0xe2b84a, 0.3, 0.85));
   switch (style) {
     case "ginette": {
-      // Le sac à main : une anse, un sac rebondi, un fermoir doré
-      const handle = mesh(keep, new THREE.TorusGeometry(0.11, 0.02, 6, 16, Math.PI), dark, 0, 0.02, 0);
-      handle.rotation.z = Math.PI;
+      // Le sac à main : une anse de cuir, un sac rebondi aux coins ronds, son rabat et son fermoir doré
+      const handle = new THREE.Mesh(
+        keep(
+          new THREE.TubeGeometry(
+            new THREE.CatmullRomCurve3([
+              new THREE.Vector3(-0.13, 0.13, 0),
+              new THREE.Vector3(-0.07, 0.02, 0),
+              new THREE.Vector3(0, -0.01, 0),
+              new THREE.Vector3(0.07, 0.02, 0),
+              new THREE.Vector3(0.13, 0.13, 0),
+            ]),
+            16,
+            0.018,
+            6,
+          ),
+        ),
+        dark,
+      );
+      handle.castShadow = true;
       g.add(handle);
-      const bag = mesh(keep, new THREE.BoxGeometry(0.34, 0.26, 0.14), main, 0, 0.2, 0);
-      g.add(bag);
-      g.add(mesh(keep, new THREE.SphereGeometry(0.035, 8, 6), keep(std(0xf2c94c, 0.3, 0.7)), 0, 0.31, 0.07));
-      g.add(mesh(keep, new THREE.BoxGeometry(0.36, 0.05, 0.15), acc, 0, 0.3, 0));
+      g.add(mesh(keep, new RoundedBoxGeometry(0.38, 0.28, 0.16, 3, 0.06), main, 0, 0.26, 0));
+      const flap = mesh(keep, new RoundedBoxGeometry(0.39, 0.12, 0.17, 2, 0.04), keep(std(shade(color, -0.25), 0.5)), 0, 0.33, 0.004);
+      g.add(flap);
+      g.add(mesh(keep, new THREE.SphereGeometry(0.03, 10, 8), gold, 0, 0.28, 0.09));
       break;
     }
     case "marcel": {
-      // La chaise pliante : deux montants, l'assise, le dossier
+      // La chaise pliante, tenue par le haut du dossier : tubes de métal, assise et dossier de couleur
+      const tube = (a: THREE.Vector3, b: THREE.Vector3) => {
+        const d = new THREE.Vector3().subVectors(b, a);
+        const t = mesh(keep, new THREE.CylinderGeometry(0.018, 0.018, d.length(), 8), metal);
+        t.position.copy(a).add(b).multiplyScalar(0.5);
+        t.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+        g.add(t);
+      };
       for (const side of [-1, 1]) {
-        const leg = mesh(keep, new THREE.CylinderGeometry(0.02, 0.02, 0.8, 6), dark, side * 0.17, 0.35, 0);
-        g.add(leg);
+        const x = side * 0.19;
+        tube(new THREE.Vector3(x, -0.02, 0), new THREE.Vector3(x, 0.86, 0));
+        tube(new THREE.Vector3(x, 0.42, 0.33), new THREE.Vector3(x, 0.88, -0.08));
+        g.add(mesh(keep, new THREE.SphereGeometry(0.026, 8, 6), dark, x, 0.87, 0));
+        g.add(mesh(keep, new THREE.SphereGeometry(0.026, 8, 6), dark, x, 0.88, -0.08));
       }
-      g.add(mesh(keep, new THREE.BoxGeometry(0.4, 0.05, 0.36), main, 0, 0.32, 0.1));
-      g.add(mesh(keep, new THREE.BoxGeometry(0.4, 0.22, 0.04), main, 0, 0.62, 0));
-      g.add(mesh(keep, new THREE.BoxGeometry(0.42, 0.04, 0.04), acc, 0, 0.75, 0));
+      g.add(mesh(keep, new RoundedBoxGeometry(0.42, 0.24, 0.035, 2, 0.015), main, 0, 0.14, 0));
+      g.add(mesh(keep, new RoundedBoxGeometry(0.42, 0.035, 0.38, 2, 0.015), main, 0, 0.42, 0.16));
+      g.add(mesh(keep, new THREE.BoxGeometry(0.43, 0.05, 0.04), acc, 0, 0.2, 0.002));
       break;
     }
     case "huguette": {
-      // Deux aiguilles à tricoter croisées, et le début d'un tricot
-      for (const tilt of [-0.18, 0.18]) {
-        const n = mesh(keep, new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6), keep(std(0xd8d4cc, 0.3, 0.6)), 0, 0.25, 0);
-        n.rotation.z = tilt;
+      // Deux longues aiguilles à tricoter, et l'écharpe en cours qui pend entre elles
+      for (const tilt of [-0.16, 0.16]) {
+        const n = mesh(keep, new THREE.CylinderGeometry(0.012, 0.012, 0.62, 8), metal, Math.sin(tilt) * 0.3, 0.3, 0);
+        n.rotation.z = -tilt;
         g.add(n);
-        g.add(mesh(keep, new THREE.SphereGeometry(0.03, 8, 6), acc, 0, 0, 0));
+        g.add(mesh(keep, new THREE.SphereGeometry(0.03, 10, 8), acc, -Math.sin(tilt) * 0.0, 0, 0));
       }
-      g.add(mesh(keep, new THREE.BoxGeometry(0.2, 0.12, 0.03), main, 0, 0.38, 0));
+      const knit = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: keep(knitTexture(color, shade(color, -0.3))) });
+      knit.side = THREE.DoubleSide;
+      const scarf = mesh(keep, new RoundedBoxGeometry(0.24, 0.26, 0.03, 2, 0.012), keep(knit), 0, 0.36, 0.02);
+      scarf.rotation.z = 0.05;
+      g.add(scarf);
       break;
     }
     case "raymond": {
-      // Une boule de pétanque dans la main
-      g.add(mesh(keep, new THREE.SphereGeometry(0.11, 16, 12), keep(std(0xa9b2bc, 0.25, 0.9)), 0, 0.08, 0));
+      // Une boule de pétanque d'acier, avec ses stries
+      g.add(mesh(keep, new THREE.SphereGeometry(0.12, 24, 16), keep(std(0xb6bec8, 0.22, 0.95)), 0, 0.09, 0));
+      for (const r of [0, Math.PI / 2]) {
+        const groove = mesh(keep, new THREE.TorusGeometry(0.12, 0.006, 6, 32), dark, 0, 0.09, 0);
+        groove.rotation.set(Math.PI / 2, r, 0);
+        g.add(groove);
+      }
       break;
     }
     case "simone": {
-      // L'éventail ouvert : un demi-disque plissé
-      const fan = mesh(keep, new THREE.CircleGeometry(0.34, 14, Math.PI * 0.15, Math.PI * 0.7), keep(std(color, 0.6)), 0, 0.02, 0);
-      (fan.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-      g.add(fan);
-      for (let i = 0; i < 7; i++) {
-        const a = Math.PI * 0.15 + (i / 6) * Math.PI * 0.7;
-        const rib = mesh(keep, new THREE.BoxGeometry(0.012, 0.34, 0.012), acc, Math.cos(a) * 0.17, Math.sin(a) * 0.17 + 0.02, 0.005);
+      // L'éventail ouvert : un demi-disque plissé, ses brins et son ruban
+      const folds = 16;
+      const pos: number[] = [];
+      for (let i = 0; i < folds; i++) {
+        const a0 = Math.PI * 0.12 + (i / folds) * Math.PI * 0.76;
+        const a1 = Math.PI * 0.12 + ((i + 1) / folds) * Math.PI * 0.76;
+        const z0 = i % 2 === 0 ? 0.02 : -0.02;
+        const z1 = -z0;
+        const p = (a: number, r: number, z: number) => [Math.cos(a) * r, Math.sin(a) * r + 0.03, z];
+        pos.push(...p(a0, 0.07, 0), ...p(a0, 0.38, z0), ...p(a1, 0.38, z1));
+        pos.push(...p(a0, 0.07, 0), ...p(a1, 0.38, z1), ...p(a1, 0.07, 0));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.computeVertexNormals();
+      const paper = keep(std(color, 0.55));
+      paper.side = THREE.DoubleSide;
+      g.add(mesh(keep, geo, paper));
+      const edge = mesh(keep, new THREE.TorusGeometry(0.38, 0.012, 4, 30, Math.PI * 0.76), acc, 0, 0.03, 0);
+      edge.rotation.z = Math.PI * 0.12;
+      g.add(edge);
+      for (let i = 0; i <= 8; i++) {
+        const a = Math.PI * 0.12 + (i / 8) * Math.PI * 0.76;
+        const rib = mesh(keep, new THREE.BoxGeometry(0.012, 0.36, 0.012), gold, Math.cos(a) * 0.19, Math.sin(a) * 0.19 + 0.03, 0);
         rib.rotation.z = a - Math.PI / 2;
         g.add(rib);
       }
@@ -84,6 +140,14 @@ export function propModel(style: HabitueId, color: string, accent: string, keep:
   return g;
 }
 
+/** Une couleur un peu plus claire (k > 0) ou plus foncée (k < 0) */
+function shade(c: string, k: number): string {
+  const col = new THREE.Color(c);
+  if (k > 0) col.lerp(new THREE.Color(0xffffff), k);
+  else col.multiplyScalar(1 + k);
+  return `#${col.getHexString()}`;
+}
+
 /** L'accordéon de Lucien : deux caisses, et un soufflet qui s'étire entre les mains */
 export interface Accordion {
   group: THREE.Group;
@@ -94,9 +158,33 @@ export interface Accordion {
 
 export function accordionModel(color: string, accent: string, keep: Keep): Accordion {
   const group = new THREE.Group();
-  const box = keep(std(color, 0.4));
-  const left = mesh(keep, new THREE.BoxGeometry(0.1, 0.36, 0.3), box);
-  const right = mesh(keep, new THREE.BoxGeometry(0.1, 0.36, 0.3), box);
+  const box = keep(std(color, 0.35));
+  const left = mesh(keep, new RoundedBoxGeometry(0.12, 0.4, 0.32, 2, 0.03), box);
+  const right = mesh(keep, new RoundedBoxGeometry(0.12, 0.4, 0.32, 2, 0.03), box);
+  // Le clavier, sur la caisse de droite ; les boutons des basses, sur celle de gauche
+  const keys = document.createElement("canvas");
+  keys.width = 16;
+  keys.height = 64;
+  const kg = keys.getContext("2d")!;
+  kg.fillStyle = "#f6f1e6";
+  kg.fillRect(0, 0, 16, 64);
+  kg.fillStyle = "#1c1c22";
+  for (let i = 0; i < 8; i++) kg.fillRect(0, i * 8 + 7, 16, 1);
+  for (let i = 0; i < 8; i++) if (i % 7 !== 2 && i % 7 !== 6) kg.fillRect(0, i * 8 + 3, 9, 4);
+  const keyTex = keep(new THREE.CanvasTexture(keys));
+  keyTex.colorSpace = THREE.SRGBColorSpace;
+  const board = mesh(
+    keep,
+    new THREE.BoxGeometry(0.03, 0.36, 0.08),
+    keep(new THREE.MeshStandardMaterial({ map: keyTex, roughness: 0.4 })),
+    0.07,
+    0,
+    0.1,
+  );
+  right.add(board);
+  const pearl = keep(std(0xf6f1e6, 0.3));
+  for (let i = 0; i < 6; i++)
+    left.add(mesh(keep, new THREE.SphereGeometry(0.018, 8, 6), pearl, -0.065, -0.12 + i * 0.05, 0.08 - (i % 2) * 0.04));
   // Le soufflet : des plis clairs et sombres, le long de x
   const c = document.createElement("canvas");
   c.width = 64;
