@@ -314,8 +314,6 @@ export function unpackFull(ft: Fighter, p: number[]) {
   const stale = p[o] ?? 0;
   ft.stale = p.slice(o + 1, o + 1 + stale).map((c) => MOVE_KEYS[c] ?? "");
   ft.face = ft.face < 0 ? -1 : 1;
-  ft.hitIds = [];
-  ft.hitAt = [];
 }
 
 /** Tout ce qui bouge, à cette image (sans le combattant complet de chacun, ajouté à part) */

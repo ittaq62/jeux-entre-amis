@@ -17,6 +17,7 @@ import {
 } from "./model.ts";
 import { CHARGE_DECIDE, MOVE_SLOTS } from "./moves.ts";
 import { STYLES } from "./styles.ts";
+import { packFull, unpackFull } from "./view.ts";
 
 const duel = (a: HabitueId = "ginette", b: HabitueId = "marcel", settings = {}): Fight =>
   createFight({ ...DEFAULT_FIGHT_SETTINGS, items: "aucun", ...settings }, "place", entrants([a, b]), 42);
@@ -429,6 +430,33 @@ describe("Culbute : le combat", () => {
       // Déjà touché : le même coup ne se devine pas deux fois
       expect(predictHits(solo, 0)).toHaveLength(0);
     }
+  });
+
+  it("l'état renvoyé à l'appareil garde ceux que le coup a déjà touchés (il ne devine pas deux fois le même coup)", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.6);
+    for (let k = 0; k < 20 && f.fighters[0]!.hitIds.length === 0; k++) stepFight(f, [tap(ATK, 1, 0)(k), NO_INPUT]);
+    const a = f.fighters[0]!;
+    expect(a.hitIds).toEqual([1]);
+    // L'appareil rejoue la suite du coup (l'arrêt sur image fini), l'autre encore à portée
+    const replay = (keepHits: boolean) => {
+      const solo: Fight = JSON.parse(JSON.stringify(f));
+      const me = solo.fighters[0]!;
+      me.hitIds = [];
+      me.hitAt = [];
+      me.stale = [];
+      if (keepHits) unpackFull(me, packFull(a));
+      me.hitstop = 0;
+      Object.assign(solo.fighters[1]!, { state: "stand", hitstop: 0, kx: 0, ky: 0 });
+      return { me, hits: predictHits(solo, 0) };
+    };
+    expect(replay(false).hits).toHaveLength(1);
+    const { me, hits } = replay(true);
+    expect(me.hitIds).toEqual(a.hitIds);
+    expect(me.hitAt).toEqual(a.hitAt);
+    expect(me.stale).toEqual(a.stale);
+    expect(hits).toHaveLength(0);
   });
 
   it("la saisie attrape même en garde ; une direction projette, et se débattre aide à se dégager", () => {
