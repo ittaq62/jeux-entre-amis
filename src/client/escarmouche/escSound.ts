@@ -162,6 +162,30 @@ export class EscSound {
     src.start();
     const level = () => usePrefs.getState().volume * (usePrefs.getState().sound ? 1 : 0);
     gain.gain.setTargetAtTime(level() * (light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
+    const nodes: AudioNode[] = [src, gain];
+    if (light === "gris") {
+      // La bruine : un chuintement doux, sans fin
+      const rain = ctx.createBuffer(1, sr * 4, sr);
+      const rd = rain.getChannelData(0);
+      const rn = noiseGen(2024);
+      let a = 0;
+      let b = 0;
+      for (let i = 0; i < rd.length; i++) {
+        const w = rn();
+        a += lowpassK(6000, sr) * (w - a);
+        b += lowpassK(900, sr) * (a - b);
+        rd[i] = (a - b) * (1 + (rn() > 0.995 ? 3 : 0));
+      }
+      const rs = ctx.createBufferSource();
+      rs.buffer = rain;
+      rs.loop = true;
+      const rg = ctx.createGain();
+      rg.gain.value = 0;
+      rs.connect(rg).connect(this.out);
+      rs.start();
+      rg.gain.setTargetAtTime(level() * 0.18, ctx.currentTime, 2);
+      nodes.push(rs, rg);
+    }
     // Les bruits de fond, de temps en temps : des oiseaux le soir au hameau, des tôles et des pigeons à la gare
     const chirp = () => {
       if (!this.ctx || !this.out || level() === 0) return;
@@ -219,7 +243,7 @@ export class EscSound {
     const timer = window.setInterval(() => {
       if (Math.random() < 0.45) chirp();
     }, 2600);
-    this.ambience = { nodes: [src, gain], timer };
+    this.ambience = { nodes, timer };
   }
 
   dispose() {

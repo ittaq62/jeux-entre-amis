@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -80,6 +81,7 @@ export class Post {
   readonly composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
+  private ao: GTAOPass;
   private t = 0;
 
   constructor(
@@ -94,6 +96,12 @@ export class Post {
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
+    // L'ombre dans les recoins : au pied des murs, sous les avant-toits, entre les caisses
+    const ao = new GTAOPass(scene, camera, size.x, size.y);
+    ao.blendIntensity = 0.8;
+    ao.updateGtaoMaterial({ radius: 0.85, distanceExponent: 1.6, thickness: 1.4, scale: 1.1, samples: 12 });
+    this.composer.addPass(ao);
+    this.ao = ao;
     this.composer.addPass(new ViewmodelPass(vmScene, vmCam));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), look.bloom, 0.55, 0.92);
     this.composer.addPass(this.bloom);
@@ -126,6 +134,7 @@ export class Post {
     this.composer.renderTarget1.dispose();
     this.composer.renderTarget2.dispose();
     this.bloom.dispose();
+    this.ao.dispose();
     this.grade.material.dispose();
   }
 }

@@ -15,7 +15,10 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { fuse } from "./fuse.ts";
 import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
 import { buildDistant, type Distant } from "./distant.ts";
+import { worldOf } from "../../../shared/games/escarmouche/match.ts";
+import { buildGrass, grassTime } from "./grass.ts";
 import { Post } from "./post.ts";
+import { Rain } from "./rain.ts";
 import type { Quality } from "./quality.ts";
 import { SKIES, skyEnvironment, skyMaterial, sunDirection, type Light } from "./sky.ts";
 
@@ -82,6 +85,8 @@ export class EscScene {
   private skyMat: THREE.ShaderMaterial;
   private distant: Distant;
   private post: Post | null = null;
+  private grass: THREE.Mesh | null = null;
+  private rain: Rain | null = null;
   private sunDir: THREE.Vector3;
   private shadowSpan = 30;
   private size: [number, number] = [1, 1];
@@ -158,6 +163,13 @@ export class EscScene {
 
     this.map = buildMap(gm, q);
     this.scene.add(this.map.group);
+    // L'herbe des prés, la bruine du matin sur la gare
+    this.grass = buildGrass(gm, worldOf(gm.id), q);
+    if (this.grass) this.scene.add(this.grass);
+    if (light === "gris" && q !== "bas") {
+      this.rain = new Rain(q === "haut" ? 1500 : 700);
+      this.scene.add(this.rain.lines);
+    }
     this.effects = new Effects(this.low);
     this.scene.add(this.effects.group);
 
@@ -629,6 +641,8 @@ export class EscScene {
   render(dt: number) {
     this.t += dt;
     this.effects.update(dt, this.camera);
+    grassTime.value = this.t;
+    this.rain?.update(dt, this.camera);
     this.updateViewFx(dt);
     this.skyMat.uniforms.time!.value = this.t;
     if (this.post) {
@@ -646,6 +660,11 @@ export class EscScene {
     for (const i of [...this.soldiers.keys()]) this.removeSoldier(i);
     this.map.dispose();
     this.distant.dispose();
+    if (this.grass) {
+      this.grass.geometry.dispose();
+      (this.grass.material as THREE.Material).dispose();
+    }
+    this.rain?.dispose();
     this.post?.dispose();
     this.skyMat.dispose();
     this.env.dispose();
