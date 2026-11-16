@@ -35,7 +35,8 @@ export type EscSoundName =
   | "slide"
   | "mantle"
   | "spot"
-  | "shell";
+  | "shell"
+  | "revive";
 
 interface ShotSpec {
   thump: number;
@@ -537,6 +538,15 @@ export class EscSound {
     this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
     this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
     this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+    // Relevé : trois notes qui montent
+    this.buffers.set(
+      "revive",
+      this.tone(0.5, [
+        [660, 0],
+        [880, 0.1],
+        [1100, 0.2],
+      ]),
+    );
     // Repérer : deux notes brèves, comme un signal radio
     this.buffers.set(
       "spot",

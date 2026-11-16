@@ -283,7 +283,8 @@ export function HowTo() {
         En pleine course, s'accroupir lance une glissade. Sauter en avançant devant un muret, une caisse ou un quai fait se hisser dessus. À
         la lunette, <kbd>Maj</kbd> retient son souffle pour que la visée ne bouge plus. <kbd>E</kbd> (ou le clic de la molette) repère
         l'ennemi visé pour ton équipe. Trois éliminations d'affilée te donnent les jumelles (tous les ennemis repérés), cinq un tir de
-        mortier. Les bidons rouges sautent quand on tire dessus.
+        mortier. Les bidons rouges sautent quand on tire dessus. En équipe, accroupis-toi près d'un coéquipier tombé (la croix verte) pour
+        le relever ; une fois tombé, tu peux choisir de revenir auprès d'un coéquipier plutôt qu'à la base.
       </p>
       <p className="hint">
         Au téléphone, couché : le pouce gauche se pose n'importe où à gauche pour avancer, le pouce droit glisse sur l'écran pour tourner la

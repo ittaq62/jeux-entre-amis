@@ -338,6 +338,8 @@ export const BOT_PARAMS: Record<BotLevel, LevelParams> = {
 export interface BotMemory {
   path: number[];
   goal: { x: number; y: number; z: number } | null;
+  /** Il va relever un coéquipier : son but redevient le sien quand c'est fini */
+  rescuing?: boolean;
   repathAt: number;
   goalUntil: number;
   target: number;
@@ -479,6 +481,33 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   const visible = target !== undefined && target.s.alive && t - mem.seenAt < 0.25;
   const w = WEAPONS[s.slot === 0 ? s.primary : s.secondary];
 
+  // Un coéquipier tombé tout près, et personne en vue : il va le relever
+  let rescue = -1;
+  if (isTeamMode(m.mode) && !visible) {
+    let bestD = 12;
+    for (let j = 0; j < m.fighters.length; j++) {
+      const g = m.fighters[j]!;
+      if (j === i || g.s.alive || g.team !== f.team || g.s.y < -5) continue;
+      const d = Math.hypot(g.s.x - s.x, g.s.z - s.z);
+      if (d < bestD && Math.abs(g.s.y - s.y) < 2) {
+        bestD = d;
+        rescue = j;
+      }
+    }
+  }
+  const rescueAt = rescue >= 0 ? m.fighters[rescue]!.s : null;
+  if (rescueAt && (!mem.goal || Math.hypot(mem.goal.x - rescueAt.x, mem.goal.z - rescueAt.z) > 0.5)) {
+    mem.goal = { x: rescueAt.x, y: rescueAt.y, z: rescueAt.z };
+    mem.goalUntil = t + 6;
+    mem.repathAt = 0;
+    mem.rescuing = true;
+  } else if (!rescueAt && mem.rescuing) {
+    mem.rescuing = false;
+    mem.goal = null;
+    mem.path = [];
+  }
+  const kneeling = rescueAt !== null && Math.hypot(rescueAt.x - s.x, rescueAt.z - s.z) < 1.2;
+
   // Où aller
   if (!mem.goal || t >= mem.goalUntil || (mem.path.length === 0 && t >= mem.repathAt)) pickGoal(m, i, mem);
   if (mem.goal && t >= mem.repathAt) {
@@ -517,6 +546,12 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     }
   } else if (mem.goal) {
     mem.goalUntil = Math.min(mem.goalUntil, t + 0.5);
+  }
+
+  // Arrivé près du coéquipier tombé : il s'arrête et s'agenouille
+  if (kneeling) {
+    mvx = 0;
+    mvz = 0;
   }
 
   // Coincé : il saute, puis cherche autre chose
@@ -606,7 +641,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     b |= B.jump;
     cmd.mz = Math.min(cmd.mz, 0.25);
   }
-  if (t < mem.crouchUntil) b |= B.crouch;
+  if (t < mem.crouchUntil || kneeling) b |= B.crouch;
   if (!visible && mz > 0.8 && ml > 0.9 && !jump) b |= B.sprint;
   const mag = s.mag[s.slot];
   // Des rafales courtes, puis une pause : il ne vide pas son chargeur d'un trait

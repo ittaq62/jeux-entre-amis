@@ -17,6 +17,8 @@ import {
   type Match,
   type Pose,
   upgradeMatch,
+  chooseSpawn,
+  giveUp,
 } from "../shared/games/escarmouche/match.ts";
 import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } from "../shared/games/escarmouche/rules.ts";
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
@@ -579,6 +581,20 @@ export class EscarmoucheRoom extends DurableObject<Env> {
           changed = true;
         }
         if (changed) return this.afterChange([], now);
+        return;
+      }
+
+      case "respawnNow": {
+        const m = d.status === "playing" ? d.match : null;
+        if (!seat || !m) return;
+        giveUp(m, fighterIndex(m, seat.id));
+        return;
+      }
+
+      case "spawnOn": {
+        const m = d.status === "playing" ? d.match : null;
+        if (!seat || !m || typeof msg.target !== "number" || !Number.isInteger(msg.target)) return;
+        chooseSpawn(m, fighterIndex(m, seat.id), msg.target);
         return;
       }
 

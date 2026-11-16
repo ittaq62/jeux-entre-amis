@@ -28,7 +28,11 @@ const ASSIST_WINDOW = 8;
 const FLAG_REACH = 1.4;
 const FLAG_RETURN = 20;
 /** Les points de chacun au tableau */
-export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone: 1 };
+export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone: 1, revive: 6 };
+/** Relever un coéquipier tombé : s'accroupir tout près de lui, un moment ; il repart avec un peu de vie */
+export const REVIVE = { reach: 1.7, time: 1.4, hp: 60, near: 15, wait: 8 };
+/** Revenir auprès d'un coéquipier : seulement s'il n'est pas au combat depuis quelques secondes */
+export const TEAMSPAWN = { calm: 3, gap: 1.3 };
 /** Une balle ne va pas plus loin */
 const RANGE = 300;
 
@@ -49,7 +53,9 @@ export type EscEvent =
   | { k: "shot"; i: number; w: WeaponId; x: number; y: number; z: number; n: number }
   | { k: "hit"; a: number; v: number; d: number; p: Part; x: number; y: number; z: number }
   | { k: "kill"; a: number; v: number; w: KillWeapon; h: boolean; as: number }
-  | { k: "spawn"; i: number }
+  | { k: "spawn"; i: number; on?: number }
+  /** `i` a relevé son coéquipier `v` */
+  | { k: "revive"; i: number; v: number }
   | { k: "throw"; i: number }
   | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" }
   /** Un bidon saute (ou un nouveau le remplace) */
@@ -82,6 +88,7 @@ export interface FighterStats {
   best: number;
   knives: number;
   grenadeKills: number;
+  revives: number;
 }
 
 export interface Fighter {
@@ -106,6 +113,16 @@ export interface Fighter {
   streak: number;
   /** Quand il pourra repérer de nouveau */
   spotReady: number;
+  /** Le coéquipier tombé qu'il relève (-1 aucun), et depuis combien de temps */
+  reviving: number;
+  reviveT: number;
+  /** Auprès de qui il veut revenir au combat (-1 : à la base) */
+  spawnOn: number;
+  /** Tombé : quand, et s'il a choisi de revenir sans attendre qu'on le relève */
+  diedAt: number;
+  giveUp: boolean;
+  /** Son dernier coup tiré ou reçu : il est « au combat » quelques secondes après */
+  lastFight: number;
   stats: FighterStats;
 }
 
@@ -221,6 +238,7 @@ function newStats(): FighterStats {
     best: 0,
     knives: 0,
     grenadeKills: 0,
+    revives: 0,
   };
 }
 
@@ -297,6 +315,12 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       points: 0,
       streak: 0,
       spotReady: 0,
+      reviving: -1,
+      reviveT: 0,
+      spawnOn: -1,
+      diedAt: -100,
+      giveUp: false,
+      lastFight: -100,
       stats: newStats(),
     };
     m.fighters.push(f);
@@ -339,6 +363,13 @@ export function upgradeMatch(m: Match): Match {
   const fresh = newSoldier(0, 0, 0, 0, "fa");
   for (const f of m.fighters) {
     if (typeof f.spotReady !== "number") f.spotReady = 0;
+    if (typeof f.reviving !== "number") f.reviving = -1;
+    if (typeof f.reviveT !== "number") f.reviveT = 0;
+    if (typeof f.spawnOn !== "number") f.spawnOn = -1;
+    if (typeof f.lastFight !== "number") f.lastFight = -100;
+    if (typeof f.diedAt !== "number") f.diedAt = -100;
+    if (typeof f.giveUp !== "boolean") f.giveUp = false;
+    if (typeof f.stats.revives !== "number") f.stats.revives = 0;
     for (const k of Object.keys(fresh) as (keyof Soldier)[]) {
       if (f.s[k] === undefined) (f.s as unknown as Record<string, unknown>)[k] = fresh[k];
     }
@@ -407,6 +438,7 @@ export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, e
   if (out.shots.length > 0) f.shieldUntil = 0;
   for (const shot of out.shots) {
     f.stats.shots += 1;
+    f.lastFight = m.t;
     const w = WEAPONS[shot.weapon];
     let anyHit = false;
     shot.dirs.forEach((d, p) => {
@@ -580,6 +612,101 @@ function stepBlasts(m: Match, world: World, ev: EscEvent[]) {
   }
 }
 
+/**
+ * Relever : un soldat accroupi tout près d'un coéquipier tombé (pas encore revenu à sa base) le relève au bout d'un
+ * moment ; tant qu'on le relève, son retour à la base attend
+ */
+function stepRevive(m: Match, ev: EscEvent[]) {
+  for (let r = 0; r < m.fighters.length; r++) {
+    const f = m.fighters[r]!;
+    let best = -1;
+    if (f.s.alive && f.s.crouch && f.s.ground && f.s.mantleEnd === 0) {
+      let bestD: number = REVIVE.reach;
+      for (let v = 0; v < m.fighters.length; v++) {
+        const g = m.fighters[v]!;
+        if (v === r || g.s.alive || g.team !== f.team || g.s.y < -5) continue;
+        const d = Math.hypot(g.s.x - f.s.x, g.s.z - f.s.z);
+        if (d <= bestD && Math.abs(g.s.y - f.s.y) < 1.2) {
+          best = v;
+          bestD = d;
+        }
+      }
+    }
+    if (best < 0) {
+      f.reviving = -1;
+      f.reviveT = 0;
+      continue;
+    }
+    if (f.reviving !== best) {
+      f.reviving = best;
+      f.reviveT = 0;
+    }
+    f.reviveT += DT;
+    const g = m.fighters[best]!;
+    g.respawnAt = Math.max(g.respawnAt, m.t + 0.3);
+    if (f.reviveT >= REVIVE.time) {
+      f.reviving = -1;
+      f.reviveT = 0;
+      placeAt(g, g.s.x, g.s.y, g.s.z, g.s.yaw, m);
+      g.hp = REVIVE.hp;
+      g.hurtAt = m.t;
+      g.shieldUntil = m.t + 1;
+      f.points += POINTS.revive;
+      f.stats.revives += 1;
+      ev.push({ k: "revive", i: r, v: best });
+    }
+  }
+}
+
+/** En équipe, un tombé attend un moment qu'on le relève si un coéquipier est tout près (sauf s'il préfère revenir) */
+export function waitingRescue(m: Match, i: number): boolean {
+  const f = m.fighters[i]!;
+  if (!isTeamMode(m.mode) || f.giveUp || f.s.alive || m.t - f.diedAt > REVIVE.wait || f.s.y < -5) return false;
+  return m.fighters.some((g, j) => j !== i && g.team === f.team && g.s.alive && Math.hypot(g.s.x - f.s.x, g.s.z - f.s.z) < REVIVE.near);
+}
+
+/** Il préfère revenir tout de suite plutôt qu'attendre qu'on le relève */
+export function giveUp(m: Match, i: number) {
+  const f = m.fighters[i];
+  if (f && !f.s.alive) f.giveUp = true;
+}
+
+/** Une place libre tout près d'un coéquipier calme (derrière lui, puis à côté), ou null : on revient à la base */
+function besideTeammate(m: Match, i: number, world: World): { x: number; y: number; z: number; yaw: number } | null {
+  const f = m.fighters[i]!;
+  if (!isTeamMode(m.mode) || f.spawnOn < 0) return null;
+  const g = m.fighters[f.spawnOn];
+  if (!g || f.spawnOn === i || g.team !== f.team || !g.s.alive || !g.s.ground || m.t - g.lastFight < TEAMSPAWN.calm) return null;
+  const [fx, , fz] = forward(g.s.yaw, 0);
+  const tries: [number, number][] = [
+    [-fx, -fz],
+    [-fz, fx],
+    [fz, -fx],
+    [-fx - fz, -fz + fx],
+    [-fx + fz, -fz - fx],
+  ];
+  for (const [dx, dz] of tries) {
+    const l = Math.hypot(dx, dz) || 1;
+    const x = g.s.x + (dx / l) * TEAMSPAWN.gap;
+    const z = g.s.z + (dz / l) * TEAMSPAWN.gap;
+    const y = g.s.y;
+    if (world.overlaps(x - 0.3, y + 0.02, z - 0.3, x + 0.3, y + 1.78, z + 0.3)) continue;
+    // Il faut un sol sous les pieds
+    if (!world.overlaps(x - 0.2, y - 0.1, z - 0.2, x + 0.2, y + 0.01, z + 0.2)) continue;
+    if (!world.clear(g.s.x, y + 1, g.s.z, x, y + 1, z)) continue;
+    return { x, y, z, yaw: g.s.yaw };
+  }
+  return null;
+}
+
+/** Le choix du retour au combat : auprès de ce coéquipier, ou à la base (-1) */
+export function chooseSpawn(m: Match, i: number, target: number) {
+  const f = m.fighters[i];
+  if (!f) return;
+  const g = target >= 0 ? m.fighters[target] : null;
+  f.spawnOn = g && target !== i && g.team === f.team && isTeamMode(m.mode) ? target : -1;
+}
+
 /** Les récompenses de série */
 function reward(m: Match, a: number, ev: EscEvent[]) {
   const fa = m.fighters[a]!;
@@ -631,6 +758,7 @@ export function hurt(
   if (dmg <= 0) return;
   fv.hp -= dmg;
   fv.hurtAt = m.t;
+  fv.lastFight = m.t;
   if (a >= 0 && a !== v) {
     const fa = m.fighters[a]!;
     fa.stats.damage += Math.min(dmg, dmg + Math.min(0, fv.hp));
@@ -648,6 +776,8 @@ function kill(m: Match, v: number, a: number, w: KillWeapon, head: boolean, ev: 
   fv.s.alive = false;
   fv.s.vx = fv.s.vz = 0;
   fv.respawnAt = m.t + RESPAWN;
+  fv.diedAt = m.t;
+  fv.giveUp = false;
   fv.stats.deaths += 1;
   fv.streak = 0;
   dropFlag(m, v, ev);
@@ -734,10 +864,11 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   for (let i = 0; i < m.fighters.length; i++) {
     const f = m.fighters[i]!;
     if (!f.s.alive) {
-      if (m.phase === "live" && m.t >= f.respawnAt) {
-        const sp = spawnPoint(m, i);
+      if (m.phase === "live" && m.t >= f.respawnAt && !waitingRescue(m, i)) {
+        const near = besideTeammate(m, i, world);
+        const sp = near ?? spawnPoint(m, i);
         placeAt(f, sp.x, sp.y, sp.z, sp.yaw, m);
-        ev.push({ k: "spawn", i });
+        ev.push(near ? { k: "spawn", i, on: f.spawnOn } : { k: "spawn", i });
       }
       continue;
     }
@@ -748,6 +879,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
     if (!m.settings.hardcore && f.hp < MAX_HP && m.t - f.hurtAt > REGEN_DELAY) f.hp = Math.min(MAX_HP, f.hp + REGEN_RATE * DT);
   }
   if (m.phase !== "live") return;
+  if (isTeamMode(m.mode)) stepRevive(m, ev);
   if (m.zone) stepZone(m, ev);
   if (m.flags) stepFlags(m, ev);
   checkEnd(m, ev);
@@ -927,6 +1059,12 @@ export function addFighter(m: Match, p: FighterInit): number {
     points: 0,
     streak: 0,
     spotReady: 0,
+    reviving: -1,
+    reviveT: 0,
+    spawnOn: -1,
+    diedAt: -100,
+    giveUp: false,
+    lastFight: -100,
     stats: newStats(),
   });
   const sp = spawnPoint(m, i);

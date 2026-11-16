@@ -855,6 +855,10 @@ export type EscarmoucheClientMessage =
   | { t: "team"; team: 0 | 1; seatId?: string }
   /** Ses armes (pour sa prochaine vie, en pleine partie), son camouflage et sa tenue (s'il les a) */
   | { t: "arsenal"; primary?: PrimaryId; secondary?: SecondaryId; camo?: CamoId; tenue?: UniformId }
+  /** Revenir au combat auprès de ce coéquipier (son numéro dans la partie), ou à la base (-1) */
+  | { t: "spawnOn"; target: number }
+  /** Tombé : revenir tout de suite, sans attendre qu'on le relève */
+  | { t: "respawnNow" }
   | { t: "addBot" }
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }

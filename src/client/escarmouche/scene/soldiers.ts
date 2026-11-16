@@ -538,7 +538,8 @@ export class SoldierModel {
         leg.shin.rotation.x = -e * (k === 0 ? 1.4 : 0.6);
       }
       this.head.rotation.x = -e * 0.4;
-      this.root.visible = this.deadFor < 3.4;
+      // Le corps reste là tant qu'un coéquipier peut venir le relever
+      this.root.visible = this.deadFor < 9;
       this.flag.visible = false;
       this.alive = false;
       return;

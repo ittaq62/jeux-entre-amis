@@ -599,6 +599,21 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
           {hitFresh && <div className={`esc-hit is-${h.hitKind}`} />}
           {h.aimed && h.alive && <div className="esc-aimed">{h.aimed}</div>}
           {h.scoped && <div className="esc-scope" />}
+          {h.alive && h.team?.reviving && (
+            <div className="esc-reviving">
+              <span className="esc-gauge">
+                <i style={{ width: `${Math.round(h.team.reviving.k * 100)}%` }} />
+              </span>
+              <small>Tu relèves {h.team.reviving.name}</small>
+            </div>
+          )}
+          {h.alive && !h.team?.reviving && h.team?.hint && (
+            <div className="esc-reviving">
+              <small>
+                {touch ? "Accroupi" : "Ctrl ou C"} : relever {h.team.hint}
+              </small>
+            </div>
+          )}
           {h.breath && (
             <div className={`esc-breath ${h.breath.holding ? "is-holding" : ""} ${h.breath.winded ? "is-winded" : ""}`}>
               <span style={{ width: `${Math.round(h.breath.left * 100)}%` }} />
@@ -674,7 +689,45 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                   Il lui restait {h.killer.hp} de vie{h.killer.hp < 30 ? " : il s'en est fallu de peu." : "."}
                 </p>
               )}
-              <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
+              {h.team?.rescue ? (
+                <div className="esc-rescue">
+                  <p>
+                    <b>{h.team.rescue.name}</b> te relève…
+                  </p>
+                  <span className="esc-gauge">
+                    <i style={{ width: `${Math.round(h.team.rescue.k * 100)}%` }} />
+                  </span>
+                </div>
+              ) : h.team?.waiting ? (
+                <div className="esc-rescue">
+                  <p className="hint">Un coéquipier est tout près : il peut te relever.</p>
+                  <button className="btn btn-sm" onClick={() => send({ t: "respawnNow" })}>
+                    Revenir maintenant
+                  </button>
+                </div>
+              ) : (
+                <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
+              )}
+              {h.team && h.team.mates.length > 0 && (
+                <div className="esc-spawnon">
+                  <span className="hint">Revenir :</span>
+                  <button className={`btn btn-sm ${h.team.spawnOn < 0 ? "is-on" : ""}`} onClick={() => send({ t: "spawnOn", target: -1 })}>
+                    À la base
+                  </button>
+                  {h.team.mates.map((mate) => (
+                    <button
+                      key={mate.i}
+                      className={`btn btn-sm ${h.team!.spawnOn === mate.i ? "is-on" : ""}`}
+                      disabled={!mate.alive}
+                      title={mate.fight ? "Au combat : tu reviendras à la base tant qu'il se bat" : undefined}
+                      onClick={() => send({ t: "spawnOn", target: mate.i })}
+                    >
+                      Auprès de {mate.name}
+                      {mate.fight && mate.alive ? " · au combat" : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
               {!forced && (
                 <div className="esc-next">
                   {PRIMARY_IDS.filter((id) => has(weaponItem(id))).map((id) => (
@@ -707,7 +760,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
             </div>
           )}
 
-          {!touch && !h.locked && !menu && h.seated && (
+          {!touch && !h.locked && !menu && h.seated && h.alive && (
             <button className="esc-click" onClick={resume}>
               Clique pour prendre la souris et combattre
             </button>

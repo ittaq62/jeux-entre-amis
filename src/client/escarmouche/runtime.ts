@@ -107,6 +107,15 @@ export interface HudState {
   breath: { left: number; holding: boolean; winded: boolean } | null;
   /** Ses éliminations d'affilée (vers les jumelles, puis le mortier) */
   streak: number;
+  /** En équipe : ses coéquipiers (pour revenir auprès d'eux), la relève en cours, le conseil pour relever */
+  team: {
+    mates: { i: number; name: string; alive: boolean; fight: boolean }[];
+    spawnOn: number;
+    reviving: { name: string; k: number } | null;
+    rescue: { name: string; k: number } | null;
+    waiting: boolean;
+    hint: string | null;
+  } | null;
   scheme: Scheme;
   locked: boolean;
   /** Le nom de l'adversaire dans le viseur */
@@ -224,6 +233,12 @@ export class BattleRuntime {
   private marked = new Set<number>();
   /** Ses éliminations depuis sa dernière mort */
   private streak = 0;
+  /** Le jeu en équipe : auprès de qui revenir, qui on relève, qui nous relève, si l'on attend d'être relevé */
+  private spawnOn = -1;
+  private revivingNow: [number, number] | null = null;
+  private rescueNow: [number, number] | null = null;
+  private waiting = false;
+  private nearFallen: string | null = null;
   /** Les bidons de la carte (leur boîte dans le monde) */
   private barrelBoxes: { i: number; x: number; z: number }[] = [];
   /** La vue penche et s'élargit pendant une glissade */
@@ -405,6 +420,10 @@ export class BattleRuntime {
     this.back = me.back;
     this.next = me.next;
     this.nextSecondary = me.nextSecondary;
+    this.spawnOn = me.spawnOn ?? -1;
+    this.revivingNow = me.reviving ?? null;
+    this.rescueNow = me.rescue ?? null;
+    this.waiting = Boolean(me.waiting);
     const s = me.s;
     // Le serveur compte plus loin que nous (une connexion d'avant) : on reprend à son compte
     if (s.seq > this.seq) {
@@ -581,6 +600,17 @@ export class BattleRuntime {
       }
       case "barrel":
         return;
+      case "revive": {
+        const at = this.fighterAt(e.v);
+        if (at) this.sound.play("revive", { at: { x: at.x, y: at.y + 0.5, z: at.z }, volume: 0.6 });
+        if (e.i === this.me) this.award(`${this.nameOf(e.v)} relevé`, POINTS.revive);
+        if (e.v === this.me) this.say(`${this.nameOf(e.i)} t'a relevé !`, "good");
+        return;
+      }
+      case "spawn": {
+        if (e.i === this.me && e.on !== undefined && e.on >= 0) this.say(`De retour auprès de ${this.nameOf(e.on)}`, "info");
+        return;
+      }
       case "spot": {
         const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
         const teams = v ? isTeamMode(v.mode) : false;
@@ -925,6 +955,7 @@ export class BattleRuntime {
     const wallT = this.world.raycast(eyeX, eyeY, eyeZ, dir[0], dir[1], dir[2], 120)?.t ?? 120;
     this.radarDots.length = 0;
     const nowMs = performance.now();
+    let nearFallen: string | null = null;
     // Les repères : ceux qui sont montrés à son équipe (ou à soi seul, en chacun pour soi)
     this.marked.clear();
     const mk = this.latest?.mk;
@@ -946,6 +977,8 @@ export class BattleRuntime {
       const flagTeam = f.carrying;
       // Au radar : ses alliés toujours, un ennemi quand il vient de tirer
       const marked = !ally && this.marked.has(i);
+      const fallen = ally && !alive;
+      if (fallen && s?.alive && Math.hypot(f.x - s.x, f.z - s.z) < 1.8 && Math.abs(f.y - s.y) < 1.2) nearFallen = this.nameOf(i);
       if (alive && (ally || marked || nowMs - (this.lastShots.get(i) ?? -1e9) < 2500))
         this.radarDots.push({ x: f.x, z: f.z, yaw: f.yaw, kind: ally ? "ally" : "enemy" });
       this.scene.updateSoldier(
@@ -973,6 +1006,7 @@ export class BattleRuntime {
         ally || inSight || this.me < 0,
         flagTeam >= 0 ? TEAM_HEX[flagTeam === 1 ? 1 : 0] : null,
         marked,
+        fallen,
       );
       // Les pas des autres, s'ils courent près de soi
       if (alive && f.speed > 3 && !crouch && (f.bits & PF.ground) !== 0) {
@@ -1020,6 +1054,7 @@ export class BattleRuntime {
         this.sound.play("beep", { volume: 0.5 });
       }
     }
+    this.nearFallen = nearFallen;
     if (t - this.hudAt > 66) {
       this.hudAt = t;
       this.emitHud(r.board || this.forceBoard, scoped, aimed, spectating, w.id);
@@ -1252,6 +1287,28 @@ export class BattleRuntime {
       suppress: this.suppress,
       breath: scoped ? { left: this.breath, holding: this.holding, winded: this.winded > 0 } : null,
       streak: s?.alive ? this.streak : 0,
+      team:
+        teams && this.me >= 0
+          ? {
+              mates: v.fighters
+                .map((f, i) => ({ i, f }))
+                .filter(({ f, i }) => i !== this.me && f.team === this.teamOf(this.me))
+                .map(({ i }) => {
+                  const g = tick ? readFighter(tick.p, i) : null;
+                  return {
+                    i,
+                    name: this.nameOf(i),
+                    alive: Boolean(g && (g.bits & PF.alive) !== 0),
+                    fight: Boolean(g && (g.bits & PF.fight) !== 0),
+                  };
+                }),
+              spawnOn: this.spawnOn,
+              reviving: this.revivingNow ? { name: this.nameOf(this.revivingNow[0]), k: this.revivingNow[1] } : null,
+              rescue: this.rescueNow ? { name: this.nameOf(this.rescueNow[0]), k: this.rescueNow[1] } : null,
+              waiting: this.waiting,
+              hint: s?.alive && !this.revivingNow ? this.nearFallen : null,
+            }
+          : null,
       scheme: this.controls.scheme,
       locked: this.controls.locked,
       aimed,

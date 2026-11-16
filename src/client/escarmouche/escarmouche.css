@@ -1156,3 +1156,59 @@ html:has(.esc-root) body {
   height: 46px;
   font-size: 10px;
 }
+
+/* Le jeu en équipe : relever, revenir auprès d'un coéquipier */
+.esc-gauge {
+  display: block;
+  width: 160px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.esc-gauge i {
+  display: block;
+  height: 100%;
+  background: #4fd36b;
+}
+
+.esc-reviving {
+  position: absolute;
+  top: calc(50% + 46px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px #000;
+}
+
+.esc-reviving small {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #c8f5d1;
+}
+
+.esc-rescue {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.esc-spawnon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.esc-spawnon .is-on {
+  border-color: #b5793a;
+  background: rgba(181, 121, 58, 0.25);
+}

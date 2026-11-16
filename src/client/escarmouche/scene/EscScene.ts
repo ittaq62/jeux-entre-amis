@@ -62,7 +62,7 @@ export class EscScene {
   private sun: THREE.DirectionalLight;
   private env: THREE.Texture;
   readonly effects: Effects;
-  private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite }>();
+  private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite; cross: THREE.Sprite }>();
   /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
   private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
   private vmRoot = new THREE.Group();
@@ -329,10 +329,14 @@ export class EscScene {
     mark.scale.set(0.34, 0.34, 1);
     mark.renderOrder = 10;
     mark.visible = false;
+    const cross = new THREE.Sprite(crossMaterial());
+    cross.renderOrder = 10;
+    cross.visible = false;
     this.scene.add(model.root);
     this.scene.add(label);
     this.scene.add(mark);
-    this.soldiers.set(i, { model, name: label, mark });
+    this.scene.add(cross);
+    this.soldiers.set(i, { model, name: label, mark, cross });
   }
 
   removeSoldier(i: number) {
@@ -341,12 +345,13 @@ export class EscScene {
     this.scene.remove(s.model.root);
     this.scene.remove(s.name);
     this.scene.remove(s.mark);
+    this.scene.remove(s.cross);
     s.model.dispose();
     this.soldiers.delete(i);
   }
 
   /** Le soldat `i`, et son nom (montré ou non) */
-  updateSoldier(i: number, pose: SoldierPose, dt: number, showName: boolean, flagColor: string | null, marked = false) {
+  updateSoldier(i: number, pose: SoldierPose, dt: number, showName: boolean, flagColor: string | null, marked = false, fallen = false) {
     const s = this.soldiers.get(i);
     if (!s) return;
     s.model.update(pose, dt, flagColor);
@@ -355,6 +360,13 @@ export class EscScene {
     s.mark.visible = marked && pose.alive;
     if (s.name.visible || s.mark.visible) s.model.headWorld(this.tmp);
     if (s.name.visible) s.name.position.set(this.tmp.x, this.tmp.y + 0.5, this.tmp.z);
+    // Un coéquipier tombé : une croix verte au-dessus de lui, qu'on voit de loin, pour venir le relever
+    s.cross.visible = fallen && s.model.root.visible;
+    if (s.cross.visible) {
+      s.cross.position.set(pose.x, pose.y + 0.9, pose.z);
+      const d = this.camera.position.distanceTo(s.cross.position);
+      s.cross.scale.setScalar(Math.max(0.32, d * 0.03) * (1 + Math.sin(this.t * 5) * 0.08));
+    }
     if (s.mark.visible) {
       s.mark.position.set(this.tmp.x, this.tmp.y + (s.name.visible ? 0.82 : 0.55), this.tmp.z);
       const d = this.camera.position.distanceTo(s.mark.position);
@@ -762,4 +774,24 @@ function buildBarrel(x: number, z: number, low: boolean) {
   wreck.rotation.set(0.12, x, 0.08);
   wreck.visible = false;
   return { whole, wreck, down: false };
+}
+
+let crossMat: THREE.SpriteMaterial | null = null;
+/** La croix verte d'un coéquipier à relever */
+function crossMaterial(): THREE.SpriteMaterial {
+  if (crossMat) return crossMat;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(0,0,0,.7)";
+  g.beginPath();
+  g.arc(32, 32, 28, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#4fd36b";
+  g.fillRect(25, 12, 14, 40);
+  g.fillRect(12, 25, 40, 14);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  crossMat = new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
+  return crossMat;
 }

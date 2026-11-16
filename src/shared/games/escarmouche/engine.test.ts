@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot.ts";
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
-import { applyCmd, createMatch, finish, hurt, upgradeMatch, worldOf, worldStep, type EscEvent, type Match, type Pose } from "./match.ts";
+import {
+  applyCmd,
+  chooseSpawn,
+  createMatch,
+  finish,
+  giveUp,
+  hurt,
+  REVIVE,
+  upgradeMatch,
+  waitingRescue,
+  worldOf,
+  worldStep,
+  type EscEvent,
+  type Match,
+  type Pose,
+} from "./match.ts";
 import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
@@ -590,5 +605,111 @@ describe("Escarmouche : une partie relue après une mise en ligne", () => {
     }
     expect(up.fighters[0]!.s.slideEnd).toBeTypeOf("number");
     expect(Number.isFinite(up.fighters[0]!.s.x)).toBe(true);
+  });
+});
+
+describe("Escarmouche : relever un coéquipier, revenir auprès de lui", () => {
+  function squad() {
+    const m = createMatch(
+      settings({ mode: "equipes", map: "hameau" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 0, bot: false, primary: "fa" },
+        { id: "c", team: 1, bot: false, primary: "fa" },
+      ],
+      4,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    // Les deux coéquipiers au milieu de l'avenue, l'ennemi loin
+    Object.assign(m.fighters[0]!.s, { x: -30, y: 0, z: 1.5, vx: 0, vz: 0 });
+    Object.assign(m.fighters[1]!.s, { x: -29, y: 0, z: 1.5, vx: 0, vz: 0 });
+    Object.assign(m.fighters[2]!.s, { x: 40, y: 0, z: 0, vx: 0, vz: 0 });
+    return m;
+  }
+  const down = (m: Match, v: number, ev: EscEvent[]) => {
+    while (m.fighters[v]!.s.alive) hurt(m, v, 2, 50, 1, "fa", ev, 0, 1, 0);
+  };
+
+  it("accroupi près d'un coéquipier tombé, on le relève : il repart là où il est tombé, avec un peu de vie", () => {
+    const m = squad();
+    const ev: EscEvent[] = [];
+    down(m, 1, ev);
+    for (let k = 0; k < 100; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(k + 1, { b: B.crouch }), null, ev);
+    }
+    const b = m.fighters[1]!;
+    expect(b.s.alive).toBe(true);
+    expect(b.hp).toBe(REVIVE.hp);
+    expect(Math.hypot(b.s.x + 29, b.s.z - 1.5)).toBeLessThan(0.01);
+    expect(ev.some((e) => e.k === "revive" && e.i === 0 && e.v === 1)).toBe(true);
+    expect(m.fighters[0]!.stats.revives).toBe(1);
+  });
+
+  it("debout à côté, rien : il attend un moment qu'on le relève, puis revient à sa base ; ou tout de suite s'il le demande", () => {
+    const m = squad();
+    const ev: EscEvent[] = [];
+    down(m, 1, ev);
+    for (let k = 0; k < 60 * 5; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(k + 1), null, ev);
+    }
+    expect(m.fighters[1]!.s.alive).toBe(false);
+    expect(waitingRescue(m, 1)).toBe(true);
+    for (let k = 0; k < 60 * 4; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(400 + k), null, ev);
+    }
+    const b = m.fighters[1]!;
+    expect(b.s.alive).toBe(true);
+    expect(b.s.x).toBeLessThan(-34);
+    expect(ev.some((e) => e.k === "revive")).toBe(false);
+    // Il préfère revenir sans attendre
+    const m2 = squad();
+    down(m2, 1, []);
+    giveUp(m2, 1);
+    for (let k = 0; k < 60 * 4.2; k++) worldStep(m2, []);
+    expect(m2.fighters[1]!.s.alive).toBe(true);
+  });
+
+  it("revenir auprès d'un coéquipier calme ; s'il est au combat, à la base", () => {
+    const m = squad();
+    chooseSpawn(m, 1, 0);
+    const ev: EscEvent[] = [];
+    down(m, 1, ev);
+    giveUp(m, 1);
+    m.fighters[0]!.lastFight = -100;
+    for (let k = 0; k < 60 * 5; k++) worldStep(m, ev);
+    const b = m.fighters[1]!;
+    expect(b.s.alive).toBe(true);
+    expect(Math.hypot(b.s.x - m.fighters[0]!.s.x, b.s.z - m.fighters[0]!.s.z)).toBeLessThan(2);
+    expect(ev.some((e) => e.k === "spawn" && e.i === 1 && e.on === 0)).toBe(true);
+    // Au combat : il tire, et son coéquipier revient à la base
+    const m2 = squad();
+    chooseSpawn(m2, 1, 0);
+    const ev2: EscEvent[] = [];
+    down(m2, 1, ev2);
+    giveUp(m2, 1);
+    for (let k = 0; k < 60 * 5; k++) {
+      worldStep(m2, ev2);
+      m2.fighters[0]!.lastFight = m2.t;
+    }
+    expect(m2.fighters[1]!.s.alive).toBe(true);
+    expect(Math.hypot(m2.fighters[1]!.s.x - m2.fighters[0]!.s.x, m2.fighters[1]!.s.z - m2.fighters[0]!.s.z)).toBeGreaterThan(4);
+  });
+
+  it("en chacun pour soi, ni relève ni retour auprès d'un autre", () => {
+    const m = createMatch(
+      settings({ mode: "solo" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      4,
+    );
+    live(m);
+    chooseSpawn(m, 1, 0);
+    expect(m.fighters[1]!.spawnOn).toBe(-1);
   });
 });
