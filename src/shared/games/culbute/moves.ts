@@ -27,7 +27,8 @@ export type PoseId =
   | "blow"
   | "climb"
   | "pickup"
-  | "grab";
+  | "grab"
+  | "taunt";
 
 export interface HitDef {
   /** Les images où le coup frappe (comptées depuis le début du coup, bornes comprises) */
@@ -144,6 +145,8 @@ export const GENERIC: Record<string, MoveDef> = {
     charge: { at: 10, max: 60, button: 1 },
     hits: [h(14, 16, 1.6, 0.9, 0.7, 17, 37, 9, 30)],
   },
+  /** Narguer : une petite danse bras levés, une bulle au-dessus de la tête (et on reste à découvert) */
+  taunt: { name: "Narguer", frames: 60, pose: "taunt", hits: [] },
 };
 
 export const GENERIC_KEYS = Object.keys(GENERIC).map((k) => `g:${k}`);

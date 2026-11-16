@@ -37,6 +37,22 @@ describe("Culbute : les bots", () => {
     expect(f.winners.length).toBeGreaterThan(0);
   });
 
+  it("narguent parfois après avoir sorti quelqu'un (et le combat va quand même au bout)", () => {
+    let taunts = 0;
+    for (const seed of [1, 2, 3]) {
+      const { f, mem } = botFight(["ginette", "lucien"], "place", "aucun", seed);
+      for (let k = 0; k < 8 * 60 * 60 + 400 && f.phase !== "over"; k++) {
+        stepFight(
+          f,
+          f.fighters.map((_, i) => botInput(f, i, mem[i]!, "fort")),
+        );
+        taunts += f.fighters.filter((o) => o.state === "move" && o.move === "g:taunt" && o.mt === 1).length;
+      }
+      expect(f.phase, `graine ${seed}`).toBe("over");
+    }
+    expect(taunts).toBeGreaterThan(0);
+  });
+
   it("à huit, sur chaque arène, le combat avance sans bloquer", () => {
     for (const arena of ["place", "bal", "marche", "clocher"] as ArenaId[]) {
       const styles = [...HABITUE_IDS, "ginette", "simone"] as HabitueId[];

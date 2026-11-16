@@ -16,6 +16,7 @@ import {
   GRB,
   HABITUE_IDS,
   JMP,
+  NAR,
   NO_INPUT,
   SHD,
   SPC,
@@ -625,6 +626,19 @@ describe("Culbute : le combat", () => {
     run(f, 6, [() => ({ x: 0, y: 0, held: SHD, pressed: 0 })]);
     run(f, 1, [() => ({ x: 0, y: 1, held: SHD | SPC, pressed: SPC })]);
     expect(f.fighters[0]!.move).toBe("pu");
+  });
+
+  it("narguer : debout, une petite danse d'une seconde, sans toucher personne", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.2);
+    run(f, 1, [tap(NAR)]);
+    const a = f.fighters[0]!;
+    expect(a.state).toBe("move");
+    expect(a.move).toBe("g:taunt");
+    run(f, 70);
+    expect(a.state).toBe("stand");
+    expect(f.fighters[1]!.dmg).toBe(0);
   });
 
   it("depuis la garde, Frapper saisit", () => {

@@ -15,6 +15,7 @@ import {
   GRB,
   ITEM_KINDS,
   JMP,
+  NAR,
   SHD,
   sign,
   SPC,
@@ -424,6 +425,11 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       if (press & SPC) {
         consume(ft, SPC);
         special(f, ft, x, y);
+        return;
+      }
+      if (press & NAR) {
+        consume(ft, NAR);
+        startMove(ft, "g:taunt");
         return;
       }
       if (flickDown && onThin(plats, ft)) {

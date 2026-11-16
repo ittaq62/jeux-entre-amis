@@ -2,12 +2,12 @@
 // (un stick sous le pouce gauche, trois boutons sous le droit, la garde en posant le pouce sur Frapper et Spécial à la fois).
 // Une fois par image, tout devient une seule commande : le stick, les boutons tenus et ceux qu'on vient d'enfoncer.
 
-import { ATK, GRB, JMP, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
+import { ATK, GRB, JMP, NAR, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
 import { ACTION_IDS, loadSettings, type ActionId, type CulbuteSettings } from "./bindings.ts";
 
 export type Scheme = "clavier" | "manette" | "tactile";
 
-const BITS: Partial<Record<ActionId, number>> = { attack: ATK, special: SPC, jump: JMP, shield: SHD, grab: GRB };
+const BITS: Partial<Record<ActionId, number>> = { attack: ATK, special: SPC, jump: JMP, shield: SHD, grab: GRB, taunt: NAR };
 
 /** Un clic sur l'interface (boutons, menus, discussion) n'est pas un coup */
 const UI = "button, a, input, textarea, select, label, summary, [role='dialog'], [role='menu'], .panel";
@@ -158,7 +158,7 @@ export class CulbuteControls {
     if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP;
 
     // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite
-    // pour saisir, les autres gâchettes pour la garde
+    // pour saisir, les autres gâchettes pour la garde, le petit bouton de gauche (Retour, Select) pour narguer
     const gp = [...(navigator.getGamepads?.() ?? [])].find((p) => p && p.connected) ?? null;
     if (gp) {
       const pb = (i: number) => Boolean(gp.buttons[i]?.pressed);
@@ -170,6 +170,7 @@ export class CulbuteControls {
       if (pb(1)) pad |= SPC;
       if (pb(4) || pb(6) || pb(7)) pad |= SHD;
       if (pb(5)) pad |= GRB;
+      if (pb(8)) pad |= NAR;
       if (Math.hypot(ax, ay) > 0.2) {
         x = ax;
         y = -ay;

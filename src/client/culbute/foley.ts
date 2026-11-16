@@ -30,6 +30,11 @@ export class Foley {
       this.seen[i] = { state: f.state, move: f.move, mt: f.mt };
       if (!was || f.state === "dead" || f.state === "out" || f.state === "respawn") return;
       const gain = f.me ? 1 : 0.55;
+      // Il nargue : sa petite ritournelle
+      if (f.state === "move" && f.move === "g:taunt" && (was.state !== "move" || was.move !== f.move)) {
+        sfx.taunt(gain);
+        return;
+      }
       // Le coup part : au moment où il frappe (sa première image active)
       if (f.state === "move") {
         const style = this.styles[i];

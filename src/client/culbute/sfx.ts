@@ -1,7 +1,7 @@
 // Les bruits des coups de Culbute, fabriqués à la volée (rien à télécharger) : un coup sourd et un claquement dont la
 // force suit celle du coup, un tintement sur la garde, une grosse détonation pour une sortie, un froissement pour une
-// saisie ; et ceux du corps (le souffle d'un coup qui part, le saut, la réception, le rebord). Ils passent par la
-// sortie générale du site (le réglage du son les coupe comme les autres).
+// saisie ; et ceux du corps (le souffle d'un coup qui part, le saut, la réception, le rebord), et la ritournelle de
+// celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
 
 import { audioOut } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -250,4 +250,28 @@ export function ledge(gain = 1) {
   const t0 = ctx.currentTime + 0.003;
   slap(ctx, dest, t0, 1900, 1.6, vol * gain * 0.2, 0.045);
   thump(ctx, dest, t0, 200, 120, vol * gain * 0.08, 0.04);
+}
+
+/** Narguer : trois petites notes moqueuses qui montent et redescendent (« na-na-nè-re ») */
+export function taunt(gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("taunt", 300)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.01;
+  const notes: [number, number, number][] = [
+    [784, 0, 0.11],
+    [659, 0.13, 0.11],
+    [880, 0.26, 0.12],
+    [659, 0.41, 0.2],
+  ];
+  for (const [freq, at, d] of notes) {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    env(g, vol * gain * 0.13, 0.01, d, t0 + at);
+    osc.connect(g).connect(dest);
+    osc.start(t0 + at);
+    osc.stop(t0 + at + d + 0.05);
+  }
 }

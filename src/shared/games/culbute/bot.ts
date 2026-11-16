@@ -4,7 +4,7 @@
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
 import { gravityOf, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
-import { ATK, GRB, JMP, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
+import { ATK, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -32,6 +32,8 @@ interface LevelInfo {
   wary: number;
   /** Il garde l'adversaire hors de l'arène */
   edgeguard: boolean;
+  /** Ses chances de narguer, une fois un adversaire sorti (si personne n'est tout près) */
+  taunt: number;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
@@ -46,6 +48,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     grab: 0.15,
     mash: 0.08,
     wary: 0.04,
+    taunt: 0.35,
   },
   moyen: {
     think: 11,
@@ -58,6 +61,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     grab: 0.5,
     mash: 0.2,
     wary: 0.14,
+    taunt: 0.45,
   },
   fort: {
     think: 5,
@@ -70,6 +74,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     grab: 0.85,
     mash: 0.4,
     wary: 0.12,
+    taunt: 0.5,
   },
 };
 
@@ -87,10 +92,12 @@ export interface BotMemory {
   target: number;
   /** Il attend avant d'agir (au rebord, à son retour) */
   waitUntil: number;
+  /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
+  taunted: number;
 }
 
 export function newBotMemory(seed: number): BotMemory {
-  return { rng: seed >>> 0 || 1, next: 0, x: 0, y: 0, held: 0, holdUntil: 0, press: 0, target: -1, waitUntil: 0 };
+  return { rng: seed >>> 0 || 1, next: 0, x: 0, y: 0, held: 0, holdUntil: 0, press: 0, target: -1, waitUntil: 0, taunted: -1 };
 }
 
 function rnd(m: BotMemory): number {
@@ -231,6 +238,18 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     return out();
   }
   if (me.state === "shield") return out();
+
+  // Il vient d'en sortir un : il nargue parfois, si personne n'est tout près (une fois par sortie)
+  const victim = f.fighters.find(
+    (o) => o !== me && o.lastBy === me.slot && (o.state === "dead" || o.state === "respawn") && f.frame - o.lastAt < 240,
+  );
+  if (victim && me.state === "stand" && m.taunted !== victim.lastAt) {
+    m.taunted = victim.lastAt;
+    if (!foes.some((o) => Math.abs(o.x - me.x) < 4.5) && rnd(m) < L.taunt) {
+      m.press = NAR;
+      return out();
+    }
+  }
 
   // Un objet : s'en servir, ou aller le chercher
   if (me.item && me.item !== "baguette") {

@@ -210,6 +210,9 @@ function keyPoses(pose: PoseId, base: Pose): [Pose, Pose] {
       return [with_(base, { hands: [R(-0.2, 0.1, 0.4), R(0.2, 0.1, 0.4)], crouch: 0.2 }), base];
     case "pickup":
       return [with_(base, { crouch: 0.15 }), with_(base, { hands: [R(-0.15, 0.1, 0.45), L], crouch: 0.3, lean: 0.6 })];
+    case "taunt":
+      // Animée à part, image par image (voir la pose d'un coup)
+      return [base, base];
     case "grab":
       // Les deux mains tendues devant, pour attraper
       return [
@@ -408,6 +411,9 @@ export class FighterModel {
   private stars = new THREE.Group();
   private yarn: THREE.Mesh;
   private marker: THREE.Group;
+  /** Ce qu'il lance en narguant, dans une bulle au-dessus de sa tête (sa taille ordinaire) */
+  private quip: THREE.Sprite;
+  private quipSize = 1;
   private held: { kind: ItemKind | ""; model: THREE.Object3D | null } = { kind: "", model: null };
   private keep: Keep;
   private flash = 0;
@@ -748,6 +754,10 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     this.marker = nameTag(look.me ? "Toi" : look.bot ? "" : look.name, look.color, keep);
     this.marker.position.y = HEIGHT + 0.5;
     this.group.add(this.marker);
+    this.quip = quipBubble(QUIPS[look.style], keep);
+    this.quip.position.set(0.35, HEIGHT + 1.15, 0);
+    this.quip.visible = false;
+    this.group.add(this.quip);
 
     // Le contour sombre, sur les volumes fermés (pas sur les cheveux, la jupe ou le châle, ouverts)
     if (OUTLINE) {
@@ -990,6 +1000,7 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
           pose = with_(pose, { spinY: ((mt - tl.first + 2) / (tl.last - tl.first + 4)) * Math.PI * 2 });
         if (def.pose === "rise" && mt >= tl.first) pose = with_(pose, { spinY: (mt - tl.first) * 0.55 });
         if (def.pose === "climb") pose = with_(pose, { liftY: -(1 - Math.min(1, mt / (tl.frames * 0.6))) * 1.1 });
+        if (def.pose === "taunt") return { pose: taunting(moveBase, mt, def.frames), strike: 0, charging };
         return { pose, strike: mt >= tl.first && mt <= tl.last + 6 ? Math.max(strike, 0.6) : strike, charging };
       }
       default:
@@ -1135,6 +1146,14 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
       this.shieldMat.uniforms.uPower!.value = 0.75 + 0.25 * Math.sin(time * 9) * (k < 0.3 ? 1 : 0.2);
     }
     this.cream.visible = (f.flags & F_CREAM) !== 0;
+    // La bulle de celui qui nargue : elle surgit, puis disparaît avant la fin de la pose
+    const quip = f.state === "move" && f.move === "g:taunt" && f.mt >= 5 && f.mt < 52;
+    this.quip.visible = quip;
+    if (quip) {
+      const pop = Math.min(1, (f.mt - 5) / 5);
+      const s = (0.55 + 0.45 * ease(pop) + Math.sin(pop * Math.PI) * 0.12) * this.quipSize;
+      this.quip.scale.set(1.6 * s, 0.56 * s, 1);
+    }
     this.stars.visible = f.state === "dizzy";
     if (this.stars.visible)
       this.stars.children.forEach((s, i) => {
@@ -1195,6 +1214,12 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
       this.held.model.scale.setScalar(kind === "baguette" ? 1 : 0.8);
       this.body.add(this.held.model);
     }
+  }
+
+  /** Où se place la bulle de la provocation (la vitrine, cadrée serré, la met à côté de la tête) */
+  placeQuip(x: number, y: number, size: number) {
+    this.quip.position.set(x, y, 0);
+    this.quipSize = size;
   }
 
   dispose() {
@@ -1294,6 +1319,71 @@ function nameTag(text: string, color: string, keep: Keep): THREE.Group {
   sprite.renderOrder = 10;
   g.add(sprite);
   return g;
+}
+
+/** Ce que chacun lance en narguant (à son caractère) */
+const QUIPS: Record<HabitueId, string> = {
+  ginette: "Et toc !",
+  marcel: "Assis !",
+  huguette: "Au suivant !",
+  raymond: "De mon temps…",
+  simone: "…",
+  lucien: "Gagné !",
+};
+
+/** La danse de celui qui nargue : bras levés qui balancent, hanches qui ondulent, deux petits sauts */
+function taunting(base: Pose, mt: number, frames: number): Pose {
+  const into = Math.min(1, mt / 6);
+  const out = Math.min(1, Math.max(0, (frames - mt) / 8));
+  const k = ease(Math.min(into, out));
+  const sway = Math.sin(mt * 0.42);
+  const up: Pose = with_(base, {
+    hands: [
+      [-0.42 + sway * 0.12, 1.72 + Math.sin(mt * 0.84) * 0.08, 0.12],
+      [0.42 + sway * 0.12, 1.72 - Math.sin(mt * 0.84) * 0.08, 0.12],
+    ],
+    twist: sway * 0.45,
+    headTilt: Math.sin(mt * 0.42 + 1) * 0.28,
+    liftY: Math.max(0, Math.sin((mt / frames) * Math.PI * 4)) * 0.22,
+    crouch: -0.02,
+  });
+  return blend(base, up, k);
+}
+
+/** La bulle de la provocation : du texte noir sur un nuage blanc, avec sa pointe vers la tête */
+function quipBubble(text: string, keep: Keep): THREE.Sprite {
+  const c = document.createElement("canvas");
+  c.width = 320;
+  c.height = 112;
+  const ctx = c.getContext("2d")!;
+  ctx.font = "italic 800 40px 'Libre Franklin Variable', system-ui, sans-serif";
+  const w = Math.min(300, ctx.measureText(text).width + 44);
+  const x = (320 - w) / 2;
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "rgba(20, 18, 26, 0.85)";
+  ctx.lineWidth = 5;
+  roundRect(ctx, x, 6, w, 70, 32);
+  ctx.fill();
+  ctx.stroke();
+  // La pointe, vers le bas à gauche (la tête)
+  ctx.beginPath();
+  ctx.moveTo(x + 40, 72);
+  ctx.lineTo(x + 22, 104);
+  ctx.lineTo(x + 70, 74);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillRect(x + 36, 66, 36, 10);
+  ctx.fillStyle = "#1c1a22";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 160, 42);
+  const tex = keep(new THREE.CanvasTexture(c));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })));
+  sprite.scale.set(1.6, 0.56, 1);
+  sprite.renderOrder = 11;
+  return sprite;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

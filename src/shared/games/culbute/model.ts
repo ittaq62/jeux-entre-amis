@@ -20,6 +20,8 @@ export const JMP = 4;
 export const SHD = 8;
 /** Saisir (une touche à part, ou la garde avec Frapper) */
 export const GRB = 16;
+/** Narguer : pour rire, sans effet sur le combat (on reste à découvert le temps de la pose) */
+export const NAR = 32;
 
 /** Ce que le joueur demande pendant un pas : le stick (de -1 à 1, y vers le haut) et ses boutons */
 export interface Input {

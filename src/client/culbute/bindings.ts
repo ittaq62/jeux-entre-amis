@@ -5,7 +5,7 @@ import { keyLabel } from "../crampons/bindings.ts";
 
 export { keyLabel };
 
-export type ActionId = "up" | "down" | "left" | "right" | "attack" | "special" | "jump" | "shield" | "grab";
+export type ActionId = "up" | "down" | "left" | "right" | "attack" | "special" | "jump" | "shield" | "grab" | "taunt";
 
 /** Une touche (`KeyW`, `Space`…) ou un bouton de souris (`Mouse0` gauche, `Mouse1` molette, `Mouse2` droit) */
 export type Binding = string;
@@ -22,7 +22,7 @@ export interface CulbuteSettings {
   music: boolean;
 }
 
-export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "special", "jump", "shield", "grab"];
+export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "special", "jump", "shield", "grab", "taunt"];
 
 export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "left", label: "Gauche" },
@@ -34,6 +34,7 @@ export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "jump", label: "Sauter", note: "deux fois, une au sol et une en l'air" },
   { id: "shield", label: "Garde", note: "avec une direction : esquive ou roulade" },
   { id: "grab", label: "Saisir", note: "aussi : Frapper pendant la garde ; puis une direction pour projeter" },
+  { id: "taunt", label: "Narguer", note: "pour rire, sans effet sur le combat (mais on reste à découvert)" },
 ];
 
 const MOVES_ZQSD = {
@@ -55,6 +56,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
       jump: ["Space"],
       shield: ["ShiftLeft", "Mouse1"],
       grab: ["KeyE", "Mouse3"],
+      taunt: ["KeyR"],
     },
   },
   {
@@ -71,6 +73,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
       jump: ["Space"],
       shield: ["KeyV", "ShiftLeft"],
       grab: ["KeyB"],
+      taunt: ["KeyN"],
     },
   },
   {
@@ -84,6 +87,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
       jump: ["Space", "KeyI"],
       shield: ["KeyL", "ShiftLeft"],
       grab: ["KeyU"],
+      taunt: ["KeyO"],
     },
   },
 ];
@@ -113,6 +117,11 @@ export function loadSettings(): CulbuteSettings {
     for (const id of ACTION_IDS) {
       const list = cleanList(data.bindings?.[id]);
       if (list) bindings[id] = list;
+    }
+    // Une action venue après coup (Narguer) : sa touche par défaut ne doit pas voler celle d'une autre
+    if (!data.bindings?.taunt) {
+      const used = new Set(ACTION_IDS.filter((id) => id !== "taunt").flatMap((id) => bindings[id]));
+      bindings.taunt = bindings.taunt.filter((b) => !used.has(b));
     }
     return {
       preset: typeof data.preset === "string" ? data.preset : base.preset,
@@ -156,7 +165,7 @@ export function bindingText(s: CulbuteSettings, action: ActionId): string {
   return list.length > 0 ? list.map(keyLabel).join(" ou ") : "aucune touche";
 }
 
-/** Les actions sans aucune touche : on le signale, sinon le joueur ne pourrait plus sauter ou frapper */
+/** Les actions sans aucune touche : on le signale, sinon le joueur ne pourrait plus sauter ou frapper (narguer est facultatif) */
 export function unbound(s: CulbuteSettings): ActionId[] {
-  return ACTION_IDS.filter((id) => s.bindings[id].length === 0);
+  return ACTION_IDS.filter((id) => id !== "taunt" && s.bindings[id].length === 0);
 }

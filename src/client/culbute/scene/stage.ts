@@ -16,6 +16,8 @@ const SHOW: { move: string; hold: number }[] = [
   { move: "pn", hold: 0 },
   { move: "", hold: 1.2 },
   { move: "u", hold: 0 },
+  { move: "", hold: 1.2 },
+  { move: "g:taunt", hold: 0 },
 ];
 
 function idle(): RenderFighter {
@@ -120,6 +122,8 @@ export class FighterStage {
     model.group.children.forEach((c) => {
       if (c instanceof THREE.Group && c.children[0] instanceof THREE.Sprite) c.visible = false;
     });
+    // Cadrée serré : la bulle de la provocation à côté de la tête, un peu plus petite
+    model.placeQuip(0.7, 1.85, 0.75);
     model.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.castShadow = true;
     });
