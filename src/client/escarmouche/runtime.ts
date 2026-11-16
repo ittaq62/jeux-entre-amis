@@ -270,6 +270,8 @@ export class BattleRuntime {
   private hudAt = 0;
   private stepTimers = new Map<number, number>();
   private lastShots = new Map<number, number>();
+  /** Les repères de son équipe, pour le radar */
+  private pingDots: { x: number; y: number; z: number }[] = [];
   /** Le dernier ravitaillement (pour ne pas l'annoncer à chaque chargeur) */
   private suppliedAt = -1e9;
   /** Vers où tombe chacun (la dernière fois qu'il a été éliminé), et la dernière explosion */
@@ -759,6 +761,15 @@ export class BattleRuntime {
         }
         return;
       }
+      case "ping": {
+        const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
+        const teams = v ? isTeamMode(v.mode) : false;
+        if (e.i === this.me || (teams && this.teamOf(e.i) === mine)) {
+          this.sound.play("spot", { volume: 0.3, gap: 250 });
+          if (e.i !== this.me) this.say(`${this.nameOf(e.i)} : par ici !`, "info");
+        }
+        return;
+      }
       case "sab": {
         const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
         const name = DEPOT_NAMES[e.d] ?? "?";
@@ -1076,6 +1087,19 @@ export class BattleRuntime {
       for (let k = 0; k + 2 < mk.length; k += 3) if (teams ? mk[k + 1] === myTeam : mk[k + 2] === this.me) this.marked.add(mk[k]!);
     }
     this.scene.setBarrels(this.barrelBoxes, new Set(this.latest?.bd ?? []));
+    // Les repères de son équipe (en chacun pour soi, les siens)
+    {
+      const pg = this.latest?.pg ?? [];
+      const mine = this.me >= 0 ? this.teamOf(this.me) : -2;
+      const teams = isTeamMode(v.mode);
+      const list: { x: number; y: number; z: number }[] = [];
+      for (let k = 0; k + 4 < pg.length; k += 5) {
+        const ok = teams ? pg[k] === mine : pg[k + 1] === this.me;
+        if (ok) list.push({ x: pg[k + 2]! / 100, y: pg[k + 3]! / 100, z: pg[k + 4]! / 100 });
+      }
+      this.scene.setPings(list);
+      this.pingDots = list;
+    }
     // Ses lieux de ravitaillement : sa base (les deux, chacun pour soi), et ses drapeaux en conquête
     if (this.me >= 0) {
       const team = this.teamOf(this.me);
@@ -1178,7 +1202,10 @@ export class BattleRuntime {
         this.radarCanvas,
         { x: cam.x, z: cam.z, yaw: this.yaw },
         this.radarDots,
-        flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : [],
+        [
+          ...(flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : []),
+          ...this.pingDots.map((p) => ({ x: p.x, z: p.z, color: "#ffd23a" })),
+        ],
         v.mode === "zone" ? { ...this.gm.zone, color: zoneOwner >= 0 ? TEAM_HEX[zoneOwner === 1 ? 1 : 0] : "rgba(240,236,220,.8)" } : null,
         v.mode === "sabotage" && this.latest?.sb
           ? this.gm.depots

@@ -70,6 +70,8 @@ export class EscScene {
   private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite; cross: THREE.Sprite }>();
   /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
   private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
+  /** Les repères de son équipe : une épingle jaune, vue à travers les murs */
+  private pins: { sprite: THREE.Sprite; at: THREE.Vector3 }[] = [];
   /** Sabotage : les deux dépôts (debout, piégés, détruits), leur lettre, leur feu rouge */
   private depots: { whole: THREE.Group; wreck: THREE.Group; beacon: THREE.Sprite; letter: THREE.Sprite; at: THREE.Vector3 }[] = [];
   /** Les caisses de munitions de ses lieux de ravitaillement, et le cercle discret autour */
@@ -468,6 +470,27 @@ export class EscScene {
       (d.letter.material as THREE.SpriteMaterial).color.set(color);
       const s = Math.max(0.9, cam.distanceTo(d.at) * 0.04);
       d.letter.scale.set(s, s, 1);
+    });
+  }
+
+  /** Les repères de son équipe, là où ils ont été posés ; ils pulsent un peu */
+  setPings(list: readonly { x: number; y: number; z: number }[]) {
+    while (this.pins.length < list.length) {
+      const sprite = new THREE.Sprite(pinMaterial());
+      sprite.renderOrder = 10;
+      sprite.center.set(0.5, 0);
+      this.scene.add(sprite);
+      this.pins.push({ sprite, at: new THREE.Vector3() });
+    }
+    const cam = this.camera.position;
+    this.pins.forEach((p, k) => {
+      const q = list[k];
+      p.sprite.visible = Boolean(q);
+      if (!q) return;
+      p.at.set(q.x, q.y, q.z);
+      p.sprite.position.copy(p.at);
+      const s = Math.max(0.5, cam.distanceTo(p.at) * 0.035) * (1 + Math.sin(this.t * 5) * 0.06);
+      p.sprite.scale.set(s * 0.7, s, 1);
     });
   }
 
@@ -1011,6 +1034,33 @@ function letterMaterial(letter: string): THREE.SpriteMaterial {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
+}
+
+let pinMat: THREE.SpriteMaterial | null = null;
+/** Un repère : une épingle jaune cerclée de noir, la pointe en bas sur l'endroit visé */
+function pinMaterial(): THREE.SpriteMaterial {
+  if (pinMat) return pinMat;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 92;
+  const g = c.getContext("2d")!;
+  g.beginPath();
+  g.arc(32, 30, 24, Math.PI * 0.82, Math.PI * 0.18);
+  g.lineTo(32, 88);
+  g.closePath();
+  g.lineWidth = 6;
+  g.strokeStyle = "rgba(0,0,0,.8)";
+  g.stroke();
+  g.fillStyle = "#ffd23a";
+  g.fill();
+  g.beginPath();
+  g.arc(32, 30, 9, 0, Math.PI * 2);
+  g.fillStyle = "#3a2c00";
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  pinMat = new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
+  return pinMat;
 }
 
 let markMat: THREE.SpriteMaterial | null = null;

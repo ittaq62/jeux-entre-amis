@@ -12,9 +12,11 @@ import {
   giveUp,
   hurt,
   matchWorld,
+  PING,
   RESUPPLY,
   REVIVE,
   SABOTAGE,
+  SPOT,
   upgradeMatch,
   waitingRescue,
   worldOf,
@@ -1386,5 +1388,39 @@ describe("Escarmouche : le sabotage", () => {
     const old = raid() as unknown as Record<string, unknown>;
     delete old.sab;
     expect(upgradeMatch(old as unknown as Match).sab).toBeNull();
+  });
+});
+
+describe("Escarmouche : les repères", () => {
+  it("repérer sans ennemi en vue pose un repère là où l'on vise, un seul à la fois, qui s'efface au bout d'un moment", () => {
+    const m = createMatch(
+      settings({ mode: "equipes", map: "hameau" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      4,
+    );
+    live(m);
+    Object.assign(m.fighters[0]!.s, { x: -24, y: 0, z: 3, vx: 0, vz: 0 });
+    Object.assign(m.fighters[1]!.s, { x: 40, y: 0, z: -20, vx: 0, vz: 0 });
+    const ev: EscEvent[] = [];
+    worldStep(m, ev);
+    applyCmd(m, 0, idle(1, { yaw: 0, pitch: -0.3, b: B.spot }), null, ev);
+    expect(m.pings).toHaveLength(1);
+    const p = m.pings[0]!;
+    expect(p.team).toBe(0);
+    expect(p.y).toBeLessThan(eyeOf(m.fighters[0]!.s));
+    expect(p.z).toBeLessThan(3);
+    expect(ev.some((e) => e.k === "ping" && e.i === 0)).toBe(true);
+    expect(encodeTick(m, []).pg).toHaveLength(5);
+    // Un autre repère remplace le premier
+    for (let k = 0; k < Math.round((SPOT.cooldown + 0.1) / DT); k++) worldStep(m, ev);
+    applyCmd(m, 0, idle(2, { yaw: Math.PI / 2, pitch: -0.2 }), null, ev);
+    applyCmd(m, 0, idle(3, { yaw: Math.PI / 2, pitch: -0.2, b: B.spot }), null, ev);
+    expect(m.pings).toHaveLength(1);
+    expect(m.pings[0]).not.toBe(p);
+    for (let k = 0; k < Math.round((PING.time + 0.1) / DT); k++) worldStep(m, ev);
+    expect(m.pings).toHaveLength(0);
   });
 });

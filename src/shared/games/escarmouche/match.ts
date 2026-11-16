@@ -83,6 +83,8 @@ export const CRATE = { hp: 80, bullet: 0.35, blast: 2, back: 45 };
 export const REWARDS = { scout: 3, scoutTime: 10, mortar: 5, shells: 3, shellDelay: 2.6, shellGap: 0.55, radius: 7, damage: 140 };
 /** Repérer : combien de temps le repère reste, l'angle autour du viseur, l'attente entre deux */
 export const SPOT = { time: 7, cone: 0.07, range: 120, cooldown: 1.5 };
+/** Un repère posé là où l'on vise (quand aucun ennemi n'est dans le viseur) : ses coéquipiers le voient un moment */
+export const PING = { time: 6, range: 120 };
 
 /** Une partie de corps touchée : 0 la tête, 1 le tronc, 2 les jambes */
 export type Part = 0 | 1 | 2;
@@ -97,6 +99,8 @@ export type EscEvent =
   | { k: "revive"; i: number; v: number }
   | { k: "throw"; i: number }
   | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" | "charge" }
+  /** `i` pose un repère là où il vise : « par ici ! » */
+  | { k: "ping"; i: number; x: number; y: number; z: number }
   /** Sabotage : `i` pose une charge sur le dépôt `d`, la désamorce, ou le dépôt saute */
   | { k: "sab"; d: number; s: "arm" | "defuse" | "boom"; i: number }
   /** Un bidon saute (ou un nouveau le remplace) */
@@ -212,6 +216,16 @@ export interface Blast {
 }
 
 /** Un ennemi repéré : pour l'équipe (ou, en chacun pour soi, pour celui qui l'a repéré) */
+/** Un repère au sol (ou sur un mur), pour son équipe (en chacun pour soi, pour soi seul) */
+export interface Ping {
+  x: number;
+  y: number;
+  z: number;
+  team: number;
+  by: number;
+  until: number;
+}
+
 export interface Mark {
   target: number;
   team: number;
@@ -267,6 +281,7 @@ export interface Match extends RngHolder {
   crates: Crate[];
   blasts: Blast[];
   marks: Mark[];
+  pings: Ping[];
 }
 
 export interface Depot {
@@ -373,6 +388,7 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     crates: [],
     blasts: [],
     marks: [],
+    pings: [],
   };
   const gm = getMap(map);
   gm.boxes.forEach((b, box) => {
@@ -501,6 +517,7 @@ export function upgradeMatch(m: Match): Match {
     });
   }
   if (!Array.isArray(m.marks)) m.marks = [];
+  if (!Array.isArray(m.pings)) m.pings = [];
   if (m.cq === undefined) m.cq = null;
   if (m.sab === undefined) m.sab = null;
   const fresh = newSoldier(0, 0, 0, 0, "fa");
@@ -688,7 +705,19 @@ function spot(m: Match, i: number, world: World, ev: EscEvent[]) {
     mark(m, j, i, SPOT.time);
     seen.push(j);
   }
-  if (seen.length > 0) ev.push({ k: "spot", i, v: seen });
+  if (seen.length > 0) {
+    ev.push({ k: "spot", i, v: seen });
+    return;
+  }
+  // Personne en vue : un repère là où il vise (un seul à la fois)
+  const hit = world.raycast(ex, ey, ez, dx, dy, dz, PING.range);
+  if (!hit) return;
+  const x = r2(ex + dx * (hit.t - 0.05));
+  const y = r2(ey + dy * (hit.t - 0.05));
+  const z = r2(ez + dz * (hit.t - 0.05));
+  m.pings = m.pings.filter((p) => p.by !== i);
+  m.pings.push({ x, y, z, team: f.team, by: i, until: m.t + PING.time });
+  ev.push({ k: "ping", i, x, y, z });
 }
 
 function mark(m: Match, target: number, by: number, time: number) {
@@ -1166,6 +1195,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   stepBlasts(m, world, ev);
   stepCrates(m, ev);
   if (m.marks.length > 0) m.marks = m.marks.filter((k) => k.until > m.t && m.fighters[k.target]?.s.alive);
+  if (m.pings.length > 0) m.pings = m.pings.filter((p) => p.until > m.t);
   for (let i = 0; i < m.fighters.length; i++) {
     const f = m.fighters[i]!;
     if (!f.s.alive) {

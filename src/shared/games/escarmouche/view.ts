@@ -88,6 +88,8 @@ export interface EscTick {
   g: number[];
   /** Les ennemis repérés : par trois, la cible, l'équipe à qui elle est montrée, celui qui l'a repérée */
   mk?: number[];
+  /** Les repères : par cinq, l'équipe, celui qui l'a posé, x, y, z (cm) */
+  pg?: number[];
   /** Les bidons qui ont sauté (leur boîte), en attendant d'être remplacés */
   bd?: number[];
   /** Les caisses cassées (leur boîte), en attendant d'être remplacées */
@@ -165,6 +167,7 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
   if (m.cq) tick.cq = m.cq.pts.flatMap((p) => [p.owner, Math.round(p.v * 100)]);
   if (m.sab) tick.sb = m.sab.deps.flatMap((d) => [d.state, d.state === 1 ? Math.max(0, Math.round((d.boomAt - m.t) * 10)) : 0]);
   if (m.marks.length > 0) tick.mk = m.marks.flatMap((k) => [k.target, k.team, k.by]);
+  if (m.pings.length > 0) tick.pg = m.pings.flatMap((p) => [p.team, p.by, cm(p.x), cm(p.y), cm(p.z)]);
   const down = m.barrels.filter((b) => b.downUntil > 0).map((b) => b.box);
   if (down.length > 0) tick.bd = down;
   const broken = m.crates.filter((c) => c.downUntil > 0).map((c) => c.box);
