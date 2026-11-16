@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
+import { MAP_NAMES } from "../shared/games/escarmouche/maps.ts";
 import { botCommand, botHurt, botPrimary, newBotMemory, type BotMemory } from "../shared/games/escarmouche/bot.ts";
 import { CAMO_BY_ID, isCamoId, type CamoId } from "../shared/games/escarmouche/camos.ts";
 import {
@@ -843,7 +844,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     this.memories.clear();
     this.steps = 0;
     this.lastKey = stateKey(d.match);
-    this.systemChat(`Au combat ! ${MODE_INFO[settings.mode].name}, ${d.match.map === "gare" ? "à la gare de triage" : "au hameau"}.`);
+    this.systemChat(`Au combat ! ${MODE_INFO[settings.mode].name}, ${MAP_NAMES[d.match.map].name.toLowerCase()}.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("escarmouche", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange([], now);

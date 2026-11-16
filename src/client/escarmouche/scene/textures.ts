@@ -553,3 +553,38 @@ export function boardTexture(size = 128): THREE.CanvasTexture {
   cache.set(key, t);
   return t;
 }
+
+/** La tôle ondulée d'un conteneur : des côtes verticales claires et sombres, un peu de rouille et de saleté */
+export function corrugatedTexture(): THREE.CanvasTexture {
+  const key = "tole";
+  const known = cache.get(key);
+  if (known) return known;
+  const size = 128;
+  const [c, g] = canvas(size);
+  const r = rng(909);
+  const ribs = 8;
+  const w = size / ribs;
+  for (let i = 0; i < ribs; i++) {
+    const grad = g.createLinearGradient(i * w, 0, (i + 1) * w, 0);
+    grad.addColorStop(0, "#9a9a9a");
+    grad.addColorStop(0.3, "#e8e8e8");
+    grad.addColorStop(0.55, "#c4c4c4");
+    grad.addColorStop(0.8, "#7c7c7c");
+    grad.addColorStop(1, "#9a9a9a");
+    g.fillStyle = grad;
+    g.fillRect(i * w, 0, w, size);
+  }
+  // Des coulures et des taches de rouille
+  for (let i = 0; i < 18; i++) {
+    g.fillStyle = `rgba(${90 + r() * 40},${50 + r() * 20},${30},${0.12 + r() * 0.15})`;
+    const x = r() * size;
+    g.fillRect(x, r() * size * 0.5, 2 + r() * 4, 20 + r() * 60);
+  }
+  grain(g, size, r, 1200, 0.14);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  cache.set(key, t);
+  return t;
+}

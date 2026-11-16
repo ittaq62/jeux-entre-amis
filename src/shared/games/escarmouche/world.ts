@@ -26,6 +26,8 @@ export type Mat =
   | "sacs"
   /** Un bidon d'essence : il explose quand on tire dessus */
   | "bidon"
+  /** Un conteneur maritime (dessiné avec ses ondulations, ses portes et sa couleur) */
+  | "conteneur"
   | "invisible";
 
 export interface Box {

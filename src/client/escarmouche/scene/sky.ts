@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 
-export type Light = "soir" | "gris";
+export type Light = "soir" | "gris" | "aube";
 
 export interface SkyLook {
   zenith: string;
@@ -42,6 +42,22 @@ export const SKIES: Record<Light, SkyLook> = {
     fog: "#d6bb9e",
     fogNear: 40,
     fogFar: 240,
+  },
+  // Le port à l'aube : le soleil se lève sur la mer, rose et doré, une brume légère sur l'eau
+  aube: {
+    zenith: "#4f6c94",
+    horizon: "#f2c2a6",
+    ground: "#4a4a50",
+    sunColor: "#ffd6ae",
+    sun: [0.82, 0.16, 0.5],
+    sunSize: 0.034,
+    glow: 1.1,
+    clouds: 0.38,
+    cloudLit: "#ffd9c4",
+    cloudShade: "#727496",
+    fog: "#cdbdbb",
+    fogNear: 34,
+    fogFar: 250,
   },
   // La gare un matin couvert : des gris bleutés, un soleil voilé, des nuages bas et lourds
   gris: {

@@ -5,10 +5,10 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Decor, GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { Mat } from "../../../shared/games/escarmouche/world.ts";
-import { addHouse, addWagon, instancedParts, type Ctx, type Paint } from "./architecture.ts";
+import { addContainer, addCrane, addHouse, addQuay, addWagon, instancedParts, type Ctx, type Paint } from "./architecture.ts";
 import { addBox, Bucket, pushFace, tintOf } from "./geom.ts";
 import type { Quality } from "./quality.ts";
-import { boardTexture, clothTexture, matTexture, normalFrom, normalTexture, TILE } from "./textures.ts";
+import { boardTexture, clothTexture, corrugatedTexture, matTexture, normalFrom, normalTexture, TILE } from "./textures.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 /** Les teintes de base : elles colorent la toile (et la remplacent quand il n'y en a pas) */
@@ -65,7 +65,7 @@ export function matMaterial(m: Mat, q: Quality, vertexColors = true): THREE.Mate
 
 /** Les pièces d'habillage : la pierre de taille, le fer, les planches peintes des volets et des portes */
 export function paintMaterial(k: Paint, q: Quality): THREE.Material {
-  if (!k.startsWith("volet:") && k !== "taille" && k !== "fer") return matMaterial(k as Mat, q);
+  if (!k.startsWith("volet:") && !k.startsWith("cont:") && k !== "taille" && k !== "fer") return matMaterial(k as Mat, q);
   const key = `${k}:${q}`;
   const known = materials.get(key);
   if (known) return known;
@@ -84,6 +84,20 @@ export function paintMaterial(k: Paint, q: Quality): THREE.Material {
           normalMap: normalTexture("crepi2", 256, 0.9) ?? undefined,
           color: "#f6eedf",
           roughness: 0.9,
+          vertexColors: true,
+        });
+  } else if (k.startsWith("cont:")) {
+    // La tôle ondulée d'un conteneur, peinte à sa couleur
+    const color = k.slice("cont:".length);
+    const tex = corrugatedTexture();
+    mat = low
+      ? new THREE.MeshLambertMaterial({ map: tex, color, vertexColors: true })
+      : new THREE.MeshStandardMaterial({
+          map: tex,
+          normalMap: normalFrom(tex, "normal:tole", 2.4),
+          color,
+          roughness: 0.62,
+          metalness: 0.35,
           vertexColors: true,
         });
   } else {
@@ -105,6 +119,8 @@ export function paintMaterial(k: Paint, q: Quality): THREE.Material {
 
 export interface MapMesh {
   group: THREE.Group;
+  /** Ce qui bouge avec le temps : les vaguelettes de la mer */
+  update(t: number): void;
   dispose(): void;
 }
 
@@ -123,7 +139,7 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
   const bags: THREE.Box3[] = [];
   const bales: THREE.Box3[] = [];
   gm.boxes.forEach((bx, i) => {
-    if (bx.m === "invisible" || bx.m === "bidon") return;
+    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur") return;
     // Les sacs de sable et les bottes de foin ont leur propre forme
     if (bx.m === "sacs" || bx.m === "foin") {
       (bx.m === "sacs" ? bags : bales).push(new THREE.Box3(new THREE.Vector3(bx.x0, bx.y0, bx.z0), new THREE.Vector3(bx.x1, bx.y1, bx.z1)));
@@ -168,6 +184,10 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
   }
   return {
     group,
+    update(t: number) {
+      const n = (seaMaterial as THREE.MeshStandardMaterial).normalMap;
+      if (n) n.offset.set(t * 0.012, t * 0.007);
+    },
     dispose() {
       group.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.Line) o.geometry.dispose();
@@ -278,6 +298,36 @@ function tree(d: Extract<Decor, { k: "tree" }>, group: THREE.Group, q: Quality) 
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
 const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe2a8" });
 const water = new THREE.MeshLambertMaterial({ color: "#3f5f6a", transparent: true, opacity: 0.82, emissive: "#0d1a1f" });
+/** La mer : sombre, lisse, des vaguelettes qui glissent, le ciel qui s'y reflète */
+const seaMaterial = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#808080";
+  g.fillRect(0, 0, 128, 128);
+  let seed = 3;
+  const r = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < 220; i++) {
+    const v = Math.floor(90 + r() * 90);
+    g.fillStyle = `rgba(${v},${v},${v},0.35)`;
+    g.beginPath();
+    g.ellipse(r() * 128, r() * 128, 4 + r() * 12, 1.5 + r() * 3, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  const height = new THREE.CanvasTexture(c);
+  const normal = normalFrom(height, "normal:mer", 1.6);
+  normal.repeat.set(60, 30);
+  return new THREE.MeshStandardMaterial({
+    color: "#23404a",
+    roughness: 0.14,
+    metalness: 0.1,
+    normalMap: normal,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+  });
+})();
 const wireMat = new THREE.LineBasicMaterial({ color: "#2b2b2b" });
 const clockFace = new THREE.MeshLambertMaterial({ color: "#efe8d6" });
 const clockHand = new THREE.MeshBasicMaterial({ color: "#1d1d1d" });
@@ -288,6 +338,15 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
   switch (d.k) {
     case "house":
       addHouse(d, ctx);
+      return;
+    case "container":
+      addContainer(d, ctx);
+      return;
+    case "crane":
+      addCrane(d, ctx);
+      return;
+    case "quay":
+      addQuay(d, ctx);
       return;
     case "wagon":
       addWagon(d, ctx);
@@ -522,7 +581,8 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     }
     case "water": {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.z1 - d.z0), water);
+      const big = d.x1 - d.x0 > 100;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.z1 - d.z0), big && !low ? seaMaterial : water);
       m.rotation.x = -Math.PI / 2;
       m.position.set((d.x0 + d.x1) / 2, d.y, (d.z0 + d.z1) / 2);
       group.add(m);

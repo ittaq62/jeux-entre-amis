@@ -124,7 +124,7 @@ export class EscScene {
     hemi.color.lerp(new THREE.Color(look.horizon), 0.5);
     this.scene.add(hemi);
     this.sunDir = sunDirection(light);
-    this.sun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.8 : 1.7);
+    this.sun = new THREE.DirectionalLight(look.sunColor, light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7);
     this.sun.position.copy(this.sunDir).multiplyScalar(90);
     if (q !== "bas") {
       this.sun.castShadow = true;
@@ -259,7 +259,9 @@ export class EscScene {
         this.vmCam,
         light === "soir"
           ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
-          : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
+          : light === "aube"
+            ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
+            : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
       );
     void opts.teams;
   }
@@ -645,6 +647,7 @@ export class EscScene {
     this.rain?.update(dt, this.camera);
     this.updateViewFx(dt);
     this.skyMat.uniforms.time!.value = this.t;
+    this.map.update(this.t);
     if (this.post) {
       this.post.render(dt);
       return;

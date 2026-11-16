@@ -39,6 +39,12 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Du haut de la passerelle", x: 0, y: 6.92, z: 18, yaw: yawTo(0, 18, 0, -10), pitch: -0.18 },
     { name: "Entre les wagons", x: -24, y: 1.62, z: 9, yaw: yawTo(-24, 9, 0, 9), pitch: 0 },
   ],
+  port: [
+    { name: "La base, vers le portique", x: -42, y: 1.62, z: 1, yaw: yawTo(-42, 1, 0, 0), pitch: 0.04 },
+    { name: "Entre les conteneurs", x: -30, y: 1.62, z: 3, yaw: yawTo(-30, 3, 0, -2), pitch: 0.02 },
+    { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
+    { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
+  ],
 };
 
 export function DevEscarmouche() {
@@ -152,7 +158,7 @@ export function DevEscarmouche() {
       scene.updateViewmodel({
         weapon,
         camo,
-        ads: 0,
+        ads: params.has("epaule") ? 1 : 0,
         reload: -1,
         raise: 1,
         kick: Math.max(0, 1 - ((t * 3) % 1) * 4) * (Math.floor(t) % 3 === 0 ? 1 : 0),

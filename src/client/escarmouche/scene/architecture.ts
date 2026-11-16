@@ -10,7 +10,7 @@ import type { Mat } from "../../../shared/games/escarmouche/world.ts";
 import { addBox, type Bucket } from "./geom.ts";
 
 /** Ce qu'on peint : une matière de la carte, ou une pièce d'habillage */
-export type Paint = Mat | "taille" | "fer" | `volet:${string}`;
+export type Paint = Mat | "taille" | "fer" | `volet:${string}` | `cont:${string}`;
 
 export interface Ctx {
   bucket(k: Paint): Bucket;
@@ -22,6 +22,8 @@ export interface Ctx {
 
 type HouseDecor = Extract<Decor, { k: "house" }>;
 type WagonDecor = Extract<Decor, { k: "wagon" }>;
+type ContainerDecor = Extract<Decor, { k: "container" }>;
+type CraneDecor = Extract<Decor, { k: "crane" }>;
 
 const SHUTTERS = ["#4f6b4a", "#5d7789", "#7b3d2f", "#8a8b82", "#3f5a6b", "#6f7a3c"];
 const DOORS = ["#5b3b25", "#3f5a6b", "#6b2f27", "#4f6b4a"];
@@ -316,4 +318,124 @@ export function instancedParts(list: Map<"wheel" | "buffer", THREE.Matrix4[]>, l
     mesh.castShadow = true;
     group.add(mesh);
   }
+}
+
+/** Un conteneur : la tôle ondulée à sa couleur, les montants d'angle, les cadres, les portes et leurs barres */
+export function addContainer(d: ContainerDecor, ctx: Ctx) {
+  const body = ctx.bucket(`cont:${d.color}`);
+  addBox(body, d.x0, d.y0, d.z0, d.x1, d.y1, d.z1, 2.4, 1, d.y0 <= 0.001);
+  const fer = ctx.bucket("fer");
+  const c = 0.14;
+  // Les montants d'angle et les cadres du haut et du bas
+  for (const [x, z] of [
+    [d.x0, d.z0],
+    [d.x1, d.z0],
+    [d.x0, d.z1],
+    [d.x1, d.z1],
+  ] as const)
+    addBox(fer, x - c / 2, d.y0, z - c / 2, x + c / 2, d.y1, z + c / 2, 1, 0.8, d.y0 <= 0.001);
+  for (const y of [d.y0, d.y1 - 0.12]) {
+    addBox(fer, d.x0 - 0.03, y, d.z0 - 0.03, d.x1 + 0.03, y + 0.12, d.z0 + 0.06, 1, 0.75, y <= 0.001);
+    addBox(fer, d.x0 - 0.03, y, d.z1 - 0.06, d.x1 + 0.03, y + 0.12, d.z1 + 0.03, 1, 0.75, y <= 0.001);
+  }
+  // Les portes : deux battants, quatre barres de fermeture et leurs poignées
+  const alongX = d.door === "x0" || d.door === "x1";
+  const end = d.door === "x0" ? d.x0 : d.door === "x1" ? d.x1 : d.door === "z0" ? d.z0 : d.z1;
+  const out = d.door === "x0" || d.door === "z0" ? -1 : 1;
+  const [a0, a1] = alongX ? [d.z0, d.z1] : [d.x0, d.x1];
+  const leaf = ctx.bucket(`cont:${d.color}`);
+  const mid = (a0 + a1) / 2;
+  for (const [p, q] of [
+    [a0 + 0.08, mid - 0.01],
+    [mid + 0.01, a1 - 0.08],
+  ] as const) {
+    if (alongX)
+      addBox(leaf, Math.min(end, end + out * 0.04), d.y0 + 0.12, p, Math.max(end, end + out * 0.04), d.y1 - 0.12, q, 2.4, 0.92, false);
+    else addBox(leaf, p, d.y0 + 0.12, Math.min(end, end + out * 0.04), q, d.y1 - 0.12, Math.max(end, end + out * 0.04), 2.4, 0.92, false);
+  }
+  for (const k of [0.22, 0.38, 0.62, 0.78]) {
+    const at = a0 + (a1 - a0) * k;
+    if (alongX)
+      addBox(
+        fer,
+        Math.min(end, end + out * 0.08),
+        d.y0 + 0.2,
+        at - 0.02,
+        Math.max(end, end + out * 0.08),
+        d.y1 - 0.2,
+        at + 0.02,
+        1,
+        0.65,
+        false,
+      );
+    else
+      addBox(
+        fer,
+        at - 0.02,
+        d.y0 + 0.2,
+        Math.min(end, end + out * 0.08),
+        at + 0.02,
+        d.y1 - 0.2,
+        Math.max(end, end + out * 0.08),
+        1,
+        0.65,
+        false,
+      );
+  }
+}
+
+/** Le portique : ses pieds et ses poutres peints en jaune, des croisillons, la cabine, le chariot et un conteneur pendu */
+export function addCrane(d: CraneDecor, ctx: Ctx) {
+  const yellow = ctx.bucket("volet:#d6a320");
+  const fer = ctx.bucket("fer");
+  const hw = d.w / 2;
+  const hd = d.d / 2;
+  for (const [x, z] of [
+    [-hw, -hd],
+    [hw, -hd],
+    [-hw, hd],
+    [hw, hd],
+  ] as const) {
+    addBox(yellow, d.x + x - 0.5, 0, d.z + z - 0.5, d.x + x + 0.5, d.h, d.z + z + 0.5, 3, 1, true);
+    // Les bogies au pied, sur les rails
+    addBox(fer, d.x + x - 0.9, 0, d.z + z - 0.7, d.x + x + 0.9, 0.7, d.z + z + 0.7, 1, 0.7, true);
+  }
+  for (const z of [-hd, hd]) addBox(yellow, d.x - hw - 1, d.h, d.z + z - 0.65, d.x + hw + 1, d.h + 1.1, d.z + z + 0.65, 3, 0.95, false);
+  for (const x of [-hw, hw]) addBox(yellow, d.x + x - 0.55, d.h - 0.6, d.z - hd, d.x + x + 0.55, d.h + 1.1, d.z + hd, 3, 0.9, false);
+  // Les croisillons des deux côtés courts
+  const brace = new THREE.MeshStandardMaterial({ color: "#c9961c", roughness: 0.6, metalness: 0.4 });
+  for (const x of [-hw, hw]) {
+    for (const s of [-1, 1]) {
+      const len = Math.hypot(d.d, d.h * 0.55);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.22, len, 0.22), brace);
+      m.position.set(d.x + x, d.h * 0.62, d.z);
+      m.rotation.x = s * Math.atan2(d.d, d.h * 0.55);
+      m.castShadow = true;
+      ctx.group.add(m);
+    }
+  }
+  // La cabine sous la poutre, le chariot et ses câbles, le conteneur au bout
+  const cabin = ctx.bucket("volet:#e9e4d6");
+  addBox(cabin, d.x + 2.2, d.h - 2.2, d.z - hd + 0.7, d.x + 4.4, d.h - 0.2, d.z - hd + 2.6, 1, 1, false);
+  addBox(ctx.bucket("fer"), d.x + 2.25, d.h - 1.6, d.z - hd + 0.68, d.x + 4.35, d.h - 0.7, d.z - hd + 0.7, 1, 0.4, false);
+  addBox(yellow, d.x - 1.4, d.h - 0.9, d.z - hd + 0.4, d.x + 1.4, d.h - 0.1, d.z + hd - 0.4, 2, 0.85, false);
+  const lo = 9.4;
+  for (const [x, z] of [
+    [-1.2, -0.9],
+    [1.2, -0.9],
+    [-1.2, 0.9],
+    [1.2, 0.9],
+  ] as const)
+    addBox(fer, d.x + x - 0.02, lo + 2.75, d.z + z - 0.02, d.x + x + 0.02, d.h - 0.9, d.z + z + 0.02, 1, 0.5, false);
+  addBox(fer, d.x - 3.1, lo + 2.62, d.z - 1.25, d.x + 3.1, lo + 2.78, d.z + 1.25, 1, 0.6, false);
+  addContainer(
+    { k: "container", x0: d.x - 3.03, x1: d.x + 3.03, z0: d.z - 1.22, z1: d.z + 1.22, y0: lo, y1: lo + 2.59, color: "#2c5a8a", door: "x1" },
+    ctx,
+  );
+}
+
+/** Le mur du quai, du sol jusque dans l'eau, et la ligne sombre où l'eau le mouille */
+export function addQuay(d: Extract<Decor, { k: "quay" }>, ctx: Ctx) {
+  addBox(ctx.bucket("beton"), d.x0, d.y0, d.z, d.x1, d.y1, d.z + 0.6, 2.5, 0.8, false);
+  addBox(ctx.bucket("fer"), d.x0, -1.45, d.z + 0.6, d.x1, -1.05, d.z + 0.62, 1, 0.5, false);
 }

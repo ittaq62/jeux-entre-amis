@@ -6,8 +6,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare";
-export const MAP_IDS: MapId[] = ["hameau", "gare"];
+export type MapId = "hameau" | "gare" | "port";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port"];
 
 export interface Spawn {
   x: number;
@@ -26,6 +26,22 @@ export type Decor =
   | { k: "house"; x0: number; z0: number; x1: number; z1: number; top: number; wall: Mat; open: Hole[]; blind?: boolean }
   /** Un wagon (ou un plat, s'il est bas) : roues, bogies, portes, tampons, échelle */
   | { k: "wagon"; x0: number; x1: number; z0: number; z1: number; h: number; m: Mat }
+  /** Un conteneur maritime : sa couleur, et le bout où sont ses portes */
+  | {
+      k: "container";
+      x0: number;
+      z0: number;
+      x1: number;
+      z1: number;
+      y0: number;
+      y1: number;
+      color: string;
+      door: "x0" | "x1" | "z0" | "z1";
+    }
+  /** Le portique de déchargement : ses pieds, sa poutre, sa cabine, un conteneur pendu à ses câbles */
+  | { k: "crane"; x: number; z: number; w: number; d: number; h: number }
+  /** Le mur du quai, au-dessus de l'eau */
+  | { k: "quay"; x0: number; x1: number; z: number; y0: number; y1: number }
   /** Un toit en pointe (clocher, beffroi) */
   | { k: "spire"; x0: number; z0: number; x1: number; z1: number; y: number; h: number; m: Mat }
   | { k: "tree"; x: number; z: number; h: number; r: number }
@@ -70,7 +86,9 @@ export interface GameMap {
   flags: [{ x: number; y: number; z: number }, { x: number; y: number; z: number }];
   zone: { x: number; z: number; r: number };
   /** L'heure et le temps qu'il fait : seulement pour l'image */
-  light: "soir" | "gris";
+  light: "soir" | "gris" | "aube";
+  /** La mer, au nord, au-delà du quai (seulement pour l'image) */
+  sea?: boolean;
 }
 
 export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
@@ -79,6 +97,10 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     blurb: "Un village de pierre : la halle au centre, des ruelles, et des maisons à étage pour tirer d'en haut.",
   },
   gare: { name: "La Gare de triage", blurb: "Des wagons garés, un hangar, une passerelle au-dessus des voies : de longues lignes de tir." },
+  port: {
+    name: "Le Port",
+    blurb: "Des rangées de conteneurs, un entrepôt, la capitainerie et le grand portique au milieu : on grimpe, on contourne, on surprend.",
+  },
 };
 
 /** Le regard (yaw) vers une direction : yaw 0 regarde vers -z */
@@ -167,6 +189,17 @@ class Builder {
         return;
       case "wagon":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
+        return;
+      case "container": {
+        const flip = { x0: "x1", x1: "x0", z0: "z1", z1: "z0" } as const;
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), door: flip[d.door] });
+        return;
+      }
+      case "crane":
+        this.decor.push({ ...d, x: -d.x, z: -d.z });
+        return;
+      case "quay":
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z: -d.z });
         return;
     }
   }
@@ -355,6 +388,19 @@ class Builder {
 
   sandbags(x0: number, z0: number, x1: number, z1: number, h = 1.1) {
     this.box(x0, 0, z0, x1, h, z1, "sacs");
+  }
+
+  /**
+   * Un conteneur maritime de six mètres, couché le long de `axis`, à partir de (x, z), posé à `y` (sur un autre, on
+   * en fait une pile) ; ses portes au bout le plus loin
+   */
+  container(x: number, z: number, axis: "x" | "z", color: string, y = 0) {
+    const L = 6.06;
+    const W = 2.44;
+    const H = 2.59;
+    const [x0, x1, z0, z1] = axis === "x" ? [x, x + L, z, z + W] : [x, x + W, z, z + L];
+    this.box(x0, y, z0, x1, y + H, z1, "conteneur");
+    this.add({ k: "container", x0, z0, x1, z1, y0: y, y1: y + H, color, door: axis === "x" ? "x1" : "z1" });
   }
 
   /** Un bidon d'essence, debout : il explose quand on tire dessus */
@@ -710,18 +756,168 @@ function gare(): GameMap {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Le Port
+// ---------------------------------------------------------------------------
+
+const RED = "#9c3326";
+const BLUE = "#2c5a8a";
+const GREEN = "#3f6b3a";
+const ORANGE = "#c4682a";
+const GREY = "#7d8186";
+const SAND = "#b39257";
+
+function portSide(b: Builder) {
+  // La base : un hangar ouvert vers les quais, ses caisses, des sacs de sable devant
+  b.box(-48, 0, -10.3, -40, 6, -10, "beton");
+  b.box(-48, 0, 10, -40, 6, 10.3, "beton");
+  b.box(-48.2, 6, -10.6, -39.6, 6.3, 10.6, "metal");
+  b.add({ k: "roof", x0: -48.4, z0: -10.8, x1: -39.4, z1: 10.8, y: 6.3, h: 1.4, axis: "z", m: "metal" });
+  b.crate(-47, -8.6);
+  b.crate(-47, -7.3, 1.2, 2.4);
+  b.crate(-47, 8.6);
+  b.crate(-41.4, 8.8, 1.3, 1.3);
+  b.sandbags(-37.6, -3.5, -37, 3.5);
+
+  // La capitainerie : un étage vitré au-dessus des quais, l'escalier à l'intérieur
+  b.house(-30, 16, -24, 22, {
+    floors: 2,
+    open: [
+      { side: "e", at: 16.7, w: 1.4, kind: "door" },
+      { side: "s", at: -29.4, w: 1.6, kind: "win", floor: 1 },
+      { side: "s", at: -26.6, w: 2, kind: "win", floor: 1 },
+      { side: "e", at: 16.7, w: 1.6, kind: "win", floor: 1 },
+      { side: "e", at: 19.3, w: 1.6, kind: "win", floor: 1 },
+      { side: "w", at: 17.6, w: 2.6, kind: "win", floor: 1 },
+      { side: "n", at: -28.6, w: 3, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -29.7, dir: 1, c0: 20.2, c1: 21.7 },
+    wall: "beton",
+    roof: "metal",
+    roofAxis: "x",
+  });
+
+  // L'entrepôt : deux grandes portes vers les conteneurs, une porte de chaque côté
+  b.house(-30, -26, -16, -17, {
+    floors: 1,
+    height: 7,
+    open: [
+      { side: "n", at: -28, w: 4.4, kind: "big" },
+      { side: "n", at: -21, w: 4.4, kind: "big" },
+      { side: "e", at: -22.6, w: 1.4, kind: "door" },
+      { side: "w", at: -21, w: 1.4, kind: "door" },
+      { side: "s", at: -24, w: 2.2, kind: "win" },
+    ],
+    wall: "metal",
+    roof: "metal",
+    roofAxis: "x",
+  });
+  b.crate(-27.6, -24.2);
+  b.crate(-27.6, -22.9, 1.2, 2.4);
+  b.crate(-18.4, -24.2, 1.3, 1.3);
+  b.box(-24.6, 0, -24.6, -20.6, 1.4, -22.8, "bois");
+
+  // Les conteneurs : des rangées, des piles, quelques caisses pour grimper dessus
+  b.container(-36, 6, "x", RED);
+  b.container(-22, 9, "x", BLUE);
+  b.container(-22, 9, "x", ORANGE, 2.59);
+  b.container(-14, 13, "z", GREEN);
+  b.container(-34, -11, "x", GREY);
+  b.crate(-27.2, -9.8);
+  b.container(-20, -8, "x", SAND);
+  b.crate(-13.2, -6.8);
+  b.container(-40, -24, "z", BLUE);
+  b.container(-8.5, 20, "x", RED);
+  b.container(-36.5, 13, "x", GREEN);
+  b.container(-36.5, 13, "x", GREY, 2.59);
+
+  // Le quai au nord : sa bordure, ses bittes d'amarrage
+  b.box(-48, 0, 29.4, 0, 0.25, 30, "beton");
+  for (const x of [-44, -34, -24, -14, -4]) b.box(x - 0.2, 0, 28.6, x + 0.2, 0.6, 29, "metal");
+
+  // Des bidons, des sacs de sable, des caisses, des projecteurs
+  b.barrel(-26, 4.6);
+  b.barrel(-10.5, -12);
+  b.barrel(-33, -14.5);
+  b.sandbags(-12, 2.4, -9.6, 3);
+  b.crate(-24, 12.6);
+  b.crate(-16, 1.4, 1.3, 1.3);
+  b.add({ k: "lamp", x: -34, z: 0.6, h: 8 });
+  b.add({ k: "lamp", x: -12, z: 8.4, h: 8 });
+}
+
+function port(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "beton");
+  fence(b, -48, -30, 48, 30);
+  // Le grand portique au milieu : quatre pieds, deux poutres, ses rails ; deux caisses dans la zone
+  for (const [x, z] of [
+    [-7, -5],
+    [7, -5],
+    [-7, 5],
+    [7, 5],
+  ] as const)
+    b.box(x - 0.45, 0, z - 0.45, x + 0.45, 16, z + 0.45, "metal");
+  b.box(-8, 16, -5.6, 8, 17, -4.4, "metal");
+  b.box(-8, 16, 4.4, 8, 17, 5.6, "metal");
+  b.add({ k: "crane", x: 0, z: 0, w: 14, d: 10, h: 16 });
+  b.add({ k: "rail", x0: -26, x1: 26, z: -5 });
+  b.add({ k: "rail", x0: -26, x1: 26, z: 5 });
+  b.crate(-3, 2.5);
+  b.crate(3, -2.5);
+  // La mer au nord, au pied du mur du quai
+  b.add({ k: "water", x0: -300, z0: 30, x1: 300, z1: 320, y: -1.3 });
+  b.add({ k: "quay", x0: -48, x1: 48, z: 30, y0: -2.5, y1: 0 });
+
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    portSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -4, 0, -4),
+      b.spawn(-46, 4, 0, 4),
+      b.spawn(-43, -7, 0, -7),
+      b.spawn(-43, 7, 0, 7),
+      b.spawn(-41, -3, 0, -3),
+      b.spawn(-41, 3, 0, 3),
+      b.spawn(-45, 0, 0, 0),
+    ];
+    ffa.push(b.spawn(-44, 0, 0, 0), b.spawn(-26, 26, 0, 26), b.spawn(-23, -14, 0, -14), b.spawn(-8, -20, 0, -20), b.spawn(-20, 2, 0, 0));
+    ffa.push(b.spawn(-35, -18, 0, -18), b.spawn(-6, 15, 0, 15));
+  }
+  b.s = 1;
+  return {
+    id: "port",
+    ...MAP_NAMES.port,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    light: "aube",
+    sea: true,
+  };
+}
+
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {
   let m = cache.get(id);
   if (!m) {
-    m = id === "gare" ? gare() : hameau();
+    m = id === "gare" ? gare() : id === "port" ? port() : hameau();
     cache.set(id, m);
   }
   return m;
 }
 
 export function isMapId(v: unknown): v is MapId {
-  return v === "hameau" || v === "gare";
+  return v === "hameau" || v === "gare" || v === "port";
 }

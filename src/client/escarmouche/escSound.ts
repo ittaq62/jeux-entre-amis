@@ -135,7 +135,7 @@ export class EscSound {
   }
 
   /** L'ambiance de la carte, en boucle sous le combat */
-  startAmbience(light: "soir" | "gris") {
+  startAmbience(light: "soir" | "gris" | "aube") {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const sr = ctx.sampleRate;
@@ -163,6 +163,27 @@ export class EscSound {
     const level = () => usePrefs.getState().volume * (usePrefs.getState().sound ? 1 : 0);
     gain.gain.setTargetAtTime(level() * (light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
     const nodes: AudioNode[] = [src, gain];
+    if (light === "aube") {
+      // Le clapotis contre le quai : un bruit grave qui va et vient
+      const sea = ctx.createBuffer(1, sr * 6, sr);
+      const sd = sea.getChannelData(0);
+      const sn = noiseGen(77);
+      let a = 0;
+      for (let i = 0; i < sd.length; i++) {
+        const t = i / sr;
+        a += lowpassK(500, sr) * (sn() - a);
+        sd[i] = a * (0.5 + 0.5 * Math.sin((t / 6) * Math.PI * 2 * 3) ** 2);
+      }
+      const ss = ctx.createBufferSource();
+      ss.buffer = sea;
+      ss.loop = true;
+      const sg = ctx.createGain();
+      sg.gain.value = 0;
+      ss.connect(sg).connect(this.out);
+      ss.start();
+      sg.gain.setTargetAtTime(level() * 0.4, ctx.currentTime, 2);
+      nodes.push(ss, sg);
+    }
     if (light === "gris") {
       // La bruine : un chuintement doux, sans fin
       const rain = ctx.createBuffer(1, sr * 4, sr);
@@ -195,7 +216,28 @@ export class EscSound {
       const g = ctx.createGain();
       g.gain.value = 0;
       g.connect(pan).connect(this.out);
-      if (light === "soir") {
+      if (light === "aube") {
+        // Une mouette : deux ou trois cris qui glissent vers le grave
+        const cries = 2 + Math.floor(Math.random() * 2);
+        for (let k = 0; k < cries; k++) {
+          const o = ctx.createOscillator();
+          o.type = "sawtooth";
+          const at = t0 + k * 0.32;
+          o.frequency.setValueAtTime(1500 + Math.random() * 300, at);
+          o.frequency.exponentialRampToValueAtTime(900, at + 0.22);
+          const f = ctx.createBiquadFilter();
+          f.type = "bandpass";
+          f.frequency.value = 1400;
+          f.Q.value = 3;
+          const og = ctx.createGain();
+          og.gain.setValueAtTime(0, at);
+          og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.03);
+          og.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
+          o.connect(f).connect(og).connect(pan);
+          o.start(at);
+          o.stop(at + 0.28);
+        }
+      } else if (light === "soir") {
         const notes = 2 + Math.floor(Math.random() * 4);
         const base = 2600 + Math.random() * 1600;
         for (let k = 0; k < notes; k++) {

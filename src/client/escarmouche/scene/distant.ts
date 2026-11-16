@@ -47,7 +47,7 @@ export interface Distant {
   dispose(): void;
 }
 
-export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris"): Distant {
+export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "aube"): Distant {
   const group = new THREE.Group();
   const { x0, x1, z0, z1 } = gm.bounds;
   const pad = 3;
@@ -56,6 +56,8 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris"): D
   const heightAt = (x: number, z: number) => {
     const d = out(x, z);
     if (d <= 0) return -0.3;
+    // La mer au nord : le fond descend sous l'eau, et remonte au loin en falaises de l'autre côté de la baie
+    if (gm.sea && z > z1 + pad) return -6 + smooth(260, 420, z - z1) * (20 + fbm(x * 0.006, z * 0.006) * 50);
     const hills = smooth(0, 60, d) * (1.5 + fbm(x * 0.012, z * 0.012) * 16);
     const far = smooth(110, 360, d) * (25 + fbm(x * 0.004 + 9, z * 0.004 - 4, 5) * 110);
     return hills + far;
@@ -123,6 +125,7 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris"): D
     const z = cz + Math.sin(a) * (r + (z1 - z0) / 2);
     const d = out(x, z);
     if (d < 5 || d > 230) continue;
+    if (gm.sea && z > z1) continue;
     const woods = fbm(x * 0.018 + 50, z * 0.018 - 20);
     const hedge = Math.abs(((x + 13) / 42) % 1) < 0.04 || Math.abs(((z - 7) / 34) % 1) < 0.05;
     if (woods < 0.55 && !(hedge && hash(x, z) < 0.5) && hash(z, x) > 0.04) continue;
