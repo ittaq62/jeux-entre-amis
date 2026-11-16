@@ -221,6 +221,8 @@ export class Effects {
   private lightDur = 0.05;
   private now = 0;
   private camPos = new THREE.Vector3();
+  /** Ce qui brûle encore (une carcasse de bidon), ce qui fume en rouge (là où un obus va tomber) */
+  private fires: { at: THREE.Vector3; until: number; next: number; kind: "feu" | "fusee" }[] = [];
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
   private color = new THREE.Color();
@@ -437,6 +439,16 @@ export class Effects {
     h.rotateZ(Math.random() * Math.PI * 2);
   }
 
+  /** Un feu qui brûle là quelques secondes (la carcasse d'un bidon) */
+  fire(at: THREE.Vector3, seconds: number) {
+    this.fires.push({ at: at.clone(), until: this.now + seconds, next: 0, kind: "feu" });
+  }
+
+  /** Une fumée rouge qui monte : un obus va tomber ici */
+  flare(at: THREE.Vector3, seconds: number) {
+    this.fires.push({ at: at.clone(), until: this.now + seconds, next: 0, kind: "fusee" });
+  }
+
   /** Un soldat touché : une gerbe rouge, et des gouttes qui retombent */
   blood(at: THREE.Vector3, big = false) {
     this.puff(at, "#7a0d0d", big ? 0.42 : 0.28, 0.4, -0.25, 1.0, 0.85);
@@ -605,6 +617,27 @@ export class Effects {
     }
     this.chips.update(dt);
     this.sparks.update(dt);
+    if (this.fires.length > 0) {
+      this.fires = this.fires.filter((f) => f.until > now);
+      for (const f of this.fires) {
+        if (now < f.next) continue;
+        if (f.kind === "feu") {
+          f.next = now + 0.07;
+          const p = this.tmp
+            .copy(f.at)
+            .add(this.tmp2.set((Math.random() - 0.5) * 0.4, 0.2 + Math.random() * 0.3, (Math.random() - 0.5) * 0.4));
+          const flame = this.puffs[this.puffNext]!;
+          this.puff(p, Math.random() < 0.5 ? "#ff9a3a" : "#ffcf5a", 0.35 + Math.random() * 0.25, 0.45, 1.4, 0.3, 0.9, 0.6);
+          flame.sprite.material.blending = THREE.AdditiveBlending;
+          if (Math.random() < 0.35) this.puff(p.add(this.tmp2.set(0, 0.6, 0)), "#2e2a26", 0.6, 2.4, 1.1, 0.4, 0.5, 2.4);
+          this.glow(f.at, 6, 120);
+        } else {
+          f.next = now + 0.12;
+          const p = this.tmp.copy(f.at).add(this.tmp2.set((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3));
+          this.puff(p, "#d8392b", 0.5, 2.2, 1.6, 0.4, 0.7, 2.6);
+        }
+      }
+    }
     if (this.light) {
       if (now > this.lightUntil) this.light.intensity = 0;
       else this.light.intensity = this.lightPower * Math.max(0, (this.lightUntil - now) / this.lightDur);

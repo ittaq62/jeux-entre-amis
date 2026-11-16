@@ -39,7 +39,7 @@ import { pickQuality } from "./scene/quality.ts";
 import { ffaKit, TEAM_KITS } from "./scene/soldiers.ts";
 
 /** Les boutons qui ne comptent qu'au moment de l'appui (gardés jusqu'au prochain pas) */
-const TAPS = B.reload | B.grenade | B.melee | B.swap | B.slot1 | B.slot2 | B.jump;
+const TAPS = B.reload | B.grenade | B.melee | B.swap | B.slot1 | B.slot2 | B.jump | B.spot;
 const INTERP_MIN = 70;
 const INTERP_MAX = 250;
 
@@ -105,6 +105,8 @@ export interface HudState {
   suppress: number;
   /** À la lunette : le souffle qui reste, retenu ou non */
   breath: { left: number; holding: boolean; winded: boolean } | null;
+  /** Ses éliminations d'affilée (vers les jumelles, puis le mortier) */
+  streak: number;
   scheme: Scheme;
   locked: boolean;
   /** Le nom de l'adversaire dans le viseur */
@@ -218,6 +220,12 @@ export class BattleRuntime {
   private aimYaw = 0;
   private aimPitch = 0;
   private heartAt = 0;
+  /** Les ennemis repérés pour soi (son équipe, ou soi en chacun pour soi) */
+  private marked = new Set<number>();
+  /** Ses éliminations depuis sa dernière mort */
+  private streak = 0;
+  /** Les bidons de la carte (leur boîte dans le monde) */
+  private barrelBoxes: { i: number; x: number; z: number }[] = [];
   /** La vue penche et s'élargit pendant une glissade */
   private slideTilt = 0;
   private bannerUntil = 0;
@@ -246,6 +254,9 @@ export class BattleRuntime {
     this.gm = getMap(v.map);
     this.world = worldOf(v.map);
     this.radar = new Radar(this.gm);
+    this.gm.boxes.forEach((b, i) => {
+      if (b.m === "bidon") this.barrelBoxes.push({ i, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 });
+    });
     this.scene = new EscScene(o.canvas, this.gm, {
       quality: pickQuality(usePrefs.getState().escQuality, o.touch),
       teams: isTeamMode(v.mode),
@@ -541,10 +552,12 @@ export class BattleRuntime {
           }
           if (this.hp < 25 && this.pred?.alive) this.award("Dernier souffle");
         } else if (e.as === this.me && e.v !== this.me) this.award(`Aide contre ${this.nameOf(e.v)}`, POINTS.assist);
+        if (e.a === this.me && e.v !== this.me) this.streak++;
         if (e.v === this.me) {
           this.killer = e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h } : null;
           this.nemesis = e.a >= 0 && e.a !== e.v ? e.a : -1;
           this.multi = 0;
+          this.streak = 0;
         }
         return;
       }
@@ -556,9 +569,47 @@ export class BattleRuntime {
       case "boom": {
         const at = this.tmp.set(e.x, e.y, e.z);
         this.scene.effects.explosion(at);
-        this.sound.play("boom", { at });
+        if (e.w === "bidon") this.scene.effects.fire(at, 7);
+        if (e.w === "obus") this.scene.effects.explosion(this.tmp2.copy(at).add(this.tmp3.set(0.8, 0, -0.6)));
+        this.sound.play("boom", { at, volume: e.w === "obus" ? 1.2 : 1 });
         const d = at.distanceTo(this.scene.camera.position);
-        if (d < 14) this.shake = Math.max(this.shake, 1.2 * (1 - d / 14));
+        const reach = e.w === "obus" ? 20 : 14;
+        if (d < reach) this.shake = Math.max(this.shake, 1.3 * (1 - d / reach));
+        if (d < 6) this.suppress = Math.min(1, this.suppress + 0.6);
+        return;
+      }
+      case "barrel":
+        return;
+      case "spot": {
+        const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
+        const teams = v ? isTeamMode(v.mode) : false;
+        if (e.i === this.me || (teams && this.teamOf(e.i) === mine)) this.sound.play("spot", { volume: 0.35, gap: 300 });
+        if (e.i === this.me && e.v.length > 0)
+          this.award(e.v.length > 1 ? `${e.v.length} ennemis repérés` : `${this.nameOf(e.v[0]!)} repéré`);
+        return;
+      }
+      case "reward": {
+        const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
+        const teams = v ? isTeamMode(v.mode) : false;
+        const ally = e.i === this.me || (teams && this.teamOf(e.i) === mine);
+        if (e.r === "jumelles") {
+          if (e.i === this.me) this.award("Jumelles : ennemis repérés");
+          else
+            this.say(
+              ally ? `${this.nameOf(e.i)} sort les jumelles : ennemis repérés` : `${this.nameOf(e.i)} vous a repérés aux jumelles !`,
+              ally ? "good" : "bad",
+            );
+        } else {
+          if (e.i === this.me) this.award("Tir de mortier en route");
+          this.say(ally ? `Tir de mortier demandé par ${this.nameOf(e.i)}` : "Tir de mortier ennemi : à couvert !", ally ? "good" : "bad");
+        }
+        return;
+      }
+      case "shell": {
+        const at = this.tmp.set(e.x, 0.05, e.z);
+        this.scene.effects.flare(at, e.in);
+        const hear = { x: e.x, y: 3, z: e.z };
+        setTimeout(() => this.sound.play("shell", { at: hear, volume: 1, gap: 0 }), Math.max(0, (e.in - 1.3) * 1000));
         return;
       }
       case "knife": {
@@ -873,6 +924,14 @@ export class BattleRuntime {
     const wallT = this.world.raycast(eyeX, eyeY, eyeZ, dir[0], dir[1], dir[2], 120)?.t ?? 120;
     this.radarDots.length = 0;
     const nowMs = performance.now();
+    // Les repères : ceux qui sont montrés à son équipe (ou à soi seul, en chacun pour soi)
+    this.marked.clear();
+    const mk = this.latest?.mk;
+    if (mk && this.me >= 0) {
+      const myTeam = this.teamOf(this.me);
+      for (let k = 0; k + 2 < mk.length; k += 3) if (teams ? mk[k + 1] === myTeam : mk[k + 2] === this.me) this.marked.add(mk[k]!);
+    }
+    this.scene.setBarrels(this.barrelBoxes, new Set(this.latest?.bd ?? []));
     for (let i = 0; i < v.fighters.length; i++) {
       if (i === this.me) continue;
       const f = this.fighterAt(i, rt);
@@ -885,7 +944,8 @@ export class BattleRuntime {
       const ally = teams && this.me >= 0 && this.teamOf(i) === this.teamOf(this.me);
       const flagTeam = f.carrying;
       // Au radar : ses alliés toujours, un ennemi quand il vient de tirer
-      if (alive && (ally || nowMs - (this.lastShots.get(i) ?? -1e9) < 2500))
+      const marked = !ally && this.marked.has(i);
+      if (alive && (ally || marked || nowMs - (this.lastShots.get(i) ?? -1e9) < 2500))
         this.radarDots.push({ x: f.x, z: f.z, yaw: f.yaw, kind: ally ? "ally" : "enemy" });
       this.scene.updateSoldier(
         i,
@@ -911,6 +971,7 @@ export class BattleRuntime {
         dt,
         ally || inSight || this.me < 0,
         flagTeam >= 0 ? TEAM_HEX[flagTeam === 1 ? 1 : 0] : null,
+        marked,
       );
       // Les pas des autres, s'ils courent près de soi
       if (alive && f.speed > 3 && !crouch && (f.bits & PF.ground) !== 0) {
@@ -1189,6 +1250,7 @@ export class BattleRuntime {
       awards: this.awards.filter((a) => now - a.at < 2600),
       suppress: this.suppress,
       breath: scoped ? { left: this.breath, holding: this.holding, winded: this.winded > 0 } : null,
+      streak: s?.alive ? this.streak : 0,
       scheme: this.controls.scheme,
       locked: this.controls.locked,
       aimed,

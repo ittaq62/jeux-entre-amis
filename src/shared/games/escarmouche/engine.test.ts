@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot.ts";
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
-import { applyCmd, createMatch, finish, worldOf, worldStep, type EscEvent, type Match, type Pose } from "./match.ts";
+import { applyCmd, createMatch, finish, hurt, worldOf, worldStep, type EscEvent, type Match, type Pose } from "./match.ts";
 import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
@@ -439,5 +439,124 @@ describe("Escarmouche : glisser et se hisser", () => {
     run(world, s, 1, { b: B.jump });
     expect(s.mantleEnd).toBe(0);
     expect(s.vy).toBeGreaterThan(0);
+  });
+});
+
+describe("Escarmouche : bidons, repérage, récompenses de série", () => {
+  function duo(over: Partial<EscarmoucheSettings> = {}) {
+    const m = createMatch(
+      settings({ mode: "solo", ...over }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      3,
+    );
+    live(m);
+    for (const f of m.fighters) f.shieldUntil = 0;
+    return m;
+  }
+
+  for (const id of MAP_IDS) {
+    it(`${id} : les bidons sont posés au sol, loin des points d'apparition, sans rien chevaucher`, () => {
+      const gm = getMap(id);
+      const barrels = gm.boxes.filter((b) => b.m === "bidon");
+      expect(barrels.length).toBeGreaterThanOrEqual(4);
+      for (const b of barrels) {
+        const others = gm.boxes.filter(
+          (o) => o !== b && o.m !== "invisible" && o.y1 > 0.01 && o.x0 < b.x1 && o.x1 > b.x0 && o.z0 < b.z1 && o.z1 > b.z0 && o.y0 < b.y1,
+        );
+        expect(others, `${b.x0},${b.z0}`).toEqual([]);
+        for (const sp of [...gm.spawns[0], ...gm.spawns[1], ...gm.ffa])
+          expect(Math.hypot(sp.x - (b.x0 + b.x1) / 2, sp.z - (b.z0 + b.z1) / 2)).toBeGreaterThan(4);
+      }
+    });
+  }
+
+  it("un bidon touché explose un instant après : l'ennemi à côté est blessé, le bidon revient plus tard", () => {
+    const m = duo();
+    const [a, b] = m.fighters;
+    const barrel = m.barrels.find((k) => Math.abs(k.x + 19.6) < 0.01 && Math.abs(k.z + 5.4) < 0.01)!;
+    expect(barrel).toBeTruthy();
+    Object.assign(a!.s, { x: -17, y: 0, z: -5.4, vx: 0, vz: 0 });
+    Object.assign(b!.s, { x: -22.2, y: 0, z: -5.2, vx: 0, vz: 0 });
+    const yaw = Math.PI / 2;
+    const pitch = Math.atan2(barrel.y - eyeOf(a!.s), 2.6);
+    const world = worldOf("hameau");
+    const probe = world.raycast(a!.s.x, eyeOf(a!.s), a!.s.z, -Math.cos(pitch), Math.sin(pitch), 0, 10);
+    expect(world.boxes[probe!.box]!.m).toBe("bidon");
+    const ev: EscEvent[] = [];
+    for (let k = 0; k < 40; k++) {
+      worldStep(m, ev);
+      applyCmd(m, 0, idle(k + 1, { yaw, pitch, b: k % 2 ? 0 : B.fire }), null, ev);
+      applyCmd(m, 1, idle(k + 1), null, ev);
+    }
+    const boom = ev.find((e) => e.k === "boom" && e.w === "bidon");
+    expect(boom).toBeTruthy();
+    expect(ev.some((e) => e.k === "barrel" && !e.up)).toBe(true);
+    expect(ev.some((e) => e.k === "hit" && e.v === 1 && e.a === 0)).toBe(true);
+    expect(barrel.downUntil).toBeGreaterThan(m.t);
+    // Plus tard, un nouveau bidon le remplace
+    const back: EscEvent[] = [];
+    while (m.t < barrel.downUntil + 0.1) worldStep(m, back);
+    expect(back.some((e) => e.k === "barrel" && e.up)).toBe(true);
+    expect(barrel.hp).toBeGreaterThan(0);
+  });
+
+  it("repérer marque l'ennemi visé, pas celui qu'un mur cache", () => {
+    const m = duo({ mode: "equipes" });
+    const [a, b] = m.fighters;
+    Object.assign(a!.s, { x: -40, y: 0, z: 1.5 });
+    Object.assign(b!.s, { x: -30, y: 0, z: 1.5 });
+    const ev: EscEvent[] = [];
+    applyCmd(m, 0, idle(1, { yaw: -Math.PI / 2, b: B.spot }), null, ev);
+    expect(m.marks.some((k) => k.target === 1 && k.team === a!.team)).toBe(true);
+    expect(ev.some((e) => e.k === "spot")).toBe(true);
+    // Derrière le mur de la maison B
+    const m2 = duo({ mode: "equipes" });
+    Object.assign(m2.fighters[0]!.s, { x: -30, y: 0, z: 1.5 });
+    Object.assign(m2.fighters[1]!.s, { x: -19, y: 0, z: -11 });
+    const yaw = Math.atan2(-(-19 - -30), -(-11 - 1.5));
+    applyCmd(m2, 0, idle(1, { yaw, b: B.spot }), null, []);
+    expect(m2.marks).toEqual([]);
+  });
+
+  it("trois éliminations d'affilée : les jumelles repèrent tous les ennemis ; cinq : un tir de mortier tombe", () => {
+    const m = createMatch(
+      settings({ mode: "equipes" }),
+      Array.from({ length: 4 }, (_, i) => ({ id: `p${i}`, team: i === 0 ? 0 : 1, bot: false, primary: "fa" as const })),
+      5,
+    );
+    live(m);
+    const ev: EscEvent[] = [];
+    const killOnce = () => {
+      for (let j = 1; j < 4; j++) {
+        const f = m.fighters[j]!;
+        if (f.s.alive) {
+          f.shieldUntil = 0;
+          hurtFor(m, j, 0, ev);
+          return;
+        }
+      }
+    };
+    const hurtFor = (mm: Match, v: number, a: number, out: EscEvent[]) => {
+      // Une balle à bout portant, jusqu'à ce qu'il tombe
+      while (mm.fighters[v]!.s.alive) hurt(mm, v, a, 60, 1, "fa", out, 0, 1, 0);
+    };
+    killOnce();
+    killOnce();
+    killOnce();
+    expect(ev.some((e) => e.k === "reward" && e.r === "jumelles")).toBe(true);
+    expect(new Set(m.marks.map((k) => k.target))).toEqual(new Set([1, 2, 3]));
+    // Les morts reviennent, et on continue
+    while (m.fighters.some((f) => !f.s.alive)) worldStep(m, ev);
+    killOnce();
+    killOnce();
+    expect(ev.some((e) => e.k === "reward" && e.r === "mortier")).toBe(true);
+    const shells = ev.filter((e) => e.k === "shell");
+    expect(shells.length).toBeGreaterThan(0);
+    const later: EscEvent[] = [];
+    for (let k = 0; k < 60 * 5; k++) worldStep(m, later);
+    expect(later.filter((e) => e.k === "boom" && e.w === "obus").length).toBe(shells.length);
   });
 });

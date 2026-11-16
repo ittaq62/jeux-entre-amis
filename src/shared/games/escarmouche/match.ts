@@ -7,7 +7,6 @@ import { DT, eyeOf, forward, heightOf, newSoldier, respawnSoldier, stepSoldier, 
 import {
   damageAt,
   GRENADE,
-  grenadeDamage,
   isPrimaryId,
   isSecondaryId,
   KNIFE,
@@ -33,7 +32,14 @@ export const POINTS = { kill: 10, assist: 4, capture: 30, take: 5, ret: 10, zone
 /** Une balle ne va pas plus loin */
 const RANGE = 300;
 
-export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute";
+export type KillWeapon = WeaponId | "grenade" | "couteau" | "chute" | "bidon" | "mortier";
+
+/** Les bidons d'essence : ce qu'ils encaissent, leur souffle, le temps avant qu'un autre ne les remplace */
+export const BARREL = { hp: 45, radius: 6, damage: 120, back: 40, chain: 0.18 };
+/** Les récompenses de série : à 3 éliminations d'affilée, les jumelles ; à 5, un tir de mortier */
+export const REWARDS = { scout: 3, scoutTime: 10, mortar: 5, shells: 3, shellDelay: 2.6, shellGap: 0.55, radius: 7, damage: 140 };
+/** Repérer : combien de temps le repère reste, l'angle autour du viseur, l'attente entre deux */
+export const SPOT = { time: 7, cone: 0.07, range: 120, cooldown: 1.5 };
 
 /** Une partie de corps touchée : 0 la tête, 1 le tronc, 2 les jambes */
 export type Part = 0 | 1 | 2;
@@ -45,7 +51,15 @@ export type EscEvent =
   | { k: "kill"; a: number; v: number; w: KillWeapon; h: boolean; as: number }
   | { k: "spawn"; i: number }
   | { k: "throw"; i: number }
-  | { k: "boom"; i: number; x: number; y: number; z: number }
+  | { k: "boom"; i: number; x: number; y: number; z: number; w?: "bidon" | "obus" }
+  /** Un bidon saute (ou un nouveau le remplace) */
+  | { k: "barrel"; b: number; up: boolean }
+  /** Des ennemis viennent d'être repérés, par un soldat ou par les jumelles */
+  | { k: "spot"; i: number; v: number[] }
+  /** Une récompense de série */
+  | { k: "reward"; i: number; r: "jumelles" | "mortier" }
+  /** Un obus de mortier arrive ici dans `in` secondes */
+  | { k: "shell"; x: number; z: number; in: number }
   | { k: "knife"; i: number; v: number }
   | { k: "reload"; i: number }
   | { k: "flag"; f: "take" | "drop" | "return" | "capture"; team: number; i: number }
@@ -90,7 +104,38 @@ export interface Fighter {
   carrying: number;
   points: number;
   streak: number;
+  /** Quand il pourra repérer de nouveau */
+  spotReady: number;
   stats: FighterStats;
+}
+
+/** Un bidon d'essence : sa boîte dans le monde, ce qu'il encaisse encore, et quand il sera remplacé s'il a sauté */
+export interface Barrel {
+  box: number;
+  x: number;
+  y: number;
+  z: number;
+  hp: number;
+  downUntil: number;
+}
+
+/** Une explosion à venir (un bidon qui s'enflamme, un obus qui tombe) */
+export interface Blast {
+  at: number;
+  x: number;
+  y: number;
+  z: number;
+  owner: number;
+  kind: "bidon" | "obus";
+  barrel: number;
+}
+
+/** Un ennemi repéré : pour l'équipe (ou, en chacun pour soi, pour celui qui l'a repéré) */
+export interface Mark {
+  target: number;
+  team: number;
+  by: number;
+  until: number;
 }
 
 export interface Grenade {
@@ -133,6 +178,9 @@ export interface Match extends RngHolder {
   /** À la fin : l'équipe gagnante (ou le soldat, en chacun pour soi), null pour une égalité */
   winner: number | null;
   ranks: number[] | null;
+  barrels: Barrel[];
+  blasts: Blast[];
+  marks: Mark[];
 }
 
 export interface Pose {
@@ -219,8 +267,14 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
     zone: null,
     winner: null,
     ranks: null,
+    barrels: [],
+    blasts: [],
+    marks: [],
   };
   const gm = getMap(map);
+  gm.boxes.forEach((b, box) => {
+    if (b.m === "bidon") m.barrels.push({ box, x: (b.x0 + b.x1) / 2, y: b.y0 + 0.5, z: (b.z0 + b.z1) / 2, hp: BARREL.hp, downUntil: 0 });
+  });
   if (settings.mode === "drapeau") {
     m.flags = [0, 1].map((t) => ({ at: "home", carrier: -1, ...gm.flags[t]!, since: 0 })) as [FlagState, FlagState];
   }
@@ -242,6 +296,7 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       carrying: -1,
       points: 0,
       streak: 0,
+      spotReady: 0,
       stats: newStats(),
     };
     m.fighters.push(f);
@@ -354,6 +409,7 @@ export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, e
         const n = target < 0 && wall && tMax === wall.t ? 1 + wall.axis * 2 + (wall.sign > 0 ? 1 : 0) : 0;
         ev.push({ k: "shot", i, w: shot.weapon, x: r2(x), y: r2(y), z: r2(z), n });
       }
+      if (target < 0 && wall && tMax === wall.t && world.boxes[wall.box]?.m === "bidon") hitBarrel(m, wall.box, damageAt(w, tMax), i);
       if (target >= 0) {
         anyHit = true;
         const base = damageAt(w, tMax);
@@ -394,7 +450,139 @@ export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, e
     ev.push({ k: "throw", i });
   }
   if (out.reloaded) ev.push({ k: "reload", i });
+  if (out.spot && m.phase === "live") spot(m, i, world, ev);
   return out;
+}
+
+/** Repérer : les ennemis visibles tout près du viseur sont marqués pour son équipe quelques secondes */
+function spot(m: Match, i: number, world: World, ev: EscEvent[]) {
+  const f = m.fighters[i]!;
+  if (m.t < f.spotReady) return;
+  f.spotReady = m.t + SPOT.cooldown;
+  const s = f.s;
+  const ex = s.x;
+  const ey = eyeOf(s);
+  const ez = s.z;
+  const [dx, dy, dz] = forward(s.yaw, s.pitch);
+  const seen: number[] = [];
+  for (let j = 0; j < m.fighters.length; j++) {
+    if (!enemies(m, i, j)) continue;
+    const g = m.fighters[j]!;
+    if (!g.s.alive) continue;
+    const cy = g.s.y + heightOf(g.s) * 0.7;
+    const vx = g.s.x - ex;
+    const vy = cy - ey;
+    const vz = g.s.z - ez;
+    const dist = Math.hypot(vx, vy, vz);
+    if (dist > SPOT.range || dist < 0.1) continue;
+    const cos = (vx * dx + vy * dy + vz * dz) / dist;
+    if (Math.acos(Math.min(1, cos)) > SPOT.cone + 0.6 / dist) continue;
+    if (!world.clear(ex, ey, ez, g.s.x, cy, g.s.z)) continue;
+    mark(m, j, i, SPOT.time);
+    seen.push(j);
+  }
+  if (seen.length > 0) ev.push({ k: "spot", i, v: seen });
+}
+
+function mark(m: Match, target: number, by: number, time: number) {
+  const team = m.fighters[by]!.team;
+  const known = m.marks.find((k) => k.target === target && k.team === team && (isTeamMode(m.mode) || k.by === by));
+  if (known) known.until = Math.max(known.until, m.t + time);
+  else m.marks.push({ target, team, by, until: m.t + time });
+}
+
+/** Un bidon touché : il encaisse, puis s'enflamme et saute un instant après */
+function hitBarrel(m: Match, box: number, dmg: number, by: number) {
+  const b = m.barrels.find((k) => k.box === box);
+  if (!b || b.downUntil > 0 || b.hp <= 0) return;
+  b.hp -= dmg;
+  if (b.hp <= 0) m.blasts.push({ at: m.t + BARREL.chain, x: b.x, y: b.y, z: b.z, owner: by, kind: "bidon", barrel: box });
+}
+
+/** Le souffle d'une explosion : les soldats à portée (sauf derrière un mur), et les bidons voisins */
+function blast(
+  m: Match,
+  world: World,
+  x: number,
+  y: number,
+  z: number,
+  owner: number,
+  radius: number,
+  damage: number,
+  w: KillWeapon,
+  self: number,
+  ev: EscEvent[],
+) {
+  for (let j = 0; j < m.fighters.length; j++) {
+    const f = m.fighters[j]!;
+    if (!f.s.alive) continue;
+    const cy = f.s.y + heightOf(f.s) * 0.6;
+    const dist = Math.hypot(f.s.x - x, cy - y, f.s.z - z);
+    if (dist >= radius) continue;
+    // Un mur entre l'explosion et le soldat le protège (sa tête comme son buste)
+    if (!world.clear(x, y, z, f.s.x, cy, f.s.z) && !world.clear(x, y + 0.1, z, f.s.x, eyeOf(f.s), f.s.z)) continue;
+    const k = 1 - dist / radius;
+    const dmg = damage * (0.25 + 0.75 * k) * Math.min(1, k * 4) * (j === owner ? self : 1);
+    hurt(m, j, owner, dmg, 1, w, ev, f.s.x, cy, f.s.z);
+  }
+  for (const b of m.barrels) {
+    if (b.downUntil > 0 || b.hp <= 0) continue;
+    const dist = Math.hypot(b.x - x, b.y - y, b.z - z);
+    if (dist < radius * 0.8) hitBarrel(m, b.box, damage * (1 - dist / radius), owner);
+  }
+}
+
+/** Les explosions dues : les bidons, les obus ; et les bidons qui reviennent */
+function stepBlasts(m: Match, world: World, ev: EscEvent[]) {
+  for (const b of m.barrels) {
+    if (b.downUntil > 0 && m.t >= b.downUntil) {
+      b.downUntil = 0;
+      b.hp = BARREL.hp;
+      ev.push({ k: "barrel", b: b.box, up: true });
+    }
+  }
+  if (m.blasts.length === 0) return;
+  const due = m.blasts.filter((k) => m.t >= k.at);
+  if (due.length === 0) return;
+  m.blasts = m.blasts.filter((k) => m.t < k.at);
+  for (const k of due) {
+    if (k.kind === "bidon") {
+      const b = m.barrels.find((q) => q.box === k.barrel);
+      if (b) b.downUntil = m.t + BARREL.back;
+      ev.push({ k: "barrel", b: k.barrel, up: false });
+    }
+    ev.push({ k: "boom", i: k.owner, x: r2(k.x), y: r2(k.y), z: r2(k.z), w: k.kind });
+    if (k.kind === "bidon") blast(m, world, k.x, k.y, k.z, k.owner, BARREL.radius, BARREL.damage, "bidon", 0.6, ev);
+    else blast(m, world, k.x, k.y, k.z, k.owner, REWARDS.radius, REWARDS.damage, "mortier", 0.5, ev);
+  }
+}
+
+/** Les récompenses de série */
+function reward(m: Match, a: number, ev: EscEvent[]) {
+  const fa = m.fighters[a]!;
+  if (fa.streak === REWARDS.scout) {
+    // Les jumelles : tous les ennemis repérés un moment
+    const seen: number[] = [];
+    for (let j = 0; j < m.fighters.length; j++) {
+      if (!enemies(m, a, j)) continue;
+      mark(m, j, a, REWARDS.scoutTime);
+      seen.push(j);
+    }
+    ev.push({ k: "reward", i: a, r: "jumelles" });
+    if (seen.length > 0) ev.push({ k: "spot", i: a, v: seen });
+  } else if (fa.streak === REWARDS.mortar) {
+    // Le mortier : quelques obus sur les ennemis, annoncés un peu avant de tomber
+    const targets = m.fighters.map((f, j) => ({ f, j })).filter(({ f, j }) => enemies(m, a, j) && f.s.alive);
+    ev.push({ k: "reward", i: a, r: "mortier" });
+    for (let k = 0; k < REWARDS.shells && targets.length > 0; k++) {
+      const { f } = targets[Math.floor(random(m) * targets.length)]!;
+      const x = f.s.x + (random(m) - 0.5) * 5;
+      const z = f.s.z + (random(m) - 0.5) * 5;
+      const delay = REWARDS.shellDelay + k * REWARDS.shellGap;
+      m.blasts.push({ at: m.t + delay, x, y: f.s.y + 0.2, z, owner: a, kind: "obus", barrel: -1 });
+      ev.push({ k: "shell", x: r2(x), z: r2(z), in: delay });
+    }
+  }
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -451,6 +639,7 @@ function kill(m: Match, v: number, a: number, w: KillWeapon, head: boolean, ev: 
     fa.streak += 1;
     fa.stats.best = Math.max(fa.stats.best, fa.streak);
     if (fa.streak >= 3 && fa.streak % 2 === 1) ev.push({ k: "streak", i: a, n: fa.streak });
+    reward(m, a, ev);
     if (m.mode === "equipes") m.scores[fa.team === 1 ? 1 : 0] += 1;
     for (const d of fv.damagers) {
       if (d.i === a || d.i === v || m.t - d.at > ASSIST_WINDOW) continue;
@@ -517,6 +706,8 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   }
   const world = worldOf(m.map);
   stepGrenades(m, world, ev);
+  stepBlasts(m, world, ev);
+  if (m.marks.length > 0) m.marks = m.marks.filter((k) => k.until > m.t && m.fighters[k.target]?.s.alive);
   for (let i = 0; i < m.fighters.length; i++) {
     const f = m.fighters[i]!;
     if (!f.s.alive) {
@@ -562,17 +753,7 @@ function stepGrenades(m: Match, world: World, ev: EscEvent[]) {
   m.grenades = m.grenades.filter((g) => m.t < g.boom);
   for (const g of due) {
     ev.push({ k: "boom", i: g.owner, x: r2(g.x), y: r2(g.y), z: r2(g.z) });
-    for (let j = 0; j < m.fighters.length; j++) {
-      const f = m.fighters[j]!;
-      if (!f.s.alive) continue;
-      const cy = f.s.y + heightOf(f.s) * 0.6;
-      const dist = Math.hypot(f.s.x - g.x, cy - g.y, f.s.z - g.z);
-      if (dist >= GRENADE.radius) continue;
-      // Un mur entre la grenade et le soldat le protège (sa tête comme son buste)
-      if (!world.clear(g.x, g.y, g.z, f.s.x, cy, f.s.z) && !world.clear(g.x, g.y + 0.1, g.z, f.s.x, eyeOf(f.s), f.s.z)) continue;
-      const dmg = grenadeDamage(dist) * (j === g.owner ? GRENADE.self : 1);
-      hurt(m, j, g.owner, dmg, 1, "grenade", ev, f.s.x, cy, f.s.z);
-    }
+    blast(m, world, g.x, g.y, g.z, g.owner, GRENADE.radius, GRENADE.damage, "grenade", GRENADE.self, ev);
   }
 }
 
@@ -722,6 +903,7 @@ export function addFighter(m: Match, p: FighterInit): number {
     carrying: -1,
     points: 0,
     streak: 0,
+    spotReady: 0,
     stats: newStats(),
   });
   const sp = spawnPoint(m, i);

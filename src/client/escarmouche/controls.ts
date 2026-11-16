@@ -18,6 +18,7 @@ const KEYS = {
   grenade: ["KeyG"],
   melee: ["KeyV", "KeyF"],
   swap: ["KeyQ"],
+  spot: ["KeyE"],
   slot1: ["Digit1"],
   slot2: ["Digit2"],
   board: ["Tab"],
@@ -217,6 +218,7 @@ export class EscControls {
     if (this.tap("swap") || this.wheel > 0) b |= B.swap;
     if (this.tap("slot1")) b |= B.slot1;
     if (this.tap("slot2")) b |= B.slot2;
+    if (this.tap("spot") || this.mouseButtons & 4) b |= B.spot;
     if ((this.mouseButtons | this.mouseTapped) & 1) b |= B.fire;
     if (this.mouseButtons & 2) b |= B.ads;
     this.wheel = 0;
@@ -250,6 +252,7 @@ export class EscControls {
         if (edge(3)) b |= B.swap;
         if (edge(5)) b |= B.grenade;
         if (edge(4) || edge(11)) b |= B.melee;
+        if (edge(12)) b |= B.spot;
       }
     }
 

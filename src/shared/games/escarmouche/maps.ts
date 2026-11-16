@@ -357,6 +357,11 @@ class Builder {
     this.box(x0, 0, z0, x1, h, z1, "sacs");
   }
 
+  /** Un bidon d'essence, debout : il explose quand on tire dessus */
+  barrel(x: number, z: number) {
+    this.box(x - 0.3, 0, z - 0.3, x + 0.3, 0.95, z + 0.3, "bidon");
+  }
+
   tree(x: number, z: number, h = 7, r = 2.6) {
     this.box(x - 0.25, 0, z - 0.25, x + 0.25, h * 0.55, z + 0.25, "bois");
     this.add({ k: "tree", x, z, h, r });
@@ -468,6 +473,10 @@ function hameauSide(b: Builder) {
   b.crate(-17.6, 2.6);
   b.crate(-17.6, 3.8, 1.2, 2.4);
   b.sandbags(-21, -4.6, -18.6, -4);
+  // Des bidons d'essence, à ne pas laisser près de soi
+  b.barrel(-19.6, -5.4);
+  b.barrel(-36.4, -2.6);
+  b.barrel(-16.2, 5.6);
 
   // La rue haute : des tonneaux, une charrette ; la rue basse : un camion abandonné, des sacs de sable
   b.box(-24.35, 0, 17.65, -23.65, 1, 18.35, "bois");
@@ -624,6 +633,10 @@ function gareSide(b: Builder) {
   b.crate(-34, -1.5, 1.3, 1.3);
   b.crate(-9, 15.6, 1.2, 1.2);
   b.crate(-9, 22.4, 1.2, 2.2);
+  // Des bidons d'essence : au dépôt, près de la citerne, entre les wagons
+  b.barrel(-37.5, 4);
+  b.barrel(-30, -14.4);
+  b.barrel(-10.2, 14.4);
 
   // L'escalier de la passerelle (l'autre est son demi-tour)
   b.stairs("z", 26, -1, -1.5, 1.5, 0, 5.3, "metal");

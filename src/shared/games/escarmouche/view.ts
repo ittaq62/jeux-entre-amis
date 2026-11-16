@@ -80,6 +80,10 @@ export interface EscTick {
   z?: [number, number];
   /** Les grenades en vol : id, x, y, z (cm) */
   g: number[];
+  /** Les ennemis repérés : par trois, la cible, l'équipe à qui elle est montrée, celui qui l'a repérée */
+  mk?: number[];
+  /** Les bidons qui ont sauté (leur boîte), en attendant d'être remplacés */
+  bd?: number[];
   e: EscEvent[];
 }
 
@@ -139,6 +143,9 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
   };
   if (m.flags) tick.f = m.flags.flatMap((F) => [F.at === "home" ? 0 : F.at === "carried" ? 1 : 2, F.carrier, cm(F.x), cm(F.y), cm(F.z)]);
   if (m.zone) tick.z = [m.zone.owner, m.zone.contested ? 1 : 0];
+  if (m.marks.length > 0) tick.mk = m.marks.flatMap((k) => [k.target, k.team, k.by]);
+  const down = m.barrels.filter((b) => b.downUntil > 0).map((b) => b.box);
+  if (down.length > 0) tick.bd = down;
   return tick;
 }
 

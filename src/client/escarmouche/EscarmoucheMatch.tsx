@@ -34,6 +34,8 @@ const KILL_WEAPON: Record<KillWeapon, string> = {
   grenade: "grenade",
   couteau: "couteau",
   chute: "chute",
+  bidon: "bidon d'essence",
+  mortier: "tir de mortier",
 };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -201,6 +203,9 @@ function TouchPad({ rt, hud }: { rt: MutableRefObject<BattleRuntime | null>; hud
         </button>
         <button className="esc-btn esc-knife" onPointerDown={tap(B.melee)} aria-label="Couteau">
           Couteau
+        </button>
+        <button className="esc-btn esc-spot" onPointerDown={tap(B.spot)} aria-label="Repérer l'ennemi visé">
+          Repérer
         </button>
       </div>
     </div>
@@ -634,6 +639,12 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                   <small> / {h.res}</small>
                 </span>
                 <span className="esc-ammo-nade">{h.grenades > 0 ? "● grenade" : "○ grenade"}</span>
+                {h.streak > 0 && (
+                  <span className="esc-streak">
+                    Série {h.streak}
+                    {h.streak < 3 ? ` · jumelles à 3` : h.streak < 5 ? ` · mortier à 5` : ""}
+                  </span>
+                )}
                 {h.reloading >= 0 && (
                   <span className="esc-reload">
                     <span style={{ width: `${Math.round(h.reloading * 100)}%` }} />

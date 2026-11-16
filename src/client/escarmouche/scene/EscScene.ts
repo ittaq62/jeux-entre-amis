@@ -59,7 +59,9 @@ export class EscScene {
   private sun: THREE.DirectionalLight;
   private env: THREE.Texture;
   readonly effects: Effects;
-  private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite }>();
+  private soldiers = new Map<number, { model: SoldierModel; name: THREE.Sprite; mark: THREE.Sprite }>();
+  /** Les bidons d'essence : debout, ou carcasse noircie qui fume encore */
+  private barrels = new Map<number, { whole: THREE.Group; wreck: THREE.Group; down: boolean }>();
   private vmRoot = new THREE.Group();
   private vmGun: Gun | null = null;
   private vmKey = "";
@@ -306,9 +308,14 @@ export class EscScene {
     if (known) this.removeSoldier(i);
     const model = new SoldierModel(look, this.low);
     const label = nameSprite(name, nameColor);
+    const mark = new THREE.Sprite(markMaterial());
+    mark.scale.set(0.34, 0.34, 1);
+    mark.renderOrder = 10;
+    mark.visible = false;
     this.scene.add(model.root);
     this.scene.add(label);
-    this.soldiers.set(i, { model, name: label });
+    this.scene.add(mark);
+    this.soldiers.set(i, { model, name: label, mark });
   }
 
   removeSoldier(i: number) {
@@ -316,19 +323,44 @@ export class EscScene {
     if (!s) return;
     this.scene.remove(s.model.root);
     this.scene.remove(s.name);
+    this.scene.remove(s.mark);
     s.model.dispose();
     this.soldiers.delete(i);
   }
 
   /** Le soldat `i`, et son nom (montré ou non) */
-  updateSoldier(i: number, pose: SoldierPose, dt: number, showName: boolean, flagColor: string | null) {
+  updateSoldier(i: number, pose: SoldierPose, dt: number, showName: boolean, flagColor: string | null, marked = false) {
     const s = this.soldiers.get(i);
     if (!s) return;
     s.model.update(pose, dt, flagColor);
     s.name.visible = showName && pose.alive && s.model.root.visible;
-    if (s.name.visible) {
-      s.model.headWorld(this.tmp);
-      s.name.position.set(this.tmp.x, this.tmp.y + 0.5, this.tmp.z);
+    // Repéré : un losange rouge au-dessus de sa tête, qu'on voit même à travers les murs
+    s.mark.visible = marked && pose.alive;
+    if (s.name.visible || s.mark.visible) s.model.headWorld(this.tmp);
+    if (s.name.visible) s.name.position.set(this.tmp.x, this.tmp.y + 0.5, this.tmp.z);
+    if (s.mark.visible) {
+      s.mark.position.set(this.tmp.x, this.tmp.y + (s.name.visible ? 0.82 : 0.55), this.tmp.z);
+      const d = this.camera.position.distanceTo(s.mark.position);
+      s.mark.scale.setScalar(Math.max(0.3, d * 0.028) * (1 + Math.sin(this.t * 6) * 0.06));
+    }
+  }
+
+  /** Les bidons de la carte, debout ou qui ont sauté */
+  setBarrels(boxes: { i: number; x: number; z: number }[], down: ReadonlySet<number>) {
+    for (const b of boxes) {
+      let k = this.barrels.get(b.i);
+      if (!k) {
+        k = buildBarrel(b.x, b.z, this.low);
+        this.scene.add(k.whole);
+        this.scene.add(k.wreck);
+        this.barrels.set(b.i, k);
+      }
+      const isDown = down.has(b.i);
+      if (isDown !== k.down) {
+        k.down = isDown;
+        k.whole.visible = !isDown;
+        k.wreck.visible = isDown;
+      }
     }
   }
 
@@ -619,4 +651,85 @@ export class EscScene {
     this.env.dispose();
     this.renderer.dispose();
   }
+}
+
+let markMat: THREE.SpriteMaterial | null = null;
+/** Le repère d'un ennemi : un losange rouge cerclé de noir, dessiné par-dessus tout */
+function markMaterial(): THREE.SpriteMaterial {
+  if (markMat) return markMat;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  g.beginPath();
+  g.moveTo(32, 6);
+  g.lineTo(54, 30);
+  g.lineTo(32, 58);
+  g.lineTo(10, 30);
+  g.closePath();
+  g.lineWidth = 7;
+  g.strokeStyle = "rgba(0,0,0,.75)";
+  g.stroke();
+  g.fillStyle = "#ff3b2a";
+  g.fill();
+  g.fillStyle = "rgba(255,255,255,.55)";
+  g.beginPath();
+  g.moveTo(32, 14);
+  g.lineTo(44, 30);
+  g.lineTo(32, 30);
+  g.closePath();
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  markMat = new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true });
+  return markMat;
+}
+
+/** Un bidon d'essence rouge cerclé, et sa carcasse ouverte et noircie */
+function buildBarrel(x: number, z: number, low: boolean) {
+  const seg = low ? 10 : 18;
+  const red = new THREE.MeshStandardMaterial({ color: "#a3231b", roughness: 0.5, metalness: 0.45 });
+  const band = new THREE.MeshStandardMaterial({ color: "#e0b030", roughness: 0.5, metalness: 0.3 });
+  const steel = new THREE.MeshStandardMaterial({ color: "#3a3836", roughness: 0.45, metalness: 0.7 });
+  const burnt = new THREE.MeshStandardMaterial({ color: "#1d1b19", roughness: 0.9, metalness: 0.3 });
+  const whole = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, seg), red);
+  body.position.y = 0.45;
+  whole.add(body);
+  for (const y of [0.3, 0.6]) {
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.302, 0.012, 6, seg), steel);
+    rib.rotation.x = Math.PI / 2;
+    rib.position.y = y;
+    whole.add(rib);
+  }
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.303, 0.303, 0.12, seg, 1, true), band);
+  stripe.position.y = 0.45;
+  whole.add(stripe);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.02, seg), steel);
+  lid.position.y = 0.91;
+  whole.add(lid);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 8), steel);
+  cap.position.set(0.15, 0.93, 0.05);
+  whole.add(cap);
+  whole.position.set(x, 0, z);
+  whole.rotation.y = x * 3.1 + z;
+  whole.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = true;
+  });
+  const wreck = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.3, 0.55, seg, 1, true), burnt);
+  shell.material.side = THREE.DoubleSide;
+  shell.position.y = 0.27;
+  shell.scale.set(1, 1, 0.8);
+  wreck.add(shell);
+  const scorch = new THREE.Mesh(
+    new THREE.CircleGeometry(1.2, 16),
+    new THREE.MeshBasicMaterial({ color: "#000", transparent: true, opacity: 0.55, depthWrite: false }),
+  );
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.position.y = 0.02;
+  wreck.add(scorch);
+  wreck.position.set(x, 0, z);
+  wreck.rotation.set(0.12, x, 0.08);
+  wreck.visible = false;
+  return { whole, wreck, down: false };
 }

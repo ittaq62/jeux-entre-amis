@@ -1141,3 +1141,18 @@ html:has(.esc-root) body {
 .esc-breath.is-winded span {
   background: #e0503c;
 }
+
+.esc-streak {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f4c86a;
+}
+
+.esc-spot {
+  right: 188px;
+  bottom: 186px;
+  width: 46px;
+  height: 46px;
+  font-size: 10px;
+}

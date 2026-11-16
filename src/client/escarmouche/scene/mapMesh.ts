@@ -123,7 +123,7 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
   const bags: THREE.Box3[] = [];
   const bales: THREE.Box3[] = [];
   gm.boxes.forEach((bx, i) => {
-    if (bx.m === "invisible") return;
+    if (bx.m === "invisible" || bx.m === "bidon") return;
     // Les sacs de sable et les bottes de foin ont leur propre forme
     if (bx.m === "sacs" || bx.m === "foin") {
       (bx.m === "sacs" ? bags : bales).push(new THREE.Box3(new THREE.Vector3(bx.x0, bx.y0, bx.z0), new THREE.Vector3(bx.x1, bx.y1, bx.z1)));

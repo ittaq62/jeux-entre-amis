@@ -33,7 +33,9 @@ export type EscSoundName =
   | "whiz"
   | "heart"
   | "slide"
-  | "mantle";
+  | "mantle"
+  | "spot"
+  | "shell";
 
 interface ShotSpec {
   thump: number;
@@ -469,6 +471,27 @@ export class EscSound {
     this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
     this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
     this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+    // Repérer : deux notes brèves, comme un signal radio
+    this.buffers.set(
+      "spot",
+      this.tone(0.3, [
+        [1320, 0],
+        [1760, 0.08],
+      ]),
+    );
+    // L'obus de mortier : un sifflement qui descend, de plus en plus fort
+    this.buffers.set(
+      "shell",
+      this.make(1.4, (d, sr) => {
+        let ph = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          const f = 2400 - t * 1300;
+          ph += (2 * Math.PI * f) / sr;
+          d[i] = Math.sin(ph) * Math.min(1, t / 0.3) * (0.3 + t * 0.5);
+        }
+      }),
+    );
     // La glissade : le gravier qui crisse sous le corps
     this.buffers.set(
       "slide",

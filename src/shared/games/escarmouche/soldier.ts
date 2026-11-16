@@ -41,6 +41,8 @@ export const B = {
   swap: 256,
   slot1: 512,
   slot2: 1024,
+  /** Repérer l'ennemi visé, pour ses coéquipiers */
+  spot: 2048,
 } as const;
 
 /** Ce que demande le joueur pour un pas */
@@ -75,7 +77,7 @@ export function decodeCmd(n: unknown): Cmd | null {
     mz: c(Math.round(mz!), -100, 100) / 100,
     yaw: Math.round(wrapAngle(Math.round(yaw!) / 1000) * 1000) / 1000,
     pitch: c(Math.round(pitch!) / 1000, -MAX_PITCH, MAX_PITCH),
-    b: Math.round(b!) & 2047,
+    b: Math.round(b!) & 4095,
     vt: vt!,
   };
 }
@@ -253,10 +255,23 @@ export interface StepOut {
   /** Une glissade, une escalade viennent de commencer : pour les sons */
   slid: boolean;
   mantled: boolean;
+  /** Il vient d'appuyer sur « repérer » */
+  spot: boolean;
 }
 
 export function emptyOut(): StepOut {
-  return { shots: [], grenade: null, melee: false, reloaded: false, swapped: false, jumped: false, landed: 0, slid: false, mantled: false };
+  return {
+    shots: [],
+    grenade: null,
+    melee: false,
+    reloaded: false,
+    swapped: false,
+    jumped: false,
+    landed: 0,
+    slid: false,
+    mantled: false,
+    spot: false,
+  };
 }
 
 /** En train de glisser */
@@ -320,6 +335,7 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
   const pressed = b & ~s.prevB;
   s.prevB = b;
   const w0 = weaponOf(s);
+  if (pressed & B.spot) out.spot = true;
 
   // L'escalade en cours : il monte d'abord, puis passe par-dessus ; l'arme attend
   if (s.mantleEnd > 0) {
