@@ -34,6 +34,7 @@ import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
 import type { Surface } from "./scene/effects.ts";
+import { drawCompass, Radar, type RadarDot } from "./radar.ts";
 import { pickQuality } from "./scene/quality.ts";
 import { ffaKit, TEAM_KITS } from "./scene/soldiers.ts";
 
@@ -187,6 +188,11 @@ export class BattleRuntime {
   private hitKind: HudState["hitKind"] = "body";
   private damage: HudState["damage"] = [];
   private hurtAt = 0;
+  /** Le radar et la boussole, dessinés à chaque image */
+  private radar: Radar;
+  private radarCanvas: HTMLCanvasElement | null = null;
+  private compassCanvas: HTMLCanvasElement | null = null;
+  private radarDots: RadarDot[] = [];
   private killer: HudState["killer"] = null;
   private banner: HudState["banner"] = null;
   private bannerUntil = 0;
@@ -212,6 +218,7 @@ export class BattleRuntime {
     const v = o.room.escarmouche!;
     this.gm = getMap(v.map);
     this.world = worldOf(v.map);
+    this.radar = new Radar(this.gm);
     this.scene = new EscScene(o.canvas, this.gm, {
       quality: pickQuality(usePrefs.getState().escQuality, o.touch),
       teams: isTeamMode(v.mode),
@@ -223,6 +230,14 @@ export class BattleRuntime {
     this.fit();
     // En développement seulement : de quoi piloter la partie depuis la console (tests à plusieurs onglets)
     if (import.meta.env.DEV) (window as unknown as { __esc?: BattleRuntime }).__esc = this;
+  }
+
+  setRadarCanvas(c: HTMLCanvasElement | null) {
+    this.radarCanvas = c;
+  }
+
+  setCompassCanvas(c: HTMLCanvasElement | null) {
+    this.compassCanvas = c;
   }
 
   applyPrefs() {
@@ -745,6 +760,8 @@ export class BattleRuntime {
     const eyeZ = this.scene.camera.position.z;
     const dir = forward(this.yaw, this.pitch);
     const wallT = this.world.raycast(eyeX, eyeY, eyeZ, dir[0], dir[1], dir[2], 120)?.t ?? 120;
+    this.radarDots.length = 0;
+    const nowMs = performance.now();
     for (let i = 0; i < v.fighters.length; i++) {
       if (i === this.me) continue;
       const f = this.fighterAt(i, rt);
@@ -756,6 +773,9 @@ export class BattleRuntime {
       if (inSight) aimed = this.nameOf(i);
       const ally = teams && this.me >= 0 && this.teamOf(i) === this.teamOf(this.me);
       const flagTeam = f.carrying;
+      // Au radar : ses alliés toujours, un ennemi quand il vient de tirer
+      if (alive && (ally || nowMs - (this.lastShots.get(i) ?? -1e9) < 2500))
+        this.radarDots.push({ x: f.x, z: f.z, yaw: f.yaw, kind: ally ? "ally" : "enemy" });
       this.scene.updateSoldier(
         i,
         {
@@ -798,7 +818,23 @@ export class BattleRuntime {
       );
     }
     if (v.mode === "zone") this.scene.setZone(this.gm.zone, this.latest?.z?.[0] ?? -1, this.latest?.z?.[1] === 1);
+    // La douleur à l'image : pâle et rougie sur les bords quand on vient d'être touché, ou qu'il reste peu de vie
+    const hurtK =
+      this.me >= 0 && s?.alive ? Math.max(0, 1 - (nowMs - this.hurtAt) / 650) * 0.55 + Math.max(0, (40 - this.hp) / 40) * 0.45 : 0;
+    this.scene.setHurt(hurtK);
     this.scene.render(dt);
+    if (this.radarCanvas) {
+      const cam = this.scene.camera.position;
+      const zoneOwner = this.latest?.z?.[0] ?? -1;
+      this.radar.draw(
+        this.radarCanvas,
+        { x: cam.x, z: cam.z, yaw: this.yaw },
+        this.radarDots,
+        flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : [],
+        v.mode === "zone" ? { ...this.gm.zone, color: zoneOwner >= 0 ? TEAM_HEX[zoneOwner === 1 ? 1 : 0] : "rgba(240,236,220,.8)" } : null,
+      );
+    }
+    if (this.compassCanvas) drawCompass(this.compassCanvas, this.yaw);
 
     // Le compte à rebours
     const remain = v.liveAt - this.simNow();

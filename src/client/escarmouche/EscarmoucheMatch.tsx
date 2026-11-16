@@ -9,6 +9,7 @@ import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared
 import { ReportButton } from "../components/ReportButton.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { QUALITY_NAMES, type QualityPref } from "./scene/quality.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TEAM_NAMES } from "./EscarmoucheLobby.tsx";
@@ -379,6 +380,16 @@ function Settings({ touch, onClose }: { touch: boolean; onClose: () => void }) {
         <input type="range" min={65} max={100} step={1} value={p.escFov} onChange={(e) => p.set({ escFov: Number(e.target.value) })} />
       </label>
       <label>
+        <span>Qualité de l'image</span>
+        <select value={p.escQuality} onChange={(e) => p.set({ escQuality: e.target.value as QualityPref })}>
+          {(Object.keys(QUALITY_NAMES) as QualityPref[]).map((q) => (
+            <option key={q} value={q}>
+              {QUALITY_NAMES[q]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
         <span>Volume</span>
         <input
           type="range"
@@ -420,6 +431,8 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const v = room.escarmouche!;
   const over = room.status === "finished" || v.phase === "over";
   const mapKey = `${v.map}:${room.escarmouche?.liveAt}:${room.code}`;
+  // Changer la qualité refait l'image tout de suite (la partie, elle, continue)
+  const quality = usePrefs((p) => p.escQuality);
   const roomRef = useRef(room);
   roomRef.current = room;
 
@@ -439,7 +452,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
       r.dispose();
       rt.current = null;
     };
-  }, [mapKey, send, listeners, touch]);
+  }, [mapKey, send, listeners, touch, quality]);
 
   useEffect(() => {
     rt.current?.setRoom(room);
@@ -542,6 +555,10 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
               </div>
             )}
           </div>
+
+          {/* La boussole, sous le score ; le radar, dans un coin */}
+          <canvas className="esc-compass" ref={(el) => rt.current?.setCompassCanvas(el)} />
+          {h.seated && <canvas className="esc-radar" ref={(el) => rt.current?.setRadarCanvas(el)} />}
 
           {/* Le fil des éliminations */}
           <ul className="esc-feed">
