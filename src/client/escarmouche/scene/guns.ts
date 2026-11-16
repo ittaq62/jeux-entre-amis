@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
 import type { ExtraId, MuzzleId, WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
 import { camoTexture } from "./textures.ts";
 
@@ -69,8 +70,13 @@ export interface Gun {
   pistol: boolean;
 }
 
+/** Les arêtes adoucies (sauf en qualité basse) : chaque pièce accroche la lumière sur ses bords */
+let bevel = false;
+
 function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D, rx = 0) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const small = Math.min(w, h, d);
+  const geo = bevel && small > 0.007 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(0.01, small * 0.22)) : new THREE.BoxGeometry(w, h, d);
+  const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
   m.rotation.x = rx;
   parent.add(m);
@@ -169,6 +175,7 @@ export interface Gear {
 export const NO_GEAR: Gear = { muzzle: "aucun", extra: "aucun" };
 
 export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = NO_GEAR): Gun {
+  bevel = !low;
   const g = new THREE.Group();
   const body = camoMat(camo);
   const muzzle = new THREE.Object3D();
@@ -504,6 +511,7 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
     }
     if (gear.extra === "chargeur" && mag) mag.scale.y = 1.45;
   }
+  bevel = false;
   fuse(g);
   g.add(muzzle);
   g.add(eject);
