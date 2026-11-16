@@ -694,7 +694,7 @@ function roofExtras(d: Extract<Decor, { k: "roof" }>, ctx: Ctx, q: Quality) {
 /** Des sacs de sable posés en quinconce, rang par rang, un peu de travers, de teintes un peu différentes */
 function sandbagMesh(boxes: THREE.Box3[], q: Quality): THREE.Mesh {
   const parts: THREE.BufferGeometry[] = [];
-  const base = new RoundedBoxGeometry(0.56, 0.17, 0.34, q === "bas" ? 1 : 2, 0.07).toNonIndexed();
+  const base = new RoundedBoxGeometry(0.56, 0.17, 0.34, q === "haut" ? 2 : 1, 0.07).toNonIndexed();
   const tints = ["#a8996f", "#9c8d64", "#b3a479", "#8f835e", "#a39270"];
   const c = new THREE.Color();
   let n = 0;

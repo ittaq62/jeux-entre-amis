@@ -14,6 +14,7 @@ import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import { fuse } from "./fuse.ts";
 import { buildGun, type Gun } from "./guns.ts";
 import { clothTexture } from "./textures.ts";
+import { outfitCoat, outfitExtras, wearHair, wearHat } from "./wardrobe3d.ts";
 
 /** La couleur d'un camp (ou d'un soldat en chacun pour soi) : son foulard, ses brassards, la bande de son casque */
 export interface Kit {
@@ -94,8 +95,10 @@ export interface UniformMats {
 }
 
 export function uniformMats(u: UniformInfo, avatar: AvatarConfig, keep: Keep): UniformMats {
-  const coatColor = u.coat ?? AVATAR_BACKGROUNDS[avatar.bg] ?? AVATAR_BACKGROUNDS[0]!;
-  const coatTex = clothTexture(coatColor, u.spots, u.pattern);
+  // Sa propre tenue reprend celle de son personnage : la couleur de son portrait, ou ce qu'il porte (chemise, marinière…)
+  const own = u.id === "perso" ? outfitCoat(avatar.wear?.outfit) : {};
+  const coatColor = own.stripes?.[0] ?? own.coat ?? u.coat ?? AVATAR_BACKGROUNDS[avatar.bg] ?? AVATAR_BACKGROUNDS[0]!;
+  const coatTex = own.stripes ? clothTexture(own.stripes[0], [own.stripes[1]], "rayures") : clothTexture(coatColor, u.spots, u.pattern);
   const trouserTex = clothTexture(
     u.trousers,
     u.spots.map((c) => darken(c, 0.92)),
@@ -174,8 +177,18 @@ function buildHead(avatar: AvatarConfig, u: UniformInfo, band: THREE.Material, m
     g.add(ear);
   }
   const helmet = m.helmet;
-  const hatCoversTop = helmet !== null || [1, 2, 4, 5, 7].includes(avatar.hat);
-  const hairGeo = hairGeometry(avatar.hair, hatCoversTop);
+  // Ce qu'il porte de la garde-robe remplace la coiffure et le chapeau de base (sous un casque, on garde la coiffure courte)
+  const wornHat = helmet ? undefined : avatar.wear?.hat;
+  const wornHair = helmet ? undefined : avatar.wear?.hair;
+  const hatCoversTop =
+    helmet !== null ||
+    (wornHat
+      ? ["melon", "chantier", "toque", "helice", "tricorne", "sorcier", "viking"].includes(wornHat)
+      : [1, 2, 4, 5, 7].includes(avatar.hat));
+  const hairColor = AVATAR_HAIR_COLORS[avatar.hairColor] ?? AVATAR_HAIR_COLORS[0]!;
+  const extraHair = wearHair(wornHair, R, hairColor, keep);
+  if (extraHair) g.add(extraHair);
+  const hairGeo = extraHair ? null : hairGeometry(avatar.hair, hatCoversTop);
   if (hairGeo) {
     const hairMat = keep(
       new THREE.MeshStandardMaterial({
@@ -209,7 +222,7 @@ function buildHead(avatar: AvatarConfig, u: UniformInfo, band: THREE.Material, m
       g.add(strap);
     }
   } else {
-    const hat = hatGroup(avatar.hat, keep, true);
+    const hat = wornHat ? wearHat(wornHat, R, keep) : hatGroup(avatar.hat, keep, true);
     if (hat) g.add(hat);
   }
   if (u.id === "nuit") {
@@ -359,6 +372,11 @@ export class SoldierModel {
         collar.position.y = 0.55;
         this.spine.add(collar);
       }
+    }
+    // Dans sa propre tenue : la capuche, la cape, le collier de fleurs, le nœud du smoking, l'armure… de son personnage
+    if (u.id === "perso") {
+      const extras = outfitExtras(look.avatar.wear?.outfit, AVATAR_BACKGROUNDS[look.avatar.bg] ?? AVATAR_BACKGROUNDS[0]!, keep);
+      if (extras) this.spine.add(extras);
     }
     if (u.pattern === "feuillu")
       leaves(

@@ -68,7 +68,11 @@ export function DevEscarmouche() {
     const [fx, , fz] = [-Math.sin(v.yaw), 0, -Math.cos(v.yaw)];
     const rx = Math.cos(v.yaw);
     const rz = -Math.sin(v.yaw);
-    const avatars: AvatarConfig[] = [user?.avatar ?? seededAvatar("dev-1"), seededAvatar("dev-2"), seededAvatar("dev-3")];
+    // ?porte=hat:viking+outfit:cape|hat:toque|hair:afro+outfit:smoking : ce que porte chaque soldat (la garde-robe)
+    const worn = (params.get("porte") ?? "").split("|");
+    const avatars: AvatarConfig[] = [user?.avatar ?? seededAvatar("dev-1"), seededAvatar("dev-2"), seededAvatar("dev-3")].map((a, i) =>
+      worn[i] ? { ...a, wear: Object.fromEntries(worn[i]!.split("+").map((kv) => kv.split(":") as [string, string])) } : a,
+    );
     const spots = closeUp
       ? [
           { d: 2.9, s: -0.95, team: 0, yaw: v.yaw + Math.PI + 0.35 },

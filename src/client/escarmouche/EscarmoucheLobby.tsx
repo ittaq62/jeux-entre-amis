@@ -37,9 +37,9 @@ import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "./WeaponIcon.ts
 const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
 const BOT_HINTS: Record<BotLevel, string> = {
-  facile: "Ils mettent du temps à réagir et visent large : idéal pour découvrir.",
-  moyen: "Ils réagissent vite et touchent souvent : il faut bouger.",
-  fort: "Ils visent la tête et ne pardonnent pas une sortie à découvert.",
+  facile: "Lents à réagir, ils visent large et oublient vite où tu es : idéal pour découvrir.",
+  moyen: "Ils tirent par courtes rafales et te cherchent un peu : reste à couvert.",
+  fort: "Ils visent bien, parfois la tête, et te traquent : à découvert, on ne tient pas longtemps.",
 };
 
 export const TEAM_NAMES = [TABLE_TEAMS[0].name, TABLE_TEAMS[1].name] as const;

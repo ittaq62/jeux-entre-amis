@@ -412,7 +412,11 @@ export function skyTexture(light: "soir" | "gris"): THREE.CanvasTexture {
 }
 
 /** Le tissu d'une tenue : sa couleur, son motif (taches, petits carrés, feuillage) et un grain de toile */
-export function clothTexture(base: string, spots: string[], pattern: "uni" | "taches" | "pixels" | "feuillu"): THREE.CanvasTexture {
+export function clothTexture(
+  base: string,
+  spots: string[],
+  pattern: "uni" | "taches" | "pixels" | "feuillu" | "rayures",
+): THREE.CanvasTexture {
   const key = `cloth:${base}:${spots.join(",")}:${pattern}`;
   const known = cache.get(key);
   if (known) return known;
@@ -446,6 +450,10 @@ export function clothTexture(base: string, spots: string[], pattern: "uni" | "ta
       g.fillStyle = spots[i % spots.length]!;
       g.fillRect(Math.floor((r() * size) / 6) * 6, Math.floor((r() * size) / 6) * 6, 6 * (1 + Math.floor(r() * 3)), 6);
     }
+  } else if (pattern === "rayures" && spots.length > 0) {
+    // Les rayures d'une marinière : des bandes régulières, qui se raccordent
+    g.fillStyle = spots[0]!;
+    for (let y = 0; y < size; y += 16) g.fillRect(0, y + 9, size, 7);
   } else if (pattern === "feuillu" && spots.length > 0) {
     for (let i = 0; i < 160; i++) {
       g.fillStyle = spots[i % spots.length]!;

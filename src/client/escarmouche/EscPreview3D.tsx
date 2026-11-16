@@ -10,7 +10,7 @@ import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import { useSession } from "../stores/session.ts";
 import { buildGun } from "./scene/guns.ts";
 import { SoldierModel } from "./scene/soldiers.ts";
-import { skyTexture } from "./scene/textures.ts";
+import { skyEnvironment } from "./scene/sky.ts";
 
 interface Props {
   /** Le soldat entier dans cette tenue, ou l'arme seule (tenue absente) */
@@ -23,6 +23,22 @@ interface Props {
   height?: number;
 }
 
+/**
+ * Un seul moteur WebGL pour tous les aperçus (la boutique, le salon) : le navigateur limite le nombre de contextes, et
+ * chaque aperçu ne fait que recopier l'image dans sa toile.
+ */
+let shared: THREE.WebGLRenderer | null = null;
+function sharedRenderer(): THREE.WebGLRenderer {
+  if (!shared) {
+    shared = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    shared.outputColorSpace = THREE.SRGBColorSpace;
+    shared.toneMapping = THREE.ACESFilmicToneMapping;
+    shared.toneMappingExposure = 1.1;
+    shared.setClearColor(0x000000, 0);
+  }
+  return shared;
+}
+
 export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c8392d", width = 260, height = 300 }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const user = useSession((s) => s.user);
@@ -32,24 +48,13 @@ export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c83
   useEffect(() => {
     const c = canvas.current;
     if (!c) return;
-    const renderer = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(width, height, false);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    const renderer = sharedRenderer();
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = Math.round(width * ratio);
+    c.height = Math.round(height * ratio);
+    const out = c.getContext("2d")!;
     const scene = new THREE.Scene();
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envScene = new THREE.Scene();
-    const envSky = new THREE.Mesh(
-      new THREE.SphereGeometry(10, 24, 12),
-      new THREE.MeshBasicMaterial({ map: skyTexture("soir"), side: THREE.BackSide }),
-    );
-    envScene.add(envSky);
-    const env = pmrem.fromScene(envScene, 0.02).texture;
-    pmrem.dispose();
-    envSky.geometry.dispose();
-    (envSky.material as THREE.Material).dispose();
+    const env = skyEnvironment(renderer, "soir");
     scene.environment = env;
     scene.environmentIntensity = 0.8;
     scene.add(new THREE.HemisphereLight("#e8edf2", "#4a4236", 1.2));
@@ -110,7 +115,12 @@ export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c83
         0.016,
         null,
       );
+      // Le moteur est partagé : on dessine à notre taille, puis on recopie l'image dans notre toile
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(width, height, false);
       renderer.render(scene, camera);
+      out.clearRect(0, 0, c.width, c.height);
+      out.drawImage(renderer.domElement, 0, 0, c.width, c.height);
     };
     let raf = 0;
     const loop = () => {
@@ -128,18 +138,9 @@ export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c83
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
       env.dispose();
-      renderer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenue, weapon, camo, whoKey, band, width, height]);
 
-  return (
-    <canvas
-      ref={canvas}
-      width={width}
-      height={height}
-      style={{ width, height, maxWidth: "100%", display: "block", margin: "0 auto" }}
-      aria-hidden="true"
-    />
-  );
+  return <canvas ref={canvas} style={{ width, height, maxWidth: "100%", display: "block", margin: "0 auto" }} aria-hidden="true" />;
 }

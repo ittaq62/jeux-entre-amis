@@ -68,7 +68,7 @@ export const DEFAULT_SETTINGS: EscarmoucheSettings = {
   map: "hasard",
   minutes: 8,
   goal: 1,
-  botLevel: "moyen",
+  botLevel: "facile",
   arsenal: "libre",
   hardcore: false,
 };
