@@ -92,6 +92,10 @@ export class CulbuteScene {
   /** La charge de chacun : la dernière étincelle aspirée, et s'il a déjà jeté l'éclair de la charge pleine */
   private chargeAt: number[] = [];
   private chargeFull: boolean[] = [];
+  /** Les enchaînements : qui a touché chacun en dernier, combien de fois d'affilée, et jusqu'à quand ça compte */
+  private combo: { by: number; n: number; until: number }[] = [];
+  /** Le compte affiché au-dessus de chacun (le suivant le remplace) */
+  private comboShown: THREE.Sprite[] = [];
   /** Le coup qui fait sortir : la caméra plonge sur l'impact le temps de l'arrêt sur image */
   private koCam: { x: number; y: number; age: number } | null = null;
   /** Par-dessus l'image : les bulles des combattants sortis du cadre, au bord de l'écran, tournées vers eux */
@@ -695,6 +699,56 @@ export class CulbuteScene {
     }
   }
 
+  /**
+   * Un enchaînement : touché de nouveau par le même avant d'avoir repris ses esprits (le temps de l'étourdissement, à
+   * peu près), le compte monte, et « 2 coups ! », « 3 coups ! »… saute au-dessus de lui, à la couleur de l'attaquant
+   */
+  private countCombo(a: number, v: number, power: number, frame: RenderFrame) {
+    if (a < 0 || a === v) return;
+    const c = this.combo[v];
+    const n = c && c.by === a && this.time < c.until ? c.n + 1 : 1;
+    this.combo[v] = { by: a, n, until: this.time + 0.3 + power * 0.65 };
+    if (n < 2) return;
+    const target = frame.fighters[v];
+    if (!target) return;
+    const color = this.looks[a]?.color ?? "#ffd25a";
+    const c2 = document.createElement("canvas");
+    c2.width = 256;
+    c2.height = 96;
+    const g = c2.getContext("2d")!;
+    g.font = "italic 900 52px 'Libre Franklin Variable', system-ui, sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.lineJoin = "round";
+    g.lineWidth = 10;
+    g.strokeStyle = "rgba(20, 16, 24, 0.9)";
+    const text = `${n} coups !`;
+    g.strokeText(text, 128, 50);
+    g.fillStyle = color;
+    g.fillText(text, 128, 50);
+    const tex = new THREE.CanvasTexture(c2);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const m = new THREE.Sprite(mat);
+    m.renderOrder = 12;
+    const old = this.comboShown[v];
+    if (old) old.visible = false;
+    this.comboShown[v] = m;
+    const x = target.x + (Math.random() - 0.5) * 0.3;
+    const y = target.y + 2.3;
+    const size = Math.min(1.6, 1 + n * 0.08);
+    this.add(m, 0.7, (k) => {
+      const pop = k < 0.15 ? 0.6 + (k / 0.15) * 0.55 : 1.15 - Math.min(0.15, (k - 0.15) * 0.6);
+      m.position.set(x, y + k * 0.5, 0.9);
+      m.scale.set(1.9 * size * pop, 0.71 * size * pop, 1);
+      mat.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+      if (k >= 1) {
+        tex.dispose();
+        mat.dispose();
+      }
+    });
+  }
+
   /** Une étincelle qui part d'un peu plus loin et file vers le centre en s'effaçant */
   private gather(x: number, y: number, color: number, radius: number) {
     const mat = new THREE.SpriteMaterial({
@@ -798,6 +852,7 @@ export class CulbuteScene {
         }
         this.fighters[e.v]?.hit(e.power);
         this.spark(e.x, e.y, e.power, e.power > 0.55 ? 0xffa53a : 0xfff2a8);
+        this.countCombo(e.a, e.v, e.power, frame);
         if (e.power > 0.45) this.shake = Math.max(this.shake, 0.3 + e.power * 0.6);
         if (e.ko) {
           // Le coup de grâce : la caméra plonge (seulement si ça ne détourne pas le regard de quelqu'un qui se bat
