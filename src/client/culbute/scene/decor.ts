@@ -360,7 +360,8 @@ export function island(keep: Keep, x0: number, x1: number, y: number, s: IslandS
     const vx = pos.getX(i);
     const vy = pos.getY(i);
     const vz = pos.getZ(i);
-    const t = Math.min(1, -vy / depth);
+    // Bornée : une erreur d'arrondi en haut de la motte donnerait une profondeur à peine négative (et une puissance invalide)
+    const t = Math.max(0, Math.min(1, -vy / depth));
     const nx = vx / (w / 2);
     // Plus étroit en bas, avec une pointe pas tout à fait au milieu
     const narrow = 1 - 0.78 * Math.pow(t, 1.25);
