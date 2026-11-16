@@ -553,6 +553,15 @@ export class EscScene {
     }
   }
 
+  /** Où respire ce soldat (devant sa bouche), s'il est là et visible ; null sinon */
+  mouthOf(i: number, out: THREE.Vector3): THREE.Vector3 | null {
+    const s = this.soldiers.get(i);
+    if (!s || !s.model.root.visible) return null;
+    s.model.headWorld(out);
+    const yaw = s.model.root.rotation.y;
+    return out.set(out.x - Math.sin(yaw) * 0.22, out.y - 0.06, out.z - Math.cos(yaw) * 0.22);
+  }
+
   /** Les caisses cassées (leurs boîtes) : à leur place, quelques planches */
   setCrates(down: ReadonlySet<number>) {
     for (const [i, c] of this.crates) {

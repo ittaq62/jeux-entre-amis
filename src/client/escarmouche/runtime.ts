@@ -270,6 +270,8 @@ export class BattleRuntime {
   private hudAt = 0;
   private stepTimers = new Map<number, number>();
   private lastShots = new Map<number, number>();
+  /** La prochaine bouffée de buée (sur le col) */
+  private breathAt = 0;
   /** Les repères de son équipe, pour le radar */
   private pingDots: { x: number; y: number; z: number }[] = [];
   /** Le dernier ravitaillement (pour ne pas l'annoncer à chaque chargeur) */
@@ -1087,6 +1089,30 @@ export class BattleRuntime {
       for (let k = 0; k + 2 < mk.length; k += 3) if (teams ? mk[k + 1] === myTeam : mk[k + 2] === this.me) this.marked.add(mk[k]!);
     }
     this.scene.setBarrels(this.barrelBoxes, new Set(this.latest?.bd ?? []));
+    // Le froid du col : la buée des respirations, la sienne devant soi, celle des soldats tout près
+    if (this.gm.light === "neige" && nowMs >= this.breathAt) {
+      this.breathAt = nowMs + 450;
+      const cam = this.scene.camera;
+      if (s?.alive && Math.random() < 0.3) {
+        cam.getWorldDirection(this.tmp2);
+        this.scene.effects.breath(
+          this.tmp
+            .copy(cam.position)
+            .addScaledVector(this.tmp2, 0.45)
+            .add(this.tmp3.set(0, -0.16, 0)),
+        );
+      }
+      const tick = this.latest;
+      if (tick) {
+        for (let i = 0; i < v.fighters.length; i++) {
+          if (i === this.me || Math.random() > 0.22) continue;
+          const g = readFighter(tick.p, i);
+          if (!g || (g.bits & PF.alive) === 0 || Math.hypot(g.x - cam.position.x, g.z - cam.position.z) > 18) continue;
+          const at = this.scene.mouthOf(i, this.tmp);
+          if (at) this.scene.effects.breath(at);
+        }
+      }
+    }
     // Les repères de son équipe (en chacun pour soi, les siens)
     {
       const pg = this.latest?.pg ?? [];

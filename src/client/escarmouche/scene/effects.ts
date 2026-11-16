@@ -475,6 +475,11 @@ export class Effects {
     }
   }
 
+  /** La buée d'une respiration dans le froid : un petit nuage pâle qui s'étire devant la bouche et s'évanouit */
+  breath(at: THREE.Vector3) {
+    this.puff(at, "#eef3f7", 0.09, 1.1, 0.12, 0.05, 0.28, 2.6);
+  }
+
   /** Un feu qui brûle là quelques secondes (la carcasse d'un bidon) */
   fire(at: THREE.Vector3, seconds: number) {
     this.fires.push({ at: at.clone(), until: this.now + seconds, next: 0, kind: "feu" });
