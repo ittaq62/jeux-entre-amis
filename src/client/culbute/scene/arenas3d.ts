@@ -721,9 +721,9 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
       const louvre = mat(keep, 0x3a2e26, 0.9);
       for (const ax of [-2.6, 2.6]) {
         stage.add(box(keep, 1.2, 2.4, 0.1, louvre, ax, -3.2, 0.72));
-        const arc = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 16, 1, false, 0, Math.PI)), louvre);
-        arc.rotation.set(Math.PI / 2, 0, -Math.PI / 2);
-        arc.position.set(ax, -2.0, 0.72);
+        // Le haut de l'ouverture, en plein cintre
+        const arc = new THREE.Mesh(keep(new THREE.CircleGeometry(0.6, 16, 0, Math.PI)), louvre);
+        arc.position.set(ax, -2.0, 0.78);
         stage.add(arc);
       }
       const clock = cyl(keep, 1.05, 1.05, 0.12, mat(keep, 0xf6f1e4, 0.5), 0, -2.6, 0.76, 28);
