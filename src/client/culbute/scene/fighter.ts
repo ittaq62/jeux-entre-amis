@@ -1053,7 +1053,9 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     const holding = f.item !== "";
     this.setHeld(f.item);
     const shown = this.held.model ?? this.prop;
-    this.prop.visible = !holding && !this.accordion;
+    // Pendant une saisie ou une projection, les mains sont prises : l'accessoire disparaît le temps du geste
+    const grappling = f.state === "holding" || f.state === "held" || (f.state === "move" && /^g:(grab|pummel|t[FBUD])$/.test(f.move));
+    this.prop.visible = !holding && !this.accordion && !grappling;
     if (this.held.model) this.held.model.visible = holding;
     shown.position.copy(grip);
     shown.quaternion.setFromUnitVectors(UP, along);
@@ -1064,7 +1066,7 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     }
     if (this.accordion) {
       const a = this.accordion;
-      a.group.visible = !holding;
+      a.group.visible = !holding && !grappling;
       const left = this.arms[1]!.hand.position.clone();
       const right = hand.clone();
       const ext = (STRETCH[f.move] ?? 0) * (f.state === "move" ? strike : 0);

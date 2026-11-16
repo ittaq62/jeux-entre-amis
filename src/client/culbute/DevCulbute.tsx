@@ -41,6 +41,9 @@ export function DevCulbute() {
     const asked = (q.get("styles") ?? "").split(",").filter(isHabitueId);
     const styles: HabitueId[] = Array.from({ length: n }, (_, i) => asked[i] ?? HABITUE_IDS[i % HABITUE_IDS.length]!);
     const play = q.get("joue") === "1";
+    /** ?bots=0 : les autres ne bougent pas ; ?niveau=fort : leur niveau */
+    const idle = q.get("bots") === "0";
+    const level = q.get("niveau") === "facile" ? "facile" : q.get("niveau") === "fort" ? "fort" : "moyen";
     const moi = q.get("moi") === "1";
     const seed = Number(q.get("graine")) || 3;
     const f = createFight(
@@ -93,7 +96,9 @@ export function DevCulbute() {
       paused = true;
     }
     const step = () => {
-      const inputs = f.fighters.map((_, i) => (controls && i === 0 ? controls.sample() : botInput(f, i, mem[i]!, "moyen")));
+      const inputs = f.fighters.map((_, i) =>
+        controls && i === 0 ? controls.sample() : idle ? { x: 0, y: 0, held: 0, pressed: 0 } : botInput(f, i, mem[i]!, level),
+      );
       pending.push(...stepFight(f, inputs));
     };
     const resize = () => scene.resize(host.current!.clientWidth, host.current!.clientHeight);

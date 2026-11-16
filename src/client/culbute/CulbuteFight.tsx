@@ -14,6 +14,7 @@ import { CommandsPanel } from "./CommandsPanel.tsx";
 import { CulbuteGameOver } from "./CulbuteGameOver.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FightRuntime, type HudState } from "./runtime.ts";
+import * as sfx from "./sfx.ts";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import type { FightListeners } from "./useCulbuteRoom.ts";
 
@@ -21,8 +22,6 @@ import type { FightListeners } from "./useCulbuteRoom.ts";
 export const PLAYER_COLORS = ["#e2483d", "#3f7fd8", "#f2c94c", "#2f9e6a", "#8e44ad", "#f2994a", "#26b5c8", "#e86aa6"];
 
 const SOUNDS: SoundName[] = [
-  "hit",
-  "bigHit",
   "bolidesClang",
   "tourChip",
   "wild",
@@ -80,13 +79,12 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
 function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: number } | null {
   switch (e.k) {
     case "hit":
-      if (e.ko) return { name: "bigHit", volume: 1 };
-      if (e.kind === "shield") return { name: "bolidesClang", volume: 0.5 };
+      // Les coups et la garde : des bruits fabriqués (voir sfx.ts)
+      if (e.kind === "hit" || e.kind === "shield") return null;
       if (e.kind === "counter") return { name: "tourChip" };
-      if (e.kind === "push") return e.a < 0 ? { name: "bolidesSpring", volume: 0.5 } : { name: "wild", volume: 0.5 };
-      return { name: e.power > 0.5 ? "bigHit" : "hit", volume: 0.45 + e.power * 0.5 };
+      return e.a < 0 ? { name: "bolidesSpring", volume: 0.5 } : { name: "wild", volume: 0.5 };
     case "ko":
-      return { name: "bolidesFirework", volume: e.v === mine ? 1 : 0.8 };
+      return { name: "bolidesFirework", volume: e.v === mine ? 0.55 : 0.4 };
     case "back":
       return { name: "pop", volume: 0.6 };
     case "out":
@@ -104,7 +102,7 @@ function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: numbe
     case "trap":
       return { name: "capDiceHit", volume: 0.6 };
     case "grab":
-      return { name: "capDiceHit", volume: 0.55 };
+      return null;
     case "go":
       return { name: "brickGo" };
     case "end":
@@ -275,6 +273,10 @@ export function CulbuteFight({
       onHud: setHud,
       onEvents: (events) => {
         for (const e of events) {
+          if (e.k === "hit" && e.kind === "hit") sfx.impact(e.power, e.ko);
+          else if (e.k === "hit" && e.kind === "shield") sfx.shieldHit(Math.min(1, e.dmg / 20));
+          else if (e.k === "ko") sfx.koBlast();
+          else if (e.k === "grab") sfx.grab();
           const s = soundOf(e, mySlot);
           if (s) play(s.name, { volume: s.volume ?? 0.8 });
           // Le coup qui fait sortir : un éclair blanc sur tout l'écran
