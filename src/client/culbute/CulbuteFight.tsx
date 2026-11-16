@@ -8,12 +8,14 @@ import { TOUR_TEAM_COLORS } from "../../shared/tour.ts";
 import { AvatarDrawing } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import { loadSettings, type CulbuteSettings } from "./bindings.ts";
+import { loadSettings, saveSettings, type CulbuteSettings } from "./bindings.ts";
 import { CommandsPanel } from "./CommandsPanel.tsx";
 import { CulbuteGameOver } from "./CulbuteGameOver.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FightRuntime, type HudState } from "./runtime.ts";
+import { FightMusic } from "./music.ts";
 import * as sfx from "./sfx.ts";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import type { FightListeners } from "./useCulbuteRoom.ts";
@@ -245,6 +247,7 @@ export function CulbuteFight({
   const [help, setHelp] = useState(false);
   const [commands, setCommands] = useState(false);
   const [flash, setFlash] = useState(0);
+  const music = useRef<FightMusic | null>(null);
   const [settings, setSettings] = useState<CulbuteSettings>(loadSettings);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -310,7 +313,27 @@ export function CulbuteFight({
 
   useEffect(() => {
     runtime.current?.controls.setSettings(settings);
+    music.current?.setEnabled(settings.music);
   }, [settings]);
+
+  // La musique : du compte à rebours à la fin du combat (plus vite pour la dernière vie, plus bas à la fin)
+  useEffect(() => {
+    const m = new FightMusic();
+    m.setEnabled(settingsRef.current.music);
+    m.start();
+    music.current = m;
+    const prefs = usePrefs.subscribe(() => m.update());
+    return () => {
+      prefs();
+      m.stop();
+      music.current = null;
+    };
+  }, []);
+  const lastStocks = hud ? hud.fighters.filter((f) => !f.out) : [];
+  const decisive =
+    room.status === "playing" && view.config.mode !== "temps" && lastStocks.length === 2 && lastStocks.every((f) => f.stocks <= 1);
+  useEffect(() => music.current?.setFast(decisive), [decisive]);
+  useEffect(() => music.current?.setQuiet(room.status === "finished"), [room.status]);
 
   // Au premier doigt posé, les commandes tactiles s'affichent
   useEffect(() => {
@@ -432,6 +455,16 @@ export function CulbuteFight({
           </button>
           <button className="btn btn-ghost" onClick={() => (setCommands(true), setMenu(false))}>
             Commandes
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              const next = { ...settings, music: !settings.music };
+              saveSettings(next);
+              setSettings(next);
+            }}
+          >
+            {settings.music ? "Couper la musique" : "Remettre la musique"}
           </button>
           {!bridge && room.status === "playing" && (
             <button className="btn btn-ghost" onClick={() => (onShowLobby(), setMenu(false))}>

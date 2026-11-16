@@ -18,6 +18,8 @@ export interface CulbuteSettings {
   upJumps: boolean;
   /** Au doigt : sauter en poussant le stick vers le haut (et pas de bouton Saut) */
   stickJump: boolean;
+  /** La musique pendant le combat */
+  music: boolean;
 }
 
 export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "special", "jump", "shield", "grab"];
@@ -92,7 +94,7 @@ const OLD_STICK_KEY = "culbute-saut-au-stick";
 
 export function defaultSettings(): CulbuteSettings {
   const p = PRESETS[0]!;
-  return { preset: p.id, bindings: structuredClone(p.bindings), upJumps: true, stickJump: false };
+  return { preset: p.id, bindings: structuredClone(p.bindings), upJumps: true, stickJump: false, music: true };
 }
 
 function cleanList(v: unknown): Binding[] | null {
@@ -117,6 +119,7 @@ export function loadSettings(): CulbuteSettings {
       bindings,
       upJumps: data.upJumps !== false,
       stickJump: data.stickJump === true,
+      music: data.music !== false,
     };
   } catch {
     return base;
