@@ -286,6 +286,9 @@ export function packFull(ft: Fighter): number[] {
     ft.hitIds.length,
     ...ft.hitIds,
     ...ft.hitAt,
+    // Ses derniers coups qui ont touché (leur usure)
+    ft.stale.length,
+    ...ft.stale.map((k) => MOVE_CODE.get(k) ?? 0),
   );
   return out;
 }
@@ -307,6 +310,9 @@ export function unpackFull(ft: Fighter, p: number[]) {
   const hits = p[n + 4] ?? 0;
   ft.hitIds = p.slice(n + 5, n + 5 + hits);
   ft.hitAt = p.slice(n + 5 + hits, n + 5 + 2 * hits);
+  const o = n + 5 + 2 * hits;
+  const stale = p[o] ?? 0;
+  ft.stale = p.slice(o + 1, o + 1 + stale).map((c) => MOVE_KEYS[c] ?? "");
   ft.face = ft.face < 0 ? -1 : 1;
   ft.hitIds = [];
   ft.hitAt = [];

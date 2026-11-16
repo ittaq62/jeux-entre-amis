@@ -629,6 +629,14 @@ export class CulbuteScene {
           this.spark(e.x, e.y, 0.3, 0x8fe3ff);
           break;
         }
+        if (e.kind === "parry") {
+          // La parade : un éclat bleuté, une onde nette, et le défenseur qui brille un instant
+          this.flare(e.x, e.y, 3.2, 0xbfe8ff, 0.35);
+          this.wave(e.x, e.y, 2.2, 0x9fdcff, 0.35);
+          this.rays(e.x, e.y, 8, 1.4, 0xe8f6ff, 0.28, 0.06);
+          this.fighters[e.v]?.hit(0.3);
+          break;
+        }
         if (e.kind === "counter") {
           this.spark(e.x, e.y, 0.8, 0x6ab4ff);
           this.shake = Math.max(this.shake, 0.4);

@@ -155,3 +155,27 @@ export function grab() {
   slap(ctx, dest, t0 + 0.05, 900, 1.5, vol * 0.3, 0.08);
   thump(ctx, dest, t0, 120, 80, vol * 0.3, 0.07);
 }
+
+/** Une parade : un « ting » clair qui scintille */
+export function parry() {
+  const o = out();
+  if (!o || !throttle(28)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  for (const [freq, k, d] of [
+    [2350, 1, 0.35],
+    [3520, 0.55, 0.28],
+    [4700, 0.3, 0.2],
+  ] as const) {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.04, t0 + d);
+    const g = ctx.createGain();
+    env(g, vol * 0.32 * k, 0.002, d, t0);
+    osc.connect(g).connect(dest);
+    osc.start(t0);
+    osc.stop(t0 + d + 0.05);
+  }
+  slap(ctx, dest, t0, 6000, 0.8, vol * 0.25, 0.06, "highpass");
+}

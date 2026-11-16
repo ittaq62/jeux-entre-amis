@@ -163,7 +163,10 @@ describe("Culbute : le combat", () => {
     const f = duel();
     skipIntro(f);
     faceToFace(f, 1.6);
-    const events = run(f, 30, [hold(ATK, 4, 1, 0), hold(SHD, 30)]);
+    // La garde levée bien avant (sinon c'est une parade)
+    const guard = (): Input => ({ x: 0, y: 0, held: SHD, pressed: 0 });
+    run(f, 10, [() => NO_INPUT, guard]);
+    const events = run(f, 30, [hold(ATK, 4, 1, 0), guard]);
     expect(events.some((e) => e.k === "hit" && e.kind === "shield")).toBe(true);
     expect(f.fighters[1]!.dmg).toBe(0);
     expect(f.fighters[1]!.shield).toBeLessThan(45);
@@ -477,6 +480,87 @@ describe("Culbute : le combat", () => {
     expect(aerial).toBe("an");
     const st = STYLES[ft.style];
     expect(top).toBeLessThan(((st.jump * st.jump) / (2 * st.gravity)) * 0.7);
+  });
+
+  it("la parade : la garde levée juste avant le coup n'use rien, et l'attaquant reste figé", () => {
+    const parried = (late: number) => {
+      const f = duel("ginette", "marcel");
+      skipIntro(f);
+      faceToFace(f, 1.4);
+      const [a, v] = f.fighters as [Fighter, Fighter];
+      v.face = -1;
+      const shieldAt = 5 - late;
+      const events: FightEvent[] = [];
+      for (let k = 0; k < 12; k++)
+        events.push(
+          ...stepFight(f, [
+            k === 0 ? { x: 0, y: 0, held: ATK, pressed: ATK } : NO_INPUT,
+            k >= shieldAt ? { x: 0, y: 0, held: SHD, pressed: k === shieldAt ? SHD : 0 } : NO_INPUT,
+          ]),
+        );
+      return { events, a, v };
+    };
+    // La garde levée deux images avant la frappe : parée
+    const p = parried(2);
+    expect(p.events.some((e) => e.k === "hit" && e.kind === "parry")).toBe(true);
+    expect(p.v.dmg).toBe(0);
+    expect(p.v.shield).toBeGreaterThan(49);
+    expect(p.a.hitstop).toBeGreaterThan(8);
+    // Levée bien avant : une garde ordinaire, qui s'use
+    const q = (() => {
+      const f = duel("ginette", "marcel");
+      skipIntro(f);
+      faceToFace(f, 1.4);
+      const guard = (): Input => ({ x: 0, y: 0, held: SHD, pressed: 0 });
+      run(f, 10, [() => NO_INPUT, guard]);
+      const events = run(f, 12, [tap(ATK), guard]);
+      return { events, v: f.fighters[1]! };
+    })();
+    expect(q.events.some((e) => e.k === "hit" && e.kind === "shield")).toBe(true);
+    expect(q.v.shield).toBeLessThan(50);
+  });
+
+  it("un coup répété s'use : il fait moins de dégâts que la première fois", () => {
+    const f = duel("ginette", "marcel");
+    skipIntro(f);
+    const v = f.fighters[1]!;
+    const dealt: number[] = [];
+    for (let n = 0; n < 4; n++) {
+      faceToFace(f, 1.4);
+      v.state = "stand";
+      v.kx = v.ky = v.vx = v.vy = 0;
+      v.y = 0;
+      v.ground = 0;
+      const before = v.dmg;
+      run(f, 30, [tap(ATK)]);
+      dealt.push(Math.round((v.dmg - before) * 10) / 10);
+      run(f, 60);
+    }
+    expect(dealt[0]).toBeGreaterThan(dealt[1]!);
+    expect(dealt[1]).toBeGreaterThan(dealt[3]!);
+  });
+
+  it("une attaque en l'air qui touche le sol avant de frapper atterrit sans latence", () => {
+    const f = duel("marcel", "ginette");
+    skipIntro(f);
+    const ft = f.fighters[0]!;
+    ft.y = 0.25;
+    ft.ground = -1;
+    ft.state = "air";
+    ft.vy = -6;
+    run(f, 1, [tap(ATK, 1, 0)]);
+    expect(ft.move).toBe("as");
+    run(f, 4);
+    expect(ft.state).toBe("land");
+    expect(ft.wait).toBeLessThanOrEqual(4);
+  });
+
+  it("en garde, le spécial vers le haut part aussitôt", () => {
+    const f = duel();
+    skipIntro(f);
+    run(f, 6, [() => ({ x: 0, y: 0, held: SHD, pressed: 0 })]);
+    run(f, 1, [() => ({ x: 0, y: 1, held: SHD | SPC, pressed: SPC })]);
+    expect(f.fighters[0]!.move).toBe("pu");
   });
 
   it("depuis la garde, Frapper saisit", () => {

@@ -28,14 +28,49 @@ interface LevelInfo {
   grab: number;
   /** Tenu, ses chances d'appuyer à chaque image pour se dégager */
   mash: number;
+  /** Ses chances de lever la garde à l'avance quand un adversaire arrive tout près */
+  wary: number;
   /** Il garde l'adversaire hors de l'arène */
   edgeguard: boolean;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
-  facile: { think: 20, attack: 0.35, guard: 0.08, charge: 0.15, recover: 0.75, influence: false, edgeguard: false, grab: 0.15, mash: 0.08 },
-  moyen: { think: 11, attack: 0.6, guard: 0.3, charge: 0.4, recover: 0.95, influence: true, edgeguard: false, grab: 0.5, mash: 0.2 },
-  fort: { think: 5, attack: 0.85, guard: 0.55, charge: 0.6, recover: 1, influence: true, edgeguard: true, grab: 0.85, mash: 0.4 },
+  facile: {
+    think: 20,
+    attack: 0.35,
+    guard: 0.05,
+    charge: 0.15,
+    recover: 0.75,
+    influence: false,
+    edgeguard: false,
+    grab: 0.15,
+    mash: 0.08,
+    wary: 0.04,
+  },
+  moyen: {
+    think: 11,
+    attack: 0.6,
+    guard: 0.08,
+    charge: 0.4,
+    recover: 0.95,
+    influence: true,
+    edgeguard: false,
+    grab: 0.5,
+    mash: 0.2,
+    wary: 0.14,
+  },
+  fort: {
+    think: 5,
+    attack: 0.85,
+    guard: 0.28,
+    charge: 0.6,
+    recover: 1,
+    influence: true,
+    edgeguard: true,
+    grab: 0.85,
+    mash: 0.4,
+    wary: 0.12,
+  },
 };
 
 /** Ce dont un bot se souvient d'un pas à l'autre (perdu si le serveur redémarre, sans gravité) */
@@ -166,6 +201,15 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
 
   if (me.state === "ledge") return ledge(f, me, m, foes);
   if (airborne(me) && offstage(me, st)) return recover(f, me, m, L);
+
+  // Un adversaire tout près, tourné vers lui : parfois, il lève la garde à l'avance (une garde ordinaire, qui s'use)
+  const close = foes.find((o) => Math.abs(o.x - me.x) < 1.9 && Math.abs(o.y - me.y) < 1 && o.face === (me.x > o.x ? 1 : -1));
+  if (close && !airborne(me) && me.state === "stand" && rnd(m) < L.wary) {
+    m.held = SHD;
+    m.holdUntil = f.frame + 16 + Math.floor(rnd(m) * 14);
+    m.press = SHD;
+    return out();
+  }
 
   // Un coup arrive : la garde, une roulade, ou un saut
   const danger = threat(me, foes);

@@ -71,6 +71,28 @@ export const OVER_FRAMES = 150;
 const BOUNCE_VY = 17;
 /** L'arrêt sur image du coup qui fait sortir */
 export const KO_STOP = 30;
+/** La parade : la garde levée moins de tant d'images avant le coup ; l'attaquant reste figé un peu plus */
+export const PARRY_FRAMES = 5;
+const PARRY_STUN = 14;
+/** L'usure : chaque fois qu'un coup est dans la file des derniers coups qui ont touché, il perd un peu (le plus récent compte le plus) */
+const STALE = [0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.025, 0.02, 0.015];
+/** Un coup frais (absent de la file) frappe un peu plus fort */
+const FRESH = 1.05;
+
+/** Ce que vaut ce coup, selon combien de fois on vient de le placer */
+export function staleFactor(ft: Fighter, key: string): number {
+  if (!ft.stale.includes(key)) return FRESH;
+  let k = 1;
+  ft.stale.forEach((m, i) => {
+    if (m === key) k -= STALE[i] ?? 0;
+  });
+  return k;
+}
+
+function noteStale(ft: Fighter, key: string) {
+  ft.stale.unshift(key);
+  if (ft.stale.length > STALE.length) ft.stale.length = STALE.length;
+}
 /** La saisie : la main tendue (images actives), sa portée */
 const GRAB_FROM = 6;
 const GRAB_TO = 8;
@@ -182,6 +204,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     lastKb: 0,
     holding: -1,
     holder: -1,
+    stale: [],
   };
 }
 
@@ -476,6 +499,11 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         consume(ft, ATK | GRB);
         startMove(ft, "g:grab");
         return;
+      }
+      // Le spécial, en sortie de garde
+      if (press & SPC) {
+        consume(ft, SPC);
+        if (special(f, ft, x, y)) return;
       }
       if (press & JMP) {
         consume(ft, JMP);
@@ -862,7 +890,11 @@ function land(f: Fight, ft: Fighter, pi: number, plats: PlatformNow[], fallSpeed
       const def = moveDef(ft.style, ft.move);
       ft.ky = 0;
       if (def && isAerialSlot(ft.move)) {
-        const lag = def.landLag ?? LAND_LAG;
+        // Avant sa première frappe, ou bien après la dernière : on atterrit presque comme d'habitude
+        const first = def.hits.length > 0 ? Math.min(...def.hits.map((hd) => hd.from)) : 0;
+        const last = def.hits.length > 0 ? Math.max(...def.hits.map((hd) => hd.to)) : 0;
+        const clean = ft.mt < first - 1 || ft.mt > last + 6;
+        const lag = clean ? LAND_LAG : (def.landLag ?? LAND_LAG);
         setState(ft, "land");
         ft.wait = lag;
       } else if (def?.special === "stomp") {
@@ -1555,6 +1587,14 @@ function applyHit(f: Fight, src: HitSource, v: Fighter, inputs: Input[]) {
     }
     return;
   }
+  // La parade : la garde levée juste à temps ; rien ne s'use, et l'attaquant reste figé un instant
+  if (v.state === "shield" && v.t <= PARRY_FRAMES && !src.pull) {
+    v.hitstop = 6;
+    v.t = PARRY_FRAMES + 1;
+    if (a && !src.projectile) a.hitstop = 6 + PARRY_STUN;
+    pending.push({ k: "hit", a: src.attacker, v: v.slot, dmg: 0, x: src.x, y: src.y, power: 0.7, kind: "parry" });
+    return;
+  }
   // La garde : elle s'use, et on recule un peu
   if ((v.state === "shield" || v.state === "shieldstun") && !src.pull) {
     v.shield -= src.dmg * (1 + src.charge * 0.5);
@@ -1754,13 +1794,16 @@ function detectHits(f: Fight, inputs: Input[]) {
         a.hitAt.push(a.mt);
       }
       const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;
+      // Un coup répété s'use (et compte dans la file une fois par coup, même s'il touche plusieurs fois)
+      const fresh = staleFactor(a, a.move);
+      if (idx < 0 && a.hitIds.length === 1) noteStale(a, a.move);
       found.push({
         src: {
           attacker: a.slot,
           x: hx,
           y: hy,
           dirX,
-          dmg: hit.dmg,
+          dmg: Math.round(hit.dmg * fresh * 10) / 10,
           ang: hit.ang,
           kb: hit.kb,
           kbg: hit.kbg,
@@ -2147,6 +2190,7 @@ export interface PredictedHit {
   dmg: number;
   power: number;
   shield: boolean;
+  parry: boolean;
   ko: boolean;
 }
 
@@ -2185,14 +2229,20 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
       if (hit) break;
     }
     if (!hit) continue;
-    const dmg = Math.round(hit.dmg * (1 + CHARGE_BONUS * charge) * 10) / 10;
-    const shielded = v.state === "shield" || v.state === "shieldstun";
+    const fresh = staleFactor(a, a.move);
+    const baseDmg = Math.round(hit.dmg * fresh * 10) / 10;
+    const dmg = Math.round(baseDmg * (1 + CHARGE_BONUS * charge) * 10) / 10;
+    const parried = v.state === "shield" && v.t <= PARRY_FRAMES;
+    const shielded = !parried && (v.state === "shield" || v.state === "shieldstun");
     let stop: number;
     let ko = false;
     let power: number;
-    if (shielded) {
-      stop = Math.round(clamp(3 + hit.dmg * 0.3, 3, 10));
-      power = clamp(hit.dmg / 20, 0, 1);
+    if (parried) {
+      stop = 6 + PARRY_STUN;
+      power = 0.7;
+    } else if (shielded) {
+      stop = Math.round(clamp(3 + baseDmg * 0.3, 3, 10));
+      power = clamp(baseDmg / 20, 0, 1);
     } else {
       const speed = (hit.kb + (hit.kbg * (v.dmg + dmg)) / 100) * (200 / (100 + styleOf(v).weight)) * (1 + 0.15 * charge);
       let ang = hit.ang;
@@ -2206,9 +2256,10 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
       power = ko ? 1 : clamp(speed / 50, 0, 1);
     }
     a.hitstop = stop;
+    if (a.hitIds.length === 0) noteStale(a, a.move);
     a.hitIds.push(v.slot);
     a.hitAt.push(a.mt);
-    out.push({ v: v.slot, x: hx, y: hy, dmg, power, shield: shielded, ko });
+    out.push({ v: v.slot, x: hx, y: hy, dmg, power, shield: shielded, parry: parried, ko });
   }
   return out;
 }

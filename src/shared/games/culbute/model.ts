@@ -167,6 +167,8 @@ export interface Fighter {
   /** Celui qu'il tient (sa place), ou -1 ; celui qui le tient, ou -1 */
   holding: number;
   holder: number;
+  /** Ses derniers coups qui ont touché, du plus récent au plus ancien : un coup répété s'use */
+  stale: string[];
 }
 
 export interface FighterStats {
@@ -256,7 +258,7 @@ export type FightEvent =
       x: number;
       y: number;
       power: number;
-      kind: "hit" | "shield" | "counter" | "push";
+      kind: "hit" | "shield" | "counter" | "push" | "parry";
       /** Ce coup va le faire sortir de l'arène (l'écran s'en approche) */
       ko?: boolean;
     }

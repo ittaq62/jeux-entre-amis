@@ -82,7 +82,7 @@ function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: numbe
   switch (e.k) {
     case "hit":
       // Les coups et la garde : des bruits fabriqués (voir sfx.ts)
-      if (e.kind === "hit" || e.kind === "shield") return null;
+      if (e.kind === "hit" || e.kind === "shield" || e.kind === "parry") return null;
       if (e.kind === "counter") return { name: "tourChip" };
       return e.a < 0 ? { name: "bolidesSpring", volume: 0.5 } : { name: "wild", volume: 0.5 };
     case "ko":
@@ -278,6 +278,7 @@ export function CulbuteFight({
         for (const e of events) {
           if (e.k === "hit" && e.kind === "hit") sfx.impact(e.power, e.ko);
           else if (e.k === "hit" && e.kind === "shield") sfx.shieldHit(Math.min(1, e.dmg / 20));
+          else if (e.k === "hit" && e.kind === "parry") sfx.parry();
           else if (e.k === "ko") sfx.koBlast();
           else if (e.k === "grab") sfx.grab();
           const s = soundOf(e, mySlot);

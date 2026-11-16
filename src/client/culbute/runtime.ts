@@ -283,7 +283,7 @@ export class FightRuntime {
       x: h.x,
       y: h.y,
       power: h.power,
-      kind: h.shield ? "shield" : "hit",
+      kind: h.parry ? "parry" : h.shield ? "shield" : "hit",
       ...(h.ko ? { ko: true } : {}),
     }));
     for (const h of hits) this.predicted.push({ v: h.v, at: now, ko: h.ko });
