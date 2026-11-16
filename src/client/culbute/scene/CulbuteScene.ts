@@ -233,7 +233,9 @@ export class CulbuteScene {
         const at = this.trailAt.get(i) ?? 0;
         if (this.time - at > 0.035) {
           this.trailAt.set(i, this.time);
-          this.puff(f.x, f.y + 0.7, 0xf4f4f4, 0.35 + Math.min(0.4, f.kb / 80), 0.5);
+          // Teintée à sa couleur : on voit tout de suite qui s'envole
+          const tint = new THREE.Color(this.looks[i]?.color ?? "#ffffff").lerp(new THREE.Color(0xffffff), 0.55).getHex();
+          this.puff(f.x, f.y + 0.7, tint, 0.3 + Math.min(0.4, f.kb / 80), 0.55);
         }
       }
     });
