@@ -279,7 +279,11 @@ function vanPlatform(keep: Keep, w: number): THREE.Group {
   const cream = mat(keep, 0xf4efe2, 0.5);
   // Le toit-terrasse, ses rambardes arrière
   g.add(box(keep, w, 0.14, 2.2, cream, 0, -0.07, -0.5));
-  g.add(box(keep, w, 0.05, 0.05, mat(keep, 0xc9cfd6, 0.3, 0.8), 0, 0.3, -1.55));
+  const chrome = mat(keep, 0xc9cfd6, 0.3, 0.8);
+  g.add(box(keep, w, 0.05, 0.05, chrome, 0, 0.3, -1.55));
+  // Ses montants, pour qu'elle ne flotte pas
+  const posts = Math.max(2, Math.round(w / 0.7));
+  for (let i = 0; i <= posts; i++) g.add(box(keep, 0.04, 0.3, 0.04, chrome, -w / 2 + 0.03 + (i * (w - 0.06)) / posts, 0.15, -1.55));
   // La caisse, derrière
   const body = new THREE.Mesh(keep(new THREE.BoxGeometry(w * 1.05, 3.1, 1.6)), paint);
   body.position.set(0, -1.7, -1.6);
