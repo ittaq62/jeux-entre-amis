@@ -16,6 +16,7 @@ import {
   type EscEvent,
   type Match,
   type Pose,
+  upgradeMatch,
 } from "../shared/games/escarmouche/match.ts";
 import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } from "../shared/games/escarmouche/rules.ts";
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
@@ -174,6 +175,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.data = (await ctx.storage.get<EscarmoucheData>("room")) ?? null;
+      if (this.data?.match) upgradeMatch(this.data.match);
       if (this.data?.status === "playing" && this.data.match) this.startLoop();
     });
   }

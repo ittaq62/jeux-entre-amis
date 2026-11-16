@@ -323,6 +323,29 @@ function placeAt(f: Fighter, x: number, y: number, z: number, yaw: number, m: Ma
   f.hurtAt = -100;
 }
 
+/**
+ * Une partie relue après un redémarrage (une mise en ligne) a pu être créée par une version d'avant : on lui ajoute ce
+ * qui lui manque (les bidons, les explosions à venir, les repères ; la glissade et l'escalade de chaque soldat)
+ */
+export function upgradeMatch(m: Match): Match {
+  if (!Array.isArray(m.barrels)) {
+    m.barrels = [];
+    getMap(m.map).boxes.forEach((b, box) => {
+      if (b.m === "bidon") m.barrels.push({ box, x: (b.x0 + b.x1) / 2, y: b.y0 + 0.5, z: (b.z0 + b.z1) / 2, hp: BARREL.hp, downUntil: 0 });
+    });
+  }
+  if (!Array.isArray(m.blasts)) m.blasts = [];
+  if (!Array.isArray(m.marks)) m.marks = [];
+  const fresh = newSoldier(0, 0, 0, 0, "fa");
+  for (const f of m.fighters) {
+    if (typeof f.spotReady !== "number") f.spotReady = 0;
+    for (const k of Object.keys(fresh) as (keyof Soldier)[]) {
+      if (f.s[k] === undefined) (f.s as unknown as Record<string, unknown>)[k] = fresh[k];
+    }
+  }
+  return m;
+}
+
 export function fighterIndex(m: Match, id: string): number {
   return m.fighters.findIndex((f) => f.id === id);
 }

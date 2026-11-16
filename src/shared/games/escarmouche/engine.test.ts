@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot.ts";
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
-import { applyCmd, createMatch, finish, hurt, worldOf, worldStep, type EscEvent, type Match, type Pose } from "./match.ts";
+import { applyCmd, createMatch, finish, hurt, upgradeMatch, worldOf, worldStep, type EscEvent, type Match, type Pose } from "./match.ts";
 import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
@@ -558,5 +558,37 @@ describe("Escarmouche : bidons, repérage, récompenses de série", () => {
     const later: EscEvent[] = [];
     for (let k = 0; k < 60 * 5; k++) worldStep(m, later);
     expect(later.filter((e) => e.k === "boom" && e.w === "obus").length).toBe(shells.length);
+  });
+});
+
+describe("Escarmouche : une partie relue après une mise en ligne", () => {
+  it("une partie d'une version d'avant (sans bidons, ni repères, ni glissade) reprend et se joue sans planter", () => {
+    const m = createMatch(
+      settings({ mode: "equipes" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: true, primary: "fa" },
+      ],
+      9,
+    );
+    live(m);
+    // Ce que l'ancienne version n'avait pas
+    const old = JSON.parse(JSON.stringify(m)) as Record<string, unknown> & Match;
+    delete (old as Partial<Match>).barrels;
+    delete (old as Partial<Match>).blasts;
+    delete (old as Partial<Match>).marks;
+    for (const f of old.fighters) {
+      delete (f as Partial<typeof f>).spotReady;
+      for (const k of ["slideEnd", "slideReady", "mantleStart", "mantleEnd"]) delete (f.s as unknown as Record<string, unknown>)[k];
+    }
+    const up = upgradeMatch(old);
+    expect(up.barrels.length).toBeGreaterThan(0);
+    const ev: EscEvent[] = [];
+    for (let k = 0; k < 120; k++) {
+      worldStep(up, ev);
+      applyCmd(up, 0, idle(k + 1, { mz: 1, b: k === 30 ? B.spot | B.jump : B.sprint }), null, ev);
+    }
+    expect(up.fighters[0]!.s.slideEnd).toBeTypeOf("number");
+    expect(Number.isFinite(up.fighters[0]!.s.x)).toBe(true);
   });
 });
