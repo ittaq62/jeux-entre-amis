@@ -65,13 +65,17 @@ export function matMaterial(m: Mat, q: Quality, vertexColors = true): THREE.Mate
 
 /** Les pièces d'habillage : la pierre de taille, le fer, les planches peintes des volets et des portes */
 export function paintMaterial(k: Paint, q: Quality): THREE.Material {
-  if (!k.startsWith("volet:") && !k.startsWith("cont:") && k !== "taille" && k !== "fer") return matMaterial(k as Mat, q);
+  if (!k.startsWith("volet:") && !k.startsWith("cont:") && k !== "taille" && k !== "fer" && k !== "lumiere")
+    return matMaterial(k as Mat, q);
   const key = `${k}:${q}`;
   const known = materials.get(key);
   if (known) return known;
   const low = q === "bas";
   let mat: THREE.Material;
-  if (k === "fer")
+  if (k === "lumiere")
+    // Une vitre allumée, la nuit : une lumière chaude derrière un rideau
+    mat = new THREE.MeshStandardMaterial({ color: "#3a2410", emissive: "#ffb35c", emissiveIntensity: low ? 1.1 : 1.7, roughness: 0.5 });
+  else if (k === "fer")
     mat = low
       ? new THREE.MeshLambertMaterial({ color: "#3a3734", vertexColors: true })
       : new THREE.MeshStandardMaterial({ color: "#3d3a36", roughness: 0.55, metalness: 0.55, vertexColors: true });
@@ -125,7 +129,7 @@ export interface MapMesh {
 }
 
 /** La carte entière : boîtes, toits et décor */
-export function buildMap(gm: GameMap, q: Quality): MapMesh {
+export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   const group = new THREE.Group();
   const buckets = new Map<Paint, Bucket>();
   const bucket = (m: Paint) => {
@@ -170,7 +174,7 @@ export function buildMap(gm: GameMap, q: Quality): MapMesh {
     ["wheel", []],
     ["buffer", []],
   ]);
-  const ctx: Ctx = { bucket, group, low: q === "bas", instance: (kind, m) => parts.get(kind)!.push(m.clone()) };
+  const ctx: Ctx = { bucket, group, low: q === "bas", night, instance: (kind, m) => parts.get(kind)!.push(m.clone()) };
   for (const d of gm.decor) addDecor(d, ctx, q);
   instancedParts(parts, q === "bas", group);
   if (bags.length > 0) group.add(sandbagMesh(bags, q));

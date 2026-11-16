@@ -185,7 +185,7 @@ export class EscScene {
     this.distant = buildDistant(gm, q, gm.light);
     this.scene.add(this.distant.group);
 
-    this.map = buildMap(gm, q);
+    this.map = buildMap(gm, q, night);
     this.scene.add(this.map.group);
     for (const [i, c] of buildCrates(gm, q)) {
       this.scene.add(c.whole, c.wreck);

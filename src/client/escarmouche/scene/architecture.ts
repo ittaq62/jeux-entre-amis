@@ -10,7 +10,7 @@ import type { Mat } from "../../../shared/games/escarmouche/world.ts";
 import { addBox, type Bucket } from "./geom.ts";
 
 /** Ce qu'on peint : une matière de la carte, ou une pièce d'habillage */
-export type Paint = Mat | "taille" | "fer" | `volet:${string}` | `cont:${string}`;
+export type Paint = Mat | "taille" | "fer" | "lumiere" | `volet:${string}` | `cont:${string}`;
 
 export interface Ctx {
   bucket(k: Paint): Bucket;
@@ -18,6 +18,8 @@ export interface Ctx {
   instance(kind: "wheel" | "buffer", m: THREE.Matrix4): void;
   group: THREE.Group;
   low: boolean;
+  /** De nuit : des fenêtres allumées */
+  night?: boolean;
 }
 
 type HouseDecor = Extract<Decor, { k: "house" }>;
@@ -93,6 +95,22 @@ export function addHouse(d: HouseDecor, ctx: Ctx) {
     if (h.kind === "win") fbox(fr, axis, f, out, h.a0 - 0.18, h.a1 + 0.18, h.y0 - 0.08, h.y0, -0.02, 0.11);
     else fbox(ctx.bucket("taille"), axis, f, out, h.a0 - 0.05, h.a1 + 0.05, 0, 0.07, -0.2, 0.18, 0.85);
     const fits = (p: number, q: number) => Math.min(p, q) >= side.lo + 0.05 && Math.max(p, q) <= side.hi - 0.05;
+    // De nuit, une fenêtre sur trois environ est allumée : les volets ouverts, la vitre chaude à fleur de façade (le mur
+    // d'un bâtiment plein n'est pas percé), ses croisillons
+    if (d.blind && ctx.night && h.kind === "win" && litWindow(h.a0, h.y0, h.c) < 0.36) {
+      const mid = (h.a0 + h.a1) / 2;
+      const ym = (h.y0 + h.y1) / 2;
+      fbox(ctx.bucket("lumiere"), axis, f, out, h.a0, h.a1, h.y0, h.y1, 0.0, 0.012, 1, 1);
+      fbox(ctx.bucket("fer"), axis, f, out, mid - 0.018, mid + 0.018, h.y0, h.y1, 0.012, 0.03, 0.7);
+      fbox(ctx.bucket("fer"), axis, f, out, h.a0, h.a1, ym - 0.018, ym + 0.018, 0.012, 0.03, 0.7);
+      for (const [p, q] of [
+        [h.a0 - 0.13 - w / 2, h.a0 - 0.13],
+        [h.a1 + 0.13, h.a1 + 0.13 + w / 2],
+      ] as const) {
+        if (fits(p, q)) fbox(ctx.bucket(shutter), axis, f, out, p, q, h.y0 + 0.02, h.y1 - 0.02, 0.04, 0.08, 1, 2);
+      }
+      continue;
+    }
     if (d.blind) {
       // Close : deux volets (ou une porte) à fleur de l'encadrement
       const paint = h.kind === "win" ? shutter : doorPaint;
@@ -192,6 +210,12 @@ export function addHouse(d: HouseDecor, ctx: Ctx) {
       }
     }
   }
+}
+
+/** Toujours la même réponse pour la même fenêtre : allumée ou non (de 0 à 1) */
+function litWindow(a: number, y: number, c: number): number {
+  const h = Math.sin(a * 12.9898 + y * 78.233 + c * 37.719) * 43758.5453;
+  return h - Math.floor(h);
 }
 
 /** Les fenêtres closes d'un bâtiment plein : tous les trois mètres, à chaque étage ; une porte au rez-de-chaussée */
