@@ -461,6 +461,24 @@ describe("Culbute : le combat", () => {
     expect(hold(true)).toBeLessThan(hold(false));
   });
 
+  it("Saut et Frapper ensemble : un petit saut et une attaque en l'air", () => {
+    const f = duel();
+    skipIntro(f);
+    const ft = f.fighters[0]!;
+    let top = 0;
+    let aerial = "";
+    for (let k = 0; k < 40; k++) {
+      run(f, 1, [
+        () => (k === 0 ? { x: 0, y: 0, held: JMP | ATK, pressed: JMP | ATK } : k < 8 ? { x: 0, y: 0, held: JMP, pressed: 0 } : NO_INPUT),
+      ]);
+      top = Math.max(top, ft.y);
+      if (ft.state === "move" && ft.move.startsWith("a")) aerial = ft.move;
+    }
+    expect(aerial).toBe("an");
+    const st = STYLES[ft.style];
+    expect(top).toBeLessThan(((st.jump * st.jump) / (2 * st.gravity)) * 0.7);
+  });
+
   it("depuis la garde, Frapper saisit", () => {
     const f = duel();
     skipIntro(f);

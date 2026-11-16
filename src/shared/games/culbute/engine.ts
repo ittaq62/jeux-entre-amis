@@ -416,7 +416,9 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     case "squat": {
       ft.vx *= 0.9;
       if (ft.t >= JUMPSQUAT) {
-        const full = (inp.held & JMP) !== 0 || flickUp || y > 0.6;
+        // Saut et Frapper ensemble (ou Frapper pendant l'élan) : un petit saut, et l'attaque en l'air part aussitôt
+        const quick = (ft.buf & ATK) !== 0;
+        const full = !quick && ((inp.held & JMP) !== 0 || flickUp || y > 0.6);
         ft.vy = (full ? st.jump : st.short) * jumpOf(f, ft);
         ft.vx = clamp(ft.vx + x * 1.5, -st.air * sm * 1.1, st.air * sm * 1.1);
         ft.ground = -1;

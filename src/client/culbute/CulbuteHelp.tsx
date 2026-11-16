@@ -31,7 +31,8 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
           </ul>
           <p className="hint">
             Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Vers le bas
-            en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers.
+            en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers. Saut et Frapper en même temps : un
+            petit saut avec une attaque en l'air.
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour saisir, une autre
