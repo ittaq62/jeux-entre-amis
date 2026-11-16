@@ -10,6 +10,7 @@ interface Seen {
   state: string;
   move: string;
   mt: number;
+  charge: number;
 }
 
 const AIRBORNE = new Set(["air", "move", "helpless", "airdodge", "hurt"]);
@@ -27,7 +28,7 @@ export class Foley {
     if (frame.frame <= 0) return;
     frame.fighters.forEach((f, i) => {
       const was = this.seen[i];
-      this.seen[i] = { state: f.state, move: f.move, mt: f.mt };
+      this.seen[i] = { state: f.state, move: f.move, mt: f.mt, charge: f.charge };
       if (!was || f.state === "dead" || f.state === "out" || f.state === "respawn") return;
       const gain = f.me ? 1 : 0.55;
       // Il nargue : sa petite ritournelle
@@ -35,6 +36,8 @@ export class Foley {
         sfx.taunt(gain);
         return;
       }
+      // La charge commence : un sifflement qui monte
+      if (f.state === "move" && f.charge > 0 && was.charge === 0) sfx.charge(gain);
       // Le coup part : au moment où il frappe (sa première image active)
       if (f.state === "move") {
         const style = this.styles[i];

@@ -1,7 +1,7 @@
 // Les bruits des coups de Culbute, fabriqués à la volée (rien à télécharger) : un coup sourd et un claquement dont la
 // force suit celle du coup, un tintement sur la garde, une grosse détonation pour une sortie, un froissement pour une
-// saisie ; et ceux du corps (le souffle d'un coup qui part, le saut, la réception, le rebord), et la ritournelle de
-// celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
+// saisie ; et ceux du corps (le souffle d'un coup qui part, la charge, le saut, la réception, le rebord), et la
+// ritournelle de celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
 
 import { audioOut } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -274,4 +274,27 @@ export function taunt(gain = 1) {
     osc.start(t0 + at);
     osc.stop(t0 + at + d + 0.05);
   }
+}
+
+/** Un coup qu'on charge : un sifflement qui monte, le temps de la décision */
+export function charge(gain = 1) {
+  const o = out();
+  if (!o || !bodyThrottle("charge", 120)) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  const osc = ctx.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(220, t0);
+  osc.frequency.exponentialRampToValueAtTime(660, t0 + 0.45);
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.setValueAtTime(900, t0);
+  f.frequency.exponentialRampToValueAtTime(2600, t0 + 0.45);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol * gain * 0.06, t0 + 0.12);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+  osc.connect(f).connect(g).connect(dest);
+  osc.start(t0);
+  osc.stop(t0 + 0.55);
 }
