@@ -6,7 +6,7 @@
 
 import * as THREE from "three";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
-import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
+import type { ExtraId, MuzzleId, WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { fuse } from "./fuse.ts";
 import { camoTexture } from "./textures.ts";
 
@@ -161,7 +161,14 @@ function curvedMag(p: THREE.Object3D, mat: THREE.Material, w = 0.04, d = 0.072) 
 }
 
 /** Une arme, dans son camouflage */
-export function buildGun(id: WeaponId, camo: CamoId, low = false): Gun {
+/** Les accessoires montés sur l'arme principale */
+export interface Gear {
+  muzzle: MuzzleId;
+  extra: ExtraId;
+}
+export const NO_GEAR: Gear = { muzzle: "aucun", extra: "aucun" };
+
+export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = NO_GEAR): Gun {
   const g = new THREE.Group();
   const body = camoMat(camo);
   const muzzle = new THREE.Object3D();
@@ -476,6 +483,26 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false): Gun {
       pistol = true;
       break;
     }
+  }
+  // Les accessoires de l'arme principale : au bout du canon, sous le garde-main, le chargeur
+  if (!pistol) {
+    const p = muzzle.position.clone();
+    if (gear.muzzle === "silencieux") {
+      cyl(0.024, 0.2, darkMetal, p.x, p.y, p.z - 0.1, g, seg);
+      cyl(0.026, 0.02, metal, p.x, p.y, p.z - 0.005, g, seg);
+      muzzle.position.z -= 0.2;
+    } else if (gear.muzzle === "compensateur") {
+      box(0.042, 0.042, 0.085, darkMetal, p.x, p.y, p.z - 0.042, g);
+      if (detail)
+        for (let k = 0; k < 3; k++)
+          for (const s of [-1, 1]) box(0.004, 0.022, 0.01, metal, p.x + s * 0.022, p.y, p.z - 0.02 - k * 0.022, g);
+      muzzle.position.z -= 0.085;
+    }
+    if (gear.extra === "poignee" && front < -0.1) {
+      box(0.03, 0.09, 0.036, polymer, 0, -0.01, front, g, -0.12);
+      box(0.026, 0.012, 0.06, darkMetal, 0, 0.035, front, g);
+    }
+    if (gear.extra === "chargeur" && mag) mag.scale.y = 1.45;
   }
   fuse(g);
   g.add(muzzle);

@@ -24,7 +24,19 @@ import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } 
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
 import { encodeMe, encodeTick, escarmoucheView, stateKey } from "../shared/games/escarmouche/view.ts";
 import { isUniformId, UNIFORM_BY_ID, type UniformId } from "../shared/games/escarmouche/uniforms.ts";
-import { isPrimaryId, isSecondaryId, WEAPONS, type PrimaryId, type SecondaryId } from "../shared/games/escarmouche/weapons.ts";
+import {
+  isPrimaryId,
+  isSecondaryId,
+  WEAPONS,
+  type PrimaryId,
+  type SecondaryId,
+  EXTRA_BY_ID,
+  isExtraId,
+  isMuzzleId,
+  MUZZLE_BY_ID,
+  type ExtraId,
+  type MuzzleId,
+} from "../shared/games/escarmouche/weapons.ts";
 import {
   CHAT_MAX,
   ESCARMOUCHE_MAX_PLAYERS,
@@ -42,7 +54,7 @@ import {
 } from "../shared/protocol.ts";
 import { randomSeed } from "../shared/rng.ts";
 import { lookOf } from "../shared/looks.ts";
-import { camoItem, canUse, uniformItem, weaponItem } from "../shared/shop.ts";
+import { camoItem, canUse, uniformItem, weaponItem, attachmentItem } from "../shared/shop.ts";
 import { TOUR_BOT_LEVELS, TOUR_GUEST_PREFIX, variantSettings, type TourInit } from "../shared/tour.ts";
 import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import {
@@ -111,6 +123,9 @@ interface Seat {
   /** L'arme de poing et la tenue (absentes des tables d'avant : le pistolet, et sa propre tenue) */
   secondary?: SecondaryId;
   tenue?: UniformId;
+  /** Les accessoires de l'arme principale (absents des tables d'avant : aucun) */
+  muzzle?: MuzzleId;
+  extra?: ExtraId;
   camo: CamoId;
 }
 
@@ -400,7 +415,15 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       const seat = this.newHumanSeat(user, this.lighterTeam());
       d.seats.push(seat);
       if (m && m.phase !== "over") {
-        addFighter(m, { id: seat.id, team: seat.team, bot: false, primary: seat.primary, secondary: seat.secondary });
+        addFighter(m, {
+          id: seat.id,
+          team: seat.team,
+          bot: false,
+          primary: seat.primary,
+          secondary: seat.secondary,
+          muzzle: seat.muzzle,
+          extra: seat.extra,
+        });
         this.systemChat(`${user.pseudo} rejoint le combat en cours de partie.`);
       } else this.systemChat(`${user.pseudo} rejoint les rangs.`);
       return seat;
@@ -569,6 +592,20 @@ export class EscarmoucheRoom extends DurableObject<Env> {
           seat.secondary = msg.secondary;
           changed = true;
           if (m) chooseNext(m, fighterIndex(m, seat.id), { secondary: msg.secondary });
+        }
+        if (isMuzzleId(msg.muzzle) && msg.muzzle !== (seat.muzzle ?? "aucun")) {
+          if (!(await has(attachmentItem(msg.muzzle))))
+            return error(`Le ${MUZZLE_BY_ID.get(msg.muzzle)!.name.toLowerCase()} se débloque à la boutique.`);
+          seat.muzzle = msg.muzzle;
+          changed = true;
+          if (m) chooseNext(m, fighterIndex(m, seat.id), { muzzle: msg.muzzle });
+        }
+        if (isExtraId(msg.extra) && msg.extra !== (seat.extra ?? "aucun")) {
+          if (!(await has(attachmentItem(msg.extra))))
+            return error(`La ${EXTRA_BY_ID.get(msg.extra)!.name.toLowerCase()} se débloque à la boutique.`);
+          seat.extra = msg.extra;
+          changed = true;
+          if (m) chooseNext(m, fighterIndex(m, seat.id), { extra: msg.extra });
         }
         if (isCamoId(msg.camo) && msg.camo !== seat.camo) {
           if (!(await has(camoItem(msg.camo)))) return error(`Le camouflage ${CAMO_BY_ID.get(msg.camo)!.name} s'achète à la boutique.`);
@@ -847,7 +884,15 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     }
     d.match = createMatch(
       settings,
-      d.seats.map((s) => ({ id: s.id, team: s.team, bot: s.kind === "bot", primary: s.primary, secondary: s.secondary })),
+      d.seats.map((s) => ({
+        id: s.id,
+        team: s.team,
+        bot: s.kind === "bot",
+        primary: s.primary,
+        secondary: s.secondary,
+        muzzle: s.muzzle,
+        extra: s.extra,
+      })),
       randomSeed(),
     );
     d.status = "playing";
@@ -1257,7 +1302,17 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       arsenal: Object.fromEntries(
-        d.seats.map((s) => [s.id, { primary: s.primary, secondary: s.secondary ?? "pistolet", camo: s.camo, tenue: s.tenue ?? "perso" }]),
+        d.seats.map((s) => [
+          s.id,
+          {
+            primary: s.primary,
+            secondary: s.secondary ?? "pistolet",
+            camo: s.camo,
+            tenue: s.tenue ?? "perso",
+            muzzle: s.muzzle ?? "aucun",
+            extra: s.extra ?? "aucun",
+          },
+        ]),
       ),
       escarmouche: d.match ? escarmoucheView(d.match) : null,
       serverNow: Date.now(),

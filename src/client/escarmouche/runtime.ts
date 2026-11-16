@@ -18,6 +18,7 @@ import {
   quantizeCmd,
   spreadOf,
   stepSoldier,
+  defOf,
   weaponOf,
   wrapAngle,
   type Cmd,
@@ -248,6 +249,8 @@ export class BattleRuntime {
   private hudAt = 0;
   private stepTimers = new Map<number, number>();
   private lastShots = new Map<number, number>();
+  /** Le dernier tir entendu de chacun (pas au silencieux) : il le montre au radar un moment */
+  private radarPing = new Map<number, number>();
   private lastBeep = -1;
   private ping = 0;
   private fps = 60;
@@ -349,6 +352,7 @@ export class BattleRuntime {
         tenue: arsenal?.tenue ?? "perso",
         band: kit.band,
         camo: arsenal?.camo ?? "usine",
+        gear: { muzzle: arsenal?.muzzle ?? "aucun", extra: arsenal?.extra ?? "aucun" },
       };
       const color = teams ? TEAM_HEX[f.team === 1 ? 1 : 0] : kit.band;
       this.scene.ensureSoldier(i, look, seat?.name ?? "Soldat", color);
@@ -478,13 +482,18 @@ export class BattleRuntime {
         const from = this.scene.muzzleOf(e.i, this.tmp2) ? this.tmp2 : null;
         if (from) {
           const last = this.lastShots.get(e.i) ?? 0;
+          // Au silencieux : pas de flamme, un tir étouffé qu'on n'entend pas de loin, et pas de trace au radar
+          const quiet = this.quietShooter(e.i, e.w);
           if (performance.now() - last > 30) {
-            this.scene.effects.flash(from, 0.3);
+            if (!quiet) this.scene.effects.flash(from, 0.3);
             this.scene.soldierFired(e.i);
             const dist = from.distanceTo(this.scene.camera.position);
-            if (dist > 40) this.sound.play("far", { at: from, volume: 0.9, gap: 40 });
+            if (quiet) {
+              if (dist < 30) this.sound.play("shot-quiet", { at: from, volume: 0.8, gap: 40 });
+            } else if (dist > 40) this.sound.play("far", { at: from, volume: 0.9, gap: 40 });
             else this.sound.play(`shot-${e.w}`, { at: from, gap: 40 });
             this.lastShots.set(e.i, performance.now());
+            if (!quiet) this.radarPing.set(e.i, performance.now());
           }
           this.scene.effects.tracer(from, at, 0.8);
           // La balle passe tout près : elle siffle
@@ -894,6 +903,7 @@ export class BattleRuntime {
       this.scene.updateViewmodel({
         weapon: w.id,
         camo: this.room.arsenal[this.room.you.seatId ?? ""]?.camo ?? "usine",
+        gear: { muzzle: s.muzzle ?? "aucun", extra: s.extra ?? "aucun" },
         ads: this.adsAmount,
         reload: s.reloadEnd > 0 ? 1 - (s.reloadEnd - s.clock) / w.reload : -1,
         raise: Math.min(this.raise, s.switchEnd > s.clock ? 1 - (s.switchEnd - s.clock) / 0.45 : 1),
@@ -979,7 +989,7 @@ export class BattleRuntime {
       const marked = !ally && this.marked.has(i);
       const fallen = ally && !alive;
       if (fallen && s?.alive && Math.hypot(f.x - s.x, f.z - s.z) < 1.8 && Math.abs(f.y - s.y) < 1.2) nearFallen = this.nameOf(i);
-      if (alive && (ally || marked || nowMs - (this.lastShots.get(i) ?? -1e9) < 2500))
+      if (alive && (ally || marked || nowMs - (this.radarPing.get(i) ?? -1e9) < 2500))
         this.radarDots.push({ x: f.x, z: f.z, yaw: f.yaw, kind: ally ? "ally" : "enemy" });
       this.scene.updateSoldier(
         i,
@@ -1149,6 +1159,13 @@ export class BattleRuntime {
     return best;
   }
 
+  /** Ce soldat tire-t-il au silencieux (avec son arme principale) ? */
+  private quietShooter(i: number, w: WeaponId): boolean {
+    const id = this.room.escarmouche?.fighters[i]?.id;
+    const a = id ? this.room.arsenal[id] : undefined;
+    return Boolean(a && a.muzzle === "silencieux" && a.primary === w);
+  }
+
   /** La matière de la face touchée en ce point (un tout petit rayon tiré vers elle) */
   private surfaceAt(at: THREE.Vector3, axis: number, sign: number): Surface {
     if (axis < 0) return "dirt";
@@ -1161,7 +1178,8 @@ export class BattleRuntime {
   private localEffects(out: StepOut, cmd: Cmd) {
     const s = this.pred!;
     for (const shot of out.shots) {
-      const w = WEAPONS[shot.weapon];
+      const w = defOf(s, shot.weapon);
+      const quiet = shot.weapon === s.primary && s.muzzle === "silencieux";
       const muzzle = this.scene.viewMuzzle(this.tmp2);
       shot.dirs.slice(0, 4).forEach((d) => {
         const hit = this.world.raycast(shot.ox, shot.oy, shot.oz, d[0], d[1], d[2], 150);
@@ -1170,12 +1188,12 @@ export class BattleRuntime {
         this.scene.effects.tracer(muzzle, end, 1);
         if (hit) this.scene.effects.impact(end, hit.axis, hit.sign, surfaceOf(this.world.boxes[hit.box]?.m));
       });
-      this.scene.viewFlash(shot.weapon);
+      this.scene.viewFlash(shot.weapon, quiet);
       this.scene.effects.glow(muzzle, 8, 60);
       if (Math.random() < 0.35) this.scene.effects.muzzleSmoke(muzzle);
       if (shot.weapon === "pompe") setTimeout(() => this.scene.ejectShell("pompe"), 380);
       else this.scene.ejectShell(shot.weapon);
-      this.sound.play(`shot-${shot.weapon}`, { gap: 20 });
+      this.sound.play(quiet ? "shot-quiet" : `shot-${shot.weapon}`, { gap: 20 });
       if (shot.weapon === "pompe" || shot.weapon === "precision") setTimeout(() => this.sound.play("pump", { volume: 0.6 }), 380);
       const k = ((w.kick * (s.ads ? 0.55 : 1) * (s.crouch ? 0.8 : 1)) / 180) * Math.PI;
       this.kickPitch += k;

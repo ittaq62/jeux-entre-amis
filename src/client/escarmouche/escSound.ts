@@ -36,7 +36,8 @@ export type EscSoundName =
   | "mantle"
   | "spot"
   | "shell"
-  | "revive";
+  | "revive"
+  | "shot-quiet";
 
 interface ShotSpec {
   thump: number;
@@ -538,6 +539,21 @@ export class EscSound {
     this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
     this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
     this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+    // Le tir au silencieux : un claquement sourd et bref, le mécanisme qui cliquette
+    this.buffers.set(
+      "shot-quiet",
+      this.make(0.22, (d, sr) => {
+        const n = noiseGen(616);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += lowpassK(1300, sr) * (n() - lp);
+          const thump = Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t / 0.025);
+          const click = n() * 0.35 * Math.exp(-Math.abs(t - 0.03) / 0.004);
+          d[i] = (lp * Math.exp(-t / 0.04) + thump * 0.6 + click) * 0.8;
+        }
+      }),
+    );
     // Relevé : trois notes qui montent
     this.buffers.set(
       "revive",

@@ -9,7 +9,7 @@ import { UNIFORM_BY_ID, type UniformId } from "../../../shared/games/escarmouche
 import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { Effects, flashTexture } from "./effects.ts";
-import { buildGrenade, buildGun, buildKnife, type Gun } from "./guns.ts";
+import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from "./guns.ts";
 import { buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
@@ -28,6 +28,8 @@ export const TEAM_HEX = ["#d4453c", "#3f7fd8"] as const;
 export interface ViewState {
   weapon: WeaponId;
   camo: CamoId;
+  /** Les accessoires de son arme principale */
+  gear?: Gear;
   /** De 0 à 1 : l'épaulé */
   ads: number;
   /** De 0 à 1 : en train de recharger (la progression), -1 sinon */
@@ -319,7 +321,7 @@ export class EscScene {
   ensureSoldier(i: number, look: SoldierLook, name: string, nameColor: string) {
     const known = this.soldiers.get(i);
     if (known && known.model.key === soldierKey(look)) {
-      known.model.setCamo(look.camo);
+      known.model.setCamo(look.camo, look.gear);
       return;
     }
     if (known) this.removeSoldier(i);
@@ -469,8 +471,8 @@ export class EscScene {
     this.vmLook = { avatar, tenue };
   }
 
-  private setViewGun(weapon: WeaponId, camo: CamoId) {
-    const key = `${weapon}:${camo}:${this.vmLookKey}`;
+  private setViewGun(weapon: WeaponId, camo: CamoId, gear: Gear) {
+    const key = `${weapon}:${camo}:${gear.muzzle}:${gear.extra}:${this.vmLookKey}`;
     if (key === this.vmKey) return;
     if (this.vmGun) {
       this.vmRoot.remove(this.vmGun.group);
@@ -484,7 +486,7 @@ export class EscScene {
       this.vmTrash.push(x);
       return x;
     };
-    this.vmGun = buildGun(weapon, camo, this.low);
+    this.vmGun = buildGun(weapon, camo, this.low, gear);
     this.vmGun.group.scale.setScalar(0.62);
     this.vmRoot.add(this.vmGun.group);
     const gun = this.vmGun;
@@ -542,7 +544,7 @@ export class EscScene {
 
   /** Son arme en main : à la hanche ou épaulée, qui se balance, recule, se recharge */
   updateViewmodel(v: ViewState) {
-    this.setViewGun(v.weapon, v.camo);
+    this.setViewGun(v.weapon, v.camo, v.gear ?? NO_GEAR);
     const gun = this.vmGun!;
     this.vmRoot.visible = v.alive && !v.scoped;
     // À la hanche : en bas à droite, assez loin pour ne pas boucher la vue ; épaulée : le viseur au milieu de l'écran
@@ -594,7 +596,9 @@ export class EscScene {
   }
 
   /** Son arme vient de tirer : la flamme, sur l'arme même */
-  viewFlash(weapon: WeaponId) {
+  viewFlash(weapon: WeaponId, quiet = false) {
+    // Au silencieux : pas de flamme, à peine une lueur
+    if (quiet) return;
     const big =
       weapon === "pompe" || weapon === "double" ? 1.6 : weapon === "precision" || weapon === "carabine" || weapon === "fm" ? 1.25 : 1;
     const small = weapon === "pistolet" || weapon === "pa" || weapon === "mitraillette" ? 0.75 : 1;

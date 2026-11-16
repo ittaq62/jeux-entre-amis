@@ -8,11 +8,11 @@ import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
 import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
 import { isUniformId, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import { getMap, isMapId, type MapId } from "../../shared/games/escarmouche/maps.ts";
-import { WEAPON_IDS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { isExtraId, isMuzzleId, WEAPON_IDS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import { useSession } from "../stores/session.ts";
 import { EscScene } from "./scene/EscScene.ts";
 import { TEAM_KITS } from "./scene/soldiers.ts";
-import { buildGun } from "./scene/guns.ts";
+import { buildGun, type Gear } from "./scene/guns.ts";
 import * as THREE from "three";
 
 interface View {
@@ -55,6 +55,9 @@ export function DevEscarmouche() {
   const [view, setView] = useState(Number(params.get("vue") ?? 0) || 0);
   const weapon = (WEAPON_IDS as string[]).includes(params.get("arme") ?? "") ? (params.get("arme") as WeaponId) : "fa";
   const camo = (params.get("camo") ?? "usine") as CamoId;
+  // Les accessoires : ?acc=silencieux,poignee
+  const acc = (params.get("acc") ?? "").split(",");
+  const gear: Gear = { muzzle: acc.find(isMuzzleId) ?? "aucun", extra: acc.find(isExtraId) ?? "aucun" };
   const low = params.has("tel");
   const closeUp = params.has("soldat");
   const gallery = params.has("armes");
@@ -98,7 +101,7 @@ export function DevEscarmouche() {
     spots.forEach((p, i) => {
       scene.ensureSoldier(
         i,
-        { avatar: avatars[i]!, tenue: tenues[i]!, band: TEAM_KITS[p.team as 0 | 1].band, camo },
+        { avatar: avatars[i]!, tenue: tenues[i]!, band: TEAM_KITS[p.team as 0 | 1].band, camo, gear },
         i === 0 ? (user?.pseudo ?? "Soldat") : `Bot ${i}`,
         p.team ? "#3f7fd8" : "#d4453c",
       );
@@ -106,7 +109,7 @@ export function DevEscarmouche() {
     // La galerie : les douze armes alignées devant la caméra, sur trois rangs
     if (gallery) {
       WEAPON_IDS.forEach((id, k) => {
-        const gun = buildGun(id, camo, low);
+        const gun = buildGun(id, camo, low, gear);
         const col = k % 4;
         const row = Math.floor(k / 4);
         const d = 2.3;
@@ -158,6 +161,7 @@ export function DevEscarmouche() {
       scene.updateViewmodel({
         weapon,
         camo,
+        gear,
         ads: params.has("epaule") ? 1 : 0,
         reload: -1,
         raise: 1,

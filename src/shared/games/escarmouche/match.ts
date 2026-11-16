@@ -3,15 +3,28 @@
 
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
 import { goalOf, MODE_INFO, type EscarmoucheSettings, type Mode } from "./rules.ts";
-import { DT, eyeOf, forward, heightOf, newSoldier, respawnSoldier, stepSoldier, type Cmd, type Soldier, type StepOut } from "./soldier.ts";
+import {
+  defOf,
+  DT,
+  eyeOf,
+  forward,
+  heightOf,
+  newSoldier,
+  respawnSoldier,
+  stepSoldier,
+  type Cmd,
+  type Soldier,
+  type StepOut,
+} from "./soldier.ts";
 import {
   damageAt,
   GRENADE,
   isPrimaryId,
   isSecondaryId,
   KNIFE,
-  WEAPONS,
   type PrimaryId,
+  type ExtraId,
+  type MuzzleId,
   type SecondaryId,
   type WeaponId,
 } from "./weapons.ts";
@@ -105,6 +118,9 @@ export interface Fighter {
   next: PrimaryId;
   /** L'arme de poing de sa prochaine vie */
   nextSecondary: SecondaryId;
+  /** Les accessoires de sa prochaine vie */
+  nextMuzzle: MuzzleId;
+  nextExtra: ExtraId;
   /** Ceux qui l'ont touché depuis sa dernière mort (pour les passes décisives) */
   damagers: { i: number; at: number }[];
   /** Le drapeau qu'il porte (l'équipe à qui il est), -1 s'il n'en porte pas */
@@ -261,6 +277,8 @@ export interface FighterInit {
   bot: boolean;
   primary: PrimaryId;
   secondary?: SecondaryId;
+  muzzle?: MuzzleId;
+  extra?: ExtraId;
 }
 
 export function createMatch(settings: EscarmoucheSettings, players: FighterInit[], seed: number): Match {
@@ -303,13 +321,25 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
       id: p.id,
       team,
       bot: p.bot,
-      s: newSoldier(0, 0, 0, 0, allowedPrimary(settings, p.primary), GRENADE.count, allowedSecondary(settings, p.secondary ?? "pistolet")),
+      s: newSoldier(
+        0,
+        0,
+        0,
+        0,
+        allowedPrimary(settings, p.primary),
+        GRENADE.count,
+        allowedSecondary(settings, p.secondary ?? "pistolet"),
+        p.muzzle ?? "aucun",
+        p.extra ?? "aucun",
+      ),
       hp: MAX_HP,
       respawnAt: 0,
       shieldUntil: 0,
       hurtAt: -100,
       next: isPrimaryId(p.primary) ? p.primary : "fa",
       nextSecondary: isSecondaryId(p.secondary) ? p.secondary : "pistolet",
+      nextMuzzle: p.muzzle ?? "aucun",
+      nextExtra: p.extra ?? "aucun",
       damagers: [],
       carrying: -1,
       points: 0,
@@ -339,7 +369,17 @@ export function createMatch(settings: EscarmoucheSettings, players: FighterInit[
 }
 
 function placeAt(f: Fighter, x: number, y: number, z: number, yaw: number, m: Match) {
-  respawnSoldier(f.s, x, y, z, yaw, allowedPrimary(m.settings, f.next), allowedSecondary(m.settings, f.nextSecondary));
+  respawnSoldier(
+    f.s,
+    x,
+    y,
+    z,
+    yaw,
+    allowedPrimary(m.settings, f.next),
+    allowedSecondary(m.settings, f.nextSecondary),
+    f.nextMuzzle ?? "aucun",
+    f.nextExtra ?? "aucun",
+  );
   f.hp = MAX_HP;
   f.damagers = [];
   f.carrying = -1;
@@ -369,6 +409,8 @@ export function upgradeMatch(m: Match): Match {
     if (typeof f.lastFight !== "number") f.lastFight = -100;
     if (typeof f.diedAt !== "number") f.diedAt = -100;
     if (typeof f.giveUp !== "boolean") f.giveUp = false;
+    if (!f.nextMuzzle) f.nextMuzzle = "aucun";
+    if (!f.nextExtra) f.nextExtra = "aucun";
     if (typeof f.stats.revives !== "number") f.stats.revives = 0;
     for (const k of Object.keys(fresh) as (keyof Soldier)[]) {
       if (f.s[k] === undefined) (f.s as unknown as Record<string, unknown>)[k] = fresh[k];
@@ -439,7 +481,7 @@ export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, e
   for (const shot of out.shots) {
     f.stats.shots += 1;
     f.lastFight = m.t;
-    const w = WEAPONS[shot.weapon];
+    const w = defOf(f.s, shot.weapon);
     let anyHit = false;
     shot.dirs.forEach((d, p) => {
       const wall = world.raycast(shot.ox, shot.oy, shot.oz, d[0], d[1], d[2], RANGE);
@@ -1047,6 +1089,8 @@ export function addFighter(m: Match, p: FighterInit): number {
       allowedPrimary(m.settings, p.primary),
       GRENADE.count,
       allowedSecondary(m.settings, p.secondary ?? "pistolet"),
+      p.muzzle ?? "aucun",
+      p.extra ?? "aucun",
     ),
     hp: MAX_HP,
     respawnAt: 0,
@@ -1054,6 +1098,8 @@ export function addFighter(m: Match, p: FighterInit): number {
     hurtAt: -100,
     next: isPrimaryId(p.primary) ? p.primary : "fa",
     nextSecondary: isSecondaryId(p.secondary) ? p.secondary : "pistolet",
+    nextMuzzle: p.muzzle ?? "aucun",
+    nextExtra: p.extra ?? "aucun",
     damagers: [],
     carrying: -1,
     points: 0,
@@ -1073,11 +1119,17 @@ export function addFighter(m: Match, p: FighterInit): number {
 }
 
 /** Le choix des armes pour la prochaine vie */
-export function chooseNext(m: Match, i: number, pick: { primary?: PrimaryId; secondary?: SecondaryId }) {
+export function chooseNext(
+  m: Match,
+  i: number,
+  pick: { primary?: PrimaryId; secondary?: SecondaryId; muzzle?: MuzzleId; extra?: ExtraId },
+) {
   const f = m.fighters[i];
   if (!f) return;
   if (pick.primary) f.next = pick.primary;
   if (pick.secondary) f.nextSecondary = pick.secondary;
+  if (pick.muzzle) f.nextMuzzle = pick.muzzle;
+  if (pick.extra) f.nextExtra = pick.extra;
 }
 
 /** Un soldat qu'on garde de côté (le retour dans le temps n'a besoin que de la pose) */

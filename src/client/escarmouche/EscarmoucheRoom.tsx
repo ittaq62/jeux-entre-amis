@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import type { EscarmoucheClientMessage } from "../../shared/protocol.ts";
-import { camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
+import { attachmentItem, camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { usePrefs } from "../stores/prefs.ts";
@@ -34,12 +34,16 @@ export function EscarmoucheRoom({ code }: { code: string }) {
   const primary = usePrefs((p) => p.escarmouchePrimary);
   const secondary = usePrefs((p) => p.escarmoucheSecondary);
   const tenue = usePrefs((p) => p.escarmoucheTenue);
+  const muzzle = usePrefs((p) => p.escarmoucheMuzzle);
+  const extra = usePrefs((p) => p.escarmoucheExtra);
   const { has } = useMyItems();
   const mine = view?.you.seatId ? view.arsenal[view.you.seatId] : undefined;
   const okCamo = camo !== null && has(camoItem(camo));
   const okPrimary = primary !== null && has(weaponItem(primary));
   const okSecondary = secondary !== null && has(weaponItem(secondary));
   const okTenue = tenue !== null && has(uniformItem(tenue));
+  const okMuzzle = muzzle !== null && has(attachmentItem(muzzle));
+  const okExtra = extra !== null && has(attachmentItem(extra));
   useEffect(() => {
     if (!mine) return;
     const patch: Extract<EscarmoucheClientMessage, { t: "arsenal" }> = { t: "arsenal" };
@@ -47,8 +51,10 @@ export function EscarmoucheRoom({ code }: { code: string }) {
     if (secondary && okSecondary && secondary !== mine.secondary) patch.secondary = secondary;
     if (camo && okCamo && camo !== mine.camo) patch.camo = camo;
     if (tenue && okTenue && tenue !== mine.tenue) patch.tenue = tenue;
-    if (patch.primary || patch.secondary || patch.camo || patch.tenue) send(patch);
-  }, [mine, primary, secondary, camo, tenue, okPrimary, okSecondary, okCamo, okTenue, send]);
+    if (muzzle && okMuzzle && muzzle !== mine.muzzle) patch.muzzle = muzzle;
+    if (extra && okExtra && extra !== mine.extra) patch.extra = extra;
+    if (patch.primary || patch.secondary || patch.camo || patch.tenue || patch.muzzle || patch.extra) send(patch);
+  }, [mine, primary, secondary, camo, tenue, muzzle, extra, okPrimary, okSecondary, okCamo, okTenue, okMuzzle, okExtra, send]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion au salon…" : "Arrivée au front…"} />;

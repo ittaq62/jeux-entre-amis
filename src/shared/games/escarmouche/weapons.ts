@@ -443,3 +443,74 @@ export function grenadeDamage(dist: number): number {
   const k = 1 - dist / GRENADE.radius;
   return GRENADE.damage * (0.25 + 0.75 * k) * Math.min(1, k * 4);
 }
+
+/**
+ * Les accessoires de l'arme principale : un au bout du canon, un dessous. Aucun n'est meilleur en tout : ce qu'il
+ * apporte d'un côté, il le reprend de l'autre.
+ */
+export type MuzzleId = "aucun" | "silencieux" | "compensateur";
+export type ExtraId = "aucun" | "poignee" | "chargeur";
+
+export interface Attachment<Id extends string> {
+  id: Id;
+  name: string;
+  blurb: string;
+  price: number;
+}
+
+export const MUZZLES: Attachment<MuzzleId>[] = [
+  { id: "aucun", name: "Rien au canon", blurb: "Le canon tel quel.", price: 0 },
+  {
+    id: "silencieux",
+    name: "Silencieux",
+    blurb: "Pas de flamme, un tir étouffé : tu n'apparais plus au radar en tirant. La balle porte moins loin.",
+    price: 300,
+  },
+  {
+    id: "compensateur",
+    name: "Compensateur",
+    blurb: "Le canon se cabre beaucoup moins à chaque coup ; au jugé, les balles s'écartent un peu plus.",
+    price: 200,
+  },
+];
+
+export const EXTRAS: Attachment<ExtraId>[] = [
+  { id: "aucun", name: "Rien dessous", blurb: "L'arme telle quelle.", price: 0 },
+  { id: "poignee", name: "Poignée avant", blurb: "Moins de recul, une visée plus serrée ; un peu plus lourd à porter.", price: 150 },
+  { id: "chargeur", name: "Chargeur long", blurb: "Moitié plus de balles par chargeur ; plus long à recharger, plus lourd.", price: 250 },
+];
+
+export const MUZZLE_BY_ID = new Map(MUZZLES.map((a) => [a.id, a]));
+export const EXTRA_BY_ID = new Map(EXTRAS.map((a) => [a.id, a]));
+export const isMuzzleId = (v: unknown): v is MuzzleId => typeof v === "string" && MUZZLE_BY_ID.has(v as MuzzleId);
+export const isExtraId = (v: unknown): v is ExtraId => typeof v === "string" && EXTRA_BY_ID.has(v as ExtraId);
+
+const modded = new Map<string, WeaponDef>();
+/** Une arme avec ses accessoires : ses caractéristiques changées (une seule fois par combinaison) */
+export function withAttachments(w: WeaponDef, muzzle: MuzzleId, extra: ExtraId): WeaponDef {
+  if (muzzle === "aucun" && extra === "aucun") return w;
+  const key = `${w.id}:${muzzle}:${extra}`;
+  let d = modded.get(key);
+  if (d) return d;
+  d = { ...w, range: [w.range[0], w.range[1]] };
+  if (muzzle === "silencieux") {
+    d.range = [d.range[0] * 0.75, d.range[1] * 0.8];
+    d.kick *= 0.92;
+  } else if (muzzle === "compensateur") {
+    d.kick *= 0.7;
+    d.bloom *= 0.8;
+    d.hip *= 1.15;
+  }
+  if (extra === "poignee") {
+    d.kick *= 0.85;
+    d.ads *= 0.8;
+    d.move *= 0.97;
+  } else if (extra === "chargeur") {
+    d.mag = Math.round(d.mag * 1.5);
+    d.reserve = Math.round(d.reserve * 1.25);
+    d.reload *= 1.3;
+    d.move *= 0.97;
+  }
+  modded.set(key, d);
+  return d;
+}

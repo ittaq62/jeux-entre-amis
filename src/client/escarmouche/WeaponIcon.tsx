@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
 import { UNIFORM_BY_ID, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
-import { WEAPONS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { WEAPONS, type ExtraId, type MuzzleId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 
 /** Les taches d'un camouflage, toujours les mêmes (tirées d'un nombre) */
 function blotches(seed: number, n: number, w: number, h: number) {
@@ -189,5 +189,36 @@ export function WeaponBars({ weapon }: { weapon: WeaponId }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/** Un accessoire en petit : le silencieux, le compensateur, la poignée, le chargeur long */
+export function AttachmentIcon({ id, size = 40 }: { id: MuzzleId | ExtraId; size?: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden="true" className="esc-camo-swatch">
+      <rect x="1" y="1" width="38" height="38" rx="7" fill="#2b2f33" />
+      {id === "silencieux" && (
+        <>
+          <rect x="5" y="16" width="26" height="8" rx="3" fill="#cfd3d6" />
+          <rect x="31" y="18" width="5" height="4" fill="#8d9296" />
+        </>
+      )}
+      {id === "compensateur" && (
+        <>
+          <rect x="8" y="15" width="22" height="10" rx="1.5" fill="#cfd3d6" />
+          {[12, 17, 22].map((x) => (
+            <rect key={x} x={x} y="15" width="2.5" height="4" fill="#2b2f33" />
+          ))}
+        </>
+      )}
+      {id === "poignee" && (
+        <>
+          <rect x="6" y="11" width="28" height="6" rx="1.5" fill="#8d9296" />
+          <rect x="16" y="17" width="7" height="16" rx="2" fill="#cfd3d6" transform="rotate(-8 19 25)" />
+        </>
+      )}
+      {id === "chargeur" && <path d="M14 6 h10 l2 26 a3 3 0 0 1 -3 3 h-6 a3 3 0 0 1 -3 -3 Z" fill="#cfd3d6" />}
+      {id === "aucun" && <path d="M12 12 L28 28 M28 12 L12 28" stroke="#6f7478" strokeWidth="3" strokeLinecap="round" />}
+    </svg>
   );
 }

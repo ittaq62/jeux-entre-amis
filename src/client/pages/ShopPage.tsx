@@ -5,8 +5,8 @@ import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import { FETE_BY_ID, type FeteId } from "../../shared/games/crampons/boutique.ts";
 import { CAMO_BY_ID, type CamoId } from "../../shared/games/escarmouche/camos.ts";
 import { UNIFORM_BY_ID, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
-import { WEAPONS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
-import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "../escarmouche/WeaponIcon.tsx";
+import { EXTRA_BY_ID, MUZZLE_BY_ID, WEAPONS, type ExtraId, type MuzzleId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { AttachmentIcon, CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "../escarmouche/WeaponIcon.tsx";
 import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.ts";
 import { bombInfo, type BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
@@ -57,6 +57,12 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
     note: "Des armes de plus, chacune sa façon de se battre : à choisir au salon",
   },
   { kind: "uniforme", game: "escarmouche", title: "Escarmouche", note: "Les tenues de ton soldat : ta tête reste la tienne" },
+  {
+    kind: "accessoire",
+    game: "escarmouche",
+    title: "Escarmouche",
+    note: "Les accessoires de ton arme principale : chacun a son prix à payer",
+  },
   { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
 ];
 
@@ -92,6 +98,7 @@ export function ShopPage() {
         </span>
       );
     if (item.kind === "uniforme") return <TenueSwatch tenue={item.ref as UniformId} size={56} />;
+    if (item.kind === "accessoire") return <AttachmentIcon id={item.ref as MuzzleId} size={56} />;
     return null;
   };
 
@@ -107,6 +114,7 @@ export function ShopPage() {
     if (item.kind === "camo") return CAMO_BY_ID.get(item.ref as CamoId)?.blurb ?? null;
     if (item.kind === "arme") return WEAPONS[item.ref as WeaponId].blurb;
     if (item.kind === "uniforme") return UNIFORM_BY_ID.get(item.ref as UniformId)?.blurb ?? null;
+    if (item.kind === "accessoire") return (MUZZLE_BY_ID.get(item.ref as MuzzleId) ?? EXTRA_BY_ID.get(item.ref as ExtraId))?.blurb ?? null;
     return null;
   };
 
@@ -143,6 +151,18 @@ export function ShopPage() {
           </Suspense>
           <WeaponBars weapon={id} />
         </span>
+      );
+    }
+    if (item.kind === "accessoire") {
+      const isMuzzle = MUZZLE_BY_ID.has(item.ref as MuzzleId);
+      const gear = {
+        muzzle: isMuzzle ? (item.ref as MuzzleId) : ("aucun" as const),
+        extra: isMuzzle ? ("aucun" as const) : (item.ref as ExtraId),
+      };
+      return (
+        <Suspense fallback={<AttachmentIcon id={item.ref as MuzzleId} size={120} />}>
+          <EscPreview3D weapon="fa" camo="usine" gear={gear} width={300} height={170} />
+        </Suspense>
       );
     }
     if (item.kind === "uniforme")

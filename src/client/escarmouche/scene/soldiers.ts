@@ -12,7 +12,7 @@ import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import { fuse } from "./fuse.ts";
-import { buildGun, type Gun } from "./guns.ts";
+import { buildGun, NO_GEAR, type Gear, type Gun } from "./guns.ts";
 import { clothTexture } from "./textures.ts";
 import { outfitCoat, outfitExtras, wearHair, wearHat } from "./wardrobe3d.ts";
 
@@ -35,6 +35,8 @@ export interface SoldierLook {
   tenue: UniformId;
   band: string;
   camo: CamoId;
+  /** Les accessoires de son arme principale */
+  gear?: Gear;
 }
 
 export interface SoldierPose {
@@ -296,6 +298,7 @@ export class SoldierModel {
   private mats: UniformMats;
   private bandMat: THREE.MeshStandardMaterial;
   private camo: CamoId;
+  private gear: Gear = NO_GEAR;
   private low: boolean;
   private alive = true;
   /** Le temps depuis le dernier coup tiré, pour le recul de l'arme */
@@ -306,6 +309,7 @@ export class SoldierModel {
 
   constructor(look: SoldierLook, low: boolean) {
     this.camo = look.camo;
+    this.gear = look.gear ?? NO_GEAR;
     this.low = low;
     this.key = soldierKey(look);
     const keep: Keep = (x) => {
@@ -490,7 +494,7 @@ export class SoldierModel {
   }
 
   private setGun(weapon: WeaponId) {
-    const key = `${weapon}:${this.camo}`;
+    const key = `${weapon}:${this.camo}:${this.gear.muzzle}:${this.gear.extra}`;
     if (key === this.gunKey) return;
     if (this.gun) {
       this.aim.remove(this.gun.group);
@@ -498,16 +502,17 @@ export class SoldierModel {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
     }
-    this.gun = buildGun(weapon, this.camo, this.low);
+    this.gun = buildGun(weapon, this.camo, this.low, this.gear);
     this.gun.group.position.set(0.08, -0.16, this.gun.pistol ? -0.36 : -0.3);
     this.aim.add(this.gun.group);
     this.poseArms(this.gun);
     this.gunKey = key;
   }
 
-  setCamo(camo: CamoId) {
-    if (camo === this.camo) return;
+  setCamo(camo: CamoId, gear: Gear = NO_GEAR) {
+    if (camo === this.camo && gear.muzzle === this.gear.muzzle && gear.extra === this.gear.extra) return;
     this.camo = camo;
+    this.gear = gear;
     this.gunKey = "";
   }
 

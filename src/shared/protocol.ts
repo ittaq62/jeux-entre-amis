@@ -25,7 +25,7 @@ import type { EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { CmdNet } from "./games/escarmouche/soldier.ts";
 import type { EscarmoucheView, EscMe, EscTick } from "./games/escarmouche/view.ts";
 import type { UniformId } from "./games/escarmouche/uniforms.ts";
-import type { PrimaryId, SecondaryId } from "./games/escarmouche/weapons.ts";
+import type { ExtraId, MuzzleId, PrimaryId, SecondaryId } from "./games/escarmouche/weapons.ts";
 
 export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons" | "escarmouche" | "culbute";
 
@@ -830,7 +830,7 @@ export interface EscarmoucheRoomView {
   /** Dans quelle équipe joue chaque siège (modes en équipes) */
   teams: Record<string, 0 | 1>;
   /** Les armes, le camouflage et la tenue de chaque siège */
-  arsenal: Record<string, { primary: PrimaryId; secondary: SecondaryId; camo: CamoId; tenue: UniformId }>;
+  arsenal: Record<string, { primary: PrimaryId; secondary: SecondaryId; camo: CamoId; tenue: UniformId; muzzle: MuzzleId; extra: ExtraId }>;
   escarmouche: EscarmoucheView | null;
   serverNow: number;
   rematch: string[];
@@ -854,7 +854,7 @@ export type EscarmoucheClientMessage =
   /** Choisir son équipe (l'hôte peut changer celle d'un bot) */
   | { t: "team"; team: 0 | 1; seatId?: string }
   /** Ses armes (pour sa prochaine vie, en pleine partie), son camouflage et sa tenue (s'il les a) */
-  | { t: "arsenal"; primary?: PrimaryId; secondary?: SecondaryId; camo?: CamoId; tenue?: UniformId }
+  | { t: "arsenal"; primary?: PrimaryId; secondary?: SecondaryId; camo?: CamoId; tenue?: UniformId; muzzle?: MuzzleId; extra?: ExtraId }
   /** Revenir au combat auprès de ce coéquipier (son numéro dans la partie), ou à la base (-1) */
   | { t: "spawnOn"; target: number }
   /** Tombé : revenir tout de suite, sans attendre qu'on le relève */

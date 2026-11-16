@@ -3,6 +3,7 @@ import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot
 import { getMap, MAP_IDS, type MapId } from "./maps.ts";
 import {
   applyCmd,
+  chooseNext,
   chooseSpawn,
   createMatch,
   finish,
@@ -20,7 +21,7 @@ import {
 import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.ts";
 import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
-import { WEAPONS } from "./weapons.ts";
+import { damageAt, WEAPONS, withAttachments } from "./weapons.ts";
 import { World } from "./world.ts";
 
 const idle = (s: number, over: Partial<Cmd> = {}): Cmd => ({ s, mx: 0, mz: 0, yaw: 0, pitch: 0, b: 0, vt: 0, ...over });
@@ -711,5 +712,73 @@ describe("Escarmouche : relever un coéquipier, revenir auprès de lui", () => {
     live(m);
     chooseSpawn(m, 1, 0);
     expect(m.fighters[1]!.spawnOn).toBe(-1);
+  });
+});
+
+describe("Escarmouche : les accessoires", () => {
+  it("chaque accessoire change l'arme, dans un sens et dans l'autre", () => {
+    const fa = WEAPONS.fa;
+    expect(withAttachments(fa, "aucun", "aucun")).toBe(fa);
+    const longMag = withAttachments(fa, "aucun", "chargeur");
+    expect(longMag.mag).toBe(45);
+    expect(longMag.reload).toBeGreaterThan(fa.reload);
+    expect(longMag.move).toBeLessThan(fa.move);
+    const quiet = withAttachments(fa, "silencieux", "aucun");
+    expect(damageAt(quiet, 35)).toBeLessThan(damageAt(fa, 35));
+    const comp = withAttachments(fa, "compensateur", "aucun");
+    expect(comp.kick).toBeLessThan(fa.kick);
+    expect(comp.hip).toBeGreaterThan(fa.hip);
+    const grip = withAttachments(fa, "aucun", "poignee");
+    expect(grip.ads).toBeLessThan(fa.ads);
+    expect(grip.move).toBeLessThan(fa.move);
+  });
+
+  it("un soldat au chargeur long tire 45 balles avant de recharger ; l'arme de poing n'en a pas", () => {
+    const world = new World([{ x0: -20, y0: -1, z0: -20, x1: 20, y1: 0, z1: 20, m: "sol" }]);
+    const s = newSoldier(0, 0, 0, 0, "fa", 1, "pistolet", "aucun", "chargeur");
+    expect(s.mag[0]).toBe(45);
+    expect(s.mag[1]).toBe(WEAPONS.pistolet.mag);
+    let shots = 0;
+    for (let k = 0; k < 60 * 6; k++) shots += stepSoldier(s, idle(k + 1, { b: B.fire }), world).shots.length;
+    expect(shots).toBeGreaterThanOrEqual(45);
+  });
+
+  it("au serveur, un silencieux fait moins mal au loin ; changer d'accessoire vaut pour la vie suivante", () => {
+    const shootAt = (muzzle: "aucun" | "silencieux") => {
+      const m = createMatch(
+        settings({ mode: "solo", map: "hameau" }),
+        [
+          { id: "a", team: 0, bot: false, primary: "fa", muzzle },
+          { id: "b", team: 1, bot: false, primary: "fa" },
+        ],
+        2,
+      );
+      live(m);
+      for (const f of m.fighters) f.shieldUntil = 0;
+      Object.assign(m.fighters[0]!.s, { x: -40, y: 0, z: 1.5 });
+      Object.assign(m.fighters[1]!.s, { x: -5, y: 0, z: 1.5 });
+      const ev: EscEvent[] = [];
+      applyCmd(m, 0, idle(1, { yaw: -Math.PI / 2, pitch: -0.012, b: B.fire | B.ads, mz: 0 }), null, ev);
+      return ev.filter((e) => e.k === "hit").reduce((a, e) => a + (e.k === "hit" ? e.d : 0), 0);
+    };
+    const loud = shootAt("aucun");
+    const quiet = shootAt("silencieux");
+    expect(loud).toBeGreaterThan(0);
+    expect(quiet).toBeLessThan(loud);
+    const m = createMatch(
+      settings({ mode: "solo" }),
+      [
+        { id: "a", team: 0, bot: false, primary: "fa" },
+        { id: "b", team: 1, bot: false, primary: "fa" },
+      ],
+      2,
+    );
+    live(m);
+    chooseNext(m, 0, { extra: "chargeur" });
+    expect(m.fighters[0]!.s.mag[0]).toBe(30);
+    m.fighters[0]!.shieldUntil = 0;
+    while (m.fighters[0]!.s.alive) hurt(m, 0, 1, 60, 1, "fa", [], 0, 1, 0);
+    for (let k = 0; k < 60 * 5; k++) worldStep(m, []);
+    expect(m.fighters[0]!.s.mag[0]).toBe(45);
   });
 });

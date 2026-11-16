@@ -4,7 +4,7 @@ import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { BallId, FeteId } from "../../shared/games/crampons/boutique.ts";
 import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
 import type { UniformId } from "../../shared/games/escarmouche/uniforms.ts";
-import type { PrimaryId, SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
+import type { ExtraId, MuzzleId, PrimaryId, SecondaryId } from "../../shared/games/escarmouche/weapons.ts";
 import type { BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
@@ -50,6 +50,8 @@ interface Prefs {
   escarmoucheCamo: CamoId | null;
   escarmouchePrimary: PrimaryId | null;
   escarmoucheSecondary: SecondaryId | null;
+  escarmoucheMuzzle: MuzzleId | null;
+  escarmoucheExtra: ExtraId | null;
   escarmoucheTenue: UniformId | null;
   /** Escarmouche : la qualité de l'image (auto : selon l'appareil) */
   escQuality: "auto" | "bas" | "moyen" | "haut";
@@ -99,6 +101,8 @@ export const usePrefs = create<Prefs>((set, get) => ({
   escarmoucheCamo: null,
   escarmouchePrimary: null,
   escarmoucheSecondary: null,
+  escarmoucheMuzzle: null,
+  escarmoucheExtra: null,
   escarmoucheTenue: null,
   escQuality: "auto",
   escMouse: 1,

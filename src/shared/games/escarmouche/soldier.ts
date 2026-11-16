@@ -2,7 +2,17 @@
 // fait autorité ; le téléphone (ou l'ordinateur) du joueur joue les mêmes pas en avance pour ne pas attendre le réseau,
 // puis se recale sur ce que le serveur a vraiment retenu. Tout est donc calculé ici, de la même façon des deux côtés.
 
-import { GRENADE, KNIFE, WEAPONS, type SecondaryId, type WeaponDef, type WeaponId } from "./weapons.ts";
+import {
+  GRENADE,
+  KNIFE,
+  WEAPONS,
+  withAttachments,
+  type ExtraId,
+  type MuzzleId,
+  type SecondaryId,
+  type WeaponDef,
+  type WeaponId,
+} from "./weapons.ts";
 import type { World } from "./world.ts";
 
 /** Un pas de simulation */
@@ -114,6 +124,9 @@ export interface Soldier {
   slot: 0 | 1;
   primary: WeaponId;
   secondary: SecondaryId;
+  /** Les accessoires de l'arme principale */
+  muzzle: MuzzleId;
+  extra: ExtraId;
   /** Les balles qui restent à tirer dans la rafale en cours */
   burst: number;
   mag: [number, number];
@@ -151,7 +164,12 @@ export interface Soldier {
 }
 
 export function weaponOf(s: Soldier): WeaponDef {
-  return WEAPONS[s.slot === 0 ? s.primary : s.secondary];
+  return s.slot === 0 ? withAttachments(WEAPONS[s.primary], s.muzzle ?? "aucun", s.extra ?? "aucun") : WEAPONS[s.secondary];
+}
+
+/** Les caractéristiques d'une arme qu'il tient (avec ses accessoires si c'est sa principale) */
+export function defOf(s: Soldier, id: WeaponId): WeaponDef {
+  return id === s.primary ? withAttachments(WEAPONS[id], s.muzzle ?? "aucun", s.extra ?? "aucun") : WEAPONS[id];
 }
 
 export function heightOf(s: { crouch: boolean }): number {
@@ -170,8 +188,10 @@ export function newSoldier(
   primary: WeaponId,
   grenades = GRENADE.count,
   secondary: SecondaryId = "pistolet",
+  muzzle: MuzzleId = "aucun",
+  extra: ExtraId = "aucun",
 ): Soldier {
-  const p = WEAPONS[primary];
+  const p = withAttachments(WEAPONS[primary], muzzle, extra);
   const q = WEAPONS[secondary];
   return {
     x,
@@ -189,6 +209,8 @@ export function newSoldier(
     slot: 0,
     primary,
     secondary,
+    muzzle,
+    extra,
     burst: 0,
     mag: [p.mag, q.mag],
     res: [p.reserve, q.reserve],
@@ -618,11 +640,13 @@ export function respawnSoldier(
   yaw: number,
   primary: WeaponId,
   secondary: SecondaryId = "pistolet",
+  muzzle: MuzzleId = "aucun",
+  extra: ExtraId = "aucun",
 ) {
   const clock = s.clock;
   const seq = s.seq;
   const shots = s.shots;
-  Object.assign(s, newSoldier(x, y, z, yaw, primary, GRENADE.count, secondary));
+  Object.assign(s, newSoldier(x, y, z, yaw, primary, GRENADE.count, secondary, muzzle, extra));
   s.clock = clock;
   s.seq = seq;
   s.shots = shots;

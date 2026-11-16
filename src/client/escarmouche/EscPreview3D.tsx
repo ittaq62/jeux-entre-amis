@@ -8,7 +8,7 @@ import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
 import type { UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import { useSession } from "../stores/session.ts";
-import { buildGun } from "./scene/guns.ts";
+import { buildGun, NO_GEAR, type Gear } from "./scene/guns.ts";
 import { SoldierModel } from "./scene/soldiers.ts";
 import { skyEnvironment } from "./scene/sky.ts";
 
@@ -19,6 +19,8 @@ interface Props {
   camo: CamoId;
   avatar?: AvatarConfig;
   band?: string;
+  /** Les accessoires de l'arme */
+  gear?: Gear;
   width?: number;
   height?: number;
 }
@@ -39,11 +41,12 @@ function sharedRenderer(): THREE.WebGLRenderer {
   return shared;
 }
 
-export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c8392d", width = 260, height = 300 }: Props) {
+export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c8392d", gear, width = 260, height = 300 }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const user = useSession((s) => s.user);
   const who = avatar ?? user?.avatar ?? seededAvatar("boutique");
   const whoKey = JSON.stringify(who);
+  const gearKey = `${gear?.muzzle ?? "aucun"}:${gear?.extra ?? "aucun"}`;
 
   useEffect(() => {
     const c = canvas.current;
@@ -70,12 +73,12 @@ export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c83
     let soldier: SoldierModel | null = null;
     let gunGroup: THREE.Group | null = null;
     if (tenue) {
-      soldier = new SoldierModel({ avatar: who, tenue, band, camo }, false);
+      soldier = new SoldierModel({ avatar: who, tenue, band, camo, gear }, false);
       turn.add(soldier.root);
       camera.position.set(0, 1.0, 3.35);
       camera.lookAt(0, 0.9, 0);
     } else {
-      const gun = buildGun(weapon, camo, false);
+      const gun = buildGun(weapon, camo, false, gear ?? NO_GEAR);
       const box = new THREE.Box3().setFromObject(gun.group);
       const center = box.getCenter(new THREE.Vector3());
       gun.group.position.sub(center);
@@ -140,7 +143,7 @@ export default function EscPreview3D({ tenue, weapon, camo, avatar, band = "#c83
       env.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenue, weapon, camo, whoKey, band, width, height]);
+  }, [tenue, weapon, camo, whoKey, band, width, height, gearKey]);
 
   return <canvas ref={canvas} style={{ width, height, maxWidth: "100%", display: "block", margin: "0 auto" }} aria-hidden="true" />;
 }

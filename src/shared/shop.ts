@@ -16,14 +16,28 @@ import { HABITUES, TENUES } from "./games/culbute/fighters.ts";
 import { HABITUE_IDS, type HabitueId } from "./games/culbute/model.ts";
 import { CAMOS, type CamoId } from "./games/escarmouche/camos.ts";
 import { UNIFORMS, type UniformId } from "./games/escarmouche/uniforms.ts";
-import { WEAPON_IDS, WEAPONS, type WeaponId } from "./games/escarmouche/weapons.ts";
+import { EXTRAS, MUZZLES, WEAPON_IDS, WEAPONS, type ExtraId, type MuzzleId, type WeaponId } from "./games/escarmouche/weapons.ts";
 import { BOMBS, type BombId } from "./games/meche/bombs.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
 
 export type ShopKind =
-  "perso" | "naval" | "token" | "vehicle" | "kart" | "uno" | "club" | "ballon" | "fete" | "bombe" | "camo" | "tenue" | "arme" | "uniforme";
+  | "perso"
+  | "naval"
+  | "token"
+  | "vehicle"
+  | "kart"
+  | "uno"
+  | "club"
+  | "ballon"
+  | "fete"
+  | "bombe"
+  | "camo"
+  | "tenue"
+  | "arme"
+  | "uniforme"
+  | "accessoire";
 
 export interface ShopItem {
   id: string;
@@ -52,6 +66,8 @@ export const camoItem = (id: CamoId) => `camo:${id}`;
 /** Escarmouche : une arme (les premières sont à tout le monde) et une tenue du soldat */
 export const weaponItem = (id: WeaponId) => `arme:${id}`;
 export const uniformItem = (id: UniformId) => `uniforme:${id}`;
+/** Escarmouche : un accessoire de l'arme principale (au canon, dessous) */
+export const attachmentItem = (id: MuzzleId | ExtraId) => `acc:${id}`;
 /** Le personnage de profil : ce qu'il porte (wardrobe.ts) */
 export const wearItem = (id: string) => `perso:${id}`;
 
@@ -90,6 +106,9 @@ export const SHOP_ITEMS: ShopItem[] = [
   ...CAMOS.map((c): ShopItem => ({ id: camoItem(c.id), kind: "camo", ref: c.id, name: c.name, price: c.price })),
   ...WEAPON_IDS.map((id): ShopItem => ({ id: weaponItem(id), kind: "arme", ref: id, name: WEAPONS[id].name, price: WEAPONS[id].price })),
   ...UNIFORMS.map((u): ShopItem => ({ id: uniformItem(u.id), kind: "uniforme", ref: u.id, name: u.name, price: u.price })),
+  ...[...MUZZLES, ...EXTRAS]
+    .filter((a, i, all) => all.findIndex((b) => b.id === a.id) === i)
+    .map((a): ShopItem => ({ id: attachmentItem(a.id), kind: "accessoire", ref: a.id, name: a.name, price: a.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

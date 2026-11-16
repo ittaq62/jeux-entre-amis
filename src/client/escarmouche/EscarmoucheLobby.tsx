@@ -19,11 +19,17 @@ import {
   type PrimaryId,
   type SecondaryId,
   type WeaponId,
+  EXTRA_BY_ID,
+  EXTRAS,
+  MUZZLE_BY_ID,
+  MUZZLES,
+  type ExtraId,
+  type MuzzleId,
 } from "../../shared/games/escarmouche/weapons.ts";
 import { TABLE_TEAMS } from "../../shared/games/teams.ts";
 import { ESCARMOUCHE_MAX_PLAYERS, type EscarmoucheClientMessage, type EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { applyDrawnRules } from "../../shared/randomRules.ts";
-import { camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
+import { attachmentItem, camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
 import { toast } from "../lib/toast.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Check, Options } from "../components/ui.tsx";
@@ -32,7 +38,7 @@ import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { lazy, Suspense } from "react";
-import { CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "./WeaponIcon.tsx";
+import { AttachmentIcon, CamoSwatch, TenueSwatch, WeaponBars, WeaponIcon } from "./WeaponIcon.tsx";
 
 const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
@@ -110,6 +116,18 @@ export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: 
     setPrefs({ escarmoucheSecondary: secondary });
     send({ t: "arsenal", secondary });
   };
+  const pickMuzzle = (muzzle: MuzzleId) => {
+    const a = MUZZLE_BY_ID.get(muzzle)!;
+    if (locked(attachmentItem(muzzle), a.name, a.price)) return;
+    setPrefs({ escarmoucheMuzzle: muzzle });
+    send({ t: "arsenal", muzzle });
+  };
+  const pickExtra = (extra: ExtraId) => {
+    const a = EXTRA_BY_ID.get(extra)!;
+    if (locked(attachmentItem(extra), a.name, a.price)) return;
+    setPrefs({ escarmoucheExtra: extra });
+    send({ t: "arsenal", extra });
+  };
   const pickCamo = (camo: CamoId) => {
     const c = CAMO_BY_ID.get(camo)!;
     if (locked(camoItem(camo), `Le camouflage ${c.name}`, c.price)) return;
@@ -132,7 +150,14 @@ export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: 
       )}
       <div className="esc-soldier-preview">
         <Suspense fallback={<TenueSwatch tenue={mine.tenue} size={120} />}>
-          <EscPreview3D tenue={mine.tenue} weapon={mine.primary} camo={mine.camo} width={200} height={250} />
+          <EscPreview3D
+            tenue={mine.tenue}
+            weapon={mine.primary}
+            camo={mine.camo}
+            gear={{ muzzle: mine.muzzle, extra: mine.extra }}
+            width={200}
+            height={250}
+          />
         </Suspense>
       </div>
       <h3 className="esc-camo-title">Arme principale</h3>
@@ -148,6 +173,41 @@ export function ArsenalPanel({ room, send }: { room: EscarmoucheRoomView; send: 
             onPick={() => pickPrimary(id)}
           />
         ))}
+      </div>
+      <h3 className="esc-camo-title">Accessoires de l'arme principale</h3>
+      <div className="esc-camos">
+        {MUZZLES.map((a) => {
+          const owned = has(attachmentItem(a.id));
+          return (
+            <button
+              key={a.id}
+              className={`esc-camo ${mine.muzzle === a.id ? "is-on" : ""} ${owned ? "" : "is-locked"}`}
+              onClick={() => pickMuzzle(a.id)}
+              title={owned ? a.blurb : `${a.name} : ${a.price} points à la boutique`}
+              aria-pressed={mine.muzzle === a.id}
+            >
+              <AttachmentIcon id={a.id} />
+              <span>{a.name}</span>
+              {!owned && <small>{a.price} pts</small>}
+            </button>
+          );
+        })}
+        {EXTRAS.map((a) => {
+          const owned = has(attachmentItem(a.id));
+          return (
+            <button
+              key={`x-${a.id}`}
+              className={`esc-camo ${mine.extra === a.id ? "is-on" : ""} ${owned ? "" : "is-locked"}`}
+              onClick={() => pickExtra(a.id)}
+              title={owned ? a.blurb : `${a.name} : ${a.price} points à la boutique`}
+              aria-pressed={mine.extra === a.id}
+            >
+              <AttachmentIcon id={a.id} />
+              <span>{a.name}</span>
+              {!owned && <small>{a.price} pts</small>}
+            </button>
+          );
+        })}
       </div>
       <h3 className="esc-camo-title">Arme de poing</h3>
       <div className="esc-weapons is-small">
@@ -284,7 +344,8 @@ export function HowTo() {
         la lunette, <kbd>Maj</kbd> retient son souffle pour que la visée ne bouge plus. <kbd>E</kbd> (ou le clic de la molette) repère
         l'ennemi visé pour ton équipe. Trois éliminations d'affilée te donnent les jumelles (tous les ennemis repérés), cinq un tir de
         mortier. Les bidons rouges sautent quand on tire dessus. En équipe, accroupis-toi près d'un coéquipier tombé (la croix verte) pour
-        le relever ; une fois tombé, tu peux choisir de revenir auprès d'un coéquipier plutôt qu'à la base.
+        le relever ; une fois tombé, tu peux choisir de revenir auprès d'un coéquipier plutôt qu'à la base. Au silencieux, tu n'apparais
+        plus au radar de l'ennemi quand tu tires.
       </p>
       <p className="hint">
         Au téléphone, couché : le pouce gauche se pose n'importe où à gauche pour avancer, le pouce droit glisse sur l'écran pour tourner la
