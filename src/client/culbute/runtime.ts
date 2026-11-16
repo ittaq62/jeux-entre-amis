@@ -124,6 +124,7 @@ export class FightRuntime {
   ) {
     this.view = view;
     this.scene = new CulbuteScene(host, view.arena, view.scale, opts.looks);
+    if (import.meta.env.DEV) (window as unknown as { __cbScene: CulbuteScene }).__cbScene = this.scene;
     this.looksKey = JSON.stringify(opts.looks);
     this.setupSolo(view);
     window.addEventListener("resize", this.fit);
