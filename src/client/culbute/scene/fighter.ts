@@ -370,6 +370,23 @@ interface Leg {
 /** Le bout d'un accessoire qui frappe laisse une traînée claire : on garde ses dernières positions */
 const TRAIL = 9;
 
+/** Le contour des combattants (pas au doigt : trop de dessins pour un téléphone) */
+const OUTLINE = typeof window !== "undefined" && !(window.matchMedia?.("(pointer: coarse)").matches ?? false);
+
+/** Une matière de contour : la forme gonflée le long de ses normales, vue de dos, sombre */
+function outlineMaterial(width: number): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ color: 0x1d1720, side: THREE.BackSide });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+transformed += normalize(normal) * ${width.toFixed(4)};`,
+    );
+  };
+  m.customProgramCacheKey = () => `culbute-contour-${width}`;
+  return m;
+}
+
 export class FighterModel {
   readonly group = new THREE.Group();
   private root = new THREE.Group();
@@ -732,6 +749,22 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     this.marker.position.y = HEIGHT + 0.5;
     this.group.add(this.marker);
 
+    // Le contour sombre, sur les volumes fermés (pas sur les cheveux, la jupe ou le châle, ouverts)
+    if (OUTLINE) {
+      const line = keep(outlineMaterial(0.016));
+      const targets: THREE.Mesh[] = [];
+      this.root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh) || o === this.cream || o === this.yarn || this.stars.children.includes(o)) return;
+        const mat = o.material as THREE.Material;
+        if (mat.side === THREE.DoubleSide || mat.transparent || !(mat instanceof THREE.MeshStandardMaterial)) return;
+        targets.push(o);
+      });
+      for (const o of targets) {
+        const shell = new THREE.Mesh(o.geometry, line);
+        shell.raycast = () => {};
+        o.add(shell);
+      }
+    }
     this.root.scale.setScalar(this.scale);
     if (look.style === "marcel") this.root.scale.set(this.scale * 1.12, this.scale, this.scale * 1.08);
     if (look.head) this.setHead(look.head);

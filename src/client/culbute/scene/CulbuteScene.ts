@@ -22,6 +22,34 @@ interface Effect {
 
 const TOUCH = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
+/** La bulle d'un combattant hors du cadre : un rond à sa couleur, cerclé de blanc, avec une pointe vers le haut */
+function bubbleTexture(color: string): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#ffffff";
+  g.beginPath();
+  g.moveTo(64, 4);
+  g.lineTo(84, 34);
+  g.lineTo(44, 34);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.arc(64, 70, 46, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = color;
+  g.beginPath();
+  g.arc(64, 70, 39, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "rgba(255,255,255,0.35)";
+  g.beginPath();
+  g.arc(52, 56, 14, 0, Math.PI * 2);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export class CulbuteScene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -62,6 +90,10 @@ export class CulbuteScene {
   private dustAt: number[] = [];
   /** Le coup qui fait sortir : la caméra plonge sur l'impact le temps de l'arrêt sur image */
   private koCam: { x: number; y: number; age: number } | null = null;
+  /** Par-dessus l'image : les bulles des combattants sortis du cadre, au bord de l'écran, tournées vers eux */
+  private overlay = new THREE.Scene();
+  private overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+  private bubbles: THREE.Sprite[] = [];
   /** Une caméra posée à la main (la page de travail, les vitrines) : sinon elle suit le combat */
   fixedCam: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
 
@@ -163,6 +195,17 @@ export class CulbuteScene {
     }
     for (const p of this.pads) this.scene.remove(p);
     for (const b of this.blobs) this.scene.remove(b);
+    for (const b of this.bubbles) {
+      this.overlay.remove(b);
+      b.material.map?.dispose();
+      b.material.dispose();
+    }
+    this.bubbles = looks.map((l) => {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(l.color), transparent: true, depthTest: false }));
+      sprite.visible = false;
+      this.overlay.add(sprite);
+      return sprite;
+    });
     this.looks = looks;
     this.fighters = looks.map((l) => new FighterModel(l));
     this.pads = looks.map(() => this.respawnPad());
@@ -204,6 +247,9 @@ export class CulbuteScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
+    this.overlayCam.left = -this.camera.aspect;
+    this.overlayCam.right = this.camera.aspect;
+    this.overlayCam.updateProjectionMatrix();
   }
 
   /** Rien encore à montrer : l'arène seule */
@@ -255,6 +301,37 @@ export class CulbuteScene {
     this.updateCamera(dt, frame);
     this.arena.dome.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
+    if (this.placeBubbles(frame)) {
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.overlay, this.overlayCam);
+      this.renderer.autoClear = true;
+    }
+  }
+
+  /** Les combattants hors du cadre : une bulle au bord, la pointe vers eux, d'autant plus petite qu'ils sont loin */
+  private placeBubbles(frame: RenderFrame): boolean {
+    let any = false;
+    const aspect = this.camera.aspect;
+    const p = new THREE.Vector3();
+    frame.fighters.forEach((f, i) => {
+      const b = this.bubbles[i];
+      if (!b) return;
+      b.visible = false;
+      if (f.state === "dead" || f.state === "out") return;
+      p.set(f.x, f.y + 0.8, 0).project(this.camera);
+      if (Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1) return;
+      const over = Math.max(Math.abs(p.x), Math.abs(p.y));
+      const cx = Math.max(-0.88, Math.min(0.88, p.x)) * aspect;
+      const cy = Math.max(-0.82, Math.min(0.82, p.y));
+      b.position.set(cx, cy, 0);
+      b.material.rotation = Math.atan2(p.y - cy, p.x * aspect - cx) - Math.PI / 2;
+      const size = Math.max(0.13, 0.22 - (over - 1) * 0.05);
+      b.scale.set(size, size, 1);
+      b.visible = true;
+      any = true;
+    });
+    return any;
   }
 
   /** L'ombre ronde : sur la plateforme juste sous ses pieds, plus petite et plus pâle quand il est haut */
@@ -771,6 +848,10 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
     for (const d of this.keepList) d.dispose();
     for (const d of this.arenaKeep) d.dispose();
     for (const e of this.effects) this.scene.remove(e.obj);
+    for (const b of this.bubbles) {
+      b.material.map?.dispose();
+      b.material.dispose();
+    }
     this.envMap?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
