@@ -30,7 +30,10 @@ export type EscSoundName =
   | "beep"
   | "go"
   | "zone"
-  | "whiz";
+  | "whiz"
+  | "heart"
+  | "slide"
+  | "mantle";
 
 interface ShotSpec {
   thump: number;
@@ -466,6 +469,54 @@ export class EscSound {
     this.buffers.set("beep", this.tone(0.2, [[660, 0]], "square"));
     this.buffers.set("go", this.tone(0.5, [[990, 0]], "square"));
     this.buffers.set("zone", this.tone(0.15, [[1200, 0]]));
+    // La glissade : le gravier qui crisse sous le corps
+    this.buffers.set(
+      "slide",
+      this.make(0.75, (d, sr) => {
+        const n = noiseGen(808);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += lowpassK(1800 - t * 1400, sr) * (n() - lp);
+          const grit = n() * 0.25 * Math.exp(-t / 0.3);
+          d[i] = (lp + grit) * Math.min(1, t / 0.02) * Math.exp(-t / 0.35);
+        }
+      }),
+    );
+    // Se hisser : le choc des mains et du corps, un froissement de toile
+    this.buffers.set(
+      "mantle",
+      this.make(0.4, (d, sr) => {
+        const n = noiseGen(919);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          lp += lowpassK(900, sr) * (n() - lp);
+          const thud = Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t / 0.05);
+          const cloth = lp * 0.8 * Math.exp(-Math.abs(t - 0.18) / 0.07);
+          d[i] = thud + cloth;
+        }
+      }),
+    );
+    // Le cœur qui bat fort : deux coups sourds
+    this.buffers.set(
+      "heart",
+      this.make(0.5, (d, sr) => {
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          let v = 0;
+          for (const [at, k] of [
+            [0, 1],
+            [0.22, 0.7],
+          ] as const) {
+            if (t < at) continue;
+            const u = t - at;
+            v += Math.sin(2 * Math.PI * (52 - u * 40) * u) * Math.exp(-u / 0.06) * k;
+          }
+          d[i] = v;
+        }
+      }),
+    );
     // Une balle qui frôle : un souffle aigu qui file et retombe
     this.buffers.set(
       "whiz",

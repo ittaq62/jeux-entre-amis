@@ -56,6 +56,8 @@ export const PF = {
   reload: 64,
   busy: 128,
   carry: 256,
+  slide: 512,
+  mantle: 1024,
 } as const;
 
 /** Par soldat dans `p` : x, y, z (cm), yaw, pitch (millièmes), drapeaux, arme en main, santé, drapeau porté + 1, coups tirés */
@@ -109,6 +111,8 @@ export function encodeTick(m: Match, events: EscEvent[]): EscTick {
     if (s.reloadEnd > 0) bits |= PF.reload;
     if (s.throwEnd > s.clock || s.meleeEnd > s.clock || s.switchEnd > s.clock) bits |= PF.busy;
     if (f.carrying >= 0) bits |= PF.carry;
+    if (s.slideEnd > s.clock) bits |= PF.slide;
+    if (s.mantleEnd > 0) bits |= PF.mantle;
     const weapon: WeaponId = s.slot === 0 ? s.primary : s.secondary;
     p.push(
       cm(s.x),

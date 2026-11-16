@@ -280,6 +280,10 @@ export function HowTo() {
         <kbd>Échap</kbd> pour la rendre.
       </p>
       <p className="hint">
+        En pleine course, s'accroupir lance une glissade. Sauter en avançant devant un muret, une caisse ou un quai fait se hisser dessus. À
+        la lunette, <kbd>Maj</kbd> retient son souffle pour que la visée ne bouge plus.
+      </p>
+      <p className="hint">
         Au téléphone, couché : le pouce gauche se pose n'importe où à gauche pour avancer, le pouce droit glisse sur l'écran pour tourner la
         vue. Les boutons sont sous le pouce droit. Une petite aide à la visée t'accompagne au doigt.
       </p>

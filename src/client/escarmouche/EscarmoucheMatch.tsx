@@ -594,6 +594,23 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
           {hitFresh && <div className={`esc-hit is-${h.hitKind}`} />}
           {h.aimed && h.alive && <div className="esc-aimed">{h.aimed}</div>}
           {h.scoped && <div className="esc-scope" />}
+          {h.breath && (
+            <div className={`esc-breath ${h.breath.holding ? "is-holding" : ""} ${h.breath.winded ? "is-winded" : ""}`}>
+              <span style={{ width: `${Math.round(h.breath.left * 100)}%` }} />
+              <small>{h.breath.winded ? "Essoufflé…" : touch ? "Course : retenir son souffle" : "Maj : retenir son souffle"}</small>
+            </div>
+          )}
+          <div className="esc-suppress" style={{ opacity: Math.min(0.85, h.suppress * 0.9) }} />
+          {h.awards.length > 0 && (
+            <ul className="esc-awards">
+              {h.awards.map((a) => (
+                <li key={a.id} className={a.pts > 0 ? "is-points" : ""}>
+                  {a.pts > 0 && <b className="num">+{a.pts}</b>}
+                  <span>{a.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {h.damage.map((d) => (
             <div key={d.id} className="esc-dmg" style={{ transform: `translate(-50%, -50%) rotate(${(-d.angle * 180) / Math.PI}deg)` }} />
           ))}

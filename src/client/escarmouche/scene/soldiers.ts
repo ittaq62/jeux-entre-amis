@@ -50,6 +50,9 @@ export interface SoldierPose {
   sprint: boolean;
   ads: boolean;
   reload: boolean;
+  /** En train de glisser, de se hisser */
+  slide?: boolean;
+  mantle?: boolean;
   alive: boolean;
   weapon: WeaponId;
   carrying: number;
@@ -566,6 +569,31 @@ export class SoldierModel {
         leg.thigh.rotation.x = s * swing;
         leg.shin.rotation.x = -Math.max(0, -s * Math.cos(this.phase) * 0.9 * run) - 0.05;
       }
+    }
+    // La glissade : assis sur une hanche, une jambe tendue devant, le buste en arrière ; l'escalade : penché, les jambes repliées
+    if (p.slide || p.mantle) {
+      const [front, back] = this.legs;
+      if (p.slide) {
+        this.hips.position.y += (0.42 - this.hips.position.y) * Math.min(1, dt * 18);
+        front!.thigh.rotation.x = 1.45;
+        front!.shin.rotation.x = -0.15;
+        back!.thigh.rotation.x = 0.9;
+        back!.shin.rotation.x = -1.9;
+        this.spine.rotation.x = 0.45;
+      } else {
+        front!.thigh.rotation.x = 1.3;
+        front!.shin.rotation.x = -1.6;
+        back!.thigh.rotation.x = 0.4;
+        back!.shin.rotation.x = -1.1;
+        this.spine.rotation.x = -0.45;
+      }
+      this.spine.rotation.y = 0;
+      this.aim.rotation.x = p.slide ? p.pitch * 0.9 - 0.35 : -0.9;
+      this.head.rotation.x = p.pitch * 0.4 + (p.slide ? -0.3 : 0.3);
+      if (this.gun) this.gun.muzzle.getWorldPosition(this.muzzle);
+      this.flag.visible = p.carrying >= 0 && flagColor !== null;
+      this.root.visible = !p.shield || Math.floor(performance.now() / 120) % 3 !== 0;
+      return;
     }
     // Le haut du corps : il se penche en courant, l'arme baissée ; il vise haut ou bas ; les épaules tournent un peu au pas
     const lean = p.sprint ? 0.25 : crouch * 0.12;

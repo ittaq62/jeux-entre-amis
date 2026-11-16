@@ -601,7 +601,11 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
 
   // Les boutons
   let b = 0;
-  if (jump) b |= B.jump;
+  // Coincé, il saute pour se dégager, sans se hisser sur l'obstacle (son chemin ne passe pas par-dessus)
+  if (jump) {
+    b |= B.jump;
+    cmd.mz = Math.min(cmd.mz, 0.25);
+  }
   if (t < mem.crouchUntil) b |= B.crouch;
   if (!visible && mz > 0.8 && ml > 0.9 && !jump) b |= B.sprint;
   const mag = s.mag[s.slot];

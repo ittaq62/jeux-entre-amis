@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, type EscarmoucheSettings, type Mode } from "./rules.t
 import { B, copySoldier, decodeCmd, DT, encodeCmd, eyeOf, newSoldier, quantizeCmd, RADIUS, stepSoldier, type Cmd } from "./soldier.ts";
 import { encodeMe, encodeTick, readFighter } from "./view.ts";
 import { WEAPONS } from "./weapons.ts";
+import { World } from "./world.ts";
 
 const idle = (s: number, over: Partial<Cmd> = {}): Cmd => ({ s, mx: 0, mz: 0, yaw: 0, pitch: 0, b: 0, vt: 0, ...over });
 
@@ -358,4 +359,85 @@ describe("Escarmouche : les bots", () => {
       expect(m.ranks).toHaveLength(6);
     });
   }
+});
+
+describe("Escarmouche : glisser et se hisser", () => {
+  const floor = { x0: -20, y0: -1, z0: -20, x1: 20, y1: 0, z1: 20, m: "sol" as const };
+  /** Joue des pas avec la même commande ; renvoie le soldat */
+  function run(world: World, s: ReturnType<typeof newSoldier>, steps: number, over: Partial<Cmd>, from = 1) {
+    for (let k = 0; k < steps; k++) stepSoldier(s, idle(from + k, over), world);
+    return s;
+  }
+
+  it("en pleine course, s'accroupir lance une glissade : plus vite un instant, puis on freine et on reste accroupi", () => {
+    const world = new World([floor]);
+    const s = newSoldier(0, 0, 15, 0, "fa");
+    run(world, s, 60, { mz: 1, b: B.sprint });
+    const running = Math.hypot(s.vx, s.vz);
+    expect(s.sprint).toBe(true);
+    run(world, s, 1, { mz: 1, b: B.sprint | B.crouch }, 100);
+    expect(s.slideEnd).toBeGreaterThan(s.clock);
+    expect(Math.hypot(s.vx, s.vz)).toBeGreaterThan(running * 1.1);
+    expect(s.crouch).toBe(true);
+    run(world, s, 70, { mz: 1, b: B.sprint | B.crouch }, 101);
+    expect(s.slideEnd).toBeLessThanOrEqual(s.clock);
+    expect(Math.hypot(s.vx, s.vz)).toBeLessThan(3);
+    expect(s.crouch).toBe(true);
+  });
+
+  it("en marchant, s'accroupir ne fait pas glisser ; et on ne peut pas glisser deux fois de suite", () => {
+    const world = new World([floor]);
+    const s = newSoldier(0, 0, 15, 0, "fa");
+    run(world, s, 40, { mz: 1 });
+    run(world, s, 30, { mz: 1, b: B.crouch }, 100);
+    expect(s.slideEnd).toBe(0);
+    expect(Math.hypot(s.vx, s.vz)).toBeLessThan(3);
+    // Une glissade, se relever, recourir : trop tôt pour glisser encore
+    const t = newSoldier(0, 0, 15, 0, "fa");
+    run(world, t, 60, { mz: 1, b: B.sprint });
+    run(world, t, 1, { mz: 1, b: B.sprint | B.crouch }, 200);
+    const first = t.slideEnd;
+    run(world, t, 20, { mz: 1, b: B.sprint }, 201);
+    run(world, t, 1, { mz: 1, b: B.sprint | B.crouch }, 300);
+    expect(t.slideEnd).toBeLessThanOrEqual(first);
+  });
+
+  it("devant une caisse à hauteur de poitrine, sauter en avançant fait monter dessus", () => {
+    const crate = { x0: -1, y0: 0, z0: -3, x1: 1, y1: 1.1, z1: -0.6, m: "caisse" as const };
+    const world = new World([floor, crate]);
+    const s = newSoldier(0, 0, -0.1, 0, "fa");
+    run(world, s, 1, { mz: 1, b: B.jump });
+    expect(s.mantleEnd).toBeGreaterThan(0);
+    run(world, s, 60, { mz: 0 }, 2);
+    expect(s.mantleEnd).toBe(0);
+    expect(s.y).toBeCloseTo(1.1, 2);
+    expect(s.z).toBeLessThan(-0.6);
+    expect(s.ground).toBe(true);
+  });
+
+  it("un mur trop haut, ou un dessus sans place pour se tenir : on saute, sans se hisser", () => {
+    const wall = { x0: -1, y0: 0, z0: -3, x1: 1, y1: 2.6, z1: -0.6, m: "pierre" as const };
+    const s = newSoldier(0, 0, -0.1, 0, "fa");
+    const w1 = new World([floor, wall]);
+    run(w1, s, 1, { mz: 1, b: B.jump });
+    expect(s.mantleEnd).toBe(0);
+    run(w1, s, 90, { mz: 1 }, 2);
+    expect(s.y).toBeLessThan(0.05);
+    // Une caisse sous un plafond bas
+    const crate = { x0: -1, y0: 0, z0: -3, x1: 1, y1: 1.1, z1: -0.6, m: "caisse" as const };
+    const slab = { x0: -1, y0: 2.2, z0: -3, x1: 1, y1: 2.4, z1: -0.6, m: "beton" as const };
+    const w2 = new World([floor, crate, slab]);
+    const t = newSoldier(0, 0, -0.1, 0, "fa");
+    run(w2, t, 1, { mz: 1, b: B.jump });
+    expect(t.mantleEnd).toBe(0);
+  });
+
+  it("sans avancer, sauter devant une caisse reste un simple saut", () => {
+    const crate = { x0: -1, y0: 0, z0: -3, x1: 1, y1: 1.1, z1: -0.6, m: "caisse" as const };
+    const world = new World([floor, crate]);
+    const s = newSoldier(0, 0, -0.1, 0, "fa");
+    run(world, s, 1, { b: B.jump });
+    expect(s.mantleEnd).toBe(0);
+    expect(s.vy).toBeGreaterThan(0);
+  });
 });

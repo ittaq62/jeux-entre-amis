@@ -131,6 +131,8 @@ export function DevEscarmouche() {
             pitch: 0,
             speed: i === 1 && !closeUp ? 4.5 : 0,
             crouch: i === 2 && !closeUp,
+            slide: params.has("glisse") && i === 1,
+            mantle: params.has("glisse") && i === 2,
             ground: true,
             sprint: false,
             ads: i === 0,

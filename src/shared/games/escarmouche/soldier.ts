@@ -23,6 +23,10 @@ const ACCEL = 48;
 const AIR_ACCEL = 7;
 const SWITCH_TIME = 0.45;
 export const MAX_PITCH = 1.45;
+/** La glissade : on se jette accroupi en pleine course, plus vite un instant, puis on freine */
+export const SLIDE = { time: 0.8, boost: 1.2, max: 8.4, minSpeed: 5, friction: 5.5, cooldown: 1.3 };
+/** L'escalade : on se hisse sur ce qui arrive entre la taille et la poitrine (un muret, une caisse, un quai) */
+export const MANTLE = { min: 0.5, max: 1.6, reach: [0.42, 0.58, 0.74] as const, base: 0.28, perMeter: 0.22 };
 
 /** Les boutons d'une commande */
 export const B = {
@@ -130,6 +134,18 @@ export interface Soldier {
   seq: number;
   /** Pour le dessin : le dernier coup tiré, à son horloge */
   firedAt: number;
+  /** La glissade en cours (sa fin, à son horloge ; 0 sinon), et quand on pourra glisser de nouveau */
+  slideEnd: number;
+  slideReady: number;
+  /** L'escalade en cours : son début et sa fin (0 sinon), d'où il part, où il arrive */
+  mantleStart: number;
+  mantleEnd: number;
+  mantleX0: number;
+  mantleY0: number;
+  mantleZ0: number;
+  mantleX1: number;
+  mantleY1: number;
+  mantleZ1: number;
 }
 
 export function weaponOf(s: Soldier): WeaponDef {
@@ -187,6 +203,16 @@ export function newSoldier(
     sprint: false,
     seq: 0,
     firedAt: -10,
+    slideEnd: 0,
+    slideReady: 0,
+    mantleStart: 0,
+    mantleEnd: 0,
+    mantleX0: 0,
+    mantleY0: 0,
+    mantleZ0: 0,
+    mantleX1: 0,
+    mantleY1: 0,
+    mantleZ1: 0,
   };
 }
 
@@ -224,10 +250,46 @@ export interface StepOut {
   swapped: boolean;
   jumped: boolean;
   landed: number;
+  /** Une glissade, une escalade viennent de commencer : pour les sons */
+  slid: boolean;
+  mantled: boolean;
 }
 
 export function emptyOut(): StepOut {
-  return { shots: [], grenade: null, melee: false, reloaded: false, swapped: false, jumped: false, landed: 0 };
+  return { shots: [], grenade: null, melee: false, reloaded: false, swapped: false, jumped: false, landed: 0, slid: false, mantled: false };
+}
+
+/** En train de glisser */
+export const sliding = (s: Soldier) => s.slideEnd > s.clock;
+/** En train de se hisser */
+export const mantling = (s: Soldier) => s.mantleEnd > 0;
+
+/**
+ * Peut-il se hisser devant lui ? Il faut quelque chose devant, dont le dessus arrive entre la taille et la poitrine,
+ * avec la place de se tenir debout dessus, et rien au-dessus de sa tête pendant qu'il monte. Renvoie l'arrivée.
+ */
+export function mantleTarget(s: Soldier, world: World): { x: number; y: number; z: number } | null {
+  const fx = -Math.sin(s.yaw);
+  const fz = -Math.cos(s.yaw);
+  for (const d of MANTLE.reach) {
+    const ax = s.x + fx * d;
+    const az = s.z + fz * d;
+    const from = s.y + MANTLE.max + 0.25;
+    const hit = world.raycast(ax, from, az, 0, -1, 0, from - (s.y + MANTLE.min) + 0.01);
+    if (!hit || hit.t < 0.02) continue;
+    const top = from - hit.t;
+    const rise = top - s.y;
+    if (rise < MANTLE.min || rise > MANTLE.max) continue;
+    // Où il arrive : juste un peu plus loin, pour avoir les deux pieds sur le dessus
+    const lx = s.x + fx * (d + 0.18);
+    const lz = s.z + fz * (d + 0.18);
+    if (world.overlaps(lx - RADIUS, top + 0.02, lz - RADIUS, lx + RADIUS, top + HEIGHT, lz + RADIUS)) continue;
+    // Rien au-dessus de sa tête pendant qu'il monte
+    if (world.overlaps(s.x - RADIUS * 0.8, s.y + heightOf(s), s.z - RADIUS * 0.8, s.x + RADIUS * 0.8, top + HEIGHT, s.z + RADIUS * 0.8))
+      continue;
+    return { x: lx, y: top, z: lz };
+  }
+  return null;
 }
 
 /** La dispersion actuelle (degrés) : à la hanche ou en visant, en mouvement, accroupi, et ce que les rafales ajoutent */
@@ -259,14 +321,46 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
   s.prevB = b;
   const w0 = weaponOf(s);
 
-  // Accroupi tant qu'on tient la touche ; on ne se relève que s'il y a la place
-  if (b & B.crouch) s.crouch = true;
+  // L'escalade en cours : il monte d'abord, puis passe par-dessus ; l'arme attend
+  if (s.mantleEnd > 0) {
+    const k = Math.min(1, (s.clock - s.mantleStart) / (s.mantleEnd - s.mantleStart));
+    const up = Math.min(1, k / 0.6);
+    const ahead = Math.max(0, (k - 0.4) / 0.6);
+    s.y = s.mantleY0 + (s.mantleY1 - s.mantleY0) * (1 - (1 - up) * (1 - up));
+    s.x = s.mantleX0 + (s.mantleX1 - s.mantleX0) * ahead;
+    s.z = s.mantleZ0 + (s.mantleZ1 - s.mantleZ0) * ahead;
+    s.vx = s.vy = s.vz = 0;
+    s.sprint = false;
+    s.ads = false;
+    s.ground = false;
+    if (k >= 1) {
+      s.mantleEnd = 0;
+      s.ground = true;
+    }
+    stepWeapon(s, 0, 0, out);
+    return out;
+  }
+
+  // La glissade : accroupi en pleine course, au sol
+  const speed0 = Math.hypot(s.vx, s.vz);
+  if (pressed & B.crouch && s.sprint && s.ground && speed0 > SLIDE.minSpeed && s.clock >= s.slideReady) {
+    s.slideEnd = s.clock + SLIDE.time;
+    s.slideReady = s.clock + SLIDE.cooldown;
+    const k = Math.min(SLIDE.max, speed0 * SLIDE.boost) / speed0;
+    s.vx *= k;
+    s.vz *= k;
+    out.slid = true;
+  }
+  const slide = s.slideEnd > s.clock;
+
+  // Accroupi tant qu'on tient la touche (et pendant la glissade) ; on ne se relève que s'il y a la place
+  if (b & B.crouch || slide) s.crouch = true;
   else if (s.crouch && !world.overlaps(s.x - RADIUS, s.y + 0.05, s.z - RADIUS, s.x + RADIUS, s.y + HEIGHT, s.z + RADIUS)) s.crouch = false;
 
   const firing = (b & B.fire) !== 0;
   const busy = s.throwEnd > s.clock || s.meleeEnd > s.clock;
   s.sprint = (b & B.sprint) !== 0 && cmd.mz > 0.3 && !s.crouch && !firing && !(b & B.ads) && !busy;
-  s.ads = (b & B.ads) !== 0 && !s.sprint && s.reloadEnd === 0 && !busy;
+  s.ads = (b & B.ads) !== 0 && !s.sprint && !slide && s.reloadEnd === 0 && !busy;
 
   // Le déplacement
   const mx = free ? cmd.mx : 0;
@@ -280,20 +374,58 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
   }
   let speed = s.crouch ? CROUCH_SPEED : s.sprint ? RUN : WALK;
   speed *= w0.move * (s.ads ? w0.adsMove : 1);
-  const tx = wx * speed;
-  const tz = wz * speed;
-  const acc = (s.ground ? ACCEL : AIR_ACCEL) * DT;
-  const dvx = tx - s.vx;
-  const dvz = tz - s.vz;
-  const dl = Math.hypot(dvx, dvz);
-  if (dl <= acc) {
-    s.vx = tx;
-    s.vz = tz;
-  } else if (s.ground || wl > 0.01) {
-    s.vx += (dvx / dl) * acc;
-    s.vz += (dvz / dl) * acc;
+  if (slide && s.ground) {
+    // On glisse : on freine peu à peu, sans pouvoir tourner ; trop lent, ou un saut, et c'est fini
+    const v = Math.hypot(s.vx, s.vz);
+    const nv = Math.max(0, v - SLIDE.friction * DT);
+    if (v > 1e-6) {
+      s.vx *= nv / v;
+      s.vz *= nv / v;
+    }
+    if (nv < CROUCH_SPEED) s.slideEnd = 0;
+  } else {
+    if (slide) s.slideEnd = 0;
+    const tx = wx * speed;
+    const tz = wz * speed;
+    const acc = (s.ground ? ACCEL : AIR_ACCEL) * DT;
+    const dvx = tx - s.vx;
+    const dvz = tz - s.vz;
+    const dl = Math.hypot(dvx, dvz);
+    if (dl <= acc) {
+      s.vx = tx;
+      s.vz = tz;
+    } else if (s.ground || wl > 0.01) {
+      s.vx += (dvx / dl) * acc;
+      s.vz += (dvz / dl) * acc;
+    }
   }
-  if (pressed & B.jump && s.ground && !s.crouch) {
+  // Sauter (ou se hisser, s'il y a de quoi devant soi en avançant)
+  if (pressed & B.jump && (s.ground || s.vy > -2.5) && cmd.mz > 0.3 && !(slide && s.ground)) {
+    const to = mantleTarget(s, world);
+    if (to) {
+      s.mantleStart = s.clock;
+      s.mantleEnd = s.clock + MANTLE.base + (to.y - s.y) * MANTLE.perMeter;
+      s.mantleX0 = s.x;
+      s.mantleY0 = s.y;
+      s.mantleZ0 = s.z;
+      s.mantleX1 = to.x;
+      s.mantleY1 = to.y;
+      s.mantleZ1 = to.z;
+      s.crouch = false;
+      s.slideEnd = 0;
+      s.reloadEnd = 0;
+      s.burst = 0;
+      out.mantled = true;
+      stepWeapon(s, 0, 0, out);
+      return out;
+    }
+  }
+  if (pressed & B.jump && s.ground && (!s.crouch || slide)) {
+    // Sauter en glissant garde l'élan
+    if (slide) {
+      s.slideEnd = 0;
+      s.crouch = false;
+    }
     s.vy = JUMP;
     s.ground = false;
     out.jumped = true;

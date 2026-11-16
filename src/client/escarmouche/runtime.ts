@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { getMap, type GameMap } from "../../shared/games/escarmouche/maps.ts";
-import { isTeamMode, partBox, rayFighter, worldOf, type EscEvent, type KillWeapon } from "../../shared/games/escarmouche/match.ts";
+import { isTeamMode, partBox, rayFighter, worldOf, type EscEvent, type KillWeapon, POINTS } from "../../shared/games/escarmouche/match.ts";
 import {
   B,
   copySoldier,
@@ -99,6 +99,12 @@ export interface HudState {
   carrying: number;
   zone: { owner: number; contested: boolean; inside: boolean } | null;
   banner: { id: number; text: string; tone: "info" | "good" | "bad" } | null;
+  /** Les médailles du moment, et les points qu'elles rapportent */
+  awards: { id: number; text: string; pts: number }[];
+  /** Sous le feu (0 à 1) */
+  suppress: number;
+  /** À la lunette : le souffle qui reste, retenu ou non */
+  breath: { left: number; holding: boolean; winded: boolean } | null;
   scheme: Scheme;
   locked: boolean;
   /** Le nom de l'adversaire dans le viseur */
@@ -195,6 +201,25 @@ export class BattleRuntime {
   private radarDots: RadarDot[] = [];
   private killer: HudState["killer"] = null;
   private banner: HudState["banner"] = null;
+  /** Les médailles du moment (élimination, tir à la tête, double élimination…), qui montent et s'effacent */
+  private awards: { id: number; text: string; pts: number; at: number }[] = [];
+  private multi = 0;
+  private lastKillAt = -1e9;
+  private firstBlood = false;
+  /** Celui qui nous a eu en dernier : l'avoir à son tour, c'est une vengeance */
+  private nemesis = -1;
+  /** La pression des balles qui frôlent (0 à 1) : l'image s'assombrit, la visée tremble */
+  private suppress = 0;
+  /** Le souffle retenu à la lunette : il en reste (1 plein), et l'essoufflement qui suit */
+  private breath = 1;
+  private winded = 0;
+  private holding = false;
+  private swayT = 0;
+  private aimYaw = 0;
+  private aimPitch = 0;
+  private heartAt = 0;
+  /** La vue penche et s'élargit pendant une glissade */
+  private slideTilt = 0;
   private bannerUntil = 0;
   private bannerSeq = 0;
   private hudAt = 0;
@@ -440,7 +465,10 @@ export class BattleRuntime {
             if (len > 1) {
               const k = Math.max(0, Math.min(1, this.tmp4.subVectors(cam, from).dot(seg) / (len * len)));
               const close = this.tmp4.copy(from).addScaledVector(seg, k);
-              if (k > 0.05 && k < 0.98 && close.distanceTo(cam) < 2.2) this.sound.play("whiz", { at: close, volume: 0.7, gap: 60 });
+              if (k > 0.05 && k < 0.98 && close.distanceTo(cam) < 2.2) {
+                this.sound.play("whiz", { at: close, volume: 0.7, gap: 60 });
+                this.suppress = Math.min(1, this.suppress + 0.22);
+              }
             }
           }
         }
@@ -485,13 +513,39 @@ export class BattleRuntime {
         };
         this.feed = [...this.feed.slice(-4), line];
         setTimeout(() => (this.feed = this.feed.filter((f) => f.id !== line.id)), 6000);
+        const first = !this.firstBlood && e.a >= 0 && e.a !== e.v;
+        if (first) this.firstBlood = true;
         if (e.a === this.me && e.v !== this.me) {
-          this.hitAt = performance.now();
+          const now = performance.now();
+          this.hitAt = now;
           this.hitKind = "kill";
           this.sound.play("kill", { volume: 0.55 });
           this.say(`Tu as éliminé ${this.nameOf(e.v)}${e.h ? " d'une balle à la tête" : ""}`, "good");
+          this.award(`${this.nameOf(e.v)} éliminé`, POINTS.kill);
+          if (e.h) this.award("Tir à la tête");
+          this.multi = now - this.lastKillAt < 4500 ? this.multi + 1 : 1;
+          this.lastKillAt = now;
+          if (this.multi >= 2)
+            this.award(["", "", "Double élimination", "Triple élimination", "Quadruple élimination"][this.multi] ?? "Carnage !");
+          if (first) this.award("Premier sang");
+          if (e.v === this.nemesis) {
+            this.award("Vengeance");
+            this.nemesis = -1;
+          }
+          if (e.w === "grenade") this.award("À la grenade");
+          if (e.w === "couteau") this.award("Au couteau");
+          const victim = this.fighterAt(e.v);
+          if (victim && this.pred) {
+            const d = Math.hypot(victim.x - this.pred.x, victim.z - this.pred.z);
+            if (d > 38 && e.w !== "grenade") this.award(`Tir de loin · ${Math.round(d)} m`);
+          }
+          if (this.hp < 25 && this.pred?.alive) this.award("Dernier souffle");
+        } else if (e.as === this.me && e.v !== this.me) this.award(`Aide contre ${this.nameOf(e.v)}`, POINTS.assist);
+        if (e.v === this.me) {
+          this.killer = e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h } : null;
+          this.nemesis = e.a >= 0 && e.a !== e.v ? e.a : -1;
+          this.multi = 0;
         }
-        if (e.v === this.me) this.killer = e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h } : null;
         return;
       }
       case "throw": {
@@ -522,6 +576,11 @@ export class BattleRuntime {
         if (!v) return;
         const mine = this.me >= 0 ? this.teamOf(this.me) : -1;
         const who = e.i >= 0 ? this.nameOf(e.i) : "";
+        if (e.i === this.me) {
+          if (e.f === "take") this.award("Drapeau pris", POINTS.take);
+          else if (e.f === "capture") this.award("Drapeau rapporté", POINTS.capture);
+          else if (e.f === "return") this.award("Drapeau ramené", POINTS.ret);
+        }
         if (e.f === "take") {
           this.sound.play("flag-take", { volume: 0.6 });
           this.say(
@@ -552,7 +611,10 @@ export class BattleRuntime {
         return;
       }
       case "streak": {
-        if (e.i === this.me) this.say(`${e.n} éliminations d'affilée !`, "good");
+        if (e.i === this.me) {
+          this.say(`${e.n} éliminations d'affilée !`, "good");
+          this.award(`Série de ${e.n}`);
+        }
         return;
       }
       case "live":
@@ -567,6 +629,12 @@ export class BattleRuntime {
   /** Les évènements envoyés avec l'état d'ensemble (ils ne passent pas par les positions) */
   onEvents(events: EscEvent[]) {
     for (const e of events) this.handle(e);
+  }
+
+  /** Une médaille : quelques mots, et les points qu'elle rapporte (0 : rien qu'une mention) */
+  private award(text: string, pts = 0) {
+    const now = performance.now();
+    this.awards = [...this.awards.filter((a) => now - a.at < 2600).slice(-4), { id: ++this.feedSeq, text, pts, at: now }];
   }
 
   private say(text: string, tone: "info" | "good" | "bad") {
@@ -639,6 +707,31 @@ export class BattleRuntime {
     this.swayX += (r.dyaw * 30 - this.swayX) * Math.min(1, dt * 10);
     this.swayY += (r.dpitch * 30 - this.swayY) * Math.min(1, dt * 10);
 
+    // La visée bouge un peu d'elle-même : à la lunette (le souffle, retenu avec la touche de course), et sous le feu
+    this.swayT += dt;
+    this.suppress = Math.max(0, this.suppress - dt * 0.45);
+    const scopedNow = alive && s!.ads && (w.id === "precision" || w.id === "carabine");
+    this.holding = scopedNow && (r.b & B.sprint) !== 0 && this.winded <= 0 && this.breath > 0;
+    if (this.holding) this.breath = Math.max(0, this.breath - dt / 4.5);
+    else this.breath = Math.min(1, this.breath + dt / (this.winded > 0 ? 6 : 3));
+    if (this.holding && this.breath <= 0) this.winded = 2.2;
+    this.winded = Math.max(0, this.winded - dt);
+    const swayK = scopedNow ? (this.holding ? 0.12 : this.winded > 0 ? 2.2 : 1) * (s!.crouch ? 0.6 : 1) : 0;
+    const shaky = this.suppress * (alive ? 1 : 0);
+    const wantYaw =
+      (Math.sin(this.swayT * 0.83) * 0.0042 + Math.sin(this.swayT * 2.1 + 1) * 0.0016) * swayK +
+      (Math.sin(this.swayT * 9.3) * 0.004 + Math.sin(this.swayT * 13.7 + 2) * 0.002) * shaky;
+    const wantPitch =
+      (Math.sin(this.swayT * 1.21 + 0.5) * 0.0034 + Math.cos(this.swayT * 2.7) * 0.0012) * swayK +
+      (Math.cos(this.swayT * 8.1) * 0.0035 + Math.sin(this.swayT * 11.9) * 0.0018) * shaky;
+    this.aimYaw += (wantYaw - this.aimYaw) * Math.min(1, dt * 8);
+    this.aimPitch += (wantPitch - this.aimPitch) * Math.min(1, dt * 8);
+    // Peu de vie : le cœur bat, de plus en plus vite
+    if (alive && this.hp < 35 && t > this.heartAt) {
+      this.heartAt = t + 520 + this.hp * 14;
+      this.sound.play("heart", { volume: 0.25 + (35 - this.hp) / 60 });
+    }
+
     // Les pas de simulation : un toutes les 1/60 s, envoyés au serveur par petits paquets
     this.taps |= r.b & TAPS;
     const held = r.b & ~TAPS;
@@ -652,8 +745,8 @@ export class BattleRuntime {
         s: ++this.seq,
         mx: alive ? r.mx : 0,
         mz: alive ? r.mz : 0,
-        yaw: wrapAngle(this.yaw + this.kickYaw),
-        pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + this.kickPitch)),
+        yaw: wrapAngle(this.yaw + this.kickYaw + this.aimYaw),
+        pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + this.kickPitch + this.aimPitch)),
         b: held | this.taps,
         vt: rt,
       });
@@ -687,7 +780,9 @@ export class BattleRuntime {
 
     // La caméra : à ses yeux, ou celle d'un autre soldat pour qui regarde
     const baseFov = prefs.escFov;
-    const fov = baseFov + (w.adsFov - baseFov) * this.adsAmount;
+    const slidingNow = Boolean(s && s.alive && s.slideEnd > s.clock);
+    this.slideTilt += ((slidingNow ? 1 : 0) - this.slideTilt) * Math.min(1, dt * 9);
+    const fov = baseFov + (w.adsFov - baseFov) * this.adsAmount + this.slideTilt * 7 + (s?.sprint ? 3 : 0) * (1 - this.adsAmount);
     let spectating: string | null = null;
     if (s && this.me >= 0 && s.alive) {
       const speed = Math.hypot(s.vx, s.vz);
@@ -709,9 +804,10 @@ export class BattleRuntime {
         s.x + this.err.x,
         eyeOf(s) + this.err.y + Math.sin(this.bob * 2) * bobAmp * 0.6,
         s.z + this.err.z,
-        this.yaw + this.kickYaw + shakeX,
-        this.pitch + this.kickPitch + shakeY,
+        this.yaw + this.kickYaw + this.aimYaw + shakeX,
+        this.pitch + this.kickPitch + this.aimPitch + shakeY,
         fov,
+        this.slideTilt * 0.08,
       );
       this.scene.updateViewmodel({
         weapon: w.id,
@@ -805,6 +901,8 @@ export class BattleRuntime {
           sprint: (f.bits & PF.sprint) !== 0,
           ads: (f.bits & PF.ads) !== 0,
           reload: (f.bits & PF.reload) !== 0,
+          slide: (f.bits & PF.slide) !== 0,
+          mantle: (f.bits & PF.mantle) !== 0,
           alive,
           weapon: f.weapon,
           carrying: f.carrying,
@@ -994,6 +1092,11 @@ export class BattleRuntime {
     }
     if (out.melee) this.sound.play("knife", { volume: 0.6 });
     if (out.grenade) this.sound.play("throw", { volume: 0.6 });
+    if (out.slid) this.sound.play("slide", { volume: 0.55 });
+    if (out.mantled) {
+      this.sound.play("mantle", { volume: 0.6 });
+      this.raise = 0.25;
+    }
     if ((cmd.b & B.fire) !== 0 && (s.prevB & B.fire) !== 0 && s.mag[s.slot] === 0 && s.res[s.slot] === 0 && s.reloadEnd === 0) {
       this.sound.play("empty", { volume: 0.5, gap: 250 });
     }
@@ -1083,6 +1186,9 @@ export class BattleRuntime {
       carrying: myFighter?.carrying ?? -1,
       zone: v.mode === "zone" ? { owner: tick?.z?.[0] ?? -1, contested: tick?.z?.[1] === 1, inside: inZone } : null,
       banner: now < this.bannerUntil ? this.banner : null,
+      awards: this.awards.filter((a) => now - a.at < 2600),
+      suppress: this.suppress,
+      breath: scoped ? { left: this.breath, holding: this.holding, winded: this.winded > 0 } : null,
       scheme: this.controls.scheme,
       locked: this.controls.locked,
       aimed,
