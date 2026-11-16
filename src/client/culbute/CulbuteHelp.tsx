@@ -9,7 +9,7 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
     { keys: bindingText(s, "attack"), what: "Frapper (tenir : coup chargé)" },
     { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
     { keys: bindingText(s, "jump"), what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi)" : ""}` },
-    { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive)" },
+    { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive ; levée juste avant le coup : parade)" },
     { keys: bindingText(s, "grab"), what: "Saisir (aussi : Frapper pendant la garde), puis une direction pour projeter" },
   ];
   return (
@@ -33,6 +33,10 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
             Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Vers le bas
             en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers. Saut et Frapper en même temps : un
             petit saut avec une attaque en l'air.
+          </p>
+          <p className="hint">
+            La garde s'use et rétrécit ; levée au tout dernier moment, elle pare le coup (un tintement clair) et l'attaquant reste figé un
+            instant : à toi de punir. Un même coup répété s'use aussi, il pousse moins : varie tes attaques.
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour saisir, une autre
