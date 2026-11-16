@@ -2,12 +2,12 @@
 // (un stick sous le pouce gauche, trois boutons sous le droit, la garde en posant le pouce sur Frapper et Spécial à la fois).
 // Une fois par image, tout devient une seule commande : le stick, les boutons tenus et ceux qu'on vient d'enfoncer.
 
-import { ATK, GRB, JMP, NAR, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
+import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
 import { ACTION_IDS, loadSettings, type ActionId, type CulbuteSettings } from "./bindings.ts";
 
 export type Scheme = "clavier" | "manette" | "tactile";
 
-const BITS: Partial<Record<ActionId, number>> = { attack: ATK, special: SPC, jump: JMP, shield: SHD, grab: GRB, taunt: NAR };
+const BITS: Partial<Record<ActionId, number>> = { attack: ATK, strong: FRT, special: SPC, jump: JMP, shield: SHD, grab: GRB, taunt: NAR };
 
 /** Un clic sur l'interface (boutons, menus, discussion) n'est pas un coup */
 const UI = "button, a, input, textarea, select, label, summary, [role='dialog'], [role='menu'], .panel";
@@ -158,7 +158,8 @@ export class CulbuteControls {
     if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP;
 
     // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite
-    // pour saisir, les autres gâchettes pour la garde, le petit bouton de gauche (Retour, Select) pour narguer
+    // pour saisir, les autres gâchettes pour la garde, le petit bouton de gauche (Retour, Select) pour narguer, le stick
+    // droit pour le coup fort (dans sa direction, tenu pour le charger)
     const gp = [...(navigator.getGamepads?.() ?? [])].find((p) => p && p.connected) ?? null;
     if (gp) {
       const pb = (i: number) => Boolean(gp.buttons[i]?.pressed);
@@ -180,6 +181,13 @@ export class CulbuteControls {
         x = (pb(15) ? 1 : 0) - (pb(14) ? 1 : 0);
         y = (pb(12) ? 1 : 0) - (pb(13) ? 1 : 0);
         this.scheme = "manette";
+      }
+      const rx = gp.axes[2] ?? 0;
+      const ry = gp.axes[3] ?? 0;
+      if (Math.hypot(rx, ry) > 0.5) {
+        x = rx;
+        y = -ry;
+        pad |= FRT;
       }
       if (pad) this.scheme = "manette";
       tapped |= pad & ~this.padPrev;

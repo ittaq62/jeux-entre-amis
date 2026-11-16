@@ -6,7 +6,8 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
   const move = [bindingText(s, "left"), bindingText(s, "right"), bindingText(s, "up"), bindingText(s, "down")];
   const rows = [
     { keys: move.join(" · "), what: "Se déplacer (et diriger les coups)" },
-    { keys: bindingText(s, "attack"), what: "Frapper (tenir : coup chargé)" },
+    { keys: bindingText(s, "attack"), what: "Frapper (en courant : coup en courant ; tenir : coup fort chargé)" },
+    { keys: bindingText(s, "strong"), what: "Coup fort, tout de suite (tenir pour le charger)" },
     { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
     { keys: bindingText(s, "jump"), what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi)" : ""}` },
     { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive ; levée juste avant le coup : parade)" },
@@ -41,9 +42,10 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
             travers de ta trajectoire (vers le haut, vers l'arène) : tu iras un peu moins loin.
           </p>
           <p className="hint">
-            À la manette : stick gauche, A pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite pour saisir, une autre
-            gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose n'importe où pour diriger, à droite Frapper,
-            Spécial et Saut ; pose le pouce sur Frapper et Spécial à la fois pour te protéger (avec une direction : une esquive).
+            À la manette : stick gauche, A pour sauter, X pour frapper, le stick droit pour le coup fort, B pour le spécial, la gâchette
+            haute droite pour saisir, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose n'importe où
+            pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial et Saut ; pose le pouce sur Frapper et Spécial
+            à la fois pour te protéger (avec une direction : une esquive).
           </p>
         </>
       )}

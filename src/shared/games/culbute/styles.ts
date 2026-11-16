@@ -2,7 +2,7 @@
 // appartiennent au style, pas au dessin : un avatar qui emprunte le style de Ginette se bat avec son sac à main.
 
 import { ATK, SPC, type HabitueId } from "./model.ts";
-import { CHARGE_DECIDE, h, type MoveDef, type MoveSlot } from "./moves.ts";
+import { h, type MoveDef, type MoveSlot } from "./moves.ts";
 
 export interface Style {
   id: HabitueId;
@@ -32,7 +32,8 @@ export interface Style {
   moves: Record<MoveSlot, MoveDef>;
 }
 
-const C = CHARGE_DECIDE;
+/** Vers cette image, les attaques chargées s'arrêtent pour se charger (tant qu'on tient le bouton) */
+const C = 8;
 /** La première image où frappe une attaque au sol, si on a déjà relâché le bouton */
 const T = 5;
 
@@ -59,7 +60,7 @@ const GINETTE: Style = {
   w: 0.8,
   hgt: 1.55,
   moves: {
-    n: { name: "Petit coup de sac", frames: 16, pose: "jab", hits: [h(5, 6, 0.85, 0.85, 0.5, 3.5, 45, 3.5, 4)] },
+    n: { name: "Petit coup de sac", frames: 15, pose: "jab", hits: [h(4, 5, 0.85, 0.85, 0.5, 3.5, 45, 3.5, 4)] },
     s: { name: "Coup de sac", frames: 21, pose: "side", hits: [h(T, T + 2, 1.15, 0.9, 0.55, 9, 38, 6, 18)] },
     u: { name: "Sac au ciel", frames: 21, pose: "up", hits: [h(T, T + 4, 0.35, 1.75, 0.6, 8, 92, 6, 14)] },
     d: { name: "Balayette", frames: 16, pose: "low", hits: [h(T, T + 1, 0.95, 0.25, 0.45, 6.5, 22, 5, 11)] },
@@ -120,7 +121,7 @@ const MARCEL: Style = {
   w: 0.95,
   hgt: 1.6,
   moves: {
-    n: { name: "Pied de chaise", frames: 19, pose: "jab", hits: [h(6, 7, 0.95, 0.8, 0.5, 4.5, 50, 4, 5)] },
+    n: { name: "Pied de chaise", frames: 18, pose: "jab", hits: [h(5, 6, 0.95, 0.8, 0.5, 4.5, 50, 4, 5)] },
     s: { name: "Chaise en avant", frames: 25, pose: "side", hits: [h(T + 2, T + 4, 1.3, 0.8, 0.65, 11, 35, 7, 17)] },
     u: { name: "Le dossier", frames: 25, pose: "up", hits: [h(T + 2, T + 6, 0.3, 1.9, 0.7, 10, 88, 7, 14)] },
     d: { name: "Raclée de pieds", frames: 20, pose: "low", hits: [h(T + 2, T + 3, 1.1, 0.25, 0.55, 8, 22, 6, 11)] },
@@ -252,7 +253,7 @@ const RAYMOND: Style = {
   w: 0.85,
   hgt: 1.55,
   moves: {
-    n: { name: "Coup de coude", frames: 17, pose: "jab", hits: [h(6, 7, 0.8, 0.95, 0.45, 4, 45, 4, 4)] },
+    n: { name: "Coup de coude", frames: 16, pose: "jab", hits: [h(5, 6, 0.8, 0.95, 0.45, 4, 45, 4, 4)] },
     s: { name: "Boule en main", frames: 22, pose: "side", hits: [h(T + 1, T + 3, 1.1, 0.8, 0.55, 10, 38, 6, 17)] },
     u: { name: "Boule levée", frames: 22, pose: "up", hits: [h(T + 1, T + 5, 0.2, 1.8, 0.55, 9, 90, 6, 13)] },
     d: { name: "Pied de pointeur", frames: 20, pose: "low", hits: [h(T + 1, T + 2, 1.1, 0.2, 0.5, 8, 20, 5, 11)] },
@@ -305,7 +306,7 @@ const SIMONE: Style = {
   w: 0.72,
   hgt: 1.5,
   moves: {
-    n: { name: "Coup d'éventail", frames: 14, pose: "jab", hits: [h(5, 6, 0.85, 0.9, 0.45, 3, 50, 3, 4)] },
+    n: { name: "Coup d'éventail", frames: 13, pose: "jab", hits: [h(4, 5, 0.85, 0.9, 0.45, 3, 50, 3, 4)] },
     s: { name: "Éventail tranchant", frames: 18, pose: "side", hits: [h(T, T + 2, 1.15, 0.85, 0.5, 9, 40, 6, 17)] },
     u: { name: "Bourrasque", frames: 19, pose: "up", hits: [h(T, T + 4, 0, 1.7, 0.65, 8, 95, 6, 13)] },
     d: { name: "Révérence", frames: 15, pose: "low", hits: [h(T, T + 1, 1.0, 0.2, 0.45, 6, 25, 5, 10)] },
@@ -367,7 +368,7 @@ const LUCIEN: Style = {
   w: 0.82,
   hgt: 1.55,
   moves: {
-    n: { name: "Couac", frames: 16, pose: "jab", hits: [h(5, 6, 0.85, 0.9, 0.5, 3.5, 45, 3.5, 4)] },
+    n: { name: "Couac", frames: 15, pose: "jab", hits: [h(4, 5, 0.85, 0.9, 0.5, 3.5, 45, 3.5, 4)] },
     s: {
       name: "Soufflet tendu",
       frames: 21,

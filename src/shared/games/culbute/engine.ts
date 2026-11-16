@@ -14,6 +14,7 @@ import {
   DT,
   GRB,
   ITEM_KINDS,
+  FRT,
   JMP,
   NAR,
   SHD,
@@ -41,7 +42,14 @@ import { STYLES, type Style } from "./styles.ts";
 /** L'éjection s'use de tant de m/s chaque seconde (deux fois plus vite en glissant au sol) */
 export const KB_DECAY = 46;
 /** Images d'étourdissement par m/s d'éjection */
-export const HITSTUN_K = 0.8;
+export const HITSTUN_K = 0.75;
+/** Toutes les éjections un peu plus fortes : on sort plus tôt, les vies sont plus courtes et plus nerveuses */
+const KB_SCALE = 1.1;
+
+/** La vitesse d'éjection d'un coup : sa base, plus ce qu'elle gagne avec les pourcents, selon le poids et la charge */
+function launchSpeed(kb: number, kbg: number, dmgAfter: number, weight: number, charge: number): number {
+  return (kb + (kbg * dmgAfter) / 100) * (200 / (100 + weight)) * (1 + 0.15 * charge) * KB_SCALE;
+}
 /** Au-delà de cette éjection, on tombe à terre en touchant le sol (sauf à amortir avec la garde) */
 const TUMBLE = 17;
 export const SHIELD_MAX = 50;
@@ -347,6 +355,26 @@ function groundAttack(f: Fight, ft: Fighter, x: number, y: number) {
   startMove(ft, dir);
 }
 
+/** Le coup fort : l'attaque chargée de sa direction, aussitôt (tenir le bouton la charge) ; sans direction, devant soi */
+function strongAttack(ft: Fighter, x: number, y: number) {
+  const dir = dirOf(x, y);
+  if (dir === "s") ft.face = x < 0 ? -1 : 1;
+  if (ft.item === "baguette") {
+    startMove(ft, "g:bagC");
+    return;
+  }
+  if (ft.item) {
+    startMove(ft, dir === "u" ? "g:throwU" : dir === "d" ? "g:throwD" : "g:throwF");
+    return;
+  }
+  startMove(ft, dir === "u" ? "cu" : dir === "d" ? "cd" : "cs");
+}
+
+/** En pleine course vers l'avant : le coup en courant (on garde son élan) */
+function dashing(ft: Fighter, x: number, y: number, st: Style, sm: number): boolean {
+  return !ft.item && dirOf(x, y) === "s" && Math.abs(ft.vx) >= st.run * 0.7 * sm && sign(x) === sign(ft.vx);
+}
+
 function airAttack(ft: Fighter, x: number, y: number) {
   const dir = dirOf(x, y);
   if (dir === "s") ft.face = x < 0 ? -1 : 1;
@@ -417,9 +445,15 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         jumpFromGround(ft);
         return;
       }
+      if (press & FRT) {
+        consume(ft, FRT | ATK);
+        strongAttack(ft, x, y);
+        return;
+      }
       if (press & ATK) {
         consume(ft, ATK);
-        groundAttack(f, ft, x, y);
+        if (dashing(ft, x, y, st, sm)) startMove(ft, "g:dash");
+        else groundAttack(f, ft, x, y);
         return;
       }
       if (press & SPC) {
@@ -471,8 +505,8 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         startAirdodge(ft, x, y);
         return;
       }
-      if (press & ATK) {
-        consume(ft, ATK);
+      if (press & (ATK | FRT)) {
+        consume(ft, ATK | FRT);
         airAttack(ft, x, y);
         return;
       }
@@ -579,8 +613,8 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     }
     case "down": {
       ft.vx *= 0.8;
-      if (ft.t >= 6 && press & ATK) {
-        consume(ft, ATK);
+      if (ft.t >= 6 && press & (ATK | FRT)) {
+        consume(ft, ATK | FRT);
         startMove(ft, "g:getupAtk");
         return;
       }
@@ -678,7 +712,8 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       if (isAirborne(ft)) {
         airDrift(ft, x, st, sm, def?.drift ?? (isAerialSlot(key) ? 1 : 0.4));
         if (isAerialSlot(key)) fastFall(ft, y);
-      } else ft.vx *= def?.push ? 1 : 0.86;
+      } else if (key === "g:dash") ft.vx *= ft.mt < 12 ? 0.985 : 0.8;
+      else ft.vx *= def?.push ? 1 : 0.86;
       return;
     }
     default:
@@ -691,7 +726,7 @@ function groundMove(ft: Fighter, x: number, st: Style, sm: number) {
     const run = Math.abs(x) >= 0.65;
     const target = (run ? st.run : st.walk) * sign(x) * sm;
     // Le départ en courant : un élan immédiat (ou un demi-tour sec), pas une lente mise en route
-    if (run && (Math.abs(ft.vx) < st.run * 0.5 * sm || sign(ft.vx) !== sign(x))) ft.vx = target * 0.85;
+    if (run && (Math.abs(ft.vx) < st.run * 0.5 * sm || sign(ft.vx) !== sign(x))) ft.vx = target;
     const acc = 120 * DT;
     ft.vx += clamp(target - ft.vx, -acc, acc);
     ft.face = x < 0 ? -1 : 1;
@@ -785,8 +820,8 @@ function ledgeControl(f: Fight, ft: Fighter, inp: Input, press: number) {
     setState(ft, "air");
     return;
   }
-  if (press & ATK) {
-    consume(ft, ATK);
+  if (press & (ATK | FRT)) {
+    consume(ft, ATK | FRT);
     climbTo(f, ft);
     startMove(ft, "g:ledgeAtk");
     return;
@@ -1054,6 +1089,12 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
     setState(ft, isAirborne(ft) ? "air" : "stand");
     return;
   }
+  // Le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt
+  if (ft.move === "n" && ft.buf & ATK && def.hits.length > 0 && ft.mt > Math.max(...def.hits.map((hd) => hd.to)) + 1) {
+    consume(ft, ATK);
+    startMove(ft, "n");
+    return;
+  }
   // Une attaque au sol qui peut se charger : tant que le bouton est tenu, elle attend juste avant de frapper ; relâché,
   // elle part aussitôt ; tenu assez longtemps, elle devient l'attaque chargée de sa direction
   const charged = ft.move === "g:bagS" ? "g:bagC" : CHARGED_OF[ft.move as MoveSlot];
@@ -1074,7 +1115,7 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
 
 function advanceCharged(f: Fight, ft: Fighter, def: MoveDef, inp: Input, solo: boolean) {
   // La charge : on reste à cette image tant que le bouton est tenu
-  if (def.charge && ft.mt === def.charge.at && inp.held & def.charge.button && ft.charge < def.charge.max) {
+  if (def.charge && ft.mt === def.charge.at && inp.held & (def.charge.button | FRT) && ft.charge < def.charge.max) {
     ft.charge++;
     if (!isAirborne(ft)) ft.vx *= 0.8;
     return;
@@ -1675,8 +1716,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     pending.push({ k: "hit", a: src.attacker, v: v.slot, dmg, x: src.x, y: src.y, power: 0.2, kind: "hit" });
     return;
   }
-  const weight = 200 / (100 + st.weight);
-  let speed = (src.kb + (src.kbg * v.dmg) / 100) * weight * (1 + 0.15 * src.charge);
+  let speed = launchSpeed(src.kb, src.kbg, v.dmg, st.weight, src.charge);
   let ang = src.ang;
   // Un coup vers le bas sur quelqu'un au sol le soulève
   if (ang < 0 && !isAirborne(v)) {
@@ -2261,7 +2301,7 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
       stop = Math.round(clamp(3 + baseDmg * 0.3, 3, 10));
       power = clamp(baseDmg / 20, 0, 1);
     } else {
-      const speed = (hit.kb + (hit.kbg * (v.dmg + dmg)) / 100) * (200 / (100 + styleOf(v).weight)) * (1 + 0.15 * charge);
+      const speed = launchSpeed(hit.kb, hit.kbg, v.dmg + dmg, styleOf(v).weight, charge);
       let ang = hit.ang;
       if (ang < 0 && !isAirborne(v)) ang = 40;
       const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;

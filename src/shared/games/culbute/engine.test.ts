@@ -15,6 +15,7 @@ import {
   ATK,
   GRB,
   HABITUE_IDS,
+  FRT,
   JMP,
   NAR,
   NO_INPUT,
@@ -85,7 +86,7 @@ describe("Culbute : les données", () => {
       for (const slot of ["cs", "cu", "cd"] as const) {
         const m = st.moves[slot];
         expect(m.charge, `${id} ${slot}`).toBeDefined();
-        expect(m.charge!.at).toBeGreaterThanOrEqual(CHARGE_DECIDE);
+        expect(m.charge!.at).toBeGreaterThanOrEqual(8);
         for (const hit of m.hits) expect(hit.from, `${id} ${slot}`).toBeGreaterThan(m.charge!.at);
       }
     }
@@ -175,6 +176,71 @@ describe("Culbute : le combat", () => {
     run(g, CHARGE_DECIDE + 12, [hold(ATK, CHARGE_DECIDE + 12, 1, 0)]);
     expect(g.fighters[0]!.move).toBe("cs");
     expect(g.fighters[0]!.charge).toBeGreaterThan(0);
+  });
+
+  it("tenir Frapper sans direction charge aussi le coup fort, devant soi", () => {
+    const g = duel();
+    skipIntro(g);
+    run(g, CHARGE_DECIDE + 12, [hold(ATK, CHARGE_DECIDE + 12)]);
+    expect(g.fighters[0]!.move).toBe("cs");
+    expect(g.fighters[0]!.charge).toBeGreaterThan(0);
+    // Un clic ordinaire (un dixième de seconde), même avec une direction, reste une attaque normale
+    const q = duel();
+    skipIntro(q);
+    run(q, 20, [hold(ATK, 7, 1, 0)]);
+    expect(q.fighters[0]!.move).toBe("s");
+  });
+
+  it("le coup fort part tout de suite dans la direction tenue, et se charge tant qu'on tient le bouton", () => {
+    for (const [y, key] of [
+      [0, "cs"],
+      [1, "cu"],
+      [-1, "cd"],
+    ] as const) {
+      const f = duel();
+      skipIntro(f);
+      run(f, 1, [tap(FRT, 0, y)]);
+      expect(f.fighters[0]!.move, key).toBe(key);
+    }
+    const f = duel();
+    skipIntro(f);
+    run(f, 40, [hold(FRT, 40, -1, 0)]);
+    const a = f.fighters[0]!;
+    expect(a.move).toBe("cs");
+    expect(a.face).toBe(-1);
+    expect(a.charge).toBeGreaterThan(20);
+    // En l'air, c'est une attaque en l'air
+    const air = duel();
+    skipIntro(air);
+    run(air, 8, [tap(JMP)]);
+    run(air, 1, [tap(FRT, 0, 1)]);
+    expect(air.fighters[0]!.move).toBe("au");
+  });
+
+  it("en pleine course, Frapper vers l'avant : le coup en courant, qui garde son élan", () => {
+    const f = duel();
+    skipIntro(f);
+    f.fighters[0]!.x = -6;
+    run(f, 14, [stick(1)]);
+    const a = f.fighters[0]!;
+    const x0 = a.x;
+    run(f, 1, [tap(ATK, 1, 0)]);
+    expect(a.move).toBe("g:dash");
+    run(f, 8, [stick(1)]);
+    expect(a.x - x0).toBeGreaterThan(1.2);
+  });
+
+  it("le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt", () => {
+    const f = duel();
+    skipIntro(f);
+    const a = f.fighters[0]!;
+    run(f, 1, [tap(ATK)]);
+    run(f, 6);
+    expect(a.move).toBe("n");
+    const before = a.mt;
+    run(f, 1, [tap(ATK)]);
+    expect(a.move).toBe("n");
+    expect(a.mt).toBeLessThan(before);
   });
 
   it("l'attaque chargée à fond fait sortir un adversaire à 120 % depuis le bord", () => {

@@ -104,11 +104,12 @@ export type MoveSlot = "n" | "s" | "u" | "d" | "an" | "as" | "au" | "ad" | "pn" 
 export const MOVE_SLOTS: MoveSlot[] = ["n", "s", "u", "d", "an", "as", "au", "ad", "pn", "ps", "pu", "pd", "cs", "cu", "cd"];
 
 /**
- * Une attaque au sol tenue jusqu'à cette image devient l'attaque chargée de sa direction : les attaques au sol de côté,
- * vers le haut et vers le bas ne frappent jamais avant (un simple appui reste une attaque normale).
+ * Une attaque au sol tenue jusqu'à cette image (un cinquième de seconde) devient l'attaque chargée de sa direction ;
+ * relâchée avant, elle part aussitôt (un clic ordinaire reste une attaque normale, jamais un coup fort par mégarde).
  */
-export const CHARGE_DECIDE = 8;
-export const CHARGED_OF: Partial<Record<MoveSlot, MoveSlot>> = { s: "cs", u: "cu", d: "cd" };
+export const CHARGE_DECIDE = 12;
+/** Tenue, une attaque au sol devient l'attaque chargée de sa direction (sans direction : celle de devant) */
+export const CHARGED_OF: Partial<Record<MoveSlot, MoveSlot>> = { n: "cs", s: "cs", u: "cu", d: "cd" };
 
 /** La charge rend l'attaque jusqu'à 40 % plus forte */
 export const CHARGE_BONUS = 0.4;
@@ -145,6 +146,8 @@ export const GENERIC: Record<string, MoveDef> = {
     charge: { at: 10, max: 60, button: 1 },
     hits: [h(14, 16, 1.6, 0.9, 0.7, 17, 37, 9, 30)],
   },
+  /** En pleine course : on se jette en avant, élan compris, et l'autre décolle */
+  dash: { name: "Coup en courant", frames: 30, pose: "lunge", hits: [h(5, 11, 0.85, 0.8, 0.62, 9, 55, 7, 11)] },
   /** Narguer : une petite danse bras levés, une bulle au-dessus de la tête (et on reste à découvert) */
   taunt: { name: "Narguer", frames: 60, pose: "taunt", hits: [] },
 };

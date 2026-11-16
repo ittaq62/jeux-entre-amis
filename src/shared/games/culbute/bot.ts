@@ -4,7 +4,7 @@
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
 import { gravityOf, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
-import { ATK, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
+import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -38,7 +38,7 @@ interface LevelInfo {
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
   facile: {
-    think: 20,
+    think: 16,
     attack: 0.35,
     guard: 0.05,
     charge: 0.15,
@@ -51,7 +51,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     taunt: 0.35,
   },
   moyen: {
-    think: 11,
+    think: 8,
     attack: 0.6,
     guard: 0.08,
     charge: 0.4,
@@ -359,18 +359,20 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     m.y = 1;
     m.press = ATK;
     if (t.dmg > 90 && rnd(m) < L.charge) {
-      m.held = ATK;
-      m.holdUntil = f.frame + 14 + Math.floor(rnd(m) * 25);
+      // Le coup fort vers le haut, chargé un moment
+      m.press = FRT;
+      m.held = FRT;
+      m.holdUntil = f.frame + 2 + Math.floor(rnd(m) * 25);
     }
     return out();
   }
   const killPercent = 95 + STYLES[t.style].weight * 0.3;
   if (t.dmg > killPercent * 0.75 && rnd(m) < L.charge && !airborne(t)) {
-    // L'attaque chargée, tenue un moment
+    // Le coup fort, chargé un moment
     m.x = toward;
-    m.press = ATK;
-    m.held = ATK;
-    m.holdUntil = f.frame + 12 + Math.floor(rnd(m) * 30);
+    m.press = FRT;
+    m.held = FRT;
+    m.holdUntil = f.frame + 2 + Math.floor(rnd(m) * 30);
     return out();
   }
   const pick = rnd(m);

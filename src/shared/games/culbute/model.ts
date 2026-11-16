@@ -22,6 +22,8 @@ export const SHD = 8;
 export const GRB = 16;
 /** Narguer : pour rire, sans effet sur le combat (on reste à découvert le temps de la pose) */
 export const NAR = 32;
+/** Le coup fort : l'attaque chargée de sa direction, tout de suite (tenir pour charger) ; en l'air, une attaque en l'air */
+export const FRT = 64;
 
 /** Ce que le joueur demande pendant un pas : le stick (de -1 à 1, y vers le haut) et ses boutons */
 export interface Input {
