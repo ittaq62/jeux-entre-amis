@@ -417,6 +417,27 @@ export class NavalRoom extends DurableObject<Env> {
     await this.afterChange([], now, ws);
   }
 
+  /** La revanche part : la partie est finie et tous les joueurs restés à la table l'ont demandée */
+  private rematchReady(): boolean {
+    const d = this.data!;
+    if (d.status !== "finished" || d.rematch.length === 0) return false;
+    return d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).every((s) => d.rematch.includes(s.userId!));
+  }
+
+  /**
+   * Après la partie, la place d'un joueur parti pendant le jeu se libère comme au salon. Sans ça, elle restait (avec
+   * la main d'hôte s'il l'avait : plus personne ne pouvait lancer la suite ni changer les règles).
+   */
+  private releaseAbsent(now: number) {
+    const d = this.data!;
+    if (d.status === "playing" || d.tour) return;
+    for (const s of d.seats) {
+      if (s.kind !== "human" || s.disconnectedAt === null || this.isConnected(s.userId)) continue;
+      if (d.timers.some((t) => t.kind === "seatCleanup" && t.seatId === s.id)) continue;
+      this.addTimer({ at: Math.max(now, s.disconnectedAt + SEAT_RELEASE_MS), kind: "seatCleanup", seatId: s.id });
+    }
+  }
+
   private ensureHost() {
     const d = this.data!;
     if (d.seats.find((s) => s.userId === d.hostId)) return;
@@ -539,6 +560,7 @@ export class NavalRoom extends DurableObject<Env> {
         }
         this.ensureHost();
         void this.setPresence(userId, null).catch(() => {});
+        if (this.rematchReady()) return this.startGame(now);
         return this.afterChange([], now, ws);
       }
 
@@ -576,8 +598,7 @@ export class NavalRoom extends DurableObject<Env> {
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
-        const humans = d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId));
-        if (humans.every((s) => d.rematch.includes(s.userId!))) return this.startGame(now);
+        if (this.rematchReady()) return this.startGame(now);
         return this.afterChange([], now);
       }
     }
@@ -818,6 +839,7 @@ export class NavalRoom extends DurableObject<Env> {
     }
     this.schedule(now);
     this.botReactions(events, now);
+    this.releaseAbsent(now);
     await this.persist();
     this.broadcast(events, closing);
     await this.armAlarm();
@@ -911,6 +933,8 @@ export class NavalRoom extends DurableObject<Env> {
       }
     }
     if (!this.data) return;
+    // Une place s'est libérée après la partie : si tous ceux qui restent ont demandé la revanche, elle part
+    if (changed && this.rematchReady()) return void (await this.startGame(now));
     if (changed) await this.afterChange(events, now);
     else {
       await this.persist();
