@@ -1,0 +1,55 @@
+// Un message qui n'est pas un objet (« null », un nombre, une chaîne) est ignoré par toutes les salles, sans exception.
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("cloudflare:workers", () => ({
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
+}));
+
+import { BolidesRoom } from "./bolidesRoom.ts";
+import { BricksRoom } from "./bricksRoom.ts";
+import { CapitaleRoom } from "./capitaleRoom.ts";
+import { CramponsRoom } from "./cramponsRoom.ts";
+import { CulbuteRoom } from "./culbuteRoom.ts";
+import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
+import { MecheRoom } from "./mecheRoom.ts";
+import { NavalRoom } from "./navalRoom.ts";
+import { GameRoom } from "./room.ts";
+import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type RoomLike } from "./roomHarness.ts";
+import { TourRoom } from "./tourRoom.ts";
+
+installWorkerGlobals();
+
+type RoomClass = new (state: never, env: never) => RoomLike & { init(opts: unknown): Promise<boolean>; stopLoop?: () => void };
+
+const ROOMS: { name: string; Room: RoomClass }[] = [
+  { name: "uno", Room: GameRoom as unknown as RoomClass },
+  { name: "naval", Room: NavalRoom as unknown as RoomClass },
+  { name: "bricks", Room: BricksRoom as unknown as RoomClass },
+  { name: "capitale", Room: CapitaleRoom as unknown as RoomClass },
+  { name: "meche", Room: MecheRoom as unknown as RoomClass },
+  { name: "bolides", Room: BolidesRoom as unknown as RoomClass },
+  { name: "crampons", Room: CramponsRoom as unknown as RoomClass },
+  { name: "culbute", Room: CulbuteRoom as unknown as RoomClass },
+  { name: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass },
+  { name: "tournée", Room: TourRoom as unknown as RoomClass },
+];
+
+describe.each(ROOMS)("$name", ({ Room }) => {
+  it("« null », un nombre ou une chaîne : ignorés sans erreur", async () => {
+    const state = new FakeState();
+    const room = new Room(state as never, fakeEnv() as never);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    for (const raw of ["null", "42", '"bonjour"', "true", "[]"]) {
+      await expect(room.webSocketMessage(host as unknown as WebSocket, raw)).resolves.toBeUndefined();
+    }
+    room.stopLoop?.();
+  });
+});

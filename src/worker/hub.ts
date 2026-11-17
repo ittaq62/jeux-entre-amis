@@ -78,6 +78,8 @@ export class Hub extends DurableObject<Env> {
     } catch {
       return;
     }
+    // « null », un nombre, une liste : rien à lire
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
     const att = ws.deserializeAttachment() as HubAttachment;
     switch (msg.t) {
       case "watchLobby":

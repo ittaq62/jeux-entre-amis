@@ -453,6 +453,8 @@ export class BolidesRoom extends DurableObject<Env> {
     } catch {
       return;
     }
+    // « null », un nombre, une liste : rien à lire
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
     const att = ws.deserializeAttachment() as Attachment;
     if (att.replaced) return;
     const userId = att.userId;
