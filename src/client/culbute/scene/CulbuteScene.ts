@@ -71,6 +71,9 @@ export class CulbuteScene {
   private effects: Effect[] = [];
   private keepList: { dispose: () => void }[] = [];
   private keep: Keep;
+  /** Un modèle de chaque sorte d'objet (tir, objet à ramasser, piège, estrade), copié à chaque apparition : les copies
+   * partagent ses géométries et ses matières, qui ne s'entassent donc pas au fil des combats */
+  private protos = new Map<string, THREE.Object3D>();
   private time = 0;
   private shake = 0;
   private camPos = new THREE.Vector3(0, 3, 26);
@@ -233,7 +236,21 @@ export class CulbuteScene {
   }
 
   /** L'estrade volante où l'on revient après une sortie : une planche et deux ballons */
+  /** Une copie du modèle de cette sorte, fait la première fois */
+  private copyOf(key: string, make: () => THREE.Object3D): THREE.Object3D {
+    let proto = this.protos.get(key);
+    if (!proto) {
+      proto = make();
+      this.protos.set(key, proto);
+    }
+    return proto.clone();
+  }
+
   private respawnPad(): THREE.Object3D {
+    return this.copyOf("estrade", () => this.padModel());
+  }
+
+  private padModel(): THREE.Object3D {
     const g = new THREE.Group();
     const keep = this.keep;
     const board = new THREE.Mesh(keep(new THREE.BoxGeometry(1.3, 0.14, 0.9)), keep(std(0xb07a4f, 0.8)));
@@ -389,7 +406,7 @@ export class CulbuteScene {
       seen.add(s.id);
       let obj = this.shots.get(s.id);
       if (!obj) {
-        obj = shotModel(s.kind, this.keep);
+        obj = this.copyOf(`tir:${s.kind}`, () => shotModel(s.kind, this.keep));
         this.shots.set(s.id, obj);
         this.scene.add(obj);
       }
@@ -448,7 +465,7 @@ export class CulbuteScene {
       seen.add(it.id);
       let obj = this.items.get(it.id);
       if (!obj) {
-        obj = itemModel(it.kind as ItemKind, this.keep);
+        obj = this.copyOf(`objet:${it.kind}`, () => itemModel(it.kind as ItemKind, this.keep));
         this.items.set(it.id, obj);
         this.scene.add(obj);
       }
@@ -468,16 +485,18 @@ export class CulbuteScene {
       seen.add(t.id);
       let obj = this.traps.get(t.id);
       if (!obj) {
-        const g = new THREE.Group();
-        const knit = new THREE.Mesh(this.keep(new THREE.CylinderGeometry(0.5, 0.55, 0.06, 14)), this.keep(std(0x8e7cc3, 0.95)));
-        g.add(knit);
-        for (let k = 0; k < 3; k++) {
-          const ring = new THREE.Mesh(this.keep(new THREE.TorusGeometry(0.15 + k * 0.12, 0.02, 5, 16)), this.keep(std(0xe86aa6, 0.95)));
-          ring.rotation.x = Math.PI / 2;
-          ring.position.y = 0.04;
-          g.add(ring);
-        }
-        obj = g;
+        obj = this.copyOf("piege", () => {
+          const g = new THREE.Group();
+          const knit = new THREE.Mesh(this.keep(new THREE.CylinderGeometry(0.5, 0.55, 0.06, 14)), this.keep(std(0x8e7cc3, 0.95)));
+          g.add(knit);
+          for (let k = 0; k < 3; k++) {
+            const ring = new THREE.Mesh(this.keep(new THREE.TorusGeometry(0.15 + k * 0.12, 0.02, 5, 16)), this.keep(std(0xe86aa6, 0.95)));
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.04;
+            g.add(ring);
+          }
+          return g;
+        });
         this.traps.set(t.id, obj);
         this.scene.add(obj);
       }
