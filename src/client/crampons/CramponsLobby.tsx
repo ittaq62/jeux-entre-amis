@@ -515,9 +515,11 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
           <section className="rules-sheet panel cr-help">
             <h3>Comment jouer</h3>
             <p className="hint">
-              Flèches ou ZQSD pour courir, Maj pour sprinter. Espace (ou clic gauche) pour passer, C (ou clic droit) pour tirer : plus tu
-              tiens, plus c'est fort. Sans le ballon, Espace presse et tacle, C tente un tacle glissé, E change de joueur. X passe en
-              profondeur, V lobe ou centre. Tout est rappelé à l'écran pendant le match, et ça marche aussi à la manette et sur téléphone.
+              ZQSD ou les flèches pour courir, Maj pour sprinter. Clic gauche pour tirer, clic droit pour passer : plus tu tiens, plus c'est
+              fort. Espace pour la passe en profondeur, la molette ou C pour lober ou centrer, A pour le crochet, E pour changer de joueur.
+              Sans le ballon, clic droit presse et tacle, clic gauche tente un tacle glissé. D'autres touches (tout au clavier) se
+              choisissent dans « Changer mes touches ». Tout est rappelé à l'écran pendant le match, et ça marche aussi à la manette et sur
+              téléphone.
             </p>
           </section>
         </>
