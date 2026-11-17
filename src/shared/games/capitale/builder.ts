@@ -243,6 +243,8 @@ function occupied(s: CapitaleState, index: number, ignore: number | null): Set<n
 
 /** Ce qui empêche de poser cette emprise dans la ville (hors frontières, place prise), ou null */
 export function footprintProblem(s: CapitaleState, index: number, r: Rect, ignore: number | null = null): string | null {
+  // NaN ou l'infini passeraient toutes les comparaisons, sans aucune case à vérifier : refusés comme hors de la carte
+  if (![r.x, r.z, r.w, r.d].every(Number.isInteger)) return "Hors de la carte.";
   if (r.x < 0 || r.z < 0 || r.x + r.w > MAP || r.z + r.d > MAP) return "Hors de la carte.";
   const area = areaOf(s, index);
   const taken = occupied(s, index, ignore);

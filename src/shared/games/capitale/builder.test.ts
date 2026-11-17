@@ -170,6 +170,25 @@ describe("poser ses bâtiments", () => {
     expect(fail(s, "a", { type: "build", square: LYON, kind: "maison", x: 30, z: 24, rot: 0 })).toBe("Cette ville n'est pas à toi.");
   });
 
+  it("une position qui n'est pas un nombre est refusée : on ne bâtit pas hors de la carte, sans place", () => {
+    const s = game();
+    own(s, "a", PARIS);
+    P(s, "a").cash = 100_000;
+    for (const [x, z] of [
+      [NaN, 30],
+      [30, NaN],
+      [Infinity, 30],
+      [30, -Infinity],
+    ] as const) {
+      expect(fail(s, "a", { type: "build", square: PARIS, kind: "maison", x, z, rot: 0 })).toBe("Hors de la carte.");
+    }
+    expect(lotOf(s.deeds[PARIS])).toEqual([]);
+    // Un bâtiment posé ne part pas hors de la carte non plus (sa place ne se libère pas)
+    build(s, "a", PARIS, "immeuble", 30, 30);
+    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 1, x: NaN, z: 30, rot: 0 })).toBe("Hors de la carte.");
+    expect(lotOf(s.deeds[PARIS])[0]).toMatchObject({ x: 30, z: 30 });
+  });
+
   it("à tout moment, même pendant le tour d'un autre ; jamais pendant une enchère", () => {
     const s = game();
     own(s, "b", PARIS);
