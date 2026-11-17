@@ -1227,6 +1227,9 @@ export class CapitaleRoom extends DurableObject<Env> {
           events.push(...this.apply(g, seat.id, action));
           if (step !== "debt") break;
         }
+        // Une dette trop lourde pour quarante coups : même décision, donc pas de nouveau chrono. On le réarme, sinon la
+        // table attendrait pour toujours un joueur resté connecté sans jouer.
+        if (g.step !== "over" && actorOf(g) === seat.id && t.key === `${g.decision}`) d.deadlineKey = "";
         if (seat.missed >= MAX_MISSED) {
           seat.autoplay = "afk";
           d.botKey = "";

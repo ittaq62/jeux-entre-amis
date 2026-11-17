@@ -12,6 +12,7 @@ vi.mock("cloudflare:workers", () => ({
 }));
 
 import { BUYABLE } from "../shared/games/capitale/board.ts";
+import { areaOf, lotOf } from "../shared/games/capitale/builder.ts";
 import { actorOf, type CapitaleState } from "../shared/games/capitale/engine.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { Bench, FakeState, fakeEnv, fixedSeeds, installWorkerGlobals, user } from "./roomHarness.ts";
@@ -72,5 +73,59 @@ describe("Capitale : le chrono d'un joueur qui ne joue pas", () => {
     for (let k = 0; k < 200 && g.turnId === turn; k++) await wait();
     expect(g.players.find((p) => p.id === "hote")!.position).toBe(15);
     expect(g.turnId).toBeGreaterThan(turn);
+  });
+
+  it("en Builder, une grosse dette qui demande plus de quarante démolitions : la salle continue, la table ne reste pas bloquée", async () => {
+    fixedSeeds(2);
+    vi.useFakeTimers();
+    let now = Date.now();
+    vi.setSystemTime(now);
+    const state = new FakeState();
+    const room = new CapitaleRoom(state as never, fakeEnv() as never);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "settings", settings: { end: "bankrupt", turnSeconds: 30, builder: true } });
+    await bench.send(host, { t: "start" });
+    const d = () => bench.data<Data>();
+    const g = d().capitale;
+    const wait = async (ms = 1_000) => {
+      now += ms;
+      vi.setSystemTime(now);
+      await room.alarm();
+    };
+    for (let k = 0; k < 100 && !(actorOf(g) === "hote" && g.step === "roll"); k++) await wait();
+    expect(actorOf(g)).toBe("hote");
+    // Le bot a Aurillac ; le joueur, sans un sou, va s'y arrêter et devoir le loyer
+    const bot = g.players.find((p) => p.id !== "hote")!.id;
+    const me = g.players.find((p) => p.id === "hote")!;
+    for (const i of BUYABLE) g.deeds[i]!.owner = null;
+    g.deeds[3]!.owner = bot;
+    me.position = 0;
+    me.cash = 0;
+    g.rigged = [[1, 2]];
+    // Il lance lui-même (il est là), puis ne touche plus à rien
+    await bench.send(host, { t: "action", action: { type: "roll" } });
+    expect(g.step).toBe("debt");
+    expect(actorOf(g)).toBe("hote");
+    // La dette est énorme, et Paris et Lyon sont couverts de maisons : il faut bien plus de quarante coups pour s'en sortir
+    for (const i of [37, 39]) {
+      g.deeds[i]!.owner = "hote";
+      g.deeds[i]!.lot = [...areaOf(g, i)].map((c) => ({
+        id: (g.buildSeq = (g.buildSeq ?? 0) + 1),
+        kind: "maison" as const,
+        x: c % 36,
+        z: Math.floor(c / 36),
+        rot: 0,
+      }));
+    }
+    for (const i of [1, 6, 11, 16, 21, 26, 31]) g.deeds[i]!.owner = "hote";
+    g.debts[0]!.amount = 2_000;
+    expect(lotOf(g.deeds[37]).length + lotOf(g.deeds[39]).length).toBeGreaterThan(50);
+    // Son temps passe, encore et encore : la salle règle sa dette pour lui, jusqu'au bout
+    for (let k = 0; k < 400 && g.step === "debt" && actorOf(g) === "hote"; k++) await wait();
+    expect(g.step === "debt" && actorOf(g) === "hote").toBe(false);
   });
 });
