@@ -411,7 +411,8 @@ function Battle({
       )}
       <span className="naval-status-text">{compact && weapon && showRadar ? WEAPONS[weapon].help : status}</span>
       {g.phase === "placement" && placementLeft !== null && <span className="placement-clock num">{formatClock(placementLeft)}</span>}
-      {mySeat?.autoplay && (
+      {/* La bataille finie, il n'y a plus de barre à reprendre */}
+      {mySeat?.autoplay && g.phase !== "gameOver" && (
         <button className="btn btn-sm" onClick={() => send({ t: "takeBack" })}>
           Reprendre la barre
         </button>

@@ -459,7 +459,8 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                 </AnimatePresence>
               </div>
               <div className="my-actions">
-                {mySeat?.autoplay && (
+                {/* La partie finie, il n'y a plus de main à reprendre */}
+                {mySeat?.autoplay && g.phase !== "gameOver" && (
                   <button className="btn btn-primary btn-sm" onClick={() => send({ t: "takeBack" })}>
                     Reprendre la main
                   </button>
