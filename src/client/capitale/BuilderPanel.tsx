@@ -242,23 +242,31 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
     };
   }, [cells]);
 
-  // Au clavier : R tourne, Échap annule (ou ferme), Suppr démolit le bâtiment choisi
+  // Une confirmation de démolition ne vaut que pour le bâtiment choisi à ce moment
+  useEffect(() => setConfirmDemolish(false), [sel?.id, square]);
+
+  // Au clavier : R tourne, Échap annule (ou ferme), Suppr démolit le bâtiment choisi, après confirmation comme le bouton
+  // (un premier appui demande « Démolir ? », un second démolit ; une touche tenue ne compte qu'une fois)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+      if (t instanceof HTMLElement && t.isContentEditable) return;
       if (e.key === "r" || e.key === "R") {
         if (tool.kind === "place" || tool.kind === "move") setTool({ ...tool, rot: (tool.rot + 1) & 3 });
       } else if (e.key === "Escape") {
         if (tool.kind !== "look") setTool({ kind: "look" });
         else if (selected !== null) setSelected(null);
         else onClose();
-      } else if ((e.key === "Delete" || e.key === "Backspace") && sel) {
+      } else if ((e.key === "Delete" || e.key === "Backspace") && sel && !e.repeat) {
+        if (!confirmDemolish) return setConfirmDemolish(true);
         act({ type: "demolish", square, id: sel.id });
+        setConfirmDemolish(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, selected, sel, square]);
+  }, [tool, selected, sel, square, confirmDemolish]);
 
   const kinds = BUILD_ORDER.filter((k) => g.settings.specials || !BUILDS[k].special);
   const annexed = annexedOf(deed).length;
