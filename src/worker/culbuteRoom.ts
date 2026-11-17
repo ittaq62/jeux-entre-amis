@@ -63,6 +63,8 @@ import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 const EXTRA_BOT_NAMES = ["Gaston", "Josiane", "Odette", "Paulette", "Fernand", "Germaine", "Jacqueline"];
 const AWAY_AFTER_MS = 8000;
 const SEAT_RELEASE_MS = 25_000;
+/** Pendant la partie, l'alarme de garde ne dort jamais plus longtemps */
+const WATCHDOG_MS = 60_000;
 const CHAT_KEEP = 80;
 /** La boucle : le combat avance par soixantièmes de seconde, et tout le monde reçoit ce qui bouge une trentaine de fois par seconde */
 const LOOP_MS = 16;
@@ -957,11 +959,14 @@ export class CulbuteRoom extends DurableObject<Env> {
 
   private async armAlarm() {
     const d = this.data;
-    if (!d || d.timers.length === 0) {
+    // Pendant la partie, une alarme de garde : si l'objet redémarre (une mise en ligne) sans personne pour le rappeler,
+    // elle le réveille, la boucle repart et la partie va à son terme
+    const watch = d?.status === "playing" ? [Date.now() + WATCHDOG_MS] : [];
+    if (!d || d.timers.length + watch.length === 0) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
-    const next = Math.min(...d.timers.map((t) => t.at));
+    const next = Math.min(...d.timers.map((t) => t.at), ...watch);
     await this.ctx.storage.setAlarm(Math.max(next, Date.now() + 5));
   }
 
@@ -969,6 +974,7 @@ export class CulbuteRoom extends DurableObject<Env> {
     const d = this.data;
     if (!d) return;
     const now = Date.now();
+    if (d.status === "playing" && d.fight) this.startLoop();
     const due = d.timers.filter((t) => t.at <= now + 15).sort((a, b) => a.at - b.at);
     d.timers = d.timers.filter((t) => t.at > now + 15);
     let changed = false;

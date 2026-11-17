@@ -72,6 +72,8 @@ const BOT_NAMES = ["Gaston", "Jacqueline", "Marcel", "Odette", "Raymond", "Simon
 // Délai laissé à un joueur déconnecté pour revenir avant qu'un bot conduise à sa place
 const AWAY_AFTER_MS = 8000;
 const SEAT_RELEASE_MS = 25_000;
+/** Pendant la partie, l'alarme de garde ne dort jamais plus longtemps */
+const WATCHDOG_MS = 60_000;
 const CHAT_KEEP = 80;
 /** La boucle de course : les bots avancent et les positions partent vers tout le monde, 20 fois par seconde */
 const TICK_MS = 50;
@@ -909,11 +911,14 @@ export class BolidesRoom extends DurableObject<Env> {
 
   private async armAlarm() {
     const d = this.data;
-    if (!d || d.timers.length === 0) {
+    // Pendant la partie, une alarme de garde : si l'objet redémarre (une mise en ligne) sans personne pour le rappeler,
+    // elle le réveille, la boucle repart et la partie va à son terme
+    const watch = d?.status === "playing" ? [Date.now() + WATCHDOG_MS] : [];
+    if (!d || d.timers.length + watch.length === 0) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
-    const next = Math.min(...d.timers.map((t) => t.at));
+    const next = Math.min(...d.timers.map((t) => t.at), ...watch);
     await this.ctx.storage.setAlarm(Math.max(next, Date.now() + 5));
   }
 
@@ -921,6 +926,7 @@ export class BolidesRoom extends DurableObject<Env> {
     const d = this.data;
     if (!d) return;
     const now = Date.now();
+    if (d.status === "playing" && d.race) this.startLoop();
     const due = d.timers.filter((t) => t.at <= now + 15).sort((a, b) => a.at - b.at);
     d.timers = d.timers.filter((t) => t.at > now + 15);
     let changed = false;
