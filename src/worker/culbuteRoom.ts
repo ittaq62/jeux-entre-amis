@@ -72,6 +72,10 @@ const SAVE_EVERY_MS = 15_000;
 /** Au-delà de ce retard, les commandes en attente d'un joueur sont serrées (on garde les appuis, on rattrape le temps) */
 const QUEUE_MAX = 6;
 const QUEUE_KEEP = 3;
+/** Plus rien d'un joueur depuis une demi-seconde (onglet caché, connexion morte) : il lâche tout */
+const STALE_STEPS = 30;
+/** Un numéro de commande aussi loin derrière le dernier reçu vient d'un nouvel écran, qui recompte depuis 1 */
+const SEQ_RESTART = 600;
 /** Le niveau des bots de la tournée, traduit pour Culbute */
 const TOUR_LEVEL: Record<string, BotLevel> = { easy: "facile", normal: "moyen", hard: "fort" };
 
@@ -134,6 +138,8 @@ interface InputQueue {
   ack: number;
   last: Input;
   stamp: number;
+  /** Les pas joués d'affilée sans nouvelle commande */
+  starved: number;
 }
 
 /** Une table de Culbute : le salon commun, puis un combat que le serveur mène image par image. */
@@ -658,8 +664,16 @@ export class CulbuteRoom extends DurableObject<Env> {
     if (typeof first !== "number" || !Array.isArray(data) || data.length > SAMPLE_STRIDE * 30) return;
     let q = this.queues.get(seatId);
     if (!q) {
-      q = { samples: [], lastSeq: 0, ack: 0, last: { x: 0, y: 0, held: 0, pressed: 0 }, stamp: 0 };
+      q = { samples: [], lastSeq: 0, ack: 0, last: { x: 0, y: 0, held: 0, pressed: 0 }, stamp: 0, starved: 0 };
       this.queues.set(seatId, q);
+    }
+    // Un nouvel écran (après une revanche) recompte depuis 1 : un paquet en retard de l'ancien ne doit pas faire ignorer
+    // toutes ses commandes. On repart d'une file vide.
+    if (Math.floor(first) < q.lastSeq - SEQ_RESTART) {
+      q.samples = [];
+      q.lastSeq = Math.floor(first) - 1;
+      q.ack = 0;
+      q.last = { x: 0, y: 0, held: 0, pressed: 0 };
     }
     const num = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0);
     for (let i = 0; i + SAMPLE_STRIDE <= data.length; i += SAMPLE_STRIDE) {
@@ -690,7 +704,12 @@ export class CulbuteRoom extends DurableObject<Env> {
       q.samples[0]!.input.pressed |= pressed;
     }
     const next = q.samples.shift();
-    if (!next) return { ...q.last, pressed: 0 };
+    if (!next) {
+      // Un trou court, le réseau qui hoquette : la commande tenue continue ; au-delà, plus rien n'est tenu
+      q.starved += 1;
+      return q.starved > STALE_STEPS ? { x: 0, y: 0, held: 0, pressed: 0 } : { ...q.last, pressed: 0 };
+    }
+    q.starved = 0;
     q.ack = next.seq;
     q.last = next.input;
     return next.input;
