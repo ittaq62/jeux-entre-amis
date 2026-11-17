@@ -832,6 +832,8 @@ export interface EscarmoucheRoomView {
   /** Les armes, le camouflage et la tenue de chaque siège */
   arsenal: Record<string, { primary: PrimaryId; secondary: SecondaryId; camo: CamoId; tenue: UniformId; muzzle: MuzzleId; extra: ExtraId }>;
   escarmouche: EscarmoucheView | null;
+  /** Quand la partie en cours (ou la dernière) a commencé : une revanche sur la même carte en est une autre */
+  startedAt?: number | null;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;

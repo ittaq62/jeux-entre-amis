@@ -1347,6 +1347,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         ]),
       ),
       escarmouche: d.match ? escarmoucheView(d.match) : null,
+      startedAt: d.startedAt,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

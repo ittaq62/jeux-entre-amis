@@ -19,6 +19,7 @@ import type { BattleListeners } from "./useEscarmoucheRoom.ts";
 import { WeaponIcon } from "./WeaponIcon.tsx";
 import { ffaKit } from "./scene/soldiers.ts";
 import { seededAvatar } from "../../shared/avatar.ts";
+import { runtimeKey } from "./runtimeKey.ts";
 
 const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
@@ -534,7 +535,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const { has } = useMyItems();
   const v = room.escarmouche!;
   const over = room.status === "finished" || v.phase === "over";
-  const mapKey = `${v.map}:${room.escarmouche?.liveAt}:${room.code}`;
+  const mapKey = runtimeKey(room);
   // Changer la qualité refait l'image tout de suite (la partie, elle, continue)
   const quality = usePrefs((p) => p.escQuality);
   const roomRef = useRef(room);

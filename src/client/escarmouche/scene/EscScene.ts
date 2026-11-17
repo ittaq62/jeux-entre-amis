@@ -399,6 +399,9 @@ export class EscScene {
     this.scene.remove(s.mark);
     this.scene.remove(s.cross);
     s.model.dispose();
+    // Son nom : une texture à lui (la marque et la croix sont partagées)
+    s.name.material.map?.dispose();
+    s.name.material.dispose();
     this.soldiers.delete(i);
   }
 
@@ -999,7 +1002,34 @@ export class EscScene {
     this.post?.dispose();
     this.skyMat.dispose();
     this.env.dispose();
+    // Tout le reste (caisses, bidons, dépôts, drapeaux, effets, l'arme en main, les textures gardées par les modules) :
+    // le prochain moteur reprend le même canvas, donc le même contexte, où ce qui n'est pas libéré resterait orphelin.
+    // Une matière ou une texture partagée, libérée ici, est simplement renvoyée à la carte graphique à sa prochaine image.
+    for (const root of [this.scene, this.vmScene]) disposeTree(root);
     this.renderer.dispose();
+  }
+}
+
+/** Libère les géométries, matières et textures de tout ce qui est sous `root` */
+function disposeTree(root: THREE.Object3D) {
+  const done = new Set<unknown>();
+  const free = (x: { dispose: () => void } | null | undefined) => {
+    if (!x || done.has(x)) return;
+    done.add(x);
+    x.dispose();
+  };
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    free(m.geometry);
+    const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+    for (const mat of mats) {
+      for (const v of Object.values(mat)) if (v instanceof THREE.Texture) free(v);
+      free(mat);
+    }
+  });
+  if (root instanceof THREE.Scene) {
+    if (root.background instanceof THREE.Texture) free(root.background);
+    if (root.environment instanceof THREE.Texture) free(root.environment);
   }
 }
 
