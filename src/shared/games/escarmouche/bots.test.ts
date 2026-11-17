@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botCommand, newBotMemory } from "./bot.ts";
+import { botCommand, findPath, flagRole, navOf, nearestNode, newBotMemory } from "./bot.ts";
 import { applyCmd, createMatch, worldStep, type EscEvent, type Match } from "./match.ts";
 import { DEFAULT_SETTINGS, type BotLevel } from "./rules.ts";
 import type { PrimaryId } from "./weapons.ts";
@@ -71,5 +71,47 @@ describe("Escarmouche : les bots, bien moins forts (surtout en facile)", () => {
       expect(r.shots, level).toBe(0);
       expect(r.mem.target, level).toBe(-1);
     }
+  });
+});
+
+describe("Escarmouche : le chemin des bots", () => {
+  // Des endroits où un bot collé contre un obstacle bas tombait sur une case posée dessus, isolée du reste : plus aucun
+  // chemin, et il restait planté jusqu'à ce qu'on l'abatte
+  it.each([
+    ["hameau", -31.9, 6.9, 27, 16],
+    ["hameau", -31.9, -9.6, 27, 16],
+    ["port", -38, 2.7, 25, 0],
+    ["col", -37.9, -2.9, 24, 4],
+  ] as const)("%s : de (%d, %d), un chemin mène au milieu et de l'autre côté", (map, x, z, tx, tz) => {
+    const nav = navOf(map);
+    const from = nearestNode(nav, x, 0, z);
+    expect(from).toBeGreaterThanOrEqual(0);
+    expect(findPath(nav, from, nearestNode(nav, 0, 0, 0)).length).toBeGreaterThan(0);
+    expect(findPath(nav, from, nearestNode(nav, tx, 0, tz)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Escarmouche : les bots à la capture du drapeau", () => {
+  it("dans chaque équipe, des bots attaquent et d'autres défendent (les équipes se font déjà par la parité des places)", () => {
+    const m = createMatch(
+      { ...DEFAULT_SETTINGS, map: "gare", mode: "drapeau" },
+      Array.from({ length: 6 }, (_, i) => ({ id: `b${i}`, team: i % 2, bot: true, primary: "fa" as const })),
+      3,
+    );
+    for (const team of [0, 1]) {
+      const roles = m.fighters.flatMap((f, i) => (f.team === team ? [flagRole(m, i)] : []));
+      expect(roles).toContain("attaque");
+      expect(roles).toContain("defense");
+    }
+    // Seul de son équipe, un bot attaque
+    const duo = createMatch(
+      { ...DEFAULT_SETTINGS, map: "gare", mode: "drapeau" },
+      [
+        { id: "a", team: 0, bot: true, primary: "fa" },
+        { id: "b", team: 1, bot: true, primary: "fa" },
+      ],
+      3,
+    );
+    expect([flagRole(duo, 0), flagRole(duo, 1)]).toEqual(["attaque", "attaque"]);
   });
 });

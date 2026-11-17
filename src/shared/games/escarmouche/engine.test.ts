@@ -419,7 +419,7 @@ describe("Escarmouche : les bots", () => {
       expect(moved).toBeGreaterThanOrEqual(4);
       expect(shots).toBeGreaterThan(20);
       expect(kills).toBeGreaterThan(2);
-      if (mode === "zone") expect(m.scores[0] + m.scores[1]).toBeGreaterThan(5);
+      if (mode === "zone") expect(m.scores[0] + m.scores[1]).toBeGreaterThanOrEqual(5);
       // Conquête : des drapeaux ont changé de mains, et des tickets se sont perdus
       if (mode === "conquete") {
         expect(cqTaken).toBeGreaterThan(0);

@@ -25,6 +25,9 @@ export interface Nav {
   /** Les cases de chaque colonne */
   cols: number[][];
   links: number[][];
+  /** Le morceau du graphe de chaque case ; `main`, le plus grand (le terrain de jeu, le reste étant des îlots) */
+  part: Int32Array;
+  main: number;
 }
 
 const CELL = 1;
@@ -139,7 +142,32 @@ export function buildNav(map: MapId): Nav {
       }
     }
   }
-  return { x0, z0, nx, nz, px: Float32Array.from(px), py: Float32Array.from(py), pz: Float32Array.from(pz), cols, links };
+  const { part, main } = parts(links);
+  return { x0, z0, nx, nz, px: Float32Array.from(px), py: Float32Array.from(py), pz: Float32Array.from(pz), cols, links, part, main };
+}
+
+/** Les morceaux du graphe (cases reliées entre elles), et le plus grand */
+function parts(links: number[][]): { part: Int32Array; main: number } {
+  const part = new Int32Array(links.length).fill(-1);
+  const sizes: number[] = [];
+  for (let start = 0; start < links.length; start++) {
+    if (part[start] !== -1) continue;
+    const id = sizes.length;
+    let size = 0;
+    const stack = [start];
+    part[start] = id;
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      size++;
+      for (const o of links[n]!) {
+        if (part[o] !== -1) continue;
+        part[o] = id;
+        stack.push(o);
+      }
+    }
+    sizes.push(size);
+  }
+  return { part, main: sizes.indexOf(Math.max(0, ...sizes)) };
 }
 
 /** On passe d'une case à l'autre en marchant : chaque quart de chemin a un sol à moins d'une marche du précédent */
@@ -166,8 +194,16 @@ export function navOf(map: MapId): Nav {
   return n;
 }
 
-/** La case la plus proche de ce point (même colonne d'abord, au sol le plus proche) */
+/**
+ * La case la plus proche de ce point (même colonne d'abord, au sol le plus proche), prise sur le terrain de jeu : une
+ * case posée sur un obstacle bas, isolée du reste, ne mène nulle part (le bot collé contre restait planté). Faute de
+ * mieux tout près, n'importe quelle case reliée.
+ */
 export function nearestNode(nav: Nav, x: number, y: number, z: number): number {
+  return nearestIn(nav, x, y, z, true) ?? nearestIn(nav, x, y, z, false) ?? -1;
+}
+
+function nearestIn(nav: Nav, x: number, y: number, z: number, mainOnly: boolean): number | null {
   const ci = Math.floor((x - nav.x0) / CELL);
   const ck = Math.floor((z - nav.z0) / CELL);
   let best = -1;
@@ -177,8 +213,9 @@ export function nearestNode(nav: Nav, x: number, y: number, z: number): number {
       for (let i = ci - r; i <= ci + r; i++) {
         if (i < 0 || k < 0 || i >= nav.nx || k >= nav.nz) continue;
         for (const n of nav.cols[k * nav.nx + i]!) {
+          if (nav.links[n]!.length === 0 || (mainOnly && nav.part[n] !== nav.main)) continue;
           const d = (nav.px[n]! - x) ** 2 + (nav.pz[n]! - z) ** 2 + ((nav.py[n]! - y) * 2) ** 2;
-          if (d < bestD && nav.links[n]!.length > 0) {
+          if (d < bestD) {
             bestD = d;
             best = n;
           }
@@ -186,7 +223,7 @@ export function nearestNode(nav: Nav, x: number, y: number, z: number): number {
       }
     }
   }
-  return best;
+  return best < 0 ? null : best;
 }
 
 /** Le chemin le plus court d'une case à l'autre (A*), en liste de cases ; vide s'il n'y en a pas */
@@ -358,7 +395,6 @@ export interface BotMemory {
   stuckSince: number;
   thinkAt: number;
   fireToggle: boolean;
-  role: "attaque" | "defense";
   wander: number;
   seq: number;
   /** Le dernier adversaire qui l'a touché, quand, et d'où venait le coup (pas sa position d'après) */
@@ -392,7 +428,6 @@ export function newBotMemory(i: number, yaw: number): BotMemory {
     stuckSince: 0,
     thinkAt: (i % 6) / 60,
     fireToggle: false,
-    role: i % 2 === 0 ? "attaque" : "defense",
     wander: 0,
     seq: 0,
     hurtBy: -1,
@@ -698,6 +733,17 @@ export function botHurt(mem: BotMemory, by: number, t: number, x: number, z: num
   mem.hurtZ = z;
 }
 
+/**
+ * Capture du drapeau : les bots d'une même équipe alternent, un qui attaque, un qui défend, et ainsi de suite (un bot
+ * seul dans son équipe attaque). La parité de la place ne suffit pas : les équipes se font déjà par elle, et toute une
+ * équipe défendait pendant que l'autre attaquait.
+ */
+export function flagRole(m: Match, i: number): "attaque" | "defense" {
+  const team = m.fighters[i]!.team;
+  const mates = m.fighters.flatMap((g, j) => (g.bot && g.team === team ? [j] : []));
+  return mates.length > 1 && mates.indexOf(i) % 2 === 1 ? "defense" : "attaque";
+}
+
 /** Où aller quand rien ne presse : selon le mode, chercher les adversaires, tenir la zone, prendre ou défendre un drapeau */
 function pickGoal(m: Match, i: number, mem: BotMemory) {
   const f = m.fighters[i]!;
@@ -770,8 +816,7 @@ function pickGoal(m: Match, i: number, mem: BotMemory) {
       const target = own.at === "carried" ? m.fighters[own.carrier]!.s : own;
       return set(target.x, target.y, target.z, 1.5);
     }
-    const defenders = m.fighters.filter((g) => g.bot && g.team === f.team).length;
-    if (mem.role === "defense" && defenders > 1) {
+    if (flagRole(m, i) === "defense") {
       const a = rand(mem) * Math.PI * 2;
       return set(home.x + Math.cos(a) * 5 + (mine === 0 ? 6 : -6), 0, home.z + Math.sin(a) * 6, 5);
     }
