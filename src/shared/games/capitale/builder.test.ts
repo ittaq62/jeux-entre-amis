@@ -383,6 +383,21 @@ describe("les règles de la Capitale, en Builder", () => {
     expect(buyoutShield(s, "a", PARIS)).toBe("Un monument ne se rachète pas.");
   });
 
+  it("pendant qu'un adversaire décide du rachat, le propriétaire ne bâtit ni n'annexe dans cette ville (ailleurs, si)", () => {
+    const s = game();
+    own(s, "b", PARIS, LYON);
+    build(s, "b", PARIS, "maison", 30, 30);
+    s.pendingBuyout = PARIS;
+    s.step = "buyout";
+    expect(actorOf(s)).toBe("a");
+    expect(fail(s, "b", { type: "build", square: PARIS, kind: "monument", x: 34, z: 34, rot: 0 })).toMatch(/rachat/);
+    expect(fail(s, "b", { type: "build", square: PARIS, kind: "maison", x: 31, z: 30, rot: 0 })).toMatch(/rachat/);
+    expect(fail(s, "b", { type: "annex", square: PARIS, cell: cellIndex(29, 30) })).toMatch(/rachat/);
+    build(s, "b", LYON, "maison", 30, 24);
+    expect(s.step).toBe("buyout");
+    expect(s.pendingBuyout).toBe(PARIS);
+  });
+
   it("la fortune compte les bâtiments et le terrain ; la liquidité, la moitié des bâtiments", () => {
     const s = game();
     own(s, "a", PARIS);

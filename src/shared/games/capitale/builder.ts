@@ -414,6 +414,14 @@ function rightProblem(s: CapitaleState, playerId: string, raise = false): string
   return null;
 }
 
+/**
+ * Un adversaire décide de racheter cette ville : le propriétaire n'y touche plus le temps de sa réponse (un monument,
+ * un bâtiment qui fait monter le prix ou un stade ferait échouer le rachat sous son nez). Démolir reste permis.
+ */
+function buyoutLock(s: CapitaleState, index: number): string | null {
+  return s.step === "buyout" && s.pendingBuyout === index ? "Un rachat de cette ville se décide : attends la réponse." : null;
+}
+
 function cityProblem(s: CapitaleState, playerId: string, index: number): string | null {
   const deed = s.deeds[index];
   if (!TERRITORIES[index] || !deed) return "On ne bâtit que dans les villes.";
@@ -430,7 +438,7 @@ export function kindProblem(s: CapitaleState, playerId: string, index: number, k
   const right = rightProblem(s, playerId);
   if (right) return right;
   if (!isBuildKind(kind)) return "Ce bâtiment n'existe pas.";
-  const city = cityProblem(s, playerId, index);
+  const city = cityProblem(s, playerId, index) ?? buyoutLock(s, index);
   if (city) return city;
   const info = BUILDS[kind];
   if (info.special && !s.settings.specials) return "Les bâtiments spéciaux ne sont pas de la partie.";
@@ -499,7 +507,7 @@ export function demolishProblem(s: CapitaleState, playerId: string, index: numbe
 export function annexProblem(s: CapitaleState, playerId: string, index: number, cell: number): string | null {
   const right = rightProblem(s, playerId);
   if (right) return right;
-  const city = cityProblem(s, playerId, index);
+  const city = cityProblem(s, playerId, index) ?? buyoutLock(s, index);
   if (city) return city;
   if (!Number.isInteger(cell) || !isVague(cell)) return "On n'annexe que du terrain vague.";
   if (annexedBy(s, cell) !== null) return "Cette case est déjà annexée.";
