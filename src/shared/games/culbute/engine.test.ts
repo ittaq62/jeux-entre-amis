@@ -402,6 +402,32 @@ describe("Culbute : le combat", () => {
     expect(f.winners).toEqual([2]);
   });
 
+  it("aux vies, deux sorties sur la même image : la même place pour les deux, quel que soit l'ordre des sièges", () => {
+    for (const order of [
+      ["ginette", "marcel", "simone"],
+      ["marcel", "ginette", "simone"],
+    ] as HabitueId[][]) {
+      const f = createFight({ ...DEFAULT_FIGHT_SETTINGS, stocks: 1, items: "aucun" }, "clocher", entrants(order), 7);
+      skipIntro(f);
+      const drop = (i: number) => {
+        const ft = f.fighters[i]!;
+        ft.x = 0;
+        ft.y = -20;
+        ft.ground = -1;
+        ft.state = "air";
+      };
+      // Le troisième sort d'abord ; puis les deux derniers ensemble
+      drop(2);
+      run(f, 2);
+      drop(0);
+      drop(1);
+      run(f, 2);
+      expect(f.phase).toBe("over");
+      expect(f.fighters.map((ft) => ft.rank)).toEqual([1, 1, 3]);
+      expect(f.winners).toEqual([0, 1]);
+    }
+  });
+
   it("au temps, sortir quelqu'un rapporte un point et tomber en coûte un", () => {
     const f = createFight(
       { ...DEFAULT_FIGHT_SETTINGS, mode: "temps", minutes: 2, items: "aucun" },

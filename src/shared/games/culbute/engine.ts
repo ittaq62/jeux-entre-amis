@@ -2048,6 +2048,9 @@ function updateTraps(f: Fight) {
 
 function checkBlast(f: Fight) {
   const b = blastOf(f.arena as ArenaId, f.scale);
+  // Ceux qui sortent pour de bon sur cette même image : ils partagent la meilleure de leurs places (pas d'avantage au
+  // numéro de siège)
+  const outNow: Fighter[] = [];
   for (const ft of f.fighters) {
     if (ft.state === "dead" || ft.state === "out" || ft.state === "respawn") continue;
     const top = ft.y > b.top && ft.state === "hurt";
@@ -2074,9 +2077,12 @@ function checkBlast(f: Fight) {
     ft.wait = DEAD_FRAMES;
     if (f.settings.mode !== "temps" && ft.stocks <= 0) {
       f.outCount++;
-      ft.rank = f.fighters.length - f.outCount + 1;
+      outNow.push(ft);
+      const rank = f.fighters.length - f.outCount + 1;
+      for (const o of outNow) o.rank = rank;
+      for (const e of pending) if (e.k === "out" && outNow.some((o) => o.slot === e.v)) e.rank = rank;
       setState(ft, "out");
-      pending.push({ k: "out", v: ft.slot, rank: ft.rank });
+      pending.push({ k: "out", v: ft.slot, rank });
     }
   }
 }
