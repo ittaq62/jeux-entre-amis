@@ -11,6 +11,13 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 
+// Le bot qui joue : on garde le vrai, en notant le niveau qu'on lui demande
+vi.mock("../shared/games/culbute/bot.ts", async (actual) => {
+  const real = await actual<typeof import("../shared/games/culbute/bot.ts")>();
+  return { ...real, botInput: vi.fn(real.botInput) };
+});
+
+import { botInput } from "../shared/games/culbute/bot.ts";
 import type { Fight } from "../shared/games/culbute/engine.ts";
 import type { Input } from "../shared/games/culbute/model.ts";
 import { CulbuteRoom } from "./culbuteRoom.ts";
@@ -83,5 +90,31 @@ describe("Culbute : les commandes des joueurs", () => {
     // Il revient : ses commandes reprennent
     await bench.send(host, { t: "in", s: 2, d: [-1, 0, 0, 0], c: 2 });
     expect(inside.inputs(f)[mine()]!.x).toBe(-1);
+  });
+});
+
+describe("Culbute : le bot qui remplace un joueur parti", () => {
+  it("joue au niveau de la table, comme les autres bots", async () => {
+    const state = new FakeState();
+    const room = new CulbuteRoom(state as never, fakeEnv() as never);
+    const inside = room as unknown as Inside & { data: { seats: { id: string; kind: string; autoplay: unknown }[] } };
+    rooms.push(inside);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "settings", settings: { botLevel: "facile" } });
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "start" });
+    inside.stopLoop();
+    const me = inside.data.seats.find((s) => s.kind === "human")!;
+    me.autoplay = "away";
+    const f = inside.data.fight!;
+    const slot = f.fighters.findIndex((ft) => ft.id === me.id);
+    vi.mocked(botInput).mockClear();
+    inside.inputs(f);
+    const asked = vi.mocked(botInput).mock.calls.map((c) => [c[1], c[3]]);
+    expect(asked).toContainEqual([slot, "facile"]);
+    expect(asked.every(([, level]) => level === "facile")).toBe(true);
   });
 });

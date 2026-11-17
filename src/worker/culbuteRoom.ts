@@ -849,8 +849,8 @@ export class CulbuteRoom extends DurableObject<Env> {
         mem = newBotMemory(f.rng ^ (ft.slot * 7919));
         this.memory.set(ft.id, mem);
       }
-      // Un joueur parti : un bot moyen tient sa place
-      return botInput(f, ft.slot, mem, seat?.kind === "human" ? "moyen" : level);
+      // Un joueur parti : un bot tient sa place, au niveau de la table (comme à Escarmouche)
+      return botInput(f, ft.slot, mem, level);
     });
   }
 
