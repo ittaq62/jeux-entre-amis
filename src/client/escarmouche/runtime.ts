@@ -95,6 +95,8 @@ export interface HudState {
   /** Le réticule : son écart, en pixels */
   spread: number;
   back: number;
+  /** Sabotage : tombé, plus de renforts pour revenir */
+  noReinforcements: boolean;
   next: PrimaryId;
   nextSecondary: SecondaryId;
   killer: { name: string; weapon: KillWeapon; head: boolean; hp: number | null } | null;
@@ -194,6 +196,7 @@ export class BattleRuntime {
   private taps = 0;
   private hp = 100;
   private back = 0;
+  private noReinforcements = false;
   private next: PrimaryId = "fa";
   private nextSecondary: SecondaryId = "pistolet";
   private err = new THREE.Vector3();
@@ -456,6 +459,7 @@ export class BattleRuntime {
     this.me = me.i;
     this.hp = me.hp;
     this.back = me.back;
+    this.noReinforcements = Boolean(me.noReinforcements);
     this.next = me.next;
     this.nextSecondary = me.nextSecondary;
     this.spawnOn = me.spawnOn ?? -1;
@@ -1511,6 +1515,7 @@ export class BattleRuntime {
       scoped,
       spread: Math.max(4, spread),
       back: this.back,
+      noReinforcements: this.noReinforcements,
       next: this.next,
       nextSecondary: this.nextSecondary,
       killer: this.killer,

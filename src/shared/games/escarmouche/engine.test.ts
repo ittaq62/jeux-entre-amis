@@ -1365,6 +1365,25 @@ describe("Escarmouche : le sabotage", () => {
     expect(m2.winner).toBe(1);
   });
 
+  it("plus de renforts : un attaquant tombé ne revient plus (un coéquipier peut encore le relever), et la partie finit", () => {
+    const m = raid();
+    m.scores[0] = 0;
+    const ev: EscEvent[] = [];
+    while (m.fighters[0]!.s.alive) hurt(m, 0, 2, 50, 1, "fa", ev, 0, 1, 0);
+    giveUp(m, 0);
+    for (let k = 0; k < Math.round(6 / DT); k++) worldStep(m, ev);
+    expect(m.fighters[0]!.s.alive).toBe(false);
+    expect(m.scores[0]).toBe(0);
+    expect(encodeMe(m, 0).back).toBe(0);
+    expect(encodeMe(m, 0).noReinforcements).toBe(true);
+    // Le dernier attaquant debout tombe à son tour : les défenseurs gagnent
+    while (m.fighters[1]!.s.alive) hurt(m, 1, 2, 50, 1, "fa", ev, 0, 1, 0);
+    giveUp(m, 1);
+    for (let k = 0; k < 10 && m.phase !== "over"; k++) worldStep(m, ev);
+    expect(m.phase).toBe("over");
+    expect(m.winner).toBe(1);
+  });
+
   it("plus de renforts, plus personne debout et aucune charge posée : les défenseurs gagnent", () => {
     const m = raid();
     m.scores[0] = 0;

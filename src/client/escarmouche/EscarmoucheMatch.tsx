@@ -852,6 +852,8 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                     Revenir maintenant
                   </button>
                 </div>
+              ) : h.noReinforcements ? (
+                <p className="hint">Plus de renforts : tu ne reviens plus avant la fin de la partie.</p>
               ) : (
                 <p className="hint">Retour au combat dans {Math.ceil(h.back)} s</p>
               )}

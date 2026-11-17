@@ -938,6 +938,11 @@ export function waitingRescue(m: Match, i: number): boolean {
   return m.fighters.some((g, j) => j !== i && g.team === f.team && g.s.alive && Math.hypot(g.s.x - f.s.x, g.s.z - f.s.z) < REVIVE.near);
 }
 
+/** Sabotage : un attaquant tombé quand ses renforts sont épuisés ne revient plus (un coéquipier peut encore le relever) */
+export function outOfReinforcements(m: Match, i: number): boolean {
+  return Boolean(m.sab) && m.fighters[i]!.team !== 1 && m.scores[0]! <= 0;
+}
+
 /** Il préfère revenir tout de suite plutôt qu'attendre qu'on le relève */
 export function giveUp(m: Match, i: number) {
   const f = m.fighters[i];
@@ -1199,7 +1204,7 @@ export function worldStep(m: Match, ev: EscEvent[]) {
   for (let i = 0; i < m.fighters.length; i++) {
     const f = m.fighters[i]!;
     if (!f.s.alive) {
-      if (m.phase === "live" && m.t >= f.respawnAt && !waitingRescue(m, i)) {
+      if (m.phase === "live" && m.t >= f.respawnAt && !waitingRescue(m, i) && !outOfReinforcements(m, i)) {
         if (m.cq && f.bot) f.spawnOn = botFlagSpawn(m, i);
         const onFlag = m.cq && f.spawnOn <= -2 ? flagSpawn(m, i, world) : null;
         const near = onFlag ? null : besideTeammate(m, i, world);

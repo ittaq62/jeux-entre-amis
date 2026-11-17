@@ -3,7 +3,17 @@
 // entier, pour se recaler sur ce que le serveur a retenu de ses pas.
 
 import type { MapId } from "./maps.ts";
-import { isTeamMode, REVIVE, SABOTAGE, TEAMSPAWN, waitingRescue, type EscEvent, type FighterStats, type Match } from "./match.ts";
+import {
+  isTeamMode,
+  outOfReinforcements,
+  REVIVE,
+  SABOTAGE,
+  TEAMSPAWN,
+  waitingRescue,
+  type EscEvent,
+  type FighterStats,
+  type Match,
+} from "./match.ts";
 import type { EscarmoucheSettings, Mode } from "./rules.ts";
 import type { Soldier } from "./soldier.ts";
 import { WEAPON_IDS, type PrimaryId, type SecondaryId, type WeaponId } from "./weapons.ts";
@@ -116,6 +126,8 @@ export interface EscMe {
   sab?: [number, number];
   /** Tombé, il attend qu'un coéquipier tout près le relève */
   waiting?: boolean;
+  /** Sabotage : tombé, plus de renforts pour revenir */
+  noReinforcements?: boolean;
 }
 
 const cm = (v: number) => Math.round(v * 100);
@@ -181,7 +193,7 @@ export function encodeMe(m: Match, i: number): EscMe {
     i,
     s: f.s,
     hp: Math.ceil(f.hp),
-    back: f.s.alive ? 0 : Math.max(0, f.respawnAt - m.t),
+    back: f.s.alive || outOfReinforcements(m, i) ? 0 : Math.max(0, f.respawnAt - m.t),
     next: f.next,
     nextSecondary: f.nextSecondary,
     spawnOn: f.spawnOn,
@@ -191,6 +203,7 @@ export function encodeMe(m: Match, i: number): EscMe {
   const r = m.fighters.findIndex((g) => g.reviving === i);
   if (r >= 0) me.rescue = [r, Math.min(1, m.fighters[r]!.reviveT / REVIVE.time)];
   if (!f.s.alive && m.t >= f.respawnAt && waitingRescue(m, i)) me.waiting = true;
+  if (!f.s.alive && outOfReinforcements(m, i)) me.noReinforcements = true;
   return me;
 }
 
