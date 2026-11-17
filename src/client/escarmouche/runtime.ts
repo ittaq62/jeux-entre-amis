@@ -52,6 +52,7 @@ import type { Surface } from "./scene/effects.ts";
 import { drawCompass, Radar, type RadarDot } from "./radar.ts";
 import { pickQuality } from "./scene/quality.ts";
 import { ffaKit, TEAM_KITS } from "./scene/soldiers.ts";
+import { due, enqueue } from "./eventQueue.ts";
 
 /** Les boutons qui ne comptent qu'au moment de l'appui (gardés jusqu'au prochain pas) */
 const TAPS = B.reload | B.grenade | B.melee | B.swap | B.slot1 | B.slot2 | B.jump | B.spot;
@@ -449,7 +450,7 @@ export class BattleRuntime {
       // Ce qui touche le joueur lui-même passe tout de suite ; le reste au moment où on le voit arriver
       const mine = this.me >= 0 && ("a" in e && e.a === this.me ? true : "v" in e && e.v === this.me ? true : "i" in e && e.i === this.me);
       if (mine || e.k === "live" || e.k === "over") this.handle(e);
-      else this.queue.push({ at: now, e });
+      else enqueue(this.queue, now, e);
     }
     if (me) this.reconcile(me);
   }
@@ -892,7 +893,7 @@ export class BattleRuntime {
     const v = this.room.escarmouche;
     if (!v) return;
     const rt = this.renderTime(t);
-    while (this.queue.length > 0 && this.queue[0]!.at <= rt) this.handle(this.queue.shift()!.e);
+    for (const e of due(this.queue, rt)) this.handle(e);
     const r = this.controls.read();
     const prefs = usePrefs.getState();
     const s = this.pred;
