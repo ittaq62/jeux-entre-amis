@@ -652,8 +652,10 @@ export class BuilderCity {
       const grew = owner !== null && o.ownedKey.startsWith(`${owner}|`) && area.size > o.ownedKey.split(",").length;
       o.ownedKey = ownedKey;
       if (o.owned) {
-        this.root.remove(o.owned);
-        o.owned.traverse((m) => (m as THREE.Mesh).geometry?.dispose());
+        // Par la scène : le drapeau quitte aussi la liste de ceux qu'elle anime (et les géométries sont libérées)
+        const veil = o.owned.children.find((c) => c.userData.ownerVeil) as THREE.Mesh | undefined;
+        (veil?.material as THREE.Material | undefined)?.dispose();
+        this.hooks.remove(o.owned, false);
       }
       o.owned = null;
       if (owner) {
@@ -662,6 +664,7 @@ export class BuilderCity {
         if (veil) {
           const m = new THREE.Mesh(veil, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false }));
           m.renderOrder = 1;
+          m.userData.ownerVeil = true;
           g.add(m);
         }
         const line = BuilderCity.border(area, 0.034, 0.018);
@@ -819,11 +822,13 @@ export class BuilderCity {
     if (this.overlay) {
       this.root.remove(this.overlay);
       this.overlay.geometry.dispose();
+      (this.overlay.material as THREE.Material).dispose();
       this.overlay = null;
     }
     if (this.selectFrame) {
       this.root.remove(this.selectFrame);
       this.selectFrame.geometry.dispose();
+      (this.selectFrame.material as THREE.Material).dispose();
       this.selectFrame = null;
     }
     if (p && p.cells.length > 0) {
@@ -861,10 +866,18 @@ export class BuilderCity {
     const g = p?.ghost ?? null;
     const key = g ? `${g.kind}|${g.square}|${g.color}|${g.ok}|${g.rot & 3}|${g.x}|${g.z}` : "";
     if (this.ghost && this.ghost.key !== key) {
+      // Un modèle neuf à chaque case visée : l'ancien est libéré (ses matières, des copies gardées, restent pour le suivant)
       this.root.remove(this.ghost.obj);
+      this.ghost.obj.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
       this.ghost = null;
     }
     if (g && !this.ghost) {
+      // Quelques modèles font une matière neuve à chaque fois (fanions, jets d'eau) : leurs copies fantômes ne
+      // s'entassent pas sans fin (aucune n'est montrée à cet instant : l'ancien fantôme vient de partir)
+      if (this.ghostMats.size >= 400) {
+        for (const m of this.ghostMats.values()) m.dispose();
+        this.ghostMats.clear();
+      }
       const { obj } = placedModel({ ...g, id: 1 }, g.square, g.color);
       obj.traverse((m) => {
         const mesh = m as THREE.Mesh;

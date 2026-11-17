@@ -1271,6 +1271,8 @@ export class CapitaleScene {
     const done = () => {
       o.parent?.remove(o);
       this.flags = this.flags.filter((f) => !isDescendant(f, o));
+      // Parti pour de bon : ses géométries aussi (les matières, souvent partagées, restent)
+      o.traverse((c) => (c as THREE.Mesh).geometry?.dispose());
     };
     if (!animate) return done();
     const sy = o.scale.y;
@@ -1865,7 +1867,15 @@ export class CapitaleScene {
             }
           });
         }
-        this.setVeil(`b${i}:${(s?.deeds[i]?.annexed ?? []).length}`, this.filter !== null && !on, () => {
+        // La ville a grandi (annexion) : son ancien voile, à l'ancienne taille, part (il restait gris après le filtre)
+        const veilKey = `b${i}:${(s?.deeds[i]?.annexed ?? []).length}`;
+        for (const [k, v] of this.veils) {
+          if (!k.startsWith(`b${i}:`) || k === veilKey) continue;
+          this.scene.remove(v);
+          v.geometry.dispose();
+          this.veils.delete(k);
+        }
+        this.setVeil(veilKey, this.filter !== null && !on, () => {
           const geo = BuilderCity.veil(new Set([...baseCells(i), ...(s?.deeds[i]?.annexed ?? [])]), 0)!;
           return geo;
         });
