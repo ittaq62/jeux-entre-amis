@@ -7,6 +7,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { FighterStageView } from "./FighterStageView.tsx";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
+import { overTitle } from "./overTitle.ts";
 
 const place = (r: number) => (r === 1 ? "1er" : `${r}e`);
 
@@ -30,15 +31,7 @@ export function CulbuteGameOver({
   const ranks = view.ranks ?? [];
   const order = view.fighters.map((f) => f.slot).sort((a, b) => (ranks[a] ?? 9) - (ranks[b] ?? 9));
   const winners = order.filter((i) => ranks[i] === 1);
-  const teamWin = view.config.teams && winners.length > 0;
-  const title =
-    winners.length === 0
-      ? "Fin du combat"
-      : teamWin
-        ? `Victoire des ${view.fighters[winners[0]!]!.team === 0 ? "Rouges" : "Bleus"}`
-        : winners.length === 1
-          ? `${looks[winners[0]!]?.name ?? "?"} gagne !`
-          : "Égalité en tête";
+  const title = overTitle(view, (slot) => looks[slot]?.name);
   const seated = room.you.seatId !== null;
   const asked = room.rematch.includes(room.you.userId);
   const timed = view.config.mode === "temps";
