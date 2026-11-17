@@ -89,4 +89,29 @@ describe("Capitale Builder à la table", () => {
     await bench.send(host, { t: "action", action: { type: "build", square: 39, kind: "maison", x: 0, z: 0, rot: 0 } });
     expect(host.inbox.some((m) => m.t === "error" && m.message === "Hors des frontières de la ville.")).toBe(true);
   });
+
+  it("tourner ses bâtiments sans arrêt pendant le tour d'un bot ne repousse pas son coup", async () => {
+    vi.useFakeTimers();
+    let now = Date.now();
+    vi.setSystemTime(now);
+    const { bench, host } = await table({ builder: true, end: "bankrupt" }, 2);
+    await bench.send(host, { t: "start" });
+    const d = bench.data<{ capitale: CapitaleState; animUntil: number; seats: { id: string; kind: string }[] }>();
+    const g = d.capitale;
+    const me = d.seats.find((s) => s.kind === "human")!.id;
+    g.turn = g.players.findIndex((p) => p.id !== me);
+    g.step = "roll";
+    g.deeds[39]!.owner = me;
+    now += 5_000;
+    vi.setSystemTime(now);
+    await bench.send(host, { t: "action", action: { type: "build", square: 39, kind: "immeuble", x: 30, z: 30, rot: 0 } });
+    const before = d.animUntil;
+    for (let k = 0; k < 20; k++) {
+      now += 130;
+      vi.setSystemTime(now);
+      await bench.send(host, { t: "action", action: { type: "relocate", square: 39, id: 1, x: 30, z: 30, rot: k % 2 } });
+    }
+    expect(g.deeds[39]!.lot![0]!.rot).toBe(1);
+    expect(d.animUntil).toBe(before);
+  });
 });

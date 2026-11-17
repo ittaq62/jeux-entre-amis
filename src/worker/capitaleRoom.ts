@@ -561,7 +561,7 @@ export class CapitaleRoom extends DurableObject<Env> {
         }
         seat.missed = 0;
         if (!aside) d.actionSeq += 1;
-        return this.afterChange(res.events, now);
+        return this.afterChange(res.events, now, undefined, aside);
       }
 
       case "takeBack": {
@@ -875,13 +875,14 @@ export class CapitaleRoom extends DurableObject<Env> {
   // Boucle : après chaque changement, on programme la suite
   // -------------------------------------------------------------------------
 
-  private async afterChange(events: CapitaleEvent[], now: number, closing?: WebSocket) {
+  /** `aside` : des travaux faits hors de son tour, qui ne repoussent pas la suite de la partie */
+  private async afterChange(events: CapitaleEvent[], now: number, closing?: WebSocket, aside = false) {
     const d = this.data;
     if (!d) return;
     let finished = false;
     const g = d.capitale;
     if (g && d.status === "playing") {
-      if (events.length > 0) d.animUntil = Math.max(d.animUntil ?? 0, now) + batchMs(events);
+      if (events.length > 0 && !aside) d.animUntil = Math.max(d.animUntil ?? 0, now) + batchMs(events);
       this.narrate(events);
       if (g.step === "over") {
         d.status = "finished";
