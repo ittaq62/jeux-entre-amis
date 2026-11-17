@@ -509,6 +509,8 @@ export class CulbuteRoom extends DurableObject<Env> {
 
       case "team": {
         if (!seat || d.status === "playing" || (msg.team !== 0 && msg.team !== 1)) return;
+        // Rien qui change, ou un changement par-dessus l'autre : ni écriture ni envoi à toute la table
+        if (seat.team === msg.team || !this.allowMessage(`team:${userId}`, 150)) return;
         seat.team = msg.team;
         return this.afterChange([], now);
       }

@@ -53,3 +53,25 @@ describe.each(ROOMS)("$name", ({ Room }) => {
     room.stopLoop?.();
   });
 });
+
+describe.each([
+  { name: "culbute", Room: CulbuteRoom as unknown as RoomClass },
+  { name: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass },
+])("$name", ({ Room }) => {
+  it("changer d'équipe en rafale au salon : pas une écriture par message", async () => {
+    const state = new FakeState();
+    const room = new Room(state as never, fakeEnv() as never);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    let writes = 0;
+    const put = state.storage.put;
+    state.storage.put = async (key: string, value: unknown) => {
+      writes++;
+      return put(key, value);
+    };
+    for (let k = 0; k < 50; k++) await bench.send(host, { t: "team", team: k % 2 });
+    expect(writes).toBeLessThanOrEqual(2);
+  });
+});

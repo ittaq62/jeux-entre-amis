@@ -663,7 +663,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       case "team": {
         if (d.status === "playing" || (msg.team !== 0 && msg.team !== 1)) return;
         const target = msg.seatId && isHost ? d.seats.find((s) => s.id === msg.seatId) : seat;
-        if (!target) return;
+        // Rien qui change, ou un changement par-dessus l'autre : ni écriture ni envoi à toute la table
+        if (!target || target.team === msg.team || !this.allowMessage(`team:${userId}`, 150)) return;
         target.team = msg.team;
         return this.afterChange([], now);
       }
