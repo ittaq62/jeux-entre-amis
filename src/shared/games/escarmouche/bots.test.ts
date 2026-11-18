@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { botCommand, findPath, flagRole, navOf, nearestNode, newBotMemory } from "./bot.ts";
+import { botCommand, botHurt, findPath, flagJob, flagRole, navOf, nearestNode, newBotMemory, type BotMemory, type FlagJob } from "./bot.ts";
+import type { MapId } from "./maps.ts";
 import { applyCmd, createMatch, worldStep, type EscEvent, type Match } from "./match.ts";
 import { DEFAULT_SETTINGS, type BotLevel } from "./rules.ts";
 import type { PrimaryId } from "./weapons.ts";
@@ -114,4 +115,112 @@ describe("Escarmouche : les bots à la capture du drapeau", () => {
     );
     expect([flagRole(duo, 0), flagRole(duo, 1)]).toEqual(["attaque", "attaque"]);
   });
+});
+
+describe("Escarmouche : ce que fait chaque bot à la capture du drapeau", () => {
+  /** Huit bots au Hameau (équipe 0 à l'ouest, drapeau en -41 ; équipe 1 à l'est, en 41), la partie lancée */
+  function ctf() {
+    const m = createMatch(
+      { ...DEFAULT_SETTINGS, map: "hameau", mode: "drapeau" },
+      Array.from({ length: 8 }, (_, i) => ({ id: `b${i}`, team: i % 2, bot: true, primary: "fa" as const })),
+      3,
+    );
+    const ev: EscEvent[] = [];
+    while (m.phase === "countdown") worldStep(m, ev);
+    return m;
+  }
+  const at = (m: Match, i: number, x: number, z: number) => Object.assign(m.fighters[i]!.s, { x, y: 0, z });
+
+  it("sur quatre bots, trois attaquent et un défend", () => {
+    const m = ctf();
+    for (const team of [0, 1]) {
+      const roles = m.fighters.flatMap((f, i) => (f.team === team ? [flagRole(m, i)] : []));
+      expect(roles.filter((r) => r === "defense")).toHaveLength(1);
+    }
+  });
+
+  it("le porteur file chez lui, ses coéquipiers l'escortent ; en face, on court après son drapeau", () => {
+    const m = ctf();
+    // Équipe 0 : 0, 2, 4, 6 (le défenseur est 2) ; équipe 1 : 1, 3, 5, 7 (le défenseur est 3)
+    expect(m.fighters.map((_, i) => flagRole(m, i))).toEqual([
+      "attaque",
+      "attaque",
+      "defense",
+      "defense",
+      "attaque",
+      "attaque",
+      "attaque",
+      "attaque",
+    ]);
+    // 0 a pris le drapeau des bleus, il est au milieu
+    at(m, 0, 5, 0);
+    m.fighters[0]!.carrying = 1;
+    Object.assign(m.flags![1], { at: "carried", carrier: 0 });
+    at(m, 2, -38, 2);
+    at(m, 4, 20, 10);
+    at(m, 1, 20, 0);
+    at(m, 5, -30, 0);
+    const jobs = m.fighters.map((_, i) => flagJob(m, i));
+    expect(jobs[0]).toBe<FlagJob>("porteur");
+    // Ses attaquants l'escortent ; son défenseur, loin de lui, garde le drapeau
+    expect(jobs[4]).toBe<FlagJob>("escorte");
+    expect(jobs[2]).toBe<FlagJob>("defense");
+    // Chez les bleus, le défenseur reprend le drapeau, comme l'attaquant qui en est tout près ; celui qui est loin attaque
+    expect(jobs[3]).toBe<FlagJob>("reprise");
+    expect(jobs[1]).toBe<FlagJob>("reprise");
+    expect(jobs[5]).toBe<FlagJob>("attaque");
+    // Le porteur revient chez lui, le défenseur passe tout près : il l'escorte aussi
+    at(m, 0, -30, 0);
+    expect(flagJob(m, 2)).toBe<FlagJob>("escorte");
+  });
+});
+
+/** Une partie de capture du drapeau entre bots (quatre contre quatre), et ce qu'ils y ont fait */
+function ctfGame(map: MapId, level: BotLevel, seed: number, minutes = 8) {
+  const m = createMatch(
+    { ...DEFAULT_SETTINGS, map, mode: "drapeau", botLevel: level, minutes },
+    Array.from({ length: 8 }, (_, i) => ({
+      id: `b${i}`,
+      team: i % 2,
+      bot: true,
+      primary: (["fa", "pm", "pompe", "precision"] as const)[(i >> 1) % 4]!,
+    })),
+    seed,
+  );
+  const mems: BotMemory[] = m.fighters.map((f, i) => newBotMemory(i, f.s.yaw));
+  const out = { takes: 0, returns: 0, jobs: {} as Partial<Record<FlagJob, number>> };
+  let step = 0;
+  while (m.phase !== "over") {
+    const ev: EscEvent[] = [];
+    worldStep(m, ev);
+    m.fighters.forEach((_, i) => applyCmd(m, i, botCommand(m, i, mems[i]!, level, step * 16), null, ev));
+    step++;
+    for (const e of ev) {
+      // Comme sur le serveur : un bot touché se retourne vers le tireur
+      if (e.k === "hit" && e.a >= 0) botHurt(mems[e.v]!, e.a, m.t, m.fighters[e.a]!.s.x, m.fighters[e.a]!.s.z);
+      if (e.k === "flag" && e.f === "take") out.takes++;
+      if (e.k === "flag" && e.f === "return" && e.i >= 0) out.returns++;
+    }
+    m.fighters.forEach((f, i) => {
+      const job = mems[i]!.job;
+      if (f.s.alive && job) out.jobs[job] = (out.jobs[job] ?? 0) + 1 / 60;
+    });
+  }
+  return out;
+}
+
+// Mesuré avant (24 parties de 8 minutes, quatre cartes, trois niveaux) : une seule prise en tout. Les deux attaquants de
+// chaque équipe prenaient la même avenue, s'entretuaient au milieu et ne dépassaient jamais la moitié de la carte.
+describe("Escarmouche : entre bots, la capture du drapeau se joue vraiment, à chaque niveau", () => {
+  it.each(["facile", "moyen", "fort"] as BotLevel[])(
+    "%s : ils prennent le drapeau, le portent, l'escortent, défendent et reprennent le leur",
+    (level) => {
+      const games = [ctfGame("hameau", level, 1), ctfGame("port", level, 2)];
+      const sum = (k: "takes" | "returns") => games.reduce((a, g) => a + g[k], 0);
+      const time = (j: FlagJob) => games.reduce((a, g) => a + (g.jobs[j] ?? 0), 0);
+      expect(sum("takes")).toBeGreaterThanOrEqual(2);
+      expect(sum("returns")).toBeGreaterThanOrEqual(1);
+      for (const j of ["attaque", "defense", "porteur", "escorte", "reprise"] as FlagJob[]) expect(time(j), j).toBeGreaterThan(0);
+    },
+  );
 });

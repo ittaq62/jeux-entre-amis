@@ -3,7 +3,7 @@
 // qui dépendent de leur niveau. Ils jouent avec les mêmes commandes qu'un humain.
 
 import { getMap, type MapId } from "./maps.ts";
-import { CONQUEST, isTeamMode, matchWorld, worldOf, type Match } from "./match.ts";
+import { CONQUEST, isTeamMode, matchWorld, worldOf, type FlagState, type Match } from "./match.ts";
 import type { BotLevel } from "./rules.ts";
 import { B, eyeOf, heightOf, MAX_PITCH, RADIUS, wrapAngle, type Cmd } from "./soldier.ts";
 import { WEAPONS, type PrimaryId } from "./weapons.ts";
@@ -404,6 +404,12 @@ export interface BotMemory {
   hurtZ: number;
   /** Son niveau (pour choisir où aller) */
   level?: BotLevel;
+  /** Capture du drapeau : ce qu'il fait (voir `flagJob`), le passage par où il attaque, et l'état des drapeaux qu'il a vu */
+  job?: FlagJob;
+  via?: { x: number; y: number; z: number } | null;
+  /** Arrivé seul au passage du milieu : jusqu'à quand il attend un coéquipier */
+  waitUntil?: number;
+  flagKey?: number;
 }
 
 export function newBotMemory(i: number, yaw: number): BotMemory {
@@ -472,6 +478,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     mem.path = [];
     mem.goal = null;
     mem.target = -1;
+    mem.via = null;
     return cmd;
   }
   const t = m.t;
@@ -514,12 +521,26 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   }
 
   const target = mem.target >= 0 ? m.fighters[mem.target] : undefined;
-  const visible = target !== undefined && target.s.alive && t - mem.seenAt < 0.25;
+  const seen = target !== undefined && target.s.alive && t - mem.seenAt < 0.25;
   const w = WEAPONS[s.slot === 0 ? s.primary : s.secondary];
 
-  // Un coéquipier tombé tout près, et personne en vue : il va le relever
+  // Capture du drapeau : un drapeau pris, tombé ou rapporté, et il change d'idée, plus ou moins vite selon son niveau
+  if (m.flags) {
+    const key = flagKeyOf(m, i);
+    if (key !== mem.flagKey) {
+      mem.flagKey = key;
+      mem.goalUntil = Math.min(mem.goalUntil, t + FLAG_REACT[level]);
+    }
+  }
+  const job = m.flags ? mem.job : undefined;
+  // Au drapeau, qui a un but ne s'arrête pas pour un duel de loin : il ne se bat qu'avec qui est assez près, et sinon il
+  // court (le porteur, encore plus pressé)
+  const reach = job === "porteur" ? FLAG_FIGHT.porteur : job === "attaque" || job === "escorte" ? FLAG_FIGHT.attaque : Infinity;
+  const visible = seen && Math.hypot(target!.s.x - s.x, target!.s.z - s.z) < reach;
+
+  // Un coéquipier tombé tout près, et personne en vue : il va le relever (sauf avec le drapeau, ou en courant après le sien)
   let rescue = -1;
-  if (isTeamMode(m.mode) && !visible) {
+  if (isTeamMode(m.mode) && !visible && job !== "porteur" && job !== "reprise") {
     let bestD = 12;
     for (let j = 0; j < m.fighters.length; j++) {
       const g = m.fighters[j]!;
@@ -648,7 +669,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     onTarget = off < size * P.loose;
   } else {
     // Sans adversaire en vue : il regarde où il va, et d'où venait le coup qu'il vient de prendre
-    if (mem.hurtBy >= 0 && t - mem.hurtAt < 1.5) {
+    if (mem.hurtBy >= 0 && t - mem.hurtAt < 1.5 && reach === Infinity) {
       wantYaw = Math.atan2(-(mem.hurtX - s.x), -(mem.hurtZ - s.z));
     } else if (mvx !== 0 || mvz !== 0) wantYaw = Math.atan2(-mvx, -mvz);
     turnToward(mem, wantYaw, wantPitch, P.turn * 0.6);
@@ -665,14 +686,18 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     mz += -dx * Math.sin(yaw) - dz * Math.cos(yaw);
   };
   const ideal = w.id === "pompe" ? 6 : w.id === "pm" ? 12 : w.id === "precision" ? 30 : 20;
+  // Au drapeau, on ne s'arrête pas pour se battre : le porteur file chez lui, les autres avancent en tirant
+  const push = job === "porteur" ? 1 : job === "attaque" || job === "escorte" || job === "reprise" ? FLAG_PUSH[level] : 0;
   if (visible) {
     if (t >= mem.strafeUntil) {
       mem.strafe = rand(mem) < 0.5 ? -1 : 1;
       mem.strafeUntil = t + 0.5 + rand(mem) * 0.9;
-      if (level !== "facile" && rand(mem) < 0.25) mem.crouchUntil = t + 0.8;
+      if (level !== "facile" && push === 0 && rand(mem) < 0.25) mem.crouchUntil = t + 0.8;
     }
-    if (w.id !== "precision" || dist < 12) mx += mem.strafe * 0.8;
-    if (dist > ideal * 1.4 && (mvx !== 0 || mvz !== 0)) toLocal(mvx * 0.8, mvz * 0.8);
+    if (w.id !== "precision" || dist < 12) mx += mem.strafe * (job === "porteur" ? 0.35 : 0.8);
+    const far = dist > ideal * 1.4 ? 0.8 : 0;
+    const advance = Math.max(push, far);
+    if (advance > 0 && (mvx !== 0 || mvz !== 0)) toLocal(mvx * advance, mvz * advance);
   } else if (mvx !== 0 || mvz !== 0) {
     toLocal(mvx, mvz);
   }
@@ -734,14 +759,134 @@ export function botHurt(mem: BotMemory, by: number, t: number, x: number, z: num
 }
 
 /**
- * Capture du drapeau : les bots d'une même équipe alternent, un qui attaque, un qui défend, et ainsi de suite (un bot
- * seul dans son équipe attaque). La parité de la place ne suffit pas : les équipes se font déjà par elle, et toute une
- * équipe défendait pendant que l'autre attaquait.
+ * Capture du drapeau : dans une équipe, un bot sur trois défend (le deuxième, puis le cinquième…), les autres attaquent ;
+ * un bot seul dans son équipe attaque. La parité de la place ne suffit pas : les équipes se font déjà par elle, et toute
+ * une équipe défendait pendant que l'autre attaquait.
  */
 export function flagRole(m: Match, i: number): "attaque" | "defense" {
   const team = m.fighters[i]!.team;
   const mates = m.fighters.flatMap((g, j) => (g.bot && g.team === team ? [j] : []));
-  return mates.length > 1 && mates.indexOf(i) % 2 === 1 ? "defense" : "attaque";
+  return mates.length > 1 && mates.indexOf(i) % 3 === 1 ? "defense" : "attaque";
+}
+
+/** Capture du drapeau : ce que fait un bot (voir `flagJob`) */
+export type FlagJob = "attaque" | "defense" | "porteur" | "escorte" | "reprise";
+
+/** Le temps qu'il met à changer d'idée quand un drapeau est pris, tombe ou revient (s), selon son niveau */
+const FLAG_REACT: Record<BotLevel, number> = { facile: 1.6, moyen: 0.9, fort: 0.45 };
+/** Au drapeau, la part de sa course qu'il garde en se battant (le porteur, toute) */
+const FLAG_PUSH: Record<BotLevel, number> = { facile: 0.6, moyen: 0.75, fort: 0.9 };
+/** Un attaquant court après son propre drapeau s'il en est à moins de ça (m) ; plus loin, il continue d'attaquer */
+const FLAG_CHASE = 30;
+/** Un défenseur escorte le porteur qui passe à moins de ça (m) */
+const FLAG_ESCORT = 18;
+/** Au-delà, l'attaquant (ou l'escorte) et le porteur ne s'arrêtent pas pour se battre (m) */
+const FLAG_FIGHT = { attaque: 30, porteur: 16 };
+
+/** L'état des drapeaux, vu par ce bot (où est chacun, qui le porte, et s'il en porte un) : quand il change, il change d'idée */
+function flagKeyOf(m: Match, i: number): number {
+  const F = m.flags!;
+  const at = (k: 0 | 1) => (F[k].at === "home" ? 0 : F[k].at === "carried" ? 1 : 2) * 64 + F[k].carrier + 1;
+  return (at(0) * 256 + at(1)) * 4 + m.fighters[i]!.carrying + 1;
+}
+
+/** Où est un drapeau : sur son porteur, ou là où il est */
+function flagAt(m: Match, F: FlagState): { x: number; y: number; z: number } {
+  return F.at === "carried" ? m.fighters[F.carrier]!.s : F;
+}
+
+/**
+ * Ce que fait un bot à la capture du drapeau : il porte le drapeau adverse et file chez lui ; il reprend le sien (les
+ * défenseurs, et ceux qui en sont tout près) ; il escorte le coéquipier qui porte le drapeau adverse (les attaquants, et
+ * les défenseurs près de qui il passe) ; sinon, il tient son rôle, attaque ou défense
+ */
+export function flagJob(m: Match, i: number): FlagJob {
+  const f = m.flags ? m.fighters[i] : undefined;
+  if (!f || !m.flags) return "attaque";
+  if (f.carrying >= 0) return "porteur";
+  const mine = f.team === 1 ? 1 : 0;
+  const own = m.flags[mine]!;
+  const theirs = m.flags[1 - mine]!;
+  const role = flagRole(m, i);
+  if (own.at !== "home") {
+    const at = flagAt(m, own);
+    if (role === "defense" || Math.hypot(at.x - f.s.x, at.z - f.s.z) < FLAG_CHASE) return "reprise";
+  }
+  if (theirs.at === "carried" && theirs.carrier !== i) {
+    const c = m.fighters[theirs.carrier]!.s;
+    if (role === "attaque" || Math.hypot(c.x - f.s.x, c.z - f.s.z) < FLAG_ESCORT) return "escorte";
+  }
+  return role;
+}
+
+/** Les passages du milieu de chaque carte, en trois bandes (d'un bord à l'autre) : des cases au sol sur la ligne médiane */
+const lanes = new Map<MapId, { x: number; y: number; z: number }[][]>();
+function lanesOf(map: MapId) {
+  let out = lanes.get(map);
+  if (out) return out;
+  const gm = getMap(map);
+  const nav = navOf(map);
+  const [a, b] = gm.flags;
+  const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+  const ax = (b.x - a.x) / len;
+  const az = (b.z - a.z) / len;
+  const mx = (a.x + b.x) / 2;
+  const mz = (a.z + b.z) / 2;
+  const nodes: { x: number; y: number; z: number; side: number }[] = [];
+  for (let n = 0; n < nav.px.length; n++) {
+    if (nav.part[n] !== nav.main || nav.py[n]! > Math.max(a.y, b.y) + 0.6) continue;
+    const dx = nav.px[n]! - mx;
+    const dz = nav.pz[n]! - mz;
+    if (Math.abs(dx * ax + dz * az) > 4) continue;
+    nodes.push({ x: nav.px[n]!, y: nav.py[n]!, z: nav.pz[n]!, side: -dx * az + dz * ax });
+  }
+  const lo = Math.min(...nodes.map((p) => p.side));
+  const hi = Math.max(...nodes.map((p) => p.side));
+  const bands: { x: number; y: number; z: number }[][] = [[], [], []];
+  for (const p of nodes) bands[Math.min(2, Math.floor(((p.side - lo) / (hi - lo || 1)) * 3))]!.push({ x: p.x, y: p.y, z: p.z });
+  out = bands.filter((l) => l.length > 0);
+  lanes.set(map, out);
+  return out;
+}
+
+/** Au milieu, un attaquant seul attend un moment qu'un coéquipier le rejoigne (s), pour ne pas arriver un par un */
+const FLAG_REGROUP = 5;
+
+/**
+ * Le passage par où l'on traverse le milieu, de `from` vers `to` (sa base vers celle d'en face pour attaquer, l'inverse
+ * pour rapporter le drapeau) : pris en partant, oublié une fois passé (ou si l'on est déjà de l'autre côté). Les
+ * attaquants d'une équipe qui partent ensemble prennent le même passage (il change toutes les 25 s), et celui qui y
+ * arrive seul attend un peu qu'un coéquipier le rejoigne. Null : on va droit au but.
+ */
+function laneVia(
+  m: Match,
+  i: number,
+  mem: BotMemory,
+  from: { x: number; z: number },
+  to: { x: number; z: number },
+  regroup: boolean,
+): { x: number; y: number; z: number } | null {
+  const f = m.fighters[i]!;
+  const len = Math.hypot(to.x - from.x, to.z - from.z) || 1;
+  // Où l'on en est sur le trajet (0 au départ, `len` à l'arrivée)
+  const progress = (x: number, z: number) => ((x - from.x) * (to.x - from.x) + (z - from.z) * (to.z - from.z)) / len;
+  const here = progress(f.s.x, f.s.z);
+  if (mem.via && (here > progress(mem.via.x, mem.via.z) - 1 || Math.hypot(mem.via.x - f.s.x, mem.via.z - f.s.z) < 5)) {
+    // Arrivé au passage : seul, il attend un peu qu'un coéquipier arrive (une fois par passage)
+    const buddy = m.fighters.some((g, j) => j !== i && g.team === f.team && g.s.alive && Math.hypot(g.s.x - f.s.x, g.s.z - f.s.z) < 14);
+    if (regroup && !buddy && mem.waitUntil === undefined) mem.waitUntil = m.t + FLAG_REGROUP;
+    if (regroup && !buddy && m.t < (mem.waitUntil ?? 0)) return mem.via;
+    mem.via = null;
+    mem.waitUntil = undefined;
+  }
+  if (!mem.via && here < len / 2 - 10) {
+    const list = lanesOf(m.map);
+    const wave = Math.floor(m.t / 25) * 7 + f.team * 3;
+    const lane = list[regroup ? wave % list.length : Math.floor(rand(mem) * list.length)] ?? [];
+    mem.via = lane[Math.floor(rand(mem) * lane.length)] ?? null;
+    mem.waitUntil = undefined;
+  }
+  return mem.via ?? null;
 }
 
 /** Où aller quand rien ne presse : selon le mode, chercher les adversaires, tenir la zone, prendre ou défendre un drapeau */
@@ -806,25 +951,47 @@ function pickGoal(m: Match, i: number, mem: BotMemory) {
   }
   if (m.mode === "drapeau" && m.flags) {
     const mine = f.team === 1 ? 1 : 0;
-    const theirs = 1 - mine;
     const home = gm.flags[mine]!;
-    if (f.carrying >= 0) return set(home.x, home.y, home.z, 3);
-    const own = m.flags[mine]!;
-    const enemyFlag = m.flags[theirs]!;
-    if (own.at !== "home") {
-      // Son drapeau est parti : on court après (on sait où il est)
-      const target = own.at === "carried" ? m.fighters[own.carrier]!.s : own;
-      return set(target.x, target.y, target.z, 1.5);
+    const job = flagJob(m, i);
+    const near = (r: number) => (rand(mem) * 2 - 1) * r;
+    if (job !== mem.job) {
+      mem.via = null;
+      mem.waitUntil = undefined;
     }
-    if (flagRole(m, i) === "defense") {
-      const a = rand(mem) * Math.PI * 2;
-      return set(home.x + Math.cos(a) * 5 + (mine === 0 ? 6 : -6), 0, home.z + Math.sin(a) * 6, 5);
+    mem.job = job;
+    const there = gm.flags[1 - mine]!;
+    switch (job) {
+      case "porteur": {
+        // Chez lui, par un passage pris au hasard ; si son propre drapeau n'y est pas (on ne marque qu'avec le sien à sa
+        // place), il attend tout près
+        const via = laneVia(m, i, mem, there, home, false);
+        if (via) return set(via.x, via.y, via.z, 4);
+        if (m.flags[mine]!.at === "home" || Math.hypot(home.x - f.s.x, home.z - f.s.z) > 12) return set(home.x, home.y, home.z, 3);
+        return set(home.x + near(5), home.y, home.z + near(5), 2.5);
+      }
+      case "reprise": {
+        // Son drapeau est parti : on court après (on sait où il est), pour abattre le porteur ou le ramener
+        const at = flagAt(m, m.flags[mine]!);
+        return set(at.x, at.y, at.z, 1);
+      }
+      case "escorte": {
+        const c = m.fighters[m.flags[1 - mine]!.carrier]!.s;
+        return set(c.x + near(3.5), c.y, c.z + near(3.5), 1.2);
+      }
+      case "defense": {
+        // Autour de son drapeau, un peu en avant, du côté d'où viennent les autres
+        const ahead = gm.flags[1 - mine]!.x > home.x ? 1 : -1;
+        return set(home.x + ahead * (3 + rand(mem) * 6), home.y, home.z + near(7), 4 + rand(mem) * 3);
+      }
+      case "attaque": {
+        const flag = m.flags[1 - mine]!;
+        if (flag.at !== "home") return set(flag.x, flag.y, flag.z, 2);
+        // Il traverse le milieu par un passage (celui des coéquipiers qui partent avec lui), puis va au drapeau
+        const via = laneVia(m, i, mem, home, there, true);
+        if (via) return set(via.x, via.y, via.z, mem.waitUntil !== undefined ? 1 : 6);
+        return set(flag.x, flag.y, flag.z, 4);
+      }
     }
-    if (enemyFlag.at === "carried") {
-      const c = m.fighters[enemyFlag.carrier]!.s;
-      return set(c.x, c.y, c.z, 2);
-    }
-    return set(enemyFlag.x, enemyFlag.y, enemyFlag.z, 4);
   }
   // Chercher quelqu'un : là où il s'est fait tirer dessus, parfois (un bot fort) là où est un adversaire, ou un coin
   // de la carte. Un bot facile ne sait jamais où sont les autres : il patrouille.
