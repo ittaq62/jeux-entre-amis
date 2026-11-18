@@ -139,7 +139,9 @@ function NewRules({ s }: { s: CapitaleSettings }) {
             <li className="cap-special-limits hint">
               Une catastrophe abat des niveaux, jamais un bâtiment spécial ; un niveau perdu ne se rembourse pas. L'arrêté de péril épargne
               les monuments (classés) et les coéquipiers. Expropriation et cession ne prennent qu'un titre sans construction ni obélisque
+              {s.builder ? ", ni tour ni monument dans son quartier" : ""}
               {s.monopoly ? ", et la cession évite de faire gagner l'adversaire au Monopole quand elle le peut" : ""}.
+              {s.builder && " L'expropriation paie aussi le terrain annexé, au prix payé."}
             </li>
           </ul>
         </details>

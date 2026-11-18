@@ -42,6 +42,7 @@ import {
   annexCost,
   annexedOf,
   annexProblem,
+  BUILDS,
   builderHasStadium,
   builderRent,
   builtCities,
@@ -1195,8 +1196,10 @@ function disaster(s: CapitaleState, p: CapitalePlayer, kind: DisasterKind, event
       const i = looseTitles(s, p.id)[0];
       if (i === undefined) break;
       const d = s.deeds[i]!;
-      // La banque paie le titre ; hypothéqué, elle garde ce qu'elle avait prêté
-      const price = d.mortgaged ? SQUARES[i]!.price! - mortgageValue(i) : SQUARES[i]!.price!;
+      // La banque paie le titre ; hypothéqué, elle garde ce qu'elle avait prêté. Builder : elle paie aussi le terrain
+      // annexé, au prix où on l'a payé, puisqu'il retourne à la friche avec la ville
+      const title = d.mortgaged ? SQUARES[i]!.price! - mortgageValue(i) : SQUARES[i]!.price!;
+      const price = title + (isBuilder(s) ? landValue(s, i) : 0);
       s.deeds[i] = freshDeed(i);
       events.push({ type: "disaster", player: p.id, kind, hits, title: i });
       pay(s, "bank", p.id, price, "expropriation", events, i);
@@ -1613,6 +1616,14 @@ export function tradeProblem(s: CapitaleState, playerId: string, index: number):
   const g = groupOf(index);
   if (g && districtSpecials(s, g.id).some((b) => b.kind === "monument"))
     return `Il y a un obélisque dans le quartier de ${name} : il faut le revendre avant.`;
+  // Builder : une tour ou un monument (qu'il faut tout le quartier pour poser) garde le quartier ensemble
+  if (g && isBuilder(s)) {
+    for (const i of GROUPS[g.id].squares) {
+      const b = lotOf(s.deeds[i]).find((o) => BUILDS[o.kind].district);
+      if (b)
+        return `Il faut d'abord démolir ${BUILDS[b.kind].the} de ${SQUARES[i]!.name} : tant qu'une tour ou un monument est debout, le quartier ne se sépare pas.`;
+    }
+  }
   return null;
 }
 

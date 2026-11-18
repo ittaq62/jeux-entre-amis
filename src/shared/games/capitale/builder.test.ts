@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DECKS, GROUPS, SQUARES, upgradeCost } from "./board.ts";
+import { DECKS, GROUPS, mortgageValue, SQUARES, upgradeCost, type DisasterKind } from "./board.ts";
 import {
   annexable,
   annexCost,
@@ -63,6 +63,16 @@ const fail = (s: CapitaleState, id: string, action: CapitaleAction) => {
   return r.ok ? "" : r.error;
 };
 const rent = (s: CapitaleState, i: number) => rentFor(s, i, { diceTotal: 7 });
+/** Fait tirer à ce joueur la carte de cette catastrophe, dans le paquet où elle est */
+function drawDisaster(s: CapitaleState, id: string, disaster: DisasterKind): CapitaleEvent[] {
+  const deck = (["hasard", "courrier"] as const).find((d) =>
+    DECKS[d].some((c) => c.effect.kind === "disaster" && c.effect.disaster === disaster),
+  )!;
+  s.decks[deck].unshift(DECKS[deck].findIndex((c) => c.effect.kind === "disaster" && c.effect.disaster === disaster));
+  const events: CapitaleEvent[] = [];
+  drawCard(s, P(s, id), deck, events, 0);
+  return events;
+}
 const PARIS = 39;
 const LYON = 37;
 const GUERET = 1;
@@ -371,6 +381,53 @@ describe("les règles de la Capitale, en Builder", () => {
     act(s, "a", { type: "demolish", square: PARIS, id: 1 });
     act(s, "a", { type: "annex", square: PARIS, cell: cellIndex(29, 30) });
     expect(tradeProblem(s, "a", PARIS)).toBeNull();
+  });
+
+  it("une tour ou un monument garde le quartier : aucune de ses villes ne s'échange ni ne se donne, tant qu'ils sont debout", () => {
+    for (const kind of ["tour", "monument"] as const) {
+      const s = game();
+      own(s, "a", PARIS, LYON);
+      build(s, "a", PARIS, kind, 34, 34);
+      expect(tradeProblem(s, "a", LYON)).toBe(
+        `Il faut d'abord démolir ${BUILDS[kind].the} de Paris : tant qu'une tour ou un monument est debout, le quartier ne se sépare pas.`,
+      );
+      const give = { cash: 0, squares: [LYON], jailCards: 0 };
+      const none = { cash: 0, squares: [], jailCards: 0 };
+      expect(fail(s, "a", { type: "propose", to: "b", give, get: { ...none, cash: 100 } })).toMatch(/démolir/);
+      // L'adversaire ne peut pas non plus la demander
+      expect(fail(s, "b", { type: "propose", to: "a", give: { ...none, cash: 300 }, get: give })).toMatch(/démolir/);
+      // Une maison ne garde rien : seule la tour ou le monument
+      act(s, "a", { type: "demolish", square: PARIS, id: 1 });
+      build(s, "a", PARIS, "maison", 30, 30);
+      expect(tradeProblem(s, "a", LYON)).toBeNull();
+    }
+  });
+
+  it("l'expropriation et la cession forcée ne prennent pas une ville d'un quartier qui a une tour", () => {
+    const s = game();
+    own(s, "a", PARIS, LYON);
+    build(s, "a", PARIS, "tour", 30, 30);
+    for (const disaster of ["expropriation", "cession"] as const) {
+      expect(drawDisaster(s, "a", disaster).find((e) => e.type === "disaster")).not.toHaveProperty("title");
+      expect(s.deeds[LYON]!.owner).toBe("a");
+    }
+  });
+
+  it("l'expropriation paie le titre et le terrain annexé, au prix payé (hypothéqué : sans ce que la banque avait prêté)", () => {
+    for (const mortgaged of [false, true]) {
+      const s = game();
+      own(s, "a", GUERET);
+      const cells = annexable(s, GUERET).slice(0, 2);
+      for (const cell of cells) act(s, "a", { type: "annex", square: GUERET, cell });
+      if (mortgaged) act(s, "a", { type: "mortgage", square: GUERET });
+      const cash = P(s, "a").cash;
+      drawDisaster(s, "a", "expropriation");
+      const title = SQUARES[GUERET]!.price!;
+      expect(P(s, "a").cash - cash).toBe((mortgaged ? title - mortgageValue(GUERET) : title) + 2 * annexCost(GUERET));
+      expect(s.deeds[GUERET]!.owner).toBeNull();
+      expect(s.deeds[GUERET]!.annexed ?? []).toEqual([]);
+      expect(annexable(s, GUERET)).toEqual(expect.arrayContaining(cells));
+    }
   });
 
   it("le rachat paie les bâtiments et le terrain, majorés de moitié ; le monument protège la ville", () => {

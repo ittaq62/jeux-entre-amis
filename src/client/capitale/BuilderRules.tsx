@@ -58,8 +58,9 @@ export function BuilderRules({ specials, monopoly }: { specials: boolean; monopo
             rend la moitié). Une nuisance ne se déplace pas.
           </li>
           <li className="cap-special-limits hint">
-            Une ville bâtie ne s'échange pas et ne s'hypothèque pas ; son terrain annexé la suit. Le rachat paie ses bâtiments et son
-            terrain, et le monument la protège. Une catastrophe abat un bâtiment, jamais le monument.
+            Une ville bâtie ne s'échange pas et ne s'hypothèque pas ; son terrain annexé la suit. Tant qu'une tour ou un monument est debout
+            dans un quartier, aucune ville de ce quartier ne s'échange. Le rachat paie les bâtiments et le terrain, et le monument protège
+            sa ville ; l'expropriation paie le terrain annexé au prix payé. Une catastrophe abat un bâtiment, jamais le monument.
             {monopoly && " Au Monopole, seuls les titres comptent."}
           </li>
         </ul>
