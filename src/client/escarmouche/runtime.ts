@@ -44,6 +44,7 @@ import { P_STRIDE, PF, readFighter, SC_STRIDE, type EscMe, type EscTick, type Fi
 import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import type { Mat, World } from "../../shared/games/escarmouche/world.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
+import { AutoQuality } from "../lib/autoQuality.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
@@ -162,6 +163,11 @@ export interface RuntimeOpts {
   touch: boolean;
   onHud: (h: HudState) => void;
 }
+
+/** Les crans de la qualité automatique (voir tuneQuality), et la finesse de l'image à chaque cran de pixels */
+const QUALITY_LEVERS = ["pixels", "pixels", "pixels", "ombres"];
+const QUALITY_LEVERS_HIGH = ["recoins", ...QUALITY_LEVERS];
+const PIXEL_STEPS = [1, 0.85, 0.7, 0.55];
 
 export class BattleRuntime {
   readonly controls = new EscControls();
@@ -290,11 +296,8 @@ export class BattleRuntime {
   private radarPing = new Map<number, number>();
   private lastBeep = -1;
   private ping = 0;
-  private fps = 60;
-  private frames = 0;
-  private fpsAt = 0;
-  private slowFor = 0;
-  private fastFor = 0;
+  /** La qualité automatique : moins de pixels, plus d'ombres… quand l'appareil peine (voir tuneQuality) */
+  private quality: AutoQuality;
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
   private tmp3 = new THREE.Vector3();
@@ -317,6 +320,8 @@ export class BattleRuntime {
       teams: isTeamMode(v.mode),
       night: Boolean(v.settings.night),
     });
+    const levers = this.scene.quality === "haut" ? QUALITY_LEVERS_HIGH : QUALITY_LEVERS;
+    this.quality = new AutoQuality({ levers, apply: (on) => this.tuneQuality(levers, on) });
     this.controls.attach(o.canvas);
     this.applyPrefs();
     this.setRoom(o.room);
@@ -892,7 +897,7 @@ export class BattleRuntime {
     const t = performance.now();
     const dt = Math.min(0.1, (t - this.lastFrame) / 1000);
     this.lastFrame = t;
-    this.tuneQuality(t, dt);
+    this.quality.tick(t);
     const v = this.room.escarmouche;
     if (!v) return;
     const rt = this.renderTime(t);
@@ -1446,25 +1451,24 @@ export class BattleRuntime {
     }
   }
 
-  /** Moins de pixels quand l'appareil peine, plus quand il est à l'aise */
-  private tuneQuality(t: number, dt: number) {
-    void dt;
-    this.frames++;
-    if (t - this.fpsAt < 2000) return;
-    this.fps = (this.frames * 1000) / (t - this.fpsAt);
-    this.frames = 0;
-    this.fpsAt = t;
-    const scale = this.scene.pixelScale;
-    if (this.fps < 40) {
-      this.slowFor++;
-      this.fastFor = 0;
-      if (scale > 0.55) this.scene.setResolution(Math.max(0.55, scale - 0.15));
-      else if (this.slowFor > 2) this.scene.setShadows(false);
-    } else if (this.fps > 57) {
-      this.fastFor++;
-      this.slowFor = 0;
-      if (this.fastFor >= 3 && scale < 1) this.scene.setResolution(Math.min(1, scale + 0.1));
-    }
+  /**
+   * Quand l'appareil peine, un cran de plus : en qualité haute, d'abord l'ombre des recoins (une deuxième image de toute
+   * la scène, à peine visible) ; puis moins de pixels, en trois fois ; enfin plus d'ombres portées. La qualité
+   * automatique défait un cran qui ne sert à rien (un processeur qui peine ne gagne rien à dessiner moins de pixels).
+   */
+  private tuneQuality(levers: readonly string[], on: readonly boolean[]) {
+    let pixels = 0;
+    let ao = true;
+    let shadows = true;
+    on.forEach((taken, i) => {
+      if (!taken) return;
+      if (levers[i] === "pixels") pixels++;
+      else if (levers[i] === "recoins") ao = false;
+      else if (levers[i] === "ombres") shadows = false;
+    });
+    this.scene.setResolution(PIXEL_STEPS[pixels]!);
+    this.scene.setAo(ao);
+    this.scene.setShadows(shadows);
   }
 
   private emitHud(board: boolean, scoped: boolean, aimed: string | null, spectating: string | null, weapon: WeaponId) {

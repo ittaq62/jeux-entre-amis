@@ -169,6 +169,10 @@ export class Post {
     this.bloom.resolution.set((w * pixelRatio) / 2, (h * pixelRatio) / 2);
   }
 
+  setAo(on: boolean) {
+    this.ao.enabled = on;
+  }
+
   /** La douleur : l'image se vide de ses couleurs et rougit sur les bords */
   setHurt(k: number) {
     this.grade.uniforms.hurt!.value = k;

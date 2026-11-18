@@ -342,6 +342,11 @@ export class EscScene {
     return this.resolution;
   }
 
+  /** L'ombre dans les recoins (qualité haute) : la première chose qu'on retire quand l'appareil peine */
+  setAo(on: boolean) {
+    this.post?.setAo(on);
+  }
+
   setShadows(on: boolean) {
     this.renderer.shadowMap.enabled = on && !this.low;
     this.sun.castShadow = on && !this.low;
