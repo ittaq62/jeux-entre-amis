@@ -93,6 +93,55 @@ describe("Culbute : les commandes des joueurs", () => {
   });
 });
 
+describe("Culbute : choisir son combattant", () => {
+  it("le combat se lance pendant qu'on vérifie la tenue : le combattant ne change plus, celui de la table est celui qui se bat", async () => {
+    // La boutique répond quand on le décide : le temps que la vérification se fasse, l'hôte lance le combat
+    let answer!: () => void;
+    const env = fakeEnv();
+    const prepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql: string) => {
+      const st = prepare(sql);
+      if (!sql.includes("user_items")) return st;
+      return {
+        ...st,
+        bind: () => ({
+          all: () =>
+            new Promise((resolve) => {
+              answer = () => resolve({ results: [{ item: "tenue:marcel:nuit" }] } as never);
+            }),
+        }),
+      } as typeof st;
+    };
+    const state = new FakeState();
+    const room = new CulbuteRoom(state as never, env as never);
+    const inside = room as unknown as Inside & { data: { seats: { id: string; kind: string; fighter: unknown }[] } };
+    rooms.push(inside);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "addBot" });
+    const me = inside.data.seats.find((s) => s.kind === "human")!;
+    const before = me.fighter;
+    const picking = bench.send(host, { t: "pick", fighter: { who: "marcel", tenue: "nuit" } });
+    await bench.send(host, { t: "start" });
+    inside.stopLoop();
+    answer();
+    await picking;
+    expect(me.fighter).toEqual(before);
+    const fought = inside.data.fight!.fighters.find((f) => f.id === me.id)!;
+    expect(fought.style).toBe("ginette");
+
+    // Hors combat, la même tenue achetée se choisit bien (le délai entre deux choix passé)
+    await inside.finishGame(Date.now());
+    (room as unknown as { lastMessageAt: Map<string, number> }).lastMessageAt.clear();
+    const again = bench.send(host, { t: "pick", fighter: { who: "marcel", tenue: "nuit" } });
+    answer();
+    await again;
+    expect(me.fighter).toEqual({ who: "marcel", tenue: "nuit" });
+  });
+});
+
 describe("Culbute : le bot qui remplace un joueur parti", () => {
   it("joue au niveau de la table, comme les autres bots", async () => {
     const state = new FakeState();

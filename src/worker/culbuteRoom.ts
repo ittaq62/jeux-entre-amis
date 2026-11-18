@@ -499,8 +499,13 @@ export class CulbuteRoom extends DurableObject<Env> {
       case "pick": {
         if (!seat || d.status === "playing" || !isFighterPick(msg.fighter) || !this.allowMessage(`pick:${userId}`, 120)) return;
         const pick = msg.fighter;
-        if (pick.who !== "moi" && pick.tenue && !canUse(tenueItem(pick.who, pick.tenue), await ownedItems(this.env.DB, userId))) {
-          return error("Cette tenue s'achète à la boutique.");
+        if (pick.who !== "moi" && pick.tenue) {
+          const owned = await ownedItems(this.env.DB, userId);
+          // Le combat a pu se lancer pendant qu'on lisait la boutique : il se joue avec le combattant d'avant, qu'on
+          // ne change plus (sinon le salon et la fin montreraient un autre combattant que celui qui s'est battu)
+          const live = this.data;
+          if (live !== d || !live || live.status === "playing" || !live.seats.includes(seat)) return;
+          if (!canUse(tenueItem(pick.who, pick.tenue), owned)) return error("Cette tenue s'achète à la boutique.");
         }
         seat.fighter =
           pick.who === "moi" ? { who: "moi", style: pick.style } : pick.tenue ? { who: pick.who, tenue: pick.tenue } : { who: pick.who };
