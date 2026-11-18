@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SQUARES, type DeckId, type SpecialKind } from "../../../shared/games/capitale/board.ts";
+import { AutoQuality } from "../../lib/autoQuality.ts";
 import { play } from "../../lib/sound.ts";
 import type { TokenId } from "../../../shared/games/capitale/tokens.ts";
 import * as B from "./buildings.ts";
@@ -158,9 +159,15 @@ export class CapitaleScene {
   /** Quelque chose a changé depuis la dernière image (en mode sobre, on ne redessine que dans ce cas) */
   private dirty = true;
   private frames = 0;
-  /** La finesse du rendu : sur PC on dessine plus fin que l'écran (moins de flou), et on redescend si la machine peine */
+  /**
+   * La finesse du rendu : sur PC on dessine plus fin que l'écran (moins de flou). Si l'appareil peine, la qualité
+   * automatique allège d'un cran : moins de pixels (sur PC, d'abord la finesse de l'écran), encore moins, puis plus
+   * d'ombres portées. Elle remonte quand tout redevient fluide.
+   */
   private ratio = 1;
-  private slow = { time: 0, frames: 0 };
+  private ratios: [number, number, number] = [1, 1, 1];
+  private sun: THREE.DirectionalLight | null = null;
+  private quality = new AutoQuality({ levers: ["pixels", "pixels", "ombres"], apply: (on) => this.applyQuality(on) });
   private pending = 0;
 
   private boardCanvas: HTMLCanvasElement;
@@ -260,6 +267,8 @@ export class CapitaleScene {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     const dpr = window.devicePixelRatio || 1;
     this.ratio = opts.phone ? Math.min(dpr, 2) : Math.min(2, Math.max(dpr, 1.5));
+    const screen = Math.min(this.ratio, Math.max(1, Math.min(dpr, 2)));
+    this.ratios = opts.phone ? [this.ratio, this.ratio * 0.75, this.ratio * 0.6] : [this.ratio, screen, screen * 0.8];
     this.renderer.setPixelRatio(this.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // Des couleurs franches, sans le voile gris de l'ACES
@@ -362,6 +371,7 @@ export class CapitaleScene {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.02;
     this.scene.add(sun);
+    this.sun = sun;
   }
 
   private addBoard() {
@@ -2036,7 +2046,7 @@ export class CapitaleScene {
     // Le temps des images sautées n'est pas perdu : les voitures gardent leur vitesse à 30 images par seconde
     this.pending += this.clock.getDelta();
     this.frames++;
-    this.watchSpeed();
+    this.quality.tick(performance.now());
     const busy = this.busy();
     // Mode sobre : rien ne vit tout seul, on ne redessine que ce qui change.
     // Téléphone : la vie de la ville à 30 images par seconde, le reste à 60.
@@ -2067,20 +2077,16 @@ export class CapitaleScene {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** Si les images tardent (moins de 40 par seconde pendant 3 s), on rend à la finesse de l'écran */
-  private watchSpeed() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (this.opts.phone || this.ratio <= dpr) return;
-    const dt = this.clock.elapsedTime - this.slow.time;
-    this.slow.frames++;
-    if (dt < 3) return;
-    const fps = this.slow.frames / dt;
-    this.slow = { time: this.clock.elapsedTime, frames: 0 };
-    if (fps < 40 && !this.opts.reduced) {
-      this.ratio = dpr;
-      this.renderer.setPixelRatio(dpr);
+  private applyQuality(on: readonly boolean[]) {
+    const ratio = this.ratios[on[1] ? 2 : on[0] ? 1 : 0];
+    if (ratio !== this.ratio) {
+      this.ratio = ratio;
+      this.renderer.setPixelRatio(ratio);
       this.resize();
     }
+    this.renderer.shadowMap.enabled = !on[2];
+    if (this.sun) this.sun.castShadow = !on[2];
+    this.dirty = true;
   }
 
   dispose() {

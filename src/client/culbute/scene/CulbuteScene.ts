@@ -7,6 +7,7 @@ import { blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/c
 import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
+import { AutoQuality } from "../../lib/autoQuality.ts";
 import type { RenderFrame } from "../runtime.ts";
 import { buildArena, type ArenaScene } from "./arenas3d.ts";
 import { FighterModel, type FighterLook } from "./fighter.ts";
@@ -59,6 +60,9 @@ export class CulbuteScene {
   readonly camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 220);
   private hemi = new THREE.HemisphereLight(0xffffff, 0x888888, 0.6);
   private sun = new THREE.DirectionalLight(0xffffff, 2);
+  /** La finesse de l'image, et les ombres : allégées d'elles-mêmes si l'appareil peine (voir AutoQuality) */
+  private baseRatio = Math.min(window.devicePixelRatio || 1, TOUCH ? 1.25 : 1.75);
+  private quality = new AutoQuality({ levers: ["pixels", "pixels", "ombres"], apply: (on) => this.applyQuality(on) });
   private arena!: ArenaScene;
   private arenaKeep: { dispose: () => void }[] = [];
   private arenaId: ArenaId;
@@ -123,7 +127,7 @@ export class CulbuteScene {
       return x;
     };
     this.renderer = new THREE.WebGLRenderer({ antialias: !TOUCH, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.25 : 1.75));
+    this.renderer.setPixelRatio(this.baseRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.92;
@@ -286,8 +290,16 @@ export class CulbuteScene {
     this.overlayCam.updateProjectionMatrix();
   }
 
+  /** Un peu moins de pixels, puis encore moins, puis plus d'ombres portées (les ombres rondes restent sous les pieds) */
+  private applyQuality(on: readonly boolean[]) {
+    this.renderer.setPixelRatio(this.baseRatio * (on[1] ? 0.68 : on[0] ? 0.82 : 1));
+    this.renderer.shadowMap.enabled = !on[2];
+    this.sun.castShadow = !on[2];
+  }
+
   /** Rien encore à montrer : l'arène seule */
   renderIdle(dt: number) {
+    this.quality.tick(performance.now());
     this.time += dt;
     this.arena.update(this.time, []);
     this.camera.position.copy(this.camPos);
@@ -297,6 +309,7 @@ export class CulbuteScene {
   }
 
   render(dt: number, frame: RenderFrame) {
+    this.quality.tick(performance.now());
     this.time += dt;
     this.arena.update(this.time, frame.plats);
     frame.fighters.forEach((raw, i) => {
