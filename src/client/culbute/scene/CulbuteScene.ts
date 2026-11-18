@@ -22,6 +22,8 @@ interface Effect {
 }
 
 const TOUCH = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+const UP = new THREE.Vector3(0, 1, 0);
+const WHITE = new THREE.Color(0xffffff);
 
 /** La bulle d'un combattant hors du cadre : un rond à sa couleur, cerclé de blanc, avec une pointe vers le haut */
 function bubbleTexture(color: string): THREE.CanvasTexture {
@@ -78,6 +80,11 @@ export class CulbuteScene {
   private shake = 0;
   private camPos = new THREE.Vector3(0, 3, 26);
   private camLook = new THREE.Vector3(0, 2, 0);
+  /** De quoi calculer à chaque image sans rien créer (le ramasse-miettes n'a rien à balayer derrière) */
+  private tmpA = new THREE.Vector3();
+  private tmpB = new THREE.Vector3();
+  private tmpColor = new THREE.Color();
+  private seen = new Set<number>();
   private trailAt = new Map<number, number>();
   /** Sous chaque combattant, une ombre ronde sur la plateforme où il retombera */
   private blobs: THREE.Mesh[] = [];
@@ -309,7 +316,10 @@ export class CulbuteScene {
         if (this.time - at > 0.035) {
           this.trailAt.set(i, this.time);
           // Teintée à sa couleur : on voit tout de suite qui s'envole
-          const tint = new THREE.Color(this.looks[i]?.color ?? "#ffffff").lerp(new THREE.Color(0xffffff), 0.55).getHex();
+          const tint = this.tmpColor
+            .set(this.looks[i]?.color ?? "#ffffff")
+            .lerp(WHITE, 0.55)
+            .getHex();
           this.puff(f.x, f.y + 0.7, tint, 0.3 + Math.min(0.4, f.kb / 80), 0.55);
         }
       }
@@ -342,7 +352,7 @@ export class CulbuteScene {
   private placeBubbles(frame: RenderFrame): boolean {
     let any = false;
     const aspect = this.camera.aspect;
-    const p = new THREE.Vector3();
+    const p = this.tmpA;
     frame.fighters.forEach((f, i) => {
       const b = this.bubbles[i];
       if (!b) return;
@@ -400,7 +410,8 @@ export class CulbuteScene {
   }
 
   private syncShots(frame: RenderFrame, dt: number) {
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     let lasso: RenderFrame["shots"][number] | null = null;
     for (const s of frame.shots) {
       seen.add(s.id);
@@ -449,18 +460,18 @@ export class CulbuteScene {
     if (lasso) {
       const owner = frame.fighters[lasso.owner];
       if (owner) {
-        const a = new THREE.Vector3(owner.x + owner.face * 0.4, owner.y + 1, 0);
-        const b = new THREE.Vector3(lasso.x, lasso.y, 0);
-        const d = b.clone().sub(a);
+        const a = this.tmpA.set(owner.x + owner.face * 0.4, owner.y + 1, 0);
+        const d = this.tmpB.set(lasso.x, lasso.y, 0).sub(a);
         this.lasso.position.copy(a);
         this.lasso.scale.set(1, d.length(), 1);
-        this.lasso.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+        this.lasso.quaternion.setFromUnitVectors(UP, d.normalize());
       }
     }
   }
 
   private syncItems(frame: RenderFrame) {
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     for (const it of frame.items) {
       seen.add(it.id);
       let obj = this.items.get(it.id);
@@ -480,7 +491,8 @@ export class CulbuteScene {
   }
 
   private syncTraps(frame: RenderFrame) {
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     for (const t of frame.traps) {
       seen.add(t.id);
       let obj = this.traps.get(t.id);
@@ -553,19 +565,19 @@ export class CulbuteScene {
     const halfW = Math.max(5.8, (maxX - minX) / 2);
     const halfH = Math.max(3.4, (maxY - minY) / 2);
     const dist = Math.min(52, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)));
-    let want = new THREE.Vector3(cx, cy + dist * 0.09, dist);
+    const want = this.tmpA.set(cx, cy + dist * 0.09, dist);
     let k = Math.min(1, dt * 3.2);
     if (this.koCam) {
       this.koCam.age += dt;
       if (this.koCam.age < 0.5) {
         cx = this.koCam.x;
         cy = this.koCam.y;
-        want = new THREE.Vector3(cx + 0.4, cy + 0.5, 7.2);
+        want.set(cx + 0.4, cy + 0.5, 7.2);
         k = Math.min(1, dt * 16);
       } else this.koCam = null;
     }
     this.camPos.lerp(want, k);
-    this.camLook.lerp(new THREE.Vector3(cx, cy, 0), k);
+    this.camLook.lerp(this.tmpB.set(cx, cy, 0), k);
     this.shake = Math.max(0, this.shake - dt * 2.2);
     const s = this.shake * this.shake * 0.5;
     this.camera.position.set(this.camPos.x + (Math.random() - 0.5) * s, this.camPos.y + (Math.random() - 0.5) * s, this.camPos.z);

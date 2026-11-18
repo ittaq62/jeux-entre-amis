@@ -1068,39 +1068,37 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     for (let i = 0; i < 2; i++) {
       const arm = this.arms[i]!;
       const side = i === 0 ? -1 : 1;
-      const shoulder = new THREE.Vector3(side * SHOULDER_X, SHOULDER_Y - HIPS_Y, 0).applyMatrix4(this.torso.matrix);
-      const target = new THREE.Vector3(...pose.hands[i]!);
+      const shoulder = V.a.set(side * SHOULDER_X, SHOULDER_Y - HIPS_Y, 0).applyMatrix4(this.torso.matrix);
+      const target = V.b.fromArray(pose.hands[i]!);
       target.y -= pose.crouch * 0.5;
-      const elbow = ik(shoulder, target, UPPER, FORE, new THREE.Vector3(side * 0.8, -0.4, -0.5));
+      const elbow = ik(shoulder, target, UPPER, FORE, V.c.set(side * 0.8, -0.4, -0.5), V.d);
       stretch(arm.upper, shoulder, elbow);
       stretch(arm.fore, elbow, target);
       // La main dans le prolongement de l'avant-bras, le pouce vers le haut
       arm.hand.position.copy(target);
-      const dir = new THREE.Vector3().subVectors(target, elbow).normalize();
-      arm.hand.quaternion.setFromUnitVectors(DOWN, dir);
+      arm.hand.quaternion.setFromUnitVectors(DOWN, V.e.subVectors(target, elbow).normalize());
     }
     // Les jambes : de la hanche à la cheville, le genou vers l'avant ; la chaussure à plat (ou dans l'axe du tibia en l'air)
     for (let i = 0; i < 2; i++) {
       const leg = this.legs[i]!;
       const side = i === 0 ? -1 : 1;
-      const hip = new THREE.Vector3(side * 0.1, HIPS_Y - pose.crouch - 0.03, 0);
-      const foot = new THREE.Vector3(...pose.feet[i]!);
-      const ankle = foot.clone().add(new THREE.Vector3(0, 0.06, -0.02));
-      const knee = ik(hip, ankle, THIGH, SHIN, new THREE.Vector3(0, 0.1, 1));
+      const hip = V.a.set(side * 0.1, HIPS_Y - pose.crouch - 0.03, 0);
+      const foot = pose.feet[i]!;
+      const ankle = V.b.set(foot[0], foot[1] + 0.06, foot[2] - 0.02);
+      const knee = ik(hip, ankle, THIGH, SHIN, V.c.set(0, 0.1, 1), V.d);
       stretch(leg.thigh, hip, knee);
       stretch(leg.shin, knee, ankle);
-      const shinUp = new THREE.Vector3().subVectors(knee, ankle).normalize();
-      const lift = Math.min(1, Math.max(0, foot.y * 4));
-      const up = new THREE.Vector3(0, 1, 0).lerp(shinUp, lift).normalize();
+      const shinUp = V.e.subVectors(knee, ankle).normalize();
+      const lift = Math.min(1, Math.max(0, foot[1] * 4));
+      const up = V.f.set(0, 1, 0).lerp(shinUp, lift).normalize();
       leg.shoe.quaternion.setFromUnitVectors(UP, up);
-      leg.shoe.position.copy(ankle).add(new THREE.Vector3(0, -0.06, -0.05).applyQuaternion(leg.shoe.quaternion));
+      leg.shoe.position.copy(ankle).add(V.g.set(0, -0.06, -0.05).applyQuaternion(leg.shoe.quaternion));
     }
 
     // L'accessoire dans la main droite, le long de l'avant-bras ; un objet tenu le remplace
     const hand = this.arms[0]!.hand.position;
-    const elbowP = new THREE.Vector3().copy(this.arms[0]!.fore.position);
-    const along = new THREE.Vector3().subVectors(hand, elbowP).normalize();
-    const grip = hand.clone().addScaledVector(along, 0.07);
+    const along = V.along.subVectors(hand, this.arms[0]!.fore.position).normalize();
+    const grip = V.grip.copy(hand).addScaledVector(along, 0.07);
     const holding = f.item !== "";
     this.setHeld(f.item);
     const shown = this.held.model ?? this.prop;
@@ -1112,24 +1110,22 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     shown.quaternion.setFromUnitVectors(UP, along);
     if (this.look.style === "ginette" && !holding) {
       // Le sac pend à son anse, sauf quand il frappe
-      const hang = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(0, -1, 0));
-      if (strike < 0.3) shown.quaternion.slerp(hang, 0.85 - strike * 2);
+      if (strike < 0.3) shown.quaternion.slerp(HANG, 0.85 - strike * 2);
     }
     if (this.accordion) {
       const a = this.accordion;
       a.group.visible = !holding && !grappling;
-      const left = this.arms[1]!.hand.position.clone();
-      const right = hand.clone();
+      const left = V.a.copy(this.arms[1]!.hand.position);
+      const right = V.b.copy(hand);
       const ext = (STRETCH[f.move] ?? 0) * (f.state === "move" ? strike : 0);
-      const dir = new THREE.Vector3().subVectors(right, left);
+      const dir = V.c.subVectors(right, left);
       if (dir.lengthSq() < 0.01) dir.set(-1, 0, 0);
       dir.normalize();
       right.addScaledVector(dir, ext);
       a.left.position.copy(left);
       a.right.position.copy(right);
-      const mid = left.clone().add(right).multiplyScalar(0.5);
-      a.bellows.position.copy(mid);
-      a.bellows.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+      a.bellows.position.copy(left).add(right).multiplyScalar(0.5);
+      a.bellows.quaternion.setFromUnitVectors(RIGHT, dir);
       a.left.quaternion.copy(a.bellows.quaternion);
       a.right.quaternion.copy(a.bellows.quaternion);
       a.bellows.scale.x = Math.max(0.08, left.distanceTo(right) - 0.1);
@@ -1240,10 +1236,31 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
+const RIGHT = new THREE.Vector3(1, 0, 0);
+/** Le sac de Ginette pendu à son anse */
+const HANG = new THREE.Quaternion().setFromUnitVectors(UP, DOWN);
+/**
+ * Des vecteurs de travail, réutilisés à chaque image par tous les combattants (rien de gardé d'une image à l'autre) :
+ * sans eux, chaque combattant en créait une cinquantaine par image, que le ramasse-miettes devait ensuite balayer
+ */
+const V = {
+  a: new THREE.Vector3(),
+  b: new THREE.Vector3(),
+  c: new THREE.Vector3(),
+  d: new THREE.Vector3(),
+  e: new THREE.Vector3(),
+  f: new THREE.Vector3(),
+  g: new THREE.Vector3(),
+  along: new THREE.Vector3(),
+  grip: new THREE.Vector3(),
+  stretch: new THREE.Vector3(),
+  ikAlong: new THREE.Vector3(),
+  ikPerp: new THREE.Vector3(),
+};
 
 /** Un membre entre deux articulations : construit à sa longueur, il ne s'étire presque jamais */
 function stretch(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
-  const dir = new THREE.Vector3().subVectors(b, a);
+  const dir = V.stretch.subVectors(b, a);
   const len = dir.length();
   m.position.copy(a);
   m.quaternion.setFromUnitVectors(UP, dir.divideScalar(len || 1));
@@ -1258,9 +1275,9 @@ function shade(c: THREE.ColorRepresentation, k: number): string {
   return `#${col.getHexString()}`;
 }
 
-/** L'articulation du milieu (coude, genou) : deux os de longueurs données, plié du côté de `pole` */
-function ik(a: THREE.Vector3, target: THREE.Vector3, l1: number, l2: number, pole: THREE.Vector3): THREE.Vector3 {
-  const along = new THREE.Vector3().subVectors(target, a);
+/** L'articulation du milieu (coude, genou), écrite dans `out` : deux os de longueurs données, plié du côté de `pole` */
+function ik(a: THREE.Vector3, target: THREE.Vector3, l1: number, l2: number, pole: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  const along = V.ikAlong.subVectors(target, a);
   let d = along.length();
   // Trop loin : le membre se tend (la main ne va pas plus loin que le bras)
   if (d > l1 + l2 - 0.005) {
@@ -1269,12 +1286,12 @@ function ik(a: THREE.Vector3, target: THREE.Vector3, l1: number, l2: number, pol
     d = l1 + l2 - 0.005;
   }
   along.normalize();
-  const perp = pole.clone().addScaledVector(along, -pole.dot(along));
+  const perp = V.ikPerp.copy(pole).addScaledVector(along, -pole.dot(along));
   if (perp.lengthSq() < 1e-6) perp.set(0, 0, 1);
   perp.normalize();
   const x = (l1 * l1 - l2 * l2 + d * d) / (2 * Math.max(d, 1e-3));
   const h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
-  return a.clone().addScaledVector(along, x).addScaledVector(perp, h);
+  return out.copy(a).addScaledVector(along, x).addScaledVector(perp, h);
 }
 
 function starShape(r: number): THREE.ShapeGeometry {

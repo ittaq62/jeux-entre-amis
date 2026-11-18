@@ -25,6 +25,9 @@ function bareScene(): Inside {
     protos: new Map(),
     keepList: [],
     lasso: new THREE.Mesh(),
+    seen: new Set(),
+    tmpA: new THREE.Vector3(),
+    tmpB: new THREE.Vector3(),
     time: 0,
   });
   sc.keep = (x) => {
