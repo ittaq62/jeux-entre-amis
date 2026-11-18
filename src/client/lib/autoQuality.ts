@@ -37,7 +37,7 @@ export class AutoQuality {
    * Le cran qu'on vient de prendre : on compare la moyenne des cinq secondes d'avant à celle des trois secondes qui
    * suivent la première (celle du changement, où la carte graphique refait ses programmes, ne compte pas)
    */
-  private trial: { before: number; lever: number; skip: number; after: number[] } | null = null;
+  private trial: { before: number; kept: number[]; lever: number; skip: number; after: number[] } | null = null;
   /** Les essais pour rien, par genre de cran */
   private useless = new Map<string, number>();
   /** Les crans qu'on ne quitte plus (une remontée qui n'a pas tenu) */
@@ -97,7 +97,7 @@ export class AutoQuality {
     if (this.recent.length > 5) this.recent.shift();
     this.slowFor = this.fps < this.slow || jank >= 6 ? this.slowFor + 1 : 0;
     this.fastFor = this.fps >= this.fast && jank <= 1 ? this.fastFor + 1 : 0;
-    if (this.slowFor >= 2 && this.recent.length >= 4) {
+    if (this.slowFor >= 2 && this.recent.length >= 3) {
       this.slowFor = 0;
       this.fastFor = 0;
       // On venait de remonter et ça ne tient pas : ce cran-là reste pris
@@ -120,7 +120,7 @@ export class AutoQuality {
     const i = this.on.findIndex((on, k) => !on && (this.useless.get(this.o.levers[k]!) ?? 0) < 2);
     if (i < 0) return;
     this.on[i] = true;
-    this.trial = { before: mean(this.recent), lever: i, skip: 1, after: [] };
+    this.trial = { before: mean(this.recent), kept: [...this.recent], lever: i, skip: 1, after: [] };
     this.o.apply(this.on);
     void now;
   }
@@ -131,9 +131,15 @@ export class AutoQuality {
     this.trial = null;
     this.slowFor = 0;
     this.fastFor = 0;
-    this.recent = [];
     const after = mean(t.after);
-    if (after >= t.before + 4 || after >= this.fast) return;
+    // Gardé : les secondes de l'essai sont la nouvelle référence ; défait : on reprend celle d'avant (le cran suivant
+    // s'essaie sans attendre)
+    // Un gain d'au moins 10 % (et 3 images) : à 20 images par seconde, 3 de plus comptent autant que 5 à 45
+    if (after >= t.before + Math.max(3, t.before * 0.1) || after >= this.fast) {
+      this.recent = [...t.after];
+      return;
+    }
+    this.recent = t.kept;
     this.on[t.lever] = false;
     const kind = this.o.levers[t.lever]!;
     this.useless.set(kind, (this.useless.get(kind) ?? 0) + 1);

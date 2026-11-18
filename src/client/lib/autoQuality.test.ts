@@ -61,6 +61,17 @@ describe("la qualité automatique", () => {
     expect(d.q.level).toBe(0);
   });
 
+  it("sur une carte graphique qui peine, prend vite chaque cran utile, même un petit gain à basse cadence", () => {
+    // 20 images par seconde ; l'ombre des recoins fait gagner 15 %, chaque cran de pixels 30 %
+    const gain = [1.15, 1.3, 1.3, 1.3, 1.1];
+    const d = device(
+      ["recoins", "pixels", "pixels", "pixels", "ombres"],
+      (on) => 1000 / on.reduce((f, x, i) => (x ? f * gain[i]! : f), 20),
+    );
+    d.run(30);
+    expect(d.q.on.slice(0, 4)).toEqual([true, true, true, true]);
+  });
+
   it("remonte d'un cran quand tout redevient fluide", () => {
     let heavy = true;
     const d = device(["pixels", "ombres"], (on) => (heavy && !on[0] ? 1000 / 30 : 1000 / 60));
