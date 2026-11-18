@@ -1,5 +1,6 @@
 // L'atelier des cartes (uniquement en développement, sur /dev/cartes) : chaque sujet en 3D est photographié, et on en
-// tire la planche d'images de l'album, à ranger dans src/client/cards/cards-atlas.webp.
+// tire la planche d'images de l'album, à ranger dans src/client/cards/cards-atlas.webp (et sa demi-taille, pour les petites
+// cartes, dans cards-atlas-petit.webp).
 // /dev/cartes?seulement=build: ne refait que les cases dont la clé commence ainsi, par-dessus la planche actuelle.
 
 import { useEffect, useRef, useState } from "react";
@@ -405,12 +406,20 @@ async function photograph(): Promise<HTMLCanvasElement> {
 export function DevCards() {
   const box = useRef<HTMLDivElement>(null);
   const [url, setUrl] = useState("");
+  const [smallUrl, setSmallUrl] = useState("");
   useEffect(() => {
     void photograph().then((atlas) => {
       box.current?.replaceChildren(atlas);
       atlas.style.width = "100%";
       const data = atlas.toDataURL("image/webp", 0.9);
       setUrl(data);
+      const half = document.createElement("canvas");
+      half.width = atlas.width / 2;
+      half.height = atlas.height / 2;
+      const g = half.getContext("2d")!;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(atlas, 0, 0, half.width, half.height);
+      setSmallUrl(half.toDataURL("image/webp", 0.88));
       (window as unknown as { __atlas?: string }).__atlas = data;
     });
   }, []);
@@ -418,6 +427,9 @@ export function DevCards() {
     <div style={{ background: "#2e4a3d", minHeight: "100vh", padding: 12 }}>
       <a href={url} download="cards-atlas.webp" style={{ color: "#fff" }}>
         Enregistrer la planche
+      </a>{" "}
+      <a href={smallUrl} download="cards-atlas-petit.webp" style={{ color: "#fff" }}>
+        Enregistrer la demi-planche
       </a>
       <div ref={box} />
     </div>

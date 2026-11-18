@@ -9,6 +9,7 @@ import { Logo } from "../components/ui.tsx";
 import { CELL, hullFill, ShipShape, SkinDefs } from "../naval/ships.tsx";
 import { ATLAS_COLS, ATLAS_KEYS, ATLAS_ROWS } from "./atlasKeys.ts";
 import atlasUrl from "./cards-atlas.webp";
+import smallAtlasUrl from "./cards-atlas-petit.webp";
 import "./cards.css";
 
 const UNO_FACES: Record<Extract<CardArt, { kind: "uno" }>["face"], Card> = {
@@ -20,7 +21,12 @@ const UNO_FACES: Record<Extract<CardArt, { kind: "uno" }>["face"], Card> = {
   wild4: { id: 9006, kind: "wild4", color: null },
 };
 
-export function AtlasArt({ artKey }: { artKey: string }) {
+/**
+ * Une case de la planche des sujets en 3D. Une petite carte (l'accueil, les vignettes) prend la planche à demi-taille,
+ * deux fois plus légère, quand elle suffit à la finesse de l'écran ; sinon, la planche entière.
+ */
+export function AtlasArt({ artKey, width }: { artKey: string; width?: number }) {
+  const small = width !== undefined && width * (window.devicePixelRatio || 1) <= 200;
   const i = ATLAS_KEYS.indexOf(artKey);
   const x = (i % ATLAS_COLS) / (ATLAS_COLS - 1);
   const y = Math.floor(i / ATLAS_COLS) / (ATLAS_ROWS - 1);
@@ -28,7 +34,7 @@ export function AtlasArt({ artKey }: { artKey: string }) {
     <span
       className="tc-atlas"
       style={{
-        backgroundImage: `url(${atlasUrl})`,
+        backgroundImage: `url(${small ? smallAtlasUrl : atlasUrl})`,
         backgroundSize: `${ATLAS_COLS * 100}% ${ATLAS_ROWS * 100}%`,
         backgroundPosition: `${x * 100}% ${y * 100}%`,
       }}
@@ -366,7 +372,7 @@ function EscarmoucheArt({ subject }: { subject: Extract<CardArt, { kind: "escarm
 }
 
 function Art({ art, width }: { art: CardArt; width: number }) {
-  if (art.kind === "atlas") return <AtlasArt artKey={art.key} />;
+  if (art.kind === "atlas") return <AtlasArt artKey={art.key} width={width} />;
   if (art.kind === "ship") return <ShipArt art={art} />;
   if (art.kind === "brick") return <BrickArt piece={art.piece} />;
   if (art.kind === "meche") return <MecheArt subject={art.subject} />;

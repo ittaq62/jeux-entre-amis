@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
 import { CARD_BY_ID, CARDS, PACK_PRICE, RARITIES, type PackResponse } from "../../shared/cards.ts";
 import { Icon } from "../components/Icon.tsx";
 import { ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useAlbum, useMyAlbum } from "../stores/album.ts";
-import { PackOpening } from "./PackOpening.tsx";
 import { CardBackFace, TradingCard } from "./TradingCard.tsx";
+
+// L'ouverture d'un paquet (ses confettis, ses animations) ne se charge qu'au premier paquet ouvert
+const loadOpening = () => import("./PackOpening.tsx");
+const PackOpening = lazy(() => loadOpening().then((m) => ({ default: m.PackOpening })));
 
 const FAN = [
   { x: -40, y: 5, r: -14 },
@@ -28,6 +31,7 @@ export function HomeAlbum() {
 
   async function open() {
     setBusy(true);
+    void loadOpening();
     try {
       setPack(await openPack());
     } catch (err) {
@@ -76,7 +80,11 @@ export function HomeAlbum() {
           Voir l'album
         </Link>
       </div>
-      {pack && <PackOpening pack={pack} onClose={() => setPack(null)} />}
+      {pack && (
+        <Suspense fallback={null}>
+          <PackOpening pack={pack} onClose={() => setPack(null)} />
+        </Suspense>
+      )}
     </section>
   );
 }
