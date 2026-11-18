@@ -49,6 +49,18 @@ describe("la qualité automatique", () => {
     expect(d.q.level).toBe(0);
   });
 
+  it("ne garde pas un cran sur la foi d'une seconde chanceuse (les images varient d'une seconde à l'autre)", () => {
+    // Entre 39 et 49 images par seconde selon le moment, quoi qu'on fasse
+    let t = 0;
+    const d = device(["pixels", "pixels", "ombres"], () => {
+      const ms = 1000 / (44 + 5 * Math.sin(t / 700));
+      t += ms;
+      return ms;
+    });
+    d.run(120);
+    expect(d.q.level).toBe(0);
+  });
+
   it("remonte d'un cran quand tout redevient fluide", () => {
     let heavy = true;
     const d = device(["pixels", "ombres"], (on) => (heavy && !on[0] ? 1000 / 30 : 1000 / 60));

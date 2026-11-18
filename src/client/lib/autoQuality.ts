@@ -31,8 +31,13 @@ export class AutoQuality {
   private startedAt = -1;
   private slowFor = 0;
   private fastFor = 0;
-  /** Le cran qu'on vient de prendre, pour vérifier trois secondes plus tard qu'il a servi à quelque chose */
-  private trial: { at: number; fps: number; lever: number } | null = null;
+  /** Les images par seconde des dernières secondes (la référence d'un essai : pas seulement les deux plus lentes) */
+  private recent: number[] = [];
+  /**
+   * Le cran qu'on vient de prendre : on compare la moyenne des cinq secondes d'avant à celle des trois secondes qui
+   * suivent la première (celle du changement, où la carte graphique refait ses programmes, ne compte pas)
+   */
+  private trial: { before: number; lever: number; skip: number; after: number[] } | null = null;
   /** Les essais pour rien, par genre de cran */
   private useless = new Map<string, number>();
   /** Les crans qu'on ne quitte plus (une remontée qui n'a pas tenu) */
@@ -83,13 +88,16 @@ export class AutoQuality {
     // Les toutes premières secondes ne comptent pas : la carte graphique finit de tout préparer
     if (this.hidden() || now - this.startedAt < 3500) return;
     if (this.trial) {
-      if (now - this.trial.at < 3000) return;
-      this.judge(now);
+      if (this.trial.skip-- > 0) return;
+      this.trial.after.push(this.fps);
+      if (this.trial.after.length >= 3) this.judge();
       return;
     }
+    this.recent.push(this.fps);
+    if (this.recent.length > 5) this.recent.shift();
     this.slowFor = this.fps < this.slow || jank >= 6 ? this.slowFor + 1 : 0;
     this.fastFor = this.fps >= this.fast && jank <= 1 ? this.fastFor + 1 : 0;
-    if (this.slowFor >= 2) {
+    if (this.slowFor >= 2 && this.recent.length >= 4) {
       this.slowFor = 0;
       this.fastFor = 0;
       // On venait de remonter et ça ne tient pas : ce cran-là reste pris
@@ -112,22 +120,24 @@ export class AutoQuality {
     const i = this.on.findIndex((on, k) => !on && (this.useless.get(this.o.levers[k]!) ?? 0) < 2);
     if (i < 0) return;
     this.on[i] = true;
-    this.trial = { at: now, fps: this.fps, lever: i };
+    this.trial = { before: mean(this.recent), lever: i, skip: 1, after: [] };
     this.o.apply(this.on);
+    void now;
   }
 
-  /** Trois secondes après : le cran a-t-il fait gagner des images ? Sinon on le défait */
-  private judge(now: number) {
+  /** Le cran a-t-il fait gagner des images ? Sinon on le défait */
+  private judge() {
     const t = this.trial!;
     this.trial = null;
     this.slowFor = 0;
     this.fastFor = 0;
-    if (this.fps >= t.fps + 4 || this.fps >= this.fast) return;
+    this.recent = [];
+    const after = mean(t.after);
+    if (after >= t.before + 4 || after >= this.fast) return;
     this.on[t.lever] = false;
     const kind = this.o.levers[t.lever]!;
     this.useless.set(kind, (this.useless.get(kind) ?? 0) + 1);
     this.o.apply(this.on);
-    void now;
   }
 
   /** Défaire le dernier cran pris (sauf ceux qu'on ne quitte plus) */
@@ -141,3 +151,5 @@ export class AutoQuality {
     }
   }
 }
+
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 60);
