@@ -61,6 +61,7 @@ export class FighterStage {
   /** La vitrine du salon (quelques coups), ou la victoire (des sauts de joie) */
   private mode: "show" | "victory" = "show";
   private visible = false;
+  private disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -111,6 +112,7 @@ export class FighterStage {
   }
 
   setLook(look: FighterLook) {
+    if (this.disposed) return;
     if (this.model) {
       this.holder.remove(this.model.group);
       this.scene.remove(this.model.trail);
@@ -142,6 +144,7 @@ export class FighterStage {
   }
 
   resize(w: number, h: number) {
+    if (this.disposed) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
@@ -166,7 +169,7 @@ export class FighterStage {
   }
 
   private update() {
-    const run = this.visible && !this.still;
+    const run = this.visible && !this.still && !this.disposed;
     if (run && !this.raf) {
       this.last = performance.now();
       const loop = (now: number) => {
@@ -184,6 +187,7 @@ export class FighterStage {
   }
 
   private frame(dt: number) {
+    if (this.disposed) return;
     if (!this.model || !this.look) {
       this.renderer.render(this.scene, this.camera);
       return;
@@ -230,9 +234,18 @@ export class FighterStage {
 
   dispose() {
     if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.visible = false;
     this.model?.dispose();
+    // Plus de modèle : la tête qui arrive après coup (headCanvas) ne redessine plus rien
+    this.model = null;
+    this.look = null;
     for (const d of this.disposables) d.dispose();
     this.env.dispose();
     this.renderer.dispose();
+    // La vitrine rend sa carte graphique tout de suite, sans attendre le ramasse-miettes : on en ouvre et ferme
+    // souvent (salon, tenues de la boutique, fin du combat) et le navigateur n'en garde qu'une poignée à la fois
+    this.renderer.forceContextLoss();
+    this.disposed = true;
   }
 }

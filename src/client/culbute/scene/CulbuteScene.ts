@@ -1005,6 +1005,8 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
     }
     this.envMap?.dispose();
     this.renderer.dispose();
+    // La carte graphique rendue tout de suite (une revanche ou un retour au salon en rouvre une autre aussitôt)
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 }
