@@ -1611,6 +1611,20 @@ export function addFighter(m: Match, p: FighterInit): number {
   return i;
 }
 
+/**
+ * Un joueur prend le soldat d'un bot en pleine partie : il le reprend là où il est (vie, arme, position), mais son bilan
+ * part de zéro (ce que le bot a fait ne lui revient pas). Le score de l'équipe ne bouge pas.
+ */
+export function takeOver(m: Match, i: number, id: string) {
+  const f = m.fighters[i];
+  if (!f) return;
+  f.id = id;
+  f.bot = false;
+  f.stats = newStats();
+  f.points = 0;
+  f.streak = 0;
+}
+
 /** Le choix des armes pour la prochaine vie */
 export function chooseNext(
   m: Match,

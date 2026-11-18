@@ -19,6 +19,7 @@ import {
   upgradeMatch,
   chooseSpawn,
   giveUp,
+  takeOver,
 } from "../shared/games/escarmouche/match.ts";
 import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } from "../shared/games/escarmouche/rules.ts";
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
@@ -167,6 +168,12 @@ interface Attachment {
   userId: string;
   user: PublicUser;
   replaced?: boolean;
+}
+
+/** Une partie finie, relevée pour l'historique et la tournée */
+interface GameReport {
+  game: Parameters<typeof recordGame>[1];
+  tour: { code: string; report: Parameters<typeof reportToTour>[2] } | null;
 }
 
 /** Une table d'Escarmouche : le salon commun, puis une partie que le serveur mène et arbitre : il fait autorité. */
@@ -436,11 +443,9 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       const seat = { ...this.newHumanSeat(user, bot.team), primary: bot.primary };
       d.seats[k] = seat;
       if (m) {
+        // Il reprend le soldat du bot là où il est, avec un bilan à zéro
         const i = fighterIndex(m, bot.id);
-        if (i >= 0) {
-          m.fighters[i]!.id = seat.id;
-          m.fighters[i]!.bot = false;
-        }
+        if (i >= 0) takeOver(m, i, seat.id);
         this.memories.delete(bot.id);
         this.systemChat(`${user.pseudo} prend la place de ${bot.name} en pleine partie.`);
       } else this.systemChat(`${user.pseudo} prend la place de ${bot.name}.`);
@@ -1100,21 +1105,27 @@ export class EscarmoucheRoom extends DurableObject<Env> {
   private async afterChange(events: EscEvent[], now: number, closing?: WebSocket) {
     const d = this.data;
     if (!d) return;
+    // Une partie finie est relevée tout de suite, avant la moindre attente : pendant que le hub ou la base répondent,
+    // d'autres messages passent, et une revanche lancée entre-temps remplaçait la partie avant qu'elle soit enregistrée
+    const recording = this.recordIfNeeded();
     this.releaseAbsent(now);
     await this.persist();
     this.broadcast(events, closing);
     await this.armAlarm();
     await this.syncHub();
-    void now;
-    await this.recordIfNeeded();
+    await recording;
   }
 
   private async recordIfNeeded() {
     const d = this.data;
-    if (!d || d.status !== "finished" || d.recorded || d.match?.phase !== "over") return;
+    const m = d?.match;
+    if (!d || !m || d.status !== "finished" || d.recorded || m.phase !== "over") return;
+    // Tout ce qui part dans l'historique est lu maintenant, d'un coup : une revanche lancée pendant l'enregistrement
+    // n'y change plus rien
+    const record = this.recordOf(m, Date.now());
     d.recorded = true;
     await this.persist();
-    await this.recordResults(Date.now());
+    await this.recordResults(d, m, record);
     this.broadcast([]);
   }
 
@@ -1197,52 +1208,54 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     await this.ctx.storage.deleteAll();
   }
 
-  private async recordResults(now: number) {
+  /** Ce que la partie finie envoie à l'historique (et à la tournée) */
+  private recordOf(m: Match, now: number): GameReport {
     const d = this.data!;
-    const m = d.match!;
-    try {
-      const teams = isTeamMode(m.mode);
-      const statsOf = (i: number): EscarmoucheRecordStats => {
-        const f = m.fighters[i]!;
-        const won = m.ranks?.[i] === 1 && m.winner !== null;
-        return {
-          kills: f.stats.kills,
-          deaths: f.stats.deaths,
-          assists: f.stats.assists,
-          headshots: f.stats.headshots,
-          damage: Math.round(f.stats.damage),
-          shots: f.stats.shots,
-          hits: f.stats.hits,
-          captures: f.stats.captures,
-          returns: f.stats.returns,
-          zone: Math.round(f.stats.zone),
-          best: f.stats.best,
-          knives: f.stats.knives,
-          grenadeKills: f.stats.grenadeKills,
-          points: f.points,
-          won: won ? 1 : 0,
-        };
+    const teams = isTeamMode(m.mode);
+    const statsOf = (i: number): EscarmoucheRecordStats => {
+      const f = m.fighters[i]!;
+      const won = m.ranks?.[i] === 1 && m.winner !== null;
+      return {
+        kills: f.stats.kills,
+        deaths: f.stats.deaths,
+        assists: f.stats.assists,
+        headshots: f.stats.headshots,
+        damage: Math.round(f.stats.damage),
+        shots: f.stats.shots,
+        hits: f.stats.hits,
+        captures: f.stats.captures,
+        returns: f.stats.returns,
+        zone: Math.round(f.stats.zone),
+        best: f.stats.best,
+        knives: f.stats.knives,
+        grenadeKills: f.stats.grenadeKills,
+        points: f.points,
+        won: won ? 1 : 0,
       };
-      const players = m.fighters.map((f, i) => {
-        const seat = this.seatById(f.id);
-        return {
-          seat: i,
-          userId: seat?.kind === "human" ? seat.userId : null,
-          name: seat?.name ?? "?",
-          isBot: seat?.kind !== "human",
-          absent: Boolean(seat?.autoplay),
-          rank: m.ranks?.[i] ?? m.fighters.length,
-          score: teams ? m.scores[f.team === 1 ? 1 : 0] : f.stats.kills,
-          eliminated: false,
-          team: teams ? f.team : null,
-          stats: statsOf(i),
-        };
-      });
-      if (d.tour) {
-        // La tournée classe ses membres : en équipes, les gagnants devant puis, dans chaque équipe, les points de chacun
-        const counted = players.map((p, i) => ({ p, f: m.fighters[i]! })).filter(({ f }) => !f.id.startsWith(TOUR_GUEST_PREFIX));
-        const key = (x: (typeof counted)[number]) => -x.p.rank * 100000 + x.f.points;
-        await reportToTour(this.env, d.tour.code, {
+    };
+    const players = m.fighters.map((f, i) => {
+      const seat = this.seatById(f.id);
+      return {
+        seat: i,
+        userId: seat?.kind === "human" ? seat.userId : null,
+        name: seat?.name ?? "?",
+        isBot: seat?.kind !== "human",
+        absent: Boolean(seat?.autoplay),
+        rank: m.ranks?.[i] ?? m.fighters.length,
+        score: teams ? m.scores[f.team === 1 ? 1 : 0] : f.stats.kills,
+        eliminated: false,
+        team: teams ? f.team : null,
+        stats: statsOf(i),
+      };
+    });
+    let tour: GameReport["tour"] = null;
+    if (d.tour) {
+      // La tournée classe ses membres : en équipes, les gagnants devant puis, dans chaque équipe, les points de chacun
+      const counted = players.map((p, i) => ({ p, f: m.fighters[i]! })).filter(({ f }) => !f.id.startsWith(TOUR_GUEST_PREFIX));
+      const key = (x: (typeof counted)[number]) => -x.p.rank * 100000 + x.f.points;
+      tour = {
+        code: d.tour.code,
+        report: {
           code: d.code,
           index: d.tour.index,
           game: "escarmouche",
@@ -1252,9 +1265,11 @@ export class EscarmoucheRoom extends DurableObject<Env> {
             rank: 1 + counted.filter((o) => key(o) > key(c)).length,
             stats: { ...c.p.stats },
           })),
-        });
-      }
-      const { unlocked, elo } = await recordGame(this.env.DB, {
+        },
+      };
+    }
+    return {
+      game: {
         game: "escarmouche",
         mode: m.mode,
         roomCode: d.code,
@@ -1263,10 +1278,20 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         endedAt: now,
         rounds: 1,
         players,
-      });
+      },
+      tour,
+    };
+  }
+
+  /** L'envoi à la tournée et à l'historique ; les points d'Elo s'affichent avec la partie qui les a donnés */
+  private async recordResults(d: EscarmoucheData, m: Match, record: GameReport) {
+    try {
+      if (record.tour) await reportToTour(this.env, record.tour.code, record.tour.report);
+      const { unlocked, elo } = await recordGame(this.env.DB, record.game);
       const unlocks = Object.entries(unlocked).map(([userId, ids]) => ({ userId, ids }));
       if (unlocks.length > 0) this.broadcastRaw({ t: "achievements", unlocks });
-      if (this.data === d && Object.keys(elo).length > 0) {
+      // Une revanche partie entre-temps joue une autre partie : ces points-là ne sont pas les siens
+      if (this.data === d && d.match === m && Object.keys(elo).length > 0) {
         d.results = elo;
         await this.persist();
       }
