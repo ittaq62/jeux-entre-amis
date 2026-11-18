@@ -308,6 +308,8 @@ export class SoldierModel {
   private gear: Gear = NO_GEAR;
   private low: boolean;
   private alive = true;
+  /** Caché depuis qu'on l'a vu : s'il réapparaît à terre, c'est qu'il est tombé hors de vue (pas de chute à rejouer) */
+  private unseen = false;
   /** Le temps depuis le dernier coup tiré, pour le recul de l'arme */
   private kick = 0;
   /** Pour viser les tirs des autres : là où naît la balle */
@@ -528,6 +530,12 @@ export class SoldierModel {
     this.kick = 1;
   }
 
+  /** Hors de vue : on ne le montre plus */
+  hide() {
+    this.root.visible = false;
+    this.unseen = true;
+  }
+
   update(p: SoldierPose, dt: number, flagColor: string | null) {
     this.setGun(p.weapon);
     this.root.position.set(p.x, p.y, p.z);
@@ -536,8 +544,10 @@ export class SoldierModel {
       this.fallDown(p, dt);
       this.flag.visible = false;
       this.alive = false;
+      this.unseen = false;
       return;
     }
+    this.unseen = false;
     if (!this.alive) {
       this.hips.rotation.set(0, 0, 0);
       this.hips.position.set(0, 0.95, 0);
@@ -624,7 +634,8 @@ export class SoldierModel {
    */
   private fallDown(p: SoldierPose, dt: number) {
     if (this.deadFor < 0) {
-      this.deadFor = 0;
+      // Tombé pendant qu'on ne le voyait pas : il est déjà à terre
+      this.deadFor = this.unseen ? 1.5 : 0;
       this.fallSide = Math.random() < 0.5 ? -1 : 1;
       const ang = Math.random() * Math.PI * 2;
       this.fallDir = p.fall ?? { dx: Math.sin(ang), dz: Math.cos(ang), head: false, blast: false };

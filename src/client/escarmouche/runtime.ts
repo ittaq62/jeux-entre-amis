@@ -864,8 +864,11 @@ export class BattleRuntime {
     if (i * P_STRIDE >= b.p.length || i * P_STRIDE >= a.p.length) return null;
     const span = b.at - a.at;
     const f = span > 0 ? Math.max(0, Math.min(1, (rt - a.at) / span)) : 1;
-    const pa = readFighter(a.p, i);
     const pb = readFighter(b.p, i);
+    // Caché (le serveur ne dit rien de lui : on ne peut ni le voir ni l'entendre) : pas de soldat à montrer
+    if ((pb.bits & PF.hidden) !== 0) return null;
+    // Il vient d'apparaître : là où il est, sans glisser depuis l'endroit vide d'avant
+    const pa = (readFighter(a.p, i).bits & PF.hidden) !== 0 ? pb : readFighter(a.p, i);
     const jump = Math.hypot(pb.x - pa.x, pb.z - pa.z) > 4 || (pa.bits & PF.alive) !== (pb.bits & PF.alive);
     const g = jump ? (f < 0.5 ? 0 : 1) : f;
     const speed = span > 0 && !jump ? (Math.hypot(pb.x - pa.x, pb.z - pa.z) / span) * 1000 : 0;
@@ -1147,7 +1150,11 @@ export class BattleRuntime {
     for (let i = 0; i < v.fighters.length; i++) {
       if (i === this.me) continue;
       const f = this.fighterAt(i, rt);
-      if (!f) continue;
+      if (!f) {
+        // Hors de vue et sans bruit : le serveur ne l'envoie plus, on ne le montre plus
+        this.scene.hideSoldier(i);
+        continue;
+      }
       const alive = (f.bits & PF.alive) !== 0;
       const crouch = (f.bits & PF.crouch) !== 0;
       const pose = { x: f.x, y: f.y, z: f.z, crouch, alive };

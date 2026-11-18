@@ -70,6 +70,11 @@ export const PF = {
   mantle: 1024,
   /** Au combat (il a tiré ou été touché il y a peu) : on ne peut pas revenir auprès de lui */
   fight: 2048,
+  /**
+   * Caché : ce joueur ne peut ni le voir ni l'entendre en ce moment, le serveur ne dit rien de lui (tout le reste est à
+   * zéro). Voir sight.ts.
+   */
+  hidden: 4096,
 } as const;
 
 /** Par soldat dans `p` : x, y, z (cm), yaw, pitch (millièmes), drapeaux, arme en main, santé, drapeau porté + 1, coups tirés */

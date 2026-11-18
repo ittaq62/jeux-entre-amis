@@ -198,6 +198,66 @@ export class World {
     if (l < 1e-6) return true;
     return this.raycast(ax, ay, az, dx / l, dy / l, dz / l, l - 0.02) === null;
   }
+
+  /**
+   * Voit-on b depuis a ? Comme `clear`, mais pour l'œil seulement : les murs invisibles du bord ne cachent rien, et le
+   * premier obstacle suffit. Le trajet passe de case en case (au lieu de tout ce que couvre son rectangle) : c'est ce que
+   * le serveur demande le plus souvent, pour chaque joueur et chaque adversaire.
+   */
+  sees(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dz = bz - az;
+    const l = Math.hypot(dx, dy, dz);
+    if (l < 1e-6) return true;
+    const ux = dx / l;
+    const uy = dy / l;
+    const uz = dz / l;
+    const max = l - 0.02;
+    this.mark = (this.mark + 1) >>> 0;
+    if (this.mark === 0) {
+      this.stamp.fill(0);
+      this.mark = 1;
+    }
+    // Les cases traversées, dans l'ordre (en fractions du trajet, de 0 à 1)
+    const fx = (ax - this.minX) / CELL;
+    const fz = (az - this.minZ) / CELL;
+    const gx = (bx - this.minX) / CELL;
+    const gz = (bz - this.minZ) / CELL;
+    const [endI, endK] = this.cellOf(bx, bz);
+    let [i, k] = this.cellOf(ax, az);
+    const sx = gx > fx ? 1 : -1;
+    const sz = gz > fz ? 1 : -1;
+    const ddx = Math.abs(gx - fx);
+    const ddz = Math.abs(gz - fz);
+    const stepX = ddx > 1e-12 ? 1 / ddx : Infinity;
+    const stepZ = ddz > 1e-12 ? 1 / ddz : Infinity;
+    let nextX = ddx > 1e-12 ? (sx > 0 ? Math.floor(fx) + 1 - fx : fx - Math.floor(fx)) / ddx : Infinity;
+    let nextZ = ddz > 1e-12 ? (sz > 0 ? Math.floor(fz) + 1 - fz : fz - Math.floor(fz)) / ddz : Infinity;
+    for (let guard = this.nx + this.nz + 2; guard > 0; guard--) {
+      for (const b of this.grid[k * this.nx + i]!) {
+        if (this.stamp[b] === this.mark) continue;
+        this.stamp[b] = this.mark;
+        const box = this.boxes[b]!;
+        if (box.m === "invisible") continue;
+        if (rayBox(ax, ay, az, ux, uy, uz, box.x0, box.y0, box.z0, box.x1, box.y1, box.z1, max)) return false;
+      }
+      if (i === endI && k === endK) return true;
+      if (Math.min(nextX, nextZ) > 1) {
+        // Arrivé au bout sans tomber pile sur la dernière case (arrondis) : on la regarde quand même
+        i = endI;
+        k = endK;
+        nextX = nextZ = Infinity;
+      } else if (nextX < nextZ) {
+        nextX += stepX;
+        i = Math.max(0, Math.min(this.nx - 1, i + sx));
+      } else {
+        nextZ += stepZ;
+        k = Math.max(0, Math.min(this.nz - 1, k + sz));
+      }
+    }
+    return true;
+  }
 }
 
 const tmpList: number[] = [];

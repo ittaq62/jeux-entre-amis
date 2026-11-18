@@ -1,4 +1,5 @@
-// La salle d'Escarmouche : la fin d'une partie et sa revanche, la place d'un bot prise en pleine partie.
+// La salle d'Escarmouche : la fin d'une partie et sa revanche, la place d'un bot prise en pleine partie, et ce que
+// chacun reçoit des autres soldats pendant le combat.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({
@@ -14,6 +15,7 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("./users.ts", async (original) => ({ ...(await original<typeof import("./users.ts")>()), recordGame: vi.fn() }));
 
 import type { Match } from "../shared/games/escarmouche/match.ts";
+import { PF, readFighter, type EscTick } from "../shared/games/escarmouche/view.ts";
 import type { LobbyRoom } from "../shared/protocol.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user } from "./roomHarness.ts";
@@ -146,5 +148,58 @@ describe("Escarmouche : prendre la place d'un bot en pleine partie", () => {
     expect(f.points).toBe(0);
     expect(f.streak).toBe(0);
     expect(m.scores).toEqual(scores);
+  });
+});
+
+describe("Escarmouche : ce que la salle envoie des autres soldats", () => {
+  /** Les positions reçues par cette connexion, au dernier envoi du combat */
+  const lastTick = (ws: { inbox: Record<string, unknown>[] }) =>
+    [...ws.inbox].reverse().find((msg) => msg.t === "tick") as (EscTick & { now: number }) | undefined;
+
+  it("un adversaire derrière un mur n'arrive pas chez le joueur ; un spectateur voit tout, mais avec trois secondes de retard", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let now = Date.now();
+    const { bench, inside, host, ana } = await table({ mode: "solo", map: "hameau" });
+    const m = inside.data.match;
+    const me = m.fighters.findIndex((f) => f.id === "hote");
+    const her = m.fighters.findIndex((f) => f.id === "ana");
+    const bot = m.fighters.findIndex((f) => f.bot);
+    // Le bot est hors de combat pour longtemps ; l'hôte est dans l'avenue, Ana derrière la maison B
+    Object.assign(m.fighters[bot]!, { respawnAt: 1e9 });
+    Object.assign(m.fighters[bot]!.s, { alive: false, y: -50 });
+    const watcher = (await bench.arrive(user("curieux"))).ws;
+    expect(watcher.view<LobbyRoom>().you.seatId).toBeNull();
+    const stand = () => {
+      Object.assign(m.fighters[me]!.s, { x: -28, y: 0, z: -3, vx: 0, vz: 0, alive: true });
+      Object.assign(m.fighters[her]!.s, { x: -17, y: 0, z: -11, vx: 0, vz: 0, alive: true, crouch: true });
+    };
+    (inside as unknown as { lastTick: number }).lastTick = now;
+    for (let k = 0; k < 40; k++) {
+      stand();
+      now += 50;
+      vi.setSystemTime(now);
+      await inside.tick();
+    }
+    const mine = lastTick(host)!;
+    expect(readFighter(mine.p, her).bits).toBe(PF.hidden);
+    expect(readFighter(mine.p, me).x).toBe(-28);
+    expect(readFighter(lastTick(ana!)!.p, me).bits).toBe(PF.hidden);
+    // Le spectateur : rien pendant trois secondes, puis tout le monde, à sa vraie place
+    expect(lastTick(watcher)).toBeUndefined();
+    for (let k = 0; k < 30; k++) {
+      stand();
+      now += 50;
+      vi.setSystemTime(now);
+      await inside.tick();
+    }
+    const seen = lastTick(watcher)!;
+    expect(seen.now).toBeLessThanOrEqual(now - 3000);
+    expect(readFighter(seen.p, her)).toMatchObject({ x: -17, z: -11 });
+    // Ana se montre dans l'avenue : l'hôte la reçoit aussitôt
+    Object.assign(m.fighters[her]!.s, { x: -14, z: 1, crouch: false });
+    now += 50;
+    vi.setSystemTime(now);
+    await inside.tick();
+    expect(readFighter(lastTick(host)!.p, her)).toMatchObject({ x: -14, z: 1 });
   });
 });

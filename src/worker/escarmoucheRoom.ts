@@ -23,7 +23,8 @@ import {
 } from "../shared/games/escarmouche/match.ts";
 import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } from "../shared/games/escarmouche/rules.ts";
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
-import { encodeMe, encodeTick, escarmoucheView, stateKey } from "../shared/games/escarmouche/view.ts";
+import { encodeMe, encodeTick, escarmoucheView, stateKey, type EscTick } from "../shared/games/escarmouche/view.ts";
+import { Sight, tickFor } from "../shared/games/escarmouche/sight.ts";
 import { isUniformId, UNIFORM_BY_ID, type UniformId } from "../shared/games/escarmouche/uniforms.ts";
 import {
   isPrimaryId,
@@ -110,6 +111,8 @@ const HISTORY_MS = 1000;
 /** Les pas qu'un joueur peut avoir d'avance (au-delà, les plus vieux sont oubliés) */
 const QUEUE_MAX = 40;
 const STEP_MS = DT * 1000;
+/** Les spectateurs voient tout le combat, avec ce retard */
+const WATCH_DELAY_MS = 3000;
 
 interface Seat {
   id: string;
@@ -195,6 +198,10 @@ export class EscarmoucheRoom extends DurableObject<Env> {
   private memories = new Map<string, BotMemory>();
   /** Pas joués par le monde depuis le début (horloge des bots) */
   private steps = 0;
+  /** Ce que chaque joueur peut voir ou entendre des autres */
+  private sight = new Sight();
+  /** Le combat tel que les spectateurs le verront, en attendant son heure */
+  private watchFeed: { at: number; text: string }[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -937,6 +944,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     this.history = [];
     this.memories.clear();
     this.steps = 0;
+    this.sight = new Sight();
+    this.watchFeed = [];
     this.lastKey = stateKey(d.match);
     this.systemChat(`Au combat ! ${MODE_INFO[settings.mode].name}, ${MAP_NAMES[d.match.map].name.toLowerCase()}.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("escarmouche", d.settings.randomRules, "start"));
@@ -1038,16 +1047,38 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       if (mem && by) botHurt(mem, e.a, m.t, by.s.x, by.s.z);
     }
 
-    // L'envoi : la même partie pour tout le monde, et à chacun son propre soldat
+    // L'envoi : à chaque joueur, ce qu'il peut voir ou entendre des autres (sight.ts) et son propre soldat ; aux
+    // spectateurs, tout, mais en différé (sinon un second compte qui regarde verrait à travers les murs pour un ami)
     const tick = encodeTick(m, events);
-    const base = JSON.stringify({ t: "tick", now, ...tick }).slice(0, -1);
+    this.sight.hear(m, events, (i, w) => {
+      const seat = this.seatById(m.fighters[i]!.id);
+      return seat?.muzzle === "silencieux" && seat.primary === w;
+    });
+    const { p, e, mk, pg, ...common } = tick;
+    const head = JSON.stringify({ t: "tick", now, ...common }).slice(0, -1);
+    const part = (x: Pick<EscTick, "p" | "e" | "mk" | "pg">) =>
+      `"p":${JSON.stringify(x.p)},"e":${JSON.stringify(x.e)}${x.mk ? `,"mk":${JSON.stringify(x.mk)}` : ""}${x.pg ? `,"pg":${JSON.stringify(x.pg)}` : ""}`;
+    this.watchFeed.push({ at: now, text: `${head},${part({ p, e, mk, pg })}}` });
+    let late = 0;
+    while (late < this.watchFeed.length && this.watchFeed[late]!.at <= now - WATCH_DELAY_MS) late++;
+    const due = this.watchFeed.splice(0, late);
+    const views = new Map<number, string>();
     for (const ws of this.ctx.getWebSockets()) {
       if (!isLive(ws)) continue;
       const att = ws.deserializeAttachment() as Attachment | null;
       if (!att || att.replaced) continue;
       const i = fighterIndex(m, att.userId);
       try {
-        ws.send(i >= 0 ? `${base},"me":${JSON.stringify(encodeMe(m, i))}}` : `${base}}`);
+        if (i < 0) {
+          for (const d of due) ws.send(d.text);
+          continue;
+        }
+        let body = views.get(i);
+        if (body === undefined) {
+          body = part(tickFor(m, tick, i, this.sight.mask(m, i)));
+          views.set(i, body);
+        }
+        ws.send(`${head},${body},"me":${JSON.stringify(encodeMe(m, i))}}`);
       } catch {
         // déjà fermée
       }

@@ -405,6 +405,16 @@ export class EscScene {
     this.soldiers.delete(i);
   }
 
+  /** Le soldat `i` n'est plus envoyé (on ne peut ni le voir ni l'entendre) : il disparaît, avec son nom et ses marques */
+  hideSoldier(i: number) {
+    const s = this.soldiers.get(i);
+    if (!s) return;
+    s.model.hide();
+    s.name.visible = false;
+    s.mark.visible = false;
+    s.cross.visible = false;
+  }
+
   /** Le soldat `i`, et son nom (montré ou non) */
   updateSoldier(i: number, pose: SoldierPose, dt: number, showName: boolean, flagColor: string | null, marked = false, fallen = false) {
     const s = this.soldiers.get(i);
