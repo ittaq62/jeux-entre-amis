@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ArenaId } from "./arenas.ts";
+import { ARENAS, type ArenaId } from "./arenas.ts";
 import { botInput, newBotMemory, type BotLevel } from "./bot.ts";
 import { createFight, DEFAULT_FIGHT_SETTINGS, stepFight } from "./engine.ts";
-import { HABITUE_IDS, type Fight, type FightEvent, type Fighter, type HabitueId } from "./model.ts";
+import { HABITUE_IDS, SPC, type Fight, type FightEvent, type Fighter, type HabitueId } from "./model.ts";
 
 function botFight(styles: HabitueId[], arena: ArenaId = "place", items: "aucun" | "peu" | "beaucoup" = "peu", seed = 1) {
   const f = createFight(
@@ -114,6 +114,36 @@ describe("Culbute : les bots", () => {
       }
     }
     expect(up).toBeGreaterThanOrEqual(HABITUE_IDS.length * 2 - 1);
+  });
+
+  it("au niveau moyen comme au niveau fort, ils attendent au bord celui qui revient (au niveau facile, jamais)", () => {
+    const tries = (level: BotLevel) => {
+      let guarded = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        const f = createFight(
+          { ...DEFAULT_FIGHT_SETTINGS, items: "aucun" },
+          "place",
+          [
+            { id: "bot", team: 0, style: "raymond" },
+            { id: "dehors", team: 1, style: "marcel" },
+          ],
+          seed,
+        );
+        while (f.phase === "intro") stepFight(f, []);
+        const [me, out] = f.fighters as [Fighter, Fighter];
+        const st = ARENAS.place.platforms[0]!;
+        // Lui au bord de droite, arrêté, tourné vers le vide ; l'autre dehors, en l'air, qui revient
+        Object.assign(me, { x: st.x1 * f.scale - 0.8, y: st.y, ground: 0, state: "stand", vx: 0, vy: 0, face: 1 });
+        Object.assign(out, { x: st.x1 * f.scale + 3, y: st.y - 1, ground: -1, state: "air", vx: 0, vy: 0 });
+        const mem = newBotMemory(seed);
+        // Ce qu'il fait à sa première décision : le spécial neutre sur celui qui revient
+        if (botInput(f, 0, mem, level).pressed & SPC) guarded++;
+      }
+      return guarded;
+    };
+    expect(tries("facile")).toBe(0);
+    expect(tries("moyen")).toBeGreaterThan(5);
+    expect(tries("fort")).toBeGreaterThan(5);
   });
 
   it("ne se jettent pas dans le vide tout seuls", () => {

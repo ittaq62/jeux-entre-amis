@@ -30,8 +30,8 @@ interface LevelInfo {
   mash: number;
   /** Ses chances de lever la garde à l'avance quand un adversaire arrive tout près */
   wary: number;
-  /** Il garde l'adversaire hors de l'arène */
-  edgeguard: boolean;
+  /** Ses chances, à chaque décision, de garder au bord l'adversaire qui revient sur l'arène */
+  edgeguard: number;
   /** Ses chances de narguer, une fois un adversaire sorti (si personne n'est tout près) */
   taunt: number;
 }
@@ -44,7 +44,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     charge: 0.15,
     recover: 0.75,
     influence: false,
-    edgeguard: false,
+    edgeguard: 0,
     grab: 0.15,
     mash: 0.08,
     wary: 0.04,
@@ -57,7 +57,9 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     charge: 0.4,
     recover: 0.95,
     influence: true,
-    edgeguard: false,
+    // Comme le niveau fort : sans personne pour l'attendre au bord, le style qui revient mal sur l'arène (Marcel) ne
+    // payait jamais ce défaut, et gagnait deux combats sur trois entre bots moyens (un peu plus de la moitié, avec)
+    edgeguard: 0.5,
     grab: 0.5,
     mash: 0.2,
     wary: 0.14,
@@ -70,7 +72,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     charge: 0.6,
     recover: 1,
     influence: true,
-    edgeguard: true,
+    edgeguard: 0.5,
     grab: 0.85,
     mash: 0.4,
     wary: 0.12,
@@ -285,7 +287,7 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
   // L'adversaire est dehors : on l'attend au bord (les bons bots vont le chercher)
   if (offstage(t, st)) {
     const edge = t.x < 0 ? st.x0 + 0.8 : st.x1 - 0.8;
-    if (L.edgeguard && airborne(t) && Math.abs(edge - me.x) < 1.2 && Math.abs(dy) < 4 && rnd(m) < 0.5) {
+    if (L.edgeguard > 0 && airborne(t) && Math.abs(edge - me.x) < 1.2 && Math.abs(dy) < 4 && rnd(m) < L.edgeguard) {
       // Un projectile, ou le souffle de Simone, sur celui qui revient
       if (["raymond", "lucien", "simone", "ginette", "huguette"].includes(me.style)) {
         // Arrêté et tourné vers lui : le spécial neutre part ; sinon on freine, ou on se retourne d'abord
