@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { colorless, lookKey, paintVertices } from "../../lib/sameLook.ts";
 import type { Keep } from "./props.ts";
 
 export const mat = (keep: Keep, color: THREE.ColorRepresentation, roughness = 0.85, metalness = 0, map?: THREE.Texture | null) =>
@@ -839,30 +840,37 @@ export function bunting(keep: Keep, a: THREE.Vector3, b: THREE.Vector3, sag: num
 }
 
 /**
- * Moins de choses à dessiner : sous `root`, tous les morceaux immobiles qui partagent une matière deviennent une seule
- * forme (en gardant les couleurs par sommet quand la matière s'en sert).
+ * Moins de choses à dessiner : sous `root`, tous les morceaux immobiles qui rendent pareil deviennent une seule forme :
+ * ceux qui partagent une matière, et ceux dont les matières ne diffèrent que par la couleur (elle passe alors dans les
+ * sommets, voir sameLook.ts ; l'image est la même). Les couleurs par sommet d'une matière qui s'en sert sont gardées.
+ * Un morceau qui porte des données (une lanterne qui vacille…) ne se fond qu'avec ceux de sa propre matière.
  */
 export function bake(root: THREE.Object3D, keep: Keep) {
   root.updateMatrixWorld(true);
   const inverse = root.matrixWorld.clone().invert();
-  const groups = new Map<THREE.Material, THREE.Mesh[]>();
+  const groups = new Map<string | THREE.Material, THREE.Mesh[]>();
   root.traverse((o) => {
     if (o === root || !(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh) return;
     if (Array.isArray(o.material) || !o.visible) return;
-    const list = groups.get(o.material) ?? [];
+    const key = Object.keys(o.userData).length === 0 ? (lookKey(o.material) ?? o.material) : o.material;
+    const list = groups.get(key) ?? [];
     list.push(o);
-    groups.set(o.material, list);
+    groups.set(key, list);
   });
-  for (const [m, meshes] of groups) {
+  for (const [key, meshes] of groups) {
     if (meshes.length < 2) continue;
-    const colored = (m as THREE.MeshStandardMaterial).vertexColors === true;
+    const first = meshes[0]!.material as THREE.MeshStandardMaterial;
+    const mixed = typeof key === "string" && meshes.some((x) => !(x.material as THREE.MeshStandardMaterial).color.equals(first.color));
+    const m = mixed ? keep(colorless(first)) : first;
+    const colored = m.vertexColors === true;
     const parts = meshes.map((mesh) => {
       const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
       g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld));
       const n = g.getAttribute("position").count;
       if (!g.getAttribute("normal")) g.computeVertexNormals();
       if (!g.getAttribute("uv")) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
-      if (colored && !g.getAttribute("color"))
+      if (mixed) paintVertices(g, (mesh.material as THREE.MeshStandardMaterial).color);
+      else if (colored && !g.getAttribute("color"))
         g.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(n * 3).fill(1), 3));
       return g;
     });
