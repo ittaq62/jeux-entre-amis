@@ -1,8 +1,8 @@
 import { HABITUES } from "../../shared/games/culbute/fighters.ts";
 import { isHabitueId } from "../../shared/games/culbute/model.ts";
 import { AvatarDrawing } from "../components/Avatar.tsx";
-import { PropIcon } from "./FighterPicker.tsx";
-import "./culbute.css";
+import { PropIcon } from "./PropIcon.tsx";
+import "./culbuteCard.css";
 
 /** Les dessins des cartes de la famille « La Culbute » : les Habitués et leur accessoire, les objets, les arènes */
 export function CulbuteCardArt({ subject }: { subject: string }) {

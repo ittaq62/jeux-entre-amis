@@ -8,7 +8,6 @@
 // autour ce que sa forme permet, du cadre haut de l'ordinateur à la bande très large de la tablette.
 
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import "./escarmouche.css";
 import "./escarmouchePreview.css";
 
 /** L'essentiel, toujours visible, et ce qu'on aime montrer autour quand le cadre le permet (repère du dessin) */

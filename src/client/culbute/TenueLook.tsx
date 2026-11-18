@@ -2,7 +2,7 @@ import { HABITUES, isTenueId, PALETTES } from "../../shared/games/culbute/fighte
 import { isHabitueId } from "../../shared/games/culbute/model.ts";
 import type { ShopItem } from "../../shared/shop.ts";
 import { AvatarDrawing } from "../components/Avatar.tsx";
-import { PropIcon } from "./FighterPicker.tsx";
+import { PropIcon } from "./PropIcon.tsx";
 import { FighterStageView, lookOfPick } from "./FighterStageView.tsx";
 import "./culbute.css";
 

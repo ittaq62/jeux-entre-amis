@@ -932,17 +932,6 @@ html:has(.cb-fight) body {
 }
 
 /* L'accueil : le titre du jeu (l'affiche est dans culbutePreview.css) */
-.game-name.is-culbute {
-  color: #ffffff;
-  text-shadow:
-    1px 1px 0 #c0653a,
-    2px 2px 0 #b35a32,
-    3px 3px 0 #a5502b,
-    4px 4px 0 #974624,
-    5px 5px 0 #893c1d,
-    8px 10px 16px rgba(0, 0, 0, 0.5);
-}
-
 /* La boutique : une tenue */
 .cb-tenue-look {
   position: relative;
@@ -966,38 +955,6 @@ html:has(.cb-fight) body {
 }
 
 /* L'album : un Habitué et son accessoire */
-.tc-culbute-fighter {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-}
-
-.tc-culbute-fighter .avatar {
-  width: 62% !important;
-  height: auto !important;
-  aspect-ratio: 1;
-}
-
-.tc-culbute-prop {
-  position: absolute;
-  right: 10%;
-  bottom: 8%;
-  display: grid;
-  place-items: center;
-  width: 32%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgba(255, 250, 236, 0.92);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-.tc-culbute-prop svg {
-  width: 72%;
-  height: 72%;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .cb-countdown,
   .cb-dmg,

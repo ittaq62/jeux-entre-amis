@@ -4,7 +4,7 @@
 // et la caméra s'approche lentement de l'action, puis recule (banners.css).
 
 import type { CSSProperties } from "react";
-import "./crampons.css";
+import "./cramponsPreview.css";
 
 const IMAGE = "/crampons-apercu.webp";
 /** Le ballon sur l'image */

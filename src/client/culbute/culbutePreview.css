@@ -120,3 +120,14 @@
     stroke-dashoffset: -100;
   }
 }
+
+.game-name.is-culbute {
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 #c0653a,
+    2px 2px 0 #b35a32,
+    3px 3px 0 #a5502b,
+    4px 4px 0 #974624,
+    5px 5px 0 #893c1d,
+    8px 10px 16px rgba(0, 0, 0, 0.5);
+}

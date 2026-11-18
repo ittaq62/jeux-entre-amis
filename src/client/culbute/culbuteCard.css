@@ -1,0 +1,33 @@
+/* Les dessins des cartes de la famille « La Culbute » (l'album, l'accueil) : sans la feuille du jeu */
+
+.tc-culbute-fighter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.tc-culbute-fighter .avatar {
+  width: 62% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+}
+
+.tc-culbute-prop {
+  position: absolute;
+  right: 10%;
+  bottom: 8%;
+  display: grid;
+  place-items: center;
+  width: 32%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 250, 236, 0.92);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.tc-culbute-prop svg {
+  width: 72%;
+  height: 72%;
+}

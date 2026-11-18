@@ -7,7 +7,6 @@
 // Par-dessus, en SVG au repère de chaque image (calé comme object-fit: cover), ce qui vit : l'éclat du coup qui palpite, son
 // onde, les traits de vitesse derrière Marcel ; et la caméra s'approche lentement de l'action (culbutePreview.css).
 
-import "./culbute.css";
 import "./culbutePreview.css";
 
 interface Poster {
