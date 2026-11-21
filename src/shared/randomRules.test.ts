@@ -12,8 +12,10 @@ import {
   applyDrawnRules,
   cleanDraw,
   drawnKeys,
+  drawnLines,
   drawNotice,
   drawnRules,
+  drawnShort,
   drawRules,
   hostDraw,
   hostPatch,
@@ -21,7 +23,7 @@ import {
 } from "./randomRules.ts";
 import { DEFAULT_SETTINGS as ESCARMOUCHE_DEFAULTS } from "./games/escarmouche/rules.ts";
 import { random } from "./rng.ts";
-import { findVariant, TOUR_GAMES, variantSettings } from "./tour.ts";
+import { findVariant, gameVariants, maxExtras, TOUR_GAMES, variantSettings } from "./tour.ts";
 
 const DEFAULTS: Record<GameId, object> = {
   uno: UNO_DEFAULTS,
@@ -57,11 +59,16 @@ describe("règles au hasard d'une table", () => {
     }
   });
 
-  it("chaque jeu peut tomber sur chacune de ses variantes", () => {
+  it("chaque jeu peut tomber sur chacun de ses formats, et sur plusieurs règles à part à la fois", () => {
     for (const game of TOUR_GAMES) {
       const rnd = seeded(11);
-      const seen = new Set(Array.from({ length: 300 }, () => drawRules(game, rnd).split("+")[0]));
-      expect(seen.size).toBeGreaterThan(2);
+      const draws = Array.from({ length: 400 }, () => drawRules(game, rnd));
+      expect(new Set(draws.map((d) => d.split("+")[0])).size).toBe(gameVariants(game).length);
+      if (maxExtras(game) >= 2)
+        expect(
+          draws.some((d) => d.split("+").length >= 3),
+          game,
+        ).toBe(true);
     }
   });
 
@@ -158,14 +165,27 @@ describe("règles au hasard d'une table", () => {
     expect(drawNotice("bolides", "sprint", "start")).toBe(
       "Règles tirées au sort pour cette partie : Sprint. Deux tours seulement : pas le droit à l'erreur.",
     );
-    expect(drawNotice("naval", "salve+colles", "next")).toContain(
-      "Pour la prochaine partie, règles tirées au sort : Salve, navires collés.",
+    expect(drawNotice("naval", "grande+salve+colles", "next")).toContain(
+      "Pour la prochaine partie, règles tirées au sort : Grande grille, salve, navires collés.",
     );
     expect(drawNotice("uno", "no-mercy+sans-avance", "start")).toContain(
       "Règles tirées au sort pour cette partie : No Mercy, pas de UNO d'avance. ",
     );
     // À une table, Capitale ne dure pas les 20 minutes de la tournée : c'est l'hôte qui règle la durée
     expect(drawnRules("capitale", "classique")!.blurb).not.toContain("20 minutes");
-    expect(drawnRules("capitale", "monopole")).toEqual(findVariant("capitale", "monopole"));
+    expect(drawnRules("capitale", "classique+monopole")!.blurb).toContain("Trois quartiers complets");
+    expect(drawnRules("capitale", "builder+monopole")).toEqual(findVariant("capitale", "builder+monopole"));
+  });
+
+  it("dit les règles une par ligne, et en une ligne courte pour l'en-tête d'une table", () => {
+    expect(drawnLines("capitale", "classique+cagnotte+monopole").map((l) => l.name)).toEqual(["Classique", "Cagnotte", "Monopole"]);
+    expect(drawnLines("capitale", "classique")[0]!.blurb).not.toContain("20 minutes");
+    expect(drawnShort("capitale", "classique+cagnotte+monopole")).toBe("Classique + 2 règles");
+    expect(drawnShort("naval", "eclair+colles")).toBe("Éclair + 1 règle");
+    expect(drawnShort("naval", "eclair")).toBe("Éclair");
+    // « UNO d'avance permis » se dit au salon, mais ne compte pas comme une règle de plus
+    expect(drawnLines("uno", "classique").map((l) => l.kind)).toEqual(["base", "off"]);
+    expect(drawnShort("uno", "classique")).toBe("Classique");
+    expect(drawnShort("uno", "triche")).toBeNull();
   });
 });

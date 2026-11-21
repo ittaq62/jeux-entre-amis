@@ -5,7 +5,7 @@
 // l'hôte le coche.
 
 import type { GameId } from "./protocol.ts";
-import { drawVariant, findVariant, gameModifiers, variantKeys, variantSettings, type TourVariant } from "./tour.ts";
+import { drawVariant, findVariant, ruleLines, variantKeys, variantSettings, type RuleLine, type TourVariant } from "./tour.ts";
 
 /**
  * Les règles que le tirage décide en plus de celles que touchent les variantes : celles que leurs descriptions
@@ -19,9 +19,10 @@ const ALSO_DRAWN: Partial<Record<GameId, string[]>> = {
 
 /** Les descriptions propres aux tables, quand celle de la tournée parle de la tournée */
 const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
-  capitale: { classique: "Les règles de base : rachat des villes, catastrophes, construction équilibrée et bâtiments spéciaux." },
+  // La durée d'une partie de Capitale, à une table, est celle de l'hôte (la tournée joue 20 minutes)
+  capitale: { classique: "Le plateau des villes et ses bâtiments spéciaux : le plus riche gagne." },
   // Une table de Culbute joue un seul combat (la tournée en enchaîne trois)
-  culbute: { classique: "Trois vies chacun, et quelques objets qui tombent du ciel." },
+  culbute: { classique: "Trois vies chacun." },
 };
 
 /** Les réglages que fixe le tirage : ceux-là ne se choisissent plus à la main tant que les règles sont au hasard */
@@ -29,15 +30,30 @@ export function drawnKeys(game: GameId): string[] {
   return [...new Set([...variantKeys(game), ...(ALSO_DRAWN[game] ?? [])])];
 }
 
-/** Les règles tirées, nommées et décrites pour une table (null si l'id est inconnu) */
+/**
+ * Les règles tirées pour une table, une par ligne (le format, puis chaque règle à part), avec les mots d'une table ;
+ * vide si l'id est inconnu
+ */
+export function drawnLines(game: GameId, id: string | null | undefined): RuleLine[] {
+  return ruleLines(game, id).map((line) => {
+    const own = line.kind === "base" ? TABLE_BLURBS[game]?.[line.id] : undefined;
+    return own ? { ...line, blurb: own } : line;
+  });
+}
+
+/** Les règles tirées, nommées et décrites en une phrase pour une table (null si l'id est inconnu) */
 export function drawnRules(game: GameId, id: string | null | undefined): TourVariant | null {
   const v = findVariant(game, id);
   if (!v) return null;
-  const [base, ...mods] = id!.split("+");
-  const own = TABLE_BLURBS[game]?.[base!];
-  if (!own) return v;
-  const extra = mods.map((m) => gameModifiers(game).find((x) => x.id === m)?.blurb);
-  return { ...v, blurb: [own, ...extra].filter(Boolean).join(" ") };
+  const lines = drawnLines(game, id).filter((l) => l.kind !== "off");
+  return { ...v, blurb: lines.map((l) => l.blurb).join(" ") };
+}
+
+/** En une ligne courte (en-tête d'une table) : le format, et combien de règles à part s'y ajoutent */
+export function drawnShort(game: GameId, id: string | null | undefined): string | null {
+  const [base, ...rest] = drawnLines(game, id).filter((l) => l.kind !== "off");
+  if (!base) return null;
+  return rest.length === 0 ? base.name : `${base.name} + ${rest.length} règle${rest.length > 1 ? "s" : ""}`;
 }
 
 /** Un tirage pour la partie suivante : autre chose que le tirage d'avant quand c'est possible */

@@ -302,26 +302,25 @@ interface VariantOf<S> {
   settings: Partial<S>;
 }
 
+/** Un format du jeu : ils s'excluent entre eux (la taille de la grille, le paquet de cartes, le mode de partie…) */
+interface Format<S> extends VariantOf<S> {
+  /** Au hasard : son poids parmi les formats du jeu (1 sans rien) */
+  weight?: number;
+}
+
 export interface TourVariant {
   id: string;
   name: string;
   blurb: string;
 }
 
-const UNO_VARIANTS: VariantOf<UnoSettings>[] = [
-  { id: "classique", name: "Classique", blurb: "Les règles habituelles : les +2 et les +4 se cumulent.", settings: {} },
-  {
-    id: "sept-zero",
-    name: "7-0 et interception",
-    blurb: "Un 7 échange ta main avec celle de ton choix, un 0 fait tourner les mains, et une carte identique se joue hors de son tour.",
-    settings: { sevenZero: true, jumpIn: true },
-  },
-  {
-    id: "pioche",
-    name: "Pioche sans fin",
-    blurb: "On pioche tant qu'aucune carte ne peut être posée.",
-    settings: { drawUntilPlayable: true },
-  },
+// Les règles d'un jeu se tirent en deux temps : un format (ils s'excluent : un seul), puis des règles à part, tirées
+// chacune de leur côté et cumulables, jusqu'à un plafond par jeu pour que la partie reste jouable. Une règle à part peut
+// ne se jouer qu'avec certains formats (`bases`), ou exclure les autres règles de son groupe (`group`). Les règles
+// tirées s'écrivent « format+règle+règle », dans l'ordre du jeu : « grande+salve+arsenal ».
+
+const UNO_VARIANTS: Format<UnoSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "108 cartes ; les +2 et les +4 se cumulent.", settings: {}, weight: 3 },
   {
     id: "no-mercy",
     name: "No Mercy",
@@ -330,19 +329,13 @@ const UNO_VARIANTS: VariantOf<UnoSettings>[] = [
   },
 ];
 
-const NAVAL_VARIANTS: VariantOf<NavalSettings>[] = [
-  { id: "classique", name: "Classique", blurb: "Grille 10 × 10, celui qui touche rejoue.", settings: {} },
-  { id: "salve", name: "Salve", blurb: "À chaque tour, autant de tirs que de navires encore à flot.", settings: { shots: "salvo" } },
-  {
-    id: "arsenal",
-    name: "Arsenal",
-    blurb: "Grande grille 12 × 12, et couler un navire rapporte une arme : radar, torpille ou barrage.",
-    settings: { grid: 12, arsenal: true },
-  },
+const NAVAL_VARIANTS: Format<NavalSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "La grille habituelle, 10 × 10.", settings: {}, weight: 2 },
   { id: "eclair", name: "Éclair", blurb: "Petite grille 8 × 8 : ça va très vite.", settings: { grid: 8 } },
+  { id: "grande", name: "Grande grille", blurb: "Grille 12 × 12 : la flotte a de la place pour se cacher.", settings: { grid: 12 } },
 ];
 
-/** Une règle à part qu'on annonce toujours, par oui ou par non, et que les règles votées soumettent au vote */
+/** Une règle à part qu'on annonce toujours, par oui ou par non : au UNO, « pas de UNO d'avance » */
 interface AskedRule {
   /** La question du vote */
   question: string;
@@ -351,23 +344,48 @@ interface AskedRule {
   offBlurb: string;
 }
 
-type Modifier = VariantOf<object> & { chance: number; asked?: AskedRule };
+interface Modifier extends VariantOf<object> {
+  /** Au hasard : sa chance d'être tirée */
+  chance: number;
+  /** Les formats avec lesquels elle se joue (tous sans rien) */
+  bases?: string[];
+  /** Pourquoi elle est écartée avec les autres formats (aux règles votées) */
+  unfit?: string;
+  /** Deux règles du même groupe ne se cumulent pas (Culbute : sans objets ou pluie d'objets) */
+  group?: string;
+  /** Annoncée toujours, retenue ou non, et tirée hors du plafond */
+  asked?: AskedRule;
+}
 
-/**
- * Les règles à part, tirées chacune de leur côté par-dessus la variante : à la bataille navale, les navires collés ;
- * au UNO, pas de UNO d'avance (Classique comme No Mercy). Une variante tirée s'écrit alors « salve+colles ».
- */
+/** Les règles à part de chaque jeu, dans l'ordre où elles s'écrivent et s'annoncent */
 const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
-  naval: [
-    {
-      id: "colles",
-      name: "navires collés",
-      blurb: "Les navires peuvent se toucher.",
-      settings: { touching: true } satisfies Partial<NavalSettings>,
-      chance: 0.5,
-    },
-  ],
   uno: [
+    {
+      id: "sept-zero",
+      name: "7-0",
+      blurb: "Un 7 échange ta main avec celle de ton choix, un 0 fait tourner toutes les mains.",
+      settings: { sevenZero: true } satisfies Partial<UnoSettings>,
+      chance: 0.35,
+      // En No Mercy, le 7-0 et la pioche sans fin sont déjà la règle
+      bases: ["classique"],
+      unfit: "déjà la règle en No Mercy",
+    },
+    {
+      id: "interception",
+      name: "interception",
+      blurb: "Une carte strictement identique se joue hors de son tour.",
+      settings: { jumpIn: true } satisfies Partial<UnoSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "pioche",
+      name: "pioche sans fin",
+      blurb: "On pioche tant qu'aucune carte ne peut être posée.",
+      settings: { drawUntilPlayable: true } satisfies Partial<UnoSettings>,
+      chance: 0.3,
+      bases: ["classique"],
+      unfit: "déjà la règle en No Mercy",
+    },
     {
       id: "sans-avance",
       name: "pas de UNO d'avance",
@@ -381,25 +399,285 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       },
     },
   ],
+  naval: [
+    {
+      id: "salve",
+      name: "salve",
+      blurb: "À chaque tour, autant de tirs que de navires encore à flot, au lieu de rejouer quand on touche.",
+      settings: { shots: "salvo" } satisfies Partial<NavalSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "arsenal",
+      name: "arsenal",
+      blurb: "Couler un navire rapporte une arme : radar, torpille ou barrage.",
+      settings: { arsenal: true } satisfies Partial<NavalSettings>,
+      chance: 0.35,
+      // Sur la petite grille, les armes videraient la mer en trois tours
+      bases: ["classique", "grande"],
+      unfit: "pas sur la petite grille",
+    },
+    {
+      id: "colles",
+      name: "navires collés",
+      blurb: "Les navires peuvent se toucher.",
+      settings: { touching: true } satisfies Partial<NavalSettings>,
+      chance: 0.45,
+    },
+  ],
+  bricks: [
+    {
+      id: "vrac",
+      name: "lignes en vrac",
+      blurb: "Chaque ligne grise reçue a son propre trou : plus dur à déblayer.",
+      settings: { messy: true } satisfies Partial<BricksSettings>,
+      chance: 0.4,
+    },
+    {
+      id: "ancienne",
+      name: "à l'ancienne",
+      blurb: "Pas de réserve, et une seule pièce annoncée à l'avance.",
+      settings: { hold: false, previews: 1 } satisfies Partial<BricksSettings>,
+      chance: 0.35,
+    },
+  ],
+  capitale: [
+    {
+      id: "cagnotte",
+      name: "cagnotte",
+      blurb: "Taxes et amendes s'entassent sur l'Aire de repos, et tomber pile sur Départ double le salaire.",
+      settings: { freeParking: true, doubleGo: true } satisfies Partial<CapitaleSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "depart-rapide",
+      name: "départ rapide",
+      blurb: "Chacun commence avec deux titres tirés au sort.",
+      settings: { quickStart: true } satisfies Partial<CapitaleSettings>,
+      chance: 0.3,
+    },
+    {
+      id: "monopole",
+      name: "Monopole",
+      blurb: "Trois quartiers complets, toutes les rues d'un côté ou les quatre gares : la partie s'arrête net, victoire.",
+      settings: { monopoly: true } satisfies Partial<CapitaleSettings>,
+      chance: 0.3,
+    },
+    {
+      id: "prison-sans-loyer",
+      name: "prison sans loyer",
+      blurb: "Un propriétaire en prison ne touche plus ses loyers.",
+      settings: { noRentInJail: true } satisfies Partial<CapitaleSettings>,
+      chance: 0.3,
+    },
+    {
+      id: "batisseurs",
+      name: "bâtisseurs libres",
+      blurb:
+        "L'ancienne façon de bâtir : une rue seule monte jusqu'à l'immeuble, sans construction équilibrée, et pas de rachat des villes.",
+      settings: { evenBuild: false, buyout: false } satisfies Partial<CapitaleSettings>,
+      chance: 0.25,
+      // Le Builder a sa propre façon de bâtir
+      bases: ["classique"],
+      unfit: "le Builder a sa propre façon de bâtir",
+    },
+    {
+      id: "ciel-serein",
+      name: "ciel serein",
+      blurb: "Pas de catastrophes dans les paquets : ni séisme, ni tempête, ni cession forcée.",
+      settings: { disasters: false } satisfies Partial<CapitaleSettings>,
+      chance: 0.3,
+    },
+  ],
+  meche: [
+    {
+      id: "marabout",
+      name: "marabout",
+      blurb: "Les lettres à placer sont les deux dernières du mot d'avant : choisis bien comment tu finis.",
+      settings: { source: "marabout" } satisfies Partial<MecheSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "courte",
+      name: "courte mèche",
+      blurb: "La mèche brûle bien plus vite.",
+      settings: { pace: "nerveux" } satisfies Partial<MecheSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "corsee",
+      name: "lettres corsées",
+      blurb: "Des lettres difficiles dès la première mèche.",
+      settings: { difficulty: "corse" } satisfies Partial<MecheSettings>,
+      chance: 0.3,
+    },
+  ],
+  bolides: [
+    {
+      id: "pure",
+      name: "course pure",
+      blurb: "Pas de caisses d'objets : rien que le pilotage.",
+      settings: { items: false } satisfies Partial<BolidesSettings>,
+      chance: 0.3,
+    },
+    {
+      id: "vitesse",
+      name: "grande vitesse",
+      blurb: "Les karts vont bien plus vite.",
+      settings: { speed: "bolide" } satisfies Partial<BolidesSettings>,
+      chance: 0.35,
+    },
+    {
+      id: "miroir",
+      name: "circuit en miroir",
+      blurb: "Le circuit à l'envers, gauche et droite échangées : tout est à réapprendre.",
+      settings: { mirror: true } satisfies Partial<BolidesSettings>,
+      chance: 0.3,
+    },
+  ],
+  crampons: [
+    {
+      id: "tab",
+      name: "pas de nul",
+      blurb: "En cas d'égalité, une séance de tirs au but désigne le vainqueur.",
+      settings: { draw: "penalties" } satisfies Partial<CramponsConfig>,
+      chance: 0.4,
+    },
+  ],
+  escarmouche: [
+    {
+      id: "sans-filet",
+      name: "sans filet",
+      blurb: "Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.",
+      settings: { hardcore: true } satisfies Partial<EscarmoucheSettings>,
+      chance: 0.3,
+    },
+    {
+      id: "nuit",
+      name: "de nuit",
+      blurb: "La lune et les lampadaires pour seule lumière ; les bots voient moins loin.",
+      settings: { night: true } satisfies Partial<EscarmoucheSettings>,
+      chance: 0.3,
+    },
+  ],
+  culbute: [
+    {
+      id: "sans-objets",
+      name: "sans objets",
+      blurb: "Rien ne tombe du ciel : rien que les combattants.",
+      settings: { items: "aucun" } satisfies Partial<CulbuteConfig>,
+      chance: 0.25,
+      group: "objets",
+    },
+    {
+      id: "pluie",
+      name: "pluie d'objets",
+      blurb: "Il y a toujours quelque chose à ramasser.",
+      settings: { items: "beaucoup" } satisfies Partial<CulbuteConfig>,
+      chance: 0.3,
+      group: "objets",
+    },
+    {
+      id: "lune",
+      name: "sur la lune",
+      blurb: "On saute plus haut et on retombe lentement : les combats durent en l'air.",
+      settings: { lune: true } satisfies Partial<CulbuteConfig>,
+      chance: 0.3,
+    },
+  ],
 };
+
+/**
+ * Combien de règles à part au plus, en plus du format (les règles qu'on annonce toujours, comme « pas de UNO
+ * d'avance », n'en font pas partie) : de quoi changer la partie sans la rendre méconnaissable
+ */
+const MAX_EXTRAS: Partial<Record<GameId, number>> = { capitale: 3, crampons: 1 };
+const DEFAULT_MAX_EXTRAS = 2;
+
+/** Le plus de règles à part qu'un tirage cumule pour ce jeu */
+export function maxExtras(game: GameId): number {
+  return MAX_EXTRAS[game] ?? DEFAULT_MAX_EXTRAS;
+}
+
+/**
+ * Les anciennes variantes devenues des règles à part : une tournée commencée avant, un vote ou l'historique d'une
+ * partie peuvent encore les nommer. « monopole » se lit « classique+monopole ».
+ */
+const LEGACY: Partial<Record<GameId, Record<string, string>>> = {
+  uno: { "sept-zero": "classique+sept-zero+interception", pioche: "classique+pioche" },
+  naval: { salve: "classique+salve", arsenal: "grande+arsenal" },
+  bricks: { vrac: "survie+vrac", ancienne: "survie+ancienne" },
+  capitale: {
+    cagnotte: "classique+cagnotte",
+    "depart-rapide": "classique+depart-rapide",
+    monopole: "classique+monopole",
+    "prison-sans-loyer": "classique+prison-sans-loyer",
+    batisseurs: "classique+batisseurs",
+    "ciel-serein": "classique+ciel-serein",
+  },
+  meche: { marabout: "classique+marabout", courte: "classique+courte", corsee: "classique+corsee" },
+  bolides: { pure: "classique+pure", vitesse: "classique+vitesse" },
+  crampons: { tab: "classique+tab" },
+  escarmouche: { "sans-filet": "classique+sans-filet" },
+  culbute: { "sans-objets": "classique+sans-objets", pluie: "classique+pluie", lune: "classique+lune" },
+};
+
+/** Les règles tirées, avec une ancienne variante remplacée par ce qu'elle est devenue */
+function expandLegacy(game: GameId, id: string | null | undefined): string[] {
+  const [head, ...mods] = (id ?? "").split("+");
+  const legacy = LEGACY[game]?.[head!];
+  return legacy ? [...legacy.split("+"), ...mods] : [head!, ...mods];
+}
+
+const fitsBase = (m: Modifier, base: string) => !m.bases || m.bases.includes(base);
 
 /** Les règles à part d'un jeu, sans leurs réglages */
 export function gameModifiers(game: GameId): TourVariant[] {
   return (MODIFIERS[game] ?? []).map(({ id, name, blurb }) => ({ id, name, blurb }));
 }
 
-/** Une règle à part qu'on vote oui ou non (règles votées) et qu'on annonce toujours, retenue ou non */
-export interface TourAskedRule extends TourVariant, AskedRule {}
+/** Une règle à part qu'on vote oui ou non (règles votées) ; `bases` : les seuls formats avec lesquels elle se joue */
+export interface TourAskedRule extends TourVariant, AskedRule {
+  bases?: string[];
+  unfit?: string;
+}
 
-/** Les règles à part d'un jeu qu'on vote oui ou non : au UNO, « pas de UNO d'avance » */
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Une règle à part telle qu'on la vote et l'annonce ; celles qu'on ne dit pas « toujours » ont des mots par défaut */
+function asAsked(m: Modifier): TourAskedRule {
+  return {
+    id: m.id,
+    name: m.name,
+    blurb: m.blurb,
+    question: m.asked?.question ?? `${capitalize(m.name)} ?`,
+    offName: m.asked?.offName ?? `pas de « ${m.name} »`,
+    offBlurb: m.asked?.offBlurb ?? "La règle habituelle.",
+    ...(m.bases ? { bases: m.bases } : {}),
+    ...(m.unfit ? { unfit: m.unfit } : {}),
+  };
+}
+
+/** Les règles à part qu'on annonce toujours, retenues ou non : au UNO, « pas de UNO d'avance » */
 export function askedRules(game: GameId): TourAskedRule[] {
-  return (MODIFIERS[game] ?? []).flatMap(({ id, name, blurb, asked }) => (asked ? [{ id, name, blurb, ...asked }] : []));
+  return (MODIFIERS[game] ?? []).filter((m) => m.asked).map(asAsked);
+}
+
+/** Règles votées : chaque règle à part du jeu se vote oui ou non */
+export function votedRules(game: GameId): TourAskedRule[] {
+  return (MODIFIERS[game] ?? []).map(asAsked);
 }
 
 /** Le nom d'une règle à part selon qu'elle est retenue ou non : « pas de UNO d'avance », « UNO d'avance permis » */
 export function askedLabel(game: GameId, rule: string, on: boolean): string {
-  const r = askedRules(game).find((a) => a.id === rule);
+  const r = votedRules(game).find((a) => a.id === rule);
   return r ? (on ? r.name : r.offName) : rule;
+}
+
+/** Une règle à part se joue-t-elle avec ce format (une règle inconnue, non) */
+export function ruleFitsBase(game: GameId, rule: string, base: string): boolean {
+  const m = (MODIFIERS[game] ?? []).find((x) => x.id === rule);
+  return Boolean(m && fitsBase(m, expandLegacy(game, base)[0]!));
 }
 
 /** Les règles à part que retient une variante (« no-mercy+sans-avance » : sans-avance) */
@@ -408,13 +686,19 @@ export function variantModifiers(id: string | null | undefined): string[] {
 }
 
 /**
- * La variante et les règles à part retenues, écrites dans l'ordre du jeu (« no-mercy+sans-avance ») ; les règles à
- * part inconnues sont laissées de côté
+ * Le format et les règles à part retenues, écrits dans l'ordre du jeu (« no-mercy+sans-avance ») : les règles à part
+ * inconnues, celles qui ne vont pas avec le format et la seconde d'un même groupe sont laissées de côté
  */
 export function composeVariant(game: GameId, base: string, extras: string[]): string {
-  const [head] = base.split("+");
-  const mods = (MODIFIERS[game] ?? []).filter((m) => extras.includes(m.id)).map((m) => m.id);
-  return [head!, ...mods].join("+");
+  const [head, ...fromBase] = expandLegacy(game, base);
+  const wanted = new Set([...fromBase, ...extras]);
+  const taken: Modifier[] = [];
+  for (const m of MODIFIERS[game] ?? []) {
+    if (!wanted.has(m.id) || !fitsBase(m, head!)) continue;
+    if (m.group && taken.some((t) => t.group === m.group)) continue;
+    taken.push(m);
+  }
+  return [head!, ...taken.map((m) => m.id)].join("+");
 }
 
 /**
@@ -427,24 +711,56 @@ export function splitAsked(
 ): { rest: string | null; asked: { rule: TourAskedRule; on: boolean }[] } {
   if (!findVariant(game, id)) return { rest: null, asked: [] };
   const asked = askedRules(game);
-  const mods = variantModifiers(id);
+  const [head, ...mods] = expandLegacy(game, id);
   const rest = composeVariant(
     game,
-    id!,
+    head!,
     mods.filter((m) => !asked.some((a) => a.id === m)),
   );
-  return { rest, asked: asked.map((rule) => ({ rule, on: mods.includes(rule.id) })) };
+  return { rest, asked: asked.filter((rule) => ruleFitsBase(game, rule.id, head!)).map((rule) => ({ rule, on: mods.includes(rule.id) })) };
 }
 
-/** Une variante et ses règles à part : « salve+colles » */
+/** Une règle tirée, telle qu'on la montre : le format d'abord, puis chaque règle à part ; `off` : dite par la négative */
+export interface RuleLine {
+  id: string;
+  name: string;
+  blurb: string;
+  kind: "base" | "extra" | "off";
+}
+
+/**
+ * Les règles tirées, une par ligne, pour les annonces : le format, chaque règle à part retenue, puis les règles qu'on
+ * annonce toujours quand elles ne sont pas retenues (« UNO d'avance permis »). Vide si l'id est inconnu.
+ */
+export function ruleLines(game: GameId, id: string | null | undefined): RuleLine[] {
+  const { base, extra } = splitVariant(game, id);
+  if (!base || !extra) return [];
+  const taken = new Set(extra.map((m) => m.id));
+  const off = (MODIFIERS[game] ?? []).filter((m) => m.asked && !taken.has(m.id) && fitsBase(m, base.id));
+  return [
+    { id: base.id, name: base.name, blurb: base.blurb, kind: "base" as const },
+    ...extra.map((m) => ({ id: m.id, name: capitalize(m.name), blurb: m.blurb, kind: "extra" as const })),
+    ...off.map((m) => ({ id: m.id, name: m.asked!.offName, blurb: m.asked!.offBlurb, kind: "off" as const })),
+  ];
+}
+
+/**
+ * Le format et ses règles à part : « grande+salve+arsenal ». Une ancienne variante se lit comme ce qu'elle est
+ * devenue ; une règle inconnue, qui ne va pas avec le format, ou deux d'un même groupe rendent le tout inconnu.
+ */
 function splitVariant(game: GameId, id: string | null | undefined) {
-  const [baseId, ...mods] = (id ?? "").split("+");
+  const [baseId, ...mods] = expandLegacy(game, id);
   const base = VARIANTS[game].find((v) => v.id === baseId);
   const extra = mods.map((m) => (MODIFIERS[game] ?? []).find((x) => x.id === m));
-  return { base, extra: extra.every(Boolean) ? (extra as VariantOf<object>[]) : null };
+  const fine =
+    base &&
+    extra.every((m) => m && fitsBase(m, base.id)) &&
+    new Set(mods).size === mods.length &&
+    extra.every((m, i) => !m?.group || !extra.some((o, j) => j !== i && o?.group === m.group));
+  return { base, extra: fine ? (extra as Modifier[]) : null };
 }
 
-const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
+const BRICKS_VARIANTS: Format<BricksSettings>[] = [
   { id: "survie", name: "Dernier debout", blurb: "Une seule vie ; après 3 minutes, la marée de lignes grises monte.", settings: {} },
   {
     id: "chrono",
@@ -452,58 +768,15 @@ const BRICKS_VARIANTS: VariantOf<BricksSettings>[] = [
     blurb: "2 minutes : une pile qui déborde repart de zéro, et le plus de K.O. gagne.",
     settings: { win: "ko", minutes: 2 },
   },
-  {
-    id: "vrac",
-    name: "Lignes en vrac",
-    blurb: "Chaque ligne grise reçue a son propre trou : plus dur à déblayer.",
-    settings: { messy: true },
-  },
-  {
-    id: "ancienne",
-    name: "À l'ancienne",
-    blurb: "Pas de réserve, et une seule pièce annoncée à l'avance.",
-    settings: { hold: false, previews: 1 },
-  },
 ];
 
-const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
+const CAPITALE_VARIANTS: Format<CapitaleSettings>[] = [
   {
     id: "classique",
     name: "Classique",
-    blurb:
-      "Les règles de base (rachat des villes, catastrophes, construction équilibrée, bâtiments spéciaux), en 20 minutes : le plus riche gagne.",
+    blurb: "Le plateau des villes et ses bâtiments spéciaux, en 20 minutes : le plus riche gagne.",
     settings: {},
-  },
-  {
-    id: "cagnotte",
-    name: "Cagnotte",
-    blurb: "Taxes et amendes s'entassent sur l'Aire de repos, et tomber pile sur Départ double le salaire.",
-    settings: { freeParking: true, doubleGo: true },
-  },
-  { id: "depart-rapide", name: "Départ rapide", blurb: "Chacun commence avec deux titres tirés au sort.", settings: { quickStart: true } },
-  {
-    id: "monopole",
-    name: "Monopole",
-    blurb: "Trois quartiers complets, toutes les rues d'un côté ou les quatre gares : la partie s'arrête net, victoire.",
-    settings: { monopoly: true },
-  },
-  {
-    id: "prison-sans-loyer",
-    name: "Prison sans loyer",
-    blurb: "Un propriétaire en prison ne touche plus ses loyers.",
-    settings: { noRentInJail: true },
-  },
-  {
-    id: "batisseurs",
-    name: "Bâtisseurs libres",
-    blurb: "L'ancienne façon de bâtir : une rue seule monte jusqu'à l'immeuble, sans construction équilibrée, et pas de rachat.",
-    settings: { evenBuild: false, buyout: false },
-  },
-  {
-    id: "ciel-serein",
-    name: "Ciel serein",
-    blurb: "Pas de catastrophes dans les paquets : ni séisme, ni tempête, ni cession forcée.",
-    settings: { disasters: false },
+    weight: 3,
   },
   {
     id: "builder",
@@ -514,21 +787,14 @@ const CAPITALE_VARIANTS: VariantOf<CapitaleSettings>[] = [
   },
 ];
 
-const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
+const MECHE_VARIANTS: Format<MecheSettings>[] = [
   {
     id: "classique",
     name: "Classique",
-    blurb: "Trois allumettes, des lettres tirées au sort, et un grand mot rapporte une passe.",
+    blurb: "Une mèche neuve à chaque main, trois allumettes chacun, et un grand mot rapporte une passe.",
     settings: {},
+    weight: 2,
   },
-  {
-    id: "marabout",
-    name: "Marabout",
-    blurb: "Les lettres à placer sont les deux dernières du mot d'avant : choisis bien comment tu finis.",
-    settings: { source: "marabout" },
-  },
-  { id: "courte", name: "Courte mèche", blurb: "La mèche brûle bien plus vite.", settings: { pace: "nerveux" } },
-  { id: "corsee", name: "Lettres corsées", blurb: "Des lettres difficiles dès la première mèche.", settings: { difficulty: "corse" } },
   {
     id: "rallonge",
     name: "Mèche à rallonge",
@@ -543,14 +809,12 @@ const MECHE_VARIANTS: VariantOf<MecheSettings>[] = [
   },
 ];
 
-const BOLIDES_VARIANTS: VariantOf<BolidesSettings>[] = [
-  { id: "classique", name: "Classique", blurb: "Trois tours, et des caisses d'objets sur la route.", settings: {} },
-  { id: "pure", name: "Course pure", blurb: "Pas de caisses d'objets : rien que le pilotage.", settings: { items: false } },
-  { id: "vitesse", name: "Grande vitesse", blurb: "Les karts vont bien plus vite.", settings: { speed: "bolide" } },
+const BOLIDES_VARIANTS: Format<BolidesSettings>[] = [
+  { id: "classique", name: "Classique", blurb: "Trois tours de circuit.", settings: {}, weight: 2 },
   { id: "sprint", name: "Sprint", blurb: "Deux tours seulement : pas le droit à l'erreur.", settings: { laps: 2 } },
 ];
 
-const CRAMPONS_VARIANTS: VariantOf<CramponsConfig>[] = [
+const CRAMPONS_VARIANTS: Format<CramponsConfig>[] = [
   { id: "classique", name: "Match", blurb: "Onze contre onze, deux mi-temps de trois minutes.", settings: {} },
   {
     id: "eclair",
@@ -559,16 +823,10 @@ const CRAMPONS_VARIANTS: VariantOf<CramponsConfig>[] = [
     settings: { side: 5, halfMinutes: 2 },
   },
   { id: "sept", name: "À sept", blurb: "Sept contre sept, sur tout le terrain : de l'espace pour dribbler.", settings: { side: 7 } },
-  {
-    id: "tab",
-    name: "Pas de nul",
-    blurb: "En cas d'égalité, une séance de tirs au but désigne le vainqueur.",
-    settings: { draw: "penalties" },
-  },
 ];
 
-const ESCARMOUCHE_VARIANTS: VariantOf<EscarmoucheSettings>[] = [
-  { id: "classique", name: "Escarmouche", blurb: "Toutes les armes, la santé qui revient à l'abri.", settings: {} },
+const ESCARMOUCHE_VARIANTS: Format<EscarmoucheSettings>[] = [
+  { id: "classique", name: "Escarmouche", blurb: "Toutes les armes.", settings: {}, weight: 2 },
   {
     id: "precision",
     name: "Tireurs d'élite",
@@ -587,22 +845,11 @@ const ESCARMOUCHE_VARIANTS: VariantOf<EscarmoucheSettings>[] = [
     blurb: "Rien que des pistolets : la précision avant tout.",
     settings: { arsenal: "pistolet" },
   },
-  {
-    id: "sans-filet",
-    name: "Sans filet",
-    blurb: "Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.",
-    settings: { hardcore: true },
-  },
 ];
 
-const CULBUTE_VARIANTS: VariantOf<CulbuteConfig>[] = [
+const CULBUTE_VARIANTS: Format<CulbuteConfig>[] = [
   // En tournée, une table de Culbute enchaîne trois combats (voir games/culbute/series.ts) ; à une table, un seul
-  {
-    id: "classique",
-    name: "Aux vies",
-    blurb: "Trois combats d'affilée, trois vies chacun à chaque combat, et quelques objets qui tombent du ciel.",
-    settings: {},
-  },
+  { id: "classique", name: "Aux vies", blurb: "Trois combats d'affilée, trois vies chacun à chaque combat.", settings: {}, weight: 2 },
   {
     id: "temps",
     name: "Au temps",
@@ -610,17 +857,9 @@ const CULBUTE_VARIANTS: VariantOf<CulbuteConfig>[] = [
     settings: { mode: "temps", minutes: 3 },
   },
   { id: "subite", name: "Mort subite", blurb: "Une seule vie, et tout le monde commence à 100 %.", settings: { mode: "subite" } },
-  { id: "sans-objets", name: "Sans objets", blurb: "Rien ne tombe du ciel : rien que les combattants.", settings: { items: "aucun" } },
-  { id: "pluie", name: "Pluie d'objets", blurb: "Il y a toujours quelque chose à ramasser.", settings: { items: "beaucoup" } },
-  {
-    id: "lune",
-    name: "Sur la lune",
-    blurb: "On saute plus haut et on retombe lentement : les combats durent en l'air.",
-    settings: { lune: true },
-  },
 ];
 
-const VARIANTS: Record<GameId, VariantOf<object>[]> = {
+const VARIANTS: Record<GameId, Format<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
   bricks: BRICKS_VARIANTS,
@@ -632,7 +871,7 @@ const VARIANTS: Record<GameId, VariantOf<object>[]> = {
   escarmouche: ESCARMOUCHE_VARIANTS,
 };
 
-/** Les variantes d'un jeu, sans leurs réglages */
+/** Les formats d'un jeu (ils s'excluent), sans leurs réglages */
 export function gameVariants(game: GameId): TourVariant[] {
   return VARIANTS[game].map(({ id, name, blurb }) => ({ id, name, blurb }));
 }
@@ -687,18 +926,47 @@ export function variantSettings(game: GameId, id: string | null | undefined): ob
   return Object.assign({}, base.settings, ...extra.map((m) => m.settings));
 }
 
-/** Les réglages que touchent les variantes d'un jeu et ses règles à part (« grid », « shots »…) */
+/** Les réglages que touchent les formats d'un jeu et ses règles à part (« grid », « shots »…) */
 export function variantKeys(game: GameId): string[] {
   const all = [...VARIANTS[game], ...(MODIFIERS[game] ?? [])];
   return [...new Set(all.flatMap((v) => Object.keys(v.settings)))];
 }
 
-/** Une variante au hasard, puis chaque règle à part tirée de son côté */
+/**
+ * Des règles au hasard : un format (selon son poids), puis les règles à part, chacune avec sa chance, dans un ordre
+ * tiré lui aussi au hasard pour que le plafond ne favorise aucune d'elles. Une règle qui ne va pas avec le format, ou
+ * dont le groupe est déjà pris, est passée ; celles qu'on annonce toujours ne comptent pas dans le plafond.
+ */
 export function drawVariant(game: GameId, random: () => number): string {
   const all = VARIANTS[game];
-  const base = all[Math.min(all.length - 1, Math.floor(random() * all.length))]!.id;
-  const mods = (MODIFIERS[game] ?? []).filter((m) => random() < m.chance).map((m) => m.id);
-  return [base, ...mods].join("+");
+  const total = all.reduce((n, v) => n + (v.weight ?? 1), 0);
+  let r = random() * total;
+  let base = all[all.length - 1]!.id;
+  for (const v of all) {
+    r -= v.weight ?? 1;
+    if (r < 0) {
+      base = v.id;
+      break;
+    }
+  }
+  const order = (MODIFIERS[game] ?? [])
+    .filter((m) => fitsBase(m, base))
+    .map((m) => ({ m, k: random() }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.m);
+  const cap = maxExtras(game);
+  const taken: Modifier[] = [];
+  for (const m of order) {
+    if (random() >= m.chance) continue;
+    if (m.group && taken.some((t) => t.group === m.group)) continue;
+    if (!m.asked && taken.filter((t) => !t.asked).length >= cap) continue;
+    taken.push(m);
+  }
+  return composeVariant(
+    game,
+    base,
+    taken.map((m) => m.id),
+  );
 }
 
 /** Voix nécessaires : la moitié des votants, au moins une */
@@ -767,9 +1035,25 @@ export function resolveRule(votes: Record<string, boolean>, voters: string[]): b
   return yes > no;
 }
 
-/** Règles votées : les règles à part ouvertes au vote pour ce jeu (aucune voix, rien de décidé) */
+/** Règles votées : les règles à part ouvertes au vote pour ce jeu, toutes (aucune voix, rien de décidé) */
 export function openRuleVotes(game: GameId): Record<string, TourRuleVote> {
-  return Object.fromEntries(askedRules(game).map((r) => [r.id, { votes: {}, value: null }]));
+  return Object.fromEntries(votedRules(game).map((r) => [r.id, { votes: {}, value: null }]));
+}
+
+/**
+ * Règles votées : une fois le format adopté, les règles à part qui ne vont pas avec lui sont écartées d'office (au UNO,
+ * le 7-0 avec No Mercy, qui l'a déjà). Renvoie celles qui viennent d'être écartées.
+ */
+export function dropUnfitRules(next: Pick<TourNext, "game" | "base" | "extras">): string[] {
+  if (!next.base || !next.extras) return [];
+  const dropped: string[] = [];
+  for (const [id, vote] of Object.entries(next.extras)) {
+    if (vote.value === null && !ruleFitsBase(next.game, id, next.base)) {
+      vote.value = false;
+      dropped.push(id);
+    }
+  }
+  return dropped;
 }
 
 /** Le jeu tiré pour la suite, tel que la tournée le garde et l'envoie aux écrans */

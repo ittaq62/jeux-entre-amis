@@ -44,6 +44,7 @@ import {
   INTERMISSION_MS,
   isBaseVariant,
   openRuleVotes,
+  dropUnfitRules,
   resolveVoted,
   sanitizeEnd,
   settledVariant,
@@ -525,6 +526,14 @@ export class TourRoom extends DurableObject<Env> {
   private settleVote() {
     const d = this.data!;
     if (!d.next) return;
+    // Le format adopté écarte les règles à part qui ne vont pas avec lui (au UNO, le 7-0 avec No Mercy, qui l'a déjà)
+    const dropped = dropUnfitRules(d.next);
+    if (dropped.length > 0) {
+      const names = dropped.map((id) => askedLabel(d.next!.game, id, true)).join(", ");
+      this.systemChat(
+        `Ne va pas avec ${findVariant(d.next.game, d.next.base)?.name ?? "ce format"} : ${names}, écarté${dropped.length > 1 ? "s" : ""}.`,
+      );
+    }
     const variant = settledVariant(d.next);
     if (variant) d.next.variant = variant;
   }
@@ -758,7 +767,8 @@ export class TourRoom extends DurableObject<Env> {
         const vote = typeof msg.rule === "string" ? d.next.extras?.[msg.rule] : undefined;
         if (!vote || vote.value !== null || typeof msg.on !== "boolean") return;
         if (!member || !this.voters().includes(member)) return;
-        if (vote.votes[userId] === msg.on || !this.allowMessage(`voteRule:${userId}`, 150)) return;
+        // Un garde-fou par règle : avec plusieurs règles à voter, on répond à l'une puis à l'autre sans attendre
+        if (vote.votes[userId] === msg.on || !this.allowMessage(`voteRule:${userId}:${msg.rule}`, 150)) return;
         vote.votes = { ...vote.votes, [userId]: msg.on };
         this.adoptRuleIfMajority(msg.rule);
         return this.afterChange();

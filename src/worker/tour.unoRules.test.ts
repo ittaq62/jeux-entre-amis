@@ -1,5 +1,6 @@
-// UNO en tournée : « pas de UNO d'avance » n'est plus un réglage de l'hôte. Au hasard, le serveur le tire avec la
-// variante ; votées, les joueurs le votent oui ou non à côté des variantes ; de base, la règle habituelle.
+// UNO en tournée : « pas de UNO d'avance » n'est plus un réglage de l'hôte. Au hasard, le serveur le tire avec le
+// format et les autres règles à part ; votées, les joueurs le votent oui ou non comme chaque règle à part, à côté du
+// format ; de base, la règle habituelle.
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({
@@ -103,11 +104,16 @@ describe("UNO en tournée : l'ancien réglage de l'hôte", () => {
     await state.ready;
     const d = new Bench(again, state).data<{ settings: Record<string, unknown>; next: Record<string, unknown> }>();
     expect(d.settings).not.toHaveProperty("noEarlyUno");
-    // Le vote reste ouvert (il était clos en douce à chaque réveil), et « pas de UNO d'avance » s'y ajoute
+    // Le vote reste ouvert (il était clos en douce à chaque réveil), et les règles à part s'y ajoutent
     expect(d.next.variant).toBeNull();
     expect(d.next.votes).toEqual({ ami: "pioche" });
     expect(d.next.base).toBeNull();
-    expect(d.next.extras).toEqual({ "sans-avance": { votes: {}, value: null } });
+    expect(d.next.extras).toEqual({
+      "sept-zero": { votes: {}, value: null },
+      interception: { votes: {}, value: null },
+      pioche: { votes: {}, value: null },
+      "sans-avance": { votes: {}, value: null },
+    });
   });
 });
 
@@ -115,17 +121,32 @@ describe("UNO en tournée : « pas de UNO d'avance » voté", () => {
   it("se vote oui ou non dans le même écran que les variantes, la moitié des voix suffit", async () => {
     const { bench, host, players, inits } = await unoTour("vote", ["ami"]);
     const ami = players.ami!;
-    expect(next(host)).toMatchObject({ variant: null, base: null, extras: { "sans-avance": { votes: {}, value: null } } });
+    expect(next(host)).toMatchObject({
+      variant: null,
+      base: null,
+      extras: {
+        "sept-zero": { votes: {}, value: null },
+        interception: { votes: {}, value: null },
+        pioche: { votes: {}, value: null },
+        "sans-avance": { votes: {}, value: null },
+      },
+    });
     // Deux joueurs (le bot ne vote pas) : une voix suffit
     expect(host.view<TourView>().voters.sort()).toEqual(["ami", "hote"]);
     await bench.send(host, { t: "vote", variant: "no-mercy" });
-    // La variante est adoptée, la règle à part reste au vote : les règles ne sont pas encore connues
+    // Le format est adopté, les règles à part restent au vote : les règles ne sont pas encore connues. No Mercy a déjà
+    // le 7-0 et la pioche sans fin : ces deux votes-là sont écartés d'office
     expect(next(host)).toMatchObject({ base: "no-mercy", variant: null });
     expect(chat(host)).toContain("Règles adoptées : No Mercy !");
-    // Une fois la variante adoptée, on ne revote plus pour elle
-    await bench.send(ami, { t: "vote", variant: "pioche" });
+    expect(chat(host)).toContain("Ne va pas avec No Mercy : 7-0, pioche sans fin, écartés.");
+    expect(next(host).extras!["sept-zero"]!.value).toBe(false);
+    expect(next(host).extras!.pioche!.value).toBe(false);
+    // Une fois le format adopté, on ne revote plus pour lui
+    await bench.send(ami, { t: "vote", variant: "classique" });
     expect(next(host).base).toBe("no-mercy");
     await bench.send(ami, { t: "voteRule", rule: "sans-avance", on: true });
+    expect(next(host).variant).toBeNull();
+    await bench.send(ami, { t: "voteRule", rule: "interception", on: false });
     expect(next(host).variant).toBe("no-mercy+sans-avance");
     expect(next(host).extras!["sans-avance"]).toEqual({ votes: { ami: true }, value: true });
     expect(chat(host)).toContain("Règle adoptée : pas de UNO d'avance !");
@@ -139,10 +160,15 @@ describe("UNO en tournée : « pas de UNO d'avance » voté", () => {
     await bench.send(players.ami!, { t: "voteRule", rule: "sans-avance", on: false });
     expect(next(host).extras!["sans-avance"]!.value).toBe(false);
     expect(chat(host)).toContain("Règle adoptée : UNO d'avance permis !");
-    await bench.send(host, { t: "vote", variant: "sept-zero" });
-    expect(next(host).variant).toBe("sept-zero");
+    await bench.send(host, { t: "vote", variant: "classique" });
+    await bench.send(host, { t: "voteRule", rule: "sept-zero", on: true });
+    await bench.send(host, { t: "voteRule", rule: "interception", on: true });
+    await bench.send(host, { t: "voteRule", rule: "pioche", on: false });
+    // Plusieurs règles à part à la fois : le 7-0 et l'interception
+    expect(next(host).variant).toBe("classique+sept-zero+interception");
+    expect(chat(host)).toContain("Règle adoptée : pas de « pioche sans fin » !");
     await bench.send(host, { t: "launch" });
-    expect(tourUnoSettings(inits[0]!.tour).noEarlyUno).toBe(false);
+    expect(tourUnoSettings(inits[0]!.tour)).toEqual({ noEarlyUno: false, sevenZero: true, jumpIn: true });
   });
 
   it("à égalité, la règle habituelle ; la voix d'un absent ne compte pas ; ni les bots ni les spectateurs ne votent", async () => {
@@ -177,9 +203,9 @@ describe("UNO en tournée : « pas de UNO d'avance » voté", () => {
     const { bench, host, players, inits } = await unoTour("vote", ["ami", "berthe", "zoe"]);
     await bench.send(host, { t: "voteRule", rule: "sans-avance", on: true });
     expect(next(host).extras!["sans-avance"]!.value).toBeNull();
-    await bench.send(players.ami!, { t: "vote", variant: "pioche" });
+    await bench.send(players.ami!, { t: "voteRule", rule: "pioche", on: true });
     await bench.send(host, { t: "launch" });
-    expect(inits[0]!.tour.variant).toBe("pioche+sans-avance");
+    expect(inits[0]!.tour.variant).toBe("classique+pioche+sans-avance");
   });
 
   it("l'hôte peut l'imposer, oui ou non, comme il impose une variante", async () => {
@@ -194,9 +220,12 @@ describe("UNO en tournée : « pas de UNO d'avance » voté", () => {
     await bench.send(players.ami!, { t: "voteRule", rule: "sans-avance", on: false });
     await bench.send(players.berthe!, { t: "voteRule", rule: "sans-avance", on: false });
     expect(next(host).extras!["sans-avance"]!.value).toBe(true);
-    await bench.send(host, { t: "pickVariant", variant: "pioche" });
-    expect(next(host).variant).toBe("pioche+sans-avance");
+    await bench.send(host, { t: "pickVariant", variant: "classique" });
+    await bench.send(host, { t: "pickRule", rule: "pioche", on: true });
+    await bench.send(host, { t: "pickRule", rule: "sept-zero", on: false });
+    await bench.send(host, { t: "pickRule", rule: "interception", on: false });
+    expect(next(host).variant).toBe("classique+pioche+sans-avance");
     await bench.send(host, { t: "launch" });
-    expect(inits[0]!.tour.variant).toBe("pioche+sans-avance");
+    expect(inits[0]!.tour.variant).toBe("classique+pioche+sans-avance");
   });
 });

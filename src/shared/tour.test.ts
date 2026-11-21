@@ -17,7 +17,12 @@ import {
   baseVariant,
   composeVariant,
   defaultTourSettings,
+  dropUnfitRules,
   gameModifiers,
+  maxExtras,
+  ruleFitsBase,
+  ruleLines,
+  votedRules,
   isBaseVariant,
   openRuleVotes,
   resolveRule,
@@ -202,10 +207,13 @@ describe("règles des jeux", () => {
     escarmouche: ESCARMOUCHE_DEFAULTS,
   };
 
-  it("propose plusieurs variantes par jeu, la première étant celle de base, sans rien changer", () => {
+  it("propose des formats par jeu (le premier est celui de base, sans rien changer) et des règles à part", () => {
     for (const game of TOUR_GAMES) {
       const all = gameVariants(game);
-      expect(all.length).toBeGreaterThanOrEqual(3);
+      expect(all.length).toBeGreaterThanOrEqual(2);
+      expect(gameModifiers(game).length, game).toBeGreaterThanOrEqual(1);
+      // Un format et une règle à part n'ont jamais le même nom de code
+      for (const m of gameModifiers(game)) expect(all.map((v) => v.id)).not.toContain(m.id);
       expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
       expect(baseVariant(game)).toBe(all[0]!.id);
       expect(variantSettings(game as "uno", baseVariant(game))).toEqual({});
@@ -215,7 +223,7 @@ describe("règles des jeux", () => {
   it("ne touche qu'à de vrais réglages du jeu, avec des valeurs du bon type", () => {
     for (const game of TOUR_GAMES) {
       const base = defaults[game] as unknown as Record<string, unknown>;
-      for (const v of gameVariants(game)) {
+      for (const v of [...gameVariants(game), ...gameModifiers(game).map((m) => ({ id: `${baseVariant(game)}+${m.id}` }))]) {
         for (const [key, value] of Object.entries(variantSettings(game as "uno", v.id))) {
           expect(key in base, `${game}/${v.id}/${key}`).toBe(true);
           expect(typeof value).toBe(typeof base[key]);
@@ -226,7 +234,7 @@ describe("règles des jeux", () => {
 
   it("ne garde jamais les équipes, les bots ni le solo, réglés par la tournée", () => {
     for (const game of TOUR_GAMES) {
-      for (const v of gameVariants(game)) {
+      for (const v of [...gameVariants(game), ...gameModifiers(game).map((m) => ({ id: `${baseVariant(game)}+${m.id}` }))]) {
         const keys = Object.keys(variantSettings(game as "uno", v.id));
         // La tournée règle aussi la durée de Capitale (20 minutes) : ses variantes n'y touchent pas
         const owned = ["teams", "botLevel", "sprint", "endMode", "turnSeconds", ...(game === "capitale" ? ["end", "minutes"] : [])];
@@ -241,20 +249,88 @@ describe("règles des jeux", () => {
     expect(findVariant("bricks", "chrono")?.name).toBe("K.O. au chrono");
   });
 
-  it("tire toutes les variantes au hasard, et les navires collés à part", () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 400; i++) seen.add(drawVariant("naval", rand));
-    // Chaque variante, avec ou sans navires collés
-    expect(seen.size).toBe(gameVariants("naval").length * 2);
-    expect(findVariant("naval", "salve+colles")?.name).toBe("Salve, navires collés");
-    expect(variantSettings("naval", "eclair+colles")).toEqual({ grid: 8, touching: true });
-    expect(variantSettings("naval", "eclair")).toEqual({ grid: 8 });
-    expect(findVariant("naval", "salve+inconnue")).toBeNull();
-    // Les autres jeux n'ont pas de règle à part (sauf le UNO, plus bas)
-    for (const game of ["bricks", "capitale", "meche", "bolides", "crampons", "culbute"] as const) {
-      expect(gameModifiers(game)).toEqual([]);
-      for (let i = 0; i < 30; i++) expect(drawVariant(game, rand)).not.toContain("+");
+  it("tire un format, puis des règles à part cumulables : chacune sort, plusieurs à la fois, jamais plus que le plafond", () => {
+    for (const game of TOUR_GAMES) {
+      const formats = new Set<string>();
+      const rules = new Set<string>();
+      let several = 0;
+      for (let i = 0; i < 800; i++) {
+        const id = drawVariant(game, rand);
+        expect(findVariant(game, id), `${game} ${id}`).not.toBeNull();
+        const [base, ...mods] = id.split("+");
+        formats.add(base!);
+        mods.forEach((m) => rules.add(m));
+        // Les règles qu'on annonce toujours (« pas de UNO d'avance ») ne comptent pas dans le plafond
+        const counted = mods.filter((m) => !askedRules(game).some((a) => a.id === m));
+        expect(counted.length).toBeLessThanOrEqual(maxExtras(game));
+        if (counted.length >= 2) several++;
+        // Écrites dans l'ordre du jeu, et seulement avec un format qui leur va
+        expect(composeVariant(game, base!, mods)).toBe(id);
+        for (const m of mods) expect(ruleFitsBase(game, m, base!), `${game} ${id}`).toBe(true);
+      }
+      expect([...formats].sort()).toEqual(
+        gameVariants(game)
+          .map((v) => v.id)
+          .sort(),
+      );
+      expect([...rules].sort()).toEqual(
+        gameModifiers(game)
+          .map((m) => m.id)
+          .sort(),
+      );
+      // Plusieurs règles à la fois, là où le plafond le permet
+      if (maxExtras(game) >= 2 && gameModifiers(game).length >= 2) expect(several, game).toBeGreaterThan(40);
     }
+  });
+
+  it("Capitale : Monopole est une règle à part, cumulable avec les autres, avec le Builder comme avec le plateau classique", () => {
+    expect(gameVariants("capitale").map((v) => v.id)).toEqual(["classique", "builder"]);
+    expect(variantSettings("capitale", "classique+cagnotte+monopole+ciel-serein")).toEqual({
+      freeParking: true,
+      doubleGo: true,
+      monopoly: true,
+      disasters: false,
+    });
+    expect(variantSettings("capitale", "builder+monopole")).toEqual({ builder: true, monopoly: true });
+    // Les bâtisseurs libres ne vont pas avec le Builder, qui a sa propre façon de bâtir
+    expect(findVariant("capitale", "builder+batisseurs")).toBeNull();
+    expect(composeVariant("capitale", "builder", ["batisseurs", "monopole"])).toBe("builder+monopole");
+    expect(findVariant("capitale", "classique+depart-rapide+monopole")?.name).toBe("Classique, départ rapide, Monopole");
+  });
+
+  it("garde les combinaisons jouables : formats et groupes", () => {
+    // Bataille navale : pas d'arsenal sur la petite grille
+    expect(findVariant("naval", "eclair+arsenal")).toBeNull();
+    expect(variantSettings("naval", "grande+salve+arsenal+colles")).toEqual({ grid: 12, shots: "salvo", arsenal: true, touching: true });
+    expect(variantSettings("naval", "eclair+colles")).toEqual({ grid: 8, touching: true });
+    // UNO : No Mercy a déjà le 7-0 et la pioche sans fin
+    expect(findVariant("uno", "no-mercy+sept-zero")).toBeNull();
+    expect(variantSettings("uno", "no-mercy+interception+sans-avance")).toEqual({ variant: "nomercy", jumpIn: true, noEarlyUno: true });
+    // Culbute : sans objets et pluie d'objets ne se cumulent pas
+    expect(findVariant("culbute", "classique+sans-objets+pluie")).toBeNull();
+    expect(composeVariant("culbute", "subite", ["pluie", "sans-objets", "lune"])).toBe("subite+sans-objets+lune");
+    // Une règle inconnue, ou deux fois la même, rendent le tout inconnu
+    expect(findVariant("naval", "classique+salve+inconnue")).toBeNull();
+    expect(findVariant("naval", "classique+salve+salve")).toBeNull();
+  });
+
+  it("lit encore les anciennes variantes devenues des règles à part (tournées en cours, historique)", () => {
+    expect(variantSettings("capitale", "monopole")).toEqual({ monopoly: true });
+    expect(findVariant("capitale", "monopole")?.name).toBe("Classique, Monopole");
+    expect(variantSettings("naval", "arsenal+colles")).toEqual({ grid: 12, arsenal: true, touching: true });
+    expect(variantSettings("uno", "sept-zero+sans-avance")).toEqual({ sevenZero: true, jumpIn: true, noEarlyUno: true });
+    expect(variantSettings("culbute", "lune")).toEqual({ lune: true });
+    expect(findVariant("escarmouche", "sans-filet")?.name).toBe("Escarmouche, sans filet");
+  });
+
+  it("montre les règles une par ligne : le format, chaque règle à part, et celle qu'on annonce toujours quand elle n'est pas retenue", () => {
+    expect(ruleLines("uno", "classique+interception").map((l) => [l.kind, l.name])).toEqual([
+      ["base", "Classique"],
+      ["extra", "Interception"],
+      ["off", "UNO d'avance permis"],
+    ]);
+    expect(ruleLines("naval", "grande+salve").map((l) => l.name)).toEqual(["Grande grille", "Salve"]);
+    expect(ruleLines("naval", "triche")).toEqual([]);
   });
 
   it("UNO : « pas de UNO d'avance » est tiré au sort à part, avec chaque variante, Classique comme No Mercy", () => {
@@ -271,8 +347,11 @@ describe("règles des jeux", () => {
       // La variante tirée garde ses propres règles : No Mercy reste No Mercy, avec ou sans
       expect(s).toMatchObject(variantSettings("uno", variant.split("+")[0]));
     }
-    // Chaque variante, avec et sans : une fois sur deux à peu près
-    expect(seen.size).toBe(gameVariants("uno").length * 2);
+    // Chaque format, avec et sans : une fois sur deux à peu près
+    for (const base of gameVariants("uno").map((v) => v.id)) {
+      expect([...seen.keys()].some((v) => v.startsWith(base) && v.endsWith("+sans-avance"))).toBe(true);
+      expect([...seen.keys()].some((v) => v.startsWith(base) && !v.endsWith("+sans-avance"))).toBe(true);
+    }
     const on = [...seen].filter(([v]) => v.endsWith("+sans-avance")).reduce((n, [, k]) => n + k, 0);
     expect(on).toBeGreaterThan(600 * 0.35);
     expect(on).toBeLessThan(600 * 0.65);
@@ -343,25 +422,45 @@ describe("règles à part votées oui ou non", () => {
     ...over,
   });
 
-  it("au UNO, seulement « pas de UNO d'avance » ; les navires collés ne se votent pas", () => {
+  it("chaque règle à part se vote oui ou non ; seul « pas de UNO d'avance » s'annonce toujours, retenu ou non", () => {
     expect(askedRules("uno").map((r) => r.id)).toEqual(["sans-avance"]);
     expect(askedRules("uno")[0]!.question).toBe("Pas de UNO d'avance ?");
     expect(askedRules("naval")).toEqual([]);
-    expect(openRuleVotes("uno")).toEqual({ "sans-avance": { votes: {}, value: null } });
-    expect(openRuleVotes("naval")).toEqual({});
+    expect(Object.keys(openRuleVotes("uno"))).toEqual(["sept-zero", "interception", "pioche", "sans-avance"]);
+    expect(openRuleVotes("naval")).toEqual({
+      salve: { votes: {}, value: null },
+      arsenal: { votes: {}, value: null },
+      colles: { votes: {}, value: null },
+    });
+    expect(votedRules("capitale").find((r) => r.id === "monopole")?.question).toBe("Monopole ?");
+    expect(votedRules("capitale").find((r) => r.id === "batisseurs")?.bases).toEqual(["classique"]);
     expect(askedLabel("uno", "sans-avance", true)).toBe("pas de UNO d'avance");
     expect(askedLabel("uno", "sans-avance", false)).toBe("UNO d'avance permis");
+    expect(askedLabel("capitale", "monopole", false)).toBe("pas de « Monopole »");
+  });
+
+  it("le format adopté écarte d'office les règles à part qui ne vont pas avec lui", () => {
+    const n = next({ base: "no-mercy" });
+    expect(dropUnfitRules(n)).toEqual(["sept-zero", "pioche"]);
+    expect(n.extras!["sept-zero"]!.value).toBe(false);
+    expect(n.extras!.interception!.value).toBeNull();
+    // Déjà décidées, ou format pas encore adopté : rien ne bouge
+    expect(dropUnfitRules(n)).toEqual([]);
+    expect(dropUnfitRules(next())).toEqual([]);
   });
 
   it("écrit la variante et ses règles à part dans l'ordre du jeu, et les sépare pour l'affichage", () => {
     expect(composeVariant("uno", "no-mercy", ["sans-avance"])).toBe("no-mercy+sans-avance");
     expect(composeVariant("uno", "no-mercy", [])).toBe("no-mercy");
-    expect(composeVariant("uno", "pioche+sans-avance", ["inconnue"])).toBe("pioche");
-    expect(composeVariant("naval", "salve", ["colles"])).toBe("salve+colles");
+    expect(composeVariant("uno", "classique+sans-avance", ["inconnue"])).toBe("classique+sans-avance");
+    expect(composeVariant("uno", "classique", ["sans-avance", "pioche"])).toBe("classique+pioche+sans-avance");
+    expect(composeVariant("naval", "classique", ["colles", "salve"])).toBe("classique+salve+colles");
+    // Une ancienne variante se lit comme ce qu'elle est devenue
+    expect(composeVariant("naval", "salve", ["colles"])).toBe("classique+salve+colles");
     expect(splitAsked("uno", "no-mercy+sans-avance")).toMatchObject({ rest: "no-mercy", asked: [{ on: true }] });
     expect(splitAsked("uno", "classique")).toMatchObject({ rest: "classique", asked: [{ on: false }] });
     // Les navires collés ne se disent pas à part : ils restent dans le nom
-    expect(splitAsked("naval", "salve+colles")).toEqual({ rest: "salve+colles", asked: [] });
+    expect(splitAsked("naval", "classique+salve+colles")).toEqual({ rest: "classique+salve+colles", asked: [] });
     expect(splitAsked("uno", "triche")).toEqual({ rest: null, asked: [] });
     // Au vote des variantes, seulement celles proposées
     expect(isBaseVariant("uno", "no-mercy")).toBe(true);
@@ -398,11 +497,16 @@ describe("règles à part votées oui ou non", () => {
     expect(settledVariant(next({ base: "no-mercy" }))).toBeNull();
     expect(settledVariant(next({ extras: { "sans-avance": { votes: {}, value: true } } }))).toBeNull();
     expect(settledVariant(next({ base: "no-mercy", extras: { "sans-avance": { votes: {}, value: true } } }))).toBe("no-mercy+sans-avance");
-    expect(settledVariant(next({ base: "pioche", extras: { "sans-avance": { votes: {}, value: false } } }))).toBe("pioche");
-    // Un jeu sans règle à part votée : la variante suffit
-    expect(settledVariant({ game: "naval", base: "salve", extras: {} })).toBe("salve");
-    // Tournée d'avant : pas de règles à part en jeu
-    expect(settledVariant({ game: "uno", base: "pioche" })).toBe("pioche");
+    expect(settledVariant(next({ base: "classique", extras: { "sans-avance": { votes: {}, value: false } } }))).toBe("classique");
+    // Toutes les règles à part au vote : connues quand chacune est décidée
+    expect(settledVariant(next({ base: "classique" }))).toBeNull();
+    const all = openRuleVotes("uno");
+    for (const [id, v] of Object.entries(all)) v.value = id === "pioche" || id === "interception";
+    expect(settledVariant(next({ base: "classique", extras: all }))).toBe("classique+interception+pioche");
+    // Un jeu sans règle à part votée : le format suffit
+    expect(settledVariant({ game: "naval", base: "grande", extras: {} })).toBe("grande");
+    // Tournée d'avant : pas de règles à part en jeu (et l'ancienne variante devient ce qu'elle est maintenant)
+    expect(settledVariant({ game: "uno", base: "pioche" })).toBe("classique+pioche");
   });
 
   it("au départ, garde ce qui est décidé et tranche le reste avec les voix des présents", () => {
@@ -411,7 +515,7 @@ describe("règles à part votées oui ou non", () => {
     expect(resolveVoted(next({ variant: "sept-zero+sans-avance" }), voters, rand)).toBe("sept-zero+sans-avance");
     // Variante adoptée, le oui l'emporte au départ
     const yes = { "sans-avance": { votes: { a: true, b: true, c: false }, value: null } };
-    expect(resolveVoted(next({ base: "pioche", extras: yes }), voters, rand)).toBe("pioche+sans-avance");
+    expect(resolveVoted(next({ base: "classique", extras: yes }), voters, rand)).toBe("classique+sans-avance");
     // Égalité (le troisième n'a pas voté) : la règle habituelle
     const tie = { "sans-avance": { votes: { a: true, b: false }, value: null } };
     expect(resolveVoted(next({ votes: { a: "no-mercy", b: "no-mercy" }, extras: tie }), voters, rand)).toBe("no-mercy");
