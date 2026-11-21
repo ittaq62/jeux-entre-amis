@@ -34,6 +34,7 @@ import {
 } from "../../shared/games/capitale/builderMap.ts";
 import type { CapitaleAction } from "../../shared/games/capitale/engine.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
+import { fr } from "../../shared/typo.ts";
 import { Icon } from "../components/Icon.tsx";
 import { asState, colorOf, money } from "./boardUi.ts";
 import type { BuilderPreview } from "./scene/builderCity.ts";
@@ -372,10 +373,10 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
             <img className="cap-build-thumb" src={buildThumb(sel.kind, square, color, 96)} alt="" width={44} height={44} />
             <p className="cap-build-hint">
               <strong>{BUILDS[sel.kind].name}</strong> rapporte <b className="num">{money(selRent?.rent ?? 0)}</b>
-              {selRent && selRent.parcs > 0 && <span className="cap-build-gain"> · parc +{selRent.parcs * 30} %</span>}
+              {selRent && selRent.parcs > 0 && <span className="cap-build-gain"> · parc +{selRent.parcs * 30}&nbsp;%</span>}
               {selRent && selRent.neighbors > 0 && <span className="cap-build-gain"> · {selRent.neighbors} voisin(s)</span>}
               {selRent && selRent.nuisances > 0 && (
-                <span className="cap-build-why"> · nuisance −{Math.min(60, selRent.nuisances * 30)} %</span>
+                <span className="cap-build-why"> · nuisance −{Math.min(60, selRent.nuisances * 30)}&nbsp;%</span>
               )}
             </p>
             {!BUILDS[sel.kind].nuisance && (
@@ -420,7 +421,7 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
                   className={`cap-build-card ${info.nuisance ? "is-nuisance" : ""}`}
                   disabled={why !== null}
                   onClick={() => (setTool({ kind: "place", build: k, rot: 0 }), setSelected(null), setCursor(null))}
-                  title={why ?? info.effect}
+                  title={fr(why ?? info.effect)}
                 >
                   <img src={buildThumb(k, square, color, 96)} alt="" width={phone ? 32 : 48} height={phone ? 32 : 48} draggable={false} />
                   <span className="cap-build-card-name">{info.name}</span>

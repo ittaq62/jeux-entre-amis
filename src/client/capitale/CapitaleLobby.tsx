@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { fr } from "../../shared/typo.ts";
 import {
   BUYOUT_RATE,
   DISASTERS,
@@ -38,7 +39,7 @@ import { MONOPOLY_RULE, TeamRules } from "./TeamRules.tsx";
 import { BuilderRules } from "./BuilderRules.tsx";
 
 const BOT_HINTS: Record<BotLevel, string> = {
-  facile: "Prudent jusqu'à l'excès : il garde son argent et bâtit peu.",
+  facile: "Prudent jusqu'à l'excès\u00a0: il garde son argent et bâtit peu.",
   moyen: "Achète raisonnablement, améliore ses rues, pose parfois une nuisance, accepte les échanges équitables.",
   fort: "Rafle les terrains, monte vite ses rues, pose ses nuisances chez le plus riche et négocie.",
 };
@@ -49,27 +50,27 @@ const HOUSE_RULES: { key: HouseRule; label: string; desc: string }[] = [
   {
     key: "evenBuild",
     label: "Construction équilibrée",
-    desc: "Sans tout le quartier, deux maisons au plus ; dans un quartier complet, aucune rue ne prend plus d'un niveau d'avance.",
+    desc: "Sans tout le quartier, deux maisons au plus\u00a0; dans un quartier complet, aucune rue ne prend plus d'un niveau d'avance.",
   },
   {
     key: "buyout",
     label: "Rachat des villes",
-    desc: `Arrêté chez un adversaire, le loyer payé, on peut lui racheter sa ville : sa valeur plus ${Math.round((BUYOUT_RATE - 1) * 100)} %.`,
+    desc: `Arrêté chez un adversaire, le loyer payé, on peut lui racheter sa ville\u00a0: sa valeur plus ${Math.round((BUYOUT_RATE - 1) * 100)}\u00a0%.`,
   },
   {
     key: "disasters",
     label: "Catastrophes",
-    desc: "Dans les paquets : séisme, incendie, tempête, crue, arrêté de péril, expropriation, cession forcée.",
+    desc: "Dans les paquets\u00a0: séisme, incendie, tempête, crue, arrêté de péril, expropriation, cession forcée.",
   },
   {
     key: "specials",
     label: "Bâtiments spéciaux",
-    desc: "Obélisque (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres : décharge, centrale.",
+    desc: "Obélisque (loyers du quartier doublés), parc, stade, et des nuisances à poser chez les autres\u00a0: décharge, centrale.",
   },
   {
     key: "freeParking",
     label: "Cagnotte de l'Aire de repos",
-    desc: "Taxes et amendes s'entassent sur l'Aire de repos : celui qui s'y arrête rafle tout.",
+    desc: "Taxes et amendes s'entassent sur l'Aire de repos\u00a0: celui qui s'y arrête rafle tout.",
   },
   { key: "doubleGo", label: "Double salaire sur Départ", desc: "Tomber pile sur Départ rapporte 400 au lieu de 200." },
   { key: "noRentInJail", label: "Pas de loyer en prison", desc: "Un propriétaire derrière les barreaux ne touche plus ses loyers." },
@@ -92,16 +93,16 @@ function SpecialRules({ monopoly }: { monopoly: boolean }) {
         {SPECIAL_ORDER.map((k) => (
           <li key={k} className={SPECIALS[k].nuisance ? "is-nuisance" : ""}>
             <strong>{SPECIALS[k].name}</strong>
-            <span className="num">{k === "monument" ? MONUMENT_PRICES : specialPrice(k, 0)} ₣</span>
+            <span className="num">{k === "monument" ? MONUMENT_PRICES : specialPrice(k, 0)}&nbsp;₣</span>
             <span className="hint">
-              {SPECIALS[k].where} {SPECIALS[k].effect}
+              {fr(SPECIALS[k].where)} {fr(SPECIALS[k].effect)}
             </span>
           </li>
         ))}
         <li className="cap-special-limits hint">
           Un bâtiment par rue et un seul par tour, un stade par joueur, rien sur une rue hypothéquée. Le propriétaire fait raser une
-          nuisance à son prix ; ses propres bâtiments se revendent à moitié prix et bloquent l'échange et l'hypothèque de leur rue.
-          {monopoly && " Au Monopole, seuls les titres comptent : un bâtiment ne remplace pas une rue."}
+          nuisance à son prix&nbsp;; ses propres bâtiments se revendent à moitié prix et bloquent l'échange et l'hypothèque de leur rue.
+          {monopoly && " Au Monopole, seuls les titres comptent\u00a0: un bâtiment ne remplace pas une rue."}
         </li>
       </ul>
     </details>
@@ -116,33 +117,34 @@ function NewRules({ s }: { s: CapitaleSettings }) {
     <>
       {s.buyout && (
         <details className="cap-special-rules">
-          <summary>Le rachat : le prix et ce qui protège une ville</summary>
+          <summary>Le rachat&nbsp;: le prix et ce qui protège une ville</summary>
           <ul>
             <li className="cap-special-limits hint">
-              Le prix : le titre, ses niveaux et le bâtiment du propriétaire (parc, stade), au prix coûtant, plus{" "}
-              {Math.round((BUYOUT_RATE - 1) * 100)} %. Tout va au propriétaire. Proposé seulement si l'on a l'argent, juste après le loyer ;
-              les niveaux et le bâtiment suivent la ville.
+              Le prix&nbsp;: le titre, ses niveaux et le bâtiment du propriétaire (parc, stade), au prix coûtant, plus{" "}
+              {Math.round((BUYOUT_RATE - 1) * 100)}&nbsp;%. Tout va au propriétaire. Proposé seulement si l'on a l'argent, juste après le
+              loyer&nbsp;; les niveaux et le bâtiment suivent la ville.
             </li>
             <li className="cap-special-limits hint">
-              Protégées : un monument (niveau 5), une ville hypothéquée, tout le quartier d'un obélisque, et la ville d'un coéquipier. Pas
-              de second stade.{s.monopoly && " Au Monopole, un rachat peut faire gagner : surveillez vos rues."}
+              Protégées&nbsp;: un monument (niveau 5), une ville hypothéquée, tout le quartier d'un obélisque, et la ville d'un coéquipier.
+              Pas de second stade.{s.monopoly && " Au Monopole, un rachat peut faire gagner\u00a0: surveillez vos rues."}
             </li>
           </ul>
         </details>
       )}
       {s.disasters && (
         <details className="cap-special-rules">
-          <summary>Les catastrophes : qui est touché</summary>
+          <summary>Les catastrophes&nbsp;: qui est touché</summary>
           <ul className="is-two">
             {DISASTER_ORDER.map((k) => (
               <li key={k} className={k === "peril" ? "" : "is-nuisance"}>
                 <strong>{DISASTERS[k].name}</strong>
-                <span className="hint">{DISASTERS[k].who}.</span>
+                <span className="hint">{fr(DISASTERS[k].who)}.</span>
               </li>
             ))}
             <li className="cap-special-limits hint">
-              Une catastrophe abat des niveaux, jamais un bâtiment spécial ; un niveau perdu ne se rembourse pas. L'arrêté de péril épargne
-              les monuments (classés) et les coéquipiers. Expropriation et cession ne prennent qu'un titre sans construction ni obélisque
+              Une catastrophe abat des niveaux, jamais un bâtiment spécial&nbsp;; un niveau perdu ne se rembourse pas. L'arrêté de péril
+              épargne les monuments (classés) et les coéquipiers. Expropriation et cession ne prennent qu'un titre sans construction ni
+              obélisque
               {s.builder ? ", ni tour ni monument dans son quartier" : ""}
               {s.monopoly ? ", et la cession évite de faire gagner l'adversaire au Monopole quand elle le peut" : ""}.
               {s.builder && " L'expropriation paie aussi le terrain annexé, au prix payé."}
@@ -200,7 +202,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
       startHint={
         teamsOk
           ? undefined
-          : `En équipes, il faut au moins deux joueurs par équipe, autant dans chacune : c'est ${sizes.join(" contre ")} pour l'instant.`
+          : `En équipes, il faut au moins deux joueurs par équipe, autant dans chacune\u00a0: c'est ${sizes.join(" contre ")} pour l'instant.`
       }
       seatNote={count ? (seat) => (seat.team !== undefined ? teamName(seat.team) : null) : undefined}
       aside={count ? <CapTeamsPanel room={room} send={send} count={count} /> : undefined}
@@ -223,8 +225,8 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             />
             <p className="hint" style={{ margin: 0 }}>
               {s.builder
-                ? "Builder : au centre du plateau, la carte d'une ville, avec son fleuve et son avenue, et chaque quartier dans son liseré. Tu poses tes bâtiments sur tes parcelles, où tu veux, à tout moment, même pendant le tour des autres, et tu repousses tes frontières sur la réserve de ton quartier."
-                : "Classique : chaque rue s'améliore d'un bouton, de la maison au monument de la ville."}
+                ? "Builder\u00a0: au centre du plateau, la carte d'une ville, avec son fleuve et son avenue, et chaque quartier dans son liseré. Tu poses tes bâtiments sur tes parcelles, où tu veux, à tout moment, même pendant le tour des autres, et tu repousses tes frontières sur la réserve de ton quartier."
+                : "Classique\u00a0: chaque rue s'améliore d'un bouton, de la maison au monument de la ville."}
             </p>
             {s.builder && <BuilderRules specials={s.specials} monopoly={Boolean(s.monopoly)} />}
           </div>
@@ -256,7 +258,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             )}
             <p className="hint" style={{ margin: 0 }}>
               {s.end === "timed"
-                ? `Au bout de ${s.minutes} minutes, le tour en cours est le dernier : le plus riche gagne (argent, titres et constructions).`
+                ? `Au bout de ${s.minutes} minutes, le tour en cours est le dernier\u00a0: le plus riche gagne (argent, titres et constructions).`
                 : "Le dernier joueur à ne pas avoir fait faillite gagne. Compte une à trois heures."}
             </p>
             <div className="rule-list">
@@ -267,7 +269,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                 <Check label="Monopole" checked={Boolean(s.monopoly)} disabled={!isHost || locked("monopoly")} onChange={() => {}} />
                 <span>
                   <strong>Monopole</strong>
-                  <span className="hint">{MONOPOLY_RULE} En plus de la fin choisie : la table montre à chacun où il en est.</span>
+                  <span className="hint">{MONOPOLY_RULE} En plus de la fin choisie&nbsp;: la table montre à chacun où il en est.</span>
                 </span>
               </div>
             </div>
@@ -288,10 +290,10 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             />
             <p className="hint" style={{ margin: 0 }}>
               {count === 0
-                ? "Chacun joue pour lui. En équipes : 2 contre 2, 3 contre 3, ou trois équipes de deux."
+                ? "Chacun joue pour lui. En équipes\u00a0: 2 contre 2, 3 contre 3, ou trois équipes de deux."
                 : count === 2
-                  ? "Deux équipes de même taille : 2 contre 2 ou 3 contre 3."
-                  : "Trois équipes de deux : il faut six joueurs."}
+                  ? "Deux équipes de même taille\u00a0: 2 contre 2 ou 3 contre 3."
+                  : "Trois équipes de deux\u00a0: il faut six joueurs."}
             </p>
             {/* En équipes, leurs règles (loyer, dons, héritage, victoire ensemble) se voient tout de suite, sous le choix */}
             {count > 0 && <TeamRules s={s} disabled={!isHost} update={update} />}
@@ -312,7 +314,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                   <Check label={r.label} checked={s[r.key]} disabled={!isHost || locked(r.key)} onChange={() => {}} />
                   <span>
                     <strong>{r.label}</strong>
-                    <span className="hint">{s.builder && r.key === "specials" ? BUILDER_SPECIALS : r.desc}</span>
+                    <span className="hint">{fr(s.builder && r.key === "specials" ? BUILDER_SPECIALS : r.desc)}</span>
                   </span>
                 </div>
               ))}
@@ -321,9 +323,9 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             {s.specials && !s.builder && <SpecialRules monopoly={Boolean(s.monopoly)} />}
             {!s.builder && (
               <p className="hint" style={{ margin: 0 }}>
-                La ville : chaque rue s'améliore d'un bouton, une fois par tour, de la maison au monument de la ville (la tour Eiffel à
+                La ville&nbsp;: chaque rue s'améliore d'un bouton, une fois par tour, de la maison au monument de la ville (la tour Eiffel à
                 Paris). {s.evenBuild ? "Sans tout le quartier, deux maisons au plus." : "Au-delà de l'immeuble, il faut tout le quartier."}{" "}
-                Le reste suit la règle : enchères, prison, hypothèques.
+                Le reste suit la règle&nbsp;: enchères, prison, hypothèques.
               </p>
             )}
           </div>
@@ -392,9 +394,9 @@ function CapitaleHelp({ s, teams }: { s: CapitaleSettings; teams: boolean }) {
     <div className="lobby-help">
       <h2>Comment jouer</h2>
       <p>
-        <strong>Le but :</strong>{" "}
+        <strong>Le but&nbsp;:</strong>{" "}
         {s.end === "timed"
-          ? `${together ? "que ton équipe soit la plus riche" : "être le plus riche"} à la fin. Au bout de ${s.minutes} minutes, le tour en cours est le dernier ; on compte l'argent, les titres et les constructions${together ? " de toute l'équipe" : ""}.`
+          ? `${together ? "que ton équipe soit la plus riche" : "être le plus riche"} à la fin. Au bout de ${s.minutes} minutes, le tour en cours est le dernier\u00a0; on compte l'argent, les titres et les constructions${together ? " de toute l'équipe" : ""}.`
           : together
             ? "ruiner les autres équipes. La dernière équipe encore en jeu gagne, ensemble."
             : teams
@@ -403,31 +405,34 @@ function CapitaleHelp({ s, teams }: { s: CapitaleSettings; teams: boolean }) {
       </p>
       {s.monopoly && (
         <p>
-          <strong>Monopole :</strong> {MONOPOLY_RULE}
+          <strong>Monopole&nbsp;:</strong> {MONOPOLY_RULE}
         </p>
       )}
       <ul>
         <li>
-          Chacun part avec {money(START_CASH)}. À ton tour, lance les dés, avance ton pion, puis finis ton tour ; chaque passage par Départ
-          rapporte {money(GO_SALARY)}.
+          Chacun part avec {money(START_CASH)}. À ton tour, lance les dés, avance ton pion, puis finis ton tour&nbsp;; chaque passage par
+          Départ rapporte {money(GO_SALARY)}.
         </li>
         <li>
-          Un double te fait rejouer ; au troisième double de suite, c'est la prison. Pour en sortir : paie {money(JAIL_FINE)}, joue une
-          carte « sortie de prison » ou fais un double (au troisième essai raté, tu paies et tu sors).
+          Un double te fait rejouer&nbsp;; au troisième double de suite, c'est la prison. Pour en sortir&nbsp;: paie {money(JAIL_FINE)},
+          joue une carte «&nbsp;sortie de prison&nbsp;» ou fais un double (au troisième essai raté, tu paies et tu sors).
         </li>
-        <li>Arrêté sur une ville, une gare ou un réseau libre : achète-le à son prix, ou laisse-le aux enchères, où tout le monde mise.</li>
         <li>
-          Arrêté chez un adversaire : tu lui paies le loyer, qui grimpe s'il a tout le quartier et avec ce qu'il y a bâti. Plus on a de
-          gares, plus elles rapportent ; un titre hypothéqué ne rapporte rien.
+          Arrêté sur une ville, une gare ou un réseau libre&nbsp;: achète-le à son prix, ou laisse-le aux enchères, où tout le monde mise.
+        </li>
+        <li>
+          Arrêté chez un adversaire&nbsp;: tu lui paies le loyer, qui grimpe s'il a tout le quartier et avec ce qu'il y a bâti. Plus on a de
+          gares, plus elles rapportent&nbsp;; un titre hypothéqué ne rapporte rien.
         </li>
         <li>
           {s.builder
-            ? "Builder : pose tes bâtiments sur le territoire de tes villes, où tu veux et à tout moment, même pendant le tour des autres (sauf pendant une enchère). Le loyer suit ce que tu as bâti, doublé avec tout le quartier."
-            : `Pendant ton tour, améliore tes rues d'un niveau à la fois, une fois par rue et par tour, de la maison au monument ; ${s.evenBuild ? "au-delà de deux maisons" : "au-delà de l'immeuble"}, il faut tout le quartier.`}
+            ? "Builder\u00a0: pose tes bâtiments sur le territoire de tes villes, où tu veux et à tout moment, même pendant le tour des autres (sauf pendant une enchère). Le loyer suit ce que tu as bâti, doublé avec tout le quartier."
+            : `Pendant ton tour, améliore tes rues d'un niveau à la fois, une fois par rue et par tour, de la maison au monument\u00a0; ${s.evenBuild ? "au-delà de deux maisons" : "au-delà de l'immeuble"}, il faut tout le quartier.`}
         </li>
         <li>Propose des échanges (argent, titres, cartes de prison) quand tu veux, sauf pendant une enchère.</li>
         <li>
-          Pas de quoi payer : revends ce que tu as bâti (à moitié prix) ou hypothèque des titres ; si ça ne suffit pas, c'est la faillite.
+          Pas de quoi payer&nbsp;: revends ce que tu as bâti (à moitié prix) ou hypothèque des titres&nbsp;; si ça ne suffit pas, c'est la
+          faillite.
         </li>
       </ul>
     </div>
@@ -452,7 +457,7 @@ export function TokenPicker({ color, current, onPick }: { color: string; current
               className={`cap-token ${current === t.id ? "is-on" : ""} ${locked ? "is-locked" : ""}`}
               aria-pressed={current === t.id}
               onClick={() => (locked ? setBuying(t.id) : onPick(t.id))}
-              title={locked ? `${t.name} : ${t.price} points` : t.name}
+              title={locked ? `${t.name}\u00a0: ${t.price} points` : t.name}
             >
               {thumbs[t.id] ? (
                 <img src={thumbs[t.id]} alt="" width={64} height={64} draggable={false} />

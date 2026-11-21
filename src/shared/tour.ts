@@ -459,7 +459,7 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
     {
       id: "monopole",
       name: "Monopole",
-      blurb: "Trois quartiers complets, toutes les rues d'un côté ou les quatre gares : la partie s'arrête net, victoire.",
+      blurb: "Trois quartiers complets, toutes les rues d'un côté ou les quatre gares\u00a0: la partie s'arrête net, victoire.",
       settings: { monopoly: true } satisfies Partial<CapitaleSettings>,
       chance: 0.3,
     },
@@ -474,7 +474,7 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       id: "batisseurs",
       name: "bâtisseurs libres",
       blurb:
-        "L'ancienne façon de bâtir : une rue seule monte jusqu'à l'immeuble, sans construction équilibrée, et pas de rachat des villes.",
+        "L'ancienne façon de bâtir\u00a0: une rue seule monte jusqu'à l'immeuble, sans construction équilibrée, et pas de rachat des villes.",
       settings: { evenBuild: false, buyout: false } satisfies Partial<CapitaleSettings>,
       chance: 0.25,
       // Le Builder a sa propre façon de bâtir
@@ -484,7 +484,7 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
     {
       id: "ciel-serein",
       name: "ciel serein",
-      blurb: "Pas de catastrophes dans les paquets : ni séisme, ni tempête, ni cession forcée.",
+      blurb: "Pas de catastrophes dans les paquets\u00a0: ni séisme, ni tempête, ni cession forcée.",
       settings: { disasters: false } satisfies Partial<CapitaleSettings>,
       chance: 0.3,
     },
@@ -774,7 +774,7 @@ const CAPITALE_VARIANTS: Format<CapitaleSettings>[] = [
   {
     id: "classique",
     name: "Classique",
-    blurb: "Le plateau des villes et ses bâtiments spéciaux, en 20 minutes : le plus riche gagne.",
+    blurb: "Le plateau des villes et ses bâtiments spéciaux, en 20 minutes\u00a0: le plus riche gagne.",
     settings: {},
     weight: 3,
   },
@@ -782,7 +782,7 @@ const CAPITALE_VARIANTS: Format<CapitaleSettings>[] = [
     id: "builder",
     name: "Builder",
     blurb:
-      "Chaque ville a son territoire en cases, au centre du plateau : on y pose ses bâtiments où l'on veut, à tout moment, et on repousse ses frontières sur la réserve de son quartier.",
+      "Chaque ville a son territoire en cases, au centre du plateau\u00a0: on y pose ses bâtiments où l'on veut, à tout moment, et on repousse ses frontières sur la réserve de son quartier.",
     settings: { builder: true },
   },
 ];

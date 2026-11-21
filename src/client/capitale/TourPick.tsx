@@ -71,12 +71,12 @@ export function TourPick({
         <div className="cap-pick-rules">
           {teams && (
             <p>
-              <strong>En équipes :</strong> {capitalize(teamRulesText({ settings }).join(" ; "))}.
+              <strong>En équipes&nbsp;:</strong> {capitalize(teamRulesText({ settings }).join("\u00a0; "))}.
             </p>
           )}
           {settings.monopoly && (
             <p>
-              <strong>Monopole :</strong> {MONOPOLY_RULE}
+              <strong>Monopole&nbsp;:</strong> {MONOPOLY_RULE}
             </p>
           )}
         </div>

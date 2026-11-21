@@ -41,7 +41,7 @@ export function TourRules({ view, send, revealed }: Props) {
       <RulesOf view={view} send={send} revealed={revealed} />
       {capTeams && (
         <p className="rules-fixed">
-          <strong>En équipes</strong> : {teamRulesText({ settings: view.settings.capitaleTeam }).join(", ")}. Réglé à part par l'hôte.
+          <strong>En équipes</strong>&nbsp;: {teamRulesText({ settings: view.settings.capitaleTeam }).join(", ")}. Réglé à part par l'hôte.
         </p>
       )}
     </>

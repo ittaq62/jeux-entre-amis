@@ -1,6 +1,7 @@
 import { SQUARES } from "../../shared/games/capitale/board.ts";
 import { annexCost, BUILD_ORDER, buildCost, BUILDS, NUISANCE_MALUS, PARC_BONUS } from "../../shared/games/capitale/builder.ts";
 import { baseSize, maxAnnex } from "../../shared/games/capitale/builderMap.ts";
+import { fr } from "../../shared/typo.ts";
 
 // Capitale Builder au salon : les bâtiments, leur taille, leur prix (de la ville la moins chère à Paris), et les règles
 // propres à la carte, repliés sous le choix de la version.
@@ -34,7 +35,7 @@ export function BuilderRules({ specials, monopoly }: { specials: boolean; monopo
                   </span>
                 </strong>
                 <span className="num">{priceRange(k)}</span>
-                <span className="hint">{info.effect}</span>
+                <span className="hint">{fr(info.effect)}</span>
               </li>
             );
           })}

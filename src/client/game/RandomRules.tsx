@@ -92,7 +92,7 @@ function DrawnExtras({ lines }: { lines: RuleLine[] }) {
     <ul className="drawn-extras">
       {lines.map((l) => (
         <li key={l.id} className={l.kind === "off" ? "is-off" : ""}>
-          <strong>{l.name}</strong> : {l.blurb}
+          <strong>{l.name}</strong>&nbsp;: {l.blurb}
         </li>
       ))}
     </ul>

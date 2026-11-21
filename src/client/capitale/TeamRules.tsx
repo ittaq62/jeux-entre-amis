@@ -27,17 +27,17 @@ export function TeamRules({
     {
       key: "teamGifts",
       label: "Dons entre coéquipiers",
-      desc: "Donner de l'argent, un titre ou une carte de prison à son coéquipier, à tout moment, sans contrepartie : pour l'aider à payer une dette ou à compléter son quartier.",
+      desc: "Donner de l'argent, un titre ou une carte de prison à son coéquipier, à tout moment, sans contrepartie\u00a0: pour l'aider à payer une dette ou à compléter son quartier.",
     },
     {
       key: "teamHeir",
       label: "Héritage d'équipe",
-      desc: "En faillite, ses titres passent à son coéquipier encore en jeu ; le créancier ne touche que l'argent qui reste.",
+      desc: "En faillite, ses titres passent à son coéquipier encore en jeu\u00a0; le créancier ne touche que l'argent qui reste.",
     },
     {
       key: "teamWin",
       label: "Victoire d'équipe",
-      desc: "On gagne ensemble : à la fin, les fortunes de l'équipe s'additionnent, et au Monopole ses titres comptent ensemble. Sinon, chacun son classement.",
+      desc: "On gagne ensemble\u00a0: à la fin, les fortunes de l'équipe s'additionnent, et au Monopole ses titres comptent ensemble. Sinon, chacun son classement.",
     },
   ];
   return (
@@ -62,7 +62,7 @@ export function TeamRules({
         ))}
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        Toujours en équipes : pas de nuisance chez un coéquipier, et le tour passe d'une équipe à l'autre.
+        Toujours en équipes&nbsp;: pas de nuisance chez un coéquipier, et le tour passe d'une équipe à l'autre.
       </p>
     </>
   );

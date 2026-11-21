@@ -119,7 +119,7 @@ export function BuyoutPrompt({
         <span>Prix du rachat</span>
         <b className="num">{money(price)}</b>
         <em>
-          valeur {money(cityValue(s, index))} + {Math.round((BUYOUT_RATE - 1) * 100)} %, payés à {name(owner)}
+          valeur {money(cityValue(s, index))} + {Math.round((BUYOUT_RATE - 1) * 100)}&nbsp;%, payés à {name(owner)}
         </em>
       </div>
       <p className="cap-pop-text">
