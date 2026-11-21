@@ -148,13 +148,21 @@ export class Scatter {
 export function leafyBall(detail = 2, bump = 0.12, seed = 1): THREE.BufferGeometry {
   const base = new THREE.IcosahedronGeometry(1, detail);
   base.deleteAttribute("normal");
-  base.deleteAttribute("uv");
   const g = mergeVertices(base);
   base.dispose();
   const pos = g.attributes.position as THREE.BufferAttribute;
   const rnd = seeded(seed);
+  void rnd;
+  // Le relief dépend seulement de la place du sommet : deux sommets confondus (une couture de la texture) bougent ensemble
+  const hash = (x: number, y: number, z: number) => {
+    const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 19.3) * 43758.5453;
+    return h - Math.floor(h);
+  };
   for (let i = 0; i < pos.count; i++) {
-    const o = 1 + (rnd() - 0.5) * bump * 2;
+    const x = Math.round(pos.getX(i) * 1000) / 1000;
+    const y = Math.round(pos.getY(i) * 1000) / 1000;
+    const z = Math.round(pos.getZ(i) * 1000) / 1000;
+    const o = 1 + (hash(x, y, z) - 0.5) * bump * 2;
     pos.setXYZ(i, pos.getX(i) * o, pos.getY(i) * o, pos.getZ(i) * o);
   }
   g.computeVertexNormals();

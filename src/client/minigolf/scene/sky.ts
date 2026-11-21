@@ -26,6 +26,8 @@ export interface SkyDef {
   exposure: number;
   /** Des étoiles (la nuit) */
   stars?: number;
+  /** L'étalonnage de l'image : chaleur, saturation, bords assombris */
+  grade?: { warm: number; sat: number; vignette: number };
 }
 
 const VERT = /* glsl */ `

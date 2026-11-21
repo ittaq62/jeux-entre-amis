@@ -37,6 +37,8 @@ export function jardinTheme(): Theme {
   const iron = new THREE.MeshStandardMaterial({ color: 0x1c1f22, roughness: 0.45, metalness: 0.7 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xd4a842, roughness: 0.3, metalness: 0.9 });
   const leaf = new THREE.MeshStandardMaterial({ color: 0x3f7a35, roughness: 0.9 });
+  // Le feuillage des grands arbres : la texture du buis, plus grande, teintée arbre par arbre
+  const foliage = surfaceMat(hedgeTex(), { color: 0xffffff, roughness: 0.92, scale: 0.18 });
   const pot = new THREE.MeshStandardMaterial({ color: 0xb8643a, roughness: 0.85 });
   const white = new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.6 });
   const green = new THREE.MeshStandardMaterial({ color: 0x2f5d3a, roughness: 0.6 });
@@ -230,7 +232,7 @@ export function jardinTheme(): Theme {
       bottom: 0x8a9a6a,
       sun: [0.72, 0.4, 0.3],
       sunColor: 0xffd49a,
-      sunIntensity: 2.9,
+      sunIntensity: 3.3,
       hemiSky: 0xb9d4ff,
       hemiGround: 0x6f8a4a,
       hemiIntensity: 0.85,
@@ -239,12 +241,13 @@ export function jardinTheme(): Theme {
       fog: 0xe9d7b8,
       fogNear: 35,
       fogFar: 150,
-      exposure: 1.02,
+      exposure: 1.06,
+      grade: { warm: 0.055, sat: 1.12, vignette: 0.3 },
     },
     kit,
     ambience: "jardin",
     tick: (t) => flowWater(water, t),
-    decor: (c, rng) => jardinDecor(c, rng, { hedge, hedgeTall, stone, gravel, leaf, white, beam, canvas, iron, gold }),
+    decor: (c, rng) => jardinDecor(c, rng, { hedge, hedgeTall, stone, gravel, leaf: foliage, white, beam, canvas, iron, gold }),
   };
   return made;
 }

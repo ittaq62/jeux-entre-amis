@@ -2,6 +2,11 @@
 // visée, et la caméra (que le jeu pilote). La qualité s'allège d'elle-même sur un appareil qui peine.
 
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { BALL_R, tileAt, tileHeight, type Course } from "../../../shared/games/minigolf/course.ts";
 import type { CourseId } from "../../../shared/games/minigolf/courses.ts";
 import { segClosest } from "../../../shared/games/minigolf/geom.ts";
@@ -35,7 +40,11 @@ export class HoleScene {
   private aimMat: THREE.MeshBasicMaterial;
   private host: HTMLElement;
   private baseRatio = Math.min(window.devicePixelRatio || 1, TOUCH ? 2 : 2);
-  private quality = new AutoQuality({ levers: ["pixels", "pixels", "ombres"], apply: (on) => this.applyQuality(on) });
+  /** Les effets de l'image (le halo des lumières, l'étalonnage) : le premier cran qu'on retire si l'appareil peine */
+  private composer: EffectComposer | null = null;
+  private grade: ShaderPass | null = null;
+  private effects = true;
+  private quality = new AutoQuality({ levers: ["effets", "pixels", "pixels", "ombres"], apply: (on) => this.applyQuality(on) });
   private ro: ResizeObserver;
 
   constructor(host: HTMLElement) {
@@ -86,15 +95,65 @@ export class HoleScene {
   }
 
   private applyQuality(on: readonly boolean[]) {
-    this.renderer.setPixelRatio(this.baseRatio * (on[1] ? 0.66 : on[0] ? 0.82 : 1));
-    this.renderer.shadowMap.enabled = !on[2];
-    this.sun.castShadow = !on[2];
+    this.effects = !on[0];
+    this.renderer.setPixelRatio(this.baseRatio * (on[2] ? 0.66 : on[1] ? 0.82 : 1));
+    this.renderer.shadowMap.enabled = !on[3];
+    this.sun.castShadow = !on[3];
+    this.resize();
+  }
+
+  /** Le halo des lumières et l'étalonnage de l'image (une image un peu plus chaude, un peu plus franche, les bords assombris) */
+  private makeComposer() {
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: TOUCH ? 0 : 4 });
+    const composer = new EffectComposer(this.renderer, target);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.5, 1.05));
+    composer.addPass(new OutputPass());
+    const grade = new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, uWarm: { value: 0.04 }, uSat: { value: 1.08 }, uVignette: { value: 0.32 } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tDiffuse;
+        uniform float uWarm;
+        uniform float uSat;
+        uniform float uVignette;
+        varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(tDiffuse, vUv).rgb;
+          float grey = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          c = mix(vec3(grey), c, uSat);
+          c += vec3(uWarm, uWarm * 0.35, -uWarm * 0.6) * (1.0 - grey);
+          c = (c - 0.5) * 1.04 + 0.5;
+          vec2 d = vUv - 0.5;
+          c *= 1.0 - uVignette * smoothstep(0.32, 0.85, length(d * vec2(1.15, 1.0)));
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }`,
+    });
+    composer.addPass(grade);
+    this.grade = grade;
+    const g = this.theme?.sky.grade;
+    if (g) {
+      grade.uniforms.uWarm!.value = g.warm;
+      grade.uniforms.uSat!.value = g.sat;
+      grade.uniforms.uVignette!.value = g.vignette;
+    }
+    composer.setPixelRatio(this.renderer.getPixelRatio());
+    composer.setSize(size.x, size.y);
+    this.composer = composer;
   }
 
   resize() {
     const w = Math.max(1, this.host.clientWidth);
     const h = Math.max(1, this.host.clientHeight);
     this.renderer.setSize(w, h, false);
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -148,7 +207,7 @@ export class HoleScene {
     this.envMap?.dispose();
     this.envMap = this.sky.environment(this.renderer);
     this.scene.environment = this.envMap;
-    this.scene.environmentIntensity = 0.7;
+    this.scene.environmentIntensity = 0.85;
     this.scene.fog = new THREE.Fog(s.fog, s.fogNear, s.fogFar);
     this.sun.color.set(s.sunColor);
     this.sun.intensity = s.sunIntensity;
@@ -156,6 +215,11 @@ export class HoleScene {
     this.hemi.groundColor.set(s.hemiGround);
     this.hemi.intensity = s.hemiIntensity;
     this.renderer.toneMappingExposure = s.exposure;
+    if (this.grade) {
+      this.grade.uniforms.uWarm!.value = s.grade?.warm ?? 0.04;
+      this.grade.uniforms.uSat!.value = s.grade?.sat ?? 1.08;
+      this.grade.uniforms.uVignette!.value = s.grade?.vignette ?? 0.32;
+    }
   }
 
   /** La balle d'un joueur (créée la première fois) */
@@ -216,7 +280,10 @@ export class HoleScene {
     this.theme?.tick?.(t);
     this.sky?.update(t);
     if (this.sky) this.sky.mesh.position.copy(this.camera.position);
-    this.renderer.render(this.scene, this.camera);
+    if (this.effects) {
+      if (!this.composer) this.makeComposer();
+      this.composer!.render(dt);
+    } else this.renderer.render(this.scene, this.camera);
   }
 
   /** Les drapeaux, pour les lever quand une balle approche */
@@ -235,6 +302,7 @@ export class HoleScene {
     this.decor?.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
     this.sky?.dispose();
     this.envMap?.dispose();
+    this.composer?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
