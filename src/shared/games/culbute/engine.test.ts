@@ -8,6 +8,7 @@ import {
   moveDef,
   predictHits,
   stepFight,
+  stepPredict,
   stepSolo,
   type Entrant,
 } from "./engine.ts";
@@ -21,6 +22,7 @@ import {
   NO_INPUT,
   SHD,
   SPC,
+  UPJ,
   type Fight,
   type FightEvent,
   type Fighter,
@@ -155,40 +157,53 @@ describe("Culbute : le combat", () => {
     expect(launchAngle(Math.cos(base), Math.sin(base))).toBeCloseTo(base, 6);
   });
 
-  it("un appui bref reste une attaque normale (elle part dès qu'on relâche), un appui tenu devient l'attaque chargée", () => {
-    const f = duel();
-    skipIntro(f);
-    run(f, 1, [tap(ATK, 1, 0)]);
-    run(f, 5);
-    expect(f.fighters[0]!.move).toBe("s");
-    expect(f.fighters[0]!.mt).toBeGreaterThanOrEqual(5);
-    // Tenu trois images de plus, le même coup attend, puis part au relâchement
-    const r = duel();
-    skipIntro(r);
-    run(r, 7, [hold(ATK, 7, 1, 0)]);
-    const late = r.fighters[0]!;
-    expect(late.move).toBe("s");
-    expect(late.mt).toBeLessThan(5);
-    run(r, 3);
-    expect(late.mt).toBeGreaterThanOrEqual(5);
-    const g = duel();
-    skipIntro(g);
-    run(g, CHARGE_DECIDE + 12, [hold(ATK, CHARGE_DECIDE + 12, 1, 0)]);
-    expect(g.fighters[0]!.move).toBe("cs");
-    expect(g.fighters[0]!.charge).toBeGreaterThan(0);
-  });
-
-  it("tenir Frapper sans direction charge aussi le coup fort, devant soi", () => {
+  it("les coups simples partent dès l'appui : tenir Frapper ne les retarde pas et n'en fait pas un coup fort", () => {
+    // Le même coup, appui bref ou appui tenu : il frappe à la même image
+    const firstHit = (frames: number) => {
+      const f = duel();
+      skipIntro(f);
+      const a = f.fighters[0]!;
+      for (let k = 0; k < 30; k++) {
+        stepFight(f, [hold(ATK, frames, 1, 0)(k), NO_INPUT]);
+        const def = moveDef(a.style, a.move);
+        if (a.move === "s" && def && a.mt >= Math.min(...def.hits.map((h) => h.from))) return k;
+      }
+      return -1;
+    };
+    expect(firstHit(1)).toBeGreaterThan(0);
+    expect(firstHit(20)).toBe(firstHit(1));
     const g = duel();
     skipIntro(g);
     run(g, CHARGE_DECIDE + 12, [hold(ATK, CHARGE_DECIDE + 12)]);
-    expect(g.fighters[0]!.move).toBe("cs");
-    expect(g.fighters[0]!.charge).toBeGreaterThan(0);
-    // Un clic ordinaire (un dixième de seconde), même avec une direction, reste une attaque normale
-    const q = duel();
-    skipIntro(q);
-    run(q, 20, [hold(ATK, 7, 1, 0)]);
-    expect(q.fighters[0]!.move).toBe("s");
+    expect(g.fighters[0]!.move).not.toBe("cs");
+  });
+
+  it("Haut et un coup ensemble : le coup vers le haut, au sol ; Haut seul : un saut", () => {
+    const up =
+      (bits: number) =>
+      (k: number): Input =>
+        k === 0 ? { x: 0, y: 1, held: bits, pressed: bits } : NO_INPUT;
+    const a = duel();
+    skipIntro(a);
+    run(a, 1, [up(JMP | UPJ | ATK)]);
+    expect(a.fighters[0]!.move).toBe("u");
+    expect(a.fighters[0]!.ground).toBeGreaterThanOrEqual(0);
+    // Le coup un instant après la touche Haut (pendant l'élan du saut) : encore le coup vers le haut
+    const b = duel();
+    skipIntro(b);
+    run(b, 1, [up(JMP | UPJ)]);
+    expect(b.fighters[0]!.state).toBe("squat");
+    run(b, 1, [() => ({ x: 0, y: 1, held: FRT, pressed: FRT })]);
+    expect(b.fighters[0]!.move).toBe("cu");
+    // Haut seul : il saute ; le bouton Saut et un coup : le petit saut avec l'attaque en l'air
+    const c = duel();
+    skipIntro(c);
+    run(c, 8, [up(JMP | UPJ)]);
+    expect(c.fighters[0]!.state).toBe("air");
+    const d = duel();
+    skipIntro(d);
+    run(d, 7, [(k) => (k === 0 ? { x: 0, y: 1, held: JMP | ATK, pressed: JMP | ATK } : stick(0, 1)())]);
+    expect(d.fighters[0]!.move).toBe("au");
   });
 
   it("le coup fort part tout de suite dans la direction tenue, et se charge tant qu'on tient le bouton", () => {
@@ -250,7 +265,7 @@ describe("Culbute : le combat", () => {
     f.fighters[0]!.x = 3.5;
     f.fighters[1]!.x = 5.2;
     f.fighters[1]!.dmg = 120;
-    const events = run(f, 240, [hold(ATK, 75, 1, 0)]);
+    const events = run(f, 240, [hold(FRT, 75, 1, 0)]);
     expect(events.some((e) => e.k === "ko" && e.v === 1 && e.by === 0)).toBe(true);
   });
 
@@ -258,7 +273,7 @@ describe("Culbute : le combat", () => {
     const f = duel("ginette", "ginette");
     skipIntro(f);
     faceToFace(f, 1.8);
-    const events = run(f, 240, [hold(ATK, 75, 1, 0)]);
+    const events = run(f, 240, [hold(FRT, 75, 1, 0)]);
     expect(events.some((e) => e.k === "ko")).toBe(false);
     expect(f.fighters[1]!.dmg).toBeGreaterThan(10);
   });
@@ -535,6 +550,32 @@ describe("Culbute : le combat", () => {
     expect(b.x).toBeCloseTo(a.x, 6);
     expect(b.y).toBeCloseTo(a.y, 6);
     expect(b.state).toBe(a.state);
+  });
+
+  it("l'appareil anticipe tout le combat comme le serveur le calcule, coups compris, quand il connaît les commandes", () => {
+    const f = duel("ginette", "marcel");
+    skipIntro(f);
+    faceToFace(f, 2.4);
+    const world: Fight = JSON.parse(JSON.stringify(f));
+    const mine = (k: number): Input => {
+      const bits = k === 3 ? ATK : k === 40 ? JMP : k === 55 ? FRT : 0;
+      return { x: k < 20 ? 1 : -0.5, y: 0, held: k >= 55 && k < 70 ? FRT : bits, pressed: bits };
+    };
+    const theirs = (k: number): Input => ({ x: k < 30 ? -1 : 0.4, y: 0, held: k % 37 === 0 ? ATK : 0, pressed: k % 37 === 0 ? ATK : 0 });
+    let serverHits = 0;
+    let guessedHits = 0;
+    for (let k = 0; k < 150; k++) {
+      serverHits += stepFight(f, [mine(k), theirs(k)]).filter((e) => e.k === "hit").length;
+      guessedHits += stepPredict(world, [mine(k), theirs(k)]).filter((e) => e.k === "hit").length;
+    }
+    expect(serverHits).toBeGreaterThan(0);
+    expect(guessedHits).toBe(serverHits);
+    for (const i of [0, 1]) {
+      expect(world.fighters[i]!.x).toBeCloseTo(f.fighters[i]!.x, 6);
+      expect(world.fighters[i]!.y).toBeCloseTo(f.fighters[i]!.y, 6);
+      expect(world.fighters[i]!.dmg).toBe(f.fighters[i]!.dmg);
+      expect(world.fighters[i]!.state).toBe(f.fighters[i]!.state);
+    }
   });
 
   it("l'appareil devine ses propres coups qui touchent, avec le même arrêt sur image que le serveur", () => {

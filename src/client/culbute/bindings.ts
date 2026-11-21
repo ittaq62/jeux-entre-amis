@@ -29,9 +29,9 @@ const OPTIONAL: ActionId[] = ["strong", "taunt"];
 export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "left", label: "Gauche" },
   { id: "right", label: "Droite" },
-  { id: "up", label: "Haut", note: "vise les coups vers le haut" },
+  { id: "up", label: "Haut", note: "vise les coups vers le haut (Haut et un coup ensemble : le coup vers le haut, pas un saut)" },
   { id: "down", label: "Bas", note: "vise vers le bas, tombe plus vite, traverse une planche" },
-  { id: "attack", label: "Frapper", note: "avec une direction : un autre coup ; en courant : coup en courant ; tenir : coup fort chargé" },
+  { id: "attack", label: "Frapper", note: "part aussitôt ; avec une direction : un autre coup ; en courant : coup en courant" },
   { id: "strong", label: "Coup fort", note: "tout de suite, dans la direction tenue (devant si aucune) ; tenir pour le charger" },
   { id: "special", label: "Spécial", note: "haut + Spécial : remonter vers l'arène" },
   { id: "jump", label: "Sauter", note: "deux fois, une au sol et une en l'air" },
@@ -51,7 +51,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "souris",
     name: "ZQSD et souris",
-    note: "Clic gauche pour frapper (tenu : coup fort), clic droit pour le spécial, F pour le coup fort, Espace pour sauter, Maj pour la garde, E pour saisir",
+    note: "Clic gauche pour frapper, F (ou le bouton avant de la souris) pour le coup fort, clic droit pour le spécial, Espace pour sauter, Maj pour la garde, E pour saisir",
     bindings: {
       ...MOVES_ZQSD,
       attack: ["Mouse0", "KeyJ"],

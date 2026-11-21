@@ -6,10 +6,13 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
   const move = [bindingText(s, "left"), bindingText(s, "right"), bindingText(s, "up"), bindingText(s, "down")];
   const rows = [
     { keys: move.join(" · "), what: "Se déplacer (et diriger les coups)" },
-    { keys: bindingText(s, "attack"), what: "Frapper (en courant : coup en courant ; tenir : coup fort chargé)" },
+    { keys: bindingText(s, "attack"), what: "Frapper, aussitôt (en courant : coup en courant ; vite plusieurs fois : ça enchaîne)" },
     { keys: bindingText(s, "strong"), what: "Coup fort, tout de suite (tenir pour le charger)" },
     { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
-    { keys: bindingText(s, "jump"), what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi)" : ""}` },
+    {
+      keys: bindingText(s, "jump"),
+      what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi ; Haut avec un coup : le coup vers le haut)" : ""}`,
+    },
     { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive ; levée juste avant le coup : parade)" },
     { keys: bindingText(s, "grab"), what: "Saisir (aussi : Frapper pendant la garde), puis une direction pour projeter" },
     { keys: bindingText(s, "taunt"), what: "Narguer (pour rire)" },

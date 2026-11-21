@@ -1,21 +1,25 @@
-// La boucle d'un combat, côté navigateur : lire les commandes soixante fois par seconde et les envoyer, anticiper son
-// propre combattant (le même calcul que le serveur, rejoué depuis le dernier état reçu avec les commandes pas encore
-// prises en compte), montrer les autres un peu en retard pour qu'ils glissent sans à-coups, et tout dessiner.
+// La boucle d'un combat, côté navigateur : lire les commandes soixante fois par seconde et les envoyer, et anticiper
+// tout le combat. Le serveur envoie à chaque joueur l'état complet de chacun et sa dernière commande : l'appareil repart
+// de cet état, rejoue ses propres commandes pas encore prises en compte (et, pour les autres, leur dernière commande
+// prolongée), et montre tout le monde au présent. Ses coups et ceux qu'il reçoit se voient donc tout de suite, aux
+// bonnes places ; quand un autre a changé d'idée entre-temps, il glisse vers sa vraie place au lieu de sauter. Celui
+// qui regarde sans jouer voit les positions reçues, un peu en retard, sans rien anticiper.
 
 import { platformsAt, type ArenaId, type PlatformNow } from "../../shared/games/culbute/arenas.ts";
-import { createFight, INTRO_FRAMES, predictHits, stepSolo, type PredictedHit } from "../../shared/games/culbute/engine.ts";
+import { createFight, INTRO_FRAMES, stepPredict } from "../../shared/games/culbute/engine.ts";
 import type { Fight, FightEvent, Input, ItemKind } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage } from "../../shared/games/culbute/net.ts";
 import {
-  F_INTANG,
   FIGHTER_STRIDE,
   HELD_ITEMS,
   ITEM_STRIDE,
   SHOT_KINDS,
   SHOT_STRIDE,
   TRAP_STRIDE,
+  packFighter,
   unpackFighter,
   unpackFull,
+  unpackInputs,
   type CulbuteTick,
   type CulbuteView,
   type FighterNet,
@@ -24,6 +28,8 @@ import { CulbuteControls, type Scheme } from "./controls.ts";
 import { CulbuteScene, type FighterLook } from "./scene/CulbuteScene.ts";
 
 const STEP = 1 / 60;
+/** En développement : une latence simulée, en millisecondes aller-retour (`?lag=80` dans l'adresse) */
+const LAG = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get("lag") ?? 0) || 0 : 0;
 const SEND_EVERY = 2;
 const HEARTBEAT_MS = 120;
 const MIN_DELAY = 3;
@@ -93,8 +99,8 @@ export class FightRuntime {
   private renderF: number | null = null;
   private minLag: number | null = null;
   private jitter = 0.02;
-  // Son combattant, anticipé
-  private solo: Fight | null = null;
+  // Le combat anticipé (seulement pour un joueur) : tout le monde au présent
+  private world: Fight | null = null;
   private mySlot = -1;
   private seq = 0;
   private unacked: { seq: number; input: Input }[] = [];
@@ -102,10 +108,11 @@ export class FightRuntime {
   private outFirst = 1;
   private sinceSend = 0;
   private lastSendAt = 0;
-  private prevX = 0;
-  private prevY = 0;
-  private offX = 0;
-  private offY = 0;
+  /** Chacun : sa place à l'image d'avant (pour glisser d'une image à l'autre), et l'écart qui reste à rattraper */
+  private prev: { x: number; y: number }[] = [];
+  private off: { x: number; y: number }[] = [];
+  /** La dernière commande connue des autres : on la prolonge jusqu'à la suivante */
+  private others: Input[] = [];
   private rtt = 0.08;
   private pending: { f: number; events: FightEvent[] }[] = [];
   private hudAt = 0;
@@ -116,8 +123,8 @@ export class FightRuntime {
   private looksKey = "";
   /** La dernière image montrée : les autres tels qu'on les voit, pour deviner ses propres coups */
   private lastFrame: RenderFrame | null = null;
-  /** Ses coups devinés (on ne rejouera pas l'étincelle quand le serveur les confirmera) */
-  private predicted: { v: number; at: number; ko: boolean }[] = [];
+  /** Les coups déjà montrés d'avance (on ne rejouera pas l'étincelle quand le serveur les confirmera) */
+  private guessed: { k: string; a: number; v: number; at: number; ko: boolean }[] = [];
 
   constructor(
     host: HTMLElement,
@@ -128,7 +135,7 @@ export class FightRuntime {
     this.scene = new CulbuteScene(host, view.arena, view.scale, opts.looks);
     if (import.meta.env.DEV) (window as unknown as { __cbScene: CulbuteScene }).__cbScene = this.scene;
     this.looksKey = JSON.stringify(opts.looks);
-    this.setupSolo(view);
+    this.setupWorld(view);
     window.addEventListener("resize", this.fit);
     this.fit();
     this.raf = requestAnimationFrame(this.loop);
@@ -157,27 +164,43 @@ export class FightRuntime {
     this.scene.setLooks(looks);
   }
 
-  private setupSolo(view: CulbuteView) {
+  private setupWorld(view: CulbuteView) {
     this.mySlot = this.opts.mySeat ? view.fighters.findIndex((f) => f.id === this.opts.mySeat) : -1;
+    this.prev = [];
+    this.off = [];
+    this.others = [];
     if (this.mySlot < 0) {
-      this.solo = null;
+      this.world = null;
       return;
     }
-    this.solo = createFight(
+    this.world = createFight(
       view.config,
       view.arena,
       view.fighters.map((f) => ({ id: f.id, team: f.team, style: f.style })),
       0,
     );
     // L'arène est déjà agrandie par le serveur selon le nombre de combattants : la même
-    this.solo.scale = view.scale;
+    this.world.scale = view.scale;
   }
 
   private fit = () => {
     this.scene.resize(window.innerWidth, window.innerHeight);
   };
 
-  onTick(_now: number, tick: CulbuteTick) {
+  onTick(now: number, tick: CulbuteTick) {
+    if (LAG > 0) {
+      window.setTimeout(() => !this.disposed && this.receive(now, tick), LAG / 2);
+      return;
+    }
+    this.receive(now, tick);
+  }
+
+  private receive(_now: number, tick: CulbuteTick) {
+    if (import.meta.env.DEV) {
+      const log = ((window as unknown as { __cbTicks?: number[] }).__cbTicks ??= []);
+      log.push(tick.f);
+      if (log.length > 80) log.shift();
+    }
     const prev = this.snaps.at(-1);
     if (prev && tick.f < prev.f - 30) {
       // Une revanche : nouveau combat, nouvelle horloge
@@ -186,7 +209,8 @@ export class FightRuntime {
       this.renderF = null;
       this.minLag = null;
       this.unacked.length = 0;
-      this.setupSolo(this.view);
+      this.guessed.length = 0;
+      this.setupWorld(this.view);
     }
     const arrival = performance.now() / 1000;
     const lag = arrival - tick.f / 60;
@@ -201,23 +225,26 @@ export class FightRuntime {
       const sample = Math.max(0, performance.now() - stamp) / 1000;
       if (sample < 2) this.rtt = this.rtt * 0.9 + sample * 0.1;
     }
-    if (tick.m && this.solo && this.mySlot >= 0) this.reconcile(tick);
+    if (tick.w && this.world && this.mySlot >= 0) this.reconcile(tick);
   }
 
   /** Le serveur a parlé : on repart de son état, et on rejoue les commandes qu'il n'a pas encore prises en compte */
   private reconcile(tick: CulbuteTick) {
-    const solo = this.solo!;
-    const me = solo.fighters[this.mySlot]!;
+    const world = this.world!;
     const ack = tick.k[this.mySlot] ?? 0;
     while (this.unacked.length > 0 && this.unacked[0]!.seq <= ack) this.unacked.shift();
-    const [ox, oy] = this.shownMe();
-    solo.phase = tick.ph === 0 ? "intro" : tick.ph === 1 ? "fight" : "over";
-    solo.frame = tick.f;
-    unpackFull(me, tick.m!);
+    const before = world.fighters.map((_, i) => this.shown(i));
+    world.phase = tick.ph === 0 ? "intro" : tick.ph === 1 ? "fight" : "over";
+    world.frame = tick.f;
+    tick.w!.forEach((p, i) => {
+      const ft = world.fighters[i];
+      if (ft) unpackFull(ft, p);
+    });
+    this.others = unpackInputs(tick.u ?? [], world.fighters.length);
     // Les objets tels que le serveur les voit : on anticipe aussi le ramassage
-    solo.items = [];
+    world.items = [];
     for (let k = 0; k + ITEM_STRIDE <= tick.i.length; k += ITEM_STRIDE) {
-      solo.items.push({
+      world.items.push({
         id: tick.i[k]!,
         kind: (HELD_ITEMS[tick.i[k + 1]!] || "tarte") as ItemKind,
         x: tick.i[k + 2]!,
@@ -228,86 +255,91 @@ export class FightRuntime {
         life: 999,
       });
     }
-    this.syncOthers();
+    world.projectiles = [];
+    world.traps = [];
+    this.keepPrev();
     for (const u of this.unacked) {
-      this.prevX = me.x;
-      this.prevY = me.y;
-      stepSolo(solo, this.mySlot, u.input);
-      predictHits(solo, this.mySlot);
+      this.keepPrev();
+      this.showPredicted(stepPredict(world, this.inputsWith(u.input)));
     }
-    if (this.unacked.length === 0) {
-      this.prevX = me.x;
-      this.prevY = me.y;
-    }
-    // Un petit écart se rattrape en douceur ; un grand (une sortie, un retour) se suit tout de suite
-    const [nx, ny] = this.shownMe();
-    const dx = ox - nx;
-    const dy = oy - ny;
-    if (Math.hypot(dx, dy) < 1.8 && me.state !== "dead" && me.state !== "respawn") {
-      this.offX = dx;
-      this.offY = dy;
-    } else {
-      this.offX = 0;
-      this.offY = 0;
-    }
+    // Un petit écart se rattrape en douceur ; un grand (une sortie, un retour, un saut de plusieurs mètres) se suit
+    // tout de suite
+    world.fighters.forEach((ft, i) => {
+      const [nx, ny] = this.shown(i);
+      const [ox, oy] = before[i]!;
+      const o = (this.off[i] ??= { x: 0, y: 0 });
+      const dx = ox - nx;
+      const dy = oy - ny;
+      if (import.meta.env.DEV && Math.hypot(dx, dy) > 0.4) {
+        const net = ((window as unknown as { __cbNet?: { mine: number; others: number } }).__cbNet ??= { mine: 0, others: 0 });
+        if (i === this.mySlot) net.mine++;
+        else net.others++;
+      }
+      if (Math.hypot(dx, dy) < 2.5 && ft.state !== "dead" && ft.state !== "respawn" && ft.state !== "out") {
+        o.x = dx;
+        o.y = dy;
+      } else {
+        o.x = 0;
+        o.y = 0;
+      }
+    });
   }
 
-  /** Les autres, dans son combat anticipé, là où on les voit à l'écran */
-  private syncOthers() {
-    const solo = this.solo;
-    const frame = this.lastFrame;
-    if (!solo || !frame) return;
-    for (const r of frame.fighters) {
-      if (r.slot === this.mySlot) continue;
-      const o = solo.fighters[r.slot];
-      if (!o) continue;
-      o.x = r.x;
-      o.y = r.y;
-      o.face = r.face;
-      o.state = r.state;
-      o.dmg = r.dmg;
-      o.shield = r.shield;
-      o.intangUntil = (r.flags & F_INTANG) !== 0 ? solo.frame + 2 : 0;
-      o.ground = r.state === "stand" || r.state === "land" || r.state === "shield" || r.state === "squat" ? 0 : -1;
-    }
+  /** Les commandes de cette image pour tout le monde : la sienne, et la dernière connue des autres (sans nouvel appui) */
+  private inputsWith(mine: Input): Input[] {
+    return this.world!.fighters.map((ft) =>
+      ft.slot === this.mySlot ? mine : { ...(this.others[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }), pressed: 0 },
+    );
   }
 
-  /** Ses coups qui touchent, montrés tout de suite (le serveur confirmera un peu plus tard) */
-  private showPredicted(hits: PredictedHit[]) {
+  /** Chacun garde sa place de l'image d'avant, pour glisser jusqu'à la suivante */
+  private keepPrev() {
+    this.world!.fighters.forEach((ft, i) => {
+      const p = (this.prev[i] ??= { x: ft.x, y: ft.y });
+      p.x = ft.x;
+      p.y = ft.y;
+    });
+  }
+
+  /** Les coups (et les saisies) devinés sur l'appareil : montrés tout de suite, une seule fois */
+  private showPredicted(events: FightEvent[]) {
     const frame = this.lastFrame;
-    if (hits.length === 0 || !frame) return;
+    if (events.length === 0 || !frame) return;
     const now = performance.now();
-    const events: FightEvent[] = hits.map((h) => ({
-      k: "hit",
-      a: this.mySlot,
-      v: h.v,
-      dmg: h.dmg,
-      x: h.x,
-      y: h.y,
-      power: h.power,
-      kind: h.parry ? "parry" : h.shield ? "shield" : "hit",
-      ...(h.ko ? { ko: true } : {}),
-    }));
-    for (const h of hits) this.predicted.push({ v: h.v, at: now, ko: h.ko });
-    for (const e of events) this.scene.effect(e, frame);
-    this.opts.onEvents(events, frame);
+    this.guessed = this.guessed.filter((g) => now - g.at < 900);
+    const fresh: FightEvent[] = [];
+    for (const e of events) {
+      if (e.k !== "hit" && e.k !== "grab") continue;
+      const ko = e.k === "hit" && Boolean(e.ko);
+      if (this.guessed.some((g) => g.k === e.k && g.a === e.a && g.v === e.v && now - g.at < 400)) continue;
+      this.guessed.push({ k: e.k, a: e.a, v: e.v, at: now, ko });
+      fresh.push(e);
+    }
+    if (fresh.length === 0) return;
+    for (const e of fresh) this.scene.effect(e, frame);
+    this.opts.onEvents(fresh, frame);
   }
 
-  /** Un coup confirmé par le serveur : déjà montré s'il avait été deviné */
+  /** Un coup (ou une saisie) confirmé par le serveur : déjà montré s'il avait été deviné */
   private alreadyShown(e: FightEvent): boolean {
-    if (e.k !== "hit" || e.a !== this.mySlot || this.mySlot < 0) return false;
+    if ((e.k !== "hit" && e.k !== "grab") || !this.world) return false;
     const now = performance.now();
-    this.predicted = this.predicted.filter((p) => now - p.at < 900);
-    const i = this.predicted.findIndex((p) => p.v === e.v && (p.ko || !e.ko));
+    this.guessed = this.guessed.filter((g) => now - g.at < 900);
+    const ko = e.k === "hit" && Boolean(e.ko);
+    const i = this.guessed.findIndex((g) => g.k === e.k && g.a === e.a && g.v === e.v && (g.ko || !ko) && !("done" in g));
     if (i < 0) return false;
-    this.predicted.splice(i, 1);
+    // Confirmé : il ne sert plus à reconnaître le suivant
+    (this.guessed[i] as { done?: boolean }).done = true;
     return true;
   }
 
-  private shownMe(): [number, number] {
-    const me = this.solo!.fighters[this.mySlot]!;
+  /** Où montrer un combattant anticipé : entre ses deux dernières images, plus ce qui reste à rattraper */
+  private shown(i: number): [number, number] {
+    const ft = this.world!.fighters[i]!;
+    const p = this.prev[i] ?? ft;
+    const o = this.off[i] ?? { x: 0, y: 0 };
     const k = Math.min(1, this.acc / STEP);
-    return [this.prevX + (me.x - this.prevX) * k + this.offX, this.prevY + (me.y - this.prevY) * k + this.offY];
+    return [p.x + (ft.x - p.x) * k + o.x, p.y + (ft.y - p.y) * k + o.y];
   }
 
   /** Les commandes de cette image : au serveur, et à son combattant anticipé */
@@ -323,20 +355,18 @@ export class FightRuntime {
       this.outbox.push(Math.round(input.x * 100) / 100, Math.round(input.y * 100) / 100, input.held, input.pressed);
       this.unacked.push({ seq: this.seq, input });
       if (this.unacked.length > 120) this.unacked.shift();
-      if (this.solo) {
-        const me = this.solo.fighters[this.mySlot]!;
-        this.prevX = me.x;
-        this.prevY = me.y;
-        stepSolo(this.solo, this.mySlot, input);
-        this.syncOthers();
-        this.showPredicted(predictHits(this.solo, this.mySlot));
+      if (this.world) {
+        this.keepPrev();
+        this.showPredicted(stepPredict(this.world, this.inputsWith(input)));
       }
       this.sinceSend++;
     }
     // Un onglet resté en arrière-plan : on ne rattrape pas des secondes de commandes
     if (this.acc > STEP * 5) this.acc = 0;
     if (this.mySlot >= 0 && this.outbox.length > 0 && (this.sinceSend >= SEND_EVERY || now - this.lastSendAt > HEARTBEAT_MS)) {
-      this.opts.send({ t: "in", s: this.outFirst, d: this.outbox, c: now });
+      const msg: CulbuteClientMessage = { t: "in", s: this.outFirst, d: this.outbox, c: now };
+      if (LAG > 0) window.setTimeout(() => this.opts.send(msg), LAG / 2);
+      else this.opts.send(msg);
       this.outbox = [];
       this.sinceSend = 0;
       this.lastSendAt = now;
@@ -390,29 +420,22 @@ export class FightRuntime {
         me: false,
       });
     }
-    // Soi-même : l'anticipation
-    if (this.solo && this.mySlot >= 0 && fighters[this.mySlot]) {
-      const me = this.solo.fighters[this.mySlot]!;
-      const server = fighters[this.mySlot]!;
-      if (me.state !== "dead" && me.state !== "out" && this.solo.phase === "fight") {
-        const [x, y] = this.shownMe();
-        fighters[this.mySlot] = {
-          ...server,
+    // Un joueur : tout le monde tel qu'anticipé, au présent (les vies et les points restent ceux du serveur)
+    const world = this.world;
+    if (world && this.mySlot >= 0) {
+      world.fighters.forEach((ft, i) => {
+        const server = fighters[i];
+        const [x, y] = this.shown(i);
+        fighters[i] = {
+          ...unpackFighter(packFighter(ft, world.frame), 0),
+          ...(server ? { stocks: server.stocks, score: server.score } : {}),
           x,
           y,
-          face: me.face,
-          state: me.state,
-          move: me.move,
-          mt: me.mt,
-          t: me.t,
-          charge: me.charge,
-          shield: me.shield,
-          item: me.item,
-          ground: me.ground,
-          kb: Math.hypot(me.kx, me.ky),
-          me: true,
+          slot: i,
+          ground: ft.ground,
+          me: i === this.mySlot,
         };
-      } else fighters[this.mySlot] = { ...server, me: true };
+      });
     }
     const lerpList = <T extends { id: number; x: number; y: number }>(la: T[], lb: T[]) =>
       lb.map((q) => {
@@ -449,11 +472,15 @@ export class FightRuntime {
     const traps: RenderFrame["traps"] = [];
     for (let o = 0; o + TRAP_STRIDE <= b.r.length; o += TRAP_STRIDE)
       traps.push({ id: b.r[o]!, x: b.r[o + 1]!, y: b.r[o + 2]!, owner: b.r[o + 3]! });
-    const plats = platformsAt(this.view.arena as ArenaId, this.view.scale, Math.round(at));
-    // Debout sur une plateforme qui bouge : ses pieds suivent la plateforme telle qu'on la voit
-    const mine = fighters[this.mySlot];
-    if (mine?.me && mine.ground >= 0 && plats[mine.ground]) mine.y = plats[mine.ground]!.y;
-    return { frame: at, fighters, shots: lerpList(shots(a), shots(b)), items: lerpList(items(a), items(b)), traps, plats };
+    // Les plateformes qui bougent : au présent pour un joueur (comme les combattants), sinon à l'heure de lecture
+    const now = world && this.mySlot >= 0 ? world.frame : at;
+    const plats = platformsAt(this.view.arena as ArenaId, this.view.scale, Math.round(now));
+    // Debout sur une plateforme qui bouge : les pieds suivent la plateforme telle qu'on la voit
+    if (world) for (const r of fighters) if (r.ground >= 0 && plats[r.ground]) r.y = plats[r.ground]!.y;
+    // Ce qui vole, reçu en retard : poussé jusqu'au présent d'après sa vitesse (sinon il toucherait après coup)
+    const ahead = world ? Math.max(0, Math.min(0.25, (now - at) / 60)) : 0;
+    const flying = lerpList(shots(a), shots(b)).map((q) => (ahead > 0 ? { ...q, x: q.x + q.vx * ahead, y: q.y + q.vy * ahead } : q));
+    return { frame: now, fighters, shots: flying, items: lerpList(items(a), items(b)), traps, plats };
   }
 
   private loop = (now: number) => {
@@ -463,10 +490,12 @@ export class FightRuntime {
     this.last = now;
     this.acc += dt;
     this.stepInputs(now);
-    // Le rattrapage de son combattant s'efface en un dixième de seconde environ
+    // Les rattrapages s'effacent en un dixième de seconde environ
     const fade = Math.exp(-dt * 12);
-    this.offX *= fade;
-    this.offY *= fade;
+    for (const o of this.off) {
+      o.x *= fade;
+      o.y *= fade;
+    }
     this.fpsFrames++;
     if (now - this.fpsAt > 1000) {
       this.fps = Math.round((this.fpsFrames * 1000) / (now - this.fpsAt));

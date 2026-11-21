@@ -20,6 +20,7 @@ import {
   SHD,
   sign,
   SPC,
+  UPJ,
   type FieldItem,
   type Fight,
   type FightEvent,
@@ -32,7 +33,7 @@ import {
   type Projectile,
   type Trap,
 } from "./model.ts";
-import { CHARGE_BONUS, CHARGE_DECIDE, CHARGED_OF, GENERIC, type HitDef, type MoveDef, type MoveSlot } from "./moves.ts";
+import { CHARGE_BONUS, GENERIC, type HitDef, type MoveDef, type MoveSlot } from "./moves.ts";
 import { STYLES, type Style } from "./styles.ts";
 
 // ---------------------------------------------------------------------------
@@ -183,6 +184,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     hitAt: [],
     jumps: st.jumps,
     airdodged: false,
+    upJump: false,
     sideUsed: false,
     fastfall: false,
     dropUntil: 0,
@@ -370,6 +372,14 @@ function strongAttack(ft: Fighter, x: number, y: number) {
   startMove(ft, dir === "u" ? "cu" : dir === "d" ? "cd" : "cs");
 }
 
+/** Le coup vers le haut, au sol : le coup fort si c'est lui qu'on a enfoncé, sinon le coup simple */
+function upAttack(ft: Fighter, x: number, press: number) {
+  const strong = (press & FRT) !== 0;
+  consume(ft, ATK | FRT);
+  if (strong) strongAttack(ft, x, 1);
+  else startMove(ft, ft.item ? "g:throwU" : "u");
+}
+
 /** En pleine course vers l'avant : le coup en courant (on garde son élan) */
 function dashing(ft: Fighter, x: number, y: number, st: Style, sm: number): boolean {
   return !ft.item && dirOf(x, y) === "s" && Math.abs(ft.vx) >= st.run * 0.7 * sm && sign(x) === sign(ft.vx);
@@ -441,8 +451,15 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         return;
       }
       if (press & JMP) {
-        consume(ft, JMP);
+        // Haut et un coup ensemble : le coup vers le haut, pas un saut
+        if (press & UPJ && press & (ATK | FRT)) {
+          consume(ft, JMP | UPJ);
+          upAttack(ft, x, press);
+          return;
+        }
+        consume(ft, JMP | UPJ);
         jumpFromGround(ft);
+        ft.upJump = (press & UPJ) !== 0;
         return;
       }
       if (press & FRT) {
@@ -478,6 +495,12 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     }
     case "squat": {
       ft.vx *= 0.9;
+      // Le saut venait de la touche Haut, et un coup suit aussitôt : c'était un coup vers le haut
+      if (ft.upJump && press & (ATK | FRT)) {
+        setState(ft, "stand");
+        upAttack(ft, x, press);
+        return;
+      }
       if (ft.t >= JUMPSQUAT) {
         // Saut et Frapper ensemble (ou Frapper pendant l'élan) : un petit saut, et l'attaque en l'air part aussitôt
         const quick = (ft.buf & ATK) !== 0;
@@ -1095,21 +1118,7 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
     startMove(ft, "n");
     return;
   }
-  // Une attaque au sol qui peut se charger : tant que le bouton est tenu, elle attend juste avant de frapper ; relâché,
-  // elle part aussitôt ; tenu assez longtemps, elle devient l'attaque chargée de sa direction
-  const charged = ft.move === "g:bagS" ? "g:bagC" : CHARGED_OF[ft.move as MoveSlot];
-  if (charged && !isAirborne(ft) && inp.held & ATK) {
-    if (ft.t >= CHARGE_DECIDE - 1) {
-      ft.move = charged;
-      advanceCharged(f, ft, moveDef(ft.style, charged)!, inp, solo);
-      return;
-    }
-    const first = def.hits.length > 0 ? Math.min(...def.hits.map((hd) => hd.from)) : def.frames;
-    if (ft.mt >= first - 1) {
-      ft.vx *= 0.86;
-      return;
-    }
-  }
+  // Les coups simples partent dès l'appui, sans attendre qu'on relâche (le coup fort, lui, se charge en tenant sa touche)
   advanceCharged(f, ft, def, inp, solo);
 }
 
@@ -2243,6 +2252,27 @@ export function stepSolo(f: Fight, slot: number, inp: Input) {
   updateFighter(f, ft, inp, platformsNow(f), true);
   // Sorti de l'arène : c'est le serveur qui décide de la suite
   pending = [];
+}
+
+/**
+ * Sur l'appareil d'un joueur : tout le combat avance d'une image, chacun avec sa commande (la sienne, et pour les
+ * autres la dernière qu'on leur connaît), coups et saisies compris. Ni sortie, ni objet qui tombe, ni tir : c'est le
+ * serveur qui en décide, et son état remplace celui-ci dès qu'il arrive. Rend les coups qui touchent (et les saisies).
+ */
+export function stepPredict(f: Fight, inputs: Input[]): FightEvent[] {
+  pending = [];
+  f.frame++;
+  if (f.phase !== "fight") return [];
+  const plats = platformsNow(f);
+  for (const ft of f.fighters) updateFighter(f, ft, inputs[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }, plats, false);
+  holdInPlace(f);
+  detectHits(f);
+  // Les tirs et les pièges ne sont pas anticipés (le serveur les montre)
+  f.projectiles.length = 0;
+  f.traps.length = 0;
+  const out = pending.filter((e) => e.k === "hit" || e.k === "grab");
+  pending = [];
+  return out;
 }
 
 /** Un coup de son propre combattant, deviné sur l'appareil */

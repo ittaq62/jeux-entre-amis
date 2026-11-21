@@ -21,7 +21,16 @@ import {
   type CulbuteRoomView,
   type CulbuteServerMessage,
 } from "../shared/games/culbute/net.ts";
-import { culbuteView, DEFAULT_CONFIG, encodeTick, mergeConfig, packFull, pickArena, stateKey } from "../shared/games/culbute/view.ts";
+import {
+  culbuteView,
+  DEFAULT_CONFIG,
+  encodeTick,
+  mergeConfig,
+  packFull,
+  packInputs,
+  pickArena,
+  stateKey,
+} from "../shared/games/culbute/view.ts";
 import {
   CHAT_MAX,
   MIN_PLAYERS,
@@ -164,6 +173,8 @@ export class CulbuteRoom extends DurableObject<Env> {
   private pendingEvents: FightEvent[] = [];
   private queues = new Map<string, InputQueue>();
   private memory = new Map<string, BotMemory>();
+  /** La commande de chacun à la dernière image jouée (les joueurs l'envoient aux autres pour qu'ils l'anticipent) */
+  private lastInputs: Input[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -701,8 +712,8 @@ export class CulbuteRoom extends DurableObject<Env> {
         input: {
           x: num(data[i], -1, 1),
           y: num(data[i + 1], -1, 1),
-          held: num(data[i + 2], 0, 127) | 0,
-          pressed: num(data[i + 3], 0, 127) | 0,
+          held: num(data[i + 2], 0, 255) | 0,
+          pressed: num(data[i + 3], 0, 255) | 0,
         },
       });
     }
@@ -888,7 +899,9 @@ export class CulbuteRoom extends DurableObject<Env> {
     while (this.acc >= STEP_MS && steps < 8) {
       this.acc -= STEP_MS;
       steps++;
-      this.pendingEvents.push(...stepFight(f, this.inputs(f)));
+      const inputs = this.inputs(f);
+      this.lastInputs = inputs;
+      this.pendingEvents.push(...stepFight(f, inputs));
     }
     if (steps === 0) return;
     if (now - this.lastSent >= SEND_EVERY_MS || this.pendingEvents.length > 0) {
@@ -924,12 +937,14 @@ export class CulbuteRoom extends DurableObject<Env> {
     const events = this.pendingEvents;
     this.pendingEvents = [];
     const base = JSON.stringify({ t: "tick", now, ...encodeTick(f, events, acks, stamps) });
+    // Aux joueurs, de quoi anticiper tout le combat : chacun en entier, et la dernière commande de chacun
+    const full = `,"w":${JSON.stringify(f.fighters.map((x) => packFull(x)))},"u":${JSON.stringify(packInputs(this.lastInputs))}}`;
     for (const ws of this.ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() as Attachment | null;
       const seat = att ? d.seats.find((s) => s.userId === att.userId) : undefined;
       const ft = seat ? f.fighters.find((x) => x.id === seat.id) : undefined;
       try {
-        ws.send(ft ? `${base.slice(0, -1)},"m":${JSON.stringify(packFull(ft))}}` : base);
+        ws.send(ft ? `${base.slice(0, -1)}${full}` : base);
       } catch {
         // déjà fermée
       }

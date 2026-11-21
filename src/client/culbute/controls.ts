@@ -2,7 +2,8 @@
 // (un stick sous le pouce gauche, trois boutons sous le droit, la garde en posant le pouce sur Frapper et Spécial à la fois).
 // Une fois par image, tout devient une seule commande : le stick, les boutons tenus et ceux qu'on vient d'enfoncer.
 
-import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Input } from "../../shared/games/culbute/model.ts";
+import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, UPJ, type Input } from "../../shared/games/culbute/model.ts";
+import { CHARGE_DECIDE } from "../../shared/games/culbute/moves.ts";
 import { ACTION_IDS, loadSettings, type ActionId, type CulbuteSettings } from "./bindings.ts";
 
 export type Scheme = "clavier" | "manette" | "tactile";
@@ -20,6 +21,9 @@ export class CulbuteControls {
   private byCode = new Map<string, ActionId[]>();
   private padPrev = 0;
   private touchPrevHeld = 0;
+  /** Au doigt, Frapper tenu : depuis combien d'images (-1 : pas tenu), et s'il est devenu le coup fort */
+  private touchAtk = -1;
+  private touchStrong = false;
   private scheme: Scheme = "clavier";
   private settings: CulbuteSettings;
   /** Pendant que l'aide, le menu ou les réglages sont ouverts, le combat n'écoute plus */
@@ -154,8 +158,8 @@ export class CulbuteControls {
       if (keys.held.has(id)) held |= bit;
       if (keys.tapped.has(id)) tapped |= bit;
     }
-    // La touche du haut fait sauter (un appui, un saut)
-    if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP;
+    // La touche du haut fait sauter (un appui, un saut) ; enfoncée avec un coup, c'est le coup vers le haut (voir UPJ)
+    if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP | UPJ;
 
     // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite
     // pour saisir, les autres gâchettes pour la garde, le petit bouton de gauche (Retour, Select) pour narguer, le stick
@@ -201,12 +205,30 @@ export class CulbuteControls {
       x = t.sx;
       y = t.sy;
     }
-    let touchHeld = (t.atk ? ATK : 0) | (t.spc ? SPC : 0) | (t.jmp ? JMP : 0) | (t.grb ? GRB : 0);
+    let touchHeld = (t.spc ? SPC : 0) | (t.jmp ? JMP : 0) | (t.grb ? GRB : 0);
     if (t.atk && t.spc) touchHeld = SHD | (t.jmp ? JMP : 0);
-    if (this.settings.stickJump && t.sy > 0.65) touchHeld |= JMP;
-    let touchTaps = t.taps;
+    const stickJump = this.settings.stickJump && t.sy > 0.65;
+    if (stickJump) touchHeld |= JMP;
+    // Frapper au doigt : relâché vite, le coup simple ; gardé un cinquième de seconde, le coup fort, qui se charge tant
+    // que le doigt reste (posé avec Spécial, c'est la garde : pas de coup)
+    let touchTaps = t.taps & ~ATK;
+    if (t.atk && !t.spc) {
+      this.touchAtk++;
+      if (this.touchAtk >= CHARGE_DECIDE && !this.touchStrong) {
+        this.touchStrong = true;
+        touchTaps |= FRT;
+      }
+      if (this.touchStrong) touchHeld |= FRT;
+    } else {
+      // Relâché (même un appui si bref qu'il tient entre deux images) : le coup simple
+      if (!t.atk && (this.touchAtk >= 0 || t.taps & ATK) && !this.touchStrong) touchTaps |= ATK;
+      this.touchAtk = -1;
+      this.touchStrong = false;
+    }
     if (touchHeld & SHD) touchTaps = (touchTaps & JMP) | SHD;
     touchTaps |= touchHeld & ~this.touchPrevHeld & (SHD | JMP);
+    // Le saut au stick : comme la touche Haut, un coup en même temps donne le coup vers le haut
+    if (stickJump && touchTaps & JMP && !t.jmp) touchTaps |= UPJ;
     this.touchPrevHeld = touchHeld;
     t.taps = 0;
     held |= touchHeld;

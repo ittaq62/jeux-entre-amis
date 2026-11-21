@@ -14,6 +14,7 @@ import {
   type FighterStats,
   type FightSettings,
   type HabitueId,
+  type Input,
   type ItemKind,
 } from "./model.ts";
 import { GENERIC_KEYS, MOVE_SLOTS } from "./moves.ts";
@@ -163,8 +164,24 @@ export interface CulbuteTick {
   /** La phase du combat : 0 introduction, 1 combat, 2 fini */
   ph: number;
   e: FightEvent[];
-  /** Son propre combattant, en entier (envoyé à chacun le sien) */
-  m?: number[];
+  /**
+   * Aux joueurs seulement, pour anticiper tout le combat : chaque combattant en entier (voir packFull), et la commande
+   * de chacun à cette image (x, y, boutons tenus : trois nombres par combattant)
+   */
+  w?: number[][];
+  u?: number[];
+}
+
+/** Les commandes de chacun à cette image, serrées (x et y arrondis au centième, les boutons tenus) */
+export function packInputs(inputs: Input[]): number[] {
+  const out: number[] = [];
+  for (const inp of inputs) out.push(Math.round(inp.x * 100) / 100, Math.round(inp.y * 100) / 100, inp.held);
+  return out;
+}
+
+/** La dernière commande connue de chacun : on la prolonge (boutons tenus, sans nouvel appui) */
+export function unpackInputs(u: number[], count: number): Input[] {
+  return Array.from({ length: count }, (_, i) => ({ x: u[i * 3] ?? 0, y: u[i * 3 + 1] ?? 0, held: u[i * 3 + 2] ?? 0, pressed: 0 }));
 }
 
 export function packFighter(ft: Fighter, frame: number): number[] {
@@ -281,7 +298,7 @@ export function packFull(ft: Fighter): number[] {
     STATE_CODE.get(ft.state) ?? 0,
     MOVE_CODE.get(ft.move) ?? 0,
     ITEM_CODE.get(ft.item) ?? 0,
-    (ft.airdodged ? 1 : 0) | (ft.sideUsed ? 2 : 0) | (ft.fastfall ? 4 : 0) | (ft.ledgeFresh ? 8 : 0),
+    (ft.airdodged ? 1 : 0) | (ft.sideUsed ? 2 : 0) | (ft.fastfall ? 4 : 0) | (ft.ledgeFresh ? 8 : 0) | (ft.upJump ? 16 : 0),
     // Ceux que le coup en cours a déjà touchés (et quand) : l'appareil ne les touche pas une deuxième fois
     ft.hitIds.length,
     ...ft.hitIds,
@@ -307,6 +324,7 @@ export function unpackFull(ft: Fighter, p: number[]) {
   ft.sideUsed = (b & 2) !== 0;
   ft.fastfall = (b & 4) !== 0;
   ft.ledgeFresh = (b & 8) !== 0;
+  ft.upJump = (b & 16) !== 0;
   const hits = p[n + 4] ?? 0;
   ft.hitIds = p.slice(n + 5, n + 5 + hits);
   ft.hitAt = p.slice(n + 5 + hits, n + 5 + 2 * hits);
@@ -317,7 +335,7 @@ export function unpackFull(ft: Fighter, p: number[]) {
 }
 
 /** Tout ce qui bouge, à cette image (sans le combattant complet de chacun, ajouté à part) */
-export function encodeTick(f: Fight, events: FightEvent[], acks: number[], stamps: number[]): Omit<CulbuteTick, "m"> {
+export function encodeTick(f: Fight, events: FightEvent[], acks: number[], stamps: number[]): Omit<CulbuteTick, "w" | "u"> {
   const p: number[] = [];
   for (const ft of f.fighters) p.push(...packFighter(ft, f.frame));
   const j: number[] = [];

@@ -24,6 +24,11 @@ export const GRB = 16;
 export const NAR = 32;
 /** Le coup fort : l'attaque chargée de sa direction, tout de suite (tenir pour charger) ; en l'air, une attaque en l'air */
 export const FRT = 64;
+/**
+ * Ce saut vient de la touche Haut (ou du stick poussé vers le haut), pas du bouton Saut : Haut et un coup enfoncés
+ * ensemble font le coup vers le haut, au sol, au lieu de sauter
+ */
+export const UPJ = 128;
 
 /** Ce que le joueur demande pendant un pas : le stick (de -1 à 1, y vers le haut) et ses boutons */
 export interface Input {
@@ -121,6 +126,8 @@ export interface Fighter {
   /** Sauts en l'air restants ; esquive aérienne et spécial de côté déjà pris pendant ce saut */
   jumps: number;
   airdodged: boolean;
+  /** Son saut en cours d'élan vient de la touche Haut (un coup pendant l'élan devient le coup vers le haut, au sol) */
+  upJump: boolean;
   sideUsed: boolean;
   fastfall: boolean;
   /** Il traverse les plateformes fines jusqu'à cette image (il descend exprès) */
