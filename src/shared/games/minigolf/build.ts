@@ -67,7 +67,7 @@ export class HoleBuilder {
       decos: [],
       opens: [],
       links: [],
-      outY: opts.outY ?? -0.03,
+      outY: opts.outY ?? null,
       time: opts.time,
       hint: opts.hint,
     };

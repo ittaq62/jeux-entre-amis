@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { COURSES, type CourseId } from "../../shared/games/minigolf/courses.ts";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
@@ -43,6 +44,7 @@ interface Profile {
   crampons: GameStats;
   culbute: GameStats;
   escarmouche?: GameStats;
+  minigolf?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -127,12 +129,15 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const escarmouche = profile.escarmouche ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const et = escarmouche.totals as Record<string, number>;
   const showEscarmouche = games.includes("escarmouche") || escarmouche.played > 0;
+  const minigolf = profile.minigolf ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const gt = minigolf.totals as Record<string, number>;
+  const showMinigolf = games.includes("minigolf") || minigolf.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
   const shelfGames = (
-    ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche", "tour"] as TableGame[]
+    ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf", "tour"] as TableGame[]
   ).filter(
     (g) =>
       g === "uno" ||
@@ -150,9 +155,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   ? showEscarmouche
                   : g === "culbute"
                     ? showCulbute
-                    : g === "bolides"
-                      ? showBolides
-                      : showTour),
+                    : g === "minigolf"
+                      ? showMinigolf
+                      : g === "bolides"
+                        ? showBolides
+                        : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -237,6 +244,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{bolides.points.toLocaleString("fr-FR")}</strong> points à Bolides
                 <span className="profile-elo">
                   Elo <strong className="num">{bolides.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showMinigolf && minigolf.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{minigolf.points.toLocaleString("fr-FR")}</strong> points au minigolf
+                <span className="profile-elo">
+                  Elo <strong className="num">{minigolf.elo}</strong>
                 </span>
               </p>
             )}
@@ -442,6 +457,23 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </section>
             )}
 
+            {showMinigolf && (
+              <section className="carnet panel">
+                <h2>Le green</h2>
+                <p className="carnet-summary">
+                  {minigolf.played === 0
+                    ? "Aucune partie de minigolf pour l'instant."
+                    : `${minigolf.played} partie${minigolf.played > 1 ? "s" : ""}, ${minigolf.won} gagnée${minigolf.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Trous joués" value={gt.holes} strong />
+                  <LedgerRow label="Trous en un" value={gt.aces} />
+                  <LedgerRow label="Trous sous le par" value={gt.under} />
+                  <LedgerRow label="Balles perdues" value={gt.lost} />
+                </dl>
+              </section>
+            )}
+
             {showTour && (
               <section className="carnet panel">
                 <h2>Les tournées</h2>
@@ -587,6 +619,7 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "culbute")
     return g.variant === "temps" ? "Culbute au temps" : g.variant === "subite" ? "Culbute en mort subite" : "Culbute aux vies";
   if (g.game === "escarmouche") return `Escarmouche, ${ESC_MODES[g.variant] ?? "combat"}`;
+  if (g.game === "minigolf") return g.variant in COURSES ? `Minigolf, ${COURSES[g.variant as CourseId].name}` : "Minigolf";
   if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }

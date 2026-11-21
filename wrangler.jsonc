@@ -20,6 +20,7 @@
       { "name": "CRAMPONS", "class_name": "CramponsRoom" },
       { "name": "CULBUTE", "class_name": "CulbuteRoom" },
       { "name": "ESCARMOUCHE", "class_name": "EscarmoucheRoom" },
+      { "name": "MINIGOLF", "class_name": "MinigolfRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" },
     ],
@@ -35,6 +36,7 @@
     { "tag": "v8", "new_sqlite_classes": ["CramponsRoom"] },
     { "tag": "v9", "new_sqlite_classes": ["EscarmoucheRoom"] },
     { "tag": "v10", "new_sqlite_classes": ["CulbuteRoom"] },
+    { "tag": "v11", "new_sqlite_classes": ["MinigolfRoom"] },
   ],
   "d1_databases": [
     {

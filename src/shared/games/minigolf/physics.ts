@@ -34,7 +34,7 @@ const REST_STEPS = 16;
 /** En retombant, sous cette vitesse de rebond, elle reste au sol */
 const V_STICK = 0.42;
 /** La balle descend de tant sous le bord du trou : elle y est */
-export const DROP_CAPTURE = 0.072;
+export const DROP_CAPTURE = 0.14;
 /** Un coup dure au plus tant de secondes */
 export const MAX_SHOT_S = 30;
 /** La vitesse de départ, du plus petit au plus grand coup */
@@ -407,7 +407,7 @@ function airContact(c: Course, b: Ball, o: PhysOpts, emit?: Emit) {
   }
   const tile = tileAt(c, b.x, b.z, b.tile);
   if (tile < 0) {
-    if (b.y - BALL_R <= c.def.outY || b.y < c.killY) lose(b, "out", emit);
+    if (b.y - BALL_R <= c.outY || b.y < c.killY) lose(b, "out", emit);
     return;
   }
   const T = c.tiles[tile]!;

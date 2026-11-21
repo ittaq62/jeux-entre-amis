@@ -71,6 +71,7 @@ const fontaine = hole(
     b.tile([...aR, end(t)], -0.14, "water", { noRail: true, look: "bassin" });
     b.tile([...aL, end(Math.PI + t)], -0.14, "water", { noRail: true, look: "bassin" });
     b.tile([...aB, end(Math.PI - t), ...aT, end(Math.PI * 2 - t)], 0.0, "wood", { look: "pont" });
+    b.deco("jets", C[0], C[1], { s: W });
     b.tee(0, -0.45, UP).cup(0, -9.1);
   },
   { hint: "Tout droit par le pont, ou le grand tour du bassin." },
@@ -210,6 +211,7 @@ const moulin = hole(
     b.tile(box(-0.25, -8.6, 0.25, -7), 0, "stone", { look: "porte" });
     b.tile(box(-1.4, -12, 1.4, -8.6), ramp([0, -8.6], [0, -9.7], 0, -0.25, "s"), "green", { look: "buis" });
     b.mover({ motion: { k: "wheel", c: [0, 1.05, -6.9], axis: [0, 1], w: 1.15 }, parts: sails([0, -6.9], 1.05), look: "moulin" });
+    b.deco("moulin", 0, -7);
     b.tee(0, -0.45, UP).cup(0.55, -11.2);
   },
   { hint: "Les ailes passent devant la porte : vise le bon moment." },

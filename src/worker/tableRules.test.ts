@@ -19,6 +19,7 @@ import { BricksRoom } from "./bricksRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
 import { CulbuteRoom } from "./culbuteRoom.ts";
+import { MinigolfRoom } from "./minigolfRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -39,6 +40,7 @@ const GAMES: { game: GameId; Room: RoomClass; bots: boolean }[] = [
   { game: "crampons", Room: CramponsRoom as unknown as RoomClass, bots: false },
   { game: "culbute", Room: CulbuteRoom as unknown as RoomClass, bots: true },
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
+  { game: "minigolf", Room: MinigolfRoom as unknown as RoomClass, bots: true },
 ];
 
 /** Pour chaque jeu, une règle que le tirage décide et qui accepte une autre valeur (un oui/non, ou la fin d'un nul) */
@@ -52,6 +54,7 @@ const DRAWN_TOGGLE: Record<GameId, string> = {
   crampons: "draw",
   culbute: "lune",
   escarmouche: "hardcore",
+  minigolf: "lune",
 };
 
 const open: { stopLoop?: () => void }[] = [];
@@ -143,6 +146,7 @@ const FINISH: Record<GameId, (room: Record<string, (...a: unknown[]) => unknown>
     crampons: (room) => room.finishGame!(Date.now()),
     culbute: (room) => room.finishGame!(Date.now()),
     escarmouche: (room) => room.finishGame!(Date.now()),
+    minigolf: (room) => room.finishGame!(Date.now()),
   };
 
 describe.each(GAMES)("$game : à la fin de la partie", ({ game, Room, bots }) => {

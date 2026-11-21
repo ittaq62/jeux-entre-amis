@@ -7,6 +7,7 @@ import type { BolidesSettings } from "./games/bolides/race.ts";
 import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/engine.ts";
 import type { CramponsConfig } from "./games/crampons/view.ts";
 import type { CulbuteConfig } from "./games/culbute/view.ts";
+import type { MinigolfConfig } from "./games/minigolf/match.ts";
 import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
@@ -16,13 +17,25 @@ import type { Looks } from "./looks.ts";
 import type { AchievementUnlock, ChatMessage, GameId, PublicUser, Visibility } from "./protocol.ts";
 
 /** Jeux qu'on peut mettre dans une tournée, dans l'ordre où l'hôte les voit */
-export const TOUR_GAMES: GameId[] = ["uno", "bricks", "naval", "capitale", "meche", "bolides", "crampons", "escarmouche", "culbute"];
+export const TOUR_GAMES: GameId[] = [
+  "uno",
+  "bricks",
+  "naval",
+  "capitale",
+  "meche",
+  "bolides",
+  "crampons",
+  "escarmouche",
+  "culbute",
+  "minigolf",
+];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
  * l'hôte les coche s'il veut, ils ne le sont pas d'office
  */
 const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
-  (g) => g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "culbute" && g !== "escarmouche",
+  (g) =>
+    g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "culbute" && g !== "escarmouche" && g !== "minigolf",
 );
 
 /** Nombre de joueurs qu'accueille chaque jeu */
@@ -35,6 +48,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   bolides: { min: 2, max: 8 },
   crampons: { min: 2, max: 8 },
   culbute: { min: 2, max: 8 },
+  minigolf: { min: 2, max: 8 },
   escarmouche: { min: 2, max: 8 },
 };
 
@@ -585,6 +599,29 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       chance: 0.3,
     },
   ],
+  minigolf: [
+    {
+      id: "envers",
+      name: "à l'envers",
+      blurb: "Chaque trou se joue en miroir : la gauche devient la droite.",
+      settings: { mirror: true } satisfies Partial<MinigolfConfig>,
+      chance: 0.3,
+    },
+    {
+      id: "lune",
+      name: "sur la lune",
+      blurb: "La pesanteur fond : les sauts durent, les pentes poussent à peine.",
+      settings: { lune: true } satisfies Partial<MinigolfConfig>,
+      chance: 0.25,
+    },
+    {
+      id: "glace",
+      name: "tout glisse",
+      blurb: "Le gazon devient patinoire : la balle roule bien plus loin.",
+      settings: { glace: true } satisfies Partial<MinigolfConfig>,
+      chance: 0.2,
+    },
+  ],
 };
 
 /**
@@ -859,6 +896,13 @@ const CULBUTE_VARIANTS: Format<CulbuteConfig>[] = [
   { id: "subite", name: "Mort subite", blurb: "Une seule vie, et tout le monde commence à 100 %.", settings: { mode: "subite" } },
 ];
 
+const MINIGOLF_VARIANTS: Format<MinigolfConfig>[] = [
+  // En tournée, une table de minigolf joue trois trous (six avec « Six trous ») ; à une table, neuf
+  { id: "classique", name: "Le parcours", blurb: "Trois trous d'un parcours tiré au sort.", settings: {}, weight: 3 },
+  { id: "six", name: "Six trous", blurb: "Six trous d'un parcours tiré au sort.", settings: { holes: 6 } },
+  { id: "melange", name: "Trous mélangés", blurb: "Des trous pris dans tous les parcours.", settings: { course: "melange" } },
+];
+
 const VARIANTS: Record<GameId, Format<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -869,6 +913,7 @@ const VARIANTS: Record<GameId, Format<object>[]> = {
   crampons: CRAMPONS_VARIANTS,
   culbute: CULBUTE_VARIANTS,
   escarmouche: ESCARMOUCHE_VARIANTS,
+  minigolf: MINIGOLF_VARIANTS,
 };
 
 /** Les formats d'un jeu (ils s'excluent), sans leurs réglages */
@@ -919,6 +964,7 @@ export function variantSettings(game: "meche", id: string | null | undefined): P
 export function variantSettings(game: "bolides", id: string | null | undefined): Partial<BolidesSettings>;
 export function variantSettings(game: "crampons", id: string | null | undefined): Partial<CramponsConfig>;
 export function variantSettings(game: "culbute", id: string | null | undefined): Partial<CulbuteConfig>;
+export function variantSettings(game: "minigolf", id: string | null | undefined): Partial<MinigolfConfig>;
 export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);

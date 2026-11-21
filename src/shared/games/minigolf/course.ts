@@ -19,7 +19,7 @@ export const BALL_R = 0.055;
 /** Rayon du trou */
 export const CUP_R = 0.125;
 /** Au-dessus de ce cercle, la balle n'est plus portée : elle tombe */
-export const CUP_FALL = CUP_R - BALL_R * 0.4;
+export const CUP_FALL = CUP_R - BALL_R * 0.12;
 /** La cuvette douce autour du trou : rayon et profondeur */
 export const FUNNEL_R = 0.42;
 export const FUNNEL_D = 0.009;
@@ -229,8 +229,8 @@ export interface HoleDef {
   opens: Pt[][];
   /** Pour les bots : des passages que le sol ne montre pas (un saut au-dessus de l'eau), de `from` à `to` */
   links: { from: Pt; to: Pt }[];
-  /** Le sol hors du parcours : la balle qui l'atteint est hors limites */
-  outY: number;
+  /** Le sol hors du parcours : la balle qui l'atteint est hors limites (null : 25 cm sous la piste la plus basse) */
+  outY: number | null;
   /** Durée du trou en secondes (sinon d'après le par) */
   time?: number;
   /** Une phrase pour le présenter */
@@ -379,7 +379,9 @@ export interface Course {
   rails: CRail[];
   cups: CCup[];
   tee: { x: number; y: number; z: number; aim: number };
-  /** Où la balle est perdue en tombant */
+  /** Le sol hors du parcours (la balle qui l'atteint est hors limites) */
+  outY: number;
+  /** Où la balle est perdue en tombant, quoi qu'il arrive */
   killY: number;
   box: Box;
   /** Grilles : les morceaux de sol et les murs par case */
@@ -426,7 +428,8 @@ export function compileHole(source: HoleDef, mirror = false): Course {
     rails: [],
     cups: [],
     tee: { x: def.tee.at[0], y: 0, z: def.tee.at[1], aim: def.tee.aim },
-    killY: def.outY - 0.5,
+    outY: 0,
+    killY: 0,
     box,
     grid,
   };
@@ -441,6 +444,12 @@ export function compileHole(source: HoleDef, mirror = false): Course {
     cup.rim = s / 8;
   }
   course.tee.y = heightAt(course, course.tee.x, course.tee.z) + BALL_R;
+  let low = Infinity;
+  course.tiles.forEach((t, i) => {
+    for (const p of t.rings[0]!) low = Math.min(low, tileHeight(course, i, p[0], p[1]));
+  });
+  course.outY = def.outY ?? low - 0.15;
+  course.killY = course.outY - 5;
   course.walls = buildEdges(course);
   for (const w of def.walls) addWall(course, w);
   course.posts = def.posts.map((p) => {
@@ -524,7 +533,7 @@ export function tileHeight(c: Course, tile: number, x: number, z: number): numbe
 /** La hauteur du sol en ce point (celle du morceau qui le porte ; le sol hors parcours sinon) */
 export function heightAt(c: Course, x: number, z: number): number {
   const t = tileAt(c, x, z);
-  return t >= 0 ? tileHeight(c, t, x, z) : c.def.outY;
+  return t >= 0 ? tileHeight(c, t, x, z) : c.outY;
 }
 
 /** La pente d'un morceau en ce point : montée par mètre selon x et selon z */

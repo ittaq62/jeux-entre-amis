@@ -23,6 +23,8 @@ const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
   capitale: { classique: "Le plateau des villes et ses bâtiments spéciaux : le plus riche gagne." },
   // Une table de Culbute joue un seul combat (la tournée en enchaîne trois)
   culbute: { classique: "Trois vies chacun." },
+  // Une table de minigolf joue neuf trous (la tournée en joue trois)
+  minigolf: { classique: "Neuf trous d'un parcours tiré au sort.", six: "Six trous d'un parcours tiré au sort." },
 };
 
 /** Les réglages que fixe le tirage : ceux-là ne se choisissent plus à la main tant que les règles sont au hasard */

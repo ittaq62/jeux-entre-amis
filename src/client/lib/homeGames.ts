@@ -124,6 +124,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table d'Escarmouche",
   },
+  {
+    id: "minigolf",
+    name: "Minigolf",
+    desc: "Du minigolf en 3D, de 1 à 8, tout le monde en même temps : chacun sa balle, le moins de coups gagne. Des parcours à thème pleins de pentes, de moulins, de grilles qui tournent, de bassins et de tremplins, à la souris ou au doigt.",
+    keywords: "golf mini-golf putt putter balle trou parcours green drapeau",
+    players: [1, GAME_SEATS.minigolf.max],
+    quick: "Partie rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de minigolf",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

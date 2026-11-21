@@ -65,6 +65,8 @@ export function GameTicket({
             <CulbuteArt />
           ) : game === "escarmouche" ? (
             <EscarmoucheArt />
+          ) : game === "minigolf" ? (
+            <MinigolfArt />
           ) : (
             <NavalArt />
           )}
@@ -72,6 +74,22 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Un drapeau planté dans le trou, et la balle qui y roule */
+function MinigolfArt() {
+  return (
+    <>
+      <ellipse cx="50" cy="60" rx="40" ry="9" fill="#2f8a3e" />
+      <ellipse cx="50" cy="58" rx="38" ry="8" fill="#47a855" />
+      <ellipse cx="62" cy="58" rx="6" ry="2.2" fill="#1b2a1b" />
+      <path d="M62 58V14" stroke="#fbf5e6" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M62 15L82 21L62 27Z" fill="#e2453c" />
+      <path d="M20 57C30 53 40 55 50 57" stroke="#fbf5e6" strokeWidth="1.2" strokeDasharray="2 3" opacity="0.7" fill="none" />
+      <circle cx="50" cy="55" r="4.2" fill="#fbf5e6" />
+      <circle cx="48.6" cy="53.6" r="1.2" fill="#fff" />
+    </>
   );
 }
 

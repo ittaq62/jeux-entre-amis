@@ -1,0 +1,54 @@
+/* L'illustration du minigolf sur l'accueil */
+.mg-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(165deg, #6fb46a, #1f5a2c);
+}
+
+.mg-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 60%;
+  animation: mg-preview-drift 24s ease-in-out infinite alternate;
+}
+
+/* Un reflet doré qui passe lentement, comme le soleil qui joue dans les arbres */
+.mg-preview-shine {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(ellipse 40% 30% at 30% 30%, rgba(255, 230, 170, 0.22), transparent 70%);
+  animation: mg-preview-shine 14s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes mg-preview-drift {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-1.5%, -1%);
+  }
+}
+
+@keyframes mg-preview-shine {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(20%, 10%);
+  }
+}
+
+.game-stage.is-paused .mg-preview img,
+.game-stage.is-paused .mg-preview-shine {
+  animation-play-state: paused;
+}
+
+.game-stage.is-still .mg-preview img,
+.game-stage.is-still .mg-preview-shine {
+  animation: none;
+}

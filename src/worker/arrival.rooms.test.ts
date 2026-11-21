@@ -16,6 +16,7 @@ import { BricksRoom } from "./bricksRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
 import { CulbuteRoom } from "./culbuteRoom.ts";
+import { MinigolfRoom } from "./minigolfRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -40,11 +41,12 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "crampons", Room: CramponsRoom as unknown as RoomClass, bots: false },
   { game: "culbute", Room: CulbuteRoom as unknown as RoomClass, bots: true },
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
+  { game: "minigolf", Room: MinigolfRoom as unknown as RoomClass, bots: true },
 ];
 
 /** Les tables où la revanche passe par l'écran d'annonce avant de partir */
 const announced = (game: string) =>
-  ["naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche"].includes(game);
+  ["naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf"].includes(game);
 
 const open: { stopLoop?: () => void }[] = [];
 afterEach(() => {

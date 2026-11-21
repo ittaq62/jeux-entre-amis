@@ -4346,6 +4346,10 @@ h3 .hint {
   --art: linear-gradient(165deg, #d9893b 0%, #6b3518 100%);
 }
 
+.game-ticket.is-minigolf {
+  --art: linear-gradient(165deg, #5fb36a 0%, #1d5a2b 100%);
+}
+
 .game-ticket.is-escarmouche {
   --art: linear-gradient(165deg, #8a6a4a 0%, #2d2620 100%);
 }

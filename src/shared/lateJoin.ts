@@ -29,6 +29,7 @@ export const JOINS_STARTED: Record<TableGame, boolean> = {
   tour: true,
   crampons: true,
   culbute: false,
+  minigolf: false,
   escarmouche: true,
   uno: false,
   naval: false,

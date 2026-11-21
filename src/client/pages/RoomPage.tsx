@@ -27,6 +27,7 @@ const BolidesRoom = lazy(() => import("../bolides/BolidesRoom.tsx").then((m) => 
 const CramponsRoom = lazy(() => import("../crampons/CramponsRoom.tsx").then((m) => ({ default: m.CramponsRoom })));
 const CulbuteRoom = lazy(() => import("../culbute/CulbuteRoom.tsx").then((m) => ({ default: m.CulbuteRoom })));
 const EscarmoucheRoom = lazy(() => import("../escarmouche/EscarmoucheRoom.tsx").then((m) => ({ default: m.EscarmoucheRoom })));
+const MinigolfRoom = lazy(() => import("../minigolf/MinigolfRoom.tsx").then((m) => ({ default: m.MinigolfRoom })));
 const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ default: m.TourRoom })));
 
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
@@ -75,7 +76,8 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
     game === "bolides" ||
     game === "crampons" ||
     game === "culbute" ||
-    game === "escarmouche"
+    game === "escarmouche" ||
+    game === "minigolf"
   ) {
     return (
       <Suspense fallback={<Loading label="Arrivée à la table…" />}>
@@ -93,6 +95,8 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
           <CulbuteRoom code={code} />
         ) : game === "escarmouche" ? (
           <EscarmoucheRoom code={code} />
+        ) : game === "minigolf" ? (
+          <MinigolfRoom code={code} />
         ) : (
           <BolidesRoom code={code} />
         )}

@@ -210,7 +210,8 @@ export function holeDuration(m: Match): number {
   return Math.round(holeTime(holeDef(currentRef(m))) * PACE_FACTOR[m.cfg.pace] * 1000);
 }
 
-function startHole(m: Match, index: number, now: number) {
+/** Commence le trou `index` (présentation, balles au départ) */
+export function startHole(m: Match, index: number, now: number) {
   m.hole = index;
   m.phase = "intro";
   m.phaseAt = now;

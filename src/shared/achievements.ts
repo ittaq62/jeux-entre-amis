@@ -358,6 +358,47 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Jeu de quilles",
     description: "Sortir trois adversaires ou plus dans un même combat.",
   },
+  // Minigolf
+  {
+    id: "minigolf-first-win",
+    game: "minigolf",
+    chip: "1re",
+    tone: "red",
+    title: "Premier drapeau",
+    description: "Gagner une partie de minigolf.",
+  },
+  {
+    id: "minigolf-regular",
+    game: "minigolf",
+    chip: "25",
+    tone: "blue",
+    title: "Habitué du green",
+    description: "Jouer 25 parties de minigolf.",
+  },
+  {
+    id: "minigolf-ace",
+    game: "minigolf",
+    chip: "1",
+    tone: "green",
+    title: "Trou en un",
+    description: "Mettre la balle dans le trou du premier coup.",
+  },
+  {
+    id: "minigolf-under",
+    game: "minigolf",
+    chip: "−1",
+    tone: "black",
+    title: "Sous le par",
+    description: "Finir une partie de neuf trous ou plus sous le par.",
+  },
+  {
+    id: "minigolf-dry",
+    game: "minigolf",
+    chip: "0",
+    tone: "ivory",
+    title: "Pieds au sec",
+    description: "Finir une partie de neuf trous ou plus sans perdre une seule balle.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -547,6 +588,23 @@ export function earnedEscarmoucheAchievements(o: EscarmoucheOutcome): string[] {
   add("escarmouche-knife", o.stats.knives >= 1);
   add("escarmouche-flag", o.stats.captures >= 1);
   add("escarmouche-untouchable", o.won && o.stats.deaths === 0);
+  return out;
+}
+
+export interface MinigolfOutcome {
+  won: boolean;
+  played: number;
+  stats: { aces: number; holes: number; toPar: number; lost: number };
+}
+
+export function earnedMinigolfAchievements(o: MinigolfOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("minigolf-first-win", o.won);
+  add("minigolf-regular", o.played >= 25);
+  add("minigolf-ace", o.stats.aces >= 1);
+  add("minigolf-under", o.stats.holes >= 9 && o.stats.toPar < 0);
+  add("minigolf-dry", o.stats.holes >= 9 && o.stats.lost === 0);
   return out;
 }
 

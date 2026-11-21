@@ -39,6 +39,7 @@ const DevBombs = lazy(() => import("./meche/DevBombs.tsx").then((m) => ({ defaul
 const DevWardrobe = lazy(() => import("./pages/DevWardrobe.tsx").then((m) => ({ default: m.DevWardrobe })));
 const DevEscarmouche = lazy(() => import("./escarmouche/DevEscarmouche.tsx").then((m) => ({ default: m.DevEscarmouche })));
 const DevCulbute = lazy(() => import("./culbute/DevCulbute.tsx").then((m) => ({ default: m.DevCulbute })));
+const DevMinigolf = lazy(() => import("./minigolf/DevMinigolf.tsx").then((m) => ({ default: m.DevMinigolf })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -110,6 +111,7 @@ export function App() {
           {import.meta.env.DEV && <Route path="/dev/bombes" component={DevBombs} />}
           {import.meta.env.DEV && <Route path="/dev/escarmouche" component={DevEscarmouche} />}
           {import.meta.env.DEV && <Route path="/dev/culbute" component={DevCulbute} />}
+          {import.meta.env.DEV && <Route path="/dev/minigolf" component={DevMinigolf} />}
           {import.meta.env.DEV && <Route path="/dev/personnage" component={DevWardrobe} />}
           <Route component={NotFoundPage} />
         </Switch>
