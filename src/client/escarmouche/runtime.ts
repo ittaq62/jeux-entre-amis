@@ -219,6 +219,10 @@ export class BattleRuntime {
   private bob = 0;
   private stride = 0;
   private wasGround = true;
+  /** La hauteur des yeux à l'image (qui suit en douceur l'accroupissement), le tassement d'une réception, la dernière vitesse de chute */
+  private eyeOff = 0;
+  private landDip = 0;
+  private lastVy = 0;
   private swayX = 0;
   private swayY = 0;
   private aimSeeded = false;
@@ -1035,14 +1039,27 @@ export class BattleRuntime {
           this.sound.play("step", { volume: s.sprint ? 0.45 : 0.3 });
         }
       }
-      if (s.ground && !this.wasGround) this.sound.play("land", { volume: 0.4 });
+      if (s.ground && !this.wasGround) {
+        this.sound.play("land", { volume: 0.4 });
+        // La réception : la vue se tasse un instant, d'autant plus que la chute était rapide
+        this.landDip = Math.min(0.16, Math.max(0.03, -this.lastVy * 0.018));
+      }
       this.wasGround = s.ground;
+      if (!s.ground) this.lastVy = s.vy;
+      // S'accroupir, se relever : la vue descend et remonte en douceur (la balle part toujours des vrais yeux)
+      const eyeWant = eyeOf(s) - s.y;
+      this.eyeOff = this.eyeOff === 0 ? eyeWant : this.eyeOff + (eyeWant - this.eyeOff) * Math.min(1, dt * 15);
+      this.landDip = Math.max(0, this.landDip - dt * 0.9);
       const bobAmp = s.ground ? Math.min(1, speed / 5) * (s.sprint ? 0.022 : 0.012) : 0;
       const shakeX = (Math.random() - 0.5) * this.shake * 0.05;
       const shakeY = (Math.random() - 0.5) * this.shake * 0.05;
       this.scene.setView(
         s.x + this.err.x,
-        eyeOf(s) + this.err.y + Math.sin(this.bob * 2) * bobAmp * 0.6,
+        s.y +
+          this.eyeOff -
+          this.landDip * Math.sin(Math.min(1, this.landDip / 0.16) * Math.PI * 0.5) +
+          this.err.y +
+          Math.sin(this.bob * 2) * bobAmp * 0.6,
         s.z + this.err.z,
         this.yaw + this.kickYaw + this.aimYaw + shakeX,
         this.pitch + this.kickPitch + this.aimPitch + shakeY,
