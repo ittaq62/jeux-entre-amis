@@ -1,4 +1,4 @@
-// Ce qui passe en un éclair : les balles traçantes (de vrais traits lumineux, toujours tournés vers soi), les flammes en
+// Ce qui passe en un éclair (sans traînée de balle : on ne voit pas une balle filer) : les flammes en
 // étoile au bout des canons, ce qui jaillit d'un impact selon ce qu'il touche (des étincelles sur le métal, des éclats
 // et de la poussière sur la pierre, des copeaux sur le bois, de la terre au sol), les trous qui restent, le sang, et les
 // explosions : la boule de feu, l'onde de poussière, les projections, la colonne de fumée qui monte longtemps.
@@ -22,8 +22,6 @@ interface Puff {
   alpha: number;
   spin: number;
 }
-
-const TRACERS = 48;
 
 function canvasTexture(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void): THREE.CanvasTexture {
   const c = document.createElement("canvas");
@@ -199,11 +197,6 @@ const SURFACE: Record<Surface, { dust: string; chip: string; hole: string; size:
 
 export class Effects {
   readonly group = new THREE.Group();
-  private tracerGeo: THREE.BufferGeometry;
-  private tracerPos: Float32Array;
-  private tracerCol: Float32Array;
-  private tracers: { a: THREE.Vector3; b: THREE.Vector3; born: number; life: number; color: THREE.Color; width: number }[] = [];
-  private tracerNext = 0;
   private puffs: Puff[] = [];
   private puffNext = 0;
   private flashes: { sprite: THREE.Sprite; born: number; life: number }[] = [];
@@ -232,30 +225,6 @@ export class Effects {
     const dot = softDot();
     const star = flashTexture();
     const smoke = smokeTexture();
-    // Les traçantes : deux triangles par balle, recalculés à chaque image face à la caméra
-    this.tracerPos = new Float32Array(TRACERS * 12);
-    this.tracerCol = new Float32Array(TRACERS * 12);
-    this.tracerGeo = new THREE.BufferGeometry();
-    this.tracerGeo.setAttribute("position", new THREE.BufferAttribute(this.tracerPos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.tracerGeo.setAttribute("color", new THREE.BufferAttribute(this.tracerCol, 3).setUsage(THREE.DynamicDrawUsage));
-    const idx: number[] = [];
-    for (let i = 0; i < TRACERS; i++) idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3);
-    this.tracerGeo.setIndex(idx);
-    const lines = new THREE.Mesh(
-      this.tracerGeo,
-      new THREE.MeshBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-    );
-    lines.frustumCulled = false;
-    this.group.add(lines);
-    for (let i = 0; i < TRACERS; i++)
-      this.tracers.push({ a: new THREE.Vector3(), b: new THREE.Vector3(), born: -1, life: 0, color: new THREE.Color(), width: 0.02 });
     for (let i = 0; i < (low ? 50 : 110); i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smoke, transparent: true, depthWrite: false, color: "#aaa" }));
       s.visible = false;
@@ -318,18 +287,6 @@ export class Effects {
     this.group.add(this.sparks.points);
     this.light = low ? null : new THREE.PointLight("#ffb060", 0, 16, 2);
     if (this.light) this.group.add(this.light);
-  }
-
-  /** Une balle traçante, d'un point à l'autre */
-  tracer(a: THREE.Vector3, b: THREE.Vector3, bright = 1) {
-    const t = this.tracers[this.tracerNext]!;
-    this.tracerNext = (this.tracerNext + 1) % TRACERS;
-    t.a.copy(a);
-    t.b.copy(b);
-    t.born = this.now;
-    t.life = Math.min(0.12, 0.05 + a.distanceTo(b) / 900);
-    t.width = 0.018 + bright * 0.008;
-    t.color.setRGB(1.6 * bright, 1.1 * bright, 0.55 * bright);
   }
 
   /** La flamme au bout d'un canon (celle des autres : la sienne est sur son arme) */
@@ -573,65 +530,6 @@ export class Effects {
     this.now += dt;
     const now = this.now;
     if (camera) camera.getWorldPosition(this.camPos);
-    const side = this.tmp;
-    const dir = this.tmp2;
-    this.tracers.forEach((t, i) => {
-      const k = i * 12;
-      const age = now - t.born;
-      if (t.born < 0 || age > t.life) {
-        this.tracerCol.fill(0, k, k + 12);
-        return;
-      }
-      // Un trait qui file vers le point d'arrivée, large de quelques centimètres, tourné vers la caméra
-      const f = age / t.life;
-      const head = Math.min(1, f * 1.5 + 0.2);
-      const tail = Math.max(0, head - 0.35);
-      const ax = t.a.x + (t.b.x - t.a.x) * tail;
-      const ay = t.a.y + (t.b.y - t.a.y) * tail;
-      const az = t.a.z + (t.b.z - t.a.z) * tail;
-      const bx = t.a.x + (t.b.x - t.a.x) * head;
-      const by = t.a.y + (t.b.y - t.a.y) * head;
-      const bz = t.a.z + (t.b.z - t.a.z) * head;
-      dir.set(bx - ax, by - ay, bz - az);
-      side
-        .set((ax + bx) / 2 - this.camPos.x, (ay + by) / 2 - this.camPos.y, (az + bz) / 2 - this.camPos.z)
-        .cross(dir)
-        .normalize();
-      const w = t.width * (1 + this.camPos.distanceTo(t.b) * 0.01);
-      this.tracerPos.set(
-        [
-          ax - side.x * w * 0.4,
-          ay - side.y * w * 0.4,
-          az - side.z * w * 0.4,
-          ax + side.x * w * 0.4,
-          ay + side.y * w * 0.4,
-          az + side.z * w * 0.4,
-        ],
-        k,
-      );
-      this.tracerPos.set([bx - side.x * w, by - side.y * w, bz - side.z * w, bx + side.x * w, by + side.y * w, bz + side.z * w], k + 6);
-      const fade = 1 - f * 0.6;
-      const tailK = 0.15 * fade;
-      this.tracerCol.set(
-        [
-          t.color.r * tailK,
-          t.color.g * tailK,
-          t.color.b * tailK,
-          t.color.r * tailK,
-          t.color.g * tailK,
-          t.color.b * tailK,
-          t.color.r * fade,
-          t.color.g * fade,
-          t.color.b * fade,
-          t.color.r * fade,
-          t.color.g * fade,
-          t.color.b * fade,
-        ],
-        k,
-      );
-    });
-    (this.tracerGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.tracerGeo.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     for (const f of this.flashes) {
       if (!f.sprite.visible) continue;
       const age = now - f.born;

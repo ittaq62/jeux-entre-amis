@@ -540,7 +540,6 @@ export class BattleRuntime {
             this.lastShots.set(e.i, performance.now());
             if (!quiet) this.radarPing.set(e.i, performance.now());
           }
-          this.scene.effects.tracer(from, at, 0.8);
           // La balle passe tout près : elle siffle
           if (this.me >= 0 && this.pred?.alive) {
             const cam = this.scene.camera.position;
@@ -1419,7 +1418,6 @@ export class BattleRuntime {
         const hit = this.world.raycast(shot.ox, shot.oy, shot.oz, d[0], d[1], d[2], 150);
         const t = hit?.t ?? 150;
         const end = this.tmp.set(shot.ox + d[0] * t, shot.oy + d[1] * t, shot.oz + d[2] * t);
-        this.scene.effects.tracer(muzzle, end, 1);
         if (hit) this.scene.effects.impact(end, hit.axis, hit.sign, surfaceOf(this.world.boxes[hit.box]?.m));
       });
       this.scene.viewFlash(shot.weapon, quiet);

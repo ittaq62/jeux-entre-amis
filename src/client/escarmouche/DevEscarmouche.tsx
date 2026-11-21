@@ -196,7 +196,6 @@ export function DevEscarmouche() {
       if (!closeUp && Math.floor(t * 8) !== Math.floor((t - dt) * 8) && Math.floor(t) % 3 === 0) {
         const target = world(spots[1]!);
         const from = scene.viewMuzzle(shots.clone());
-        scene.effects.tracer(from, new THREE.Vector3(target.x, 1.3, target.z), 1);
         scene.viewFlash(weapon);
         scene.ejectShell(weapon);
         scene.effects.glow(from, 8, 60);
