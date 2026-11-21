@@ -1159,7 +1159,7 @@
   letter-spacing: 0.04em;
 }
 
-/* Le salon : la bombe est dans l'onglet « Mon look », déjà encadré ; elle n'y prend pas un second cadre */
+/* Le salon : la bombe est dans l'onglet « Skin », déjà encadré ; elle n'y prend pas un second cadre */
 .lobby-panel > .bomb-picker {
   padding: 0;
   background: none;

@@ -405,7 +405,7 @@ function TourHelp({ teams }: { teams: boolean }) {
           long quand on les vote). Il part plus tôt quand la moitié des joueurs est prête.
         </li>
         <li>
-          À la table, une annonce de {ANNOUNCE_MS / 1000} s montre le jeu, ses règles et les équipes, le temps de choisir ton look. Quand
+          À la table, une annonce de {ANNOUNCE_MS / 1000} s montre le jeu, ses règles et les équipes, le temps de choisir ton skin. Quand
           tous ont appuyé sur <strong>Je suis prêt</strong>, la partie part tout de suite.
         </li>
         <li>

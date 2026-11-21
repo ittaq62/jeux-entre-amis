@@ -8,7 +8,7 @@
   gap: 12px;
 }
 
-/* Le choix du combattant dans l'onglet « Mon look » du salon : sans son cadre, il est déjà dans celui de l'onglet */
+/* Le choix du combattant dans l'onglet « Skin » du salon : sans son cadre, il est déjà dans celui de l'onglet */
 .lobby-panel > .cb-picker {
   margin: 0;
   padding: 0;

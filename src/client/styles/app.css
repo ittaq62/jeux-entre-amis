@@ -2300,7 +2300,7 @@ a.shop-item {
   border-bottom: 1px solid var(--line-soft);
 }
 
-/* Les onglets du salon : Règles, Mon look, Comment jouer */
+/* Les onglets du salon : Règles, Skin, Comment jouer */
 .lobby-tabs {
   display: flex;
   gap: 6px;

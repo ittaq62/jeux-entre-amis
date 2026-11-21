@@ -360,7 +360,7 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
               </p>
             </section>
           )}
-          {/* Hors des onglets : un club de légende s'achète depuis les règles, un ballon ou une fête depuis « Mon look » */}
+          {/* Hors des onglets : un club de légende s'achète depuis les règles, un ballon ou une fête depuis « Skin » */}
           <BuyModal
             item={buying?.item ?? null}
             preview={buying ? <CramponsLook item={buying.item} big kit={myKit} /> : undefined}

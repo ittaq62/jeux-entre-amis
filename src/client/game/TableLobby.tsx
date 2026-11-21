@@ -20,7 +20,7 @@ export interface TableLobbyProps {
   rules: ReactNode;
   /** Le reste des règles, replié sous « Plus de règles » (les places et qui peut venir y sont toujours) */
   moreRules?: ReactNode;
-  /** L'onglet « Mon look » : ce que le joueur choisit pour lui (pion, dos de cartes, arsenal, tenue…), et ses achats */
+  /** L'onglet « Skin » : ce que le joueur choisit pour lui (pion, dos de cartes, arsenal, tenue…), et ses achats */
   look?: ReactNode;
   /** L'onglet « Comment jouer » : le but du jeu, les touches, l'aide */
   help?: ReactNode;
@@ -52,7 +52,7 @@ type LobbyTab = "rules" | "look" | "help";
 /**
  * Le salon d'attente, le même pour tous les jeux et toujours dans le même ordre : en haut les joueurs, « Ajouter un
  * bot » et « Inviter » (le lien, le QR code et les amis en ligne au même endroit) ; dessous trois onglets, « Règles »
- * (l'essentiel, le reste replié), « Mon look » et « Comment jouer » ; en bas le départ, avec les règles en une ligne.
+ * (l'essentiel, le reste replié), « Skin » et « Comment jouer » ; en bas le départ, avec les règles en une ligne.
  */
 export function TableLobby({
   room,
@@ -99,7 +99,7 @@ export function TableLobby({
   );
   const tabs: { id: LobbyTab; label: string; icon: "list" | "user" | "info" }[] = [
     { id: "rules", label: "Règles", icon: "list" },
-    ...(look ? [{ id: "look" as const, label: "Mon look", icon: "user" as const }] : []),
+    ...(look ? [{ id: "look" as const, label: "Skin", icon: "user" as const }] : []),
     ...(help ? [{ id: "help" as const, label: "Comment jouer", icon: "info" as const }] : []),
   ];
   // Un onglet qui disparaît (on quitte sa place : plus de look à choisir) ramène aux règles

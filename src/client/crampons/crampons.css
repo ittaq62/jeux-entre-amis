@@ -991,7 +991,7 @@ kbd {
   margin: 0;
 }
 
-/* Le vestiaire dans l'onglet « Mon look » du salon : sans son cadre, il est déjà dans celui de l'onglet */
+/* Le vestiaire dans l'onglet « Skin » du salon : sans son cadre, il est déjà dans celui de l'onglet */
 .lobby-panel > .cr-locker {
   margin: 0;
   padding: 0;

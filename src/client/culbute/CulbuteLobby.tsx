@@ -61,7 +61,7 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
   const seat = room.seats.find((x) => x.id === room.you.seatId);
 
   // Le combattant choisi sur cet appareil, repris en arrivant à la table, comme le fait le choix lui-même : il n'est
-  // plus monté qu'avec l'onglet « Mon look », et on ne doit pas avoir à l'ouvrir pour retrouver le sien
+  // plus monté qu'avec l'onglet « Skin », et on ne doit pas avoir à l'ouvrir pour retrouver le sien
   useEffect(() => {
     const saved = savedPick();
     const current = seat?.fighter;

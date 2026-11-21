@@ -379,7 +379,7 @@ export function EscarmoucheLobby({ room, send, ...rest }: Props) {
   const update = (patch: Partial<EscarmoucheSettings>) => send({ t: "settings", settings: patch });
   const info = MODE_INFO[s.mode];
   const empty = info.teams && [0, 1].some((t) => !room.seats.some((x) => (room.teams[x.id] ?? 0) === t));
-  // L'arsenal n'existe que pour un soldat assis : sinon, pas d'onglet « Mon look »
+  // L'arsenal n'existe que pour un soldat assis : sinon, pas d'onglet « Skin »
   const armed = room.you.seatId !== null && Boolean(room.arsenal[room.you.seatId]);
 
   const summary = [
