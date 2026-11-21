@@ -78,8 +78,11 @@ export function headOf(avatar: AvatarConfig): Promise<HTMLCanvasElement> {
   return p;
 }
 
-/** Le rayon de la tête du soldat, et celui des têtes de pilote dont on reprend la coiffure et le chapeau */
-const HEAD_R = 0.12;
+/**
+ * Le rayon de la tête du soldat (un peu plus grosse que nature : on reconnaît le personnage de loin, et elle remplit sa
+ * zone de touche), et celui des têtes de pilote dont on reprend la coiffure et le chapeau
+ */
+const HEAD_R = 0.15;
 const PILOT_R = 0.34;
 
 const std = (keep: Keep, color: THREE.ColorRepresentation, roughness = 0.85, metalness = 0, map: THREE.Texture | null = null) =>
@@ -177,6 +180,9 @@ function buildHead(avatar: AvatarConfig, u: UniformInfo, band: THREE.Material, m
   const skull = new THREE.Mesh(keep(new THREE.SphereGeometry(R, low ? 18 : 28, low ? 12 : 18)), m.skin);
   skull.userData.keep = true;
   g.add(skull);
+  // Un fin liseré sombre autour du visage : la tête se détache du décor, même de loin
+  const rim = new THREE.Mesh(keep(new THREE.SphereGeometry(R * 1.05, low ? 14 : 22, low ? 10 : 14)), outlineMaterial());
+  g.add(rim);
   for (const side of [-1, 1]) {
     const ear = new THREE.Mesh(keep(new THREE.SphereGeometry(R * 0.24, 8, 6)), m.skin);
     ear.position.set(side * R * 0.97, -R * 0.05, -R * 0.05);
@@ -260,6 +266,13 @@ function buildHead(avatar: AvatarConfig, u: UniformInfo, band: THREE.Material, m
   g.rotation.y = Math.PI;
   g.scale.setScalar(HEAD_R / PILOT_R);
   return { group: g, skull };
+}
+
+/** La matière du liseré : sombre, vue de l'intérieur (seul son bord dépasse autour de la tête) */
+let outline: THREE.MeshBasicMaterial | null = null;
+function outlineMaterial(): THREE.MeshBasicMaterial {
+  outline ??= new THREE.MeshBasicMaterial({ color: "#16120f", side: THREE.BackSide });
+  return outline;
 }
 
 /** Des touffes de feuillage cousues sur la tenue */
@@ -410,7 +423,7 @@ export class SoldierModel {
         7,
       );
     // La tête du personnage
-    this.head.position.y = 0.6;
+    this.head.position.y = 0.62;
     this.spine.add(this.head);
     const head = buildHead(look.avatar, u, this.bandMat, m, keep, low);
     head.group.position.y = 0.075;
@@ -421,9 +434,9 @@ export class SoldierModel {
         u.spots,
         keep,
         [
-          [0, 0.2, 0.03],
-          [-0.07, 0.17, 0.05],
-          [0.07, 0.17, 0.05],
+          [0, 0.24, 0.03],
+          [-0.09, 0.21, 0.06],
+          [0.09, 0.21, 0.06],
         ],
         11,
       );
@@ -431,8 +444,11 @@ export class SoldierModel {
       if (this.disposables.length === 0) return;
       const tex = keep(new THREE.CanvasTexture(c));
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 4;
-      const face = keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+      tex.anisotropy = 8;
+      // Le visage s'éclaire un peu de lui-même : il ne se perd pas dans l'ombre d'un mur ou sous un casque
+      const face = keep(
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: "#ffffff", emissiveMap: tex, emissiveIntensity: 0.2 }),
+      );
       head.skull.material = face;
     });
     // Les bras et l'arme : ils suivent la visée (les bras sont posés sur l'arme quand elle change)
