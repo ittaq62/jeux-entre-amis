@@ -596,7 +596,13 @@ const ESCARMOUCHE_VARIANTS: VariantOf<EscarmoucheSettings>[] = [
 ];
 
 const CULBUTE_VARIANTS: VariantOf<CulbuteConfig>[] = [
-  { id: "classique", name: "Aux vies", blurb: "Trois vies chacun, et quelques objets qui tombent du ciel.", settings: {} },
+  // En tournée, une table de Culbute enchaîne trois combats (voir games/culbute/series.ts) ; à une table, un seul
+  {
+    id: "classique",
+    name: "Aux vies",
+    blurb: "Trois combats d'affilée, trois vies chacun à chaque combat, et quelques objets qui tombent du ciel.",
+    settings: {},
+  },
   {
     id: "temps",
     name: "Au temps",

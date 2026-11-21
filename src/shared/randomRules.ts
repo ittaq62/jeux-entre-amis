@@ -20,6 +20,8 @@ const ALSO_DRAWN: Partial<Record<GameId, string[]>> = {
 /** Les descriptions propres aux tables, quand celle de la tournée parle de la tournée */
 const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
   capitale: { classique: "Les règles de base : rachat des villes, catastrophes, construction équilibrée et bâtiments spéciaux." },
+  // Une table de Culbute joue un seul combat (la tournée en enchaîne trois)
+  culbute: { classique: "Trois vies chacun, et quelques objets qui tombent du ciel." },
 };
 
 /** Les réglages que fixe le tirage : ceux-là ne se choisissent plus à la main tant que les règles sont au hasard */
