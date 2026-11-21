@@ -41,13 +41,13 @@ import {
   type StepOut,
 } from "../../shared/games/escarmouche/soldier.ts";
 import { P_STRIDE, PF, readFighter, SC_STRIDE, type EscMe, type EscTick, type FighterNet } from "../../shared/games/escarmouche/view.ts";
-import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponDef, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import type { Mat, World } from "../../shared/games/escarmouche/world.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { AutoQuality } from "../lib/autoQuality.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
-import { EscSound } from "./escSound.ts";
+import { EscSound, type EscSoundName } from "./escSound.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
 import type { Surface } from "./scene/effects.ts";
 import { drawCompass, Radar, type RadarDot } from "./radar.ts";
@@ -1433,6 +1433,34 @@ export class BattleRuntime {
     return null;
   }
 
+  /**
+   * Les bruits de son rechargement, calés sur le geste de l'arme en main : le chargeur qui sort, le plein qui s'enfonce,
+   * la culasse ; les canons ou le barillet qui s'ouvrent puis claquent ; les cartouches du fusil à pompe, qu'on réarme à
+   * la fin. Interrompu (une autre arme, la mort), il se tait.
+   */
+  private reloadSounds(w: WeaponDef) {
+    const end = this.pred?.reloadEnd ?? 0;
+    const at = (k: number, name: EscSoundName) =>
+      setTimeout(
+        () => {
+          if (this.running && end > 0 && Math.abs((this.pred?.reloadEnd ?? 0) - end) < 0.05) this.sound.play(name, { volume: 0.6 });
+        },
+        k * w.reload * 1000,
+      );
+    if (w.id === "pompe") {
+      for (const k of [0.15, 0.4, 0.65]) at(k, "mag-in");
+      at(0.86, "pump");
+    } else if (w.id === "double" || w.id === "revolver") {
+      at(0.17, "mag-out");
+      at(0.5, "mag-in");
+      at(0.8, "bolt");
+    } else {
+      at(0.18, "mag-out");
+      at(0.72, "mag-in");
+      at(0.88, "bolt");
+    }
+  }
+
   /** Ce soldat tire-t-il au silencieux (avec son arme principale) ? */
   private quietShooter(i: number, w: WeaponId): boolean {
     const id = this.room.escarmouche?.fighters[i]?.id;
@@ -1473,7 +1501,7 @@ export class BattleRuntime {
       this.kickYaw += (Math.random() - 0.5) * k * 0.5;
       this.vmKick = 1;
     }
-    if (out.reloaded) this.sound.play(weaponOf(s).id === "pompe" ? "pump" : "reload", { volume: 0.6 });
+    if (out.reloaded) this.reloadSounds(weaponOf(s));
     if (out.swapped) {
       this.sound.play("swap", { volume: 0.5 });
       this.raise = 0;

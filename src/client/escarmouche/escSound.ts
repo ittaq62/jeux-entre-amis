@@ -11,6 +11,9 @@ export type EscSoundName =
   | `shot-${WeaponId}`
   | "far"
   | "reload"
+  | "mag-out"
+  | "mag-in"
+  | "bolt"
   | "pump"
   | "empty"
   | "swap"
@@ -73,6 +76,9 @@ const WET: Partial<Record<string, number>> = {
   boom: 0.55,
   pump: 0.12,
   reload: 0.08,
+  "mag-out": 0.08,
+  "mag-in": 0.08,
+  bolt: 0.08,
   step: 0.06,
   land: 0.08,
   bounce: 0.15,
@@ -470,6 +476,32 @@ export class EscSound {
         }
       }),
     );
+    // Les mêmes bruits un à un, pour les caler sur le geste de son arme en main (le rechargement dure de 1,5 à 4,4 s)
+    const clicks = (len: number, at: [number, number][], seed: number) =>
+      this.make(len, (d, sr) => {
+        const n = noiseGen(seed);
+        for (let i = 0; i < d.length; i++) {
+          const t = i / sr;
+          let v = 0;
+          for (const [a, f] of at) {
+            if (t >= a) v += (n() * 0.7 + Math.sin(2 * Math.PI * f * (t - a)) * 0.4) * Math.exp(-(t - a) / 0.012);
+          }
+          d[i] = v;
+        }
+      });
+    this.buffers.set("mag-out", clicks(0.12, [[0.005, 1800]], 5));
+    this.buffers.set(
+      "mag-in",
+      clicks(
+        0.16,
+        [
+          [0.005, 1300],
+          [0.055, 2400],
+        ],
+        6,
+      ),
+    );
+    this.buffers.set("bolt", clicks(0.14, [[0.005, 900]], 7));
     this.buffers.set(
       "pump",
       this.make(0.35, (d, sr) => {
