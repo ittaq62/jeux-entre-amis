@@ -66,6 +66,7 @@ export class HoleBuilder {
       items: [],
       decos: [],
       opens: [],
+      links: [],
       outY: opts.outY ?? -0.03,
       time: opts.time,
       hint: opts.hint,
@@ -205,6 +206,12 @@ export class HoleBuilder {
 
   deco(k: string, x: number, z: number, o: Omit<DecoDef, "k" | "at"> = {}): this {
     this.def.decos.push({ k, at: [x, z], ...o });
+    return this;
+  }
+
+  /** Pour les bots : un passage que le sol ne montre pas (un saut au-dessus de l'eau) */
+  link(from: Pt, to: Pt): this {
+    this.def.links.push({ from, to });
     return this;
   }
 

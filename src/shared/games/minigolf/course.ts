@@ -227,6 +227,8 @@ export interface HoleDef {
   decos: DecoDef[];
   /** Les zones où le tour du parcours reste sans bordure (un saut, un raccourci au-dessus du vide) */
   opens: Pt[][];
+  /** Pour les bots : des passages que le sol ne montre pas (un saut au-dessus de l'eau), de `from` à `to` */
+  links: { from: Pt; to: Pt }[];
   /** Le sol hors du parcours : la balle qui l'atteint est hors limites */
   outY: number;
   /** Durée du trou en secondes (sinon d'après le par) */
@@ -293,6 +295,7 @@ export function mirrorHole(def: HoleDef): HoleDef {
     items: def.items.map(m),
     decos: def.decos.map((d) => ({ ...d, at: m(d.at), r: d.r !== undefined ? -d.r : undefined })),
     opens: def.opens.map(ring),
+    links: def.links.map((l) => ({ from: m(l.from), to: m(l.to) })),
   };
 }
 
