@@ -1267,6 +1267,57 @@
   gap: 4px;
 }
 
+/* Plusieurs règles à voter : une ligne chacune, séparées d'un trait ; la question à gauche, oui et non à droite */
+.rules-ask.is-compact + .rules-ask.is-compact,
+.rules-vote-done + .rules-ask.is-compact,
+.rules-ask.is-compact + .rules-vote-done {
+  margin-top: 2px;
+}
+
+.rules-ask.is-compact {
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.rules-ask.is-compact .rules-ask-head strong {
+  font-size: 16px;
+}
+
+.rules-ask.is-compact .rules-ask-row .rules-option {
+  padding-block: 6px;
+}
+
+/* La largeur qui compte est celle du panneau du vote (étroit à l'entracte), pas celle de l'écran */
+.rules-vote {
+  container-type: inline-size;
+}
+
+.rules-ask-intro {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+@container (min-width: 520px) {
+  .rules-ask.is-compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    align-items: center;
+    column-gap: 14px;
+  }
+
+  .rules-ask.is-compact .rules-ask-head {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .rules-ask.is-compact .rules-ask-host {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+}
+
 /* Le vote « prêt » */
 .ready-vote {
   display: flex;

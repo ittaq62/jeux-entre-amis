@@ -3,7 +3,8 @@ import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol
 import {
   DEFAULT_CAPITALE_TEAM,
   END_CHOICES,
-  askedRules,
+  maxExtras,
+  votedRules,
   GAME_END_HOLD_MS,
   gameModifiers,
   gameVariants,
@@ -334,8 +335,9 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             {s.rules !== "base" && (
               <ul className="variant-list">
                 {s.games.map((g) => {
-                  // Au hasard, chaque règle à part est tirée de son côté ; votées, celles qu'on demande se votent oui ou non
-                  const extra = s.rules === "random" ? gameModifiers(g) : askedRules(g);
+                  // Un format (ils s'excluent), puis des règles à part : au hasard, tirées chacune de son côté et cumulables ;
+                  // votées, chacune oui ou non
+                  const extra = s.rules === "random" ? gameModifiers(g) : votedRules(g);
                   return (
                     <li key={g}>
                       <strong>{GAME_NAMES[g]}</strong> :{" "}
@@ -345,7 +347,13 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
                       {extra.length > 0 && (
                         <span className="hint">
                           {" "}
-                          · {s.rules === "random" ? "tiré à part" : "voté à part, oui ou non"} : {extra.map((m) => m.name).join(", ")}
+                          ·{" "}
+                          {s.rules === "random"
+                            ? extra.length > maxExtras(g)
+                              ? `en plus, jusqu'à ${maxExtras(g)} au hasard`
+                              : "en plus, au hasard"
+                            : "en plus, chacune votée oui ou non"}{" "}
+                          : {extra.map((m) => m.name).join(", ")}
                         </span>
                       )}
                     </li>

@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { ChatMessage } from "../../shared/protocol.ts";
+import type { RuleLine } from "../../shared/tour.ts";
 
 /**
  * Ce qu'une table de jeu emprunte à sa tournée quand elle en fait partie : le chat de la tournée (il ne repart
@@ -20,9 +21,12 @@ export interface TourBridge {
   youId: string;
   serverOffset: number;
   onContinue: () => void;
-  /** Pour l'annonce avant la partie : où en est la tournée (« Jeu 3 sur 6 »), et les règles jouées (aucune aux règles de base) */
+  /**
+   * Pour l'annonce avant la partie : où en est la tournée (« Jeu 3 sur 6 »), et les règles jouées, une par ligne : le
+   * format, puis chaque règle à part (aucune aux règles de base)
+   */
   progress: string;
-  rules: { name: string; blurb: string } | null;
+  rules: RuleLine[] | null;
 }
 
 export const TourBridgeContext = createContext<TourBridge | null>(null);

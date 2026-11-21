@@ -37,6 +37,44 @@
   color: var(--ink-soft);
 }
 
+/* Les règles à part tirées en plus du format, une par ligne */
+.drawn-extras {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.drawn-extras li::before {
+  content: "+ ";
+  font-weight: 800;
+}
+
+.drawn-extras li.is-off {
+  opacity: 0.75;
+}
+
+.drawn-extras li.is-off::before {
+  content: "· ";
+}
+
+.drawn-card .drawn-extras {
+  color: var(--ink-soft);
+}
+
+.drawn-card .drawn-extras strong {
+  color: var(--ink);
+}
+
+.menu-drawn .drawn-extras {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
 .drawn-card .drawn-again {
   margin-top: 6px;
   align-self: flex-start;

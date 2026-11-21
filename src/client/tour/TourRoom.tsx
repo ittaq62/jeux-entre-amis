@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
-import { findVariant, type TourView } from "../../shared/tour.ts";
+import { ruleLines, type TourView } from "../../shared/tour.ts";
 import { Loading } from "../components/ui.tsx";
 import { ArrivalChoice } from "../game/ArrivalChoice.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
@@ -60,7 +60,7 @@ export function TourRoom({ code }: { code: string }) {
     const hold = view.endHold?.code === shown.code ? view.endHold : null;
     const game = view.games.find((g) => g.code === shown.code);
     const played = game?.players ?? [];
-    const rules = game && view.settings.rules !== "base" ? findVariant(game.game, game.variant) : null;
+    const lines = game && view.settings.rules !== "base" ? ruleLines(game.game, game.variant) : [];
     const humans = view.members
       .filter((m) => m.kind === "human" && !m.left && m.connected && played.includes(m.userId))
       .map((m) => m.userId);
@@ -75,7 +75,7 @@ export function TourRoom({ code }: { code: string }) {
       serverOffset,
       onContinue,
       progress: progressLabel(view, Date.now() + serverOffset),
-      rules: rules ? { name: rules.name, blurb: rules.blurb } : null,
+      rules: lines.length > 0 ? lines : null,
     };
   }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue]);
 

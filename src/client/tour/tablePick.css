@@ -123,6 +123,36 @@
   line-height: 1.4;
 }
 
+/* Les règles à part tirées en plus du format : une par ligne */
+.table-pick-rule-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.table-pick-rule-list li::before {
+  content: "+ ";
+  color: var(--gold-light);
+  font-weight: 800;
+}
+
+.table-pick-rule-list strong {
+  font-size: 14px;
+}
+
+.table-pick-rule-list li.is-off {
+  opacity: 0.8;
+}
+
+.table-pick-rule-list li.is-off::before {
+  content: "· ";
+}
+
 /* Le choix de chaque jeu, sans son cadre de salon : il est déjà dans la fenêtre */
 .table-pick-body > .panel {
   margin: 0;

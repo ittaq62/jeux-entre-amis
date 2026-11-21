@@ -1,5 +1,6 @@
 import type { GameId, LobbyRoom } from "../../shared/protocol.ts";
-import { drawnKeys, drawnRules } from "../../shared/randomRules.ts";
+import { drawnKeys, drawnLines, drawnShort } from "../../shared/randomRules.ts";
+import type { RuleLine } from "../../shared/tour.ts";
 import { Options } from "../components/ui.tsx";
 import "../styles/tableRules.css";
 
@@ -35,7 +36,7 @@ export function RandomRulesField({
   if (room.tour) return null;
   const isHost = room.you.isHost;
   const draw = tableDraw(room);
-  const v = drawnRules(game, draw);
+  const [base, ...extras] = drawnLines(game, draw);
   const set = (randomRules: boolean) => send({ t: "settings", settings: {}, randomRules });
   const finished = room.status === "finished";
   return (
@@ -56,7 +57,7 @@ export function RandomRulesField({
         <p className="hint" style={{ margin: 0 }}>
           {off}
         </p>
-      ) : v ? (
+      ) : base ? (
         <div className="drawn-card" aria-live="polite">
           <span className="drawn-label">
             {room.status === "playing"
@@ -65,8 +66,9 @@ export function RandomRulesField({
                 ? "Tirées au sort pour la prochaine partie"
                 : "Tirées au sort"}
           </span>
-          <strong className="drawn-name">{v.name}</strong>
-          <span className="drawn-blurb">{v.blurb}</span>
+          <strong className="drawn-name">{base.name}</strong>
+          <span className="drawn-blurb">{base.blurb}</span>
+          <DrawnExtras lines={extras} />
           {isHost && room.status !== "playing" && (
             <button type="button" className="btn btn-sm drawn-again" onClick={() => set(true)}>
               Tirer d'autres règles
@@ -83,22 +85,40 @@ export function RandomRulesField({
   );
 }
 
-/** Les règles tirées de la partie en cours, en une ligne : pour l'en-tête de la table (rien sans tirage) */
+/** Les règles à part tirées en plus du format, une par ligne */
+function DrawnExtras({ lines }: { lines: RuleLine[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <ul className="drawn-extras">
+      {lines.map((l) => (
+        <li key={l.id} className={l.kind === "off" ? "is-off" : ""}>
+          <strong>{l.name}</strong> : {l.blurb}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Les règles tirées de la partie en cours, en une ligne courte : pour l'en-tête de la table (« Classique + 2 règles »),
+ * rien sans tirage
+ */
 export function drawnName(room: DrawRoom & { game: string }): string | null {
   if (room.status !== "playing" || room.game === "tour") return null;
-  return drawnRules(room.game as GameId, tableDraw(room))?.name ?? null;
+  return drawnShort(room.game as GameId, tableDraw(room));
 }
 
 /** En tête du menu de la table : les règles tirées au sort de la partie en cours, pour les relire à tout moment */
 export function DrawnRulesNote({ room }: { room: DrawRoom & { game: string } }) {
   if (room.status !== "playing" || room.game === "tour") return null;
-  const v = drawnRules(room.game as GameId, tableDraw(room));
-  if (!v) return null;
+  const [base, ...extras] = drawnLines(room.game as GameId, tableDraw(room));
+  if (!base) return null;
   return (
     <div className="menu-drawn" role="note">
       <span className="drawn-label">Règles tirées au sort</span>
-      <strong>{v.name}</strong>
-      <span className="hint">{v.blurb}</span>
+      <strong>{base.name}</strong>
+      <span className="hint">{base.blurb}</span>
+      <DrawnExtras lines={extras} />
     </div>
   );
 }

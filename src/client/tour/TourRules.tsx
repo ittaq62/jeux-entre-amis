@@ -2,11 +2,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { GameId } from "../../shared/protocol.ts";
 import {
-  askedRules,
   baseVariant,
   findVariant,
   gameVariants,
-  splitAsked,
+  ruleLines,
   tallyRule,
   tallyVotes,
   voteNeed,
@@ -14,6 +13,7 @@ import {
   type TourClientMessage,
   type TourMemberView,
   type TourView,
+  votedRules,
 } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { play } from "../lib/sound.ts";
@@ -69,21 +69,22 @@ function RulesOf({ view, send, revealed }: Props) {
       variant={next.variant}
       label={mode === "random" ? "Règles tirées au sort" : "Règles adoptées"}
       open={revealed}
-      asked
     />
   );
 }
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** La carte des règles : le dos d'abord, puis elle se retourne sur la variante */
+/**
+ * La carte des règles : le dos d'abord, puis elle se retourne sur le format et, dessous, chaque règle à part tirée ou
+ * votée (au UNO, « pas de UNO d'avance » se dit aussi quand il n'est pas retenu)
+ */
 function RulesCard({
   game,
   variant,
   label,
   open,
   quiet = false,
-  asked = false,
 }: {
   game: GameId;
   variant: string | null;
@@ -91,13 +92,10 @@ function RulesCard({
   open: boolean;
   /** Sans suspense : déjà retournée, sans son */
   quiet?: boolean;
-  /** Tirées ou votées : les règles à part qu'on demande (UNO : pas de UNO d'avance) se disent, retenues ou non */
-  asked?: boolean;
 }) {
   const reduced = usePrefs((s) => s.reducedEffects);
-  const split = asked ? splitAsked(game, variant) : null;
-  const v = findVariant(game, split ? split.rest : variant);
-  const known = v !== null;
+  const [base, ...rest] = ruleLines(game, variant);
+  const known = base !== undefined;
   const [flipped, setFlipped] = useState(open && (quiet || reduced));
 
   // Seulement des valeurs simples en dépendances : l'écran se redessine 4 fois par seconde (compte à rebours),
@@ -134,12 +132,12 @@ function RulesCard({
         </div>
         <div className="rules-face rules-front" aria-hidden={!flipped}>
           <span className="rules-label">{label}</span>
-          <strong className="rules-name">{v?.name}</strong>
-          <span className="rules-blurb">{v?.blurb}</span>
-          {split?.asked.map(({ rule, on }) => (
-            <span key={rule.id} className={`rules-asked ${on ? "is-on" : "is-off"}`}>
-              <strong>{on ? capitalize(rule.name) : rule.offName}</strong>
-              <span>{on ? rule.blurb : rule.offBlurb}</span>
+          <strong className="rules-name">{base?.name}</strong>
+          <span className="rules-blurb">{base?.blurb}</span>
+          {rest.map((line) => (
+            <span key={line.id} className={`rules-asked ${line.kind === "off" ? "is-off" : "is-on"}`}>
+              <strong>{line.name}</strong>
+              <span>{line.blurb}</span>
             </span>
           ))}
         </div>
@@ -160,7 +158,9 @@ function RulesVote({ view, send }: { view: TourView; send: (msg: TourClientMessa
   const need = voteNeed(view.voters.length);
   const mine = next.votes[me];
   const adopted = next.base ? findVariant(next.game, next.base) : null;
-  const asked = askedRules(next.game).filter((r) => next.extras?.[r.id]);
+  // Chaque règle à part se vote oui ou non, sous le format
+  const asked = votedRules(next.game).filter((r) => next.extras?.[r.id]);
+  const formats = gameVariants(next.game);
   const facesOf = (ids: string[]) =>
     ids.map((id) => view.members.find((m) => m.userId === id)).filter((m): m is TourMemberView => Boolean(m));
   const votersOf = (variant: string) =>
@@ -217,8 +217,17 @@ function RulesVote({ view, send }: { view: TourView; send: (msg: TourClientMessa
           })}
         </ul>
       )}
+      {asked.length > 1 && <p className="rules-ask-intro hint">Et chaque règle en plus, oui ou non : à égalité, la règle habituelle.</p>}
       {asked.map((rule) => (
-        <AskedVote key={rule.id} view={view} send={send} rule={rule} facesOf={facesOf} />
+        <AskedVote
+          key={rule.id}
+          view={view}
+          send={send}
+          rule={rule}
+          facesOf={facesOf}
+          compact={asked.length > 1}
+          only={rule.bases?.map((b) => formats.find((f) => f.id === b)?.name ?? b).join(" ou ")}
+        />
       ))}
     </div>
   );
@@ -253,17 +262,23 @@ function VoteCount({ faces, n, need }: { faces: TourMemberView[]; n: number; nee
   );
 }
 
-/** Une règle à part votée oui ou non (UNO : pas de UNO d'avance) : même compte que les variantes */
+/** Une règle à part votée oui ou non : même compte que les variantes */
 function AskedVote({
   view,
   send,
   rule,
   facesOf,
+  only,
+  compact = false,
 }: {
   view: TourView;
   send: (msg: TourClientMessage) => void;
   rule: TourAskedRule;
   facesOf: (ids: string[]) => TourMemberView[];
+  /** Les seuls formats avec lesquels elle se joue */
+  only?: string;
+  /** Plusieurs règles à voter : une ligne chacune (la question à gauche, oui et non à droite, sur un grand écran) */
+  compact?: boolean;
 }) {
   const vote = view.next!.extras![rule.id]!;
   const me = view.you.userId;
@@ -271,11 +286,17 @@ function AskedVote({
   const need = voteNeed(view.voters.length);
   const { yes, no } = tallyRule(vote.votes, view.voters);
   const mine = vote.votes[me];
+  const base = view.next!.base;
   if (vote.value !== null) {
+    // Écartée d'office par le format adopté : on dit pourquoi
+    const unfit = !vote.value && base && rule.bases && !rule.bases.includes(base);
     return (
       <p className="rules-vote-done">
         {capitalize(rule.name)} : <strong>{vote.value ? "oui" : "non"}</strong>
-        <span className="hint"> · {vote.value ? rule.blurb : rule.offBlurb}</span>
+        <span className="hint">
+          {" "}
+          · {vote.value ? rule.blurb : unfit ? capitalize(rule.unfit ?? "ne va pas avec ce format") + "." : rule.offBlurb}
+        </span>
       </p>
     );
   }
@@ -284,10 +305,14 @@ function AskedVote({
     { on: false, label: "Non", n: no },
   ];
   return (
-    <div className="rules-ask">
+    <div className={`rules-ask ${compact ? "is-compact" : ""}`}>
       <p className="rules-ask-head">
         <strong>{rule.question}</strong>
-        <span className="hint">{rule.blurb} À égalité, la règle habituelle.</span>
+        <span className="hint">
+          {rule.blurb}
+          {only ? ` Seulement avec ${only}.` : ""}
+          {compact ? "" : " À égalité, la règle habituelle."}
+        </span>
       </p>
       <div className="rules-ask-row">
         {choices.map((c) => (

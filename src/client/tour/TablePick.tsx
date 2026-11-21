@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { ANNOUNCE_MS } from "../../shared/announce.ts";
 import { tableTeamName } from "../../shared/games/teams.ts";
 import { GAME_NAMES, type GameId, type SeatView } from "../../shared/protocol.ts";
-import { drawnRules } from "../../shared/randomRules.ts";
+import { drawnLines } from "../../shared/randomRules.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useCountdown } from "../lib/countdown.ts";
@@ -61,7 +61,8 @@ export function TablePick({
   const mine = room.you.seatId ? room.seats.find((s) => s.id === room.you.seatId) : undefined;
   const ready = room.ready ?? [];
   const meReady = ready.includes(room.you.userId);
-  const rules = bridge ? bridge.rules : drawnRules(game, drawn);
+  // Les règles de la partie, une par ligne : le format, puis chaque règle à part tirée ou votée
+  const [rules, ...extras] = (bridge ? bridge.rules : drawnLines(game, drawn)) ?? [];
   // Les équipes : celles que donne le jeu, ou celles de la tournée quand les places en ont
   const names = teamName === null ? null : (teamName ?? (bridge && room.seats.some((s) => teamOf(s) !== undefined) ? tableTeamName : null));
   const teams = names
@@ -126,6 +127,15 @@ export function TablePick({
             <div>
               <strong>Règles : {rules.name}</strong>
               <p>{rules.blurb}</p>
+              {extras.length > 0 && (
+                <ul className="table-pick-rule-list">
+                  {extras.map((r) => (
+                    <li key={r.id} className={r.kind === "off" ? "is-off" : ""}>
+                      <strong>{r.name}</strong> : {r.blurb}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}
