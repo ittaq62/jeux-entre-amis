@@ -106,7 +106,7 @@ export class CulbuteScene {
   /** La charge de chacun : la dernière étincelle aspirée, et s'il a déjà jeté l'éclair de la charge pleine */
   private chargeAt: number[] = [];
   private chargeFull: boolean[] = [];
-  /** Les enchaînements : qui a touché chacun en dernier, combien de fois d'affilée, et jusqu'à quand ça compte */
+  /** Les enchaînements : qui a touché chacun en dernier, combien de fois d'affilée, et jusqu'à quand ça compte (en ms) */
   private combo: { by: number; n: number; until: number }[] = [];
   /** Le compte affiché au-dessus de chacun (le suivant le remplace) */
   private comboShown: THREE.Sprite[] = [];
@@ -747,14 +747,17 @@ export class CulbuteScene {
    * Un enchaînement : touché de nouveau par le même avant d'avoir repris ses esprits (le temps de l'étourdissement, à
    * peu près), le compte monte, et « 2 coups ! », « 3 coups ! »… saute au-dessus de lui, à la couleur de l'attaquant
    */
-  private countCombo(a: number, v: number, power: number, frame: RenderFrame) {
+  private countCombo(a: number, v: number, chained: boolean, frame: RenderFrame) {
     if (a < 0 || a === v) return;
-    const c = this.combo[v];
-    const n = c && c.by === a && this.time < c.until ? c.n + 1 : 1;
-    this.combo[v] = { by: a, n, until: this.time + 0.3 + power * 0.65 };
-    if (n < 2) return;
     const target = frame.fighters[v];
     if (!target) return;
+    // Un vrai enchaînement : le combat dit qu'il était encore étourdi par le coup d'avant du même attaquant (et pas
+    // depuis plus d'une seconde et demie, en temps réel : un onglet au ralenti ne fait pas grimper le compte)
+    const now = performance.now();
+    const c = this.combo[v];
+    const n = chained && c && c.by === a && now < c.until ? c.n + 1 : 1;
+    this.combo[v] = { by: a, n, until: now + 1500 };
+    if (n < 2) return;
     const color = this.looks[a]?.color ?? "#ffd25a";
     const c2 = document.createElement("canvas");
     c2.width = 256;
@@ -896,7 +899,7 @@ export class CulbuteScene {
         }
         this.fighters[e.v]?.hit(e.power);
         this.spark(e.x, e.y, e.power, e.power > 0.55 ? 0xffa53a : 0xfff2a8);
-        this.countCombo(e.a, e.v, e.power, frame);
+        this.countCombo(e.a, e.v, Boolean(e.chain), frame);
         if (e.power > 0.45) this.shake = Math.max(this.shake, 0.3 + e.power * 0.6);
         if (e.ko) {
           // Le coup de grâce : la caméra plonge (seulement si ça ne détourne pas le regard de quelqu'un qui se bat

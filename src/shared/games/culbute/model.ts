@@ -274,6 +274,8 @@ export type FightEvent =
       kind: "hit" | "shield" | "counter" | "push" | "parry";
       /** Ce coup va le faire sortir de l'arène (l'écran s'en approche) */
       ko?: boolean;
+      /** Il était encore étourdi par le coup d'avant du même attaquant : un enchaînement */
+      chain?: boolean;
     }
   | { k: "ko"; v: number; by: number; x: number; y: number; side: "left" | "right" | "top" | "bottom" }
   | { k: "back"; v: number }

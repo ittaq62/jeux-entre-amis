@@ -1699,6 +1699,8 @@ function applyHit(f: Fight, src: HitSource, v: Fighter) {
 
 /** Les pourcents, puis l'éjection d'autant plus forte qu'ils sont hauts */
 function launch(f: Fight, src: HitSource, v: Fighter) {
+  // Encore étourdi par le coup d'avant du même attaquant : c'est un enchaînement (dit avant que le coup ne change rien)
+  const chained = v.state === "hurt" && src.attacker >= 0 && v.lastBy === src.attacker;
   const a = src.attacker >= 0 ? f.fighters[src.attacker] : undefined;
   if (v.holding >= 0) {
     const w = f.fighters[v.holding];
@@ -1792,6 +1794,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     power: ko ? 1 : clamp(speed / 50, 0, 1),
     kind: "hit",
     ...(ko ? { ko: true } : {}),
+    ...(chained ? { chain: true } : {}),
   });
 }
 

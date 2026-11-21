@@ -287,16 +287,20 @@ describe("Culbute : le combat", () => {
     while (!hitCancelable(a) && k++ < 30) run(f, 1);
     const before = v.dmg;
     let comboHit = false;
+    let chain = false;
     run(f, 1, [tap(ATK, 1, 0)]);
     for (let i = 0; i < 12; i++) {
       const wasHurt = v.state === "hurt";
-      run(f, 1);
+      const ev = run(f, 1);
       if (v.dmg > before) {
         comboHit = wasHurt;
+        chain = ev.some((e) => e.k === "hit" && e.chain === true);
         break;
       }
     }
     expect(comboHit).toBe(true);
+    // Le combat le dit : c'est un enchaînement (le compteur « 2 coups ! » s'y fie)
+    expect(chain).toBe(true);
   });
 
   it("le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt", () => {
