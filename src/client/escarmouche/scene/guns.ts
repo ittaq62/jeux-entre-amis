@@ -12,9 +12,10 @@ import { fuse } from "./fuse.ts";
 import { camoTexture } from "./textures.ts";
 
 const std = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
-const metal = std("#2c2f34", 0.4, 0.7);
-const darkMetal = std("#191a1d", 0.55, 0.5);
-const polymer = std("#202124", 0.85);
+// Des noirs pas tout à fait noirs : assez clairs pour que les formes de l'arme se lisent (boîtier, garde-main, chargeur)
+const metal = std("#454a52", 0.34, 0.7);
+const darkMetal = std("#2a2c31", 0.55, 0.5);
+const polymer = std("#33353a", 0.72);
 const wood = std("#6b4426", 0.55);
 const brass = std("#b58b3d", 0.3, 0.85);
 const lens = new THREE.MeshStandardMaterial({

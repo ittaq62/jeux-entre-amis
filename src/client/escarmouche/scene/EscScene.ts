@@ -273,6 +273,10 @@ export class EscScene {
     const vmSun = new THREE.DirectionalLight(look.sunColor, night ? 3.2 : light === "soir" ? 2.3 : 1.8);
     vmSun.position.set(-1, 2, 1);
     this.vmScene.add(vmSun);
+    // Une lumière froide venue de devant, en haut à droite : elle accroche les arêtes du dessus de l'arme
+    const vmEdge = new THREE.DirectionalLight("#dfe8ff", night ? 0.6 : 1.1);
+    vmEdge.position.set(0.8, 1.2, -1.6);
+    this.vmScene.add(vmEdge);
     this.vmScene.add(this.vmRoot);
     this.vmKnife = buildKnife();
     this.vmKnife.visible = false;

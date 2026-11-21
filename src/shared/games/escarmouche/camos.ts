@@ -20,7 +20,7 @@ export const CAMOS: CamoInfo[] = [
     name: "D'usine",
     blurb: "Le métal bruni, comme à la sortie de l'armurerie.",
     price: 0,
-    colors: ["#2b2d30", "#3a3d41"],
+    colors: ["#343639", "#45484d"],
     pattern: "uni",
   },
   {
