@@ -41,6 +41,67 @@ const LOOK: Partial<Record<Mat, { rough: number; metal?: number; bump: number }>
   caisse: { rough: 0.85, bump: 1.0 },
 };
 
+/**
+ * Les sols et les murs qui couvrent de grandes surfaces : leur dessin se répète tous les quelques mètres, et l'œil le voit
+ * de loin. Des taches plus claires ou plus sombres, larges de plusieurs mètres, les cassent (la force de l'effet).
+ */
+const MACRO: Partial<Record<Mat, number>> = {
+  pave: 0.3,
+  sol: 0.3,
+  terre: 0.3,
+  herbe: 0.32,
+  gravier: 0.26,
+  beton: 0.24,
+  neige: 0.12,
+  pierre: 0.16,
+  crepi: 0.16,
+  crepi2: 0.16,
+};
+
+/** Ajoute à une matière ses taches à grande échelle, d'après la position dans le monde (le même endroit, la même tache) */
+function macroVariation(mat: THREE.MeshStandardMaterial, strength: number) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.macroK = { value: strength };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vMacro;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+vMacro = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vMacro;
+uniform float macroK;
+float macroHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float macroNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(macroHash(i), macroHash(i + vec2(1.0, 0.0)), u.x), mix(macroHash(i + vec2(0.0, 1.0)), macroHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}`,
+      )
+      .replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+{
+  vec2 mp = vMacro.xz + vec2(vMacro.y * 0.37, -vMacro.y * 0.21);
+  float mn = macroNoise(mp * 0.055) * 0.6 + macroNoise(mp * 0.19 + 7.3) * 0.3 + macroNoise(mp * 0.7 + 3.1) * 0.1;
+  float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+  diffuseColor.rgb *= 1.0 + (mn - 0.5) * 2.0 * macroK;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum), (0.5 - mn) * macroK * 0.6);
+}`,
+      );
+  };
+  mat.customProgramCacheKey = () => `macro:${strength}`;
+}
+
 const materials = new Map<string, THREE.Material>();
 export function matMaterial(m: Mat, q: Quality, vertexColors = true): THREE.Material {
   const key = `${m}:${q}:${vertexColors}`;
@@ -60,6 +121,7 @@ export function matMaterial(m: Mat, q: Quality, vertexColors = true): THREE.Mate
       metalness: look.metal ?? 0,
       vertexColors,
     });
+    if (MACRO[m]) macroVariation(std, MACRO[m]!);
     mat = std;
   }
   materials.set(key, mat);
@@ -873,7 +935,7 @@ function roofExtras(d: Extract<Decor, { k: "roof" }>, ctx: Ctx, q: Quality) {
 /** Des sacs de sable posés en quinconce, rang par rang, un peu de travers, de teintes un peu différentes */
 function sandbagMesh(boxes: THREE.Box3[], q: Quality): THREE.Mesh {
   const parts: THREE.BufferGeometry[] = [];
-  const base = new RoundedBoxGeometry(0.56, 0.17, 0.34, q === "haut" ? 2 : 1, 0.07).toNonIndexed();
+  const base = new RoundedBoxGeometry(0.56, 0.17, 0.34, q === "haut" ? 2 : 1, 0.07);
   const tints = ["#a8996f", "#9c8d64", "#b3a479", "#8f835e", "#a39270"];
   const c = new THREE.Color();
   let n = 0;
@@ -937,7 +999,7 @@ function baleMesh(boxes: THREE.Box3[], q: Quality): THREE.Group {
   for (const b of boxes) {
     const size = b.getSize(new THREE.Vector3());
     const center = b.getCenter(new THREE.Vector3());
-    const bale = new RoundedBoxGeometry(size.x - 0.02, size.y - 0.02, size.z - 0.02, q === "bas" ? 1 : 3, 0.12).toNonIndexed();
+    const bale = new RoundedBoxGeometry(size.x - 0.02, size.y - 0.02, size.z - 0.02, q === "bas" ? 1 : 3, 0.12);
     // La toile du foin, à l'échelle de la botte
     const uv = bale.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.max(size.x, size.z) * 0.8, uv.getY(i) * size.y * 0.8);
