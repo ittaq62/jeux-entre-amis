@@ -316,6 +316,21 @@ describe("Culbute : le combat", () => {
     expect(a.mt).toBeLessThan(before);
   });
 
+  it("après un petit coup qui touche, une direction avec Frapper donne le coup de côté, pas un nouveau petit coup", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.2);
+    const a = f.fighters[0]!;
+    const v = f.fighters[1]!;
+    run(f, 1, [tap(ATK)]);
+    for (let k = 0; k < 20 && !a.landed; k++) run(f, 1);
+    expect(a.landed).toBe(true);
+    // Frapper vers l'avant à chaque image : le petit coup ne se relance pas, le coup de côté part dès qu'il s'annule
+    for (let k = 0; k < 20 && a.move === "n"; k++) run(f, 1, [tap(ATK, 1, 0)]);
+    expect(a.move).toBe("s");
+    expect(v.state).toBe("hurt");
+  });
+
   it("l'attaque chargée à fond fait sortir un adversaire à 120 % depuis le bord", () => {
     const f = duel("ginette", "ginette");
     skipIntro(f);

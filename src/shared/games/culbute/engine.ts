@@ -1139,8 +1139,15 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
     setState(ft, isAirborne(ft) ? "air" : "stand");
     return;
   }
-  // Le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt
-  if (ft.move === "n" && ft.buf & ATK && def.hits.length > 0 && ft.mt > Math.max(...def.hits.map((hd) => hd.to)) + 1) {
+  // Le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt, stick au neutre (avec une
+  // direction, c'est le coup de cette direction qu'on veut : il part dès que le petit coup s'annule ou finit)
+  if (
+    ft.move === "n" &&
+    ft.buf & ATK &&
+    dirOf(inp.x, inp.y) === "n" &&
+    def.hits.length > 0 &&
+    ft.mt > Math.max(...def.hits.map((hd) => hd.to)) + 1
+  ) {
     consume(ft, ATK);
     startMove(ft, "n");
     return;
