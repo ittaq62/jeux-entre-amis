@@ -924,6 +924,58 @@ html:has(.cb-fight) body {
   font-size: 12px;
 }
 
+/* En tournée : plusieurs manches, et les points de chacun */
+.cb-series-badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: rgba(10, 12, 18, 0.6);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.cb-series-badge strong {
+  font-family: var(--font-card);
+  font-size: 18px;
+}
+
+.cb-series-kicker {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cb-series-gain {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.cb-series-places {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.cb-series-places .is-win {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.cb-series-next {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.cb-series-next strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
 .cb-over-actions {
   display: flex;
   flex-wrap: wrap;

@@ -5,6 +5,15 @@ import { createFight, stepFight } from "../shared/games/culbute/engine.ts";
 import { botPick, HABITUES, isFighterPick, styleOf, type FighterPick } from "../shared/games/culbute/fighters.ts";
 import { HABITUE_IDS, type Fight, type FightEvent, type Input } from "../shared/games/culbute/model.ts";
 import {
+  addRound,
+  newSeries,
+  recordStatsOf,
+  seriesArena,
+  seriesRanks,
+  SERIES_PAUSE_MS,
+  type CulbuteSeries,
+} from "../shared/games/culbute/series.ts";
+import {
   CULBUTE_MAX_PLAYERS,
   SAMPLE_STRIDE,
   type CulbuteClientMessage,
@@ -12,16 +21,7 @@ import {
   type CulbuteRoomView,
   type CulbuteServerMessage,
 } from "../shared/games/culbute/net.ts";
-import {
-  culbuteView,
-  DEFAULT_CONFIG,
-  encodeTick,
-  mergeConfig,
-  packFull,
-  pickArena,
-  stateKey,
-  type CulbuteRecordStats,
-} from "../shared/games/culbute/view.ts";
+import { culbuteView, DEFAULT_CONFIG, encodeTick, mergeConfig, packFull, pickArena, stateKey } from "../shared/games/culbute/view.ts";
 import {
   CHAT_MAX,
   MIN_PLAYERS,
@@ -95,7 +95,7 @@ interface Seat {
   fighter: FighterPick;
 }
 
-type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart";
+type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart" | "nextRound";
 
 interface Timer {
   at: number;
@@ -125,6 +125,8 @@ interface CulbuteData {
   watchers?: string[];
   pickUntil?: number | null;
   ready?: string[];
+  /** En tournée : plusieurs combats d'affilée, et les points de chacun */
+  series?: CulbuteSeries | null;
 }
 
 interface Attachment {
@@ -143,6 +145,9 @@ interface InputQueue {
   /** Les pas joués d'affilée sans nouvelle commande */
   starved: number;
 }
+
+/** Les statistiques de celui qui n'a fini aucune manche */
+const EMPTY_STATS = { kos: 0, falls: 0, dealt: 0, taken: 0, items: 0, lowKo: 0, stocksLeft: 0, lostStock: 0, won: 0 };
 
 /** Une table de Culbute : le salon commun, puis un combat que le serveur mène image par image. */
 export class CulbuteRoom extends DurableObject<Env> {
@@ -789,6 +794,16 @@ export class CulbuteRoom extends DurableObject<Env> {
       await this.close("Pas assez de joueurs arrivés : la tournée reprend la main.");
       return;
     }
+    // Plusieurs combats d'affilée : les points de chaque manche font le classement envoyé à la tournée
+    d.series = newSeries(
+      present.map((x) => ({
+        id: x.id,
+        name: x.name,
+        userId: x.kind === "human" ? (x.userId ?? null) : null,
+        bot: x.kind !== "human",
+        team: x.team,
+      })),
+    );
     return this.startGame(now);
   }
 
@@ -810,7 +825,7 @@ export class CulbuteRoom extends DurableObject<Env> {
     const cfg = { ...DEFAULT_CONFIG, ...d.settings.culbute };
     d.fight = createFight(
       cfg,
-      pickArena(cfg, Math.random),
+      d.series ? seriesArena(cfg, d.series, Math.random) : pickArena(cfg, Math.random),
       d.seats.map((s) => ({ id: s.id, team: s.team, style: styleOf(s.fighter) })),
       randomSeed(),
     );
@@ -824,7 +839,7 @@ export class CulbuteRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.lastKey = stateKey(d.fight);
-    this.systemChat("Que le meilleur gagne !");
+    this.systemChat(d.series ? `Manche ${d.series.round} sur ${d.series.rounds} : que le meilleur gagne !` : "Que le meilleur gagne !");
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("culbute", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange([], now);
@@ -862,7 +877,7 @@ export class CulbuteRoom extends DurableObject<Env> {
   private async tick() {
     const d = this.data;
     const f = d?.fight;
-    if (!d || !f || d.status !== "playing") {
+    if (!d || !f || d.status !== "playing" || d.series?.nextAt) {
       this.stopLoop();
       return;
     }
@@ -923,18 +938,63 @@ export class CulbuteRoom extends DurableObject<Env> {
 
   private async finishGame(now: number) {
     const d = this.data!;
+    const s = d.series;
+    if (s && !s.final) {
+      if (s.nextAt) return;
+      addRound(s, d.fight!);
+      if (s.round < s.rounds) return this.betweenRounds(now);
+      s.final = seriesRanks(s, d.fight!.settings.teams);
+    }
     d.status = "finished";
     this.stopLoop();
     if (d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
     const f = d.fight!;
-    const names = f.winners.map((slot) => d.seats.find((s) => s.id === f.fighters[slot]?.id)?.name ?? "?");
-    if (names.length === 1) this.systemChat(`${names[0]} remporte le combat !`);
-    else if (names.length > 1) this.systemChat(`Victoire de ${names.join(", ")} !`);
+    if (s?.final) {
+      const first = Object.keys(s.final).filter((id) => s.final![id] === 1);
+      const who = first.map((id) => s.seats[id]?.name ?? "?");
+      if (who.length === 1) this.systemChat(`${who[0]} remporte les ${s.rounds} manches avec ${s.points[first[0]!]} points !`);
+      else if (who.length > 1) this.systemChat(`Victoire de ${who.join(", ")} aux points !`);
+    } else {
+      const names = f.winners.map((slot) => d.seats.find((x) => x.id === f.fighters[slot]?.id)?.name ?? "?");
+      if (names.length === 1) this.systemChat(`${names[0]} remporte le combat !`);
+      else if (names.length > 1) this.systemChat(`Victoire de ${names.join(", ")} !`);
+    }
     if (d.settings.randomRules && !d.tour) {
       d.settings.randomRules = drawRules("culbute", Math.random, d.settings.randomRules);
       this.systemChat(drawNotice("culbute", d.settings.randomRules, "next"));
     }
     await this.afterChange([], now);
+  }
+
+  /** Une manche de la série est finie : le combat s'enregistre, chacun regarde les scores, puis la suivante part */
+  private async betweenRounds(now: number) {
+    const d = this.data!;
+    const s = d.series!;
+    this.stopLoop();
+    s.nextAt = now + SERIES_PAUSE_MS;
+    this.addTimer({ at: s.nextAt, kind: "nextRound" });
+    const ranks = seriesRanks(s, d.fight!.settings.teams);
+    const lead = Object.keys(ranks).filter((id) => ranks[id] === 1);
+    const who = lead.map((id) => s.seats[id]?.name ?? "?").join(", ");
+    this.systemChat(
+      `Fin de la manche ${s.round} sur ${s.rounds} : ${who} ${lead.length > 1 ? "mènent" : "mène"} avec ${s.points[lead[0]!]} points.`,
+    );
+    await this.afterChange([], now);
+    await this.recordResults(now);
+  }
+
+  /** La manche suivante, avec ceux qui sont encore là ; s'il n'y a plus de quoi se battre, la série s'arrête là */
+  private async nextRound(now: number) {
+    const d = this.data!;
+    const s = d.series!;
+    s.nextAt = null;
+    const present = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
+    if (present.length < MIN_PLAYERS || !present.some((x) => x.kind === "human")) {
+      s.final = seriesRanks(s, d.fight!.settings.teams);
+      return this.finishGame(now);
+    }
+    s.round++;
+    return this.startGame(now);
   }
 
   // -------------------------------------------------------------------------
@@ -1027,6 +1087,10 @@ export class CulbuteRoom extends DurableObject<Env> {
         if (!d.tour || d.status !== "lobby") return false;
         await this.startTourGame(now);
         return false;
+      case "nextRound":
+        if (!d.series?.nextAt || d.status !== "playing") return false;
+        await this.nextRound(now);
+        return false;
     }
   }
 
@@ -1043,20 +1107,11 @@ export class CulbuteRoom extends DurableObject<Env> {
   private async recordResults(now: number) {
     const d = this.data!;
     const f = d.fight!;
+    const series = d.series;
     try {
       const players = f.fighters.map((ft) => {
         const seat = d.seats.find((s) => s.id === ft.id);
-        const stats: CulbuteRecordStats = {
-          kos: ft.stats.kos,
-          falls: ft.stats.falls,
-          dealt: Math.round(ft.stats.dealt),
-          taken: Math.round(ft.stats.taken),
-          items: ft.stats.items,
-          lowKo: ft.stats.lowKo >= 999 ? 0 : Math.round(ft.stats.lowKo),
-          stocksLeft: f.settings.mode === "temps" ? 0 : Math.max(0, ft.stocks),
-          lostStock: ft.stats.falls > 0 ? 1 : 0,
-          won: ft.rank === 1 ? 1 : 0,
-        };
+        const stats = recordStatsOf(f, ft);
         return {
           seat: ft.slot,
           userId: seat?.kind === "human" ? seat.userId : null,
@@ -1070,7 +1125,21 @@ export class CulbuteRoom extends DurableObject<Env> {
           stats,
         };
       });
-      if (d.tour) {
+      if (d.tour && series?.final) {
+        // La série finie : la place au total, et ce que chacun a fait sur toutes les manches
+        const ids = Object.keys(series.seats);
+        await reportToTour(this.env, d.tour.code, {
+          code: d.code,
+          index: d.tour.index,
+          game: "culbute",
+          seats: ids.length,
+          players: ids.map((id) => ({
+            userId: series.seats[id]!.userId ?? id,
+            rank: series.final![id]!,
+            stats: { ...(series.totals[id] ?? EMPTY_STATS) },
+          })),
+        });
+      } else if (d.tour && !series) {
         await reportToTour(this.env, d.tour.code, {
           code: d.code,
           index: d.tour.index,
@@ -1078,6 +1147,12 @@ export class CulbuteRoom extends DurableObject<Env> {
           seats: players.length,
           players: players.map((p) => ({ userId: p.userId ?? f.fighters[p.seat]!.id, rank: p.rank, stats: { ...p.stats } })),
         });
+      }
+      // Chaque combat ne s'enregistre qu'une fois (dans une série, chaque manche à sa fin)
+      if (series) {
+        if (series.recorded >= series.round) return;
+        series.recorded = series.round;
+        await this.persist();
       }
       const cfg = { ...DEFAULT_CONFIG, ...d.settings.culbute };
       const { unlocked, elo } = await recordGame(this.env.DB, {
@@ -1159,6 +1234,7 @@ export class CulbuteRoom extends DurableObject<Env> {
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       culbute: d.fight ? culbuteView(d.fight, cfg) : null,
+      series: d.series ?? null,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

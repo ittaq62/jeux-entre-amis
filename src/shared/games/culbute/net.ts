@@ -3,6 +3,7 @@
 import type { AchievementUnlock, ChatMessage, EloResult, RoomStatus, SeatView, SpectatorView, Visibility } from "../../protocol.ts";
 import type { FighterPick } from "./fighters.ts";
 import type { FightEvent } from "./model.ts";
+import type { CulbuteSeries } from "./series.ts";
 import type { CulbuteConfig, CulbuteTick, CulbuteView } from "./view.ts";
 
 export const CULBUTE_MAX_PLAYERS = 8;
@@ -42,6 +43,8 @@ export interface CulbuteRoomView {
   /** Tournée : la fenêtre de choix du combattant avant le combat, jusqu'à cette heure ; ceux qui sont prêts */
   pickUntil?: number | null;
   ready?: string[];
+  /** En tournée : les manches enchaînées et les points de chacun */
+  series?: CulbuteSeries | null;
 }
 
 export type CulbuteClientMessage =

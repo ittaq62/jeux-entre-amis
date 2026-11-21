@@ -17,6 +17,7 @@ import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FightRuntime, type HudState } from "./runtime.ts";
 import { FightMusic } from "./music.ts";
 import { Foley } from "./foley.ts";
+import { SeriesBadge, SeriesBoard } from "./SeriesBoard.tsx";
 import * as sfx from "./sfx.ts";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import type { FightListeners } from "./useCulbuteRoom.ts";
@@ -366,6 +367,7 @@ export function CulbuteFight({
 
       <header className="cb-top">
         <div className="cb-top-left">
+          {room.series && !room.series.final && <SeriesBadge series={room.series} />}
           {timed && hud && (
             <span className="cb-clock num">
               {Math.floor(hud.time / 60)}:{String(hud.time % 60).padStart(2, "0")}
@@ -501,6 +503,7 @@ export function CulbuteFight({
 
       {commands && <CommandsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setCommands(false)} />}
 
+      {room.series?.nextAt && !finished && <SeriesBoard room={room} view={view} looks={looks} />}
       {finished && view.ranks && (
         <CulbuteGameOver room={room} view={view} looks={looks} send={send} onLeave={onLeave} onShowLobby={onShowLobby} />
       )}
