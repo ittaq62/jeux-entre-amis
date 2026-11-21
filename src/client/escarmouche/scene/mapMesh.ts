@@ -27,7 +27,8 @@ const LOOK: Partial<Record<Mat, { rough: number; metal?: number; bump: number }>
   planche: { rough: 0.8, bump: 1.0 },
   tuile: { rough: 0.72, bump: 1.4 },
   beton: { rough: 0.9, bump: 0.6 },
-  metal: { rough: 0.48, metal: 0.55, bump: 0.6 },
+  // La tôle peinte : un éclat mat, sans miroir (au ras d'un toit, le ciel s'y reflétait en une ligne blanche)
+  metal: { rough: 0.62, metal: 0.42, bump: 0.6 },
   rouille: { rough: 0.85, metal: 0.25, bump: 1.2 },
   wagon: { rough: 0.68, metal: 0.2, bump: 0.7 },
   wagon2: { rough: 0.68, metal: 0.2, bump: 0.7 },
