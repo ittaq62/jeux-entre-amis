@@ -24,7 +24,7 @@ import { Check, Options } from "../components/ui.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { TeamsPanel } from "../game/TeamsPanel.tsx";
 import { TeamRules } from "../capitale/TeamRules.tsx";
-import { GameTicket, MusicToggle, ReadyVote } from "./TourParts.tsx";
+import { GameTicket, ReadyVote, TourSound } from "./TourParts.tsx";
 
 interface Props {
   view: TourView;
@@ -145,7 +145,7 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
       hostWillStart="va lancer la tournée"
       canStart={canStart}
       startHint={startHint}
-      topActions={<MusicToggle />}
+      topActions={<TourSound />}
       // Le vote n'a lieu que s'il y a d'autres vrais joueurs que l'hôte ; sinon, on attend l'hôte comme avant
       vote={
         view.voters.some((id) => id !== view.hostId) ? (

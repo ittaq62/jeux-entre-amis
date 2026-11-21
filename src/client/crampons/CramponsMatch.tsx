@@ -8,6 +8,7 @@ import {
 } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
 import { FETE_BY_ID } from "../../shared/games/crampons/boutique.ts";
@@ -619,6 +620,14 @@ export function CramponsMatch({
         <button className="cr-mini" onClick={() => setHelp(true)} aria-label="Comment jouer" title="Comment jouer">
           ?
         </button>
+        <ReportButton
+          look="icon"
+          className="cr-mini"
+          game="crampons"
+          variant={`Crampons, ${room.settings.crampons.side} contre ${room.settings.crampons.side}, mi-temps de ${room.settings.crampons.halfMinutes} min`}
+          code={room.code}
+          role={room.you.seatId ? "player" : "watcher"}
+        />
         <button className="cr-mini" onClick={onOpenChat} aria-label="Discussion" title="Discussion">
           <Icon name="chat" size={18} />
           {unread > 0 && <span className="cr-badge">{unread}</span>}

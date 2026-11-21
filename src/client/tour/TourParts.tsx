@@ -15,6 +15,8 @@ import {
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
+import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
@@ -659,22 +661,14 @@ export function ReadyVote({
   );
 }
 
-/** Couper ou remettre la musique d'entracte (gardé sur cet appareil) */
-export function MusicToggle() {
+/** Le haut-parleur de la tournée : le réglage commun du son, et la musique d'entracte (gardés sur cet appareil) */
+export function TourSound() {
   const on = usePrefs((s) => s.tourMusic);
-  const sound = usePrefs((s) => s.sound);
   const set = usePrefs((s) => s.set);
-  if (!sound) return null;
   return (
-    <button
-      className="btn btn-ghost btn-icon"
-      aria-pressed={on}
-      aria-label={on ? "Couper la musique" : "Mettre la musique"}
-      title={on ? "Couper la musique" : "Mettre la musique"}
-      onClick={() => set({ tourMusic: !on })}
-    >
-      <Icon name={on ? "music" : "musicOff"} />
-    </button>
+    <SoundButton>
+      <SoundToggle label="Musique d'entracte" checked={on} onChange={(v) => set({ tourMusic: v })} />
+    </SoundButton>
   );
 }
 
@@ -768,7 +762,16 @@ export function TourTop({
         </span>
       </div>
       <div className="page-top-actions">
-        <MusicToggle />
+        <ReportButton
+          look="icon"
+          className="btn btn-ghost btn-icon"
+          game="tour"
+          variant={null}
+          code={null}
+          tour={view.code}
+          role={view.you.role === "player" ? "player" : "watcher"}
+        />
+        <TourSound />
         <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
           <Icon name="chat" />
           {unread > 0 && <span className="badge">{unread}</span>}

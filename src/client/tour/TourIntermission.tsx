@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
 import { fitsGame, type TourClientMessage, type TourView } from "../../shared/tour.ts";
 import { Avatar } from "../components/Avatar.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 import { lateJoinHint } from "../../shared/lateJoin.ts";
 import { ConfirmButton, Options } from "../components/ui.tsx";
 import { formatClock, useCountdown } from "../lib/countdown.ts";
@@ -175,6 +176,13 @@ export function TourIntermission({ view, send, serverOffset, unread, onOpenChat,
                       );
                     })}
                 </ol>
+                <ReportButton
+                  game={last.game}
+                  variant={lastRules}
+                  code={last.code}
+                  tour={view.code}
+                  role={last.players.includes(view.you.userId) ? "player" : "watcher"}
+                />
               </div>
             </section>
           )}

@@ -15,14 +15,23 @@ export function ReportButton({
   tour,
   look = "link",
   onOpen,
+  className,
   ...context
-}: Omit<ReportContext, "tour"> & { tour?: string | null; look?: "link" | "menu"; onOpen?: () => void }) {
+}: Omit<ReportContext, "tour"> & { tour?: string | null; look?: "link" | "menu" | "icon"; onOpen?: () => void; className?: string }) {
   const bridge = useTourBridge();
   const open = useReport((s) => s.open);
   const go = () => {
     onOpen?.();
     open({ ...context, tour: tour ?? bridge?.code ?? null });
   };
+  if (look === "icon") {
+    // Une barre d'outils en partie (Crampons) : le drapeau seul, nommé pour les lecteurs d'écran et au survol
+    return (
+      <button type="button" className={className} onClick={go} aria-label="Signaler un problème" title="Signaler un problème">
+        <Icon name="flag" size={18} />
+      </button>
+    );
+  }
   if (look === "menu") {
     return (
       <button type="button" className="menu-item" onClick={go}>
