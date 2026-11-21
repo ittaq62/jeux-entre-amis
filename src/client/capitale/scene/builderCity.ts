@@ -1,18 +1,24 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { GROUPS, SQUARES } from "../../../shared/games/capitale/board.ts";
+import { GROUP_ORDER, GROUPS, SQUARES } from "../../../shared/games/capitale/board.ts";
 import { BUILDS, footprint, type BuildKind, type Placed } from "../../../shared/games/capitale/builder.ts";
 import {
+  BLOCK,
   baseCells,
   CELLS,
   cellIndex,
   cellX,
   cellZ,
+  boxOf,
+  DISTRICT_CELLS,
   LOTS,
   MAP,
+  MAP_CITIES,
+  neighbors,
+  onMap,
+  parcelNumber,
   rectCells,
   sideOfSquare,
-  TERRITORIES,
   type Lot,
   type Rect,
 } from "../../../shared/games/capitale/builderMap.ts";
@@ -23,11 +29,12 @@ import * as LM from "./landmarks.ts";
 import * as S from "./streets.ts";
 import { makeCanvas, mix, signTexture } from "./textures.ts";
 
-// Capitale Builder : la carte du centre du plateau en 3D. Le sol en cases (les territoires, le terrain vague, les rues,
-// les jardins), les frontières de chaque ville à la couleur de son propriétaire, ses bâtiments posés là où il les a
-// mis, et l'aperçu de ce qu'on s'apprête à poser (cases vertes ou rouges, zone d'une nuisance).
-// Les bâtiments d'une ville sont fondus en quelques maillages (un par matière) ; celui qui vient d'être posé reste à
-// part le temps de sortir de terre.
+// Capitale Builder : la carte du centre du plateau en 3D, dessinée comme le plan d'une ville. Le fleuve et ses ponts,
+// ses bateaux ; l'avenue et ses voitures ; les squares arborés ; chaque quartier dans son liseré lumineux, ses
+// parcelles numérotées et sa réserve hachurée. Les frontières de chaque ville à la couleur de son propriétaire, ses
+// bâtiments posés là où il les a mis, et l'aperçu de ce qu'on s'apprête à poser (cases vertes ou rouges, zone d'une
+// nuisance). Les bâtiments d'une ville sont fondus en quelques maillages (un par matière) ; celui qui vient d'être posé
+// reste à part le temps de sortir de terre.
 
 /** Le côté d'une case, dans le monde */
 export const CELL = (2 * CITY_HALF) / MAP;
@@ -54,6 +61,46 @@ export function cellAt(x: number, z: number): number | null {
   const cx = Math.floor((x + CITY_HALF) / CELL);
   const cz = Math.floor((z + CITY_HALF) / CELL);
   return cx >= 0 && cz >= 0 && cx < MAP && cz < MAP ? cellIndex(cx, cz) : null;
+}
+
+/** La case d'une liste la plus proche d'un point (en cases) */
+function nearestCell(list: number[], x: number, z: number): number {
+  let best = list[0]!;
+  let gap = Infinity;
+  for (const c of list) {
+    const d = (cellX(c) - x) ** 2 + (cellZ(c) - z) ** 2;
+    if (d < gap - 1e-9) [best, gap] = [c, d];
+  }
+  return best;
+}
+
+/** La case d'un ensemble la plus proche de son milieu */
+export function middleCell(cells: Iterable<number>): number {
+  const list = [...cells];
+  const mx = list.reduce((n, c) => n + cellX(c), 0) / list.length;
+  const mz = list.reduce((n, c) => n + cellZ(c), 0) / list.length;
+  return nearestCell(list, mx, mz);
+}
+
+/** Le milieu (dans le monde) du bloc de 2 × 2 cases qui contient une case */
+function blockCenter(cell: number): { x: number; z: number } {
+  const bx = Math.floor(cellX(cell) / BLOCK) * BLOCK;
+  const bz = Math.floor(cellZ(cell) / BLOCK) * BLOCK;
+  return { x: -CITY_HALF + (bx + BLOCK / 2) * CELL, z: -CITY_HALF + (bz + BLOCK / 2) * CELL };
+}
+
+/**
+ * Les deux places d'une parcelle : le bloc du milieu, où son numéro est peint au sol, et le bloc voisin le plus
+ * central, où se plante le panneau « à vendre » (puis le drapeau du propriétaire)
+ */
+export function parcelSpots(square: number): { number: { x: number; z: number }; sign: { x: number; z: number } } {
+  const cells = baseCells(square);
+  const mx = cells.reduce((n, c) => n + cellX(c), 0) / cells.length;
+  const mz = cells.reduce((n, c) => n + cellZ(c), 0) / cells.length;
+  const mid = nearestCell(cells, mx, mz);
+  const blockOf = (c: number) => `${Math.floor(cellX(c) / BLOCK)},${Math.floor(cellZ(c) / BLOCK)}`;
+  const others = cells.filter((c) => blockOf(c) !== blockOf(mid));
+  return { number: blockCenter(mid), sign: blockCenter(nearestCell(others.length > 0 ? others : cells, mx, mz)) };
 }
 
 /** Le quart de tour qui tourne les façades d'une ville vers sa case du plateau (rot 0) */
@@ -216,14 +263,150 @@ export function placedModel(b: Placed, index: number, color: string): { obj: THR
 }
 
 // ---------------------------------------------------------------------------
+// Le fleuve, ses ponts, ses bateaux ; l'avenue et ses voitures
+// ---------------------------------------------------------------------------
+
+/** Les ponts : chacun dans le rectangle de ses cases */
+function bridgeRects(): Rect[] {
+  const seen = new Set<number>();
+  const out: Rect[] = [];
+  CELLS.forEach((cell, c) => {
+    if (cell.kind !== "bridge" || seen.has(c)) return;
+    const group = [c];
+    seen.add(c);
+    for (let q = 0; q < group.length; q++) {
+      for (const n of neighbors(group[q]!)) {
+        if (CELLS[n]!.kind !== "bridge" || seen.has(n)) continue;
+        seen.add(n);
+        group.push(n);
+      }
+    }
+    out.push(boxOf(group));
+  });
+  return out;
+}
+
+/** Un pont de pierre qui enjambe le fleuve (du nord au sud), assez haut pour que les bateaux passent dessous */
+function bridgeModel(r: WRect): THREE.Group {
+  const g = new THREE.Group();
+  const stone = B.mat("#d6ccb8", { rough: 0.85 });
+  const deck = B.mat("#a8a196", { rough: 0.9 });
+  const rail = B.mat("#efe8da", { rough: 0.7 });
+  const w = r.w * 0.86;
+  const top = 0.11;
+  const th = 0.022;
+  const ramp = CELL;
+  const cx = r.x + r.w / 2;
+  const z0 = r.z;
+  const z1 = r.z + r.d;
+  // Le tablier plat au-dessus de l'eau, ses parapets, sa pile au milieu
+  const flat = z1 - z0 - 2 * ramp;
+  g.add(B.box(w, th, flat, deck, cx, top - th, (z0 + z1) / 2));
+  for (const side of [-1, 1]) g.add(B.box(0.014, 0.03, flat, rail, cx + (side * (w - 0.014)) / 2, top, (z0 + z1) / 2));
+  g.add(B.box(w * 0.7, top - th, 0.04, stone, cx, 0, (z0 + z1) / 2));
+  // Les deux rampes, depuis les quais
+  const len = Math.hypot(ramp, top);
+  const tilt = Math.atan2(top, ramp);
+  for (const [z, dir] of [
+    [z0, 1],
+    [z1, -1],
+  ] as const) {
+    const part = new THREE.Group();
+    part.position.set(cx, 0.004, z);
+    part.rotation.x = -tilt * dir;
+    part.add(B.box(w, th, len, deck, 0, -th, (dir * len) / 2));
+    for (const side of [-1, 1]) part.add(B.box(0.014, 0.03, len, rail, (side * (w - 0.014)) / 2, 0, (dir * len) / 2));
+    g.add(part);
+  }
+  // Un réverbère à chaque coin du tablier
+  for (const z of [z0 + ramp, z1 - ramp]) {
+    for (const side of [-1, 1]) {
+      const l = B.lamp();
+      l.scale.setScalar(0.7);
+      l.position.set(cx + (side * (w - 0.014)) / 2, top + 0.03, z);
+      g.add(l);
+    }
+  }
+  return B.shadowed(g);
+}
+
+/** Une péniche : la coque sombre, sa cargaison de sable, la timonerie à l'arrière (l'avant vers +x) */
+function barge(hull: string, cargo: string): THREE.Group {
+  const g = new THREE.Group();
+  const hullMat = B.mat(hull, { rough: 0.6 });
+  g.add(B.box(0.28, 0.024, 0.075, hullMat));
+  g.add(B.box(0.272, 0.004, 0.067, B.mat("#5b4a3a"), 0, 0.024));
+  g.add(B.box(0.15, 0.018, 0.055, B.mat(cargo, { rough: 1 }), 0.025, 0.028));
+  g.add(B.box(0.055, 0.032, 0.055, B.mat("#f3efe5"), -0.1, 0.028));
+  g.add(B.box(0.057, 0.01, 0.057, B.mat("#3d5566", { rough: 0.2, metal: 0.3 }), -0.1, 0.044));
+  g.add(B.box(0.062, 0.006, 0.062, hullMat, -0.1, 0.06));
+  return B.bake(B.shadowed(g));
+}
+
+/** Un bateau de promenade : une coque blanche, une cabine vitrée, un toit plat */
+function tourBoat(): THREE.Group {
+  const g = new THREE.Group();
+  const white = B.mat("#f6f3ec", { rough: 0.5 });
+  g.add(B.box(0.26, 0.022, 0.07, white));
+  g.add(B.box(0.262, 0.006, 0.072, B.mat("#c0392b"), 0, 0.012));
+  g.add(B.box(0.19, 0.026, 0.058, B.mat("#9fc4d6", { rough: 0.15, metal: 0.3 }), -0.01, 0.022));
+  g.add(B.box(0.2, 0.005, 0.062, white, -0.01, 0.048));
+  return B.bake(B.shadowed(g));
+}
+
+/** Un petit bateau à moteur, son pare-brise */
+function motorBoat(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(B.box(0.12, 0.018, 0.048, B.mat("#f6f3ec", { rough: 0.5 })));
+  g.add(B.box(0.122, 0.005, 0.05, B.mat("#2f6fb8"), 0, 0.01));
+  g.add(B.box(0.04, 0.012, 0.036, B.mat("#8a6236"), -0.03, 0.018));
+  const shield = B.box(0.006, 0.018, 0.04, B.mat("#9fc4d6", { rough: 0.15, metal: 0.3 }), 0.012, 0.018);
+  g.add(shield);
+  return B.bake(B.shadowed(g));
+}
+
+/** Une boucle de circulation : deux voies droites (de a0 à a1, de part et d'autre de c) et deux demi-tours de rayon r */
+interface Loop {
+  a0: number;
+  a1: number;
+  c: number;
+  r: number;
+  /** Le long de z (l'avenue) plutôt que de x (le fleuve) */
+  vertical: boolean;
+}
+
+/** Un point d'une boucle, à une distance s du départ, et sa direction */
+function loopPoint(l: Loop, s: number): { x: number; z: number; dx: number; dz: number } {
+  const straight = l.a1 - l.a0;
+  const turn = Math.PI * l.r;
+  let u = ((s % (2 * straight + 2 * turn)) + 2 * straight + 2 * turn) % (2 * straight + 2 * turn);
+  let a: number, b: number, da: number, db: number;
+  if (u < straight) [a, b, da, db] = [l.a0 + u, l.c - l.r, 1, 0];
+  else if ((u -= straight) < turn) {
+    const t = u / l.r;
+    [a, b, da, db] = [l.a1 + l.r * Math.sin(t), l.c - l.r * Math.cos(t), Math.cos(t), Math.sin(t)];
+  } else if ((u -= turn) < straight) [a, b, da, db] = [l.a1 - u, l.c + l.r, -1, 0];
+  else {
+    const t = (u - straight) / l.r;
+    [a, b, da, db] = [l.a0 - l.r * Math.sin(t), l.c + l.r * Math.cos(t), -Math.cos(t), -Math.sin(t)];
+  }
+  return l.vertical ? { x: b, z: a, dx: db, dz: da } : { x: a, z: b, dx: da, dz: db };
+}
+
+/** Une coordonnée en cases, dans le monde */
+const world = (v: number) => -CITY_HALF + v * CELL;
+
+// ---------------------------------------------------------------------------
 // Le sol
 // ---------------------------------------------------------------------------
 
 const GRASS = "#88ad5e";
-const ASPHALT = "#7b7f84";
+const ASPHALT = "#6e7277";
 const SIDEWALK = "#d4ccbb";
-const EARTH = "#cdb68a";
 const PAVING = "#e7decb";
+const WATER = "#3d84b6";
+const QUAY = "#c3baa8";
+const FLOWERS = ["#f2c94c", "#e2453c", "#f6f2e8", "#d36fa8"];
 
 /** Un nombre entre 0 et 1, toujours le même pour une case et un sel */
 const noise = (cell: number, salt: number) => {
@@ -231,67 +414,235 @@ const noise = (cell: number, salt: number) => {
   return v - Math.floor(v);
 };
 
+/** De l'eau : le fleuve, sous ses ponts, et le lac du barrage */
+const isWater = (cell: number) => {
+  const c = CELLS[cell];
+  return c !== undefined && (c.kind === "river" || c.kind === "bridge" || (c.kind === "lot" && c.square === 12));
+};
+
+/** Les quatre côtés d'une case : la voisine, et le bord à tracer (en cases) */
+const SIDES = [
+  { dx: 0, dz: -1, edge: (x: number, z: number) => [x, z, x + 1, z] as const },
+  { dx: 0, dz: 1, edge: (x: number, z: number) => [x, z + 1, x + 1, z + 1] as const },
+  { dx: -1, dz: 0, edge: (x: number, z: number) => [x, z, x, z + 1] as const },
+  { dx: 1, dz: 0, edge: (x: number, z: number) => [x + 1, z, x + 1, z + 1] as const },
+];
+
+/** Le chemin d'un ensemble de cases, pour y découper le dessin (clip) */
+function cellsPath(ctx: CanvasRenderingContext2D, cells: Iterable<number>, k: number) {
+  ctx.beginPath();
+  for (const c of cells) ctx.rect(cellX(c) * k, cellZ(c) * k, k, k);
+}
+
 function drawGround(): HTMLCanvasElement {
   const size = 2048;
   const [canvas, ctx] = makeCanvas(size, size);
   const k = size / MAP;
-  const at = (c: number) => ({ x: cellX(c) * k, y: cellZ(c) * k });
-  const kindAt = (x: number, z: number) => (x >= 0 && z >= 0 && x < MAP && z < MAP ? CELLS[cellIndex(x, z)]!.kind : "garden");
+  const cellOf = (x: number, z: number) => (onMap(x, z) ? cellIndex(x, z) : -1);
   ctx.fillStyle = GRASS;
   ctx.fillRect(0, 0, size, size);
+  // Le fond de chaque case
   CELLS.forEach((cell, c) => {
-    const { x, y } = at(c);
-    if (cell.kind === "street") {
-      ctx.fillStyle = ASPHALT;
-      ctx.fillRect(x, y, k, k);
-      // Le trottoir, là où la rue s'arrête
-      ctx.fillStyle = SIDEWALK;
-      const cx = cellX(c);
-      const cz = cellZ(c);
-      const t = k * 0.14;
-      if (kindAt(cx, cz - 1) !== "street") ctx.fillRect(x, y, k, t);
-      if (kindAt(cx, cz + 1) !== "street") ctx.fillRect(x, y + k - t, k, t);
-      if (kindAt(cx - 1, cz) !== "street") ctx.fillRect(x, y, t, k);
-      if (kindAt(cx + 1, cz) !== "street") ctx.fillRect(x + k - t, y, t, k);
-    } else if (cell.kind === "vague") {
-      ctx.fillStyle = mix(EARTH, "#b49b6c", noise(c, 1) * 0.5);
-      ctx.fillRect(x, y, k, k);
-      // Quelques cailloux et touffes d'herbe sèche
-      for (let n = 0; n < 4; n++) {
-        ctx.fillStyle = n % 2 ? "rgba(120, 100, 60, 0.35)" : "rgba(110, 140, 70, 0.55)";
-        const px = x + noise(c, 10 + n) * k * 0.8 + k * 0.1;
-        const py = y + noise(c, 20 + n) * k * 0.8 + k * 0.1;
+    const x = cellX(c) * k;
+    const y = cellZ(c) * k;
+    if (isWater(c)) ctx.fillStyle = mix(WATER, "#4f97c6", noise(c, 3) * 0.5);
+    else if (cell.kind === "avenue") ctx.fillStyle = ASPHALT;
+    else if (cell.kind === "city") ctx.fillStyle = mix(GROUPS[cell.group!].color, PAVING, 0.7);
+    else if (cell.kind === "reserve") ctx.fillStyle = mix(GROUPS[cell.group!].color, PAVING, 0.86);
+    else if (cell.kind === "lot") ctx.fillStyle = cell.square < 0 ? PAVING : "#d9d0bc";
+    else ctx.fillStyle = mix(GRASS, "#77a050", noise(c, 2));
+    ctx.fillRect(x, y, k + 0.5, k + 0.5);
+    if (cell.kind === "park") {
+      // Les squares : de l'herbe plus ou moins drue, et des fleurs çà et là
+      for (let n = 0; n < 3; n++) {
+        const flower = n === 0 && noise(c, 40) > 0.75;
+        ctx.fillStyle = flower ? FLOWERS[Math.floor(noise(c, 41) * FLOWERS.length)]! : "rgba(70, 110, 45, 0.28)";
         ctx.beginPath();
-        ctx.arc(px, py, k * (0.04 + noise(c, 30 + n) * 0.05), 0, Math.PI * 2);
+        ctx.arc(
+          x + (0.15 + noise(c, 10 + n) * 0.7) * k,
+          y + (0.15 + noise(c, 20 + n) * 0.7) * k,
+          k * (0.04 + noise(c, 30 + n) * 0.06),
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
       }
-    } else if (cell.kind === "city") {
-      const group = SQUARES[cell.square]!.group!;
-      ctx.fillStyle = mix(GROUPS[group].color, PAVING, 0.8);
-      ctx.fillRect(x, y, k, k);
-    } else if (cell.kind === "lot") {
-      ctx.fillStyle = cell.square < 0 ? PAVING : "#d3cab6";
-      ctx.fillRect(x, y, k, k);
-    } else {
-      ctx.fillStyle = mix(GRASS, "#79a052", noise(c, 2));
-      ctx.fillRect(x, y, k, k);
     }
   });
+  // Le fleuve : des reflets, et les quais de pierre là où il touche la terre
+  CELLS.forEach((_, c) => {
+    if (!isWater(c)) return;
+    const cx = cellX(c);
+    const cz = cellZ(c);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.lineWidth = k * 0.035;
+    for (let n = 0; n < 2; n++) {
+      const px = cx * k + noise(c, 50 + n) * k * 0.6;
+      const py = cz * k + (0.25 + noise(c, 60 + n) * 0.5) * k;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.quadraticCurveTo(px + k * 0.15, py - k * 0.05, px + k * 0.32, py);
+      ctx.stroke();
+    }
+    for (const s of SIDES) {
+      const n = cellOf(cx + s.dx, cz + s.dz);
+      if (n < 0 || isWater(n)) continue;
+      const t = k * 0.16;
+      ctx.fillStyle = QUAY;
+      const x = cx * k + (s.dx === 1 ? k - t : 0);
+      const y = cz * k + (s.dz === 1 ? k - t : 0);
+      ctx.fillRect(x, y, s.dx === 0 ? k : t, s.dz === 0 ? k : t);
+      ctx.fillStyle = "rgba(60, 55, 45, 0.35)";
+      const lx = cx * k + (s.dx === 1 ? k - t : s.dx === -1 ? t - k * 0.03 : 0);
+      const ly = cz * k + (s.dz === 1 ? k - t : s.dz === -1 ? t - k * 0.03 : 0);
+      ctx.fillRect(lx, ly, s.dx === 0 ? k : k * 0.03, s.dz === 0 ? k : k * 0.03);
+    }
+  });
+  // L'avenue : ses trottoirs, sa ligne blanche au milieu, ses passages piétons au bord de la place
+  CELLS.forEach((cell, c) => {
+    if (cell.kind !== "avenue") return;
+    const cx = cellX(c);
+    const cz = cellZ(c);
+    for (const s of SIDES) {
+      const n = cellOf(cx + s.dx, cz + s.dz);
+      if (s.dz !== 0 || (n >= 0 && CELLS[n]!.kind === "avenue")) continue;
+      const t = k * 0.2;
+      ctx.fillStyle = SIDEWALK;
+      ctx.fillRect(cx * k + (s.dx === 1 ? k - t : 0), cz * k, t, k);
+    }
+    const n = cellOf(cx, cz + 1);
+    const p = cellOf(cx, cz - 1);
+    for (const end of [n, p]) {
+      if (end < 0 || CELLS[end]!.kind !== "lot") continue;
+      // Les bandes blanches du passage piéton, sur la dernière case avant la place
+      ctx.fillStyle = "rgba(250, 250, 245, 0.85)";
+      const y = cz * k + (end === n ? k * 0.55 : k * 0.15);
+      for (let b = 0; b < 4; b++) ctx.fillRect(cx * k + k * 0.08 + b * k * 0.24, y, k * 0.13, k * 0.3);
+    }
+  });
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+  ctx.lineWidth = k * 0.06;
+  ctx.setLineDash([k * 0.35, k * 0.3]);
+  for (let x = 0; x + 1 < MAP; x++) {
+    let start = -1;
+    for (let z = 0; z <= MAP; z++) {
+      const both = z < MAP && CELLS[cellIndex(x, z)]!.kind === "avenue" && CELLS[cellIndex(x + 1, z)]!.kind === "avenue";
+      if (both && start < 0) start = z;
+      if (both || start < 0) continue;
+      ctx.beginPath();
+      ctx.moveTo((x + 1) * k, (start + 0.5) * k);
+      ctx.lineTo((x + 1) * k, (z - 0.5) * k);
+      ctx.stroke();
+      start = -1;
+    }
+  }
+  ctx.setLineDash([]);
+  // La réserve de chaque quartier, hachurée à sa couleur
+  for (const g of GROUP_ORDER) {
+    const reserve = DISTRICT_CELLS[g].filter((c) => CELLS[c]!.kind === "reserve");
+    ctx.save();
+    cellsPath(ctx, reserve, k);
+    ctx.clip();
+    ctx.strokeStyle = mix(GROUPS[g].color, "#ffffff", 0.15);
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = k * 0.06;
+    ctx.beginPath();
+    for (let d = -size; d < size; d += k * 0.3) {
+      ctx.moveTo(d, 0);
+      ctx.lineTo(d + size, size);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
   // Le quadrillage, sur ce qui se bâtit ou s'annexe : on voit les cases
   ctx.lineWidth = Math.max(1, k * 0.03);
   CELLS.forEach((cell, c) => {
-    if (cell.kind !== "city" && cell.kind !== "vague") return;
-    const { x, y } = at(c);
-    ctx.strokeStyle = cell.kind === "city" ? "rgba(90, 70, 40, 0.22)" : "rgba(90, 70, 40, 0.16)";
-    ctx.strokeRect(x + 0.5, y + 0.5, k - 1, k - 1);
+    if (cell.kind !== "city" && cell.kind !== "reserve") return;
+    ctx.strokeStyle = cell.kind === "city" ? "rgba(70, 55, 35, 0.2)" : "rgba(70, 55, 35, 0.12)";
+    ctx.strokeRect(cellX(c) * k + 0.5, cellZ(c) * k + 0.5, k - 1, k - 1);
   });
-  // La frontière de départ de chaque ville, à la couleur de son quartier
-  ctx.lineWidth = k * 0.09;
-  for (const [sq, r] of Object.entries(TERRITORIES)) {
-    ctx.strokeStyle = mix(GROUPS[SQUARES[Number(sq)]!.group!].color, "#000000", 0.15);
-    ctx.strokeRect(r.x * k + ctx.lineWidth / 2, r.z * k + ctx.lineWidth / 2, r.w * k - ctx.lineWidth, r.d * k - ctx.lineWidth);
+  // Les limites des parcelles : un trait blanc entre deux villes, un trait fin de couleur au bord de la réserve
+  CELLS.forEach((cell, c) => {
+    if (cell.kind !== "city") return;
+    const cx = cellX(c);
+    const cz = cellZ(c);
+    for (const s of SIDES) {
+      const n = cellOf(cx + s.dx, cz + s.dz);
+      if (n < 0) continue;
+      const other = CELLS[n]!;
+      if (other.group !== cell.group || (other.kind === "city" && other.square === cell.square)) continue;
+      const [x0, z0, x1, z1] = s.edge(cx, cz);
+      ctx.strokeStyle = other.kind === "city" ? "rgba(255, 255, 255, 0.95)" : mix(GROUPS[cell.group!].color, "#000000", 0.2);
+      ctx.lineWidth = other.kind === "city" ? k * 0.09 : k * 0.045;
+      ctx.beginPath();
+      ctx.moveTo(x0 * k, z0 * k);
+      ctx.lineTo(x1 * k, z1 * k);
+      ctx.stroke();
+    }
+  });
+  // Le liseré de chaque quartier, à sa couleur, avec un halo vers l'intérieur
+  for (const g of GROUP_ORDER) {
+    const cells = new Set(DISTRICT_CELLS[g]);
+    const color = GROUPS[g].color;
+    ctx.save();
+    cellsPath(ctx, cells, k);
+    ctx.clip();
+    ctx.beginPath();
+    for (const c of cells) {
+      const cx = cellX(c);
+      const cz = cellZ(c);
+      for (const s of SIDES) {
+        const n = cellOf(cx + s.dx, cz + s.dz);
+        if (n >= 0 && cells.has(n)) continue;
+        const [x0, z0, x1, z1] = s.edge(cx, cz);
+        ctx.moveTo(x0 * k, z0 * k);
+        ctx.lineTo(x1 * k, z1 * k);
+      }
+    }
+    ctx.lineCap = "square";
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = k * 1.1;
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = k * 0.55;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = k * 0.26;
+    ctx.stroke();
+    ctx.restore();
   }
-  // La place : un dallage en couronne autour du milieu
+  // Le numéro de chaque parcelle (1, 2, 3), comme sur sa case du plateau
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const sq of MAP_CITIES) {
+    const p = parcelSpots(sq).number;
+    const x = ((p.x + CITY_HALF) / CELL) * k;
+    const y = ((p.z + CITY_HALF) / CELL) * k;
+    const color = GROUPS[SQUARES[sq]!.group!].color;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.arc(x + k * 0.05, y + k * 0.07, k * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = mix(color, "#000000", 0.12);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = k * 0.12;
+    ctx.beginPath();
+    ctx.arc(x, y, k * 0.58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `800 ${Math.round(k * 0.78)}px "Big Shoulders Display Variable", Impact, sans-serif`;
+    ctx.fillText(String(parcelNumber(sq)), x, y + k * 0.04);
+  }
+  // Les lots (gares, réseaux, impôts, péage, banque) : un dallage bordé
+  ctx.strokeStyle = "rgba(120, 105, 80, 0.45)";
+  ctx.lineWidth = k * 0.06;
+  for (const l of LOTS) {
+    if (l.kind === "plaza" || l.square === 12) continue;
+    ctx.strokeRect(l.x * k + k * 0.08, l.z * k + k * 0.08, l.w * k - k * 0.16, l.d * k - k * 0.16);
+  }
+  // La place : un dallage en couronne autour du milieu, posée sur le fleuve
   const plaza = LOTS.find((l) => l.kind === "plaza")!;
   const pc = { x: (plaza.x + plaza.w / 2) * k, y: (plaza.z + plaza.d / 2) * k };
   ctx.strokeStyle = "rgba(150, 120, 80, 0.35)";
@@ -301,22 +652,9 @@ function drawGround(): HTMLCanvasElement {
     ctx.arc(pc.x, pc.y, plaza.w * k * r, 0, Math.PI * 2);
     ctx.stroke();
   }
-  // Les lignes blanches de la rocade intérieure
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-  ctx.lineWidth = k * 0.05;
-  ctx.setLineDash([k * 0.3, k * 0.3]);
-  for (const [x0, y0, x1, y1] of [
-    [7.5, 7.5, 27.5, 7.5],
-    [7.5, 30.5, 27.5, 30.5],
-    [7.5, 7.5, 7.5, 30.5],
-    [27.5, 7.5, 27.5, 30.5],
-  ] as const) {
-    ctx.beginPath();
-    ctx.moveTo(x0 * k, y0 * k);
-    ctx.lineTo(x1 * k, y1 * k);
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(120, 100, 70, 0.5)";
+  ctx.lineWidth = k * 0.1;
+  ctx.strokeRect(plaza.x * k + k * 0.05, plaza.z * k + k * 0.05, plaza.w * k - k * 0.1, plaza.d * k - k * 0.1);
   return canvas;
 }
 
@@ -362,6 +700,8 @@ interface CityObj {
   shown: Placed[];
 }
 
+let mortgageTex: THREE.CanvasTexture | null = null;
+
 const TONES: Record<BuilderPreview["cells"][number]["tone"], [string, number]> = {
   ok: ["#43c463", 0.55],
   bad: ["#e5483d", 0.6],
@@ -381,6 +721,10 @@ export class BuilderCity {
   /** Ce qui tourne (les éoliennes) et l'eau du barrage */
   readonly rotors: { obj: THREE.Object3D; speed: number }[] = [];
   water: THREE.Mesh | null = null;
+  /** Les bateaux sur le fleuve, les voitures sur l'avenue : chacun sur sa boucle */
+  private boats: { obj: THREE.Object3D; loop: Loop; s0: number; speed: number }[] = [];
+  private cars: { loop: Loop; s0: number; speed: number }[] = [];
+  private fleet: B.CarFleet | null = null;
   /** Les gares et les réseaux : un repère à leur place, pour le drapeau et la palissade de leur propriétaire */
   readonly lotRoots = new Map<number, THREE.Group>();
   private hooks: BuilderHooks;
@@ -408,9 +752,12 @@ export class BuilderCity {
     ground.name = "builder-ground";
     this.pickable = ground;
     this.root.add(ground);
+    this.addRiver();
     this.addLots();
-    this.addGardens();
-    for (const sq of Object.keys(TERRITORIES).map(Number)) {
+    this.addParks();
+    this.addDistricts();
+    this.addTraffic();
+    for (const sq of MAP_CITIES) {
       const obj: CityObj = {
         square: sq,
         baked: null,
@@ -422,11 +769,11 @@ export class BuilderCity {
         fence: null,
         shown: [],
       };
-      // Le panneau « à vendre », au milieu du territoire
-      const r = rectWorld(TERRITORIES[sq]!);
+      // Le panneau « à vendre », sur sa parcelle, à côté de son numéro
+      const spot = parcelSpots(sq).sign;
       const sale = B.forSale();
       sale.scale.setScalar(0.62);
-      sale.position.set(r.x + r.w / 2, 0, r.z + r.d / 2);
+      sale.position.set(spot.x, 0, spot.z);
       this.root.add(sale);
       obj.sale = sale;
       this.cities.set(sq, obj);
@@ -456,10 +803,11 @@ export class BuilderCity {
         }
         case "utility":
           if (l.square === 12) {
+            // Le barrage tient la tête du fleuve : son lac, c'est le fleuve lui-même
             const dam = B.dam();
-            dam.water.userData.keep = true;
+            dam.water.visible = false;
+            dam.group.rotation.y = Math.PI / 2;
             fit(dam.group);
-            this.water = dam.water;
           } else {
             for (const [x, z, h] of [
               [-0.3, 0.25, 0.85],
@@ -521,20 +869,104 @@ export class BuilderCity {
     }
   }
 
-  /** Quelques arbres sur les jardins, jamais deux de suite */
-  private addGardens() {
+  /** Le fleuve : une eau qui brille sur ses cases (le lac du barrage compris), et ses ponts */
+  private addRiver() {
+    const cells = CELLS.flatMap((_, c) => (isWater(c) ? [c] : []));
+    const geo = BuilderCity.veil(cells, 0.008);
+    if (geo) {
+      const water = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({
+          color: "#3f8fc4",
+          roughness: 0.08,
+          metalness: 0.35,
+          transparent: true,
+          opacity: 0.7,
+          depthWrite: false,
+        }),
+      );
+      water.receiveShadow = true;
+      water.renderOrder = 1;
+      this.root.add(water);
+      this.water = water;
+    }
+    for (const r of bridgeRects()) this.decor.add(bridgeModel(rectWorld(r)));
+  }
+
+  /** Les squares : des arbres, plus ou moins serrés ; l'avenue bordée d'arbres d'alignement */
+  private addParks() {
     const spots: { x: number; z: number; s: number; kind: number }[] = [];
     CELLS.forEach((cell, c) => {
-      if (cell.kind !== "garden" || noise(c, 5) > 0.42) return;
+      if (cell.kind !== "park" || noise(c, 5) > 0.55) return;
       const p = cellCenter(c);
       spots.push({
-        x: p.x + (noise(c, 6) - 0.5) * CELL * 0.4,
-        z: p.z + (noise(c, 7) - 0.5) * CELL * 0.4,
-        s: 0.55 + noise(c, 8) * 0.3,
-        kind: noise(c, 9) > 0.7 ? 1 : 0,
+        x: p.x + (noise(c, 6) - 0.5) * CELL * 0.45,
+        z: p.z + (noise(c, 7) - 0.5) * CELL * 0.45,
+        s: 0.5 + noise(c, 8) * 0.35,
+        kind: noise(c, 9) > 0.72 ? 1 : 0,
       });
     });
+    CELLS.forEach((cell, c) => {
+      if (cell.kind !== "avenue" || cellZ(c) % 2 !== 0) return;
+      const x = cellX(c);
+      const outer = onMap(x - 1, cellZ(c)) && CELLS[cellIndex(x - 1, cellZ(c))]!.kind === "avenue" ? 1 : -1;
+      const p = cellCenter(c);
+      spots.push({ x: p.x + outer * CELL * 0.4, z: p.z + CELL * 0.5, s: 0.34, kind: 0 });
+    });
     this.decor.add(B.trees(spots));
+  }
+
+  /** Le liseré lumineux de chaque quartier, à sa couleur, tout autour de ses parcelles et de sa réserve */
+  private addDistricts() {
+    for (const g of GROUP_ORDER) {
+      const geo = BuilderCity.border(new Set(DISTRICT_CELLS[g]), 0.026, 0.006);
+      if (!geo) continue;
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: mix(GROUPS[g].color, "#ffffff", 0.2) }));
+      m.position.y = 0.004;
+      this.decor.add(m);
+    }
+  }
+
+  /** Les bateaux qui font des ronds sur le fleuve (de part et d'autre de la place), les voitures sur l'avenue */
+  private addTraffic() {
+    const river = (a0: number, a1: number): Loop => ({ a0: world(a0), a1: world(a1), c: world(20), r: 0.75 * CELL, vertical: false });
+    const west = river(3.1, 12.9);
+    const east = river(25.1, 36.9);
+    const fleet: [THREE.Group, Loop, number, number][] = [
+      [barge("#3b3a3f", "#d8b872"), west, 0, 0.11],
+      [motorBoat(), west, 2.6, 0.16],
+      [tourBoat(), east, 0, 0.12],
+      [barge("#7a2f2a", "#8d8a84"), east, 3.1, 0.1],
+    ];
+    for (const [obj, loop, s0, speed] of fleet) {
+      this.root.add(obj);
+      this.boats.push({ obj, loop, s0, speed });
+    }
+    // L'avenue : deux tronçons, de la place au bord de la carte, quatre voitures chacun (on roule à droite)
+    const avenue = (a0: number, a1: number): Loop => ({ a0: world(a0), a1: world(a1), c: world(19), r: 0.4 * CELL, vertical: true });
+    const colors = ["#d6433a", "#f2f2ee", "#2f5bb8", "#e8b12f", "#3c3f44", "#2fa864", "#e07a3a", "#9fb4c4"];
+    [avenue(0.8, 13.2), avenue(24.8, 37.2)].forEach((loop, n) => {
+      const length = 2 * (loop.a1 - loop.a0) + 2 * Math.PI * loop.r;
+      for (let k = 0; k < 4; k++) this.cars.push({ loop, s0: (k / 4) * length + n * 0.3, speed: 0.3 + ((k * 7 + n * 3) % 5) * 0.02 });
+    });
+    this.fleet = new B.CarFleet(colors);
+    this.root.add(...this.fleet.meshes);
+    this.animate(0);
+  }
+
+  /** À chaque image (sauf mouvements réduits) : les bateaux sur le fleuve, les voitures sur l'avenue */
+  animate(time: number) {
+    for (const b of this.boats) {
+      const p = loopPoint(b.loop, b.s0 + time * b.speed);
+      b.obj.position.set(p.x, 0.007 + Math.sin(time * 1.8 + b.s0) * 0.0015, p.z);
+      b.obj.rotation.y = Math.atan2(-p.dz, p.dx);
+    }
+    if (!this.fleet) return;
+    this.cars.forEach((c, k) => {
+      const p = loopPoint(c.loop, c.s0 + time * c.speed);
+      this.fleet!.place(k, p.x, p.z, Math.atan2(p.dx, p.dz));
+    });
+    this.fleet.commit();
   }
 
   /** Où sont les cartes, la banque : pour la scène */
@@ -554,24 +986,44 @@ export class BuilderCity {
     return rectWorld({ x: x0, z: z0, w: Math.max(...xs) - x0 + 1, d: Math.max(...zs) - z0 + 1 });
   }
 
-  /** La frontière d'un ensemble de cases : des baguettes le long des bords qui ne touchent pas une autre case du lot */
-  static border(cells: Set<number>, t: number, h: number): THREE.BufferGeometry | null {
+  /** Le milieu d'une ville (avec ce qu'elle a annexé) : la case la plus centrale, dans le monde */
+  areaCenter(square: number, deed: Deed | null | undefined): THREE.Vector3 {
+    const p = cellCenter(middleCell([...baseCells(square), ...(deed?.annexed ?? [])]));
+    return new THREE.Vector3(p.x, 0, p.z);
+  }
+
+  /**
+   * La frontière d'un ensemble de cases : des baguettes de largeur t le long des bords qui ne touchent pas une autre case
+   * de l'ensemble, à « inset » du bord, qui se rejoignent dans les coins, saillants comme rentrants
+   */
+  static border(cells: Set<number>, t: number, h: number, inset = 0): THREE.BufferGeometry | null {
     const geos: THREE.BufferGeometry[] = [];
+    const inside = (x: number, z: number) => onMap(x, z) && cells.has(cellIndex(x, z));
     for (const c of cells) {
       const p = cellCenter(c);
       const x = cellX(c);
       const z = cellZ(c);
-      const sides: [number, number, number, number][] = [
-        [x, z - 1, 0, -1],
-        [x, z + 1, 0, 1],
-        [x - 1, z, -1, 0],
-        [x + 1, z, 1, 0],
-      ];
-      for (const [nx, nz, dx, dz] of sides) {
-        const inside = nx >= 0 && nz >= 0 && nx < MAP && nz < MAP && cells.has(cellIndex(nx, nz));
-        if (inside) continue;
-        const geo = new THREE.BoxGeometry(dx === 0 ? CELL + t : t, h, dz === 0 ? CELL + t : t);
-        geo.translate(p.x + (dx * (CELL - t)) / 2, h / 2, p.z + (dz * (CELL - t)) / 2);
+      for (const [dx, dz] of [
+        [0, -1],
+        [0, 1],
+        [-1, 0],
+        [1, 0],
+      ] as const) {
+        if (inside(x + dx, z + dz)) continue;
+        // Le bord court le long de (ex, ez) ; à chaque bout, il continue tout droit, tourne (coin saillant) ou rentre
+        const ex = dz !== 0 ? 1 : 0;
+        const ez = dx !== 0 ? 1 : 0;
+        const reach = (sign: number) => {
+          const nx = x + ex * sign;
+          const nz = z + ez * sign;
+          if (!inside(nx, nz)) return -inset;
+          return inside(nx + dx, nz + dz) ? inset + t : 0;
+        };
+        const lo = -CELL / 2 - reach(-1);
+        const hi = CELL / 2 + reach(1);
+        const off = CELL / 2 - inset - t / 2;
+        const geo = new THREE.BoxGeometry(ex ? hi - lo : t, h, ez ? hi - lo : t);
+        geo.translate(p.x + dx * off + (ex * (lo + hi)) / 2, h / 2, p.z + dz * off + (ez * (lo + hi)) / 2);
         geos.push(geo);
       }
     }
@@ -579,6 +1031,30 @@ export class BuilderCity {
     const merged = mergeGeometries(geos, false);
     for (const g of geos) g.dispose();
     return merged;
+  }
+
+  /** Une palissade de chantier qui suit la frontière d'une ville (elle est hypothéquée), et son panneau */
+  static fenceAlong(cells: Set<number>, spot: { x: number; z: number }): THREE.Group {
+    const g = new THREE.Group();
+    const panels = BuilderCity.border(cells, 0.01, 0.08, 0.012);
+    const stripe = BuilderCity.border(cells, 0.013, 0.014, 0.0105);
+    if (panels) g.add(new THREE.Mesh(panels, B.mat("#f1eee6", { rough: 0.7 })));
+    if (stripe) {
+      const m = new THREE.Mesh(stripe, B.mat("#e07b2c"));
+      m.position.y = 0.045;
+      g.add(m);
+    }
+    mortgageTex ??= signTexture("HYPOTHÉQUÉ", "#f2c230", "#2b2418", 320, 80);
+    const post = B.mat("#8a6a48");
+    const face = new THREE.MeshStandardMaterial({ map: mortgageTex, roughness: 0.6 });
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.075, 0.01), [post, post, post, post, face, face]);
+    board.position.set(spot.x, 0.07, spot.z + 0.07);
+    g.add(
+      board,
+      B.box(0.012, 0.07, 0.012, post, spot.x - 0.12, 0, spot.z + 0.07),
+      B.box(0.012, 0.07, 0.012, post, spot.x + 0.12, 0, spot.z + 0.07),
+    );
+    return B.shadowed(g, false, false);
   }
 
   /** Un voile à plat sur des cases */
@@ -667,27 +1143,24 @@ export class BuilderCity {
           m.userData.ownerVeil = true;
           g.add(m);
         }
-        const line = BuilderCity.border(area, 0.034, 0.018);
+        const line = BuilderCity.border(area, 0.03, 0.018, 0.026);
         if (line) {
           const m = new THREE.Mesh(line, B.mat(color, { rough: 0.5 }));
           m.receiveShadow = true;
           g.add(m);
         }
-        // Le drapeau, au coin du territoire le plus proche du plateau
-        const r = rectWorld(TERRITORIES[o.square]!);
-        const side = sideOfSquare(o.square);
+        // Le drapeau, à la place du panneau « à vendre »
+        const spot = parcelSpots(o.square).sign;
         const flag = B.flag(color);
         flag.scale.setScalar(0.62);
-        const fx = side === "left" ? r.x + CELL * 0.35 : r.x + r.w - CELL * 0.35;
-        const fz = side === "top" ? r.z + CELL * 0.35 : r.z + r.d - CELL * 0.35;
-        flag.position.set(fx, 0, fz);
+        flag.position.set(spot.x, 0, spot.z);
         g.add(flag);
         this.hooks.flag(flag.getObjectByName("cloth")!);
         this.root.add(g);
         o.owned = g;
         if (animate && !grew) {
           this.hooks.popIn(flag);
-          this.hooks.lookAt(new THREE.Vector3(r.x + r.w / 2, 0, r.z + r.d / 2));
+          this.hooks.lookAt(new THREE.Vector3(spot.x, 0, spot.z));
         }
       }
       if (o.sale) o.sale.visible = owner === null;
@@ -698,9 +1171,7 @@ export class BuilderCity {
       if (o.fence) this.hooks.remove(o.fence, animate);
       o.fence = null;
       if (mortgaged) {
-        const r = this.areaBox(o.square, d as Deed);
-        const fence = B.fence(r.w, r.d);
-        fence.position.set(r.x + r.w / 2, 0, r.z + r.d / 2);
+        const fence = BuilderCity.fenceAlong(area, parcelSpots(o.square).sign);
         this.root.add(fence);
         if (animate) this.hooks.popIn(fence);
         o.fence = fence;

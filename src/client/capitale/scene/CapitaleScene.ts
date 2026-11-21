@@ -9,7 +9,7 @@ import * as LM from "./landmarks.ts";
 import * as S from "./streets.ts";
 import * as C from "./city.ts";
 import { BuilderCity, cellAt, type BuilderPreview } from "./builderCity.ts";
-import { baseCells, TERRITORIES } from "../../../shared/games/capitale/builderMap.ts";
+import { baseCells, CELLS, isMapCity, MAP_CITIES } from "../../../shared/games/capitale/builderMap.ts";
 import type { Placed } from "../../../shared/games/capitale/builder.ts";
 import { tokenModel } from "./tokens.ts";
 import { DIE, diceMeshes, restingQuaternion, simulateThrow, type Throw } from "./dice.ts";
@@ -291,7 +291,7 @@ export class CapitaleScene {
     // Le plateau : une toile en haute définition, filtrée de biais pour rester nette même vue de loin
     const size = Math.min(this.renderer.capabilities.maxTextureSize, opts.phone ? 2048 : 4096);
     [this.boardCanvas] = makeCanvas(size, size);
-    drawBoard(this.boardCanvas, 0);
+    drawBoard(this.boardCanvas, 0, Boolean(opts.builder));
     this.boardTex = new THREE.CanvasTexture(this.boardCanvas);
     this.boardTex.colorSpace = THREE.SRGBColorSpace;
     this.boardTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -299,7 +299,7 @@ export class CapitaleScene {
     this.boardTex.minFilter = THREE.LinearMipmapLinearFilter;
     void fontsReady().then(() => {
       if (this.disposed) return;
-      drawBoard(this.boardCanvas, this.drawnRot);
+      drawBoard(this.boardCanvas, this.drawnRot, Boolean(this.opts.builder));
       this.boardTex.needsUpdate = true;
     });
     this.addBoard();
@@ -1050,12 +1050,12 @@ export class CapitaleScene {
       this.marker.position.set(parcel.center.x, 1, parcel.center.z);
     }
     // Builder : le territoire de la ville, entouré d'or
-    if (this.builder && h !== null && TERRITORIES[h]) {
+    if (this.builder && h !== null && isMapCity(h)) {
       this.highlightRing = this.areaRing(h, "#ffb000", 0.08, 0.9);
       if (this.highlightRing) this.scene.add(this.highlightRing);
-      const box = this.builder.areaBox(h, this.state?.deeds[h] as never);
+      const mid = this.builder.areaCenter(h, this.state?.deeds[h] as never);
       this.marker.visible = true;
-      this.marker.position.set(box.x + box.w / 2, 1, box.z + box.d / 2);
+      this.marker.position.set(mid.x, 1, mid.z);
     }
     const hv = this.hover && this.hover.square !== h ? this.hover : null;
     this.hoverFrame.visible = hv !== null;
@@ -1070,7 +1070,7 @@ export class CapitaleScene {
       this.hoverRing = this.parcelRing(hp, "#46a8ff", 0.07, 0.85);
       this.scene.add(this.hoverRing);
     }
-    if (this.builder && hv && TERRITORIES[hv.square] && !this.building) {
+    if (this.builder && hv && isMapCity(hv.square) && !this.building) {
       this.hoverRing = this.areaRing(hv.square, "#46a8ff", 0.06, 0.85);
       if (this.hoverRing) this.scene.add(this.hoverRing);
     }
@@ -1109,19 +1109,16 @@ export class CapitaleScene {
 
   /** La caméra va voir une ville : son territoire bien au milieu, d'assez près pour bâtir */
   focusCity(square: number) {
-    if (!this.builder || !TERRITORIES[square]) return;
+    if (!this.builder || !isMapCity(square)) return;
     const box = this.builder.areaBox(square, this.state?.deeds[square] as never);
     const size = Math.max(box.w, box.d);
+    const mid = this.builder.areaCenter(square, this.state?.deeds[square] as never);
     const zoom = THREE.MathUtils.clamp((size * (this.opts.phone ? 2.6 : 2.2)) / (L.BOARD + 1), ZOOM_MIN_BUILDER, 1);
     this.zoom = zoom;
     // Le chantier occupe le bas de l'écran : la ville se montre au-dessus (la cible avance vers la caméra)
     const yaw = this.targetYaw();
     const lift = size * (this.opts.phone ? 0.75 : 0.45);
-    this.pan.set(
-      box.x + box.w / 2 + Math.sin(yaw) * lift - this.baseTarget.x,
-      0,
-      box.z + box.d / 2 + Math.cos(yaw) * lift - this.baseTarget.z,
-    );
+    this.pan.set(mid.x + Math.sin(yaw) * lift - this.baseTarget.x, 0, mid.z + Math.cos(yaw) * lift - this.baseTarget.z);
     this.clampPan();
     this.closeUp = null;
     this.pendingFollow = null;
@@ -1434,6 +1431,7 @@ export class CapitaleScene {
     for (const c of this.cars) c.s += c.speed * dt * (c.reverse ? -1 : 1);
     this.placeCars();
     for (const r of this.rotors) r.obj.rotation.z -= r.speed * dt;
+    this.builder?.animate(this.time);
     this.flags.forEach((f, k) => (f.rotation.y = Math.sin(this.time * 2.2 + k) * 0.35));
     if (this.water) {
       const m = this.water.material as THREE.MeshStandardMaterial;
@@ -1554,7 +1552,7 @@ export class CapitaleScene {
     this.yaw += (want - this.yaw) * (1 - Math.exp(-dt * 5));
     if (!rotating && this.drawnRot !== this.rot) {
       this.drawnRot = this.rot;
-      drawBoard(this.boardCanvas, this.rot);
+      drawBoard(this.boardCanvas, this.rot, Boolean(this.opts.builder));
       this.boardTex.needsUpdate = true;
     }
     if (rotating) this.fit();
@@ -1862,7 +1860,7 @@ export class CapitaleScene {
       });
     }
     if (this.builder) {
-      for (const i of Object.keys(TERRITORIES).map(Number)) {
+      for (const i of MAP_CITIES) {
         const on = kept(i);
         for (const root of this.builder.cityObjects(i)) {
           root.traverse((o) => {
@@ -1970,11 +1968,8 @@ export class CapitaleScene {
   /** Builder : la ville (ou la gare, le réseau) d'une case de la carte, annexions comprises */
   private squareOfCell(cell: number | null): number | null {
     if (cell === null) return null;
-    for (const [sq, r] of Object.entries(TERRITORIES)) {
-      const x = cell % 36;
-      const z = Math.floor(cell / 36);
-      if (x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) return Number(sq);
-    }
+    const c = CELLS[cell];
+    if (c && (c.kind === "city" || c.kind === "lot") && c.square >= 0) return c.square;
     for (const [sq, d] of Object.entries(this.state?.deeds ?? {})) if (d.annexed?.includes(cell)) return Number(sq);
     return null;
   }

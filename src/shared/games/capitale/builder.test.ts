@@ -14,7 +14,20 @@ import {
   rentScale,
   type BuildKind,
 } from "./builder.ts";
-import { baseSize, CELLS, cellIndex, LOTS, MAP, maxAnnex, rectCells, STREETS, TERRITORIES } from "./builderMap.ts";
+import {
+  baseCells,
+  baseSize,
+  CELLS,
+  cellIndex,
+  DISTRICT_CELLS,
+  LOTS,
+  MAP,
+  MAP_CITIES,
+  maxAnnex,
+  neighbors,
+  parcelNumber,
+  rectCells,
+} from "./builderMap.ts";
 import { botAction, botAnswer, botBid } from "./bot.ts";
 import {
   actorOf,
@@ -77,45 +90,95 @@ const PARIS = 39;
 const LYON = 37;
 const GUERET = 1;
 
+/** Des cases d'un seul tenant (par les bords) ? */
+function connected(cells: number[]): boolean {
+  const set = new Set(cells);
+  const seen = new Set([cells[0]!]);
+  const queue = [cells[0]!];
+  while (queue.length > 0) for (const n of neighbors(queue.pop()!)) if (set.has(n) && !seen.has(n)) (seen.add(n), queue.push(n));
+  return seen.size === set.size;
+}
+
 describe("la carte", () => {
-  it("chaque ville a son territoire, à la taille de son prix, sans chevauchement", () => {
+  it("chaque ville a sa parcelle, à la taille de son prix, d'un seul tenant, dans son quartier", () => {
     const sizeOf = (price: number) =>
-      price <= 60 ? 9 : price <= 120 ? 12 : price <= 160 ? 16 : price <= 220 ? 20 : price <= 280 ? 25 : price <= 350 ? 30 : 36;
+      price <= 60
+        ? 8
+        : price <= 120
+          ? 12
+          : price <= 160
+            ? 16
+            : price <= 220
+              ? 20
+              : price <= 260
+                ? 24
+                : price <= 300
+                  ? 28
+                  : price <= 350
+                    ? 32
+                    : 36;
     const cities = SQUARES.filter((s) => s.kind === "property");
-    expect(Object.keys(TERRITORIES).map(Number).sort()).toEqual(cities.map((s) => s.index).sort());
-    for (const sq of cities) expect(baseSize(sq.index), sq.name).toBe(sizeOf(sq.price!));
-    expect(baseSize(1)).toBe(9);
-    expect(baseSize(PARIS)).toBe(36);
-    const seen = new Set<number>();
-    for (const r of [...Object.values(TERRITORIES), ...LOTS]) {
-      for (const c of rectCells(r)) {
-        expect(c).toBeLessThan(MAP * MAP);
-        expect(seen.has(c)).toBe(false);
-        seen.add(c);
-      }
+    expect(MAP_CITIES).toEqual(cities.map((s) => s.index));
+    for (const sq of cities) {
+      expect(baseSize(sq.index), sq.name).toBe(sizeOf(sq.price!));
+      expect(connected(baseCells(sq.index)), sq.name).toBe(true);
+      for (const c of baseCells(sq.index)) expect(CELLS[c]!.group, sq.name).toBe(sq.group);
     }
-    for (const r of STREETS) for (const c of rectCells(r)) expect(CELLS[c]!.kind === "city").toBe(false);
+    expect(baseSize(GUERET)).toBe(8);
+    expect(baseSize(PARIS)).toBe(36);
+    // Chaque quartier (ses parcelles et sa réserve) est d'un seul tenant, et ses villes sont numérotées dans l'ordre
+    for (const [g, group] of Object.entries(GROUPS)) {
+      expect(connected(DISTRICT_CELLS[g as keyof typeof GROUPS]), g).toBe(true);
+      group.squares.forEach((i, k) => expect(parcelNumber(i)).toBe(k + 1));
+    }
+    expect(parcelNumber(PARIS)).toBe(2);
+    expect(parcelNumber(5)).toBe(0);
   });
 
-  it("toute ville touche du terrain vague, de quoi s'agrandir de moitié", () => {
+  it("un fleuve d'un bord à l'autre, une avenue de haut en bas, et les lots des cases qui ne se bâtissent pas", () => {
+    // Le fleuve (et ses ponts) coupe la carte par le milieu ; la place des dés est dessus, au centre
+    for (let x = 0; x < MAP; x++) expect(["river", "bridge", "lot"]).toContain(CELLS[cellIndex(x, MAP / 2)]!.kind);
+    for (let z = 0; z < MAP; z++) expect(["avenue", "lot"]).toContain(CELLS[cellIndex(MAP / 2, z)]!.kind);
+    expect(CELLS.filter((c) => c.kind === "bridge").length).toBeGreaterThanOrEqual(8);
+    expect(CELLS.filter((c) => c.kind === "park").length).toBeGreaterThan(100);
+    const plaza = LOTS.find((l) => l.kind === "plaza")!;
+    expect(plaza.x + plaza.w / 2).toBe(MAP / 2);
+    expect(plaza.z + plaza.d / 2).toBe(MAP / 2);
+    const squares = (kind: string) =>
+      LOTS.filter((l) => l.kind === kind)
+        .map((l) => l.square)
+        .sort((a, b) => a - b);
+    expect(squares("station")).toEqual([5, 15, 25, 35]);
+    expect(squares("utility")).toEqual([12, 28]);
+    expect(squares("tax")).toEqual([4]);
+    expect(squares("toll")).toEqual([38]);
+    for (const l of LOTS) for (const c of rectCells(l)) expect(CELLS[c]!.kind, l.kind).toBe("lot");
+  });
+
+  it("toute ville touche la réserve de son quartier, de quoi s'agrandir de moitié", () => {
     const s = game();
-    for (const i of Object.keys(TERRITORIES).map(Number)) {
+    for (const i of MAP_CITIES) {
       own(s, "a", i);
+      const group = SQUARES[i]!.group;
       expect(annexable(s, i).length, SQUARES[i]!.name).toBeGreaterThan(0);
-      // Le terrain vague qu'elle atteint de proche en proche suffit à grandir de moitié
+      for (const c of annexable(s, i)) expect(CELLS[c]).toMatchObject({ kind: "reserve", group });
+      // La réserve qu'elle atteint de proche en proche suffit à grandir de moitié
       const reach = new Set<number>();
       const area = areaOf(s, i);
       const queue = [...area];
       while (queue.length > 0) {
-        const c = queue.pop()!;
-        for (const n of [c + 1, c - 1, c + MAP, c - MAP]) {
-          if (n < 0 || n >= MAP * MAP || reach.has(n) || area.has(n) || CELLS[n]!.kind !== "vague") continue;
-          if (Math.abs((n % MAP) - (c % MAP)) > 1) continue;
+        for (const n of neighbors(queue.pop()!)) {
+          if (reach.has(n) || area.has(n) || CELLS[n]!.kind !== "reserve" || CELLS[n]!.group !== group) continue;
           reach.add(n);
           queue.push(n);
         }
       }
       expect(reach.size, SQUARES[i]!.name).toBeGreaterThanOrEqual(maxAnnex(i));
+    }
+    // Les réserves d'un quartier suffisent à toutes ses villes à la fois
+    for (const [g, group] of Object.entries(GROUPS)) {
+      const reserve = DISTRICT_CELLS[g as keyof typeof GROUPS].filter((c) => CELLS[c]!.kind === "reserve").length;
+      expect(reserve, g).toBeGreaterThanOrEqual(group.squares.reduce((n, i) => n + maxAnnex(i), 0));
     }
   });
 });
@@ -124,7 +187,7 @@ describe("les prix", () => {
   it("à l'échelle de la ville : Paris plus cher que Guéret, le parc et les nuisances à prix fixe", () => {
     expect(rentScale(PARIS)).toBeCloseTo(2000 / (5.5 * 36));
     expect(buildCost("maison", PARIS)).toBe(50);
-    expect(buildCost("maison", GUERET)).toBe(25);
+    expect(buildCost("maison", GUERET)).toBe(30);
     expect(buildCost("immeuble", PARIS)).toBe(110);
     expect(buildCost("tour", PARIS)).toBe(265);
     expect(buildCost("monument", PARIS)).toBe(445);
@@ -176,7 +239,7 @@ describe("poser ses bâtiments", () => {
     expect(fail(s, "a", { type: "build", square: PARIS, kind: "maison", x: 30, z: 31, rot: 0 })).toBe("La place est déjà prise.");
     expect(fail(s, "a", { type: "build", square: PARIS, kind: "maison", x: 29, z: 30, rot: 0 })).toBe("Hors des frontières de la ville.");
     // Un immeuble couché dépasse du bord
-    expect(fail(s, "a", { type: "build", square: PARIS, kind: "immeuble", x: 29, z: 33, rot: 1 })).toBe("Hors des frontières de la ville.");
+    expect(fail(s, "a", { type: "build", square: PARIS, kind: "immeuble", x: 29, z: 28, rot: 1 })).toBe("Hors des frontières de la ville.");
     expect(fail(s, "a", { type: "build", square: LYON, kind: "maison", x: 30, z: 24, rot: 0 })).toBe("Cette ville n'est pas à toi.");
   });
 
@@ -232,11 +295,11 @@ describe("poser ses bâtiments", () => {
     expect(fail(s, "a", { type: "build", square: PARIS, kind: "tour", x: 30, z: 30, rot: 0 })).toMatch(/tout le quartier bleu/);
     own(s, "a", LYON);
     build(s, "a", PARIS, "tour", 30, 30);
-    build(s, "a", PARIS, "monument", 34, 34);
-    expect(fail(s, "a", { type: "build", square: PARIS, kind: "monument", x: 32, z: 30, rot: 0 })).toBe("La ville a déjà le monument.");
+    build(s, "a", PARIS, "monument", 34, 30);
+    expect(fail(s, "a", { type: "build", square: PARIS, kind: "monument", x: 32, z: 28, rot: 0 })).toBe("La ville a déjà le monument.");
     expect(P(s, "a").stats.hotels).toBe(1);
-    build(s, "a", LYON, "stade", 30, 24);
-    expect(fail(s, "a", { type: "build", square: PARIS, kind: "stade", x: 31, z: 32, rot: 0 })).toBe("Tu as déjà un stade.");
+    build(s, "a", LYON, "stade", 32, 22);
+    expect(fail(s, "a", { type: "build", square: PARIS, kind: "stade", x: 32, z: 28, rot: 0 })).toBe("Tu as déjà un stade.");
   });
 
   it("sans les bâtiments spéciaux, ni parc, ni stade, ni nuisance", () => {
@@ -251,15 +314,16 @@ describe("poser ses bâtiments", () => {
     own(s, "a", PARIS);
     build(s, "a", PARIS, "immeuble", 30, 30);
     const cash = P(s, "a").cash;
-    act(s, "a", { type: "relocate", square: PARIS, id: 1, x: 32, z: 32, rot: 1 });
-    expect(lotOf(s.deeds[PARIS])[0]).toEqual({ id: 1, kind: "immeuble", x: 32, z: 32, rot: 1 });
-    expect(footprint(lotOf(s.deeds[PARIS])[0]!)).toEqual({ x: 32, z: 32, w: 2, d: 1 });
+    act(s, "a", { type: "relocate", square: PARIS, id: 1, x: 32, z: 30, rot: 1 });
+    expect(lotOf(s.deeds[PARIS])[0]).toEqual({ id: 1, kind: "immeuble", x: 32, z: 30, rot: 1 });
+    expect(footprint(lotOf(s.deeds[PARIS])[0]!)).toEqual({ x: 32, z: 30, w: 2, d: 1 });
     expect(P(s, "a").cash).toBe(cash);
     // Tourné à la place d'un autre, ou hors de la ville : refusé
-    build(s, "a", PARIS, "maison", 34, 32);
-    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 1, x: 33, z: 32, rot: 1 })).toBe("La place est déjà prise.");
-    build(s, "a", PARIS, "decharge", 30, 34);
-    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 3, x: 32, z: 34, rot: 0 })).toMatch(/ne se déplace pas/);
+    build(s, "a", PARIS, "maison", 34, 30);
+    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 1, x: 33, z: 30, rot: 1 })).toBe("La place est déjà prise.");
+    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 1, x: 36, z: 28, rot: 0 })).toBe("Hors des frontières de la ville.");
+    build(s, "a", PARIS, "decharge", 30, 30);
+    expect(fail(s, "a", { type: "relocate", square: PARIS, id: 3, x: 34, z: 28, rot: 0 })).toMatch(/ne se déplace pas/);
   });
 });
 
@@ -282,13 +346,13 @@ describe("les voisinages", () => {
   it("un commerce rapporte un point de plus par habitation qui le touche", () => {
     const s = game();
     own(s, "a", PARIS);
-    build(s, "a", PARIS, "commerce", 31, 31);
+    build(s, "a", PARIS, "commerce", 31, 29);
     expect(cityRent(s, PARIS).buildings[0]!.neighbors).toBe(0);
-    build(s, "a", PARIS, "maison", 30, 31);
-    build(s, "a", PARIS, "maison", 32, 31);
-    build(s, "a", PARIS, "immeuble", 31, 32);
+    build(s, "a", PARIS, "maison", 30, 29);
+    build(s, "a", PARIS, "maison", 32, 29);
+    build(s, "a", PARIS, "immeuble", 31, 30);
     // Une maison en diagonale ne compte pas
-    build(s, "a", PARIS, "maison", 30, 30);
+    build(s, "a", PARIS, "maison", 30, 28);
     const c = cityRent(s, PARIS).buildings[0]!;
     expect(c.neighbors).toBe(3);
     expect(c.rent).toBe(Math.round(4 * rentScale(PARIS)));
@@ -298,19 +362,19 @@ describe("les voisinages", () => {
     const s = game(3, {}, null);
     own(s, "a", PARIS);
     own(s, "b", LYON);
-    build(s, "a", PARIS, "maison", 30, 30);
+    build(s, "a", PARIS, "maison", 30, 28);
     const before = cityRent(s, PARIS).buildings[0]!.rent;
-    // La décharge de b au bas de Lyon (rangées 27 et 28) : la maison de Paris (rangée 30) est à deux cases
-    build(s, "b", LYON, "decharge", 30, 27);
+    // La décharge de b au bas de Lyon (colonnes 32 et 33, rangées 26 et 27) : la maison de Paris (30, 28) est à deux cases
+    build(s, "b", LYON, "decharge", 32, 26);
     const hit = cityRent(s, PARIS).buildings[0]!;
     expect(hit.nuisances).toBe(1);
     expect(hit.rent).toBe(Math.round(2 * rentScale(PARIS) * 0.7));
     expect(before).toBeGreaterThan(hit.rent);
     // Et chez b aussi, à côté de sa décharge
-    build(s, "b", LYON, "maison", 32, 27);
+    build(s, "b", LYON, "maison", 34, 25);
     expect(cityRent(s, LYON).buildings.find((b) => b.kind === "maison")!.nuisances).toBe(1);
     // Une maison plus loin, à trois cases : rien
-    build(s, "a", PARIS, "maison", 30, 31);
+    build(s, "a", PARIS, "maison", 30, 30);
     expect(cityRent(s, PARIS).buildings[1]!.nuisances).toBe(0);
   });
 
@@ -319,24 +383,26 @@ describe("les voisinages", () => {
     own(s, "a", PARIS);
     own(s, "b", LYON);
     own(s, "c", 34);
-    build(s, "a", PARIS, "maison", 30, 30);
-    build(s, "b", LYON, "decharge", 30, 27);
+    build(s, "a", PARIS, "maison", 30, 28);
+    build(s, "b", LYON, "decharge", 32, 26);
     expect(cityRent(s, PARIS).buildings[0]!.nuisances).toBe(0);
-    // Bordeaux (rangées 18 à 22) n'est pas à portée
-    build(s, "c", 34, "maison", 30, 22);
+    // Bordeaux, de l'autre côté du fleuve, n'est pas à portée
+    build(s, "c", 34, "maison", 30, 14);
     expect(cityRent(s, 34).buildings[0]!.nuisances).toBe(0);
   });
 });
 
 describe("les frontières", () => {
-  it("annexer une case de terrain vague qui touche la ville, à son prix ; elle s'ajoute au territoire", () => {
+  it("annexer une case de la réserve du quartier qui touche la ville, à son prix ; elle s'ajoute au territoire", () => {
     const s = game();
     own(s, "a", PARIS);
     const cell = cellIndex(29, 30);
     expect(annexable(s, PARIS)).toContain(cell);
-    // Pas une case loin des frontières, ni une rue
+    // Pas une case loin des frontières, ni un square, ni la réserve d'un autre quartier
     expect(fail(s, "a", { type: "annex", square: PARIS, cell: cellIndex(28, 31) })).toMatch(/toucher les frontières/);
-    expect(fail(s, "a", { type: "annex", square: PARIS, cell: cellIndex(27, 30) })).toMatch(/terrain vague/);
+    expect(fail(s, "a", { type: "annex", square: PARIS, cell: cellIndex(27, 30) })).toMatch(/réserve du quartier/);
+    own(s, "a", GUERET);
+    expect(fail(s, "a", { type: "annex", square: GUERET, cell: cellIndex(34, 33) })).toBe("Cette réserve est celle d'un autre quartier.");
     act(s, "a", { type: "annex", square: PARIS, cell });
     expect(P(s, "a").cash).toBe(1400);
     expect(s.deeds[PARIS]!.annexed).toEqual([cell]);
@@ -351,7 +417,7 @@ describe("les frontières", () => {
     const s = game();
     own(s, "a", PARIS);
     own(s, "b", LYON);
-    const shared = cellIndex(31, 29);
+    const shared = cellIndex(31, 27);
     expect(annexable(s, PARIS)).toContain(shared);
     expect(annexable(s, LYON)).toContain(shared);
     act(s, "b", { type: "annex", square: LYON, cell: shared });
@@ -365,7 +431,7 @@ describe("les frontières", () => {
     P(s, "a").cash = 10_000;
     for (let k = 0; k < maxAnnex(GUERET); k++) act(s, "a", { type: "annex", square: GUERET, cell: annexable(s, GUERET)[0]! });
     expect(s.deeds[GUERET]!.annexed).toHaveLength(4);
-    expect(fail(s, "a", { type: "annex", square: GUERET, cell: annexable(s, GUERET)[0] ?? cellIndex(25, 33) })).toMatch(
+    expect(fail(s, "a", { type: "annex", square: GUERET, cell: annexable(s, GUERET)[0] ?? cellIndex(33, 36) })).toMatch(
       /taille maximale|toucher/,
     );
   });
@@ -387,7 +453,7 @@ describe("les règles de la Capitale, en Builder", () => {
     for (const kind of ["tour", "monument"] as const) {
       const s = game();
       own(s, "a", PARIS, LYON);
-      build(s, "a", PARIS, kind, 34, 34);
+      build(s, "a", PARIS, kind, 34, 30);
       expect(tradeProblem(s, "a", LYON)).toBe(
         `Il faut d'abord démolir ${BUILDS[kind].the} de Paris : tant qu'une tour ou un monument est debout, le quartier ne se sépare pas.`,
       );
@@ -436,7 +502,7 @@ describe("les règles de la Capitale, en Builder", () => {
     build(s, "b", PARIS, "maison", 30, 30);
     act(s, "b", { type: "annex", square: PARIS, cell: cellIndex(29, 30) });
     expect(buyoutPrice(s, PARIS)).toBe(Math.round((400 + 50 + 100) * 1.5));
-    build(s, "b", PARIS, "monument", 34, 34);
+    build(s, "b", PARIS, "monument", 34, 30);
     expect(buyoutShield(s, "a", PARIS)).toBe("Un monument ne se rachète pas.");
   });
 
@@ -447,7 +513,7 @@ describe("les règles de la Capitale, en Builder", () => {
     s.pendingBuyout = PARIS;
     s.step = "buyout";
     expect(actorOf(s)).toBe("a");
-    expect(fail(s, "b", { type: "build", square: PARIS, kind: "monument", x: 34, z: 34, rot: 0 })).toMatch(/rachat/);
+    expect(fail(s, "b", { type: "build", square: PARIS, kind: "monument", x: 34, z: 30, rot: 0 })).toMatch(/rachat/);
     expect(fail(s, "b", { type: "build", square: PARIS, kind: "maison", x: 31, z: 30, rot: 0 })).toMatch(/rachat/);
     expect(fail(s, "b", { type: "annex", square: PARIS, cell: cellIndex(29, 30) })).toMatch(/rachat/);
     build(s, "b", LYON, "maison", 30, 24);
@@ -468,7 +534,7 @@ describe("les règles de la Capitale, en Builder", () => {
   it("une catastrophe abat le bâtiment le plus cher, jamais le monument", () => {
     const s = game();
     own(s, "a", PARIS, LYON);
-    build(s, "a", PARIS, "monument", 34, 34);
+    build(s, "a", PARIS, "monument", 34, 30);
     build(s, "a", PARIS, "maison", 30, 30);
     build(s, "a", PARIS, "tour", 31, 30);
     expect(knockable(s, PARIS).map((b) => b.kind)).toEqual(["tour", "maison"]);
@@ -487,8 +553,9 @@ describe("les règles de la Capitale, en Builder", () => {
 
   it("le stade : chaque adversaire qui passe sur la case de la ville paie le billet", () => {
     const s = game();
-    own(s, "b", GUERET);
-    build(s, "b", GUERET, "stade", 26, 33);
+    own(s, "b", LYON);
+    build(s, "b", LYON, "stade", 32, 22);
+    P(s, "a").position = 35;
     s.rigged = [[1, 2]];
     act(s, "a", { type: "roll" });
     expect(P(s, "b").cash).toBe(1500 - 200 + 50);
@@ -513,7 +580,7 @@ describe("les règles de la Capitale, en Builder", () => {
     const s = game();
     own(s, "a", PARIS, LYON);
     build(s, "a", PARIS, "tour", 30, 30);
-    build(s, "a", PARIS, "monument", 34, 34);
+    build(s, "a", PARIS, "monument", 34, 30);
     const card = DECKS.courrier.findIndex((c) => c.effect.kind === "repairs");
     const effect = DECKS.courrier[card]!.effect as { kind: "repairs"; level: number; tower: number };
     s.decks.courrier.unshift(card);
@@ -567,7 +634,7 @@ function simulate(levels: BotLevel[], seed: number) {
     if (!r.ok) throw new Error(`${a.type} à l'étape ${s.step} : ${r.error}`);
     for (const e of r.events) if (e.type === "build") kinds.add(e.building.kind);
     // Jamais deux bâtiments l'un sur l'autre, ni hors des frontières
-    for (const i of Object.keys(TERRITORIES).map(Number)) {
+    for (const i of MAP_CITIES) {
       const area = areaOf(s, i);
       const seen = new Set<number>();
       for (const b of lotOf(s.deeds[i])) {
@@ -628,7 +695,7 @@ describe("les bots en Builder", () => {
     own(s, "a", PARIS);
     own(s, "b", LYON);
     P(s, "a").cash = 5000;
-    for (let x = 30; x < 36; x++) build(s, "b", LYON, "maison", x, 28);
+    for (let x = 30; x < 36; x++) build(s, "b", LYON, "maison", x, 25);
     Object.assign(s, { step: "manage", dice: [1, 2] });
     for (let k = 0; k < 4; k++) {
       const a = botAction(s, "a", "fort", { allowAttack: false });

@@ -1,6 +1,6 @@
 import { GO_SALARY, GROUPS, JAIL_FINE, levelName, SPECIALS, SQUARES, STATION_RENTS, teamName } from "../../shared/games/capitale/board.ts";
 import { buyoutPrice, buyoutShield, levelOf, newRules, rentFor, teamRules } from "../../shared/games/capitale/engine.ts";
-import { baseSize } from "../../shared/games/capitale/builderMap.ts";
+import { baseSize, parcelNumber } from "../../shared/games/capitale/builderMap.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { asState, colorOf, money } from "./boardUi.ts";
 import { isMate, teamIn } from "./teamsUi.tsx";
@@ -57,11 +57,13 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
       const shield = g.you && deed?.owner && newRules(g).buyout ? buyoutShield(s, g.you, index) : "x";
       const buyout =
         shield === null ? `Rachat : ${money(buyoutPrice(s, index))}` : shield && /monument|obélisque/.test(shield) ? shield : null;
-      // Builder : ce qui est bâti sur la carte, et la taille du territoire
+      // Builder : ce qui est bâti sur la carte, et la taille de sa parcelle (annexions comprises)
       const lot = deed?.lot ?? [];
       const cells = baseSize(index) + (deed?.annexed?.length ?? 0);
       const built =
-        g.settings.builder && deed?.owner ? `${lot.length} bâtiment${lot.length > 1 ? "s" : ""}, territoire de ${cells} cases` : null;
+        g.settings.builder && deed?.owner
+          ? `${lot.length} bâtiment${lot.length > 1 ? "s" : ""}, parcelle ${parcelNumber(index)} du quartier, ${cells} cases`
+          : null;
       const extras = [
         level > 0 ? `${levelName(index, level)} (niveau ${level})` : null,
         built,

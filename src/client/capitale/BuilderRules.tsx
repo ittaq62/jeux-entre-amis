@@ -12,7 +12,7 @@ function priceRange(kind: (typeof BUILD_ORDER)[number]): string {
   const prices = CITIES.map((i) => buildCost(kind, i));
   const lo = Math.min(...prices);
   const hi = Math.max(...prices);
-  return lo === hi ? `${lo} ₣` : `${lo} à ${hi} ₣`;
+  return lo === hi ? `${lo} ₣` : `${lo} à ${hi} ₣`;
 }
 
 export function BuilderRules({ specials, monopoly }: { specials: boolean; monopoly: boolean }) {
@@ -39,9 +39,9 @@ export function BuilderRules({ specials, monopoly }: { specials: boolean; monopo
             );
           })}
           <li className="cap-special-limits hint">
-            Le loyer d'une ville : son terrain nu, plus ce que rapporte chaque bâtiment, plus cher dans les grandes villes. Avec tout le
-            quartier, tout est doublé. Un parc donne +{Math.round(PARC_BONUS * 100)} % aux habitations qui le touchent, une nuisance retire{" "}
-            {Math.round(NUISANCE_MALUS * 100)} % à tout ce qui est à deux cases ou moins, de l'autre côté de la frontière aussi.
+            Le loyer d'une ville&nbsp;: son terrain nu, plus ce que rapporte chaque bâtiment, plus cher dans les grandes villes. Avec tout
+            le quartier, tout est doublé. Un parc donne +{Math.round(PARC_BONUS * 100)}&nbsp;% aux habitations qui le touchent, une nuisance
+            retire {Math.round(NUISANCE_MALUS * 100)}&nbsp;% à tout ce qui est à deux cases ou moins, de l'autre côté de la frontière aussi.
           </li>
         </ul>
       </details>
@@ -49,18 +49,20 @@ export function BuilderRules({ specials, monopoly }: { specials: boolean; monopo
         <summary>Les frontières et ce qui change</summary>
         <ul>
           <li className="cap-special-limits hint">
-            Chaque ville a son territoire, de {baseSize(1)} cases (Guéret) à {baseSize(39)} (Paris). Le terrain vague qui le touche s'annexe
-            case par case, de {Math.min(...annex)} à {Math.max(...annex)} ₣ : premier arrivé, premier servi. Une ville grandit au plus de
-            moitié (Paris : {baseSize(39) + maxAnnex(39)} cases).
+            Chaque ville a sa parcelle dans son quartier, numérotée comme sa case du plateau, de {baseSize(1)}&nbsp;cases (Guéret) à{" "}
+            {baseSize(39)} (Paris). La réserve hachurée du quartier s'annexe case par case, seulement par ses villes, de{" "}
+            {Math.min(...annex)} à {Math.max(...annex)}&nbsp;₣&nbsp;: premier arrivé, premier servi. Une ville grandit au plus de moitié
+            (Paris&nbsp;: {baseSize(39) + maxAnnex(39)}&nbsp;cases). Les squares, le fleuve et l'avenue ne s'annexent pas.
           </li>
           <li className="cap-special-limits hint">
-            On bâtit, déplace, tourne et démolit à tout moment, sauf pendant une enchère ; en dette, on peut seulement démolir (la banque
-            rend la moitié). Une nuisance ne se déplace pas.
+            On bâtit, déplace, tourne et démolit à tout moment, sauf pendant une enchère&nbsp;; en dette, on peut seulement démolir (la
+            banque rend la moitié). Une nuisance ne se déplace pas.
           </li>
           <li className="cap-special-limits hint">
-            Une ville bâtie ne s'échange pas et ne s'hypothèque pas ; son terrain annexé la suit. Tant qu'une tour ou un monument est debout
-            dans un quartier, aucune ville de ce quartier ne s'échange. Le rachat paie les bâtiments et le terrain, et le monument protège
-            sa ville ; l'expropriation paie le terrain annexé au prix payé. Une catastrophe abat un bâtiment, jamais le monument.
+            Une ville bâtie ne s'échange pas et ne s'hypothèque pas&nbsp;; son terrain annexé la suit. Tant qu'une tour ou un monument est
+            debout dans un quartier, aucune ville de ce quartier ne s'échange. Le rachat paie les bâtiments et le terrain, et le monument
+            protège sa ville&nbsp;; l'expropriation paie le terrain annexé au prix payé. Une catastrophe abat un bâtiment, jamais le
+            monument.
             {monopoly && " Au Monopole, seuls les titres comptent."}
           </li>
         </ul>

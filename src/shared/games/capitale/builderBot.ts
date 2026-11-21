@@ -1,7 +1,7 @@
 // Capitale Builder : les bots bâtissent leurs villes. À chaque coup, ils essaient chaque bâtiment à chaque place libre
 // de chacune de leurs villes et gardent celui qui rapporte le plus de loyer pour son prix (le monument d'abord quand
 // le quartier le permet). Fort pose aussi ses nuisances là où elles coûtent le plus aux adversaires, et annexe le
-// terrain vague avant les voisins. Peu de coups par tour, pour que la partie avance.
+// la réserve du quartier avant les voisins. Peu de coups par tour, pour que la partie avance.
 
 import { SQUARES } from "./board.ts";
 import {
@@ -112,7 +112,7 @@ function bestBuild(s: CapitaleState, playerId: string, level: BotLevel, keep: nu
   return best && best.score >= floor ? best.action : null;
 }
 
-/** Une case de terrain vague à annexer : quand une ville manque de place, la case qui garde la ville la plus ramassée */
+/** Une case de la réserve à annexer : quand une ville manque de place, la case qui garde la ville la plus ramassée */
 function bestAnnex(s: CapitaleState, playerId: string, level: BotLevel, keep: number): CapitaleAction | null {
   if (level === "facile") return null;
   const p = playerOf(s, playerId)!;

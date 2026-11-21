@@ -41,7 +41,7 @@ import { buildThumb } from "./scene/thumbs.ts";
 
 // Capitale Builder : le chantier d'une ville. On choisit un bâtiment, on le promène sur la carte (vert : il tient,
 // rouge : il déborde ou chevauche), on le tourne, on le pose ; on choisit un bâtiment posé pour le déplacer, le tourner
-// ou le démolir ; on annexe le terrain vague doré qui touche la frontière.
+// ou le démolir ; on annexe les cases dorées de la réserve du quartier qui touchent la frontière.
 // À la souris, le bâtiment suit le pointeur et un clic le pose ; au doigt, on touche une case pour l'y mettre, puis
 // « Poser ici » (ou on touche la même case une seconde fois).
 
@@ -290,13 +290,13 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
         <span className="cap-build-stat">
           <b className="num">{used}</b>/{area.size} cases
         </span>
-        {rent.full && <span className="cap-build-full">quartier complet : ×2</span>}
+        {rent.full && <span className="cap-build-full">quartier complet&nbsp;: ×2</span>}
         <span className="cap-build-spacer" />
         <button
           className={`cap-small ${tool.kind === "annex" ? "is-on" : ""}`}
           disabled={right !== "full" || annexed >= maxAnnex(square)}
           onClick={() => setTool(tool.kind === "annex" ? { kind: "look" } : { kind: "annex" })}
-          title={`Une case de terrain vague : ${money(annexCost(square))} (${annexed}/${maxAnnex(square)} annexées)`}
+          title={`Une case de la réserve du quartier : ${money(annexCost(square))} (${annexed}/${maxAnnex(square)} annexées)`}
         >
           <Icon name="plus" size={16} /> Annexer
         </button>
@@ -307,16 +307,17 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
 
       {blocked && <p className="cap-build-note">{blocked}</p>}
       {right === "raise" && (
-        <p className="cap-build-note is-bad">Tu dois de l'argent : tu peux seulement démolir (la banque rend la moitié).</p>
+        <p className="cap-build-note is-bad">Tu dois de l'argent&nbsp;: tu peux seulement démolir (la banque rend la moitié).</p>
       )}
 
       <>
         {tool.kind === "annex" ? (
           <motion.div key="annex" className="cap-build-row" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <p className="cap-build-hint">
-              {phone ? "Touche" : "Clique"} une case dorée pour repousser la frontière : <b className="num">{money(annexCost(square))}</b>{" "}
-              la case, {annexed}/{maxAnnex(square)} déjà prises ({baseSize(square)} cases au départ).
-              {annexable(s, square).length === 0 && " Plus aucune case libre ne touche la ville."}
+              {phone ? "Touche" : "Clique"} une case dorée de la réserve hachurée pour repousser la frontière&nbsp;:{" "}
+              <b className="num">{money(annexCost(square))}</b> la case, {annexed}/{maxAnnex(square)} déjà prises ({baseSize(square)} cases
+              au départ).
+              {annexable(s, square).length === 0 && " Plus aucune case libre de la réserve ne touche la ville."}
             </p>
             <button className="cap-small" onClick={() => setTool({ kind: "look" })}>
               Fini
@@ -327,7 +328,7 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
             <img className="cap-build-thumb" src={buildThumb(plan?.kind ?? "maison", square, color, 96)} alt="" width={44} height={44} />
             <p className="cap-build-hint">
               <strong>
-                {tool.kind === "move" ? "Déplacer : " : ""}
+                {tool.kind === "move" ? "Déplacer : " : ""}
                 {BUILDS[plan?.kind ?? "maison"].name}
               </strong>{" "}
               {tool.kind === "place" && <b className="num">{money(buildCost(tool.build, square))}</b>}
@@ -405,7 +406,7 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
                 setConfirmDemolish(false);
               }}
             >
-              <Icon name="trash" size={16} /> {confirmDemolish ? `Démolir ? +${money(refundOf(sel.kind, square))}` : "Démolir"}
+              <Icon name="trash" size={16} /> {confirmDemolish ? `Démolir ? +${money(refundOf(sel.kind, square))}` : "Démolir"}
             </button>
           </motion.div>
         ) : (

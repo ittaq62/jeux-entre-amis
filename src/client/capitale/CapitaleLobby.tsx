@@ -223,7 +223,7 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
             />
             <p className="hint" style={{ margin: 0 }}>
               {s.builder
-                ? "Builder : au centre du plateau, chaque ville a son territoire en cases. Tu y poses tes bâtiments où tu veux, à tout moment, même pendant le tour des autres, et tu repousses tes frontières sur le terrain vague."
+                ? "Builder : au centre du plateau, la carte d'une ville, avec son fleuve et son avenue, et chaque quartier dans son liseré. Tu poses tes bâtiments sur tes parcelles, où tu veux, à tout moment, même pendant le tour des autres, et tu repousses tes frontières sur la réserve de ton quartier."
                 : "Classique : chaque rue s'améliore d'un bouton, de la maison au monument de la ville."}
             </p>
             {s.builder && <BuilderRules specials={s.specials} monopoly={Boolean(s.monopoly)} />}

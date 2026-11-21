@@ -179,7 +179,7 @@ export interface Deed {
   special?: Special | null;
   /** Builder : les bâtiments posés sur le territoire de la ville */
   lot?: Placed[];
-  /** Builder : les cases de terrain vague annexées par la ville */
+  /** Builder : les cases de la réserve du quartier annexées par la ville */
   annexed?: number[];
 }
 
@@ -243,7 +243,7 @@ export type MoneyReason =
   | "buyout"
   /** Une expropriation : la banque paie le titre */
   | "expropriation"
-  /** Builder : une case de terrain vague annexée */
+  /** Builder : une case de la réserve du quartier annexée */
   | "annex";
 
 export interface Offer {
@@ -432,7 +432,7 @@ export type CapitaleAction =
   | { type: "cancel"; trade: number }
   /** Donner à un coéquipier (règle des dons) */
   | { type: "gift"; to: string; give: Offer }
-  /** Builder : poser un bâtiment, le déplacer (ou le tourner), le démolir, annexer une case de terrain vague */
+  /** Builder : poser un bâtiment, le déplacer (ou le tourner), le démolir, annexer une case de la réserve du quartier */
   | { type: "build"; square: number; kind: BuildKind; x: number; z: number; rot: number }
   | { type: "relocate"; square: number; id: number; x: number; z: number; rot: number }
   | { type: "demolish"; square: number; id: number }

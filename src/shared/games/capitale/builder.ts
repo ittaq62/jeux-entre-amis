@@ -12,14 +12,16 @@ import {
   baseCells,
   baseSize,
   CELLS,
-  isVague,
+  groupOfCell,
+  isMapCity,
+  isReserve,
   MAP,
+  MAP_CITIES,
   maxAnnex,
   neighbors,
   rectCells,
   rectGap,
   rectsTouch,
-  TERRITORIES,
   type Rect,
 } from "./builderMap.ts";
 import { allies, ownedBy, ownsGroup, playerOf, type CapitaleState, type Deed } from "./engine.ts";
@@ -213,7 +215,7 @@ export function buildCost(kind: BuildKind, index: number): number {
 /** Ce que rend la banque d'un bâtiment démoli : la moitié de son prix */
 export const refundOf = (kind: BuildKind, index: number) => Math.floor(buildCost(kind, index) / 2);
 
-/** Le prix d'une case de terrain vague annexée : il suit le quartier */
+/** Le prix d'une case de la réserve du quartier annexée : il suit le quartier */
 export const annexCost = (index: number) => Math.max(30, Math.round(upgradeCost(index) / 2));
 
 // ---------------------------------------------------------------------------
@@ -228,9 +230,9 @@ export function areaOf(s: CapitaleState, index: number): Set<number> {
   return new Set([...baseCells(index), ...annexedOf(s.deeds[index])]);
 }
 
-/** La ville qui a annexé cette case de terrain vague, ou null */
+/** La ville qui a annexé cette case de la réserve, ou null */
 export function annexedBy(s: CapitaleState, cell: number): number | null {
-  for (const i of Object.keys(TERRITORIES).map(Number)) if (annexedOf(s.deeds[i]).includes(cell)) return i;
+  for (const i of MAP_CITIES) if (annexedOf(s.deeds[i]).includes(cell)) return i;
   return null;
 }
 
@@ -268,7 +270,7 @@ export function freeCells(s: CapitaleState, index: number): number[] {
 /** Les nuisances de la carte : leur emprise et leur propriétaire */
 function nuisances(s: CapitaleState): { rect: Rect; owner: string; square: number; id: number }[] {
   const out: { rect: Rect; owner: string; square: number; id: number }[] = [];
-  for (const i of Object.keys(TERRITORIES).map(Number)) {
+  for (const i of MAP_CITIES) {
     const d = s.deeds[i];
     if (!d?.owner || d.mortgaged) continue;
     for (const b of lotOf(d)) if (BUILDS[b.kind].nuisance) out.push({ rect: footprint(b), owner: d.owner, square: i, id: b.id });
@@ -424,7 +426,7 @@ function buyoutLock(s: CapitaleState, index: number): string | null {
 
 function cityProblem(s: CapitaleState, playerId: string, index: number): string | null {
   const deed = s.deeds[index];
-  if (!TERRITORIES[index] || !deed) return "On ne bâtit que dans les villes.";
+  if (!isMapCity(index) || !deed) return "On ne bâtit que dans les villes.";
   if (deed.owner !== playerId) return "Cette ville n'est pas à toi.";
   if (deed.mortgaged) return "Cette ville est hypothéquée.";
   return null;
@@ -497,19 +499,20 @@ export function demolishProblem(s: CapitaleState, playerId: string, index: numbe
   const right = rightProblem(s, playerId, true);
   if (right) return right;
   const deed = s.deeds[index];
-  if (!TERRITORIES[index] || !deed) return "On ne bâtit que dans les villes.";
+  if (!isMapCity(index) || !deed) return "On ne bâtit que dans les villes.";
   if (deed.owner !== playerId) return "Cette ville n'est pas à toi.";
   if (!lotOf(deed).some((b) => b.id === id)) return "Ce bâtiment n'est plus là.";
   return null;
 }
 
-/** Peut-on annexer cette case de terrain vague à cette ville ? Elle doit toucher ses frontières */
+/** Peut-on annexer cette case de la réserve à cette ville ? Elle doit être de son quartier et toucher ses frontières */
 export function annexProblem(s: CapitaleState, playerId: string, index: number, cell: number): string | null {
   const right = rightProblem(s, playerId);
   if (right) return right;
   const city = cityProblem(s, playerId, index) ?? buyoutLock(s, index);
   if (city) return city;
-  if (!Number.isInteger(cell) || !isVague(cell)) return "On n'annexe que du terrain vague.";
+  if (!Number.isInteger(cell) || !isReserve(cell)) return "On n'annexe que la réserve du quartier (les cases hachurées).";
+  if (groupOfCell(cell) !== SQUARES[index]!.group) return "Cette réserve est celle d'un autre quartier.";
   if (annexedBy(s, cell) !== null) return "Cette case est déjà annexée.";
   const area = areaOf(s, index);
   if (!neighbors(cell).some((n) => area.has(n))) return "La case doit toucher les frontières de la ville.";
@@ -520,16 +523,18 @@ export function annexProblem(s: CapitaleState, playerId: string, index: number, 
   return null;
 }
 
-/** Les cases de terrain vague que cette ville peut annexer maintenant (sans parler d'argent) */
+/** Les cases de la réserve de son quartier que cette ville peut annexer maintenant (sans parler d'argent) */
 export function annexable(s: CapitaleState, index: number): number[] {
   const deed = s.deeds[index];
   if (!deed || annexedOf(deed).length >= maxAnnex(index)) return [];
   const area = areaOf(s, index);
-  const taken = new Set(Object.keys(TERRITORIES).flatMap((i) => annexedOf(s.deeds[Number(i)])));
+  const taken = new Set(MAP_CITIES.flatMap((i) => annexedOf(s.deeds[i])));
+  const group = SQUARES[index]!.group;
   const out = new Set<number>();
-  for (const c of area) for (const n of neighbors(c)) if (isVague(n) && !taken.has(n) && !area.has(n)) out.add(n);
+  for (const c of area)
+    for (const n of neighbors(c)) if (isReserve(n) && groupOfCell(n) === group && !taken.has(n) && !area.has(n)) out.add(n);
   return [...out].sort((a, b) => a - b);
 }
 
-/** Toutes les cases de terrain vague de la carte */
-export const vagueCells = () => CELLS.flatMap((c, i) => (c.kind === "vague" ? [i] : []));
+/** Toutes les cases des réserves de la carte */
+export const reserveCells = () => CELLS.flatMap((c, i) => (c.kind === "reserve" ? [i] : []));

@@ -279,8 +279,8 @@ function taxIcon(p: Pen, x: number, y: number, s: number, toll: boolean) {
   ctx.restore();
 }
 
-/** Une case du tour */
-function drawSquare(p: Pen, i: number) {
+/** Une case du tour ; en Builder, le numéro de la ville dans son quartier (1, 2, 3) est sur sa bande, comme sur la carte */
+function drawSquare(p: Pen, i: number, builder: boolean) {
   const { ctx, k } = p;
   const sq = SQUARES[i]!;
   const r = squareRect(i);
@@ -297,6 +297,24 @@ function drawSquare(p: Pen, i: number) {
     ctx.strokeStyle = INK;
     ctx.lineWidth = 0.012 * k;
     ctx.strokeRect(...rectPx(p, b));
+    if (builder) {
+      const [cx, cy, cw, ch] = rectPx(p, b);
+      const radius = Math.min(cw, ch) * 0.36;
+      framed(p, cx + cw / 2, cy + ch / 2, cw, ch, () => {
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 0.012 * k;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = INK;
+        ctx.font = `800 ${Math.round(radius * 1.45)}px ${FONT_NUM}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(GROUPS[sq.group!].squares.indexOf(i) + 1), 0, radius * 0.08);
+      });
+    }
     if (r.side === "bottom") box = { ...r, z: r.z + b.d, d: r.d - b.d };
     else if (r.side === "left") box = { ...r, w: r.w - b.w };
     else if (r.side === "top") box = { ...r, d: r.d - b.d };
@@ -616,8 +634,11 @@ function drawArena(p: Pen) {
   ctx.restore();
 }
 
-/** Le plateau entier : les cases tout autour, le sol de la ville au milieu. rot = quarts de tour de la caméra. */
-export function drawBoard(canvas: HTMLCanvasElement, rot: number) {
+/**
+ * Le plateau entier : les cases tout autour, le sol de la ville au milieu. rot = quarts de tour de la caméra ; en
+ * Builder, les villes portent leur numéro de parcelle.
+ */
+export function drawBoard(canvas: HTMLCanvasElement, rot: number, builder = false) {
   const ctx = canvas.getContext("2d")!;
   const size = canvas.width;
   const p: Pen = { ctx, k: size / BOARD, alpha: (-rot * Math.PI) / 2 };
@@ -627,7 +648,7 @@ export function drawBoard(canvas: HTMLCanvasElement, rot: number) {
   ctx.fillStyle = GRASS;
   ctx.fillRect(px(p, -INNER), px(p, -INNER), 2 * INNER * p.k, 2 * INNER * p.k);
   drawCity(p);
-  for (let i = 0; i < 40; i++) drawSquare(p, i);
+  for (let i = 0; i < 40; i++) drawSquare(p, i, builder);
   ctx.strokeStyle = INK;
   ctx.lineWidth = 0.05 * p.k;
   ctx.strokeRect(px(p, -INNER), px(p, -INNER), 2 * INNER * p.k, 2 * INNER * p.k);
