@@ -21,7 +21,8 @@ export class CulbuteControls {
   private byCode = new Map<string, ActionId[]>();
   private padPrev = 0;
   private touchPrevHeld = 0;
-  /** Au doigt, Frapper tenu : depuis combien d'images (-1 : pas tenu), et s'il est devenu le coup fort */
+  /** Au doigt, Frapper tenu : depuis combien d'images (-1 : pas tenu ; -2 : resté posé après la garde, ignoré jusqu'au
+   * relâchement), et s'il est devenu le coup fort */
   private touchAtk = -1;
   private touchStrong = false;
   private scheme: Scheme = "clavier";
@@ -212,8 +213,13 @@ export class CulbuteControls {
     // Frapper au doigt : relâché vite, le coup simple ; gardé un cinquième de seconde, le coup fort, qui se charge tant
     // que le doigt reste (posé avec Spécial, c'est la garde : pas de coup)
     let touchTaps = t.taps & ~ATK;
-    if (t.atk && !t.spc) {
-      this.touchAtk++;
+    if (t.atk && t.spc) {
+      // La garde : le doigt qui reste sur Frapper quand on lève Spécial n'est pas un nouveau coup
+      this.touchAtk = -2;
+      this.touchStrong = false;
+    } else if (t.atk) {
+      // (encore le doigt de la garde : rien tant qu'il ne s'est pas levé)
+      if (this.touchAtk !== -2) this.touchAtk++;
       if (this.touchAtk >= CHARGE_DECIDE && !this.touchStrong) {
         this.touchStrong = true;
         touchTaps |= FRT;
@@ -221,7 +227,9 @@ export class CulbuteControls {
       if (this.touchStrong) touchHeld |= FRT;
     } else {
       // Relâché (même un appui si bref qu'il tient entre deux images) : le coup simple
-      if (!t.atk && (this.touchAtk >= 0 || t.taps & ATK) && !this.touchStrong) touchTaps |= ATK;
+      if (this.touchAtk >= 0 || (this.touchAtk === -1 && t.taps & ATK)) {
+        if (!this.touchStrong) touchTaps |= ATK;
+      }
       this.touchAtk = -1;
       this.touchStrong = false;
     }
