@@ -1,7 +1,7 @@
 // Une page réservée au développement (/dev/escarmouche) : une carte d'Escarmouche vue depuis des points fixes, avec des
 // soldats posés, l'arme en main et des effets qui partent tout seuls, sans serveur ni bots. Elle sert à comparer le rendu
 // avant et après un changement, aux mêmes endroits. ?carte=hameau|gare &vue=0..n &arme=fa &tel (qualité du téléphone)
-// &soldat (gros plan sur un soldat).
+// &soldat (gros plan sur un soldat), &loin (les soldats à 25, 40 et 60 m).
 
 import { useEffect, useRef, useState } from "react";
 import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
@@ -92,17 +92,25 @@ export function DevEscarmouche() {
     const avatars: AvatarConfig[] = [user?.avatar ?? seededAvatar("dev-1"), seededAvatar("dev-2"), seededAvatar("dev-3")].map((a, i) =>
       worn[i] ? { ...a, wear: Object.fromEntries(worn[i]!.split("+").map((kv) => kv.split(":") as [string, string])) } : a,
     );
-    const spots = closeUp
+    // ?loin : les trois soldats à 25, 40 et 60 m, pour juger s'ils se détachent du décor
+    const far = params.has("loin");
+    const spots = far
       ? [
-          { d: 2.9, s: -0.95, team: 0, yaw: v.yaw + Math.PI + 0.35 },
-          { d: 2.9, s: 0, team: 0, yaw: v.yaw + Math.PI },
-          { d: 2.9, s: 0.95, team: 1, yaw: v.yaw + Math.PI - 0.35 },
+          { d: 25, s: -2.5, team: 0, yaw: v.yaw + Math.PI * 0.8 },
+          { d: 40, s: 2, team: 1, yaw: v.yaw + Math.PI + 0.3 },
+          { d: 60, s: -1, team: 1, yaw: v.yaw - 0.4 },
         ]
-      : [
-          { d: 7, s: -2.5, team: 0, yaw: v.yaw + Math.PI * 0.8 },
-          { d: 11, s: 2.2, team: 1, yaw: v.yaw + Math.PI + 0.3 },
-          { d: 16, s: -0.5, team: 1, yaw: v.yaw - 0.4 },
-        ];
+      : closeUp
+        ? [
+            { d: 2.9, s: -0.95, team: 0, yaw: v.yaw + Math.PI + 0.35 },
+            { d: 2.9, s: 0, team: 0, yaw: v.yaw + Math.PI },
+            { d: 2.9, s: 0.95, team: 1, yaw: v.yaw + Math.PI - 0.35 },
+          ]
+        : [
+            { d: 7, s: -2.5, team: 0, yaw: v.yaw + Math.PI * 0.8 },
+            { d: 11, s: 2.2, team: 1, yaw: v.yaw + Math.PI + 0.3 },
+            { d: 16, s: -0.5, team: 1, yaw: v.yaw - 0.4 },
+          ];
     const tenues: UniformId[] =
       closeUp && params.get("tenues")
         ? (params.get("tenues")!.split(",").filter(isUniformId) as UniformId[]).concat(["treillis", "nuit", "perso"])
