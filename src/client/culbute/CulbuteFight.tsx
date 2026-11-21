@@ -3,10 +3,12 @@ import { AVATAR_BACKGROUNDS } from "../../shared/avatar.ts";
 import { avatarPalette, HABITUES, PALETTES } from "../../shared/games/culbute/fighters.ts";
 import type { FightEvent } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage, CulbuteRoomView } from "../../shared/games/culbute/net.ts";
-import type { CulbuteView } from "../../shared/games/culbute/view.ts";
+import { MODE_NAMES, type CulbuteConfig, type CulbuteView } from "../../shared/games/culbute/view.ts";
 import { TOUR_TEAM_COLORS } from "../../shared/tour.ts";
 import { AvatarDrawing } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
+import { MenuSound, SoundToggle } from "../components/SoundSettings.tsx";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
@@ -46,6 +48,12 @@ const SOUNDS: SoundName[] = [
 ];
 
 /** Le dessin de chaque combattant, d'après les sièges de la table */
+/** Les règles du combat, pour un signalement : « Culbute, aux vies (3) » */
+function fightVariant(c: CulbuteConfig): string {
+  const detail = c.mode === "vies" ? ` (${c.stocks})` : c.mode === "temps" ? ` (${c.minutes} min)` : "";
+  return `Culbute, ${MODE_NAMES[c.mode].toLowerCase()}${detail}${c.teams ? ", en équipes" : ""}`;
+}
+
 export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[] {
   return view.fighters.map((f) => {
     const seat = room.seats.find((s) => s.id === f.id);
@@ -461,30 +469,40 @@ export function CulbuteFight({
 
       {menu && (
         <div className="cb-menu panel" role="menu">
-          <button className="btn btn-ghost" onClick={() => (setHelp(true), setMenu(false))}>
-            Comment jouer
-          </button>
-          <button className="btn btn-ghost" onClick={() => (setCommands(true), setMenu(false))}>
-            Commandes
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              const next = { ...settings, music: !settings.music };
-              saveSettings(next);
-              setSettings(next);
-            }}
-          >
-            {settings.music ? "Couper la musique" : "Remettre la musique"}
-          </button>
           {!bridge && room.status === "playing" && (
-            <button className="btn btn-ghost" onClick={() => (onShowLobby(), setMenu(false))}>
-              Voir le salon
+            <button className="menu-item" onClick={() => (onShowLobby(), setMenu(false))}>
+              <Icon name="users" size={18} /> Voir le salon et les règles
             </button>
           )}
-          <span className="hint">{hud ? `${hud.fps} images/s · ${hud.ping} ms` : ""}</span>
-          <button className="btn btn-danger" onClick={onLeave}>
-            Quitter la table
+          <button className="menu-item" onClick={() => (setHelp(true), setMenu(false))}>
+            <Icon name="info" size={18} /> Comment jouer
+          </button>
+          <button className="menu-item" onClick={() => (setCommands(true), setMenu(false))}>
+            <Icon name="target" size={18} /> Commandes
+          </button>
+          {/* Le son commun à tous les jeux, et la musique propre au combat */}
+          <MenuSound>
+            <SoundToggle
+              label="Musique du combat"
+              checked={settings.music}
+              onChange={(music) => {
+                const next = { ...settings, music };
+                saveSettings(next);
+                setSettings(next);
+              }}
+            />
+          </MenuSound>
+          <ReportButton
+            look="menu"
+            game="culbute"
+            variant={fightVariant(room.settings.culbute)}
+            code={room.code}
+            role={seated ? "player" : "watcher"}
+            onOpen={() => setMenu(false)}
+          />
+          <span className="hint cb-menu-stats">{hud ? `${hud.fps} images/s · ${hud.ping} ms` : ""}</span>
+          <button className="menu-item is-danger" onClick={onLeave}>
+            <Icon name="door" size={18} /> {bridge ? "Quitter la tournée" : "Quitter la table"}
           </button>
         </div>
       )}

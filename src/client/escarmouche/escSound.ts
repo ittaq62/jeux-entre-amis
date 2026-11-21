@@ -3,7 +3,7 @@
 // loin, plus ils s'assourdissent et plus l'écho des murs l'emporte. Une ambiance tourne derrière (le vent, les
 // oiseaux du hameau, les tôles et les pigeons de la gare), et les balles qui frôlent sifflent.
 
-import { audioOut } from "../lib/sound.ts";
+import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 
@@ -102,7 +102,7 @@ export class EscSound {
   private verb: ConvolverNode | null = null;
   private verbIn: GainNode | null = null;
   private ear = { x: 0, y: 0, z: 0 };
-  private ambience: { nodes: AudioNode[]; timer: number } | null = null;
+  private ambience: { nodes: AudioNode[]; timer: number; unsubscribe: () => void } | null = null;
 
   constructor() {
     const a = audioOut();
@@ -143,6 +143,11 @@ export class EscSound {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const sr = ctx.sampleRate;
+    // Toute l'ambiance passe par un seul volume : celui de « Musique et ambiance » du réglage du son, suivi en direct
+    const bus = ctx.createGain();
+    bus.gain.value = musicLevel();
+    bus.connect(this.out);
+    const unsubscribe = usePrefs.subscribe(() => bus.gain.setTargetAtTime(musicLevel(), ctx.currentTime, 0.2));
     // Le vent : un bruit très filtré qui enfle et retombe
     const wind = ctx.createBuffer(1, sr * 8, sr);
     const d = wind.getChannelData(0);
@@ -162,11 +167,10 @@ export class EscSound {
     src.loop = true;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    src.connect(gain).connect(this.out);
+    src.connect(gain).connect(bus);
     src.start();
-    const level = () => usePrefs.getState().volume * (usePrefs.getState().sound ? 1 : 0);
-    gain.gain.setTargetAtTime(level() * (light === "neige" ? 0.62 : light === "gris" ? 0.5 : 0.32), ctx.currentTime, 1.5);
-    const nodes: AudioNode[] = [src, gain];
+    gain.gain.setTargetAtTime(light === "neige" ? 0.62 : light === "gris" ? 0.5 : 0.32, ctx.currentTime, 1.5);
+    const nodes: AudioNode[] = [src, gain, bus];
     if (light === "aube") {
       // Le clapotis contre le quai : un bruit grave qui va et vient
       const sea = ctx.createBuffer(1, sr * 6, sr);
@@ -183,9 +187,9 @@ export class EscSound {
       ss.loop = true;
       const sg = ctx.createGain();
       sg.gain.value = 0;
-      ss.connect(sg).connect(this.out);
+      ss.connect(sg).connect(bus);
       ss.start();
-      sg.gain.setTargetAtTime(level() * 0.4, ctx.currentTime, 2);
+      sg.gain.setTargetAtTime(0.4, ctx.currentTime, 2);
       nodes.push(ss, sg);
     }
     if (light === "gris") {
@@ -206,20 +210,20 @@ export class EscSound {
       rs.loop = true;
       const rg = ctx.createGain();
       rg.gain.value = 0;
-      rs.connect(rg).connect(this.out);
+      rs.connect(rg).connect(bus);
       rs.start();
-      rg.gain.setTargetAtTime(level() * 0.18, ctx.currentTime, 2);
+      rg.gain.setTargetAtTime(0.18, ctx.currentTime, 2);
       nodes.push(rs, rg);
     }
     // Les bruits de fond, de temps en temps : des oiseaux le soir au hameau, des tôles et des pigeons à la gare
     const chirp = () => {
-      if (!this.ctx || !this.out || level() === 0) return;
+      if (!this.ctx || !this.out || musicLevel() === 0) return;
       const t0 = ctx.currentTime + 0.05;
       const pan = ctx.createStereoPanner();
       pan.pan.value = Math.random() * 1.6 - 0.8;
       const g = ctx.createGain();
       g.gain.value = 0;
-      g.connect(pan).connect(this.out);
+      g.connect(pan).connect(bus);
       if (light === "neige") {
         // Un corbeau au loin : deux ou trois croassements rauques
         const caws = 2 + Math.floor(Math.random() * 2);
@@ -235,7 +239,7 @@ export class EscSound {
           f.Q.value = 2.2;
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(level() * 0.04, at + 0.03);
+          og.gain.linearRampToValueAtTime(0.04, at + 0.03);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
           o.connect(f).connect(og).connect(pan);
           og.connect(this.verbIn!);
@@ -261,7 +265,7 @@ export class EscSound {
             vib.connect(vg).connect(o.frequency);
             const og = ctx.createGain();
             og.gain.setValueAtTime(0, at);
-            og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.08);
+            og.gain.linearRampToValueAtTime(0.05, at + 0.08);
             og.gain.exponentialRampToValueAtTime(0.0001, at + len);
             o.connect(og).connect(pan);
             og.connect(this.verbIn!);
@@ -284,7 +288,7 @@ export class EscSound {
             ag.gain.value = 0.5;
             const og = ctx.createGain();
             og.gain.setValueAtTime(0, at);
-            og.gain.linearRampToValueAtTime(level() * 0.03, at + 0.02);
+            og.gain.linearRampToValueAtTime(0.03, at + 0.02);
             og.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
             am.connect(ag).connect(og.gain);
             o.connect(og).connect(pan);
@@ -309,7 +313,7 @@ export class EscSound {
           f.Q.value = 3;
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.03);
+          og.gain.linearRampToValueAtTime(0.05, at + 0.03);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
           o.connect(f).connect(og).connect(pan);
           o.start(at);
@@ -325,7 +329,7 @@ export class EscSound {
           o.frequency.exponentialRampToValueAtTime(base * 1.5, at + 0.06);
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(level() * 0.05, at + 0.01);
+          og.gain.linearRampToValueAtTime(0.05, at + 0.01);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.08);
           o.connect(og).connect(pan);
           o.start(at);
@@ -337,7 +341,7 @@ export class EscSound {
         o.type = "triangle";
         o.frequency.value = 180 + Math.random() * 140;
         const og = ctx.createGain();
-        og.gain.setValueAtTime(level() * 0.06, t0);
+        og.gain.setValueAtTime(0.06, t0);
         og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
         o.connect(og).connect(pan);
         og.connect(this.verbIn!);
@@ -352,7 +356,7 @@ export class EscSound {
           o.frequency.linearRampToValueAtTime(330, at + 0.3);
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(level() * 0.035, at + 0.06);
+          og.gain.linearRampToValueAtTime(0.035, at + 0.06);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
           o.connect(og).connect(pan);
           o.start(at);
@@ -363,12 +367,13 @@ export class EscSound {
     const timer = window.setInterval(() => {
       if (Math.random() < 0.45) chirp();
     }, 2600);
-    this.ambience = { nodes, timer };
+    this.ambience = { nodes, timer, unsubscribe };
   }
 
   dispose() {
     if (this.ambience) {
       window.clearInterval(this.ambience.timer);
+      this.ambience.unsubscribe();
       for (const n of this.ambience.nodes) {
         if (n instanceof AudioBufferSourceNode) n.stop();
         n.disconnect();
@@ -788,9 +793,10 @@ export class EscSound {
 
   /** Un son, d'un endroit du monde (sinon dans la tête du joueur) */
   play(name: EscSoundName, opts: { at?: { x: number; y: number; z: number }; volume?: number; rate?: number; gap?: number } = {}) {
-    const prefs = usePrefs.getState();
+    // Le réglage du son du site : général × effets (0 quand le son est coupé)
+    const vol = effectsLevel();
     const ctx = this.ctx;
-    if (!prefs.sound || !ctx || !this.out) return;
+    if (vol <= 0 || !ctx || !this.out) return;
     const buf = this.buffers.get(name);
     if (!buf) return;
     // Pas deux fois le même son en même temps (au même endroit)
@@ -803,7 +809,7 @@ export class EscSound {
     src.buffer = buf;
     src.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
     const gain = ctx.createGain();
-    gain.gain.value = prefs.volume * (opts.volume ?? 1) * 0.8;
+    gain.gain.value = vol * (opts.volume ?? 1) * 0.8;
     // Plus c'est loin, plus c'est sourd (les aigus se perdent) et plus l'écho domine
     const dist = opts.at ? Math.hypot(opts.at.x - this.ear.x, opts.at.y - this.ear.y, opts.at.z - this.ear.z) : 0;
     if (opts.at && dist > 6) {

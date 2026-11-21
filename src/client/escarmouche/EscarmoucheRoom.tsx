@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import type { EscarmoucheClientMessage } from "../../shared/protocol.ts";
 import { attachmentItem, camoItem, uniformItem, weaponItem } from "../../shared/shop.ts";
+import { DEFAULT_SETTINGS } from "../../shared/games/escarmouche/rules.ts";
+import { isTeamMode } from "../../shared/games/escarmouche/match.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { Loading } from "../components/ui.tsx";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
-import { ArsenalPanel, EscarmoucheLobby } from "./EscarmoucheLobby.tsx";
+import { ArsenalPanel, EscarmoucheLobby, TEAM_NAMES } from "./EscarmoucheLobby.tsx";
 import { EscarmoucheMatch } from "./EscarmoucheMatch.tsx";
 import { useEscarmoucheRoom } from "./useEscarmoucheRoom.ts";
 import "./escarmouche.css";
@@ -64,7 +68,24 @@ export function EscarmoucheRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showMatch = view.escarmouche !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant le combat : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showMatch = view.escarmouche !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const rules = applyDrawnRules("escarmouche", { ...DEFAULT_SETTINGS, ...view.settings.escarmouche }, DEFAULT_SETTINGS, tableDraw(view));
+  // Son arsenal ; en équipes, les soldats rangés par équipe
+  const pick = (
+    <TablePick
+      game="escarmouche"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamOf={(s) => view.teams[s.id]}
+      teamName={view.tour || isTeamMode(rules.mode) ? (t) => TEAM_NAMES[t as 0 | 1] ?? "" : undefined}
+    >
+      <ArsenalPanel room={view} send={send} />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -89,13 +110,14 @@ export function EscarmoucheRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
+        // Juste avant le combat de la tournée : l'annonce
         view.status === "lobby" ? (
-          <TablePick game="escarmouche" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <ArsenalPanel room={view} send={send} />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <EscarmoucheLobby
           room={view}

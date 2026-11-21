@@ -639,14 +639,23 @@ html:has(.cb-fight) body {
 }
 
 /* Le menu */
+/* Le menu du combat : les mêmes lignes que les menus des autres jeux (Son, Signaler un problème, Quitter…) */
 .cb-menu {
   position: absolute;
   top: calc(58px + var(--safe-top));
   right: calc(12px + var(--safe-right, 0px));
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
   width: min(300px, 86vw);
-  padding: 12px;
+  max-height: calc(100dvh - 72px - var(--safe-top));
+  overflow-y: auto;
+  padding: 6px;
+  box-shadow: var(--shadow-float);
+}
+
+.cb-menu-stats {
+  padding: 4px 12px;
+  font-size: 12px;
 }
 
 .cb-menu-row {

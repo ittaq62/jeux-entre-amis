@@ -17,7 +17,12 @@ export function ReportButton({
   onOpen,
   className,
   ...context
-}: Omit<ReportContext, "tour"> & { tour?: string | null; look?: "link" | "menu" | "icon"; onOpen?: () => void; className?: string }) {
+}: Omit<ReportContext, "tour"> & {
+  tour?: string | null;
+  look?: "link" | "menu" | "icon" | "button";
+  onOpen?: () => void;
+  className?: string;
+}) {
   const bridge = useTourBridge();
   const open = useReport((s) => s.open);
   const go = () => {
@@ -29,6 +34,14 @@ export function ReportButton({
     return (
       <button type="button" className={className} onClick={go} aria-label="Signaler un problème" title="Signaler un problème">
         <Icon name="flag" size={18} />
+      </button>
+    );
+  }
+  if (look === "button") {
+    // Un bouton parmi d'autres (la pause d'Escarmouche)
+    return (
+      <button type="button" className={className ?? "btn"} onClick={go}>
+        <Icon name="flag" size={16} /> Signaler un problème
       </button>
     );
   }

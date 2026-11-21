@@ -80,6 +80,7 @@ import { isLive, replaceOlder } from "./sockets.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults, type EscarmoucheRecordStats } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
+import { ANNOUNCE_MS } from "../shared/announce.ts";
 
 // Des soldats pour compléter les rangs
 const BOT_NAMES = [
@@ -532,6 +533,59 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     await this.afterChange([], now, ws);
   }
 
+  /** L'écran d'annonce est ouvert : avant un jeu de tournée, ou avant la revanche (hors tournée) */
+  private announcing(): boolean {
+    const d = this.data!;
+    return d.tour ? d.status === "lobby" : d.status === "finished" && Boolean(d.pickUntil);
+  }
+
+  /** Tous les joueurs sont prêts (les présents, à la revanche) : on n'attend pas la fin de l'annonce */
+  private allReady(): boolean {
+    const d = this.data!;
+    const ready = d.ready ?? [];
+    const humans = d.seats.filter((s) => s.kind === "human");
+    if (d.tour) return humans.every((s) => this.isConnected(s.userId) && ready.includes(s.userId!));
+    const here = humans.filter((s) => this.isConnected(s.userId));
+    return here.length > 0 && here.every((s) => ready.includes(s.userId!));
+  }
+
+  /** La revanche demandée par tous : l'écran d'annonce, quinze secondes (moins si tous sont prêts) avant la partie */
+  private async openAnnounce(now: number) {
+    const d = this.data!;
+    if (d.status === "finished" && !d.pickUntil) {
+      d.pickUntil = now + ANNOUNCE_MS;
+      d.ready = [];
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
+    }
+    return this.afterChange([], now);
+  }
+  /** Ce qui empêche un combat de partir avec les soldats présents (pas assez de monde, une équipe vide), ou null */
+  private startProblem(): string | null {
+    const d = this.data!;
+    const seats = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
+    if (seats.length < 2) return "Il faut au moins deux soldats : ajoute un bot !";
+    const own = { ...DEFAULT_SETTINGS, ...d.settings.escarmouche };
+    const drawn = d.settings.randomRules && !d.tour ? d.settings.randomRules : null;
+    const settings = drawn ? applyDrawnRules("escarmouche", own, DEFAULT_SETTINGS, drawn) : own;
+    if (!isTeamMode(settings.mode)) return null;
+    for (const t of [0, 1]) if (!seats.some((s) => s.team === t)) return "Chaque équipe doit avoir au moins un soldat : ajoute un bot !";
+    return null;
+  }
+
+  /** L'annonce de la revanche est finie (compte à rebours, ou tous prêts) : le combat part, ou la table dit pourquoi */
+  private async announceDone(now: number) {
+    const d = this.data!;
+    const problem = this.startProblem();
+    if (!problem) return this.startGame(now);
+    d.pickUntil = null;
+    d.ready = [];
+    d.rematch = [];
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    this.systemChat(`Le combat ne peut pas partir. ${problem}`);
+    return this.afterChange([], now);
+  }
+
   /** La revanche part : la partie est finie et tous les joueurs restés à la table l'ont demandée */
   private rematchReady(): boolean {
     const d = this.data!;
@@ -698,10 +752,9 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       }
 
       case "ready": {
-        if (!d.tour || d.status !== "lobby" || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        if (!this.announcing() || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
         d.ready = [...new Set([...(d.ready ?? []), userId])];
-        const humans = d.seats.filter((s) => s.kind === "human");
-        if (humans.every((s) => this.isConnected(s.userId) && d.ready!.includes(s.userId!))) return this.startTourGame(now);
+        if (this.allReady()) return d.tour ? this.startTourGame(now) : this.announceDone(now);
         return this.afterChange([], now);
       }
 
@@ -734,14 +787,14 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         }
         this.ensureHost();
         void this.setPresence(userId, null).catch(() => {});
-        if (this.rematchReady()) return this.startGame(now);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now, ws);
       }
 
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
-        if (this.rematchReady()) return this.startGame(now);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now);
       }
     }
@@ -814,6 +867,12 @@ export class EscarmoucheRoom extends DurableObject<Env> {
 
       case "start": {
         if (d.status === "playing") return;
+        // Après un combat, « Rejouer » passe par l'annonce, comme la revanche ; ce qui l'empêche se dit tout de suite
+        if (d.status === "finished" && !d.tour) {
+          const problem = this.startProblem();
+          if (problem) return this.send(ws, { t: "error", message: problem });
+          return this.openAnnounce(now);
+        }
         return this.startGame(now, ws);
       }
     }
@@ -896,6 +955,10 @@ export class EscarmoucheRoom extends DurableObject<Env> {
 
   private async startGame(now: number, ws?: WebSocket) {
     const d = this.data!;
+    // L'annonce (revanche ou tournée) est passée
+    d.pickUntil = null;
+    d.ready = [];
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
     d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
     this.ensureHost();
     if (d.seats.length < 2) {
@@ -1191,7 +1254,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     }
     if (!this.data) return;
     // Une place s'est libérée après la partie : si tous ceux qui restent ont demandé la revanche, elle part
-    if (changed && this.rematchReady()) return void (await this.startGame(now));
+    if (changed && this.rematchReady()) return void (await this.openAnnounce(now));
     if (changed) await this.afterChange([], now);
     else {
       await this.persist();
@@ -1223,6 +1286,11 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         await this.destroy();
         return false;
       case "tourStart":
+        // Hors tournée : l'annonce de la revanche est passée, la partie part
+        if (!d.tour && d.status === "finished" && d.pickUntil) {
+          await this.announceDone(now);
+          return false;
+        }
         if (!d.tour || d.status !== "lobby") return false;
         await this.startTourGame(now);
         return false;

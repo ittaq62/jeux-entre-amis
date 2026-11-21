@@ -7,11 +7,13 @@ import { PRIMARY_IDS, SECONDARY_IDS, WEAPONS, type PrimaryId, type SecondaryId }
 import { weaponItem } from "../../shared/shop.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { SoundSettings } from "../components/SoundSettings.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { QUALITY_NAMES, type QualityPref } from "./scene/quality.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 import { TEAM_NAMES } from "./EscarmoucheLobby.tsx";
 import { BattleRuntime, type HudState } from "./runtime.ts";
 import { TEAM_HEX } from "./scene/EscScene.ts";
@@ -429,9 +431,8 @@ function GameOver({
           </tbody>
         </table>
         {inTour ? (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
+          // La feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué
+          <TourNextNote />
         ) : (
           !seated && (
             <p className="hint" style={{ margin: 0 }}>
@@ -494,17 +495,6 @@ function Settings({ touch, onClose }: { touch: boolean; onClose: () => void }) {
           ))}
         </select>
       </label>
-      <label>
-        <span>Volume</span>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={p.volume}
-          onChange={(e) => p.set({ volume: Number(e.target.value), sound: true })}
-        />
-      </label>
       <label className="esc-check">
         <input type="checkbox" checked={p.escInvert} onChange={(e) => p.set({ escInvert: e.target.checked })} />
         <span>Inverser l'axe vertical</span>
@@ -529,6 +519,8 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const [hud, setHud] = useState<HudState | null>(null);
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [sound, setSound] = useState(false);
+  const inTour = Boolean(useTourBridge());
   const [board, setBoard] = useState(false);
   const [touch] = useState(() => window.matchMedia("(pointer: coarse)").matches);
   const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth);
@@ -595,6 +587,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const resume = () => {
     setMenu(false);
     setSettings(false);
+    setSound(false);
     unlockAudio();
     if (!touch) rt.current?.controls.lock();
   };
@@ -965,6 +958,21 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
           </button>
         </div>
       )}
+      {!touch && !over && !menu && (
+        // Au PC, le menu se voit aussi : un bouton (et Échap, qui rend la souris)
+        <div className="esc-touch-top">
+          <button
+            className="esc-mini"
+            onClick={() => {
+              document.exitPointerLock?.();
+              setMenu(true);
+            }}
+            aria-label="Menu (Échap)"
+          >
+            Menu <kbd>Échap</kbd>
+          </button>
+        </div>
+      )}
       {touch && portrait && !over && <div className="esc-rotate">Tourne ton téléphone pour jouer couché</div>}
 
       {menu && !over && (
@@ -974,6 +982,14 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
             <p className="hint">La partie continue pendant ce temps : ton soldat reste là où il est.</p>
             {settings ? (
               <Settings touch={touch} onClose={() => setSettings(false)} />
+            ) : sound ? (
+              // Le son commun à tous les jeux (général, effets, musique et ambiance)
+              <div className="esc-sound">
+                <SoundSettings />
+                <button className="btn btn-sm" onClick={() => setSound(false)}>
+                  Fermer le réglage du son
+                </button>
+              </div>
             ) : (
               <div className="esc-menu-actions">
                 <button className="btn btn-primary" onClick={resume}>
@@ -982,14 +998,27 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
                 <button className="btn" onClick={() => setSettings(true)}>
                   Réglages
                 </button>
+                <button className="btn" onClick={() => setSound(true)}>
+                  Son
+                </button>
                 <button className="btn" onClick={onOpenChat}>
                   Discussion{unread > 0 ? ` (${unread})` : ""}
                 </button>
-                <button className="btn" onClick={onShowLobby}>
-                  Voir le salon
-                </button>
+                {!inTour && (
+                  <button className="btn" onClick={onShowLobby}>
+                    Voir le salon
+                  </button>
+                )}
+                <ReportButton
+                  look="button"
+                  game="escarmouche"
+                  variant={`Escarmouche, ${MODE_INFO[v.mode].name}, ${MAP_NAMES[v.map].name}`}
+                  code={room.code}
+                  role={room.you.seatId ? "player" : "watcher"}
+                  onOpen={() => setMenu(false)}
+                />
                 <button className="btn btn-ghost" onClick={onLeave}>
-                  Quitter la partie
+                  {inTour ? "Quitter la tournée" : "Quitter la partie"}
                 </button>
               </div>
             )}

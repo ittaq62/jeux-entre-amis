@@ -2,7 +2,7 @@
 // accélère un peu quand il ne reste qu'une vie à départager, se fait discrète à la fin, et se coupe à part (réglage
 // « musique » de Culbute, gardé sur l'appareil).
 
-import { audioOut, soundBuffer } from "../lib/sound.ts";
+import { audioOut, musicLevel, soundBuffer } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
 /** 16 mesures à 140 battements par minute, une seconde de recouvrement à chaque bout du fichier */
@@ -51,13 +51,12 @@ export class FightMusic {
     this.update();
   }
 
-  /** Le volume suit les préférences du site (son coupé) et le réglage de Culbute, en douceur */
+  /** Le volume suit le réglage du son du site (général × musique, son coupé) et celui de Culbute, en douceur */
   update() {
     const g = this.gain;
     if (!g) return;
-    const prefs = usePrefs.getState();
-    const on = prefs.sound && this.enabled;
-    g.gain.setTargetAtTime(on ? prefs.volume * LEVEL * (this.quiet ? 0.45 : 1) : 0, g.context.currentTime, 0.4);
+    const level = this.enabled ? musicLevel() : 0;
+    g.gain.setTargetAtTime(level * LEVEL * (this.quiet ? 0.45 : 1), g.context.currentTime, 0.4);
   }
 
   /** La dernière vie à départager : un peu plus vite */

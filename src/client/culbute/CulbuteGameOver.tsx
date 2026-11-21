@@ -5,6 +5,7 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 import { FighterStageView } from "./FighterStageView.tsx";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import { overTitle } from "./overTitle.ts";
@@ -94,9 +95,8 @@ export function CulbuteGameOver({
           </ol>
         )}
         {inTour ? (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
+          // La feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué
+          <TourNextNote />
         ) : (
           !seated && (
             <p className="hint" style={{ margin: 0 }}>

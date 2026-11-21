@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { DEFAULT_CONFIG } from "../../shared/games/culbute/view.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { TOUR_TEAMS } from "../../shared/tour.ts";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
 import { CulbuteFight } from "./CulbuteFight.tsx";
@@ -34,7 +38,24 @@ export function CulbuteRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showFight = view.culbute !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant le combat : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showFight = view.culbute !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const cfg = applyDrawnRules("culbute", { ...DEFAULT_CONFIG, ...view.settings.culbute }, DEFAULT_CONFIG, tableDraw(view));
+  // Son combattant ; en équipes, les joueurs rangés par équipe
+  const pick = (
+    <TablePick
+      game="culbute"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamOf={(s) => view.teams[s.id]}
+      teamName={view.tour || cfg.teams ? (t) => TOUR_TEAMS[t as 0 | 1] ?? "" : undefined}
+    >
+      <FighterPicker room={view} send={send} />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -58,14 +79,14 @@ export function CulbuteRoom({ code }: { code: string }) {
           onShowLobby={() => !bridge && setLobbyOpen(true)}
         />
       ) : bridge ? (
+        // Juste avant le combat de la tournée : l'annonce
         view.status === "lobby" ? (
-          // Juste avant le combat de la tournée : son combattant
-          <TablePick game="culbute" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <FighterPicker room={view} send={send} />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <CulbuteLobby
           room={view}

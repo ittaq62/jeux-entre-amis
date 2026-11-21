@@ -63,7 +63,9 @@ describe("Culbute : les commandes des joueurs", () => {
     const { bench, host, inside, mine } = await table();
     await inside.finishGame(Date.now());
     expect(inside.data.status).toBe("finished");
+    // La revanche ouvre l'annonce ; prêt, le combat repart
     await bench.send(host, { t: "rematch" });
+    await bench.send(host, { t: "ready" });
     inside.stopLoop();
     expect(inside.data.status).toBe("playing");
     // L'ancien écran avait compté loin ; son dernier paquet arrive après le début du nouveau combat

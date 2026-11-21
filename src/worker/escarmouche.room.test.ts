@@ -80,9 +80,11 @@ describe("Escarmouche : une revanche lancée pendant l'enregistrement de la part
     const end = inside.finishGame(Date.now());
     await settle();
     expect(recorded).toHaveBeenCalledTimes(1);
-    // Pendant que la base répond, les deux amis demandent la revanche : elle part
+    // Pendant que la base répond, les deux amis demandent la revanche (l'annonce) et se disent prêts : elle part
     await bench.send(host, { t: "rematch" });
     await bench.send(ana!, { t: "rematch" });
+    await bench.send(host, { t: "ready" });
+    await bench.send(ana!, { t: "ready" });
     expect(inside.data.status).toBe("playing");
     expect(inside.data.match).not.toBe(before);
     inside.stopLoop();
@@ -111,8 +113,9 @@ describe("Escarmouche : une revanche lancée pendant l'enregistrement de la part
       summary.status === "finished" && calls++ === 0 ? hub.promise : upsert(summary);
     const end = inside.finishGame(Date.now());
     await settle();
-    // Un seul clic : la revanche part aussitôt
+    // La revanche ouvre l'annonce ; prêt, elle part aussitôt
     await bench.send(host, { t: "rematch" });
+    await bench.send(host, { t: "ready" });
     expect(inside.data.status).toBe("playing");
     expect(inside.data.match).not.toBe(before);
     inside.stopLoop();

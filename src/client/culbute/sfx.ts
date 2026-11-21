@@ -3,19 +3,19 @@
 // saisie ; et ceux du corps (le souffle d'un coup qui part, la charge, le saut, la réception, le rebord), et la
 // ritournelle de celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
 
-import { audioOut } from "../lib/sound.ts";
-import { usePrefs } from "../stores/prefs.ts";
+import { audioOut, effectsLevel } from "../lib/sound.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 let lastAt = 0;
 
 function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
-  const prefs = usePrefs.getState();
-  if (!prefs.sound) return null;
+  // Le réglage du son du site : général × effets (0 quand le son est coupé)
+  const vol = effectsLevel();
+  if (vol <= 0) return null;
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: o.out, vol: prefs.volume };
+  return { ctx: o.ctx, dest: o.out, vol };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
