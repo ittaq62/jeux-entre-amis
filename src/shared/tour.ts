@@ -782,7 +782,7 @@ const CAPITALE_VARIANTS: Format<CapitaleSettings>[] = [
     id: "builder",
     name: "Builder",
     blurb:
-      "Chaque ville a son territoire en cases, au centre du plateau : on y pose ses bâtiments où l'on veut, à tout moment, et on repousse ses frontières sur le terrain vague.",
+      "Chaque ville a son territoire en cases, au centre du plateau : on y pose ses bâtiments où l'on veut, à tout moment, et on repousse ses frontières sur la réserve de son quartier.",
     settings: { builder: true },
   },
 ];
