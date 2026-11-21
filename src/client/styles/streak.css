@@ -60,11 +60,14 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* La carte d'habitué : un carton imprimé posé sur la table            */
+/* La carte d'habitué : un carton imprimé posé sur la table, la        */
+/* récompense du jour en grand                                         */
 /* ------------------------------------------------------------------ */
 
-.habitue-backdrop {
-  animation: habitue-fade 0.15s ease-out both;
+/* Le reste de l'écran s'efface davantage ; une lumière chaude tombe sur la carte */
+.modal-backdrop.habitue-backdrop {
+  background: radial-gradient(ellipse 60% 55% at 50% 48%, rgba(226, 189, 110, 0.2), transparent 70%), rgba(3, 10, 7, 0.84);
+  animation: habitue-fade 0.18s ease-out both;
 }
 
 @keyframes habitue-fade {
@@ -75,36 +78,40 @@
 
 .habitue {
   width: 100%;
-  max-width: 440px;
+  max-width: 580px;
   max-height: calc(100dvh - 32px);
   overflow: auto;
-  padding: 22px 26px 16px;
-  border-radius: 6px;
-  outline: 1px solid rgba(29, 27, 24, 0.13);
-  outline-offset: -8px;
+  padding: 24px 30px 16px;
+  border-radius: 8px;
+  outline: 1px solid rgba(29, 27, 24, 0.16);
+  outline-offset: -9px;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.3),
-    var(--shadow-float);
-  rotate: -0.6deg;
-  animation: habitue-in 0.34s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    0 0 0 1px rgba(226, 189, 110, 0.35),
+    0 30px 70px -20px rgba(0, 0, 0, 0.95),
+    0 0 90px -10px rgba(226, 189, 110, 0.35);
+  rotate: -0.5deg;
+  animation: habitue-in 0.38s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
 @keyframes habitue-in {
   from {
     opacity: 0;
-    translate: 0 22px;
+    translate: 0 26px;
+    scale: 0.94;
     rotate: -3.5deg;
   }
 }
 
-/* Le coup de tampon fait trembler le carton */
+/* Le grand coup de tampon fait trembler le carton */
 .habitue.is-thud {
-  animation: habitue-thud 0.22s ease-out;
+  animation: habitue-thud 0.26s ease-out;
 }
 
 @keyframes habitue-thud {
-  35% {
-    translate: 0 3px;
+  30% {
+    translate: 0 4px;
+    scale: 0.995;
   }
 }
 
@@ -114,8 +121,8 @@
   right: 12px;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -129,21 +136,102 @@
 }
 
 .habitue-kicker {
-  margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
 
-.habitue .habitue-title {
+/* En tête de carte : la récompense, en grand tampon, et la série */
+.habitue-hero {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 0 0 16px;
+  gap: 22px;
+  margin: 0 0 18px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid rgba(29, 27, 24, 0.16);
+}
+
+.hero-slot {
+  position: relative;
+  flex: none;
+  width: 128px;
+  height: 128px;
+  border: 2px dashed rgba(29, 27, 24, 0.3);
+  border-radius: 50%;
+}
+
+.hero-stamp {
+  position: absolute;
+  top: -6%;
+  left: -6%;
+  width: 112%;
+  height: 112%;
+  color: var(--stamp);
+  rotate: -8deg;
+  opacity: 0.92;
+  mix-blend-mode: multiply;
+  -webkit-mask: var(--worn-ink) center / 110px;
+  mask: var(--worn-ink) center / 110px;
+}
+
+.hero-stamp-amount {
+  font-family: var(--font-card);
+  font-size: 44px;
+  font-weight: 800;
+  fill: currentColor;
+}
+
+.hero-stamp-unit {
+  font-family: var(--font-text);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  fill: currentColor;
+}
+
+.hero-stamp.is-pressing {
+  animation: hero-press 0.4s cubic-bezier(0.3, 1.45, 0.5, 1) both;
+}
+
+@keyframes hero-press {
+  0% {
+    opacity: 0;
+    scale: 2.4;
+    rotate: -30deg;
+  }
+  55% {
+    opacity: 0.96;
+    scale: 0.92;
+  }
+  100% {
+    opacity: 0.92;
+    scale: 1;
+    rotate: -8deg;
+  }
+}
+
+.hero-text {
+  min-width: 0;
+}
+
+.hero-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--stamp);
+}
+
+.habitue .hero-title {
+  margin: 0;
   font-family: var(--font-title);
   font-weight: 400;
+  font-size: 30px;
+  line-height: 1.05;
   color: var(--ink);
   text-shadow: none;
 }
@@ -151,41 +239,62 @@
 .habitue-count {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 66px;
-  line-height: 0.82;
+  font-size: 52px;
+  line-height: 0.8;
   color: var(--stamp);
 }
 
-.habitue-title-text {
-  display: flex;
-  flex-direction: column;
-  font-size: 24px;
-  line-height: 1.1;
+.hero-sub {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  color: #4a443b;
 }
 
-.habitue-title-text small {
-  margin-top: 5px;
-  font-family: var(--font-text);
-  font-size: 13px;
-  color: var(--ink-soft);
+.habitue-last-week {
+  margin: -6px 0 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--stamp);
+}
+
+/* Un titre de partie, et ce qu'elle annonce à droite */
+.habitue-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.habitue-section-head h3 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.habitue-section-note {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #4a443b;
 }
 
 /* Les 7 cases à tamponner */
 .punches {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
   margin: 0 0 14px;
-  padding: 16px 0 0;
+  padding: 0;
   list-style: none;
-  border-top: 1px solid rgba(29, 27, 24, 0.14);
 }
 
 .punch {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .punch-hole {
@@ -193,34 +302,36 @@
   display: grid;
   place-items: center;
   width: 100%;
-  max-width: 52px;
+  max-width: 64px;
   aspect-ratio: 1;
-  border: 1.5px dashed rgba(29, 27, 24, 0.32);
+  border: 2px dashed rgba(29, 27, 24, 0.4);
   border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
 }
 
-/* Dans la case, le numéro du jour, à l'encre pâle ; dessous, ce qu'il rapporte */
+/* Dans la case, le numéro du jour ; dessous, ce qu'il rapporte */
 .punch-day {
   font-family: var(--font-card);
-  font-weight: 700;
-  font-size: 19px;
-  color: rgba(29, 27, 24, 0.3);
+  font-weight: 800;
+  font-size: 24px;
+  color: rgba(29, 27, 24, 0.5);
 }
 
 .punch-amount {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 15px;
-  color: var(--ink-soft);
+  font-size: 19px;
+  color: var(--ink);
 }
 
 .punch.is-today .punch-hole {
-  border: 1.5px solid var(--stamp);
-  background: rgba(181, 48, 42, 0.06);
+  border: 2.5px solid var(--stamp);
+  background: rgba(181, 48, 42, 0.07);
+  box-shadow: 0 0 0 4px rgba(181, 48, 42, 0.12);
 }
 
-.punch.is-today .punch-amount,
-.punch.is-today .punch-day {
+.punch.is-today .punch-day,
+.punch.is-today .punch-amount {
   color: var(--stamp);
 }
 
@@ -271,9 +382,9 @@
 .habitue-notes {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 0 0 16px;
-  font-size: 14px;
+  gap: 7px;
+  margin: 0 0 18px;
+  font-size: 15px;
   color: var(--ink);
 }
 
@@ -281,19 +392,14 @@
   margin: 0;
 }
 
-.habitue-today strong {
+.habitue-tomorrow strong {
   font-family: var(--font-card);
-  font-size: 18px;
+  font-size: 20px;
   color: var(--stamp);
 }
 
-.habitue-sep {
-  margin: 0 9px;
-  color: var(--ink-soft);
-}
-
 .habitue-soft {
-  color: var(--ink-soft);
+  color: #4a443b;
 }
 
 .mini-joker {
@@ -303,66 +409,66 @@
   rotate: -8deg;
 }
 
+/* Un rappel quand quelque chose risque de se perdre : à l'encre rouge */
+.habitue-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-weight: 600;
+  color: var(--stamp);
+}
+
+.habitue-alert svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* Le talon : le défi de la semaine, sous les pointillés */
 .habitue-week {
   position: relative;
-  margin: 0 -26px 14px;
-  padding: 14px 26px 12px;
+  margin: 0 -30px 16px;
+  padding: 16px 30px 14px;
   border-top: 2px dashed var(--paper-line);
-  background: rgba(29, 27, 24, 0.035);
+  background: rgba(29, 27, 24, 0.045);
 }
 
-.habitue-week-head {
-  display: flex;
+.habitue-week .habitue-section-head {
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.habitue-week h3 {
-  margin: 0;
-  font-family: var(--font-title);
-  font-weight: 400;
-  font-size: 18px;
-  color: var(--ink);
+  margin-bottom: 4px;
 }
 
 .habitue-week-prize {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 22px;
+  font-size: 26px;
   color: var(--stamp);
 }
 
 .habitue-week-text {
-  margin: 2px 0 10px;
-  font-size: 13.5px;
-  color: var(--ink-soft);
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  color: #4a443b;
 }
 
-.habitue-games-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 8px;
+.habitue-week-text strong {
+  color: var(--ink);
 }
 
+.habitue-urgent {
+  font-weight: 800;
+  color: var(--stamp);
+}
+
+/* Les affiches des jeux de la semaine, toutes sur une ligne au PC */
 .habitue-games {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
+  --cols: var(--n);
+  --w: 48px;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--w));
+  gap: 7px;
+  margin: 0 0 10px;
   padding: 0;
   list-style: none;
-}
-
-.habitue-week-count {
-  margin-left: auto;
-  font-family: var(--font-card);
-  font-weight: 800;
-  font-size: 22px;
-  color: var(--ink);
 }
 
 .habitue-games li {
@@ -370,8 +476,8 @@
 }
 
 .habitue-games .game-ticket.size-sm {
-  --w: 42px;
-  outline: 1px solid rgba(29, 27, 24, 0.14);
+  --w: inherit;
+  outline: 1px solid rgba(29, 27, 24, 0.18);
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.2),
     0 5px 8px -5px rgba(0, 0, 0, 0.45);
@@ -380,24 +486,25 @@
 /* Pas encore joué cette semaine : l'affiche passée, en gris */
 .habitue-games li:not(.is-played) .game-ticket {
   filter: grayscale(1);
-  opacity: 0.38;
+  opacity: 0.5;
   box-shadow: none;
 }
 
-.habitue-week .habitue-soft {
+.habitue-missing {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
+  color: #4a443b;
 }
 
 /* « Réussi » : un coup de tampon à la place de la prime */
 .habitue-done {
   flex: none;
   margin: -4px -4px 2px 0;
-  padding: 1px 10px 0;
+  padding: 1px 12px 0;
   border: 4px double var(--stamp);
   border-radius: 6px;
   font-family: var(--font-card);
-  font-size: 21px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -429,17 +536,10 @@
     scale: 0.94;
   }
   100% {
-    opacity: 0.88;
+    opacity: 0.9;
     scale: 1;
     rotate: -7deg;
   }
-}
-
-.habitue-last-week {
-  margin: -4px 0 14px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--stamp);
 }
 
 .habitue-foot {
@@ -455,21 +555,21 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 14px;
-  color: var(--ink-soft);
+  font-size: 15px;
+  color: #4a443b;
 }
 
 .habitue-balance-label {
   margin-right: 2px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .habitue-balance strong {
   font-family: var(--font-card);
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 800;
   line-height: 1;
   color: var(--ink);
@@ -478,14 +578,14 @@
 /* Les points qui viennent de tomber, écrits à l'encre à côté du solde */
 .habitue-plus {
   position: absolute;
-  top: -10px;
+  top: -12px;
   left: 100%;
   margin-left: 6px;
   font-family: var(--font-card);
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 800;
   color: var(--stamp);
-  animation: habitue-plus 1.5s ease-out both;
+  animation: habitue-plus 1.6s ease-out both;
 }
 
 @keyframes habitue-plus {
@@ -505,14 +605,14 @@
 
 /* « À table ! » : un bouton couleur du tapis */
 .habitue-go {
-  min-height: 44px;
-  padding: 0 24px;
+  min-height: 48px;
+  padding: 0 28px;
   border: 0;
   border-radius: 10px;
   background: var(--felt);
   color: var(--paper);
   font-family: var(--font-title);
-  font-size: 17px;
+  font-size: 18px;
   cursor: pointer;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -536,9 +636,9 @@
 
 .habitue-fine {
   margin: 12px 0 0;
-  font-size: 11.5px;
+  font-size: 12px;
   text-align: center;
-  color: var(--ink-soft);
+  color: #4a443b;
 }
 
 /* Quand la place manque, la carte perd ses marges avant de devoir défiler (comme les autres fenêtres) */
@@ -548,65 +648,239 @@
   }
 }
 
-/* Au téléphone : les 7 cases et les 7 jeux tiennent sur une ligne */
+/* Un écran peu haut (ordinateur portable) : la carte se resserre pour tenir sans défiler */
+@media (max-height: 820px) and (min-width: 481px) {
+  .habitue {
+    padding-top: 18px;
+  }
+
+  .habitue-kicker {
+    margin-bottom: 8px;
+  }
+
+  .habitue-hero {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .hero-slot {
+    width: 112px;
+    height: 112px;
+  }
+
+  .habitue-notes {
+    margin-bottom: 12px;
+  }
+
+  .habitue-fine {
+    display: none;
+  }
+}
+
+/* Au téléphone : la carte prend toute la largeur ; 7 cases sur une ligne, les affiches sur deux au-delà de 6 jeux */
 @media (max-width: 480px) {
   .habitue {
     padding: 18px 18px 14px;
   }
 
-  .habitue-count {
-    font-size: 56px;
+  .habitue-kicker {
+    margin-bottom: 10px;
+    font-size: 11px;
   }
 
-  .habitue-title-text {
-    font-size: 21px;
+  .habitue-hero {
+    gap: 14px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+  }
+
+  .hero-slot {
+    width: 100px;
+    height: 100px;
+  }
+
+  .hero-label {
+    font-size: 11.5px;
+  }
+
+  .habitue .hero-title {
+    font-size: 23px;
+  }
+
+  .habitue-count {
+    font-size: 42px;
+  }
+
+  .hero-sub {
+    font-size: 13px;
+  }
+
+  .habitue-section-head h3 {
+    font-size: 18px;
+  }
+
+  .habitue-section-note {
+    font-size: 12px;
   }
 
   .punches {
-    gap: 4px;
+    gap: 5px;
   }
 
   .punch-day {
-    font-size: 17px;
+    font-size: 19px;
   }
 
   .punch-amount {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .punch-joker {
     scale: 0.85;
   }
 
-  .habitue-week-count {
-    font-size: 19px;
+  .habitue-notes {
+    font-size: 14px;
   }
 
   .habitue-week {
     margin: 0 -18px 14px;
-    padding: 12px 18px 10px;
+    padding: 14px 18px 12px;
   }
 
   .habitue-games {
-    gap: 5px;
+    --w: 44px;
+    gap: 6px;
   }
 
-  .habitue-games .game-ticket.size-sm {
-    --w: 37px;
+  .habitue-games.is-two-rows {
+    --cols: var(--half);
+    --w: 52px;
   }
 
   .habitue-done {
-    font-size: 18px;
+    font-size: 19px;
+  }
+
+  .habitue-balance strong {
+    font-size: 30px;
+  }
+
+  .habitue-go {
+    padding: 0 22px;
   }
 }
 
 @media (max-width: 380px) {
-  .habitue-games .game-ticket.size-sm {
-    --w: 33px;
+  .habitue .hero-title {
+    font-size: 21px;
   }
 
-  .habitue-today {
-    font-size: 13.5px;
+  .hero-slot {
+    width: 88px;
+    height: 88px;
+  }
+
+  .habitue-games {
+    --w: 40px;
+  }
+
+  .habitue-games.is-two-rows {
+    --w: 48px;
+  }
+}
+
+/* Un téléphone peu haut : tout se resserre, et si la carte doit défiler, le solde et « À table ! » restent en bas */
+@media (max-width: 480px) and (max-height: 760px) {
+  .habitue {
+    padding: 14px 14px 0;
+  }
+
+  .habitue-kicker {
+    margin-bottom: 6px;
+  }
+
+  .habitue-hero {
+    gap: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .hero-slot {
+    width: 80px;
+    height: 80px;
+  }
+
+  .habitue .hero-title {
+    font-size: 20px;
+  }
+
+  .habitue-count {
+    font-size: 34px;
+  }
+
+  .hero-sub {
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .habitue-section-head {
+    margin-bottom: 8px;
+  }
+
+  .punches {
+    margin-bottom: 10px;
+  }
+
+  .punch {
+    gap: 4px;
+  }
+
+  .punch-amount {
+    font-size: 15px;
+  }
+
+  .habitue-notes {
+    gap: 5px;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+
+  .habitue-week {
+    margin: 0 -14px 0;
+    padding: 10px 14px;
+  }
+
+  .habitue-week-text {
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .habitue-games.is-two-rows {
+    --w: 42px;
+  }
+
+  .habitue-missing,
+  .habitue-fine {
+    display: none;
+  }
+
+  .habitue-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    margin: 0 -14px;
+    padding: 10px 14px 12px;
+    border-top: 1px solid rgba(29, 27, 24, 0.14);
+    background: var(--paper);
+  }
+
+  .habitue-balance strong {
+    font-size: 26px;
+  }
+
+  .habitue-go {
+    min-height: 44px;
   }
 }
 

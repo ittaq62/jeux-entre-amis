@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { GAME_NAMES } from "../../shared/protocol.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
-import { CYCLE_DAYS, LOGIN_LADDER, MAX_JOKERS, type StreakStatus } from "../../shared/streak.ts";
+import { CYCLE_DAYS, dayNumber, LOGIN_LADDER, MAX_JOKERS, type StreakStatus } from "../../shared/streak.ts";
 import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useShop } from "../stores/shop.ts";
@@ -27,17 +27,24 @@ function useStill(): boolean {
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
 const fr = (n: number) => n.toLocaleString("fr-FR");
 const ordinal = (n: number) => (n === 1 ? "1er" : `${n}e`);
+const WEEK_TOTAL = LOGIN_LADDER.reduce((sum, n) => sum + n, 0);
 
 /** Le joker du 7e jour : une vraie carte joker de la table */
 const JOKER: Card = { id: -7, kind: "wild", color: null };
 /** Chaque tampon penche un peu à sa façon, comme posé à la main */
 const TILT = [-11, 7, -4, 12, -8, 5, -13];
+/** Le logo de la maison, en éventail de quatre cartes, comme dans l'en-tête du site */
+const FAN = [-26, -9, 9, 26];
 
-/** Le moment de l'animation : la case d'aujourd'hui attend son tampon, puis il tombe */
-type Phase = "before" | "landed";
+/**
+ * Le moment de l'animation : la récompense attend, le grand tampon s'abat au milieu de la carte, puis la case du jour est
+ * tamponnée et le solde monte.
+ */
+type Phase = "before" | "hero" | "landed";
 
-const STAMP_AT = 520;
-const WEEK_AFTER = 650;
+const HERO_AT = 450;
+const LAND_AT = 1050;
+const WEEK_AFTER = 600;
 const COUNT_MS = 700;
 
 /** Le solde qui monte jusqu'à sa nouvelle valeur (tout de suite, sans animation) */
@@ -60,8 +67,8 @@ function useCountUp(from: number, to: number, start: boolean, still: boolean): n
 }
 
 /**
- * La carte d'habitué : un carton imprimé, un tampon par jour d'affilée (7 cases, le joker au bout), et en talon le
- * défi de la semaine. Le tampon du jour s'abat au moment où les points tombent.
+ * La carte d'habitué : en grand, la récompense du jour (un tampon qui s'abat), puis la semaine en 7 cases avec ce que
+ * rapporte chacune, quelques rappels quand quelque chose risque de se perdre, et en talon le défi de la semaine.
  */
 export function StreakDialog() {
   const status = useStreak((s) => s.status);
@@ -79,7 +86,7 @@ export function StreakDialog() {
   const paid = (day?.reward ?? 0) + (gained?.weeks.reduce((sum, w) => sum + w.bonus, 0) ?? 0);
   // L'animation ne se joue qu'au moment où les points tombent, pas quand on rouvre la carte pour la regarder
   const animate = !still && paid > 0;
-  const [phase, setPhase] = useState<Phase>(animate && day ? "before" : "landed");
+  const [phase, setPhase] = useState<Phase>(animate ? "before" : "landed");
   const [weekLanded, setWeekLanded] = useState(!animate || !thisWeek);
 
   useEffect(() => {
@@ -95,15 +102,13 @@ export function StreakDialog() {
 
   useEffect(() => {
     if (!animate) return;
-    const timers: number[] = [];
-    if (day) {
-      timers.push(
-        window.setTimeout(() => {
-          setPhase("landed");
-          play("cardPlace", { volume: 0.8 });
-        }, STAMP_AT),
-      );
-    }
+    const timers = [
+      window.setTimeout(() => {
+        setPhase("hero");
+        play("cardPlace", { volume: 0.9 });
+      }, HERO_AT),
+      window.setTimeout(() => setPhase("landed"), day ? LAND_AT : HERO_AT),
+    ];
     if (thisWeek) {
       timers.push(
         window.setTimeout(
@@ -111,7 +116,7 @@ export function StreakDialog() {
             setWeekLanded(true);
             play("achievement", { volume: 0.7 });
           },
-          day ? STAMP_AT + WEEK_AFTER : STAMP_AT,
+          day ? LAND_AT + WEEK_AFTER : HERO_AT,
         ),
       );
     }
@@ -119,37 +124,66 @@ export function StreakDialog() {
   }, [animate, day, thisWeek]);
 
   const target = paid > 0 ? balanceBefore + paid : liveBalance;
-  const counting = !animate || phase === "landed" || (!day && weekLanded);
-  const shownBalance = useCountUp(balanceBefore, target, counting, !animate);
+  const shownBalance = useCountUp(balanceBefore, target, !animate || phase === "landed", !animate);
 
   if (!status) return null;
-  const { login, play: playing } = status;
-  const thud = animate && day !== null && phase === "landed";
+  const { login } = status;
+  // La récompense mise en avant : celle du jour, sinon celle du défi qui vient d'être réussi, sinon celle déjà prise aujourd'hui
+  const hero = day
+    ? { amount: day.reward, label: "Ta récompense du jour" }
+    : thisWeek
+      ? { amount: thisWeek.bonus, label: "Défi de la semaine réussi" }
+      : login.claimedToday
+        ? { amount: LOGIN_LADDER[login.cycleDay - 1]!, label: "Récompense du jour : déjà prise" }
+        : null;
+  const heroStamped = !animate || phase !== "before";
   return createPortal(
     <div
       className={`modal-backdrop habitue-backdrop ${still ? "is-still" : ""}`}
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
-      <div className={`habitue paper ${thud ? "is-thud" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div
+        className={`habitue paper ${animate && phase === "hero" ? "is-thud" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         <button className="habitue-close" onClick={close} aria-label="Fermer">
-          <Icon name="close" size={20} />
+          <Icon name="close" size={22} />
         </button>
         <p className="habitue-kicker">La Tablée · carte d'habitué</p>
-        <h2 id={titleId} className="habitue-title">
-          <span className="habitue-count">{login.streak}</span>
-          <span className="habitue-title-text">
-            {login.streak > 1 ? "jours d'affilée" : "jour d'affilée"}
-            <small>
-              Record : {plural(login.best, "jour")}
-              {playing.streak > 0 && <> · {plural(playing.streak, "jour")} de jeu</>}
-            </small>
-          </span>
-        </h2>
 
-        <Punches status={status} phase={phase} animate={animate && day !== null} />
+        <div className="habitue-hero">
+          {hero && (
+            <span className="hero-slot" aria-hidden="true">
+              {heroStamped && <BigStamp amount={hero.amount} pressing={animate} />}
+            </span>
+          )}
+          <div className="hero-text">
+            {hero && <p className="hero-label">{hero.label}</p>}
+            <h2 id={titleId} className="hero-title">
+              <span className="habitue-count num">{login.streak}</span> {login.streak > 1 ? "jours d'affilée" : "jour d'affilée"}
+            </h2>
+            <p className="hero-sub">
+              Record : {plural(login.best, "jour")}
+              {status.play.streak > 0 && <> · {plural(status.play.streak, "jour")} de jeu d'affilée</>}
+            </p>
+          </div>
+        </div>
+        {lastWeek && <p className="habitue-last-week">Défi de la semaine dernière réussi : +{lastWeek.bonus} points.</p>}
+
+        <div className="habitue-week-days">
+          <div className="habitue-section-head">
+            <h3>Ta semaine</h3>
+            <span className="habitue-section-note">
+              {WEEK_TOTAL} points et un joker en {CYCLE_DAYS} jours
+            </span>
+          </div>
+          <Punches status={status} stamped={!animate || phase === "landed"} animate={animate && day !== null} />
+        </div>
 
         <div className="habitue-notes">
-          <Today status={status} />
+          <Tomorrow status={status} />
           {day && day.lost >= 2 && <p>Ta série de {day.lost} jours s'était arrêtée : nouvelle carte !</p>}
           {day?.jokerUsed ? (
             <p>
@@ -160,18 +194,22 @@ export function StreakDialog() {
               <MiniJoker /> 7e tampon : un joker en poche ! Il couvrira un jour raté.
             </p>
           ) : (
-            <JokerNote status={status} />
+            login.jokers > 0 && (
+              <p>
+                <MiniJoker /> {login.jokers >= MAX_JOKERS ? "Joker" : "Jokers"} en poche : un jour raté ne casse pas ta série.
+              </p>
+            )
           )}
+          <PlayReminder status={status} />
         </div>
 
         {status.week.bonus > 0 && <Challenge status={status} landed={weekLanded} animate={animate && thisWeek !== null} />}
-        {lastWeek && <p className="habitue-last-week">Défi de la semaine dernière réussi : +{lastWeek.bonus} points.</p>}
 
         <div className="habitue-foot">
           <span className="habitue-balance">
             <span className="habitue-balance-label">Ton solde</span>
             <strong className="num">{fr(shownBalance)}</strong> points
-            {animate && counting && (
+            {animate && phase === "landed" && (
               <span className="habitue-plus num" aria-hidden="true">
                 +{paid}
               </span>
@@ -192,22 +230,54 @@ export function StreakDialog() {
   );
 }
 
-/** Les 7 cases de la carte : tamponnées, celle d'aujourd'hui, et celles qui attendent */
-function Punches({ status, phase, animate }: { status: StreakStatus; phase: Phase; animate: boolean }) {
+/** Le grand tampon de la récompense : le logo de la maison et les points, à l'encre rouge */
+function BigStamp({ amount, pressing }: { amount: number; pressing: boolean }) {
+  return (
+    <svg className={`hero-stamp ${pressing ? "is-pressing" : ""}`} viewBox="0 0 120 120" aria-hidden="true">
+      <circle cx="60" cy="60" r="56" fill="none" stroke="currentColor" strokeWidth="5" />
+      <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <g transform="translate(60 42) scale(0.62)">
+        {FAN.map((angle) => (
+          <rect
+            key={angle}
+            x="-5"
+            y="-21"
+            width="10"
+            height="15"
+            rx="1.6"
+            transform={`rotate(${angle})`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.6"
+          />
+        ))}
+      </g>
+      <text className="hero-stamp-amount" x="60" y="80" textAnchor="middle">
+        +{amount}
+      </text>
+      <text className="hero-stamp-unit" x="60" y="97" textAnchor="middle">
+        POINTS
+      </text>
+    </svg>
+  );
+}
+
+/** Les 7 cases de la carte : tamponnées, celle d'aujourd'hui, et celles qui attendent, avec ce que rapporte chacune */
+function Punches({ status, stamped: todayStamped, animate }: { status: StreakStatus; stamped: boolean; animate: boolean }) {
   const { cycleDay, claimedToday } = status.login;
   return (
     <ol className="punches" aria-label="Les 7 jours de ta carte">
       {LOGIN_LADDER.map((reward, i) => {
         const n = i + 1;
         const today = n === cycleDay;
-        const stamped = n < cycleDay || (today && claimedToday && phase === "landed");
+        const stamped = n < cycleDay || (today && claimedToday && todayStamped);
         const label = `Jour ${n} : ${reward} points${n === CYCLE_DAYS ? " et un joker" : ""}${stamped ? ", tamponné" : today ? ", aujourd'hui" : ""}`;
         return (
           <li key={n} className={`punch ${today ? "is-today" : ""} ${n === CYCLE_DAYS ? "is-seventh" : ""}`} aria-label={label}>
             <span className="punch-hole" aria-hidden="true">
               {n === CYCLE_DAYS ? (
                 <span className="punch-joker">
-                  <CardFace card={JOKER} width={24} />
+                  <CardFace card={JOKER} width={26} />
                 </span>
               ) : (
                 !stamped && <span className="punch-day num">{n}</span>
@@ -223,9 +293,6 @@ function Punches({ status, phase, animate }: { status: StreakStatus; phase: Phas
     </ol>
   );
 }
-
-/** Le logo de la maison, en éventail de quatre cartes, comme dans l'en-tête du site */
-const FAN = [-26, -9, 9, 26];
 
 /** Un coup de tampon à l'encre rouge : un double cercle et l'éventail de cartes de la maison */
 function Stamp({ day, pressing }: { day: number; pressing: boolean }) {
@@ -266,34 +333,34 @@ function MiniJoker() {
   );
 }
 
-function JokerNote({ status }: { status: StreakStatus }) {
-  if (status.login.jokers > 0) {
-    return (
-      <p>
-        <MiniJoker /> {status.login.jokers >= MAX_JOKERS ? "Joker" : "Jokers"} en poche : un jour raté ne casse pas ta série.
-      </p>
-    );
-  }
+/** Demain, et le 7e jour qui approche */
+function Tomorrow({ status }: { status: StreakStatus }) {
+  const { cycleDay, claimedToday, jokers } = status.login;
+  const next = claimedToday ? (cycleDay % CYCLE_DAYS) + 1 : cycleDay;
+  const joker = next === CYCLE_DAYS && jokers < MAX_JOKERS;
   return (
-    <p className="habitue-soft">
-      <MiniJoker /> Au 7e tampon : +{LOGIN_LADDER[CYCLE_DAYS - 1]} et un joker, qui couvre un jour raté.
+    <p className="habitue-tomorrow">
+      {claimedToday ? "Reviens demain" : "Ouvre l'accueil aujourd'hui"} : <strong className="num">+{LOGIN_LADDER[next - 1]}</strong>
+      {joker && " et un joker"}
+      {next < CYCLE_DAYS && (
+        <span className="habitue-soft">
+          {" "}
+          · au 7e jour : +{LOGIN_LADDER[CYCLE_DAYS - 1]}
+          {jokers < MAX_JOKERS ? " et un joker" : ""}
+        </span>
+      )}
     </p>
   );
 }
 
-/** Aujourd'hui et demain, en clair */
-function Today({ status }: { status: StreakStatus }) {
-  const { cycleDay, claimedToday, jokers } = status.login;
-  const next = (cycleDay % CYCLE_DAYS) + 1;
-  const joker = next === CYCLE_DAYS && jokers < MAX_JOKERS;
+/** La série de jeu tient jusqu'à minuit : une partie terminée aujourd'hui la garde */
+function PlayReminder({ status }: { status: StreakStatus }) {
+  const { streak, today } = status.play;
+  if (today || streak < 1) return null;
   return (
-    <p className="habitue-today">
-      {claimedToday ? "Aujourd'hui" : "En ouvrant l'accueil aujourd'hui"} : <strong className="num">+{LOGIN_LADDER[cycleDay - 1]}</strong>
-      <span className="habitue-sep" aria-hidden="true">
-        ·
-      </span>
-      Demain : <strong className="num">+{LOGIN_LADDER[next - 1]}</strong>
-      {joker && " et un joker"}
+    <p className="habitue-alert">
+      <Icon name="info" size={16} aria-hidden="true" /> Pas encore de partie aujourd'hui : une partie finie avant minuit garde tes{" "}
+      {plural(streak, "jour")} de jeu d'affilée.
     </p>
   );
 }
@@ -302,9 +369,15 @@ function Today({ status }: { status: StreakStatus }) {
 function Challenge({ status, landed, animate }: { status: StreakStatus; landed: boolean; animate: boolean }) {
   const { games, played, bonus, paid } = status.week;
   const done = paid && landed;
+  // Les jours qui restent, aujourd'hui compris (le dimanche, c'est le dernier)
+  const left = 7 - (dayNumber(status.today) - dayNumber(status.week.start));
+  const missing = games.filter((g) => !played.includes(g));
+  // Au téléphone, au-delà de 6 jeux, les affiches passent sur deux lignes plutôt que de rapetisser
+  const style = { "--n": games.length, "--half": Math.ceil(games.length / 2) } as CSSProperties;
+  const twoRows = games.length > 6;
   return (
     <section className={`habitue-week ${done ? "is-done" : ""}`} aria-label="Le défi de la semaine">
-      <div className="habitue-week-head">
+      <div className="habitue-section-head">
         <h3>Défi de la semaine</h3>
         {done ? (
           <span className={`habitue-done ${animate ? "is-pressing" : ""}`}>
@@ -315,25 +388,35 @@ function Challenge({ status, landed, animate }: { status: StreakStatus; landed: 
         )}
       </div>
       <p className="habitue-week-text">
-        {done ? `Les ${games.length} jeux, cette semaine.` : `Une partie de chacun des ${games.length} jeux d'ici dimanche soir.`}
+        {done || missing.length === 0 ? (
+          `Les ${games.length} jeux, cette semaine.`
+        ) : (
+          <>
+            <strong className="num">
+              {played.length} jeu{played.length > 1 ? "x" : ""} sur {games.length}
+            </strong>{" "}
+            · une partie de chacun d'ici dimanche soir
+            {left <= 2 && <span className="habitue-urgent">{left === 1 ? " · dernier jour !" : ` · plus que ${left} jours !`}</span>}
+          </>
+        )}
       </p>
-      <div className="habitue-games-row">
-        <ul className="habitue-games">
-          {games.map((g) => {
-            const has = played.includes(g);
-            return (
-              <li key={g} className={has ? "is-played" : ""} title={`${GAME_NAMES[g]}${has ? " : joué" : " : pas encore"}`}>
-                <GameTicket game={g} size="sm" />
-                <span className="visually-hidden">{`${GAME_NAMES[g]}${has ? ", joué" : ", pas encore joué"}`}</span>
-              </li>
-            );
-          })}
-        </ul>
-        <span className="habitue-week-count num" aria-label={`${played.length} sur ${games.length}`}>
-          {played.length}/{games.length}
-        </span>
-      </div>
-      <p className="habitue-soft">Contre des amis ou des bots, du moment que tu restes jusqu'à la fin.</p>
+      <ul className={`habitue-games ${twoRows ? "is-two-rows" : ""}`} style={style}>
+        {games.map((g) => {
+          const has = played.includes(g);
+          return (
+            <li key={g} className={has ? "is-played" : ""} title={`${GAME_NAMES[g]}${has ? " : joué" : " : pas encore"}`}>
+              <GameTicket game={g} size="sm" />
+              <span className="visually-hidden">{`${GAME_NAMES[g]}${has ? ", joué" : ", pas encore joué"}`}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {!done && missing.length > 0 && (
+        <p className="habitue-missing">
+          Il te manque {missing.length <= 5 ? missing.map((g) => GAME_NAMES[g]).join(", ") : `encore ${missing.length} jeux`}. Contre des
+          amis ou des bots, du moment que tu restes jusqu'à la fin.
+        </p>
+      )}
     </section>
   );
 }
