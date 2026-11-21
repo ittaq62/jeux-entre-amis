@@ -891,7 +891,7 @@ kbd {
 
 .cr-over-card .report-link {
   align-self: center;
-  margin: -2px 0 -6px;
+  margin: 0;
 }
 
 /* Le salon */

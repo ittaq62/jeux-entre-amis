@@ -37,6 +37,8 @@ const PATHS = {
   lock: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4",
   door: "M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.8a1 1 0 0 1-1.3 1L5 20V5.6a2 2 0 0 1 1.6-2l5-1A1 1 0 0 1 13 3.6z",
   menu: "M4 6h16M4 12h16M4 18h16",
+  chevronDown: "M6 9l6 6 6-6",
+  chevronUp: "M18 15l-6-6-6 6",
   play: "M6 4l14 8-14 8z",
   refresh: "M21 12a9 9 0 0 1-15.4 6.4L3 16M3 12a9 9 0 0 1 15.4-6.4L21 8M21 3v5h-5M3 21v-5h5",
   rotate: "M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5",

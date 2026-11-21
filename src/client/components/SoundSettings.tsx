@@ -130,3 +130,25 @@ export function SoundButton({ className = "btn btn-ghost btn-icon", children }: 
     </div>
   );
 }
+
+/**
+ * La ligne « Son » des menus de partie : elle déplie le réglage commun sur place (et les réglages propres au jeu dessous),
+ * sans quitter le menu.
+ */
+export function MenuSound({ children }: { children?: ReactNode }) {
+  const sound = usePrefs((p) => p.sound);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="menu-item" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Icon name={sound ? "volume" : "mute"} size={18} /> Son
+        <Icon name={open ? "chevronUp" : "chevronDown"} size={16} className="menu-item-end" />
+      </button>
+      {open && (
+        <div className="menu-sound">
+          <SoundSettings>{children}</SoundSettings>
+        </div>
+      )}
+    </>
+  );
+}

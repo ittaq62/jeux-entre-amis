@@ -24,6 +24,8 @@ import { FuseRope, ropeStart } from "./FuseRope.tsx";
 import { MecheGameOver } from "./MecheGameOver.tsx";
 import { useTyping, type EventBatch, type RefusedWord } from "./useMecheRoom.ts";
 import { screenSize } from "../lib/viewport.ts";
+import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 
 interface Props {
   room: MecheRoomView;
@@ -256,7 +258,6 @@ export function MecheTable({
   const phone = w < 760;
   const short = phone && h < 520;
   const sound = usePrefs((s) => s.sound);
-  const setPrefs = usePrefs((s) => s.set);
   const reduced = usePrefs((s) => s.reducedEffects);
   const [stageRef, stage] = useSize<HTMLElement>();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -572,13 +573,7 @@ export function MecheTable({
           </span>
         </div>
         <div className="table-top-actions">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
-          </button>
+          <SoundButton />
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" />
             {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -600,6 +595,15 @@ export function MecheTable({
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <MenuSound />
+                <ReportButton
+                  look="menu"
+                  game="meche"
+                  variant={`${g.settings.mode === "rallonge" ? "Mèche à rallonge" : g.settings.mode === "chacun" ? "Chacun sa mèche" : "Mèche"}${g.settings.source === "marabout" ? ", au Marabout" : ""}`}
+                  code={room.code}
+                  role={room.you.seatId ? "player" : "watcher"}
+                  onOpen={() => setMenuOpen(false)}
+                />
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>

@@ -7,15 +7,32 @@ import { Icon } from "./Icon.tsx";
 const ReportDialog = lazy(() => import("./ReportDialog.tsx").then((m) => ({ default: m.ReportDialog })));
 
 /**
- * Le petit bouton des écrans de fin, sous ceux de la partie : il ouvre la fenêtre « Signaler un problème ».
- * Dans une tournée, le code de la tournée part avec celui de la table.
+ * « Signaler un problème » : il ouvre la fenêtre de signalement. Sous les boutons des écrans de fin (`look` « link »), ou
+ * comme une ligne des menus de partie (`look` « menu », `onOpen` referme le menu). Dans une tournée, le code de la
+ * tournée part avec celui de la table.
  */
-export function ReportButton({ tour, ...context }: Omit<ReportContext, "tour"> & { tour?: string | null }) {
+export function ReportButton({
+  tour,
+  look = "link",
+  onOpen,
+  ...context
+}: Omit<ReportContext, "tour"> & { tour?: string | null; look?: "link" | "menu"; onOpen?: () => void }) {
   const bridge = useTourBridge();
   const open = useReport((s) => s.open);
+  const go = () => {
+    onOpen?.();
+    open({ ...context, tour: tour ?? bridge?.code ?? null });
+  };
+  if (look === "menu") {
+    return (
+      <button type="button" className="menu-item" onClick={go}>
+        <Icon name="flag" size={18} /> Signaler un problème
+      </button>
+    );
+  }
   return (
-    <button type="button" className="report-link" onClick={() => open({ ...context, tour: tour ?? bridge?.code ?? null })}>
-      <Icon name="flag" size={14} />
+    <button type="button" className="report-link" onClick={go}>
+      <Icon name="flag" size={15} />
       Signaler un problème
     </button>
   );

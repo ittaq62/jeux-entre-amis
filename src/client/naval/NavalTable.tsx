@@ -22,6 +22,8 @@ import { PlacementBoard } from "./Placement.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useBoxSize, useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
+import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 
 interface Props {
   room: NavalRoomView;
@@ -86,7 +88,6 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
   const short = h < 560 && w > h;
   const compact = phone || short;
   const sound = usePrefs((s) => s.sound);
-  const setPrefs = usePrefs((s) => s.set);
   const [menuOpen, setMenuOpen] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
@@ -122,13 +123,7 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
         </div>
       )}
       <div className="table-top-actions">
-        <button
-          className="btn btn-ghost btn-icon"
-          onClick={() => setPrefs({ sound: !sound })}
-          aria-label={sound ? "Couper le son" : "Activer le son"}
-        >
-          <Icon name={sound ? "volume" : "mute"} />
-        </button>
+        <SoundButton />
         <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
           <Icon name="chat" />
           {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -150,6 +145,15 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
                   <Icon name="users" size={18} /> Voir le salon et les règles
                 </button>
               )}
+              <MenuSound />
+              <ReportButton
+                look="menu"
+                game="naval"
+                variant={`Bataille navale, ${g.mode === "duel" ? "en duel" : g.mode === "teams" ? "en équipes" : "en mêlée"}, grille ${g.settings.grid}×${g.settings.grid}`}
+                code={room.code}
+                role={room.you.seatId ? "player" : "watcher"}
+                onOpen={() => setMenuOpen(false)}
+              />
               <button className="menu-item is-danger" onClick={onLeave}>
                 <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
               </button>

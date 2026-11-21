@@ -22,6 +22,8 @@ import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
+import { MenuSound, SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 
 interface Props {
   room: BricksRoomView;
@@ -76,7 +78,6 @@ export function BricksTable({
   const flat = phone && w > h && h < 560;
   const tightPad = phone && h < 640;
   const sound = usePrefs((s) => s.sound);
-  const setPrefs = usePrefs((s) => s.set);
   const music = useControls((s) => s.music);
   const [menuOpen, setMenuOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -188,13 +189,9 @@ export function BricksTable({
         </div>
         <RoundHud room={room} serverOffset={serverOffset} meId={meId} />
         <div className="table-top-actions">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
-          </button>
+          <SoundButton>
+            <SoundToggle label="Musique de Briques" checked={music} onChange={(v) => useControls.getState().set({ music: v })} />
+          </SoundButton>
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" />
             {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -219,6 +216,21 @@ export function BricksTable({
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <MenuSound>
+                  <SoundToggle label="Musique de Briques" checked={music} onChange={(v) => useControls.getState().set({ music: v })} />
+                </MenuSound>
+                <ReportButton
+                  look="menu"
+                  game="bricks"
+                  variant={
+                    g.mode === "sprint"
+                      ? "Briques, 40 lignes en solo"
+                      : `Briques, ${g.mode === "duel" ? "en duel" : g.mode === "teams" ? "en équipes" : "en mêlée"}${g.settings.series > 1 ? `, en ${g.settings.series} manches gagnantes` : ""}`
+                  }
+                  code={room.code}
+                  role={room.you.seatId ? "player" : "watcher"}
+                  onOpen={() => setMenuOpen(false)}
+                />
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>

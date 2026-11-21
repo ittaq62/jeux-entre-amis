@@ -27,6 +27,8 @@ import { useViewport } from "../lib/viewport.ts";
 import { tableTeamName } from "../../shared/games/teams.ts";
 import { crewColor } from "./Crews.tsx";
 import { DrawnRulesNote, drawnName } from "./RandomRules.tsx";
+import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 
 interface TableProps {
   room: RoomView;
@@ -67,7 +69,6 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   const pileW = compact
     ? clamp(portrait ? Math.min(w / 4.6, h / 9.6) : w / 5.2, 62, short ? Math.max(62, h / 6.2) : 88)
     : clamp(h / 7.8, 84, 116);
-  const sound = usePrefs((s) => s.sound);
   const setPrefs = usePrefs((s) => s.set);
   const [colorFor, setColorFor] = useState<Card | null>(null);
   const [targetFor, setTargetFor] = useState<Card | null>(null);
@@ -354,13 +355,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             />
           )}
           <div className="table-top-actions">
-            <button
-              className="btn btn-ghost btn-icon"
-              onClick={() => setPrefs({ sound: !sound })}
-              aria-label={sound ? "Couper le son" : "Activer le son"}
-            >
-              <Icon name={sound ? "volume" : "mute"} />
-            </button>
+            <SoundButton />
             <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
               <Icon name="chat" />
               {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -385,6 +380,15 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   <button className="menu-item" onClick={() => setPrefs({ colorblind: !usePrefs.getState().colorblind })}>
                     <Icon name="eye" size={18} /> Symboles de couleur
                   </button>
+                  <MenuSound />
+                  <ReportButton
+                    look="menu"
+                    game="uno"
+                    variant={`${g.settings.variant === "nomercy" ? "UNO No Mercy" : "UNO classique"}${g.settings.endMode === "points" ? `, en ${g.settings.targetScore} points` : ""}`}
+                    code={room.code}
+                    role={room.you.seatId ? "player" : "watcher"}
+                    onOpen={() => setMenuOpen(false)}
+                  />
                   <button className="menu-item is-danger" onClick={onLeave}>
                     <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                   </button>

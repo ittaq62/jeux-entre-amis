@@ -23,7 +23,6 @@ import { formatClock, useCountdown } from "../lib/countdown.ts";
 import { preloadSounds, startLoop, stopLoop } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
-import { MusicToggle } from "../tour/TourParts.tsx";
 import { Board3D } from "./Board3D.tsx";
 import { asState, colorOf, money } from "./boardUi.ts";
 import { CapitaleGameOver } from "./CapitaleGameOver.tsx";
@@ -42,6 +41,8 @@ import { useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote } from "../game/RandomRules.tsx";
 import { BuilderPanel, type CellHandler } from "./BuilderPanel.tsx";
 import type { BuilderPreview } from "./scene/builderCity.ts";
+import { MenuSound, SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
 
 interface Props {
   room: CapitaleRoomView;
@@ -477,14 +478,9 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
           >
             <Icon name="list" />
           </button>
-          <MusicToggle />
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
-          </button>
+          <SoundButton>
+            <SoundToggle label="Musique pendant la partie" checked={music} onChange={(v) => setPrefs({ tourMusic: v })} />
+          </SoundButton>
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" />
             {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -506,6 +502,17 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <MenuSound>
+                  <SoundToggle label="Musique pendant la partie" checked={music} onChange={(v) => setPrefs({ tourMusic: v })} />
+                </MenuSound>
+                <ReportButton
+                  look="menu"
+                  game="capitale"
+                  variant={`Capitale, ${g.settings.end === "timed" ? `partie de ${g.settings.minutes} minutes` : "jusqu'à la faillite"}`}
+                  code={room.code}
+                  role={room.you.seatId ? "player" : "watcher"}
+                  onOpen={() => setMenuOpen(false)}
+                />
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la table"}
                 </button>
