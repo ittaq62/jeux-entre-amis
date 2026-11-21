@@ -11,6 +11,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 
 interface Props {
   room: MecheRoomView;
@@ -116,11 +117,7 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
           })}
         </ol>
 
-        {inTour && (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
-        )}
+        {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>

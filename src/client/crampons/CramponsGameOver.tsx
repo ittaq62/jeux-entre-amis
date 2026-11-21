@@ -4,6 +4,7 @@ import type { TeamStats } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 
 const ROWS: [string, (s: TeamStats, total: TeamStats) => string][] = [
   ["Tirs", (s) => String(s.shots)],
@@ -80,9 +81,7 @@ export function CramponsGameOver({
           </tbody>
         </table>
         {inTour ? (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
+          <TourNextNote />
         ) : (
           !seated && (
             <p className="hint" style={{ margin: 0 }}>

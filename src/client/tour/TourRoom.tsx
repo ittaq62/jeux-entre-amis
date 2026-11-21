@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
-import { GAME_END_HOLD_MS, type TourView } from "../../shared/tour.ts";
+import type { TourView } from "../../shared/tour.ts";
 import { Loading } from "../components/ui.tsx";
 import { ArrivalChoice } from "../game/ArrivalChoice.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
@@ -25,7 +25,7 @@ export function TourRoom({ code }: { code: string }) {
   const { view, status, chat, fatal, send, serverOffset, me } = useTourRoom(code);
   const [chatOpen, setChatOpen] = useState(false);
   const unread = useUnread(chat, chatOpen, me?.id);
-  const shown = useShownGame(view);
+  const shown = useShownGame(view, serverOffset);
 
   // La musique d'entracte : au salon et entre deux jeux, coupée dès qu'un jeu s'affiche (il a ses propres sons)
   const musicOn = usePrefs((s) => s.sound && s.tourMusic);
@@ -53,13 +53,27 @@ export function TourRoom({ code }: { code: string }) {
   }, [send, navigate]);
   const sendChat = useCallback((text: string) => send({ t: "chat", text }), [send]);
 
-  const bridge = useMemo<TourBridge | null>(
-    () =>
-      view && shown
-        ? { code, chat, sendChat, leave, waiting: <TourWaiting view={view} game={shown.game} serverOffset={serverOffset} /> }
-        : null,
-    [code, chat, sendChat, leave, view, shown, serverOffset],
-  );
+  const onContinue = useCallback(() => send({ t: "continue" }), [send]);
+  const bridge = useMemo<TourBridge | null>(() => {
+    if (!view || !shown) return null;
+    // La feuille de fin de ce jeu : ceux qui peuvent « continuer » sont les vrais joueurs du jeu, encore là
+    const hold = view.endHold?.code === shown.code ? view.endHold : null;
+    const played = view.games.find((g) => g.code === shown.code)?.players ?? [];
+    const humans = view.members
+      .filter((m) => m.kind === "human" && !m.left && m.connected && played.includes(m.userId))
+      .map((m) => m.userId);
+    return {
+      code,
+      chat,
+      sendChat,
+      leave,
+      waiting: <TourWaiting view={view} game={shown.game} serverOffset={serverOffset} />,
+      endHold: hold ? { until: hold.until, done: hold.done, players: humans, last: view.status === "finished" } : null,
+      youId: view.you.userId,
+      serverOffset,
+      onContinue,
+    };
+  }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion à la tournée…" : "Arrivée à la tournée…"} />;
@@ -114,11 +128,18 @@ export function TourRoom({ code }: { code: string }) {
   );
 }
 
-/** Le jeu à afficher : celui en cours, et encore quelques secondes après sa fin, le temps de sa feuille de fin */
-function useShownGame(view: TourView | null): { game: GameId; code: string } | null {
+/**
+ * Le jeu à afficher : celui en cours, puis encore le temps de sa feuille de fin, que la tournée garde jusqu'à une heure
+ * donnée (quinze secondes, moins si tous les joueurs ont appuyé sur « Continuer »)
+ */
+function useShownGame(view: TourView | null, serverOffset: number): { game: GameId; code: string } | null {
   const [held, setHeld] = useState<{ game: GameId; code: string } | null>(null);
   const current = view?.current ?? null;
   const aborted = held ? (view?.games.find((g) => g.code === held.code)?.aborted ?? false) : false;
+  // L'heure de fin de la feuille, si la tournée en garde une pour ce jeu
+  const holdUntil = held && view?.endHold?.code === held.code ? view.endHold.until : null;
+  // La table vient de finir mais la tournée n'a pas encore donné son délai : on attend sa prochaine vue
+  const finishedHere = held ? Boolean(view?.games.find((g) => g.code === held.code)?.endedAt) : false;
   useEffect(() => {
     if (current) {
       setHeld((h) => (h?.code === current.code ? h : { game: current.game, code: current.code }));
@@ -130,9 +151,19 @@ function useShownGame(view: TourView | null): { game: GameId; code: string } | n
       setHeld(null);
       return;
     }
-    const t = setTimeout(() => setHeld(null), GAME_END_HOLD_MS);
+    if (holdUntil === null) {
+      // Sans feuille de fin gardée (un jeu fini sans résultat) : l'entracte tout de suite
+      if (finishedHere) setHeld(null);
+      return;
+    }
+    const left = holdUntil - (Date.now() + serverOffset);
+    if (left <= 0) {
+      setHeld(null);
+      return;
+    }
+    const t = setTimeout(() => setHeld(null), left);
     return () => clearTimeout(t);
-  }, [current?.code, current?.game, held?.code, aborted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.code, current?.game, held?.code, aborted, holdUntil, finishedHere, serverOffset]); // eslint-disable-line react-hooks/exhaustive-deps
   return held;
 }
 

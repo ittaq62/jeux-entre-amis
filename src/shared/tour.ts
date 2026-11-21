@@ -188,12 +188,22 @@ export function drawBolidesBots(humans: number, maxSeats: number, random: () => 
 export const TOUR_TEAMS = ["Rouges", "Bleus"] as const;
 export const TOUR_TEAM_COLORS = ["#d4453c", "#3f7fd8"] as const;
 
-/** Délai entre deux jeux : le récap, le tirage, puis le départ */
-export const INTERMISSION_MS = 25_000;
+/** L'entracte entre deux jeux, une fois la feuille de fin du jeu passée : le récap, le tirage, puis le départ */
+export const INTERMISSION_MS = 20_000;
 /** Avant le tout premier jeu, seulement le tirage */
 export const FIRST_DRAW_MS = 9_000;
-/** Temps laissé à la feuille de fin du jeu avant d'afficher l'entracte */
-export const GAME_END_HOLD_MS = 5_000;
+/**
+ * La feuille de fin d'un jeu reste au plus tant à l'écran avant l'entracte (ou la fin de la tournée), le temps de lire le
+ * résultat et de signaler un problème ; quand tous les joueurs du jeu appuient sur « Continuer », on passe tout de suite.
+ */
+export const GAME_END_HOLD_MS = 15_000;
+
+/** La feuille de fin du dernier jeu : de quelle table, jusqu'à quand, et qui a déjà appuyé sur « Continuer » */
+export interface TourEndHold {
+  code: string;
+  until: number;
+  done: string[];
+}
 /** Règles votées : un peu plus de temps à l'entracte pour voter */
 export const VOTE_EXTRA_MS = 12_000;
 
@@ -1067,6 +1077,8 @@ export interface TourView {
   notice: string | null;
   serverNow: number;
   quick: boolean;
+  /** La feuille de fin du dernier jeu, gardée à l'écran (null quand il n'y en a pas) */
+  endHold: TourEndHold | null;
 }
 
 export type TourClientMessage =
@@ -1102,6 +1114,8 @@ export type TourClientMessage =
   | { t: "pickRule"; rule: string; on: boolean }
   | { t: "pause" }
   | { t: "resume" }
+  /** Un joueur du jeu qui vient de finir a lu sa feuille de fin : quand tous l'ont fait, l'entracte arrive */
+  | { t: "continue" }
   /** Hôte : finir la tournée (à l'entracte), ou après le jeu en cours */
   | { t: "finish" }
   /** Hôte, une fois la tournée finie : en relancer une avec la même bande */

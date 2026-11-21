@@ -12,6 +12,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { CrewMark } from "./Crews.tsx";
 import { EloLine } from "./EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 
 function seatOf(room: RoomView, id: string): SeatView | undefined {
   return room.seats.find((s) => s.id === id);
@@ -186,9 +187,7 @@ export function GameOver({
         </ol>
 
         {inTour ? (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
+          <TourNextNote />
         ) : (
           !me && (
             <p className="hint" style={{ margin: 0 }}>

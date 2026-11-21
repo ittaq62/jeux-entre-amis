@@ -39,6 +39,7 @@ import {
   findVariant,
   FIRST_DRAW_MS,
   fitsGame,
+  GAME_END_HOLD_MS,
   GAME_SEATS,
   INTERMISSION_MS,
   isBaseVariant,
@@ -60,6 +61,7 @@ import {
   VOTE_EXTRA_MS,
   voteNeed,
   type TableReport,
+  type TourEndHold,
   type TourClientMessage,
   type TourGameLine,
   type TourGameResult,
@@ -150,6 +152,8 @@ interface TourData {
   /** Ce que chacun a fait à chaque jeu, pour les titres de fin */
   lines: Record<string, TourGameLine[]>;
   notice: string | null;
+  /** La feuille de fin du dernier jeu, gardée à l'écran le temps de la lire (« Continuer » l'abrège) */
+  endHold?: TourEndHold | null;
   chat: ChatMessage[];
   chatSeq: number;
   timers: Timer[];
@@ -308,6 +312,8 @@ export class TourRoom extends DurableObject<Env> {
     game.results = results.sort((a, b) => a.rank - b.rank);
     game.endedAt = now;
     d.current = null;
+    // Chacun garde la feuille de fin du jeu sous les yeux un moment : le résultat, « Signaler un problème »
+    d.endHold = { code: report.code, until: now + GAME_END_HOLD_MS, done: [] };
     d.timers = d.timers.filter((t) => t.kind !== "stale");
     const best = d.settings.teams ? Math.max(...teamScores(d.members)) : Math.max(0, ...d.members.map((m) => m.points));
     const played = d.games.filter((g) => !g.aborted && g.results).length;
@@ -322,8 +328,22 @@ export class TourRoom extends DurableObject<Env> {
       return;
     }
     d.status = "intermission";
-    this.drawNext(now, INTERMISSION_MS);
+    // L'entracte commence quand la feuille de fin s'efface
+    this.drawNext(now, GAME_END_HOLD_MS + INTERMISSION_MS);
     await this.afterChange();
+  }
+
+  /** Tous les joueurs du jeu qui vient de finir ont appuyé sur « Continuer » : l'entracte (ou la fin) arrive tout de suite */
+  private endHoldNow(now: number) {
+    const d = this.data!;
+    if (!d.endHold || d.endHold.until <= now) return;
+    d.endHold.until = now;
+    if (d.status !== "intermission" || !d.next || d.next.at === null) return;
+    const at = now + INTERMISSION_MS + (d.settings.rules === "vote" ? VOTE_EXTRA_MS : 0);
+    if (at >= d.next.at) return;
+    d.next.at = at;
+    d.timers = d.timers.filter((t) => t.kind !== "launch");
+    this.addTimer({ at, kind: "launch" });
   }
 
   /** La table n'a pas pu commencer (moins de deux joueurs arrivés) : on retire un jeu au sort. */
@@ -337,6 +357,7 @@ export class TourRoom extends DurableObject<Env> {
       game.endedAt = now;
     }
     d.current = null;
+    d.endHold = null;
     d.timers = d.timers.filter((t) => t.kind !== "stale");
     d.status = "intermission";
     // Deux tables de suite où personne n'est venu : on attend l'hôte plutôt que d'en recréer sans fin
@@ -710,6 +731,18 @@ export class TourRoom extends DurableObject<Env> {
         return this.afterChange();
       }
 
+      case "continue": {
+        const hold = d.endHold;
+        if (!hold || now >= hold.until || !member || member.kind !== "human" || hold.done.includes(userId)) return;
+        const game = d.games.find((g) => g.code === hold.code);
+        if (!game || !game.players.includes(userId) || !this.allowMessage(`continue:${userId}`, 150)) return;
+        hold.done = [...hold.done, userId];
+        // Tous ceux qui ont joué ce jeu et sont encore là : on n'attend plus
+        const waiting = this.voters().filter((m) => game.players.includes(m.userId) && !hold.done.includes(m.userId));
+        if (waiting.length === 0) this.endHoldNow(now);
+        return this.afterChange();
+      }
+
       case "vote": {
         if (d.status !== "intermission" || !d.next || d.settings.rules !== "vote" || d.next.variant !== null || d.next.base) return;
         if (!member || !this.voters().includes(member) || !isBaseVariant(d.next.game, msg.variant)) return;
@@ -1078,6 +1111,8 @@ export class TourRoom extends DurableObject<Env> {
     this.launching = true;
     try {
       d.timers = d.timers.filter((t) => t.kind !== "launch");
+      // Un nouveau jeu : la feuille de fin du précédent n'a plus lieu d'être
+      d.endHold = null;
       // Les joueurs d'abord, les bots ensuite : s'il y a trop de monde pour le jeu, ce sont les bots qui attendent
       const active = this.activePlayers();
       let players = [...active.filter((m) => m.kind === "human"), ...active.filter((m) => m.kind === "bot")];
@@ -1458,6 +1493,7 @@ export class TourRoom extends DurableObject<Env> {
       notice: d.notice,
       serverNow: Date.now(),
       quick: d.quick,
+      endHold: d.endHold ?? null,
     };
   }
 

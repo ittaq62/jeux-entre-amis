@@ -13,6 +13,7 @@ import { useSession } from "../stores/session.ts";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 
 interface Props {
   room: BricksRoomView;
@@ -79,9 +80,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
   );
   const actions = inTour ? (
     <>
-      <p className="tour-next-note">
-        <span className="spinner" /> La tournée continue : le classement arrive.
-      </p>
+      <TourNextNote />
       <div className="overlay-actions">
         <button className="btn" onClick={onInspect}>
           Voir les plateaux

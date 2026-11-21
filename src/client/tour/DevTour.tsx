@@ -120,6 +120,7 @@ function mockView(
     notice: null,
     serverNow: now,
     quick: false,
+    endHold: null,
   };
 }
 

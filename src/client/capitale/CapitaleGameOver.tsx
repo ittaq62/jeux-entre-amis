@@ -13,6 +13,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { money } from "./boardUi.ts";
 import { teamColor, teamIn, TeamMark } from "./teamsUi.tsx";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 
 interface Props {
   room: CapitaleRoomView;
@@ -169,11 +170,7 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
           })}
         </ol>
 
-        {inTour && (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
-        )}
+        {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>

@@ -4119,13 +4119,19 @@ h3 .hint {
   opacity: 0.32;
 }
 
-/* À la table d'une tournée, la feuille de fin annonce la suite au lieu de proposer une revanche */
+/* À la table d'une tournée, la feuille de fin annonce la suite au lieu de proposer une revanche : dans combien de temps,
+   et « Continuer » pour y passer plus tôt */
 .tour-next-note {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 14px;
   margin: 4px 0 0;
   font-weight: 600;
+}
+
+.tour-next-time strong {
+  font-size: 1.2em;
 }
 
 /* La fiche de la tournée sur l'accueil : une affiche de théâtre, le programme d'une soirée */
