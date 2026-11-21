@@ -131,7 +131,7 @@ export function TablePick({
                 <ul className="table-pick-rule-list">
                   {extras.map((r) => (
                     <li key={r.id} className={r.kind === "off" ? "is-off" : ""}>
-                      <strong>{r.name}</strong> : {r.blurb}
+                      <strong>{r.name}</strong>&nbsp;: {r.blurb}
                     </li>
                   ))}
                 </ul>
