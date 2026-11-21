@@ -1486,8 +1486,11 @@ function ballContacts(m: Match, ev: MatchEvent[]) {
       continue;
     }
     // Dans sa surface, le gardien joue avec les mains, et rien d'autre : une frappe qui arrive sur lui n'est pas un
-    // contrôle raté de joueur de champ (qui le bloquerait un instant et laisserait le ballon lui passer à travers)
-    if (p.role === "GK" && inBox(p.x, p.z, -attackDir(m, p.team))) {
+    // contrôle raté de joueur de champ (qui le bloquerait un instant et laisserait le ballon lui passer à travers).
+    // Sauf la passe d'un coéquipier : elle se joue au pied, comme n'importe quel joueur (sans quoi elle lui passait au
+    // travers, jusque dans son but)
+    const backPass = m.pass !== null && m.players[m.lastTouch]?.team === p.team;
+    if (p.role === "GK" && !backPass && inBox(p.x, p.z, -attackDir(m, p.team))) {
       if (keeperTouch(m, p, ev)) return;
       continue;
     }

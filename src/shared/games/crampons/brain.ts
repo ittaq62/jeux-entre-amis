@@ -137,6 +137,8 @@ export function keeperReadsShot(m: Match, p: Player): boolean {
   // Au penalty, il a déjà choisi son côté (voir spotKeeper)
   const sk = m.spotKick;
   if (sk && sk.gk === p.i && m.t - sk.at < 1.4) return true;
+  // La passe d'un coéquipier n'est pas une frappe : il ne plonge pas dessus, il la contrôle (voir thinkKeeper)
+  if (m.pass && m.players[m.pass.from]?.team === p.team) return false;
   if (m.owner < 0 && b.vx * own > 4) {
     const t = (line - b.x) / b.vx;
     if (t > 0 && t < 2) {
@@ -195,6 +197,28 @@ function thinkKeeper(m: Match, p: Player, path: FlightPoint[] | null) {
       p.tz = p.z;
     }
     return;
+  }
+  // Une passe de son coéquipier pour lui : il se met dans la ligne du ballon, au plus près de là où il est, et va
+  // au-devant seulement s'il n'y arrive pas à temps
+  if (m.owner < 0 && path && m.pass?.to === p.i && m.players[m.pass.from]?.team === p.team) {
+    const v = topSpeed(p, true, false);
+    let meet: FlightPoint | null = null;
+    let md = Infinity;
+    for (const f of path) {
+      if (f.y > 1.2) continue;
+      const d = Math.hypot(f.x - p.x, f.z - p.z);
+      if (d < md && d <= f.t * v + 0.8) {
+        md = d;
+        meet = f;
+      }
+    }
+    meet ??= intercept(p, path, 0.05);
+    if (meet) {
+      p.tx = meet.x;
+      p.tz = meet.z;
+      p.sprint = md > 3;
+      return;
+    }
   }
   if (keeperReadsShot(m, p)) return;
   // Une balle en profondeur qu'il atteint le premier
@@ -281,7 +305,9 @@ export function thinkTeam(m: Match, team: Team) {
       .sort((a, b) => a.f.t - b.f.t);
     const target = m.pass && m.pass.to >= 0 && m.players[m.pass.to]!.team === team ? m.players[m.pass.to]! : null;
     const chaser = target && target.role !== "GK" ? callers.find((e) => e.p.i === target.i) : callers[0];
-    const first = chaser ?? callers[0];
+    // Une passe pour son gardien : c'est lui qui va au ballon (voir thinkKeeper), personne ne court la lui prendre
+    const toKeeper = target?.role === "GK" && intercept(target, path, 0.05) !== null;
+    const first = toKeeper ? undefined : (chaser ?? callers[0]);
     if (first && !human(first.p) && first.p.role !== "GK") {
       first.p.tx = first.f.x;
       first.p.tz = first.f.z;
@@ -590,6 +616,21 @@ export function thinkCarrier(m: Match, p: Player) {
           run: () => orderKick(p, { kind: "through", power: 0.5, ax: dir, az: 0, to: q.i, px: sx, pz: sz }),
         });
       }
+    }
+  }
+
+  // Rejouer sur son gardien : dans son camp, serré de près, quand la passe ne longe personne et que personne ne l'attend
+  // près de lui (un ballon perdu là, c'est un but). Mieux que de dégager au hasard ; pas tout de suite s'il vient de le
+  // lui rendre (pas de va-et-vient)
+  const gk = m.players.find((q) => q.team === p.team && q.role === "GK" && free(q));
+  if (gk && p.x * dir < -8 && pressure > 0.3 && !(m.assistBy === gk.i && held < 4)) {
+    const d = Math.hypot(gk.x - p.x, gk.z - p.z);
+    const risk = d > 8 && d < 42 ? laneRisk(m, p, gk.x, gk.z, 20) : 1;
+    if (risk < 0.2 && openness(m, p.team, gk.x, gk.z) > 12) {
+      options.push({
+        score: 0.4 + pressure * 0.6 - risk * 2 + random(m) * 0.05,
+        run: () => orderKick(p, { kind: "pass", power: clamp(d / 40 + 0.2, 0.25, 0.8), ax: 0, az: 0, to: gk.i }),
+      });
     }
   }
 

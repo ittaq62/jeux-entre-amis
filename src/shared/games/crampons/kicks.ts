@@ -89,6 +89,13 @@ function markOffside(m: Match, p: Player, kind: "kick" | "free") {
  */
 export const RECEIVER_MIN_COS = 0.1;
 
+/**
+ * Son gardien, lui, ne reçoit que si on le vise vraiment : à 31° près. Assez pour l'atteindre au clavier, dont les huit
+ * directions tombent toujours à moins de 22,5° de lui ; pas assez pour qu'une passe en retrait vers un défenseur parte
+ * chez lui. Avant, c'était 21° (hors de portée du clavier entre deux directions), et l'écran ne le désignait jamais.
+ */
+export const KEEPER_MIN_COS = 0.85;
+
 /** Le coéquipier le mieux placé dans la direction demandée : l'angle compte le plus, puis la distance et l'espace autour de lui */
 export function pickReceiver(m: Match, p: Player, ax: number, az: number, ahead = false, minCos = RECEIVER_MIN_COS): number {
   let dx = ax;
@@ -111,13 +118,73 @@ export function pickReceiver(m: Match, p: Player, ax: number, az: number, ahead 
     if (d < 2.5 || d > 62) continue;
     const c = (rx * dx + rz * dz) / d;
     if (c < minCos) continue;
-    if (q.role === "GK" && c < 0.93) continue;
+    if (q.role === "GK" && c < KEEPER_MIN_COS) continue;
     if (ahead && (q.x - p.x) * dir < -4) continue;
     const space = Math.min(openness(m, p.team, q.x, q.z), 9) / 9;
     const score = c * c * 3 - d / 45 + space * 0.5;
     if (score > bestScore) {
       bestScore = score;
       best = q.i;
+    }
+  }
+  return best;
+}
+
+/** Ce que l'écran sait d'un joueur pour lui désigner une passe */
+export interface PassMate {
+  x: number;
+  z: number;
+  h: number;
+  team: number;
+  off: boolean;
+  keeper: boolean;
+}
+
+/**
+ * Le coéquipier que l'écran désigne pour la prochaine passe (entouré de bleu ; c'est à lui que le serveur l'enverra) :
+ * le plus proche du curseur quand on vise à la souris, sinon le mieux placé dans la direction demandée, comme
+ * pickReceiver, son gardien compris. Celui déjà désigné garde un petit avantage, pour que la désignation ne saute pas
+ * de l'un à l'autre.
+ */
+export function designateReceiver(
+  mates: readonly PassMate[],
+  me: number,
+  ax: number,
+  az: number,
+  cursor: readonly [number, number] | null,
+  current: number,
+): number {
+  const p = mates[me]!;
+  let dx = ax;
+  let dz = az;
+  if (Math.hypot(dx, dz) < 0.2) {
+    dx = Math.cos(p.h);
+    dz = Math.sin(p.h);
+  }
+  const l = Math.hypot(dx, dz) || 1;
+  dx /= l;
+  dz /= l;
+  let best = -1;
+  let score = -Infinity;
+  for (let i = 0; i < mates.length; i++) {
+    const q = mates[i]!;
+    if (i === me || q.team !== p.team || q.off) continue;
+    const rx = q.x - p.x;
+    const rz = q.z - p.z;
+    const d = Math.hypot(rx, rz);
+    if (d < 2.5 || d > 62) continue;
+    let s: number;
+    if (cursor) {
+      s = -Math.hypot(q.x - cursor[0], q.z - cursor[1]) + (i === current ? 2.5 : 0);
+    } else {
+      // Comme sur le serveur : le plus dans l'axe d'abord, mais un coéquipier même assez de côté plutôt que le vide
+      const c = (rx * dx + rz * dz) / d;
+      if (c < (q.keeper ? KEEPER_MIN_COS : RECEIVER_MIN_COS)) continue;
+      s = c * c * 3 - d / 45 + (i === current ? 0.25 : 0);
+    }
+    if (s > score) {
+      score = s;
+      best = i;
     }
   }
   return best;

@@ -2,7 +2,7 @@
 // qu'elles soient fluides, anticiper son propre joueur pour que le stick réponde tout de suite, et traduire les boutons en gestes.
 
 import { GRAVITY, stepBall, type Ball } from "../../shared/games/crampons/ball.ts";
-import { planPass, planThrough, RECEIVER_MIN_COS, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
+import { designateReceiver, planPass, planThrough, shotSpeed, throughTarget } from "../../shared/games/crampons/kicks.ts";
 import {
   AUTO_SWITCH_BLIND,
   AUTO_SWITCH_HOLD,
@@ -1387,41 +1387,7 @@ export class MatchRuntime {
 
   /** Le coéquipier qui recevra la passe : le plus proche du curseur, sinon le mieux placé dans la direction demandée */
   private guessReceiver(views: FootballerView[], me: number): number {
-    const p = views[me]!;
-    const cursor = this.cursorPoint;
-    let dx = this.aimX;
-    let dz = this.aimZ;
-    if (Math.hypot(dx, dz) < 0.2) {
-      dx = Math.cos(p.h);
-      dz = Math.sin(p.h);
-    }
-    const l = Math.hypot(dx, dz) || 1;
-    dx /= l;
-    dz /= l;
-    let best = -1;
-    let score = -Infinity;
-    for (let i = 0; i < views.length; i++) {
-      const q = views[i]!;
-      if (i === me || q.team !== p.team || q.off || q.keeper) continue;
-      const rx = q.x - p.x;
-      const rz = q.z - p.z;
-      const d = Math.hypot(rx, rz);
-      if (d < 2.5 || d > 62) continue;
-      let s: number;
-      if (cursor) {
-        s = -Math.hypot(q.x - cursor[0], q.z - cursor[1]) + (i === this.receiver ? 2.5 : 0);
-      } else {
-        // Comme sur le serveur : le plus dans l'axe d'abord, mais un coéquipier même assez de côté plutôt que le vide
-        const c = (rx * dx + rz * dz) / d;
-        if (c < RECEIVER_MIN_COS) continue;
-        s = c * c * 3 - d / 45 + (i === this.receiver ? 0.25 : 0);
-      }
-      if (s > score) {
-        score = s;
-        best = i;
-      }
-    }
-    return best;
+    return designateReceiver(views, me, this.aimX, this.aimZ, this.cursorPoint, this.receiver);
   }
 
   /** Garde en mémoire les dernières secondes de jeu */

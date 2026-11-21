@@ -137,7 +137,9 @@ export const IDLE_CARRY = 3;
  * équipe a le ballon, rien ne change : son joueur ne bouge que s'il le fait bouger.
  */
 export function assisted(m: Match, p: Player): boolean {
-  if (p.human === null || m.phase !== "play" || p.role === "GK") return false;
+  // Son gardien n'est à lui que balle au pied (une passe en retrait) : là, comme un joueur de champ, il relance seul
+  // si on le laisse planté ; dans les mains, c'est HUMAN_KEEPER_WAIT qui compte
+  if (p.human === null || m.phase !== "play" || (p.role === "GK" && m.owner !== p.i)) return false;
   const h = m.humans.find((o) => o.id === p.human);
   if (!h) return false;
   const idle = m.t - (h.inputAt ?? -Infinity);

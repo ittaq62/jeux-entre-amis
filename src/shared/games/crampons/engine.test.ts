@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BALL_R, groundSpeedFor, makeBall, rollTime, stepBall } from "./ball.ts";
 import type { TeamSetup } from "./clubs.ts";
+import { designateReceiver, pickReceiver } from "./kicks.ts";
 import { createMatch, pushAction, setInput, stepMatch } from "./match.ts";
 import { attackDir, CELEBRATION_RUN, type Match, type MatchEvent, type MatchSettings, type Team } from "./model.ts";
 import { DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W } from "./pitch.ts";
@@ -1094,5 +1095,222 @@ describe("le hors-jeu", () => {
     const ev = play(m, (e) => e.some((x) => x.k === "offside") || e.some((x) => x.k === "restart"), 240);
     expect(ev.some((x) => x.k === "offside")).toBe(true);
     expect(m.restart?.team).toBe(1);
+  });
+});
+
+describe("la passe à son gardien", () => {
+  /** L'humain a le ballon dans son camp, à `from` mètres de sa ligne de but ; son gardien est sur sa ligne, personne autour */
+  function backPass(seed: number, from: number, side = 0) {
+    const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], seed);
+    toPlay(m);
+    const dir = attackDir(m, 0);
+    const h = m.humans[0]!;
+    const p = m.players[h.active]!;
+    const gk = m.players.find((o) => o.team === 0 && o.role === "GK")!;
+    for (const o of m.players) {
+      if (o === p || o === gk) continue;
+      o.x = dir * (o.team === 0 ? 5 : 25) + (o.i % 3);
+      o.z = -30 + o.i * 2.5;
+      o.vx = o.vz = 0;
+      o.tx = o.x;
+      o.tz = o.z;
+    }
+    gk.x = -dir * (HALF_L - 3);
+    gk.z = 0;
+    p.x = -dir * (HALF_L - from);
+    p.z = side;
+    p.h = dir > 0 ? Math.PI : 0;
+    Object.assign(m.ball, { x: p.x, y: BALL_R, z: p.z, vx: 0, vy: 0, vz: 0 });
+    m.owner = p.i;
+    m.lastTouch = p.i;
+    m.pass = null;
+    p.order = null;
+    p.lockedUntil = 0;
+    p.gotAt = m.t;
+    return { m, h, p, gk, dir };
+  }
+
+  /** Passe à son gardien, désigné à l'écran ; rend les événements jusqu'à ce qu'il ait le ballon (ou que le jeu s'arrête) */
+  function passToKeeper(m: Match, p: { x: number; z: number }, gk: { i: number; x: number; z: number }) {
+    const d = Math.hypot(gk.x - p.x, gk.z - p.z);
+    pushAction(m, "moi", "pass", 0.5, (gk.x - p.x) / d, (gk.z - p.z) / d, gk.i);
+    const events: MatchEvent[] = [];
+    for (let i = 0; i < 300 && m.owner !== gk.i && m.phase === "play"; i++) events.push(...stepMatch(m));
+    return events;
+  }
+
+  it("elle lui arrive au pied, de près comme de loin, dans l'axe ou de côté : jamais dans son propre but", () => {
+    for (const [from, side] of [
+      [15, 0],
+      [25, 0],
+      [35, 0],
+      [28, 14],
+      [20, -18],
+    ] as const) {
+      const { m, gk } = backPass(21, from, side);
+      const events = passToKeeper(m, m.players[m.humans[0]!.active]!, gk);
+      expect(
+        events.some((e) => e.k === "goal"),
+        `but contre son camp (${from} m, ${side})`,
+      ).toBe(false);
+      expect(m.owner, `le gardien n'a pas le ballon (${from} m, ${side})`).toBe(gk.i);
+      // Une passe de son coéquipier se joue au pied, pas à la main
+      expect(gk.act).not.toBe("hold");
+    }
+  });
+
+  it("l'écran le désigne quand on le vise : au stick, aux huit directions du clavier, à la souris ; le serveur aussi", () => {
+    // À 22° de l'axe : la direction du clavier la plus proche (droit derrière) s'en écarte presque au maximum
+    const { m, p, gk, dir } = backPass(21, 25, 9);
+    // Un défenseur de côté, à 60° de la direction du gardien
+    const cb = m.players.find((o) => o.team === 0 && o.role === "CB" && o !== p)!;
+    const toward = Math.atan2(gk.z - p.z, gk.x - p.x);
+    cb.x = p.x + Math.cos(toward + Math.PI / 3) * 14;
+    cb.z = p.z + Math.sin(toward + Math.PI / 3) * 14;
+    const views = m.players.map((o) => ({ x: o.x, z: o.z, h: o.h, team: o.team, off: o.off, keeper: o.role === "GK" }));
+    const key = Math.round(toward / (Math.PI / 4)) * (Math.PI / 4);
+    expect(Math.abs(key - toward)).toBeGreaterThan(0.35);
+    expect(designateReceiver(views, p.i, Math.cos(toward), Math.sin(toward), null, -1)).toBe(gk.i);
+    expect(designateReceiver(views, p.i, Math.cos(key), Math.sin(key), null, -1)).toBe(gk.i);
+    expect(designateReceiver(views, p.i, 0, 0, [gk.x + 1, gk.z - 1], -1)).toBe(gk.i);
+    expect(pickReceiver(m, p, Math.cos(key), Math.sin(key))).toBe(gk.i);
+    // Vers le défenseur, ou vers l'avant : pas le gardien
+    expect(designateReceiver(views, p.i, cb.x - p.x, cb.z - p.z, null, -1)).toBe(cb.i);
+    expect(designateReceiver(views, p.i, dir, 0, null, -1)).not.toBe(gk.i);
+    expect(pickReceiver(m, p, dir, 0)).not.toBe(gk.i);
+  });
+
+  it("il ne plonge pas sur la passe : elle n'est pas une frappe", () => {
+    const { m, h, gk } = backPass(4, 30, 6);
+    const d = Math.hypot(gk.x - m.ball.x, gk.z - m.ball.z);
+    pushAction(m, "moi", "pass", 1, (gk.x - m.ball.x) / d, (gk.z - m.ball.z) / d, gk.i);
+    let dived = false;
+    for (let i = 0; i < 300 && m.owner !== gk.i && m.phase === "play"; i++) {
+      stepMatch(m);
+      if (gk.act === "dive") dived = true;
+    }
+    expect(dived).toBe(false);
+    expect(m.owner).toBe(gk.i);
+    expect(h.active).toBe(gk.i);
+  });
+
+  it("l'humain prend son gardien et relance lui-même, puis retrouve un joueur de champ", () => {
+    const { m, h, gk, dir } = backPass(21, 25);
+    passToKeeper(m, m.players[h.active]!, gk);
+    expect(m.owner).toBe(gk.i);
+    expect(h.active).toBe(gk.i);
+    // Il voit son gardien recevoir, puis joue (un clic trop rapide serait pour le joueur d'avant)
+    for (let i = 0; i < 30; i++) stepMatch(m);
+    expect(m.owner).toBe(gk.i);
+    const mate = m.players
+      .filter((o) => o.team === 0 && o.role !== "GK")
+      .sort((a, b) => Math.hypot(a.x - gk.x, a.z - gk.z) - Math.hypot(b.x - gk.x, b.z - gk.z))[0]!;
+    const d = Math.hypot(mate.x - gk.x, mate.z - gk.z);
+    pushAction(m, "moi", "pass", 0.6, (mate.x - gk.x) / d, (mate.z - gk.z) / d, mate.i);
+    for (let i = 0; i < 30 && m.owner === gk.i; i++) stepMatch(m);
+    expect(m.owner).not.toBe(gk.i);
+    expect(m.pass?.to).toBe(mate.i);
+    expect(m.players[h.active]!.role).not.toBe("GK");
+    expect(m.ball.vx * dir).toBeGreaterThan(0);
+  });
+
+  it("laissé planté balle au pied, son gardien relance tout seul, sans attendre qu'on le lui prenne", () => {
+    const { m, h, gk } = backPass(21, 25);
+    passToKeeper(m, m.players[h.active]!, gk);
+    expect(m.owner).toBe(gk.i);
+    const got = m.t;
+    const events: MatchEvent[] = [];
+    for (let i = 0; i < Math.round(6 / DT) && m.owner === gk.i; i++) events.push(...stepMatch(m));
+    expect(m.owner).not.toBe(gk.i);
+    expect(m.t - got).toBeLessThan(5);
+    expect(events.some((e) => e.k === "kick" && e.p === gk.i)).toBe(true);
+    expect(events.some((e) => e.k === "goal")).toBe(false);
+  });
+});
+
+describe("les bots et leur gardien", () => {
+  /**
+   * Un défenseur de l'ordinateur a le ballon à 28 m de son but. `pressed` : deux attaquants sur lui, chacun de ses
+   * coéquipiers marqué de près ; sinon, personne à moins de 30 m. Rend ce qu'il fait de son premier ballon.
+   */
+  function firstDecision(seed: number, pressed: boolean) {
+    const m = createMatch(settings({ offside: false }), teams, [], seed);
+    toPlay(m);
+    const dir = attackDir(m, 0);
+    const gk = m.players.find((o) => o.team === 0 && o.role === "GK")!;
+    const cb = m.players.find((o) => o.team === 0 && o.role === "CB")!;
+    const mates = m.players.filter((o) => o.team === 0 && o !== gk && o !== cb);
+    const foes = m.players.filter((o) => o.team === 1 && o.role !== "GK");
+    for (const o of m.players) {
+      o.vx = o.vz = 0;
+      o.act = "none";
+      o.order = null;
+    }
+    gk.x = -dir * (HALF_L - 3);
+    gk.z = 0;
+    cb.x = -dir * (HALF_L - 28);
+    cb.z = 6;
+    cb.h = dir > 0 ? Math.PI : 0;
+    mates.forEach((o, k) => {
+      o.x = dir * (-12 + (k % 4) * 9);
+      o.z = -26 + k * 6;
+    });
+    foes.forEach((o, k) => {
+      if (!pressed) {
+        o.x = dir * 30;
+        o.z = -20 + k * 4;
+      } else if (k < 2) {
+        o.x = cb.x + dir * 1.7;
+        o.z = cb.z + (k ? 1.2 : -1.2);
+      } else {
+        const t = mates[(k - 2) % mates.length]!;
+        o.x = t.x - dir * 0.9;
+        o.z = t.z + 0.4;
+      }
+    });
+    for (const o of m.players) [o.tx, o.tz] = [o.x, o.z];
+    Object.assign(m.ball, { x: cb.x, y: BALL_R, z: cb.z, vx: 0, vy: 0, vz: 0 });
+    m.owner = cb.i;
+    m.lastTouch = cb.i;
+    m.pass = null;
+    cb.gotAt = m.t - 1;
+    cb.thinkAt = m.t;
+    const events: MatchEvent[] = [];
+    let to = -2;
+    for (let i = 0; i < Math.round(3 / DT) && m.phase === "play"; i++) {
+      const ev = stepMatch(m);
+      events.push(...ev);
+      if (ev.some((e) => e.k === "kick" && e.p === cb.i)) {
+        // (stepMatch a changé la passe : TypeScript la croit encore nulle depuis la mise en place)
+        to = (m.pass as Match["pass"])?.to ?? -1;
+        break;
+      }
+      if (m.owner !== cb.i) break;
+    }
+    // La suite : le gardien reçoit et relance, sans but contre son camp
+    for (let i = 0; i < Math.round(6 / DT) && m.phase === "play"; i++) events.push(...stepMatch(m));
+    return { to, gk, events };
+  }
+
+  it("pressé dans son camp, sans solution devant, un défenseur rejoue sur son gardien, qui relance", () => {
+    let back = 0;
+    let relaunched = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const { to, gk, events } = firstDecision(seed, true);
+      if (to === gk.i) {
+        back++;
+        if (events.some((e) => e.k === "kick" && e.p === gk.i)) relaunched++;
+        expect(events.some((e) => e.k === "goal" && e.own)).toBe(false);
+      }
+    }
+    expect(back).toBeGreaterThanOrEqual(4);
+    expect(relaunched).toBe(back);
+  });
+
+  it("libre, il ne rejoue pas sur son gardien sans raison", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { to, gk } = firstDecision(seed, false);
+      expect(to).not.toBe(gk.i);
+    }
   });
 });
