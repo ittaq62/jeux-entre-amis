@@ -5,6 +5,7 @@ import { GRAVITY } from "./physics.ts";
 import { JARDIN } from "./holes/jardin.ts";
 import { MER } from "./holes/mer.ts";
 import { MONTAGNE } from "./holes/montagne.ts";
+import { CUISINE } from "./holes/cuisine.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -40,7 +41,13 @@ export const COURSES: Record<CourseId, CourseInfo> = {
     holes: MONTAGNE,
     g: GRAVITY,
   },
-  cuisine: { id: "cuisine", name: "Cuisine géante", blurb: "Une balle minuscule sur un plan de travail géant.", holes: [], g: GRAVITY },
+  cuisine: {
+    id: "cuisine",
+    name: "Cuisine géante",
+    blurb: "Une balle grosse comme un petit pois sur un plan de travail immense : l'évier, le batteur, le grille-pain, le petit train.",
+    holes: CUISINE,
+    g: GRAVITY,
+  },
   jungle: {
     id: "jungle",
     name: "Temple dans la jungle",

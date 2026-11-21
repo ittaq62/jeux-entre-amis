@@ -238,6 +238,7 @@ export class Ambience {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private lfo: OscillatorNode | null = null;
+  private hum: { osc: OscillatorNode; gain: GainNode } | null = null;
 
   constructor(private kind: string) {}
 
@@ -253,7 +254,8 @@ export class Ambience {
     src.loop = true;
     const f = o.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.value = this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : this.kind === "montagne" ? 520 : 300;
+    f.frequency.value =
+      this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : this.kind === "montagne" ? 520 : this.kind === "cuisine" ? 240 : 300;
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
@@ -268,6 +270,17 @@ export class Ambience {
       lfo.start();
       this.lfo = lfo;
     }
+    // Dans la cuisine : le ronron du réfrigérateur, tout bas
+    if (this.kind === "cuisine") {
+      const osc = o.ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = 98;
+      const hg = o.ctx.createGain();
+      hg.gain.value = 0.006 * o.vol;
+      osc.connect(hg).connect(o.dest);
+      osc.start();
+      this.hum = { osc, gain: hg };
+    }
     src.start();
     this.wind = { src, gain };
     this.birds();
@@ -276,6 +289,7 @@ export class Ambience {
   /** Le réglage du son a changé */
   update() {
     if (this.wind) this.wind.gain.gain.value = 0.035 * musicLevel();
+    if (this.hum) this.hum.gain.gain.value = 0.006 * musicLevel();
   }
 
   private birds() {
@@ -300,6 +314,36 @@ export class Ambience {
         tone(o.ctx, o.dest, tk, "sine", base * (0.9 + Math.random() * 0.3), base * (1.15 + Math.random() * 0.3), o.vol * 0.07, 0.01, 0.06);
       }
     }
+    if (o && this.kind === "cuisine") {
+      const t = o.ctx.currentTime + 0.02;
+      const r = Math.random();
+      if (r < 0.4) {
+        // Un oiseau dehors, derrière la fenêtre
+        const base = 2600 + Math.random() * 1400;
+        const n = 2 + Math.floor(Math.random() * 3);
+        for (let k = 0; k < n; k++)
+          tone(o.ctx, o.dest, t + k * (0.1 + Math.random() * 0.05), "sine", base, base * 1.25, o.vol * 0.03, 0.01, 0.06);
+      } else if (r < 0.75) {
+        // La casserole qui frémit : quelques bulles
+        const n = 3 + Math.floor(Math.random() * 4);
+        for (let k = 0; k < n; k++)
+          tone(
+            o.ctx,
+            o.dest,
+            t + k * (0.07 + Math.random() * 0.12),
+            "sine",
+            260 + Math.random() * 120,
+            520 + Math.random() * 200,
+            o.vol * 0.035,
+            0.005,
+            0.05,
+          );
+      } else {
+        // Une cuillère contre une tasse
+        tone(o.ctx, o.dest, t, "triangle", 2900, 2880, o.vol * 0.03, 0.003, 0.3);
+        tone(o.ctx, o.dest, t, "sine", 4150, 4120, o.vol * 0.015, 0.003, 0.22);
+      }
+    }
     this.timer = setTimeout(() => this.birds(), 1800 + Math.random() * 4200);
   }
 
@@ -309,6 +353,7 @@ export class Ambience {
     try {
       this.wind?.src.stop();
       this.lfo?.stop();
+      this.hum?.osc.stop();
     } catch {
       // déjà arrêté
     }

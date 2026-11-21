@@ -32,6 +32,7 @@ export class HoleScene {
   private envMap: THREE.Texture | null = null;
   private hole: HoleMeshes | null = null;
   private decor: THREE.Group | null = null;
+  private tmpDir = new THREE.Vector3();
   private course: Course | null = null;
   private balls = new Map<string, BallModel>();
   private aim: THREE.Group;
@@ -43,6 +44,7 @@ export class HoleScene {
   /** Les effets de l'image (le halo des lumières, l'étalonnage) : le premier cran qu'on retire si l'appareil peine */
   private composer: EffectComposer | null = null;
   private grade: ShaderPass | null = null;
+  private bloom: UnrealBloomPass | null = null;
   private effects = true;
   private quality = new AutoQuality({ levers: ["effets", "pixels", "pixels", "ombres"], apply: (on) => this.applyQuality(on) });
   private ro: ResizeObserver;
@@ -108,7 +110,9 @@ export class HoleScene {
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: TOUCH ? 0 : 4 });
     const composer = new EffectComposer(this.renderer, target);
     composer.addPass(new RenderPass(this.scene, this.camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.5, 1.05));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.5, this.theme?.sky.bloom ?? 1.05);
+    composer.addPass(bloom);
+    this.bloom = bloom;
     composer.addPass(new OutputPass());
     const grade = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, uWarm: { value: 0.04 }, uSat: { value: 1.08 }, uVignette: { value: 0.32 } },
@@ -215,6 +219,7 @@ export class HoleScene {
     this.hemi.groundColor.set(s.hemiGround);
     this.hemi.intensity = s.hemiIntensity;
     this.renderer.toneMappingExposure = s.exposure;
+    if (this.bloom) this.bloom.threshold = s.bloom ?? 1.05;
     if (this.grade) {
       this.grade.uniforms.uWarm!.value = s.grade?.warm ?? 0.04;
       this.grade.uniforms.uSat!.value = s.grade?.sat ?? 1.08;
@@ -278,6 +283,12 @@ export class HoleScene {
     this.quality.tick(performance.now());
     this.hole?.update(t, dt);
     this.theme?.tick?.(t, this.decor);
+    // Vu d'en haut, ce qui surplombe la piste (la tête d'un batteur, un toit) s'efface pour laisser voir les obstacles
+    const above = this.decor?.userData.hideAbove as THREE.Object3D[] | undefined;
+    if (above) {
+      const down = this.camera.getWorldDirection(this.tmpDir).y < -0.82;
+      for (const o of above) o.visible = !down;
+    }
     this.sky?.update(t);
     if (this.sky) this.sky.mesh.position.copy(this.camera.position);
     if (this.effects) {

@@ -28,6 +28,8 @@ export interface SkyDef {
   stars?: number;
   /** L'étalonnage de l'image : chaleur, saturation, bords assombris */
   grade?: { warm: number; sat: number; vignette: number };
+  /** À partir de quelle lumière les choses ont un halo (1,05 par défaut ; plus haut pour une scène très claire) */
+  bloom?: number;
 }
 
 const VERT = /* glsl */ `

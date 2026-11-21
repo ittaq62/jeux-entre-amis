@@ -11,7 +11,10 @@ import { feltTex, waterNormalTex, type SurfaceTex } from "../textures.ts";
 export interface Theme {
   sky: SkyDef;
   kit: ThemeKit;
-  /** Le décor autour d'un trou (tiré au hasard d'après la graine, toujours le même pour un trou) */
+  /**
+   * Le décor autour d'un trou (tiré au hasard d'après la graine, toujours le même pour un trou). Dans
+   * `userData.hideAbove` du groupe : ce qui surplombe la piste et s'efface quand on la regarde d'en haut
+   */
   decor(c: Course, rng: () => number): THREE.Group;
   /** Ce qui vit à chaque image (l'eau, les feuilles, les oiseaux) ; `decor` : le décor du trou en cours */
   tick?(t: number, decor: THREE.Object3D | null): void;
