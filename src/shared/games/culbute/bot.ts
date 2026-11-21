@@ -113,6 +113,8 @@ export interface BotMemory {
   waitUntil: number;
   /** Le coup (son image de départ) dont il a déjà décidé l'enchaînement */
   comboFrom: number;
+  /** Il tient le saut jusqu'à cette image (un grand saut, sans s'empêcher de frapper en montant) */
+  jumpUntil: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
 }
@@ -130,6 +132,7 @@ export function newBotMemory(seed: number): BotMemory {
     waitUntil: 0,
     taunted: -1,
     comboFrom: -1,
+    jumpUntil: 0,
   };
 }
 
@@ -188,7 +191,7 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
   const out = (): Input => {
     const pressed = m.press;
     m.press = 0;
-    const held = (f.frame < m.holdUntil ? m.held : 0) | pressed;
+    const held = (f.frame < m.holdUntil ? m.held : 0) | (f.frame < m.jumpUntil ? JMP : 0) | pressed;
     return { x: m.x, y: m.y, held, pressed };
   };
   if (f.phase !== "fight") return { x: 0, y: 0, held: 0, pressed: 0 };
@@ -231,6 +234,8 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     if (next) {
       m.holdUntil = 0;
       m.next = f.frame + L.think;
+      // À la poursuite de celui qui s'envole : un grand saut, le bouton tenu pendant la montée
+      if (next.pressed & JMP) m.jumpUntil = f.frame + JUMPSQUAT + 8;
       return next;
     }
   }
@@ -522,10 +527,10 @@ function climb(f: Fight, me: Fighter, m: BotMemory, t: Fighter): boolean {
       m.next = Math.min(m.next, f.frame + 3);
       return true;
     }
-    // Un grand saut : le bouton tenu jusqu'au décollage
+    // Un grand saut : le bouton tenu jusqu'au décollage, et encore un peu après (lâché trop tôt, le saut s'arrête bas)
     m.press = JMP;
     m.held = JMP;
-    m.holdUntil = f.frame + JUMPSQUAT + 3;
+    m.holdUntil = f.frame + JUMPSQUAT + 8;
     return true;
   }
   m.x = Math.abs(dx) > 0.25 ? dir : 0;

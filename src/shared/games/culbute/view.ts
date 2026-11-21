@@ -290,6 +290,7 @@ const FULL_FIELDS = [
   "lastAt",
   "holding",
   "holder",
+  "hopLeft",
 ] as const satisfies readonly (keyof Fighter)[];
 
 export function packFull(ft: Fighter): number[] {

@@ -61,6 +61,8 @@ const SHIELD_WEAR = 0.13;
 const SHIELD_REGEN = 0.09;
 const SHIELD_BREAK_STUN = 150;
 export const JUMPSQUAT = 3;
+/** Après l'élan, le saut lâché pendant tant d'images s'arrête plus bas : une touche tapée vite fait un petit saut */
+const HOP_CUT = 6;
 const LAND_LAG = 4;
 const HELPLESS_LAG = 10;
 const SHIELD_DROP = 6;
@@ -219,6 +221,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     lastKb: 0,
     holding: -1,
     holder: -1,
+    hopLeft: 0,
     stale: [],
   };
 }
@@ -522,6 +525,7 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         const quick = (ft.buf & ATK) !== 0;
         const full = !quick && ((inp.held & JMP) !== 0 || flickUp || y > 0.6);
         ft.vy = (full ? st.jump : st.short) * jumpOf(f, ft);
+        ft.hopLeft = full ? HOP_CUT : 0;
         ft.vx = clamp(ft.vx + x * 1.5, -st.air * sm * 1.1, st.air * sm * 1.1);
         ft.ground = -1;
         setState(ft, "air");
@@ -532,6 +536,7 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       if (press & JMP && ft.jumps > 0) {
         consume(ft, JMP);
         ft.jumps--;
+        ft.hopLeft = 0;
         ft.vy = st.airJump * jumpOf(f, ft);
         ft.vx = x * st.air * sm;
         if (Math.abs(x) > 0.3) ft.face = x < 0 ? -1 : 1;
@@ -2216,6 +2221,14 @@ export function updateFighter(f: Fight, ft: Fighter, inp: Input, plats: Platform
     return;
   }
   ft.t++;
+  // Le saut lâché tout au début de la montée : il s'arrête à la hauteur d'un petit saut (même en lançant une attaque)
+  if (ft.hopLeft > 0) {
+    ft.hopLeft--;
+    if ((inp.held & JMP) === 0 && inp.y <= 0.6 && ft.ground < 0 && ft.vy > 0) {
+      ft.vy = Math.min(ft.vy, styleOf(ft).short * jumpOf(f, ft));
+      ft.hopLeft = 0;
+    }
+  }
   if (ft.state !== "shield" && ft.shield < SHIELD_MAX && ft.state !== "dizzy") ft.shield = Math.min(SHIELD_MAX, ft.shield + SHIELD_REGEN);
   soloStep = solo;
   control(f, ft, inp, plats);

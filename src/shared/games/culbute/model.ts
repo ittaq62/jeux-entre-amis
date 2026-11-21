@@ -180,6 +180,8 @@ export interface Fighter {
   /** Celui qu'il tient (sa place), ou -1 ; celui qui le tient, ou -1 */
   holding: number;
   holder: number;
+  /** Le saut vient de partir : tant d'images encore où le lâcher le raccourcit (0 : plus possible) */
+  hopLeft: number;
   /** Ses derniers coups qui ont touché, du plus récent au plus ancien : un coup répété s'use */
   stale: string[];
 }

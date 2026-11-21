@@ -359,6 +359,26 @@ describe("Culbute : le combat", () => {
     expect(f.fighters[0]!.x).toBeGreaterThan(x0 + 1.5);
   });
 
+  it("la hauteur du saut suit l'appui : tapé, un petit saut ; tenu, le grand ; entre les deux, entre les deux", () => {
+    const heights = [1, 5, 8, 20].map((n) => {
+      const f = duel();
+      skipIntro(f);
+      const a = f.fighters[0]!;
+      let best = a.y;
+      for (let k = 0; k < 70; k++) {
+        run(f, 1, [() => (k < n ? { x: 0, y: 0, held: JMP, pressed: k === 0 ? JMP : 0 } : NO_INPUT)]);
+        best = Math.max(best, a.y);
+      }
+      return best;
+    });
+    expect(heights[1]!).toBeGreaterThan(heights[0]! + 0.2);
+    expect(heights[2]!).toBeGreaterThan(heights[1]! + 0.2);
+    expect(heights[3]!).toBeGreaterThan(heights[2]! + 0.2);
+    // Tenu tout du long : la hauteur du grand saut, comme avant
+    const st = STYLES.ginette;
+    expect(heights[3]!).toBeCloseTo((st.jump * st.jump) / (2 * st.gravity), 0);
+  });
+
   it("saute, ressaute en l'air, et retombe avec ses sauts rendus", () => {
     const f = duel("huguette");
     skipIntro(f);
