@@ -325,6 +325,10 @@ export class SoldierModel {
   private unseen = false;
   /** Le temps depuis le dernier coup tiré, pour le recul de l'arme */
   private kick = 0;
+  /** Touché : il tressaille (le buste rejeté, la tête qui part), d'autant plus fort à la tête */
+  private flinch = 0;
+  private flinchSide = 1;
+  private flinchHead = false;
   /** Pour viser les tirs des autres : là où naît la balle */
   readonly muzzle = new THREE.Vector3();
   readonly key: string;
@@ -546,6 +550,13 @@ export class SoldierModel {
     this.kick = 1;
   }
 
+  /** Il vient d'être touché (à la tête ou non) */
+  hit(head: boolean) {
+    this.flinch = 1;
+    this.flinchHead = head;
+    this.flinchSide = Math.random() < 0.5 ? -1 : 1;
+  }
+
   /** Hors de vue : on ne le montre plus */
   hide() {
     this.root.visible = false;
@@ -628,6 +639,18 @@ export class SoldierModel {
     this.kick = Math.max(0, this.kick - dt * 8);
     this.aim.rotation.x = p.pitch * 0.9 + lower + this.kick * 0.08;
     this.head.rotation.x = p.pitch * 0.4 + lean * 0.5;
+    // Le coup encaissé : un sursaut bref du buste et de la tête, qui revient aussitôt
+    if (this.flinch > 0) {
+      this.flinch = Math.max(0, this.flinch - dt * 7);
+      const f = Math.sin(this.flinch * Math.PI) * this.flinch;
+      this.spine.rotation.x += f * (this.flinchHead ? 0.12 : 0.22);
+      this.spine.rotation.z = f * 0.12 * this.flinchSide;
+      this.head.rotation.x += f * (this.flinchHead ? 0.45 : 0.12);
+      this.head.rotation.z = f * (this.flinchHead ? 0.3 : 0.08) * this.flinchSide;
+    } else {
+      this.spine.rotation.z = 0;
+      this.head.rotation.z = 0;
+    }
     if (this.gun) {
       this.gun.group.rotation.z = p.reload ? 0.6 : 0;
       this.gun.group.position.z = (this.gun.pistol ? -0.36 : -0.3) + this.kick * 0.05;

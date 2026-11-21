@@ -614,6 +614,11 @@ export class EscScene {
     this.soldiers.get(i)?.model.fired();
   }
 
+  /** Ce soldat vient d'être touché : il tressaille */
+  soldierHit(i: number, head: boolean) {
+    this.soldiers.get(i)?.model.hit(head);
+  }
+
   /** Là où naît la balle d'un autre soldat */
   muzzleOf(i: number, out: THREE.Vector3): boolean {
     const s = this.soldiers.get(i);

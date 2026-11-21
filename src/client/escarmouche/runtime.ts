@@ -112,6 +112,8 @@ export interface HudState {
   feed: FeedLine[];
   hitAt: number;
   hitKind: "body" | "head" | "kill";
+  /** Les dégâts qu'on vient d'infliger : un chiffre par adversaire, qui s'additionne pendant une rafale */
+  pops: { id: number; value: number; at: number; head: boolean; kill: boolean }[];
   damage: { id: number; angle: number; at: number }[];
   hurtAt: number;
   flags: { at: number; carrier: number }[] | null;
@@ -231,6 +233,7 @@ export class BattleRuntime {
   private feed: FeedLine[] = [];
   private feedSeq = 0;
   private hitAt = 0;
+  private pops: { id: number; victim: number; value: number; at: number; head: boolean; kill: boolean }[] = [];
   private hitKind: HudState["hitKind"] = "body";
   private damage: HudState["damage"] = [];
   private hurtAt = 0;
@@ -564,10 +567,24 @@ export class BattleRuntime {
       }
       case "hit": {
         this.scene.effects.blood(this.tmp.set(e.x, e.y, e.z), e.p === 0);
+        if (e.v !== this.me) this.scene.soldierHit(e.v, e.p === 0);
         if (e.a === this.me && e.v !== this.me) {
-          this.hitAt = performance.now();
+          const now = performance.now();
+          this.hitAt = now;
           this.hitKind = e.p === 0 ? "head" : "body";
           this.sound.play(e.p === 0 ? "head" : "hit", { volume: 0.5 });
+          // Le chiffre des dégâts : le même adversaire touché à nouveau dans la seconde, il s'additionne
+          const last = this.pops.find((q) => q.victim === e.v && now - q.at < 1000 && !q.kill);
+          if (last) {
+            last.value += Math.round(e.d);
+            last.at = now;
+            last.head ||= e.p === 0;
+          } else {
+            this.pops = [
+              ...this.pops.filter((q) => now - q.at < 1200).slice(-2),
+              { id: ++this.feedSeq, victim: e.v, value: Math.round(e.d), at: now, head: e.p === 0, kill: false },
+            ];
+          }
         }
         if (e.v === this.me) {
           this.hurtAt = performance.now();
@@ -615,6 +632,11 @@ export class BattleRuntime {
           const now = performance.now();
           this.hitAt = now;
           this.hitKind = "kill";
+          const pop = this.pops.find((q) => q.victim === e.v && now - q.at < 1200);
+          if (pop) {
+            pop.kill = true;
+            pop.at = now;
+          }
           this.sound.play("kill", { volume: 0.55 });
           this.say(`Tu as éliminé ${this.nameOf(e.v)}${e.h ? " d'une balle à la tête" : ""}`, "good");
           this.award(`${this.nameOf(e.v)} éliminé`, POINTS.kill);
@@ -1539,6 +1561,7 @@ export class BattleRuntime {
       feed: this.feed,
       hitAt: this.hitAt,
       hitKind: this.hitKind,
+      pops: this.pops.filter((q) => now - q.at < 1100).map(({ id, value, at, head, kill }) => ({ id, value, at, head, kill })),
       damage: this.damage.filter((d) => now - d.at < 1500),
       hurtAt: this.hurtAt,
       flags: flagsRaw ? [0, 1].map((k) => ({ at: flagsRaw[k * 5]!, carrier: flagsRaw[k * 5 + 1]! })) : null,

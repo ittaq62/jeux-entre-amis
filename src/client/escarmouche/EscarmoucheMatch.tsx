@@ -727,6 +727,19 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
             </div>
           )}
           {hitFresh && <div className={`esc-hit is-${h.hitKind}`} />}
+          {h.pops.length > 0 && (
+            <div className="esc-pops">
+              {h.pops.map((q, k) => (
+                <span
+                  key={q.id}
+                  className={`esc-pop ${q.kill ? "is-kill" : q.head ? "is-head" : ""}`}
+                  style={{ ["--k" as string]: String(h.pops.length - 1 - k) }}
+                >
+                  {q.value}
+                </span>
+              ))}
+            </div>
+          )}
           {h.aimed && h.alive && <div className="esc-aimed">{h.aimed}</div>}
           {h.scoped && <div className="esc-scope" />}
           {h.alive && h.sab?.act && (
