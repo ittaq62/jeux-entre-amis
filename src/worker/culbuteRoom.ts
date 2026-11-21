@@ -81,9 +81,14 @@ const LOOP_MS = 16;
 const STEP_MS = 1000 / 60;
 const SEND_EVERY_MS = 32;
 const SAVE_EVERY_MS = 15_000;
-/** Au-delà de ce retard, les commandes en attente d'un joueur sont serrées (on garde les appuis, on rattrape le temps) */
-const QUEUE_MAX = 6;
-const QUEUE_KEEP = 3;
+/** Les commandes en attente d'un joueur amortissent les à-coups du réseau. Tant que sa file n'est jamais descendue sous
+ * QUEUE_LOW pendant QUEUE_DRAIN pas, elle a plus de marge qu'il n'en faut : une commande de moins (ses appuis passent à la
+ * suivante). Au-delà de QUEUE_MAX (un onglet revenu au premier plan), on serre d'un coup jusqu'à QUEUE_KEEP. Serrer
+ * dès 6 faisait osciller la file sur un réseau qui hoquette : tantôt vide, tantôt serrée, le combattant sautait. */
+const QUEUE_LOW = 3;
+const QUEUE_DRAIN = 120;
+const QUEUE_MAX = 30;
+const QUEUE_KEEP = 4;
 /** Plus rien d'un joueur depuis une demi-seconde (onglet caché, connexion morte) : il lâche tout */
 const STALE_STEPS = 30;
 /** Un numéro de commande aussi loin derrière le dernier reçu vient d'un nouvel écran, qui recompte depuis 1 */
@@ -154,6 +159,9 @@ interface InputQueue {
   stamp: number;
   /** Les pas joués d'affilée sans nouvelle commande */
   starved: number;
+  /** La file la plus courte vue depuis la dernière vidange, et les pas depuis */
+  low: number;
+  since: number;
 }
 
 /** Les statistiques de celui qui n'a fini aucune manche */
@@ -743,7 +751,7 @@ export class CulbuteRoom extends DurableObject<Env> {
     if (typeof first !== "number" || !Array.isArray(data) || data.length > SAMPLE_STRIDE * 30) return;
     let q = this.queues.get(seatId);
     if (!q) {
-      q = { samples: [], lastSeq: 0, ack: 0, last: { x: 0, y: 0, held: 0, pressed: 0 }, stamp: 0, starved: 0 };
+      q = { samples: [], lastSeq: 0, ack: 0, last: { x: 0, y: 0, held: 0, pressed: 0 }, stamp: 0, starved: 0, low: 0, since: 0 };
       this.queues.set(seatId, q);
     }
     // Un nouvel écran (après une revanche) recompte depuis 1 : un paquet en retard de l'ancien ne doit pas faire ignorer
@@ -777,10 +785,23 @@ export class CulbuteRoom extends DurableObject<Env> {
     const q = this.queues.get(seatId);
     if (!q) return { x: 0, y: 0, held: 0, pressed: 0 };
     if (q.samples.length > QUEUE_MAX) {
-      // Trop de retard accumulé : on serre, sans perdre un seul appui
+      // Beaucoup de retard d'un coup : on serre, sans perdre un seul appui
       let pressed = 0;
       while (q.samples.length > QUEUE_KEEP) pressed |= q.samples.shift()!.input.pressed;
       q.samples[0]!.input.pressed |= pressed;
+      q.low = q.samples.length;
+      q.since = 0;
+    } else {
+      // Une marge qui n'a pas servi depuis un moment : une commande de moins, en douceur
+      q.low = Math.min(q.low, q.samples.length);
+      if (++q.since >= QUEUE_DRAIN) {
+        if (q.low >= QUEUE_LOW) {
+          const drop = q.samples.shift()!;
+          q.samples[0]!.input.pressed |= drop.input.pressed;
+        }
+        q.low = q.samples.length;
+        q.since = 0;
+      }
     }
     const next = q.samples.shift();
     if (!next) {

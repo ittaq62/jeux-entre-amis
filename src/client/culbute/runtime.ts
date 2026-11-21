@@ -28,8 +28,9 @@ import { CulbuteControls, type Scheme } from "./controls.ts";
 import { CulbuteScene, type FighterLook } from "./scene/CulbuteScene.ts";
 
 const STEP = 1 / 60;
-/** En développement : une latence simulée, en millisecondes aller-retour (`?lag=80` dans l'adresse) */
-const LAG = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get("lag") ?? 0) || 0 : 0;
+/** En développement : une latence simulée, en millisecondes aller-retour (`localStorage.cbLag = "80"`, l'adresse d'une
+ * table perd ses paramètres avant que le jeu ne se charge) */
+const LAG = import.meta.env.DEV ? Number(localStorage.getItem("cbLag") ?? 0) || 0 : 0;
 const SEND_EVERY = 2;
 const HEARTBEAT_MS = 120;
 const MIN_DELAY = 3;
@@ -232,6 +233,17 @@ export class FightRuntime {
   private reconcile(tick: CulbuteTick) {
     const world = this.world!;
     const ack = tick.k[this.mySlot] ?? 0;
+    if (import.meta.env.DEV) {
+      // Les pas du serveur sans commande de soi (arrivée trop tard), ou qui en ont avalé plusieurs (file trop longue)
+      const net = ((window as unknown as { __cbNet?: Record<string, number> }).__cbNet ??= { mine: 0, others: 0 });
+      const p = (window as unknown as { __cbAck?: [number, number] }).__cbAck;
+      if (p && tick.f > p[0] && ack >= p[1]) {
+        const gap = tick.f - p[0] - (ack - p[1]);
+        if (gap > 0) net.starved = (net.starved ?? 0) + gap;
+        if (gap < 0) net.squeezed = (net.squeezed ?? 0) - gap;
+      }
+      (window as unknown as { __cbAck?: [number, number] }).__cbAck = [tick.f, ack];
+    }
     while (this.unacked.length > 0 && this.unacked[0]!.seq <= ack) this.unacked.shift();
     const before = world.fighters.map((_, i) => this.shown(i));
     world.phase = tick.ph === 0 ? "intro" : tick.ph === 1 ? "fight" : "over";

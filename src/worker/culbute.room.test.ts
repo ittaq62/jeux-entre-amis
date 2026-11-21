@@ -93,6 +93,33 @@ describe("Culbute : les commandes des joueurs", () => {
     await bench.send(host, { t: "in", s: 2, d: [-1, 0, 0, 0], c: 2 });
     expect(inside.inputs(f)[mine()]!.x).toBe(-1);
   });
+
+  it("un paquet arrivé en retard avec dix commandes : elles sont toutes jouées, une par image, dans l'ordre", async () => {
+    const { bench, host, inside, mine } = await table();
+    // Chaque commande porte son numéro dans le stick, pour savoir laquelle est jouée
+    const d = Array.from({ length: 10 }, (_, i) => [(i + 1) / 100, 0, 0, 0]).flat();
+    await bench.send(host, { t: "in", s: 1, d, c: 1 });
+    const f = inside.data.fight!;
+    const seen = Array.from({ length: 10 }, () => inside.inputs(f)[mine()]!.x);
+    expect(seen).toEqual([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]);
+  });
+
+  it("une marge qui ne sert pas se résorbe d'une commande en deux secondes, sans perdre l'appui qu'elle portait", async () => {
+    const { bench, host, inside, mine } = await table();
+    const f = inside.data.fight!;
+    // Cinq commandes d'avance, puis une nouvelle à chaque image : la file ne descend jamais sous 4
+    const one = (seq: number) => [seq / 1000, 0, 0, seq === 240 ? 16 : 0];
+    await bench.send(host, { t: "in", s: 1, d: [1, 2, 3, 4, 5].flatMap(one), c: 1 });
+    const seen: Input[] = [];
+    for (let k = 1; k <= 240; k++) {
+      await bench.send(host, { t: "in", s: 5 + k, d: one(5 + k), c: 1 + k });
+      seen.push(inside.inputs(f)[mine()]!);
+    }
+    // Les 239 premières images jouent les commandes une à une ; la 240e en saute une, et garde son appui
+    expect(seen.slice(0, 239).map((i) => Math.round(i.x * 1000))).toEqual(Array.from({ length: 239 }, (_, i) => i + 1));
+    expect(Math.round(seen[239]!.x * 1000)).toBe(241);
+    expect(seen[239]!.pressed & 16).toBe(16);
+  });
 });
 
 describe("Culbute : choisir son combattant", () => {
