@@ -25,6 +25,8 @@ export interface Mood {
   fog: [number, number];
   /** Des étoiles (la nuit) */
   stars?: boolean;
+  /** La nuit, même sans étoiles (sous la pluie) : les karts allument leurs phares */
+  night?: boolean;
 }
 
 export const MOODS: Record<Theme, Mood> = {
@@ -124,6 +126,23 @@ export const MOODS: Record<Theme, Mood> = {
     ground: 0x3a2020,
     fog: [150, 980],
     stars: true,
+  },
+  // La ville : la nuit sous la pluie, des nuages bas que la ville éclaire d'orange, la lumière des réverbères
+  ville: {
+    top: 0x0b0f1a,
+    mid: 0x1a2130,
+    horizon: 0x4b3e38,
+    dir: new THREE.Vector3(30, 96, -40).normalize(),
+    sun: 0x9fb2e8,
+    sunPower: 0.55,
+    hemiSky: 0x44557a,
+    hemiGround: 0xffa45c,
+    hemiPower: 1.3,
+    cloud: 0x3d3a42,
+    glow: 0x6b5446,
+    ground: 0x2a2c30,
+    fog: [80, 620],
+    night: true,
   },
 };
 
@@ -235,11 +254,14 @@ export class Sky {
     );
     sun.scale.setScalar(260);
     sun.renderOrder = -9;
+    // Sous un ciel couvert (la ville sous la pluie), ni soleil ni lune
+    const overcast = Boolean(mood.night) && !mood.stars;
+    sun.visible = !overcast;
     this.group.add(sun);
 
     // Les nuages, en couronne, à des hauteurs variées
     const textures = [1, 2, 3].map((s) => keep(cloudTexture(s * 7)));
-    const count = phone ? 9 : 16;
+    const count = overcast ? (phone ? 14 : 26) : phone ? 9 : 16;
     for (let i = 0; i < count; i++) {
       const mat = keep(
         new THREE.SpriteMaterial({
@@ -257,7 +279,7 @@ export class Sky {
       sprite.scale.set(w, w * 0.45, 1);
       const a = (i / count) * Math.PI * 2 + (i % 3) * 0.3;
       const dist = 640 + ((i * 53) % 260);
-      sprite.position.set(Math.cos(a) * dist, 130 + ((i * 71) % 180), Math.sin(a) * dist);
+      sprite.position.set(Math.cos(a) * dist, (overcast ? 90 : 130) + ((i * 71) % (overcast ? 120 : 180)), Math.sin(a) * dist);
       sprite.renderOrder = -8;
       this.group.add(sprite);
       this.clouds.push({ sprite, a, dist, speed: 0.004 + (i % 4) * 0.0015 });

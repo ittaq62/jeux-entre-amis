@@ -85,6 +85,9 @@ export const JUMP_CHARGE = 0.5;
 const JUMP_VY = 7.5;
 const ICE_GRIP = 0.3;
 const ICE_CHARGE = 1.3;
+/** Dans une flaque d'eau, on glisse un peu moins que sur le verglas */
+const PUDDLE_GRIP = 0.45;
+const PUDDLE_CHARGE = 1.15;
 /** Le temps où le kart tourne sur lui-même après un coup */
 export const SPIN_TIME = 1.1;
 
@@ -570,7 +573,8 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     if (!flying) {
       const before = driftLevel(k.charge);
       // Serrer charge plus vite, élargir plus lentement
-      k.charge += dt * (1 + 0.5 * into) * (mods.vehicle?.charge ?? 1) * (surface === "glace" ? ICE_CHARGE : 1);
+      k.charge +=
+        dt * (1 + 0.5 * into) * (mods.vehicle?.charge ?? 1) * (surface === "glace" ? ICE_CHARGE : surface === "flaque" ? PUDDLE_CHARGE : 1);
       const after = driftLevel(k.charge);
       if (after > before) events?.push(after === 3 ? "spark3" : after === 2 ? "spark2" : "spark1");
     }
@@ -581,7 +585,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
 
   // Le glissement : le kart part vers l'extérieur du virage, beaucoup plus en dérapage
   const slideTarget = yaw * k.v * (k.drift !== 0 ? 0.2 : 0.045);
-  const grip = (k.drift !== 0 ? 2.6 : k.offroad ? 5 : 9) * (surface === "glace" ? ICE_GRIP : 1);
+  const grip = (k.drift !== 0 ? 2.6 : k.offroad ? 5 : 9) * (surface === "glace" ? ICE_GRIP : surface === "flaque" ? PUDDLE_GRIP : 1);
   k.slip += (slideTarget - k.slip) * Math.min(1, grip * dt);
 
   const fx = Math.sin(k.h);

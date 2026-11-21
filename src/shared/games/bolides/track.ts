@@ -6,9 +6,9 @@
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
 /** Les circuits de base, et leur version en miroir */
-export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan";
+export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville";
 export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
-export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan";
+export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville";
 
 export interface TrackDef {
   id: TrackId;
@@ -78,7 +78,8 @@ export interface Island {
   half: number;
 }
 
-export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre";
+/** Les sols spéciaux ; la flaque d'eau glisse comme le verglas */
+export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre" | "flaque";
 
 export type MoverDef =
   | { kind: "drop"; frac: number; lanes: number[]; period: number; offset: number }
@@ -95,9 +96,9 @@ export type MoverDef =
     };
 
 /** Ce qui traverse la route : ça roule, ou ça marche */
-export type RollThing = "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse";
+export type RollThing = "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse" | "poubelle" | "parapluie";
 
-export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
@@ -422,6 +423,63 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
       { from: 0.73, to: 0.76, d1: 0.15, d2: 1, kind: "cendre" },
     ],
   },
+  // Une vraie ville, pas un circuit : des rues bordées d'immeubles, un trottoir étroit, la pluie, la nuit
+  ville: {
+    id: "ville",
+    name: "La Ville",
+    blurb:
+      "La nuit, sous la pluie : les quais, le pont-levant du canal, les lacets de la butte jusqu'à la place de l'église et son square à contourner, puis la descente sous la halle.",
+    theme: "ville",
+    width: 16,
+    verge: 2.5,
+    start: 60,
+    corners: [
+      [-128, 0, 40],
+      [111, 0, 60],
+      [204, 94, 50],
+      [179, 170, 30],
+      [119, 204, 30],
+      [-34, 213, 30],
+      [-34, 265, 30],
+      [85, 265, 30],
+      [85, 319, 30],
+      [-170, 319, 50],
+      [-170, 183, 35],
+      [-128, 136, 35],
+    ],
+    hills: [
+      [0, 0],
+      [0.3, 0],
+      [0.4, 5],
+      [0.5, 10],
+      [0.58, 14],
+      [0.7, 14],
+      [0.84, 3],
+      [0.92, 0],
+    ],
+    boxes: [0.11, 0.33, 0.5675, 0.82],
+    boosts: [
+      [0.62, 0.62],
+      [0.747, -0.3],
+      [0.97, 0.3],
+    ],
+    jumps: [0.1437],
+    crossers: [{ frac: 0.467, period: 9, offset: 0.3 }],
+    movers: [
+      { kind: "roll", frac: 0.776, thing: "poubelle", count: 2, gap: 1.2, period: 8, speed: 9, radius: 1, offset: 0.4 },
+      { kind: "roll", frac: 0.19, thing: "parapluie", count: 3, gap: 0.9, period: 10, speed: 7, radius: 1.1, offset: 0.1 },
+    ],
+    springs: [
+      [0.06, 0.5],
+      [0.555, -0.5],
+    ],
+    zones: [
+      { from: 0.39, to: 0.44, d1: 0.1, d2: 1, kind: "flaque" },
+      { from: 0.69, to: 0.735, d1: -1, d2: -0.1, kind: "flaque" },
+      { from: 0.915, to: 0.95, d1: 0.15, d2: 1, kind: "flaque" },
+    ],
+    islands: [{ frac: 0.5963, len: 60, width: 4.4 }],
+  },
 };
 
 /** Le même circuit, gauche et droite échangées */
@@ -447,6 +505,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
   "dunes-miroir": mirrored(BASE_TRACKS.dunes),
   "lagon-miroir": mirrored(BASE_TRACKS.lagon),
   "volcan-miroir": mirrored(BASE_TRACKS.volcan),
+  "ville-miroir": mirrored(BASE_TRACKS.ville),
 };
 
 /** La version en miroir d'un circuit (lui-même s'il l'est déjà) */

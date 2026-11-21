@@ -93,6 +93,10 @@ export class RaceScene {
   private hemi: THREE.HemisphereLight;
   /** La lumière du jour (1), plus faible dans un tunnel */
   private daylight = 1;
+  /** La lumière du jour à cette image (1 dehors, moins sous un toit) */
+  get daylightNow(): number {
+    return this.daylight;
+  }
   private lightsShown = -1;
   private world: World | null = null;
   private track: Track | null = null;
@@ -123,7 +127,7 @@ export class RaceScene {
   /** Les karts déjà sous l'eau (pour ne faire qu'un seul plouf) */
   private drowned: boolean[] = [];
   /** Le son de ce qui se passe sur la route, plus ou moins fort selon la distance */
-  onLife: ((sound: "clang" | "baa" | "firework" | "dive", volume: number) => void) | null = null;
+  onLife: ((sound: "clang" | "baa" | "firework" | "dive" | "thunder", volume: number) => void) | null = null;
   /** Chaque kart : au-dessus de la mer ou non (pour le plouf quand il la traverse), et la caméra sous l'eau ou non */
   private aboveSea: boolean[] = [];
   private cameraUnder = false;
@@ -286,6 +290,7 @@ export class RaceScene {
     this.makeEnvironment(mood);
     if (!this.opts.phone && !this.opts.reduced) this.makeBloom();
     this.scene.add(this.world.group, this.world.dome);
+    this.world.onFlash = () => this.onLife?.("thunder", 0.5 + Math.random() * 0.4);
     this.scene.background = this.world.sky;
     this.scene.fog = this.world.fog;
     await step(0.58);
@@ -301,7 +306,7 @@ export class RaceScene {
     }
     await step(0.61);
     this.karts = looks.map((look) => {
-      const m = new KartModel({ ...look, night: Boolean(mood.stars) }, this.shadows, this.items);
+      const m = new KartModel({ ...look, night: Boolean(mood.stars || mood.night) }, this.shadows, this.items);
       this.scene.add(m.group);
       return m;
     });
@@ -812,7 +817,16 @@ export class RaceScene {
   dust(k: Kart) {
     if (this.opts.reduced || Math.random() > 0.5) return;
     const theme = this.track?.def.theme;
-    const color = theme === "col" ? 0xf4f7fa : theme === "dunes" || theme === "lagon" ? 0xd9bf88 : theme === "volcan" ? 0x4a4040 : 0x9b8a6a;
+    const color =
+      theme === "col"
+        ? 0xf4f7fa
+        : theme === "dunes" || theme === "lagon"
+          ? 0xd9bf88
+          : theme === "volcan"
+            ? 0x4a4040
+            : theme === "ville"
+              ? 0x9aa6b4
+              : 0x9b8a6a;
     this.puff(
       k.x - Math.sin(k.h) * 1.2,
       k.y + 0.3,
@@ -1139,7 +1153,8 @@ export class RaceScene {
       f.camera === "chase" && followed !== undefined && this.world.tunnels.some(([a, b]) => followed.s > a + 4 && followed.s < b - 2);
     this.daylight += ((inside ? 0.38 : 1) - this.daylight) * Math.min(1, f.dt * 4);
     const { hemiPower, sunPower } = this.world.mood;
-    this.hemi.intensity = hemiPower * this.daylight;
+    const flash = this.world.flash();
+    this.hemi.intensity = hemiPower * this.daylight + flash * 2.6;
     this.sun.intensity = sunPower * this.daylight;
     this.scene.environmentIntensity = 0.75 * (0.45 + 0.55 * this.daylight);
     // Les étiquettes des autres : ni trop près ni trop loin ; un kart collé à la caméra s'efface pour ne pas boucher la vue

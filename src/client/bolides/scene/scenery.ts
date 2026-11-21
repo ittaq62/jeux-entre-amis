@@ -35,7 +35,12 @@ export const PLACES: Record<Theme, { tunnel: [number, number]; bridge: number }>
   // Pas de tunnel au lagon (un écart négatif veut dire « aucun »)
   lagon: { tunnel: [-1, -1], bridge: 110 },
   volcan: { tunnel: [878, 950], bridge: 110 },
+  // En ville, le « tunnel » est la halle du marché, le pont une passerelle de fer (la ville les dessine elle-même)
+  ville: { tunnel: [1195, 1262], bridge: 100 },
 };
+
+/** Les circuits qui dessinent eux-mêmes leur tunnel et leur pont, sans spectateurs au bord des virages */
+const OWN_PLACES = new Set<Theme>(["ville"]);
 
 const lambert = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshLambertMaterial({ color, map: map ?? null });
 
@@ -577,10 +582,12 @@ function snowfall(ctx: SceneryContext): (time: number, camera: THREE.Vector3, da
 
 export function buildScenery(ctx: SceneryContext, theme: Theme): Scenery {
   const place = PLACES[theme];
-  addTunnel(ctx, theme, place.tunnel[0], place.tunnel[1]);
   const crowd = new Crowd(ctx.keep, 60);
-  addBridge(ctx, theme, place.bridge, crowd);
-  addFans(ctx, crowd);
+  if (!OWN_PLACES.has(theme)) {
+    addTunnel(ctx, theme, place.tunnel[0], place.tunnel[1]);
+    addBridge(ctx, theme, place.bridge, crowd);
+    addFans(ctx, crowd);
+  }
   crowd.done();
   ctx.group.add(crowd.bodies, crowd.heads);
   const extras: ((time: number, camera: THREE.Vector3, daylight: number) => void)[] = [];

@@ -39,6 +39,7 @@ import { BOLIDES_SOUNDS, play, soundsLoaded, vibrate, type SoundName } from "../
 import { usePrefs } from "../stores/prefs.ts";
 import { Controls } from "./controls.ts";
 import { LocalDriver, type LaunchPress } from "./driver.ts";
+import { Ambience } from "./ambience.ts";
 import { EngineSound, honk } from "./engineSound.ts";
 import { RaceMusic } from "./music.ts";
 import type { Aim } from "./scene/aim.ts";
@@ -137,6 +138,8 @@ export class RaceRuntime {
   private scene: RaceScene;
   readonly controls: Controls;
   private engine = new EngineSound();
+  /** Le bruit de fond du circuit (la pluie en ville) */
+  private ambience: Ambience;
   private music = new RaceMusic();
   private track: Track;
   private view: BolidesView;
@@ -213,15 +216,20 @@ export class RaceRuntime {
     this.serverOffset = serverOffset;
     this.offsetTarget = serverOffset;
     this.track = getTrack(view.track);
+    this.ambience = new Ambience(this.track.def.theme);
     this.ids = view.racers.map((r) => r.id);
     this.colors = looks.map((l) => l.color);
     this.names = looks.map((l) => l.name);
     this.mine = opts.me ? this.ids.indexOf(opts.me) : -1;
     this.scene = new RaceScene(container, { phone: opts.phone, reduced: opts.reduced });
-    this.scene.onLife = (sound, volume) =>
-      play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : sound === "dive" ? "bolidesDive" : "bolidesFirework", {
-        volume,
-      });
+    this.scene.onLife = (sound, volume) => {
+      // Le tonnerre roule un peu après l'éclair, plus grave que la foudre d'un objet
+      if (sound === "thunder") play("bolidesThunder", { volume, rate: 0.72, delay: 700 + Math.random() * 1200 });
+      else
+        play(sound === "clang" ? "bolidesClang" : sound === "baa" ? "bolidesBaa" : sound === "dive" ? "bolidesDive" : "bolidesFirework", {
+          volume,
+        });
+    };
     this.shown = view.karts.map((n) => decodeKart(n)!);
     this.views = this.shown.map((k) => ({ ...k }));
     this.steers = this.shown.map(() => 0);
@@ -618,6 +626,8 @@ export class RaceRuntime {
       this.engineOn = true;
       this.engine.start();
     }
+    // Sous la halle, la pluie s'assourdit (la lumière du jour y baisse jusqu'à 0,38)
+    this.ambience.update(Math.max(0, Math.min(1, (1 - this.scene.daylightNow) / 0.62)));
     this.interpolate(now - INTERP_MS);
     const pad = this.controls.read(dt);
     const me = this.mine >= 0 ? v.racers[this.mine] : undefined;
@@ -1099,6 +1109,7 @@ export class RaceRuntime {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.engine.stop();
+    this.ambience.stop();
     this.music.stop();
     this.controls.dispose();
     this.scene.dispose();

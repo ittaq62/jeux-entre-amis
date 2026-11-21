@@ -27,6 +27,8 @@ import {
   seaMaterial,
 } from "./nature.ts";
 import { MOODS, Sky, type Mood } from "./sky.ts";
+import { addFootbridge, addHalle, addSkyline, buildVille, waterBed, waterways, type Ville } from "./ville.ts";
+import { leafTexture } from "./villeTextures.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
@@ -47,6 +49,9 @@ export interface World {
   /** Les trois feux de départ sur l'arche (0 : éteints, 1 à 3 : autant de rouges, 4 : tous verts) */
   setLights: (n: number) => void;
   fog: THREE.Fog;
+  /** Un éclair en cours (de 0 à 1), et ce qu'il faut faire quand il tombe (le tonnerre) */
+  flash: () => number;
+  onFlash: (() => void) | null;
   dispose: () => void;
 }
 
@@ -170,7 +175,13 @@ function ribbon(t: Track, d1: number, d2: number, lift: number, vScale: number, 
 }
 
 /** Un muret debout le long de la route, à l'écart d, de la hauteur donnée */
-function wallRibbon(t: Track, d: number, height: number, ground: (x: number, z: number) => number): THREE.BufferGeometry {
+function wallRibbon(
+  t: Track,
+  d: number,
+  height: number,
+  ground: (x: number, z: number) => number,
+  cuts: Track["gaps"] = [],
+): THREE.BufferGeometry {
   const n = t.n;
   const pos = new Float32Array((n + 1) * 2 * 3);
   const uv = new Float32Array((n + 1) * 2 * 2);
@@ -186,7 +197,9 @@ function wallRibbon(t: Track, d: number, height: number, ground: (x: number, z: 
     uv.set([v, 1 - (top - y) / (height + 0.3), v, 1], i * 4);
   }
   const index: number[] = [];
+  const step = t.length / n;
   for (let i = 0; i < n; i++) {
+    if (cuts.some((c) => (i + 1) * step > c.from + 0.01 && i * step < c.to - 0.01)) continue;
     const a = i * 2;
     index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
   }
@@ -342,10 +355,14 @@ export async function buildWorld(
     return plainY + (h - plainY) * keepShape;
   };
 
+  // En ville, le fleuve et le canal creusent le sol
+  const ways = theme === "ville" ? waterways(t) : [];
   // Le sol : il épouse la route près d'elle, puis redescend doucement à plat
   const heightAt = (x: number, z: number): number => {
     const pit = pitAt(x, z);
     if (pit) return pit.y - (pit.glide ? 20 : 12);
+    const bed = ways.length > 0 ? waterBed(ways, x, z) : null;
+    if (bed !== null) return bed;
     if (!hilly) return 0;
     const d = field.distAt(x, z);
     const road = field.roadAt(x, z);
@@ -428,7 +445,9 @@ export async function buildWorld(
     keep(
       opts.phone
         ? lambert(0xffffff, roadTex)
-        : new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.78, metalness: 0, envMapIntensity: 0.2 }),
+        : theme === "ville"
+          ? new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.34, metalness: 0.12, envMapIntensity: 0.9 })
+          : new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.78, metalness: 0, envMapIntensity: 0.2 }),
     ),
   );
   road.receiveShadow = opts.shadows;
@@ -441,7 +460,12 @@ export async function buildWorld(
     const b = side * (t.half + 1.2);
     group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3, 1, t.gaps)), curbMat));
   }
-  const wallHeight = theme === "col" ? 1.1 : 0.9;
+  const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : 0.9;
+  // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre)
+  const wallCuts = [
+    ...t.gaps,
+    ...t.crossers.filter((c) => c.reach + 2.4 > t.wall).map((c) => ({ from: c.s - 6, to: c.s + 6, glide: false })),
+  ];
   const capMat = keep(
     lambert(
       theme === "col"
@@ -454,7 +478,9 @@ export async function buildWorld(
               ? 0xc9ab66
               : theme === "volcan"
                 ? 0xff7a1f
-                : 0xdad9d4,
+                : theme === "ville"
+                  ? 0xb8b0a2
+                  : 0xdad9d4,
     ),
   );
   const footShade = (toRight: boolean) => {
@@ -477,16 +503,16 @@ export async function buildWorld(
   wallTex.wrapT = THREE.RepeatWrapping;
   const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide }));
   for (const side of [-1, 1]) {
-    const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), wallHeight, heightAt)), wallMat);
+    const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), wallHeight, heightAt, wallCuts)), wallMat);
     wall.castShadow = false;
     group.add(wall);
     // Le dessus du muret, pour qu'il ait de l'épaisseur
     const at = side * (t.wall + 0.4);
-    group.add(new THREE.Mesh(keep(ribbon(t, at - 0.32, at + 0.32, wallHeight, 3, 1, t.gaps)), capMat));
+    group.add(new THREE.Mesh(keep(ribbon(t, at - 0.32, at + 0.32, wallHeight, 3, 1, wallCuts)), capMat));
     // Et l'ombre douce à son pied : le muret se pose vraiment sur le sol
     const inner = side > 0 ? at - 2.4 : at;
     const outer = side > 0 ? at : at + 2.4;
-    group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, t.gaps)), side > 0 ? footLeft : footRight));
+    group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, wallCuts)), side > 0 ? footLeft : footRight));
   }
 
   await pause(0.4);
@@ -557,7 +583,7 @@ export async function buildWorld(
 
   // Les tremplins : une rampe en planches sur toute la largeur de la route, qui monte jusqu'au bord
   {
-    const top = keep(lambert(0xffffff, keep(TX.rampTexture())));
+    const top = keep(lambert(0xffffff, keep(theme === "ville" ? leafTexture() : TX.rampTexture())));
     const sideMat = keep(new THREE.MeshLambertMaterial({ color: 0x6b4a2e, side: THREE.DoubleSide }));
     const glideTop = keep(lambert(0xffffff, keep(TX.rampTexture(true))));
     for (const lip of t.jumps) {
@@ -599,10 +625,14 @@ export async function buildWorld(
 
   // L'habillage de la piste : panneaux de virage, pneus, panneaux, drapeaux, tribune, grille
   const ctx: DecorContext = { group, t, keep, heightAt, shadows, free };
-  addBendDressing(ctx);
-  addWallBoards(ctx);
-  const waveFlags = addFlags(ctx);
-  addGrandstand(ctx);
+  // Une vraie ville n'a ni pneus dans les virages, ni panneaux publicitaires, ni drapeaux, ni tribune
+  const street = theme === "ville";
+  if (!street) {
+    addBendDressing(ctx);
+    addWallBoards(ctx);
+  }
+  const waveFlags = street ? () => {} : addFlags(ctx);
+  addGrandstand(ctx, !street);
   await pause(0.6);
   // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
   const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
@@ -612,12 +642,14 @@ export async function buildWorld(
   {
     const w = (field.nx - 1) * field.cell;
     const h = (field.nz - 1) * field.cell;
-    addMountains(group, keep, theme, field.x0 + w / 2, field.z0 + h / 2, Math.hypot(w, h) / 2 + 40, opts.phone);
+    // En ville, d'autres toits jusqu'à l'horizon, au lieu des montagnes
+    if (street) addSkyline(group, keep, field.x0 + w / 2, field.z0 + h / 2, Math.hypot(w, h) / 2 + 40, opts.phone);
+    else addMountains(group, keep, theme, field.x0 + w / 2, field.z0 + h / 2, Math.hypot(w, h) / 2 + 40, opts.phone);
   }
-  // Les touffes d'herbe et les fleurs du bord de la route, les traces de pneus dans les virages
-  addGrass(group, keep, t, theme, place0.tunnel, opts.phone);
+  // Les touffes d'herbe et les fleurs du bord de la route, les traces de pneus dans les virages (pas d'herbe sur les pavés)
+  if (!street) addGrass(group, keep, t, theme, place0.tunnel, opts.phone);
   const open = (s: number) => s < place0.tunnel[0] - 4 || s > place0.tunnel[1] + 4;
-  addRunoffs(group, keep, t, theme, open);
+  if (!street) addRunoffs(group, keep, t, theme, open);
   addSkidMarks(group, keep, t, theme, open);
   await pause(0.88);
 
@@ -901,6 +933,24 @@ export async function buildWorld(
   if (theme === "dunes") biome = buildDunes(biomeCtx);
   else if (theme === "lagon") biome = buildLagon(biomeCtx);
   else if (theme === "volcan") biome = buildVolcan(biomeCtx);
+  let ville: Ville | null = null;
+  if (street) {
+    const villeCtx = {
+      group,
+      t,
+      keep,
+      heightAt,
+      distAt: (x: number, z: number) => field.distAt(x, z),
+      shadows,
+      phone: opts.phone,
+      r,
+      tunnel: place0.tunnel,
+      bridge: place0.bridge,
+    };
+    ville = buildVille(villeCtx);
+    addHalle(villeCtx, place0.tunnel[0], place0.tunnel[1]);
+    addFootbridge(villeCtx, place0.bridge);
+  }
   const caustic = { value: 0 };
   let liquid: THREE.ShaderMaterial | null = null;
   if (theme === "lagon" && t.water !== null) {
@@ -943,7 +993,7 @@ export async function buildWorld(
   }
 
   // L'ombre des nuages sur le sol et la route, les reflets de lumière au fond de l'eau
-  const surface = { water: t.water ?? undefined, clouds: !mood.stars };
+  const surface = { water: t.water ?? undefined, clouds: !mood.stars && !mood.night };
   if (surface.clouds || surface.water !== undefined) {
     for (const m of [groundMat, road.material as THREE.Material, curbMat]) addSurfaceLight(m, surface, caustic);
   }
@@ -965,7 +1015,15 @@ export async function buildWorld(
       });
     },
     fog: new THREE.Fog(horizon, mood.fog[0], mood.fog[1]),
+    flash: () => ville?.flash() ?? 0,
+    get onFlash() {
+      return ville?.onFlash ?? null;
+    },
+    set onFlash(fn: (() => void) | null) {
+      if (ville) ville.onFlash = fn;
+    },
     update(time: number, camera: THREE.Vector3, daylight: number) {
+      ville?.update(time, camera, daylight);
       boostTex.offset.y = -((time * 1.6) % 1);
       if (sea) sea.uniforms.uTime!.value = time;
       if (liquid) liquid.uniforms.uTime!.value = time;

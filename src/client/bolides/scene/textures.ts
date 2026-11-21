@@ -46,10 +46,81 @@ const ASPHALT: Record<Theme, string> = {
   dunes: "#7b6650",
   lagon: "#8b8171",
   volcan: "#2d292c",
+  ville: "#2c2f35",
 };
+
+/**
+ * Les pavés mouillés de la ville : de petites pierres de granit gris et brun posées en rangées décalées, leurs joints
+ * sombres où l'eau brille, la rigole de chaque côté, et les tirets blancs du milieu. Elle se répète tous les 8 m ;
+ * l'image est fine (64 points par mètre) pour que les pavés restent petits.
+ */
+function cobbleTexture(): THREE.CanvasTexture {
+  const S = 1024;
+  const [c, g] = canvas(S, S);
+  g.fillStyle = "#15171a";
+  g.fillRect(0, 0, S, S);
+  const r = rng(41);
+  const rows = 76;
+  const h = S / rows;
+  for (let row = 0; row < rows; row++) {
+    const y = row * h;
+    let x = -r() * 20;
+    while (x < S) {
+      const w = 16 + r() * 11;
+      // Du granit : gris, parfois brun ou rosé, plus ou moins sombre
+      const hue = r() < 0.7 ? 30 + r() * 20 : 210 + r() * 15;
+      const sat = 4 + r() * 7;
+      const l = 19 + r() * 17;
+      const grad = g.createLinearGradient(0, y + 1, 0, y + h - 1);
+      grad.addColorStop(0, `hsl(${hue}, ${sat}%, ${l + 7}%)`);
+      grad.addColorStop(0.5, `hsl(${hue}, ${sat}%, ${l}%)`);
+      grad.addColorStop(1, `hsl(${hue}, ${sat}%, ${l - 6}%)`);
+      g.fillStyle = grad;
+      g.beginPath();
+      g.roundRect(x + 1.2, y + 1.2, w - 2.4, h - 2.4, 3);
+      g.fill();
+      // Le dessus mouillé accroche la lumière
+      if (r() < 0.5) {
+        g.fillStyle = `rgba(225,225,230,${0.05 + r() * 0.09})`;
+        g.fillRect(x + 3, y + 2.5, w - 6, 1.5);
+      }
+      x += w;
+    }
+  }
+  // De l'eau dans les creux : de larges reflets doux, çà et là
+  for (let i = 0; i < 26; i++) {
+    const x = 80 + r() * 864;
+    const y = r() * S;
+    const rad = 30 + r() * 80;
+    for (const oy of [-S, 0, S]) {
+      const grad = g.createRadialGradient(x, y + oy, 0, x, y + oy, rad);
+      grad.addColorStop(0, "rgba(160,165,180,0.16)");
+      grad.addColorStop(1, "rgba(160,165,180,0)");
+      g.fillStyle = grad;
+      g.fillRect(x - rad, y + oy - rad, rad * 2, rad * 2);
+    }
+  }
+  // La rigole de chaque côté : plus sombre, de l'eau qui court
+  for (const [x0, x1] of [
+    [0, 64],
+    [S, S - 64],
+  ] as const) {
+    const grad = g.createLinearGradient(x0, 0, x1, 0);
+    grad.addColorStop(0, "rgba(6,8,12,0.7)");
+    grad.addColorStop(1, "rgba(6,8,12,0)");
+    g.fillStyle = grad;
+    g.fillRect(Math.min(x0, x1), 0, 64, S);
+  }
+  // Les tirets du milieu, usés
+  g.fillStyle = "rgba(236,232,222,0.8)";
+  g.fillRect(500, 0, 24, 460);
+  speckle(g, S, S, 3000, ["rgba(0,0,0,0.25)", "rgba(230,230,235,0.05)"], 2, 43);
+  return toTexture(c);
+}
 
 /** Le bitume : le grain, les lignes blanches des bords et les tirets du milieu. Elle se répète tous les 8 m. */
 export function roadTexture(theme: Theme): THREE.CanvasTexture {
+  if (theme === "ville") return cobbleTexture();
   const S = 512;
   const [c, g] = canvas(S, S);
   g.fillStyle = ASPHALT[theme];
@@ -144,6 +215,24 @@ export function roadTexture(theme: Theme): THREE.CanvasTexture {
 /** Les vibreurs : rouge et blanc */
 export function curbTexture(theme?: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(32, 64);
+  if (theme === "ville") {
+    // Une bordure de granit, ses blocs à peine différents, mouillée
+    for (const [y, l] of [
+      [0, 46],
+      [32, 41],
+    ] as const) {
+      const grad = g.createLinearGradient(0, 0, 32, 0);
+      grad.addColorStop(0, `hsl(215, 6%, ${l - 14}%)`);
+      grad.addColorStop(0.35, `hsl(215, 6%, ${l}%)`);
+      grad.addColorStop(1, `hsl(215, 7%, ${l - 4}%)`);
+      g.fillStyle = grad;
+      g.fillRect(0, y, 32, 32);
+    }
+    g.fillStyle = "rgba(0,0,0,0.45)";
+    g.fillRect(0, 31, 32, 2);
+    g.fillRect(0, 63, 32, 1);
+    return toTexture(c);
+  }
   g.fillStyle = theme === "lagon" ? "#2fb7d4" : theme === "volcan" ? "#ff7a1f" : "#d8352a";
   g.fillRect(0, 0, 32, 32);
   g.fillStyle = theme === "volcan" ? "#26211f" : "#f4f1ea";
@@ -153,8 +242,38 @@ export function curbTexture(theme?: Theme): THREE.CanvasTexture {
   return toTexture(c);
 }
 
-/** Le sol autour du circuit : de l'herbe, de l'herbe sèche entre les vignes, de la neige au col */
+/** Le trottoir de la ville : des dalles de pierre mouillées, leurs joints, des reflets */
+function pavementTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [c, g] = canvas(size, size);
+  g.fillStyle = "#2a2d32";
+  g.fillRect(0, 0, size, size);
+  const r = rng(57);
+  const cell = 64;
+  for (let y = 0; y < size; y += cell) {
+    for (let x = 0; x < size; x += cell) {
+      const l = 30 + r() * 9;
+      g.fillStyle = `hsl(${30 + r() * 20}, 6%, ${l}%)`;
+      g.fillRect(x + 2, y + 2, cell - 4, cell - 4);
+      // Une dalle sur trois garde une flaque, qui reflète le ciel orangé de la ville
+      if (r() < 0.33) {
+        const grad = g.createRadialGradient(x + cell / 2, y + cell / 2, 2, x + cell / 2, y + cell / 2, cell * 0.6);
+        grad.addColorStop(0, "rgba(170,150,130,0.22)");
+        grad.addColorStop(1, "rgba(170,150,130,0)");
+        g.fillStyle = grad;
+        g.fillRect(x, y, cell, cell);
+      }
+    }
+  }
+  speckle(g, size, size, 5000, ["rgba(0,0,0,0.22)", "rgba(230,225,215,0.08)"], 1.5, 59);
+  const t = toTexture(c);
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Le sol autour du circuit : de l'herbe, de l'herbe sèche entre les vignes, de la neige au col, un trottoir en ville */
 export function groundTexture(theme: Theme): THREE.CanvasTexture {
+  if (theme === "ville") return pavementTexture();
   const size = 512;
   const [c, g] = canvas(size, size);
   const base =
@@ -223,6 +342,26 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
 /** Les murets au bord du circuit, selon le décor */
 export function wallTexture(theme: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(256, 64);
+  if (theme === "ville") {
+    // Un parapet de pierre blonde, ses blocs taillés, assombris en bas par la pluie
+    g.fillStyle = "#8f877a";
+    g.fillRect(0, 0, 256, 64);
+    const r = rng(61);
+    for (let y = 0; y < 64; y += 21) {
+      for (let x = (y / 21) % 2 === 0 ? 0 : -32; x < 256; x += 64) {
+        const l = 52 + r() * 10;
+        g.fillStyle = `hsl(${36 + r() * 6}, 14%, ${l}%)`;
+        g.fillRect(x + 1.5, y + 1.5, 61, 18);
+      }
+    }
+    const wet = g.createLinearGradient(0, 20, 0, 64);
+    wet.addColorStop(0, "rgba(20,20,26,0)");
+    wet.addColorStop(1, "rgba(20,20,26,0.5)");
+    g.fillStyle = wet;
+    g.fillRect(0, 0, 256, 64);
+    speckle(g, 256, 64, 600, ["rgba(0,0,0,0.18)", "rgba(255,250,240,0.08)"], 2, 63);
+    return toTexture(c);
+  }
   if (theme === "dunes") {
     // Un muret de terre crue, ses blocs irréguliers
     g.fillStyle = "#c79a64";

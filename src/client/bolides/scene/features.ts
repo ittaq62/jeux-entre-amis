@@ -216,6 +216,21 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     wheel(-1.0, -1.05, 0.42, 0.26);
     wheel(1.0, -1.05, 0.42, 0.26);
     beaconY = 2.9;
+  } else if (theme === "ville") {
+    // La balayeuse de la ville : blanche et verte, sa cabine vitrée, sa citerne, ses deux brosses rondes devant
+    const white = keep(std(0xeef0ea, 0.45));
+    const green = keep(std(0x2f8a4a, 0.5));
+    add(new RoundedBoxGeometry(1.7, 1.2, 1.3, 2, 0.15), white, 0, 1.3, 0.9);
+    add(new RoundedBoxGeometry(1.6, 0.6, 1.0, 2, 0.08), glass, 0, 2.05, 0.95);
+    add(new RoundedBoxGeometry(1.8, 1.5, 1.9, 2, 0.15), green, 0, 1.45, -0.85);
+    add(new THREE.BoxGeometry(1.85, 0.12, 2.0), white, 0, 2.25, -0.85);
+    const brush = keep(std(0xf07a1a, 0.9));
+    for (const x of [-0.6, 0.6]) add(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 14), brush, x, 0.12, 1.7);
+    wheel(-0.85, 0.75, 0.42, 0.3);
+    wheel(0.85, 0.75, 0.42, 0.3);
+    wheel(-0.85, -1.2, 0.42, 0.3);
+    wheel(0.85, -1.2, 0.42, 0.3);
+    beaconY = 2.45;
   } else {
     // Le chasse-neige orange : sa cabine vitrée, sa grosse lame en biais devant
     const orange = keep(std(0xf07a1a, 0.45));
@@ -261,16 +276,23 @@ export class Crossers {
     hatch.width = 128;
     hatch.height = 64;
     const g = hatch.getContext("2d")!;
-    g.fillStyle = "#f2c230";
-    g.fillRect(0, 0, 128, 64);
-    g.fillStyle = "#222";
-    for (let x = -64; x < 160; x += 32) {
-      g.beginPath();
-      g.moveTo(x, 64);
-      g.lineTo(x + 16, 64);
-      g.lineTo(x + 48, 0);
-      g.lineTo(x + 32, 0);
-      g.fill();
+    if (theme === "ville") {
+      g.fillStyle = "#2a2d33";
+      g.fillRect(0, 0, 128, 64);
+      g.fillStyle = "#e9e6dc";
+      for (let x = 0; x < 128; x += 32) g.fillRect(x + 6, 0, 18, 64);
+    } else {
+      g.fillStyle = "#f2c230";
+      g.fillRect(0, 0, 128, 64);
+      g.fillStyle = "#222";
+      for (let x = -64; x < 160; x += 32) {
+        g.beginPath();
+        g.moveTo(x, 64);
+        g.lineTo(x + 16, 64);
+        g.lineTo(x + 48, 0);
+        g.lineTo(x + 32, 0);
+        g.fill();
+      }
     }
     const hatchTex = keep(new THREE.CanvasTexture(hatch));
     hatchTex.colorSpace = THREE.SRGBColorSpace;

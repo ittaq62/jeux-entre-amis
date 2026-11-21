@@ -310,9 +310,10 @@ describe("la conduite", () => {
         }
         expect(lo, id).toBeCloseTo(-c.reach, 1);
         expect(hi, id).toBeCloseTo(c.reach, 1);
-        // Il attend hors de la route, entre la route et le mur
+        // Il attend hors de la route, entre la route et le mur ; en ville, le trottoir est trop étroit : il attend dans
+        // la rue d'en face (le mur s'ouvre pour lui)
         expect(c.reach, id).toBeGreaterThan(t.roadEdge);
-        expect(c.reach + 2.4, id).toBeLessThan(t.wall);
+        if (t.wall - t.roadEdge >= 5) expect(c.reach + 2.4, id).toBeLessThan(t.wall);
         // Le passage est sur une ligne droite
         expect(Math.abs(t.bend[locate(t, pointAt(t, c.s, 0).x, pointAt(t, c.s, 0).z).i]!), id).toBeLessThan(0.006);
       }
@@ -2093,6 +2094,61 @@ describe("les îlots au milieu de la route", () => {
         const at = locate(t, x, z);
         expect(islandAt(t, at.s, at.d, 1), `drone ${along}`).toBeNull();
       }
+    }
+  });
+});
+
+describe("la Ville", () => {
+  it("un pétard lancé droit sur le square de la place s'y écrase, sans toucher personne derrière", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "ville" }, 0, 1);
+    worldTick(race, race.goAt);
+    const t = getTrack("ville");
+    const square = t.islands[0]!;
+    const a = racerOf(race, "a")!;
+    const b = racerOf(race, "b")!;
+    const put = (k: Kart, s: number, d: number) => {
+      const p = pointAt(t, s, d);
+      const at = locate(t, p.x, p.z);
+      Object.assign(k, { x: p.x, z: p.z, s: at.s, i: at.i, d: at.d, dist: at.s, h: Math.atan2(p.tx, p.tz), spin: 0 });
+    };
+    // Le lanceur juste avant la fontaine, dans l'axe du square ; un bot bien plus loin, dans le même axe, après le square
+    put(a.kart, square.s - 12, 0);
+    put(b.kart, square.s + square.len + 25, 0);
+    a.item = "petard";
+    a.uses = 1;
+    const now = race.goAt + 1000;
+    useItem(race, "a", now);
+    const events: string[] = [];
+    for (let ms = 50; ms <= 2500; ms += 50) {
+      for (const e of worldTick(race, now + ms))
+        events.push(e.type === "gone" ? `gone:${e.why}` : e.type === "hit" ? `hit:${e.id}` : e.type);
+    }
+    expect(events).toContain("gone:wall");
+    expect(events.some((e) => e.startsWith("hit:"))).toBe(false);
+    expect(race.hazards.length).toBe(0);
+  });
+
+  it("une bombe ou une flaque lancée devant retombe à côté du square, jamais dessus", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "ville" }, 0, 1);
+    worldTick(race, race.goAt);
+    const t = getTrack("ville");
+    const square = t.islands[0]!;
+    const a = racerOf(race, "a")!;
+    const now = race.goAt + 1000;
+    for (const [kind, before, flip] of [
+      ["bombe", 32, false],
+      ["huile", 22, true],
+    ] as const) {
+      const p = pointAt(t, square.s + square.len / 2 - before, 0);
+      const at = locate(t, p.x, p.z);
+      Object.assign(a.kart, { x: p.x, z: p.z, s: at.s, i: at.i, d: 0, h: Math.atan2(p.tx, p.tz), spin: 0 });
+      a.item = kind;
+      a.uses = 1;
+      useItem(race, "a", now, flip);
+      const hz = race.hazards.at(-1)!;
+      const spot = hz.kind === "bombe" ? { s: hz.s, d: hz.d } : hz.kind === "huile" ? { s: hz.s, d: hz.d } : null;
+      expect(spot, kind).not.toBeNull();
+      expect(islandAt(t, spot!.s, spot!.d), kind).toBeNull();
     }
   });
 });

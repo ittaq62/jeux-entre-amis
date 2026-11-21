@@ -212,8 +212,8 @@ export function addFlags(ctx: DecorContext): (time: number) => void {
   };
 }
 
-/** La tribune du départ et son public, du côté libre de la ligne droite ; et les cases de la grille */
-export function addGrandstand(ctx: DecorContext) {
+/** La tribune du départ et son public, du côté libre de la ligne droite (`stand` : sinon, pas de tribune) ; et les cases de la grille */
+export function addGrandstand(ctx: DecorContext, stand = true) {
   const { group, t, keep, heightAt, shadows } = ctx;
   const along = -12;
   let side = 0;
@@ -225,7 +225,7 @@ export function addGrandstand(ctx: DecorContext) {
       break;
     }
   }
-  if (side !== 0) {
+  if (stand && side !== 0) {
     const p = pointAt(t, along, side * (t.wall + 9));
     const y = heightAt(p.x, p.z);
     const stand = new THREE.Group();
