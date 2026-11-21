@@ -139,7 +139,7 @@ export class EscScene {
     this.renderer.autoClear = false;
     if (q !== "bas") {
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
     }
     this.camera = new THREE.PerspectiveCamera(78, 1, 0.05, 600);
     this.camera.rotation.order = "YXZ";
