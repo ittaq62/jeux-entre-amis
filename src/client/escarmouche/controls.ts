@@ -65,8 +65,12 @@ export class EscControls {
     crouch: false,
     taps: 0,
   };
-  /** La souris est-elle prise par le jeu ? */
+  /** La souris est-elle prise par le jeu ? Ses mouvements bruts (sans l'accélération du système) ? */
   locked = false;
+  raw = false;
+  private lockedAt = 0;
+  /** La taille moyenne des derniers mouvements (pour reconnaître un saut parasite) */
+  private recent = 0;
   onLockChange?: (locked: boolean) => void;
   private padPrev: boolean[] = [];
 
@@ -99,15 +103,37 @@ export class EscControls {
     if (document.pointerLockElement) document.exitPointerLock();
   }
 
-  /** Prendre la souris (au clic dans le jeu) */
+  /**
+   * Prendre la souris (au clic dans le jeu). On demande les mouvements bruts de la souris, sans l'accélération du
+   * système (sous Windows, « améliorer la précision du pointeur » fait tourner plus loin un geste rapide qu'un geste lent
+   * de même longueur) : le même geste tourne toujours du même angle. Là où le navigateur ne sait pas le faire, on prend
+   * la souris quand même, telle que le système la donne.
+   */
   lock() {
     const el = this.target;
     if (!el || document.pointerLockElement === el) return;
+    const plain = () => {
+      try {
+        const p = el.requestPointerLock() as unknown as Promise<void> | undefined;
+        p?.catch?.(() => {});
+      } catch {
+        // refusé (trop tôt après une sortie) : on réessaiera au prochain clic
+      }
+    };
     try {
-      const p = el.requestPointerLock() as unknown as Promise<void> | undefined;
-      p?.catch?.(() => {});
+      const request = el.requestPointerLock as unknown as (o?: { unadjustedMovement?: boolean }) => Promise<void> | undefined;
+      const p = request.call(el, { unadjustedMovement: true });
+      if (p && typeof p.then === "function") {
+        this.raw = true;
+        p.catch((err: unknown) => {
+          // Pas de mouvements bruts ici (système ou navigateur) : la souris telle que le système la donne
+          this.raw = false;
+          if ((err as { name?: string } | null)?.name === "NotSupportedError") plain();
+        });
+      } else this.raw = false;
     } catch {
-      // refusé (trop tôt après une sortie) : on réessaiera au prochain clic
+      this.raw = false;
+      plain();
     }
   }
 
@@ -117,6 +143,8 @@ export class EscControls {
 
   private onLock = () => {
     this.locked = document.pointerLockElement === this.target && this.target !== null;
+    this.lockedAt = performance.now();
+    this.recent = 0;
     if (!this.locked) {
       this.mouseButtons = 0;
       this.held.clear();
@@ -146,10 +174,17 @@ export class EscControls {
 
   private onMouseMove = (e: MouseEvent) => {
     if (!this.locked || this.paused) return;
-    // Certains navigateurs envoient un saut énorme à la prise de la souris : on l'ignore
-    if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
-    this.lookX += e.movementX;
-    this.lookY += e.movementY;
+    const dx = e.movementX;
+    const dy = e.movementY;
+    // Juste après la prise de la souris, certains navigateurs envoient le saut du curseur jusqu'au centre : on l'ignore
+    if (performance.now() - this.lockedAt < 60) return;
+    const size = Math.max(Math.abs(dx), Math.abs(dy));
+    // Sans mouvements bruts, un navigateur glisse parfois un saut parasite énorme, tombé de nulle part (la souris était
+    // presque immobile l'instant d'avant) : seulement celui-là est écarté. Un geste vif, lui, compte en entier.
+    if (!this.raw && size > 250 && size > 12 * Math.max(this.recent, 8)) return;
+    this.recent = this.recent * 0.6 + size * 0.4;
+    this.lookX += dx;
+    this.lookY += dy;
   };
 
   private onWheel = (e: WheelEvent) => {
