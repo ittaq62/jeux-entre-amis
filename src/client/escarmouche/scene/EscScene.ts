@@ -98,6 +98,13 @@ export class EscScene {
   /** La flamme de son arme (sur l'arme, dans son propre dessin) et les douilles qui sautent */
   private vmFlash = new THREE.Group();
   private vmFlashUntil = 0;
+  /** Le dernier coup vu par l'arme en main (pour la pompe, la culasse et le sens du recul) */
+  private vmShotAt = -9;
+  private vmShotRoll = 0;
+  private vmLastKick = 0;
+  private vmLastT = 0;
+  /** De 0 à 1 : l'arme qui se couche pour courir (en douceur) */
+  private vmSprint = 0;
   private shells: { mesh: THREE.Mesh; vel: THREE.Vector3; spin: THREE.Vector3; age: number }[] = [];
   private shellNext = 0;
   private grenades: THREE.Mesh[] = [];
@@ -891,32 +898,87 @@ export class EscScene {
     const sight = gun.sight * 0.62;
     const ads = new THREE.Vector3(0, -sight, gun.pistol ? -0.34 : -0.4);
     const p = hip.lerp(ads, v.ads);
+    const dt = Math.min(0.1, Math.max(0, this.t - this.vmLastT));
+    this.vmLastT = this.t;
+    // Un nouveau coup : le recul repart de 1 (on retient l'heure, et de quel côté l'arme va rouler)
+    if (v.kick > this.vmLastKick + 0.4) {
+      this.vmShotAt = this.t;
+      this.vmShotRoll = Math.random() - 0.5;
+    }
+    this.vmLastKick = v.kick;
+    this.vmSprint += ((v.sprint ? 1 : 0) - this.vmSprint) * Math.min(1, dt * 10);
+    const run = this.vmSprint;
     const bob = Math.sin(v.bob) * v.bobAmp * (1 - v.ads * 0.8);
     p.x += Math.cos(v.bob * 0.5) * v.bobAmp * 0.5 * (1 - v.ads) - v.swayX * 0.04;
-    p.y += Math.abs(bob) * 0.4 - v.swayY * 0.03 - (1 - v.raise) * 0.3;
-    p.z += v.kick * 0.055;
+    // Au changement d'arme, elle remonte d'en bas, la bouche d'abord basse, vite puis en douceur
+    const down = (1 - v.raise) * (1 - v.raise);
+    p.y += Math.abs(bob) * 0.4 - v.swayY * 0.03 - down * 0.32;
+    // Le recul : un coup sec vers l'arrière, la bouche qui se relève et roule un peu, d'autant plus fort que l'arme cogne
+    const heavy =
+      v.weapon === "pompe" || v.weapon === "double" || v.weapon === "precision"
+        ? 1.5
+        : v.weapon === "pm" || v.weapon === "mitraillette"
+          ? 0.75
+          : 1;
+    const k = v.kick * heavy;
+    const flip = gun.pistol ? 0.16 : 0.09;
+    p.z += k * 0.055;
     gun.group.position.copy(p);
-    gun.group.rotation.set(v.kick * 0.09 + v.swayY * 0.08, v.swayX * 0.1 + 0.05 * (1 - v.ads), v.sprint ? 0.5 : 0);
-    if (v.sprint) {
-      gun.group.position.x += 0.05;
-      gun.group.position.y -= 0.05;
-      gun.group.rotation.y = 0.5;
+    gun.group.rotation.set(
+      k * flip + v.swayY * 0.08 - down * 0.8,
+      (v.swayX * 0.1 + 0.05 * (1 - v.ads)) * (1 - run) + 0.5 * run,
+      k * this.vmShotRoll * 0.08 + 0.5 * run + down * 0.3,
+    );
+    gun.group.position.x += 0.05 * run;
+    gun.group.position.y -= 0.05 * run;
+    // Le fusil à pompe qu'on réarme, la culasse du fusil de précision : juste après le coup, au son
+    const since = this.t - this.vmShotAt;
+    const rack = since > 0.3 && since < 0.62 ? Math.sin(((since - 0.3) / 0.32) * Math.PI) : 0;
+    if (v.weapon === "precision" && rack > 0) {
+      gun.group.rotation.z += rack * 0.22;
+      gun.group.rotation.x -= rack * 0.06;
+      gun.group.position.y -= rack * 0.02;
     }
+    let pumpBack = rack * 0.09;
     if (v.reload >= 0) {
-      // L'arme bascule, le chargeur sort et revient
-      const r = Math.sin(Math.min(1, v.reload) * Math.PI);
-      gun.group.rotation.z = r * 0.6;
-      gun.group.rotation.x -= r * 0.35;
-      gun.group.position.y -= r * 0.06;
-      if (gun.mag) gun.mag.position.y = gun.magRest.y - r * 0.16;
-      if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = gun.hingeAxis === "x" ? -r * 0.55 : r * 1.3;
+      const t = Math.min(1, v.reload);
+      const ease = (a: number, b: number) => {
+        const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
+        return x * x * (3 - 2 * x);
+      };
+      // L'arme vient vers le milieu et se couche sur la droite, le flanc gauche tourné vers soi (on voit le chargeur
+      // partir et revenir), le temps du geste, puis se redresse
+      const tilt = ease(0, 0.16) - ease(0.84, 1);
+      gun.group.rotation.z -= tilt * 0.45;
+      gun.group.rotation.y += tilt * 0.15;
+      gun.group.position.x -= tilt * 0.08;
+      gun.group.position.y += tilt * 0.02;
+      gun.group.position.z += tilt * 0.02;
+      // Le chargeur vide tombe hors de vue ; le plein remonte, puis s'enfonce d'un coup sec qui secoue l'arme
+      if (gun.mag) {
+        const out = ease(0.16, 0.32);
+        const back = ease(0.46, 0.7);
+        gun.mag.position.y = gun.magRest.y - (t < 0.39 ? out * out * 0.34 : (1 - back) * 0.24);
+        gun.mag.visible = t < 0.33 || t > 0.45;
+      }
+      const seat = t > 0.7 && t < 0.8 ? Math.sin(((t - 0.7) / 0.1) * Math.PI) : 0;
+      gun.group.position.y += seat * 0.014;
+      gun.group.rotation.x += seat * 0.06;
+      // Les canons qui basculent, le barillet qui sort : ouverts au début, refermés d'un coup à la fin
+      if (gun.hinge) {
+        const open = ease(0.1, 0.24) - ease(0.76, 0.84);
+        gun.hinge.rotation[gun.hingeAxis] = gun.hingeAxis === "x" ? -open * 0.55 : open * 1.3;
+      }
+      // Le fusil à pompe : on réarme à la fin
+      if (t > 0.84) pumpBack = Math.sin(((t - 0.84) / 0.16) * Math.PI) * 0.09;
     } else {
-      if (gun.mag) gun.mag.position.y = gun.magRest.y;
+      if (gun.mag) {
+        gun.mag.position.y = gun.magRest.y;
+        gun.mag.visible = true;
+      }
       if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = 0;
     }
-    // La pompe recule puis revient après chaque coup
-    if (gun.pump)
-      gun.pump.position.z = gun.pumpRest + (v.kick > 0 && v.kick < 0.85 ? Math.sin(((0.85 - v.kick) / 0.85) * Math.PI) * 0.09 : 0);
+    if (gun.pump) gun.pump.position.z = gun.pumpRest + pumpBack;
     // Le couteau et la grenade passent devant
     this.vmKnife.visible = v.alive && v.melee >= 0;
     if (this.vmKnife.visible) {
