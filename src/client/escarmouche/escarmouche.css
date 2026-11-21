@@ -417,14 +417,17 @@ html:has(.esc-root) body {
     radial-gradient(circle at 50% 50%, transparent 0, transparent min(42vh, 42vw), #000 calc(min(42vh, 42vw) + 2px));
 }
 
+/* D'où vient le coup : un croissant rouge autour du réticule, vif du côté du tireur, qui s'efface vers ses deux bouts */
 .esc-dmg {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 180px;
-  height: 180px;
+  width: 200px;
+  height: 200px;
   border-radius: 50%;
-  border-top: 6px solid rgba(220, 40, 30, 0.85);
+  background: conic-gradient(from -42deg, transparent 0deg, rgba(240, 46, 30, 0.95) 42deg, transparent 84deg);
+  -webkit-mask: radial-gradient(circle, transparent 85px, #000 87px, #000 98px, transparent 100px);
+  mask: radial-gradient(circle, transparent 85px, #000 87px, #000 98px, transparent 100px);
   animation: esc-dmg 1.5s ease-out forwards;
 }
 
@@ -500,6 +503,15 @@ html:has(.esc-root) body {
 .esc-ammo-mag small {
   font-size: 16px;
   opacity: 0.7;
+}
+
+/* Le chargeur presque vide : le chiffre passe à l'orange, au rouge quand il est vide */
+.esc-ammo-mag.is-low {
+  color: #ffb347;
+}
+
+.esc-ammo-mag.is-empty {
+  color: #ff5a46;
 }
 
 .esc-ammo-nade {

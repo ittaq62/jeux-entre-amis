@@ -89,6 +89,8 @@ export interface HudState {
   weapon: WeaponId;
   slot: 0 | 1;
   mag: number;
+  /** La contenance du chargeur (accessoires compris) */
+  magCap: number;
   res: number;
   grenades: number;
   reloading: number;
@@ -1557,6 +1559,7 @@ export class BattleRuntime {
       weapon,
       slot: s?.slot ?? 0,
       mag: s ? s.mag[s.slot] : 0,
+      magCap: w.mag,
       res: s ? s.res[s.slot] : 0,
       grenades: s?.grenades ?? 0,
       reloading: s && s.reloadEnd > 0 ? 1 - (s.reloadEnd - s.clock) / w.reload : -1,

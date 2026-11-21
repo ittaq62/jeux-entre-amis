@@ -799,7 +799,7 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
               </div>
               <div className="esc-ammo">
                 <span className="esc-ammo-name">{WEAPONS[h.weapon].name}</span>
-                <span className="num esc-ammo-mag">
+                <span className={`num esc-ammo-mag ${h.mag === 0 ? "is-empty" : h.mag <= h.magCap / 4 ? "is-low" : ""}`}>
                   {h.mag}
                   <small> / {h.res}</small>
                 </span>
