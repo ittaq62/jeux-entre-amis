@@ -49,7 +49,67 @@ const ASPHALT: Record<Theme, string> = {
   ville: "#2c2f35",
   foire: "#4f4c48",
   potager: "#c4b28c",
+  foret: "#86694a",
 };
+
+/** Le chemin de la forêt : de la terre tassée, des aiguilles de pin, des racines qui affleurent, de petits cailloux */
+function forestPathTexture(): THREE.CanvasTexture {
+  const S = 512;
+  const [c, g] = canvas(S, S);
+  g.fillStyle = "#86694a";
+  g.fillRect(0, 0, S, S);
+  const r = rng(91);
+  for (let i = 0; i < 60; i++) {
+    const x = r() * S;
+    const y = r() * S;
+    const rad = 30 + r() * 70;
+    for (const oy of [-S, 0, S]) {
+      const grad = g.createRadialGradient(x, y + oy, 0, x, y + oy, rad);
+      grad.addColorStop(0, r() < 0.5 ? "rgba(30,22,14,0.25)" : "rgba(140,110,70,0.18)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(x - rad, y + oy - rad, rad * 2, rad * 2);
+    }
+  }
+  // Les aiguilles
+  for (let i = 0; i < 2400; i++) {
+    const x = r() * S;
+    const y = r() * S;
+    const a = r() * Math.PI;
+    g.strokeStyle = `rgba(${120 + r() * 60},${80 + r() * 40},${40 + r() * 20},${0.35 + r() * 0.4})`;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7);
+    g.stroke();
+  }
+  // Des racines en travers, usées par les roues
+  for (let i = 0; i < 3; i++) {
+    let x = 0;
+    let y = r() * S;
+    g.strokeStyle = "rgba(60,40,24,0.55)";
+    g.lineWidth = 5 + r() * 4;
+    g.beginPath();
+    g.moveTo(x, y);
+    while (x < S) {
+      x += 20 + r() * 30;
+      y += (r() - 0.5) * 30;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  speckle(g, S, S, 1400, ["rgba(170,160,150,0.5)", "rgba(20,14,10,0.4)"], 2.5, 17);
+  // Les ornières, plus sombres et lisses
+  for (const x of [150, 362]) {
+    const grad = g.createLinearGradient(x - 36, 0, x + 36, 0);
+    grad.addColorStop(0, "rgba(20,14,8,0)");
+    grad.addColorStop(0.5, "rgba(20,14,8,0.25)");
+    grad.addColorStop(1, "rgba(20,14,8,0)");
+    g.fillStyle = grad;
+    g.fillRect(x - 36, 0, 72, S);
+  }
+  return toTexture(c);
+}
 
 /** L'allée de gravier du potager : des cailloux clairs serrés, deux ornières plus tassées, aucune ligne peinte */
 function gravelTexture(): THREE.CanvasTexture {
@@ -168,6 +228,7 @@ function cobbleTexture(): THREE.CanvasTexture {
 export function roadTexture(theme: Theme): THREE.CanvasTexture {
   if (theme === "ville") return cobbleTexture();
   if (theme === "potager") return gravelTexture();
+  if (theme === "foret") return forestPathTexture();
   const S = 512;
   const [c, g] = canvas(S, S);
   g.fillStyle = ASPHALT[theme];
@@ -297,6 +358,21 @@ export function curbTexture(theme?: Theme): THREE.CanvasTexture {
     g.fillRect(0, 63, 32, 1);
     return toTexture(c);
   }
+  if (theme === "foret") {
+    // Une bordure de pierres moussues
+    for (const [y, l] of [
+      [0, 36],
+      [32, 30],
+    ] as const) {
+      g.fillStyle = `hsl(90, 8%, ${l}%)`;
+      g.fillRect(0, y, 32, 32);
+      g.fillStyle = "rgba(90,140,60,0.55)";
+      g.fillRect(0, y, 32, 7);
+    }
+    g.fillStyle = "rgba(0,0,0,0.45)";
+    g.fillRect(0, 31, 32, 2);
+    return toTexture(c);
+  }
   if (theme === "potager") {
     // Une bordure de planches, leur fil, leurs nœuds, posées bout à bout
     for (const [y, l] of [
@@ -373,7 +449,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
                 ? "#6c8743"
                 : theme === "potager"
                   ? "#5f9a3c"
-                  : "#5a8d48";
+                  : theme === "foret"
+                    ? "#33402a"
+                    : "#5a8d48";
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   const tones =
@@ -393,7 +471,10 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
                 : theme === "potager"
                   ? // Une pelouse bien tondue et grasse, de la rosée
                     ["rgba(120,190,80,0.4)", "rgba(64,128,48,0.35)", "rgba(150,206,104,0.35)", "rgba(210,240,220,0.15)"]
-                  : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
+                  : theme === "foret"
+                    ? // Le sous-bois : de la mousse, des aiguilles rousses, de la terre sombre
+                      ["rgba(70,110,50,0.45)", "rgba(110,80,46,0.4)", "rgba(40,50,30,0.45)", "rgba(90,130,60,0.3)"]
+                    : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
   // De grandes taches douces, puis un grain fin : rien de carré, de près comme de loin
   const r = rng(11);
   for (let i = 0; i < 260; i++) {
@@ -428,7 +509,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
               ? ["rgba(70,56,38,0.35)", "rgba(200,190,140,0.3)", "rgba(230,70,60,0.35)", "rgba(250,210,60,0.35)"]
               : theme === "potager"
                 ? ["rgba(40,96,30,0.35)", "rgba(190,230,140,0.3)", "rgba(255,255,255,0.2)"]
-                : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
+                : theme === "foret"
+                  ? ["rgba(20,26,14,0.45)", "rgba(150,110,60,0.35)"]
+                  : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
   speckle(g, size, size, 7000, dots, 1.4, 13);
   const t = toTexture(c);
   t.anisotropy = 8;
@@ -438,6 +521,30 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
 /** Les murets au bord du circuit, selon le décor */
 export function wallTexture(theme: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(256, 64);
+  if (theme === "foret") {
+    // Une barrière de rondins : deux perches couchées sur des piquets, l'écorce sombre, la mousse dessus
+    g.fillStyle = "rgba(0,0,0,0)";
+    g.clearRect(0, 0, 256, 64);
+    for (let x = 0; x < 256; x += 64) {
+      const grad = g.createLinearGradient(x + 2, 0, x + 12, 0);
+      grad.addColorStop(0, "#3a2a1c");
+      grad.addColorStop(0.5, "#6a4e32");
+      grad.addColorStop(1, "#2e2014");
+      g.fillStyle = grad;
+      g.fillRect(x + 2, 4, 10, 60);
+    }
+    for (const y of [10, 34]) {
+      const grad = g.createLinearGradient(0, y, 0, y + 12);
+      grad.addColorStop(0, "#7a5a3a");
+      grad.addColorStop(0.5, "#5a4028");
+      grad.addColorStop(1, "#2e2014");
+      g.fillStyle = grad;
+      g.fillRect(0, y, 256, 12);
+      g.fillStyle = "rgba(90,140,60,0.7)";
+      for (let x = 0; x < 256; x += 9) g.fillRect(x, y, 5 + (x % 7), 3);
+    }
+    return toTexture(c);
+  }
   if (theme === "potager") {
     // Une clôture d'osier tressé : les brins qui passent devant et derrière les piquets, ses piquets plus sombres
     g.fillStyle = "#6e5232";

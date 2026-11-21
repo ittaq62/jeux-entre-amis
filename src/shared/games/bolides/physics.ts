@@ -66,8 +66,8 @@ const RAMP_MIN_SPEED = 21;
 const SPRING_VY = 10;
 /** Dans la boue, ce qu'il reste de la vitesse ; sur le verglas, ce qu'il reste d'adhérence (le dérapage y charge plus vite) */
 const MUD = 0.7;
-/** Ce qu'il reste de vitesse dans le sable mouvant, les algues, les cendres, la sciure du cirque */
-const SLOW_GROUND: Partial<Record<ZoneKind, number>> = { boue: MUD, sable: 0.66, algues: 0.76, cendre: 0.74, sciure: 0.78 };
+/** Ce qu'il reste de vitesse dans le sable mouvant, les algues, les cendres, la sciure du cirque, les feuilles mortes */
+const SLOW_GROUND: Partial<Record<ZoneKind, number>> = { boue: MUD, sable: 0.66, algues: 0.76, cendre: 0.74, sciure: 0.78, feuilles: 0.8 };
 /** En deltaplane : la vitesse au décollage, la part du braquage, le plongeon au frein */
 const GLIDE_MIN_SPEED = 25;
 const GLIDE_TURN = 0.8;

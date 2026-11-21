@@ -238,6 +238,26 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     // La perche, à l'arrière, droite vers le ciel
     add(new THREE.CylinderGeometry(0.05, 0.06, 2.4, 6), chrome, 0, 2.3, -1.05);
     beaconY = 3.55;
+  } else if (theme === "foret") {
+    // Un sanglier, qui traverse au trot : son gros corps brun, sa hure, ses défenses, son poil dressé sur le dos
+    const fur = keep(std(0x4a3628, 0.95));
+    const dark = keep(std(0x2a1e16, 0.9));
+    add(new THREE.SphereGeometry(0.9, 14, 10).scale(0.95, 0.9, 1.55), fur, 0, 1.15, -0.1);
+    add(new THREE.SphereGeometry(0.62, 12, 10).scale(0.9, 0.95, 1.2), fur, 0, 1.1, 1.25);
+    add(new THREE.CylinderGeometry(0.28, 0.36, 0.5, 10).rotateX(Math.PI / 2), dark, 0, 0.95, 1.85);
+    for (const s of [-1, 1]) {
+      const tusk = add(new THREE.ConeGeometry(0.06, 0.4, 6), keep(std(0xf2ead8, 0.4)), s * 0.22, 1.0, 1.95);
+      tusk.rotation.z = s * 0.6;
+      add(new THREE.ConeGeometry(0.16, 0.3, 6), fur, s * 0.32, 1.65, 1.05);
+    }
+    add(new THREE.BoxGeometry(0.2, 0.3, 2.0), dark, 0, 2.0, -0.1);
+    for (const [x, z] of [
+      [-0.45, 0.75],
+      [0.45, 0.75],
+      [-0.45, -0.85],
+      [0.45, -0.85],
+    ] as const)
+      add(new THREE.CylinderGeometry(0.12, 0.1, 0.8, 7), dark, x, 0.4, z);
   } else if (theme === "potager") {
     // La tondeuse robot : une coque basse arrondie, verte sur un châssis gris, quatre petites roues, son antenne
     const shell = keep(std(0x3aa04a, 0.35, 0.1));
@@ -305,7 +325,7 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     beacon.scale.setScalar(0.75);
   }
   // Les animaux n'ont pas de gyrophare
-  beacon.visible = theme !== "dunes" && theme !== "lagon";
+  beacon.visible = theme !== "dunes" && theme !== "lagon" && theme !== "foret";
   g.add(beacon);
   mergeStatic(g, keep, [beacon]);
   return { group: g, beacon };

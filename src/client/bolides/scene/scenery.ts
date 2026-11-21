@@ -41,10 +41,12 @@ export const PLACES: Record<Theme, { tunnel: [number, number]; bridge: number }>
   foire: { tunnel: [867, 939], bridge: 455 },
   // Au potager, la serre est en verre : elle n'assombrit rien (le potager la dessine lui-même)
   potager: { tunnel: [-1, -1], bridge: 515 },
+  // En forêt, le tunnel est un tronc creux couché en travers de la montée (la forêt le dessine elle-même)
+  foret: { tunnel: [250, 302], bridge: 905 },
 };
 
 /** Les circuits qui dessinent eux-mêmes leur tunnel et leur pont, sans spectateurs au bord des virages */
-const OWN_PLACES = new Set<Theme>(["ville", "foire", "potager"]);
+const OWN_PLACES = new Set<Theme>(["ville", "foire", "potager", "foret"]);
 
 const lambert = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshLambertMaterial({ color, map: map ?? null });
 

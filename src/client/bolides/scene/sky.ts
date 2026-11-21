@@ -177,6 +177,24 @@ export const MOODS: Record<Theme, Mood> = {
     ground: 0x6a9a48,
     fog: [260, 1350],
   },
+  // La forêt au crépuscule : le ciel bleu nuit entre les cimes, la lune, une brume légère ; les lucioles et les
+  // champignons font la lumière
+  foret: {
+    top: 0x0c1230,
+    mid: 0x24305e,
+    horizon: 0x56607e,
+    dir: new THREE.Vector3(-40, 80, 50).normalize(),
+    sun: 0xc4d2ff,
+    sunPower: 1.1,
+    hemiSky: 0x7a8ac0,
+    hemiGround: 0x3a4a30,
+    hemiPower: 1.75,
+    cloud: 0x4a5070,
+    glow: 0xc8d4ff,
+    ground: 0x24301e,
+    fog: [80, 660],
+    stars: true,
+  },
 };
 
 const R = 1000;

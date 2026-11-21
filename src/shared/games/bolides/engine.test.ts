@@ -2281,3 +2281,48 @@ describe("le Potager", () => {
     expect((2 * snail.reach) / snail.speed).toBeGreaterThan(8);
   });
 });
+
+describe("la Forêt", () => {
+  const t = getTrack("foret");
+
+  it("l'arbre géant au milieu de la ligne droite : les bots passent d'un côté ou de l'autre, sans s'y cogner", () => {
+    const tree = t.islands[0]!;
+    const sides = new Set<number>();
+    for (const d0 of [-6, -2, -0.5, 0.5, 2, 6]) {
+      for (const level of ["fort", "moyen", "facile"] as const) {
+        const k = kartAt("foret", tree.s - 60, d0);
+        k.v = 18;
+        const mem = newBotMemory({ rng: 5 });
+        const events: string[] = [];
+        let worst = Infinity;
+        let side = 0;
+        for (let i = 0; i < 60 * 12 && deltaS(t, tree.s + tree.len + 10, k.s) < 0; i++) {
+          const plan = botDrive(t, k, null, [], [], level, mem, i * 16, { rng: 9 });
+          step(k, plan.input, t, { top: 1 }, events as never);
+          const at = locate(t, k.x, k.z);
+          const along = deltaS(t, tree.s, at.s);
+          if (along > -tree.half - 2 && along < tree.len + tree.half + 2) {
+            const core = pointAt(t, tree.s + islandCore(tree, along), tree.d);
+            worst = Math.min(worst, Math.hypot(k.x - core.x, k.z - core.z) - tree.half);
+          }
+          if (Math.abs(deltaS(t, tree.s + tree.len / 2, at.s)) < 2) side = Math.sign(at.d);
+        }
+        expect(deltaS(t, tree.s + tree.len, k.s), `${level} ${d0}`).toBeGreaterThan(0);
+        expect(worst, `${level} ${d0}`).toBeGreaterThan(0.4);
+        sides.add(side);
+      }
+    }
+    expect([...sides].sort()).toEqual([-1, 1]);
+  });
+
+  it("le grand vol au-dessus du ravin : tout droit, du tremplin jusqu'après le dernier anneau", () => {
+    const gap = t.gaps.find((g) => g.glide)!;
+    expect(gap.to - gap.from).toBe(45);
+    for (let s = gap.from - 35; s < gap.from + 80; s += 2) {
+      const at = locate(t, pointAt(t, s, 0).x, pointAt(t, s, 0).z);
+      expect(Math.abs(t.bend[at.i]!), `${s}`).toBeLessThan(0.004);
+    }
+    expect(t.hoops).toHaveLength(3);
+    for (const h of t.hoops) expect(deltaS(t, gap.from, h.s)).toBeLessThan(70);
+  });
+});

@@ -32,6 +32,7 @@ import { leafTexture } from "./villeTextures.ts";
 import { buildFoire, type Foire } from "./foire.ts";
 import { circusRampTexture } from "./foireTextures.ts";
 import { buildPotager, type Potager } from "./potager.ts";
+import { buildForet, type Foret } from "./foret.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
@@ -465,6 +466,9 @@ export async function buildWorld(
   }
   const fair = theme === "foire";
   const garden = theme === "potager";
+  const woods = theme === "foret";
+  // Des barrières à claire-voie : celles de la fête, la barrière de rondins de la forêt
+  const openFence = fair || woods;
   // À la fête, des barrières de fête à claire-voie
   const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : fair ? 1.1 : garden ? 1.0 : 0.9;
   // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre),
@@ -492,7 +496,9 @@ export async function buildWorld(
                     ? 0xc9cdd1
                     : garden
                       ? 0x6e5232
-                      : 0xdad9d4,
+                      : woods
+                        ? 0x5a4028
+                        : 0xdad9d4,
     ),
   );
   const footShade = (toRight: boolean) => {
@@ -513,19 +519,19 @@ export async function buildWorld(
   const footRight = footShade(false);
   const wallTex = keep(TX.wallTexture(theme));
   wallTex.wrapT = THREE.RepeatWrapping;
-  const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide, alphaTest: fair ? 0.5 : 0 }));
+  const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide, alphaTest: openFence ? 0.5 : 0 }));
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), wallHeight, heightAt, wallCuts)), wallMat);
     wall.castShadow = false;
     group.add(wall);
     // Le dessus du muret, pour qu'il ait de l'épaisseur (une barrière n'a que son tube)
     const at = side * (t.wall + 0.4);
-    const cap = fair ? 0.04 : 0.32;
-    group.add(new THREE.Mesh(keep(ribbon(t, at - cap, at + cap, wallHeight - (fair ? 0.1 : 0), 3, 1, wallCuts)), capMat));
+    const cap = openFence ? 0.04 : 0.32;
+    group.add(new THREE.Mesh(keep(ribbon(t, at - cap, at + cap, wallHeight - (openFence ? 0.1 : 0), 3, 1, wallCuts)), capMat));
     // Et l'ombre douce à son pied : le muret se pose vraiment sur le sol (une barrière à claire-voie n'en fait pas)
     const inner = side > 0 ? at - 2.4 : at;
     const outer = side > 0 ? at : at + 2.4;
-    if (!fair) group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, wallCuts)), side > 0 ? footLeft : footRight));
+    if (!openFence) group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, wallCuts)), side > 0 ? footLeft : footRight));
   }
 
   await pause(0.4);
@@ -642,7 +648,7 @@ export async function buildWorld(
   // La fête non plus : ses stands et ses manèges tiennent la place
   const street = theme === "ville";
   // Ni au potager : ses légumes et ses haies tiennent la place
-  const ownDecor = street || fair || garden;
+  const ownDecor = street || fair || garden || woods;
   if (!ownDecor) {
     addBendDressing(ctx);
     addWallBoards(ctx);
@@ -981,6 +987,20 @@ export async function buildWorld(
       sun: mood.dir,
     });
   }
+  let foret: Foret | null = null;
+  if (woods) {
+    foret = buildForet({
+      group,
+      t,
+      keep,
+      heightAt,
+      distAt: (x: number, z: number) => field.distAt(x, z),
+      shadows,
+      phone: opts.phone,
+      r,
+      tunnel: place0.tunnel,
+    });
+  }
   let foire: Foire | null = null;
   if (fair) {
     foire = buildFoire({
@@ -1070,6 +1090,7 @@ export async function buildWorld(
       ville?.update(time, camera, daylight);
       foire?.update(time, camera, daylight);
       potager?.update(time);
+      foret?.update(time, camera);
       boostTex.offset.y = -((time * 1.6) % 1);
       if (sea) sea.uniforms.uTime!.value = time;
       if (liquid) liquid.uniforms.uTime!.value = time;

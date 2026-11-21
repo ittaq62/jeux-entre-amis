@@ -1,7 +1,8 @@
 // Le bruit de fond d'un circuit, fabriqué à la volée (aucun fichier à charger) : la pluie qui tombe sur la ville, plus
 // sourde sous la halle ; à la fête foraine, la rumeur de la foule et un orgue de manège au loin, étouffés sous le
-// chapiteau ; au potager, le vent dans les feuilles, les oiseaux et une abeille. Il démarre avec le moteur, suit le
-// réglage « Musique et ambiance », et se tait avec le son.
+// chapiteau ; au potager, le vent dans les feuilles, les oiseaux et une abeille ; en forêt, les grillons et la
+// chouette, plus sourds dans le tronc creux. Il démarre avec le moteur, suit le réglage « Musique et ambiance », et se
+// tait avec le son.
 
 import type { Theme } from "../../shared/games/bolides/track.ts";
 import { audioOut, musicLevel } from "../lib/sound.ts";
@@ -154,6 +155,52 @@ function gardenBuffer(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
+/** La forêt au crépuscule : un souffle de vent dans les cimes, les grillons, une chouette qui hulule au loin */
+function forestBuffer(ctx: AudioContext): AudioBuffer {
+  const seconds = 9;
+  const rate = ctx.sampleRate;
+  const buf = ctx.createBuffer(2, Math.round(rate * seconds), rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let low = 0;
+    for (let i = 0; i < data.length; i++) {
+      const tt = i / rate;
+      low += (Math.random() * 2 - 1 - low) * 0.015;
+      const edge = Math.min(1, tt / 0.3, (seconds - tt) / 0.3);
+      data[i] = low * 1.1 * (0.55 + 0.45 * Math.sin(tt * 0.5 + ch * 2)) * (0.7 + 0.3 * edge);
+    }
+    // Les grillons : des trains de petits cris aigus, réguliers, chacun sa note
+    for (let k = 0; k < 3; k++) {
+      const f = 4200 + k * 650 + ch * 120;
+      const period = 0.42 + k * 0.11;
+      for (let at = (k * 0.13 + ch * 0.07) % period; at < seconds - 0.1; at += period) {
+        const s0 = Math.floor(at * rate);
+        for (let pulse = 0; pulse < 3; pulse++) {
+          const p0 = s0 + Math.floor(pulse * 0.025 * rate);
+          const len = Math.floor(0.016 * rate);
+          for (let i = 0; i < len && p0 + i < data.length; i++)
+            data[p0 + i]! += Math.sin((2 * Math.PI * f * i) / rate) * Math.sin((Math.PI * i) / len) * 0.035;
+        }
+      }
+    }
+    // La chouette : deux « hou » graves, le second plus long
+    const owl = Math.floor((3.2 + ch * 0.05) * rate);
+    for (const [start, len] of [
+      [0, 0.32],
+      [0.55, 0.7],
+    ] as const) {
+      const s0 = owl + Math.floor(start * rate);
+      const n = Math.floor(len * rate);
+      for (let i = 0; i < n && s0 + i < data.length; i++) {
+        const u = i / n;
+        const f = 420 - u * 40;
+        data[s0 + i]! += Math.sin((2 * Math.PI * f * i) / rate) * Math.sin(Math.PI * u) * 0.09;
+      }
+    }
+  }
+  return buf;
+}
+
 export class Ambience {
   private source: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
@@ -162,9 +209,17 @@ export class Ambience {
 
   constructor(private theme: Theme) {}
 
-  /** Seuls la ville, la fête et le potager ont un bruit de fond */
+  /** Seuls la ville, la fête, le potager et la forêt ont un bruit de fond */
   private get loud(): number {
-    return this.theme === "ville" ? 0.16 : this.theme === "foire" ? 0.2 : this.theme === "potager" ? 0.2 : 0;
+    return this.theme === "ville"
+      ? 0.16
+      : this.theme === "foire"
+        ? 0.2
+        : this.theme === "potager"
+          ? 0.2
+          : this.theme === "foret"
+            ? 0.22
+            : 0;
   }
 
   start() {
@@ -174,7 +229,14 @@ export class Ambience {
     const { ctx, out } = audio;
     const t = ctx.currentTime;
     const source = ctx.createBufferSource();
-    source.buffer = this.theme === "foire" ? fairBuffer(ctx) : this.theme === "potager" ? gardenBuffer(ctx) : rainBuffer(ctx);
+    source.buffer =
+      this.theme === "foire"
+        ? fairBuffer(ctx)
+        : this.theme === "potager"
+          ? gardenBuffer(ctx)
+          : this.theme === "foret"
+            ? forestBuffer(ctx)
+            : rainBuffer(ctx);
     source.loop = true;
     const high = ctx.createBiquadFilter();
     high.type = "highpass";

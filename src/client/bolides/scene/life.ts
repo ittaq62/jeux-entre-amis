@@ -43,6 +43,8 @@ export type LifeEvent =
 /** La profondeur de l'eau sous la route */
 export const WATER_DEPTH = 4.5;
 const BEAM_Y = 15;
+/** Ce qui traverse sans sortir d'une porte dans le muret */
+const NO_DOOR = new Set<RollThing>(["parapluie", "ballon", "canard", "coccinelle", "escargot", "herisson", "rondin"]);
 const CONTAINER = { w: 2.8, h: 2.6, l: 7.2 };
 /** Le haut de la peluche de la fête, couchée sur la route (là où la pince la tient) */
 const BEAR_TOP = 2.1;
@@ -420,6 +422,37 @@ const SIGN_ICONS: Record<"gap" | "drop" | RollThing, (g: CanvasRenderingContext2
     g.lineTo(90, 76);
     g.stroke();
   },
+  herisson: (g) => {
+    // Un hérisson de profil : son dos hérissé de piquants, son museau pointu
+    g.beginPath();
+    g.moveTo(34, 96);
+    for (let k = 0; k <= 10; k++) {
+      const a = Math.PI + (k / 10) * Math.PI;
+      const r = k % 2 === 0 ? 26 : 19;
+      g.lineTo(62 + Math.cos(a) * r, 96 + Math.sin(a) * r);
+    }
+    g.lineTo(98, 96);
+    g.lineTo(86, 88);
+    g.closePath();
+    g.fill();
+  },
+  rondin: (g) => {
+    // Un rondin qui roule : ses cernes, des traits de vitesse
+    g.lineWidth = 4;
+    g.beginPath();
+    g.arc(70, 80, 18, 0, Math.PI * 2);
+    g.stroke();
+    g.beginPath();
+    g.arc(70, 80, 9, 0, Math.PI * 2);
+    g.stroke();
+    g.lineWidth = 3;
+    for (const y of [70, 80, 90]) {
+      g.beginPath();
+      g.moveTo(30, y);
+      g.lineTo(44, y);
+      g.stroke();
+    }
+  },
   parapluie: (g) => {
     // Un parapluie que le vent emporte, renversé
     g.save();
@@ -586,7 +619,7 @@ export class TrackLife {
     if (t.gaps.length === 0) return;
     const step = t.length / t.n;
     const fair = theme === "foire";
-    const garden = theme === "potager";
+    const garden = theme === "potager" || theme === "foret";
     const bank = fair ? fairBankTexture(keep) : garden ? gardenBankTexture(keep) : bankTexture(keep);
     const bankMat = keep(new THREE.MeshLambertMaterial({ map: bank }));
     const groundTex = keep(TX.groundTexture(theme));
@@ -602,7 +635,7 @@ export class TrackLife {
                 ? 0x241f21
                 : theme === "ville"
                   ? 0x4a4640
-                  : theme === "potager"
+                  : theme === "potager" || theme === "foret"
                     ? 0x7d8a68
                     : 0x6f7276,
         flatShading: true,
@@ -620,7 +653,9 @@ export class TrackLife {
               ? 0x5a6a80
               : theme === "potager"
                 ? 0x7fbf8a
-                : 0xffffff;
+                : theme === "foret"
+                  ? 0x4a6a8a
+                  : 0xffffff;
     const r = rng(t.n);
     for (const g of t.gaps) {
       const far = Math.ceil((g.to - 0.01) / step) * step;
@@ -738,7 +773,7 @@ export class TrackLife {
                 ? TX.bannerTexture("PONT-LEVANT", "#1c2740", "#ffd23a")
                 : fair
                   ? TX.bannerTexture("CERCEAU DE FEU", "#b8322a", "#ffd23a")
-                  : garden
+                  : theme === "potager"
                     ? TX.bannerTexture("LA MARE", "#2f6a2a", "#fff6d0")
                     : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a"),
           ),
@@ -1093,9 +1128,8 @@ export class TrackLife {
       const y = heightAt(at.x, at.z);
       // Le vent emporte les parapluies depuis les quais ; les ballons passent par-dessus les barrières, les canards
       // sortent de la mare : ils n'ont pas de porte d'où sortir
-      // (les coccinelles et les escargots sortent des massifs du potager)
-      if (m.thing === "parapluie" || m.thing === "ballon" || m.thing === "canard" || m.thing === "coccinelle" || m.thing === "escargot")
-        continue;
+      // (les coccinelles et les escargots sortent des massifs du potager, les hérissons et les rondins du sous-bois)
+      if (NO_DOOR.has(m.thing)) continue;
       if (m.thing !== "tonneau" && m.thing !== "mouton" && m.thing !== "poubelle") {
         // Un gros tas (de neige, de sable, de roche) : ils en sortent, et s'y perdent de l'autre côté
         const moundColor = m.thing === "boule" ? 0xf6f9fc : m.thing === "meduse" ? 0x5f7f88 : 0xd9b67c;
@@ -1235,6 +1269,81 @@ export class TrackLife {
         const spin = new THREE.Mesh(bodyGeo, yellow);
         spin.castShadow = shadows;
         spin.add(new THREE.Mesh(beakGeo, orange), new THREE.Mesh(eyeGeo, black));
+        facing.add(spin);
+        group.add(facing);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
+    } else if (m.thing === "rondin") {
+      // Un rondin : l'écorce sombre et crevassée, ses cernes clairs aux deux bouts
+      const [c, g] = canvas(256, 128);
+      g.fillStyle = "#4a3624";
+      g.fillRect(0, 0, 256, 128);
+      for (let x = 0; x < 256; x += 6) {
+        g.fillStyle = (x / 6) % 3 === 0 ? "#2e2016" : "#5a4430";
+        g.fillRect(x, 0, 3, 128);
+      }
+      g.fillStyle = "rgba(90,140,60,0.6)";
+      g.fillRect(0, 0, 256, 18);
+      const [ec, eg] = canvas(64, 64);
+      eg.fillStyle = "#c8a070";
+      eg.fillRect(0, 0, 64, 64);
+      eg.strokeStyle = "#8a6440";
+      eg.lineWidth = 2;
+      for (let rad = 4; rad < 32; rad += 5) {
+        eg.beginPath();
+        eg.arc(32, 32, rad, 0, Math.PI * 2);
+        eg.stroke();
+      }
+      const ends = keep(new THREE.MeshLambertMaterial({ map: texture(ec, keep) }));
+      geo = keep(new THREE.CylinderGeometry(m.radius, m.radius * 1.05, m.radius * 2.4, 14));
+      geo.rotateX(Math.PI / 2);
+      mat = [keep(new THREE.MeshLambertMaterial({ map: texture(c, keep) })), ends, ends];
+    } else if (m.thing === "herisson") {
+      // Un hérisson : le dos couvert de piquants, le museau clair, le nez noir ; il regarde vers où il va
+      const R = m.radius;
+      const spikes: THREE.BufferGeometry[] = [];
+      for (let k = 0; k < 36; k++) {
+        const a = (k / 36) * Math.PI * 2 * 5.3;
+        const up = 0.25 + (k / 36) * 1.1;
+        const dir = new THREE.Vector3(Math.cos(a) * Math.cos(up), Math.sin(up), Math.sin(a) * Math.cos(up) * 1.2 - 0.25).normalize();
+        const cone = new THREE.ConeGeometry(0.12 * R, 0.7 * R, 4).translate(0, 0.35 * R, 0);
+        cone.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+        cone.translate(dir.x * 0.75 * R, dir.y * 0.6 * R - 0.55 * R, dir.z * 0.85 * R);
+        spikes.push(cone);
+      }
+      const back = BufferMerge([
+        new THREE.SphereGeometry(R, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.85, 0.75, 1.05).translate(0, -0.55 * R, 0),
+        ...spikes,
+      ]);
+      const face = BufferMerge([
+        new THREE.ConeGeometry(0.4 * R, 0.9 * R, 10).rotateX(Math.PI / 2).translate(0, -0.6 * R, 1.1 * R),
+        ...[-1, 1].flatMap((s) =>
+          [-0.5, 0.5].map((z) => new THREE.CylinderGeometry(0.08 * R, 0.08 * R, 0.4 * R, 5).translate(s * 0.45 * R, -0.85 * R, z * R)),
+        ),
+      ]);
+      const nose = BufferMerge([
+        new THREE.SphereGeometry(0.1 * R, 8, 6).translate(0, -0.6 * R, 1.55 * R),
+        new THREE.SphereGeometry(0.06 * R, 6, 5).translate(-0.18 * R, -0.42 * R, 1.08 * R),
+        new THREE.SphereGeometry(0.06 * R, 6, 5).translate(0.18 * R, -0.42 * R, 1.08 * R),
+      ]);
+      const backGeo = keep(back);
+      const faceGeo = keep(face);
+      const noseGeo = keep(nose);
+      const brown = keep(new THREE.MeshLambertMaterial({ color: 0x5a4430, flatShading: true }));
+      const tan = keep(new THREE.MeshLambertMaterial({ color: 0xc8a682 }));
+      const black = keep(new THREE.MeshBasicMaterial({ color: 0x120e0c }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const facing = new THREE.Group();
+        facing.rotation.y = -Math.PI / 2;
+        const spin = new THREE.Mesh(backGeo, brown);
+        spin.castShadow = shadows;
+        spin.add(new THREE.Mesh(faceGeo, tan), new THREE.Mesh(noseGeo, black));
         facing.add(spin);
         group.add(facing);
         group.visible = false;
@@ -1464,8 +1573,9 @@ export class TrackLife {
     const city = t.def.theme === "ville";
     const fair = t.def.theme === "foire";
     const garden = t.def.theme === "potager";
+    const woods = t.def.theme === "foret";
     const [c, g] = canvas(128, 128);
-    g.fillStyle = city ? "#2b2e33" : fair ? "#1f4fa8" : garden ? "#f6f2e4" : "#ffcf33";
+    g.fillStyle = city ? "#2b2e33" : fair ? "#1f4fa8" : garden ? "#f6f2e4" : woods ? "#c8231c" : "#ffcf33";
     g.beginPath();
     g.arc(64, 64, 64, 0, Math.PI * 2);
     g.fill();
@@ -1486,6 +1596,22 @@ export class TrackLife {
       g.beginPath();
       g.arc(64, 64, 58, 0, Math.PI * 2);
       g.stroke();
+    }
+    if (woods) {
+      // Le chapeau d'un champignon : rouge, ses pois blancs
+      g.fillStyle = "#fff6ea";
+      for (const [x, y, rad] of [
+        [30, 40, 9],
+        [92, 34, 8],
+        [100, 92, 10],
+        [34, 96, 8],
+        [64, 18, 6],
+        [64, 112, 6],
+      ] as const) {
+        g.beginPath();
+        g.arc(x, y, rad, 0, Math.PI * 2);
+        g.fill();
+      }
     }
     if (garden) {
       // Une marguerite : ses pétales blancs, son cœur jaune (les chevrons sont dessus)
@@ -1511,7 +1637,7 @@ export class TrackLife {
         g.stroke();
       }
     }
-    g.fillStyle = city ? "#ff8a2a" : fair ? "#ffd23a" : garden ? "#e07a12" : "#d8352a";
+    g.fillStyle = city ? "#ff8a2a" : fair ? "#ffd23a" : garden ? "#e07a12" : woods ? "#fff2c4" : "#d8352a";
     for (let k = 0; k < 2; k++) {
       const y = 34 + k * 34;
       g.beginPath();
@@ -1527,7 +1653,7 @@ export class TrackLife {
     const top = keep(
       new THREE.MeshStandardMaterial({
         map: texture(c, keep),
-        emissive: city ? 0xff6a10 : fair ? 0x2a3a6a : garden ? 0x4a4020 : 0x6a4a00,
+        emissive: city ? 0xff6a10 : fair ? 0x2a3a6a : garden ? 0x4a4020 : woods ? 0x8a1a10 : 0x6a4a00,
         emissiveIntensity: city ? 0.35 : 0.5,
         roughness: 0.4,
       }),
@@ -1536,7 +1662,7 @@ export class TrackLife {
     const baseGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS, SPRING_RADIUS + 0.15, 0.14, 28));
     const coilGeo = keep(new THREE.TorusGeometry(1.45, 0.11, 8, 28).rotateX(Math.PI / 2));
     const plateGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS - 0.2, SPRING_RADIUS - 0.1, 0.16, 28));
-    const side = keep(std(city ? 0xff7a1f : fair ? 0xe2322a : garden ? 0x4a8a3a : 0xd8352a, 0.5));
+    const side = keep(std(city ? 0xff7a1f : fair ? 0xe2322a : garden ? 0x4a8a3a : woods ? 0xf2ead8 : 0xd8352a, 0.5));
     t.springs.forEach((sp, i) => {
       const p = pointAt(t, sp.s, sp.d);
       const pad = new THREE.Group();
@@ -1607,6 +1733,38 @@ export class TrackLife {
         }
         g.stroke();
       }
+    } else if (kind === "feuilles") {
+      // Un tas de feuilles mortes : rousses, jaunes, brunes, serrées et en désordre
+      const colors = ["#c8641e", "#e09a2a", "#8a4a1c", "#b8401a", "#d8b040", "#6a4020"];
+      for (let i = 0; i < 520; i++) {
+        const x = 20 + r() * 216;
+        const y = 20 + r() * 472;
+        g.save();
+        g.translate(x, y);
+        g.rotate(r() * Math.PI * 2);
+        g.fillStyle = colors[Math.floor(r() * colors.length)]!;
+        g.globalAlpha = 0.85;
+        g.beginPath();
+        g.ellipse(0, 0, 9 + r() * 6, 4 + r() * 3, 0, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = "rgba(60,30,10,0.6)";
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(-10, 0);
+        g.lineTo(10, 0);
+        g.stroke();
+        g.restore();
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = "destination-in";
+      const fade = g.createLinearGradient(0, 0, 0, 512);
+      fade.addColorStop(0, "rgba(0,0,0,0)");
+      fade.addColorStop(0.08, "rgba(0,0,0,1)");
+      fade.addColorStop(0.92, "rgba(0,0,0,1)");
+      fade.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = fade;
+      g.fillRect(0, 0, 256, 512);
+      g.globalCompositeOperation = "source-over";
     } else if (kind === "flaque") {
       // De l'eau sombre qui reflète, ses bords irréguliers, et les ronds des gouttes de pluie
       for (let i = 0; i < 70; i++) {
@@ -1712,7 +1870,12 @@ export class TrackLife {
         const p = pointAt(t, m.s, d);
         const grow = Math.max(0.01, Math.min(1, (m.reach - Math.abs(d)) / 1));
         const rolls =
-          m.thing === "tonneau" || m.thing === "boule" || m.thing === "virevoltant" || m.thing === "poubelle" || m.thing === "ballon";
+          m.thing === "tonneau" ||
+          m.thing === "boule" ||
+          m.thing === "virevoltant" ||
+          m.thing === "poubelle" ||
+          m.thing === "ballon" ||
+          m.thing === "rondin";
         const swim =
           m.thing === "meduse"
             ? 0.25 + Math.sin(time * 2 + i * 1.7) * 0.32
@@ -1733,6 +1896,7 @@ export class TrackLife {
         else if (m.thing === "meduse") part.spin.scale.set(1, 1 + Math.sin(time * 3.2 + i) * 0.16, 1);
         else if (m.thing === "canard") part.spin.rotation.z = Math.sin(time * 8 + i * 1.3) * 0.16;
         else if (m.thing === "coccinelle") part.spin.rotation.z = Math.sin(time * 14 + i) * 0.05;
+        else if (m.thing === "herisson") part.spin.rotation.z = Math.sin(time * 16 + i) * 0.06;
         // L'escargot s'étire et se tasse en avançant
         else if (m.thing === "escargot") part.spin.scale.set(1, 1, 1 + Math.sin(time * 3 + i) * 0.06);
         else part.spin.rotation.z = Math.sin(time * 11 + i) * 0.07;

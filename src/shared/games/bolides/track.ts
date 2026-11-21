@@ -6,9 +6,9 @@
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
 /** Les circuits de base, et leur version en miroir */
-export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager";
+export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager" | "foret";
 export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
-export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager";
+export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager" | "foret";
 
 export interface TrackDef {
   id: TrackId;
@@ -78,8 +78,8 @@ export interface Island {
   half: number;
 }
 
-/** Les sols spéciaux ; la flaque d'eau glisse comme le verglas, la sciure de la piste du cirque freine */
-export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre" | "flaque" | "sciure";
+/** Les sols spéciaux ; la flaque d'eau glisse comme le verglas, la sciure de la piste du cirque et les tas de feuilles mortes freinent */
+export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre" | "flaque" | "sciure" | "feuilles";
 
 export type MoverDef =
   | { kind: "drop"; frac: number; lanes: number[]; period: number; offset: number }
@@ -108,9 +108,11 @@ export type RollThing =
   | "ballon"
   | "canard"
   | "coccinelle"
-  | "escargot";
+  | "escargot"
+  | "herisson"
+  | "rondin";
 
-export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville", "foire", "potager"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville", "foire", "potager", "foret"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
@@ -603,6 +605,70 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
     ],
     islands: [{ frac: 0.2095, len: 7, width: 7 }],
   },
+  // La forêt au crépuscule : des arbres immenses, des lucioles, des champignons qui luisent
+  foret: {
+    id: "foret",
+    name: "La Forêt",
+    blurb:
+      "Au crépuscule, sous les arbres géants où dansent les lucioles : le tronc creux, la crête et son grand vol au-dessus du ravin, les lacets, l'arbre à contourner, les hérissons et les rondins.",
+    theme: "foret",
+    width: 18,
+    start: 60,
+    corners: [
+      [-176, 0, 38],
+      [130, 0, 48],
+      [152, 130, 38],
+      [83, 237, 38],
+      [-130, 248, 42],
+      [-144, 152, 32],
+      [13, 158, 32],
+      [52, 91, 32],
+      [-78, 68, 30],
+      [-182, 76, 30],
+    ],
+    hills: [
+      [0, 0],
+      [0.222, 0],
+      [0.298, 6],
+      [0.405, 12],
+      [0.5245, 12],
+      [0.627, 3],
+      [0.734, 0],
+    ],
+    boxes: [0.0994, 0.37, 0.646, 0.91],
+    boosts: [
+      [0.348, -0.3],
+      [0.474, 0.3],
+      [0.975, 0.3],
+    ],
+    jumps: [],
+    glides: [
+      {
+        frac: 0.39,
+        len: 45,
+        hoops: [
+          [20, -0.4],
+          [42, 0.35],
+          [66, -0.1],
+        ],
+      },
+    ],
+    crossers: [{ frac: 0.2982, period: 10, offset: 0.4 }],
+    movers: [
+      { kind: "roll", frac: 0.5352, thing: "herisson", count: 3, gap: 1, period: 11, speed: 5, radius: 0.9, offset: 0.2 },
+      { kind: "roll", frac: 0.7645, thing: "rondin", count: 2, gap: 1.4, period: 9, speed: 11, radius: 1, offset: 0.55 },
+    ],
+    springs: [
+      [0.1567, 0.5],
+      [0.5619, -0.5],
+      [0.8869, 0.5],
+    ],
+    zones: [
+      { from: 0.7187, to: 0.7454, d1: 0.15, d2: 1, kind: "feuilles" },
+      { from: 0.8257, to: 0.8486, d1: -1, d2: -0.15, kind: "feuilles" },
+    ],
+    islands: [{ frac: 0.6154, len: 12, width: 6.5 }],
+  },
 };
 
 /** Le même circuit, gauche et droite échangées */
@@ -631,6 +697,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
   "ville-miroir": mirrored(BASE_TRACKS.ville),
   "foire-miroir": mirrored(BASE_TRACKS.foire),
   "potager-miroir": mirrored(BASE_TRACKS.potager),
+  "foret-miroir": mirrored(BASE_TRACKS.foret),
 };
 
 /** La version en miroir d'un circuit (lui-même s'il l'est déjà) */
