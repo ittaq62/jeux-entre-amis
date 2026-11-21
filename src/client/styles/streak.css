@@ -78,13 +78,11 @@
 
 .habitue {
   width: 100%;
-  max-width: 580px;
+  max-width: 660px;
   max-height: calc(100dvh - 32px);
   overflow: auto;
-  padding: 24px 30px 16px;
+  padding: 0 32px 16px;
   border-radius: 8px;
-  outline: 1px solid rgba(29, 27, 24, 0.16);
-  outline-offset: -9px;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.3),
     0 0 0 1px rgba(226, 189, 110, 0.35),
@@ -115,50 +113,63 @@
   }
 }
 
+/* Le bandeau rouge en tête de carte, comme sur un carton de fidélité */
+.habitue-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -32px 22px;
+  padding: 9px 12px 9px 32px;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #c5372f, var(--stamp));
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.14),
+    0 2px 0 rgba(122, 28, 23, 0.25);
+}
+
+.habitue-kicker {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+
 .habitue .habitue-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   display: grid;
+  flex: none;
   place-items: center;
   width: 40px;
   height: 40px;
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--paper);
   cursor: pointer;
 }
 
 .habitue .habitue-close:hover {
-  background: rgba(29, 27, 24, 0.08);
-  color: var(--ink);
-}
-
-.habitue-kicker {
-  margin: 0 0 12px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 /* En tête de carte : la récompense, en grand tampon, et la série */
 .habitue-hero {
   display: flex;
   align-items: center;
-  gap: 22px;
-  margin: 0 0 18px;
-  padding: 0 0 18px;
+  gap: 26px;
+  margin: 0 0 20px;
+  padding: 0 0 20px;
   border-bottom: 1px solid rgba(29, 27, 24, 0.16);
 }
 
 .hero-slot {
   position: relative;
   flex: none;
-  width: 128px;
-  height: 128px;
+  width: 158px;
+  height: 158px;
   border: 2px dashed rgba(29, 27, 24, 0.3);
   border-radius: 50%;
 }
@@ -218,8 +229,8 @@
 }
 
 .hero-label {
-  margin: 0 0 4px;
-  font-size: 13px;
+  margin: 0 0 6px;
+  font-size: 14.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -230,7 +241,7 @@
   margin: 0;
   font-family: var(--font-title);
   font-weight: 400;
-  font-size: 30px;
+  font-size: 36px;
   line-height: 1.05;
   color: var(--ink);
   text-shadow: none;
@@ -239,14 +250,14 @@
 .habitue-count {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 52px;
+  font-size: 66px;
   line-height: 0.8;
   color: var(--stamp);
 }
 
 .hero-sub {
-  margin: 8px 0 0;
-  font-size: 14.5px;
+  margin: 10px 0 0;
+  font-size: 15.5px;
   color: #4a443b;
 }
 
@@ -302,7 +313,7 @@
   display: grid;
   place-items: center;
   width: 100%;
-  max-width: 64px;
+  max-width: 72px;
   aspect-ratio: 1;
   border: 2px dashed rgba(29, 27, 24, 0.4);
   border-radius: 50%;
@@ -313,14 +324,14 @@
 .punch-day {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 24px;
+  font-size: 27px;
   color: rgba(29, 27, 24, 0.5);
 }
 
 .punch-amount {
   font-family: var(--font-card);
   font-weight: 800;
-  font-size: 19px;
+  font-size: 22px;
   color: var(--ink);
 }
 
@@ -328,6 +339,18 @@
   border: 2.5px solid var(--stamp);
   background: rgba(181, 48, 42, 0.07);
   box-shadow: 0 0 0 4px rgba(181, 48, 42, 0.12);
+}
+
+/* Demain : la case suivante appelle doucement */
+.punch.is-next .punch-hole {
+  border-color: rgba(181, 48, 42, 0.55);
+  animation: punch-call 2.2s ease-in-out infinite;
+}
+
+@keyframes punch-call {
+  50% {
+    box-shadow: 0 0 0 6px rgba(181, 48, 42, 0.16);
+  }
 }
 
 .punch.is-today .punch-day,
@@ -382,9 +405,9 @@
 .habitue-notes {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin: 0 0 18px;
-  font-size: 15px;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 16px;
   color: var(--ink);
 }
 
@@ -394,7 +417,7 @@
 
 .habitue-tomorrow strong {
   font-family: var(--font-card);
-  font-size: 20px;
+  font-size: 23px;
   color: var(--stamp);
 }
 
@@ -426,8 +449,8 @@
 /* Le talon : le défi de la semaine, sous les pointillés */
 .habitue-week {
   position: relative;
-  margin: 0 -30px 16px;
-  padding: 16px 30px 14px;
+  margin: 0 -32px 16px;
+  padding: 16px 32px 14px;
   border-top: 2px dashed var(--paper-line);
   background: rgba(29, 27, 24, 0.045);
 }
@@ -462,7 +485,7 @@
 /* Les affiches des jeux de la semaine, toutes sur une ligne au PC */
 .habitue-games {
   --cols: var(--n);
-  --w: 48px;
+  --w: 54px;
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--w));
   gap: 7px;
@@ -650,12 +673,10 @@
 
 /* Un écran peu haut (ordinateur portable) : la carte se resserre pour tenir sans défiler */
 @media (max-height: 820px) and (min-width: 481px) {
-  .habitue {
-    padding-top: 18px;
-  }
-
-  .habitue-kicker {
-    margin-bottom: 8px;
+  .habitue-band {
+    margin-bottom: 14px;
+    padding-top: 6px;
+    padding-bottom: 6px;
   }
 
   .habitue-hero {
@@ -664,8 +685,12 @@
   }
 
   .hero-slot {
-    width: 112px;
-    height: 112px;
+    width: 132px;
+    height: 132px;
+  }
+
+  .punch-hole {
+    max-width: 64px;
   }
 
   .habitue-notes {
@@ -680,12 +705,17 @@
 /* Au téléphone : la carte prend toute la largeur ; 7 cases sur une ligne, les affiches sur deux au-delà de 6 jeux */
 @media (max-width: 480px) {
   .habitue {
-    padding: 18px 18px 14px;
+    padding: 0 18px 14px;
+  }
+
+  .habitue-band {
+    margin: 0 -18px 16px;
+    padding: 7px 6px 7px 18px;
   }
 
   .habitue-kicker {
-    margin-bottom: 10px;
     font-size: 11px;
+    letter-spacing: 0.14em;
   }
 
   .habitue-hero {
@@ -695,8 +725,8 @@
   }
 
   .hero-slot {
-    width: 100px;
-    height: 100px;
+    width: 112px;
+    height: 112px;
   }
 
   .hero-label {
@@ -704,11 +734,11 @@
   }
 
   .habitue .hero-title {
-    font-size: 23px;
+    font-size: 26px;
   }
 
   .habitue-count {
-    font-size: 42px;
+    font-size: 50px;
   }
 
   .hero-sub {
@@ -755,7 +785,7 @@
 
   .habitue-games.is-two-rows {
     --cols: var(--half);
-    --w: 52px;
+    --w: 54px;
   }
 
   .habitue-done {
@@ -793,17 +823,18 @@
 /* Un téléphone peu haut : tout se resserre, et si la carte doit défiler, le solde et « À table ! » restent en bas */
 @media (max-width: 480px) and (max-height: 760px) {
   .habitue {
-    padding: 14px 14px 0;
+    padding: 0 14px 0;
   }
 
-  .habitue-kicker {
-    margin-bottom: 6px;
+  .habitue-band {
+    margin: 0 -14px 10px;
+    padding: 4px 4px 4px 14px;
   }
 
   .habitue-hero {
     gap: 12px;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 9px;
   }
 
   .hero-slot {

@@ -1,3 +1,4 @@
+import confetti from "canvas-confetti";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { GAME_NAMES } from "../../shared/protocol.ts";
@@ -35,6 +36,24 @@ const JOKER: Card = { id: -7, kind: "wild", color: null };
 const TILT = [-11, 7, -4, 12, -8, 5, -13];
 /** Le logo de la maison, en éventail de quatre cartes, comme dans l'en-tête du site */
 const FAN = [-26, -9, 9, 26];
+/** Les confettis de la récompense : l'encre des tampons, l'or de la maison, le papier de la carte */
+const CONFETTI_COLORS = ["#b5302a", "#e2bd6e", "#f1d595", "#f3ecdc", "#7a1c17"];
+
+/** Une gerbe de confettis qui part de cet endroit de la carte (jamais avec « Effets réduits ») */
+function burst(el: Element | null | undefined, big: boolean) {
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  void confetti({
+    particleCount: big ? 150 : 90,
+    spread: big ? 110 : 80,
+    startVelocity: big ? 42 : 32,
+    origin: { x: (r.left + r.width / 2) / innerWidth, y: (r.top + r.height / 2) / innerHeight },
+    colors: CONFETTI_COLORS,
+    scalar: 0.95,
+    zIndex: 130,
+    disableForReducedMotion: true,
+  });
+}
 
 /**
  * Le moment de l'animation : la récompense attend, le grand tampon s'abat au milieu de la carte, puis la case du jour est
@@ -79,6 +98,7 @@ export function StreakDialog() {
   const still = useStill();
   const titleId = useId();
   const primary = useRef<HTMLButtonElement>(null);
+  const card = useRef<HTMLDivElement>(null);
 
   const day = gained?.day ?? null;
   const thisWeek = gained?.weeks.find((w) => w.current) ?? null;
@@ -106,6 +126,7 @@ export function StreakDialog() {
       window.setTimeout(() => {
         setPhase("hero");
         play("cardPlace", { volume: 0.9 });
+        burst(card.current?.querySelector(".hero-slot"), true);
       }, HERO_AT),
       window.setTimeout(() => setPhase("landed"), day ? LAND_AT : HERO_AT),
     ];
@@ -115,6 +136,7 @@ export function StreakDialog() {
           () => {
             setWeekLanded(true);
             play("achievement", { volume: 0.7 });
+            if (day) burst(card.current?.querySelector(".habitue-week"), false);
           },
           day ? LAND_AT + WEEK_AFTER : HERO_AT,
         ),
@@ -143,15 +165,18 @@ export function StreakDialog() {
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
+        ref={card}
         className={`habitue paper ${animate && phase === "hero" ? "is-thud" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <button className="habitue-close" onClick={close} aria-label="Fermer">
-          <Icon name="close" size={22} />
-        </button>
-        <p className="habitue-kicker">La Tablée · carte d'habitué</p>
+        <div className="habitue-band">
+          <p className="habitue-kicker">La Tablée · carte d'habitué</p>
+          <button className="habitue-close" onClick={close} aria-label="Fermer">
+            <Icon name="close" size={22} />
+          </button>
+        </div>
 
         <div className="habitue-hero">
           {hero && (
@@ -273,7 +298,11 @@ function Punches({ status, stamped: todayStamped, animate }: { status: StreakSta
         const stamped = n < cycleDay || (today && claimedToday && todayStamped);
         const label = `Jour ${n} : ${reward} points${n === CYCLE_DAYS ? " et un joker" : ""}${stamped ? ", tamponné" : today ? ", aujourd'hui" : ""}`;
         return (
-          <li key={n} className={`punch ${today ? "is-today" : ""} ${n === CYCLE_DAYS ? "is-seventh" : ""}`} aria-label={label}>
+          <li
+            key={n}
+            className={`punch ${today ? "is-today" : ""} ${claimedToday && n === cycleDay + 1 ? "is-next" : ""} ${n === CYCLE_DAYS ? "is-seventh" : ""}`}
+            aria-label={label}
+          >
             <span className="punch-hole" aria-hidden="true">
               {n === CYCLE_DAYS ? (
                 <span className="punch-joker">
