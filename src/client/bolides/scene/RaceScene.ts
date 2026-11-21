@@ -833,7 +833,9 @@ export class RaceScene {
               ? 0x9aa6b4
               : theme === "foire"
                 ? 0xb49a72
-                : 0x9b8a6a;
+                : theme === "potager"
+                  ? 0x8a6a48
+                  : 0x9b8a6a;
     this.puff(
       k.x - Math.sin(k.h) * 1.2,
       k.y + 0.3,

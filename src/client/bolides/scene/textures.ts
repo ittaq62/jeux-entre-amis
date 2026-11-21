@@ -48,7 +48,52 @@ const ASPHALT: Record<Theme, string> = {
   volcan: "#2d292c",
   ville: "#2c2f35",
   foire: "#4f4c48",
+  potager: "#c4b28c",
 };
+
+/** L'allée de gravier du potager : des cailloux clairs serrés, deux ornières plus tassées, aucune ligne peinte */
+function gravelTexture(): THREE.CanvasTexture {
+  const S = 512;
+  const [c, g] = canvas(S, S);
+  g.fillStyle = "#c2ae88";
+  g.fillRect(0, 0, S, S);
+  const r = rng(77);
+  for (let i = 0; i < 5200; i++) {
+    const x = r() * S;
+    const y = r() * S;
+    const w = 2 + r() * 5;
+    const l = 58 + r() * 26;
+    g.fillStyle = `hsl(${32 + r() * 16}, ${12 + r() * 16}%, ${l}%)`;
+    g.beginPath();
+    g.ellipse(x, y, w, w * (0.6 + r() * 0.4), r() * 3, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "rgba(60,44,24,0.18)";
+    g.beginPath();
+    g.ellipse(x + 1, y + 1.4, w, w * 0.5, 0, 0, Math.PI);
+    g.fill();
+  }
+  // Les deux ornières, plus tassées et plus sombres
+  for (const x of [150, 362]) {
+    const grad = g.createLinearGradient(x - 40, 0, x + 40, 0);
+    grad.addColorStop(0, "rgba(90,70,40,0)");
+    grad.addColorStop(0.5, "rgba(90,70,40,0.22)");
+    grad.addColorStop(1, "rgba(90,70,40,0)");
+    g.fillStyle = grad;
+    g.fillRect(x - 40, 0, 80, S);
+  }
+  // Quelques brins d'herbe qui poussent au bord
+  g.strokeStyle = "rgba(80,130,50,0.6)";
+  g.lineWidth = 2;
+  for (let i = 0; i < 160; i++) {
+    const x = r() < 0.5 ? r() * 40 : S - r() * 40;
+    const y = r() * S;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + (r() - 0.5) * 6, y - 6 - r() * 8);
+    g.stroke();
+  }
+  return toTexture(c);
+}
 
 /**
  * Les pavés mouillés de la ville : de petites pierres de granit gris et brun posées en rangées décalées, leurs joints
@@ -122,6 +167,7 @@ function cobbleTexture(): THREE.CanvasTexture {
 /** Le bitume : le grain, les lignes blanches des bords et les tirets du milieu. Elle se répète tous les 8 m. */
 export function roadTexture(theme: Theme): THREE.CanvasTexture {
   if (theme === "ville") return cobbleTexture();
+  if (theme === "potager") return gravelTexture();
   const S = 512;
   const [c, g] = canvas(S, S);
   g.fillStyle = ASPHALT[theme];
@@ -251,6 +297,23 @@ export function curbTexture(theme?: Theme): THREE.CanvasTexture {
     g.fillRect(0, 63, 32, 1);
     return toTexture(c);
   }
+  if (theme === "potager") {
+    // Une bordure de planches, leur fil, leurs nœuds, posées bout à bout
+    for (const [y, l] of [
+      [0, 34],
+      [32, 30],
+    ] as const) {
+      g.fillStyle = `hsl(28, 42%, ${l}%)`;
+      g.fillRect(0, y, 32, 32);
+      g.fillStyle = "rgba(40,24,10,0.25)";
+      for (let x = 3; x < 32; x += 7) g.fillRect(x, y, 1, 32);
+    }
+    g.fillStyle = "rgba(0,0,0,0.4)";
+    g.fillRect(0, 31, 32, 2);
+    g.fillStyle = "rgba(255,230,190,0.25)";
+    g.fillRect(28, 0, 4, 64);
+    return toTexture(c);
+  }
   g.fillStyle = theme === "lagon" ? "#2fb7d4" : theme === "volcan" ? "#ff7a1f" : "#d8352a";
   g.fillRect(0, 0, 32, 32);
   // À la fête, rouge et jaune, comme une piste de cirque
@@ -308,7 +371,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
               ? "#37302f"
               : theme === "foire"
                 ? "#6c8743"
-                : "#5a8d48";
+                : theme === "potager"
+                  ? "#5f9a3c"
+                  : "#5a8d48";
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   const tones =
@@ -325,7 +390,10 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
               : theme === "foire"
                 ? // L'herbe piétinée du champ de foire : de la terre battue par endroits, de l'herbe jaunie
                   ["rgba(166,134,92,0.55)", "rgba(132,104,70,0.45)", "rgba(150,170,80,0.35)", "rgba(96,128,58,0.35)"]
-                : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
+                : theme === "potager"
+                  ? // Une pelouse bien tondue et grasse, de la rosée
+                    ["rgba(120,190,80,0.4)", "rgba(64,128,48,0.35)", "rgba(150,206,104,0.35)", "rgba(210,240,220,0.15)"]
+                  : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
   // De grandes taches douces, puis un grain fin : rien de carré, de près comme de loin
   const r = rng(11);
   for (let i = 0; i < 260; i++) {
@@ -358,7 +426,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
             ? ["rgba(60,85,35,0.35)", "rgba(190,180,120,0.3)"]
             : theme === "foire"
               ? ["rgba(70,56,38,0.35)", "rgba(200,190,140,0.3)", "rgba(230,70,60,0.35)", "rgba(250,210,60,0.35)"]
-              : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
+              : theme === "potager"
+                ? ["rgba(40,96,30,0.35)", "rgba(190,230,140,0.3)", "rgba(255,255,255,0.2)"]
+                : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
   speckle(g, size, size, 7000, dots, 1.4, 13);
   const t = toTexture(c);
   t.anisotropy = 8;
@@ -368,6 +438,30 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
 /** Les murets au bord du circuit, selon le décor */
 export function wallTexture(theme: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(256, 64);
+  if (theme === "potager") {
+    // Une clôture d'osier tressé : les brins qui passent devant et derrière les piquets, ses piquets plus sombres
+    g.fillStyle = "#6e5232";
+    g.fillRect(0, 0, 256, 64);
+    for (let y = 4; y < 64; y += 7) {
+      for (let x = 0; x < 256; x += 32) {
+        const front = ((y / 7 + x / 32) | 0) % 2 === 0;
+        const grad = g.createLinearGradient(0, y, 0, y + 6);
+        grad.addColorStop(0, front ? "#b89464" : "#8a6a42");
+        grad.addColorStop(1, front ? "#7a5a34" : "#5a4026");
+        g.fillStyle = grad;
+        g.beginPath();
+        g.ellipse(x + 16, y + 3, 17, front ? 3.4 : 2.6, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    for (let x = 0; x < 256; x += 32) {
+      g.fillStyle = "#4a3420";
+      g.fillRect(x - 2, 0, 4, 64);
+    }
+    g.fillStyle = "rgba(0,0,0,0.25)";
+    g.fillRect(0, 60, 256, 4);
+    return toTexture(c);
+  }
   if (theme === "foire") {
     // Des barrières de fête, en acier galvanisé : un cadre tous les 2 m, ses barreaux, ses pieds ; on voit à travers
     // (le reste de la toile est transparent). 256 px font 6 m, la hauteur va du sol au haut de la barrière.

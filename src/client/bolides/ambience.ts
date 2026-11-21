@@ -1,6 +1,7 @@
 // Le bruit de fond d'un circuit, fabriqué à la volée (aucun fichier à charger) : la pluie qui tombe sur la ville, plus
 // sourde sous la halle ; à la fête foraine, la rumeur de la foule et un orgue de manège au loin, étouffés sous le
-// chapiteau. Il démarre avec le moteur, suit le réglage « Musique et ambiance », et se tait avec le son.
+// chapiteau ; au potager, le vent dans les feuilles, les oiseaux et une abeille. Il démarre avec le moteur, suit le
+// réglage « Musique et ambiance », et se tait avec le son.
 
 import type { Theme } from "../../shared/games/bolides/track.ts";
 import { audioOut, musicLevel } from "../lib/sound.ts";
@@ -106,6 +107,53 @@ function fairBuffer(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
+/** Le potager au matin : un souffle de vent dans les feuilles, des oiseaux qui chantent çà et là, une abeille qui passe */
+function gardenBuffer(ctx: AudioContext): AudioBuffer {
+  const seconds = 8;
+  const rate = ctx.sampleRate;
+  const buf = ctx.createBuffer(2, Math.round(rate * seconds), rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let low = 0;
+    for (let i = 0; i < data.length; i++) {
+      const tt = i / rate;
+      low += (Math.random() * 2 - 1 - low) * 0.02;
+      const edge = Math.min(1, tt / 0.3, (seconds - tt) / 0.3);
+      data[i] = low * 0.9 * (0.6 + 0.4 * Math.sin(tt * 0.8 + ch)) * (0.7 + 0.3 * edge);
+    }
+    // Les oiseaux : de courtes phrases de petits cris qui montent et descendent
+    for (let k = 0; k < 9; k++) {
+      let at = Math.random() * (seconds - 1.5);
+      const base = 2200 + Math.random() * 2200;
+      const notes = 2 + Math.floor(Math.random() * 5);
+      for (let n = 0; n < notes; n++) {
+        const len = 0.05 + Math.random() * 0.1;
+        const s0 = Math.floor(at * rate);
+        const f0 = base * (0.85 + Math.random() * 0.3);
+        const sweep = (Math.random() - 0.4) * 1800;
+        let ph = 0;
+        for (let i = 0; i < len * rate && s0 + i < data.length; i++) {
+          const u = i / (len * rate);
+          ph += (2 * Math.PI * (f0 + sweep * u)) / rate;
+          data[s0 + i]! += Math.sin(ph) * Math.sin(Math.PI * u) * 0.12 * (ch === k % 2 ? 1 : 0.55);
+        }
+        at += len + 0.03 + Math.random() * 0.08;
+      }
+    }
+    // Une abeille qui passe : un bourdonnement qui enfle puis s'éloigne
+    const b0 = Math.floor((2 + ch * 2.5) * rate);
+    const blen = Math.floor(2.4 * rate);
+    let ph = 0;
+    for (let i = 0; i < blen && b0 + i < data.length; i++) {
+      const u = i / blen;
+      ph += (2 * Math.PI * (210 + 18 * Math.sin(u * 30))) / rate;
+      const saw = ((ph / (2 * Math.PI)) % 1) * 2 - 1;
+      data[b0 + i]! += saw * Math.sin(Math.PI * u) ** 2 * 0.05;
+    }
+  }
+  return buf;
+}
+
 export class Ambience {
   private source: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
@@ -114,9 +162,9 @@ export class Ambience {
 
   constructor(private theme: Theme) {}
 
-  /** Seuls la ville et la fête ont un bruit de fond */
+  /** Seuls la ville, la fête et le potager ont un bruit de fond */
   private get loud(): number {
-    return this.theme === "ville" ? 0.16 : this.theme === "foire" ? 0.2 : 0;
+    return this.theme === "ville" ? 0.16 : this.theme === "foire" ? 0.2 : this.theme === "potager" ? 0.2 : 0;
   }
 
   start() {
@@ -126,11 +174,11 @@ export class Ambience {
     const { ctx, out } = audio;
     const t = ctx.currentTime;
     const source = ctx.createBufferSource();
-    source.buffer = this.theme === "foire" ? fairBuffer(ctx) : rainBuffer(ctx);
+    source.buffer = this.theme === "foire" ? fairBuffer(ctx) : this.theme === "potager" ? gardenBuffer(ctx) : rainBuffer(ctx);
     source.loop = true;
     const high = ctx.createBiquadFilter();
     high.type = "highpass";
-    high.frequency.value = this.theme === "foire" ? 90 : 400;
+    high.frequency.value = this.theme === "ville" ? 400 : 90;
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = 7000;

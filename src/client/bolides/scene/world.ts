@@ -31,6 +31,7 @@ import { addFootbridge, addHalle, addSkyline, buildVille, waterBed, waterways, t
 import { leafTexture } from "./villeTextures.ts";
 import { buildFoire, type Foire } from "./foire.ts";
 import { circusRampTexture } from "./foireTextures.ts";
+import { buildPotager, type Potager } from "./potager.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
@@ -463,8 +464,9 @@ export async function buildWorld(
     group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3, 1, t.gaps)), curbMat));
   }
   const fair = theme === "foire";
+  const garden = theme === "potager";
   // À la fête, des barrières de fête à claire-voie
-  const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : fair ? 1.1 : 0.9;
+  const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : fair ? 1.1 : garden ? 1.0 : 0.9;
   // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre),
   // et à la fête là où passent les ballons et les canards
   const wallCuts = [
@@ -488,7 +490,9 @@ export async function buildWorld(
                   ? 0xb8b0a2
                   : fair
                     ? 0xc9cdd1
-                    : 0xdad9d4,
+                    : garden
+                      ? 0x6e5232
+                      : 0xdad9d4,
     ),
   );
   const footShade = (toRight: boolean) => {
@@ -637,12 +641,14 @@ export async function buildWorld(
   // Une vraie ville n'a ni pneus dans les virages, ni panneaux publicitaires, ni drapeaux, ni tribune
   // La fête non plus : ses stands et ses manèges tiennent la place
   const street = theme === "ville";
-  if (!street && !fair) {
+  // Ni au potager : ses légumes et ses haies tiennent la place
+  const ownDecor = street || fair || garden;
+  if (!ownDecor) {
     addBendDressing(ctx);
     addWallBoards(ctx);
   }
-  const waveFlags = street || fair ? () => {} : addFlags(ctx);
-  addGrandstand(ctx, !street && !fair);
+  const waveFlags = ownDecor ? () => {} : addFlags(ctx);
+  addGrandstand(ctx, !ownDecor);
   await pause(0.6);
   // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
   const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
@@ -659,7 +665,7 @@ export async function buildWorld(
   // Les touffes d'herbe et les fleurs du bord de la route, les traces de pneus dans les virages (pas d'herbe sur les pavés)
   if (!street) addGrass(group, keep, t, theme, place0.tunnel, opts.phone);
   const open = (s: number) => s < place0.tunnel[0] - 4 || s > place0.tunnel[1] + 4;
-  if (!street && !fair) addRunoffs(group, keep, t, theme, open);
+  if (!ownDecor) addRunoffs(group, keep, t, theme, open);
   addSkidMarks(group, keep, t, theme, open);
   await pause(0.88);
 
@@ -961,6 +967,20 @@ export async function buildWorld(
     addHalle(villeCtx, place0.tunnel[0], place0.tunnel[1]);
     addFootbridge(villeCtx, place0.bridge);
   }
+  let potager: Potager | null = null;
+  if (garden) {
+    potager = buildPotager({
+      group,
+      t,
+      keep,
+      heightAt,
+      distAt: (x: number, z: number) => field.distAt(x, z),
+      shadows,
+      phone: opts.phone,
+      r,
+      sun: mood.dir,
+    });
+  }
   let foire: Foire | null = null;
   if (fair) {
     foire = buildFoire({
@@ -1049,6 +1069,7 @@ export async function buildWorld(
     update(time: number, camera: THREE.Vector3, daylight: number) {
       ville?.update(time, camera, daylight);
       foire?.update(time, camera, daylight);
+      potager?.update(time);
       boostTex.offset.y = -((time * 1.6) % 1);
       if (sea) sea.uniforms.uTime!.value = time;
       if (liquid) liquid.uniforms.uTime!.value = time;

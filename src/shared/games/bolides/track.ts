@@ -6,9 +6,9 @@
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
 /** Les circuits de base, et leur version en miroir */
-export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire";
+export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager";
 export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
-export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire";
+export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire" | "potager";
 
 export interface TrackDef {
   id: TrackId;
@@ -97,9 +97,20 @@ export type MoverDef =
 
 /** Ce qui traverse la route : ça roule, ou ça marche */
 export type RollThing =
-  "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse" | "poubelle" | "parapluie" | "ballon" | "canard";
+  | "tonneau"
+  | "boule"
+  | "mouton"
+  | "virevoltant"
+  | "crabe"
+  | "meduse"
+  | "poubelle"
+  | "parapluie"
+  | "ballon"
+  | "canard"
+  | "coccinelle"
+  | "escargot";
 
-export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville", "foire"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville", "foire", "potager"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
@@ -536,6 +547,62 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
     ],
     islands: [{ frac: 0.2297, len: 8.4, width: 8.4 }],
   },
+  // Le potager : des karts tout petits au milieu de légumes géants, un matin de soleil
+  potager: {
+    id: "potager",
+    name: "Le Potager",
+    blurb:
+      "Minuscule au milieu des légumes géants : l'allée de gravier sous les tournesols, la citrouille à contourner, la serre, les rangs de salades et de carottes, puis le saut au-dessus de la mare.",
+    theme: "potager",
+    width: 18,
+    start: 60,
+    corners: [
+      [-160, 0, 40],
+      [150, 0, 55],
+      [150, 210, 45],
+      [-130, 232, 45],
+      [-145, 140, 35],
+      [-60, 128, 30],
+      [-5, 172, 30],
+      [55, 150, 30],
+      [102, 64, 32],
+      [-40, 70, 38],
+      [-145, 70, 35],
+    ],
+    hills: [
+      [0, 0],
+      [0.224, 0],
+      [0.347, 7],
+      [0.383, 8],
+      [0.499, 8],
+      [0.5925, 3],
+      [0.672, 0],
+    ],
+    boxes: [0.0939, 0.318, 0.5997, 0.766],
+    boosts: [
+      [0.2312, 0.3],
+      [0.307, -0.3],
+      [0.9754, 0.3],
+    ],
+    jumps: [0.7876],
+    crossers: [{ frac: 0.565, period: 10, offset: 0.2 }],
+    movers: [
+      { kind: "drop", frac: 0.4258, lanes: [-0.55, 0, 0.55], period: 8, offset: 0.45 },
+      { kind: "roll", frac: 0.654, thing: "coccinelle", count: 3, gap: 1.1, period: 10, speed: 7, radius: 1.2, offset: 0.3 },
+      { kind: "roll", frac: 0.8526, thing: "escargot", count: 2, gap: 2.6, period: 16, speed: 3.2, radius: 1.3, offset: 0.7 },
+    ],
+    springs: [
+      [0.1553, 0.5],
+      [0.5347, -0.5],
+      [0.9393, 0.5],
+    ],
+    zones: [
+      { from: 0.2384, to: 0.2565, d1: -1, d2: -0.15, kind: "boue" },
+      { from: 0.6936, to: 0.7189, d1: 0.15, d2: 1, kind: "boue" },
+      { from: 0.885, to: 0.9068, d1: -1, d2: -0.15, kind: "boue" },
+    ],
+    islands: [{ frac: 0.2095, len: 7, width: 7 }],
+  },
 };
 
 /** Le même circuit, gauche et droite échangées */
@@ -563,6 +630,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
   "volcan-miroir": mirrored(BASE_TRACKS.volcan),
   "ville-miroir": mirrored(BASE_TRACKS.ville),
   "foire-miroir": mirrored(BASE_TRACKS.foire),
+  "potager-miroir": mirrored(BASE_TRACKS.potager),
 };
 
 /** La version en miroir d'un circuit (lui-même s'il l'est déjà) */

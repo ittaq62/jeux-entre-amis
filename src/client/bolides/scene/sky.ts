@@ -161,6 +161,22 @@ export const MOODS: Record<Theme, Mood> = {
     ground: 0x6f7f46,
     fog: [190, 1150],
   },
+  // Le potager : un beau matin, le soleil encore bas à l'est, un ciel clair, la rosée qui brille
+  potager: {
+    top: 0x2f7fd8,
+    mid: 0x8cc8f0,
+    horizon: 0xe8f4ee,
+    dir: new THREE.Vector3(62, 70, -42).normalize(),
+    sun: 0xfff1d4,
+    sunPower: 2.15,
+    hemiSky: 0xdff0ff,
+    hemiGround: 0x6f8a3a,
+    hemiPower: 1.2,
+    cloud: 0xffffff,
+    glow: 0xfff0c0,
+    ground: 0x6a9a48,
+    fog: [260, 1350],
+  },
 };
 
 const R = 1000;

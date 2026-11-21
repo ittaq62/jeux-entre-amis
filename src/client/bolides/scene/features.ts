@@ -238,6 +238,19 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     // La perche, à l'arrière, droite vers le ciel
     add(new THREE.CylinderGeometry(0.05, 0.06, 2.4, 6), chrome, 0, 2.3, -1.05);
     beaconY = 3.55;
+  } else if (theme === "potager") {
+    // La tondeuse robot : une coque basse arrondie, verte sur un châssis gris, quatre petites roues, son antenne
+    const shell = keep(std(0x3aa04a, 0.35, 0.1));
+    const base = keep(std(0x3a3e44, 0.6));
+    add(new RoundedBoxGeometry(2.0, 0.55, 2.5, 3, 0.25), base, 0, 0.45, 0);
+    add(new RoundedBoxGeometry(1.8, 0.5, 2.1, 3, 0.25), shell, 0, 0.85, -0.05);
+    add(new RoundedBoxGeometry(0.8, 0.12, 0.6, 2, 0.05), keep(std(0x1f2226, 0.3)), 0, 1.13, 0.35);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 5), base, 0.55, 1.45, -0.6);
+    wheel(-1.0, 0.75, 0.3, 0.22);
+    wheel(1.0, 0.75, 0.3, 0.22);
+    wheel(-1.0, -0.75, 0.3, 0.22);
+    wheel(1.0, -0.75, 0.3, 0.22);
+    beaconY = 1.85;
   } else if (theme === "ville") {
     // La balayeuse de la ville : blanche et verte, sa cabine vitrée, sa citerne, ses deux brosses rondes devant
     const white = keep(std(0xeef0ea, 0.45));
@@ -275,6 +288,14 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     keep(new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff7a00, emissiveIntensity: 1, roughness: 0.3 })),
   );
   beacon.position.set(0, beaconY, 0);
+  if (theme === "potager") {
+    // La petite lampe au bout de l'antenne, verte
+    const lamp = beacon.material as THREE.MeshStandardMaterial;
+    lamp.color.setHex(0x9dffb0);
+    lamp.emissive.setHex(0x30ff60);
+    beacon.position.set(0.55, beaconY, -0.6);
+    beacon.scale.setScalar(0.6);
+  }
   if (theme === "foire") {
     // L'étincelle au bout de la perche, bleutée
     const spark = beacon.material as THREE.MeshStandardMaterial;

@@ -155,6 +155,30 @@ function fairBankTexture(keep: Keep): THREE.CanvasTexture {
   return texture(c, keep, true);
 }
 
+/** Les bords de la mare du potager : des planches sombres, de la mousse en haut, des traînées d'humidité */
+function gardenBankTexture(keep: Keep): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  const r = rng(41);
+  for (let x = 0; x < 256; x += 32) {
+    g.fillStyle = `hsl(${26 + r() * 6}, 36%, ${24 + r() * 8}%)`;
+    g.fillRect(x, 0, 32, 256);
+    g.fillStyle = "rgba(0,0,0,0.3)";
+    g.fillRect(x, 0, 2, 256);
+  }
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `rgba(${70 + r() * 40},${120 + r() * 50},${50 + r() * 20},0.8)`;
+    g.beginPath();
+    g.arc(r() * 256, r() * 34, 6 + r() * 10, 0, Math.PI * 2);
+    g.fill();
+  }
+  const wet = g.createLinearGradient(0, 80, 0, 256);
+  wet.addColorStop(0, "rgba(10,20,10,0)");
+  wet.addColorStop(1, "rgba(10,20,10,0.55)");
+  g.fillStyle = wet;
+  g.fillRect(0, 40, 256, 216);
+  return texture(c, keep, true);
+}
+
 /** Des balles de couleur serrées les unes contre les autres, chacune son reflet */
 function ballPitTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(256, 256);
@@ -354,6 +378,48 @@ const SIGN_ICONS: Record<"gap" | "drop" | RollThing, (g: CanvasRenderingContext2
     g.lineTo(46, 78);
     g.fill();
   },
+  coccinelle: (g) => {
+    // Une coccinelle vue de dessus : sa carapace ronde, ses points, sa tête
+    g.beginPath();
+    g.arc(64, 82, 18, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.arc(64, 58, 8, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#fff";
+    g.fillRect(63, 66, 2, 34);
+    for (const [x, y] of [
+      [56, 76],
+      [72, 76],
+      [55, 90],
+      [73, 90],
+    ] as const) {
+      g.beginPath();
+      g.arc(x, y, 3.5, 0, Math.PI * 2);
+      g.fill();
+    }
+  },
+  escargot: (g) => {
+    // Un escargot de profil : sa coquille en spirale, son corps, ses cornes
+    g.fillRect(36, 92, 62, 8);
+    g.lineWidth = 4;
+    g.beginPath();
+    for (let a = 0; a < Math.PI * 5; a += 0.2) {
+      const r = 3 + a * 1.25;
+      const x = 62 + Math.cos(a) * r;
+      const y = 76 + Math.sin(a) * r;
+      if (a === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(92, 92);
+    g.lineTo(98, 74);
+    g.moveTo(88, 92);
+    g.lineTo(90, 76);
+    g.stroke();
+  },
   parapluie: (g) => {
     // Un parapluie que le vent emporte, renversé
     g.save();
@@ -411,8 +477,9 @@ interface DropItem {
   warnMat: THREE.MeshBasicMaterial;
   lamps: THREE.MeshStandardMaterial;
   phase: string;
-  /** Au volcan : la bombe de lave qui remplace le conteneur */
+  /** Au volcan : la bombe de lave qui remplace le conteneur ; au potager, une pomme (qui ne s'enfonce pas : elle fond) */
   rock?: THREE.Group;
+  apple?: boolean;
   /** À la fête : la pince qui tient la peluche, et ses trois doigts (qu'elle ouvre pour la lâcher) */
   claw?: { group: THREE.Group; fingers: THREE.Object3D[] };
 }
@@ -519,7 +586,8 @@ export class TrackLife {
     if (t.gaps.length === 0) return;
     const step = t.length / t.n;
     const fair = theme === "foire";
-    const bank = fair ? fairBankTexture(keep) : bankTexture(keep);
+    const garden = theme === "potager";
+    const bank = fair ? fairBankTexture(keep) : garden ? gardenBankTexture(keep) : bankTexture(keep);
     const bankMat = keep(new THREE.MeshLambertMaterial({ map: bank }));
     const groundTex = keep(TX.groundTexture(theme));
     const grass = keep(new THREE.MeshLambertMaterial({ map: groundTex }));
@@ -534,13 +602,25 @@ export class TrackLife {
                 ? 0x241f21
                 : theme === "ville"
                   ? 0x4a4640
-                  : 0x6f7276,
+                  : theme === "potager"
+                    ? 0x7d8a68
+                    : 0x6f7276,
         flatShading: true,
       }),
     );
     const rockGeo = keep(new THREE.DodecahedronGeometry(1, 0));
     const tint =
-      theme === "col" ? 0xcdeeff : theme === "vignes" ? 0x9ed6ae : theme === "dunes" ? 0x7fe0d0 : theme === "ville" ? 0x5a6a80 : 0xffffff;
+      theme === "col"
+        ? 0xcdeeff
+        : theme === "vignes"
+          ? 0x9ed6ae
+          : theme === "dunes"
+            ? 0x7fe0d0
+            : theme === "ville"
+              ? 0x5a6a80
+              : theme === "potager"
+                ? 0x7fbf8a
+                : 0xffffff;
     const r = rng(t.n);
     for (const g of t.gaps) {
       const far = Math.ceil((g.to - 0.01) / step) * step;
@@ -658,7 +738,9 @@ export class TrackLife {
                 ? TX.bannerTexture("PONT-LEVANT", "#1c2740", "#ffd23a")
                 : fair
                   ? TX.bannerTexture("CERCEAU DE FEU", "#b8322a", "#ffd23a")
-                  : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a"),
+                  : garden
+                    ? TX.bannerTexture("LA MARE", "#2f6a2a", "#fff6d0")
+                    : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a"),
           ),
         }),
       );
@@ -678,6 +760,57 @@ export class TrackLife {
     const h = Math.atan2(base.tx, base.tz);
     if (t.def.theme === "foire") {
       this.buildClaw(m, base, h);
+      return;
+    }
+    if (t.def.theme === "potager") {
+      // Au potager, une grosse pomme tombe du pommier qui surplombe la route ; elle reste un moment, puis disparaît
+      const apple = new THREE.Group();
+      const red = keep(new THREE.MeshStandardMaterial({ color: 0xd42a20, roughness: 0.35 }));
+      const body = new THREE.Mesh(keep(new THREE.SphereGeometry(2.1, 24, 18).scale(1.05, 0.95, 1.05)), red);
+      body.position.y = 2;
+      body.castShadow = shadows;
+      apple.add(body);
+      const stem = new THREE.Mesh(
+        keep(new THREE.CylinderGeometry(0.1, 0.14, 0.9, 6)),
+        keep(new THREE.MeshLambertMaterial({ color: 0x5a3a20 })),
+      );
+      stem.position.y = 4.2;
+      stem.rotation.z = 0.25;
+      apple.add(stem);
+      const leaf = new THREE.Mesh(
+        keep(new THREE.SphereGeometry(0.5, 10, 6).scale(1.4, 0.15, 0.7)),
+        keep(new THREE.MeshLambertMaterial({ color: 0x4a9a32 })),
+      );
+      leaf.position.set(0.55, 4.25, 0);
+      leaf.rotation.z = -0.4;
+      apple.add(leaf);
+      apple.visible = false;
+      apple.rotation.y = h;
+      this.group.add(apple);
+      const warnMat = keep(
+        new THREE.MeshBasicMaterial({
+          color: 0xff4a1a,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          fog: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      const warn = new THREE.Mesh(keep(new THREE.RingGeometry(1.8, 3.8, 32).rotateX(-Math.PI / 2)), warnMat);
+      this.group.add(warn);
+      this.drops.push({
+        m,
+        trolley: new THREE.Group(),
+        box: apple,
+        cable: new THREE.Mesh(),
+        warn,
+        warnMat,
+        lamps: keep(new THREE.MeshStandardMaterial()),
+        phase: "none",
+        rock: apple,
+        apple: true,
+      });
       return;
     }
     if (t.def.theme === "volcan") {
@@ -960,7 +1093,9 @@ export class TrackLife {
       const y = heightAt(at.x, at.z);
       // Le vent emporte les parapluies depuis les quais ; les ballons passent par-dessus les barrières, les canards
       // sortent de la mare : ils n'ont pas de porte d'où sortir
-      if (m.thing === "parapluie" || m.thing === "ballon" || m.thing === "canard") continue;
+      // (les coccinelles et les escargots sortent des massifs du potager)
+      if (m.thing === "parapluie" || m.thing === "ballon" || m.thing === "canard" || m.thing === "coccinelle" || m.thing === "escargot")
+        continue;
       if (m.thing !== "tonneau" && m.thing !== "mouton" && m.thing !== "poubelle") {
         // Un gros tas (de neige, de sable, de roche) : ils en sortent, et s'y perdent de l'autre côté
         const moundColor = m.thing === "boule" ? 0xf6f9fc : m.thing === "meduse" ? 0x5f7f88 : 0xd9b67c;
@@ -1108,6 +1243,91 @@ export class TrackLife {
       }
       this.rolls.push({ m, parts });
       return;
+    } else if (m.thing === "coccinelle" || m.thing === "escargot") {
+      // Les bêtes du potager, à la taille des légumes : elles traversent vers la droite de la route
+      const R = m.radius;
+      let parts3: { geo: THREE.BufferGeometry; mat: THREE.Material }[];
+      if (m.thing === "coccinelle") {
+        const [c, g] = canvas(256, 128);
+        g.fillStyle = "#d8231c";
+        g.fillRect(0, 0, 256, 128);
+        g.fillStyle = "#151210";
+        for (const [x, y, r] of [
+          [40, 30, 14],
+          [100, 22, 12],
+          [168, 30, 14],
+          [228, 22, 12],
+          [70, 52, 10],
+          [196, 52, 10],
+        ] as const) {
+          g.beginPath();
+          g.arc(x, y, r, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.fillRect(126, 0, 4, 64);
+        g.fillRect(0, 0, 4, 64);
+        parts3 = [
+          {
+            geo: new THREE.SphereGeometry(R, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.95, 0.7, 1.15).translate(0, -0.72 * R, 0),
+            mat: new THREE.MeshStandardMaterial({ map: texture(c, keep), roughness: 0.25 }),
+          },
+          {
+            geo: BufferMerge([
+              new THREE.SphereGeometry(R * 0.42, 12, 8).scale(1, 0.8, 0.9).translate(0, -0.6 * R, 1.08 * R),
+              new THREE.CylinderGeometry(0.03 * R, 0.03 * R, 0.6 * R, 4).rotateX(-0.6).translate(-0.18 * R, -0.25 * R, 1.35 * R),
+              new THREE.CylinderGeometry(0.03 * R, 0.03 * R, 0.6 * R, 4).rotateX(-0.6).translate(0.18 * R, -0.25 * R, 1.35 * R),
+              ...[-1, 1].flatMap((s) =>
+                [-0.5, 0, 0.5].map((z) =>
+                  new THREE.BoxGeometry(0.5 * R, 0.06 * R, 0.08 * R).rotateZ(s * 0.6).translate(s * 0.95 * R, -0.85 * R, z * R),
+                ),
+              ),
+            ]),
+            mat: new THREE.MeshLambertMaterial({ color: 0x151210 }),
+          },
+        ];
+      } else {
+        // L'escargot : sa coquille en spirale, son corps luisant, ses deux cornes et leurs yeux
+        const [c, g] = canvas(256, 128);
+        g.fillStyle = "#b8783a";
+        g.fillRect(0, 0, 256, 128);
+        for (let y = 0; y < 128; y += 16) {
+          g.fillStyle = (y / 16) % 2 === 0 ? "#8a5226" : "#d89a54";
+          g.fillRect(0, y, 256, 8);
+        }
+        parts3 = [
+          {
+            geo: new THREE.SphereGeometry(R * 0.85, 18, 14).scale(0.75, 1, 1).translate(0, 0.05 * R, -0.15 * R),
+            mat: new THREE.MeshStandardMaterial({ map: texture(c, keep), roughness: 0.4 }),
+          },
+          {
+            geo: BufferMerge([
+              new THREE.CapsuleGeometry(0.38 * R, 1.6 * R, 4, 10).rotateX(Math.PI / 2).translate(0, -0.72 * R, 0.25 * R),
+              new THREE.CylinderGeometry(0.06 * R, 0.09 * R, 0.8 * R, 6).rotateX(-0.4).translate(-0.15 * R, -0.1 * R, 1.25 * R),
+              new THREE.CylinderGeometry(0.06 * R, 0.09 * R, 0.8 * R, 6).rotateX(-0.4).translate(0.15 * R, -0.1 * R, 1.25 * R),
+              new THREE.SphereGeometry(0.1 * R, 8, 6).translate(-0.15 * R, 0.28 * R, 1.42 * R),
+              new THREE.SphereGeometry(0.1 * R, 8, 6).translate(0.15 * R, 0.28 * R, 1.42 * R),
+            ]),
+            mat: new THREE.MeshStandardMaterial({ color: 0xb8ac90, roughness: 0.2 }),
+          },
+        ];
+      }
+      const meshes = parts3.map((q) => ({ geo: keep(q.geo), mat: keep(q.mat) }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const facing = new THREE.Group();
+        facing.rotation.y = -Math.PI / 2;
+        const spin = new THREE.Mesh(meshes[0]!.geo, meshes[0]!.mat);
+        spin.castShadow = shadows;
+        for (const extra of meshes.slice(1)) spin.add(new THREE.Mesh(extra.geo, extra.mat));
+        facing.add(spin);
+        group.add(facing);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
     } else if (m.thing === "virevoltant") {
       // Une boule de branches sèches : on voit à travers
       const outer = keep(new THREE.IcosahedronGeometry(m.radius, 1));
@@ -1243,8 +1463,9 @@ export class TrackLife {
     if (t.springs.length === 0) return;
     const city = t.def.theme === "ville";
     const fair = t.def.theme === "foire";
+    const garden = t.def.theme === "potager";
     const [c, g] = canvas(128, 128);
-    g.fillStyle = city ? "#2b2e33" : fair ? "#1f4fa8" : "#ffcf33";
+    g.fillStyle = city ? "#2b2e33" : fair ? "#1f4fa8" : garden ? "#f6f2e4" : "#ffcf33";
     g.beginPath();
     g.arc(64, 64, 64, 0, Math.PI * 2);
     g.fill();
@@ -1266,6 +1487,20 @@ export class TrackLife {
       g.arc(64, 64, 58, 0, Math.PI * 2);
       g.stroke();
     }
+    if (garden) {
+      // Une marguerite : ses pétales blancs, son cœur jaune (les chevrons sont dessus)
+      for (let k = 0; k < 18; k++) {
+        const a = (k / 18) * Math.PI * 2;
+        g.fillStyle = k % 2 === 0 ? "#ffffff" : "#ecebe2";
+        g.beginPath();
+        g.ellipse(64 + Math.cos(a) * 40, 64 + Math.sin(a) * 40, 22, 8, a, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = "#f2c230";
+      g.beginPath();
+      g.arc(64, 64, 34, 0, Math.PI * 2);
+      g.fill();
+    }
     if (fair) {
       // La toile d'un trampoline : son rond central, ses coutures
       g.strokeStyle = "rgba(255,255,255,0.35)";
@@ -1276,7 +1511,7 @@ export class TrackLife {
         g.stroke();
       }
     }
-    g.fillStyle = city ? "#ff8a2a" : fair ? "#ffd23a" : "#d8352a";
+    g.fillStyle = city ? "#ff8a2a" : fair ? "#ffd23a" : garden ? "#e07a12" : "#d8352a";
     for (let k = 0; k < 2; k++) {
       const y = 34 + k * 34;
       g.beginPath();
@@ -1292,7 +1527,7 @@ export class TrackLife {
     const top = keep(
       new THREE.MeshStandardMaterial({
         map: texture(c, keep),
-        emissive: city ? 0xff6a10 : fair ? 0x2a3a6a : 0x6a4a00,
+        emissive: city ? 0xff6a10 : fair ? 0x2a3a6a : garden ? 0x4a4020 : 0x6a4a00,
         emissiveIntensity: city ? 0.35 : 0.5,
         roughness: 0.4,
       }),
@@ -1301,7 +1536,7 @@ export class TrackLife {
     const baseGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS, SPRING_RADIUS + 0.15, 0.14, 28));
     const coilGeo = keep(new THREE.TorusGeometry(1.45, 0.11, 8, 28).rotateX(Math.PI / 2));
     const plateGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS - 0.2, SPRING_RADIUS - 0.1, 0.16, 28));
-    const side = keep(std(city ? 0xff7a1f : fair ? 0xe2322a : 0xd8352a, 0.5));
+    const side = keep(std(city ? 0xff7a1f : fair ? 0xe2322a : garden ? 0x4a8a3a : 0xd8352a, 0.5));
     t.springs.forEach((sp, i) => {
       const p = pointAt(t, sp.s, sp.d);
       const pad = new THREE.Group();
@@ -1497,6 +1732,9 @@ export class TrackLife {
         else if (m.thing === "parapluie") part.spin.rotation.set(Math.sin(time * 3 + i) * 0.5, 0, d / (m.radius * 1.6));
         else if (m.thing === "meduse") part.spin.scale.set(1, 1 + Math.sin(time * 3.2 + i) * 0.16, 1);
         else if (m.thing === "canard") part.spin.rotation.z = Math.sin(time * 8 + i * 1.3) * 0.16;
+        else if (m.thing === "coccinelle") part.spin.rotation.z = Math.sin(time * 14 + i) * 0.05;
+        // L'escargot s'étire et se tasse en avançant
+        else if (m.thing === "escargot") part.spin.scale.set(1, 1, 1 + Math.sin(time * 3 + i) * 0.06);
         else part.spin.rotation.z = Math.sin(time * 11 + i) * 0.07;
         if (
           rolls &&
@@ -1538,7 +1776,9 @@ export class TrackLife {
       // La bombe de lave : elle tombe, reste, puis s'enfonce sur place
       it.rock.visible = st.phase === "fall" || st.phase === "stay" || st.phase === "lift";
       const sink = st.phase === "lift" ? (st.u - DROP_WARN - DROP_FALL - DROP_STAY) / DROP_LIFT : 0;
-      it.rock.position.set(at.x, at.y + (st.phase === "fall" ? st.height * 2.2 : 0) - sink * 4.2, at.z);
+      it.rock.position.set(at.x, at.y + (st.phase === "fall" ? st.height * 2.2 : 0) - (it.apple ? 0 : sink * 4.2), at.z);
+      // La pomme ne s'enfonce pas : elle rapetisse et disparaît
+      if (it.apple) it.rock.scale.setScalar(Math.max(0.01, 1 - sink));
       if (st.phase === "warn" || st.phase === "fall") {
         it.warn.visible = true;
         it.warn.position.set(at.x, at.y + 0.1, at.z);
