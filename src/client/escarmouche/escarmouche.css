@@ -1478,3 +1478,11 @@ html:has(.esc-root) body {
     height: 22px;
   }
 }
+
+/* Au téléphone, les armes de l'arsenal tiennent à deux par ligne : l'onglet « Skin » du salon ne défile plus sur des mètres */
+@media (max-width: 440px) {
+  .esc-weapons,
+  .esc-weapons.is-small {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

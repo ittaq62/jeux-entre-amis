@@ -534,9 +534,10 @@
 }
 
 /* Salon : les jeux au programme */
+/* Les jeux au programme : en grille (deux ou trois par ligne), pour que la liste ne fasse pas défiler l'onglet */
 .tour-games {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 8px;
 }
 
