@@ -268,6 +268,39 @@ function buildHead(avatar: AvatarConfig, u: UniformInfo, band: THREE.Material, m
   return { group: g, skull };
 }
 
+/**
+ * Un liseré de lumière froide sur les contours du soldat (là où sa surface fuit le regard) : sa silhouette se détache du
+ * décor, de loin, dans l'ombre et la nuit, sans changer ses couleurs. Un seul programme pour tous les soldats.
+ */
+const RIM = { value: 0.12 };
+/** La force du liseré : discret au grand jour, plus marqué la nuit (où la silhouette se perd) */
+export function setRimStrength(k: number) {
+  RIM.value = k;
+}
+
+function rimLight(mat: THREE.MeshStandardMaterial) {
+  if (mat.userData.rim) return;
+  mat.userData.rim = true;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.rimStrength = RIM;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+uniform float rimStrength;`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `{
+  float rimK = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0);
+  outgoingLight += vec3(0.82, 0.9, 1.0) * rimK * rimStrength;
+}
+#include <opaque_fragment>`,
+      );
+  };
+  mat.customProgramCacheKey = () => "soldier-rim";
+}
+
 /** La matière du liseré : sombre, vue de l'intérieur (seul son bord dépasse autour de la tête) */
 let outline: THREE.MeshBasicMaterial | null = null;
 function outlineMaterial(): THREE.MeshBasicMaterial {
@@ -453,6 +486,7 @@ export class SoldierModel {
       const face = keep(
         new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: "#ffffff", emissiveMap: tex, emissiveIntensity: 0.2 }),
       );
+      rimLight(face);
       head.skull.material = face;
     });
     // Les bras et l'arme : ils suivent la visée (les bras sont posés sur l'arme quand elle change)
@@ -480,6 +514,7 @@ export class SoldierModel {
       if (o instanceof THREE.Mesh) {
         o.castShadow = true;
         this.disposables.push(o.geometry);
+        if (o.material instanceof THREE.MeshStandardMaterial) rimLight(o.material);
       }
     });
   }

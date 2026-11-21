@@ -14,7 +14,16 @@ import { buildCrates, buildMap, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
 import { DEPOT_NAMES, POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
-import { nameSprite, segment, SoldierModel, soldierKey, uniformMats, type SoldierLook, type SoldierPose } from "./soldiers.ts";
+import {
+  nameSprite,
+  segment,
+  SoldierModel,
+  soldierKey,
+  uniformMats,
+  type SoldierLook,
+  type SoldierPose,
+  setRimStrength,
+} from "./soldiers.ts";
 import { buildDistant, type Distant } from "./distant.ts";
 import { worldOf } from "../../../shared/games/escarmouche/match.ts";
 import { buildDecals } from "./decals.ts";
@@ -119,6 +128,7 @@ export class EscScene {
     this.low = q === "bas";
     const light: Light = opts.night ? "nuit" : gm.light;
     const night = light === "nuit";
+    setRimStrength(night ? 0.3 : light === "gris" || light === "neige" ? 0.14 : 0.1);
     const look = SKIES[light];
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q === "moyen", powerPreference: "high-performance" });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q === "bas" ? 1.25 : q === "moyen" ? 1.5 : 1.75);
