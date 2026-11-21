@@ -144,6 +144,23 @@ export const MOODS: Record<Theme, Mood> = {
     fog: [80, 620],
     night: true,
   },
+  // La fête foraine : le soleil se couche, très bas à l'ouest ; le ciel passe de l'orange au rose puis au bleu nuit, les
+  // nuages s'allument de rose, les ombres s'allongent, et les ampoules des manèges brillent déjà
+  foire: {
+    top: 0x252e6c,
+    mid: 0xc47b8e,
+    horizon: 0xffb46c,
+    dir: new THREE.Vector3(-80, 19, 34).normalize(),
+    sun: 0xffa86a,
+    sunPower: 1.8,
+    hemiSky: 0xf0cdb4,
+    hemiGround: 0x7a5a40,
+    hemiPower: 1.12,
+    cloud: 0xffbfa2,
+    glow: 0xff9548,
+    ground: 0x6f7f46,
+    fog: [190, 1150],
+  },
 };
 
 const R = 1000;

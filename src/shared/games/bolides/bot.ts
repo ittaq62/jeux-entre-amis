@@ -106,6 +106,9 @@ export interface BotMemory {
   /** Où il en était à la dernière vérification (pour savoir s'il n'avance plus) */
   stallAt: number;
   stallDist: number;
+  /** L'îlot qu'il approche (son début), et le passage qu'il a pris pour le contourner (-1 : à gauche, 1 : à droite) */
+  islandAt: number;
+  islandSide: number;
 }
 
 export function newBotMemory(h: RngHolder): BotMemory {
@@ -122,6 +125,8 @@ export function newBotMemory(h: RngHolder): BotMemory {
     coinUntil: -1,
     stallAt: 0,
     stallDist: 0,
+    islandAt: -1,
+    islandSide: 0,
   };
 }
 
@@ -242,7 +247,8 @@ export function botDrive(
     if (lane > left && lane < right) lane = right < half - 1.6 ? right : left;
   }
   // Un îlot (une fontaine, un manège…) : celui qu'il longe, sinon le prochain. Il prend le passage le plus proche de
-  // là où il est, bien avant d'y arriver, et s'y tient jusqu'au bout
+  // là où sa trajectoire l'emmène, le décide pour de bon à l'approche, et s'y tient jusqu'au bout (même s'il sort
+  // d'un virage en travers, ou que son couloir est de l'autre côté)
   let isl: (typeof t.islands)[number] | null = null;
   let nearest = 70;
   for (const o of t.islands) {
@@ -260,13 +266,24 @@ export function botDrive(
   }
   if (isl) {
     const margin = KART_RADIUS + 1.4;
-    if (lane > isl.d - isl.half - margin && lane < isl.d + isl.half + margin) {
-      const left = (isl.d - isl.half - half) / 2;
-      const right = (isl.d + isl.half + half) / 2;
-      const leftOk = isl.d - isl.half + half >= 2 * margin;
-      const rightOk = half - (isl.d + isl.half) >= 2 * margin;
-      lane = leftOk && (!rightOk || Math.abs(k.d - left) <= Math.abs(k.d - right)) ? left : right;
+    const lo = isl.d - isl.half - margin;
+    const hi = isl.d + isl.half + margin;
+    const left = (isl.d - isl.half - half) / 2;
+    const right = (isl.d + isl.half + half) / 2;
+    const leftOk = isl.d - isl.half + half >= 2 * margin;
+    const rightOk = half - (isl.d + isl.half) >= 2 * margin;
+    // Où il sera en arrivant à l'îlot s'il garde sa trajectoire : sa vitesse vers la droite de la route (la droite du
+    // kart est (-cos h, sin h), celle de la route (-tz, tx))
+    const road = pointAt(t, k.s, 0);
+    const across =
+      k.v * (Math.sin(k.h) * -road.tz + Math.cos(k.h) * road.tx) + k.slip * (-Math.cos(k.h) * -road.tz + Math.sin(k.h) * road.tx);
+    const soon = clamp(k.d + across * Math.min(1.2, nearest / Math.max(8, k.v)), -half, half);
+    if (mem.islandAt !== isl.s || nearest > 32) {
+      mem.islandAt = isl.s;
+      mem.islandSide = leftOk && (!rightOk || Math.abs(soon - left) <= Math.abs(soon - right)) ? -1 : 1;
     }
+    if (mem.islandSide < 0 && lane > lo) lane = left;
+    else if (mem.islandSide > 0 && lane < hi) lane = right;
   }
   // Pas trop près du bord : en coupant vers le point visé, il passerait sur le vibreur et dans l'herbe
   lane = clamp(lane, -half + 2.6, half - 2.6);

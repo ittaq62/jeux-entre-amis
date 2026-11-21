@@ -44,6 +44,8 @@ export type LifeEvent =
 export const WATER_DEPTH = 4.5;
 const BEAM_Y = 15;
 const CONTAINER = { w: 2.8, h: 2.6, l: 7.2 };
+/** Le haut de la peluche de la fête, couchée sur la route (là où la pince la tient) */
+const BEAR_TOP = 2.1;
 
 const std = (color: THREE.ColorRepresentation, roughness = 0.6, metalness = 0) =>
   new THREE.MeshStandardMaterial({ color, roughness, metalness });
@@ -120,6 +122,73 @@ function bankTexture(keep: Keep): THREE.CanvasTexture {
     g.fill();
   }
   return texture(c, keep, true);
+}
+
+/** Les bords de la piscine à balles : des planches peintes en rouge, une bande jaune et des étoiles en haut */
+function fairBankTexture(keep: Keep): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  g.fillStyle = "#b8322a";
+  g.fillRect(0, 0, 256, 256);
+  for (let x = 0; x < 256; x += 32) {
+    g.fillStyle = "rgba(0,0,0,0.18)";
+    g.fillRect(x, 0, 2, 256);
+    g.fillStyle = "rgba(255,255,255,0.06)";
+    g.fillRect(x + 2, 0, 3, 256);
+  }
+  g.fillStyle = "#f2c230";
+  g.fillRect(0, 0, 256, 40);
+  g.fillStyle = "#b8322a";
+  for (let x = 16; x < 256; x += 48) {
+    g.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      const rad = k % 2 === 0 ? 13 : 5.5;
+      g.lineTo(x + Math.cos(a) * rad, 20 + Math.sin(a) * rad);
+    }
+    g.fill();
+  }
+  const grad = g.createLinearGradient(0, 60, 0, 256);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(1, "rgba(0,0,0,0.45)");
+  g.fillStyle = grad;
+  g.fillRect(0, 40, 256, 216);
+  return texture(c, keep, true);
+}
+
+/** Des balles de couleur serrées les unes contre les autres, chacune son reflet */
+function ballPitTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  g.fillStyle = "#3a2a40";
+  g.fillRect(0, 0, 256, 256);
+  const colors = ["#e8413a", "#f7c531", "#2f7fe0", "#3fb86a", "#ee6fb0", "#ff8a2a"];
+  const r = rng(29);
+  for (let i = 0; i < 520; i++) {
+    const x = r() * 256;
+    const y = r() * 256;
+    const rad = 8 + r() * 3;
+    const color = colors[Math.floor(r() * colors.length)]!;
+    for (const [ox, oy] of [
+      [0, 0],
+      [256, 0],
+      [-256, 0],
+      [0, 256],
+      [0, -256],
+    ]) {
+      const grad = g.createRadialGradient(x + ox! - rad * 0.35, y + oy! - rad * 0.35, 1, x + ox!, y + oy!, rad);
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(0.25, color);
+      grad.addColorStop(1, "rgba(0,0,0,0.6)");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x + ox!, y + oy!, rad, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
 }
 
 /** Un panneau triangulaire, avec son dessin */
@@ -248,6 +317,43 @@ const SIGN_ICONS: Record<"gap" | "drop" | RollThing, (g: CanvasRenderingContext2
       g.stroke();
     }
   },
+  ballon: (g) => {
+    // Un ballon de plage qui rebondit : ses quartiers, et l'arc pointillé de son rebond
+    g.beginPath();
+    g.arc(76, 84, 16, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#fff";
+    g.beginPath();
+    g.ellipse(76, 84, 6, 16, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#222";
+    g.lineWidth = 3;
+    g.setLineDash([4, 4]);
+    g.beginPath();
+    g.moveTo(34, 98);
+    g.quadraticCurveTo(46, 52, 62, 72);
+    g.stroke();
+    g.setLineDash([]);
+  },
+  canard: (g) => {
+    // Un canard en plastique, de profil : son corps, sa tête, son bec
+    g.beginPath();
+    g.ellipse(60, 86, 22, 12, 0, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.arc(74, 66, 10, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.moveTo(82, 64);
+    g.lineTo(96, 68);
+    g.lineTo(82, 72);
+    g.fill();
+    g.beginPath();
+    g.moveTo(38, 82);
+    g.lineTo(32, 70);
+    g.lineTo(46, 78);
+    g.fill();
+  },
   parapluie: (g) => {
     // Un parapluie que le vent emporte, renversé
     g.save();
@@ -307,6 +413,8 @@ interface DropItem {
   phase: string;
   /** Au volcan : la bombe de lave qui remplace le conteneur */
   rock?: THREE.Group;
+  /** À la fête : la pince qui tient la peluche, et ses trois doigts (qu'elle ouvre pour la lâcher) */
+  claw?: { group: THREE.Group; fingers: THREE.Object3D[] };
 }
 
 interface RollItem {
@@ -410,7 +518,8 @@ export class TrackLife {
     const { t, keep, shadows } = this.ctx;
     if (t.gaps.length === 0) return;
     const step = t.length / t.n;
-    const bank = bankTexture(keep);
+    const fair = theme === "foire";
+    const bank = fair ? fairBankTexture(keep) : bankTexture(keep);
     const bankMat = keep(new THREE.MeshLambertMaterial({ map: bank }));
     const groundTex = keep(TX.groundTexture(theme));
     const grass = keep(new THREE.MeshLambertMaterial({ map: groundTex }));
@@ -450,9 +559,42 @@ export class TrackLife {
         wall.rotation.y = h;
         this.group.add(wall);
       }
+      if (fair) {
+        // À la fête, une piscine à balles : ses deux autres bords, et des milliers de balles de couleur
+        const len = far - g.from + 1.2;
+        for (const side of [-1, 1]) {
+          const p = pointAt(t, (g.from + far) / 2, side * (wide / 2 - 0.6));
+          const wall = new THREE.Mesh(keep(new THREE.BoxGeometry(1.2, tall, len)), bankMat);
+          wall.position.set(p.x, p.y + 0.03 - tall / 2, p.z);
+          wall.rotation.y = h;
+          this.group.add(wall);
+        }
+        const balls = keep(ballPitTexture());
+        balls.repeat.set(wide / 6, len / 6);
+        const surface = new THREE.Mesh(keep(new THREE.PlaneGeometry(wide, len)), keep(new THREE.MeshLambertMaterial({ map: balls })));
+        surface.rotation.set(-Math.PI / 2, 0, h + Math.PI);
+        surface.position.set(mid.x, mid.y - WATER_DEPTH, mid.z);
+        this.group.add(surface);
+        // Des balles par-dessus, à moitié enfoncées : la surface a du relief
+        const n = this.ctx.phone ? 70 : 190;
+        const ball = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.42, 10, 8)), keep(new THREE.MeshLambertMaterial()), n);
+        const colors = [0xe8413a, 0xf7c531, 0x2f7fe0, 0x3fb86a, 0xee6fb0, 0xff8a2a];
+        const color = new THREE.Color();
+        for (let i = 0; i < n; i++) {
+          const along = (r() - 0.5) * (len - 1.6);
+          const side = (r() - 0.5) * (wide - 2);
+          const q = pointAt(t, (g.from + far) / 2 + along, side);
+          this.m4.compose(this.p.set(q.x, mid.y - WATER_DEPTH + 0.12, q.z), this.q.identity(), this.s.setScalar(0.85 + r() * 0.3));
+          ball.setMatrixAt(i, this.m4);
+          ball.setColorAt(i, color.setHex(colors[i % colors.length]!));
+        }
+        ball.instanceMatrix.needsUpdate = true;
+        if (ball.instanceColor) ball.instanceColor.needsUpdate = true;
+        this.group.add(ball);
+      }
       // L'eau, à mi-hauteur du trou
       // (au lagon, c'est la mer ; au volcan, de la lave)
-      if (t.water === null) {
+      if (t.water === null && !fair) {
         const tex = keep(TX.waterTexture());
         tex.repeat.set(3, 1.4);
         this.water.push(tex);
@@ -470,7 +612,7 @@ export class TrackLife {
       }
       const surface = t.water ?? mid.y - WATER_DEPTH;
       // (en ville, le canal n'a pas de rochers)
-      const rocks = new THREE.InstancedMesh(rockGeo, rockMat, theme === "ville" ? 0 : 9);
+      const rocks = new THREE.InstancedMesh(rockGeo, rockMat, theme === "ville" || fair ? 0 : 9);
       for (let i = 0; i < rocks.count; i++) {
         const along = (r() - 0.5) * (far - g.from - 2);
         const side = (r() < 0.5 ? -1 : 1) * (t.half * 0.7 + r() * (t.wall - t.half * 0.7));
@@ -514,7 +656,9 @@ export class TrackLife {
               ? TX.bannerTexture("ENVOL !", "#0f6fa8", "#ffffff")
               : theme === "ville"
                 ? TX.bannerTexture("PONT-LEVANT", "#1c2740", "#ffd23a")
-                : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a"),
+                : fair
+                  ? TX.bannerTexture("CERCEAU DE FEU", "#b8322a", "#ffd23a")
+                  : TX.bannerTexture("GRAND SAUT", "#1c2740", "#ffd23a"),
           ),
         }),
       );
@@ -532,6 +676,10 @@ export class TrackLife {
     const { t, keep, shadows } = this.ctx;
     const base = pointAt(t, m.s, 0);
     const h = Math.atan2(base.tx, base.tz);
+    if (t.def.theme === "foire") {
+      this.buildClaw(m, base, h);
+      return;
+    }
     if (t.def.theme === "volcan") {
       // Au volcan, pas de grue : une bombe de lave tombe du ciel, reste fumante un moment, puis s'enfonce
       const rock = new THREE.Group();
@@ -635,6 +783,156 @@ export class TrackLife {
     this.drops.push({ m, trolley, box, cable, warn, warnMat, lamps, phase: "none" });
   }
 
+  /**
+   * À la fête, la grue est une pince à peluches géante : un portique rouge et or tout illuminé, son enseigne, un chariot
+   * doré, la pince à trois doigts au bout du câble, et une peluche (un ours couché sur le dos) qu'elle lâche sur la route
+   */
+  private buildClaw(m: DropMover, base: ReturnType<typeof pointAt>, h: number) {
+    const { t, keep, shadows } = this.ctx;
+    const red = keep(std(0xc8302b, 0.45, 0.15));
+    const gold = keep(std(0xe8b530, 0.3, 0.6));
+    const frame = new THREE.Group();
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent = frame) => {
+      const mesh = new THREE.Mesh(keep(geo), mat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = shadows;
+      parent.add(mesh);
+      return mesh;
+    };
+    const span = t.wall + 2;
+    for (const side of [-1, 1]) {
+      for (const along of [-3, 3]) {
+        add(new THREE.BoxGeometry(0.8, BEAM_Y + 0.5, 0.8), red, side * span, (BEAM_Y + 0.5) / 2, along);
+        // Des bagues dorées le long des piliers
+        for (const y of [3, 7, 11]) add(new THREE.BoxGeometry(0.95, 0.25, 0.95), gold, side * span, y, along);
+      }
+      add(new THREE.BoxGeometry(0.4, 0.4, 6), gold, side * span, 5, 0);
+      add(new THREE.BoxGeometry(0.4, 0.4, 6), gold, side * span, 10, 0);
+      add(new THREE.BoxGeometry(1.4, 0.8, 8), red, side * span, 0.4, 0);
+    }
+    for (const along of [-1.3, 1.3]) add(new THREE.BoxGeometry(span * 2 + 3, 1.1, 0.8), red, 0, BEAM_Y, along);
+    add(new THREE.BoxGeometry(span * 2 + 3.4, 0.2, 3.4), gold, 0, BEAM_Y + 0.65, 0);
+    frame.position.set(base.x, base.y, base.z);
+    frame.rotation.y = h;
+    frame.updateMatrixWorld(true);
+    mergeDeep(frame, keep);
+    this.group.add(frame);
+    // L'enseigne, des deux côtés de la poutre, et les ampoules qui courent tout le long
+    const sign = new THREE.Group();
+    const [c, g] = canvas(512, 96);
+    g.fillStyle = "#7a1a16";
+    g.fillRect(0, 0, 512, 96);
+    g.strokeStyle = "#ffd23a";
+    g.lineWidth = 6;
+    g.strokeRect(6, 6, 500, 84);
+    g.fillStyle = "#fff2c4";
+    g.font = "bold 50px sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText("PINCE À PELUCHES", 256, 50);
+    const signMat = keep(new THREE.MeshBasicMaterial({ map: texture(c, keep), color: new THREE.Color(1.25, 1.2, 1.1) }));
+    for (const z of [-1.75, 1.75]) {
+      const board = new THREE.Mesh(keep(new THREE.PlaneGeometry(13, 2.4)), signMat);
+      board.position.set(0, BEAM_Y + 2.1, z);
+      // Celle de devant regarde ceux qui arrivent (vers -z), l'autre ceux qui sont passés
+      board.rotation.y = z < 0 ? Math.PI : 0;
+      sign.add(board);
+    }
+    add(new THREE.BoxGeometry(13.4, 2.8, 0.25), red, 0, BEAM_Y + 2.1, 0, sign);
+    const bulbs: THREE.Matrix4[] = [];
+    for (let x = -span - 1.2; x <= span + 1.2; x += 1.1)
+      for (const z of [-1.72, 1.72]) bulbs.push(new THREE.Matrix4().makeTranslation(x, BEAM_Y - 0.35, z));
+    const bulbMesh = new THREE.InstancedMesh(
+      keep(new THREE.SphereGeometry(0.13, 8, 6)),
+      keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.9, 1.1) })),
+      bulbs.length,
+    );
+    bulbs.forEach((mm, i) => bulbMesh.setMatrixAt(i, mm));
+    sign.add(bulbMesh);
+    sign.position.set(base.x, base.y, base.z);
+    sign.rotation.y = h;
+    this.group.add(sign);
+    // Le chariot doré, ses deux feux qui clignotent avant la chute
+    const trolley = new THREE.Group();
+    const cart = new THREE.Mesh(keep(new THREE.BoxGeometry(3, 1.2, 3.8)), gold);
+    cart.position.y = BEAM_Y + 1.1;
+    cart.castShadow = shadows;
+    trolley.add(cart);
+    const lamps = keep(new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff7a00, emissiveIntensity: 0.2, roughness: 0.3 }));
+    for (const x of [-1.5, 1.5]) {
+      const lamp = new THREE.Mesh(keep(new THREE.SphereGeometry(0.24, 10, 8)), lamps);
+      lamp.position.set(x, BEAM_Y + 1.85, 0);
+      trolley.add(lamp);
+    }
+    trolley.rotation.y = h;
+    this.group.add(trolley);
+    const cable = new THREE.Mesh(keep(new THREE.BoxGeometry(0.12, 1, 0.12)), keep(std(0x3a3d42, 0.5, 0.6)));
+    this.group.add(cable);
+    // La pince : un moyeu doré, trois doigts articulés (chacun tourne autour de sa charnière pour s'ouvrir)
+    const claw = new THREE.Group();
+    const chrome = keep(std(0xd6dade, 0.25, 0.85));
+    add(new THREE.CylinderGeometry(0.55, 0.7, 0.9, 14), gold, 0, -0.45, 0, claw);
+    const fingers: THREE.Object3D[] = [];
+    for (let k = 0; k < 3; k++) {
+      const turn = new THREE.Group();
+      turn.rotation.y = (k / 3) * Math.PI * 2;
+      const hinge = new THREE.Group();
+      hinge.position.set(0, -0.85, 0.5);
+      // Le doigt descend, s'écarte, puis se recourbe vers l'intérieur
+      const upper = add(new THREE.BoxGeometry(0.2, 1.5, 0.2), chrome, 0, -0.7, 0.26, hinge);
+      upper.rotation.x = -0.35;
+      const lower = add(new THREE.BoxGeometry(0.18, 1.1, 0.18), chrome, 0, -1.9, 0.27, hinge);
+      lower.rotation.x = 0.45;
+      add(new THREE.SphereGeometry(0.16, 8, 6), gold, 0, -0.0, 0, hinge);
+      turn.add(hinge);
+      claw.add(turn);
+      fingers.push(hinge);
+    }
+    claw.rotation.y = h;
+    // Assez petite pour tenir sous le chariot quand la peluche est tout en haut
+    claw.scale.setScalar(0.72);
+    this.group.add(claw);
+    // La peluche : un ours couché sur le dos, la tête vers l'avant (son empreinte au sol est celle du conteneur)
+    const bear = new THREE.Group();
+    const fur = keep(new THREE.MeshStandardMaterial({ color: 0xc98a4a, roughness: 0.95 }));
+    const light = keep(new THREE.MeshStandardMaterial({ color: 0xf1d4a2, roughness: 0.95 }));
+    const dark = keep(new THREE.MeshStandardMaterial({ color: 0x2a1a14, roughness: 0.4 }));
+    const ribbon = keep(new THREE.MeshStandardMaterial({ color: 0xd8352a, roughness: 0.6 }));
+    const blob = (r: number, sx: number, sy: number, sz: number, mat: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = add(new THREE.SphereGeometry(r, 16, 12), mat, x, y, z, bear);
+      mesh.scale.set(sx, sy, sz);
+      return mesh;
+    };
+    blob(1, 1.25, 0.85, 1.55, fur, 0, 0.88, -0.35);
+    blob(1, 0.85, 0.4, 1.05, light, 0, 1.45, -0.35);
+    blob(0.92, 1, 0.95, 1, fur, 0, 0.95, 1.5);
+    blob(0.42, 1, 0.75, 1, light, 0, 1.72, 1.72);
+    blob(0.16, 1.2, 0.8, 1, dark, 0, 2.02, 1.82);
+    for (const s of [-1, 1]) {
+      blob(0.36, 1, 1, 0.6, fur, s * 0.72, 1.3, 2.25);
+      blob(0.2, 1, 1, 0.5, light, s * 0.72, 1.32, 2.4);
+      blob(0.09, 1, 1, 1, dark, s * 0.3, 1.78, 2.15);
+      blob(0.5, 0.95, 0.85, 1.5, fur, s * 1.35, 0.72, 0.35);
+      blob(0.58, 1, 0.9, 1.25, fur, s * 0.72, 0.7, -2.0);
+      blob(0.36, 0.9, 1, 0.35, light, s * 0.72, 0.75, -2.62);
+    }
+    // Le nœud rouge au cou
+    blob(0.34, 1.4, 0.7, 0.8, ribbon, -0.42, 1.6, 0.72);
+    blob(0.34, 1.4, 0.7, 0.8, ribbon, 0.42, 1.6, 0.72);
+    blob(0.2, 1, 1, 1, ribbon, 0, 1.62, 0.72);
+    bear.rotation.y = h;
+    this.group.add(bear);
+    // Là où elle va tomber : un rectangle rouge et jaune qui clignote
+    const warnMat = keep(
+      new THREE.MeshBasicMaterial({ map: hatch(keep, "#ff3b2a", "#ffd23a"), transparent: true, opacity: 0, depthWrite: false, fog: false }),
+    );
+    (warnMat.map as THREE.Texture).repeat.set(2, 3);
+    const warn = new THREE.Mesh(keep(new THREE.PlaneGeometry(CONTAINER.w + 0.9, CONTAINER.l + 1)), warnMat);
+    warn.rotation.set(-Math.PI / 2, 0, h + Math.PI);
+    this.group.add(warn);
+    this.drops.push({ m, trolley, box: bear, cable, warn, warnMat, lamps, phase: "none", claw: { group: claw, fingers } });
+  }
+
   /** Les bandes peintes en travers de la route (des rayures blanches pour les moutons), et les trappes dans les murets */
   private addCrossing(m: RollMover) {
     const { t, keep, heightAt, shadows } = this.ctx;
@@ -650,7 +948,8 @@ export class TrackLife {
       g.fillStyle = "#f4f2ea";
       for (let x = 0; x < 128; x += 32) g.fillRect(x + 6, 0, 18, 64);
       map = texture(c, keep, true);
-    } else map = hatch(keep);
+    } else if (t.def.theme === "foire") map = hatch(keep, "#f4efe6", "#d8352a");
+    else map = hatch(keep);
     map.repeat.set(width / 4, 1);
     const mark = new THREE.Mesh(keep(new THREE.PlaneGeometry(width, 3.8)), keep(new THREE.MeshLambertMaterial({ map })));
     mark.rotation.set(-Math.PI / 2, 0, h + Math.PI);
@@ -659,8 +958,9 @@ export class TrackLife {
     for (const side of [-1, 1]) {
       const at = pointAt(t, m.s, side * (t.wall + 0.1));
       const y = heightAt(at.x, at.z);
-      // Le vent emporte les parapluies depuis les quais : ils n'ont pas de porte d'où sortir
-      if (m.thing === "parapluie") continue;
+      // Le vent emporte les parapluies depuis les quais ; les ballons passent par-dessus les barrières, les canards
+      // sortent de la mare : ils n'ont pas de porte d'où sortir
+      if (m.thing === "parapluie" || m.thing === "ballon" || m.thing === "canard") continue;
       if (m.thing !== "tonneau" && m.thing !== "mouton" && m.thing !== "poubelle") {
         // Un gros tas (de neige, de sable, de roche) : ils en sortent, et s'y perdent de l'autre côté
         const moundColor = m.thing === "boule" ? 0xf6f9fc : m.thing === "meduse" ? 0x5f7f88 : 0xd9b67c;
@@ -754,6 +1054,54 @@ export class TrackLife {
         spin.castShadow = shadows;
         spin.add(new THREE.Mesh(handle, stick));
         group.add(spin);
+        group.visible = false;
+        this.group.add(group);
+        parts.push({ group, spin });
+      }
+      this.rolls.push({ m, parts });
+      return;
+    } else if (m.thing === "ballon") {
+      // Un ballon de plage géant : six quartiers de couleur, ses deux pôles blancs
+      const [c, g] = canvas(256, 128);
+      const gores = ["#e8413a", "#ffffff", "#2f7fe0", "#f7c531", "#ffffff", "#3fb86a"];
+      gores.forEach((color, k) => {
+        g.fillStyle = color;
+        g.fillRect((k * 256) / 6, 0, 256 / 6 + 1, 128);
+      });
+      g.fillStyle = "#ffffff";
+      g.fillRect(0, 0, 256, 12);
+      g.fillRect(0, 116, 256, 12);
+      geo = keep(new THREE.SphereGeometry(m.radius, 24, 16));
+      mat = keep(new THREE.MeshStandardMaterial({ map: texture(c, keep), roughness: 0.35 }));
+    } else if (m.thing === "canard") {
+      // Un canard en plastique géant, qui traverse en se dandinant : il regarde vers la droite de la route, où il va
+      const R = m.radius;
+      const body = BufferMerge([
+        new THREE.SphereGeometry(R, 16, 12).scale(0.95, 0.72, 1.25).translate(0, -0.2 * R, 0),
+        new THREE.SphereGeometry(R * 0.4, 10, 8).scale(1, 0.8, 1).translate(0, 0.25 * R, -1.05 * R),
+        new THREE.SphereGeometry(R * 0.55, 14, 10).translate(0, 0.72 * R, 0.55 * R),
+      ]);
+      const beak = BufferMerge([new THREE.SphereGeometry(R * 0.3, 10, 8).scale(1.1, 0.42, 1.2).translate(0, 0.64 * R, 1.1 * R)]);
+      const eyes = BufferMerge([
+        new THREE.SphereGeometry(R * 0.09, 8, 6).translate(-0.27 * R, 0.86 * R, 0.98 * R),
+        new THREE.SphereGeometry(R * 0.09, 8, 6).translate(0.27 * R, 0.86 * R, 0.98 * R),
+      ]);
+      const bodyGeo = keep(body);
+      const beakGeo = keep(beak);
+      const eyeGeo = keep(eyes);
+      const yellow = keep(new THREE.MeshStandardMaterial({ color: 0xffd21f, roughness: 0.3 }));
+      const orange = keep(new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.35 }));
+      const black = keep(new THREE.MeshBasicMaterial({ color: 0x15120f }));
+      const parts: RollItem["parts"] = [];
+      for (let i = 0; i < m.count; i++) {
+        const group = new THREE.Group();
+        const facing = new THREE.Group();
+        facing.rotation.y = -Math.PI / 2;
+        const spin = new THREE.Mesh(bodyGeo, yellow);
+        spin.castShadow = shadows;
+        spin.add(new THREE.Mesh(beakGeo, orange), new THREE.Mesh(eyeGeo, black));
+        facing.add(spin);
+        group.add(facing);
         group.visible = false;
         this.group.add(group);
         parts.push({ group, spin });
@@ -894,8 +1242,9 @@ export class TrackLife {
     const { t, keep } = this.ctx;
     if (t.springs.length === 0) return;
     const city = t.def.theme === "ville";
+    const fair = t.def.theme === "foire";
     const [c, g] = canvas(128, 128);
-    g.fillStyle = city ? "#2b2e33" : "#ffcf33";
+    g.fillStyle = city ? "#2b2e33" : fair ? "#1f4fa8" : "#ffcf33";
     g.beginPath();
     g.arc(64, 64, 64, 0, Math.PI * 2);
     g.fill();
@@ -917,7 +1266,17 @@ export class TrackLife {
       g.arc(64, 64, 58, 0, Math.PI * 2);
       g.stroke();
     }
-    g.fillStyle = city ? "#ff8a2a" : "#d8352a";
+    if (fair) {
+      // La toile d'un trampoline : son rond central, ses coutures
+      g.strokeStyle = "rgba(255,255,255,0.35)";
+      g.lineWidth = 2;
+      for (const rad of [20, 38, 54]) {
+        g.beginPath();
+        g.arc(64, 64, rad, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.fillStyle = city ? "#ff8a2a" : fair ? "#ffd23a" : "#d8352a";
     for (let k = 0; k < 2; k++) {
       const y = 34 + k * 34;
       g.beginPath();
@@ -933,7 +1292,7 @@ export class TrackLife {
     const top = keep(
       new THREE.MeshStandardMaterial({
         map: texture(c, keep),
-        emissive: city ? 0xff6a10 : 0x6a4a00,
+        emissive: city ? 0xff6a10 : fair ? 0x2a3a6a : 0x6a4a00,
         emissiveIntensity: city ? 0.35 : 0.5,
         roughness: 0.4,
       }),
@@ -942,7 +1301,7 @@ export class TrackLife {
     const baseGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS, SPRING_RADIUS + 0.15, 0.14, 28));
     const coilGeo = keep(new THREE.TorusGeometry(1.45, 0.11, 8, 28).rotateX(Math.PI / 2));
     const plateGeo = keep(new THREE.CylinderGeometry(SPRING_RADIUS - 0.2, SPRING_RADIUS - 0.1, 0.16, 28));
-    const side = keep(std(city ? 0xff7a1f : 0xd8352a, 0.5));
+    const side = keep(std(city ? 0xff7a1f : fair ? 0xe2322a : 0xd8352a, 0.5));
     t.springs.forEach((sp, i) => {
       const p = pointAt(t, sp.s, sp.d);
       const pad = new THREE.Group();
@@ -968,10 +1327,17 @@ export class TrackLife {
     const { keep } = this.ctx;
     const [c, g] = canvas(256, 512);
     const r = rng(seed + 11);
-    if (kind === "sable" || kind === "cendre" || kind === "algues") {
-      // Du sable qui tourbillonne, des cendres, ou un tapis d'algues : des taches douces, puis ce qui les dessine
+    if (kind === "sable" || kind === "cendre" || kind === "algues" || kind === "sciure") {
+      // Du sable qui tourbillonne, des cendres, un tapis d'algues ou la sciure de la piste : des taches douces, puis ce
+      // qui les dessine
       const tones =
-        kind === "sable" ? ["176,132,78", "150,108,60"] : kind === "cendre" ? ["68,62,62", "44,40,42"] : ["44,120,74", "28,92,60"];
+        kind === "sable"
+          ? ["176,132,78", "150,108,60"]
+          : kind === "cendre"
+            ? ["68,62,62", "44,40,42"]
+            : kind === "sciure"
+              ? ["222,188,132", "200,162,106", "234,206,156"]
+              : ["44,120,74", "28,92,60"];
       for (let i = 0; i < 150; i++) {
         const x = 26 + r() * 204;
         const y = 26 + r() * 460;
@@ -985,12 +1351,21 @@ export class TrackLife {
         g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
       }
       g.lineWidth = 3;
-      g.strokeStyle = kind === "sable" ? "rgba(96,66,34,0.45)" : kind === "cendre" ? "rgba(255,120,40,0.4)" : "rgba(120,220,150,0.5)";
-      for (let i = 0; i < (kind === "algues" ? 60 : 22); i++) {
+      g.strokeStyle =
+        kind === "sable"
+          ? "rgba(96,66,34,0.45)"
+          : kind === "cendre"
+            ? "rgba(255,120,40,0.4)"
+            : kind === "sciure"
+              ? "rgba(140,96,48,0.55)"
+              : "rgba(120,220,150,0.5)";
+      for (let i = 0; i < (kind === "algues" ? 60 : kind === "sciure" ? 120 : 22); i++) {
         const x = 40 + r() * 176;
         const y = 40 + r() * 432;
         g.beginPath();
-        if (kind === "sable") g.arc(x, y, 8 + r() * 22, r() * 6, r() * 6 + 3.6);
+        // Les copeaux : de petites boucles
+        if (kind === "sciure") g.arc(x, y, 2 + r() * 5, r() * 6, r() * 6 + 4);
+        else if (kind === "sable") g.arc(x, y, 8 + r() * 22, r() * 6, r() * 6 + 3.6);
         else {
           g.moveTo(x, y);
           g.quadraticCurveTo(x + (r() - 0.5) * 30, y + 20, x + (r() - 0.5) * 20, y + 44);
@@ -1101,7 +1476,8 @@ export class TrackLife {
         if (d === null) return;
         const p = pointAt(t, m.s, d);
         const grow = Math.max(0.01, Math.min(1, (m.reach - Math.abs(d)) / 1));
-        const rolls = m.thing === "tonneau" || m.thing === "boule" || m.thing === "virevoltant" || m.thing === "poubelle";
+        const rolls =
+          m.thing === "tonneau" || m.thing === "boule" || m.thing === "virevoltant" || m.thing === "poubelle" || m.thing === "ballon";
         const swim =
           m.thing === "meduse"
             ? 0.25 + Math.sin(time * 2 + i * 1.7) * 0.32
@@ -1109,15 +1485,27 @@ export class TrackLife {
               ? -0.1 + Math.abs(Math.sin(time * 11 + i)) * 0.09
               : m.thing === "parapluie"
                 ? Math.abs(Math.sin(time * 5.5 + i * 2.1)) * 1.1
-                : 0;
+                : m.thing === "ballon"
+                  ? Math.abs(Math.sin(time * 4.2 + i * 1.9)) * 0.9
+                  : m.thing === "canard"
+                    ? Math.abs(Math.sin(time * 8 + i * 1.3)) * 0.12
+                    : 0;
         part.group.position.set(p.x, p.y + 0.06 + m.radius * grow + swim, p.z);
         part.group.rotation.y = h;
         part.group.scale.setScalar(grow);
         if (rolls) part.spin.rotation.z = d / m.radius;
         else if (m.thing === "parapluie") part.spin.rotation.set(Math.sin(time * 3 + i) * 0.5, 0, d / (m.radius * 1.6));
         else if (m.thing === "meduse") part.spin.scale.set(1, 1 + Math.sin(time * 3.2 + i) * 0.16, 1);
+        else if (m.thing === "canard") part.spin.rotation.z = Math.sin(time * 8 + i * 1.3) * 0.16;
         else part.spin.rotation.z = Math.sin(time * 11 + i) * 0.07;
-        if (rolls && m.thing !== "poubelle" && this.tick === 0 && grow === 1 && Math.hypot(p.x - camera.x, p.z - camera.z) < 90)
+        if (
+          rolls &&
+          m.thing !== "poubelle" &&
+          m.thing !== "ballon" &&
+          this.tick === 0 &&
+          grow === 1 &&
+          Math.hypot(p.x - camera.x, p.z - camera.z) < 90
+        )
           this.events.push({ kind: "trail", x: p.x, y: p.y, z: p.z, thing: m.thing === "boule" ? "boule" : "tonneau" });
       });
     }
@@ -1164,12 +1552,23 @@ export class TrackLife {
     it.box.position.set(at.x, at.y + 0.06 + st.height, at.z);
     // Le câble : tendu sauf pendant la chute ; il redescend chercher le conteneur juste avant de le remonter
     const top = at.y + BEAM_Y + 0.6;
-    let bottom = at.y + 0.06 + st.height + CONTAINER.h;
+    let bottom = at.y + 0.06 + st.height + (it.claw ? BEAR_TOP : CONTAINER.h);
     let shown = st.phase !== "fall";
     if (st.phase === "stay") {
       const left = DROP_WARN + DROP_FALL + DROP_STAY - st.u;
       if (left > 1.2) shown = false;
       else bottom = top - (top - bottom) * Math.min(1, (1.2 - left) / 1.0);
+    }
+    if (it.claw) {
+      // La pince reste au bout du câble ; quand il n'y a plus de câble (la peluche tombe), elle est remontée sous le
+      // chariot. Elle tient la peluche fermée, et s'ouvre pour la lâcher ou pour venir la reprendre.
+      const clawTop = shown ? bottom + 2.3 : top - 0.4;
+      bottom = clawTop;
+      shown = true;
+      const holding = st.phase === "none" || st.phase === "warn" || st.phase === "lift";
+      it.claw.group.position.set(at.x, clawTop, at.z);
+      const open = holding ? 0.05 : 0.6;
+      for (const f of it.claw.fingers) f.rotation.x += (-open - f.rotation.x) * 0.25;
     }
     it.cable.visible = shown && top - bottom > 0.05;
     if (it.cable.visible) {

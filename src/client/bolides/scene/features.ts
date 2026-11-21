@@ -216,6 +216,28 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     wheel(-1.0, -1.05, 0.42, 0.26);
     wheel(1.0, -1.05, 0.42, 0.26);
     beaconY = 2.9;
+  } else if (theme === "foire") {
+    // Une auto tamponneuse échappée de sa piste : sa coque ronde et brillante, son gros boudin de caoutchouc, son siège,
+    // son volant, et la perche qui frottait le plafond (une étincelle bleue au bout)
+    const shell = keep(std(0xe2322a, 0.22, 0.35));
+    const rubber = keep(std(0x1c1c1f, 0.85));
+    const chrome = keep(std(0xd6dade, 0.25, 0.8));
+    const seat = keep(std(0x2b2f6a, 0.6));
+    add(new RoundedBoxGeometry(2.0, 0.8, 2.6, 3, 0.32), shell, 0, 0.78, 0);
+    // Le capot avant, plus bas, et un liseré doré
+    add(new RoundedBoxGeometry(1.7, 0.4, 0.9, 2, 0.18), shell, 0, 1.25, 0.75);
+    add(new THREE.BoxGeometry(2.02, 0.08, 2.62), keep(std(0xf2c230, 0.3, 0.6)), 0, 1.0, 0);
+    const bumper = add(new THREE.TorusGeometry(1.0, 0.24, 8, 28), rubber, 0, 0.36, 0);
+    bumper.rotation.x = Math.PI / 2;
+    bumper.scale.set(1.02, 1.32, 1);
+    add(new RoundedBoxGeometry(1.4, 0.9, 0.5, 2, 0.15), seat, 0, 1.55, -0.65);
+    add(new RoundedBoxGeometry(1.4, 0.25, 0.8, 2, 0.1), seat, 0, 1.25, -0.3);
+    const wheelRing = add(new THREE.TorusGeometry(0.28, 0.05, 6, 16), rubber, 0, 1.55, 0.35);
+    wheelRing.rotation.x = -0.9;
+    add(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), chrome, 0, 1.4, 0.45);
+    // La perche, à l'arrière, droite vers le ciel
+    add(new THREE.CylinderGeometry(0.05, 0.06, 2.4, 6), chrome, 0, 2.3, -1.05);
+    beaconY = 3.55;
   } else if (theme === "ville") {
     // La balayeuse de la ville : blanche et verte, sa cabine vitrée, sa citerne, ses deux brosses rondes devant
     const white = keep(std(0xeef0ea, 0.45));
@@ -253,6 +275,14 @@ function vehicle(theme: Theme, keep: Keep, shadows: boolean): { group: THREE.Gro
     keep(new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff7a00, emissiveIntensity: 1, roughness: 0.3 })),
   );
   beacon.position.set(0, beaconY, 0);
+  if (theme === "foire") {
+    // L'étincelle au bout de la perche, bleutée
+    const spark = beacon.material as THREE.MeshStandardMaterial;
+    spark.color.setHex(0xcfeeff);
+    spark.emissive.setHex(0x8fd0ff);
+    beacon.position.z = -1.05;
+    beacon.scale.setScalar(0.75);
+  }
   // Les animaux n'ont pas de gyrophare
   beacon.visible = theme !== "dunes" && theme !== "lagon";
   g.add(beacon);

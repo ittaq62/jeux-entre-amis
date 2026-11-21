@@ -47,6 +47,7 @@ const ASPHALT: Record<Theme, string> = {
   lagon: "#8b8171",
   volcan: "#2d292c",
   ville: "#2c2f35",
+  foire: "#4f4c48",
 };
 
 /**
@@ -209,6 +210,23 @@ export function roadTexture(theme: Theme): THREE.CanvasTexture {
     g.shadowBlur = 0;
   }
   speckle(g, S, S, 500, [`${ASPHALT[theme]}88`], 3, 91);
+  if (theme === "foire") {
+    // Des confettis tombés des stands : de petits carrés de couleur, un peu de travers, ternis par les roues
+    const colors = ["#e8413a", "#f7c531", "#3d8fe0", "#3fb86a", "#ee6fb0", "#ffffff", "#9a5ce0"];
+    for (let i = 0; i < 900; i++) {
+      const x = r() * S;
+      const y = r() * S;
+      const w = 2 + r() * 3.5;
+      g.save();
+      g.translate(x, y);
+      g.rotate(r() * Math.PI);
+      g.globalAlpha = 0.25 + r() * 0.35;
+      g.fillStyle = colors[Math.floor(r() * colors.length)]!;
+      g.fillRect(-w / 2, -w * 0.35, w, w * 0.7);
+      g.restore();
+    }
+    g.globalAlpha = 1;
+  }
   return toTexture(c);
 }
 
@@ -235,7 +253,8 @@ export function curbTexture(theme?: Theme): THREE.CanvasTexture {
   }
   g.fillStyle = theme === "lagon" ? "#2fb7d4" : theme === "volcan" ? "#ff7a1f" : "#d8352a";
   g.fillRect(0, 0, 32, 32);
-  g.fillStyle = theme === "volcan" ? "#26211f" : "#f4f1ea";
+  // À la fête, rouge et jaune, comme une piste de cirque
+  g.fillStyle = theme === "volcan" ? "#26211f" : theme === "foire" ? "#f6c22e" : "#f4f1ea";
   g.fillRect(0, 32, 32, 32);
   g.fillStyle = "rgba(0,0,0,0.15)";
   g.fillRect(0, 0, 4, 64);
@@ -287,7 +306,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
             ? "#e4d5ae"
             : theme === "volcan"
               ? "#37302f"
-              : "#5a8d48";
+              : theme === "foire"
+                ? "#6c8743"
+                : "#5a8d48";
   g.fillStyle = base;
   g.fillRect(0, 0, size, size);
   const tones =
@@ -301,7 +322,10 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
             ? ["rgba(70,58,58,0.4)", "rgba(24,20,22,0.4)", "rgba(92,60,48,0.3)"]
             : theme === "vignes"
               ? ["rgba(150,175,90,0.35)", "rgba(100,130,55,0.3)", "rgba(176,162,106,0.3)"]
-              : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
+              : theme === "foire"
+                ? // L'herbe piétinée du champ de foire : de la terre battue par endroits, de l'herbe jaunie
+                  ["rgba(166,134,92,0.55)", "rgba(132,104,70,0.45)", "rgba(150,170,80,0.35)", "rgba(96,128,58,0.35)"]
+                : ["rgba(120,180,90,0.35)", "rgba(70,130,55,0.3)", "rgba(140,190,95,0.3)"];
   // De grandes taches douces, puis un grain fin : rien de carré, de près comme de loin
   const r = rng(11);
   for (let i = 0; i < 260; i++) {
@@ -332,7 +356,9 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
           ? ["rgba(10,8,10,0.5)", "rgba(120,86,70,0.35)"]
           : theme === "vignes"
             ? ["rgba(60,85,35,0.35)", "rgba(190,180,120,0.3)"]
-            : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
+            : theme === "foire"
+              ? ["rgba(70,56,38,0.35)", "rgba(200,190,140,0.3)", "rgba(230,70,60,0.35)", "rgba(250,210,60,0.35)"]
+              : ["rgba(40,90,35,0.35)", "rgba(170,210,120,0.3)"];
   speckle(g, size, size, 7000, dots, 1.4, 13);
   const t = toTexture(c);
   t.anisotropy = 8;
@@ -342,6 +368,30 @@ export function groundTexture(theme: Theme): THREE.CanvasTexture {
 /** Les murets au bord du circuit, selon le décor */
 export function wallTexture(theme: Theme): THREE.CanvasTexture {
   const [c, g] = canvas(256, 64);
+  if (theme === "foire") {
+    // Des barrières de fête, en acier galvanisé : un cadre tous les 2 m, ses barreaux, ses pieds ; on voit à travers
+    // (le reste de la toile est transparent). 256 px font 6 m, la hauteur va du sol au haut de la barrière.
+    const steel = "#b8bdc2";
+    const dark = "#7d8389";
+    const frame = 256 / 3;
+    for (let k = 0; k < 3; k++) {
+      const x0 = k * frame + 2;
+      const x1 = (k + 1) * frame - 2;
+      g.fillStyle = dark;
+      g.fillRect(x0, 60, 3, 4);
+      g.fillRect(x1 - 3, 60, 3, 4);
+      g.fillStyle = steel;
+      g.fillRect(x0, 6, 3, 56);
+      g.fillRect(x1 - 3, 6, 3, 56);
+      g.fillRect(x0, 6, x1 - x0, 4);
+      g.fillRect(x0, 50, x1 - x0, 3);
+      for (let x = x0 + 7; x < x1 - 4; x += 6) g.fillRect(x, 10, 2, 40);
+      // Le reflet du tube du haut
+      g.fillStyle = "#eef1f3";
+      g.fillRect(x0, 6, x1 - x0, 1);
+    }
+    return toTexture(c);
+  }
   if (theme === "ville") {
     // Un parapet de pierre blonde, ses blocs taillés, assombris en bas par la pluie
     g.fillStyle = "#8f877a";

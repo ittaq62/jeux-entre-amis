@@ -29,6 +29,8 @@ import {
 import { MOODS, Sky, type Mood } from "./sky.ts";
 import { addFootbridge, addHalle, addSkyline, buildVille, waterBed, waterways, type Ville } from "./ville.ts";
 import { leafTexture } from "./villeTextures.ts";
+import { buildFoire, type Foire } from "./foire.ts";
+import { circusRampTexture } from "./foireTextures.ts";
 import * as TX from "./textures.ts";
 
 /** Ce que le reste de la scène doit savoir du monde construit */
@@ -460,11 +462,15 @@ export async function buildWorld(
     const b = side * (t.half + 1.2);
     group.add(new THREE.Mesh(keep(ribbon(t, Math.min(a, b), Math.max(a, b), 0.075, 3, 1, t.gaps)), curbMat));
   }
-  const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : 0.9;
-  // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre)
+  const fair = theme === "foire";
+  // À la fête, des barrières de fête à claire-voie
+  const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : fair ? 1.1 : 0.9;
+  // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre),
+  // et à la fête là où passent les ballons et les canards
   const wallCuts = [
     ...t.gaps,
     ...t.crossers.filter((c) => c.reach + 2.4 > t.wall).map((c) => ({ from: c.s - 6, to: c.s + 6, glide: false })),
+    ...(fair ? t.movers.filter((m) => m.kind === "roll").map((m) => ({ from: m.s - 4, to: m.s + 4, glide: false })) : []),
   ];
   const capMat = keep(
     lambert(
@@ -480,7 +486,9 @@ export async function buildWorld(
                 ? 0xff7a1f
                 : theme === "ville"
                   ? 0xb8b0a2
-                  : 0xdad9d4,
+                  : fair
+                    ? 0xc9cdd1
+                    : 0xdad9d4,
     ),
   );
   const footShade = (toRight: boolean) => {
@@ -501,18 +509,19 @@ export async function buildWorld(
   const footRight = footShade(false);
   const wallTex = keep(TX.wallTexture(theme));
   wallTex.wrapT = THREE.RepeatWrapping;
-  const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide }));
+  const wallMat = keep(new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide, alphaTest: fair ? 0.5 : 0 }));
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(keep(wallRibbon(t, side * (t.wall + 0.4), wallHeight, heightAt, wallCuts)), wallMat);
     wall.castShadow = false;
     group.add(wall);
-    // Le dessus du muret, pour qu'il ait de l'épaisseur
+    // Le dessus du muret, pour qu'il ait de l'épaisseur (une barrière n'a que son tube)
     const at = side * (t.wall + 0.4);
-    group.add(new THREE.Mesh(keep(ribbon(t, at - 0.32, at + 0.32, wallHeight, 3, 1, wallCuts)), capMat));
-    // Et l'ombre douce à son pied : le muret se pose vraiment sur le sol
+    const cap = fair ? 0.04 : 0.32;
+    group.add(new THREE.Mesh(keep(ribbon(t, at - cap, at + cap, wallHeight - (fair ? 0.1 : 0), 3, 1, wallCuts)), capMat));
+    // Et l'ombre douce à son pied : le muret se pose vraiment sur le sol (une barrière à claire-voie n'en fait pas)
     const inner = side > 0 ? at - 2.4 : at;
     const outer = side > 0 ? at : at + 2.4;
-    group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, wallCuts)), side > 0 ? footLeft : footRight));
+    if (!fair) group.add(new THREE.Mesh(keep(ribbon(t, inner, outer, 0.024, 3, 1, wallCuts)), side > 0 ? footLeft : footRight));
   }
 
   await pause(0.4);
@@ -583,7 +592,7 @@ export async function buildWorld(
 
   // Les tremplins : une rampe en planches sur toute la largeur de la route, qui monte jusqu'au bord
   {
-    const top = keep(lambert(0xffffff, keep(theme === "ville" ? leafTexture() : TX.rampTexture())));
+    const top = keep(lambert(0xffffff, keep(theme === "ville" ? leafTexture() : fair ? circusRampTexture() : TX.rampTexture())));
     const sideMat = keep(new THREE.MeshLambertMaterial({ color: 0x6b4a2e, side: THREE.DoubleSide }));
     const glideTop = keep(lambert(0xffffff, keep(TX.rampTexture(true))));
     for (const lip of t.jumps) {
@@ -626,13 +635,14 @@ export async function buildWorld(
   // L'habillage de la piste : panneaux de virage, pneus, panneaux, drapeaux, tribune, grille
   const ctx: DecorContext = { group, t, keep, heightAt, shadows, free };
   // Une vraie ville n'a ni pneus dans les virages, ni panneaux publicitaires, ni drapeaux, ni tribune
+  // La fête non plus : ses stands et ses manèges tiennent la place
   const street = theme === "ville";
-  if (!street) {
+  if (!street && !fair) {
     addBendDressing(ctx);
     addWallBoards(ctx);
   }
-  const waveFlags = street ? () => {} : addFlags(ctx);
-  addGrandstand(ctx, !street);
+  const waveFlags = street || fair ? () => {} : addFlags(ctx);
+  addGrandstand(ctx, !street && !fair);
   await pause(0.6);
   // Le tunnel, le pont, les spectateurs, et ce qui bouge selon le lieu
   const scenery = buildScenery({ group, t, keep, heightAt, shadows, phone: opts.phone, free }, theme);
@@ -649,7 +659,7 @@ export async function buildWorld(
   // Les touffes d'herbe et les fleurs du bord de la route, les traces de pneus dans les virages (pas d'herbe sur les pavés)
   if (!street) addGrass(group, keep, t, theme, place0.tunnel, opts.phone);
   const open = (s: number) => s < place0.tunnel[0] - 4 || s > place0.tunnel[1] + 4;
-  if (!street) addRunoffs(group, keep, t, theme, open);
+  if (!street && !fair) addRunoffs(group, keep, t, theme, open);
   addSkidMarks(group, keep, t, theme, open);
   await pause(0.88);
 
@@ -951,6 +961,20 @@ export async function buildWorld(
     addHalle(villeCtx, place0.tunnel[0], place0.tunnel[1]);
     addFootbridge(villeCtx, place0.bridge);
   }
+  let foire: Foire | null = null;
+  if (fair) {
+    foire = buildFoire({
+      group,
+      t,
+      keep,
+      heightAt,
+      distAt: (x: number, z: number) => field.distAt(x, z),
+      shadows,
+      phone: opts.phone,
+      r,
+      tunnel: place0.tunnel,
+    });
+  }
   const caustic = { value: 0 };
   let liquid: THREE.ShaderMaterial | null = null;
   if (theme === "lagon" && t.water !== null) {
@@ -1024,6 +1048,7 @@ export async function buildWorld(
     },
     update(time: number, camera: THREE.Vector3, daylight: number) {
       ville?.update(time, camera, daylight);
+      foire?.update(time, camera, daylight);
       boostTex.offset.y = -((time * 1.6) % 1);
       if (sea) sea.uniforms.uTime!.value = time;
       if (liquid) liquid.uniforms.uTime!.value = time;

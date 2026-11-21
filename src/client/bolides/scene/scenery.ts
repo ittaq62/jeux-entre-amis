@@ -37,10 +37,12 @@ export const PLACES: Record<Theme, { tunnel: [number, number]; bridge: number }>
   volcan: { tunnel: [878, 950], bridge: 110 },
   // En ville, le « tunnel » est la halle du marché, le pont une passerelle de fer (la ville les dessine elle-même)
   ville: { tunnel: [1195, 1262], bridge: 100 },
+  // À la fête, le « tunnel » est le chapiteau du cirque, le pont le grand huit qui passe au-dessus de la montée
+  foire: { tunnel: [867, 939], bridge: 455 },
 };
 
 /** Les circuits qui dessinent eux-mêmes leur tunnel et leur pont, sans spectateurs au bord des virages */
-const OWN_PLACES = new Set<Theme>(["ville"]);
+const OWN_PLACES = new Set<Theme>(["ville", "foire"]);
 
 const lambert = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshLambertMaterial({ color, map: map ?? null });
 
@@ -159,7 +161,7 @@ function addTunnel(ctx: SceneryContext, theme: Theme, s1: number, s2: number) {
 }
 
 /** Les spectateurs : un corps et une tête, en deux formes répétées, chacun à sa couleur ; ils sautillent */
-class Crowd {
+export class Crowd {
   readonly bodies: THREE.InstancedMesh;
   readonly heads: THREE.InstancedMesh;
   private people: { x: number; y: number; z: number; rot: number; phase: number; hop: number }[] = [];

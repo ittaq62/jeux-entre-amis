@@ -6,9 +6,9 @@
 // est (-cos h, sin h). Tourner à droite fait donc baisser le cap.
 
 /** Les circuits de base, et leur version en miroir */
-export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville";
+export type BaseTrackId = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire";
 export type TrackId = BaseTrackId | `${BaseTrackId}-miroir`;
-export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville";
+export type Theme = "port" | "vignes" | "col" | "dunes" | "lagon" | "volcan" | "ville" | "foire";
 
 export interface TrackDef {
   id: TrackId;
@@ -78,8 +78,8 @@ export interface Island {
   half: number;
 }
 
-/** Les sols spéciaux ; la flaque d'eau glisse comme le verglas */
-export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre" | "flaque";
+/** Les sols spéciaux ; la flaque d'eau glisse comme le verglas, la sciure de la piste du cirque freine */
+export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre" | "flaque" | "sciure";
 
 export type MoverDef =
   | { kind: "drop"; frac: number; lanes: number[]; period: number; offset: number }
@@ -96,9 +96,10 @@ export type MoverDef =
     };
 
 /** Ce qui traverse la route : ça roule, ou ça marche */
-export type RollThing = "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse" | "poubelle" | "parapluie";
+export type RollThing =
+  "tonneau" | "boule" | "mouton" | "virevoltant" | "crabe" | "meduse" | "poubelle" | "parapluie" | "ballon" | "canard";
 
-export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville"];
+export const TRACK_IDS: BaseTrackId[] = ["port", "vignes", "col", "dunes", "lagon", "volcan", "ville", "foire"];
 
 // Des routes larges et de grands virages réguliers : de quoi glisser trois ou quatre secondes et charger un turbo
 const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
@@ -480,6 +481,61 @@ const BASE_TRACKS: Record<BaseTrackId, TrackDef> = {
     ],
     islands: [{ frac: 0.5963, len: 60, width: 4.4 }],
   },
+  // La fête foraine au soleil couchant : l'allée des stands, les manèges, le grand huit et le chapiteau du cirque
+  foire: {
+    id: "foire",
+    name: "La Fête foraine",
+    blurb:
+      "Au soleil couchant, entre les stands : la grande roue, le manège à contourner, les autos tamponneuses, le cerceau de feu sous le grand huit, puis la traversée du chapiteau.",
+    theme: "foire",
+    width: 20,
+    verge: 4,
+    start: 60,
+    corners: [
+      [-160, 0, 45],
+      [150, 0, 55],
+      [150, 150, 35],
+      [90, 210, 30],
+      [90, 280, 35],
+      [-60, 280, 30],
+      [-60, 180, 30],
+      [20, 180, 30],
+      [20, 110, 30],
+      [-160, 110, 40],
+    ],
+    hills: [
+      [0, 0],
+      [0.315, 0],
+      [0.43, 8],
+      [0.481, 10],
+      [0.557, 10],
+      [0.676, 4],
+      [0.77, 0],
+    ],
+    boxes: [0.1149, 0.3743, 0.6245, 0.8788],
+    boosts: [
+      [0.255, -0.3],
+      [0.645, -0.4],
+      [0.97, 0.3],
+    ],
+    jumps: [0.4662],
+    crossers: [{ frac: 0.319, period: 9, offset: 0.5 }],
+    movers: [
+      { kind: "drop", frac: 0.06, lanes: [-0.55, 0, 0.55], period: 9, offset: 0.35 },
+      { kind: "roll", frac: 0.559, thing: "ballon", count: 3, gap: 1, period: 9, speed: 10, radius: 1.3, offset: 0.2 },
+      { kind: "roll", frac: 0.8423, thing: "canard", count: 4, gap: 0.75, period: 12, speed: 5, radius: 1, offset: 0.6 },
+    ],
+    springs: [
+      [0.17, 0.5],
+      [0.665, -0.5],
+      [0.905, -0.5],
+    ],
+    zones: [
+      { from: 0.7566, to: 0.7668, d1: 0.15, d2: 1, kind: "sciure" },
+      { from: 0.7702, to: 0.7804, d1: -1, d2: -0.15, kind: "sciure" },
+    ],
+    islands: [{ frac: 0.2297, len: 8.4, width: 8.4 }],
+  },
 };
 
 /** Le même circuit, gauche et droite échangées */
@@ -506,6 +562,7 @@ export const TRACKS: Record<TrackId, TrackDef> = {
   "lagon-miroir": mirrored(BASE_TRACKS.lagon),
   "volcan-miroir": mirrored(BASE_TRACKS.volcan),
   "ville-miroir": mirrored(BASE_TRACKS.ville),
+  "foire-miroir": mirrored(BASE_TRACKS.foire),
 };
 
 /** La version en miroir d'un circuit (lui-même s'il l'est déjà) */

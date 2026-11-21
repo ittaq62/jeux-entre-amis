@@ -2152,3 +2152,79 @@ describe("la Ville", () => {
     }
   });
 });
+
+describe("la Fête foraine", () => {
+  const t = getTrack("foire");
+
+  it("le manège, au milieu de la ligne droite : les bots passent d'un côté ou de l'autre, sans s'y cogner", () => {
+    const carousel = t.islands[0]!;
+    // Un rond : aussi long que large, au milieu de la route, sur une ligne droite
+    expect(carousel.len).toBeCloseTo(carousel.half * 2, 6);
+    expect(carousel.d).toBe(0);
+    for (let along = -30; along <= carousel.len + 30; along += 2) {
+      const at = locate(t, pointAt(t, carousel.s + along, 0).x, pointAt(t, carousel.s + along, 0).z);
+      expect(Math.abs(t.bend[at.i]!), `${along}`).toBeLessThan(0.004);
+    }
+    const sides = new Set<number>();
+    for (const d0 of [-7, -3, -0.5, 0.5, 3, 7]) {
+      for (const level of ["fort", "moyen"] as const) {
+        const k = kartAt("foire", carousel.s - 90, d0);
+        k.v = 20;
+        const mem = newBotMemory({ rng: 7 });
+        mem.lane = mem.laneTarget = d0;
+        mem.laneUntil = 1e9;
+        const events: string[] = [];
+        let worst = Infinity;
+        let side = 0;
+        for (let i = 0; i < 60 * 10 && deltaS(t, carousel.s + carousel.len + 10, k.s) < 0; i++) {
+          const plan = botDrive(t, k, null, [], [], level, mem, i * 16, { rng: 5 });
+          step(k, plan.input, t, { top: 1 }, events as never);
+          const at = locate(t, k.x, k.z);
+          const along = deltaS(t, carousel.s, at.s);
+          if (along > -carousel.half - 2 && along < carousel.len + carousel.half + 2) {
+            const core = pointAt(t, carousel.s + islandCore(carousel, along), carousel.d);
+            worst = Math.min(worst, Math.hypot(k.x - core.x, k.z - core.z) - carousel.half);
+          }
+          if (Math.abs(deltaS(t, carousel.s + carousel.len / 2, at.s)) < 2) side = Math.sign(at.d);
+        }
+        expect(deltaS(t, carousel.s + carousel.len, k.s), `${level} ${d0}`).toBeGreaterThan(0);
+        expect(worst, `${level} ${d0}`).toBeGreaterThan(0.4);
+        expect(
+          events.filter((e) => e === "wall"),
+          `${level} ${d0}`,
+        ).toHaveLength(0);
+        sides.add(side);
+      }
+    }
+    expect([...sides].sort()).toEqual([-1, 1]);
+  });
+
+  it("la sciure de la piste du cirque freine, d'un côté puis de l'autre : on la contourne en changeant de voie", () => {
+    expect(t.zones.map((z) => z.kind)).toEqual(["sciure", "sciure"]);
+    const [right, left] = t.zones as [(typeof t.zones)[0], (typeof t.zones)[0]];
+    expect(right.d1).toBeGreaterThan(0);
+    expect(left.d2).toBeLessThan(0);
+    // Lancé à fond dans la sciure, on y perd de la vitesse jusqu'au bout de la plaque ; à côté, non
+    const through = (d: number) => {
+      const k = kartAt("foire", right.s - 6, d);
+      k.v = TOP_SPEED;
+      const events: string[] = [];
+      for (let i = 0; i < 120 && deltaS(t, right.s + right.len, k.s) < 0; i++) step(k, GAS, t, { top: 1 }, events as never);
+      return k.v;
+    };
+    expect(through(right.d1 + 3)).toBeLessThan(TOP_SPEED * 0.85);
+    expect(through(-4)).toBeGreaterThan(TOP_SPEED * 0.97);
+  });
+
+  it("la pince lâche ses peluches sur la ligne droite du départ, loin de la grille", () => {
+    const drop = t.movers.find((m) => m.kind === "drop")!;
+    expect(drop.s).toBeGreaterThan(45);
+    for (let s = drop.s - 30; s <= drop.s + 30; s += 2) {
+      const at = locate(t, pointAt(t, s, 0).x, pointAt(t, s, 0).z);
+      expect(Math.abs(t.bend[at.i]!), `${s}`).toBeLessThan(0.004);
+    }
+    // Les ballons et les canards traversent ailleurs, l'un dans les lacets, l'autre après le chapiteau
+    const things = t.movers.flatMap((m) => (m.kind === "roll" ? [m.thing] : []));
+    expect(things).toEqual(["ballon", "canard"]);
+  });
+});

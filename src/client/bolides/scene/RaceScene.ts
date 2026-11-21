@@ -556,11 +556,16 @@ export class RaceScene {
     const y = (this.track?.water ?? k.y - WATER_DEPTH) + 0.2;
     const theme = this.track?.def.theme;
     const color = theme === "volcan" ? 0xff7a2a : theme === "col" ? 0xdff4ff : theme === "vignes" ? 0xcdeed5 : 0xc6e6ff;
+    // À la fête, on tombe dans la piscine à balles : des balles de toutes les couleurs volent
+    const balls = [0xe8413a, 0xf7c531, 0x2f7fe0, 0x3fb86a, 0xee6fb0, 0xff8a2a];
     for (let i = 0; i < (this.opts.reduced ? 8 : 26); i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 2 + Math.random() * 5;
-      this.puff(k.x, y, k.z, i % 3 === 0 ? 0xffffff : color, Math.cos(a) * s, 6 + Math.random() * 7, Math.sin(a) * s, 0.8, 0.55);
+      const c = theme === "foire" ? balls[i % balls.length]! : i % 3 === 0 ? 0xffffff : color;
+      this.puff(k.x, y, k.z, c, Math.cos(a) * s, 6 + Math.random() * 7, Math.sin(a) * s, 0.8, 0.55);
     }
+    // (des balles ne font pas de rond dans l'eau)
+    if (theme === "foire") return;
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.75, 1, 40),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }),
@@ -826,7 +831,9 @@ export class RaceScene {
             ? 0x4a4040
             : theme === "ville"
               ? 0x9aa6b4
-              : 0x9b8a6a;
+              : theme === "foire"
+                ? 0xb49a72
+                : 0x9b8a6a;
     this.puff(
       k.x - Math.sin(k.h) * 1.2,
       k.y + 0.3,
