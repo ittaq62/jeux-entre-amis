@@ -25,6 +25,7 @@ import { DEFAULT_SETTINGS, MODE_INFO, mergeSettings, type EscarmoucheSettings } 
 import { decodeCmd, DT, type Cmd } from "../shared/games/escarmouche/soldier.ts";
 import { encodeMe, encodeTick, escarmoucheView, stateKey, type EscTick } from "../shared/games/escarmouche/view.ts";
 import { Sight, tickFor } from "../shared/games/escarmouche/sight.ts";
+import { ViewLag } from "../shared/games/escarmouche/viewLag.ts";
 import { isUniformId, UNIFORM_BY_ID, type UniformId } from "../shared/games/escarmouche/uniforms.ts";
 import {
   isPrimaryId,
@@ -115,6 +116,20 @@ const STEP_MS = DT * 1000;
 /** Les spectateurs voient tout le combat, avec ce retard */
 const WATCH_DELAY_MS = 3000;
 
+/**
+ * Le hasard de la dispersion des balles, tiré ici (et pas par un calcul que l'appareil du tireur saurait refaire : il
+ * viserait de façon à annuler l'écart de son prochain coup)
+ */
+const spreadPool = new Uint32Array(256);
+let spreadNext = spreadPool.length;
+function spreadRand(): number {
+  if (spreadNext >= spreadPool.length) {
+    crypto.getRandomValues(spreadPool);
+    spreadNext = 0;
+  }
+  return spreadPool[spreadNext++]! / 4294967296;
+}
+
 interface Seat {
   id: string;
   kind: "human" | "bot";
@@ -193,6 +208,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
   private lastSave = 0;
   /** Les pas reçus de chaque joueur, pas encore joués, et le crédit de pas qu'il a (contre ceux qui en enverraient trop) */
   private queues = new Map<string, Cmd[]>();
+  /** Le retard habituel de chaque joueur, pour brider l'heure de ses tirs (viewLag.ts) */
+  private viewLags = new Map<string, ViewLag>();
   private credit = new Map<string, number>();
   /** Où était chacun à chaque envoi : c'est là que le retour dans le temps va chercher les cibles */
   private history: { at: number; poses: Pose[] }[] = [];
@@ -469,6 +486,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     if (!m || i < 0) return;
     m.fighters[i]!.bot = true;
     this.queues.delete(seat.id);
+    this.viewLags.delete(seat.id);
   }
 
   /** Il reprend son soldat là où le bot l'a laissé */
@@ -488,6 +506,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     if (!m || i < 0) return;
     m.fighters[i]!.s.seq = 0;
     this.queues.delete(seatId);
+    this.viewLags.delete(seatId);
   }
 
   private connectedUsers(except?: WebSocket): Map<string, PublicUser> {
@@ -653,11 +672,15 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         if (!seat || seat.autoplay || !m || d.status !== "playing" || !Array.isArray(msg.c)) return;
         const q = this.queues.get(seat.id) ?? [];
         const last = q.at(-1)?.s ?? m.fighters[fighterIndex(m, seat.id)]?.s.seq ?? 0;
+        let lag = this.viewLags.get(seat.id);
+        if (!lag) this.viewLags.set(seat.id, (lag = new ViewLag()));
         let after = last;
         for (const raw of msg.c.slice(0, 30)) {
           const c = decodeCmd(raw);
           if (!c || c.s <= after) continue;
           after = c.s;
+          // L'heure de son tir ne remonte pas plus loin que son retard habituel
+          c.vt = lag.admit(c, now);
           q.push(c);
         }
         if (q.length > QUEUE_MAX) q.splice(0, q.length - QUEUE_MAX);
@@ -1003,6 +1026,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.queues.clear();
+    this.viewLags.clear();
     this.credit.clear();
     this.history = [];
     this.memories.clear();
@@ -1078,7 +1102,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       let used = 0;
       while (q && q.length > 0 && used + 1 <= credit) {
         const c = q.shift()!;
-        applyCmd(m, i, c, this.poseAt, events);
+        applyCmd(m, i, c, this.poseAt, events, spreadRand);
         used++;
       }
       this.credit.set(f.id, credit - used);
@@ -1098,7 +1122,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
           mem.seq = f.s.seq;
           this.memories.set(f.id, mem);
         }
-        applyCmd(m, i, botCommand(m, i, mem, m.settings.botLevel, now), null, events);
+        applyCmd(m, i, botCommand(m, i, mem, m.settings.botLevel, now), null, events, spreadRand);
       });
     }
     // Un bot touché se retourne vers le tireur

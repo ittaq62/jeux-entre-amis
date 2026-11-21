@@ -589,12 +589,13 @@ function poseOf(f: Fighter): Pose {
 
 /**
  * Le serveur joue une commande d'un soldat : son pas, puis ce que son arme a fait. Les balles cherchent leurs cibles là
- * où le tireur les voyait (`poseAt(cmd.vt)`), sans remonter plus loin que ce que la salle garde.
+ * où le tireur les voyait (`poseAt(cmd.vt)`), sans remonter plus loin que ce que la salle garde. `rand` : le hasard de
+ * la dispersion, celui du serveur (voir `stepSoldier`).
  */
-export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, ev: EscEvent[]): StepOut {
+export function applyCmd(m: Match, i: number, cmd: Cmd, poseAt: PoseAt | null, ev: EscEvent[], rand?: () => number): StepOut {
   const f = m.fighters[i]!;
   const world = matchWorld(m);
-  const out = stepSoldier(f.s, cmd, world, m.phase === "live");
+  const out = stepSoldier(f.s, cmd, world, m.phase === "live", undefined, rand);
   if (!f.s.alive) return out;
   const past = out.shots.length > 0 || out.melee ? (poseAt?.(cmd.vt) ?? null) : null;
   const pose = (j: number): Pose | null => {

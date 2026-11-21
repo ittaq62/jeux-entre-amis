@@ -342,9 +342,11 @@ export function spreadOf(s: Soldier): number {
 
 /**
  * Un pas : le joueur se déplace, et son arme fait ce qu'il demande. `world` arrête ses pas ; `free` dit s'il a le droit
- * d'agir (pendant le compte à rebours, il regarde seulement).
+ * d'agir (pendant le compte à rebours, il regarde seulement). `rand` : le hasard de la dispersion. Le serveur donne le
+ * sien, que l'appareil du tireur ne peut pas connaître d'avance (sinon il viserait de façon à annuler l'écart de son
+ * prochain coup) ; sans lui (sur l'appareil, pour montrer ses impacts tout de suite), un tirage fixe.
  */
-export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out: StepOut = emptyOut()): StepOut {
+export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out: StepOut = emptyOut(), rand?: () => number): StepOut {
   s.seq = cmd.s;
   s.yaw = cmd.yaw;
   s.pitch = cmd.pitch;
@@ -375,7 +377,7 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
       s.mantleEnd = 0;
       s.ground = true;
     }
-    stepWeapon(s, 0, 0, out);
+    stepWeapon(s, 0, 0, out, rand);
     return out;
   }
 
@@ -454,7 +456,7 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
       s.reloadEnd = 0;
       s.burst = 0;
       out.mantled = true;
-      stepWeapon(s, 0, 0, out);
+      stepWeapon(s, 0, 0, out, rand);
       return out;
     }
   }
@@ -472,7 +474,7 @@ export function stepSoldier(s: Soldier, cmd: Cmd, world: World, free = true, out
   moveBody(s, world);
 
   // L'arme
-  stepWeapon(s, b, pressed, out);
+  stepWeapon(s, b, pressed, out, rand);
   return out;
 }
 
@@ -539,7 +541,7 @@ function moveBody(s: Soldier, world: World) {
   }
 }
 
-function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
+function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut, rand?: () => number) {
   const c = s.clock;
   // Fin du rechargement : le chargeur se remplit avec ce qui reste en réserve
   if (s.reloadEnd > 0 && c >= s.reloadEnd) {
@@ -592,8 +594,8 @@ function stepWeapon(s: Soldier, b: number, pressed: number, out: StepOut) {
     const spread = spreadOf(s);
     const dirs: [number, number, number][] = [];
     for (let p = 0; p < w.pellets; p++) {
-      const u = hash01(s.shots, p, 17);
-      const v = hash01(s.shots, p, 91);
+      const u = rand ? rand() : hash01(s.shots, p, 17);
+      const v = rand ? rand() : hash01(s.shots, p, 91);
       const r = ((spread * Math.sqrt(u)) / 2) * (Math.PI / 180);
       const a = v * Math.PI * 2;
       dirs.push(forward(s.yaw + Math.cos(a) * r, s.pitch + Math.sin(a) * r));
