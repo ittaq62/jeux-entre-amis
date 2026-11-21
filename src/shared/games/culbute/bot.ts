@@ -36,6 +36,8 @@ interface LevelInfo {
   taunt: number;
   /** Ses chances d'enchaîner, quand son coup vient de toucher */
   combo: number;
+  /** La part de ses attaques au contact qu'il lance d'un petit saut, en l'air */
+  aerial: number;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
@@ -52,6 +54,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     wary: 0.04,
     taunt: 0.35,
     combo: 0.15,
+    aerial: 0.08,
   },
   moyen: {
     think: 8,
@@ -68,6 +71,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     wary: 0.14,
     taunt: 0.45,
     combo: 0.45,
+    aerial: 0.18,
   },
   fort: {
     think: 5,
@@ -82,6 +86,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     wary: 0.12,
     taunt: 0.5,
     combo: 0.75,
+    aerial: 0.22,
   },
 };
 
@@ -369,6 +374,20 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     // Il saute rejoindre celui qui est en hauteur
     if (dy > 1.4 && !airborne(me) && rnd(m) < 0.6) m.press = JMP;
     else if (dy > 1.4 && airborne(me) && me.jumps > 0 && me.vy < 0 && rnd(m) < 0.5) m.press = JMP;
+    // De temps en temps, il arrive en sautant, pour frapper d'en haut (au-dessus du plateau seulement)
+    else if (
+      !airborne(me) &&
+      Math.abs(dy) < 1 &&
+      adx > 2 &&
+      adx < 4.5 &&
+      t.x > st.x0 + 1 &&
+      t.x < st.x1 - 1 &&
+      !nearEdge(me, st, toward) &&
+      rnd(m) < L.aerial * (me.style === "lucien" ? 0.25 : 0.6)
+    ) {
+      m.press = JMP;
+      m.jumpUntil = f.frame + JUMPSQUAT + 8;
+    }
     // Ne pas se jeter dans le vide pour courir après quelqu'un
     if (!airborne(me) && nearEdge(me, st, toward)) m.x = 0;
     // Il court vers un bord : il y repensera vite (sinon il le passe avant d'avoir réfléchi)
@@ -428,11 +447,15 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     // Un spécial de côté pour surprendre
     m.x = toward;
     m.press = SPC;
-  } else if (adx < 1 && pick < 0.45) {
+  } else if (adx < 1 && pick < 0.32) {
     m.press = ATK;
-  } else if (pick < 0.62) {
+  } else if (pick < 0.44) {
     m.y = -1;
     m.press = ATK;
+  } else if (pick < 0.44 + L.aerial * (me.style === "lucien" ? 0.4 : 1) && !airborne(t) && t.x > st.x0 + 1.2 && t.x < st.x1 - 1.2) {
+    // Un petit saut avec une attaque en l'air vers lui (Saut et Frapper ensemble)
+    m.x = toward;
+    m.press = JMP | ATK;
   } else if (pick < 0.72 && me.style === "lucien") {
     m.y = -1;
     m.press = SPC;
