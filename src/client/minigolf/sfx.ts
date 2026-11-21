@@ -233,6 +233,9 @@ export function applause(vol = 1) {
 // L'ambiance : un souffle de vent doux, et des oiseaux de temps en temps
 // ---------------------------------------------------------------------------
 
+/** Le bruit de fond de chaque parcours : jusqu'où on laisse passer les aigus (Hz) */
+const ROOM_TONE: Record<string, number> = { jardin: 420, mer: 650, montagne: 520, cuisine: 240, jungle: 900, horloger: 200 };
+
 export class Ambience {
   private wind: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -240,6 +243,7 @@ export class Ambience {
   private lfo: OscillatorNode | null = null;
   private hum: { osc: OscillatorNode; gain: GainNode } | null = null;
   private insects: { src: AudioBufferSourceNode; lfo: OscillatorNode; gain: GainNode } | null = null;
+  private ticker: ReturnType<typeof setInterval> | null = null;
 
   constructor(private kind: string) {}
 
@@ -255,18 +259,7 @@ export class Ambience {
     src.loop = true;
     const f = o.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.value =
-      this.kind === "jardin"
-        ? 420
-        : this.kind === "mer"
-          ? 650
-          : this.kind === "montagne"
-            ? 520
-            : this.kind === "cuisine"
-              ? 240
-              : this.kind === "jungle"
-                ? 900
-                : 300;
+    f.frequency.value = ROOM_TONE[this.kind] ?? 300;
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
@@ -312,6 +305,18 @@ export class Ambience {
       osc.connect(hg).connect(o.dest);
       osc.start();
       this.hum = { osc, gain: hg };
+    }
+    // Dans l'atelier : le tic-tac des horloges, deux fois par seconde, « tic » puis « tac »
+    if (this.kind === "horloger") {
+      let tick = 0;
+      this.ticker = setInterval(() => {
+        const q = out(musicLevel());
+        if (!q || this.stopped) return;
+        const t = q.ctx.currentTime + 0.01;
+        const f = tick++ % 2 ? 1650 : 2100;
+        tone(q.ctx, q.dest, t, "square", f, f * 0.9, q.vol * 0.012, 0.001, 0.025);
+        tone(q.ctx, q.dest, t, "sine", f * 0.5, f * 0.45, q.vol * 0.02, 0.001, 0.04);
+      }, 500);
     }
     src.start();
     this.wind = { src, gain };
@@ -398,12 +403,24 @@ export class Ambience {
         for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.28, "sine", 320 + k * 60, 420 + k * 70, o.vol * 0.05, 0.04, 0.2);
       }
     }
+    if (o && this.kind === "horloger" && Math.random() < 0.3) {
+      // Une horloge qui sonne, au loin : trois ou quatre notes de carillon
+      const t = o.ctx.currentTime + 0.02;
+      const notes = [659, 523, 587, 392];
+      const n = 3 + Math.floor(Math.random() * 2);
+      for (let k = 0; k < n; k++) {
+        const f = notes[(k + Math.floor(Math.random() * 2)) % notes.length]!;
+        tone(o.ctx, o.dest, t + k * 0.55, "sine", f, f, o.vol * 0.04, 0.005, 1.6);
+        tone(o.ctx, o.dest, t + k * 0.55, "sine", f * 2.76, f * 2.76, o.vol * 0.012, 0.005, 0.8);
+      }
+    }
     this.timer = setTimeout(() => this.birds(), 1800 + Math.random() * 4200);
   }
 
   stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.ticker) clearInterval(this.ticker);
     try {
       this.wind?.src.stop();
       this.lfo?.stop();

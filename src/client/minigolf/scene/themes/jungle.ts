@@ -7,7 +7,21 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { heightAt, tileAt, type Course, type MoverDef } from "../../../../shared/games/minigolf/course.ts";
 import { hedgeTex, sandTex, stoneTex, surface, type SurfaceTex } from "../textures.ts";
-import { feltMat, leafyBall, onCourse, plainKit, Scatter, seeded, surfaceMat, waterMat, type Theme } from "./common.ts";
+import {
+  boxMeters,
+  canvasTex,
+  feltMat,
+  leafyBall,
+  onCourse,
+  planeMeters,
+  plainKit,
+  Scatter,
+  seeded,
+  shadows,
+  surfaceMat,
+  waterMat,
+  type Theme,
+} from "./common.ts";
 
 let made: Theme | null = null;
 
@@ -176,20 +190,6 @@ function floorTex(): SurfaceTex {
     }
     return [r, g, b, moss * 0.45 + litter * 0.35 + fine * 0.2 + twig * 0.3];
   });
-}
-
-/** Une texture dessinée à la main */
-function canvasTex(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void, alpha = false): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const g = c.getContext("2d")!;
-  if (alpha) g.clearRect(0, 0, size, size);
-  draw(g, size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 8;
-  return t;
 }
 
 /** Des glyphes gravés en frise (linteaux, stèles, autel) */
@@ -405,44 +405,6 @@ function palmTrunk(): { geo: THREE.BufferGeometry; top: THREE.Vector3 } {
   ]);
   const geo = new THREE.TubeGeometry(curve, 16, 0.16, 8, false);
   return { geo, top };
-}
-
-/** Une boîte dont les uv sont en mètres */
-function boxMeters(w: number, h: number, d: number): THREE.BoxGeometry {
-  const g = new THREE.BoxGeometry(w, h, d);
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  // L'ordre des faces : +x, −x, +y, −y, +z, −z (quatre sommets chacune)
-  const dims: [number, number][] = [
-    [d, h],
-    [d, h],
-    [w, d],
-    [w, d],
-    [w, h],
-    [w, h],
-  ];
-  for (let f = 0; f < 6; f++)
-    for (let k = 0; k < 4; k++) {
-      const i = f * 4 + k;
-      uv.setXY(i, uv.getX(i) * dims[f]![0], uv.getY(i) * dims[f]![1]);
-    }
-  return g;
-}
-
-/** Un rectangle dont les uv sont en mètres */
-function planeMeters(w: number, h: number): THREE.PlaneGeometry {
-  const g = new THREE.PlaneGeometry(w, h);
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
-  return g;
-}
-
-function shadows(o: THREE.Object3D, cast = true) {
-  o.traverse((q) => {
-    if (q instanceof THREE.Mesh) {
-      q.castShadow = cast;
-      q.receiveShadow = true;
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------

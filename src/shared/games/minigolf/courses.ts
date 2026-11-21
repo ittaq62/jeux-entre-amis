@@ -7,6 +7,7 @@ import { MER } from "./holes/mer.ts";
 import { MONTAGNE } from "./holes/montagne.ts";
 import { CUISINE } from "./holes/cuisine.ts";
 import { JUNGLE } from "./holes/jungle.ts";
+import { HORLOGER } from "./holes/horloger.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -59,8 +60,8 @@ export const COURSES: Record<CourseId, CourseInfo> = {
   horloger: {
     id: "horloger",
     name: "Atelier d'horloger",
-    blurb: "Engrenages, tapis roulants, pistons et balanciers.",
-    holes: [],
+    blurb: "Dans le mécanisme d'une horloge géante : les engrenages, les tapis roulants, les pendules, le coucou, le grand cadran.",
+    holes: HORLOGER,
     g: GRAVITY,
   },
   lune: { id: "lune", name: "Base lunaire", blurb: "Gravité faible, grands sauts, cratères et téléporteurs.", holes: [], g: 3.2 },

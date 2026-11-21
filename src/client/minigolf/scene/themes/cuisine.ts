@@ -7,21 +7,21 @@
 import * as THREE from "three";
 import { heightAt, type Course, type MoverDef } from "../../../../shared/games/minigolf/course.ts";
 import { feltTex, sandTex, woodTex } from "../textures.ts";
-import { feltMat, flowWater, leafyBall, onCourse, plainKit, Scatter, surfaceMat, waterMat, type Theme } from "./common.ts";
+import {
+  canvasTex,
+  feltMat,
+  flowWater,
+  leafyBall,
+  onCourse,
+  plainKit,
+  Scatter,
+  shadows,
+  surfaceMat,
+  waterMat,
+  type Theme,
+} from "./common.ts";
 
 let made: Theme | null = null;
-
-/** Une texture dessinée à la main, répétée */
-function canvasTex(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  draw(c.getContext("2d")!, size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 8;
-  return t;
-}
 
 /** Un petit générateur pour les dessins (toujours le même) */
 function noise(seed: number): () => number {
@@ -259,15 +259,6 @@ function whiskLoop(w: number, top: number): THREE.CatmullRomCurve3 {
     [-w * 0.45, top - 0.28],
   ].map(([x, y]) => new THREE.Vector3(x, y, 0));
   return new THREE.CatmullRomCurve3(pts, true, "centripetal");
-}
-
-function shadows(o: THREE.Object3D, cast = true) {
-  o.traverse((q) => {
-    if (q instanceof THREE.Mesh) {
-      q.castShadow = cast;
-      q.receiveShadow = true;
-    }
-  });
 }
 
 export function cuisineTheme(): Theme {

@@ -361,9 +361,11 @@ export function planShot(
   for (const plan of cands) tryPlan(plan.a, plan.p, 0);
   // Quelque chose bouge sur le trou : les meilleurs coups, essayés aussi un peu plus tard (le temps qu'une grille
   // s'ouvre, qu'une vague se retire)
-  if (c.movers.length > 0 && level !== "facile") {
-    const top = scored.sort((x, y) => x.s - y.s).slice(0, level === "fort" ? 8 : 5);
-    for (const sec of [0.5, 1, 1.6, 2.3, 3.1]) for (const t of top) tryPlan(t.plan.a, t.plan.p, Math.round(sec * 240));
+  // (le bot facile essaie moins : deux moments, ses trois meilleurs coups)
+  if (c.movers.length > 0) {
+    const top = scored.sort((x, y) => x.s - y.s).slice(0, level === "fort" ? 8 : level === "moyen" ? 5 : 3);
+    const secs = level === "facile" ? [1.1, 2.4] : [0.5, 1, 1.6, 2.3, 3.1];
+    for (const sec of secs) for (const t of top) tryPlan(t.plan.a, t.plan.p, Math.round(sec * 240));
   }
   // Puis quelques retouches autour du meilleur
   for (let i = 0; i < L.refine; i++) {

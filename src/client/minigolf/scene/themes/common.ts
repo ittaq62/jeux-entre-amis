@@ -218,6 +218,59 @@ export function onCourse(c: Course, x: number, z: number, pad: number): boolean 
   return false;
 }
 
+/** Une texture dessinée à la main sur une toile (répétée ; `alpha` : un fond transparent) */
+export function canvasTex(size: number, draw: (g: CanvasRenderingContext2D, s: number) => void, alpha = false): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d")!;
+  if (alpha) g.clearRect(0, 0, size, size);
+  draw(g, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Une boîte dont les uv sont en mètres */
+export function boxMeters(w: number, h: number, d: number): THREE.BoxGeometry {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  // L'ordre des faces : +x, −x, +y, −y, +z, −z (quatre sommets chacune)
+  const dims: [number, number][] = [
+    [d, h],
+    [d, h],
+    [w, d],
+    [w, d],
+    [w, h],
+    [w, h],
+  ];
+  for (let f = 0; f < 6; f++)
+    for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      uv.setXY(i, uv.getX(i) * dims[f]![0], uv.getY(i) * dims[f]![1]);
+    }
+  return g;
+}
+
+/** Un rectangle dont les uv sont en mètres */
+export function planeMeters(w: number, h: number): THREE.PlaneGeometry {
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
+  return g;
+}
+
+/** Tout ce qui est dans `o` porte (ou non) une ombre, et en reçoit */
+export function shadows(o: THREE.Object3D, cast = true) {
+  o.traverse((q) => {
+    if (q instanceof THREE.Mesh) {
+      q.castShadow = cast;
+      q.receiveShadow = true;
+    }
+  });
+}
+
 /** Le kit par défaut d'un thème : une matière simple pour chaque chose */
 export function plainKit(o: {
   felt: THREE.Material;
