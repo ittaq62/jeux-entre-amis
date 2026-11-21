@@ -277,7 +277,7 @@ export class HoleScene {
   render(t: number, dt: number) {
     this.quality.tick(performance.now());
     this.hole?.update(t, dt);
-    this.theme?.tick?.(t);
+    this.theme?.tick?.(t, this.decor);
     this.sky?.update(t);
     if (this.sky) this.sky.mesh.position.copy(this.camera.position);
     if (this.effects) {

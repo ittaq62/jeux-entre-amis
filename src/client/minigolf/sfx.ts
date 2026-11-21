@@ -237,6 +237,7 @@ export class Ambience {
   private wind: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  private lfo: OscillatorNode | null = null;
 
   constructor(private kind: string) {}
 
@@ -252,10 +253,20 @@ export class Ambience {
     src.loop = true;
     const f = o.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.value = this.kind === "jardin" ? 420 : 300;
+    f.frequency.value = this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : 300;
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
+    // Au bord de la mer : le ressac, une vague toutes les sept secondes environ
+    if (this.kind === "mer") {
+      const lfo = o.ctx.createOscillator();
+      lfo.frequency.value = 0.14;
+      const depth = o.ctx.createGain();
+      depth.gain.value = 0.03 * o.vol;
+      lfo.connect(depth).connect(gain.gain);
+      lfo.start();
+      this.lfo = lfo;
+    }
     src.start();
     this.wind = { src, gain };
     this.birds();
@@ -269,6 +280,16 @@ export class Ambience {
   private birds() {
     if (this.stopped) return;
     const o = out(musicLevel());
+    if (o && this.kind === "mer") {
+      // Une mouette : deux ou trois cris qui descendent
+      const t = o.ctx.currentTime + 0.02;
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n; k++) {
+        const tk = t + k * 0.32;
+        tone(o.ctx, o.dest, tk, "sawtooth", 1500 + Math.random() * 200, 900, o.vol * 0.025, 0.02, 0.22);
+        tone(o.ctx, o.dest, tk, "sine", 1700, 1100, o.vol * 0.04, 0.02, 0.2);
+      }
+    }
     if (o && this.kind === "jardin") {
       const t = o.ctx.currentTime + 0.02;
       const base = 2400 + Math.random() * 1800;
@@ -286,6 +307,7 @@ export class Ambience {
     if (this.timer) clearTimeout(this.timer);
     try {
       this.wind?.src.stop();
+      this.lfo?.stop();
     } catch {
       // déjà arrêté
     }

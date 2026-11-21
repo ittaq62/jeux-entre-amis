@@ -135,6 +135,8 @@ export class MinigolfRoom extends DurableObject<Env> {
   private loop: ReturnType<typeof setInterval> | null = null;
   /** Quand chaque bot (ou joueur remplacé) jouera son prochain coup */
   private botAt = new Map<string, number>();
+  /** Le coup qu'un bot a choisi de jouer un peu plus tard (le bon moment pour passer un obstacle qui bouge) */
+  private botPlan = new Map<string, { a: number; p: number; at: number; hole: number }>();
   private botRng = { rng: 1 };
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -289,6 +291,7 @@ export class MinigolfRoom extends DurableObject<Env> {
       if (seat.autoplay === "away") {
         seat.autoplay = false;
         this.botAt.delete(seat.id);
+        this.botPlan.delete(seat.id);
         if (d.status === "playing") this.systemChat(`${seat.name} est de retour sur le parcours.`);
       }
       if (d.status !== "playing") {
@@ -506,6 +509,7 @@ export class MinigolfRoom extends DurableObject<Env> {
         const r = shoot(m, seat.id, Number(msg.a), Number(msg.p), Number(msg.at), now);
         if (typeof r === "string") return error(r);
         this.botAt.delete(seat.id);
+        this.botPlan.delete(seat.id);
         return this.afterChange(now);
       }
 
@@ -793,6 +797,7 @@ export class MinigolfRoom extends DurableObject<Env> {
     );
     this.botRng = { rng: seed ^ 0x5bd1e995 };
     this.botAt.clear();
+    this.botPlan.clear();
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
@@ -832,6 +837,17 @@ export class MinigolfRoom extends DurableObject<Env> {
       const seat = d.seats.find((s) => s.id === p.id);
       const auto = !seat || seat.kind === "bot" || Boolean(seat.autoplay);
       if (!auto) continue;
+      const planned = this.botPlan.get(p.id);
+      if (planned) {
+        if (planned.hole !== m.hole) this.botPlan.delete(p.id);
+        else {
+          if (nowTick(m, now) < planned.at) continue;
+          this.botPlan.delete(p.id);
+          const r = shoot(m, p.id, planned.a, planned.p, planned.at, now);
+          if (typeof r !== "string") changed = true;
+          continue;
+        }
+      }
       const due = this.botAt.get(p.id);
       if (due === undefined) {
         this.botAt.set(p.id, now + thinkTime(level, this.botRng));
@@ -843,6 +859,10 @@ export class MinigolfRoom extends DurableObject<Env> {
       const ref = currentRef(m);
       const t = nowTick(m, now);
       const plan = planShot(courseOf(ref), { x: p.ball[0], y: p.ball[1], z: p.ball[2] }, t, physOf(m.cfg, ref), level, this.botRng);
+      if (plan.wait > 0) {
+        this.botPlan.set(p.id, { a: plan.a, p: plan.p, at: t + plan.wait, hole: m.hole });
+        continue;
+      }
       const r = shoot(m, p.id, plan.a, plan.p, t, Date.now());
       if (typeof r !== "string") changed = true;
     }
@@ -858,6 +878,7 @@ export class MinigolfRoom extends DurableObject<Env> {
     d.status = "finished";
     this.stopLoop();
     this.botAt.clear();
+    this.botPlan.clear();
     if (d.tour) this.addTimer({ at: now + TOUR_TABLE_LINGER_MS, kind: "cleanup" });
     const m = d.match!;
     const ranks = m.ranks ?? [];

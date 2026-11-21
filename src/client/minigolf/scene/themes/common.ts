@@ -13,8 +13,8 @@ export interface Theme {
   kit: ThemeKit;
   /** Le décor autour d'un trou (tiré au hasard d'après la graine, toujours le même pour un trou) */
   decor(c: Course, rng: () => number): THREE.Group;
-  /** Ce qui vit à chaque image (l'eau, les feuilles, les oiseaux) */
-  tick?(t: number): void;
+  /** Ce qui vit à chaque image (l'eau, les feuilles, les oiseaux) ; `decor` : le décor du trou en cours */
+  tick?(t: number, decor: THREE.Object3D | null): void;
   /** Le bruit de fond */
   ambience: string;
 }

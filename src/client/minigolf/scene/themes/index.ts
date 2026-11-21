@@ -3,9 +3,12 @@
 import type { CourseId } from "../../../../shared/games/minigolf/courses.ts";
 import type { Theme } from "./common.ts";
 import { jardinTheme } from "./jardin.ts";
+import { merTheme } from "./mer.ts";
 
 export function themeOf(id: CourseId): Theme {
   switch (id) {
+    case "mer":
+      return merTheme();
     default:
       return jardinTheme();
   }

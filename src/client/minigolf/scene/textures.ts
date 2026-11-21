@@ -156,14 +156,36 @@ export function gravelTex(): SurfaceTex {
 
 /** Des planches de bois, avec leurs veines et leurs joints */
 export function woodTex(): SurfaceTex {
-  return surface("wood", 512, 1.2, 41, 3, (u, v, n) => {
+  return surface("wood2", 512, 1.2, 41, 3, (u, v, n) => {
+    // Six planches dans la largeur, chacune décalée en longueur, son ton, ses fils le long de la planche
     const plank = Math.floor(u * 6);
     const pu = u * 6 - plank;
     const shade = n(plank * 3.1, 0.5, 64, 1);
-    const grain = Math.sin((v * 40 + n(u * 6, v * 3, 6, 3) * 6 + plank * 1.7) * Math.PI) * 0.5 + 0.5;
-    const joint = pu < 0.035 || pu > 0.965 ? 0.55 : 1;
-    const k = (0.7 + shade * 0.25 + grain * 0.12) * joint;
-    return [178 * k, 122 * k, 74 * k, joint < 1 ? 0 : 0.6 + grain * 0.3];
+    const pv = v + plank * 0.37;
+    const fibre = Math.sin((pu * 26 + n(plank * 5 + 0.5, pv * 2.5, 8, 3) * 5) * Math.PI) * 0.5 + 0.5;
+    const fine = n(u * 6, v * 160, 6, 2);
+    // Un nœud de temps en temps
+    const kx = (pu - 0.5) * 3;
+    const ky = (((pv * 3) % 1) - 0.5) * 6;
+    const knot = n(plank * 7.3, Math.floor(pv * 3) * 1.7, 64, 1) > 0.78 ? Math.max(0, 1 - Math.hypot(kx, ky) * 1.6) : 0;
+    // Les joints entre planches, et en bout de planche
+    const end = (pv * 1.5) % 1 < 0.012 ? 0.6 : 1;
+    const joint = (pu < 0.03 || pu > 0.97 ? 0.5 : 1) * end;
+    const k = (0.78 + shade * 0.18 + fibre * 0.06 + fine * 0.06 - knot * 0.25) * joint;
+    return [205 * k, 172 * k, 132 * k, joint < 1 ? 0 : 0.55 + fibre * 0.2 - knot * 0.3];
+  });
+}
+
+/** Du bois peint (blanc, ou teinté par la matière) : des planches lisses, leurs joints, quelques écailles */
+export function paintTex(): SurfaceTex {
+  return surface("paint", 512, 1.2, 43, 2, (u, v, n) => {
+    const plank = Math.floor(u * 6);
+    const pu = u * 6 - plank;
+    const joint = pu < 0.025 || pu > 0.975 ? 0.72 : 1;
+    const wear = n(u * 30, v * 30, 30, 3);
+    const chip = wear > 0.72 ? 0.86 : 1;
+    const k = (0.93 + n(plank * 2.1, v * 4, 16, 2) * 0.06) * joint * chip;
+    return [244 * k, 241 * k, 234 * k, joint < 1 ? 0 : 0.7 - (chip < 1 ? 0.2 : 0)];
   });
 }
 

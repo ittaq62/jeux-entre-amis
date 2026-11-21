@@ -51,10 +51,11 @@ describe("minigolf : la partie", () => {
     expect(three).toHaveLength(3);
     expect(new Set(three.map((h) => h.i)).size).toBe(3);
     expect([...three.map((h) => h.i)].sort((a, b) => a - b)).toEqual(three.map((h) => h.i));
-    // Dix-huit trous avec un seul parcours prêt : le retour à l'envers
+    // Dix-huit trous : deux parcours différents à la suite
     const eighteen = drawHoles(cfg({ holes: 18 }), { rng: 1 });
     expect(eighteen).toHaveLength(18);
-    expect(eighteen.slice(9).every((h) => h.m)).toBe(true);
+    expect(eighteen.slice(0, 9).every((h) => h.c === "jardin")).toBe(true);
+    expect(eighteen.slice(9).every((h) => h.c !== "jardin" && !h.m)).toBe(true);
   });
 
   it("refuse un coup pendant la présentation, puis quand la balle roule encore", () => {

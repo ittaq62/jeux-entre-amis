@@ -22,6 +22,7 @@ function botPlays(ref: HoleRef, level: BotLevel, seed: number): number {
   const limit = strokeLimit(c.def.par);
   while (strokes < limit) {
     const plan = planShot(c, ball, tick, phys, level, rng);
+    tick += plan.wait;
     const r = simulateShot(c, ball, plan.a, plan.p, tick, phys);
     strokes++;
     tick = r.end + 240;

@@ -3,6 +3,7 @@
 import { compileHole, type Course, type HoleDef } from "./course.ts";
 import { GRAVITY } from "./physics.ts";
 import { JARDIN } from "./holes/jardin.ts";
+import { MER } from "./holes/mer.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -24,7 +25,13 @@ export const COURSES: Record<CourseId, CourseInfo> = {
     holes: JARDIN,
     g: GRAVITY,
   },
-  mer: { id: "mer", name: "Bord de mer", blurb: "Plage, jetée, phare et cabines rayées, la mer tout autour.", holes: [], g: GRAVITY },
+  mer: {
+    id: "mer",
+    name: "Bord de mer",
+    blurb: "Au coucher du soleil : la promenade de planches, la jetée, le phare, les cabines rayées, les crabes et la vague.",
+    holes: MER,
+    g: GRAVITY,
+  },
   montagne: {
     id: "montagne",
     name: "Montagne enneigée",

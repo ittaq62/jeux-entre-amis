@@ -285,6 +285,8 @@ function expected(c: Course, nav: Nav, r: ShotResult, fromCost: number): number 
 export interface Plan {
   a: number;
   p: number;
+  /** Attendre tant de pas avant de frapper (le bon moment pour passer un obstacle qui bouge) */
+  wait: number;
 }
 
 /** La force pour faire rouler la balle d'environ d mètres sur ce sol */
@@ -317,7 +319,7 @@ export function planShot(
   const fromCost = here === Infinity ? 3 : 1 + Math.min(3, Math.max(0, here - 0.5) / 4.5);
   const t0 = tileAt(c, from.x, from.z);
   const roll = (t0 >= 0 ? c.tiles[t0]!.phys.roll : MATS.green.roll) * phys.roll;
-  const cands: Plan[] = [];
+  const cands: { a: number; p: number }[] = [];
   const toward = (x: number, z: number) => Math.atan2(z - from.z, x - from.x);
   // Vers le trou le plus proche, à plusieurs forces
   for (const cup of c.cups) {
@@ -340,28 +342,72 @@ export function planShot(
     const a = (i / L.ring) * Math.PI * 2;
     for (const p of [0.38, 0.55, 0.72, 0.9]) cands.push({ a, p });
   }
-  let best: Plan = cands[0] ?? { a: c.tee.aim, p: 0.4 };
+  let best: Plan = { a: cands[0]?.a ?? c.tee.aim, p: cands[0]?.p ?? 0.4, wait: 0 };
   let bestScore = Infinity;
-  const tryPlan = (plan: Plan) => {
-    const p = Math.max(0, Math.min(1, plan.p));
-    const r = simulateShot(c, from, plan.a, p, tick, phys);
-    const s = expected(c, nav, r, fromCost) + p * 0.01;
+  const scored: { plan: Plan; s: number }[] = [];
+  const all: { plan: Plan; s: number }[] = [];
+  const tryPlan = (a: number, power: number, wait: number) => {
+    const p = Math.max(0, Math.min(1, power));
+    const r = simulateShot(c, from, a, p, tick + wait, phys);
+    // Un peu moins bien noté d'attendre : à coups égaux, on joue tout de suite
+    const s = expected(c, nav, r, fromCost) + p * 0.01 + wait * 0.0004;
+    if (wait === 0) scored.push({ plan: { a, p, wait }, s });
+    all.push({ plan: { a, p, wait }, s });
     if (s < bestScore) {
       bestScore = s;
-      best = { a: plan.a, p };
+      best = { a, p, wait };
     }
   };
-  for (const plan of cands) tryPlan(plan);
+  for (const plan of cands) tryPlan(plan.a, plan.p, 0);
+  // Quelque chose bouge sur le trou : les meilleurs coups, essayés aussi un peu plus tard (le temps qu'une grille
+  // s'ouvre, qu'une vague se retire)
+  if (c.movers.length > 0 && level !== "facile") {
+    const top = scored.sort((x, y) => x.s - y.s).slice(0, level === "fort" ? 8 : 5);
+    for (const sec of [0.5, 1, 1.6, 2.3, 3.1]) for (const t of top) tryPlan(t.plan.a, t.plan.p, Math.round(sec * 240));
+  }
   // Puis quelques retouches autour du meilleur
   for (let i = 0; i < L.refine; i++) {
     const b = best;
-    tryPlan({ a: b.a + (random(rng) - 0.5) * 0.09, p: b.p * (1 + (random(rng) - 0.5) * 0.16) });
+    tryPlan(b.a + (random(rng) - 0.5) * 0.09, b.p * (1 + (random(rng) - 0.5) * 0.16), b.wait);
+  }
+  // Un coup trop juste (un rebond millimétré sur un poteau) rate dès que la main tremble : parmi les meilleurs, celui
+  // qui réussit le mieux en moyenne quand on le joue un peu à côté
+  const seen = new Set<string>();
+  const top = all
+    .sort((x, y) => x.s - y.s)
+    .filter((x) => {
+      const k = `${x.plan.a.toFixed(3)}:${x.plan.p.toFixed(3)}:${x.plan.wait}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, level === "facile" ? 3 : 6);
+  let robust = Infinity;
+  for (const t of top) {
+    const { a, p, wait } = t.plan;
+    let sum = t.s;
+    for (const [da, dp] of [
+      [1.3, 0],
+      [-1.3, 0],
+      [0, 1.1],
+      [0, -1.1],
+    ] as const) {
+      const pp = Math.max(0, Math.min(1, p * (1 + dp * L.power)));
+      const r = simulateShot(c, from, a + da * L.aim, pp, tick + wait, phys);
+      sum += expected(c, nav, r, fromCost);
+    }
+    const mean = sum / 5;
+    if (mean < robust) {
+      robust = mean;
+      best = t.plan;
+    }
   }
   // La main qui tremble
   const gauss = () => (random(rng) + random(rng) + random(rng) - 1.5) / 0.5;
   return {
     a: best.a + gauss() * L.aim,
     p: Math.max(0.02, Math.min(1, best.p * (1 + gauss() * L.power))),
+    wait: best.wait,
   };
 }
 
