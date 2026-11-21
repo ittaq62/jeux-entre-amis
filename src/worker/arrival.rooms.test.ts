@@ -178,3 +178,23 @@ describe.each(GAMES)("$game", ({ game, Room, bots }) => {
     }
   });
 });
+
+describe("crampons, arriver après le coup de sifflet final", () => {
+  it("on reçoit les dernières positions du match (sans elles, le terrain restait noir derrière le tableau de fin)", async () => {
+    const state = new FakeState();
+    const room = new CramponsRoom(state as never, fakeEnv([["hote", "ami"]]) as never);
+    open.push(room as unknown as { stopLoop?: () => void });
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room as unknown as RoomLike, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "start" });
+    bench.data<{ status: string }>().status = "finished";
+    const { ws } = await bench.arrive(user("ami"), "?regarder");
+    const tick = ws.inbox.find((m) => m.t === "tick") as { p?: number[]; e?: unknown[] } | undefined;
+    expect(tick).toBeDefined();
+    expect(tick!.p!.length).toBeGreaterThan(0);
+    // Rien à rejouer : pas de coup de sifflet ni de but une deuxième fois
+    expect(tick!.e).toEqual([]);
+  });
+});

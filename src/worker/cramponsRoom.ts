@@ -366,6 +366,9 @@ export class CramponsRoom extends DurableObject<Env> {
       d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange([], now);
+    // Arrivé après le coup de sifflet final (ou la page rechargée) : plus aucun tic ne part, on lui donne les dernières
+    // positions, sans leurs événements (sinon le terrain reste noir derrière le tableau de fin)
+    if (d.status === "finished" && d.match) this.send(ws, { t: "tick", now, ...encodeTick(d.match, [], this.stamps) });
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
   }
 

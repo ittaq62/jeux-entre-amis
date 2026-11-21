@@ -357,8 +357,8 @@ export function CramponsMatch({
   const [ready, setReady] = useState(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  // L'aide s'ouvre d'elle-même au tout premier match
-  const [help, setHelp] = useState(() => seatId !== null && !localStorage.getItem(HOWTO_KEY));
+  // L'aide s'ouvre d'elle-même au tout premier match, pas sur un match fini (elle cacherait le tableau de fin)
+  const [help, setHelp] = useState(() => seatId !== null && room.status === "playing" && !localStorage.getItem(HOWTO_KEY));
   pausedRef.current = panel || help;
   const closeHelp = () => {
     localStorage.setItem(HOWTO_KEY, "1");
@@ -492,6 +492,9 @@ export function CramponsMatch({
     rt.setPaused(pausedRef.current);
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
     listeners.current.onEvents = onEvents;
+    // Sur une table finie, plus aucune position ne vient : on montre les dernières (sans rejouer leurs événements)
+    const last = listeners.current.last;
+    if (last && roomRef.current.status === "finished") rt.onTick(last.now, { ...last.tick, e: [] });
     preloadSounds(CRAMPONS_SOUNDS);
     return () => {
       listeners.current.onTick = undefined;

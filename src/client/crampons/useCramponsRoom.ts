@@ -22,6 +22,8 @@ import { useSession } from "../stores/session.ts";
 export interface MatchListeners {
   onTick?: (now: number, tick: CramponsTick) => void;
   onEvents?: (events: MatchEvent[]) => void;
+  /** Les dernières positions reçues : à l'arrivée sur une table finie, elles précèdent souvent la création du match */
+  last?: { now: number; tick: CramponsTick };
 }
 
 /** Connexion à une table de Crampons : la vue du match, les positions, le chat. */
@@ -65,6 +67,7 @@ export function useCramponsRoom(code: string) {
                 break;
               case "tick":
                 // Ses événements arrivent avec lui : le match les rendra quand l'image en sera là
+                listeners.current.last = { now: msg.now, tick: msg };
                 listeners.current.onTick?.(msg.now, msg);
                 break;
               case "chat":

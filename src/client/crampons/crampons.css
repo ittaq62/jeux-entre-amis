@@ -113,6 +113,8 @@ html:has(.cr-root) body {
   position: absolute;
   top: calc(12px + var(--safe-top));
   right: calc(12px + var(--safe-right, 0px));
+  /* Au-dessus du tableau de fin : la discussion, le son et la sortie restent à portée */
+  z-index: 3;
   display: flex;
   gap: 6px;
 }
@@ -820,7 +822,8 @@ kbd {
   display: grid;
   place-items: safe center;
   overflow-y: auto;
-  padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
+  /* En haut, la place des boutons du match, qui restent au-dessus du tableau */
+  padding: calc(60px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
   background: rgba(3, 12, 8, 0.72);
   touch-action: pan-y;
 }
