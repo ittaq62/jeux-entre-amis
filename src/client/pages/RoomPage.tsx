@@ -12,6 +12,8 @@ import { noteArrival } from "../lib/arrival.ts";
 import { preloadSounds, UNO_SOUNDS } from "../lib/sound.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
+import { tableTeamName } from "../../shared/games/teams.ts";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { unoItem } from "../../shared/shop.ts";
@@ -138,7 +140,28 @@ function UnoRoom({ code }: { code: string }) {
     else navigate("/");
   };
 
-  const showTable = view.uno !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la partie : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showTable = view.uno !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const teamCount = view.tour ? 0 : (view.settings.uno.teamCount ?? 0);
+  const pick = (
+    <TablePick
+      game="uno"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamName={teamCount ? tableTeamName : undefined}
+    >
+      <BackPicker
+        current={mySeatBack ?? "classique"}
+        onPick={(back) => {
+          setPrefs({ unoBack: back });
+          send({ t: "back", back });
+        }}
+      />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -163,20 +186,14 @@ function UnoRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
+        // Juste avant la partie de tournée : l'annonce, et le dos de ses cartes
         view.status === "lobby" ? (
-          // Juste avant la partie de tournée : le dos de ses cartes
-          <TablePick game="uno" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <BackPicker
-              current={mySeatBack ?? "classique"}
-              onPick={(back) => {
-                setPrefs({ unoBack: back });
-                send({ t: "back", back });
-              }}
-            />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <RoomLobby
           room={view}

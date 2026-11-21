@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DEFAULT_BOMB } from "../../shared/games/meche/bombs.ts";
+import { tableTeamName } from "../../shared/games/teams.ts";
 import { bombItem } from "../../shared/shop.ts";
 import { Loading } from "../components/ui.tsx";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
@@ -55,7 +57,24 @@ export function MecheRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showTable = view.meche !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la partie : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showTable = view.meche !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const teamCount = view.tour ? 0 : (view.settings.meche.teamCount ?? 0);
+  // Sa bombe, et celle de chacun à côté de son nom
+  const pick = (
+    <TablePick
+      game="meche"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamName={teamCount ? tableTeamName : undefined}
+      seatLook={(s) => <BombArt id={s.bomb ?? DEFAULT_BOMB} className="table-pick-bomb" />}
+    >
+      <BombPicker />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -83,20 +102,14 @@ export function MecheRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
+        // Juste avant la partie de tournée : l'annonce
         view.status === "lobby" ? (
-          // Juste avant la partie de tournée : sa bombe, et celle de chacun à côté de son nom
-          <TablePick
-            game="meche"
-            room={view}
-            serverOffset={serverOffset}
-            onReady={() => send({ t: "ready" })}
-            seatLook={(s) => <BombArt id={s.bomb ?? DEFAULT_BOMB} className="table-pick-bomb" />}
-          >
-            <BombPicker />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <MecheLobby
           room={view}

@@ -48,7 +48,9 @@ export function CapitaleRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showTable = view.capitale !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la partie : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showTable = view.capitale !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
 
   return (
     <RoomShell
@@ -79,6 +81,8 @@ export function CapitaleRoom({ code }: { code: string }) {
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        <TourPick room={view} send={send} serverOffset={serverOffset} />
       ) : (
         <CapitaleLobby
           room={view}

@@ -7,7 +7,8 @@ import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
-import { CramponsLobby, TourLocker } from "./CramponsLobby.tsx";
+import { tableDraw } from "../game/RandomRules.tsx";
+import { clubBy, CramponsLobby, TourLocker } from "./CramponsLobby.tsx";
 import { CramponsMatch } from "./CramponsMatch.tsx";
 import { useCramponsRoom } from "./useCramponsRoom.ts";
 import "./crampons.css";
@@ -47,7 +48,23 @@ export function CramponsRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showMatch = view.crampons !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant le match : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showMatch = view.crampons !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  // Son ballon et sa célébration ; les joueurs rangés par club
+  const pick = (
+    <TablePick
+      game="crampons"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamOf={(s) => view.teams[s.id]}
+      teamName={(t) => clubBy(view.settings.crampons.clubs[t as 0 | 1]).name}
+    >
+      <TourLocker room={view} />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -71,14 +88,14 @@ export function CramponsRoom({ code }: { code: string }) {
           onShowLobby={() => !bridge && setLobbyOpen(true)}
         />
       ) : bridge ? (
+        // Juste avant le match de tournée : l'annonce
         view.status === "lobby" ? (
-          // Juste avant le match de tournée : son ballon et sa célébration
-          <TablePick game="crampons" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <TourLocker room={view} />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <CramponsLobby
           room={view}

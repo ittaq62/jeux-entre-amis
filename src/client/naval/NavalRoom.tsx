@@ -7,7 +7,10 @@ import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
-import { NavalLobby } from "./NavalLobby.tsx";
+import { DEFAULT_SETTINGS } from "../../shared/games/naval/engine.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { tableDraw } from "../game/RandomRules.tsx";
+import { NavalLobby, TEAM_NAMES } from "./NavalLobby.tsx";
 import { NavalTable } from "./NavalTable.tsx";
 import { SkinPicker } from "./SkinPicker.tsx";
 import { useNavalRoom } from "./useNavalRoom.ts";
@@ -48,7 +51,29 @@ export function NavalRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showTable = view.naval !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la partie : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showTable = view.naval !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const rules = applyDrawnRules("naval", view.settings.naval, DEFAULT_SETTINGS, tableDraw(view));
+  const teams = !view.tour && rules.teams && view.settings.maxPlayers === 4;
+  const pick = (
+    <TablePick
+      game="naval"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamName={teams ? (t) => TEAM_NAMES[t as 0 | 1] ?? "" : undefined}
+    >
+      <SkinPicker
+        current={mySeatSkin ?? "marine"}
+        onPick={(skin) => {
+          setPrefs({ navalSkin: skin });
+          send({ t: "skin", skin });
+        }}
+      />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -73,20 +98,14 @@ export function NavalRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
+        // Juste avant la partie de tournée : l'annonce, et le thème de sa flotte
         view.status === "lobby" ? (
-          // Juste avant la partie de tournée : le thème de sa flotte
-          <TablePick game="naval" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <SkinPicker
-              current={mySeatSkin ?? "marine"}
-              onPick={(skin) => {
-                setPrefs({ navalSkin: skin });
-                send({ t: "skin", skin });
-              }}
-            />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <NavalLobby
           room={view}

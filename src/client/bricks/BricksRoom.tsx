@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loading } from "../components/ui.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
+import { DEFAULT_SETTINGS } from "../../shared/games/bricks/engine.ts";
+import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
-import { BricksLobby } from "./BricksLobby.tsx";
+import { TablePick } from "../tour/TablePick.tsx";
+import { BRICK_TEAMS, BricksLobby } from "./BricksLobby.tsx";
 import { BricksTable } from "./BricksTable.tsx";
 import { useBricksRoom } from "./useBricksRoom.ts";
 import "./bricks.css";
@@ -33,7 +37,21 @@ export function BricksRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showTable = view.bricks !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la partie : en tournée, au salon de la table ; hors tournée, avant la revanche
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showTable = view.bricks !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  const rules = applyDrawnRules("bricks", view.settings.bricks, DEFAULT_SETTINGS, tableDraw(view));
+  const teams = !view.tour && !rules.sprint && rules.teams && view.settings.maxPlayers === 4;
+  const pick = (
+    <TablePick
+      game="bricks"
+      room={view}
+      serverOffset={serverOffset}
+      onReady={() => send({ t: "ready" })}
+      drawn={tableDraw(view)}
+      teamName={teams ? (t) => BRICK_TEAMS[t as 0 | 1] ?? "" : undefined}
+    />
+  );
 
   return (
     <RoomShell
@@ -60,7 +78,14 @@ export function BricksRoom({ code }: { code: string }) {
           lastSnapshot={lastSnapshot}
         />
       ) : bridge ? (
-        bridge.waiting
+        // Juste avant la partie de tournée : l'annonce
+        view.status === "lobby" ? (
+          pick
+        ) : (
+          bridge.waiting
+        )
+      ) : announcing ? (
+        pick
       ) : (
         <BricksLobby
           room={view}

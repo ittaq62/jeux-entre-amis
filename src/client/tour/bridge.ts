@@ -20,6 +20,9 @@ export interface TourBridge {
   youId: string;
   serverOffset: number;
   onContinue: () => void;
+  /** Pour l'annonce avant la partie : où en est la tournée (« Jeu 3 sur 6 »), et les règles jouées (aucune aux règles de base) */
+  progress: string;
+  rules: { name: string; blurb: string } | null;
 }
 
 export const TourBridgeContext = createContext<TourBridge | null>(null);

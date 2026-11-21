@@ -1,0 +1,274 @@
+/*
+  L'annonce, juste avant une partie (de tournée, ou une revanche) : le jeu, un grand compte à rebours, les règles, le
+  choix des skins et les joueurs. Le choix garde sa mise en page de salon ; le bas de la fenêtre (les joueurs prêts, son
+  bouton) reste à l'écran même quand le choix est long.
+*/
+.table-pick {
+  width: min(100%, 680px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 24px 0;
+}
+
+.table-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.table-pick-head h2 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.table-pick-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.table-pick-kicker {
+  display: block;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Le compte à rebours : gros, en or, rouge sur les trois dernières secondes */
+.table-pick-count {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  min-width: 86px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--panel-sunken);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 45%, transparent);
+  color: var(--gold-light);
+  font-family: var(--font-card);
+}
+
+.table-pick-count strong {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.table-pick-count span {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.table-pick-count .spinner {
+  align-self: center;
+  margin: 12px 0;
+}
+
+.table-pick-count.is-soon {
+  color: var(--danger);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 60%, transparent);
+}
+
+.table-pick-time p {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.table-pick-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  overflow: hidden;
+}
+
+.table-pick-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 0.9s linear;
+}
+
+.table-pick-head:has(.is-soon) + .table-pick-time .table-pick-bar i {
+  background: var(--danger);
+}
+
+/* Les règles de la partie : tirées au sort, ou celles de la tournée */
+.table-pick-rules {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 10%, var(--panel-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
+.table-pick-rules > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--gold-light);
+}
+
+.table-pick-rules strong {
+  font-size: 16px;
+}
+
+.table-pick-rules p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Le choix de chaque jeu, sans son cadre de salon : il est déjà dans la fenêtre */
+.table-pick-body > .panel {
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.table-pick-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin: 0 -24px;
+  padding: 14px 24px calc(16px + var(--safe-bottom));
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: var(--panel);
+}
+
+.table-pick-seats {
+  flex: 1 1 260px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.table-pick-seats li {
+  --seat: transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  box-shadow: 0 0 0 2px var(--seat);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.table-pick-seats li.is-away {
+  opacity: 0.5;
+}
+
+.table-pick-seats li svg {
+  color: var(--ok);
+}
+
+/* Pas encore prêt : un petit rond vide à la place de la coche */
+.table-pick-wait {
+  width: 12px;
+  height: 12px;
+  margin: 0 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+
+/* En équipes : une colonne par équipe, son nom au-dessus */
+.table-pick-teams {
+  flex: 1 1 320px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.table-pick-team {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.table-pick-team-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+
+.table-pick-team .table-pick-seats {
+  flex: none;
+}
+
+.table-pick-seats img,
+.table-pick-blank {
+  width: 34px;
+  height: 34px;
+}
+
+.table-pick-ready {
+  flex: none;
+}
+
+@media (max-width: 520px) {
+  .table-pick {
+    gap: 14px;
+    padding: 16px 14px 0;
+  }
+
+  .table-pick-head {
+    gap: 12px;
+  }
+
+  .table-pick-head h2 {
+    font-size: 24px;
+  }
+
+  .table-pick-count {
+    min-width: 70px;
+    padding: 4px 10px;
+  }
+
+  .table-pick-count strong {
+    font-size: 34px;
+  }
+
+  .table-pick-foot {
+    margin: 0 -14px;
+    padding: 10px 14px calc(12px + var(--safe-bottom));
+  }
+
+  .table-pick-ready {
+    width: 100%;
+  }
+
+  /* Bolides : le garage tient en hauteur, l'aperçu à côté du nom pour voir tout de suite les véhicules */
+  .table-pick .garage-title,
+  .table-pick .garage-info .hint {
+    display: none;
+  }
+
+  .table-pick .garage-top {
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .table-pick .garage-name {
+    font-size: 24px;
+  }
+}

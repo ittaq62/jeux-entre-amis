@@ -77,7 +77,11 @@ describe("UNO : « Regarder » ne fait jamais asseoir", () => {
     await bench.send(watcher.ws, { t: "rematch" });
     expect(bench.data<{ rematch: string[] }>().rematch).toEqual([]);
     expect(bench.data<{ status: string }>().status).toBe("finished");
+    // Sa revanche ouvre l'annonce ; le spectateur ne s'y dit pas prêt à sa place
     await bench.send(host, { t: "rematch" });
+    await bench.send(watcher.ws, { t: "ready" });
+    expect(host.view<RoomView>().status).toBe("finished");
+    await bench.send(host, { t: "ready" });
     expect(host.view<RoomView>().status).toBe("playing");
     expect(seated(watcher.ws.view())).toBe(false);
   });

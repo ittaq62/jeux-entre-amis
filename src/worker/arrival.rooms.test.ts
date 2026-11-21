@@ -42,6 +42,9 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
 ];
 
+/** Les tables où la revanche passe par l'écran d'annonce avant de partir */
+const announced = (game: string) => ["naval", "bricks", "capitale", "meche", "crampons"].includes(game);
+
 const open: { stopLoop?: () => void }[] = [];
 afterEach(() => {
   // Bolides et Crampons font tourner leur course ou leur match : on arrête la boucle
@@ -111,8 +114,13 @@ describe.each(GAMES)("$game", ({ game, Room, bots }) => {
     await bench.send(watcher.ws, { t: "rematch" });
     expect(bench.data<{ rematch: string[] }>().rematch).toEqual([]);
     expect(bench.data<{ status: string }>().status).toBe("finished");
-    // L'hôte, seul joueur : sa revanche relance la partie, et le spectateur reste spectateur
+    // L'hôte, seul joueur : sa revanche ouvre l'annonce (le spectateur ne s'y dit pas prêt à sa place), puis la partie
     await bench.send(host, { t: "rematch" });
+    if (announced(game)) {
+      await bench.send(watcher.ws, { t: "ready" });
+      expect(host.view<LobbyRoom>().status).toBe("finished");
+      await bench.send(host, { t: "ready" });
+    }
     expect(host.view<LobbyRoom>().status).toBe("playing");
     expect(seated(watcher.ws.view())).toBe(false);
   });

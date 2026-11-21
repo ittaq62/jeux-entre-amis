@@ -435,6 +435,9 @@ export interface BricksRoomView {
   quick: boolean;
   /** Table d'une tournée : le code de la tournée */
   tour?: string | null;
+  /** L'écran d'annonce avant la partie (tournée, revanche) : jusqu'à quand, et qui est prêt */
+  pickUntil?: number | null;
+  ready?: string[];
 }
 
 export type BricksClientMessage =
@@ -463,6 +466,8 @@ export type BricksClientMessage =
   | { t: "takeBack" }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
+  /** Prêt à jouer, sans attendre la fin de l'annonce (tournée, revanche) */
+  | { t: "ready" }
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }

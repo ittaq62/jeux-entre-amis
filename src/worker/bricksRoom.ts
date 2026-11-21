@@ -45,7 +45,7 @@ import { random, randomSeed } from "../shared/rng.ts";
 import { TOUR_BOT_LEVELS, variantSettings, type TourInit } from "../shared/tour.ts";
 import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
 import type { RoomInit } from "./room.ts";
-import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
+import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, recordSprint, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -64,6 +64,7 @@ import {
   type ArrivalIntent,
 } from "../shared/lateJoin.ts";
 import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
+import { ANNOUNCE_MS } from "../shared/announce.ts";
 
 // Des maçons et des tailleurs de pierre pour compléter la table
 const BOT_NAMES = ["Gaston", "Jacqueline", "Marcel", "Odette", "Raymond", "Simone", "Lucien", "Paulette", "Fernand", "Germaine"];
@@ -175,6 +176,9 @@ interface BricksData {
   results?: EloResults | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
+  /** L'écran d'annonce avant la partie (tournée, revanche) : jusqu'à quand, et qui est prêt */
+  pickUntil?: number | null;
+  ready?: string[];
   /** Ceux qui regardent la table (venus pour regarder, ou arrivés pendant une partie) : jamais assis sans le demander */
   watchers?: string[];
 }
@@ -369,9 +373,12 @@ export class BricksRoom extends DurableObject<Env> {
     }
     this.ensureHost();
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
-    if (d.tour && d.status === "lobby" && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
-      await this.startTourGame(now);
-      return;
+    if (d.tour && d.status === "lobby" && !d.pickUntil && d.seats.every((s) => s.kind === "bot" || this.isConnected(s.userId))) {
+      // Tout le monde est là : l'annonce (le jeu, ses règles, les équipes), puis la partie part (plus tôt si tous sont prêts)
+      d.pickUntil = now + TOUR_PICK_MS;
+      d.ready = [];
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
     }
     await this.afterChange(now);
     // Son plateau exact, pour reprendre la manche en cours
@@ -453,6 +460,62 @@ export class BricksRoom extends DurableObject<Env> {
     }
     void this.setPresence(att.userId, null).catch(() => {});
     await this.afterChange(now, ws);
+  }
+
+  /** L'écran d'annonce est ouvert : avant un jeu de tournée, ou avant la revanche (hors tournée) */
+  private announcing(): boolean {
+    const d = this.data!;
+    return d.tour ? d.status === "lobby" : d.status === "finished" && Boolean(d.pickUntil);
+  }
+
+  /** Tous les joueurs sont prêts (les présents, à la revanche) : on n'attend pas la fin de l'annonce */
+  private allReady(): boolean {
+    const d = this.data!;
+    const ready = d.ready ?? [];
+    const humans = d.seats.filter((s) => s.kind === "human");
+    if (d.tour) return humans.every((s) => this.isConnected(s.userId) && ready.includes(s.userId!));
+    const here = humans.filter((s) => this.isConnected(s.userId));
+    return here.length > 0 && here.every((s) => ready.includes(s.userId!));
+  }
+
+  /** La revanche demandée par tous : l'écran d'annonce, quinze secondes (moins si tous sont prêts) avant la partie */
+  private async openAnnounce(now: number) {
+    const d = this.data!;
+    // Le solo 40 lignes repart tout de suite : rien à annoncer, personne à attendre
+    if (d.settings.bricks.sprint) return this.startGame(now);
+    if (d.status === "finished" && !d.pickUntil) {
+      d.pickUntil = now + ANNOUNCE_MS;
+      d.ready = [];
+      d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+      d.timers.push({ at: d.pickUntil, kind: "tourStart" });
+    }
+    return this.afterChange(now);
+  }
+  /** Ce qui empêche une partie de partir avec les joueurs présents (pas assez de monde, équipes inégales), ou null */
+  private startProblem(): string | null {
+    const d = this.data!;
+    const drawn = d.settings.randomRules && !d.tour && !d.settings.bricks.sprint ? d.settings.randomRules : null;
+    const s = drawn ? applyDrawnRules("bricks", d.settings.bricks, DEFAULT_SETTINGS, drawn) : d.settings.bricks;
+    const seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
+    if (s.sprint && seats.length !== 1) return "Le solo 40 lignes se joue seul.";
+    if (!s.sprint && seats.length < MIN_PLAYERS) return "Il faut au moins deux joueurs : ajoute un bot !";
+    const a = seats.filter((x) => x.team === 0).length;
+    if (!s.sprint && s.teams && seats.length === 4 && a !== 2)
+      return `Il faut deux joueurs dans chaque équipe : c'est ${a} contre ${seats.length - a} pour l'instant.`;
+    return null;
+  }
+
+  /** L'annonce de la revanche est finie (compte à rebours, ou tous prêts) : la partie part, ou la table dit pourquoi */
+  private async announceDone(now: number) {
+    const d = this.data!;
+    const problem = this.startProblem();
+    if (!problem) return this.startGame(now);
+    d.pickUntil = null;
+    d.ready = [];
+    d.rematch = [];
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    this.systemChat(`La partie ne peut pas partir. ${problem}`);
+    return this.afterChange(now);
   }
 
   /** La revanche part : la partie est finie et tous les joueurs restés à la table l'ont demandée */
@@ -626,14 +689,22 @@ export class BricksRoom extends DurableObject<Env> {
         }
         this.ensureHost();
         void this.setPresence(userId, null).catch(() => {});
-        if (this.rematchReady()) return this.startGame(now);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange(now, ws);
+      }
+
+      case "ready": {
+        // Prêt à jouer, sans attendre la fin de l'annonce : avant un jeu de tournée, ou avant la revanche
+        if (!this.announcing() || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
+        d.ready = [...new Set([...(d.ready ?? []), userId])];
+        if (this.allReady()) return d.tour ? this.startTourGame(now) : this.announceDone(now);
+        return this.afterChange(now);
       }
 
       case "rematch": {
         if (d.status !== "finished" || !seat || d.rematch.includes(userId)) return;
         d.rematch.push(userId);
-        if (this.rematchReady()) return this.startGame(now);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange(now);
       }
 
@@ -737,6 +808,12 @@ export class BricksRoom extends DurableObject<Env> {
 
       case "start": {
         if (d.status === "playing") return;
+        // Après une partie, « Rejouer » passe par l'annonce, comme la revanche ; ce qui l'empêche se dit tout de suite
+        if (d.status === "finished" && !d.tour) {
+          const problem = this.startProblem();
+          if (problem) return this.send(ws, { t: "error", message: problem });
+          return this.openAnnounce(now);
+        }
         return this.startGame(now, ws);
       }
     }
@@ -807,6 +884,8 @@ export class BricksRoom extends DurableObject<Env> {
   private async startTourGame(now: number) {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
+    d.pickUntil = null;
+    d.ready = [];
     const present = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     // Il faut au moins un vrai joueur à la table : une partie entre bots seuls ne compte pas
     if (present.length < MIN_PLAYERS || !present.some((s) => s.kind === "human")) {
@@ -823,6 +902,10 @@ export class BricksRoom extends DurableObject<Env> {
 
   private async startGame(now: number, ws?: WebSocket) {
     const d = this.data!;
+    // L'annonce (revanche ou tournée) est passée
+    d.pickUntil = null;
+    d.ready = [];
+    d.timers = d.timers.filter((t) => t.kind !== "tourStart");
     // Règles au hasard : celles tirées pour cette partie (affichées au salon depuis le tirage)
     const drawn = d.settings.randomRules && !d.tour && !d.settings.bricks.sprint ? d.settings.randomRules : null;
     if (drawn) d.settings.bricks = applyDrawnRules("bricks", d.settings.bricks, DEFAULT_SETTINGS, drawn);
@@ -1322,7 +1405,7 @@ export class BricksRoom extends DurableObject<Env> {
     }
     if (!this.data) return;
     // Une place s'est libérée après la partie : si tous ceux qui restent ont demandé la revanche, elle part
-    if (changed && this.rematchReady()) return void (await this.startGame(now));
+    if (changed && this.rematchReady()) return void (await this.openAnnounce(now));
     if (changed) await this.afterChange(now);
     else {
       await this.persist();
@@ -1405,6 +1488,11 @@ export class BricksRoom extends DurableObject<Env> {
         await this.destroy();
         return false;
       case "tourStart":
+        // Hors tournée : l'annonce de la revanche est passée, la partie part
+        if (!d.tour && d.status === "finished" && d.pickUntil) {
+          await this.announceDone(now);
+          return false;
+        }
         if (!d.tour || d.status !== "lobby") return false;
         await this.startTourGame(now);
         return false;
@@ -1595,6 +1683,8 @@ export class BricksRoom extends DurableObject<Env> {
       results: d.results ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
+      pickUntil: d.pickUntil ?? null,
+      ready: d.ready ?? [],
     };
   }
 

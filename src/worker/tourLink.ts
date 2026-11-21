@@ -3,14 +3,15 @@
 
 import type { GameId } from "../shared/protocol.ts";
 import type { TableReport } from "../shared/tour.ts";
+import { ANNOUNCE_MS } from "../shared/announce.ts";
 
 /** Temps laissé aux joueurs pour arriver à la table avant de commencer sans les absents */
 export const TOUR_JOIN_MS = 15_000;
 /**
- * Une fois tout le monde arrivé, une fenêtre pour choisir ses skins (son pion, son véhicule, le dos de ses cartes…)
- * avant que la partie parte ; elle se ferme plus tôt si tous les joueurs sont prêts
+ * Une fois tout le monde arrivé, l'écran d'annonce : le jeu, ses règles, les équipes, et le choix des skins (son pion, son
+ * véhicule, le dos de ses cartes…) avant que la partie parte ; il se ferme plus tôt si tous les joueurs sont prêts
  */
-export const TOUR_PICK_MS = 20_000;
+export const TOUR_PICK_MS = ANNOUNCE_MS;
 /** Une table de tournée finie s'efface vite : tout le monde est déjà passé au jeu suivant */
 export const TOUR_TABLE_LINGER_MS = 3 * 60_000;
 

@@ -40,7 +40,7 @@ const LEVEL_HINTS = [
   "Tout va vite, il lit tout : bon courage.",
 ];
 
-const clubBy = (id: string): Club => CLUBS.find((c) => c.id === id) ?? CLUBS[0]!;
+export const clubBy = (id: string): Club => CLUBS.find((c) => c.id === id) ?? CLUBS[0]!;
 const REGULAR = CLUBS.filter((c) => !isLegend(c));
 const LEGENDS = CLUBS.filter(isLegend);
 const points = (n: number) => `${n} point${n > 1 ? "s" : ""}`;

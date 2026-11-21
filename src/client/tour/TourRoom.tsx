@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
-import type { TourView } from "../../shared/tour.ts";
+import { findVariant, type TourView } from "../../shared/tour.ts";
 import { Loading } from "../components/ui.tsx";
 import { ArrivalChoice } from "../game/ArrivalChoice.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
@@ -58,7 +58,9 @@ export function TourRoom({ code }: { code: string }) {
     if (!view || !shown) return null;
     // La feuille de fin de ce jeu : ceux qui peuvent « continuer » sont les vrais joueurs du jeu, encore là
     const hold = view.endHold?.code === shown.code ? view.endHold : null;
-    const played = view.games.find((g) => g.code === shown.code)?.players ?? [];
+    const game = view.games.find((g) => g.code === shown.code);
+    const played = game?.players ?? [];
+    const rules = game && view.settings.rules !== "base" ? findVariant(game.game, game.variant) : null;
     const humans = view.members
       .filter((m) => m.kind === "human" && !m.left && m.connected && played.includes(m.userId))
       .map((m) => m.userId);
@@ -72,6 +74,8 @@ export function TourRoom({ code }: { code: string }) {
       youId: view.you.userId,
       serverOffset,
       onContinue,
+      progress: progressLabel(view, Date.now() + serverOffset),
+      rules: rules ? { name: rules.name, blurb: rules.blurb } : null,
     };
   }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue]);
 
