@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useHub } from "../stores/hub.ts";
-import { usePrefs } from "../stores/prefs.ts";
 import { useSession } from "../stores/session.ts";
 import { useShop } from "../stores/shop.ts";
 import { Avatar } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
+import { SoundButton } from "./SoundSettings.tsx";
 import { Logo } from "./ui.tsx";
 
 /** Bandeau du haut, comme la rampe en bois d'une table de jeu. */
@@ -13,8 +13,6 @@ export function AppHeader() {
   const user = useSession((s) => s.user);
   const friends = useHub((s) => s.friends);
   const [location] = useLocation();
-  const sound = usePrefs((s) => s.sound);
-  const setPrefs = usePrefs((s) => s.set);
   const requests = friends.filter((f) => f.status === "incoming").length;
   const balance = useShop((s) => s.balance);
   const loadShop = useShop((s) => s.load);
@@ -57,9 +55,8 @@ export function AppHeader() {
             </span>
           )}
         </Link>
-        <button className="nav-sound" onClick={() => setPrefs({ sound: !sound })} aria-label={sound ? "Couper le son" : "Activer le son"}>
-          <Icon name={sound ? "volume" : "mute"} size={19} />
-        </button>
+        {/* Le son de tous les jeux : coupé ou non, et les volumes (général, effets, musique et ambiance) */}
+        <SoundButton className="nav-sound" />
         <Link href={`/joueur/${encodeURIComponent(user.pseudo)}`} className="nav-avatar" aria-label="Mon profil">
           <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={34} />
         </Link>
