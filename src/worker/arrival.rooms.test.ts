@@ -43,7 +43,8 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
 ];
 
 /** Les tables où la revanche passe par l'écran d'annonce avant de partir */
-const announced = (game: string) => ["naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche"].includes(game);
+const announced = (game: string) =>
+  ["naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche"].includes(game);
 
 const open: { stopLoop?: () => void }[] = [];
 afterEach(() => {
