@@ -2748,6 +2748,85 @@
   }
 }
 
+/* Les textes longs : un médaillon plus petit, une lettre un peu plus fine ; une pastille longue en plus petit */
+.cap-card.is-mid .cap-card-art {
+  width: 96px;
+  height: 96px;
+}
+
+.cap-card.is-mid .cap-card-art-svg {
+  width: 68px;
+  height: 68px;
+}
+
+.cap-card.is-mid .cap-card-text {
+  font-size: 16px;
+}
+
+.cap-card.is-long .cap-card-face.is-front {
+  gap: 8px;
+}
+
+.cap-card.is-long .cap-card-art {
+  width: 84px;
+  height: 84px;
+}
+
+.cap-card.is-long .cap-card-art-svg {
+  width: 58px;
+  height: 58px;
+}
+
+.cap-card.is-long .cap-card-text {
+  font-size: 15px;
+  line-height: 1.32;
+}
+
+.cap-card-chip.is-wide {
+  padding: 4px 14px;
+  font-size: 19px;
+}
+
+/* Un écran bas (téléphone couché) : la carte se fait compacte */
+@media (max-height: 640px) {
+  .cap-card .cap-card-face.is-front {
+    gap: 7px;
+    padding: 18px 20px 22px;
+  }
+
+  .cap-card-deck {
+    font-size: 19px;
+  }
+
+  .cap-card-chip {
+    font-size: 20px;
+  }
+
+  .cap-card-chip.is-wide {
+    font-size: 16px;
+  }
+
+  .cap-card.is-mid .cap-card-art,
+  .cap-card.is-long .cap-card-art {
+    width: 68px;
+    height: 68px;
+  }
+
+  .cap-card.is-mid .cap-card-art-svg,
+  .cap-card.is-long .cap-card-art-svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .cap-card.is-mid .cap-card-text {
+    font-size: 14px;
+  }
+
+  .cap-card.is-long .cap-card-text {
+    font-size: 13.5px;
+  }
+}
+
 /* Les offres d'échange, posées en bas à gauche */
 .cap-bright .cap-offers {
   position: absolute;
@@ -3475,6 +3554,16 @@
   overflow-y: auto;
 }
 
+/* Téléphone en portrait : la première rangée de joueurs est collée sous la barre du haut, qui cachait le badge
+   posé au-dessus de la carte ; il se pose dans le coin bas de la carte, à droite du montant */
+.cap-bright.is-phone:not(.is-land) .cap-corner-arrow {
+  top: auto;
+  bottom: 6px;
+  right: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
 /* Couché, les cartes des joueurs : « À toi ! », « joue » plus petit, pour ne pas cacher le nom ni sortir en haut de la
    colonne */
 .cap-bright.is-land .cap-corner-arrow {
@@ -3491,7 +3580,8 @@
   top: 5px;
 }
 
-.cap-bright.is-land .cap-corner.is-turn .cap-mate.is-phone {
+/* Au tour du coéquipier, son badge prend la place de « avec toi » (couché comme en portrait) ; le double liseré reste */
+.cap-bright.is-phone .cap-corner.is-turn .cap-mate.is-phone {
   display: none;
 }
 

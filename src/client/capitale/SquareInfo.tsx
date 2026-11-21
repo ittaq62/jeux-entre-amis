@@ -4,6 +4,7 @@ import { baseSize, parcelNumber } from "../../shared/games/capitale/builderMap.t
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { asState, colorOf, money } from "./boardUi.ts";
 import { isMate, teamIn } from "./teamsUi.tsx";
+import { fr } from "../../shared/typo.ts";
 
 // Ce que fait chaque case, en une phrase : pour la bulle au survol, et les fenêtres quand on touche une case.
 
@@ -22,7 +23,18 @@ export interface SquareFacts {
   extra?: string;
 }
 
+/** Ce que fait une case, prêt à afficher (avec les espaces insécables du français) */
 export function squareFacts(g: CapitaleView, index: number, name: (id: string) => string): SquareFacts {
+  const f = rawFacts(g, index, name);
+  return {
+    ...f,
+    what: fr(f.what),
+    ...(f.extra ? { extra: fr(f.extra) } : {}),
+    ...(f.figure ? { figure: { label: f.figure.label, value: fr(f.figure.value) } } : {}),
+  };
+}
+
+function rawFacts(g: CapitaleView, index: number, name: (id: string) => string): SquareFacts {
   const sq = SQUARES[index]!;
   const deed = g.deeds[index];
   const s = asState(g);
@@ -56,7 +68,7 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
       // Chez un adversaire : le prix du rachat, ou ce qui protège la ville
       const shield = g.you && deed?.owner && newRules(g).buyout ? buyoutShield(s, g.you, index) : "x";
       const buyout =
-        shield === null ? `Rachat : ${money(buyoutPrice(s, index))}` : shield && /monument|obélisque/.test(shield) ? shield : null;
+        shield === null ? `Rachat\u00a0: ${money(buyoutPrice(s, index))}` : shield && /monument|obélisque/.test(shield) ? shield : null;
       // Builder : ce qui est bâti sur la carte, et la taille de sa parcelle (annexions comprises)
       const lot = deed?.lot ?? [];
       const cells = baseSize(index) + (deed?.annexed?.length ?? 0);
@@ -67,8 +79,8 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
       const extras = [
         level > 0 ? `${levelName(index, level)} (niveau ${level})` : null,
         built,
-        sp ? `${SPECIALS[sp.kind].name} : ${SPECIALS[sp.kind].effect.toLowerCase()}` : null,
-        deed?.mortgaged ? "Hypothéquée : pas de loyer." : null,
+        sp ? `${SPECIALS[sp.kind].name}\u00a0: ${SPECIALS[sp.kind].effect.toLowerCase()}` : null,
+        deed?.mortgaged ? "Hypothéquée\u00a0: pas de loyer." : null,
         buyout,
       ].filter(Boolean);
       return {
@@ -88,10 +100,10 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         title: sq.name,
         band: "#7d8a96",
         kind: "Gare TGV",
-        what: `Le loyer double avec chaque autre gare au même propriétaire : ${STATION_RENTS.map((r) => money(r)).join(", ")}.`,
+        what: `Le loyer double avec chaque autre gare au même propriétaire\u00a0: ${STATION_RENTS.map((r) => money(r)).join(", ")}.`,
         figure: deed?.owner ? { label: "Loyer", value: money(rent) } : { label: "Prix", value: money(sq.price!) },
         ...(owner ? { owner } : {}),
-        ...(deed?.mortgaged ? { extra: "Hypothéquée : pas de loyer." } : {}),
+        ...(deed?.mortgaged ? { extra: "Hypothéquée\u00a0: pas de loyer." } : {}),
       };
     case "utility":
       return {
@@ -118,9 +130,9 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         what:
           sq.deck === "hasard"
             ? g.settings.disasters
-              ? "On tire une carte Hasard : un voyage, un coup de chance, un coup dur, ou une catastrophe."
-              : "On tire une carte Hasard : le plus souvent, un voyage vers une autre case."
-            : "On tire une carte Courrier : de l'argent à toucher ou à payer, parfois une mauvaise nouvelle.",
+              ? "On tire une carte Hasard\u00a0: un voyage, un coup de chance, un coup dur, ou une catastrophe."
+              : "On tire une carte Hasard\u00a0: le plus souvent, un voyage vers une autre case."
+            : "On tire une carte Courrier\u00a0: de l'argent à toucher ou à payer, parfois une mauvaise nouvelle.",
       };
     case "go":
       return { title: "Départ", band: "#d6433a", kind: "Coin", what: `Chaque passage par Départ rapporte ${money(GO_SALARY)}.` };
@@ -129,14 +141,16 @@ export function squareFacts(g: CapitaleView, index: number, name: (id: string) =
         title: "Prison",
         band: "#e8b12f",
         kind: "Coin",
-        what: `En passant, simple visite. En cellule : on sort avec un double, ${money(JAIL_FINE)} ou une carte, au plus en 3 tours.`,
+        what: `En passant, simple visite. En cellule\u00a0: on sort avec un double, ${money(JAIL_FINE)} ou une carte, au plus en 3 tours.`,
       };
     case "rest":
       return {
         title: "Aire de repos",
         band: "#2fa864",
         kind: "Coin",
-        what: g.settings.freeParking ? `La cagnotte des taxes (${money(g.pot)}) revient à qui s'arrête ici.` : "On souffle : rien à payer.",
+        what: g.settings.freeParking
+          ? `La cagnotte des taxes (${money(g.pot)}) revient à qui s'arrête ici.`
+          : "On souffle\u00a0: rien à payer.",
       };
     case "toJail":
       return { title: "Allez en prison", band: "#2f5bb8", kind: "Coin", what: "Direction la prison, sans passer par Départ." };

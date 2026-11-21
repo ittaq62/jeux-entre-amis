@@ -39,6 +39,7 @@ import { isMate, TeamMark } from "./teamsUi.tsx";
 import { annexedOf, BUILD_ORDER, BUILDS, cityRent, lotOf } from "../../shared/games/capitale/builder.ts";
 import { baseSize, maxAnnex } from "../../shared/games/capitale/builderMap.ts";
 import { buildThumb } from "./scene/thumbs.ts";
+import { fr } from "../../shared/typo.ts";
 
 // La fiche d'une case, en grand au milieu de l'écran : son loyer, ses niveaux, et un bouton pour l'améliorer.
 // « Mes villes » : toutes ses rues d'un coup d'œil, avec le bouton Améliorer sur chaque ligne.
@@ -175,7 +176,7 @@ export function CityPanel({
             <b className="num">{money(upgradeCost(index))}</b>
             {level < MAX_LEVEL && <em>loyer → {money(sq.rents![level + 1]!)}</em>}
           </button>
-          {up && level < MAX_LEVEL && <p className="cap-why">{up}</p>}
+          {up && level < MAX_LEVEL && <p className="cap-why">{fr(up)}</p>}
           {level >= free && level < MAX_LEVEL && !up && (
             <p className="hint">
               Il faut tout le quartier {group.name.toLowerCase()} pour dépasser le niveau {free}
@@ -247,8 +248,8 @@ function BuilderCityPanel({
       <p className="cap-pop-text">
         Territoire de <b className="num">{area}</b> cases
         {annexedOf(deed).length > 0 && ` (dont ${annexedOf(deed).length} annexées, ${maxAnnex(index)} au plus)`}, {used} bâties. Terrain nu
-        : {money(detail.bare)}
-        {detail.full ? ", quartier complet : tout est doublé." : "."}
+        &nbsp;: {money(detail.bare)}
+        {detail.full ? ", quartier complet\u00a0: tout est doublé." : "."}
       </p>
       {counts.length > 0 ? (
         <ul className="cap-build-list">
@@ -294,11 +295,11 @@ function BuyoutNote({ g, index, me }: { g: CapitaleView; index: number; me: stri
     <p className={`cap-buyout-note ${shield ? "is-shielded" : ""}`}>
       {shield ? (
         <>
-          <Icon name="lock" size={15} /> {shield}
+          <Icon name="lock" size={15} /> {fr(shield)}
         </>
       ) : (
         <>
-          Rachat : <b className="num">{money(buyoutPrice(s, index))}</b>, à payer à son propriétaire quand tu t'y arrêtes.
+          Rachat&nbsp;: <b className="num">{money(buyoutPrice(s, index))}</b>, à payer à son propriétaire quand tu t'y arrêtes.
         </>
       )}
     </p>
@@ -373,7 +374,7 @@ function SpecialSection({
           <span>
             <strong>{info.name}</strong>
             {info.nuisance && <em> posée par {special.by === me ? "toi" : name(special.by)}</em>}
-            <span className="hint">{info.effect}</span>
+            <span className="hint">{fr(info.effect)}</span>
           </span>
           {raze === null && (
             <button className="btn btn-sm" onClick={() => act({ type: "raze", square: index })}>
@@ -403,14 +404,14 @@ function SpecialSection({
               className={`cap-special ${info.nuisance ? "is-nuisance" : ""}`}
               disabled={why !== null}
               onClick={() => act({ type: "special", square: index, kind: k })}
-              title={why ?? info.effect}
+              title={fr(why ?? info.effect)}
             >
               <img src={specialThumb(k, me ? colorOf(g, me) : "#e2453c", 120)} alt="" width={56} height={56} />
               <span>
                 <strong>
                   {info.name} <b className="num">{money(specialPrice(k, index))}</b>
                 </strong>
-                <span className="hint">{why ?? info.effect}</span>
+                <span className="hint">{fr(why ?? info.effect)}</span>
               </span>
             </button>
           );
@@ -457,7 +458,7 @@ export function MyCities({
       <h3 className="cap-pop-title">Mes villes</h3>
       {debt > 0 && (
         <p className="cap-why">
-          Tu dois {money(debt)} : {onBuild ? "démolis des bâtiments" : "revends des niveaux"} ou hypothèque. La dette se paie dès que
+          Tu dois {money(debt)}&nbsp;: {onBuild ? "démolis des bâtiments" : "revends des niveaux"} ou hypothèque. La dette se paie dès que
           l'argent suffit.
         </p>
       )}
@@ -514,7 +515,7 @@ export function MyCities({
       </div>
       <p className="hint">
         {onBuild
-          ? "Builder : ouvre le chantier d'une ville pour y poser tes bâtiments, à tout moment. Touche une ville pour sa fiche et l'hypothèque."
+          ? "Builder\u00a0: ouvre le chantier d'une ville pour y poser tes bâtiments, à tout moment. Touche une ville pour sa fiche et l'hypothèque."
           : "Une amélioration par rue et par tour. Touche une rue pour ses bâtiments spéciaux, la revente ou l'hypothèque."}
       </p>
     </Pop>

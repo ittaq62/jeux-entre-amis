@@ -70,7 +70,7 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
     : "";
   const title = mono
     ? won
-      ? "Monopole ! Tu as gagné."
+      ? "Monopole\u00a0! Tu as gagné."
       : teamWin && monoTeam !== null
         ? `Monopole pour les ${teamName(monoTeam)}.`
         : `Monopole pour ${seatOf(mono.player)?.name ?? "?"}.`
@@ -78,13 +78,13 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
       ? winTeam === null
         ? "Égalité entre les équipes de tête."
         : winTeam === myTeam
-          ? "Victoire de ton équipe !"
+          ? "Victoire de ton équipe\u00a0!"
           : `Victoire des ${teamName(winTeam)}.`
       : won
-        ? "Fortune faite !"
+        ? "Fortune faite\u00a0!"
         : `${names} ${winners.length > 1 ? "remportent" : "remporte"} la partie.`;
   const why = mono
-    ? `${teamWin && monoTeam !== null ? `L'équipe réunit` : `${mono.player === me ? "Tu réunis" : `${seatOf(mono.player)?.name ?? "?"} réunit`}`} ${what} : la partie s'arrête net.`
+    ? `${teamWin && monoTeam !== null ? `L'équipe réunit` : `${mono.player === me ? "Tu réunis" : `${seatOf(mono.player)?.name ?? "?"} réunit`}`} ${what}\u00a0: la partie s'arrête net.`
     : teamWin && outcome?.reason === "bankrupt"
       ? "Il ne reste qu'une équipe en jeu."
       : teamWin && (outcome?.reason === "time" || outcome?.reason === "rounds")

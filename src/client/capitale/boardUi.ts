@@ -17,8 +17,8 @@ export function colorOf(g: CapitaleView, playerId: string | null | undefined): s
 /** Les aides du moteur (construire, vendre…) lisent la vue comme l'état : elle en a tout ce qu'il faut */
 export const asState = (g: CapitaleView) => g as unknown as CapitaleState;
 
-/** Une somme en francs, le symbole collé au nombre (jamais seul en début de ligne) */
-export const money = (n: number) => `${n.toLocaleString("fr-FR")} ₣`;
+/** Une somme en francs, le symbole collé au nombre par une espace insécable (jamais seul en début de ligne) */
+export const money = (n: number) => `${n.toLocaleString("fr-FR")}\u00a0₣`;
 
 /** Ce qu'un joueur peut faire de ses titres maintenant : tout pendant son tour, vendre et hypothéquer pendant sa dette */
 export function manageRights(g: CapitaleView, me: string | null): "full" | "raise" | null {

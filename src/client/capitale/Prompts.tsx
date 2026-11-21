@@ -24,6 +24,7 @@ import { CardArt } from "./CardArt.tsx";
 import { Band, Pop } from "./CityPanel.tsx";
 import { Note } from "./Money.tsx";
 import { squareFacts } from "./SquareInfo.tsx";
+import { fr } from "../../shared/typo.ts";
 
 // Les décisions, une à la fois, en grand au milieu : acheter, enchérir, payer une dette. Et la carte tirée.
 
@@ -50,7 +51,7 @@ export function BuyPrompt({
   return (
     <Pop>
       <Band g={g} index={index} name={name} />
-      <p className="cap-pop-ask">Tu l'achètes ?</p>
+      <p className="cap-pop-ask">Tu l'achètes&nbsp;?</p>
       {sq.kind === "property" ? (
         <p className="cap-pop-text">
           Loyer de départ <b className="num">{money(sq.rents![0])}</b>, et jusqu'à <b className="num">{money(sq.rents![5])}</b> avec{" "}
@@ -59,7 +60,7 @@ export function BuyPrompt({
             <>
               {" "}
               Tu as {mine} rue{mine > 1 ? "s" : ""} sur {group.squares.length} du quartier
-              {mine + 1 === group.squares.length ? " : celle-ci le complète, loyers doublés !" : "."}
+              {mine + 1 === group.squares.length ? "\u00a0: celle-ci le complète, loyers doublés\u00a0!" : "."}
             </>
           )}
         </p>
@@ -75,7 +76,9 @@ export function BuyPrompt({
           <span>Aux enchères</span>
         </button>
       </div>
-      {cash < sq.price! && <p className="cap-why">Pas assez d'argent : hypothèque un titre (Mes villes), ou laisse-la aux enchères.</p>}
+      {cash < sq.price! && (
+        <p className="cap-why">Pas assez d'argent&nbsp;: hypothèque un titre (Mes villes), ou laisse-la aux enchères.</p>
+      )}
     </Pop>
   );
 }
@@ -111,7 +114,7 @@ export function BuyoutPrompt({
   return (
     <Pop className="is-buyout">
       <Band g={g} index={index} name={name} />
-      <p className="cap-pop-ask">Racheter la ville ?</p>
+      <p className="cap-pop-ask">Racheter la ville&nbsp;?</p>
       <div className="cap-buyout-price">
         <span>Prix du rachat</span>
         <b className="num">{money(price)}</b>
@@ -121,8 +124,8 @@ export function BuyoutPrompt({
       </div>
       <p className="cap-pop-text">
         {level > 0 ? `${levelName(index, level)} (niveau ${level})` : "Terrain nu"}
-        {own ? `, avec ${own === "parc" ? "son parc" : "son stade"}` : ""} : tout passe à toi.
-        {completes && <strong> Elle complète ton quartier {group.name.toLowerCase()} !</strong>}
+        {own ? `, avec ${own === "parc" ? "son parc" : "son stade"}` : ""}&nbsp;: tout passe à toi.
+        {completes && <strong> Elle complète ton quartier {group.name.toLowerCase()}&nbsp;!</strong>}
       </p>
       <div className="cap-pop-buttons">
         <button className="cap-cta is-green" disabled={cash < price || busy} onClick={() => act({ type: "buyout" })}>
@@ -161,7 +164,7 @@ export function AuctionPrompt({
   return (
     <Pop>
       <Band g={g} index={a.square} name={name} />
-      <p className="cap-pop-ask">Aux enchères !</p>
+      <p className="cap-pop-ask">Aux enchères&nbsp;!</p>
       <div className="cap-auction-high">
         <span>{a.high ? (a.high.player === me ? "Tu mènes avec" : `${name(a.high.player)} offre`) : "Personne n'a encore misé"}</span>
         <b className="num">{a.high ? money(a.high.amount) : "—"}</b>
@@ -185,7 +188,7 @@ export function AuctionPrompt({
         </div>
       ) : (
         <p className="cap-pop-text">
-          {me && a.high?.player === me ? "Les autres ont la main : attends la fin du compte à rebours." : "Tu regardes l'enchère."}
+          {me && a.high?.player === me ? "Les autres ont la main\u00a0: attends la fin du compte à rebours." : "Tu regardes l'enchère."}
         </p>
       )}
     </Pop>
@@ -208,14 +211,14 @@ export function DebtPrompt({
     <Pop>
       <h3 className="cap-pop-title">Il te manque de l'argent</h3>
       <p className="cap-pop-text">
-        Tu dois <b className="num">{money(amount)}</b> {to}. Revends des niveaux ou hypothèque des titres : la dette se paie dès que
+        Tu dois <b className="num">{money(amount)}</b> {to}. Revends des niveaux ou hypothèque des titres&nbsp;: la dette se paie dès que
         l'argent suffit.
       </p>
       <div className="cap-pop-buttons">
         <button className="cap-cta is-green" onClick={onCities}>
           <span>Mes villes</span>
         </button>
-        <ConfirmButton className="cap-cta is-grey" confirm="Tout abandonner ?" onConfirm={() => act({ type: "bankrupt" })}>
+        <ConfirmButton className="cap-cta is-grey" confirm="Tout abandonner&nbsp;?" onConfirm={() => act({ type: "bankrupt" })}>
           Faire faillite
         </ConfirmButton>
       </div>
@@ -302,11 +305,13 @@ export function CardShow({
   if (!c) return null;
   const chip = effectChip(c.effect);
   const tone = cardTone(c.effect);
+  // Un texte long : la carte se resserre (médaillon plus petit, lettre plus fine) pour que tout tienne dans son cadre
+  const length = c.text.length > 95 ? "is-long" : c.text.length > 70 ? "is-mid" : "";
   return (
     <motion.div
-      className={`cap-card deck-${card.deck} tone-${tone} ${still ? "is-still" : ""}`}
+      className={`cap-card deck-${card.deck} tone-${tone} ${length} ${still ? "is-still" : ""}`}
       role="status"
-      aria-label={`Carte ${DECK_NAMES[card.deck]} : ${c.text}`}
+      aria-label={`Carte ${DECK_NAMES[card.deck]}\u00a0: ${c.text}`}
       onClick={onClose}
       initial={still ? false : { opacity: 0, scale: 0.35, y: 140, rotate: -12 }}
       animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
@@ -337,8 +342,8 @@ export function CardShow({
           <span className="cap-card-art">
             <CardArt deck={card.deck} card={card.card} />
           </span>
-          <p className="cap-card-text">{c.text}</p>
-          <span className={`cap-card-chip tone-${chip.tone}`}>{chip.text}</span>
+          <p className="cap-card-text">{fr(c.text)}</p>
+          <span className={`cap-card-chip tone-${chip.tone} ${chip.text.length > 16 ? "is-wide" : ""}`}>{fr(chip.text)}</span>
           <span className="cap-card-who">
             {seat && <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={24} />}
             {mine ? "Ta carte" : `Tirée par ${seat?.name ?? "?"}`}
@@ -354,7 +359,7 @@ export function CardShow({
 export function JailChoices({ cash, cards, busy, act }: { cash: number; cards: number; busy: boolean; act: (a: CapitaleAction) => void }) {
   return (
     <div className="cap-jail">
-      <span>En prison : un double pour sortir, ou</span>
+      <span>En prison&nbsp;: un double pour sortir, ou</span>
       <button className="btn btn-sm" disabled={cash < JAIL_FINE || busy} onClick={() => act({ type: "payJail" })}>
         payer {money(JAIL_FINE)}
       </button>

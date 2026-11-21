@@ -18,6 +18,7 @@ import { play, vibrate } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
 import { playCapitaleEvents } from "./fx.ts";
+import { fr } from "../../shared/typo.ts";
 
 let emoteSeq = 0;
 
@@ -105,7 +106,7 @@ export function useCapitaleRoom(code: string) {
                       toast({
                         icon: createElement(Chip, { label: a.chip, tone: a.tone, size: 34 }),
                         tone: "gold",
-                        title: `Succès débloqué : ${a.title}`,
+                        title: `Succès débloqué\u00a0: ${a.title}`,
                         body: a.description,
                         duration: 6000,
                       });
@@ -116,7 +117,7 @@ export function useCapitaleRoom(code: string) {
                 break;
               }
               case "error":
-                toast({ tone: "danger", title: msg.message, duration: 3200 });
+                toast({ tone: "danger", title: fr(msg.message), duration: 3200 });
                 play("buzzer", { volume: 0.35 });
                 break;
               case "kicked":

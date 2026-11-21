@@ -221,18 +221,18 @@ function TradeForm({
       {winner && (
         <p className={winner === me ? "cap-trade-win" : "cap-trade-danger"}>
           {winner === me
-            ? "Monopole : avec ce marché, tu gagnes la partie !"
-            : `Attention : avec ce marché, ${seat(winner)?.name ?? "l'autre"} gagne la partie (Monopole) !`}
+            ? "Monopole\u00a0: avec ce marché, tu gagnes la partie\u00a0!"
+            : `Attention\u00a0: avec ce marché, ${seat(winner)?.name ?? "l'autre"} gagne la partie (Monopole)\u00a0!`}
         </p>
       )}
       <p className="hint">
         {other && isMate(g, me, other.id) && teamRules(g).gifts
           ? "Entre coéquipiers, ce que tu donnes sans rien demander part tout de suite, sans réponse à attendre. "
           : ""}
-        Un titre hypothéqué reçu coûte 10 % d'intérêts tout de suite.{" "}
+        Un titre hypothéqué reçu coûte 10&nbsp;% d'intérêts tout de suite.{" "}
         {g.settings.builder
-          ? "Une ville bâtie ne s'échange pas, ni aucune ville d'un quartier où se dresse une tour ou un monument : démolis-les d'abord."
-          : "Une rue bâtie ne s'échange pas : revends d'abord ses bâtiments."}
+          ? "Une ville bâtie ne s'échange pas, ni aucune ville d'un quartier où se dresse une tour ou un monument\u00a0: démolis-les d'abord."
+          : "Une rue bâtie ne s'échange pas\u00a0: revends d'abord ses bâtiments."}
       </p>
       <div className="overlay-actions">
         <button
@@ -308,8 +308,8 @@ export function Offers({
             {winner && (
               <p className={winner === me ? "cap-trade-win" : "cap-trade-danger"}>
                 {winner === me
-                  ? "Monopole : avec ce marché, tu gagnes la partie !"
-                  : `Attention : avec ce marché, ${name(winner)} gagne la partie (Monopole) !`}
+                  ? "Monopole\u00a0: avec ce marché, tu gagnes la partie\u00a0!"
+                  : `Attention\u00a0: avec ce marché, ${name(winner)} gagne la partie (Monopole)\u00a0!`}
               </p>
             )}
             <div className="cap-offer-actions">

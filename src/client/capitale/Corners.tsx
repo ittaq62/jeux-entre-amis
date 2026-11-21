@@ -168,7 +168,7 @@ export function Corners({
               {!phone && progress && !p.bankrupt && <MonoChips progress={progress} onOpen={onMonopoly} />}
               {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
             </span>
-            {turn === p.id && !p.bankrupt && <span className="cap-corner-arrow">{p.id === g.you ? "À toi !" : "joue"}</span>}
+            {turn === p.id && !p.bankrupt && <span className="cap-corner-arrow">{p.id === g.you ? "À toi\u00a0!" : "joue"}</span>}
           </div>
         );
       })}
@@ -189,10 +189,10 @@ export function MonoChips({ progress, onOpen }: { progress: MonopolyProgress; on
         e.stopPropagation();
         onOpen();
       }}
-      title="Monopole : où en est chacun"
+      title="Monopole&nbsp;: où en est chacun"
     >
       {close ? (
-        <b>À un titre de gagner !</b>
+        <b>À un titre de gagner&nbsp;!</b>
       ) : (
         <>
           <span>

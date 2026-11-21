@@ -377,8 +377,8 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       const mine = Boolean(g.you && side.members.includes(g.you));
       const who = side.team !== null ? `aux ${teamName(side.team)}` : `à ${nameRef.current(side.rep)}`;
       const text = mine
-        ? `Monopole : plus qu'un titre pour gagner, ${list} !`
-        : `Attention : il ne manque plus que ${list} ${who} pour gagner !`;
+        ? `Monopole\u00a0: plus qu'un titre pour gagner, ${list}\u00a0!`
+        : `Attention\u00a0: il ne manque plus que ${list} ${who} pour gagner\u00a0!`;
       setLines((l) => pushLine(l, { text, tone: mine ? "good" : "bad", who: side.rep }, ++lineSeq));
     }
   }, [shownState, g]);
@@ -414,7 +414,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   else if (myTurn && g.step === "roll")
     main = (
       <button className="cap-go is-roll" disabled={busy} onClick={() => act({ type: "roll" })}>
-        <Icon name="dice" size={26} /> {g.rollAgain ? "Relancer !" : "Lancer les dés"}
+        <Icon name="dice" size={26} /> {g.rollAgain ? "Relancer\u00a0!" : "Lancer les dés"}
       </button>
     );
   else if (myTurn && g.step === "manage")
@@ -466,7 +466,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
         {teams && (!phone || landscape) && <TeamBar g={g} name={name} phone={landscape} />}
         <div className="table-top-actions">
           {g.settings.monopoly && (!phone || landscape) && (
-            <button className="btn btn-ghost cap-mono-btn" onClick={() => setMonoOpen(true)} title="Monopole : où en est chacun">
+            <button className="btn btn-ghost cap-mono-btn" onClick={() => setMonoOpen(true)} title="Monopole&nbsp;: où en est chacun">
               Monopole
             </button>
           )}
@@ -519,7 +519,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
                 {room.you.isAdmin && (
                   <ConfirmButton
                     className="menu-item is-danger"
-                    confirm="Fermer la table pour tous ?"
+                    confirm="Fermer la table pour tous&nbsp;?"
                     onConfirm={() => send({ t: "close" })}
                   >
                     <Icon name="shield" size={18} /> Fermer la table (admin)

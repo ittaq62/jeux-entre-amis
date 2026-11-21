@@ -240,7 +240,7 @@ export function Board3D({
             : null;
   const toggle = (key: "capDiceZoom" | "capFollow", on: boolean, text: string) => {
     setPrefs({ [key]: on });
-    toast({ title: on ? `${text} : activé` : `${text} : désactivé`, duration: 2200 });
+    toast({ title: on ? `${text}\u00a0: activé` : `${text}\u00a0: désactivé`, duration: 2200 });
   };
   const pick = (v: View) => {
     setView(v);
@@ -275,7 +275,7 @@ export function Board3D({
           className={`cap-tool ${diceZoom ? "is-on" : ""}`}
           onClick={() => toggle("capDiceZoom", !diceZoom, "Dés en grand")}
           aria-pressed={diceZoom}
-          data-tip="Dés en grand : la caméra s'approche à chaque lancer"
+          data-tip="Dés en grand&nbsp;: la caméra s'approche à chaque lancer"
           aria-label="Dés en grand"
         >
           <Icon name="dice" size={20} />
@@ -284,7 +284,7 @@ export function Board3D({
           className={`cap-tool ${follow ? "is-on" : ""}`}
           onClick={() => toggle("capFollow", !follow, "Suivre le pion")}
           aria-pressed={follow}
-          data-tip="Suivre le pion : la caméra accompagne le pion qui avance"
+          data-tip="Suivre le pion&nbsp;: la caméra accompagne le pion qui avance"
           aria-label="Suivre le pion"
         >
           <Icon name="target" size={20} />

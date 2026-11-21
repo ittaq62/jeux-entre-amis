@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CHAT_MAX, REACTIONS, TAUNTS, type ChatMessage } from "../../shared/protocol.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { fr } from "../../shared/typo.ts";
 
 export function ChatPanel({
   open,
@@ -52,7 +53,7 @@ export function ChatPanel({
             {messages.map((m) =>
               m.system ? (
                 <p key={m.id} className="chat-system">
-                  {m.text}
+                  {fr(m.text)}
                 </p>
               ) : (
                 <p key={m.id} className={`chat-msg ${m.userId === meId ? "is-me" : ""}`}>

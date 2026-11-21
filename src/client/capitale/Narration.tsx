@@ -51,10 +51,10 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
   const of = (id: string) => (isMe(id) ? "à toi" : /^[aeiouyhéèêàâîïôû]/i.test(name(id)) ? `d'${name(id)}` : `de ${name(id)}`);
   switch (e.type) {
     case "turn":
-      return { text: isMe(e.player) ? "À toi de jouer !" : `Au tour de ${name(e.player)}`, tone: "turn", who: e.player };
+      return { text: isMe(e.player) ? "À toi de jouer\u00a0!" : `Au tour de ${name(e.player)}`, tone: "turn", who: e.player };
     case "dice": {
       const [a, b] = e.dice;
-      const text = `${say(e.player, "fait", "fais")} ${a} + ${b} = ${a + b}${e.doubles ? " : double !" : ""}`;
+      const text = `${say(e.player, "fait", "fais")} ${a} + ${b} = ${a + b}${e.doubles ? "\u00a0: double\u00a0!" : ""}`;
       return { text, tone: e.doubles ? "big" : "info", who: e.player };
     }
     case "money": {
@@ -87,10 +87,10 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
         return { text: `${say(from, "paie", "paies")} ${money(e.amount)} ${what}`, tone: isMe(from) ? "bad" : "info", who: from };
       }
       if (e.reason === "go" && player(to)) {
-        return { text: `${say(to, "passe", "passes")} par Départ : +${money(e.amount)}`, tone: isMe(to) ? "good" : "info", who: to };
+        return { text: `${say(to, "passe", "passes")} par Départ\u00a0: +${money(e.amount)}`, tone: isMe(to) ? "good" : "info", who: to };
       }
       if (e.reason === "pot" && player(to)) {
-        return { text: `${say(to, "ramasse", "ramasses")} la cagnotte : +${money(e.amount)}`, tone: "big", who: to };
+        return { text: `${say(to, "ramasse", "ramasses")} la cagnotte\u00a0: +${money(e.amount)}`, tone: "big", who: to };
       }
       if (e.reason === "jail" && player(from)) {
         return { text: `${say(from, "paie", "paies")} ${money(e.amount)} pour sortir de prison`, tone: "info", who: from };
@@ -100,7 +100,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     case "buy":
       return { text: `${say(e.player, "achète", "achètes")} ${sq(e.square)} pour ${money(e.price)}`, tone: "info", who: e.player };
     case "auction":
-      return { text: `${sq(e.square)} part aux enchères !`, tone: "big", who: null };
+      return { text: `${sq(e.square)} part aux enchères\u00a0!`, tone: "big", who: null };
     case "auctionEnd":
       return e.winner
         ? { text: `${say(e.winner, "remporte", "remportes")} ${sq(e.square)} pour ${money(e.amount)}`, tone: "big", who: e.winner }
@@ -109,8 +109,8 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       return {
         text:
           e.level === 5
-            ? `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "un monument"} à ${sq(e.square)} !`
-            : `${say(e.player, "améliore", "améliores")} ${sq(e.square)} : ${LEVEL_NAMES[e.level]!.toLowerCase()}`,
+            ? `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "un monument"} à ${sq(e.square)}\u00a0!`
+            : `${say(e.player, "améliore", "améliores")} ${sq(e.square)}\u00a0: ${LEVEL_NAMES[e.level]!.toLowerCase()}`,
         tone: e.level === 5 ? "big" : "info",
         who: e.player,
       };
@@ -120,7 +120,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       if (info.nuisance) {
         const at = isMe(owner) ? "chez toi" : `chez ${owner ? name(owner) : "?"}`;
         return {
-          text: `${say(e.player, "pose", "poses")} ${info.one} ${at}, à ${sq(e.square)} !`,
+          text: `${say(e.player, "pose", "poses")} ${info.one} ${at}, à ${sq(e.square)}\u00a0!`,
           tone: isMe(owner) ? "bad" : "big",
           who: e.player,
         };
@@ -134,13 +134,13 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       const info = BUILDS[e.building.kind];
       if (e.building.kind === "monument")
         return {
-          text: `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "le monument"} à ${sq(e.square)} !`,
+          text: `${say(e.player, "élève", "élèves")} ${LANDMARKS[e.square] ?? "le monument"} à ${sq(e.square)}\u00a0!`,
           tone: "big",
           who: e.player,
         };
       if (info.nuisance)
         return {
-          text: `${say(e.player, "pose", "poses")} ${info.one} à ${sq(e.square)} : ses voisins perdent 30 %`,
+          text: `${say(e.player, "pose", "poses")} ${info.one} à ${sq(e.square)}\u00a0: ses voisins perdent 30\u00a0%`,
           tone: "big",
           who: e.player,
         };
@@ -173,7 +173,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     case "unmortgage":
       return { text: `${say(e.player, "lève", "lèves")} l'hypothèque de ${sq(e.square)}`, tone: "info", who: e.player };
     case "jail":
-      return { text: `${say(e.player, "va", "vas")} en prison !`, tone: "bad", who: e.player };
+      return { text: `${say(e.player, "va", "vas")} en prison\u00a0!`, tone: "bad", who: e.player };
     case "leaveJail": {
       const how =
         e.how === "pay"
@@ -195,7 +195,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     }
     case "debt":
       return {
-        text: `${say(e.player, "doit", "dois")} trouver ${money(e.amount)} : vendre ou hypothéquer`,
+        text: `${say(e.player, "doit", "dois")} trouver ${money(e.amount)}\u00a0: vendre ou hypothéquer`,
         tone: isMe(e.player) ? "bad" : "info",
         who: e.player,
       };
@@ -213,7 +213,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     case "bankrupt":
       if (e.heir)
         return {
-          text: `${say(e.player, "fait", "fais")} faillite : ${isMe(e.to) ? "tu reprends" : `${name(e.to as string)} reprend`} ses titres, l'équipe les garde`,
+          text: `${say(e.player, "fait", "fais")} faillite\u00a0: ${isMe(e.to) ? "tu reprends" : `${name(e.to as string)} reprend`} ses titres, l'équipe les garde`,
           tone: "bad",
           who: e.player,
         };
@@ -230,8 +230,8 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     case "teamFree":
       return {
         text: isMe(e.player)
-          ? `Chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de ton équipe : pas de loyer (${money(e.amount)} économisés)`
-          : `${name(e.player)} est chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de son équipe : pas de loyer`,
+          ? `Chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de ton équipe\u00a0: pas de loyer (${money(e.amount)} économisés)`
+          : `${name(e.player)} est chez ${isMe(e.owner) ? "toi" : name(e.owner)}, de son équipe\u00a0: pas de loyer`,
         tone: isMe(e.player) || isMe(e.owner) ? "good" : "info",
         who: e.player,
       };
@@ -239,17 +239,17 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       const what =
         e.kind === "stations" ? "les quatre gares" : e.kind === "side" ? `tout ${sideName(e.side ?? 0)}` : "trois quartiers complets";
       const who = e.team !== null ? `Les ${teamName(e.team)} réunissent` : isMe(e.player) ? "Tu réunis" : `${name(e.player)} réunit`;
-      return { text: `Monopole ! ${who} ${what}`, tone: "big", who: e.player };
+      return { text: `Monopole\u00a0! ${who} ${what}`, tone: "big", who: e.player };
     }
     case "timeUp":
-      return { text: "C'est l'heure : ce tour est le dernier", tone: "big", who: null };
+      return { text: "C'est l'heure\u00a0: ce tour est le dernier", tone: "big", who: null };
     case "reshuffle":
-      return { text: `Le paquet ${DECK_NAMES[e.deck]} est épuisé : on remélange toutes ses cartes`, tone: "info", who: null };
+      return { text: `Le paquet ${DECK_NAMES[e.deck]} est épuisé\u00a0: on remélange toutes ses cartes`, tone: "info", who: null };
     case "buyout":
       return {
         text: isMe(e.from)
-          ? `${name(e.player)} te rachète ${sq(e.square)} pour ${money(e.price)} !`
-          : `${say(e.player, "rachète", "rachètes")} ${sq(e.square)} à ${isMe(e.from) ? "toi" : name(e.from)} pour ${money(e.price)} !`,
+          ? `${name(e.player)} te rachète ${sq(e.square)} pour ${money(e.price)}\u00a0!`
+          : `${say(e.player, "rachète", "rachètes")} ${sq(e.square)} à ${isMe(e.from) ? "toi" : name(e.from)} pour ${money(e.price)}\u00a0!`,
         tone: isMe(e.from) ? "bad" : "big",
         who: e.player,
       };
@@ -257,20 +257,24 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       const what = DISASTERS[e.kind].name;
       if (e.kind === "expropriation")
         return e.title !== undefined
-          ? { text: `${what} : la banque reprend ${sq(e.title)} ${of(e.player)}`, tone: isMe(e.player) ? "bad" : "info", who: e.player }
-          : { text: `${what} : rien à reprendre ${of(e.player)}`, tone: "info", who: e.player };
+          ? {
+              text: `${what}\u00a0: la banque reprend ${sq(e.title)} ${of(e.player)}`,
+              tone: isMe(e.player) ? "bad" : "info",
+              who: e.player,
+            }
+          : { text: `${what}\u00a0: rien à reprendre ${of(e.player)}`, tone: "info", who: e.player };
       if (e.kind === "cession")
         return e.title !== undefined && e.to
           ? {
-              text: `${what} : ${sq(e.title)} passe ${of(e.player)} à ${isMe(e.to) ? "toi" : name(e.to)}`,
+              text: `${what}\u00a0: ${sq(e.title)} passe ${of(e.player)} à ${isMe(e.to) ? "toi" : name(e.to)}`,
               tone: isMe(e.player) ? "bad" : isMe(e.to) ? "good" : "info",
               who: e.player,
             }
-          : { text: `${what} : rien à céder, ouf !`, tone: "info", who: e.player };
-      if (e.hits.length === 0) return { text: `${what} : plus de peur que de mal, rien n'est touché`, tone: "info", who: e.player };
+          : { text: `${what}\u00a0: rien à céder, ouf\u00a0!`, tone: "info", who: e.player };
+      if (e.hits.length === 0) return { text: `${what}\u00a0: plus de peur que de mal, rien n'est touché`, tone: "info", who: e.player };
       const list = e.hits.map((h) => `${sq(h.square)}${isMe(h.owner) ? " (à toi)" : ""}`).join(", ");
       return {
-        text: `${what} : ${list} ${e.hits.length > 1 ? "perdent" : "perd"} un niveau`,
+        text: `${what}\u00a0: ${list} ${e.hits.length > 1 ? "perdent" : "perd"} un niveau`,
         tone: e.hits.some((h) => isMe(h.owner)) ? "bad" : "big",
         who: e.player,
       };

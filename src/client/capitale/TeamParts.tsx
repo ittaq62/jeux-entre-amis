@@ -59,7 +59,7 @@ export function TeamHelp({
     <motion.div className="cap-offer panel cap-help" initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
       <div className="cap-offer-head">
         <strong>
-          {name}, de ton équipe, doit {money(owed)} : il lui manque {money(short)}.
+          {name}, de ton équipe, doit {money(owed)}&nbsp;: il lui manque {money(short)}.
         </strong>
       </div>
       {why ? (
@@ -126,7 +126,7 @@ export function MonopolyPanel({
           return (
             <section key={side.key} className={`cap-mono-side ${p.winning.length > 0 ? "is-close" : ""}`}>
               <h3>{title(side)}</h3>
-              {p.winning.length > 0 && <p className="cap-mono-alert">Gagne tout de suite avec : {squares(p.winning)}</p>}
+              {p.winning.length > 0 && <p className="cap-mono-alert">Gagne tout de suite avec&nbsp;: {squares(p.winning)}</p>}
               <ul>
                 <li>
                   <span className="cap-mono-goal">Quartiers</span>
@@ -138,7 +138,7 @@ export function MonopolyPanel({
                       <i key={id} className="cap-mono-group" style={{ background: GROUPS[id].color }} title={GROUPS[id].name} />
                     ))}
                     {near.length > 0 &&
-                      ` il manque ${near.map((x) => `${GROUPS[x.grp.id].name.toLowerCase()} : ${squares(x.missing)}`).join(" ; ")}`}
+                      ` il manque ${near.map((x) => `${GROUPS[x.grp.id].name.toLowerCase()}\u00a0: ${squares(x.missing)}`).join("\u00a0; ")}`}
                   </span>
                 </li>
                 <li>
@@ -148,7 +148,7 @@ export function MonopolyPanel({
                   </b>
                   <span className="cap-mono-what">
                     {sideName(best.k)}
-                    {best.missing.length > 0 && ` : il manque ${squares(best.missing)}`}
+                    {best.missing.length > 0 && `\u00a0: il manque ${squares(best.missing)}`}
                   </span>
                 </li>
                 <li>

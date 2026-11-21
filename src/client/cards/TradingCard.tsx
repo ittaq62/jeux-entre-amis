@@ -11,6 +11,7 @@ import { ATLAS_COLS, ATLAS_KEYS, ATLAS_ROWS } from "./atlasKeys.ts";
 import atlasUrl from "./cards-atlas.webp";
 import smallAtlasUrl from "./cards-atlas-petit.webp";
 import "./cards.css";
+import { fr } from "../../shared/typo.ts";
 
 const UNO_FACES: Record<Extract<CardArt, { kind: "uno" }>["face"], Card> = {
   zero: { id: 9001, kind: "number", color: "red", value: 0 },
@@ -508,7 +509,7 @@ export function TradingCard({
           </span>
           {!small && <span className="tc-rname">{info.name}</span>}
         </div>
-        {!small && <p className="tc-quote">{card.quote}</p>}
+        {!small && <p className="tc-quote">{fr(card.quote)}</p>}
       </div>
     </div>
   );

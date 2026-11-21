@@ -107,6 +107,6 @@ export function teamRulesText(g: { settings: Partial<CapitaleSettings> }): strin
         : "loyer plein entre coéquipiers",
     r.gifts ? "dons d'argent et de titres au coéquipier" : "pas de dons",
     r.heir ? "en faillite, l'équipe garde les titres" : "en faillite, le créancier prend tout",
-    r.win ? "victoire d'équipe : fortunes additionnées" : "chacun son classement",
+    r.win ? "victoire d'équipe\u00a0: fortunes additionnées" : "chacun son classement",
   ];
 }
