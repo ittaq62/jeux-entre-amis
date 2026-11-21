@@ -375,7 +375,7 @@ export class RaceRuntime {
           break;
         }
         case "gone":
-          if (e.why === "hit" || e.why === "klaxon") {
+          if (e.why === "hit" || e.why === "klaxon" || e.why === "wall") {
             const hz = this.view.hazards.find((h) => h.id === e.hazard);
             if (hz?.kind === "petard") {
               this.near(null, "mecheBoom", 0.7);

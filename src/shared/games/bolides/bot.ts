@@ -241,6 +241,33 @@ export function botDrive(
     const right = z.d2 + 1.3;
     if (lane > left && lane < right) lane = right < half - 1.6 ? right : left;
   }
+  // Un îlot (une fontaine, un manège…) : celui qu'il longe, sinon le prochain. Il prend le passage le plus proche de
+  // là où il est, bien avant d'y arriver, et s'y tient jusqu'au bout
+  let isl: (typeof t.islands)[number] | null = null;
+  let nearest = 70;
+  for (const o of t.islands) {
+    const inside = deltaS(t, o.s, k.s);
+    if (inside >= 0 && inside <= o.len + 4) {
+      isl = o;
+      nearest = 0;
+      break;
+    }
+    const ahead = deltaS(t, k.s, o.s);
+    if (ahead >= 0 && ahead < nearest) {
+      isl = o;
+      nearest = ahead;
+    }
+  }
+  if (isl) {
+    const margin = KART_RADIUS + 1.4;
+    if (lane > isl.d - isl.half - margin && lane < isl.d + isl.half + margin) {
+      const left = (isl.d - isl.half - half) / 2;
+      const right = (isl.d + isl.half + half) / 2;
+      const leftOk = isl.d - isl.half + half >= 2 * margin;
+      const rightOk = half - (isl.d + isl.half) >= 2 * margin;
+      lane = leftOk && (!rightOk || Math.abs(k.d - left) <= Math.abs(k.d - right)) ? left : right;
+    }
+  }
   // Pas trop près du bord : en coupant vers le point visé, il passerait sur le vibreur et dans l'herbe
   lane = clamp(lane, -half + 2.6, half - 2.6);
   const look = 8 + Math.max(0, k.v) * 0.48;
@@ -270,7 +297,8 @@ export function botDrive(
   // Dérapage dans les longs virages, jusqu'au niveau de turbo qu'il sait atteindre
   const curve = bendAhead(t, k.s, 30);
   let drift = false;
-  if (style.drift > 0 && k.v > 14 && !k.offroad) {
+  // Près d'un îlot, il ne dérape pas : sa trajectoire s'élargirait, et il le percuterait
+  if (style.drift > 0 && k.v > 14 && !k.offroad && nearest > 45) {
     if (k.drift !== 0) drift = Math.abs(curve) > 0.008 && driftLevel(k.charge) < style.drift;
     // Seulement du côté où tourne le virage (une courbure positive tourne à gauche, le volant à gauche est négatif) :
     // en contre-braquant au moment de relâcher, il partirait sinon dans l'autre sens

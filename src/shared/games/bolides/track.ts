@@ -54,6 +54,28 @@ export interface TrackDef {
   glides?: { frac: number; len: number; hoops?: [number, number][] }[];
   /** Le niveau de la mer : là où la route passe dessous, on roule sous l'eau */
   water?: number;
+  /** La place entre le bord de la route et le mur, en mètres (6 par défaut : un trottoir en ville est plus étroit) */
+  verge?: number;
+  /**
+   * Les îlots : un obstacle au milieu de la route (une fontaine, un manège…), qu'on contourne par un côté ou par
+   * l'autre. De `frac` (part du tour) sur `len` mètres, centré à `d` (part de la demi-largeur), large de `width` mètres
+   */
+  islands?: IslandDef[];
+}
+
+export interface IslandDef {
+  frac: number;
+  len: number;
+  d?: number;
+  width: number;
+}
+
+/** Un îlot sur la route : où il commence, sa longueur, son écart au milieu, sa demi-largeur (ses bouts sont arrondis) */
+export interface Island {
+  s: number;
+  len: number;
+  d: number;
+  half: number;
 }
 
 export type ZoneKind = "boue" | "glace" | "sable" | "algues" | "cendre";
@@ -413,6 +435,7 @@ function mirrored(def: TrackDef): TrackDef {
     springs: def.springs.map(([f, d]) => [f, -d]),
     zones: def.zones.map((z) => ({ ...z, d1: -z.d2, d2: -z.d1 })),
     glides: def.glides?.map((g) => ({ ...g, hoops: g.hoops?.map(([along, lane]) => [along, -lane] as [number, number]) })),
+    islands: def.islands?.map((i) => ({ ...i, d: -(i.d ?? 0) })),
   };
 }
 
@@ -473,6 +496,7 @@ export interface Track {
   movers: Mover[];
   springs: { s: number; d: number }[];
   zones: { s: number; len: number; d1: number; d2: number; kind: ZoneKind }[];
+  islands: Island[];
 }
 
 export type Mover =
@@ -497,6 +521,40 @@ export function solidGround(t: Track, s: number): number {
     if (along >= -2 && along <= g.to - g.from + 2) return wrapS(t, g.to + 3);
   }
   return s;
+}
+
+/**
+ * Le point le plus proche du cœur d'un îlot, le long de la route : ses bouts sont des demi-cercles, son cœur une ligne
+ * (un îlot plus court que large n'est qu'un rond). Renvoie la distance le long de la route depuis son début.
+ */
+export function islandCore(isl: Island, along: number): number {
+  const a = Math.min(isl.half, isl.len / 2);
+  return Math.max(a, Math.min(isl.len - a, along));
+}
+
+/** L'îlot sur lequel tombe ce point de la route (à `margin` mètres près), s'il y en a un */
+export function islandAt(t: Track, s: number, d: number, margin = 0): Island | null {
+  for (const isl of t.islands) {
+    const along = deltaS(t, isl.s, s);
+    if (along < -isl.half - margin || along > isl.len + isl.half + margin) continue;
+    if (Math.hypot(along - islandCore(isl, along), d - isl.d) < isl.half + margin) return isl;
+  }
+  return null;
+}
+
+/**
+ * Un écart au milieu où poser un kart ou un objet à cet endroit : celui demandé s'il est libre, sinon le milieu du
+ * passage le plus proche à côté de l'îlot (ou du plus large, s'ils se valent)
+ */
+export function freeLane(t: Track, s: number, d: number, margin = 1.5): number {
+  const isl = islandAt(t, s, d, margin);
+  if (!isl) return d;
+  const left = (-t.half + (isl.d - isl.half)) / 2;
+  const right = (t.half + (isl.d + isl.half)) / 2;
+  const roomLeft = isl.d - isl.half + t.half;
+  const roomRight = t.half - (isl.d + isl.half);
+  if (Math.abs(roomLeft - roomRight) > 2) return roomLeft > roomRight ? left : right;
+  return Math.abs(d - left) <= Math.abs(d - right) ? left : right;
 }
 
 /** La hauteur d'un vol en deltaplane, `along` mètres après le tremplin, pour un kart lancé à pleine vitesse */
@@ -658,7 +716,7 @@ function placeCoins(t: Track): CoinSpot[] {
   const line = (s0: number, d: number, count: number) => {
     for (let k = 0; k < count; k++) {
       const s = wrapS(t, s0 + (k - (count - 1) / 2) * 3.6);
-      if (busy(s)) continue;
+      if (busy(s) || islandAt(t, s, d, 1.5)) continue;
       const p = pointAt(t, s, d);
       out.push({ index: out.length, x: p.x, z: p.z, s, d });
     }
@@ -902,7 +960,7 @@ export function buildTrack(def: TrackDef): Track {
     bend,
     half,
     roadEdge: half + CURB,
-    wall: half + CURB + VERGE,
+    wall: half + CURB + (def.verge ?? VERGE),
     boxes: [],
     boosts: [],
     jumps: [...def.jumps, ...(def.glides ?? []).map((g) => g.frac)].map((f) => f * total),
@@ -923,6 +981,7 @@ export function buildTrack(def: TrackDef): Track {
     ),
     springs: def.springs.map(([f, lane]) => ({ s: f * total, d: lane * half })),
     zones: def.zones.map((z) => ({ s: z.from * total, len: (z.to - z.from) * total, d1: z.d1 * half, d2: z.d2 * half, kind: z.kind })),
+    islands: (def.islands ?? []).map((i) => ({ s: i.frac * total, len: i.len, d: (i.d ?? 0) * half, half: i.width / 2 })),
   };
   // Les caisses : cinq par rangée, en travers de la route
   let index = 0;

@@ -55,6 +55,11 @@ import {
   wrapAngle,
   wrapS,
   mirrorOf,
+  buildTrack,
+  freeLane,
+  islandAt,
+  islandCore,
+  type TrackDef,
 } from "./track.ts";
 import { raceTitles } from "./titles.ts";
 import { bolidesView, decodeKart, encodeKart } from "./view.ts";
@@ -1990,5 +1995,104 @@ describe("les objets lancés par un joueur", () => {
     // En un peu plus d'une demi-seconde, il avance de quelques mètres, pas de la moitié du circuit
     expect(a.kart.dist).toBeGreaterThan(300);
     expect(a.kart.dist).toBeLessThan(330);
+  });
+});
+
+describe("les îlots au milieu de la route", () => {
+  // Le Port, avec un îlot de 50 m sur sa ligne droite de départ, et un rond décentré dans le virage qui suit
+  const def: TrackDef = {
+    ...TRACKS.port,
+    islands: [
+      { frac: 120 / 1297, len: 50, width: 4 },
+      { frac: 290 / 1297, len: 6, d: 0.3, width: 6 },
+    ],
+  };
+  const t = buildTrack(def);
+  const [long, round] = t.islands as [(typeof t.islands)[0], (typeof t.islands)[0]];
+  /** Le plus près qu'un kart soit passé du cœur de l'îlot (moins sa demi-largeur : négatif s'il est entré dedans) */
+  const clearance = (k: Kart, isl: typeof long) => {
+    const at = locate(t, k.x, k.z);
+    const along = deltaS(t, isl.s, at.s);
+    if (along < -isl.half - 2 || along > isl.len + isl.half + 2) return Infinity;
+    const core = pointAt(t, isl.s + islandCore(isl, along), isl.d);
+    return Math.hypot(k.x - core.x, k.z - core.z) - isl.half;
+  };
+
+  it("se placent où on les a mis, de part et d'autre du milieu, et le miroir les retourne", () => {
+    expect(long.s).toBeCloseTo((120 / 1297) * t.length, 3);
+    expect(long.half).toBe(2);
+    expect(round.d).toBeCloseTo(0.3 * t.half, 6);
+    expect(islandAt(t, long.s + 25, 0)).toBe(long);
+    expect(islandAt(t, long.s + 25, 3)).toBeNull();
+    // Ses bouts sont arrondis : il commence pile à son début
+    expect(islandAt(t, long.s + 0.5, 0)).toBe(long);
+    expect(islandAt(t, long.s - 0.5, 0)).toBeNull();
+    expect(
+      buildTrack({ ...def, ...{ id: "port-miroir" as const }, islands: def.islands!.map((i) => ({ ...i, d: -(i.d ?? 0) })) }).islands[1]!.d,
+    ).toBeCloseTo(-round.d, 6);
+  });
+
+  it("foncer dedans : on rebondit, on n'y entre jamais, comme contre le mur", () => {
+    for (const d0 of [0, 0.8, -1.5, round.d - long.d]) {
+      const k = kartAt("port", long.s - 30, d0);
+      k.v = TOP_SPEED;
+      let worst = Infinity;
+      const events: string[] = [];
+      for (let i = 0; i < 180; i++) {
+        step(k, GAS, t, { top: 1 }, events as never);
+        worst = Math.min(worst, clearance(k, long));
+      }
+      expect(worst, `voie ${d0}`).toBeGreaterThan(0.5);
+      expect(events, `voie ${d0}`).toContain("wall");
+    }
+  });
+
+  it("les bots prennent un passage ou l'autre, et passent sans s'y cogner", () => {
+    const sides = new Set<number>();
+    for (const d0 of [-6, -3, -0.5, 0.5, 3, 6]) {
+      const k = kartAt("port", long.s - 80, d0);
+      k.v = 20;
+      const mem = newBotMemory({ rng: 3 });
+      mem.lane = mem.laneTarget = d0;
+      mem.laneUntil = 1e9;
+      const events: string[] = [];
+      let worst = Infinity;
+      let side = 0;
+      for (let i = 0; i < 60 * 10 && deltaS(t, round.s + round.len + 10, k.s) < 0; i++) {
+        const plan = botDrive(t, k, null, [], [], "fort", mem, i * 16, { rng: 5 });
+        step(k, plan.input, t, { top: 1 }, events as never);
+        worst = Math.min(worst, clearance(k, long), clearance(k, round));
+        const at = locate(t, k.x, k.z);
+        if (Math.abs(deltaS(t, long.s + long.len / 2, at.s)) < 3) side = Math.sign(at.d - long.d);
+      }
+      expect(deltaS(t, round.s + round.len, k.s), `voie ${d0}`).toBeGreaterThan(0);
+      expect(worst, `voie ${d0}`).toBeGreaterThan(0.4);
+      expect(
+        events.filter((e) => e === "wall"),
+        `voie ${d0}`,
+      ).toHaveLength(0);
+      sides.add(side);
+    }
+    // Ceux de gauche passent à gauche, ceux de droite à droite
+    expect([...sides].sort()).toEqual([-1, 1]);
+  });
+
+  it("rien ne se pose dessus : ni pièce, ni kart repêché par le drone, ni objet qui retombe", () => {
+    for (const c of t.coins) expect(islandAt(t, c.s, c.d, 1), `pièce ${c.index}`).toBeNull();
+    for (const isl of t.islands) {
+      for (let along = -2; along <= isl.len + 2; along += 2) {
+        const s = isl.s + along;
+        // Le drone ramène au milieu de la route : il choisit un passage libre
+        const lane = freeLane(t, s, 0);
+        expect(islandAt(t, s, lane, 1), `${along}`).toBeNull();
+        expect(Math.abs(lane)).toBeLessThan(t.half - 1);
+        const k = kartAt("port", s + 15, 0);
+        k.goodS = s;
+        beginRescue(t, k);
+        const [x, z] = k.rescueTo;
+        const at = locate(t, x, z);
+        expect(islandAt(t, at.s, at.d, 1), `drone ${along}`).toBeNull();
+      }
+    }
   });
 });

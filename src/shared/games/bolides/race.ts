@@ -64,7 +64,20 @@ import {
   type KartEvent,
   type SpeedClass,
 } from "./physics.ts";
-import { getTrack, gridSlot, locate, mirrorOf, pointAt, solidGround, TRACK_IDS, wrapS, type Track, type TrackId } from "./track.ts";
+import {
+  freeLane,
+  getTrack,
+  gridSlot,
+  islandAt,
+  locate,
+  mirrorOf,
+  pointAt,
+  solidGround,
+  TRACK_IDS,
+  wrapS,
+  type Track,
+  type TrackId,
+} from "./track.ts";
 
 export interface BolidesSettings {
   /** Le circuit, ou un tirage au sort à chaque course */
@@ -218,7 +231,8 @@ export type BolidesEvent =
   /** Personne à viser : l'objet reste */
   | { type: "noTarget"; id: string; item: ItemKind }
   | { type: "hazard"; hazard: Hazard }
-  | { type: "gone"; hazard: number; why: "hit" | "time" | "klaxon" }
+  /** Un piège qui disparaît : il a touché quelqu'un, son temps est fini, le klaxon l'a balayé, ou il s'est écrasé sur un îlot */
+  | { type: "gone"; hazard: number; why: "hit" | "time" | "klaxon" | "wall" }
   | { type: "hit"; id: string; by: string | null; kind: HitKind }
   | { type: "shield"; id: string }
   /** Une tarte en pleine figure */
@@ -643,7 +657,8 @@ export function useItem(race: Race, id: string, now: number, flip = false): Boli
     let z = k.z - Math.cos(k.h) * 3.4;
     if (flip) {
       // Lancée devant soi, au milieu de sa voie
-      const p = pointAt(t, k.s + OIL_AHEAD, Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d)));
+      const s = k.s + OIL_AHEAD;
+      const p = pointAt(t, s, freeLane(t, s, Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d))));
       x = p.x;
       z = p.z;
     }
@@ -726,7 +741,7 @@ export function useItem(race: Race, id: string, now: number, flip = false): Boli
     r.magnetUntil = now + AIMANT_MS;
   } else if (kind === "bombe") {
     const landS = solidGround(t, wrapS(t, k.s + (flip ? -BOMBE_BACK : BOMBE_AHEAD)));
-    const landD = Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d));
+    const landD = freeLane(t, landS, Math.max(-t.half + 1.5, Math.min(t.half - 1.5, k.d)));
     const hazard: Hazard = {
       id: ++race.seq,
       kind: "bombe",
@@ -814,6 +829,14 @@ export function worldTick(race: Race, now: number): BolidesEvent[] {
     }
     // La bombe attend de sauter (elle ne touche personne avant)
     if (hz.kind === "bombe") return true;
+    // Ce qui file le long de la route s'écrase sur un îlot
+    if ((hz.kind === "petard" || hz.kind === "bowling") && t.islands.length > 0) {
+      const at = locate(t, pos.x, pos.z);
+      if (islandAt(t, at.s, at.d)) {
+        events.push({ type: "gone", hazard: hz.id, why: "wall" });
+        return false;
+      }
+    }
     if (hz.kind === "bowling") {
       // Elle ne s'arrête pas : chacun n'est renversé qu'une fois
       for (const r of race.racers) {

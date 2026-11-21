@@ -16,6 +16,8 @@ import {
   DROP_HALF,
   DROP_RADIUS,
   dropAt,
+  freeLane,
+  islandCore,
   locate,
   pointAt,
   rollAt,
@@ -23,6 +25,7 @@ import {
   SPRING_RADIUS,
   wrapAngle,
   wrapS,
+  type Located,
   type Track,
   type ZoneKind,
 } from "./track.ts";
@@ -255,7 +258,7 @@ export function beginRescue(t: Track, k: Kart, events?: KartEvent[], at?: number
   if (k.rescue > 0) return;
   // Le dernier endroit où il roulait, mais jamais devant lui, ni trop loin derrière : on ne perd pas un demi-tour
   const s = at ?? rescueSpot(t, k.s + clamp(deltaS(t, k.s, k.goodS), -RESCUE_BACK, 0));
-  const p = pointAt(t, s, 0);
+  const p = pointAt(t, s, freeLane(t, s, 0));
   k.rescue = RESCUE_TIME;
   k.rescueFrom = [k.x, k.z, k.air, k.h];
   k.rescueTo = [p.x, p.z, Math.atan2(p.tx, p.tz)];
@@ -376,6 +379,56 @@ function hitBlock(
     } else if (closing > 2) events?.push("bump");
   }
   return locate(t, k.x, k.z, at.i);
+}
+
+/**
+ * Les îlots au milieu de la route (une fontaine, un manège…) : on rebondit dessus comme sur le mur. En l'air, assez
+ * haut, on passe au-dessus.
+ */
+function hitIslands(
+  k: Kart,
+  t: Track,
+  at: Located,
+  events: KartEvent[] | undefined,
+  fx: number,
+  fz: number,
+  rx: number,
+  rz: number,
+): Located {
+  if (k.air > 1.6) return at;
+  for (const isl of t.islands) {
+    const along = deltaS(t, isl.s, at.s);
+    if (along < -isl.half - 3 || along > isl.len + isl.half + 3) continue;
+    const core = pointAt(t, isl.s + islandCore(isl, along), isl.d);
+    const dx = k.x - core.x;
+    const dz = k.z - core.z;
+    const dist = Math.hypot(dx, dz);
+    const min = isl.half + KART_RADIUS * 0.85;
+    if (dist >= min) continue;
+    // Pile au milieu (cela n'arrive pas en roulant) : on ressort par le côté où l'on est
+    const side = at.d >= isl.d ? 1 : -1;
+    const nx = dist > 1e-6 ? dx / dist : -core.tz * side;
+    const nz = dist > 1e-6 ? dz / dist : core.tx * side;
+    k.x += nx * (min - dist);
+    k.z += nz * (min - dist);
+    // Comme contre le mur : la vitesse qui allait dans l'îlot repart dans l'autre sens, amortie
+    const vx = fx * k.v + rx * k.slip;
+    const vz = fz * k.v + rz * k.slip;
+    const into = -(vx * nx + vz * nz);
+    if (into > 0) {
+      const bx = vx + nx * into * 1.45;
+      const bz = vz + nz * into * 1.45;
+      k.v = (bx * fx + bz * fz) * 0.9;
+      k.slip = (bx * rx + bz * rz) * 0.5;
+      if (into > 3) events?.push("wall");
+      if (k.drift !== 0) {
+        k.drift = 0;
+        k.charge = 0;
+      }
+    }
+    at = locate(t, k.x, k.z, at.i);
+  }
+  return at;
 }
 
 /** Le niveau de mini-turbo atteint par un dérapage tenu `charge` secondes (0 : aucun) */
@@ -564,6 +617,7 @@ export function step(k: Kart, input: Input, t: Track, mods: StepMods, events?: K
     }
     at = locate(t, k.x, k.z, at.i);
   }
+  if (t.islands.length > 0) at = hitIslands(k, t, at, events, fx, fz, rx, rz);
   // Ce qui tombe ou dévale sur la route : même chose que les engins, avec leurs horaires
   if (mods.time !== undefined && k.air < 1) {
     for (const m of t.movers) {
