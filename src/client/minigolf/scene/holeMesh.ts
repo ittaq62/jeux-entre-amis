@@ -8,6 +8,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import {
   BALL_R,
   CUP_R,
+  RAIL_H,
   poseAt,
   posePoint,
   tileHeight,
@@ -26,7 +27,7 @@ export interface ThemeKit {
   /** Les flancs (falaises, bords sans bordure) */
   side(look?: string): THREE.Material;
   /** Les bordures du tour : leur matière, et combien elles dépassent en plus de leur hauteur de jeu */
-  rail(look?: string): { material: THREE.Material; extra: number; widen: number };
+  rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean };
   wall(look?: string): THREE.Material;
   post(look: string | undefined, r: number, h: number): THREE.Object3D;
   /** Un obstacle mobile (null : formes simples) ; dessiné dans sa pose de repos, origine du monde */
@@ -291,6 +292,10 @@ function merged(list: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   return g;
 }
 
+function w0(list: CWall[]): CWall {
+  return list[0]!;
+}
+
 function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>();
   for (const it of items) {
@@ -408,6 +413,36 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   const rails = c.walls.filter((w) => w.kind === "rail");
   for (const [look, list] of groupBy(rails, (w) => w.look ?? "")) {
     const style = kit.rail(look || undefined);
+    if (style.round) {
+      // Des rondins : un tronc couché le long de chaque bordure, sur un flanc jusqu'au sol du décor
+      const r = w0(list).t + style.widen;
+      const logs = merged(
+        list.map((w) => {
+          const len = Math.hypot(w.bx - w.ax, w.bz - w.az) + r * 1.6;
+          const g = new THREE.CylinderGeometry(r, r, len, 12, 1);
+          g.rotateZ(Math.PI / 2);
+          g.rotateY(-Math.atan2(w.bz - w.az, w.bx - w.ax));
+          const top = (w.a1 + w.b1) / 2 + style.extra;
+          g.translate((w.ax + w.bx) / 2, top - r, (w.az + w.bz) / 2);
+          return g;
+        }),
+      );
+      if (logs) {
+        const mesh = new THREE.Mesh(keep(logs), style.material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        root.add(mesh);
+      }
+      const skirt = merged(
+        list.map((w) => prism(w.ax, w.az, w.bx, w.bz, c.outY - 0.02, w.a1 - RAIL_H, c.outY - 0.02, w.b1 - RAIL_H, w.t * 0.8, w.t * 0.8)),
+      );
+      if (skirt) {
+        const mesh = new THREE.Mesh(keep(skirt), kit.side());
+        mesh.receiveShadow = true;
+        root.add(mesh);
+      }
+      continue;
+    }
     const geo = merged(
       list.map((w) =>
         prism(

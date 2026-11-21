@@ -4,6 +4,7 @@ import { compileHole, type Course, type HoleDef } from "./course.ts";
 import { GRAVITY } from "./physics.ts";
 import { JARDIN } from "./holes/jardin.ts";
 import { MER } from "./holes/mer.ts";
+import { MONTAGNE } from "./holes/montagne.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -35,8 +36,8 @@ export const COURSES: Record<CourseId, CourseInfo> = {
   montagne: {
     id: "montagne",
     name: "Montagne enneigée",
-    blurb: "Glace qui glisse, neige qui freine, tremplin et chalets.",
-    holes: [],
+    blurb: "Un matin d'hiver : la glace qui fait filer la balle, la neige qui la freine, le tremplin, la piste de luge, le télésiège.",
+    holes: MONTAGNE,
     g: GRAVITY,
   },
   cuisine: { id: "cuisine", name: "Cuisine géante", blurb: "Une balle minuscule sur un plan de travail géant.", holes: [], g: GRAVITY },

@@ -253,16 +253,17 @@ export class Ambience {
     src.loop = true;
     const f = o.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.value = this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : 300;
+    f.frequency.value = this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : this.kind === "montagne" ? 520 : 300;
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
     // Au bord de la mer : le ressac, une vague toutes les sept secondes environ
-    if (this.kind === "mer") {
+    if (this.kind === "mer" || this.kind === "montagne") {
+      // En montagne : des rafales, plus lentes et plus fortes
       const lfo = o.ctx.createOscillator();
-      lfo.frequency.value = 0.14;
+      lfo.frequency.value = this.kind === "mer" ? 0.14 : 0.07;
       const depth = o.ctx.createGain();
-      depth.gain.value = 0.03 * o.vol;
+      depth.gain.value = (this.kind === "mer" ? 0.03 : 0.035) * o.vol;
       lfo.connect(depth).connect(gain.gain);
       lfo.start();
       this.lfo = lfo;
