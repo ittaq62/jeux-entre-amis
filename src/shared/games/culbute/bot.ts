@@ -3,7 +3,7 @@
 // Le niveau règle la vitesse de réaction, l'envie d'attaquer, la garde et la justesse.
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
-import { gravityOf, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
+import { gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
 import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
@@ -34,6 +34,8 @@ interface LevelInfo {
   edgeguard: number;
   /** Ses chances de narguer, une fois un adversaire sorti (si personne n'est tout près) */
   taunt: number;
+  /** Ses chances d'enchaîner, quand son coup vient de toucher */
+  combo: number;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
@@ -49,6 +51,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     mash: 0.08,
     wary: 0.04,
     taunt: 0.35,
+    combo: 0.15,
   },
   moyen: {
     think: 8,
@@ -64,6 +67,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     mash: 0.2,
     wary: 0.14,
     taunt: 0.45,
+    combo: 0.45,
   },
   fort: {
     think: 5,
@@ -77,8 +81,21 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     mash: 0.4,
     wary: 0.12,
     taunt: 0.5,
+    combo: 0.75,
   },
 };
+
+/**
+ * Le niveau, ajusté au style : un bot facile réagit lentement, et ce sont alors les coups lourds qui gagnent les échanges.
+ * Les styles légers (Simone, Huguette) jouent donc un peu plus vite et plus souvent à ce niveau, les lourds un peu
+ * moins : à niveau égal, chaque style garde ses chances.
+ */
+function levelFor(level: BotLevel, style: HabitueId): LevelInfo {
+  const L = LEVELS[level];
+  if (level !== "facile") return L;
+  const light = (100 - STYLES[style].weight) / 20;
+  return { ...L, think: Math.round(L.think * (1 - 0.12 * light)), attack: Math.min(0.9, L.attack * (1 + 0.2 * light)) };
+}
 
 /** Ce dont un bot se souvient d'un pas à l'autre (perdu si le serveur redémarre, sans gravité) */
 export interface BotMemory {
@@ -94,12 +111,26 @@ export interface BotMemory {
   target: number;
   /** Il attend avant d'agir (au rebord, à son retour) */
   waitUntil: number;
+  /** Le coup (son image de départ) dont il a déjà décidé l'enchaînement */
+  comboFrom: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
 }
 
 export function newBotMemory(seed: number): BotMemory {
-  return { rng: seed >>> 0 || 1, next: 0, x: 0, y: 0, held: 0, holdUntil: 0, press: 0, target: -1, waitUntil: 0, taunted: -1 };
+  return {
+    rng: seed >>> 0 || 1,
+    next: 0,
+    x: 0,
+    y: 0,
+    held: 0,
+    holdUntil: 0,
+    press: 0,
+    target: -1,
+    waitUntil: 0,
+    taunted: -1,
+    comboFrom: -1,
+  };
 }
 
 function rnd(m: BotMemory): number {
@@ -153,7 +184,7 @@ function threat(me: Fighter, others: Fighter[]): Fighter | null {
 /** Le stick et les boutons de ce bot pour ce pas */
 export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   const me = f.fighters[slot]!;
-  const L = LEVELS[level];
+  const L = levelFor(level, me.style);
   const out = (): Input => {
     const pressed = m.press;
     m.press = 0;
@@ -193,16 +224,26 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     return throwToward(f, me, v);
   }
 
+  // Son coup vient de toucher : il décide aussitôt s'il enchaîne (une seule fois par coup)
+  if (me.state === "move" && me.landed && hitCancelable(me) && m.comboFrom !== f.frame - me.t) {
+    m.comboFrom = f.frame - me.t;
+    const next = followUp(f, me, enemies(f, me), m, L);
+    if (next) {
+      m.holdUntil = 0;
+      m.next = f.frame + L.think;
+      return next;
+    }
+  }
   // On tient les boutons d'une charge ou d'une garde jusqu'au bout
   if (f.frame < m.holdUntil) return out();
   if (f.frame < m.next && !(me.state === "air" && offstage(me, st))) return out();
   m.next = f.frame + L.think + Math.floor(rnd(m) * 4);
   m.x = 0;
   m.y = 0;
+  const foes = enemies(f, me);
   if (!actionable(me)) return out();
   if (f.frame < m.waitUntil) return out();
 
-  const foes = enemies(f, me);
   if (me.state === "respawn") {
     if (rnd(m) < 0.3) m.x = me.x > 0 ? -1 : 1;
     return out();
@@ -395,6 +436,27 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     m.press = ATK;
   }
   return out();
+}
+
+/** L'enchaînement : vers celui qu'on vient de toucher, le coup qui le rattrape (en l'air s'il s'envole) */
+function followUp(f: Fight, me: Fighter, foes: Fighter[], m: BotMemory, L: LevelInfo): Input | null {
+  if (rnd(m) > L.combo) return null;
+  const t = foes.find((o) => o.state === "hurt" && o.lastBy === me.slot);
+  if (!t) return null;
+  // Pas de poursuite au-dessus du vide : seulement au-dessus du plateau
+  const st = stage(f);
+  if (t.x < st.x0 + 0.8 || t.x > st.x1 - 0.8 || me.x < st.x0 + 0.5 || me.x > st.x1 - 0.5) return null;
+  const dx = t.x - me.x;
+  const dy = t.y - me.y;
+  const toward = dx < 0 ? -1 : 1;
+  const air = me.ground < 0;
+  // Trop loin pour le rattraper : on n'insiste pas
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3.5) return null;
+  // Envolé au-dessus : au sol on saute à sa poursuite, en l'air on frappe vers le haut
+  if (dy > 1.2) return air ? { x: toward * 0.4, y: 1, held: 0, pressed: ATK } : { x: toward * 0.5, y: 0, held: JMP, pressed: JMP };
+  // Tout près, à la même hauteur : un coup de côté vers lui (en l'air, l'attaque avant)
+  if (Math.abs(dx) < 1.6) return { x: toward, y: 0, held: 0, pressed: ATK };
+  return null;
 }
 
 function nearest(me: Fighter, foes: Fighter[]): Fighter | null {

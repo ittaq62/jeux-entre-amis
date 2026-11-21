@@ -298,7 +298,12 @@ export function packFull(ft: Fighter): number[] {
     STATE_CODE.get(ft.state) ?? 0,
     MOVE_CODE.get(ft.move) ?? 0,
     ITEM_CODE.get(ft.item) ?? 0,
-    (ft.airdodged ? 1 : 0) | (ft.sideUsed ? 2 : 0) | (ft.fastfall ? 4 : 0) | (ft.ledgeFresh ? 8 : 0) | (ft.upJump ? 16 : 0),
+    (ft.airdodged ? 1 : 0) |
+      (ft.sideUsed ? 2 : 0) |
+      (ft.fastfall ? 4 : 0) |
+      (ft.ledgeFresh ? 8 : 0) |
+      (ft.upJump ? 16 : 0) |
+      (ft.landed ? 32 : 0),
     // Ceux que le coup en cours a déjà touchés (et quand) : l'appareil ne les touche pas une deuxième fois
     ft.hitIds.length,
     ...ft.hitIds,
@@ -325,6 +330,7 @@ export function unpackFull(ft: Fighter, p: number[]) {
   ft.fastfall = (b & 4) !== 0;
   ft.ledgeFresh = (b & 8) !== 0;
   ft.upJump = (b & 16) !== 0;
+  ft.landed = (b & 32) !== 0;
   const hits = p[n + 4] ?? 0;
   ft.hitIds = p.slice(n + 5, n + 5 + hits);
   ft.hitAt = p.slice(n + 5 + hits, n + 5 + 2 * hits);

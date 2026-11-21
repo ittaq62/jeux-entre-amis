@@ -4,6 +4,7 @@ import {
   createFight,
   DEFAULT_FIGHT_SETTINGS,
   DI_MAX,
+  hitCancelable,
   INTRO_FRAMES,
   moveDef,
   predictHits,
@@ -243,6 +244,59 @@ describe("Culbute : le combat", () => {
     expect(a.move).toBe("g:dash");
     run(f, 8, [stick(1)]);
     expect(a.x - x0).toBeGreaterThan(1.2);
+  });
+
+  it("un coup qui a touché s'enchaîne : passé sa frappe, un nouvel appui part aussitôt ; raté, il va jusqu'au bout", () => {
+    // Touché : le coup de côté, puis un appui juste après sa frappe lance déjà le coup vers le haut
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.6);
+    const a = f.fighters[0]!;
+    run(f, 1, [tap(ATK, 1, 0)]);
+    for (let k = 0; k < 40 && !a.landed; k++) run(f, 1);
+    expect(a.landed).toBe(true);
+    while (a.hitstop > 0) run(f, 1);
+    run(f, 6);
+    expect(a.move).toBe("s");
+    run(f, 1, [tap(ATK, 0, 1)]);
+    expect(a.move).toBe("u");
+    // Raté (personne à portée) : le même appui attend la fin du coup
+    const g = duel();
+    skipIntro(g);
+    faceToFace(g, 6);
+    const b = g.fighters[0]!;
+    run(g, 1, [tap(ATK, 1, 0)]);
+    run(g, 10);
+    expect(b.landed).toBe(false);
+    run(g, 1, [tap(ATK, 0, 1)]);
+    expect(b.move).toBe("s");
+  });
+
+  it("à bas pourcentage, l'étourdissement laisse le temps d'enchaîner un petit coup", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.6);
+    const a = f.fighters[0]!;
+    const v = f.fighters[1]!;
+    run(f, 1, [tap(ATK, 1, 0)]);
+    for (let k = 0; k < 40 && v.state !== "hurt"; k++) run(f, 1);
+    while (a.hitstop > 0) run(f, 1);
+    // L'attaquant enchaîne dès que possible avec le même coup (l'autre a reculé d'un pas) : il touche encore avant que
+    // l'autre ait repris ses esprits
+    let k = 0;
+    while (!hitCancelable(a) && k++ < 30) run(f, 1);
+    const before = v.dmg;
+    let comboHit = false;
+    run(f, 1, [tap(ATK, 1, 0)]);
+    for (let i = 0; i < 12; i++) {
+      const wasHurt = v.state === "hurt";
+      run(f, 1);
+      if (v.dmg > before) {
+        comboHit = wasHurt;
+        break;
+      }
+    }
+    expect(comboHit).toBe(true);
   });
 
   it("le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt", () => {

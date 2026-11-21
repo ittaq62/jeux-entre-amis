@@ -128,6 +128,8 @@ export interface Fighter {
   airdodged: boolean;
   /** Son saut en cours d'élan vient de la touche Haut (un coup pendant l'élan devient le coup vers le haut, au sol) */
   upJump: boolean;
+  /** Son coup en cours a touché pour de bon (pas sur une garde) : sa fin s'annule dans le coup suivant */
+  landed: boolean;
   sideUsed: boolean;
   fastfall: boolean;
   /** Il traverse les plateformes fines jusqu'à cette image (il descend exprès) */

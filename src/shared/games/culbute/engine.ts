@@ -42,8 +42,11 @@ import { STYLES, type Style } from "./styles.ts";
 
 /** L'éjection s'use de tant de m/s chaque seconde (deux fois plus vite en glissant au sol) */
 export const KB_DECAY = 46;
-/** Images d'étourdissement par m/s d'éjection */
-export const HITSTUN_K = 0.75;
+/** L'étourdissement : un socle, puis tant d'images par m/s d'éjection (un petit coup laisse le temps d'enchaîner) */
+export const HITSTUN_BASE = 6;
+export const HITSTUN_K = 0.7;
+/** Un coup qui a touché (pas sur la garde) s'annule tant d'images après sa dernière image de frappe */
+export const HIT_CANCEL = 3;
 /** Toutes les éjections un peu plus fortes : on sort plus tôt, les vies sont plus courtes et plus nerveuses */
 const KB_SCALE = 1.1;
 
@@ -185,6 +188,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     jumps: st.jumps,
     airdodged: false,
     upJump: false,
+    landed: false,
     sideUsed: false,
     fastfall: false,
     dropUntil: 0,
@@ -270,6 +274,17 @@ export function moveDef(style: HabitueId, key: string): MoveDef | null {
 const isAirborne = (ft: Fighter) => ft.ground < 0;
 const isAerialSlot = (key: string) => key === "an" || key === "as" || key === "au" || key === "ad" || key === "g:bagA";
 
+/** Les coups qui s'enchaînent quand ils ont touché : le petit coup, les coups simples, les attaques en l'air, le coup en courant */
+const CANCEL_SLOTS = new Set(["n", "s", "u", "d", "an", "as", "au", "ad", "g:dash", "g:bagS", "g:bagA"]);
+
+/** Ce coup a touché, et sa frappe est passée depuis assez longtemps pour enchaîner */
+export function hitCancelable(ft: Fighter): boolean {
+  if (!CANCEL_SLOTS.has(ft.move) || ft.hitstop > 0) return false;
+  const def = moveDef(ft.style, ft.move);
+  if (!def || def.hits.length === 0) return false;
+  return ft.mt > Math.max(...def.hits.map((h) => h.to)) + HIT_CANCEL;
+}
+
 /** Peut-il être touché ? */
 export function vulnerable(f: Fight, ft: Fighter): boolean {
   if (ft.state === "dead" || ft.state === "out" || ft.state === "respawn") return false;
@@ -314,6 +329,7 @@ function startMove(ft: Fighter, key: string) {
   ft.charge = 0;
   ft.hitIds = [];
   ft.hitAt = [];
+  ft.landed = false;
 }
 
 function consume(ft: Fighter, bit: number) {
@@ -724,6 +740,12 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     case "move": {
       // Le tout début d'une attaque s'annule encore en garde ou en esquive
       const key = ft.move;
+      // Un coup qui a touché : passé sa frappe, un nouvel appui (coup, saut, spécial, garde, saisie) l'enchaîne aussitôt
+      if (ft.landed && press & (ATK | FRT | SPC | JMP | SHD | GRB) && hitCancelable(ft)) {
+        setState(ft, isAirborne(ft) ? "air" : "stand");
+        control(f, ft, inp, plats);
+        return;
+      }
       if (ft.mt <= CANCEL_WINDOW && press & SHD && key.length <= 2 && !key.startsWith("p") && !key.startsWith("c")) {
         consume(ft, SHD);
         if (isAirborne(ft)) {
@@ -1744,7 +1766,9 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     v.ground = -1;
   }
   setState(v, "hurt");
-  v.stun = Math.max(6, Math.round(speed * HITSTUN_K));
+  v.stun = Math.round(HITSTUN_BASE + speed * HITSTUN_K);
+  // Le coup a porté : l'attaquant pourra enchaîner
+  if (a && !src.projectile && a.state === "move") a.landed = true;
   v.wait = 0;
   v.fastfall = false;
   // Le coup qui va le sortir : un long arrêt sur image, le temps que l'écran s'approche (attaquant et victime figés)
