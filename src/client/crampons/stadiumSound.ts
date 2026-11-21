@@ -1,8 +1,7 @@
 // Le stade qui vit : une vraie foule enregistrée, jouée deux fois en décalé pour ne jamais se répéter, qui s'enflamme
 // quand une action chauffe, pousse un « oooh » sur une occasion, applaudit un arrêt et exulte sur un but.
 
-import { audioOut, soundBuffer } from "../lib/sound.ts";
-import { usePrefs } from "../stores/prefs.ts";
+import { audioOut, musicLevel, soundBuffer } from "../lib/sound.ts";
 
 /** La rumeur de fond : un millier de personnes qui parlent (enregistrement du domaine public) */
 const BED = "foot-stade.mp3";
@@ -110,10 +109,9 @@ export class StadiumSound {
     }
   }
 
-  /** Le volume du stade, d'après les réglages du site : coupé si le son l'est */
+  /** Le volume du stade, d'après le réglage commun « Musique et ambiance » : coupé si le son l'est */
   private level() {
-    const p = usePrefs.getState();
-    return p.sound ? p.volume * 0.7 : 0;
+    return musicLevel() * 0.7;
   }
 
   /** À chaque image : l'envie du public d'après ce qui se passe à l'écran (de 0 à 1) */

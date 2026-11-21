@@ -12,8 +12,13 @@ import type { Looks } from "../../shared/looks.ts";
 
 /** Preferences propres a cet appareil (son, vibrations, accessibilite). */
 interface Prefs {
+  /** Le son de tous les jeux : coupé ou non, et le volume général (0 à 1) */
   sound: boolean;
   volume: number;
+  /** Deux familles, chacune de 0 à 1 sous le volume général : les effets (cartes, tirs, coups, voix), et la musique avec
+   * l'ambiance (musique de course, foule du stade, mer, entracte) */
+  sfxVolume: number;
+  musicVolume: number;
   haptics: boolean;
   colorblind: boolean;
   reducedEffects: boolean;
@@ -78,6 +83,8 @@ function load(): Partial<Prefs> {
 export const usePrefs = create<Prefs>((set, get) => ({
   sound: true,
   volume: 0.7,
+  sfxVolume: 1,
+  musicVolume: 1,
   haptics: true,
   colorblind: false,
   reducedEffects: false,

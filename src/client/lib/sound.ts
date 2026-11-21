@@ -533,6 +533,23 @@ const VOLUME: Partial<Record<SoundName, number>> = {
   bolidesThrow: 0.45,
 };
 
+type SoundPrefs = Pick<ReturnType<typeof usePrefs.getState>, "sound" | "volume" | "sfxVolume" | "musicVolume">;
+
+/** Le volume des effets (cartes, tirs, coups, voix) : général × effets, 0 si le son est coupé. Pour tous les jeux. */
+export function effectsLevel(p: SoundPrefs = usePrefs.getState()): number {
+  return p.sound ? p.volume * (p.sfxVolume ?? 1) : 0;
+}
+
+/** Le volume de la musique et de l'ambiance (foule, mer, entracte) : général × musique, 0 si le son est coupé */
+export function musicLevel(p: SoundPrefs = usePrefs.getState()): number {
+  return p.sound ? p.volume * (p.musicVolume ?? 1) : 0;
+}
+
+/** Les boucles qui sont de la musique ou de l'ambiance (les autres, comme une mèche qui brûle, sont des effets) */
+const MUSIC_LOOPS = new Set<SoundName>(["brickMusic", "tourMusic", "ambience"]);
+const loopLevel = (name: SoundName, p: SoundPrefs = usePrefs.getState()) =>
+  (MUSIC_LOOPS.has(name) ? musicLevel(p) : effectsLevel(p)) * (VOLUME[name] ?? 1);
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 const buffers = new Map<string, AudioBuffer | null>();
@@ -612,12 +629,21 @@ export function startLoop(name: SoundName) {
     source.loop = true;
     const gain = ac.createGain();
     gain.gain.setValueAtTime(0, ac.currentTime);
-    gain.gain.linearRampToValueAtTime(prefs.volume * (VOLUME[name] ?? 1), ac.currentTime + 1.5);
+    gain.gain.linearRampToValueAtTime(loopLevel(name), ac.currentTime + 1.5);
     source.connect(gain).connect(master);
     source.start();
     loop = { name, source, gain };
   });
 }
+
+// Les réglages changent (curseurs du menu, son coupé) : la boucle en cours suit tout de suite, sans repartir
+usePrefs.subscribe((p, prev) => {
+  if (p.sound === prev.sound && p.volume === prev.volume && p.sfxVolume === prev.sfxVolume && p.musicVolume === prev.musicVolume) return;
+  if (!loop || !ctx) return;
+  const g = loop.gain.gain;
+  g.cancelScheduledValues(ctx.currentTime);
+  g.setTargetAtTime(loopLevel(loop.name, p), ctx.currentTime, 0.08);
+});
 
 /** Coupe la boucle en cours ; avec un nom, seulement si c'est celle-là (la musique d'entracte ne coupe pas celle d'un jeu) */
 export function stopLoop(only?: SoundName) {
@@ -633,7 +659,7 @@ export function stopLoop(only?: SoundName) {
 
 export function play(name: SoundName, opts: { volume?: number; rate?: number; delay?: number } = {}) {
   const prefs = usePrefs.getState();
-  if (!prefs.sound) return;
+  if (effectsLevel(prefs) <= 0) return;
   // Evite l'effet mitraillette quand beaucoup d'evenements arrivent d'un coup (sur l'heure prevue du son)
   const when = performance.now() + (opts.delay ?? 0);
   if (Math.abs(when - (lastPlayed.get(name) ?? -1e9)) < 45) return;
@@ -654,7 +680,7 @@ export function play(name: SoundName, opts: { volume?: number; rate?: number; de
     source.buffer = buffer;
     source.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
     const gain = ac.createGain();
-    gain.gain.value = prefs.volume * (VOLUME[name] ?? 1) * (opts.volume ?? 1);
+    gain.gain.value = effectsLevel(prefs) * (VOLUME[name] ?? 1) * (opts.volume ?? 1);
     source.connect(gain).connect(master);
     source.start(ac.currentTime + (opts.delay ?? 0) / 1000);
   });

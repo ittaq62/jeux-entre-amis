@@ -1,6 +1,7 @@
 // Les réglages du joueur : choisir une disposition toute faite, ou changer chaque touche une par une.
 
 import { useEffect, useState } from "react";
+import { SoundSettings, SoundToggle } from "../components/SoundSettings.tsx";
 import {
   ACTION_ROWS,
   assignBinding,
@@ -169,6 +170,17 @@ export function SettingsPanel({
         )}
 
         <section>
+          <h3>Son</h3>
+          <SoundSettings>
+            <SoundToggle
+              label="Le commentateur raconte le match"
+              checked={settings.commentary}
+              onChange={(v) => update({ ...settings, commentary: v })}
+            />
+          </SoundSettings>
+        </section>
+
+        <section>
           <h3>Qualité de l'image</h3>
           <div className="cr-choice">
             {QUALITIES.map((q) => (
@@ -181,10 +193,6 @@ export function SettingsPanel({
               </button>
             ))}
           </div>
-          <label className="cr-check">
-            <input type="checkbox" checked={settings.commentary} onChange={(e) => update({ ...settings, commentary: e.target.checked })} />
-            Le commentateur raconte le match
-          </label>
           <label className="cr-check">
             <input type="checkbox" checked={settings.showFps} onChange={(e) => update({ ...settings, showFps: e.target.checked })} />
             Afficher les images par seconde et le temps de réponse

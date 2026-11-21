@@ -6,8 +6,7 @@
 // cite les joueurs qui ont le ballon, et le consultant parle quand il y a de la place pour lui.
 
 import type { MatchEvent, Team } from "../../shared/games/crampons/model.ts";
-import { audioOut, soundBuffer } from "../lib/sound.ts";
-import { usePrefs } from "../stores/prefs.ts";
+import { audioOut, effectsLevel, soundBuffer } from "../lib/sound.ts";
 import { VOIX } from "./voixLignes.ts";
 import { voiceSlug } from "./voixNoms.ts";
 
@@ -584,8 +583,9 @@ export class Commentator {
 
   private speak(keys: string[], prio: Priority, who: "c" | "k", queued: boolean) {
     if (document.hidden) return;
-    const prefs = usePrefs.getState();
-    if (!prefs.sound || prefs.volume <= 0) return;
+    // La voix suit le réglage commun des effets
+    const level = effectsLevel();
+    if (level <= 0) return;
     const io = audioOut();
     if (!io) return;
     const seq = ++this.seq;
@@ -629,7 +629,7 @@ export class Commentator {
       this.stopPlaying();
       const { ctx, out } = io;
       const gain = ctx.createGain();
-      gain.gain.value = Math.min(1, prefs.volume * 1.1);
+      gain.gain.value = Math.min(1, level * 1.1);
       gain.connect(out);
       let t = ctx.currentTime + 0.03;
       const sources: AudioBufferSourceNode[] = [];

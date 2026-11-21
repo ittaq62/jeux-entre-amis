@@ -4308,3 +4308,76 @@ h3 .hint {
   gap: 8px;
   margin-top: 6px;
 }
+
+/* Le réglage du son, commun à tous les jeux (menus de partie, haut-parleur des en-têtes) */
+.sound-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.sound-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sound-main strong {
+  display: block;
+  font-size: 15px;
+}
+
+.sound-main .hint {
+  font-size: 12px;
+}
+
+.sound-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sound-slider-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sound-slider .range {
+  width: 100%;
+  min-height: 28px;
+}
+
+.sound-slider.is-off {
+  opacity: 0.45;
+}
+
+.sound-own {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-strong);
+}
+
+.sound-button {
+  position: relative;
+  display: inline-flex;
+}
+
+.sound-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  width: min(300px, calc(100vw - 24px));
+  padding: 16px;
+  box-shadow: var(--shadow-float);
+}

@@ -8,6 +8,7 @@ import {
 } from "../../shared/games/crampons/model.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
+import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
 import { FETE_BY_ID } from "../../shared/games/crampons/boutique.ts";
 import { ballItem } from "../../shared/shop.ts";
@@ -16,7 +17,7 @@ import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { THROUGH_HOLD_MS, type GameButton } from "./controls.ts";
 import { CramponsGameOver } from "./CramponsGameOver.tsx";
-import { loadSettings, type CramponsSettings } from "./bindings.ts";
+import { loadSettings, saveSettings, type CramponsSettings } from "./bindings.ts";
 import { HowTo, KeyHints, mainKey, Radar } from "./CramponsHud.tsx";
 import { SettingsPanel } from "./CramponsSettings.tsx";
 import { Commentator } from "./commentary.ts";
@@ -601,6 +602,17 @@ export function CramponsMatch({
         >
           <Icon name="eye" size={18} />
         </button>
+        <SoundButton className="cr-mini">
+          <SoundToggle
+            label="Le commentateur raconte le match"
+            checked={settings.commentary}
+            onChange={(v) => {
+              const next = { ...settings, commentary: v };
+              saveSettings(next);
+              setSettings(next);
+            }}
+          />
+        </SoundButton>
         <button className="cr-mini" onClick={() => setPanel(true)} aria-label="Réglages" title="Réglages">
           <Icon name="settings" size={18} />
         </button>
