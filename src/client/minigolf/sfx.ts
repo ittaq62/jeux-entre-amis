@@ -239,6 +239,7 @@ export class Ambience {
   private stopped = false;
   private lfo: OscillatorNode | null = null;
   private hum: { osc: OscillatorNode; gain: GainNode } | null = null;
+  private insects: { src: AudioBufferSourceNode; lfo: OscillatorNode; gain: GainNode } | null = null;
 
   constructor(private kind: string) {}
 
@@ -255,7 +256,17 @@ export class Ambience {
     const f = o.ctx.createBiquadFilter();
     f.type = "lowpass";
     f.frequency.value =
-      this.kind === "jardin" ? 420 : this.kind === "mer" ? 650 : this.kind === "montagne" ? 520 : this.kind === "cuisine" ? 240 : 300;
+      this.kind === "jardin"
+        ? 420
+        : this.kind === "mer"
+          ? 650
+          : this.kind === "montagne"
+            ? 520
+            : this.kind === "cuisine"
+              ? 240
+              : this.kind === "jungle"
+                ? 900
+                : 300;
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
@@ -269,6 +280,27 @@ export class Ambience {
       lfo.connect(depth).connect(gain.gain);
       lfo.start();
       this.lfo = lfo;
+    }
+    // Dans la jungle : le chant des insectes, aigu, qui enfle et retombe
+    if (this.kind === "jungle") {
+      const bug = o.ctx.createBufferSource();
+      bug.buffer = noise(o.ctx);
+      bug.loop = true;
+      const band = o.ctx.createBiquadFilter();
+      band.type = "bandpass";
+      band.frequency.value = 5200;
+      band.Q.value = 6;
+      const bg = o.ctx.createGain();
+      bg.gain.value = 0.012 * o.vol;
+      const pulse = o.ctx.createOscillator();
+      pulse.frequency.value = 0.09;
+      const depth = o.ctx.createGain();
+      depth.gain.value = 0.01 * o.vol;
+      pulse.connect(depth).connect(bg.gain);
+      bug.connect(band).connect(bg).connect(o.dest);
+      bug.start();
+      pulse.start();
+      this.insects = { src: bug, lfo: pulse, gain: bg };
     }
     // Dans la cuisine : le ronron du réfrigérateur, tout bas
     if (this.kind === "cuisine") {
@@ -290,6 +322,7 @@ export class Ambience {
   update() {
     if (this.wind) this.wind.gain.gain.value = 0.035 * musicLevel();
     if (this.hum) this.hum.gain.gain.value = 0.006 * musicLevel();
+    if (this.insects) this.insects.gain.gain.value = 0.012 * musicLevel();
   }
 
   private birds() {
@@ -344,6 +377,27 @@ export class Ambience {
         tone(o.ctx, o.dest, t, "sine", 4150, 4120, o.vol * 0.015, 0.003, 0.22);
       }
     }
+    if (o && this.kind === "jungle") {
+      const t = o.ctx.currentTime + 0.02;
+      const r = Math.random();
+      if (r < 0.35) {
+        // Un oiseau qui siffle deux notes, la seconde plus haute, avec un trille
+        const f = 1400 + Math.random() * 900;
+        tone(o.ctx, o.dest, t, "sine", f, f * 1.02, o.vol * 0.05, 0.02, 0.22);
+        tone(o.ctx, o.dest, t + 0.3, "sine", f * 1.5, f * 1.45, o.vol * 0.05, 0.02, 0.3);
+      } else if (r < 0.6) {
+        // Un trille rapide
+        const f = 2800 + Math.random() * 1200;
+        for (let k = 0; k < 7; k++) tone(o.ctx, o.dest, t + k * 0.055, "sine", f, f * 0.9, o.vol * 0.035, 0.005, 0.04);
+      } else if (r < 0.8) {
+        // Un perroquet, au loin : un cri rauque
+        tone(o.ctx, o.dest, t, "sawtooth", 900, 700, o.vol * 0.018, 0.01, 0.18);
+        tone(o.ctx, o.dest, t + 0.22, "sawtooth", 1000, 760, o.vol * 0.015, 0.01, 0.15);
+      } else {
+        // Un singe qui appelle : des « hou » qui montent
+        for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.28, "sine", 320 + k * 60, 420 + k * 70, o.vol * 0.05, 0.04, 0.2);
+      }
+    }
     this.timer = setTimeout(() => this.birds(), 1800 + Math.random() * 4200);
   }
 
@@ -354,6 +408,8 @@ export class Ambience {
       this.wind?.src.stop();
       this.lfo?.stop();
       this.hum?.osc.stop();
+      this.insects?.src.stop();
+      this.insects?.lfo.stop();
     } catch {
       // déjà arrêté
     }

@@ -127,7 +127,7 @@ const livres = hole(
 // 7. Le petit train : la locomotive va et vient en travers de la nappe ; un tunnel de carton passe dessous
 const train = hole(
   "Le petit train",
-  4,
+  3,
   (b) => {
     // La voie traverse la nappe : la bordure s'ouvre des deux côtés, juste assez pour laisser passer le train
     b.tile(box(-1.4, -5.75, 1.4, 0), 0, "green", { look: "nappe" });
@@ -164,7 +164,7 @@ const rouleau = hole(
 // 9. La table du goûter : des assiettes en plateaux, des biscuits qui renvoient, deux trous dont un dans une tasse
 const gouter = hole(
   "La table du goûter",
-  4,
+  3,
   (b) => {
     const t = b.tile(box(-2.6, -13, 2.6, 0), 0, "green", { look: "nappe" });
     // Une assiette : un fond plat, un rebord qui monte puis redescend jusqu'à la nappe

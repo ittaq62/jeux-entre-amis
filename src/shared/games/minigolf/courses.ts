@@ -6,6 +6,7 @@ import { JARDIN } from "./holes/jardin.ts";
 import { MER } from "./holes/mer.ts";
 import { MONTAGNE } from "./holes/montagne.ts";
 import { CUISINE } from "./holes/cuisine.ts";
+import { JUNGLE } from "./holes/jungle.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -51,8 +52,8 @@ export const COURSES: Record<CourseId, CourseInfo> = {
   jungle: {
     id: "jungle",
     name: "Temple dans la jungle",
-    blurb: "Ruines, cascades, ponts de lianes et disques de pierre.",
-    holes: [],
+    blurb: "Un temple gagné par la forêt : le pont de lianes, les rochers qui roulent, le gué et sa chute, les serpents de pierre.",
+    holes: JUNGLE,
     g: GRAVITY,
   },
   horloger: {

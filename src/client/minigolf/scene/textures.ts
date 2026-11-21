@@ -42,7 +42,7 @@ function fbm(noise: ReturnType<typeof makeNoise>, x: number, y: number, period: 
   return s / norm;
 }
 
-type Painter = (
+export type Painter = (
   u: number,
   v: number,
   n: (x: number, y: number, period: number, oct?: number) => number,
@@ -110,7 +110,11 @@ export interface SurfaceTex {
 
 const cache = new Map<string, SurfaceTex>();
 
-function surface(key: string, size: number, meters: number, seed: number, strength: number, painter: Painter): SurfaceTex {
+/**
+ * Une texture de sol (couleur et relief) peinte point par point, qui se répète tous les `meters` mètres ; gardée sous
+ * son nom une fois faite. `strength` : la force du relief.
+ */
+export function surface(key: string, size: number, meters: number, seed: number, strength: number, painter: Painter): SurfaceTex {
   const hit = cache.get(key);
   if (hit) return hit;
   const { color, height } = paint(size, seed, painter);

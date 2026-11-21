@@ -30,8 +30,11 @@ export interface ThemeKit {
   rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean };
   wall(look?: string): THREE.Material;
   post(look: string | undefined, r: number, h: number): THREE.Object3D;
-  /** Un obstacle mobile (null : formes simples) ; dessiné dans sa pose de repos, origine du monde */
-  mover(def: MoverDef): THREE.Object3D | null;
+  /**
+   * Un obstacle mobile (null : formes simples) ; dessiné dans sa pose de repos, origine du monde. Dans
+   * `userData.onPose(move, t)` : de quoi animer l'intérieur d'après le déplacement de l'origine
+   */
+  mover(def: MoverDef, c: Course): THREE.Object3D | null;
   water(look?: string): THREE.Material;
   /** La couleur du drapeau */
   flag: number;
@@ -633,7 +636,7 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   const moving: { obj: THREE.Object3D; def: MoverDef }[] = [];
   const plain = keep(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.6 }));
   for (const m of c.def.movers) {
-    let obj = kit.mover(m);
+    let obj = kit.mover(m, c);
     if (!obj) {
       const g = new THREE.Group();
       for (const p of m.parts) {
@@ -661,6 +664,9 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
         tmp.set(m[0]!, m[1]!, m[2]!, o[0], m[3]!, m[4]!, m[5]!, o[1], m[6]!, m[7]!, m[8]!, o[2], 0, 0, 0, 1);
         obj.matrix.copy(tmp);
         obj.matrixWorldNeedsUpdate = true;
+        // Le thème peut animer l'intérieur (un rocher qui roule) d'après le déplacement
+        const onPose = obj.userData.onPose as ((move: readonly number[], t: number) => void) | undefined;
+        onPose?.(o, t);
       }
       for (const s of spinning) s.rotation.z += dt * 2.4;
       for (const f of flags) {
