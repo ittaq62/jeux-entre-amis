@@ -371,12 +371,12 @@ const LUCIEN: Style = {
     n: { name: "Couac", frames: 15, pose: "jab", hits: [h(4, 5, 0.85, 0.9, 0.5, 3.5, 45, 3.5, 4)] },
     s: {
       name: "Soufflet tendu",
-      frames: 21,
+      frames: 20,
       pose: "side",
-      hits: [h(T + 1, T + 3, 1.0, 0.9, 0.45, 9, 35, 6, 16), h(T + 1, T + 3, 1.8, 0.9, 0.45, 9, 35, 6, 16)],
+      hits: [h(T, T + 2, 1.0, 0.9, 0.45, 9, 35, 6, 16), h(T, T + 2, 1.8, 0.9, 0.45, 9, 35, 6, 16)],
     },
     u: { name: "Accord en l'air", frames: 20, pose: "up", hits: [h(T + 1, T + 5, 0.1, 1.8, 0.6, 8, 90, 6, 13)] },
-    d: { name: "Note basse", frames: 18, pose: "low", hits: [h(T + 1, T + 2, 1.2, 0.25, 0.45, 8, 20, 5, 10)] },
+    d: { name: "Note basse", frames: 17, pose: "low", hits: [h(T, T + 1, 1.2, 0.25, 0.45, 8, 20, 5, 10)] },
     an: { name: "La valse", frames: 27, pose: "spin", landLag: 6, hits: [h(6, 16, 0, 0.85, 0.8, 7, 45, 5, 10)] },
     as: {
       name: "Soufflet en avant",

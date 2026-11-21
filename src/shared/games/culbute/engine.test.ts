@@ -329,6 +329,15 @@ describe("Culbute : le combat", () => {
     for (let k = 0; k < 20 && a.move === "n"; k++) run(f, 1, [tap(ATK, 1, 0)]);
     expect(a.move).toBe("s");
     expect(v.state).toBe("hurt");
+    // Et il touche l'autre encore étourdi, même à 0 % : le petit coup ouvre un vrai enchaînement
+    const before = v.dmg;
+    let stillHurt = false;
+    for (let k = 0; k < 20 && v.dmg === before; k++) {
+      stillHurt = v.state === "hurt";
+      run(f, 1);
+    }
+    expect(v.dmg).toBeGreaterThan(before);
+    expect(stillHurt).toBe(true);
   });
 
   it("l'attaque chargée à fond fait sortir un adversaire à 120 % depuis le bord", () => {

@@ -47,6 +47,8 @@ export const HITSTUN_BASE = 6;
 export const HITSTUN_K = 0.7;
 /** Un coup qui a touché (pas sur la garde) s'annule tant d'images après sa dernière image de frappe */
 export const HIT_CANCEL = 3;
+/** Le petit coup, lui, s'annule dès l'image où il pourrait se relancer */
+export const JAB_CANCEL = 1;
 /** Toutes les éjections un peu plus fortes : on sort plus tôt, les vies sont plus courtes et plus nerveuses */
 const KB_SCALE = 1.1;
 
@@ -285,7 +287,8 @@ export function hitCancelable(ft: Fighter): boolean {
   if (!CANCEL_SLOTS.has(ft.move) || ft.hitstop > 0) return false;
   const def = moveDef(ft.style, ft.move);
   if (!def || def.hits.length === 0) return false;
-  return ft.mt > Math.max(...def.hits.map((h) => h.to)) + HIT_CANCEL;
+  // Le petit coup s'annule aussi tôt qu'il se relance : il ouvre les enchaînements
+  return ft.mt > Math.max(...def.hits.map((h) => h.to)) + (ft.move === "n" ? JAB_CANCEL : HIT_CANCEL);
 }
 
 /** Peut-il être touché ? */
