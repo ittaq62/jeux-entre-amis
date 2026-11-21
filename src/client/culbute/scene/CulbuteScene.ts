@@ -859,7 +859,7 @@ export class CulbuteScene {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide });
     const m = new THREE.Mesh(this.star(), mat);
     m.position.set(x, y, 0.6);
-    const size = 0.35 + power * 0.9;
+    const size = 0.35 + power * 0.65;
     m.rotation.z = Math.random() * Math.PI;
     const spin = (Math.random() - 0.5) * 4;
     this.add(m, 0.22 + power * 0.15, (k, dt) => {
@@ -868,7 +868,8 @@ export class CulbuteScene {
       mat.opacity = 1 - k * k;
       if (k >= 1) mat.dispose();
     });
-    this.flare(x, y, 1.2 + power * 2.2, color, 0.2 + power * 0.15);
+    // La lueur passe derrière les combattants : on voit toujours qui frappe et qui encaisse
+    this.flare(x, y, 1.2 + power * 1.6, color, 0.2 + power * 0.15, -0.5);
     if (power > 0.25) this.wave(x, y, 0.8 + power * 1.6, 0xffffff, 0.25 + power * 0.15);
     if (power > 0.4) this.rays(x, y, 5 + Math.round(power * 4), 0.6 + power * 1.1, 0xffffff, 0.22 + power * 0.1);
   }
@@ -907,9 +908,10 @@ export class CulbuteScene {
           const mine = this.looks.findIndex((l) => l.me);
           const alive = frame.fighters.filter((f) => f.state !== "dead" && f.state !== "out").length;
           if (mine < 0 || e.a === mine || e.v === mine || alive <= 2) this.koCam = { x: e.x, y: e.y, age: 0 };
-          this.flare(e.x, e.y, 4.5, 0xffe9b0, 0.45);
-          this.wave(e.x, e.y, 3.5, 0xffe08a, 0.5);
-          this.rays(e.x, e.y, 16, 3.2, 0xffffff, 0.5, 0.1);
+          // (à la mesure de l'écran rapproché : derrière les combattants, qu'on voie encore le coup)
+          this.flare(e.x, e.y, 2.8, 0xffe9b0, 0.45, -0.6);
+          this.wave(e.x, e.y, 2.4, 0xffe08a, 0.5);
+          this.rays(e.x, e.y, 12, 2.1, 0xffffff, 0.45, 0.06);
           this.shake = 0.5;
         }
         break;
