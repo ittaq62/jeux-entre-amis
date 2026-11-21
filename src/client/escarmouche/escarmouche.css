@@ -580,6 +580,15 @@ html:has(.esc-root) body {
   background: rgba(181, 121, 58, 0.15);
 }
 
+/* Sur le panneau sombre de l'élimination, les armes (sombres elles aussi) prennent un fond plus clair et un fin liseré */
+.esc-dead .esc-next-btn:not(.is-on) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.esc-dead .esc-weapon-icon {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));
+}
+
 .esc-spec {
   position: absolute;
   bottom: 16px;
