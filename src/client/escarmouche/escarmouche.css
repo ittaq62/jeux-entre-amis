@@ -1061,6 +1061,14 @@ html:has(.esc-root) body {
   background: radial-gradient(ellipse at 50% 85%, rgba(181, 121, 58, 0.22), transparent 70%);
 }
 
+/* L'arsenal dans l'onglet « Mon look » du salon : sans son cadre, il est déjà dans celui de l'onglet */
+.lobby-panel > .esc-arsenal {
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
 /* ------------------------------------------------------------------ */
 /* L'interface du combat : boussole, radar, santé et munitions         */
 /* ------------------------------------------------------------------ */

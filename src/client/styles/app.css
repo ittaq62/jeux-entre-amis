@@ -2234,22 +2234,168 @@ a.shop-item {
   padding-bottom: 0;
 }
 
+/* Une seule colonne, toujours dans le même ordre : les joueurs, les onglets, puis le départ en bas */
 .lobby-body {
   width: 100%;
-  max-width: 1060px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 28px 20px 130px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  gap: 24px 28px;
-  align-items: start;
-}
-
-.lobby-left {
+  padding: 22px 20px 150px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
+}
+
+.lobby-body > * {
+  min-width: 0;
+}
+
+/* Les joueurs : le titre, « Ajouter un bot » et « Inviter » sur une ligne, les places dessous en grille */
+.lobby-players {
+  padding: 18px 22px 16px;
+}
+
+.lobby-players-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin-bottom: 6px;
+}
+
+.lobby-players-head h2 {
+  padding-bottom: 0;
+  justify-content: flex-start;
+}
+
+.lobby-players-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lobby-code {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.16);
+  font-family: var(--font-card);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.seat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  column-gap: 22px;
+}
+
+.seat-grid .seat-row {
+  min-height: 58px;
+  padding: 8px 0;
+}
+
+.seat-grid .seat-row:last-child {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Les onglets du salon : Règles, Mon look, Comment jouer */
+.lobby-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lobby-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(5, 17, 12, 0.45);
+  color: var(--text-soft);
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.lobby-tab:hover {
+  color: var(--text);
+}
+
+.lobby-tab.is-active {
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 18%, var(--panel));
+  color: var(--gold-light);
+}
+
+/* « Plus de règles » : le reste des réglages, replié */
+.lobby-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px dashed var(--line-soft);
+  background: none;
+  color: var(--gold-light);
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lobby-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* « Comment jouer » : le but, puis l'essentiel en quelques lignes */
+.lobby-help {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.lobby-help h2,
+.lobby-help h3 {
+  margin: 0;
+}
+
+.lobby-help h3 {
+  margin-top: 6px;
+  font-size: 18px;
+}
+
+.lobby-help p {
+  margin: 0;
+}
+
+.lobby-help ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.lobby-help kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  font: inherit;
+  font-size: 13px;
 }
 
 /* Ticket de vestiaire : le code de la table */
@@ -2545,6 +2691,25 @@ a.shop-item {
   box-shadow: 0 -12px 28px -12px rgba(0, 0, 0, 0.8);
 }
 
+/* Les règles en une ligne, à côté du départ : elles cèdent la place au bouton, qui ne passe jamais à la ligne */
+.lobby-summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 46ch;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.lobby-summary svg {
+  flex: none;
+  color: var(--gold);
+}
+
 .lobby-start {
   display: flex;
   align-items: center;
@@ -2565,16 +2730,57 @@ a.shop-item {
   color: var(--text-soft);
 }
 
+/* Inviter : le code, le lien, le QR code et les amis en ligne, au même endroit */
 .invite-modal {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
+}
+
+.invite-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 22px;
+}
+
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.invite-bottom {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.invite-qr-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .invite-qr {
+  display: block;
   width: 200px;
   height: 200px;
   margin: 0 auto;
+  border-radius: 6px;
+  background: rgba(242, 236, 223, 0.06);
+}
+
+.invite-modal .lobby-friends {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  border: 0;
+}
+
+.invite-modal .lobby-friends h2 {
+  font-size: 19px;
 }
 
 /* Les amis en ligne, à inviter d'un clic depuis le salon */
@@ -2728,10 +2934,72 @@ a.shop-item {
   }
 }
 
+@media (min-width: 861px) {
+  .lobby-footer .lobby-start {
+    flex: none;
+    flex-wrap: nowrap;
+  }
+}
+
 @media (max-width: 860px) {
-  /* minmax(0, ...) : un long pseudo ne doit jamais élargir la page */
+  /* Le départ prend toute la largeur ; les règles en une ligne au-dessus */
+  .lobby-footer {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .lobby-summary {
+    max-width: none;
+    width: 100%;
+    justify-content: center;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 640px) {
   .lobby-body {
+    padding-top: 14px;
+    padding-bottom: 190px;
+    gap: 12px;
+  }
+
+  .lobby-players {
+    padding: 14px 16px 12px;
+  }
+
+  /* Les trois onglets tiennent sur la largeur du téléphone */
+  .lobby-tabs {
+    gap: 4px;
+  }
+
+  .lobby-tab {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+
+  .invite-bottom {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .lobby-tab svg {
+    display: none;
+  }
+
+  .lobby-start {
+    gap: 8px;
+  }
+
+  .lobby-start .hint {
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .lobby-summary {
+    font-size: 12.5px;
   }
 }
 

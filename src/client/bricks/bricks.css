@@ -246,13 +246,40 @@
   color: var(--text-faint);
 }
 
-.attack-memo > .hint {
-  margin: 0 0 8px;
-  line-height: 1.45;
+/* Dans « Comment jouer », le mémo garde ses lignes serrées, sans puces ni retrait */
+.lobby-help .attack-list {
+  gap: 0;
+  margin: 0;
+  padding-left: 0;
 }
 
-.attack-memo > .hint:last-child {
-  margin-bottom: 0;
+/* « Comment jouer » au salon : les touches de cet appareil au clavier, les gestes au doigt */
+.lobby-help .bricks-keys {
+  max-width: 460px;
+  gap: 4px;
+  list-style: none;
+  padding-left: 0;
+}
+
+.bricks-keys li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bricks-touch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .lobby-help .bricks-keys {
+    display: none;
+  }
+
+  .lobby-help .bricks-touch {
+    display: block;
+  }
 }
 
 /* Des lignes grises parées : la barre s'éclaire de vert pendant qu'elle baisse */

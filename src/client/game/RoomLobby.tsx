@@ -7,7 +7,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { BackPicker } from "./BackPicker.tsx";
 import { CrewCountField, crewProblem, CrewsPanel } from "./Crews.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "./RandomRules.tsx";
-import { RulesHeading, TableLobby, TableSize } from "./TableLobby.tsx";
+import { TableLobby, TableSize } from "./TableLobby.tsx";
 
 interface LobbyProps {
   room: RoomView;
@@ -46,6 +46,12 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
   const setPrefs = usePrefs((p) => p.set);
   const mine = room.seats.find((seat) => seat.id === room.you.seatId);
 
+  const endLabel = s.endMode === "points" ? `en ${s.targetScore} points` : s.endMode === "ranking" ? "jusqu'au dernier" : "premier à finir";
+  const turnLabel = s.turnSeconds ? `${s.turnSeconds < 60 ? `${s.turnSeconds} s` : "1 min"} pour jouer` : "sans limite de temps";
+  const summary = [s.variant === "nomercy" ? "UNO No Mercy" : "UNO classique", endLabel, turnLabel, count ? `${count} équipes` : null]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <TableLobby
       room={room}
@@ -58,21 +64,10 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
       startHint={problem ?? undefined}
       seatNote={count ? (seat) => (seat.team !== undefined ? tableTeamName(seat.team) : null) : undefined}
       aside={count ? <CrewsPanel room={room} send={send} count={count} /> : undefined}
+      summary={summary}
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
-
+        <>
           <RandomRulesField room={room} game="uno" send={send} />
-
-          {mine && (
-            <BackPicker
-              current={mine.back ?? "classique"}
-              onPick={(back) => {
-                setPrefs({ unoBack: back });
-                send({ t: "back", back });
-              }}
-            />
-          )}
 
           <div className="field">
             <span className="field-label">Jeu</span>
@@ -91,26 +86,6 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
                 +6, +10, roulette, défausse totale. Le cumul est obligatoire et on est éliminé à 25 cartes.
               </p>
             )}
-          </div>
-
-          <div className="rule-list">
-            {HOUSE_RULES.map((r) => {
-              const forced = rules.noMercy && !MERCY_FREE.has(r.key);
-              const drawn = locked(r.key);
-              const checked = forced || Boolean(s[r.key]);
-              const toggle = () => isHost && !forced && !drawn && update({ [r.key]: !s[r.key] });
-              return (
-                <div key={r.key} className={`rule-row ${forced || drawn ? "is-forced" : ""}`} onClick={toggle}>
-                  <Check label={r.label} checked={checked} disabled={!isHost || forced || drawn} onChange={() => {}} />
-                  <span>
-                    <strong>{r.label}</strong>
-                    <span className="hint">
-                      {forced ? "Toujours en vigueur en No Mercy." : drawn ? `${r.desc} Décidé par le tirage.` : r.desc}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
           </div>
 
           <div className="field">
@@ -152,6 +127,29 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
               }
             />
           )}
+        </>
+      }
+      moreRules={
+        <>
+          <div className="rule-list">
+            {HOUSE_RULES.map((r) => {
+              const forced = rules.noMercy && !MERCY_FREE.has(r.key);
+              const drawn = locked(r.key);
+              const checked = forced || Boolean(s[r.key]);
+              const toggle = () => isHost && !forced && !drawn && update({ [r.key]: !s[r.key] });
+              return (
+                <div key={r.key} className={`rule-row ${forced || drawn ? "is-forced" : ""}`} onClick={toggle}>
+                  <Check label={r.label} checked={checked} disabled={!isHost || forced || drawn} onChange={() => {}} />
+                  <span>
+                    <strong>{r.label}</strong>
+                    <span className="hint">
+                      {forced ? "Toujours en vigueur en No Mercy." : drawn ? `${r.desc} Décidé par le tirage.` : r.desc}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="field">
             <span className="field-label">Temps pour jouer</span>
@@ -170,8 +168,47 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
           </div>
 
           <TableSize room={room} send={send} max={MAX_PLAYERS} />
-        </section>
+        </>
       }
+      look={
+        mine && (
+          <BackPicker
+            current={mine.back ?? "classique"}
+            onPick={(back) => {
+              setPrefs({ unoBack: back });
+              send({ t: "back", back });
+            }}
+          />
+        )
+      }
+      help={<UnoHelp noMercy={rules.noMercy} />}
     />
+  );
+}
+
+/** Comment jouer au UNO : le but, ce qu'on pose, les cartes spéciales et le « UNO ! » */
+function UnoHelp({ noMercy }: { noMercy: boolean }) {
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong> être le premier à poser toutes ses cartes.
+      </p>
+      <ul>
+        <li>À ton tour, pose une carte de la même couleur, ou du même chiffre ou symbole que celle du dessus.</li>
+        <li>Les jokers se posent sur tout : tu choisis la nouvelle couleur.</li>
+        <li>Rien à poser : tu pioches une carte (et tu la poses si elle va).</li>
+        <li>
+          <strong>+2</strong> et <strong>+4</strong> : le suivant pioche et passe son tour. <strong>Inversion</strong> : le sens change.{" "}
+          <strong>Passe</strong> : le suivant passe son tour.
+        </li>
+        <li>
+          Quand il te reste une carte, appuie sur <strong>UNO !</strong> Sinon, un autre peut te prendre la main dans le sac : tu pioches 2
+          cartes.
+        </li>
+        {noMercy && <li>No Mercy : +6, +10, roulette des couleurs et défausse totale ; à 25 cartes en main, on est éliminé.</li>}
+      </ul>
+      <p className="hint">Les règles en plus (cumul, 7-0, interception…) se lisent dans l'onglet Règles, sous « Plus de règles ».</p>
+    </div>
   );
 }

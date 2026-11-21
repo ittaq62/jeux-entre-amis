@@ -8,6 +8,23 @@
   gap: 12px;
 }
 
+/* Le choix du combattant dans l'onglet « Mon look » du salon : sans son cadre, il est déjà dans celui de l'onglet */
+.lobby-panel > .cb-picker {
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* « Comment jouer » au salon : les touches sans retrait de liste, le bouton des commandes à sa taille */
+.lobby-help .cb-keys {
+  padding: 0;
+}
+
+.lobby-help .cb-commands-btn {
+  align-self: flex-start;
+}
+
 .cb-stage-view {
   max-height: 240px;
   border-radius: 14px;

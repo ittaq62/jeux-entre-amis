@@ -16,8 +16,16 @@ export interface TableLobbyProps {
   onOpenChat: () => void;
   onLeave: () => void;
   onBackToGame?: () => void;
-  /** Le bloc des règles, propre à chaque jeu */
+  /** L'onglet « Règles » : l'essentiel des règles du jeu (le tirage au sort, le mode, la fin de partie…) */
   rules: ReactNode;
+  /** Le reste des règles, replié sous « Plus de règles » (les places et qui peut venir y sont toujours) */
+  moreRules?: ReactNode;
+  /** L'onglet « Mon look » : ce que le joueur choisit pour lui (pion, dos de cartes, arsenal, tenue…), et ses achats */
+  look?: ReactNode;
+  /** L'onglet « Comment jouer » : le but du jeu, les touches, l'aide */
+  help?: ReactNode;
+  /** Les règles en une ligne, à côté du bouton de départ (« Classique · premier à finir · 30 s par tour ») */
+  summary?: string;
   /** Titre du partage, par exemple « Viens jouer au UNO » */
   shareTitle: string;
   startLabel: string;
@@ -39,7 +47,13 @@ export interface TableLobbyProps {
   topActions?: ReactNode;
 }
 
-/** Le salon d'attente, commun à tous les jeux : ticket du code, places autour de la table, invitations, départ. */
+type LobbyTab = "rules" | "look" | "help";
+
+/**
+ * Le salon d'attente, le même pour tous les jeux et toujours dans le même ordre : en haut les joueurs, « Ajouter un
+ * bot » et « Inviter » (le lien, le QR code et les amis en ligne au même endroit) ; dessous trois onglets, « Règles »
+ * (l'essentiel, le reste replié), « Mon look » et « Comment jouer » ; en bas le départ, avec les règles en une ligne.
+ */
 export function TableLobby({
   room,
   send,
@@ -48,6 +62,10 @@ export function TableLobby({
   onLeave,
   onBackToGame,
   rules,
+  moreRules,
+  look,
+  help,
+  summary,
   shareTitle,
   startLabel,
   hostWillStart,
@@ -63,6 +81,8 @@ export function TableLobby({
   const isHost = room.you.isHost;
   const tour = kind === "tour";
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [tab, setTab] = useState<LobbyTab>("rules");
+  const [more, setMore] = useState(false);
   const link = `${location.origin}/salon/${room.code}`;
   const emptySeats = Math.max(0, room.settings.maxPlayers - room.seats.length);
   const finished = room.status === "finished";
@@ -71,29 +91,26 @@ export function TableLobby({
   // Une partie lancée ne se rejoint que si l'hôte le permet et que le jeu le sait (Crampons) : le serveur décide aussi
   const canTakeSeat = maySit({ started: playing, lateJoin: Boolean(room.settings.lateJoin), midGame: JOINS_STARTED[room.game] });
   const host = room.seats.find((x) => x.isHost);
+  const canAddBot = isHost && emptySeats > 0 && !noBots;
   // Ceux qui sont déjà là, assis ou spectateurs : pas besoin de les inviter
   const here = useMemo(
     () => new Set([...room.seats.map((x) => x.userId), ...room.spectators.map((x) => x.userId)].filter((id): id is string => Boolean(id))),
     [room.seats, room.spectators],
   );
-
-  async function share() {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: shareTitle, text: `Rejoins ma ${tour ? "tournée" : "table"}, code ${room.code}`, url: link });
-      } else {
-        await navigator.clipboard.writeText(link);
-        toast({ title: "Lien copié", body: "Colle-le sur Discord pour inviter tes amis." });
-      }
-    } catch {
-      // partage annule
-    }
-  }
+  const tabs: { id: LobbyTab; label: string; icon: "list" | "user" | "info" }[] = [
+    { id: "rules", label: "Règles", icon: "list" },
+    ...(look ? [{ id: "look" as const, label: "Mon look", icon: "user" as const }] : []),
+    ...(help ? [{ id: "help" as const, label: "Comment jouer", icon: "info" as const }] : []),
+  ];
+  // Un onglet qui disparaît (on quitte sa place : plus de look à choisir) ramène aux règles
+  const shown: LobbyTab = tabs.some((t) => t.id === tab) ? tab : "rules";
+  // Un salon qui n'a pas encore ses onglets donne ses règles d'un bloc, avec leur cadre et leur titre
+  const legacy = moreRules === undefined && look === undefined && help === undefined && summary === undefined;
 
   return (
     <div className="felt page lobby">
       <header className="page-top">
-        <button className="btn btn-ghost btn-icon" onClick={onLeave} aria-label="Quitter la table">
+        <button className="btn btn-ghost btn-icon" onClick={onLeave} aria-label={tour ? "Quitter la tournée" : "Quitter la table"}>
           <Icon name="back" />
         </button>
         <h1 className="page-title">
@@ -122,133 +139,159 @@ export function TableLobby({
       </header>
 
       <main className="lobby-body">
-        <div className="lobby-left">
-          <section aria-label="Code de la table">
-            <div className="ticket-wrap">
-              <div className="ticket">
-                <span className="ticket-label">
-                  <strong>{tour ? "Tournée" : "Table"}</strong>
-                  {room.settings.visibility === "public" ? "ouverte à tous" : "entre amis"}
-                </span>
-                <span className="ticket-code" aria-label={`Code ${room.code.split("").join(" ")}`}>
-                  {room.code}
-                </span>
-              </div>
-            </div>
-            <div className="lobby-invite">
-              <button className="btn btn-primary" onClick={() => void share()}>
-                Envoyer le lien
-              </button>
-              <button className="btn" onClick={() => setInviteOpen(true)}>
-                QR code
-              </button>
-            </div>
-          </section>
-
-          <FriendsInvite code={room.code} here={here} />
-
-          <section className="lobby-section panel">
+        <section className="lobby-section panel lobby-players" aria-label={tour ? "Les joueurs" : "Autour de la table"}>
+          <div className="lobby-players-head">
             <h2>
               {tour ? "Les joueurs" : "Autour de la table"}
               <span className="hint num">
                 {room.seats.length} sur {room.settings.maxPlayers}
               </span>
             </h2>
-            <ul className="seat-list">
-              <AnimatePresence initial={false}>
-                {room.seats.map((seat, i) => {
-                  const note = seatNote?.(seat, i);
-                  return (
-                    <motion.li
-                      key={seat.id}
-                      className="seat-row"
-                      // Dans une tournée, les arrivées glissent en place ; les tables gardent leur liste fixe
-                      initial={tour ? { opacity: 0, x: -14 } : false}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={tour ? { opacity: 0, x: 14, transition: { duration: 0.18 } } : undefined}
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                    >
-                      <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={44} />
-                      <span className="row-text">
-                        <strong>
-                          <PlayerName name={seat.name} admin={seat.admin} suffix={seat.id === room.you.seatId ? " (toi)" : undefined} />
-                        </strong>
-                        <span className="hint">
-                          {[note, seat.isHost && "hôte", seat.kind === "bot" && "bot", seat.kind === "human" && !seat.connected && "absent"]
-                            .filter(Boolean)
-                            .join(", ") || " "}
-                        </span>
-                      </span>
-                      <span className="seat-actions">
-                        {seat.kind === "human" && seat.userId && seat.userId !== room.you.userId && (
-                          <FriendButton userId={seat.userId} pseudo={seat.name} />
-                        )}
-                        {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() =>
-                              send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
-                            }
-                          >
-                            {seat.kind === "bot" ? "Retirer" : "Exclure"}
-                          </button>
-                        )}
-                      </span>
-                    </motion.li>
-                  );
-                })}
-              </AnimatePresence>
-              {tour && emptySeats > 0 && (
-                <li className="seat-row is-empty">
-                  <span className="seat-empty-mark" />
-                  <span className="row-text">{emptySeats === 1 ? "Encore une place libre" : `Encore ${emptySeats} places libres`}</span>
-                  {isHost && (
-                    <button className="btn btn-sm" onClick={() => send({ t: "addBot" })}>
-                      Ajouter un bot
-                    </button>
-                  )}
-                </li>
-              )}
-              {Array.from({ length: tour ? 0 : emptySeats }, (_, i) => (
-                <li key={`empty-${i}`} className="seat-row is-empty">
-                  <span className="seat-empty-mark" />
-                  <span className="row-text">Place libre</span>
-                  {isHost && i === 0 && !noBots && (
-                    <button className="btn btn-sm" onClick={() => send({ t: "addBot" })}>
-                      Ajouter un bot
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {!seated &&
-              canTakeSeat &&
-              (room.seats.length < room.settings.maxPlayers || (tour && room.seats.some((x) => x.kind === "bot"))) && (
-                <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
-                  {tour ? "Jouer la tournée" : playing ? "Entrer sur le terrain" : "Prendre une place"}
+            <div className="lobby-players-actions">
+              {canAddBot && (
+                <button className="btn btn-sm" onClick={() => send({ t: "addBot" })}>
+                  <Icon name="bot" size={16} /> Ajouter un bot
                 </button>
               )}
-            {!seated && !canTakeSeat && (
-              <p className="hint" style={{ marginTop: 12 }}>
-                {room.settings.lateJoin
-                  ? "La partie est lancée : tu la regardes, et tu pourras t'asseoir à la suivante."
-                  : "La table n'accepte plus personne en cours de route : tu regardes, et tu pourras t'asseoir à la prochaine partie."}
-              </p>
+              <button className="btn btn-sm btn-primary" onClick={() => setInviteOpen(true)}>
+                <Icon name="share" size={16} /> Inviter
+                <span className="lobby-code" aria-label={`code ${room.code.split("").join(" ")}`}>
+                  {room.code}
+                </span>
+              </button>
+            </div>
+          </div>
+          <ul className="seat-list seat-grid">
+            <AnimatePresence initial={false}>
+              {room.seats.map((seat, i) => {
+                const note = seatNote?.(seat, i);
+                return (
+                  <motion.li
+                    key={seat.id}
+                    className="seat-row"
+                    // Dans une tournée, les arrivées glissent en place ; les tables gardent leur liste fixe
+                    initial={tour ? { opacity: 0, x: -14 } : false}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={tour ? { opacity: 0, x: 14, transition: { duration: 0.18 } } : undefined}
+                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  >
+                    <Avatar avatar={seat.avatar} userId={seat.userId} photo={seat.photo} size={40} />
+                    <span className="row-text">
+                      <strong>
+                        <PlayerName name={seat.name} admin={seat.admin} suffix={seat.id === room.you.seatId ? " (toi)" : undefined} />
+                      </strong>
+                      <span className="hint">
+                        {[note, seat.isHost && "hôte", seat.kind === "bot" && "bot", seat.kind === "human" && !seat.connected && "absent"]
+                          .filter(Boolean)
+                          .join(", ") || " "}
+                      </span>
+                    </span>
+                    <span className="seat-actions">
+                      {seat.kind === "human" && seat.userId && seat.userId !== room.you.userId && (
+                        <FriendButton userId={seat.userId} pseudo={seat.name} />
+                      )}
+                      {(isHost || room.you.isAdmin) && seat.id !== room.you.seatId && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            send(seat.kind === "bot" ? { t: "removeSeat", seatId: seat.id } : { t: "kick", userId: seat.userId! })
+                          }
+                        >
+                          {seat.kind === "bot" ? "Retirer" : "Exclure"}
+                        </button>
+                      )}
+                    </span>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+            {emptySeats > 0 && (
+              <li className="seat-row is-empty">
+                <span className="seat-empty-mark" />
+                <span className="row-text">{emptySeats === 1 ? "Encore une place libre" : `Encore ${emptySeats} places libres`}</span>
+              </li>
             )}
-            {room.spectators.length > 0 && (
-              <p className="hint" style={{ marginTop: 12 }}>
-                {tour ? "Regardent seulement" : "Regardent la partie"} : {room.spectators.map((sp) => sp.name).join(", ")}
-              </p>
+          </ul>
+          {!seated &&
+            canTakeSeat &&
+            (room.seats.length < room.settings.maxPlayers || (tour && room.seats.some((x) => x.kind === "bot"))) && (
+              <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => send({ t: "sit" })}>
+                {tour ? "Jouer la tournée" : playing ? "Entrer sur le terrain" : "Prendre une place"}
+              </button>
             )}
-          </section>
+          {!seated && !canTakeSeat && (
+            <p className="hint" style={{ marginTop: 12 }}>
+              {room.settings.lateJoin
+                ? "La partie est lancée : tu la regardes, et tu pourras t'asseoir à la suivante."
+                : "La table n'accepte plus personne en cours de route : tu regardes, et tu pourras t'asseoir à la prochaine partie."}
+            </p>
+          )}
+          {room.spectators.length > 0 && (
+            <p className="hint" style={{ marginTop: 12 }}>
+              {tour ? "Regardent seulement" : "Regardent la partie"} : {room.spectators.map((sp) => sp.name).join(", ")}
+            </p>
+          )}
+        </section>
 
-          {aside}
+        {aside}
+
+        <div className="lobby-tabs" role="tablist" aria-label="Le salon">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              id={`lobby-tab-${t.id}`}
+              role="tab"
+              type="button"
+              className={`lobby-tab ${shown === t.id ? "is-active" : ""}`}
+              aria-selected={shown === t.id}
+              aria-controls={`lobby-panel-${t.id}`}
+              onClick={() => setTab(t.id)}
+            >
+              <Icon name={t.icon} size={18} /> {t.label}
+            </button>
+          ))}
         </div>
 
-        {rules}
+        {legacy ? (
+          <div className="lobby-panel" role="tabpanel" id="lobby-panel-rules" aria-labelledby="lobby-tab-rules">
+            {rules}
+          </div>
+        ) : (
+          <section
+            className="rules-sheet panel lobby-panel"
+            role="tabpanel"
+            id={`lobby-panel-${shown}`}
+            aria-labelledby={`lobby-tab-${shown}`}
+          >
+            {shown === "rules" ? (
+              <>
+                <RulesHeading room={room} tour={tour} />
+                {rules}
+                {moreRules && (
+                  <>
+                    <button type="button" className="lobby-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+                      <Icon name={more ? "chevronUp" : "chevronDown"} size={18} />
+                      {more ? "Moins de règles" : "Plus de règles"}
+                    </button>
+                    {more && <div className="lobby-more-body">{moreRules}</div>}
+                  </>
+                )}
+              </>
+            ) : shown === "look" ? (
+              look
+            ) : (
+              help
+            )}
+          </section>
+        )}
       </main>
 
       <footer className="lobby-footer">
+        {summary && room.status !== "playing" && (
+          <p className="lobby-summary">
+            <Icon name="list" size={16} /> <span>{summary}</span>
+          </p>
+        )}
         {onBackToGame && (
           <button className="btn btn-lg" onClick={onBackToGame}>
             Retour à la partie
@@ -272,17 +315,26 @@ export function TableLobby({
           ))}
       </footer>
 
-      <QrModal open={inviteOpen} onClose={() => setInviteOpen(false)} code={room.code} link={link} tour={tour} />
+      <InviteModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        code={room.code}
+        link={link}
+        tour={tour}
+        shareTitle={shareTitle}
+        here={here}
+        visibility={room.settings.visibility}
+      />
     </div>
   );
 }
 
-/** En-tête du bloc des règles : qui les a choisies. */
-export function RulesHeading({ room }: { room: LobbyRoom }) {
+/** En-tête de l'onglet des règles : qui les a choisies. */
+export function RulesHeading({ room, tour = false }: { room: LobbyRoom; tour?: boolean }) {
   const host = room.seats.find((x) => x.isHost);
   return (
     <div>
-      <h2>Règles de la table</h2>
+      <h2>{tour ? "Règles de la tournée" : "Règles de la table"}</h2>
       {!room.you.isHost && (
         <p className="hint" style={{ margin: "4px 0 0" }}>
           Choisies par {host?.name ?? "l'hôte"}.
@@ -355,29 +407,82 @@ export function TableSize({ room, send, max }: { room: LobbyRoom; send: (msg: Lo
   );
 }
 
-/** Le QR code du salon, à scanner avec le téléphone, et le lien à copier */
-function QrModal({ open, onClose, code, link, tour }: { open: boolean; onClose: () => void; code: string; link: string; tour: boolean }) {
+/** Inviter, au même endroit : le code de la table, le lien à envoyer ou copier, le QR code, et les amis en ligne */
+function InviteModal({
+  open,
+  onClose,
+  code,
+  link,
+  tour,
+  shareTitle,
+  here,
+  visibility,
+}: {
+  open: boolean;
+  onClose: () => void;
+  code: string;
+  link: string;
+  tour: boolean;
+  shareTitle: string;
+  here: Set<string>;
+  visibility: string;
+}) {
   const [qr, setQr] = useState<string | null>(null);
   if (open && !qr) {
     void import("qrcode").then((QRCode) =>
       QRCode.toDataURL(link, { margin: 1, width: 360, color: { dark: "#1d1b18", light: "#f2ecdf" } }).then(setQr),
     );
   }
+  async function share() {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle, text: `Rejoins ma ${tour ? "tournée" : "table"}, code ${code}`, url: link });
+      } else {
+        await navigator.clipboard.writeText(link);
+        toast({ title: "Lien copié", body: "Colle-le sur Discord pour inviter tes amis." });
+      }
+    } catch {
+      // partage annulé
+    }
+  }
   return (
-    <Modal open={open} onClose={onClose} title={tour ? "Inviter à la tournée" : "Inviter à la table"}>
+    <Modal open={open} onClose={onClose} title={tour ? "Inviter à la tournée" : "Inviter à la table"} wide>
       <div className="invite-modal">
-        {qr && <img src={qr} alt={`QR code de la table ${code}`} className="invite-qr" />}
-        <p className="hint center-text" style={{ margin: 0 }}>
-          À scanner avec le téléphone, ou :
-        </p>
-        <button
-          className="btn btn-block"
-          onClick={() => {
-            void navigator.clipboard.writeText(link).then(() => toast({ title: "Lien copié" }));
-          }}
-        >
-          Copier le lien
-        </button>
+        <div className="invite-top">
+          <div className="ticket-wrap">
+            <div className="ticket">
+              <span className="ticket-label">
+                <strong>{tour ? "Tournée" : "Table"}</strong>
+                {visibility === "public" ? "ouverte à tous" : "entre amis"}
+              </span>
+              <span className="ticket-code" aria-label={`Code ${code.split("").join(" ")}`}>
+                {code}
+              </span>
+            </div>
+          </div>
+          <div className="invite-actions">
+            <button className="btn btn-primary" onClick={() => void share()}>
+              <Icon name="share" size={16} /> Envoyer le lien
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                void navigator.clipboard.writeText(link).then(() => toast({ title: "Lien copié" }));
+              }}
+            >
+              <Icon name="copy" size={16} /> Copier le lien
+            </button>
+          </div>
+        </div>
+        <div className="invite-bottom">
+          <div className="invite-qr-box">
+            {qr ? <img src={qr} alt={`QR code de la table ${code}`} className="invite-qr" /> : <span className="invite-qr" />}
+            <p className="hint center-text" style={{ margin: 0 }}>
+              À scanner avec le téléphone
+            </p>
+          </div>
+          <FriendsInvite code={code} here={here} />
+        </div>
       </div>
     </Modal>
   );

@@ -2,6 +2,8 @@ import {
   DEFAULT_SETTINGS,
   LONG_WORD,
   LIVES_CHOICES,
+  MAX_PASSES,
+  MIN_LETTERS,
   type BotLevel,
   type Difficulty,
   type LetterSource,
@@ -16,29 +18,33 @@ import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { CrewCountField, crewProblem, CrewsPanel } from "../game/Crews.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { BombPicker } from "./bombs/BombPicker.tsx";
 
-/** Les trois façons de faire brûler la mèche, et ce qu'on lit sous le choix */
-const MODES: { value: FuseChoice; label: string; rule: string }[] = [
+/** Les trois façons de faire brûler la mèche, ce qu'on lit sous le choix, et leur nom dans les règles en une ligne */
+const MODES: { value: FuseChoice; label: string; short: string; rule: string }[] = [
   {
     value: "commune",
     label: "Classique",
+    short: "Mèche classique",
     rule: "Chaque joueur reçoit une mèche neuve, dont personne ne connaît la longueur : elle peut sauter à tout moment dès que l'étincelle entre dans la zone rouge. Elle raccourcit à chaque mot, et ce qu'un joueur traîne ne retombe jamais sur le suivant.",
   },
   {
     value: "rallonge",
     label: "À rallonge",
+    short: "Mèche à rallonge",
     rule: "Une seule mèche pour tous, qui brûle de plus en plus vite. Chaque bon mot la fait reculer, et personne ne peut la refiler presque finie : le suivant en reçoit toujours au moins les quatre cinquièmes de ce que tu avais reçu.",
   },
   {
     value: "chacun",
     label: "Chacun la sienne",
+    short: "Chacun sa mèche",
     rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : le premier qui arrive au bout perd une allumette, puis tout le monde repart avec une mèche neuve.",
   },
   {
     value: "hasard",
     label: "Au hasard",
+    short: "Mode tiré au sort",
     rule: "Le mode est tiré au sort au début de chaque partie : classique, à rallonge ou chacun sa mèche. Il est annoncé au lancement.",
   },
 ];
@@ -48,6 +54,9 @@ const PACE_HINTS: Record<Pace, string> = {
   normal: "Le rythme habituel, de plus en plus serré au fil de la partie.",
   nerveux: "Tout va plus vite : il faut trouver du premier coup.",
 };
+
+/** Le rythme dans les règles en une ligne : « rythme posé » */
+const PACE_NAMES: Record<Pace, string> = { pose: "posé", normal: "normal", nerveux: "nerveux" };
 
 const DIFFICULTY_HINTS: Record<Difficulty, string> = {
   simple: "Des lettres qu'on retrouve dans beaucoup de mots.",
@@ -87,6 +96,15 @@ export function MecheLobby({ room, send, ...rest }: Props) {
   const mode = MODES.find((m) => m.value === s.mode) ?? MODES[0]!;
   const update = (patch: Partial<MecheSettings>) => send({ t: "settings", settings: patch });
 
+  const summary = [
+    mode.short,
+    `${s.lives} allumette${s.lives > 1 ? "s" : ""}`,
+    `rythme ${PACE_NAMES[s.pace]}`,
+    count ? `${count} équipes` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <TableLobby
       room={room}
@@ -103,27 +121,11 @@ export function MecheLobby({ room, send, ...rest }: Props) {
           .filter(Boolean)
           .join(", ") || null
       }
-      aside={
-        count || room.you.seatId ? (
-          <>
-            {count > 0 && <CrewsPanel room={room} send={send} count={count} />}
-            {room.you.seatId && <BombPicker />}
-          </>
-        ) : null
-      }
+      aside={count ? <CrewsPanel room={room} send={send} count={count} /> : undefined}
+      summary={summary}
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
-
+        <>
           <RandomRulesField room={room} game="meche" send={send} />
-
-          <div className="meche-howto">
-            <p>
-              <strong>La mèche passe de main en main.</strong> Quand elle est chez toi, écris un mot qui contient les lettres affichées :
-              elle part chez le voisin. Si elle saute dans tes mains, tu perds une allumette. Le dernier à en avoir gagne.
-            </p>
-            <p className="hint">Les accents ne comptent pas.</p>
-          </div>
 
           <div className="field">
             <span className="field-label">Mode de jeu</span>
@@ -150,6 +152,19 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             />
           </div>
 
+          {!room.tour && (
+            <CrewCountField
+              count={count}
+              max={MECHE_MAX_PLAYERS}
+              disabled={!isHost}
+              onChange={(teamCount) => update({ teamCount })}
+              win="La mèche passe d'une équipe à l'autre ; la dernière équipe qui a encore des allumettes gagne, ensemble."
+            />
+          )}
+        </>
+      }
+      moreRules={
+        <>
           <div className="field">
             <span className="field-label">Rythme de la mèche</span>
             <Options<Pace>
@@ -222,16 +237,6 @@ export function MecheLobby({ room, send, ...rest }: Props) {
             </div>
           </div>
 
-          {!room.tour && (
-            <CrewCountField
-              count={count}
-              max={MECHE_MAX_PLAYERS}
-              disabled={!isHost}
-              onChange={(teamCount) => update({ teamCount })}
-              win="La mèche passe d'une équipe à l'autre ; la dernière équipe qui a encore des allumettes gagne, ensemble."
-            />
-          )}
-
           <div className="field">
             <span className="field-label">Niveau des bots</span>
             <Options<BotLevel>
@@ -251,20 +256,50 @@ export function MecheLobby({ room, send, ...rest }: Props) {
           </div>
 
           <TableSize room={room} send={send} max={MECHE_MAX_PLAYERS} />
-
-          <p className="hint meche-credit">
-            Dictionnaire tiré du lexique{" "}
-            <a href="https://grammalecte.net" target="_blank" rel="noreferrer">
-              Grammalecte
-            </a>{" "}
-            (licence{" "}
-            <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noreferrer">
-              MPL 2.0
-            </a>
-            ).
-          </p>
-        </section>
+        </>
       }
+      // Sa bombe : seulement pour qui est assis à la table
+      look={room.you.seatId ? <BombPicker /> : undefined}
+      help={<MecheHelp passes={s.passes} />}
     />
+  );
+}
+
+/** Comment jouer à Mèche : la règle, les mots acceptés, comment les envoyer, les passes, et d'où vient le dictionnaire */
+function MecheHelp({ passes }: { passes: boolean }) {
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>La mèche passe de main en main.</strong> Quand elle est chez toi, écris un mot qui contient les lettres affichées : elle
+        part chez le voisin. Si elle saute dans tes mains, tu perds une allumette. Le dernier à en avoir gagne.
+      </p>
+      <ul>
+        <li>Les lettres affichées doivent se suivre dans ton mot, dans cet ordre.</li>
+        <li>Un mot de {MIN_LETTERS} lettres au moins, qui existe au dictionnaire et n'a pas déjà été joué dans la partie.</li>
+        <li>
+          Tape ton mot au clavier et envoie-le avec <kbd>Entrée</kbd> (ou touche la table). Un mot refusé ne coûte rien, mais la mèche brûle
+          toujours.
+        </li>
+        {passes && (
+          <li>
+            Un mot de {LONG_WORD} lettres ou plus te donne une passe ({MAX_PASSES} au plus) : <kbd>Tab</kbd> ou le bouton « Passer » envoie
+            la mèche au suivant sans écrire de mot.
+          </li>
+        )}
+      </ul>
+      <p className="hint">Les accents ne comptent pas.</p>
+      <p className="hint meche-credit">
+        Dictionnaire tiré du lexique{" "}
+        <a href="https://grammalecte.net" target="_blank" rel="noreferrer">
+          Grammalecte
+        </a>{" "}
+        (licence{" "}
+        <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noreferrer">
+          MPL 2.0
+        </a>
+        ).
+      </p>
+    </div>
   );
 }

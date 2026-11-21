@@ -1,12 +1,16 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { DEFAULT_SETTINGS, type BotLevel, type BricksSettings, type BricksWin } from "../../shared/games/bricks/engine.ts";
 import { BRICKS_MAX_PLAYERS, type BricksClientMessage, type BricksRoomView } from "../../shared/protocol.ts";
 import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
+import { ACTION_LABELS, useControls } from "./controls.ts";
 import { sprite } from "./draw.ts";
+import { KeysModal, useKeyLabel } from "./KeysModal.tsx";
+import type { InputAction } from "./local.ts";
 
 export const BRICK_TEAMS = ["Rubis", "Saphir"] as const;
 
@@ -14,6 +18,12 @@ const BOT_HINTS: Record<BotLevel, string> = {
   apprenti: "Pose lentement, laisse des trous et n'attaque presque jamais.",
   confirme: "Un rythme tranquille et quelques erreurs : un bon adversaire pour s'entraîner.",
   expert: "Rapide et précis : garde un puits pour les quatre lignes et tente les T-spins.",
+};
+
+/** Comment on gagne une bataille, sous le choix de la victoire et dans « Comment jouer » */
+const WIN_HINTS: Record<BricksWin, string> = {
+  ko: "Une pile qui déborde repart de zéro et compte un K.O. pour celui qui l'a fait tomber. À la fin du chrono, le plus de K.O. gagne.",
+  survival: "Une seule vie. Après 3 minutes, la marée monte : une ligne grise toutes les 5 secondes pour tout le monde.",
 };
 
 /** Ce que chaque coup envoie, d'après la table du moteur (attackOf) */
@@ -68,14 +78,14 @@ function TSpinPicture() {
   return <canvas ref={ref} className="tspin-picture" width={w * dpr} height={h * dpr} style={{ width: w, height: h }} aria-hidden="true" />;
 }
 
-/** Le mémo du salon : comment on attaque, et comment on se défend */
+/** Le mémo des attaques, dans « Comment jouer » : comment on attaque, et comment on se défend */
 function AttackMemo() {
   return (
-    <section className="lobby-section panel attack-memo" aria-label="Ce que tes lignes envoient">
-      <h2>
+    <>
+      <h3>
         Les attaques <span className="hint">lignes grises envoyées</span>
-      </h2>
-      <ul className="attack-list">
+      </h3>
+      <ul className="attack-list" aria-label="Ce que tes lignes envoient">
         {ATTACKS.map((a) => (
           <li key={a.move}>
             {a.picture && <TSpinPicture />}
@@ -91,7 +101,65 @@ function AttackMemo() {
         Pour te défendre : tes lignes annulent d'abord celles qui t'arrivent (la barre rouge à côté de ton plateau), le reste part chez
         l'adversaire. Les lignes grises montent quand tu poses une pièce sans faire de ligne.
       </p>
-    </section>
+    </>
+  );
+}
+
+/** Comment jouer à Briques : le but de la partie choisie, les touches de cet appareil (réglables) et les attaques */
+function BricksHelp({ s }: { s: BricksSettings }) {
+  const keys = useControls((c) => c.keys);
+  const label = useKeyLabel();
+  const [keysOpen, setKeysOpen] = useState(false);
+  // Sans réserve à cette table, sa touche ne sert à rien
+  const actions = (Object.keys(ACTION_LABELS) as InputAction[]).filter((a) => s.hold || a !== "hold");
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong>{" "}
+        {s.sprint
+          ? "faire 40 lignes le plus vite possible, seul contre la montre. Ton record va au classement."
+          : "faire déborder la pile des autres en leur envoyant des lignes grises."}
+      </p>
+      <ul>
+        <li>Déplace et tourne les pièces qui tombent pour remplir des lignes d'un bord à l'autre : une ligne pleine disparaît.</li>
+        {!s.sprint && <li>{WIN_HINTS[s.win]}</li>}
+        {s.hold && <li>La réserve met la pièce de côté pour plus tard, une fois par pièce.</li>}
+      </ul>
+
+      <h3>Les commandes</h3>
+      {/* Au clavier : les touches réglées sur cet appareil ; au doigt (la liste se cache), les gestes */}
+      <ul className="bricks-keys">
+        {actions.map((a) => (
+          <li key={a}>
+            <span>{ACTION_LABELS[a]}</span>
+            <span>
+              {keys[a].length > 0
+                ? keys[a].map((k, i) => (
+                    <Fragment key={k}>
+                      {i > 0 && " ou "}
+                      <kbd>{label(k)}</kbd>
+                    </Fragment>
+                  ))
+                : "aucune"}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="bricks-touch">
+        Au doigt : glisse sur le plateau pour déplacer la pièce, touche-le pour la tourner, glisse doucement vers le bas pour la faire
+        descendre et balaie vers le bas pour la lâcher{s.hold ? ", vers le haut pour la réserve" : ""}. Sur téléphone, des boutons à l'écran
+        font aussi tout ça.
+      </p>
+      <div>
+        <button type="button" className="btn btn-sm" onClick={() => setKeysOpen(true)}>
+          <Icon name="settings" size={16} /> Touches et réglages
+        </button>
+      </div>
+      <KeysModal open={keysOpen} onClose={() => setKeysOpen(false)} />
+
+      {!s.sprint && <AttackMemo />}
+    </div>
   );
 }
 
@@ -103,6 +171,8 @@ interface Props {
   onLeave: () => void;
   onBackToGame?: () => void;
 }
+
+type Toggle = "hold" | "speedUp" | "messy" | "teams";
 
 /** Le salon d'une table de Briques : le salon commun, et les règles de la partie. */
 export function BricksLobby({ room, send, ...rest }: Props) {
@@ -116,7 +186,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
   const balanced = crews[0]!.length === 2 && crews[1]!.length === 2;
   const canStart = s.sprint ? room.seats.length === 1 : room.seats.length >= 2 && (!teamsReady || balanced);
 
-  const toggles: { key: "hold" | "speedUp" | "messy" | "teams"; label: string; desc: string; disabled?: boolean }[] = [
+  const toggles: { key: Toggle; label: string; desc: string; disabled?: boolean }[] = [
     { key: "hold", label: "Réserve", desc: "On peut mettre une pièce de côté, une fois par pièce." },
     { key: "speedUp", label: "Accélération", desc: "Les pièces tombent de plus en plus vite au fil de la manche." },
     { key: "messy", label: "Lignes grises en vrac", desc: "Chaque ligne reçue a son propre trou : plus dur à déblayer." },
@@ -130,6 +200,43 @@ export function BricksLobby({ room, send, ...rest }: Props) {
       disabled: room.settings.maxPlayers !== 4,
     },
   ];
+  // Les équipes changent la partie et restent en vue ; réserve, accélération et lignes en vrac vont avec les réglages fins
+  const toggleList = (keys: Toggle[]) => (
+    <div className="rule-list">
+      {toggles
+        .filter((r) => keys.includes(r.key) && !(s.sprint && (r.key === "messy" || r.key === "teams")))
+        .map((r) => {
+          const off = !isHost || r.disabled || locked(r.key);
+          return (
+            <div
+              key={r.key}
+              className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
+              onClick={() => !off && update({ [r.key]: !s[r.key] })}
+            >
+              <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />
+              <span>
+                <strong>{r.label}</strong>
+                <span className="hint">{r.desc}</span>
+              </span>
+            </div>
+          );
+        })}
+    </div>
+  );
+
+  const holdLabel = s.hold ? "avec réserve" : "sans réserve";
+  const summary = (
+    s.sprint
+      ? ["Solo 40 lignes", holdLabel, s.previews > 1 ? `${s.previews} pièces suivantes` : "1 pièce suivante"]
+      : [
+          s.win === "ko" ? `Aux K.O. en ${s.minutes} min` : "Dernier debout",
+          s.series === 1 ? "1 manche" : `${s.series} manches gagnantes`,
+          teamsReady ? "2 contre 2" : null,
+          holdLabel,
+        ]
+  )
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <TableLobby
@@ -150,15 +257,17 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             : undefined
       }
       seatNote={teamsReady ? (seat) => `équipe ${BRICK_TEAMS[(seat.team ?? 0) as 0 | 1]}` : undefined}
-      aside={
-        <>
-          {teamsReady && <TeamsPanel room={room} send={send} names={BRICK_TEAMS} colors={["#e0574a", "#5b8fe8"]} />}
-          {!s.sprint && <AttackMemo />}
-        </>
-      }
+      aside={teamsReady ? <TeamsPanel room={room} send={send} names={BRICK_TEAMS} colors={["#e0574a", "#5b8fe8"]} /> : undefined}
+      summary={summary}
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
+        <>
+          {/* En premier comme ailleurs ; le solo n'a pas de tirage, le champ dit pourquoi au lieu de disparaître */}
+          <RandomRulesField
+            room={room}
+            game="bricks"
+            send={send}
+            off={s.sprint ? "Pas de tirage au sort pour le solo 40 lignes." : undefined}
+          />
 
           <div className="field">
             <span className="field-label">Partie</span>
@@ -179,8 +288,6 @@ export function BricksLobby({ room, send, ...rest }: Props) {
             </p>
           </div>
 
-          {!s.sprint && <RandomRulesField room={room} game="bricks" send={send} />}
-
           {!s.sprint && (
             <>
               <div className="field">
@@ -196,9 +303,7 @@ export function BricksLobby({ room, send, ...rest }: Props) {
                   ]}
                 />
                 <p className="hint" style={{ margin: 0 }}>
-                  {s.win === "ko"
-                    ? "Une pile qui déborde repart de zéro et compte un K.O. pour celui qui l'a fait tomber. À la fin du chrono, le plus de K.O. gagne."
-                    : "Une seule vie. Après 3 minutes, la marée monte : une ligne grise toutes les 5 secondes pour tout le monde."}
+                  {WIN_HINTS[s.win]}
                 </p>
               </div>
 
@@ -233,29 +338,15 @@ export function BricksLobby({ room, send, ...rest }: Props) {
                   />
                 </div>
               </div>
+
+              {toggleList(["teams"])}
             </>
           )}
-
-          <div className="rule-list">
-            {toggles
-              .filter((r) => !(s.sprint && (r.key === "messy" || r.key === "teams")))
-              .map((r) => {
-                const off = !isHost || r.disabled || locked(r.key);
-                return (
-                  <div
-                    key={r.key}
-                    className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
-                    onClick={() => !off && update({ [r.key]: !s[r.key] })}
-                  >
-                    <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />
-                    <span>
-                      <strong>{r.label}</strong>
-                      <span className="hint">{r.desc}</span>
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
+        </>
+      }
+      moreRules={
+        <>
+          {toggleList(["hold", "speedUp", "messy"])}
 
           <div className="field">
             <span className="field-label">Pièces suivantes affichées</span>
@@ -293,8 +384,9 @@ export function BricksLobby({ room, send, ...rest }: Props) {
           )}
 
           {!s.sprint && <TableSize room={room} send={send} max={BRICKS_MAX_PLAYERS} />}
-        </section>
+        </>
       }
+      help={<BricksHelp s={s} />}
     />
   );
 }

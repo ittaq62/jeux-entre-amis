@@ -1,16 +1,20 @@
+import { useEffect, useState } from "react";
 import { ARENA_IDS, ARENAS, type ArenaId } from "../../shared/games/culbute/arenas.ts";
 import type { BotLevel } from "../../shared/games/culbute/bot.ts";
 import { CULBUTE_MAX_PLAYERS, type CulbuteClientMessage, type CulbuteRoomView } from "../../shared/games/culbute/net.ts";
 import type { FightSettings } from "../../shared/games/culbute/model.ts";
 import { DEFAULT_CONFIG, MINUTE_CHOICES, STOCK_CHOICES, type CulbuteConfig } from "../../shared/games/culbute/view.ts";
 import { applyDrawnRules } from "../../shared/randomRules.ts";
+import { tenueItem } from "../../shared/shop.ts";
 import { TOUR_TEAMS } from "../../shared/tour.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
-import { CommandsButton } from "./CommandsPanel.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { useMyItems } from "../stores/shop.ts";
+import { loadSettings, type CulbuteSettings } from "./bindings.ts";
+import { CommandsPanel } from "./CommandsPanel.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
-import { FighterPicker, pickLabel } from "./FighterPicker.tsx";
+import { FighterPicker, pickLabel, savedPick } from "./FighterPicker.tsx";
 
 const MODE_HINTS: Record<FightSettings["mode"], string> = {
   vies: "Chacun a ses vies ; on en perd une en sortant de l'arène. Le dernier qui en a encore gagne.",
@@ -30,6 +34,12 @@ const BOT_HINTS: Record<BotLevel, string> = {
   fort: "Ils ne laissent rien passer et viennent te chercher au bord.",
 };
 
+const ITEM_SUMMARY: Record<FightSettings["items"], string> = {
+  aucun: "sans objets",
+  peu: "quelques objets",
+  beaucoup: "beaucoup d'objets",
+};
+
 interface Props {
   room: CulbuteRoomView;
   send: (msg: CulbuteClientMessage) => void;
@@ -47,6 +57,30 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
   const update = (patch: Partial<CulbuteConfig>) => send({ t: "settings", settings: patch });
   const mine = room.you.seatId ? room.teams[room.you.seatId] : undefined;
   const fighterOf = (id: string) => room.seats.find((x) => x.id === id)?.fighter;
+  const { has } = useMyItems();
+  const seat = room.seats.find((x) => x.id === room.you.seatId);
+
+  // Le combattant choisi sur cet appareil, repris en arrivant à la table, comme le fait le choix lui-même : il n'est
+  // plus monté qu'avec l'onglet « Mon look », et on ne doit pas avoir à l'ouvrir pour retrouver le sien
+  useEffect(() => {
+    const saved = savedPick();
+    const current = seat?.fighter;
+    if (!saved || !current || room.status === "playing") return;
+    if (saved.who !== "moi" && saved.tenue && !has(tenueItem(saved.who, saved.tenue))) return;
+    if (JSON.stringify(saved) !== JSON.stringify(current)) send({ t: "pick", fighter: saved });
+    // Seulement à l'arrivée à la table
+  }, [seat?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const modeLabel =
+    s.mode === "vies" ? `${s.stocks} vie${s.stocks > 1 ? "s" : ""}` : s.mode === "temps" ? `${s.minutes} min au temps` : "mort subite";
+  const summary = [
+    modeLabel,
+    s.arena === "hasard" ? "arène au hasard" : ARENAS[s.arena].name,
+    ITEM_SUMMARY[s.items],
+    s.teams ? "en équipes" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <TableLobby
@@ -61,33 +95,25 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
         const label = f ? pickLabel(f) : null;
         return s.teams ? `${label ?? ""} · ${TOUR_TEAMS[room.teams[seat.id] ?? 0]}` : label;
       }}
+      summary={summary}
       aside={
-        room.you.seatId ? (
-          <>
-            <FighterPicker room={room} send={send} />
-            {s.teams && (
-              <section className="lobby-section panel field">
-                <span className="field-label">Ton équipe</span>
-                <Options<0 | 1>
-                  label="Ton équipe"
-                  value={mine ?? 0}
-                  onChange={(team) => send({ t: "team", team })}
-                  options={[
-                    { value: 0, label: TOUR_TEAMS[0] },
-                    { value: 1, label: TOUR_TEAMS[1] },
-                  ]}
-                />
-              </section>
-            )}
-          </>
+        room.you.seatId && s.teams ? (
+          <section className="lobby-section panel field">
+            <span className="field-label">Ton équipe</span>
+            <Options<0 | 1>
+              label="Ton équipe"
+              value={mine ?? 0}
+              onChange={(team) => send({ t: "team", team })}
+              options={[
+                { value: 0, label: TOUR_TEAMS[0] },
+                { value: 1, label: TOUR_TEAMS[1] },
+              ]}
+            />
+          </section>
         ) : null
       }
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
-          <HowToPlay compact />
-          <CommandsButton />
-
+        <>
           <RandomRulesField room={room} game="culbute" send={send} />
 
           <div className="field">
@@ -147,6 +173,35 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
             </p>
           </div>
 
+          {!room.tour && (
+            <div className="field">
+              <span className="field-label">Équipes</span>
+              <div className="rule-list">
+                <div className="rule-row" onClick={() => isHost && update({ teams: !s.teams })}>
+                  <Check label="En équipes" checked={s.teams} disabled={!isHost} onChange={() => {}} />
+                  <span>
+                    <strong>En équipes</strong>
+                    <span className="hint">
+                      Les {TOUR_TEAMS[0]} contre les {TOUR_TEAMS[1]} : chacun choisit la sienne. L'équipe qui garde quelqu'un en jeu gagne.
+                    </span>
+                  </span>
+                </div>
+                {s.teams && (
+                  <div className="rule-row" onClick={() => isHost && update({ friendlyFire: !s.friendlyFire })}>
+                    <Check label="Coups entre coéquipiers" checked={s.friendlyFire} disabled={!isHost} onChange={() => {}} />
+                    <span>
+                      <strong>Coups entre coéquipiers</strong>
+                      <span className="hint">On peut aussi toucher (et sortir) ses coéquipiers. Attention où tu frappes.</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      }
+      moreRules={
+        <>
           <div className="field">
             <span className="field-label">Objets</span>
             <Options<FightSettings["items"]>
@@ -181,32 +236,6 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
             </div>
           </div>
 
-          {!room.tour && (
-            <div className="field">
-              <span className="field-label">Équipes</span>
-              <div className="rule-list">
-                <div className="rule-row" onClick={() => isHost && update({ teams: !s.teams })}>
-                  <Check label="En équipes" checked={s.teams} disabled={!isHost} onChange={() => {}} />
-                  <span>
-                    <strong>En équipes</strong>
-                    <span className="hint">
-                      Les {TOUR_TEAMS[0]} contre les {TOUR_TEAMS[1]} : chacun choisit la sienne. L'équipe qui garde quelqu'un en jeu gagne.
-                    </span>
-                  </span>
-                </div>
-                {s.teams && (
-                  <div className="rule-row" onClick={() => isHost && update({ friendlyFire: !s.friendlyFire })}>
-                    <Check label="Coups entre coéquipiers" checked={s.friendlyFire} disabled={!isHost} onChange={() => {}} />
-                    <span>
-                      <strong>Coups entre coéquipiers</strong>
-                      <span className="hint">On peut aussi toucher (et sortir) ses coéquipiers. Attention où tu frappes.</span>
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="field">
             <span className="field-label">Niveau des bots</span>
             <Options<BotLevel>
@@ -226,8 +255,30 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
           </div>
 
           <TableSize room={room} send={send} max={CULBUTE_MAX_PLAYERS} />
-        </section>
+        </>
       }
+      look={room.you.seatId ? <FighterPicker room={room} send={send} /> : undefined}
+      help={<LobbyHelp />}
     />
+  );
+}
+
+/**
+ * Comment jouer : l'aide du combat, avec les commandes réglées sur cet appareil (chargées comme au combat), et de quoi
+ * les changer ; l'aide suit aussitôt les touches changées.
+ */
+function LobbyHelp() {
+  const [settings, setSettings] = useState<CulbuteSettings>(loadSettings);
+  const [commands, setCommands] = useState(false);
+  const touch = typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches ?? false);
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <HowToPlay settings={settings} />
+      <button type="button" className="btn btn-sm cb-commands-btn" onClick={() => (setSettings(loadSettings()), setCommands(true))}>
+        Régler les commandes
+      </button>
+      {commands && <CommandsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setCommands(false)} />}
+    </div>
   );
 }

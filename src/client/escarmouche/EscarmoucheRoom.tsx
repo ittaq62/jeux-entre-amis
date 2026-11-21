@@ -81,7 +81,8 @@ export function EscarmoucheRoom({ code }: { code: string }) {
       onReady={() => send({ t: "ready" })}
       drawn={tableDraw(view)}
       teamOf={(s) => view.teams[s.id]}
-      teamName={view.tour || isTeamMode(rules.mode) ? (t) => TEAM_NAMES[t as 0 | 1] ?? "" : undefined}
+      // Les places ont toujours une équipe ; elle ne compte qu'en mode par équipes (la tournée y met le sien)
+      teamName={isTeamMode(rules.mode) ? (t) => TEAM_NAMES[t as 0 | 1] ?? "" : null}
     >
       <ArsenalPanel room={view} send={send} />
     </TablePick>

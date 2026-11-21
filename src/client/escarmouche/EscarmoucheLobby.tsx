@@ -4,6 +4,7 @@ import { MAP_IDS, MAP_NAMES, type MapId } from "../../shared/games/escarmouche/m
 import {
   ARSENAL_NAMES,
   DEFAULT_SETTINGS,
+  goalOf,
   MINUTE_CHOICES,
   MODE_INFO,
   MODES,
@@ -34,7 +35,7 @@ import { toast } from "../lib/toast.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { lazy, Suspense } from "react";
@@ -355,6 +356,21 @@ export function HowTo() {
   );
 }
 
+/** Comment jouer : le but du mode choisi, puis les touches et les gestes du combat */
+function EscarmoucheHelp({ mode, hardcore }: { mode: Mode; hardcore: boolean }) {
+  const info = MODE_INFO[mode];
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but ({info.name}) :</strong> {info.blurb}
+      </p>
+      {hardcore && <p>Sans filet : pas de réticule, pas de santé qui revient, et des balles qui font plus mal.</p>}
+      <HowTo />
+    </div>
+  );
+}
+
 /** Le salon d'une table d'Escarmouche : le salon commun, l'arsenal de chacun et les règles de la partie. */
 export function EscarmoucheLobby({ room, send, ...rest }: Props) {
   const s = applyDrawnRules("escarmouche", { ...DEFAULT_SETTINGS, ...room.settings.escarmouche }, DEFAULT_SETTINGS, tableDraw(room));
@@ -363,6 +379,19 @@ export function EscarmoucheLobby({ room, send, ...rest }: Props) {
   const update = (patch: Partial<EscarmoucheSettings>) => send({ t: "settings", settings: patch });
   const info = MODE_INFO[s.mode];
   const empty = info.teams && [0, 1].some((t) => !room.seats.some((x) => (room.teams[x.id] ?? 0) === t));
+  // L'arsenal n'existe que pour un soldat assis : sinon, pas d'onglet « Mon look »
+  const armed = room.you.seatId !== null && Boolean(room.arsenal[room.you.seatId]);
+
+  const summary = [
+    info.name,
+    s.map === "hasard" ? "carte au hasard" : MAP_NAMES[s.map].name,
+    `${s.minutes} min ou ${goalOf(s)} ${info.unit}`,
+    s.arsenal !== "libre" ? ARSENAL_NAMES[s.arsenal].toLowerCase() : null,
+    s.hardcore ? "sans filet" : null,
+    s.night ? "de nuit" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <TableLobby
@@ -381,121 +410,123 @@ export function EscarmoucheLobby({ room, send, ...rest }: Props) {
         const team = info.teams ? `${TEAM_NAMES[room.teams[seat.id] ?? 0]} · ` : "";
         return a ? `${team}${WEAPONS[a.primary].name}` : null;
       }}
+      // Les camps restent sous les joueurs : chacun y choisit le sien
+      aside={info.teams ? <TeamsSection room={room} send={send} /> : undefined}
+      summary={summary}
       rules={
         <>
-          <ArsenalPanel room={room} send={send} />
-          {info.teams && <TeamsSection room={room} send={send} />}
-          <section className="rules-sheet panel">
-            <RulesHeading room={room} />
-            <HowTo />
-            <RandomRulesField room={room} game="escarmouche" send={send} />
+          <RandomRulesField room={room} game="escarmouche" send={send} />
 
-            <div className="field">
-              <span className="field-label">Mode</span>
-              <Options<Mode>
-                label="Mode"
-                value={s.mode}
-                disabled={!isHost}
-                onChange={(mode) => update({ mode })}
-                options={MODES.map((m) => ({ value: m, label: MODE_INFO[m].short }))}
-              />
-              <p className="hint" style={{ margin: 0 }}>
-                {info.blurb}
-              </p>
-            </div>
+          <div className="field">
+            <span className="field-label">Mode</span>
+            <Options<Mode>
+              label="Mode"
+              value={s.mode}
+              disabled={!isHost}
+              onChange={(mode) => update({ mode })}
+              options={MODES.map((m) => ({ value: m, label: MODE_INFO[m].short }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {info.blurb}
+            </p>
+          </div>
 
-            <div className="field">
-              <span className="field-label">Carte</span>
-              <Options<MapId | "hasard">
-                label="Carte"
-                value={s.map}
-                disabled={!isHost}
-                onChange={(map) => update({ map })}
-                options={[{ value: "hasard", label: "Au hasard" }, ...MAP_IDS.map((id) => ({ value: id, label: MAP_NAMES[id].name }))]}
-              />
-              <p className="hint" style={{ margin: 0 }}>
-                {s.map === "hasard" ? "Une carte tirée au sort à chaque partie." : MAP_NAMES[s.map].blurb}
-              </p>
-            </div>
+          <div className="field">
+            <span className="field-label">Carte</span>
+            <Options<MapId | "hasard">
+              label="Carte"
+              value={s.map}
+              disabled={!isHost}
+              onChange={(map) => update({ map })}
+              options={[{ value: "hasard", label: "Au hasard" }, ...MAP_IDS.map((id) => ({ value: id, label: MAP_NAMES[id].name }))]}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {s.map === "hasard" ? "Une carte tirée au sort à chaque partie." : MAP_NAMES[s.map].blurb}
+            </p>
+          </div>
 
-            <div className="field">
-              <span className="field-label">Durée et score</span>
-              <Options<number>
-                label="Durée"
-                value={s.minutes}
-                disabled={!isHost}
-                onChange={(minutes) => update({ minutes })}
-                options={MINUTE_CHOICES.map((n) => ({ value: n, label: `${n} min` }))}
-              />
-              <Options<number>
-                label="Score à atteindre"
-                value={s.goal}
-                disabled={!isHost}
-                onChange={(goal) => update({ goal })}
-                options={info.goals.map((g, i) => ({ value: i, label: `${g} ${info.unit}` }))}
-              />
-              <p className="hint" style={{ margin: 0 }}>
-                La partie s'arrête au premier des deux : la fin du temps, ou le score atteint.
-              </p>
-            </div>
-
-            <div className="field">
-              <span className="field-label">Armes</span>
-              <Options<Arsenal>
-                label="Armes"
-                value={s.arsenal}
-                disabled={!isHost || locked("arsenal")}
-                onChange={(arsenal) => update({ arsenal })}
-                options={(["libre", "precision", "pompe", "pistolet"] as const).map((a) => ({ value: a, label: ARSENAL_NAMES[a] }))}
-              />
-              <div className="rule-list">
-                <div
-                  className={`rule-row ${locked("hardcore") ? "is-forced" : ""}`}
-                  onClick={() => isHost && !locked("hardcore") && update({ hardcore: !s.hardcore })}
-                >
-                  <Check label="Sans filet" checked={s.hardcore} disabled={!isHost || locked("hardcore")} onChange={() => {}} />
-                  <span>
-                    <strong>Sans filet</strong>
-                    <span className="hint">Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.</span>
-                  </span>
-                </div>
-                <div
-                  className={`rule-row ${locked("night") ? "is-forced" : ""}`}
-                  onClick={() => isHost && !locked("night") && update({ night: !s.night })}
-                >
-                  <Check label="De nuit" checked={Boolean(s.night)} disabled={!isHost || locked("night")} onChange={() => {}} />
-                  <span>
-                    <strong>De nuit</strong>
-                    <span className="hint">
-                      La lune et les lampadaires pour seule lumière : les éclairs des tirs se voient de loin, les bots voient moins bien.
-                    </span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="field">
-              <span className="field-label">Niveau des bots</span>
-              <Options<BotLevel>
-                label="Niveau des bots"
-                value={s.botLevel}
-                disabled={!isHost}
-                onChange={(botLevel) => update({ botLevel })}
-                options={[
-                  { value: "facile", label: "Facile" },
-                  { value: "moyen", label: "Moyen" },
-                  { value: "fort", label: "Fort" },
-                ]}
-              />
-              <p className="hint" style={{ margin: 0 }}>
-                {BOT_HINTS[s.botLevel]}
-              </p>
-            </div>
-
-            <TableSize room={room} send={send} max={ESCARMOUCHE_MAX_PLAYERS} />
-          </section>
+          <div className="field">
+            <span className="field-label">Durée et score</span>
+            <Options<number>
+              label="Durée"
+              value={s.minutes}
+              disabled={!isHost}
+              onChange={(minutes) => update({ minutes })}
+              options={MINUTE_CHOICES.map((n) => ({ value: n, label: `${n} min` }))}
+            />
+            <Options<number>
+              label="Score à atteindre"
+              value={s.goal}
+              disabled={!isHost}
+              onChange={(goal) => update({ goal })}
+              options={info.goals.map((g, i) => ({ value: i, label: `${g} ${info.unit}` }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              La partie s'arrête au premier des deux : la fin du temps, ou le score atteint.
+            </p>
+          </div>
         </>
       }
+      moreRules={
+        <>
+          <div className="field">
+            <span className="field-label">Armes</span>
+            <Options<Arsenal>
+              label="Armes"
+              value={s.arsenal}
+              disabled={!isHost || locked("arsenal")}
+              onChange={(arsenal) => update({ arsenal })}
+              options={(["libre", "precision", "pompe", "pistolet"] as const).map((a) => ({ value: a, label: ARSENAL_NAMES[a] }))}
+            />
+            <div className="rule-list">
+              <div
+                className={`rule-row ${locked("hardcore") ? "is-forced" : ""}`}
+                onClick={() => isHost && !locked("hardcore") && update({ hardcore: !s.hardcore })}
+              >
+                <Check label="Sans filet" checked={s.hardcore} disabled={!isHost || locked("hardcore")} onChange={() => {}} />
+                <span>
+                  <strong>Sans filet</strong>
+                  <span className="hint">Pas de réticule, pas de santé qui revient, et des balles qui font plus mal.</span>
+                </span>
+              </div>
+              <div
+                className={`rule-row ${locked("night") ? "is-forced" : ""}`}
+                onClick={() => isHost && !locked("night") && update({ night: !s.night })}
+              >
+                <Check label="De nuit" checked={Boolean(s.night)} disabled={!isHost || locked("night")} onChange={() => {}} />
+                <span>
+                  <strong>De nuit</strong>
+                  <span className="hint">
+                    La lune et les lampadaires pour seule lumière : les éclairs des tirs se voient de loin, les bots voient moins bien.
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Niveau des bots</span>
+            <Options<BotLevel>
+              label="Niveau des bots"
+              value={s.botLevel}
+              disabled={!isHost}
+              onChange={(botLevel) => update({ botLevel })}
+              options={[
+                { value: "facile", label: "Facile" },
+                { value: "moyen", label: "Moyen" },
+                { value: "fort", label: "Fort" },
+              ]}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {BOT_HINTS[s.botLevel]}
+            </p>
+          </div>
+
+          <TableSize room={room} send={send} max={ESCARMOUCHE_MAX_PLAYERS} />
+        </>
+      }
+      look={armed && <ArsenalPanel room={room} send={send} />}
+      help={<EscarmoucheHelp mode={s.mode} hardcore={s.hardcore} />}
     />
   );
 }

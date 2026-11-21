@@ -1,10 +1,13 @@
+import { ANNOUNCE_MS } from "../../shared/announce.ts";
 import { GAME_NAMES, type LobbyRoom, type SeatView } from "../../shared/protocol.ts";
 import {
   DEFAULT_CAPITALE_TEAM,
   END_CHOICES,
   askedRules,
+  GAME_END_HOLD_MS,
   gameModifiers,
   gameVariants,
+  INTERMISSION_MS,
   RULES_MODES,
   TOUR_BOT_LEVELS,
   fitsGame,
@@ -132,6 +135,21 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           : [];
   const endValue = end.kind === "games" ? end.count : end.kind === "score" ? end.target : end.kind === "time" ? end.minutes : 0;
 
+  // Chaque jeu une seule fois : la tournée ne dure pas plus de jeux qu'il n'y en a de cochés
+  const length = end.kind === "games" ? (s.once ? Math.min(end.count, s.games.length) : end.count) : 0;
+  const summary = [
+    `${s.games.length} jeu${s.games.length > 1 ? "x" : ""} au programme`,
+    end.kind === "games"
+      ? `fin après ${length} jeu${length > 1 ? "x" : ""}`
+      : end.kind === "score"
+        ? `premier à ${end.target} points`
+        : end.kind === "time"
+          ? `fin au bout de ${end.minutes} min`
+          : "sans fin",
+    s.teams ? "deux équipes" : "chacun pour soi",
+    `règles ${s.rules === "base" ? "de base" : s.rules === "random" ? "au hasard" : "votées"}`,
+  ].join(" · ");
+
   return (
     <TableLobby
       kind="tour"
@@ -176,17 +194,9 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           )}
         </>
       }
+      summary={summary}
       rules={
-        <section className="rules-sheet panel tour-rules">
-          <div>
-            <h2>Règles de la tournée</h2>
-            {!isHost && (
-              <p className="hint" style={{ margin: "4px 0 0" }}>
-                Choisies par {room.seats.find((x) => x.isHost)?.name ?? "l'hôte"}.
-              </p>
-            )}
-          </div>
-
+        <>
           <div className="field">
             <span className="field-label">Au programme</span>
             <div className="tour-games">
@@ -232,42 +242,6 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
             <p className="hint" style={{ margin: 0 }}>
               Les jeux cochés sortent au hasard.
             </p>
-          </div>
-
-          <div className="field">
-            <span className="field-label">Règles des jeux</span>
-            <Options<TourRulesMode>
-              label="Règles des jeux"
-              value={s.rules}
-              disabled={!isHost}
-              onChange={(rules) => update({ rules })}
-              options={(Object.keys(RULES_MODES) as TourRulesMode[]).map((v) => ({ value: v, label: RULES_MODES[v].label }))}
-            />
-            <p className="hint" style={{ margin: 0 }}>
-              {RULES_MODES[s.rules].hint}
-            </p>
-            {s.rules !== "base" && (
-              <ul className="variant-list">
-                {s.games.map((g) => {
-                  // Au hasard, chaque règle à part est tirée de son côté ; votées, celles qu'on demande se votent oui ou non
-                  const extra = s.rules === "random" ? gameModifiers(g) : askedRules(g);
-                  return (
-                    <li key={g}>
-                      <strong>{GAME_NAMES[g]}</strong> :{" "}
-                      {gameVariants(g)
-                        .map((v) => v.name)
-                        .join(", ")}
-                      {extra.length > 0 && (
-                        <span className="hint">
-                          {" "}
-                          · {s.rules === "random" ? "tiré à part" : "voté à part, oui ou non"} : {extra.map((m) => m.name).join(", ")}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
           </div>
 
           <div className="field">
@@ -341,6 +315,45 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
               </div>
             )}
           </div>
+        </>
+      }
+      moreRules={
+        <>
+          <div className="field">
+            <span className="field-label">Règles des jeux</span>
+            <Options<TourRulesMode>
+              label="Règles des jeux"
+              value={s.rules}
+              disabled={!isHost}
+              onChange={(rules) => update({ rules })}
+              options={(Object.keys(RULES_MODES) as TourRulesMode[]).map((v) => ({ value: v, label: RULES_MODES[v].label }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {RULES_MODES[s.rules].hint}
+            </p>
+            {s.rules !== "base" && (
+              <ul className="variant-list">
+                {s.games.map((g) => {
+                  // Au hasard, chaque règle à part est tirée de son côté ; votées, celles qu'on demande se votent oui ou non
+                  const extra = s.rules === "random" ? gameModifiers(g) : askedRules(g);
+                  return (
+                    <li key={g}>
+                      <strong>{GAME_NAMES[g]}</strong> :{" "}
+                      {gameVariants(g)
+                        .map((v) => v.name)
+                        .join(", ")}
+                      {extra.length > 0 && (
+                        <span className="hint">
+                          {" "}
+                          · {s.rules === "random" ? "tiré à part" : "voté à part, oui ou non"} : {extra.map((m) => m.name).join(", ")}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
 
           <div className="field">
             <span className="field-label">Niveau des bots</span>
@@ -363,8 +376,47 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           </div>
 
           <TableSize room={room} send={(msg) => send(msg)} max={TOUR_MAX_PLAYERS} />
-        </section>
+        </>
       }
+      help={<TourHelp teams={s.teams} />}
     />
+  );
+}
+
+/** Comment se passe une tournée : le tirage, l'entracte, l'annonce à chaque table, la feuille de fin, les points et les titres */
+function TourHelp({ teams }: { teams: boolean }) {
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong> finir la tournée avec le plus de points. La même bande enchaîne plusieurs jeux, et ta place à chacun
+        rapporte des points{teams ? ", qui s'ajoutent à ceux de ton équipe" : ""}.
+      </p>
+      <ul>
+        <li>
+          La tournée part quand l'hôte la lance, ou dès que la moitié des joueurs a appuyé sur <strong>Je suis prêt</strong>.
+        </li>
+        <li>
+          Chaque jeu est tiré au sort parmi ceux cochés qui accueillent tout le monde, jamais deux fois de suite le même quand il y a le
+          choix.
+        </li>
+        <li>
+          Entre deux jeux, un entracte de {INTERMISSION_MS / 1000} s : le classement, le tirage du jeu suivant et ses règles (un peu plus
+          long quand on les vote). Il part plus tôt quand la moitié des joueurs est prête.
+        </li>
+        <li>
+          À la table, une annonce de {ANNOUNCE_MS / 1000} s montre le jeu, ses règles et les équipes, le temps de choisir ton look. Quand
+          tous ont appuyé sur <strong>Je suis prêt</strong>, la partie part tout de suite.
+        </li>
+        <li>
+          À la fin d'un jeu, sa feuille de résultats reste {GAME_END_HOLD_MS / 1000} s ; quand tous ceux qui l'ont joué ont appuyé sur{" "}
+          <strong>Continuer</strong>, on n'attend plus : place à l'entracte, ou au podium après le dernier jeu.
+        </li>
+        <li>
+          Points à chaque jeu selon ta place : {TOUR_POINTS.map((p, i) => `${i + 1}${i === 0 ? "er" : "e"} ${p}`).join(", ")}, puis 1 point.
+        </li>
+        <li>À la fin, le podium, et jusqu'à cinq titres pour les exploits de la tournée (deux au plus par joueur).</li>
+      </ul>
+    </div>
   );
 }

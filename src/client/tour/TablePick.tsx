@@ -48,8 +48,11 @@ export function TablePick({
   seatColor?: (seat: SeatView, index: number) => string;
   /** Hors tournée : les règles tirées au sort pour cette partie (rien quand l'hôte les a choisies) */
   drawn?: string | null;
-  /** La table joue en équipes : le nom de chacune (en tournée, les équipes de la tournée sont reconnues seules) */
-  teamName?: (team: number) => string;
+  /**
+   * La table joue en équipes : le nom de chacune. Sans rien, en tournée, les équipes de la tournée sont reconnues
+   * seules ; `null` : pas d'équipes (le jeu range tout le monde dans une équipe même chacun pour soi).
+   */
+  teamName?: ((team: number) => string) | null;
   /** L'équipe de chaque joueur, quand le jeu ne la range pas dans la place (Crampons) */
   teamOf?: (seat: SeatView) => number | undefined;
 }) {
@@ -60,7 +63,7 @@ export function TablePick({
   const meReady = ready.includes(room.you.userId);
   const rules = bridge ? bridge.rules : drawnRules(game, drawn);
   // Les équipes : celles que donne le jeu, ou celles de la tournée quand les places en ont
-  const names = teamName ?? (bridge && room.seats.some((s) => teamOf(s) !== undefined) ? tableTeamName : null);
+  const names = teamName === null ? null : (teamName ?? (bridge && room.seats.some((s) => teamOf(s) !== undefined) ? tableTeamName : null));
   const teams = names
     ? [...new Set(room.seats.map((s) => teamOf(s)).filter((t): t is number => t !== undefined))].sort((a, b) => a - b)
     : [];

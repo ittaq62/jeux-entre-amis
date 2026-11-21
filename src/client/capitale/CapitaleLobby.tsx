@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import {
   BUYOUT_RATE,
   DISASTERS,
+  GO_SALARY,
   GROUPS,
+  JAIL_FINE,
   SPECIAL_ORDER,
   specialPrice,
   SPECIALS,
+  START_CASH,
   teamName,
   type DisasterKind,
 } from "../../shared/games/capitale/board.ts";
@@ -24,10 +27,11 @@ import { CAPITALE_MAX_PLAYERS, type CapitaleClientMessage, type CapitaleRoomView
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
+import { money } from "./boardUi.ts";
 import { tokenThumbnails } from "./scene/tokens.ts";
 import { pawnColor, seatTeams, teamColor, TeamMark } from "./teamsUi.tsx";
 import { MONOPOLY_RULE, TeamRules } from "./TeamRules.tsx";
@@ -176,6 +180,14 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
   const sizes = Array.from({ length: count }, (_, k) => room.seats.filter((x) => x.team === k).length);
   const teamsOk = !count || (sizes.every((n) => n === sizes[0]) && (sizes[0] ?? 0) >= 2);
 
+  const endLabel =
+    (s.end === "timed" ? (s.minutes === 60 ? "partie d'une heure" : `partie de ${s.minutes} min`) : "jusqu'à la faillite") +
+    (s.monopoly ? " ou Monopole" : "");
+  const turnLabel = s.turnSeconds ? `${s.turnSeconds < 60 ? `${s.turnSeconds} s` : "1 min"} par décision` : "sans limite de temps";
+  const summary = [s.builder ? "Capitale Builder" : "Capitale classique", endLabel, turnLabel, count ? `${count} équipes` : null]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <TableLobby
       room={room}
@@ -192,22 +204,10 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
       }
       seatNote={count ? (seat) => (seat.team !== undefined ? teamName(seat.team) : null) : undefined}
       aside={count ? <CapTeamsPanel room={room} send={send} count={count} /> : undefined}
+      summary={summary}
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
-
+        <>
           <RandomRulesField room={room} game="capitale" send={send} />
-
-          {mine && (
-            <TokenPicker
-              color={pawnColor(ids, teams, mine.id)}
-              current={mine.token ?? "pion"}
-              onPick={(token) => {
-                setPrefs({ capitaleToken: token });
-                send({ t: "token", token });
-              }}
-            />
-          )}
 
           <div className="field">
             <span className="field-label">Version</span>
@@ -293,9 +293,13 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
                   ? "Deux équipes de même taille : 2 contre 2 ou 3 contre 3."
                   : "Trois équipes de deux : il faut six joueurs."}
             </p>
+            {/* En équipes, leurs règles (loyer, dons, héritage, victoire ensemble) se voient tout de suite, sous le choix */}
             {count > 0 && <TeamRules s={s} disabled={!isHost} update={update} />}
           </div>
-
+        </>
+      }
+      moreRules={
+        <>
           <div className="field">
             <span className="field-label">Règles maison</span>
             <div className="rule-list">
@@ -361,9 +365,72 @@ export function CapitaleLobby({ room, send, ...rest }: Props) {
           </div>
 
           <TableSize room={room} send={send} max={CAPITALE_MAX_PLAYERS} />
-        </section>
+        </>
       }
+      look={
+        mine && (
+          <TokenPicker
+            color={pawnColor(ids, teams, mine.id)}
+            current={mine.token ?? "pion"}
+            onPick={(token) => {
+              setPrefs({ capitaleToken: token });
+              send({ t: "token", token });
+            }}
+          />
+        )
+      }
+      help={<CapitaleHelp s={s} teams={count > 0} />}
     />
+  );
+}
+
+/** Comment jouer à Capitale : le but selon la fin choisie, le tour, les achats, les loyers, et quand l'argent manque */
+function CapitaleHelp({ s, teams }: { s: CapitaleSettings; teams: boolean }) {
+  // En équipes, la victoire d'équipe additionne les fortunes ; sans elle, chacun garde son classement
+  const together = teams && s.teamWin;
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong>{" "}
+        {s.end === "timed"
+          ? `${together ? "que ton équipe soit la plus riche" : "être le plus riche"} à la fin. Au bout de ${s.minutes} minutes, le tour en cours est le dernier ; on compte l'argent, les titres et les constructions${together ? " de toute l'équipe" : ""}.`
+          : together
+            ? "ruiner les autres équipes. La dernière équipe encore en jeu gagne, ensemble."
+            : teams
+              ? "ruiner les autres équipes. Quand il n'en reste qu'une en jeu, le plus riche de ses joueurs gagne."
+              : "ruiner les autres. Le dernier à ne pas avoir fait faillite gagne."}
+      </p>
+      {s.monopoly && (
+        <p>
+          <strong>Monopole :</strong> {MONOPOLY_RULE}
+        </p>
+      )}
+      <ul>
+        <li>
+          Chacun part avec {money(START_CASH)}. À ton tour, lance les dés, avance ton pion, puis finis ton tour ; chaque passage par Départ
+          rapporte {money(GO_SALARY)}.
+        </li>
+        <li>
+          Un double te fait rejouer ; au troisième double de suite, c'est la prison. Pour en sortir : paie {money(JAIL_FINE)}, joue une
+          carte « sortie de prison » ou fais un double (au troisième essai raté, tu paies et tu sors).
+        </li>
+        <li>Arrêté sur une ville, une gare ou un réseau libre : achète-le à son prix, ou laisse-le aux enchères, où tout le monde mise.</li>
+        <li>
+          Arrêté chez un adversaire : tu lui paies le loyer, qui grimpe s'il a tout le quartier et avec ce qu'il y a bâti. Plus on a de
+          gares, plus elles rapportent ; un titre hypothéqué ne rapporte rien.
+        </li>
+        <li>
+          {s.builder
+            ? "Builder : pose tes bâtiments sur le territoire de tes villes, où tu veux et à tout moment, même pendant le tour des autres (sauf pendant une enchère). Le loyer suit ce que tu as bâti, doublé avec tout le quartier."
+            : `Pendant ton tour, améliore tes rues d'un niveau à la fois, une fois par rue et par tour, de la maison au monument ; ${s.evenBuild ? "au-delà de deux maisons" : "au-delà de l'immeuble"}, il faut tout le quartier.`}
+        </li>
+        <li>Propose des échanges (argent, titres, cartes de prison) quand tu veux, sauf pendant une enchère.</li>
+        <li>
+          Pas de quoi payer : revends ce que tu as bâti (à moitié prix) ou hypothèque des titres ; si ça ne suffit pas, c'est la faillite.
+        </li>
+      </ul>
+    </div>
   );
 }
 

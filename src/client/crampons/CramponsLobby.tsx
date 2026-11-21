@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { BALLS, FETES, type BallId, type FeteId } from "../../shared/games/crampons/boutique.ts";
 import {
   CLUBS,
@@ -24,11 +24,13 @@ import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { ballItem, clubItem, feteItem, SHOP_BY_ID, type ShopItem } from "../../shared/shop.ts";
 import { Icon } from "../components/Icon.tsx";
 import { Check, Options } from "../components/ui.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
+import { ACTION_ROWS, keyLabel, loadSettings, type ActionId, type CramponsSettings } from "./bindings.ts";
 import { CramponsLook } from "./CramponsLook.tsx";
+import { SettingsPanel } from "./CramponsSettings.tsx";
 import { KitShirt } from "./KitShirt.tsx";
 import { PlayerStageView } from "./PlayerStage.tsx";
 import { ballThumbnail } from "./scene/balls.ts";
@@ -321,6 +323,9 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
     formations[t] = f;
     update({ formations });
   };
+  const drawLabel =
+    s.draw === "penalties" ? "tirs au but si égalité" : s.draw === "extra" ? "prolongations si égalité" : "match nul possible";
+  const summary = [`${home.short} contre ${away.short}`, `${s.side} joueurs par équipe`, `2 × ${s.halfMinutes} min`, drawLabel].join(" · ");
   return (
     <TableLobby
       room={room}
@@ -335,9 +340,10 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
       canStart={room.seats.length >= 1}
       noBots
       seatNote={(seat) => `${clubBy(s.clubs[room.teams[seat.id] ?? 0]).name}`}
+      summary={summary}
       aside={
-        room.you.seatId ? (
-          <>
+        <>
+          {room.you.seatId && (
             <section className="lobby-section panel field">
               <span className="field-label">Ton équipe</span>
               <Options<0 | 1>
@@ -353,177 +359,234 @@ export function CramponsLobby({ room, send, unread, onOpenChat, onLeave, onBackT
                 L'ordinateur joue les postes laissés libres, et toute une équipe s'il n'y a personne dedans.
               </p>
             </section>
-            <Locker kit={myKit} onBuy={(item) => setBuying({ item })} />
-          </>
-        ) : null
-      }
-      rules={
-        <>
-          <section className="rules-sheet panel">
-            <RulesHeading room={room} />
-            {/* L'affiche du match : un joueur de chaque club, dans le maillot qu'il portera */}
-            <div className="cr-matchup">
-              <PlayerStageView
-                actors={[
-                  { kit: kits[0], shirt: 10 },
-                  { kit: kits[1], shirt: 10 },
-                ]}
-                framing="lineup"
-                ratio={2}
-                seed={7}
-                label={`${home.name} contre ${away.name}`}
-              />
-              <div className="cr-matchup-tags" aria-hidden="true">
-                <MatchupTag club={home} />
-                <span className="cr-matchup-vs">contre</span>
-                <MatchupTag club={away} />
-              </div>
-            </div>
-            <ClubPicker
-              label="Domicile"
-              kit={kits[0]}
-              value={s.clubs[0]}
-              formation={s.formations[0]}
-              disabled={!isHost}
-              owns={owns}
-              onClub={(id) => chooseClub(0, id)}
-              onFormation={(f) => setFormation(0, f)}
-            />
-            <ClubPicker
-              label="Extérieur"
-              kit={kits[1]}
-              value={s.clubs[1]}
-              formation={s.formations[1]}
-              disabled={!isHost}
-              owns={owns}
-              onClub={(id) => chooseClub(1, id)}
-              onFormation={(f) => setFormation(1, f)}
-            />
-
-            <RandomRulesField room={room} game="crampons" send={send} />
-
-            <div className="field">
-              <span className="field-label">Durée d'une mi-temps</span>
-              <Options<number>
-                label="Durée d'une mi-temps"
-                value={s.halfMinutes}
-                disabled={!isHost || locked("halfMinutes")}
-                onChange={(halfMinutes) => update({ halfMinutes })}
-                options={HALF_CHOICES.map((n) => ({ value: n, label: `${n} min` }))}
-              />
-            </div>
-
-            <div className="field">
-              <span className="field-label">Joueurs par équipe</span>
-              <Options<number>
-                label="Joueurs par équipe"
-                value={s.side}
-                disabled={!isHost || locked("side")}
-                onChange={(side) => update({ side })}
-                options={SIDE_CHOICES.map((n) => ({ value: n, label: `${n} contre ${n}` }))}
-              />
-            </div>
-
-            <div className="field">
-              <span className="field-label">Niveau de l'ordinateur</span>
-              <Options<number>
-                label="Niveau de l'ordinateur"
-                value={s.level}
-                disabled={!isHost}
-                onChange={(level) => update({ level })}
-                options={LEVEL_NAMES.map((name, value) => ({ value, label: name }))}
-              />
-              <p className="hint" style={{ margin: 0 }}>
-                {LEVEL_HINTS[s.level]}
-              </p>
-            </div>
-
-            <div className="field">
-              <span className="field-label">En cas de match nul</span>
-              <Options<CramponsConfig["draw"]>
-                label="En cas de match nul"
-                value={s.draw}
-                disabled={!isHost || locked("draw")}
-                onChange={(draw) => update({ draw })}
-                options={[
-                  { value: "none", label: "Match nul" },
-                  { value: "penalties", label: "Tirs au but" },
-                  { value: "extra", label: "Prolongations" },
-                ]}
-              />
-            </div>
-
-            <div className="field">
-              <span className="field-label">Ambiance</span>
-              <Options<Ambience>
-                label="Ambiance"
-                value={s.ambience}
-                disabled={!isHost}
-                onChange={(ambience) => update({ ambience })}
-                options={[
-                  { value: "jour", label: "Plein jour" },
-                  { value: "soir", label: "Coucher de soleil" },
-                  { value: "nuit", label: "Nocturne" },
-                ]}
-              />
-            </div>
-
-            <div className="field">
-              <span className="field-label">Météo</span>
-              <Options<WeatherId>
-                label="Météo"
-                value={s.weather}
-                disabled={!isHost}
-                onChange={(weather) => update({ weather })}
-                options={[
-                  { value: "clair", label: "Dégagé" },
-                  { value: "pluie", label: "Pluie" },
-                  { value: "neige", label: "Neige" },
-                ]}
-              />
-            </div>
-
-            <div className="field">
-              <span className="field-label">Règles</span>
-              <div className="rule-list">
-                <div className="rule-row" onClick={() => isHost && update({ offside: !s.offside })}>
-                  <Check label="Hors-jeu" checked={s.offside} disabled={!isHost} onChange={() => {}} />
-                  <span>
-                    <strong>Hors-jeu</strong>
-                    <span className="hint">L'attaquant doit rester derrière le dernier défenseur au départ de la passe.</span>
-                  </span>
-                </div>
-                <div className="rule-row" onClick={() => isHost && update({ fouls: !s.fouls })}>
-                  <Check label="Fautes et cartons" checked={s.fouls} disabled={!isHost} onChange={() => {}} />
-                  <span>
-                    <strong>Fautes et cartons</strong>
-                    <span className="hint">Un tacle en retard, c'est un coup franc, un penalty, voire un carton.</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <TableSize room={room} send={send} max={CRAMPONS_MAX_PLAYERS} />
-          </section>
-
+          )}
+          {/* Hors des onglets : un club de légende s'achète depuis les règles, un ballon ou une fête depuis « Mon look » */}
           <BuyModal
             item={buying?.item ?? null}
             preview={buying ? <CramponsLook item={buying.item} big kit={myKit} /> : undefined}
             onClose={() => setBuying(null)}
             onBought={bought}
           />
-          <section className="rules-sheet panel cr-help">
-            <h3>Comment jouer</h3>
-            <p className="hint">
-              ZQSD ou les flèches pour courir, Maj pour sprinter. Clic gauche pour tirer, clic droit pour passer : plus tu tiens, plus c'est
-              fort. Espace pour la passe en profondeur, la molette ou C pour lober ou centrer, A pour le crochet, E pour changer de joueur.
-              Sans le ballon, clic droit presse et tacle, clic gauche tente un tacle glissé. D'autres touches (tout au clavier) se
-              choisissent dans « Changer mes touches ». Tout est rappelé à l'écran pendant le match, et ça marche aussi à la manette et sur
-              téléphone.
-            </p>
-          </section>
         </>
       }
+      rules={
+        <>
+          <RandomRulesField room={room} game="crampons" send={send} />
+
+          {/* L'affiche du match : un joueur de chaque club, dans le maillot qu'il portera */}
+          <div className="cr-matchup">
+            <PlayerStageView
+              actors={[
+                { kit: kits[0], shirt: 10 },
+                { kit: kits[1], shirt: 10 },
+              ]}
+              framing="lineup"
+              ratio={2}
+              seed={7}
+              label={`${home.name} contre ${away.name}`}
+            />
+            <div className="cr-matchup-tags" aria-hidden="true">
+              <MatchupTag club={home} />
+              <span className="cr-matchup-vs">contre</span>
+              <MatchupTag club={away} />
+            </div>
+          </div>
+          <ClubPicker
+            label="Domicile"
+            kit={kits[0]}
+            value={s.clubs[0]}
+            formation={s.formations[0]}
+            disabled={!isHost}
+            owns={owns}
+            onClub={(id) => chooseClub(0, id)}
+            onFormation={(f) => setFormation(0, f)}
+          />
+          <ClubPicker
+            label="Extérieur"
+            kit={kits[1]}
+            value={s.clubs[1]}
+            formation={s.formations[1]}
+            disabled={!isHost}
+            owns={owns}
+            onClub={(id) => chooseClub(1, id)}
+            onFormation={(f) => setFormation(1, f)}
+          />
+
+          <div className="field">
+            <span className="field-label">Durée d'une mi-temps</span>
+            <Options<number>
+              label="Durée d'une mi-temps"
+              value={s.halfMinutes}
+              disabled={!isHost || locked("halfMinutes")}
+              onChange={(halfMinutes) => update({ halfMinutes })}
+              options={HALF_CHOICES.map((n) => ({ value: n, label: `${n} min` }))}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field-label">Joueurs par équipe</span>
+            <Options<number>
+              label="Joueurs par équipe"
+              value={s.side}
+              disabled={!isHost || locked("side")}
+              onChange={(side) => update({ side })}
+              options={SIDE_CHOICES.map((n) => ({ value: n, label: `${n} contre ${n}` }))}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field-label">En cas de match nul</span>
+            <Options<CramponsConfig["draw"]>
+              label="En cas de match nul"
+              value={s.draw}
+              disabled={!isHost || locked("draw")}
+              onChange={(draw) => update({ draw })}
+              options={[
+                { value: "none", label: "Match nul" },
+                { value: "penalties", label: "Tirs au but" },
+                { value: "extra", label: "Prolongations" },
+              ]}
+            />
+          </div>
+        </>
+      }
+      moreRules={
+        <>
+          <div className="field">
+            <span className="field-label">Niveau de l'ordinateur</span>
+            <Options<number>
+              label="Niveau de l'ordinateur"
+              value={s.level}
+              disabled={!isHost}
+              onChange={(level) => update({ level })}
+              options={LEVEL_NAMES.map((name, value) => ({ value, label: name }))}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {LEVEL_HINTS[s.level]}
+            </p>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Ambiance</span>
+            <Options<Ambience>
+              label="Ambiance"
+              value={s.ambience}
+              disabled={!isHost}
+              onChange={(ambience) => update({ ambience })}
+              options={[
+                { value: "jour", label: "Plein jour" },
+                { value: "soir", label: "Coucher de soleil" },
+                { value: "nuit", label: "Nocturne" },
+              ]}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field-label">Météo</span>
+            <Options<WeatherId>
+              label="Météo"
+              value={s.weather}
+              disabled={!isHost}
+              onChange={(weather) => update({ weather })}
+              options={[
+                { value: "clair", label: "Dégagé" },
+                { value: "pluie", label: "Pluie" },
+                { value: "neige", label: "Neige" },
+              ]}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field-label">Règles</span>
+            <div className="rule-list">
+              <div className="rule-row" onClick={() => isHost && update({ offside: !s.offside })}>
+                <Check label="Hors-jeu" checked={s.offside} disabled={!isHost} onChange={() => {}} />
+                <span>
+                  <strong>Hors-jeu</strong>
+                  <span className="hint">L'attaquant doit rester derrière le dernier défenseur au départ de la passe.</span>
+                </span>
+              </div>
+              <div className="rule-row" onClick={() => isHost && update({ fouls: !s.fouls })}>
+                <Check label="Fautes et cartons" checked={s.fouls} disabled={!isHost} onChange={() => {}} />
+                <span>
+                  <strong>Fautes et cartons</strong>
+                  <span className="hint">Un tacle en retard, c'est un coup franc, un penalty, voire un carton.</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <TableSize room={room} send={send} max={CRAMPONS_MAX_PLAYERS} />
+        </>
+      }
+      look={room.you.seatId ? <Locker kit={myKit} onBuy={(item) => setBuying({ item })} /> : undefined}
+      help={<CramponsHelp draw={s.draw} />}
     />
+  );
+}
+
+/** Les quatre directions, rassemblées sur une ligne de l'aide */
+const MOVES: ActionId[] = ["up", "left", "down", "right"];
+
+const DRAW_HELP: Record<CramponsConfig["draw"], string> = {
+  none: "À égalité, le match reste nul.",
+  penalties: "À égalité, on passe aux tirs au but.",
+  extra: "À égalité, prolongations, puis tirs au but.",
+};
+
+/**
+ * Comment jouer : le but, puis les touches réglées sur cet appareil (celles du match, qui les rappelle à l'écran), et
+ * les réglages du match pour les changer avant le coup d'envoi.
+ */
+function CramponsHelp({ draw }: { draw: CramponsConfig["draw"] }) {
+  const [settings, setSettings] = useState<CramponsSettings>(loadSettings);
+  const [open, setOpen] = useState(false);
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  // Les déplacements, un jeu de touches à la fois : « Z Q S D », puis « ↑ ← ↓ → »
+  const moves = [0, 1]
+    .map((slot) => MOVES.map((id) => settings.bindings[id][slot]))
+    .filter((set): set is string[] => set.every(Boolean))
+    .map((set) => set.map(keyLabel).join(" "));
+  const rows = [
+    { id: "moves", keys: moves, label: "Se déplacer" },
+    ...ACTION_ROWS.filter((r) => !MOVES.includes(r.id)).map((r) => ({
+      id: r.id,
+      keys: settings.bindings[r.id].map(keyLabel),
+      label: r.note ? `${r.label} (${r.note})` : r.label,
+    })),
+  ].filter((r) => r.keys.length > 0);
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong> marquer plus de buts que l'autre équipe en deux mi-temps. {DRAW_HELP[draw]}
+      </p>
+      <h3>Tes touches</h3>
+      <ul>
+        {rows.map((r) => (
+          <li key={r.id}>
+            {r.keys.map((k, i) => (
+              <Fragment key={i}>
+                {i > 0 && " ou "}
+                <kbd>{k}</kbd>
+              </Fragment>
+            ))}{" "}
+            : {r.label}
+          </li>
+        ))}
+      </ul>
+      <p className="hint">
+        Plus tu tiens le tir, plus tu frappes fort. Tout est rappelé à l'écran pendant le match, et ça marche aussi à la manette et sur
+        téléphone.
+      </p>
+      <button type="button" className="btn btn-sm cr-keys-btn" onClick={() => (setSettings(loadSettings()), setOpen(true))}>
+        Changer mes touches
+      </button>
+      {open && (
+        <div className="cr-settings-layer">
+          <SettingsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setOpen(false)} />
+        </div>
+      )}
+    </div>
   );
 }

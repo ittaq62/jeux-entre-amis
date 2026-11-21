@@ -5,19 +5,23 @@ import type { InputAction } from "./local.ts";
 
 type LayoutMap = Map<string, string>;
 
-/** Touches réglables et maniement : on clique une action, on appuie sur la touche voulue. */
-export function KeysModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { keys, das, arr, ghost, music, set, reset } = useControls();
-  const [listening, setListening] = useState<InputAction | null>(null);
+/** Le vrai nom des touches sur ce clavier (AZERTY compris), quand le navigateur sait le donner */
+export function useKeyLabel(): (code: string) => string {
   const [layout, setLayout] = useState<LayoutMap | null>(null);
-
-  // Le vrai nom des touches sur ce clavier (AZERTY compris), quand le navigateur sait le donner
   useEffect(() => {
     const kb = (navigator as unknown as { keyboard?: { getLayoutMap?: () => Promise<LayoutMap> } }).keyboard;
     kb?.getLayoutMap?.()
       .then(setLayout)
       .catch(() => {});
   }, []);
+  return (code: string) => (code.startsWith("Key") && layout?.get(code) ? layout.get(code)!.toUpperCase() : keyName(code));
+}
+
+/** Touches réglables et maniement : on clique une action, on appuie sur la touche voulue. */
+export function KeysModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { keys, das, arr, ghost, music, set, reset } = useControls();
+  const [listening, setListening] = useState<InputAction | null>(null);
+  const label = useKeyLabel();
 
   useEffect(() => {
     if (!listening) return;
@@ -37,9 +41,6 @@ export function KeysModal({ open, onClose }: { open: boolean; onClose: () => voi
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [listening, keys, set]);
-
-  const label = (code: string) =>
-    layout?.get(code)?.toUpperCase() && code.startsWith("Key") ? layout.get(code)!.toUpperCase() : keyName(code);
 
   return (
     <Modal open={open} onClose={onClose} title="Touches et réglages">

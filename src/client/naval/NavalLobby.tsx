@@ -15,7 +15,7 @@ import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { Check, Options } from "../components/ui.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { SkinPicker } from "./SkinPicker.tsx";
-import { RulesHeading, TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { crewsOf, TeamsPanel } from "../game/TeamsPanel.tsx";
 
 export const TEAM_NAMES = ["Bâbord", "Tribord"] as const;
@@ -24,6 +24,13 @@ const SHOT_HINTS: Record<ShotRule, string> = {
   single: "Un tir chacun son tour, touché ou pas.",
   replay: "Celui qui touche rejoue, jusqu'à tomber à l'eau.",
   salvo: "À chaque tour, autant de tirs que de navires encore à flot.",
+};
+
+/** Les tirs en quelques mots, pour la ligne à côté du départ */
+const SHOT_SUMMARY: Record<ShotRule, string> = {
+  single: "un tir chacun",
+  replay: "on rejoue si touché",
+  salvo: "tirs en salve",
 };
 
 const TARGET_HINTS: Record<Targeting, string> = {
@@ -47,6 +54,8 @@ interface Props {
   onBackToGame?: () => void;
 }
 
+type Toggle = "touching" | "arsenal" | "teams";
+
 /** Le salon d'une table de bataille navale : le salon commun et les réglages de la bataille. */
 export function NavalLobby({ room, send, ...rest }: Props) {
   const setPrefs = usePrefs((p) => p.set);
@@ -61,8 +70,9 @@ export function NavalLobby({ room, send, ...rest }: Props) {
   const fleet = FLEETS[s.grid].map((k) => `${SHIP_NAME[k]} (${SHIP_LENGTH[k]})`).join(", ");
   const targeting = s.targeting ?? "free";
   const alone = room.settings.maxPlayers === 2;
+  const mine = room.seats.find((seat) => seat.id === room.you.seatId);
 
-  const toggles: { key: "touching" | "arsenal" | "teams"; label: string; desc: string; disabled?: boolean }[] = [
+  const toggles: { key: Toggle; label: string; desc: string; disabled?: boolean }[] = [
     { key: "touching", label: "Navires collés", desc: "Deux navires peuvent se toucher. Sinon, une case d'eau les sépare toujours." },
     { key: "arsenal", label: "Mode Arsenal", desc: "Couler un navire rapporte une arme : radar, torpille ou barrage." },
     {
@@ -72,6 +82,39 @@ export function NavalLobby({ room, send, ...rest }: Props) {
       disabled: room.settings.maxPlayers !== 4,
     },
   ];
+  // Les équipes changent la partie et restent en vue ; navires collés et Arsenal vont avec les réglages fins
+  const toggleList = (keys: Toggle[]) => (
+    <div className="rule-list">
+      {toggles
+        .filter((r) => keys.includes(r.key))
+        .map((r) => {
+          const off = !isHost || r.disabled || locked(r.key);
+          return (
+            <div
+              key={r.key}
+              className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
+              onClick={() => !off && update({ [r.key]: !s[r.key] })}
+            >
+              <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />
+              <span>
+                <strong>{r.label}</strong>
+                <span className="hint">{r.desc}</span>
+              </span>
+            </div>
+          );
+        })}
+    </div>
+  );
+
+  const timeLabel = s.turnSeconds ? `${s.turnSeconds < 60 ? `${s.turnSeconds} s` : "1 min"} pour tirer` : "sans limite de temps";
+  const parts = [
+    `Grille ${s.grid}×${s.grid}`,
+    SHOT_SUMMARY[s.shots],
+    teamsReady ? "2 contre 2" : null,
+    s.arsenal ? "Arsenal" : null,
+  ].filter(Boolean);
+  // Le temps pour tirer ferme la ligne quand il reste de la place
+  const summary = (parts.length < 4 ? [...parts, timeLabel] : parts).join(" · ");
 
   return (
     <TableLobby
@@ -91,21 +134,10 @@ export function NavalLobby({ room, send, ...rest }: Props) {
       }
       seatNote={teamsReady ? (seat) => `équipe ${TEAM_NAMES[(seat.team ?? 0) as 0 | 1]}` : undefined}
       aside={teamsReady ? <TeamsPanel room={room} send={send} names={TEAM_NAMES} colors={["#e0574a", "#4fbf83"]} /> : undefined}
+      summary={summary}
       rules={
-        <section className="rules-sheet panel">
-          <RulesHeading room={room} />
-
+        <>
           <RandomRulesField room={room} game="naval" send={send} />
-
-          {room.you.seatId && (
-            <SkinPicker
-              current={room.seats.find((s) => s.id === room.you.seatId)?.skin ?? "marine"}
-              onPick={(skin) => {
-                setPrefs({ navalSkin: skin });
-                send({ t: "skin", skin });
-              }}
-            />
-          )}
 
           <div className="field">
             <span className="field-label">Grille</span>
@@ -161,24 +193,12 @@ export function NavalLobby({ room, send, ...rest }: Props) {
             </p>
           </div>
 
-          <div className="rule-list">
-            {toggles.map((r) => {
-              const off = !isHost || r.disabled || locked(r.key);
-              return (
-                <div
-                  key={r.key}
-                  className={`rule-row ${r.disabled || locked(r.key) ? "is-forced" : ""}`}
-                  onClick={() => !off && update({ [r.key]: !s[r.key] })}
-                >
-                  <Check label={r.label} checked={s[r.key] && !r.disabled} disabled={off} onChange={() => {}} />
-                  <span>
-                    <strong>{r.label}</strong>
-                    <span className="hint">{r.desc}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {toggleList(["teams"])}
+        </>
+      }
+      moreRules={
+        <>
+          {toggleList(["touching", "arsenal"])}
 
           <div className="field">
             <span className="field-label">Niveau des bots</span>
@@ -215,8 +235,62 @@ export function NavalLobby({ room, send, ...rest }: Props) {
           </div>
 
           <TableSize room={room} send={send} max={NAVAL_MAX_PLAYERS} />
-        </section>
+        </>
       }
+      look={
+        room.you.seatId ? (
+          <SkinPicker
+            current={mine?.skin ?? "marine"}
+            onPick={(skin) => {
+              setPrefs({ navalSkin: skin });
+              send({ t: "skin", skin });
+            }}
+          />
+        ) : undefined
+      }
+      help={<NavalHelp s={s} fleet={fleet} alone={alone} teams={teamsReady} />}
     />
+  );
+}
+
+/** Comment jouer à la bataille navale : placer sa flotte, puis tirer selon les règles de la table (d'après le moteur) */
+function NavalHelp({ s, fleet, alone, teams }: { s: NavalSettings; fleet: string; alone: boolean; teams: boolean }) {
+  const time = s.turnSeconds < 60 ? `${s.turnSeconds} secondes` : "1 minute";
+  return (
+    <div className="lobby-help">
+      <h2>Comment jouer</h2>
+      <p>
+        <strong>Le but :</strong>{" "}
+        {teams
+          ? "couler les deux flottes de l'équipe adverse. Si la tienne coule, ton coéquipier peut encore gagner pour vous deux."
+          : "couler tous les navires adverses. Le dernier à garder un navire à flot gagne."}
+      </p>
+
+      <h3>Placer ta flotte</h3>
+      <ul>
+        <li>
+          Ta flotte, avec la longueur de chaque navire en cases : {fleet}. Glisse un navire pour le déplacer, touche-le pour le tourner, ou
+          laisse faire « Au hasard ».{" "}
+          {s.touching ? "Les navires peuvent se toucher." : "Deux navires ne se touchent jamais, même par un coin."}
+        </li>
+        <li>
+          Tu as 1 min 30 pour appuyer sur <strong>Prêt au combat</strong> : passé ce temps, ta flotte part comme le hasard l'avait placée.
+        </li>
+      </ul>
+
+      <h3>Tirer</h3>
+      <ul>
+        <li>Vise une case chez l'adversaire : à l'eau, touché ou coulé. Un navire coulé se montre en entier. {SHOT_HINTS[s.shots]}</li>
+        {!alone && <li>{TARGET_HINTS[s.targeting ?? "free"]}</li>}
+        {s.arsenal && (
+          <li>
+            Couler un navire rapporte une arme, dans l'ordre radar, torpille, barrage (trois en réserve au plus). Le <strong>radar</strong>{" "}
+            révèle une zone de 3×3 sans tirer, la <strong>torpille</strong> file sur une ligne ou une colonne jusqu'au premier navire, le{" "}
+            <strong>barrage</strong> tire cinq obus en croix. Une arme remplace ton tir et finit ton tour.
+          </li>
+        )}
+        {s.turnSeconds > 0 && <li>Tu as {time} pour chaque tir ; sinon, il part au hasard.</li>}
+      </ul>
+    </div>
   );
 }

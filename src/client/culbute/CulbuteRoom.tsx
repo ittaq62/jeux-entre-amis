@@ -51,7 +51,7 @@ export function CulbuteRoom({ code }: { code: string }) {
       onReady={() => send({ t: "ready" })}
       drawn={tableDraw(view)}
       teamOf={(s) => view.teams[s.id]}
-      teamName={view.tour || cfg.teams ? (t) => TOUR_TEAMS[t as 0 | 1] ?? "" : undefined}
+      teamName={cfg.teams ? (t) => TOUR_TEAMS[t as 0 | 1] ?? "" : null}
     >
       <FighterPicker room={view} send={send} />
     </TablePick>

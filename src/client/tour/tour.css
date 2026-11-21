@@ -1801,3 +1801,10 @@
     background: linear-gradient(to top, rgba(5, 17, 12, 0.96) 60%, transparent);
   }
 }
+
+/* Au salon de la tournée, « Je préfère regarder » sous la liste des joueurs, à droite */
+.lobby-body > .tour-role {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+}
