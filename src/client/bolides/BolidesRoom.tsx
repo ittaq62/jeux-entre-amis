@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loading } from "../components/ui.tsx";
+import { tableDraw } from "../game/RandomRules.tsx";
 import { RoomError, RoomShell, useUnread } from "../game/RoomShell.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
@@ -35,7 +36,15 @@ export function BolidesRoom({ code }: { code: string }) {
     if (bridge) bridge.leave();
     else navigate("/");
   };
-  const showRace = view.bolides !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen;
+  // L'annonce avant la course : en tournée, au salon de la table ; hors tournée, avant la revanche (ou la course suivante du Grand Prix)
+  const announcing = !bridge && view.status === "finished" && Boolean(view.pickUntil);
+  const showRace = view.bolides !== null && (view.status === "playing" || view.status === "finished") && !lobbyOpen && !announcing;
+  // Son véhicule et son skin
+  const pick = (
+    <TablePick game="bolides" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })} drawn={tableDraw(view)}>
+      <Garage room={view} send={send} />
+    </TablePick>
+  );
 
   return (
     <RoomShell
@@ -60,14 +69,14 @@ export function BolidesRoom({ code }: { code: string }) {
           onLeave={leave}
         />
       ) : bridge ? (
+        // Juste avant la course de tournée : l'annonce
         view.status === "lobby" ? (
-          // Juste avant la course de tournée : son véhicule et son skin
-          <TablePick game="bolides" room={view} serverOffset={serverOffset} onReady={() => send({ t: "ready" })}>
-            <Garage room={view} send={send} />
-          </TablePick>
+          pick
         ) : (
           bridge.waiting
         )
+      ) : announcing ? (
+        pick
       ) : (
         <BolidesLobby
           room={view}

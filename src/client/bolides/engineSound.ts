@@ -3,7 +3,7 @@
 // le crissement des pneus pendant les dérapages, et un souffle pendant les turbos. Le klaxon aussi.
 // Le moteur peut se couper à part (préférence « bolidesEngine »).
 
-import { audioOut, soundBuffer } from "../lib/sound.ts";
+import { audioOut, effectsLevel, soundBuffer } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
 interface Nodes {
@@ -85,7 +85,8 @@ export class EngineSound {
     if (!n) return;
     const prefs = usePrefs.getState();
     const t = n.engine.context.currentTime;
-    const volume = prefs.sound ? prefs.volume : 0;
+    // Le moteur, les dérapages et le turbo sont des effets : général × effets (0 quand le son est coupé)
+    const volume = effectsLevel(prefs);
     const v = Math.max(0, Math.min(1.5, speed));
     // Le régime monte par paliers, comme s'il passait les vitesses, avec un léger tremblement
     const gear = v < 0.35 ? v / 0.35 : v < 0.7 ? 0.55 + ((v - 0.35) / 0.35) * 0.45 : 0.75 + ((v - 0.7) / 0.8) * 0.6;
@@ -140,7 +141,7 @@ export function honk() {
     o.start(t);
     o.stop(t + 0.62);
   }
-  const v = prefs.volume * 0.16;
+  const v = effectsLevel(prefs) * 0.16;
   gain.gain.setValueAtTime(0, t);
   gain.gain.linearRampToValueAtTime(v, t + 0.02);
   gain.gain.setValueAtTime(v, t + 0.2);

@@ -2,7 +2,7 @@
 // boucle entre les deux, quel que soit le décalage du décodeur). Elle démarre au compte à rebours, accélère au
 // dernier tour, se fait plus discrète une fois arrivé, et se coupe à part (préférence « bolidesMusic »).
 
-import { audioOut, soundBuffer } from "../lib/sound.ts";
+import { audioOut, musicLevel, soundBuffer } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 
 /** 16 mesures à 140 battements par minute */
@@ -45,13 +45,13 @@ export class RaceMusic {
     });
   }
 
-  /** À chaque image : le volume suit les préférences (son coupé, musique coupée), en douceur */
+  /** À chaque image : le volume suit le réglage du son (général × musique, son coupé) et la musique de Bolides, en douceur */
   update() {
     const g = this.gain;
     if (!g) return;
     const prefs = usePrefs.getState();
-    const on = prefs.sound && prefs.bolidesMusic;
-    g.gain.setTargetAtTime(on ? prefs.volume * LEVEL * (this.quiet ? 0.55 : 1) : 0, g.context.currentTime, 0.4);
+    const level = prefs.bolidesMusic ? musicLevel(prefs) : 0;
+    g.gain.setTargetAtTime(level * LEVEL * (this.quiet ? 0.55 : 1), g.context.currentTime, 0.4);
   }
 
   /** Le dernier tour : un peu plus vite (et un peu plus aigu) */

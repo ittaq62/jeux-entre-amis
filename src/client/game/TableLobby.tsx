@@ -104,8 +104,6 @@ export function TableLobby({
   ];
   // Un onglet qui disparaît (on quitte sa place : plus de look à choisir) ramène aux règles
   const shown: LobbyTab = tabs.some((t) => t.id === tab) ? tab : "rules";
-  // Un salon qui n'a pas encore ses onglets donne ses règles d'un bloc, avec leur cadre et leur titre
-  const legacy = moreRules === undefined && look === undefined && help === undefined && summary === undefined;
 
   return (
     <div className="felt page lobby">
@@ -252,38 +250,32 @@ export function TableLobby({
           ))}
         </div>
 
-        {legacy ? (
-          <div className="lobby-panel" role="tabpanel" id="lobby-panel-rules" aria-labelledby="lobby-tab-rules">
-            {rules}
-          </div>
-        ) : (
-          <section
-            className="rules-sheet panel lobby-panel"
-            role="tabpanel"
-            id={`lobby-panel-${shown}`}
-            aria-labelledby={`lobby-tab-${shown}`}
-          >
-            {shown === "rules" ? (
-              <>
-                <RulesHeading room={room} tour={tour} />
-                {rules}
-                {moreRules && (
-                  <>
-                    <button type="button" className="lobby-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
-                      <Icon name={more ? "chevronUp" : "chevronDown"} size={18} />
-                      {more ? "Moins de règles" : "Plus de règles"}
-                    </button>
-                    {more && <div className="lobby-more-body">{moreRules}</div>}
-                  </>
-                )}
-              </>
-            ) : shown === "look" ? (
-              look
-            ) : (
-              help
-            )}
-          </section>
-        )}
+        <section
+          className="rules-sheet panel lobby-panel"
+          role="tabpanel"
+          id={`lobby-panel-${shown}`}
+          aria-labelledby={`lobby-tab-${shown}`}
+        >
+          {shown === "rules" ? (
+            <>
+              <RulesHeading room={room} tour={tour} />
+              {rules}
+              {moreRules && (
+                <>
+                  <button type="button" className="lobby-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+                    <Icon name={more ? "chevronUp" : "chevronDown"} size={18} />
+                    {more ? "Moins de règles" : "Plus de règles"}
+                  </button>
+                  {more && <div className="lobby-more-body">{moreRules}</div>}
+                </>
+              )}
+            </>
+          ) : shown === "look" ? (
+            look
+          ) : (
+            help
+          )}
+        </section>
       </main>
 
       <footer className="lobby-footer">
@@ -330,7 +322,7 @@ export function TableLobby({
 }
 
 /** En-tête de l'onglet des règles : qui les a choisies. */
-export function RulesHeading({ room, tour = false }: { room: LobbyRoom; tour?: boolean }) {
+function RulesHeading({ room, tour }: { room: LobbyRoom; tour: boolean }) {
   const host = room.seats.find((x) => x.isHost);
   return (
     <div>

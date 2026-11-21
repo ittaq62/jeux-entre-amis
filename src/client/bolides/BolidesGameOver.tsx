@@ -11,6 +11,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
+import { TourNextNote } from "../tour/TourNextNote.tsx";
 import { kartColor, raceTime } from "./BolidesRace.tsx";
 
 interface Props {
@@ -148,11 +149,8 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
           </section>
         )}
 
-        {inTour && (
-          <p className="tour-next-note">
-            <span className="spinner" /> La tournée continue : le classement arrive.
-          </p>
-        )}
+        {/* En tournée, la feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué */}
+        {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>

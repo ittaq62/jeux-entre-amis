@@ -666,6 +666,14 @@
   margin: 0 0 14px;
 }
 
+/* Au salon, le garage est dans l'onglet « Mon look » : sans son propre cadre */
+.lobby-panel > .garage {
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
 .bolides-items summary {
   cursor: pointer;
   font-weight: 700;

@@ -5,6 +5,8 @@ import { ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
+import { ReportButton } from "../components/ReportButton.tsx";
+import { MenuSound, SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
 import { BOLIDES_SOUNDS, preloadSounds, unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -83,9 +85,6 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const [sheetReady, setSheetReady] = useState(() => g.ranking != null);
   const canSkip = useRef(0);
   const [phone] = useState(() => window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760);
-  const sound = usePrefs((s) => s.sound);
-  const engineOn = usePrefs((s) => s.bolidesEngine);
-  const musicOn = usePrefs((s) => s.bolidesMusic);
   const autoItem = usePrefs((s) => s.bolidesAutoItem);
   const assist = usePrefs((s) => s.bolidesAssist);
   const setPrefs = usePrefs((s) => s.set);
@@ -326,13 +325,10 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
           <Icon name="menu" />
         </button>
         <div className="bolides-top-actions">
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setPrefs({ sound: !sound })}
-            aria-label={sound ? "Couper le son" : "Activer le son"}
-          >
-            <Icon name={sound ? "volume" : "mute"} />
-          </button>
+          {/* Le son commun (général, effets, musique et ambiance), et ce qui est propre à la course */}
+          <SoundButton>
+            <BolidesSoundToggles />
+          </SoundButton>
           <button className="btn btn-ghost btn-icon chat-toggle" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" />
             {unread > 0 && <span className="badge badge-red">{unread}</span>}
@@ -362,13 +358,17 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
                 <button className="menu-item" onClick={() => setPrefs({ bolidesAssist: !assist })}>
                   <Icon name={assist ? "check" : "close"} size={18} /> {assist ? "Conduite assistée : oui" : "Conduite assistée : non"}
                 </button>
-                <button className="menu-item" onClick={() => setPrefs({ bolidesMusic: !musicOn })}>
-                  <Icon name={musicOn ? "volume" : "mute"} size={18} /> {musicOn ? "Couper la musique" : "Remettre la musique"}
-                </button>
-                <button className="menu-item" onClick={() => setPrefs({ bolidesEngine: !engineOn })}>
-                  <Icon name={engineOn ? "volume" : "mute"} size={18} />{" "}
-                  {engineOn ? "Couper le bruit du moteur" : "Remettre le bruit du moteur"}
-                </button>
+                <MenuSound>
+                  <BolidesSoundToggles />
+                </MenuSound>
+                <ReportButton
+                  look="menu"
+                  game="bolides"
+                  variant={`Bolides, ${TRACKS[g.track]?.name ?? g.track}, ${g.settings.laps} tours`}
+                  code={room.code}
+                  role={room.you.seatId ? "player" : "watcher"}
+                  onOpen={() => setMenuOpen(false)}
+                />
                 <button className="menu-item is-danger" onClick={onLeave}>
                   <Icon name="door" size={18} /> {inTour ? "Quitter la tournée" : "Quitter la course"}
                 </button>
@@ -753,5 +753,18 @@ function Arrow({ dir }: { dir: -1 | 1 }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/** Les réglages du son propres à la course, sous le réglage commun : la musique et le bruit du moteur */
+function BolidesSoundToggles() {
+  const musicOn = usePrefs((p) => p.bolidesMusic);
+  const engineOn = usePrefs((p) => p.bolidesEngine);
+  const setPrefs = usePrefs((p) => p.set);
+  return (
+    <>
+      <SoundToggle label="Musique de course" checked={musicOn} onChange={(v) => setPrefs({ bolidesMusic: v })} />
+      <SoundToggle label="Bruit du moteur" checked={engineOn} onChange={(v) => setPrefs({ bolidesEngine: v })} />
+    </>
   );
 }

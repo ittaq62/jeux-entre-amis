@@ -36,7 +36,7 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean; announce: boolean }
   { game: "bricks", Room: BricksRoom as unknown as RoomClass, bots: true, announce: true },
   { game: "capitale", Room: CapitaleRoom as unknown as RoomClass, bots: true, announce: true },
   { game: "meche", Room: MecheRoom as unknown as RoomClass, bots: true, announce: true },
-  { game: "bolides", Room: BolidesRoom as unknown as RoomClass, bots: true, announce: false },
+  { game: "bolides", Room: BolidesRoom as unknown as RoomClass, bots: true, announce: true },
   { game: "crampons", Room: CramponsRoom as unknown as RoomClass, bots: false, announce: true },
   { game: "culbute", Room: CulbuteRoom as unknown as RoomClass, bots: true, announce: true },
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true, announce: true },
