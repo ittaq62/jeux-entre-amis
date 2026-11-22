@@ -166,7 +166,7 @@ describe("le premier coup attend le chargement de chacun (Capitale)", () => {
     await bench.send(host, { t: "start" });
     const d = () => bench.data<CapData>();
     const me = d().seats.find((s) => s.kind === "human")!.id;
-    return { bench, host, d, me };
+    return { room: r, bench, host, d, me };
   }
 
   it("ni coup, ni bot, ni chrono avant le départ commun ; puis la partie part", async () => {
@@ -208,6 +208,15 @@ describe("le premier coup attend le chargement de chacun (Capitale)", () => {
     const t = await capitaleTable({ end: "timed", minutes: 30 });
     await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
     expect(t.d().endsAt).toBe(t.d().gate!.goAt! + 30 * 60_000);
+  });
+
+  it("un joueur qui ne charge jamais ne bloque pas la partie : une alarme la réveille à la fin de l'attente", async () => {
+    const t = await capitaleTable();
+    expect(t.d().timers.some((x) => x.kind === "gate" && x.at === t.d().gate!.until)).toBe(true);
+    clock = t.d().gate!.until;
+    await (t.room as unknown as { alarm(): Promise<void> }).alarm();
+    expect(t.d().gate!.goAt).toBe(clock + LOAD_COUNTDOWN_MS);
+    expect(t.d().timers.some((x) => x.kind === "gate")).toBe(false);
   });
 
   it("le joueur parti pendant le chargement n'est plus attendu", async () => {
