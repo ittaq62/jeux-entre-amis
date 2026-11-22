@@ -63,7 +63,7 @@ const pont = hole(
       0.26,
       { look: "tronc", t: 0.13 },
     );
-    b.deco("riviere", 0, -5.5);
+    b.deco("riviere", 0, -5.5, { s: 5.6 });
     b.tee(0, -0.45, UP).cup(-0.2, -11.2);
   },
   { hint: "Le pont s'affaisse au milieu : assez fort pour remonter de l'autre côté." },

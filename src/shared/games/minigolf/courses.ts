@@ -8,6 +8,7 @@ import { MONTAGNE } from "./holes/montagne.ts";
 import { CUISINE } from "./holes/cuisine.ts";
 import { JUNGLE } from "./holes/jungle.ts";
 import { HORLOGER } from "./holes/horloger.ts";
+import { LUNE } from "./holes/lune.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -64,7 +65,13 @@ export const COURSES: Record<CourseId, CourseInfo> = {
     holes: HORLOGER,
     g: GRAVITY,
   },
-  lune: { id: "lune", name: "Base lunaire", blurb: "Gravité faible, grands sauts, cratères et téléporteurs.", holes: [], g: 3.2 },
+  lune: {
+    id: "lune",
+    name: "Base lunaire",
+    blurb: "La Terre au-dessus de l'horizon, la balle trois fois plus légère : le cratère, le tremplin, les téléporteurs, le sas.",
+    holes: LUNE,
+    g: 3.2,
+  },
   volcan: { id: "volcan", name: "Volcan", blurb: "Lave, roche noire et geysers, sous les lueurs rouges.", holes: [], g: GRAVITY },
 };
 

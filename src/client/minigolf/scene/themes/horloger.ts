@@ -1156,7 +1156,7 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: Life,
   for (const d of def.decos) {
     if (d.k === "cadran") {
       // L'émail du grand cadran, ses chiffres romains
-      const r = d.r ?? 3;
+      const r = d.s ?? 3;
       const dial = new THREE.Mesh(
         new THREE.CircleGeometry(r * 0.985, 96),
         new THREE.MeshStandardMaterial({ map: dialTex(), roughness: 0.25 }),

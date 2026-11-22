@@ -233,7 +233,7 @@ const cadran = hole(
       e: 0.5,
     });
     b.mover({ motion: { k: "spin", c, w: 0.16, a0: 2.2 }, parts: hand(1.7, 0.3, 0.08), look: "petite-aiguille", e: 0.5 });
-    b.deco("cadran", c[0], c[1], { r: 3.0 });
+    b.deco("cadran", c[0], c[1], { s: 3.0 });
     b.tee(0, -0.45, UP).cup(0, -8.8);
   },
   { hint: "Les aiguilles balaient tout le cadran : vise midi entre deux passages." },

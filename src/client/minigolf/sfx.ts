@@ -234,7 +234,7 @@ export function applause(vol = 1) {
 // ---------------------------------------------------------------------------
 
 /** Le bruit de fond de chaque parcours : jusqu'où on laisse passer les aigus (Hz) */
-const ROOM_TONE: Record<string, number> = { jardin: 420, mer: 650, montagne: 520, cuisine: 240, jungle: 900, horloger: 200 };
+const ROOM_TONE: Record<string, number> = { jardin: 420, mer: 650, montagne: 520, cuisine: 240, jungle: 900, horloger: 200, lune: 120 };
 
 export class Ambience {
   private wind: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
@@ -402,6 +402,18 @@ export class Ambience {
         // Un singe qui appelle : des « hou » qui montent
         for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.28, "sine", 320 + k * 60, 420 + k * 70, o.vol * 0.05, 0.04, 0.2);
       }
+    }
+    if (o && this.kind === "lune") {
+      // La base : un bip de radio, deux notes, de temps en temps une petite mélodie de télémétrie
+      const t = o.ctx.currentTime + 0.02;
+      if (Math.random() < 0.6) {
+        tone(o.ctx, o.dest, t, "sine", 1320, 1320, o.vol * 0.025, 0.003, 0.08);
+        tone(o.ctx, o.dest, t + 0.14, "sine", 990, 990, o.vol * 0.025, 0.003, 0.1);
+      } else
+        for (let k = 0; k < 5; k++) {
+          const f = [880, 1175, 988, 1319, 1047][k]!;
+          tone(o.ctx, o.dest, t + k * 0.09, "square", f, f, o.vol * 0.006, 0.002, 0.06);
+        }
     }
     if (o && this.kind === "horloger" && Math.random() < 0.3) {
       // Une horloge qui sonne, au loin : trois ou quatre notes de carillon
