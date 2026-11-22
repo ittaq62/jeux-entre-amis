@@ -27,7 +27,18 @@ export const RARITY: Record<Rarity, RarityInfo> = {
 };
 
 export type CardFamily =
-  "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche" | "culbute" | "minigolf";
+  | "habitues"
+  | "flotte"
+  | "capitale"
+  | "circuit"
+  | "tapis"
+  | "briques"
+  | "meche"
+  | "crampons"
+  | "escarmouche"
+  | "culbute"
+  | "minigolf"
+  | "bowling";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -41,6 +52,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "culbute", name: "La Culbute", note: "Ça vole bas, au village" },
   { id: "escarmouche", name: "L'Escarmouche", note: "Ça sent la poudre au hameau" },
   { id: "minigolf", name: "Le Minigolf", note: "Par trois, et ça finit à sept" },
+  { id: "bowling", name: "La Piste", note: "Strike, spare, et la rigole" },
 ];
 
 export type CardArt =
@@ -61,6 +73,10 @@ export type CardArt =
   | {
       kind: "minigolf";
       subject: "putter" | "balle" | "carte" | "tapis" | "moulin" | "tremplin" | "bassin" | "drapeau" | "coucou" | "volcan" | "trou-en-un";
+    }
+  | {
+      kind: "bowling";
+      subject: "quille" | "boule" | "chaussures" | "rigole" | "feuille" | "retour" | "jukebox" | "split" | "machine" | "dinde" | "parfaite";
     };
 
 export interface CardDef {
@@ -1045,6 +1061,96 @@ export const CARDS: CardDef[] = [
     name: "Le Trou en un",
     quote: "Une fois dans une vie. Et personne ne regardait.",
     art: { kind: "minigolf", subject: "trou-en-un" },
+  },
+
+  // La Piste (le bowling, arrivé après les autres : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "bowl-quille",
+    family: "bowling",
+    rarity: "commune",
+    name: "La Quille",
+    quote: "Dix sœurs, toujours debout. Jusqu'à ce que tu arrives.",
+    art: { kind: "bowling", subject: "quille" },
+  },
+  {
+    id: "bowl-boule",
+    family: "bowling",
+    rarity: "commune",
+    name: "La Boule",
+    quote: "Trois trous, et aucun pour cacher sa honte.",
+    art: { kind: "bowling", subject: "boule" },
+  },
+  {
+    id: "bowl-chaussures",
+    family: "bowling",
+    rarity: "commune",
+    name: "Les Chaussures de location",
+    quote: "Pointure 43. Elles ont connu quatre mille pieds avant les tiens.",
+    art: { kind: "bowling", subject: "chaussures" },
+  },
+  {
+    id: "bowl-rigole",
+    family: "bowling",
+    rarity: "commune",
+    name: "La Rigole",
+    quote: "Elle accueille tout le monde, sans jamais juger.",
+    art: { kind: "bowling", subject: "rigole" },
+  },
+  {
+    id: "bowl-feuille",
+    family: "bowling",
+    rarity: "peu-commune",
+    name: "La Feuille de score",
+    quote: "Un X, une barre, un trait : toute une soirée en trois signes.",
+    art: { kind: "bowling", subject: "feuille" },
+  },
+  {
+    id: "bowl-retour",
+    family: "bowling",
+    rarity: "peu-commune",
+    name: "Le Retour de boules",
+    quote: "Il rend toujours ce qu'on lui envoie. Même la honte.",
+    art: { kind: "bowling", subject: "retour" },
+  },
+  {
+    id: "bowl-jukebox",
+    family: "bowling",
+    rarity: "peu-commune",
+    name: "Le Juke-box",
+    quote: "Une pièce, et la même chanson depuis 1962.",
+    art: { kind: "bowling", subject: "jukebox" },
+  },
+  {
+    id: "bowl-split",
+    family: "bowling",
+    rarity: "rare",
+    name: "Le 7-10",
+    quote: "Deux quilles, et tout un océan entre elles.",
+    art: { kind: "bowling", subject: "split" },
+  },
+  {
+    id: "bowl-machine",
+    family: "bowling",
+    rarity: "rare",
+    name: "La Machine",
+    quote: "Elle ramasse, elle range, elle ne dit jamais rien.",
+    art: { kind: "bowling", subject: "machine" },
+  },
+  {
+    id: "bowl-dinde",
+    family: "bowling",
+    rarity: "epique",
+    name: "La Dinde",
+    quote: "Trois strikes de suite : la salle entière se lève.",
+    art: { kind: "bowling", subject: "dinde" },
+  },
+  {
+    id: "bowl-parfaite",
+    family: "bowling",
+    rarity: "legendaire",
+    name: "La Partie parfaite",
+    quote: "Douze strikes, trois cents points, pas un de moins.",
+    art: { kind: "bowling", subject: "parfaite" },
   },
 ];
 

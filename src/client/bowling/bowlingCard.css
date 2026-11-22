@@ -1,0 +1,7 @@
+/* La famille « La Piste » dans l'album : une salle de bowling le soir, ses néons, et le bois verni de la piste */
+.fam-bowling .tc-art {
+  background:
+    radial-gradient(ellipse 60% 35% at 20% 18%, rgba(255, 79, 163, 0.35), transparent 70%),
+    radial-gradient(ellipse 60% 35% at 82% 14%, rgba(55, 224, 208, 0.3), transparent 70%),
+    linear-gradient(180deg, #1b2350 0, #2a1430 55%, #5a3018 100%);
+}
