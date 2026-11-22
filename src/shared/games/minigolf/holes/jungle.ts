@@ -347,7 +347,8 @@ const sanctuaire = hole(
     // Le grand disque de pierre gravé, au milieu de la salle, qui tourne lentement et emporte la balle
     b.inset(hall, circle(0, -8.4, 1.25, 56), 0.15, "stone", { look: "disque", flow: { k: "spin", c: [0, -8.4], w: 0.8 } });
     // La bûche, pendue à deux lianes, qui balaie l'allée
-    const log: Part[] = [{ k: "cap", a: [-0.95, 0.19, -3.2], b: [0.95, 0.19, -3.2], r: 0.15 }];
+    // (elle tient entre les bordures, ses bouts juste avant elles)
+    const log: Part[] = [{ k: "cap", a: [-0.7, 0.19, -3.2], b: [0.7, 0.19, -3.2], r: 0.15 }];
     b.mover({ motion: { k: "swing", c: [0, 1.7, -3.2], axis: [1, 0], amp: 0.75, w: 1.7 }, parts: log, look: "balancier", e: 0.4 });
     // L'autel du masque
     b.block(box(-0.55, -12.0, 0.55, -11.0), 0.45, { look: "autel" });

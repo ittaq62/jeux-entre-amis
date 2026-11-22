@@ -212,7 +212,8 @@ const rouleau = hole(
   (b) => {
     const g = b.tile(roundRect(-1.0, -11, 1.0, 0, 0.55, 1.0), 0, "green", { look: "nappe" });
     b.inset(g, box(-0.85, -8.4, 0.85, -3.2), 0.0, "dirt", { look: "pate" });
-    const pin: Part[] = [{ k: "cap", a: [-1.1, 0.12, -4.0], b: [1.1, 0.12, -4.0], r: 0.12 }];
+    // (il tient entre les bordures, ses bouts juste avant elles)
+    const pin: Part[] = [{ k: "cap", a: [-0.83, 0.12, -4.0], b: [0.83, 0.12, -4.0], r: 0.12 }];
     // Il se soulève en s'éloignant (la balle passe dessous), et redescend en revenant
     b.mover({ motion: { k: "slide", d: [0, 0.34, -3.6], period: 5 }, parts: pin, look: "rouleau", e: 0.4 });
     b.tee(0, -0.45, UP).cup(0, -10.1);

@@ -146,7 +146,8 @@ const sas = hole(
       { c: [0, -11.3], r: 0.9 },
     );
     b.tile(lane.ring, lane.h, "metal", { look: "grille" });
-    const door = (z: number): Part[] => [{ k: "wall", a: [-0.9, z], b: [0.9, z], y0: 0, y1: 0.55, t: 0.07 }];
+    // (d'une bordure à l'autre, ses bouts juste avant elles)
+    const door = (z: number): Part[] => [{ k: "wall", a: [-0.79, z], b: [0.79, z], y0: 0, y1: 0.55, t: 0.07 }];
     b.mover({ motion: { k: "slide", d: [0, 0.5, 0], period: 5.2, shape: "piston" }, parts: door(-4.4), look: "porte-sas", e: 0.4 });
     b.mover({
       motion: { k: "slide", d: [0, 0.5, 0], period: 5.2, a0: 0.5, shape: "piston" },
@@ -208,7 +209,8 @@ const pasDeTir = hole(
     b.pad([0, -4.2], 0.25, 3.3, { push: [0, -1.0], look: "propulseur" });
     b.open(box(-1.7, -6.7, 0.88, -6.5));
     b.link([0, -4.2], [0, -7.6]);
-    b.deco("fusee", -1.9, -9.2);
+    // (la fusée et ses ailerons à côté de la plateforme, sans entrer dans sa bordure)
+    b.deco("fusee", -3.2, -9.2);
     b.tee(0, -0.45, UP).cup(0.3, -9.6);
   },
   { hint: "Le propulseur lance la balle très haut : sur la Lune, elle retombe lentement sur la plateforme." },

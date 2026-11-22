@@ -133,21 +133,21 @@ export function montagneTheme(): Theme {
   const mover = (def: MoverDef): THREE.Object3D | null => {
     const g = new THREE.Group();
     if (def.look === "telesiege") {
-      // Des sièges suspendus à leur perche, qui défilent sous le câble
+      // Des sièges suspendus à leur perche, au ras de la neige, qui font l'aller-retour sous le câble
       for (const p of def.parts) {
         if (p.k !== "wall") continue;
         const cx = (p.a[0] + p.b[0]) / 2;
         const cz = (p.a[1] + p.b[1]) / 2;
         const chair = new THREE.Group();
         const seat = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.06, 0.32), seatMat);
-        seat.position.y = 0.18;
+        seat.position.y = 0.11;
         const back = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.36, 0.05), seatMat);
-        back.position.set(0, 0.36, -0.14);
-        const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 2.4, 6), metal);
-        hanger.position.set(0, 1.4, -0.12);
+        back.position.set(0, 0.29, -0.14);
+        const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 2.5, 6), metal);
+        hanger.position.set(0, 1.35, -0.12);
         const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.66, 6), metal);
         bar.rotation.z = Math.PI / 2;
-        bar.position.set(0, 0.42, 0.14);
+        bar.position.set(0, 0.35, 0.14);
         chair.add(seat, back, hanger, bar);
         chair.position.set(cx, 0, cz);
         g.add(chair);
@@ -300,8 +300,9 @@ function montagneDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   for (let k = 0; k < 40; k++) {
     const x = box.x0 - 6 + rng() * (box.x1 - box.x0 + 12);
     const z = box.z0 - 6 + rng() * (box.z1 - box.z0 + 12);
-    if (onCourse(c, x, z, 1.4)) continue;
     const s = 0.6 + rng() * 1.4;
+    // (à fleur de neige, une congère est large de 0,95 × s : elle reste à distance des bordures)
+    if (onCourse(c, x, z, Math.max(1.4, s * 0.95 + 0.2))) continue;
     drifts.add(x, base - s * 0.75, z, [s * 1.4, s, s * 1.2], rng() * 6);
   }
 
@@ -320,15 +321,19 @@ function montagneDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
 
   // Les sapins, en forêt tout autour (clairsemés dans la trouée)
   const firs = [new Scatter(m.fir.green, m.firGreen), new Scatter(m.fir.snow, m.firSnow), new Scatter(m.fir.trunk, m.bark)];
+  // Le rayon des branches du bas, à l'échelle 1 : un sapin reste à cette distance des pistes (ses branches n'y entrent pas)
+  m.fir.green.computeBoundingBox();
+  const fb = m.fir.green.boundingBox!;
+  const firR = Math.max(-fb.min.x, fb.max.x, -fb.min.z, fb.max.z);
   for (let k = 0; k < 170; k++) {
     const a = rng() * Math.PI * 2;
     const r = 3 + rng() * 40;
     const x = box.cx + Math.cos(a) * (r + (box.x1 - box.x0) / 2);
     const z = box.cz + Math.sin(a) * (r + (box.z1 - box.z0) / 2);
-    if (onCourse(c, x, z, 1.6)) continue;
     const opening = inView(x, z);
     if (opening && rng() < 0.85) continue;
     const s = (1.6 + rng() * 2.8) * (opening ? 0.6 : 1);
+    if (onCourse(c, x, z, Math.max(1.6, firR * s * 1.1 + 0.2))) continue;
     for (const f of firs) f.add(x, base, z, [s, s * (0.9 + rng() * 0.3), s], rng() * 6);
   }
 

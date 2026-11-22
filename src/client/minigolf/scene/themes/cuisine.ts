@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import { heightAt, type Course, type MoverDef } from "../../../../shared/games/minigolf/course.ts";
+import { segClosest } from "../../../../shared/games/minigolf/geom.ts";
 import { feltTex, sandTex, woodTex } from "../textures.ts";
 import {
   canvasTex,
@@ -1442,12 +1443,19 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: THREE
       const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16), m.gold);
       dial.rotation.x = Math.PI / 2;
       dial.position.set(0.9, 1.5, 0.44);
+      // La colonne et son pied, posés sur le plan de travail juste après la nappe et sa bordure (jamais dessus)
+      let off = 2.0;
+      for (let k = 0; k < 80 && onCourse(c, d.at[0] + off, d.at[1], 0.75); k++) off += 0.05;
       const colH = 1.45 - base;
       const column = new THREE.Mesh(new THREE.BoxGeometry(0.62, colH, 0.62), m.mint);
-      column.position.set(1.95, base + colH / 2, 0);
+      column.position.set(off - 0.05, base + colH / 2, 0);
       const foot = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.14, 1.3), m.mint);
-      foot.position.set(2.0, base + 0.07, 0);
-      head.add(body, ring, dial, column, foot);
+      foot.position.set(off, base + 0.07, 0);
+      // Le bras qui relie la tête à la colonne, si elle s'est éloignée
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.01, off - 1.6), 0.4, 0.4), m.mint);
+      arm.position.set((1.6 + off) / 2, 1.45, 0);
+      arm.visible = off > 2.05;
+      head.add(body, ring, dial, column, foot, arm);
       head.position.set(d.at[0], 0, d.at[1]);
       shadows(head);
       g.add(head);
@@ -1518,6 +1526,8 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: THREE
           const s = (k + 0.5) / count;
           const x = a[0] + (bb[0] - a[0]) * s;
           const z = a[1] + (bb[1] - a[1]) * s;
+          // Pas de boîte dans une bordure : le mur invisible continue jusqu'à elle, la rangée s'arrête avant
+          if (c.walls.some((rw) => rw.kind === "rail" && segClosest(x, z, rw.ax, rw.az, rw.bx, rw.bz).d2 < (r + rw.t) ** 2)) continue;
           for (let level = 0; level < 2; level++) {
             const y = h * (level + 0.5);
             tins.add(x, y, z, 1, n * 0.7);

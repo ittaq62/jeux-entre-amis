@@ -118,7 +118,8 @@ const vague = hole(
     );
     b.inset(g, box(-0.6, -8.7, 0.6, -8.2), -0.012, "sand", { look: "plage" });
     // Retirée, la vague dort sous le gazon (on passe par-dessus) ; elle monte en déferlant vers le départ, puis redescend
-    const wave: Part[] = [{ k: "wall", a: [-0.86, -7.2], b: [0.86, -7.2], y0: -1.2, y1: -0.22, t: 0.06 }];
+    // (d'une bordure à l'autre, sans entrer dedans : ses bouts s'arrêtent juste avant, trop près pour qu'une balle passe)
+    const wave: Part[] = [{ k: "wall", a: [-0.79, -7.2], b: [0.79, -7.2], y0: -1.2, y1: -0.22, t: 0.06 }];
     b.mover({ motion: { k: "slide", d: [0, 0.38, 2.6], period: 5, shape: "piston" }, parts: wave, look: "vague", e: 0.45 });
     b.tee(0, -0.45, UP).cup(0, -10.1);
   },

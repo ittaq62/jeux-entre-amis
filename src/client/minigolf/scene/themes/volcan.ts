@@ -564,9 +564,10 @@ function volcanoDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   // Des rochers fendus, des arbres calcinés, des éclats d'obsidienne
   const rocks = new Scatter(leafyBall(1, 0.35, 61), m.rock);
   for (let k = 0; k < 45; k++) {
-    const p = spot(0.6, 30, 0.6, false);
-    if (!p) continue;
     const s = 0.15 + rng() * 0.9;
+    // (un rocher est large comme sa taille : il reste hors des bordures)
+    const p = spot(0.6, 30, Math.max(0.6, s + 0.15), false);
+    if (!p) continue;
     rocks.add(p[0], base + s * 0.3, p[1], [s, s * 0.7, s * 0.9], rng() * 6);
   }
   const trunks = new Scatter(new THREE.CylinderGeometry(0.08, 0.16, 1, 7).translate(0, 0.5, 0), m.charred);
@@ -717,7 +718,9 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: Life,
     const zs = w.ring.map((p) => p[1]);
     const z = (Math.min(...zs) + Math.max(...zs)) / 2;
     const fromLeft = w.acc[0] > 0;
-    const x = fromLeft ? Math.min(...xs) - 0.2 : Math.max(...xs) + 0.2;
+    // Juste hors de la piste et de sa bordure (le cône ne la traverse pas)
+    let x = fromLeft ? Math.min(...xs) - 0.2 : Math.max(...xs) + 0.2;
+    for (let k = 0; k < 80 && onCourse(c, x, z, 0.9); k++) x += fromLeft ? -0.05 : 0.05;
     const vent = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.6, 12, 1, true), m.rock);
     vent.position.set(x, base + 0.25, z);
     vent.rotation.z = fromLeft ? -1.2 : 1.2;

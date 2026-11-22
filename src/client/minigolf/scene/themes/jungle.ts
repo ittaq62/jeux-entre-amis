@@ -1035,8 +1035,10 @@ function jungleDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   const ferns = new Scatter(fernGeo(), dm.fern);
   const fernCols = [0x4f8f3a, 0x5f9a3e, 0x3f7a30, 0x6aa046];
   for (let k = 0; k < 90; k++) {
-    const p = spot(0.6, 9, 0.6, false);
-    if (p) ferns.add(p[0], base, p[1], 0.6 + rng() * 0.7, rng() * 6, fernCols[k % fernCols.length]!);
+    // (ses palmes font environ 1,2 fois sa taille : elles ne doivent pas passer par-dessus une bordure)
+    const s = 0.6 + rng() * 0.7;
+    const p = spot(0.6, 9, s * 1.2 + 0.15, false);
+    if (p) ferns.add(p[0], base, p[1], s, rng() * 6, fernCols[k % fernCols.length]!);
   }
   const bushes = new Scatter(leafyBall(2, 0.16, 9), dm.bush);
   // (le buis est déjà sombre : des teintes plus claires que celles des couronnes)
@@ -1044,9 +1046,10 @@ function jungleDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   const flowers = new Scatter(new THREE.IcosahedronGeometry(1, 0), dm.flower, false);
   const petals = [0xe8402a, 0xf0a020, 0xe04a8a, 0xffd24a, 0xf26a3a];
   for (let k = 0; k < 40; k++) {
-    const p = spot(1.2, 12, 1.2, true);
-    if (!p) continue;
     const s = 0.45 + rng() * 0.5;
+    // (le buisson et ses deux voisins s'étendent jusqu'à 1,8 fois sa taille)
+    const p = spot(1.2, 12, Math.max(1.2, s * 1.8 + 0.15), true);
+    if (!p) continue;
     for (let j = 0; j < 3; j++) {
       const a = rng() * Math.PI * 2;
       const sj = s * (j === 0 ? 1 : 0.6 + rng() * 0.25);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { navDist, navOf, planShot, type BotLevel } from "./bot.ts";
-import { BALL_R, strokeLimit, tileAt } from "./course.ts";
+import { BALL_R, motionPeriod, poseAt, posePoint, strokeLimit, tileAt, type Course, type Part } from "./course.ts";
 import { COURSES, courseOf, readyCourses, type HoleRef } from "./courses.ts";
 import { inRing, inRingSlow, inRings } from "./geom.ts";
 import { pathHeightSlow, specHeight, stripHeightSlow, type HeightSpec } from "./height.ts";
@@ -42,7 +42,84 @@ function lanes(spec: HeightSpec): Extract<HeightSpec, { k: "strip" | "path" }>[]
   return [];
 }
 
+/** Une pièce mobile vue comme une suite de boules (un mur : son épaisseur ; un poteau, un cylindre : leur rayon) */
+function partBalls(part: Part): { p: [number, number, number]; r: number }[] {
+  const out: { p: [number, number, number]; r: number }[] = [];
+  if (part.k === "wall") {
+    const n = Math.max(1, Math.ceil(Math.hypot(part.b[0] - part.a[0], part.b[1] - part.a[1]) / Math.max(0.01, part.t)));
+    const ny = Math.max(1, Math.ceil((part.y1 - part.y0) / Math.max(0.01, part.t)));
+    for (let i = 0; i <= n; i++)
+      for (let j = 0; j <= ny; j++)
+        out.push({
+          p: [
+            part.a[0] + ((part.b[0] - part.a[0]) * i) / n,
+            part.y0 + ((part.y1 - part.y0) * j) / ny,
+            part.a[1] + ((part.b[1] - part.a[1]) * i) / n,
+          ],
+          r: part.t,
+        });
+  } else if (part.k === "post") {
+    const ny = Math.max(1, Math.ceil((part.y1 - part.y0) / Math.max(0.01, part.r)));
+    for (let j = 0; j <= ny; j++) out.push({ p: [part.c[0], part.y0 + ((part.y1 - part.y0) * j) / ny, part.c[1]], r: part.r });
+  } else {
+    const n = Math.max(
+      1,
+      Math.ceil(Math.hypot(part.b[0] - part.a[0], part.b[1] - part.a[1], part.b[2] - part.a[2]) / Math.max(0.01, part.r)),
+    );
+    for (let i = 0; i <= n; i++) {
+      const k = i / n;
+      out.push({
+        p: [part.a[0] + (part.b[0] - part.a[0]) * k, part.a[1] + (part.b[1] - part.a[1]) * k, part.a[2] + (part.b[2] - part.a[2]) * k],
+        r: part.r,
+      });
+    }
+  }
+  return out;
+}
+
+/** Les murs et les bordures fixes que traverse une pièce mobile pendant un tour de son mouvement (au centimètre près) */
+function moverCrossings(c: Course): string[] {
+  const out = new Set<string>();
+  for (const mv of c.movers) {
+    const per = motionPeriod(mv.def.motion);
+    const balls = mv.def.parts.flatMap(partBalls);
+    for (let s = 0; s < 48; s++) {
+      const pose = poseAt(mv.def.motion, (per * s) / 48);
+      for (const b of balls) {
+        const [x, y, z] = posePoint(pose, b.p[0], b.p[1], b.p[2]);
+        for (const w of c.walls) {
+          const ex = w.bx - w.ax;
+          const ez = w.bz - w.az;
+          const l2 = ex * ex + ez * ez || 1;
+          const t = Math.max(0, Math.min(1, ((x - w.ax) * ex + (z - w.az) * ez) / l2));
+          const lim = b.r + w.t - 0.01;
+          if (lim <= 0 || (w.ax + ex * t - x) ** 2 + (w.az + ez * t - z) ** 2 >= lim * lim) continue;
+          const bot = w.a0 + (w.b0 - w.a0) * t;
+          const top = w.a1 + (w.b1 - w.a1) * t;
+          if (y + b.r - 0.01 <= bot || y - b.r + 0.01 >= top) continue;
+          out.add(`${mv.def.look} → ${w.kind}:${w.look ?? ""}`);
+        }
+      }
+    }
+  }
+  return [...out];
+}
+
+/**
+ * Ce qui traverse exprès : la porte du coucou glisse dans son cadre (la façade), la tige des pistons sort de la
+ * bordure d'acier (le corps du piston est dehors)
+ */
+const MOVER_CROSSINGS_OK = new Set(["porte → wall:facade", "piston → rail:acier"]);
+
 describe("minigolf : les trous des parcours", () => {
+  it.each(refs.map((r) => [`${r.c} ${r.i + 1}`, r] as const))(
+    "%s : rien de ce qui bouge ne passe à travers une bordure ou un mur",
+    (_, ref) => {
+      const bad = moverCrossings(courseOf(ref)).filter((k) => !MOVER_CROSSINGS_OK.has(k));
+      expect(bad).toEqual([]);
+    },
+  );
+
   it("la hauteur d'une allée en coupes ou d'un chemin, trouvée vite, est exactement celle de la boucle complète", () => {
     let n = 0;
     for (const ref of refs)

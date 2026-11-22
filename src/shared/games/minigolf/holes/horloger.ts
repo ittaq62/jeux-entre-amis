@@ -96,7 +96,8 @@ const tapis = hole(
 
 /** Un pendule : la lentille (un disque épais) au bout de sa tige, qui se balance en travers de l'allée */
 function bob(z: number, x = 0, y = 0): Part[] {
-  return [{ k: "cap", a: [x, 0.3 + y, z - 0.12], b: [x, 0.3 + y, z + 0.12], r: 0.3 }];
+  // (un peu au-dessus du parquet : en passant au-dessus des bordures, elle ne les frôle pas ; une balle la heurte toujours)
+  return [{ k: "cap", a: [x, 0.36 + y, z - 0.12], b: [x, 0.36 + y, z + 0.12], r: 0.3 }];
 }
 
 // 4. Les pendules : une passerelle de parquet part d'une estrade, descend palier après palier et dessine un S ; sur

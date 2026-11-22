@@ -126,12 +126,13 @@ const luge = hole(
   { hint: "Un petit coup suffit : la pente et la glace font le reste." },
 );
 
-/** Les sièges du télésiège : trois sièges qui défilent ensemble en travers de l'allée */
+/** Un siège du télésiège, au départ de son aller-retour (à gauche de l'allée) */
 function chairs(z: number): Part[] {
-  return [-3.2, 0, 3.2].map((x) => ({ k: "wall" as const, a: [x - 0.32, z] as Pt, b: [x + 0.32, z] as Pt, y0: 0.0, y1: 0.4, t: 0.12 }));
+  return [{ k: "wall" as const, a: [-0.72, z] as Pt, b: [-0.08, z] as Pt, y0: 0.0, y1: 0.4, t: 0.12 }];
 }
 
-// 5. Le télésiège : les sièges passent au ras de la neige, en travers de l'allée
+// 5. Le télésiège : deux sièges font l'aller-retour en travers de l'allée, au ras de la neige, d'une bordure à l'autre
+// (sans jamais passer à travers) ; on passe du côté qu'ils viennent de quitter
 const telesiege = hole(
   "Le télésiège",
   3,
@@ -144,8 +145,8 @@ const telesiege = hole(
         look: "rondin",
       },
     );
-    b.mover({ motion: { k: "slide", d: [3.2, 0, 0], period: 3.6 }, parts: chairs(-4.2), look: "telesiege", e: 0.4 });
-    b.mover({ motion: { k: "slide", d: [-3.2, 0, 0], period: 4.4, a0: 0.3 }, parts: chairs(-7.4), look: "telesiege", e: 0.4 });
+    b.mover({ motion: { k: "slide", d: [0.8, 0, 0], period: 3.6 }, parts: chairs(-4.2), look: "telesiege", e: 0.4 });
+    b.mover({ motion: { k: "slide", d: [0.8, 0, 0], period: 4.4, a0: 0.55 }, parts: chairs(-7.4), look: "telesiege", e: 0.4 });
     b.tee(0, -0.45, UP).cup(0, -10.1);
   },
   { hint: "Les sièges ne s'arrêtent pas : glisse-toi entre eux." },
