@@ -74,10 +74,19 @@ export class HoleScene {
     this.scene.add(this.sun, this.sun.target, this.hemi);
 
     // La visée : un pointillé court devant la balle (la direction, arrêté au premier mur), et une flèche dont la
-    // longueur et la couleur disent la force
+    // longueur et la couleur disent la force. Elle épouse la pente et se dessine par-dessus tout le reste (sans test de
+    // profondeur, en dernier) : une montée, une bordure ou un décor ne la coupent jamais
     this.aim = new THREE.Group();
+    this.aim.rotation.order = "YXZ";
     // (hors de l'étalonnage de l'image : la couleur de la force reste franche)
-    this.aimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, depthWrite: false, toneMapped: false });
+    this.aimMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+    });
     const arrow = new THREE.Shape();
     arrow.moveTo(-0.022, 0);
     arrow.lineTo(0.022, 0);
@@ -88,17 +97,18 @@ export class HoleScene {
     arrow.lineTo(-0.03, 0.78);
     this.aimArrow = new THREE.Mesh(new THREE.ShapeGeometry(arrow), this.aimMat);
     this.aimArrow.rotation.x = -Math.PI / 2;
-    this.aimArrow.renderOrder = 10;
+    this.aimArrow.renderOrder = 1001;
     this.aimLineMat = new THREE.MeshBasicMaterial({
       map: dotsTex(),
       transparent: true,
       opacity: 0.9,
       depthWrite: false,
+      depthTest: false,
       toneMapped: false,
     });
     const dots = new THREE.Mesh(new THREE.PlaneGeometry(0.034, 1), this.aimLineMat);
     dots.rotation.x = -Math.PI / 2;
-    dots.renderOrder = 9;
+    dots.renderOrder = 1000;
     this.aimLine = dots;
     this.aim.add(this.aimArrow, this.aimLine);
     this.aim.visible = false;
@@ -277,7 +287,6 @@ export class HoleScene {
     return t >= 0 ? tileHeight(c, t, x, z) : c.outY;
   }
 
-  /** La visée : depuis la balle, dans la direction `angle`, de force `power` (0 à 1) ; null pour la cacher */
   /**
    * La visée sur une balle : sa direction (le pointillé, court) et sa force (la flèche, si `power` > 0). `ghost` : celle
    * d'un autre joueur, qu'on regarde viser (plus pâle)
@@ -300,6 +309,10 @@ export class HoleScene {
     this.aimMat.opacity = ghost ? 0.55 : 0.92;
     // Le pointillé : un mètre et demi au plus, arrêté au premier mur, qui s'efface au bout
     const reach = Math.min(rayToWall(this.course, at.x, at.z, angle, AIM_GUIDE), AIM_GUIDE);
+    // Penchée comme le sol devant la balle : de sa hauteur sous la balle à celle au bout du pointillé (jamais au-delà
+    // d'une bordure, où le sol n'est plus celui du parcours)
+    const ahead = this.groundAt(at.x + Math.cos(angle) * reach, at.z + Math.sin(angle) * reach) + 0.012;
+    this.aim.rotation.x = Math.atan2(Math.max(-reach, Math.min(reach, ahead - y)), reach);
     this.aimLine.scale.set(1, reach, 1);
     this.aimLine.position.set(0, -0.002, -reach / 2);
     const tex = this.aimLineMat.map!;
