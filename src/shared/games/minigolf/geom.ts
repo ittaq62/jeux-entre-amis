@@ -34,8 +34,79 @@ export function ringArea(ring: readonly Pt[]): number {
 
 /** Le point est-il dans l'anneau (règle pair-impair) */
 export function inRing(x: number, z: number, ring: readonly Pt[]): boolean {
+  // Un long contour (des bords arrondis, une rive qui ondule) : on ne regarde que ses côtés qui passent à cette hauteur
+  if (ring.length > 24) return inRingBanded(x, z, ring);
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i]![0];
+    const zi = ring[i]![1];
+    const xj = ring[j]![0];
+    const zj = ring[j]![1];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Le même test, côté par côté sur tout le contour (la référence, pour les tests) */
+export function inRingSlow(x: number, z: number, ring: readonly Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i]![0];
+    const zi = ring[i]![1];
+    const xj = ring[j]![0];
+    const zj = ring[j]![1];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Les côtés d'un contour rangés par bandes horizontales : chaque bande liste ceux qui la traversent */
+interface Bands {
+  z0: number;
+  h: number;
+  n: number;
+  /** Pour chaque bande, les côtés (l'indice i de leur second point ; le premier est i − 1, ou le dernier) */
+  of: Int32Array[];
+}
+
+const bandsOf = new WeakMap<readonly Pt[], Bands>();
+
+function ringBands(ring: readonly Pt[]): Bands {
+  let b = bandsOf.get(ring);
+  if (b) return b;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const p of ring) {
+    z0 = Math.min(z0, p[1]);
+    z1 = Math.max(z1, p[1]);
+  }
+  const n = Math.max(1, Math.min(512, Math.ceil((z1 - z0) / 0.1)));
+  const h = (z1 - z0) / n || 1;
+  const lists: number[][] = Array.from({ length: n }, () => []);
+  const band = (z: number) => Math.max(0, Math.min(n - 1, Math.floor((z - z0) / h)));
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = band(Math.min(ring[i]![1], ring[j]![1]));
+    const c = band(Math.max(ring[i]![1], ring[j]![1]));
+    for (let k = a; k <= c; k++) lists[k]!.push(i);
+  }
+  b = { z0, h, n, of: lists.map((l) => Int32Array.from(l)) };
+  bandsOf.set(ring, b);
+  return b;
+}
+
+/**
+ * Seuls les côtés de la bande où tombe le point peuvent croiser la demi-droite qui part de lui : on compte ceux-là, avec
+ * exactement le même calcul (le même nombre de croisements, donc la même réponse)
+ */
+function inRingBanded(x: number, z: number, ring: readonly Pt[]): boolean {
+  const b = ringBands(ring);
+  const k = Math.floor((z - b.z0) / b.h);
+  // Plus bas que tout le contour : aucun côté ne croise (plus haut : ceux de la dernière bande ne croisent pas non plus)
+  if (!(k >= 0)) return false;
+  let inside = false;
+  const last = ring.length - 1;
+  for (const i of b.of[Math.min(k, b.n - 1)]!) {
+    const j = i === 0 ? last : i - 1;
     const xi = ring[i]![0];
     const zi = ring[i]![1];
     const xj = ring[j]![0];

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { navDist, navOf, planShot, type BotLevel } from "./bot.ts";
 import { BALL_R, strokeLimit, tileAt } from "./course.ts";
 import { COURSES, courseOf, readyCourses, type HoleRef } from "./courses.ts";
-import { inRings } from "./geom.ts";
+import { inRing, inRingSlow, inRings } from "./geom.ts";
+import { pathHeightSlow, specHeight, stripHeightSlow, type HeightSpec } from "./height.ts";
 import { DEFAULT_PHYS, simulateShot, type PhysOpts } from "./physics.ts";
 
 const refs: HoleRef[] = readyCourses().flatMap((c) => COURSES[c].holes.map((_, i) => ({ c, i, m: false })));
@@ -33,7 +34,61 @@ function botPlays(ref: HoleRef, level: BotLevel, seed: number): number {
   return limit + 1;
 }
 
+/** Les allées en coupes et les chemins d'une forme de sol (dans les sommes et les maximums aussi) */
+function lanes(spec: HeightSpec): Extract<HeightSpec, { k: "strip" | "path" }>[] {
+  if (typeof spec === "number") return [];
+  if (spec.k === "strip" || spec.k === "path") return [spec];
+  if (spec.k === "sum" || spec.k === "max") return spec.of.flatMap(lanes);
+  return [];
+}
+
 describe("minigolf : les trous des parcours", () => {
+  it("la hauteur d'une allée en coupes ou d'un chemin, trouvée vite, est exactement celle de la boucle complète", () => {
+    let n = 0;
+    for (const ref of refs)
+      for (const m of [false, true]) {
+        const c = courseOf({ ...ref, m });
+        for (const t of c.tiles)
+          for (const st of lanes(t.h)) {
+            const pts = st.k === "strip" ? [...st.left, ...st.right] : st.pts;
+            const xs = pts.map((p) => p[0]);
+            const zs = pts.map((p) => p[1]);
+            // Sur l'allée, sur ses bords, et bien au-delà (la hauteur est définie partout)
+            for (let x = Math.min(...xs) - 1.5; x <= Math.max(...xs) + 1.5; x += 0.071)
+              for (let z = Math.min(...zs) - 1.5; z <= Math.max(...zs) + 1.5; z += 0.083) {
+                const fast = specHeight(st, x, z);
+                const slow = st.k === "strip" ? stripHeightSlow(st, x, z) : pathHeightSlow(st, x, z);
+                if (!Object.is(fast, slow)) expect(fast, `${ref.c} ${ref.i + 1}${m ? " (envers)" : ""} en (${x}, ${z})`).toBe(slow);
+                n++;
+              }
+          }
+      }
+    expect(n).toBeGreaterThan(10_000);
+  });
+
+  it("un long contour, vu par bandes, dit exactement la même chose que côté par côté", () => {
+    let n = 0;
+    for (const ref of refs)
+      for (const m of [false, true]) {
+        const c = courseOf({ ...ref, m });
+        for (const t of c.tiles)
+          for (const ring of t.rings) {
+            if (ring.length <= 24) continue;
+            const xs = ring.map((p) => p[0]);
+            const zs = ring.map((p) => p[1]);
+            // Une grille serrée, plus les sommets eux-mêmes (les cas limites)
+            for (let x = Math.min(...xs) - 0.3; x <= Math.max(...xs) + 0.3; x += 0.047)
+              for (let z = Math.min(...zs) - 0.3; z <= Math.max(...zs) + 0.3; z += 0.053) {
+                if (inRing(x, z, ring) !== inRingSlow(x, z, ring))
+                  expect(inRing(x, z, ring), `${ref.c} ${ref.i + 1} en (${x}, ${z})`).toBe(inRingSlow(x, z, ring));
+                n++;
+              }
+            for (const p of ring) expect(inRing(p[0], p[1], ring)).toBe(inRingSlow(p[0], p[1], ring));
+          }
+      }
+    expect(n).toBeGreaterThan(10_000);
+  });
+
   it.each(refs.map((r) => [`${r.c} ${r.i + 1}`, r] as const))("%s est bien formé", (_, ref) => {
     const c = courseOf(ref);
     // Les morceaux ne se chevauchent pas
