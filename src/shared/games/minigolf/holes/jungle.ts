@@ -5,7 +5,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { box, circle, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, laneSides, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -69,18 +69,89 @@ const pont = hole(
   { hint: "Le pont s'affaisse au milieu : assez fort pour remonter de l'autre côté." },
 );
 
-// 3. Le rocher qui roule : l'allée descend, deux rochers roulent en travers, chacun à son rythme
+// 3. Le rocher qui roule : une vieille allée de dalles descend en serpentant, palier après palier ; sur chacun des
+// deux paliers, un rocher roule en travers, à son rythme ; en bas, une place ronde et le trou
 const rocher = hole(
   "Le rocher qui roule",
   3,
   (b) => {
-    b.tile(box(-1.0, -11, 1.0, 0), ramp([0, 0], [0, -11], 0.3, 0), "stone", { look: "dalle" });
-    const boulder = (x: number, z: number, r: number): Part[] => [{ k: "post", c: [x, z], r, y0: -1, y1: 0.75 }];
-    b.mover({ motion: { k: "slide", d: [1.15, 0, 0], period: 3.4 }, parts: boulder(-0.6, -4.2, 0.34), look: "rocher", e: 0.45 });
-    b.mover({ motion: { k: "slide", d: [-1.15, 0, 0], period: 2.8, a0: 0.4 }, parts: boulder(0.6, -7.4, 0.34), look: "rocher", e: 0.45 });
-    b.tee(0, -0.45, UP).cup(-0.2, -10.1);
+    const W = 2.0;
+    const hw = W / 2;
+    const C: Pt = [-0.3, -10.15];
+    const R = 1.12;
+    const zIn = C[1] + Math.sqrt(R * R - hw * hw);
+    const line = smooth(
+      [
+        [0, 0],
+        [0, -0.8],
+        [0, -2.0],
+        [0.75, -4.4],
+        [-0.6, -7.3],
+        [-0.32, -8.75],
+        [-0.3, -9.2],
+        [-0.3, zIn],
+      ],
+      0.25,
+    );
+    const { left, right } = laneSides(line, W);
+    const run = [0];
+    for (let i = 1; i < line.length; i++) run.push(run[i - 1]! + Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]));
+    const total = run[run.length - 1]!;
+    // Les paliers et les pentes qui les relient (selon la part du chemin parcourue)
+    const keys: [number, number][] = [
+      [0, 0.42],
+      [0.17, 0.42],
+      [0.29, 0.24],
+      [0.47, 0.24],
+      [0.6, 0.07],
+      [0.8, 0.07],
+      [0.9, 0],
+      [1, 0],
+    ];
+    const hAt = (u: number) => {
+      let k = 1;
+      while (k < keys.length - 1 && keys[k]![0] < u) k++;
+      const [u0, h0] = keys[k - 1]!;
+      const [u1, h1] = keys[k]!;
+      const t = Math.min(1, Math.max(0, (u - u0) / (u1 - u0 || 1)));
+      return h0 + (h1 - h0) * t * t * (3 - 2 * t);
+    };
+    const aL = Math.atan2(zIn - C[1], -hw);
+    const aR = Math.atan2(zIn - C[1], hw) + Math.PI * 2;
+    const plaza = arc(C[0], C[1], R, aL, aR, 40).slice(1, -1);
+    b.tile(
+      [...left, ...plaza, ...[...right].reverse()],
+      { k: "path", pts: [...line, C], hs: [...run.map((r) => hAt(r / total)), 0] },
+      "stone",
+      {
+        look: "dalle",
+      },
+    );
+    // Un rocher sur chaque palier, qui roule d'un bord à l'autre (en travers de l'allée à cet endroit)
+    const across = (u: number) => {
+      const i = run.findIndex((r) => r / total >= u);
+      const a = line[Math.max(0, i - 1)]!;
+      const c = line[Math.min(line.length - 1, i + 1)]!;
+      const l = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1;
+      const n: Pt = [-(c[1] - a[1]) / l, (c[0] - a[0]) / l];
+      return { p: line[i]!, n };
+    };
+    const boulder = (x: number, z: number, r: number): Part[] => [{ k: "post", c: [x, z], r, y0: -1, y1: 0.95 }];
+    const roll = (u: number, period: number, a0: number, side: number) => {
+      const { p, n } = across(u);
+      const s = side * 0.6;
+      b.mover({
+        motion: { k: "slide", d: [-n[0] * 1.2 * side, 0, -n[1] * 1.2 * side], period, a0 },
+        parts: boulder(p[0] + n[0] * s, p[1] + n[1] * s, 0.34),
+        look: "rocher",
+        e: 0.45,
+      });
+    };
+    roll(0.38, 3.4, 0, 1);
+    roll(0.7, 2.8, 0.4, -1);
+    b.tee(0, -0.45, UP).cup(-0.2, -10.25);
   },
-  { hint: "Les rochers roulent d'un bord à l'autre : passe derrière eux." },
+  { hint: "Les rochers roulent d'un bord à l'autre de leur palier : passe derrière eux." },
 );
 
 // 4. Les marches de la pyramide : on monte en zigzag, une marche à chaque palier, jusqu'au trou tout en haut
