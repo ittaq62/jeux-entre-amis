@@ -383,6 +383,11 @@ export class BattleRuntime {
   }
 
   /** La table a changé : les soldats, leurs camps, leurs camouflages */
+  /** Tout préparer pendant l'écran de chargement (voir lib/prepare.ts) */
+  prepare(onProgress?: (share: number) => void) {
+    return this.scene.prepare(onProgress);
+  }
+
   setRoom(room: EscarmoucheRoomView) {
     this.room = room;
     const v = room.escarmouche;

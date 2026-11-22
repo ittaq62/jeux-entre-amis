@@ -67,6 +67,12 @@ async function table(
   const inside = room as unknown as RoomInside;
   inside.stopLoop();
   expect(inside.data.status).toBe("playing");
+  // Chacun a chargé la carte : le combat part au tic suivant (voir shared/loadGate.ts)
+  const gate = (inside.data as unknown as { gate: { id: number } }).gate.id;
+  await bench.send(host, { t: "loaded", gate });
+  if (ana) await bench.send(ana, { t: "loaded", gate });
+  await (inside as unknown as { tick(): Promise<void> }).tick();
+  expect((inside.data as unknown as { gate: unknown }).gate).toBeNull();
   return { bench, room, inside, state, env, host, ana };
 }
 

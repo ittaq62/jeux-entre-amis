@@ -22,6 +22,14 @@ import { WeaponIcon } from "./WeaponIcon.tsx";
 import { ffaKit } from "./scene/soldiers.ts";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { runtimeKey } from "./runtimeKey.ts";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
+import { nextFrame } from "../lib/prepare.ts";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
+import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
+
+/** L'écran de chargement aux couleurs du front */
+const LOADING_THEME: LoadingTheme = { from: "#4b5a38", to: "#12160d", accent: "#e8b84a" };
 
 const EscPreview3D = lazy(() => import("./EscPreview3D.tsx"));
 
@@ -513,7 +521,7 @@ function Settings({ touch, onClose }: { touch: boolean; onClose: () => void }) {
 }
 
 /** Le combat : la vue à la première personne, ce qu'il faut savoir autour, et les commandes au doigt. */
-export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, onShowLobby, onLeave }: Props) {
+export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const rt = useRef<BattleRuntime | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
@@ -532,6 +540,17 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
   const quality = usePrefs((p) => p.escQuality);
   const roomRef = useRef(room);
   roomRef.current = room;
+  // Le chargement de la carte (voir shared/loadGate.ts) : on dit « chargé » au serveur ; le compte à rebours du combat
+  // part quand tout le monde l'a dit
+  const [prep, setPrep] = useState({ key: "", share: 0, done: false });
+  const prepKey = `${mapKey}|${quality}`;
+  const prepared = prep.key === prepKey && prep.done;
+  const gateClock = useGateClock(room.gate, serverOffset);
+  useLoadedSignal(room.gate, room.you.seatId, prepared, send);
+  const live = prepared && gateClock.passed && room.status === "playing";
+  useEffect(() => {
+    if (live) return watchFirstSeconds("Escarmouche");
+  }, [live, prepKey]);
 
   // Le moteur du combat : créé une fois par partie (la revanche en refait un)
   useEffect(() => {
@@ -544,7 +563,20 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
     };
     listeners.current = { onTick: (now, tick, me) => r.onTick(now, tick, me), onEvents: (events) => r.onEvents(events) };
     r.start();
+    // La carte se prépare derrière l'écran de chargement, une fois la première image posée (deux images plus tard)
+    const key = `${mapKey}|${quality}`;
+    let stopped = false;
+    setPrep({ key, share: 0, done: false });
+    void (async () => {
+      await nextFrame();
+      await nextFrame();
+      if (stopped) return;
+      await r.prepare((share) => !stopped && setPrep({ key, share, done: false }));
+    })()
+      .catch((err: unknown) => console.error("Carte impossible à préparer", err))
+      .then(() => !stopped && setPrep({ key, share: 1, done: true }));
     return () => {
+      stopped = true;
       listeners.current = {};
       r.dispose();
       rt.current = null;
@@ -602,6 +634,21 @@ export function EscarmoucheMatch({ room, send, listeners, unread, onOpenChat, on
 
   return (
     <div className={`esc-root ${touch ? "is-touch" : ""}`}>
+      {room.status === "playing" && loadingShown(prepared, gateClock) && (
+        <GameLoading
+          title="Escarmouche"
+          theme={LOADING_THEME}
+          share={prep.key === prepKey ? prep.share : 0}
+          done={prepared}
+          gate={room.gate}
+          serverOffset={serverOffset}
+          players={room.seats
+            .filter((s) => s.kind === "human")
+            .map((s) => ({ id: s.id, name: s.name, avatar: s.avatar, userId: s.userId }))}
+          me={room.you.seatId}
+        />
+      )}
+      <FirstSecondsPanel />
       <canvas
         ref={canvas}
         className="esc-canvas"

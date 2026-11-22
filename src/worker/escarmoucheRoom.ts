@@ -55,6 +55,7 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { forgetPlayer, gatePassed, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { randomSeed } from "../shared/rng.ts";
 import { lookOf } from "../shared/looks.ts";
 import { camoItem, canUse, uniformItem, weaponItem, attachmentItem } from "../shared/shop.ts";
@@ -181,6 +182,8 @@ interface EscarmoucheData {
   watchers?: string[];
   pickUntil?: number | null;
   ready?: string[];
+  /** Le combat retenu le temps que chacun charge la carte (voir loadGate.ts) ; null : il tourne */
+  gate?: LoadGate | null;
 }
 
 interface Attachment {
@@ -542,6 +545,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : les autres ne l'attendent plus
+      if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -774,6 +779,13 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
       }
 
+      case "loaded": {
+        // Son jeu a fini de charger la carte : le compte à rebours du combat part quand tout le monde l'a dit
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        settleGate(d.gate, now);
+        return this.afterChange([], now);
+      }
+
       case "ready": {
         if (!this.announcing() || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
         d.ready = [...new Set([...(d.ready ?? []), userId])];
@@ -793,6 +805,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
           if (d.status === "playing") {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
+            if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
             this.handOver(seat);
             this.systemChat(`${seat.name} a quitté le combat, un bot prend sa place.`);
           } else {
@@ -1033,6 +1046,14 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     this.steps = 0;
     this.sight = new Sight();
     this.watchFeed = [];
+    // Le combat attend que chaque joueur présent ait chargé la carte ; son propre compte à rebours (en temps de combat,
+    // qui ne court pas pendant l'attente) part au départ commun et en tient lieu
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+      { countdown: 0 },
+    );
     this.lastKey = stateKey(d.match);
     this.systemChat(`Au combat ! ${MODE_INFO[settings.mode].name}, ${MAP_NAMES[d.match.map].name.toLowerCase()}.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("escarmouche", d.settings.randomRules, "start"));
@@ -1090,6 +1111,19 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    // Le chargement de chacun : le combat ne court pas (ni le compte à rebours, ni les bots), les pas envoyés entre-temps
+    // ne comptent pas ; au départ commun, il part pour tout le monde au même instant
+    if (d.gate) {
+      this.lastTick = now;
+      this.acc = 0;
+      this.queues.clear();
+      this.credit.clear();
+      if (settleGate(d.gate, now)) await this.afterChange([], now);
+      if (!gatePassed(d.gate, now)) return;
+      d.gate = null;
+      await this.afterChange([], now);
+      return;
+    }
     const elapsed = Math.min(now - this.lastTick, 250);
     this.lastTick = now;
     const events: EscEvent[] = [];
@@ -1496,6 +1530,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         ]),
       ),
       escarmouche: d.match ? escarmoucheView(d.match) : null,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       startedAt: d.startedAt,
       serverNow: Date.now(),
       rematch: d.rematch,

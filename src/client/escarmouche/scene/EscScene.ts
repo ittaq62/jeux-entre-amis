@@ -2,6 +2,7 @@
 // (dessinée à part, par-dessus, pour ne jamais rentrer dans un mur), les grenades, les drapeaux et la zone.
 
 import * as THREE from "three";
+import { warmThree } from "../../lib/prepare.ts";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import { seededAvatar } from "../../../shared/avatar.ts";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
@@ -1163,6 +1164,18 @@ export class EscScene {
   /** La douleur, de 0 à 1 (l'image pâlit et rougit sur les bords, en qualité haute) */
   setHurt(k: number) {
     this.post?.setHurt(k);
+  }
+
+  /**
+   * Tout préparer derrière l'écran de chargement (les textures, les shaders de la carte et de l'arme en main, quelques
+   * images avec les effets) : le combat ne saute plus en découvrant chaque matière. Voir lib/prepare.ts.
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, {
+      extra: [[this.vmScene, this.vmCam]],
+      render: () => this.render(0),
+      onProgress,
+    });
   }
 
   render(dt: number) {

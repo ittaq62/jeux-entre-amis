@@ -851,6 +851,8 @@ export interface EscarmoucheRoomView {
   /** Les armes, le camouflage et la tenue de chaque siège */
   arsenal: Record<string, { primary: PrimaryId; secondary: SecondaryId; camo: CamoId; tenue: UniformId; muzzle: MuzzleId; extra: ExtraId }>;
   escarmouche: EscarmoucheView | null;
+  /** Le combat retenu le temps que chacun charge la carte (voir loadGate.ts) ; null : il tourne */
+  gate?: LoadGate | null;
   /** Quand la partie en cours (ou la dernière) a commencé : une revanche sur la même carte en est une autre */
   startedAt?: number | null;
   serverNow: number;
@@ -886,6 +888,8 @@ export type EscarmoucheClientMessage =
   | { t: "start" }
   /** Ses derniers pas (1/60 s chacun), envoyés par petits paquets */
   | { t: "cmd"; c: CmdNet[] }
+  /** Son jeu a fini de charger la carte (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

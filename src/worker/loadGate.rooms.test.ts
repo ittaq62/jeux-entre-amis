@@ -1,4 +1,4 @@
-// Le chargement de tous avant le départ (shared/loadGate.ts), dans de vraies salles (Crampons, Capitale, Bowling) : le départ attend que chaque
+// Le chargement de tous avant le départ (shared/loadGate.ts), dans de vraies salles (Crampons, Capitale, Bowling, Escarmouche) : le départ attend que chaque
 // joueur ait dit « chargé », au plus LOAD_MAX_MS, puis un court compte à rebours ; un joueur parti n'est plus attendu.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,7 @@ import { INTRO_MS } from "../shared/games/bowling/match.ts";
 import { BowlingRoom } from "./bowlingRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
+import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket, type RoomLike } from "./roomHarness.ts";
 
 installWorkerGlobals();
@@ -279,6 +280,57 @@ describe("l'introduction de la salle attend le chargement de chacun (Bowling)", 
     await t.tick(50);
     expect(t.d().gate).toBeNull();
     expect(t.d().match.deadline).toBe(clock + INTRO_MS);
+    t.r.stopLoop();
+  });
+});
+
+describe("le compte à rebours du combat attend le chargement de chacun (Escarmouche)", () => {
+  interface EscData {
+    status: string;
+    gate?: LoadGate | null;
+    match: { t: number; phase: string; liveAt: number };
+  }
+  type EscRoom = RoomLike & { init(o: unknown): Promise<boolean>; tick(): Promise<void>; stopLoop(): void };
+
+  async function front() {
+    const state = new FakeState();
+    const r = new EscarmoucheRoom(state as never, fakeEnv() as never) as unknown as EscRoom;
+    await state.ready;
+    await r.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(r, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "settings", settings: { mode: "solo", map: "hameau" } });
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "start" });
+    r.stopLoop();
+    const d = () => bench.data<EscData>();
+    const tick = async (ms: number) => {
+      clock += ms;
+      await r.tick();
+    };
+    return { r, bench, host, d, tick };
+  }
+
+  it("ni le compte à rebours ni les bots ne courent pendant le chargement ; il part au départ commun, sans décompte de plus", async () => {
+    const t = await front();
+    expect(t.d().gate!.countdown).toBe(0);
+    await t.tick(2000);
+    await t.tick(2000);
+    expect(t.d().match.t).toBe(0);
+    expect(t.d().match.phase).toBe("countdown");
+    await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
+    await t.tick(50);
+    expect(t.d().gate).toBeNull();
+    await t.tick(100);
+    expect(t.d().match.t).toBeGreaterThan(0);
+    expect(t.d().match.t).toBeLessThan(t.d().match.liveAt);
+    t.r.stopLoop();
+  });
+
+  it("le joueur déconnecté pendant le chargement n'est plus attendu", async () => {
+    const t = await front();
+    await t.bench.drop(t.host);
+    expect(t.d().gate!.goAt).toBe(clock);
     t.r.stopLoop();
   });
 });
