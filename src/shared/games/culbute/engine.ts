@@ -49,6 +49,10 @@ export const HITSTUN_K = 0.7;
 export const HIT_CANCEL = 3;
 /** Le petit coup, lui, s'annule dès l'image où il pourrait se relancer */
 export const JAB_CANCEL = 1;
+/** Une série de petits coups : trois au plus, le dernier repousse l'autre hors de portée (on ne martèle pas à l'infini) */
+export const JAB_SERIES = 3;
+/** Repoussé par ce dernier petit coup, on reprend ses esprits avant que l'autre puisse revenir frapper */
+const FINISHER_STUN = 10;
 /** Toutes les éjections un peu plus fortes : on sort plus tôt, les vies sont plus courtes et plus nerveuses */
 const KB_SCALE = 1.1;
 
@@ -111,7 +115,7 @@ function noteStale(ft: Fighter, key: string) {
   if (ft.stale.length > STALE.length) ft.stale.length = STALE.length;
 }
 /** La saisie : la main tendue (images actives), sa portée */
-const GRAB_FROM = 6;
+export const GRAB_FROM = 6;
 const GRAB_TO = 8;
 const GRAB_X = 0.75;
 const GRAB_Y = 0.8;
@@ -224,6 +228,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     holding: -1,
     holder: -1,
     hopLeft: 0,
+    jabs: 0,
     stale: [],
   };
 }
@@ -285,6 +290,8 @@ const CANCEL_SLOTS = new Set(["n", "s", "u", "d", "an", "as", "au", "ad", "g:das
 /** Ce coup a touché, et sa frappe est passée depuis assez longtemps pour enchaîner */
 export function hitCancelable(ft: Fighter): boolean {
   if (!CANCEL_SLOTS.has(ft.move) || ft.hitstop > 0) return false;
+  // Le dernier petit coup d'une série repousse : il va jusqu'au bout
+  if (ft.move === "n" && ft.jabs >= JAB_SERIES) return false;
   const def = moveDef(ft.style, ft.move);
   if (!def || def.hits.length === 0) return false;
   // Le petit coup s'annule aussi tôt qu'il se relance : il ouvre les enchaînements
@@ -336,6 +343,7 @@ function startMove(ft: Fighter, key: string) {
   ft.hitIds = [];
   ft.hitAt = [];
   ft.landed = false;
+  ft.jabs = key === "n" ? 1 : 0;
 }
 
 function consume(ft: Fighter, bit: number) {
@@ -781,8 +789,11 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       const key = ft.move;
       // Un coup qui a touché : passé sa frappe, un nouvel appui (coup, saut, spécial, garde, saisie) l'enchaîne aussitôt
       if (ft.landed && press & (ATK | FRT | SPC | JMP | SHD | GRB) && hitCancelable(ft)) {
+        const series = key === "n" ? ft.jabs : 0;
         setState(ft, isAirborne(ft) ? "air" : "stand");
         control(f, ft, inp, plats);
+        // Un petit coup relancé ainsi continue la série
+        if (series > 0 && ft.state === "move" && ft.move === "n" && ft.mt === 0) ft.jabs = series + 1;
         return;
       }
       if (ft.mt <= CANCEL_WINDOW && press & SHD && key.length <= 2 && !key.startsWith("p") && !key.startsWith("c")) {
@@ -1185,17 +1196,22 @@ function advanceMove(f: Fight, ft: Fighter, inp: Input, solo: boolean) {
     setState(ft, isAirborne(ft) ? "air" : "stand");
     return;
   }
-  // Le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt, stick au neutre (avec une
-  // direction, c'est le coup de cette direction qu'on veut : il part dès que le petit coup s'annule ou finit)
+  // Le petit coup qui a touché s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt, stick au neutre
+  // (avec une direction, c'est le coup de cette direction qu'on veut : il part dès que le petit coup s'annule ou finit).
+  // Dans le vide ou dans une garde, il va jusqu'au bout : marteler ne fait pas un mur de petits coups
   if (
     ft.move === "n" &&
+    ft.landed &&
+    ft.jabs < JAB_SERIES &&
     ft.buf & ATK &&
     dirOf(inp.x, inp.y) === "n" &&
     def.hits.length > 0 &&
     ft.mt > Math.max(...def.hits.map((hd) => hd.to)) + 1
   ) {
     consume(ft, ATK);
+    const n = ft.jabs + 1;
     startMove(ft, "n");
+    ft.jabs = n;
     return;
   }
   // Les coups simples partent dès l'appui, sans attendre qu'on relâche (le coup fort, lui, se charge en tenant sa touche)
@@ -1680,6 +1696,8 @@ interface HitSource {
   /** La force de la charge (0 à 1) */
   charge: number;
   projectile: boolean;
+  /** Le dernier petit coup d'une série : il repousse, mais l'autre reprend vite ses esprits (pas d'enchaînement derrière) */
+  finisher?: boolean;
 }
 
 function canHit(f: Fight, a: { slot: number; team: number }, v: Fighter): boolean {
@@ -1734,6 +1752,7 @@ function applyHit(f: Fight, src: HitSource, v: Fighter) {
   if ((v.state === "shield" || v.state === "shieldstun") && !src.pull) {
     v.shield -= src.dmg * (1 + src.charge * 0.5);
     setState(v, "shieldstun");
+    // Assez court pour punir celui qui frappe dans la garde (le saisir en sortant de garde, par exemple)
     v.wait = Math.round(4 + src.dmg * 0.6);
     v.kx = src.dirX * (1.5 + src.dmg * 0.18);
     const stop = Math.round(clamp(3 + src.dmg * 0.3, 3, 10));
@@ -1827,6 +1846,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
   }
   setState(v, "hurt");
   v.stun = Math.round(HITSTUN_BASE + speed * HITSTUN_K);
+  if (src.finisher) v.stun = Math.min(v.stun, FINISHER_STUN);
   // Le coup a porté : l'attaquant pourra enchaîner
   if (a && !src.projectile && a.state === "move") a.landed = true;
   v.wait = 0;
@@ -1945,6 +1965,8 @@ function detectHits(f: Fight) {
         a.hitAt.push(a.mt);
       }
       const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;
+      // Le dernier petit coup d'une série repousse l'autre hors de portée
+      const finisher = a.move === "n" && a.jabs >= JAB_SERIES;
       // Un coup répété s'use (et compte dans la file une fois par coup, même s'il touche plusieurs fois)
       const fresh = staleFactor(a, a.move);
       if (idx < 0 && a.hitIds.length === 1) noteStale(a, a.move);
@@ -1955,12 +1977,13 @@ function detectHits(f: Fight) {
           y: hy,
           dirX,
           dmg: Math.round(hit.dmg * fresh * 10) / 10,
-          ang: hit.ang,
-          kb: hit.kb,
-          kbg: hit.kbg,
+          ang: finisher ? 38 : hit.ang,
+          kb: finisher ? hit.kb * 3 + 6 : hit.kb,
+          kbg: finisher ? hit.kbg * 1.5 : hit.kbg,
           pull: hit.pull ?? false,
           charge,
           projectile: false,
+          finisher,
         },
         v,
       });
@@ -2294,6 +2317,48 @@ export function updateFighter(f: Fight, ft: Fighter, inp: Input, plats: Platform
   if (ft.bufT === 0) ft.buf = 0;
 }
 
+/** Deux corps au sol l'un dans l'autre s'écartent doucement (on ne se tient pas dans l'adversaire, où les coups passent
+ * à côté) ; la roulade passe au travers, et la saisie garde ses deux combattants collés */
+const BODY_PUSH = 0.02;
+const PUSHED: ReadonlySet<FState> = new Set<FState>([
+  "stand",
+  "land",
+  "squat",
+  "move",
+  "shield",
+  "shieldstun",
+  "dodge",
+  "tech",
+  "down",
+  "dizzy",
+  "hurt",
+]);
+
+function separate(f: Fight, plats: PlatformNow[]) {
+  const fs = f.fighters;
+  for (let i = 0; i < fs.length; i++) {
+    const a = fs[i]!;
+    if (!PUSHED.has(a.state) || isAirborne(a)) continue;
+    for (let j = i + 1; j < fs.length; j++) {
+      const b = fs[j]!;
+      if (!PUSHED.has(b.state) || isAirborne(b) || b.ground !== a.ground) continue;
+      const dx = b.x - a.x;
+      const gap = (styleOf(a).w + styleOf(b).w) * 0.35 - Math.abs(dx);
+      if (gap <= 0) continue;
+      // (exactement l'un sur l'autre : le premier à gauche)
+      const dir = dx < 0 ? -1 : 1;
+      const push = Math.min(gap / 2, BODY_PUSH);
+      const p = plats[a.ground];
+      a.x -= dir * push;
+      b.x += dir * push;
+      if (p) {
+        a.x = clamp(a.x, p.x0, p.x1);
+        b.x = clamp(b.x, p.x0, p.x1);
+      }
+    }
+  }
+}
+
 /** Les plateformes à l'image courante */
 export function platformsNow(f: Fight): PlatformNow[] {
   return platformsAt(f.arena as ArenaId, f.scale, f.frame);
@@ -2318,6 +2383,7 @@ export function stepFight(f: Fight, inputs: Input[]): FightEvent[] {
   }
   const plats = platformsNow(f);
   for (const ft of f.fighters) updateFighter(f, ft, inputs[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }, plats, false);
+  separate(f, plats);
   holdInPlace(f);
   updateProjectiles(f, plats);
   detectHits(f);
@@ -2358,6 +2424,7 @@ export function stepPredict(f: Fight, inputs: Input[]): FightEvent[] {
   if (f.phase !== "fight") return [];
   const plats = platformsNow(f);
   for (const ft of f.fighters) updateFighter(f, ft, inputs[ft.slot] ?? { x: 0, y: 0, held: 0, pressed: 0 }, plats, false);
+  separate(f, plats);
   holdInPlace(f);
   detectHits(f);
   // Les tirs et les pièges ne sont pas anticipés (le serveur les montre)

@@ -3,7 +3,7 @@
 // Le niveau règle la vitesse de réaction, l'envie d'attaquer, la garde et la justesse.
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
-import { gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef } from "./engine.ts";
+import { GRAB_FROM, gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef, PARRY_FRAMES } from "./engine.ts";
 import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
@@ -38,6 +38,12 @@ interface LevelInfo {
   combo: number;
   /** La part de ses attaques au contact qu'il lance d'un petit saut, en l'air */
   aerial: number;
+  /** Ses chances de saisir, en sortant de sa garde, celui qui finit son coup trop près */
+  punish: number;
+  /** Ses chances de lever la garde à temps contre un coup qui arrive tout de suite (ce qui fait une parade) */
+  reflex: number;
+  /** Face à un marteleur (le même coup relancé encore et encore), combien il se met sur ses gardes (0 : jamais) */
+  adapt: number;
 }
 
 const LEVELS: Record<BotLevel, LevelInfo> = {
@@ -55,11 +61,14 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     taunt: 0.35,
     combo: 0.15,
     aerial: 0.08,
+    punish: 0.15,
+    reflex: 0.2,
+    adapt: 0.3,
   },
   moyen: {
     think: 8,
     attack: 0.6,
-    guard: 0.08,
+    guard: 0.15,
     charge: 0.4,
     recover: 0.95,
     influence: true,
@@ -72,11 +81,14 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     taunt: 0.45,
     combo: 0.45,
     aerial: 0.18,
+    punish: 0.5,
+    reflex: 0.5,
+    adapt: 0.8,
   },
   fort: {
     think: 5,
     attack: 0.85,
-    guard: 0.28,
+    guard: 0.4,
     charge: 0.6,
     recover: 1,
     influence: true,
@@ -87,6 +99,9 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     taunt: 0.5,
     combo: 0.75,
     aerial: 0.22,
+    punish: 0.85,
+    reflex: 0.8,
+    adapt: 1,
   },
 };
 
@@ -100,7 +115,7 @@ function levelFor(level: BotLevel, style: HabitueId): LevelInfo {
   if (level !== "facile") return L;
   // Les légers réfléchissent un peu plus vite et attaquent plus ; Lucien aussi (ses coups partent de loin, mais plus
   // tard : au niveau facile, il se faisait devancer)
-  const light = (100 - STYLES[style].weight) / 20 + (style === "lucien" ? 1 : 0);
+  const light = Math.min(0.6, (100 - STYLES[style].weight) / 20) + (style === "lucien" ? 1 : 0);
   return { ...L, think: Math.round(L.think * (1 - 0.12 * light)), attack: Math.min(0.9, L.attack * (1 + 0.2 * light)) };
 }
 
@@ -124,6 +139,10 @@ export interface BotMemory {
   jumpUntil: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
+  /** Le même coup qu'on vient de lui relancer de près, encore et encore (ça s'oublie vite) : un marteleur se repère */
+  mashed: number;
+  /** Le dernier coup qu'on lui a lancé de près */
+  seen: string;
 }
 
 export function newBotMemory(seed: number): BotMemory {
@@ -140,6 +159,8 @@ export function newBotMemory(seed: number): BotMemory {
     taunted: -1,
     comboFrom: -1,
     jumpUntil: 0,
+    mashed: 0,
+    seen: "",
   };
 }
 
@@ -173,6 +194,31 @@ function actionable(ft: Fighter): boolean {
 function reach(style: HabitueId): number {
   const s = STYLES[style].moves.s.hits.reduce((m, h) => Math.max(m, h.x + h.r), 0);
   return Math.max(1.2, s);
+}
+
+/** Se protéger du coup qui arrive : la garde s'il reste le temps de la lever pour de bon ; s'il arrive tout de suite,
+ * une garde levée au dernier instant (une parade), qu'il ne réussit qu'avec ses réflexes (selon son niveau). Rend faux
+ * s'il ne fait rien. */
+function defend(f: Fight, o: Fighter, m: BotMemory, L: LevelInfo): boolean {
+  const def = moveDef(o.style, o.move);
+  const until = def && def.hits.length > 0 ? Math.min(...def.hits.map((h) => h.from)) - o.mt : 0;
+  if (until <= PARRY_FRAMES && rnd(m) > L.reflex) return false;
+  m.held = SHD;
+  m.holdUntil = f.frame + 14;
+  m.press = SHD;
+  m.x = 0;
+  return true;
+}
+
+/** Cet adversaire finit son coup (ou retombe) à portée de saisie, et il lui reste assez de temps avant de pouvoir agir
+ * pour que la main tendue l'attrape : sa fin de coup se punit (sinon, la saisie manquée se ferait punir à son tour) */
+function punishable(me: Fighter, o: Fighter): boolean {
+  if (Math.abs(o.x - me.x) > 1.35 || Math.abs(o.y - me.y) > 0.6 || o.ground < 0) return false;
+  if (o.state === "land") return o.wait - o.t > GRAB_FROM;
+  if (o.state !== "move") return false;
+  const def = moveDef(o.style, o.move);
+  if (!def || def.hits.length === 0) return false;
+  return o.mt > Math.max(...def.hits.map((h) => h.to)) && def.frames - o.mt > GRAB_FROM;
 }
 
 /** Un adversaire qui va frapper tout près, tourné vers lui */
@@ -264,6 +310,31 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   }
   // On tient les boutons d'une charge ou d'une garde jusqu'au bout
   if (f.frame < m.holdUntil) return out();
+  // Le même coup relancé de près, encore et encore : il le remarque (celui qui varie ses attaques, jamais)
+  m.mashed = (m.mashed ?? 0) * 0.985;
+  for (const o of f.fighters) {
+    if (o === me || o.team === me.team || o.state !== "move" || o.mt !== 1) continue;
+    if (Math.abs(o.x - me.x) > 3 || Math.abs(o.y - me.y) > 1.5) continue;
+    if (o.move === m.seen) m.mashed += 1;
+    m.seen = o.move;
+  }
+  // Sur ses gardes face à un marteleur : le coup qui arrive, il le voit tout de suite (sans attendre sa prochaine idée)
+  if (m.mashed >= 3 && me.state === "stand" && f.frame >= m.holdUntil) {
+    const danger = threat(me, enemies(f, me));
+    if (danger && rnd(m) < Math.min(0.6, (m.mashed - 2) * 0.2) * L.adapt && defend(f, danger, m, L)) return out();
+  }
+  // Il vient d'arrêter un coup dans sa garde : il saisit celui qui finit son coup trop près (la garde punit le martelage)
+  if (me.state === "shield" && me.t > 1) {
+    const late = enemies(f, me).find((o) => punishable(me, o));
+    if (late && rnd(m) < L.punish) {
+      m.holdUntil = 0;
+      m.held = 0;
+      m.x = 0;
+      m.press = ATK;
+      m.next = f.frame + L.think;
+      return out();
+    }
+  }
   if (f.frame < m.next && !(me.state === "air" && offstage(me, st))) return out();
   m.next = f.frame + L.think + Math.floor(rnd(m) * 4);
   m.x = 0;
@@ -280,7 +351,8 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   if (me.state === "ledge") return ledge(f, me, m, foes);
   if (airborne(me) && offstage(me, st)) return recover(f, me, m, L);
 
-  // Un adversaire tout près, tourné vers lui : parfois, il lève la garde à l'avance (une garde ordinaire, qui s'use)
+  // Un adversaire tout près, tourné vers lui : parfois, il lève la garde à l'avance (une garde ordinaire, qui s'use ; il
+  // saisira en sortant de sa garde celui qui frappe dedans, voir plus haut)
   const close = foes.find((o) => Math.abs(o.x - me.x) < 1.9 && Math.abs(o.y - me.y) < 1 && o.face === (me.x > o.x ? 1 : -1));
   if (close && !airborne(me) && me.state === "stand" && rnd(m) < L.wary) {
     m.held = SHD;
@@ -297,9 +369,8 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
       m.press = SPC;
       m.y = -1;
     } else if (!airborne(me) && r < 0.75) {
-      m.held = SHD;
-      m.holdUntil = f.frame + 14;
-      m.press = me.state === "shield" ? 0 : SHD;
+      if (me.state === "shield") m.held = SHD;
+      else if (!defend(f, danger, m, L)) return out();
     } else if (!airborne(me)) {
       m.press = SHD;
       m.x = me.x < danger.x ? -1 : 1;

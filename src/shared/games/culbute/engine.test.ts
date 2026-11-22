@@ -250,6 +250,22 @@ describe("Culbute : le combat", () => {
     expect(a.x).toBeGreaterThan(7.5);
   });
 
+  it("deux combattants l'un dans l'autre au sol s'écartent doucement ; la roulade passe au travers", () => {
+    const f = duel();
+    skipIntro(f);
+    const [a, b] = f.fighters;
+    a!.x = 0;
+    b!.x = 0.05;
+    run(f, 30);
+    expect(b!.x - a!.x).toBeGreaterThan(0.55);
+    // Une roulade vers l'autre le traverse
+    faceToFace(f, 0.7);
+    run(f, 2);
+    run(f, 1, [() => ({ x: 1, y: 0, held: SHD, pressed: SHD })]);
+    run(f, 24, [() => ({ x: 1, y: 0, held: SHD, pressed: 0 })]);
+    expect(a!.x).toBeGreaterThan(b!.x);
+  });
+
   it("lâcher le stick en pleine course : un arrêt net, pas une glissade dans le vide", () => {
     const f = duel();
     skipIntro(f);
@@ -332,17 +348,59 @@ describe("Culbute : le combat", () => {
     expect(chain).toBe(true);
   });
 
-  it("le petit coup s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt", () => {
+  it("le petit coup qui touche s'enchaîne : un nouvel appui juste après sa frappe le relance aussitôt", () => {
+    const f = duel();
+    skipIntro(f);
+    faceToFace(f, 1.2);
+    const a = f.fighters[0]!;
+    run(f, 1, [tap(ATK)]);
+    for (let k = 0; k < 20 && !a.landed; k++) run(f, 1);
+    expect(a.landed).toBe(true);
+    let restarted = false;
+    for (let k = 0; k < 12 && !restarted; k++) {
+      const before = a.mt;
+      run(f, 1, [tap(ATK)]);
+      restarted = a.move === "n" && a.mt < before;
+    }
+    expect(restarted).toBe(true);
+  });
+
+  it("une série de petits coups : trois au plus, le troisième repousse l'autre hors de portée", () => {
+    for (const style of HABITUE_IDS) {
+      const f = duel(style, "marcel");
+      skipIntro(f);
+      faceToFace(f, 1.0);
+      const v = f.fighters[1]!;
+      // Frapper à chaque image pendant deux secondes, sans direction
+      let series = 0;
+      let longest = 0;
+      for (let k = 0; k < 120; k++) {
+        const ev = run(f, 1, [tap(ATK)]);
+        for (const e of ev) {
+          if (e.k !== "hit" || e.kind !== "hit" || e.a !== 0) continue;
+          series = e.chain ? series + 1 : 1;
+          longest = Math.max(longest, series);
+        }
+      }
+      expect(longest, style).toBeLessThanOrEqual(3);
+      expect(v.dmg, style).toBeLessThan(25);
+    }
+  });
+
+  it("dans le vide, le petit coup va jusqu'au bout : marteler ne fait pas un mur de petits coups", () => {
     const f = duel();
     skipIntro(f);
     const a = f.fighters[0]!;
-    run(f, 1, [tap(ATK)]);
-    run(f, 6);
-    expect(a.move).toBe("n");
-    const before = a.mt;
-    run(f, 1, [tap(ATK)]);
-    expect(a.move).toBe("n");
-    expect(a.mt).toBeLessThan(before);
+    // Frapper à chaque image, personne à portée : un petit coup entier avant le suivant
+    const starts: number[] = [];
+    for (let k = 0; k < 45; k++) {
+      const before = a.state === "move" ? a.mt : -1;
+      run(f, 1, [tap(ATK)]);
+      if (a.state === "move" && a.mt < before) starts.push(k);
+      if (before === -1 && a.state === "move") starts.push(k);
+    }
+    const def = moveDef("ginette", "n")!;
+    for (let i = 1; i < starts.length; i++) expect(starts[i]! - starts[i - 1]!).toBeGreaterThanOrEqual(def.frames);
   });
 
   it("après un petit coup qui touche, une direction avec Frapper donne le coup de côté, pas un nouveau petit coup", () => {

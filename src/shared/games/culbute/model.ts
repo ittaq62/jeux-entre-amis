@@ -182,6 +182,8 @@ export interface Fighter {
   holder: number;
   /** Le saut vient de partir : tant d'images encore où le lâcher le raccourcit (0 : plus possible) */
   hopLeft: number;
+  /** Le petit coup en cours est le combientième d'une série (le troisième repousse, et la série s'arrête là) */
+  jabs: number;
   /** Ses derniers coups qui ont touché, du plus récent au plus ancien : un coup répété s'use */
   stale: string[];
 }

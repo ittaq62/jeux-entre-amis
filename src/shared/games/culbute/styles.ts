@@ -106,7 +106,7 @@ const MARCEL: Style = {
   prop: "la chaise pliante",
   kind: "Lourd",
   blurb: "Lent, mais chaque coup de chaise compte. Et il ne s'envole pas facilement.",
-  weight: 110,
+  weight: 107,
   walk: 4.7,
   run: 10.1,
   air: 6.6,
@@ -122,7 +122,7 @@ const MARCEL: Style = {
   hgt: 1.6,
   moves: {
     n: { name: "Pied de chaise", frames: 18, pose: "jab", hits: [h(5, 6, 0.95, 0.8, 0.5, 4.5, 50, 4, 5)] },
-    s: { name: "Chaise en avant", frames: 25, pose: "side", hits: [h(T + 2, T + 4, 1.3, 0.8, 0.65, 11, 35, 7, 17)] },
+    s: { name: "Chaise en avant", frames: 25, pose: "side", hits: [h(T + 2, T + 4, 1.3, 0.8, 0.65, 10, 35, 7, 17)] },
     u: { name: "Le dossier", frames: 25, pose: "up", hits: [h(T + 2, T + 6, 0.3, 1.9, 0.7, 10, 88, 7, 14)] },
     d: { name: "Raclée de pieds", frames: 20, pose: "low", hits: [h(T + 2, T + 3, 1.1, 0.25, 0.55, 8, 22, 6, 11)] },
     an: { name: "Chaise dépliée", frames: 32, pose: "spin", landLag: 8, hits: [h(8, 14, 0, 0.8, 0.95, 10, 45, 6, 11)] },
@@ -187,9 +187,9 @@ const HUGUETTE: Style = {
   prop: "le tricot",
   kind: "Légère et vive",
   blurb: "Quatre-vingt-sept ans, trois sauts, des aiguilles qui piquent et de la laine pour tout attraper.",
-  weight: 88,
+  weight: 84,
   walk: 6.7,
-  run: 16.0,
+  run: 15.0,
   air: 9.1,
   airAcc: 109,
   gravity: 60,
@@ -368,7 +368,7 @@ const LUCIEN: Style = {
   w: 0.82,
   hgt: 1.55,
   moves: {
-    n: { name: "Couac", frames: 15, pose: "jab", hits: [h(4, 5, 0.85, 0.9, 0.5, 3.5, 45, 3.5, 4)] },
+    n: { name: "Couac", frames: 14, pose: "jab", hits: [h(3, 4, 0.85, 0.9, 0.5, 3.5, 45, 3.5, 4)] },
     s: {
       name: "Soufflet tendu",
       frames: 20,
