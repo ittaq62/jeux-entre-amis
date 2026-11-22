@@ -27,7 +27,8 @@ export interface ThemeKit {
   /** Les flancs (falaises, bords sans bordure) */
   side(look?: string): THREE.Material;
   /** Les bordures du tour : leur matière, et combien elles dépassent en plus de leur hauteur de jeu */
-  rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean };
+  /** `bevel` : le rayon de l'arrondi du dessus (par défaut un petit arrondi ; 0 pour une arête vive) */
+  rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean; bevel?: number };
   wall(look?: string): THREE.Material;
   post(look: string | undefined, r: number, h: number): THREE.Object3D;
   /**
@@ -281,6 +282,128 @@ function prism(
   return flat;
 }
 
+/**
+ * Une bordure au dessus arrondi : son profil (un flanc, l'arrondi, le dessus, l'autre arrondi, l'autre flanc) tiré
+ * de a à b, fermé aux deux bouts. Des normales lisses dans l'arrondi : la lumière y glisse, comme sur une vraie
+ * bordure moulée ou une haie taillée.
+ */
+function railBody(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  aBot: number,
+  aTop: number,
+  bBot: number,
+  bTop: number,
+  t: number,
+  ext: number,
+  radius: number,
+): THREE.BufferGeometry {
+  const len = Math.hypot(bx - ax, bz - az) || 1;
+  const ux = (bx - ax) / len;
+  const uz = (bz - az) / len;
+  const nx = -uz;
+  const nz = ux;
+  const r = Math.max(0, Math.min(radius, t * 0.95, (Math.min(aTop - aBot, bTop - bBot) || 0.1) * 0.9));
+  const k = r > 0.03 ? 5 : r > 0 ? 3 : 0;
+  // Le profil : s (sur le côté), dy (sous le dessus ; null : au pied), la normale (côté, haut)
+  const prof: { s: number; dy: number | null; ns: number; ny: number }[] = [{ s: -t, dy: null, ns: -1, ny: 0 }];
+  const arc = (cs: number, a0: number, a1: number) => {
+    for (let i = 0; i <= k; i++) {
+      const a = a0 + ((a1 - a0) * i) / Math.max(1, k);
+      prof.push({ s: cs + r * Math.cos(a), dy: -r + r * Math.sin(a), ns: Math.cos(a), ny: Math.sin(a) });
+      if (k === 0) break;
+    }
+  };
+  if (k === 0) {
+    prof.push(
+      { s: -t, dy: 0, ns: -1, ny: 0 },
+      { s: -t, dy: 0, ns: 0, ny: 1 },
+      { s: t, dy: 0, ns: 0, ny: 1 },
+      { s: t, dy: 0, ns: 1, ny: 0 },
+    );
+  } else {
+    arc(-t + r, Math.PI, Math.PI / 2);
+    arc(t - r, Math.PI / 2, 0);
+  }
+  prof.push({ s: t, dy: null, ns: 1, ny: 0 });
+  const ends = [
+    { x: ax - ux * ext, z: az - uz * ext, bot: aBot, top: aTop, along: -ext },
+    { x: bx + ux * ext, z: bz + uz * ext, bot: bBot, top: bTop, along: len + ext },
+  ];
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  const at = (e: (typeof ends)[number], p: (typeof prof)[number]) => [e.x + nx * p.s, p.dy === null ? e.bot : e.top + p.dy, e.z + nz * p.s];
+  // La longueur du profil, pour un motif qui passe du flanc au dessus sans couture
+  const run: number[] = [0];
+  for (let i = 1; i < prof.length; i++) {
+    const a = at(ends[0]!, prof[i - 1]!);
+    const b = at(ends[0]!, prof[i]!);
+    run.push(run[i - 1]! + Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!));
+  }
+  prof.forEach((p, i) => {
+    for (const e of ends) {
+      const q = at(e, p);
+      pos.push(q[0]!, q[1]!, q[2]!);
+      nor.push(nx * p.ns, p.ny, nz * p.ns);
+      uv.push(e.along, run[i]! + aBot);
+    }
+  });
+  for (let i = 0; i + 1 < prof.length; i++) {
+    const a0 = i * 2;
+    const b0 = a0 + 1;
+    const a1 = a0 + 2;
+    const b1 = a0 + 3;
+    idx.push(a0, a1, b1, a0, b1, b0);
+  }
+  // Les deux bouts
+  ends.forEach((e, j) => {
+    const base = pos.length / 3;
+    const sign = j === 0 ? -1 : 1;
+    for (const p of prof) {
+      const q = at(e, p);
+      pos.push(q[0]!, q[1]!, q[2]!);
+      nor.push(ux * sign, 0, uz * sign);
+      uv.push(p.s, q[1]!);
+    }
+    for (let i = 1; i + 1 < prof.length; i++) {
+      if (j === 1) idx.push(base, base + i, base + i + 1);
+      else idx.push(base, base + i + 1, base + i);
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+/** Le dégradé d'une ombre de contact : sombre contre le bord, transparent à l'autre bout */
+let contactTex: THREE.CanvasTexture | null = null;
+function contactGradient(): THREE.CanvasTexture {
+  if (contactTex) return contactTex;
+  const cv = document.createElement("canvas");
+  cv.width = 4;
+  cv.height = 64;
+  const g = cv.getContext("2d")!;
+  const grad = g.createLinearGradient(0, 0, 0, 64);
+  // L'alphaMap lit le vert : des gris, pas de la transparence
+  grad.addColorStop(0, "rgb(255,255,255)");
+  grad.addColorStop(0.25, "rgb(140,140,140)");
+  grad.addColorStop(0.6, "rgb(38,38,38)");
+  grad.addColorStop(1, "rgb(0,0,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 64);
+  contactTex = new THREE.CanvasTexture(cv);
+  contactTex.wrapS = THREE.ClampToEdgeWrapping;
+  contactTex.wrapT = THREE.ClampToEdgeWrapping;
+  return contactTex;
+}
+
 function merged(list: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (list.length === 0) return null;
   const g = mergeGeometries(
@@ -377,6 +500,68 @@ function partMesh(p: Part, mat: THREE.Material): THREE.Mesh {
   }
 }
 
+/**
+ * Les bandes d'ombre de contact : le long de chaque bord extérieur de la piste (bordé ou non), une bande posée sur le
+ * sol du décor, sombre contre la piste et qui s'efface en s'éloignant. Pas au-dessus d'un trou dans le sol.
+ */
+function contactStrips(c: Course, rails: CWall[]): THREE.BufferGeometry | null {
+  const W = 0.42;
+  const y = c.outY + 0.004;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const outside = (x: number, z: number) => !c.tiles.some((u) => inRings(x, z, u.rings));
+  const open = (x: number, z: number) => c.def.opens.some((o) => inRings(x, z, [o]));
+  const strip = (ax: number, az: number, bx: number, bz: number, ox: number, oz: number, from: number) => {
+    // (ox, oz) : la direction vers le dehors ; `from` : à quelle distance du bord la bande commence
+    const p = (x: number, z: number, d: number) => [x + ox * d, z + oz * d];
+    const a0 = p(ax, az, from);
+    const b0 = p(bx, bz, from);
+    const a1 = p(ax, az, from + W);
+    const b1 = p(bx, bz, from + W);
+    const quad = [a0, b0, b1, a0, b1, a1];
+    const v = [0, 0, 1, 0, 1, 1];
+    // L'ordre des sommets pour que la bande regarde vers le haut
+    const cross = (b0[0]! - a0[0]!) * (a1[1]! - a0[1]!) - (b0[1]! - a0[1]!) * (a1[0]! - a0[0]!);
+    const order = cross < 0 ? [0, 1, 2, 3, 4, 5] : [0, 2, 1, 3, 5, 4];
+    for (const i of order) {
+      pos.push(quad[i]![0]!, y, quad[i]![1]!);
+      uv.push(0.5, 1 - v[i]!);
+    }
+  };
+  for (const t of c.tiles) {
+    if (t.phys.hazard) continue;
+    for (const ring of t.rings) {
+      for (let k = 0; k < ring.length; k++) {
+        const a = ring[k]!;
+        const b = ring[(k + 1) % ring.length]!;
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (len < 1e-4) continue;
+        const mx = (a[0] + b[0]) / 2;
+        const mz = (a[1] + b[1]) / 2;
+        let ox = -(b[1] - a[1]) / len;
+        let oz = (b[0] - a[0]) / len;
+        // Le dehors est d'un côté et un seul
+        const plus = outside(mx + ox * 0.03, mz + oz * 0.03);
+        const minus = outside(mx - ox * 0.03, mz - oz * 0.03);
+        if (plus === minus) continue;
+        if (!plus) {
+          ox = -ox;
+          oz = -oz;
+        }
+        if (open(mx + ox * 0.3, mz + oz * 0.3)) continue;
+        // Une bordure : la bande commence derrière elle
+        const railed = rails.find((w) => segClosest(mx, mz, w.ax, w.az, w.bx, w.bz).d2 < 1e-6);
+        strip(a[0], a[1], b[0], b[1], ox, oz, railed ? railed.t : 0);
+      }
+    }
+  }
+  if (pos.length === 0) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  return g;
+}
+
 export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   const root = new THREE.Group();
   const disposables: { dispose: () => void }[] = [];
@@ -446,9 +631,11 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
       }
       continue;
     }
+    const half = w0(list).t + style.widen;
+    const bevel = style.bevel ?? Math.min(0.45 * half, 0.03);
     const geo = merged(
       list.map((w) =>
-        prism(
+        railBody(
           w.ax,
           w.az,
           w.bx,
@@ -459,6 +646,7 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
           w.b1 + style.extra,
           w.t + style.widen,
           w.t + style.widen,
+          bevel,
         ),
       ),
     );
@@ -518,6 +706,28 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   if (sideMerged) {
     const mesh = new THREE.Mesh(keep(sideMerged), kit.side());
     mesh.receiveShadow = true;
+    root.add(mesh);
+  }
+
+  // L'ombre douce au pied de la piste, sur le sol du décor : la piste se pose sur le sol au lieu de flotter
+  const contact = contactStrips(c, rails);
+  if (contact) {
+    const mesh = new THREE.Mesh(
+      keep(contact),
+      keep(
+        new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          alphaMap: contactGradient(),
+          transparent: true,
+          opacity: 0.42,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        }),
+      ),
+    );
+    mesh.renderOrder = 1;
     root.add(mesh);
   }
 

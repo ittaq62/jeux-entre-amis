@@ -360,6 +360,7 @@ export function luneTheme(): Theme {
       hemiIntensity: 0.45,
       clouds: 0,
       cloudColor: 0xffffff,
+      ridges: { kind: "collines", height: 0.03, far: 0x2e2e33, near: 0x1f1f23, seed: 6.6 },
       fog: 0x05060c,
       fogNear: 140,
       fogFar: 420,

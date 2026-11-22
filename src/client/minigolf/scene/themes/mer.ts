@@ -249,6 +249,7 @@ export function merTheme(): Theme {
       hemiIntensity: 1.0,
       clouds: 0.5,
       cloudColor: 0xffc6b4,
+      ridges: { kind: "iles", height: 0.04, far: 0xd8a08c, near: 0x96707a, seed: 5.3 },
       fog: 0xf0b592,
       fogNear: 30,
       fogFar: 160,

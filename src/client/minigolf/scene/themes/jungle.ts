@@ -750,6 +750,7 @@ export function jungleTheme(): Theme {
       hemiIntensity: 0.8,
       clouds: 0.25,
       cloudColor: 0xffffff,
+      ridges: { kind: "mont", height: 0.11, far: 0xa2bc9c, near: 0x5f7f5c, seed: 8.1 },
       fog: 0xa6c2a0,
       fogNear: 24,
       fogFar: 90,

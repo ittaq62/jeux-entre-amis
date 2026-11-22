@@ -274,6 +274,7 @@ export function volcanTheme(): Theme {
       hemiIntensity: 0.95,
       clouds: 0.65,
       cloudColor: 0x4a3430,
+      ridges: { kind: "mont", height: 0.075, far: 0x4a2216, near: 0x24110b, seed: 2.2 },
       fog: 0x2e1610,
       fogNear: 26,
       fogFar: 120,

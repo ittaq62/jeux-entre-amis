@@ -224,6 +224,7 @@ export function montagneTheme(): Theme {
       hemiIntensity: 0.75,
       clouds: 0.25,
       cloudColor: 0xffffff,
+      ridges: { kind: "mont", height: 0.15, far: 0xbccfe4, near: 0x7e95b2, caps: 0xf2f6fb },
       fog: 0xe4edf7,
       fogNear: 45,
       fogFar: 220,
