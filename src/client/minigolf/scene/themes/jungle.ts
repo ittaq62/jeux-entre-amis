@@ -734,6 +734,8 @@ export function jungleTheme(): Theme {
     mover,
     water: () => river,
     flag: 0xd8402a,
+    // Le tapis de départ : une dalle de pierre moussue, des piquets de bois
+    tee: { rim: 0x6f7a5a, pad: 0x8a8f78, spot: 0xe8e2cc, post: 0x6e4422, cap: 0xd8402a },
   });
   const hiddenMat = new THREE.MeshBasicMaterial({ visible: false });
 

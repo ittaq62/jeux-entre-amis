@@ -39,6 +39,48 @@ export interface ThemeKit {
   water(look?: string): THREE.Material;
   /** La couleur du drapeau */
   flag: number;
+  /** Le tapis de départ et ses bornes, aux couleurs du parcours (par défaut : un tapis vert de jardin) */
+  tee?: TeeLook;
+}
+
+/** Le tapis de départ : sa bordure, son fond (à carreaux : un torchon), le point de départ, les bornes et leur chapeau */
+export interface TeeLook {
+  rim: number;
+  pad: number;
+  spot: number;
+  post: number;
+  cap: number;
+  /** Le fond à carreaux, avec cette seconde couleur */
+  check?: number;
+  /** Une plaque de métal plutôt qu'un tapis */
+  metal?: boolean;
+  /** Le point de départ luit (la lave) */
+  glow?: boolean;
+}
+
+const GARDEN_TEE: TeeLook = { rim: 0x4d9a52, pad: 0x2e6f3a, spot: 0xf2efe4, post: 0xc89a62, cap: 0xc8392d };
+
+/** Un fond à carreaux (un torchon de cuisine) */
+function checkTexture(a: number, b: number): THREE.CanvasTexture {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 64;
+  const g = cv.getContext("2d")!;
+  const ca = `#${a.toString(16).padStart(6, "0")}`;
+  const cb = `#${b.toString(16).padStart(6, "0")}`;
+  g.fillStyle = cb;
+  g.fillRect(0, 0, 64, 64);
+  g.globalAlpha = 0.55;
+  g.fillStyle = ca;
+  g.fillRect(0, 0, 32, 64);
+  g.fillRect(0, 0, 64, 32);
+  g.globalAlpha = 1;
+  g.fillRect(0, 0, 32, 32);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(6, 6);
+  t.magFilter = THREE.NearestFilter;
+  return t;
 }
 
 export interface HoleMeshes {
@@ -867,34 +909,56 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
     sh.quadraticCurveTo(-h, -h, -h + r, -h);
     return sh;
   };
+  const tl = kit.tee ?? GARDEN_TEE;
   const teeGroup = new THREE.Group();
   teeGroup.position.set(c.tee.x, c.tee.y - BALL_R, c.tee.z);
   teeGroup.rotation.y = -c.tee.aim;
   const rim = new THREE.Mesh(
     keep(new THREE.ExtrudeGeometry(teeShape(0.26, 0.06), { depth: 0.012, bevelEnabled: false, curveSegments: 6 })),
-    keep(new THREE.MeshStandardMaterial({ color: 0x4d9a52, roughness: 0.9 })),
+    keep(new THREE.MeshStandardMaterial({ color: tl.rim, roughness: tl.metal ? 0.4 : 0.9, metalness: tl.metal ? 0.6 : 0 })),
   );
   rim.rotation.x = -Math.PI / 2;
   rim.position.y = 0.001;
   rim.receiveShadow = true;
   const pad = new THREE.Mesh(
     keep(new THREE.ExtrudeGeometry(teeShape(0.225, 0.045), { depth: 0.004, bevelEnabled: false, curveSegments: 6 })),
-    keep(new THREE.MeshStandardMaterial({ color: 0x2e6f3a, roughness: 0.95 })),
+    keep(
+      new THREE.MeshStandardMaterial({
+        color: tl.check !== undefined ? 0xffffff : tl.pad,
+        map: tl.check !== undefined ? keep(checkTexture(tl.pad, tl.check)) : null,
+        roughness: tl.metal ? 0.5 : 0.95,
+        metalness: tl.metal ? 0.5 : 0,
+      }),
+    ),
   );
   pad.rotation.x = -Math.PI / 2;
   pad.position.y = 0.012;
   pad.receiveShadow = true;
   const spot = new THREE.Mesh(
     keep(new THREE.CircleGeometry(0.028, 20)),
-    keep(new THREE.MeshStandardMaterial({ color: 0xf2efe4, roughness: 0.8 })),
+    keep(
+      new THREE.MeshStandardMaterial({
+        color: tl.spot,
+        roughness: 0.8,
+        emissive: tl.glow ? tl.spot : 0x000000,
+        emissiveIntensity: tl.glow ? 1.4 : 0,
+      }),
+    ),
   );
   spot.rotation.x = -Math.PI / 2;
   spot.position.y = 0.0175;
   teeGroup.add(rim, pad, spot);
   const post = keep(new THREE.CylinderGeometry(0.022, 0.026, 0.075, 12));
   const cap = keep(new THREE.SphereGeometry(0.03, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2));
-  const postMat = keep(new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7 }));
-  const capMat = keep(new THREE.MeshStandardMaterial({ color: 0xc8392d, roughness: 0.45 }));
+  const postMat = keep(new THREE.MeshStandardMaterial({ color: tl.post, roughness: tl.metal ? 0.35 : 0.7, metalness: tl.metal ? 0.7 : 0 }));
+  const capMat = keep(
+    new THREE.MeshStandardMaterial({
+      color: tl.cap,
+      roughness: 0.45,
+      emissive: tl.glow ? tl.cap : 0x000000,
+      emissiveIntensity: tl.glow ? 0.8 : 0,
+    }),
+  );
   for (const side of [-1, 1]) {
     const m = new THREE.Group();
     const body = new THREE.Mesh(post, postMat);

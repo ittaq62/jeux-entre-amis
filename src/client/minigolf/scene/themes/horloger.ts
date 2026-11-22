@@ -600,6 +600,8 @@ export function horlogerTheme(): Theme {
     mover,
     water: () => brass,
     flag: 0xb0302a,
+    // Le tapis de départ : une plaque de laiton, le fond de cuir sombre
+    tee: { rim: 0xc9a24a, pad: 0x3a2a1c, spot: 0xf2e6c4, post: 0xb08a3a, cap: 0xb0302a, metal: true },
   });
 
   made = {

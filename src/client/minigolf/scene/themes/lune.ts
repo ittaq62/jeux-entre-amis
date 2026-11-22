@@ -345,6 +345,8 @@ export function luneTheme(): Theme {
     mover,
     water: () => dark,
     flag: 0xff5030,
+    // Le tapis de départ : une plaque d'acier bordée de jaune, des bornes de métal
+    tee: { rim: 0xe0b030, pad: 0x8a939e, spot: 0xffffff, post: 0xc0c6cc, cap: 0xff5030, metal: true },
   });
 
   made = {

@@ -320,6 +320,8 @@ export function volcanTheme(): Theme {
     mover,
     water: () => lava,
     flag: 0xffc020,
+    // Le tapis de départ : une dalle de basalte, le point de départ et les chapeaux qui rougeoient
+    tee: { rim: 0x3a2a24, pad: 0x1e1714, spot: 0xffb060, post: 0x2a201c, cap: 0xffc020, glow: true },
   });
 
   made = {

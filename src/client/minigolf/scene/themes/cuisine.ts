@@ -529,6 +529,8 @@ export function cuisineTheme(): Theme {
     mover,
     water: () => water,
     flag: 0xd62a24,
+    // Le tapis de départ : un torchon à carreaux rouges, des bornes de chrome
+    tee: { rim: 0xf4efe2, pad: 0xd62a24, check: 0xfaf6ee, spot: 0xffffff, post: 0xc9ced6, cap: 0xd62a24 },
   });
 
   // Les flancs de l'évier sont en inox, comme le reste
@@ -545,15 +547,16 @@ export function cuisineTheme(): Theme {
       sunIntensity: 2.5,
       hemiSky: 0xfff4e6,
       hemiGround: 0x8a7460,
-      hemiIntensity: 0.85,
+      hemiIntensity: 0.62,
       clouds: 0,
       cloudColor: 0xffffff,
       fog: 0xefe2cc,
       fogNear: 30,
       fogFar: 110,
-      exposure: 1.05,
+      // Un peu moins exposée que le jour, plus contrastée : le plan de travail clair ne doit pas tout blanchir
+      exposure: 0.9,
       bloom: 2.4,
-      grade: { warm: 0.05, sat: 1.1, vignette: 0.3 },
+      grade: { warm: 0.06, sat: 1.16, vignette: 0.38 },
     },
     kit,
     ambience: "cuisine",

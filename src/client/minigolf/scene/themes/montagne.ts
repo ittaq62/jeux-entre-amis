@@ -209,6 +209,8 @@ export function montagneTheme(): Theme {
     mover,
     water: () => ice,
     flag: 0xd8352f,
+    // Le tapis de départ : une planche de bois, des piquets de chalet
+    tee: { rim: 0x7a4a26, pad: 0x9b6a3c, spot: 0xf4f4f0, post: 0x5e3d22, cap: 0xd8352f },
   });
 
   made = {

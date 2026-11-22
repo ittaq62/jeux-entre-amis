@@ -233,6 +233,8 @@ export function merTheme(): Theme {
     mover,
     water: (look) => (look === "flaque" ? pool : sea),
     flag: 0x2f6fb5,
+    // Le tapis de départ : une natte de paille, des bornes blanches au chapeau bleu
+    tee: { rim: 0xd9b77a, pad: 0xc79a55, spot: 0xfff6e0, post: 0xf4efe2, cap: 0x2f6fb5 },
   });
 
   const seaFar = waterMat(0x1a5f7a, 1);

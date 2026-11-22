@@ -427,6 +427,7 @@ export function plainKit(o: {
   mover: (def: MoverDef, c: Course) => THREE.Object3D | null;
   water: (look?: string) => THREE.Material;
   flag: number;
+  tee?: ThemeKit["tee"];
 }): ThemeKit {
   return {
     ground: (mat, look) => o.ground(mat, look) ?? o.felt,
@@ -437,5 +438,6 @@ export function plainKit(o: {
     mover: o.mover,
     water: o.water,
     flag: o.flag,
+    tee: o.tee,
   };
 }
