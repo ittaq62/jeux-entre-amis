@@ -435,7 +435,11 @@ describe("Escarmouche : les bots", () => {
       let kills = 0;
       let moved = 0;
       let cqTaken = 0;
-      for (let step = 0; step < 60 * 120 && m.phase !== "over"; step++) {
+      // La conquête est lente sur les grandes cartes (au Port, à la Gare, une partie sur deux sans prise en deux minutes) :
+      // on joue jusqu'à quatre minutes, le temps qu'un point change de mains
+      const limit = mode === "conquete" ? 60 * 240 : 60 * 120;
+      for (let step = 0; step < limit && m.phase !== "over"; step++) {
+        if (step >= 60 * 120 && (mode !== "conquete" || cqTaken > 0)) break;
         const ev: EscEvent[] = [];
         worldStep(m, ev);
         m.fighters.forEach((_, i) => applyCmd(m, i, botCommand(m, i, mems[i]!, "fort", step * 16), null, ev));

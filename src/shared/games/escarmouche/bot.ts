@@ -170,8 +170,25 @@ function parts(links: number[][]): { part: Int32Array; main: number } {
   return { part, main: sizes.indexOf(Math.max(0, ...sizes)) };
 }
 
-/** On passe d'une case à l'autre en marchant : chaque quart de chemin a un sol à moins d'une marche du précédent */
+/** Un peu moins que la demi-largeur d'un soldat : on frôle un mur sans s'y coincer */
+const BODY = RADIUS - 0.01;
+/** De combien on s'écarte au plus de la ligne droite entre deux cases (une porte qu'on prend un peu de biais) */
+const SIDE_STEPS = [0, 0.08, -0.08, 0.16, -0.16];
+
+/** Un soldat tient-il debout ici, sur un sol à `y` (ce qui ne dépasse pas d'une marche ne gêne pas) ? */
+function bodyFits(world: World, x: number, y: number, z: number): boolean {
+  return !world.overlaps(x - BODY, y + STEP + 0.01, z - BODY, x + BODY, y + 1.75, z + BODY);
+}
+
+/**
+ * On passe d'une case à l'autre en marchant : chaque quart de chemin a un sol à moins d'une marche du précédent, et la
+ * place pour un soldat de toute sa largeur (à quelques centimètres près de côté). Sans ça, le chemin passait entre deux
+ * coins trop proches ou longeait le bout d'un muret, et le soldat y restait collé.
+ */
 function walkable(world: World, ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+  const len = Math.hypot(bx - ax, bz - az);
+  const sx = len > 1e-6 ? -(bz - az) / len : 0;
+  const sz = len > 1e-6 ? (bx - ax) / len : 0;
   let y = ay;
   for (let q = 1; q <= 4; q++) {
     const t = q / 4;
@@ -179,6 +196,7 @@ function walkable(world: World, ax: number, ay: number, az: number, bx: number, 
     const z = az + (bz - az) * t;
     const s = q === 4 ? by : standAt(world, x, z, Math.max(y, by) + STEP);
     if (s === null || Math.abs(s - y) > STEP) return false;
+    if (q < 4 && !SIDE_STEPS.some((o) => bodyFits(world, x + sx * o, s, z + sz * o))) return false;
     y = s;
   }
   return Math.abs(y - by) < 0.05;
