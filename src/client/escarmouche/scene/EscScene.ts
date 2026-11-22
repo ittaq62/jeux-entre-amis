@@ -10,6 +10,7 @@ import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { Effects, flashTexture } from "./effects.ts";
 import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from "./guns.ts";
+import { RELOAD_PLANS, reloadKind, type Anchor } from "../reload.ts";
 import { buildCrates, buildMap, setWetness, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
@@ -89,6 +90,10 @@ export class EscScene {
   private crates = new Map<number, { whole: THREE.Mesh; wreck: THREE.Group; down: boolean }>();
   private vmRoot = new THREE.Group();
   private vmGun: Gun | null = null;
+  /** La main gauche (et son bras), qui quitte l'arme pour recharger ; sa place au repos ; ce qu'elle apporte */
+  private vmLeft: THREE.Group | null = null;
+  private vmLeftRest = new THREE.Vector3();
+  private vmCarry: THREE.Group | null = null;
   private vmKey = "";
   private vmLook: { avatar: AvatarConfig; tenue: UniformId } = { avatar: seededAvatar("soldat"), tenue: "perso" };
   private vmLookKey = "";
@@ -806,6 +811,7 @@ export class EscScene {
     const u = UNIFORM_BY_ID.get(this.vmLook.tenue) ?? UNIFORM_BY_ID.get("perso")!;
     const m = uniformMats(u, this.vmLook.avatar, keep);
     const arms = new THREE.Group();
+    const left = new THREE.Group();
     const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
     // La main droite tient la poignée ; la gauche, le garde-main (ou la poignée, pour une arme de poing)
     const grip = V(0.012, -0.03, 0.03);
@@ -817,29 +823,32 @@ export class EscScene {
     // Les manches : plus fines, elles s'affinent vers le poignet, avec les plis du tissu ; le coude arrondi
     limb(rElbow.clone().add(V(0.08, -0.12, 0.32)), rElbow, 0.056, 0.047, m.coat, arms, 2);
     limb(rElbow, rWrist, 0.046, 0.034, m.coat, arms, 3);
-    limb(lElbow.clone().add(V(-0.08, -0.14, 0.32)), lElbow, 0.056, 0.047, m.coat, arms, 2);
-    limb(lElbow, lWrist, 0.046, 0.034, m.coat, arms, 3);
-    for (const e of [rElbow, lElbow]) {
+    limb(lElbow.clone().add(V(-0.08, -0.14, 0.32)), lElbow, 0.056, 0.047, m.coat, left, 2);
+    limb(lElbow, lWrist, 0.046, 0.034, m.coat, left, 3);
+    for (const [e, to] of [
+      [rElbow, arms],
+      [lElbow, left],
+    ] as const) {
       const ball = new THREE.Mesh(new THREE.SphereGeometry(0.047, 12, 8), m.coat);
       ball.position.copy(e);
-      arms.add(ball);
+      to.add(ball);
     }
     // Le poignet de la manche, un ton plus sombre, un peu évasé
-    for (const [w, e] of [
-      [rWrist, rElbow],
-      [lWrist, lElbow],
+    for (const [w, e, to] of [
+      [rWrist, rElbow, arms],
+      [lWrist, lElbow, left],
     ] as const) {
-      limb(w.clone().lerp(e, 0.03), w.clone().lerp(e, 0.15), 0.039, 0.037, m.pouch, arms);
+      limb(w.clone().lerp(e, 0.03), w.clone().lerp(e, 0.15), 0.039, 0.037, m.pouch, to);
     }
-    const piece = (w: number, h: number, d: number, at: THREE.Vector3, rx = 0, ry = 0, rz = 0) => {
+    const piece = (w: number, h: number, d: number, at: THREE.Vector3, rx = 0, ry = 0, rz = 0, to: THREE.Group = arms) => {
       const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.45), m.glove);
       mesh.position.copy(at);
       mesh.rotation.set(rx, ry, rz);
-      arms.add(mesh);
+      to.add(mesh);
     };
     /** Un doigt : des phalanges qui suivent les points donnés */
-    const finger = (pts: THREE.Vector3[], r: number) => {
-      for (let k = 1; k < pts.length; k++) segment(pts[k - 1]!, pts[k]!, r * (1 - k * 0.06), m.glove, arms, 6);
+    const finger = (pts: THREE.Vector3[], r: number, to: THREE.Group = arms) => {
+      for (let k = 1; k < pts.length; k++) segment(pts[k - 1]!, pts[k]!, r * (1 - k * 0.06), m.glove, to, 6);
     };
     // Le repère de la poignée (inclinée) : la main droite s'y referme
     const frame = new THREE.Object3D();
@@ -859,14 +868,14 @@ export class EscScene {
     finger([P(0.03, 0.04, 0.026), P(0.004, 0.058, 0.012), P(-0.016, 0.056, -0.004)], 0.0105);
     if (gun.pistol) {
       // Les deux mains sur la poignée : la gauche enveloppe la droite
-      piece(0.022, 0.062, 0.058, P(-0.027, -0.008, 0.004));
+      piece(0.022, 0.062, 0.058, P(-0.027, -0.008, 0.004), 0, 0, 0, left);
       [-0.006, -0.026, -0.044].forEach((y, k) =>
-        finger([P(-0.025, y, -0.016), P(-0.025, y, -0.039), P(0.0, y, -0.045), P(0.02, y, -0.037)], [0.0084, 0.0082, 0.0074][k]!),
+        finger([P(-0.025, y, -0.016), P(-0.025, y, -0.039), P(0.0, y, -0.045), P(0.02, y, -0.037)], [0.0084, 0.0082, 0.0074][k]!, left),
       );
-      finger([P(-0.026, 0.026, 0.018), P(-0.018, 0.044, -0.016)], 0.0094);
+      finger([P(-0.026, 0.026, 0.018), P(-0.018, 0.044, -0.016)], 0.0094, left);
     } else {
       // La main gauche sous le garde-main : la paume dessous, quatre doigts qui remontent à gauche, le pouce à droite
-      piece(0.058, 0.026, 0.085, support.clone().add(V(0.004, -0.008, 0.0)));
+      piece(0.058, 0.026, 0.085, support.clone().add(V(0.004, -0.008, 0.0)), 0, 0, 0, left);
       [-0.03, -0.01, 0.01, 0.03].forEach((dz, k) => {
         const z = support.z + dz;
         const r = [0.0092, 0.0098, 0.0094, 0.0084][k]!;
@@ -878,6 +887,7 @@ export class EscScene {
             V(-0.03, support.y + 0.054, z - 0.008),
           ],
           r,
+          left,
         );
       });
       finger(
@@ -887,10 +897,37 @@ export class EscScene {
           V(0.036, support.y + 0.036, support.z - 0.026),
         ],
         0.0105,
+        left,
       );
     }
     fuse(arms, false);
     gun.group.add(arms);
+    // Ce que la main gauche apporte en rechargeant : une cartouche du fusil à pompe, les deux du fusil à deux coups, la
+    // chargette du revolver (six balles en couronne)
+    const carry = new THREE.Group();
+    const shellMat = keep(new THREE.MeshStandardMaterial({ color: "#a3261e", roughness: 0.6 }));
+    const brassMat = keep(new THREE.MeshStandardMaterial({ color: "#c79a3e", roughness: 0.35, metalness: 0.7 }));
+    const round = (x: number, y: number, z: number, r: number, len: number, mat: THREE.Material) => {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), mat);
+      c.rotation.x = Math.PI / 2;
+      c.position.set(x, y, z);
+      carry.add(c);
+    };
+    if (weapon === "pompe") round(0, 0.03, -0.02, 0.0095, 0.07, shellMat);
+    else if (weapon === "double") for (const x of [-0.011, 0.011]) round(x, 0.032, -0.02, 0.0095, 0.07, shellMat);
+    else if (weapon === "revolver")
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        round(Math.cos(a) * 0.012, 0.035 + Math.sin(a) * 0.012, -0.015, 0.0045, 0.03, brassMat);
+      }
+    carry.position.copy(support);
+    carry.visible = false;
+    left.add(carry);
+    fuse(left, false);
+    gun.group.add(left);
+    this.vmLeft = left;
+    this.vmLeftRest.copy(support);
+    this.vmCarry = carry;
     this.vmKey = key;
   }
 
@@ -946,43 +983,105 @@ export class EscScene {
       gun.group.position.y -= rack * 0.02;
     }
     let pumpBack = rack * 0.09;
+    const left = this.vmLeft;
+    const rest = this.vmLeftRest;
     if (v.reload >= 0) {
       const t = Math.min(1, v.reload);
       const ease = (a: number, b: number) => {
         const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
         return x * x * (3 - 2 * x);
       };
-      // L'arme vient vers le milieu et se couche sur la droite, le flanc gauche tourné vers soi (on voit le chargeur
-      // partir et revenir), le temps du geste, puis se redresse
-      const tilt = ease(0, 0.16) - ease(0.84, 1);
-      gun.group.rotation.z -= tilt * 0.45;
-      gun.group.rotation.y += tilt * 0.15;
-      gun.group.position.x -= tilt * 0.08;
+      const kind = reloadKind(v.weapon);
+      const plan = RELOAD_PLANS[kind];
+      // L'arme vient vers le milieu et se couche sur la droite, le flanc gauche tourné vers soi, le temps du geste
+      const tilt = ease(0, 0.14) - ease(0.88, 1);
+      gun.group.rotation.z -= tilt * 0.4;
+      gun.group.rotation.y += tilt * 0.14;
+      gun.group.rotation.x += tilt * (kind === "pump" ? 0.18 : 0.06);
+      gun.group.position.x -= tilt * 0.07;
       gun.group.position.y += tilt * 0.02;
       gun.group.position.z += tilt * 0.02;
-      // Le chargeur vide tombe hors de vue ; le plein remonte, puis s'enfonce d'un coup sec qui secoue l'arme
-      if (gun.mag) {
-        const out = ease(0.16, 0.32);
-        const back = ease(0.46, 0.7);
-        gun.mag.position.y = gun.magRest.y - (t < 0.39 ? out * out * 0.34 : (1 - back) * 0.24);
-        gun.mag.visible = t < 0.33 || t > 0.45;
+      // Où va la main gauche : chaque endroit, sur cette arme
+      const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      const magAt = gun.mag ? gun.magRest.clone().add(gun.pistol ? V(-0.022, -0.095, 0.015) : V(-0.036, -0.085, 0)) : rest.clone();
+      const pull = gun.pistol ? 0.035 : 0.06;
+      const anchors: Record<Anchor, () => THREE.Vector3> = {
+        rest: () => rest.clone(),
+        pouch: () => rest.clone().add(V(-0.16, -0.52, 0.32)),
+        mag: () => magAt.clone(),
+        magDown: () => magAt.clone().add(V(0, -0.06, 0)),
+        magUp: () => magAt.clone().add(V(0, 0.016, 0)),
+        below: () => magAt.clone().add(V(-0.025, -0.13, 0.05)),
+        bolt: () => gun.boltAt.clone(),
+        boltBack: () => gun.boltAt.clone().add(V(0, 0, pull)),
+        boltOut: () => gun.boltAt.clone().add(V(-0.07, -0.03, 0.07)),
+        port: () => V(-0.012, -0.006, -0.08),
+        portBelow: () => V(-0.03, -0.1, -0.05),
+        portIn: () => V(-0.012, 0.01, -0.095),
+        pumpBack: () => rest.clone().add(V(0, 0, 0.09)),
+        hinge: () => V(-0.03, 0.02, -0.22),
+        hingeUp: () => V(-0.03, 0.07, -0.22),
+        chamber: () => V(-0.012, 0.1, -0.09),
+        chamberBelow: () => V(-0.05, -0.02, -0.03),
+        chamberIn: () => V(-0.012, 0.08, -0.09),
+        cyl: () => V(-0.045, 0.06, -0.05),
+        cylPush: () => V(-0.045, 0.06, -0.03),
+        cylBelow: () => V(-0.075, -0.05, 0.0),
+        cylFlick: () => V(-0.01, 0.08, -0.05),
+      };
+      const keys = plan.hand;
+      let k = 0;
+      while (k + 1 < keys.length - 1 && t >= keys[k + 1]![0]) k++;
+      const [t0, a0] = keys[k]!;
+      const [t1, a1] = keys[Math.min(k + 1, keys.length - 1)]!;
+      const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1;
+      const hand = anchors[a0]().lerp(anchors[a1](), u * u * (3 - 2 * u));
+      if (left) left.position.copy(hand).sub(rest);
+      // Le chargeur : arraché avec la main, lâché (il tombe hors de vue), absent, revenu dans la main, enfoncé
+      if (gun.mag && plan.mag) {
+        const m = plan.mag;
+        gun.mag.visible = t < m.gone || t >= m.back;
+        gun.mag.rotation.x = 0;
+        if (t >= m.grab && t < m.drop) gun.mag.position.copy(gun.magRest).add(hand).sub(magAt);
+        else if (t >= m.drop && t < m.gone) {
+          const f = (t - m.drop) / (m.gone - m.drop);
+          gun.mag.position.copy(gun.magRest).add(V(-0.01 * f, -0.06 - f * f * 0.6, 0.06 * f));
+          gun.mag.rotation.x = f * 0.9;
+        } else if (t >= m.back && t < m.seat) {
+          gun.mag.position.copy(gun.magRest).add(hand).sub(magAt);
+          gun.mag.rotation.x = 0.3 * (1 - Math.min(1, (t - m.back) / (m.seat - m.back)));
+        } else gun.mag.position.copy(gun.magRest);
       }
-      const seat = t > 0.7 && t < 0.8 ? Math.sin(((t - 0.7) / 0.1) * Math.PI) : 0;
-      gun.group.position.y += seat * 0.014;
-      gun.group.rotation.x += seat * 0.06;
+      // La culasse ou la glissière : la main la tire en arrière, puis la lâche, elle claque en avant
+      if (gun.slide) {
+        let back = 0;
+        if (plan.bolt && t >= plan.bolt.grab && t < plan.bolt.release) back = Math.min(1, Math.max(0, (hand.z - gun.boltAt.z) / pull));
+        gun.slide.position.z = gun.slideRest + back * pull;
+      }
+      // La pompe, tirée puis repoussée par la main
+      if (plan.pump && t >= plan.pump.from && t <= plan.pump.to) pumpBack = Math.min(0.09, Math.max(0, hand.z - rest.z));
+      // Ce que la main apporte
+      if (this.vmCarry) this.vmCarry.visible = (plan.carry ?? []).some(([a, b]) => t >= a && t < b);
+      // Les petits chocs : le chargeur qui s'enclenche, la culasse qui claque, les canons qu'on referme
+      let jolt = 0;
+      for (const at of plan.jolts) if (t > at && t < at + 0.05) jolt = Math.max(jolt, Math.sin(((t - at) / 0.05) * Math.PI));
+      gun.group.position.y += jolt * 0.012;
+      gun.group.rotation.x += jolt * 0.05;
       // Les canons qui basculent, le barillet qui sort : ouverts au début, refermés d'un coup à la fin
       if (gun.hinge) {
         const open = ease(0.1, 0.24) - ease(0.76, 0.84);
         gun.hinge.rotation[gun.hingeAxis] = gun.hingeAxis === "x" ? -open * 0.55 : open * 1.3;
       }
-      // Le fusil à pompe : on réarme à la fin
-      if (t > 0.84) pumpBack = Math.sin(((t - 0.84) / 0.16) * Math.PI) * 0.09;
     } else {
       if (gun.mag) {
-        gun.mag.position.y = gun.magRest.y;
+        gun.mag.position.copy(gun.magRest);
+        gun.mag.rotation.x = 0;
         gun.mag.visible = true;
       }
       if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = 0;
+      if (gun.slide) gun.slide.position.z = gun.slideRest;
+      if (left) left.position.set(0, 0, 0);
+      if (this.vmCarry) this.vmCarry.visible = false;
     }
     if (gun.pump) gun.pump.position.z = gun.pumpRest + pumpBack;
     // Le couteau et la grenade passent devant

@@ -64,6 +64,11 @@ export interface Gun {
   /** La pompe du fusil à pompe, qui recule après chaque coup */
   pump: THREE.Object3D | null;
   pumpRest: number;
+  /** La glissière d'un pistolet, le levier d'armement d'un fusil : tirés en arrière en rechargeant (et leur place) */
+  slide: THREE.Object3D | null;
+  slideRest: number;
+  /** Où la main gauche attrape la glissière ou le levier */
+  boltAt: THREE.Vector3;
   /** La hauteur de la ligne de visée (dans le repère de l'arme) */
   sight: number;
   /** Où tient la main d'appui (z), et une arme de poing (les deux mains sur la poignée) */
@@ -187,6 +192,7 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
   let hinge: THREE.Object3D | null = null;
   let hingeAxis: "x" | "z" = "x";
   let pump: THREE.Object3D | null = null;
+  let slide: THREE.Object3D | null = null;
   let sight = 0.13;
   let front = -0.42;
   let pistol = false;
@@ -422,18 +428,20 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
       break;
     }
     case "pistolet": {
-      // Le pistolet : culasse striée, carcasse au camouflage, chargeur dans la poignée
-      box(0.03, 0.032, 0.19, metal, 0, 0.09, -0.08, g);
+      // Le pistolet : culasse striée (une glissière qui recule), carcasse au camouflage, chargeur dans la poignée
+      slide = magGroup(0, 0, 0);
+      box(0.03, 0.032, 0.19, metal, 0, 0.09, -0.08, slide);
       if (detail)
-        for (let k = 0; k < 4; k++) for (const s of [-1, 1]) box(0.003, 0.024, 0.004, darkMetal, s * 0.016, 0.09, -0.005 - k * 0.009, g);
+        for (let k = 0; k < 4; k++)
+          for (const s of [-1, 1]) box(0.003, 0.024, 0.004, darkMetal, s * 0.016, 0.09, -0.005 - k * 0.009, slide);
       box(0.028, 0.026, 0.17, body, 0, 0.062, -0.075, g);
       cyl(0.007, 0.012, darkMetal, 0, 0.09, -0.18, g, 8);
       box(0.032, 0.105, 0.048, body, 0, 0.0, 0.006, g, -0.25);
       box(0.006, 0.006, 0.045, darkMetal, 0, 0.034, -0.06, g);
       box(0.006, 0.024, 0.006, darkMetal, 0, 0.046, -0.082, g);
-      box(0.012, 0.012, 0.012, darkMetal, 0, 0.112, 0.0, g);
-      box(0.004, 0.01, 0.008, darkMetal, 0, 0.11, -0.165, g);
-      box(0.003, 0.012, 0.03, darkMetal, 0.016, 0.098, -0.07, g);
+      box(0.012, 0.012, 0.012, darkMetal, 0, 0.112, 0.0, slide);
+      box(0.004, 0.01, 0.008, darkMetal, 0, 0.11, -0.165, slide);
+      box(0.003, 0.012, 0.03, darkMetal, 0.016, 0.098, -0.07, slide);
       mag = magGroup(0, 0.0, 0.006);
       box(0.026, 0.012, 0.044, darkMetal, 0, -0.06, 0.013, mag, -0.25);
       eject.position.set(0.02, 0.1, -0.07);
@@ -470,17 +478,18 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
       break;
     }
     case "pa": {
-      // Le pistolet automatique : culasse à compensateur, long chargeur qui dépasse, poignée avant repliable
-      box(0.032, 0.034, 0.2, metal, 0, 0.09, -0.085, g);
-      box(0.032, 0.03, 0.035, darkMetal, 0, 0.09, -0.2, g);
-      if (detail) for (const s of [-1, 1]) box(0.004, 0.012, 0.02, metal, s * 0.017, 0.096, -0.2, g);
+      // Le pistolet automatique : culasse à compensateur (une glissière qui recule), long chargeur, poignée avant
+      slide = magGroup(0, 0, 0);
+      box(0.032, 0.034, 0.2, metal, 0, 0.09, -0.085, slide);
+      box(0.032, 0.03, 0.035, darkMetal, 0, 0.09, -0.2, slide);
+      if (detail) for (const s of [-1, 1]) box(0.004, 0.012, 0.02, metal, s * 0.017, 0.096, -0.2, slide);
       box(0.03, 0.028, 0.18, body, 0, 0.062, -0.08, g);
       box(0.034, 0.105, 0.05, body, 0, 0.0, 0.006, g, -0.25);
       box(0.006, 0.006, 0.05, darkMetal, 0, 0.034, -0.062, g);
       box(0.006, 0.026, 0.006, darkMetal, 0, 0.046, -0.088, g);
       box(0.02, 0.05, 0.022, polymer, 0, 0.025, -0.14, g, 0.15);
-      box(0.012, 0.012, 0.012, darkMetal, 0, 0.113, 0.0, g);
-      box(0.004, 0.01, 0.008, darkMetal, 0, 0.112, -0.17, g);
+      box(0.012, 0.012, 0.012, darkMetal, 0, 0.113, 0.0, slide);
+      box(0.004, 0.01, 0.008, darkMetal, 0, 0.112, -0.17, slide);
       box(0.004, 0.012, 0.012, brass, -0.017, 0.07, -0.01, g);
       mag = magGroup(0, 0.0, 0.006);
       box(0.026, 0.13, 0.042, darkMetal, 0, -0.1, 0.03, mag, -0.25);
@@ -491,6 +500,18 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
       pistol = true;
       break;
     }
+  }
+  // Le levier d'armement, sur le flanc gauche du boîtier (à droite, la boule du levier de culasse du fusil de
+  // précision) : la main gauche le tire en rechargeant ; la glissière d'un pistolet, on la saisit par l'arrière
+  let boltAt = new THREE.Vector3(0, 0.112, 0.012);
+  if (!pistol && id !== "pompe" && id !== "double") {
+    const side = id === "precision" ? 1 : -1;
+    slide = magGroup(side * 0.034, eject.position.y - 0.004, eject.position.z + 0.03);
+    box(0.006, 0.012, 0.05, darkMetal, side * -0.003, 0, 0.02, slide);
+    const lever = cyl(0.0055, 0.028, metal, side * 0.014, 0, 0, slide, 8);
+    lever.rotation.set(0, 0, Math.PI / 2);
+    ball(id === "precision" ? 0.011 : 0.008, darkMetal, side * 0.03, 0, 0, slide);
+    boltAt = slide.position.clone().add(new THREE.Vector3(side * 0.032, 0, 0));
   }
   // Les accessoires de l'arme principale : au bout du canon, sous le garde-main, le chargeur
   if (!pistol) {
@@ -529,6 +550,9 @@ export function buildGun(id: WeaponId, camo: CamoId, low = false, gear: Gear = N
     hingeAxis,
     pump,
     pumpRest: pump ? pump.position.z : 0,
+    slide,
+    slideRest: slide ? slide.position.z : 0,
+    boltAt,
     sight,
     front,
     pistol,

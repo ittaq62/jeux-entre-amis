@@ -13,7 +13,19 @@ export type EscSoundName =
   | "reload"
   | "mag-out"
   | "mag-in"
+  | "mag-release"
+  | "mag-slide"
+  | "mag-tap"
+  | "pouch"
   | "bolt"
+  | "bolt-back"
+  | "bolt-fwd"
+  | "slide-back"
+  | "slide-fwd"
+  | "shell-in"
+  | "hinge-open"
+  | "hinge-close"
+  | "brass"
   | "pump"
   | "empty"
   | "swap"
@@ -78,7 +90,19 @@ const WET: Partial<Record<string, number>> = {
   reload: 0.08,
   "mag-out": 0.08,
   "mag-in": 0.08,
+  "mag-release": 0.05,
+  "mag-slide": 0.05,
+  "mag-tap": 0.06,
+  pouch: 0.03,
   bolt: 0.08,
+  "bolt-back": 0.08,
+  "bolt-fwd": 0.1,
+  "slide-back": 0.07,
+  "slide-fwd": 0.09,
+  "shell-in": 0.06,
+  "hinge-open": 0.08,
+  "hinge-close": 0.1,
+  brass: 0.12,
   step: 0.06,
   land: 0.08,
   bounce: 0.15,
@@ -97,6 +121,72 @@ function noiseGen(seed: number) {
 
 function lowpassK(fc: number, sr: number) {
   return 1 - Math.exp((-2 * Math.PI * fc) / sr);
+}
+
+/**
+ * Les gestes du rechargement, en bruits : un déclic métallique (quelques modes qui sonnent et s'éteignent vite, un petit
+ * souffle à l'attaque), un choc sourd (une note grave qui tombe), un frottement (un bruit filtré en bande, granuleux, qui
+ * monte puis retombe). Le tout adouci dans l'aigu : rien de criard.
+ */
+type Foley =
+  | { k: "clink"; at: number; f: number[]; decay: number; amp: number }
+  | { k: "thump"; at: number; f: number; decay: number; amp: number }
+  | { k: "rub"; from: number; to: number; lo: number; hi: number; amp: number; grain?: number }
+  | { k: "ring"; at: number; f: number; to: number; decay: number; amp: number };
+
+function foley(d: Float32Array, sr: number, seed: number, parts: Foley[], soft = 6000) {
+  const n = noiseGen(seed);
+  const grainN = noiseGen(seed + 17);
+  for (const p of parts) {
+    if (p.k === "rub") {
+      const kHi = lowpassK(p.hi, sr);
+      const kLo = lowpassK(p.lo, sr);
+      let a = 0;
+      let b = 0;
+      let g = 1;
+      const i0 = Math.floor(p.from * sr);
+      const i1 = Math.min(d.length, Math.floor(p.to * sr));
+      for (let i = i0; i < i1; i++) {
+        const x = n();
+        a += kHi * (x - a);
+        b += kLo * (x - b);
+        // Le grain du frottement : l'intensité qui saute un peu, toutes les quelques millisecondes
+        if (i % Math.floor(sr * 0.004) === 0) g = 1 - (p.grain ?? 0.5) * Math.abs(grainN());
+        const u = (i - i0) / Math.max(1, i1 - i0);
+        d[i]! += (a - b) * p.amp * Math.sin(Math.PI * u) * g * 3;
+      }
+      continue;
+    }
+    const i0 = Math.floor(p.at * sr);
+    for (let i = i0; i < d.length; i++) {
+      const t = (i - i0) / sr;
+      if (p.k === "clink") {
+        let v = n() * 0.5 * Math.exp(-t / 0.0025);
+        p.f.forEach((f, j) => {
+          v += Math.sin(2 * Math.PI * f * t) * Math.exp(-t / (p.decay / (1 + j * 0.6))) * (1 / (1 + j * 0.5));
+        });
+        d[i]! += v * p.amp;
+        if (t > p.decay * 6) break;
+      } else if (p.k === "thump") {
+        const f = p.f * (1 + Math.exp(-t / 0.01) * 0.6);
+        d[i]! += Math.sin(2 * Math.PI * f * t) * Math.exp(-t / p.decay) * p.amp;
+        if (t > p.decay * 6) break;
+      } else {
+        const f = p.f + (p.to - p.f) * Math.min(1, t / (p.decay * 3));
+        d[i]! += Math.sin(2 * Math.PI * f * t) * Math.exp(-t / p.decay) * p.amp;
+        if (t > p.decay * 6) break;
+      }
+    }
+  }
+  // Adouci dans l'aigu, deux fois
+  const k = lowpassK(soft, sr);
+  let y1 = 0;
+  let y2 = 0;
+  for (let i = 0; i < d.length; i++) {
+    y1 += k * (d[i]! - y1);
+    y2 += k * (y1 - y2);
+    d[i] = y2;
+  }
 }
 
 export class EscSound {
@@ -607,32 +697,104 @@ export class EscSound {
           d[i] = v;
         }
       });
-    this.buffers.set("mag-out", clicks(0.12, [[0.005, 1800]], 5));
-    this.buffers.set(
-      "mag-in",
-      clicks(
-        0.16,
-        [
-          [0.005, 1300],
-          [0.055, 2400],
-        ],
-        6,
-      ),
-    );
     this.buffers.set("bolt", clicks(0.14, [[0.005, 900]], 7));
+    // Le rechargement, geste par geste
+    const fx = (name: EscSoundName, len: number, seed: number, parts: Foley[], soft?: number) =>
+      this.buffers.set(
+        name,
+        this.make(len, (d, sr) => foley(d, sr, seed, parts, soft)),
+      );
+    fx("mag-release", 0.1, 31, [
+      { k: "clink", at: 0.004, f: [1700, 3000], decay: 0.006, amp: 0.7 },
+      { k: "rub", from: 0.0, to: 0.03, lo: 1400, hi: 3800, amp: 0.25 },
+    ]);
+    fx("mag-out", 0.3, 32, [
+      { k: "rub", from: 0.0, to: 0.16, lo: 600, hi: 2600, amp: 0.4, grain: 0.6 },
+      { k: "clink", at: 0.16, f: [1300, 2800], decay: 0.012, amp: 0.75 },
+      { k: "thump", at: 0.16, f: 210, decay: 0.02, amp: 0.3 },
+    ]);
+    fx(
+      "pouch",
+      0.42,
+      33,
+      [
+        { k: "rub", from: 0.0, to: 0.13, lo: 250, hi: 1500, amp: 0.55, grain: 0.8 },
+        { k: "rub", from: 0.16, to: 0.32, lo: 300, hi: 1700, amp: 0.4, grain: 0.8 },
+        { k: "thump", at: 0.33, f: 140, decay: 0.03, amp: 0.25 },
+      ],
+      4000,
+    );
+    fx("mag-slide", 0.13, 34, [{ k: "rub", from: 0.0, to: 0.12, lo: 700, hi: 2600, amp: 0.45, grain: 0.5 }]);
+    fx("mag-in", 0.28, 35, [
+      { k: "clink", at: 0.004, f: [1100, 2350, 3700], decay: 0.022, amp: 1 },
+      { k: "thump", at: 0.004, f: 160, decay: 0.04, amp: 0.65 },
+      { k: "clink", at: 0.032, f: [1650, 3050], decay: 0.009, amp: 0.3 },
+    ]);
+    fx("mag-tap", 0.14, 36, [
+      { k: "thump", at: 0.003, f: 120, decay: 0.03, amp: 0.85 },
+      { k: "rub", from: 0.0, to: 0.016, lo: 300, hi: 1800, amp: 0.45 },
+      { k: "clink", at: 0.004, f: [880], decay: 0.01, amp: 0.25 },
+    ]);
+    fx("bolt-back", 0.3, 37, [
+      { k: "clink", at: 0.004, f: [1500, 3200], decay: 0.008, amp: 0.5 },
+      { k: "rub", from: 0.01, to: 0.13, lo: 700, hi: 3000, amp: 0.5, grain: 0.55 },
+      { k: "ring", at: 0.02, f: 420, to: 300, decay: 0.07, amp: 0.12 },
+      { k: "clink", at: 0.13, f: [1200, 2600], decay: 0.012, amp: 0.55 },
+    ]);
+    fx("bolt-fwd", 0.36, 38, [
+      { k: "clink", at: 0.004, f: [950, 2450, 4100], decay: 0.05, amp: 1 },
+      { k: "thump", at: 0.004, f: 140, decay: 0.05, amp: 0.7 },
+      { k: "clink", at: 0.036, f: [1800, 3300], decay: 0.008, amp: 0.2 },
+    ]);
+    fx("slide-back", 0.2, 39, [
+      { k: "rub", from: 0.005, to: 0.07, lo: 900, hi: 3500, amp: 0.45, grain: 0.5 },
+      { k: "clink", at: 0.07, f: [1700, 3300], decay: 0.008, amp: 0.5 },
+    ]);
+    fx("slide-fwd", 0.3, 40, [
+      { k: "clink", at: 0.004, f: [1300, 2900, 4500], decay: 0.035, amp: 1 },
+      { k: "thump", at: 0.004, f: 190, decay: 0.035, amp: 0.5 },
+    ]);
+    fx("shell-in", 0.22, 41, [
+      { k: "rub", from: 0.0, to: 0.05, lo: 500, hi: 2000, amp: 0.4, grain: 0.4 },
+      { k: "clink", at: 0.05, f: [1400, 2700], decay: 0.01, amp: 0.7 },
+      { k: "thump", at: 0.05, f: 200, decay: 0.02, amp: 0.35 },
+    ]);
+    fx("hinge-open", 0.36, 42, [
+      { k: "clink", at: 0.004, f: [1800, 3100], decay: 0.008, amp: 0.6 },
+      { k: "thump", at: 0.03, f: 130, decay: 0.06, amp: 0.5 },
+      { k: "clink", at: 0.05, f: [700, 1700], decay: 0.04, amp: 0.6 },
+    ]);
+    fx("hinge-close", 0.36, 43, [
+      { k: "thump", at: 0.004, f: 110, decay: 0.06, amp: 0.9 },
+      { k: "clink", at: 0.004, f: [800, 2100, 3500], decay: 0.05, amp: 0.9 },
+      { k: "clink", at: 0.022, f: [2300], decay: 0.008, amp: 0.3 },
+    ]);
+    fx(
+      "brass",
+      0.62,
+      44,
+      [0, 0.07, 0.12, 0.22, 0.29, 0.41].map((at, j): Foley => ({
+        k: "clink",
+        at,
+        f: [1900 + j * 120, 3200 + j * 80],
+        decay: 0.035,
+        amp: 0.55 - j * 0.07,
+      })),
+      5000,
+    );
+    // La pompe (et la culasse du fusil de précision) : tirée en arrière, un frottement et un arrêt ; repoussée, un claquement
     this.buffers.set(
       "pump",
-      this.make(0.35, (d, sr) => {
-        const n = noiseGen(9);
-        let lp = 0;
-        const k = lowpassK(2500, sr);
-        for (let i = 0; i < d.length; i++) {
-          const t = i / sr;
-          lp += k * (n() - lp);
-          const a = Math.exp(-t / 0.02) + (t > 0.16 ? Math.exp(-(t - 0.16) / 0.02) : 0);
-          d[i] = lp * a;
-        }
-      }),
+      this.make(0.42, (d, sr) =>
+        foley(d, sr, 9, [
+          { k: "rub", from: 0.0, to: 0.1, lo: 400, hi: 2000, amp: 0.5, grain: 0.5 },
+          { k: "clink", at: 0.1, f: [900, 2100], decay: 0.02, amp: 0.8 },
+          { k: "thump", at: 0.1, f: 170, decay: 0.03, amp: 0.4 },
+          { k: "rub", from: 0.16, to: 0.24, lo: 450, hi: 2200, amp: 0.45, grain: 0.5 },
+          { k: "clink", at: 0.24, f: [1000, 2400, 3900], decay: 0.03, amp: 1 },
+          { k: "thump", at: 0.24, f: 150, decay: 0.04, amp: 0.6 },
+        ]),
+      ),
     );
     this.buffers.set("empty", this.click(0.05, 3000, 3));
     this.buffers.set("swap", this.click(0.12, 900, 4));

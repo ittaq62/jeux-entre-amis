@@ -47,7 +47,8 @@ import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared
 import { AutoQuality } from "../lib/autoQuality.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
-import { EscSound, type EscSoundName } from "./escSound.ts";
+import { EscSound } from "./escSound.ts";
+import { RELOAD_PLANS, RELOAD_VOLUME, reloadKind } from "./reload.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
 import type { Surface } from "./scene/effects.ts";
 import { drawCompass, Radar, type RadarDot } from "./radar.ts";
@@ -1434,31 +1435,21 @@ export class BattleRuntime {
   }
 
   /**
-   * Les bruits de son rechargement, calés sur le geste de l'arme en main : le chargeur qui sort, le plein qui s'enfonce,
-   * la culasse ; les canons ou le barillet qui s'ouvrent puis claquent ; les cartouches du fusil à pompe, qu'on réarme à
-   * la fin. Interrompu (une autre arme, la mort), il se tait.
+   * Les bruits de son rechargement, calés sur le geste de l'arme en main (la même table que l'image) : le déclic du
+   * bouton, le chargeur qui glisse et sort, la poche, le plein qui glisse et s'enclenche, la tape, la culasse tirée puis
+   * relâchée ; les cartouches poussées une à une et la pompe ; les canons ou le barillet qui s'ouvrent, les douilles,
+   * le claquement de la fermeture. Interrompu (une autre arme, la mort), il se tait.
    */
   private reloadSounds(w: WeaponDef) {
     const end = this.pred?.reloadEnd ?? 0;
-    const at = (k: number, name: EscSoundName) =>
+    for (const [k, name] of RELOAD_PLANS[reloadKind(w.id)].sounds)
       setTimeout(
         () => {
-          if (this.running && end > 0 && Math.abs((this.pred?.reloadEnd ?? 0) - end) < 0.05) this.sound.play(name, { volume: 0.6 });
+          if (this.running && end > 0 && Math.abs((this.pred?.reloadEnd ?? 0) - end) < 0.05)
+            this.sound.play(name, { volume: RELOAD_VOLUME[name] ?? 0.55, gap: 60 });
         },
         k * w.reload * 1000,
       );
-    if (w.id === "pompe") {
-      for (const k of [0.15, 0.4, 0.65]) at(k, "mag-in");
-      at(0.86, "pump");
-    } else if (w.id === "double" || w.id === "revolver") {
-      at(0.17, "mag-out");
-      at(0.5, "mag-in");
-      at(0.8, "bolt");
-    } else {
-      at(0.18, "mag-out");
-      at(0.72, "mag-in");
-      at(0.88, "bolt");
-    }
   }
 
   /** Ce soldat tire-t-il au silencieux (avec son arme principale) ? */
