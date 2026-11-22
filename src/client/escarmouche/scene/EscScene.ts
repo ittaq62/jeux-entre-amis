@@ -144,7 +144,7 @@ export class EscScene {
     this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = night ? 1.3 : light === "neige" ? 1.02 : light === "soir" ? 1.12 : 1.15;
+    this.renderer.toneMappingExposure = night ? 1.3 : light === "neige" ? 1.02 : light === "soir" ? 1.12 : light === "midi" ? 0.98 : 1.15;
     this.renderer.autoClear = false;
     if (q !== "bas") {
       this.renderer.shadowMap.enabled = true;
@@ -167,10 +167,10 @@ export class EscScene {
     }
     this.scene.add(hemi);
     this.sunDir = sunDirection(light);
-    this.rayPower = light === "gris" || night ? 0 : light === "neige" ? 0.4 : light === "aube" ? 0.9 : 1;
+    this.rayPower = light === "gris" || night ? 0 : light === "neige" ? 0.4 : light === "aube" ? 0.9 : light === "midi" ? 0.5 : 1;
     this.sun = new THREE.DirectionalLight(
       look.sunColor,
-      night ? 0.85 : light === "neige" ? 2 : light === "soir" ? 2.8 : light === "aube" ? 2.6 : 1.7,
+      night ? 0.85 : light === "neige" ? 2 : light === "soir" ? 2.8 : light === "aube" ? 2.6 : light === "midi" ? 3.1 : 1.7,
     );
     this.sun.position.copy(this.sunDir).multiplyScalar(90);
     if (q !== "bas") {
@@ -281,7 +281,7 @@ export class EscScene {
       vmHemi.intensity = 3.2;
     }
     this.vmScene.add(vmHemi);
-    const vmSun = new THREE.DirectionalLight(look.sunColor, night ? 3.2 : light === "soir" ? 2.3 : 1.8);
+    const vmSun = new THREE.DirectionalLight(look.sunColor, night ? 3.2 : light === "soir" ? 2.3 : light === "midi" ? 2.2 : 1.8);
     vmSun.position.set(-1, 2, 1);
     this.vmScene.add(vmSun);
     // Une lumière froide venue de devant, en haut à droite : elle accroche les arêtes du dessus de l'arme
@@ -341,7 +341,9 @@ export class EscScene {
               ? { tint: "#fff7ee", saturation: 1.04, contrast: 1.06, bloom: 0.3 }
               : light === "aube"
                 ? { tint: "#fff4f0", saturation: 1.02, contrast: 1.07, bloom: 0.2 }
-                : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
+                : light === "midi"
+                  ? { tint: "#fff6ea", saturation: 1.05, contrast: 1.08, bloom: 0.22 }
+                  : { tint: "#eef3f6", saturation: 0.9, contrast: 1.12, bloom: 0.22 },
       );
     void opts.teams;
   }

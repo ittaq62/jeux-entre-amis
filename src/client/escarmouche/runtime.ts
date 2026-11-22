@@ -1689,6 +1689,7 @@ function surfaceOf(m: Mat | undefined): Surface {
       return "wood";
     case "herbe":
     case "terre":
+    case "sable":
     case "sol":
     case "gravier":
     case "foin":

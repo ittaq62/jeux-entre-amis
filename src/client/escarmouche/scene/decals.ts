@@ -13,6 +13,7 @@ const LOOK: Record<GameMap["light"], { puddles: number; stains: number; water: s
   aube: { puddles: 22, stains: 26, water: "#9a9aa0", stain: "#141312" },
   soir: { puddles: 12, stains: 0, water: "#8a7c66", stain: "#1b1a18" },
   neige: { puddles: 0, stains: 0, water: "#9aa4ac", stain: "#1b1a18" },
+  midi: { puddles: 0, stains: 12, water: "#9a8a70", stain: "#3a2a1c" },
 };
 
 /** Les sols où l'eau stagne (pas l'herbe, ni les toits) */

@@ -8,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col" | "ruines";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert"];
 
 export interface Spawn {
   x: number;
@@ -64,7 +64,11 @@ export type Decor =
   /** Une horloge sur une façade : centre, direction vers où elle regarde */
   | { k: "clock"; x: number; y: number; z: number; nx: number; nz: number }
   /** Une voiture brûlée (ou un autobus, s'il est long) : ses roues, ses vitres crevées, sa couleur sous la suie */
-  | { k: "car"; x0: number; z0: number; x1: number; z1: number; color: string };
+  | { k: "car"; x0: number; z0: number; x1: number; z1: number; color: string }
+  /** Un palmier : son stipe qui se courbe un peu, ses palmes en couronne */
+  | { k: "palm"; x: number; z: number; h: number }
+  /** Une toile tendue (l'auvent d'un souk) : rayée, un peu creusée, à la hauteur y */
+  | { k: "awning"; x0: number; z0: number; x1: number; z1: number; y: number; color: string };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -101,8 +105,8 @@ export interface GameMap {
   points: [Point3, Point3, Point3];
   /** Les deux dépôts du sabotage, du côté est (les bleus les défendent) */
   depots: [Point3, Point3];
-  /** L'heure et le temps qu'il fait : seulement pour l'image */
-  light: "soir" | "gris" | "aube" | "neige";
+  /** L'heure et le temps qu'il fait : seulement pour l'image (`midi` : le plein soleil du désert) */
+  light: "soir" | "gris" | "aube" | "neige" | "midi";
   /** La mer, au nord, au-delà du quai (seulement pour l'image) */
   sea?: boolean;
 }
@@ -121,6 +125,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     name: "La Ville en ruines",
     blurb:
       "Un centre-ville bombardé : des immeubles éventrés où l'on monte à l'étage, une avenue encombrée de voitures brûlées, le grand magasin sans toit, la place et sa fontaine.",
+  },
+  desert: {
+    name: "Le Village du désert",
+    blurb:
+      "Des maisons d'enduit ocre sous le soleil de midi : le souk couvert de toiles, la grand-rue et sa tour de guet, la palmeraie et ses murets, le bassin de l'oasis au milieu. On monte sur les toits-terrasses.",
   },
   port: {
     name: "Le Port",
@@ -186,10 +195,12 @@ class Builder {
       case "patch":
       case "water":
       case "wire":
+      case "awning":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
       case "tree":
       case "pine":
+      case "palm":
       case "lamp":
       case "tower":
         this.decor.push({ ...d, x: -d.x, z: -d.z });
@@ -1453,18 +1464,299 @@ function ruines(): GameMap {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Le Village du désert
+// ---------------------------------------------------------------------------
+
+/**
+ * Une maison du désert, à toit-terrasse : ses murs (portes, fenêtres) montent 90 cm au-dessus du toit pour faire un
+ * parapet. Avec `floors: 2`, un étage et son escalier intérieur. `climb` : un escalier extérieur le long d'un mur, qui
+ * monte sur la terrasse par une brèche du parapet.
+ */
+function flatHouse(
+  b: Builder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  o: {
+    open: Opening[];
+    wall: Mat;
+    floors?: 1 | 2;
+    stairs?: { axis: "x" | "z"; start: number; dir: 1 | -1; c0: number; c1: number };
+    climb?: { side: Side; axis: "x" | "z"; start: number; dir: 1 | -1; c0: number; c1: number; gap: [number, number] };
+  },
+) {
+  const floors = o.floors ?? 1;
+  const roof = floors === 2 ? STORY * 2 + SLAB : STORY + SLAB;
+  const top = roof + 0.9;
+  const holesFor = (side: Side) => {
+    const out = o.open
+      .filter((p) => p.side === side)
+      .map((p) => {
+        const base = (p.floor ?? 0) === 1 ? STORY + SLAB : 0;
+        const [lo, hi] = p.kind === "door" ? [0, 2.3] : p.kind === "big" ? [0, 2.9] : [1.05, 2.1];
+        return { a: p.at, b: p.at + p.w, y0: base + lo, y1: base + hi };
+      });
+    if (o.climb && o.climb.side === side) out.push({ a: o.climb.gap[0], b: o.climb.gap[1], y0: roof, y1: top + 0.1 });
+    return out;
+  };
+  b.wall("x", x0, x1, z0 + WALL / 2, WALL, 0, top, holesFor("s"), o.wall);
+  b.wall("x", x0, x1, z1 - WALL / 2, WALL, 0, top, holesFor("n"), o.wall);
+  b.wall("z", z0 + WALL, z1 - WALL, x0 + WALL / 2, WALL, 0, top, holesFor("w"), o.wall);
+  b.wall("z", z0 + WALL, z1 - WALL, x1 - WALL / 2, WALL, 0, top, holesFor("e"), o.wall);
+  if (floors === 2 && o.stairs) {
+    const st = o.stairs;
+    const r = b.stairs(st.axis, st.start, st.dir, st.c0, st.c1, 0, STORY + SLAB, "planche");
+    const pad = 0.4;
+    const hole: [number, number, number, number] =
+      st.axis === "z"
+        ? [r[0], st.dir === 1 ? r[1] - pad : r[1], r[2], st.dir === 1 ? r[3] : r[3] + pad]
+        : [st.dir === 1 ? r[0] - pad : r[0], r[1], st.dir === 1 ? r[2] : r[2] + pad, r[3]];
+    b.slab(x0 + WALL, z0 + WALL, x1 - WALL, z1 - WALL, STORY, STORY + SLAB, hole, "planche");
+  }
+  // Le toit-terrasse
+  b.box(x0 + WALL, roof - SLAB, z0 + WALL, x1 - WALL, roof, z1 - WALL, o.wall);
+  if (o.climb) {
+    const c = o.climb;
+    b.stairs(c.axis, c.start, c.dir, c.c0, c.c1, 0, roof, o.wall);
+  }
+  const where: Record<Side, { axis: "x" | "z"; c: number; out: 1 | -1 }> = {
+    s: { axis: "x", c: z0 + WALL / 2, out: -1 },
+    n: { axis: "x", c: z1 - WALL / 2, out: 1 },
+    w: { axis: "z", c: x0 + WALL / 2, out: -1 },
+    e: { axis: "z", c: x1 - WALL / 2, out: 1 },
+  };
+  const open: Hole[] = (["n", "s", "e", "w"] as Side[]).flatMap((side) =>
+    o.open
+      .filter((q) => q.side === side)
+      .map((p) => {
+        const h = holesFor(side).find((x) => x.a === p.at)!;
+        return { ...where[side], a0: h.a, a1: h.b, y0: h.y0, y1: h.y1, kind: p.kind };
+      }),
+  );
+  b.add({ k: "house", x0, z0, x1, z1, top, wall: o.wall, open });
+}
+
+/** Une maison du bord, où l'on n'entre pas : un cube d'enduit à toit plat, ses fenêtres closes */
+function blindHouse(b: Builder, x0: number, z0: number, x1: number, z1: number, h: number, m: Mat) {
+  b.box(x0, 0, z0, x1, h, z1, m);
+  b.add({ k: "house", x0, z0, x1, z1, top: h, wall: m, open: [], blind: true });
+}
+
+/** Un palmier : son stipe arrête les balles, ses palmes ne sont que du décor */
+function palmTree(b: Builder, x: number, z: number, h = 7) {
+  b.box(x - 0.2, 0, z - 0.2, x + 0.2, h * 0.75, z + 0.2, "bois");
+  b.add({ k: "palm", x, z, h });
+}
+
+function desertSide(b: Builder) {
+  // Les maisons du bord, au nord et au sud
+  blindHouse(b, -48, 26, -38, 30, 5.5, "ocre");
+  blindHouse(b, -38, 25.4, -30, 30, 7.2, "ocre");
+  blindHouse(b, -30, 26, -22, 30, 5, "crepi");
+  blindHouse(b, -22, 25.6, -12, 30, 6.6, "ocre");
+  blindHouse(b, -12, 26, 0, 30, 5.8, "ocre");
+  blindHouse(b, -48, -30, -36, -26, 6, "ocre");
+  blindHouse(b, -36, -30, -28, -25.6, 4.8, "crepi");
+  blindHouse(b, -28, -30, -18, -26, 6.8, "ocre");
+  blindHouse(b, -18, -30, -8, -26, 5.2, "ocre");
+  blindHouse(b, -8, -30, 0, -25.6, 6, "crepi");
+
+  // La kasbah, la base : ses hauts murs, deux portes vers le village, un mur entre elles pour s'abriter
+  b.box(-48, 0, 12, -38, 3.6, 12.6, "ocre");
+  b.box(-48, 0, -12.6, -38, 3.6, -12, "ocre");
+  b.box(-48, 0, -12, -47.4, 3.6, 12, "ocre");
+  b.box(-38.6, 0, -12, -38, 3.2, -7, "ocre");
+  b.box(-38.6, 0, -3, -38, 3.2, 3, "ocre");
+  b.box(-38.6, 0, 7, -38, 3.2, 12, "ocre");
+  b.crate(-46.4, -10.8);
+  b.crate(-45.2, -10.8);
+  b.crate(-46.4, -10.8, 1.2, 1.2, 1.2);
+  palmTree(b, -45, 9.6, 6.5);
+
+  // Le souk, au nord : une rue couverte de toiles rayées, des étals de chaque côté
+  const colors = ["#b33a2a", "#2c5a8a", "#c9902c", "#3f6b3a"];
+  for (let k = 0; k < 7; k++) {
+    const xa = -38 + k * 4;
+    b.add({ k: "awning", x0: xa, z0: 18, x1: xa + 4, z1: 24.8, y: 3.25, color: colors[k % 4]! });
+    for (const z of [18.1, 24.7]) b.box(xa - 0.07, 0, z - 0.07, xa + 0.07, 3.2, z + 0.07, "bois");
+  }
+  for (const z of [18.1, 24.7]) b.box(-10.07, 0, z - 0.07, -9.93, 3.2, z + 0.07, "bois");
+  for (const x of [-35, -26.5, -18]) b.box(x, 0, 23.3, x + 1.8, 0.9, 24.1, "bois");
+  for (const x of [-31, -22.5]) b.box(x, 0, 18.2, x + 1.8, 0.9, 19, "bois");
+  b.crate(-14.2, 23.8);
+  b.crate(-27.6, 19.3, 0.8, 0.8);
+
+  // Deux maisons entre le souk et la grand-rue, à toit-terrasse, un escalier dehors pour y monter
+  flatHouse(b, -36, 9, -28, 16.5, {
+    open: [
+      { side: "n", at: -33, w: 1.4, kind: "door" },
+      { side: "s", at: -31, w: 1.4, kind: "door" },
+      { side: "e", at: 11.5, w: 1.4, kind: "door" },
+      { side: "s", at: -34.6, w: 1.1, kind: "win" },
+      { side: "n", at: -30.2, w: 1.1, kind: "win" },
+    ],
+    wall: "ocre",
+    climb: { side: "w", axis: "z", start: 10, dir: 1, c0: -37.5, c1: -36.1, gap: [12.6, 14.2] },
+  });
+  flatHouse(b, -24, 10, -16, 16.5, {
+    open: [
+      { side: "n", at: -21, w: 1.4, kind: "door" },
+      { side: "s", at: -19.4, w: 1.4, kind: "door" },
+      { side: "w", at: 12.4, w: 1.4, kind: "door" },
+      { side: "s", at: -22.8, w: 1.1, kind: "win" },
+      { side: "n", at: -18, w: 1.1, kind: "win" },
+    ],
+    wall: "ocre",
+    climb: { side: "e", axis: "z", start: 10.4, dir: 1, c0: -15.9, c1: -14.5, gap: [13, 14.6] },
+  });
+
+  // La grand-rue : une charrette, des caisses, des jarres (des bidons qu'on évite), un muret, des palmiers
+  b.box(-33.2, 0, 1, -31, 1.1, 2.3, "bois");
+  b.crate(-26.4, -3.2);
+  b.crate(-25.2, -3.2, 1.2, 0.9);
+  b.box(-22.4, 0, 0.4, -22, 1.1, 3.2, "ocre");
+  palmTree(b, -34, 7.4, 7);
+  palmTree(b, -21, -7.4, 6.6);
+  b.barrel(-29.4, 4.6);
+  b.barrel(-12.6, 1.6);
+
+  // La tour de guet, au bord de la place : un étage, des fenêtres de tous côtés
+  flatHouse(b, -16, -11.5, -11, -6, {
+    floors: 2,
+    open: [
+      { side: "n", at: -14.2, w: 1.4, kind: "door" },
+      { side: "w", at: -9.6, w: 1.4, kind: "door" },
+      { side: "e", at: -9.4, w: 1, kind: "win", floor: 1 },
+      { side: "n", at: -13.9, w: 1, kind: "win", floor: 1 },
+      { side: "w", at: -9.2, w: 1, kind: "win", floor: 1 },
+      { side: "s", at: -14, w: 1, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -15.6, dir: 1, c0: -11.2, c1: -9.9 },
+    wall: "ocre",
+  });
+
+  // La palmeraie, au sud : des murets de terre entre les jardins, une rigole, des palmiers, une cabane
+  b.box(-36.2, 0, -22, -35.8, 1.1, -15, "ocre");
+  b.box(-30, 0, -16.2, -24, 1.1, -15.8, "ocre");
+  b.box(-22.2, 0, -24, -21.8, 1.1, -18, "ocre");
+  b.box(-16, 0, -21.2, -10, 1.1, -20.8, "ocre");
+  b.box(-8.2, 0, -18, -7.8, 1.1, -13, "ocre");
+  b.add({ k: "water", x0: -38, z0: -19.3, x1: -10, z1: -18.7, y: 0.05 });
+  for (const [x, z, h] of [
+    [-38, -24, 7.2],
+    [-33, -19, 6.4],
+    [-26.6, -23.4, 7.6],
+    [-25.6, -13.6, 6.8],
+    [-18.6, -16.6, 7],
+    [-13, -24, 6.6],
+    [-9.4, -15.4, 7.4],
+  ] as const)
+    palmTree(b, x, z, h);
+  flatHouse(b, -32, -25.6, -27.6, -21.4, {
+    open: [
+      { side: "n", at: -30.8, w: 1.4, kind: "door" },
+      { side: "e", at: -24.4, w: 1.1, kind: "win" },
+    ],
+    wall: "crepi",
+    climb: { side: "w", axis: "z", start: -21.6, dir: -1, c0: -33.5, c1: -32.1, gap: [-24.8, -23.2] },
+  });
+  b.add({ k: "patch", x0: -38, z0: -25, x1: -10, z1: -13, m: "terre" });
+
+  // Le bord de la place : une arcade (des piliers et leur linteau), des palmiers autour du bassin
+  for (let x = -9; x <= -3; x += 2) b.box(x - 0.3, 0, 8.4, x + 0.3, 2.8, 9, "ocre");
+  b.box(-9.3, 2.8, 8.4, -2.7, 3.3, 9, "ocre");
+  palmTree(b, -4.6, 4.6, 7.6);
+  palmTree(b, -4.6, -4.6, 6.8);
+}
+
+function desert(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "sable");
+  fence(b, -48, -30, 48, 30);
+  // Au milieu : le bassin de l'oasis, sa margelle qu'on enjambe, l'eau
+  b.box(-2.6, 0, 2.2, 2.2, 0.35, 2.6, "ocre");
+  b.box(-2.2, 0, -2.6, 2.6, 0.35, -2.2, "ocre");
+  b.box(2.2, 0, -2.2, 2.6, 0.35, 2.6, "ocre");
+  b.box(-2.6, 0, -2.6, -2.2, 0.35, 2.2, "ocre");
+  b.add({ k: "water", x0: -2.2, z0: -2.2, x1: 2.2, z1: 2.2, y: 0.18 });
+  b.add({ k: "patch", x0: -7, z0: -7, x1: 7, z1: 7, m: "pave" });
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    desertSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-44, 6, 0, 6),
+      b.spawn(-43, -9, 0, -9),
+      b.spawn(-42, 9, 0, 9),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-30, 21.4, 0, 21.4),
+      b.spawn(-26, -19, 0, -19),
+      b.spawn(-30, -1, 0, 0),
+      b.spawn(-20, 13, 0, 13),
+      b.spawn(-13.5, -8.5, 0, 0),
+    );
+    ffa.push(b.spawn(-7, 6, 0, 0));
+  }
+  b.s = 1;
+  return {
+    id: "desert",
+    ...MAP_NAMES.desert,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 24, y: 0, z: 18.5 },
+      { x: 22, y: 0, z: -4 },
+    ],
+    points: [
+      { x: -27, y: 0, z: 21.4 },
+      { x: 0, y: 0, z: 0 },
+      { x: 27, y: 0, z: -21.4 },
+    ],
+    light: "midi",
+  };
+}
+
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {
   let m = cache.get(id);
   if (!m) {
-    m = id === "gare" ? gare() : id === "port" ? port() : id === "col" ? col() : id === "ruines" ? ruines() : hameau();
+    m =
+      id === "gare"
+        ? gare()
+        : id === "port"
+          ? port()
+          : id === "col"
+            ? col()
+            : id === "ruines"
+              ? ruines()
+              : id === "desert"
+                ? desert()
+                : hameau();
     cache.set(id, m);
   }
   return m;
 }
 
 export function isMapId(v: unknown): v is MapId {
-  return v === "hameau" || v === "gare" || v === "port" || v === "col" || v === "ruines";
+  return v === "hameau" || v === "gare" || v === "port" || v === "col" || v === "ruines" || v === "desert";
 }

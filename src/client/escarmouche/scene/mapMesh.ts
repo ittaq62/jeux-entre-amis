@@ -19,6 +19,10 @@ const TINT: Partial<Record<Mat, string>> = {
 /** Comment chaque matière prend la lumière : sa rugosité, son éclat de métal, la force de son relief */
 const LOOK: Partial<Record<Mat, { rough: number; metal?: number; bump: number }>> = {
   pierre: { rough: 0.92, bump: 1.6 },
+  sable: { rough: 1, bump: 0.9 },
+  ocre: { rough: 0.95, bump: 0.8 },
+  brique: { rough: 0.9, bump: 1.6 },
+  roche: { rough: 0.94, bump: 1.9 },
   crepi: { rough: 0.96, bump: 0.7 },
   crepi2: { rough: 0.96, bump: 0.7 },
   bois: { rough: 0.82, bump: 1.1 },
@@ -46,6 +50,10 @@ const LOOK: Partial<Record<Mat, { rough: number; metal?: number; bump: number }>
  * de loin. Des taches plus claires ou plus sombres, larges de plusieurs mètres, les cassent (la force de l'effet).
  */
 const MACRO: Partial<Record<Mat, number>> = {
+  sable: 0.3,
+  ocre: 0.18,
+  brique: 0.14,
+  roche: 0.22,
   pave: 0.3,
   sol: 0.3,
   terre: 0.3,
@@ -214,7 +222,7 @@ export interface MapMesh {
 }
 
 /** Les matières dont les blocs isolés et les poteaux prennent des arêtes chanfreinées */
-const CHAMFER = new Set<Mat>(["pierre", "crepi", "crepi2", "bois", "planche", "beton", "metal", "rouille"]);
+const CHAMFER = new Set<Mat>(["pierre", "crepi", "crepi2", "bois", "planche", "beton", "metal", "rouille", "ocre", "brique", "roche"]);
 /** Les matières qui reçoivent de la neige sur le dessus, au col */
 const SNOWY = new Set<Mat>(["pierre", "crepi", "crepi2", "bois", "planche", "beton", "metal", "rouille", "tuile", "wagon", "wagon2"]);
 
@@ -267,7 +275,7 @@ function addDetails(
       h <= 1.6 &&
       thin <= 0.8 &&
       long >= 1.5 &&
-      (bx.m === "pierre" || bx.m === "crepi" || bx.m === "crepi2" || bx.m === "beton");
+      (bx.m === "pierre" || bx.m === "crepi" || bx.m === "crepi2" || bx.m === "beton" || bx.m === "ocre" || bx.m === "brique");
     if (muret)
       addChamferBox(
         bucket(bx.m),
@@ -682,6 +690,169 @@ function tree(d: Extract<Decor, { k: "tree" }>, group: THREE.Group, q: Quality) 
   crown.castShadow = true;
   group.add(crown);
 }
+/**
+ * Un palmier : un stipe annelé qui se courbe un peu (penché d'un côté toujours le même pour un même palmier), et une
+ * couronne de palmes longues qui retombent, chacune pliée en gouttière, plus claires au-dessus
+ */
+function palm(d: Extract<Decor, { k: "palm" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  let seed = Math.abs(Math.round(d.x * 59 + d.z * 37)) + 3;
+  const r = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const lean = r() * Math.PI * 2;
+  const bend = 0.08 + r() * 0.1;
+  const trunkH = d.h * 0.86;
+  const segs = low ? 4 : 7;
+  const parts: THREE.BufferGeometry[] = [];
+  let top = new THREE.Vector3(d.x, 0, d.z);
+  for (let k = 0; k < segs; k++) {
+    const t0 = k / segs;
+    const t1 = (k + 1) / segs;
+    const off = (t: number) => bend * trunkH * t * t;
+    const a = new THREE.Vector3(d.x + Math.cos(lean) * off(t0), trunkH * t0, d.z + Math.sin(lean) * off(t0));
+    const b = new THREE.Vector3(d.x + Math.cos(lean) * off(t1), trunkH * t1, d.z + Math.sin(lean) * off(t1));
+    const len = a.distanceTo(b);
+    // Un anneau un peu renflé à chaque tronçon
+    const g = new THREE.CylinderGeometry(0.17 - t1 * 0.04, 0.2 - t0 * 0.04, len, low ? 6 : 9);
+    g.translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+    g.translate(a.x, a.y, a.z);
+    parts.push(g.index ? g.toNonIndexed() : g);
+    top = b;
+  }
+  const trunkGeo = mergeGeometries(
+    parts.map((g) => {
+      g.deleteAttribute("uv");
+      return g;
+    }),
+    false,
+  );
+  for (const g of parts) g.dispose();
+  if (trunkGeo) {
+    trunkGeo.computeVertexNormals();
+    const trunk = new THREE.Mesh(trunkGeo, palmBark);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    group.add(trunk);
+  }
+  // Les palmes
+  const fronds: THREE.BufferGeometry[] = [];
+  const n = low ? 8 : 13;
+  const green = new THREE.Color();
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + r() * 0.4;
+    const len = d.h * (0.32 + r() * 0.12);
+    const droop = 0.5 + r() * 0.5;
+    const rise = k % 3 === 0 ? 0.35 : 0;
+    const steps = low ? 4 : 7;
+    const pos: number[] = [];
+    const col: number[] = [];
+    green.set(r() < 0.3 ? "#6b8a35" : r() < 0.6 ? "#557a2c" : "#4a6b28");
+    // Une palme : une bande qui s'élargit puis s'effile, pliée en V le long de sa nervure, qui retombe vers son bout
+    const ring = (i: number) => {
+      const t = i / steps;
+      const w = Math.sin(Math.PI * Math.min(1, t * 1.1)) * 0.42 + 0.04;
+      const along = t * len;
+      const y = rise * t * len - droop * (t * t) * len * 0.7;
+      return { along, y, w };
+    };
+    const pt = (along: number, y: number, side: number, fold: number) => {
+      const x = Math.cos(a) * along - Math.sin(a) * side;
+      const z = Math.sin(a) * along + Math.cos(a) * side;
+      return [top.x + x, top.y + y + fold, top.z + z];
+    };
+    for (let i = 0; i < steps; i++) {
+      const p = ring(i);
+      const q2 = ring(i + 1);
+      const mid0 = pt(p.along, p.y, 0, 0.06);
+      const mid1 = pt(q2.along, q2.y, 0, 0.06);
+      for (const side of [-1, 1]) {
+        const e0 = pt(p.along, p.y, side * p.w, -0.08);
+        const e1 = pt(q2.along, q2.y, side * q2.w, -0.08);
+        pos.push(...mid0, ...e0, ...e1, ...mid0, ...e1, ...mid1);
+        const sh = 0.75 + (i / steps) * 0.35;
+        for (let v = 0; v < 6; v++) col.push(green.r * sh, green.g * sh, green.b * sh);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    fronds.push(g);
+  }
+  const crownGeo = mergeGeometries(fronds, false);
+  for (const g of fronds) g.dispose();
+  if (!crownGeo) return;
+  crownGeo.computeVertexNormals();
+  const crown = new THREE.Mesh(crownGeo, palmLeaf(q));
+  crown.castShadow = true;
+  group.add(crown);
+}
+const palmBark = new THREE.MeshStandardMaterial({ color: "#7d6448", roughness: 0.95, flatShading: true });
+const palmLeaves = new Map<string, THREE.Material>();
+function palmLeaf(q: Quality): THREE.Material {
+  let m = palmLeaves.get(q);
+  if (!m) {
+    m =
+      q === "bas"
+        ? new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })
+        : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
+    palmLeaves.set(q, m);
+  }
+  return m;
+}
+
+/** La toile rayée d'un auvent : la couleur et un blanc cassé, en larges bandes */
+const awningMats = new Map<string, THREE.Material>();
+function awningMaterial(color: string): THREE.Material {
+  let m = awningMats.get(color);
+  if (!m) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d")!;
+    for (let k = 0; k < 4; k++) {
+      g.fillStyle = k % 2 === 0 ? color : "#efe4cc";
+      g.fillRect(k * 16, 0, 16, 64);
+    }
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = `rgba(${Math.random() < 0.5 ? "0,0,0" : "255,255,255"},${Math.random() * 0.08})`;
+      g.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, side: THREE.DoubleSide });
+    awningMats.set(color, m);
+  }
+  return m;
+}
+
+/** Un auvent : une toile tendue qui se creuse un peu en son milieu, ses bandes le long du plus petit côté */
+function awning(d: Extract<Decor, { k: "awning" }>, group: THREE.Group) {
+  const w = d.x1 - d.x0;
+  const dd = d.z1 - d.z0;
+  const g = new THREE.PlaneGeometry(w, dd, 10, 10);
+  g.rotateX(-Math.PI / 2);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  const alongX = w >= dd;
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getX(i) / w + 0.5;
+    const v = pos.getZ(i) / dd + 0.5;
+    const sag = 0.28 * (1 - (2 * u - 1) ** 2) * (1 - (2 * v - 1) ** 2);
+    pos.setY(i, -sag);
+    // Les bandes : une tous les 0,5 m, en travers du plus long côté
+    uv.setXY(i, alongX ? (u * w) / 2 : (v * dd) / 2, alongX ? v : u);
+  }
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, awningMaterial(d.color));
+  m.position.set((d.x0 + d.x1) / 2, d.y, (d.z0 + d.z1) / 2);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  group.add(m);
+}
+
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
 const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe2a8" });
 const water = new THREE.MeshLambertMaterial({ color: "#3f5f6a", transparent: true, opacity: 0.82, emissive: "#0d1a1f" });
@@ -1032,6 +1203,12 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
     }
     case "car":
       addCar(d, ctx);
+      return;
+    case "palm":
+      palm(d, group, q);
+      return;
+    case "awning":
+      awning(d, group);
       return;
   }
 }

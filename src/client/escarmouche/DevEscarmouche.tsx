@@ -45,6 +45,13 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  desert: [
+    { name: "La kasbah, vers la grand-rue", x: -42, y: 1.62, z: 1.5, yaw: yawTo(-42, 1.5, 0, 0), pitch: -0.02 },
+    { name: "Le souk", x: -37, y: 1.62, z: 21.4, yaw: yawTo(-37, 21.4, 0, 21), pitch: 0 },
+    { name: "Du toit d'une maison", x: -32, y: 4.82, z: 12.5, yaw: yawTo(-32, 12.5, 0, 0), pitch: -0.1 },
+    { name: "La palmeraie", x: -37, y: 1.62, z: -17, yaw: yawTo(-37, -17, 0, -16), pitch: 0 },
+    { name: "Le bassin de l'oasis", x: -9, y: 1.62, z: -2, yaw: yawTo(-9, -2, 4, 1), pitch: 0 },
+  ],
   ruines: [
     { name: "La base ouest, vers l'avenue", x: -43, y: 1.62, z: 1.5, yaw: yawTo(-43, 1.5, 0, 0), pitch: -0.02 },
     { name: "L'avenue", x: -33, y: 1.62, z: -1, yaw: yawTo(-33, -1, 0, 2), pitch: 0 },

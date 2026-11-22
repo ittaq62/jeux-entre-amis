@@ -111,6 +111,99 @@ const PAINT: Partial<Record<Mat, Painter>> = {
     }
     grain(g, size, r, 2600, 0.18);
   },
+  // Le sable : un beige chaud, des rides que le vent a laissées, des grains plus clairs et plus sombres
+  sable: (g, size, r) => {
+    g.fillStyle = "#d4b98a";
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 26; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? "176,140,92" : "236,216,176"},${0.08 + r() * 0.12})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 14 + r() * 50, 8 + r() * 24, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.lineWidth = 2;
+    for (let i = 0; i < 22; i++) {
+      const y0 = r() * size;
+      g.strokeStyle = `rgba(${r() < 0.5 ? "160,126,82" : "240,224,190"},${0.12 + r() * 0.12})`;
+      g.beginPath();
+      for (let x = 0; x <= size; x += 8) {
+        const y = y0 + Math.sin((x / size) * Math.PI * 4 + i) * 5;
+        if (x === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    grain(g, size, r, 5000, 0.18);
+  },
+  // L'enduit ocre des maisons du désert : des reprises plus claires, des coulures plus sombres
+  ocre: (g, size, r) => {
+    g.fillStyle = "#c79a66";
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 46; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? "150,104,62" : "232,196,148"},${0.08 + r() * 0.12})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 10 + r() * 46, 6 + r() * 28, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let i = 0; i < 8; i++) {
+      g.fillStyle = `rgba(120,82,48,${0.06 + r() * 0.08})`;
+      g.fillRect(r() * size, 0, 3 + r() * 5, size * (0.3 + r() * 0.7));
+    }
+    grain(g, size, r, 4200, 0.16);
+  },
+  // La brique : des rangs décalés de briques rouges, sombres ou claires, dans un joint gris
+  brique: (g, size, r) => {
+    g.fillStyle = "#857a6e";
+    g.fillRect(0, 0, size, size);
+    const bw = size / 8;
+    const bh = size / 22;
+    for (let row = 0; row < 22; row++) {
+      const off = row % 2 === 0 ? 0 : bw / 2;
+      for (let k = -1; k < 9; k++) {
+        const t = r();
+        g.fillStyle = t < 0.15 ? "#6e3224" : t < 0.3 ? "#b0644a" : t < 0.5 ? "#8a3e2c" : "#9a4a34";
+        g.fillRect(k * bw + off + 1, row * bh + 1, bw - 2.4, bh - 2.4);
+      }
+    }
+    for (let i = 0; i < 20; i++) {
+      g.fillStyle = `rgba(30,24,20,${0.05 + r() * 0.1})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 10 + r() * 40, 8 + r() * 30, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    grain(g, size, r, 2500, 0.14);
+  },
+  // La roche brute : des strates, des fissures, des taches de lichen
+  roche: (g, size, r) => {
+    g.fillStyle = "#9a8f80";
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 14; i++) {
+      const y = r() * size;
+      g.fillStyle = `rgba(${r() < 0.5 ? "120,110,96" : "184,174,156"},${0.18 + r() * 0.2})`;
+      g.fillRect(0, y, size, 4 + r() * 18);
+    }
+    g.lineWidth = 1.4;
+    for (let i = 0; i < 26; i++) {
+      g.strokeStyle = `rgba(52,46,40,${0.25 + r() * 0.3})`;
+      let x = r() * size;
+      let y = r() * size;
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) {
+        x += r() * 30 - 15;
+        y += r() * 22;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    for (let i = 0; i < 18; i++) {
+      g.fillStyle = `rgba(${r() < 0.6 ? "130,132,96" : "190,180,120"},${0.1 + r() * 0.12})`;
+      g.beginPath();
+      g.ellipse(r() * size, r() * size, 4 + r() * 14, 3 + r() * 10, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    grain(g, size, r, 3500, 0.2);
+  },
   crepi: (g, size, r) => {
     g.fillStyle = "#c7b08a";
     g.fillRect(0, 0, size, size);
@@ -318,6 +411,10 @@ const PAINT: Partial<Record<Mat, Painter>> = {
 
 /** La taille d'un motif dans le monde (mètres) : une toile couvre ce carré */
 export const TILE: Partial<Record<Mat, number>> = {
+  sable: 3.2,
+  ocre: 3,
+  brique: 2.4,
+  roche: 3.4,
   pierre: 2.4,
   crepi: 3,
   crepi2: 3,

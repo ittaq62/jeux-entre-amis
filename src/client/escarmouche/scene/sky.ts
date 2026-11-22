@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 
-export type Light = "soir" | "gris" | "aube" | "nuit" | "neige";
+export type Light = "soir" | "gris" | "aube" | "nuit" | "neige" | "midi";
 
 export interface SkyLook {
   zenith: string;
@@ -58,6 +58,22 @@ export const SKIES: Record<Light, SkyLook> = {
     fog: "#cdbdbb",
     fogNear: 34,
     fogFar: 250,
+  },
+  // Le désert à midi : un ciel bleu dur, presque blanc à l'horizon, le soleil haut, quelques nuages minces
+  midi: {
+    zenith: "#2c69b0",
+    horizon: "#e6dcc6",
+    ground: "#a88b62",
+    sunColor: "#fff2da",
+    sun: [0.38, 0.8, -0.46],
+    sunSize: 0.026,
+    glow: 0.9,
+    clouds: 0.14,
+    cloudLit: "#ffffff",
+    cloudShade: "#aeb8c6",
+    fog: "#e2d4b8",
+    fogNear: 50,
+    fogFar: 290,
   },
   // La nuit : un ciel d'encre et d'étoiles, la lune pâle, quelques nuages qu'elle éclaire par en dessous
   nuit: {

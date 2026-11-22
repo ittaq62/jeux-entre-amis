@@ -392,6 +392,11 @@ describe("Escarmouche : les bots", () => {
     ["drapeau", "ruines"],
     ["sabotage", "ruines"],
     ["zone", "ruines"],
+    ["equipes", "desert"],
+    ["conquete", "desert"],
+    ["drapeau", "desert"],
+    ["sabotage", "desert"],
+    ["zone", "desert"],
   ] as [Mode, MapId][]) {
     it(`${mode} sur ${map} : six bots jouent deux minutes, se déplacent, tirent et s'éliminent`, () => {
       const m = createMatch(

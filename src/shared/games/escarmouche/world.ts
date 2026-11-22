@@ -16,6 +16,14 @@ export type Mat =
   | "tuile"
   | "beton"
   | "metal"
+  /** Le sable du désert (le sol) */
+  | "sable"
+  /** L'enduit ocre des maisons du désert */
+  | "ocre"
+  /** La brique d'une usine */
+  | "brique"
+  /** La roche brute d'une carrière (ses gradins, ses blocs) */
+  | "roche"
   | "rouille"
   | "wagon"
   | "wagon2"

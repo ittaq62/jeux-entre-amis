@@ -61,7 +61,7 @@ function fbox(
   else addBox(b, lo, y0, Math.min(p, q), hi, y1, Math.max(p, q), tile, tint, y0 <= 0.001);
 }
 
-const stoneLike = (m: Mat) => m === "pierre" || m === "crepi" || m === "crepi2";
+const stoneLike = (m: Mat) => m === "pierre" || m === "crepi" || m === "crepi2" || m === "ocre" || m === "brique";
 const woodLike = (m: Mat) => m === "bois" || m === "planche";
 
 export function addHouse(d: HouseDecor, ctx: Ctx) {

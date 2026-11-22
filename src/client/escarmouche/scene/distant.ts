@@ -47,8 +47,10 @@ export interface Distant {
   dispose(): void;
 }
 
-export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "aube" | "neige"): Distant {
+export function buildDistant(gm: GameMap, q: Quality, light: GameMap["light"]): Distant {
   const winter = light === "neige";
+  // Le désert : des dunes qui ondulent, des plateaux de roche aux flancs raides tout au fond, pas un arbre
+  const desert = light === "midi";
   const group = new THREE.Group();
   const { x0, x1, z0, z1 } = gm.bounds;
   const pad = 3;
@@ -59,6 +61,13 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
     if (d <= 0) return -0.3;
     // La mer au nord : le fond descend sous l'eau, et remonte au loin en falaises de l'autre côté de la baie
     if (gm.sea && z > z1 + pad) return -6 + smooth(260, 420, z - z1) * (20 + fbm(x * 0.006, z * 0.006) * 50);
+    if (desert) {
+      const dunes = smooth(0, 50, d) * (1 + fbm(x * 0.01, z * 0.01) * 9 + Math.sin(x * 0.045 + fbm(x * 0.02, z * 0.02) * 6) * 2.2);
+      // Les plateaux : une hauteur coupée net (le dessus plat d'une mesa), atteinte par des flancs raides
+      const raw = smooth(140, 380, d) * (fbm(x * 0.005 + 3, z * 0.005 - 8, 5) * 160 - 40);
+      const mesa = raw > 34 ? 34 + (raw - 34) * 0.08 : Math.max(0, raw);
+      return dunes + mesa;
+    }
     const hills = smooth(0, 60, d) * (1.5 + fbm(x * 0.012, z * 0.012) * 16) * (winter ? 1.6 : 1);
     const far = smooth(110, 360, d) * (25 + fbm(x * 0.004 + 9, z * 0.004 - 4, 5) * 110) * (winter ? 1.7 : 1);
     return hills + far;
@@ -94,7 +103,12 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
     const crop = hash(px, pz);
     c.copy(crop < 0.3 ? wheat : crop < 0.48 ? plowed : crop < 0.75 ? meadow : grass);
     const woods = fbm(x * 0.018 + 50, z * 0.018 - 20);
-    if (winter) {
+    if (desert) {
+      // Le sable, plus clair au sommet des dunes, la roche rousse des plateaux
+      c.set("#cdb084").lerp(new THREE.Color("#e2cc9e"), smooth(2, 9, h) * 0.6);
+      c.lerp(new THREE.Color("#a98a66"), fbm(x * 0.03, z * 0.03) * 0.35);
+      if (h > 14) c.lerp(new THREE.Color("#9c6e4c"), smooth(14, 30, h) * 0.8);
+    } else if (winter) {
       // L'hiver : la neige partout, les bois sombres qui la percent, la roche nue sur les pentes raides
       c.copy(snow);
       if (woods > 0.56 && d > 10) c.lerp(new THREE.Color("#2c3a2c"), smooth(0.56, 0.64, woods) * 0.8);
@@ -125,14 +139,14 @@ export function buildDistant(gm: GameMap, q: Quality, light: "soir" | "gris" | "
   const want = q === "bas" ? 160 : q === "moyen" ? 450 : 950;
   const spots: { x: number; z: number; h: number; s: number }[] = [];
   let tries = 0;
-  while (spots.length < want && tries < want * 30) {
+  while (!desert && spots.length < want && tries < want * 30) {
     tries++;
     const a = hash(tries * 0.71, 3.3) * Math.PI * 2;
     const r = 6 + Math.pow(hash(tries * 1.37, 9.1), 1.6) * 220;
     const x = cx + Math.cos(a) * (r + (x1 - x0) / 2);
     const z = cz + Math.sin(a) * (r + (z1 - z0) / 2);
     const d = out(x, z);
-    if (d < 5 || d > 230) continue;
+    if (desert || d < 5 || d > 230) continue;
     if (gm.sea && z > z1) continue;
     const woods = fbm(x * 0.018 + 50, z * 0.018 - 20);
     const hedge = Math.abs(((x + 13) / 42) % 1) < 0.04 || Math.abs(((z - 7) / 34) % 1) < 0.05;

@@ -172,7 +172,11 @@ export class EscSound {
    * compris, suivi en direct. `weather` : le temps de la carte (la bruine de la gare reste la nuit) ; `sea` : la mer est
    * là (son clapotis et ses mouettes ; sans elle, à l'aube, ce sont des tôles et des pigeons, comme en ville).
    */
-  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige", weather: "soir" | "gris" | "aube" | "neige" = "soir", sea = false) {
+  startAmbience(
+    light: "soir" | "gris" | "aube" | "nuit" | "neige" | "midi",
+    weather: "soir" | "gris" | "aube" | "neige" | "midi" = "soir",
+    sea = false,
+  ) {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const bus = ctx.createGain();
@@ -212,7 +216,7 @@ export class EscSound {
 
     // Le vent : un souffle grave et un sifflement léger, de 17 et 24 secondes (leur ensemble ne se répète qu'après
     // plusieurs minutes), dont le volume et le timbre changent sans cesse
-    const windLevel = { soir: 0.11, aube: 0.11, gris: 0.13, nuit: 0.09, neige: 0.17 }[light];
+    const windLevel = { soir: 0.11, aube: 0.11, gris: 0.13, nuit: 0.09, neige: 0.17, midi: 0.12 }[light];
     const low = this.loopBuffer(17.3, (d, sr) => {
       const n = noiseGen(4711);
       let a = 0;
@@ -395,6 +399,28 @@ export class EscSound {
           o.start(at);
           o.stop(at + 0.28);
         }
+      } else if (light === "midi") {
+        // Un rapace très haut : un long cri qui descend en tremblant
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        const len = between(0.9, 1.4);
+        o.frequency.setValueAtTime(between(2300, 2700), t0);
+        o.frequency.exponentialRampToValueAtTime(between(1300, 1600), t0 + len);
+        const vib = ctx.createOscillator();
+        vib.frequency.value = 9;
+        const vg = ctx.createGain();
+        vg.gain.value = 40;
+        vib.connect(vg).connect(o.frequency);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0, t0);
+        og.gain.linearRampToValueAtTime(0.018, t0 + 0.12);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+        o.connect(og).connect(pan);
+        og.connect(echo);
+        o.start(t0);
+        vib.start(t0);
+        o.stop(t0 + len + 0.05);
+        vib.stop(t0 + len + 0.05);
       } else if (light === "soir") {
         // Un oiseau : quelques notes qui montent
         const notes = 2 + Math.floor(Math.random() * 4);
