@@ -42,6 +42,12 @@ interface LevelInfo {
   punish: number;
   /** Ses chances de lever la garde à temps contre un coup qui arrive tout de suite (ce qui fait une parade) */
   reflex: number;
+  /** Ses chances de foncer punir celui qui finit un coup manqué (s'il a le temps d'arriver) */
+  whiff: number;
+  /** Ses chances de rester hors de portée de celui qui frappe, plutôt que de lui rentrer dedans */
+  space: number;
+  /** Ses chances de se protéger d'un tir qui arrive (la garde, ou un saut par-dessus) */
+  shots: number;
   /** Face à un marteleur (le même coup relancé encore et encore), combien il se met sur ses gardes (0 : jamais) */
   adapt: number;
 }
@@ -63,6 +69,9 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     aerial: 0.08,
     punish: 0.15,
     reflex: 0.2,
+    whiff: 0.25,
+    space: 0.3,
+    shots: 0.25,
     adapt: 0.3,
   },
   moyen: {
@@ -81,8 +90,11 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     taunt: 0.45,
     combo: 0.45,
     aerial: 0.18,
-    punish: 0.5,
+    punish: 0.7,
     reflex: 0.5,
+    whiff: 0.9,
+    space: 0.85,
+    shots: 0.8,
     adapt: 0.8,
   },
   fort: {
@@ -101,6 +113,9 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     aerial: 0.22,
     punish: 0.85,
     reflex: 0.8,
+    whiff: 0.95,
+    space: 0.95,
+    shots: 0.9,
     adapt: 1,
   },
 };
@@ -137,6 +152,24 @@ export interface BotMemory {
   comboFrom: number;
   /** Il tient le saut jusqu'à cette image (un grand saut, sans s'empêcher de frapper en montant) */
   jumpUntil: number;
+  /** Il fonce punir la fin d'un coup manqué jusqu'à cette image */
+  punishUntil: number;
+  /** Les coups adverses (leur image de départ) pour lesquels il a déjà décidé : se mettre sur ses gardes, punir */
+  alerted: number;
+  punished: number;
+  /** Les coups qu'on lance près de lui, ces dernières secondes (ça s'oublie vite) : celui qui frappe sans arrêt */
+  heat: number;
+  /** Les coups qu'on lance dans le vide (lui hors de portée), ces dernières secondes : celui qui reste planté à marteler */
+  camp: number;
+  /** Il ne sautera pas par-dessus avant cette image */
+  hopAt: number;
+  /** Face à celui qui reste planté : patient (hors de portée) jusqu'à cette image */
+  patient: boolean;
+  patientUntil: number;
+  /** Les coups adverses (leur image de départ) déjà jugés : leur fin, leur départ ; et le dernier tir vu */
+  seenEnd: number;
+  seenStart: number;
+  seenShot: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
   /** Le même coup qu'on vient de lui relancer de près, encore et encore (ça s'oublie vite) : un marteleur se repère */
@@ -160,6 +193,17 @@ export function newBotMemory(seed: number): BotMemory {
     comboFrom: -1,
     jumpUntil: 0,
     mashed: 0,
+    punishUntil: 0,
+    alerted: -1,
+    punished: -1,
+    heat: 0,
+    camp: 0,
+    hopAt: 0,
+    patient: false,
+    patientUntil: 0,
+    seenEnd: -1,
+    seenStart: -1,
+    seenShot: -99,
     seen: "",
   };
 }
@@ -208,6 +252,161 @@ function defend(f: Fight, o: Fighter, m: BotMemory, L: LevelInfo): boolean {
   m.press = SHD;
   m.x = 0;
   return true;
+}
+
+/** Combien d'images avant que cet adversaire puisse agir : la fin d'un coup dont la frappe (ou le tir) est passée, un
+ * atterrissage ; 0 s'il est libre ou s'il frappe encore */
+function recoveryLeft(o: Fighter): number {
+  if (o.state === "land") return Math.max(0, o.wait - o.t);
+  if (o.state !== "move") return 0;
+  const def = moveDef(o.style, o.move);
+  if (!def) return 0;
+  const last = def.hits.length > 0 ? Math.max(...def.hits.map((h) => h.to)) : (def.shoot?.at ?? def.frames);
+  if (o.mt <= last) return 0;
+  return def.frames - o.mt;
+}
+
+/** L'image où ce coup frappe pour la première fois */
+function startOf(style: HabitueId, key: string): number {
+  const def = moveDef(style, key);
+  return def && def.hits.length > 0 ? Math.min(...def.hits.map((h) => h.from)) : 8;
+}
+
+/** Jusqu'où porte ce coup (élan compris) ; un tir porte loin */
+const REACH = new Map<string, number>();
+function moveReach(style: HabitueId, key: string): number {
+  const id = `${style}:${key}`;
+  let r = REACH.get(id);
+  if (r !== undefined) return r;
+  const def = moveDef(style, key);
+  if (!def) r = 1;
+  else if (def.shoot) r = 99;
+  else {
+    const reachOf = def.hits.reduce((mx, h) => Math.max(mx, h.x + h.r), 0);
+    const run = (def.push ?? []).reduce((sum, p) => sum + ((p.vx ?? 0) * (p.to - p.from + 1)) / 60, 0);
+    r = reachOf + run;
+  }
+  REACH.set(id, r);
+  return r;
+}
+
+/** Jusqu'où porte ce style au sol, en comptant l'élan de ses coups qui avancent (une ruée de côté va loin) */
+const THREAT = new Map<HabitueId, number>();
+function threatRange(style: HabitueId): number {
+  let r = THREAT.get(style);
+  if (r !== undefined) return r;
+  r = 1;
+  for (const key of ["n", "s", "d", "ps", "cs"]) {
+    const def = moveDef(style, key);
+    if (!def) continue;
+    const reachOf = def.hits.reduce((mx, h) => Math.max(mx, h.x + h.r), 0);
+    const run = (def.push ?? []).reduce((sum, p) => sum + ((p.vx ?? 0) * (p.to - p.from + 1)) / 60, 0);
+    r = Math.max(r, reachOf + run);
+  }
+  THREAT.set(style, r);
+  return r;
+}
+
+/** Un tir de l'adversaire qui vient sur lui, à hauteur, tout près */
+function incomingShot(f: Fight, me: Fighter): boolean {
+  return f.projectiles.some(
+    (p) =>
+      p.owner !== me.slot &&
+      !(f.settings.teams && p.team === me.team) &&
+      Math.abs(p.vx) > 1 &&
+      Math.sign(p.vx) === Math.sign(me.x - p.x) &&
+      Math.abs(p.x - me.x) < 3.5 &&
+      Math.abs(p.y - (me.y + 0.8)) < 1.3,
+  );
+}
+
+/**
+ * Le jeu de distance, debout sur le plateau : celui qui finit un coup manqué (ou retombe) se fait punir, s'il reste le
+ * temps d'arriver ; un coup qui part vers lui, alors qu'il est dans sa portée, il s'en écarte (il tourne autour de
+ * celui qui martèle au lieu de lui rentrer dedans) ; un tir qui arrive, il se protège. Rien à faire : null.
+ */
+function spacing(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | null {
+  if (me.state !== "stand" || airborne(me) || f.frame < m.holdUntil) return null;
+  const t = nearest(me, enemies(f, me));
+  if (!t || airborne(t) || Math.abs(t.y - me.y) > 1) return null;
+  const st = STYLES[me.style];
+  const dx = t.x - me.x;
+  const adx = Math.abs(dx);
+  const toward = dx < 0 ? -1 : 1;
+  const r = reach(me.style);
+  const out = (inp: Input): Input => {
+    m.next = f.frame + 1;
+    return inp;
+  };
+  // En train de punir : on fonce, puis on frappe (ou on saisit celui qui retombe) dès qu'il est à portée
+  if (f.frame < m.punishUntil) {
+    if (recoveryLeft(t) === 0 && t.state !== "move") {
+      m.punishUntil = 0;
+      return null;
+    }
+    if (adx > r * 0.8) return out({ x: toward, y: 0, held: 0, pressed: 0 });
+    m.punishUntil = 0;
+    // Le temps que le coup fort sorte : c'est lui qui part (il fait plus mal, et il sort celui qui est entamé)
+    if (recoveryLeft(t) > startOf(me.style, "cs") + 1) return out({ x: toward, y: 0, held: FRT, pressed: FRT });
+    return out({ x: toward, y: 0, held: 0, pressed: adx < 1.1 && t.state === "land" ? GRB : ATK });
+  }
+  // Une fin de coup à punir : le temps d'arriver (en courant) et de frapper
+  const left = recoveryLeft(t);
+  if (left > 0 && adx < 5 && m.seenEnd !== f.frame - t.mt) {
+    m.seenEnd = f.frame - t.mt;
+    const travel = (Math.max(0, adx - r * 0.8) / st.run) * 60;
+    // Le temps d'arriver, puis que son coup sorte (et une image de marge)
+    const needed = travel + startOf(me.style, "s") + 1;
+    if (left > needed && rnd(m) < L.whiff) {
+      m.punishUntil = f.frame + left;
+      return out({ x: toward, y: 0, held: 0, pressed: 0 });
+    }
+  }
+  // Celui qui reste planté à marteler (des coups dans le vide, encore et encore) : on reste juste hors de sa portée, on
+  // attend qu'il manque (voir plus haut), et parfois on saute par-dessus pour frapper d'en haut
+  // (le choix d'être patient tient trois quarts de seconde : tiré à chaque image, il lâcherait sans cesse)
+  if (m.camp >= 2 && f.frame >= m.patientUntil) {
+    m.patient = rnd(m) < L.space;
+    m.patientUntil = f.frame + 45;
+  }
+  if (m.camp >= 2 && m.patient) {
+    const danger = threatRange(t.style) + 0.3;
+    const room = !nearEdge(me, stage(f), -toward);
+    if (adx < danger && room && left === 0) return out({ x: -toward, y: 0, held: 0, pressed: 0 });
+    if (adx < danger + 1.2) {
+      if (m.hopAt < f.frame && rnd(m) < L.aerial * 0.15 && !nearEdge(me, stage(f), toward)) {
+        m.hopAt = f.frame + 40;
+        m.jumpUntil = f.frame + JUMPSQUAT + 10;
+        return out({ x: toward, y: 0, held: JMP, pressed: JMP });
+      }
+      // Il piétine au bord de la portée, prêt à fondre sur la première fin de coup
+      return out({ x: (Math.floor(f.frame / 12) % 2 === 0 ? 0.4 : -0.4) * toward, y: 0, held: 0, pressed: 0 });
+    }
+  }
+  // Un coup qui part vers lui, et il est dans sa portée : il recule hors de portée (une fois par coup)
+  if (t.state === "move" && left === 0 && t.face === toward * -1 && m.seenStart !== f.frame - t.mt) {
+    const def = moveDef(t.style, t.move);
+    const first = def && def.hits.length > 0 ? Math.min(...def.hits.map((h) => h.from)) : 0;
+    if (def && t.mt < first && adx < threatRange(t.style) + 0.4) {
+      m.seenStart = f.frame - t.mt;
+      if (rnd(m) < L.space && !nearEdge(me, stage(f), -toward)) {
+        m.holdUntil = f.frame + Math.min(18, first - t.mt + 6);
+        m.held = 0;
+        m.x = -toward;
+        m.y = 0;
+        return out({ x: -toward, y: 0, held: 0, pressed: 0 });
+      }
+    }
+  }
+  // Un tir qui arrive : la garde, ou (au niveau fort, parfois) un saut par-dessus
+  if (incomingShot(f, me) && m.seenShot < f.frame - 20 && rnd(m) < L.shots) {
+    m.seenShot = f.frame;
+    if (L.space > 0.8 && rnd(m) < 0.35) return out({ x: toward, y: 0, held: JMP, pressed: JMP });
+    m.held = SHD;
+    m.holdUntil = f.frame + 16;
+    return out({ x: 0, y: 0, held: SHD, pressed: SHD });
+  }
+  return null;
 }
 
 /** Cet adversaire finit son coup (ou retombe) à portée de saisie, et il lui reste assez de temps avant de pouvoir agir
@@ -309,11 +508,17 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     }
   }
   // On tient les boutons d'une charge ou d'une garde jusqu'au bout
-  if (f.frame < m.holdUntil) return out();
-  // Le même coup relancé de près, encore et encore : il le remarque (celui qui varie ses attaques, jamais)
+  // Le même coup relancé de près, encore et encore : il le remarque (celui qui varie ses attaques, jamais) ; et les coups
+  // qu'on lance près de lui, quels qu'ils soient
   m.mashed = (m.mashed ?? 0) * 0.985;
+  m.heat = (m.heat ?? 0) * 0.985;
+  // (celui-là s'oublie lentement : un joueur planté ne change pas de manière d'une seconde à l'autre)
+  m.camp = (m.camp ?? 0) * 0.99;
   for (const o of f.fighters) {
     if (o === me || o.team === me.team || o.state !== "move" || o.mt !== 1) continue;
+    if (Math.abs(o.x - me.x) < 5 && Math.abs(o.y - me.y) < 1.5) m.heat += 1;
+    // Un coup lancé vers lui alors qu'il est hors de portée : dans le vide
+    if (Math.abs(o.x - me.x) < 7 && Math.abs(o.x - me.x) > moveReach(o.style, o.move) + 0.3) m.camp += 1;
     if (Math.abs(o.x - me.x) > 3 || Math.abs(o.y - me.y) > 1.5) continue;
     if (o.move === m.seen) m.mashed += 1;
     m.seen = o.move;
@@ -321,12 +526,22 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   // Sur ses gardes face à un marteleur : le coup qui arrive, il le voit tout de suite (sans attendre sa prochaine idée)
   if (m.mashed >= 3 && me.state === "stand" && f.frame >= m.holdUntil) {
     const danger = threat(me, enemies(f, me));
-    if (danger && rnd(m) < Math.min(0.6, (m.mashed - 2) * 0.2) * L.adapt && defend(f, danger, m, L)) return out();
+    // (une seule décision par coup adverse)
+    if (danger && m.alerted !== f.frame - danger.mt) {
+      m.alerted = f.frame - danger.mt;
+      if (rnd(m) < Math.min(0.6, (m.mashed - 2) * 0.2) * L.adapt && defend(f, danger, m, L)) return out();
+    }
   }
+  // Le jeu de distance, regardé à chaque image (sans attendre sa prochaine idée) : punir une fin de coup, s'écarter
+  // d'un coup qui arrive, se protéger d'un tir
+  const neutral = spacing(f, me, m, L);
+  if (neutral) return neutral;
   // Il vient d'arrêter un coup dans sa garde : il saisit celui qui finit son coup trop près (la garde punit le martelage)
   if (me.state === "shield" && me.t > 1) {
     const late = enemies(f, me).find((o) => punishable(me, o));
-    if (late && rnd(m) < L.punish) {
+    // (une seule décision par fin de coup)
+    const key = late ? f.frame - late.mt : -1;
+    if (late && m.punished !== key && ((m.punished = key), rnd(m) < L.punish)) {
       m.holdUntil = 0;
       m.held = 0;
       m.x = 0;
@@ -335,6 +550,8 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
       return out();
     }
   }
+  // On tient les boutons d'une charge ou d'une garde jusqu'au bout (la saisie en sortant de garde passe avant)
+  if (f.frame < m.holdUntil) return out();
   if (f.frame < m.next && !(me.state === "air" && offstage(me, st))) return out();
   m.next = f.frame + L.think + Math.floor(rnd(m) * 4);
   m.x = 0;
@@ -458,6 +675,29 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
         m.holdUntil = f.frame + Math.min(40, Math.round(adx * 4));
       }
       return out();
+    }
+    // Celui qui frappe sans arrêt : on ne lui rentre pas dedans. Au bord de sa portée (élan de ses ruées compris), on
+    // attend qu'il manque un coup (voir spacing), on avance sous la garde (il frappe dedans, on le saisit à la fin de
+    // son coup), ou on saute par-dessus pour frapper d'en haut
+    const danger = threatRange(t.style) + 0.3;
+    if (!airborne(me) && !airborne(t) && Math.abs(dy) < 1 && m.heat > 2 && adx < danger + 1 && rnd(m) < L.space) {
+      const pick = rnd(m);
+      if (pick < 0.4 && adx > danger - 0.6) {
+        m.x = rnd(m) < 0.5 ? -toward * 0.5 : 0;
+        return out();
+      }
+      if (pick < 0.7) {
+        m.held = SHD;
+        m.holdUntil = f.frame + 18 + Math.floor(rnd(m) * 12);
+        m.press = SHD;
+        return out();
+      }
+      if (t.x > st.x0 + 1 && t.x < st.x1 - 1 && !nearEdge(me, st, toward)) {
+        m.x = toward;
+        m.press = JMP;
+        m.jumpUntil = f.frame + JUMPSQUAT + 10;
+        return out();
+      }
     }
     m.x = toward;
     // Il saute rejoindre celui qui est en hauteur

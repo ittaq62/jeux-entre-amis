@@ -116,6 +116,8 @@ function noteStale(ft: Fighter, key: string) {
 }
 /** La saisie : la main tendue (images actives), sa portée */
 export const GRAB_FROM = 6;
+/** Une saisie manquée : la main tendue dans le vide se paie */
+const WHIFF_GRAB = 10;
 const GRAB_TO = 8;
 const GRAB_X = 0.75;
 const GRAB_Y = 0.8;
@@ -1300,8 +1302,27 @@ function advanceCharged(f: Fight, ft: Fighter, def: MoveDef, inp: Input, solo: b
     }
     if (ft.move === "g:climb" || ft.move === "g:ledgeAtk") ft.intangUntil = Math.max(ft.intangUntil, f.frame + 2);
     if (isAirborne(ft)) setState(ft, def.helpless ? "helpless" : "air");
-    else setState(ft, "stand");
+    else {
+      // Un coup au sol qui n'a touché personne (ni corps ni garde) : on reprend son équilibre un instant, de quoi se
+      // faire punir. Frapper dans le vide encore et encore ne rapporte plus rien ; le coup qui touche, lui, reste vif
+      const lag = ft.hitIds.length === 0 && ft.holding < 0 ? whiffLag(ft.move, def) : 0;
+      if (lag > 0) {
+        setState(ft, "land");
+        ft.wait = lag;
+      } else setState(ft, "stand");
+    }
   }
+}
+
+/** Ce que coûte un coup manqué au sol, en images : un peu pour le petit coup, plus pour un coup fort ou un spécial */
+function whiffLag(key: string, def: MoveDef): number {
+  if (key === "g:grab") return WHIFF_GRAB;
+  if (def.hits.length === 0) return 0;
+  if (key === "n") return 5;
+  if (key === "s" || key === "u" || key === "d") return 10;
+  if (key === "g:dash") return 10;
+  if (key.startsWith("c") || key.startsWith("p")) return 14;
+  return 0;
 }
 
 /** Une projection ou une petite tape : le coup commence sans lâcher celui qu'on tient */

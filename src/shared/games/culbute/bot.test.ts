@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ARENAS, type ArenaId } from "./arenas.ts";
 import { botInput, newBotMemory, type BotLevel } from "./bot.ts";
 import { createFight, DEFAULT_FIGHT_SETTINGS, stepFight } from "./engine.ts";
-import { HABITUE_IDS, SPC, type Fight, type FightEvent, type Fighter, type HabitueId } from "./model.ts";
+import { ATK, HABITUE_IDS, JMP, SPC, type Fight, type FightEvent, type Fighter, type HabitueId, type Input } from "./model.ts";
 
 function botFight(styles: HabitueId[], arena: ArenaId = "place", items: "aucun" | "peu" | "beaucoup" = "peu", seed = 1) {
   const f = createFight(
@@ -152,5 +152,53 @@ describe("Culbute : les bots", () => {
     const selfDestructs = events.filter((e) => e.k === "ko" && e.by < 0).length;
     const kos = events.filter((e) => e.k === "ko").length;
     expect(selfDestructs).toBeLessThanOrEqual(Math.max(2, kos * 0.4));
+  });
+});
+
+/** Le joueur qui reste planté et martèle les deux clics vers l'adversaire (visée au curseur), sans jamais bouger ;
+ * éjecté, il revient comme il peut (sauts, puis le spécial vers le haut) */
+function camper(f: Fight, slot: number, home: number, rnd: () => number): Input {
+  const me = f.fighters[slot]!;
+  const foe = f.fighters.find((o) => o.slot !== slot && o.state !== "dead" && o.state !== "out");
+  if (!foe || f.phase !== "fight") return { x: 0, y: 0, held: 0, pressed: 0 };
+  const st = ARENAS[f.arena as ArenaId].platforms[0]!;
+  if (me.ground < 0 && (me.x < st.x0 || me.x > st.x1 || me.y < -0.3)) {
+    const back = me.x < home ? 1 : -1;
+    if (me.vy < 0 && me.jumps > 0) return { x: back, y: 1, held: JMP, pressed: JMP };
+    if (me.vy < 0 && me.y < 1) return { x: back * 0.4, y: 0.9, held: SPC, pressed: SPC };
+    return { x: back, y: 0, held: 0, pressed: 0 };
+  }
+  if (me.ground >= 0 && Math.abs(me.x - home) > 1.2 && f.frame % 6 !== 0) return { x: me.x < home ? 1 : -1, y: 0, held: 0, pressed: 0 };
+  if (f.frame % 6 !== 0) return { x: 0, y: 0, held: 0, pressed: 0 };
+  const dx = foe.x - me.x;
+  const dy = foe.y - me.y;
+  const len = Math.hypot(dx, dy);
+  const [x, y] = len < 0.75 ? [0, 0] : [dx / len, dy / len];
+  return { x, y, held: 0, pressed: rnd() < 0.5 ? ATK : SPC };
+}
+
+describe("Culbute : marteler sans bouger ne suffit pas", () => {
+  it("contre les bots forts, le joueur planté qui martèle perd nettement (un combat par style)", () => {
+    let wins = 0;
+    for (const [i, style] of HABITUE_IDS.entries()) {
+      const foe = HABITUE_IDS[(i + 2) % HABITUE_IDS.length]!;
+      const f = createFight(
+        { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", stocks: 3 },
+        "place",
+        [
+          { id: "m", team: 0, style },
+          { id: "b", team: 1, style: foe },
+        ],
+        40 + i,
+      );
+      while (f.phase === "intro") stepFight(f, []);
+      const home = f.fighters[0]!.x;
+      const mem = newBotMemory(77 + i);
+      let r = 7919 + i * 13;
+      const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+      for (let k = 0; k < 6 * 60 * 60 && f.phase !== "over"; k++) stepFight(f, [camper(f, 0, home, rnd), botInput(f, 1, mem, "fort")]);
+      if (f.fighters[0]!.rank === 1) wins++;
+    }
+    expect(wins).toBeLessThanOrEqual(2);
   });
 });

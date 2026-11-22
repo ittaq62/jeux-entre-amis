@@ -387,6 +387,28 @@ describe("Culbute : le combat", () => {
     }
   });
 
+  it("un coup manqué au sol se paie : on reprend son équilibre un instant ; un coup qui touche, non", () => {
+    const f = duel();
+    skipIntro(f);
+    const a = f.fighters[0]!;
+    // Personne à portée : le coup de côté va jusqu'au bout, puis il se rattrape
+    run(f, 1, [tap(ATK, 1, 0)]);
+    const def = moveDef("ginette", "s")!;
+    run(f, def.frames);
+    expect(a.state).toBe("land");
+    run(f, 10);
+    expect(a.state).toBe("stand");
+    // Le même coup qui touche : debout dès la fin du coup
+    const g = duel();
+    skipIntro(g);
+    faceToFace(g, 1.4);
+    const b = g.fighters[0]!;
+    run(g, 1, [tap(ATK, 1, 0)]);
+    run(g, def.frames + 8);
+    expect(b.hitIds.length > 0 || b.state === "stand").toBe(true);
+    expect(b.state).not.toBe("land");
+  });
+
   it("dans le vide, le petit coup va jusqu'au bout : marteler ne fait pas un mur de petits coups", () => {
     const f = duel();
     skipIntro(f);
