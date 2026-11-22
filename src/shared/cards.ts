@@ -27,7 +27,7 @@ export const RARITY: Record<Rarity, RarityInfo> = {
 };
 
 export type CardFamily =
-  "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche" | "culbute";
+  "habitues" | "flotte" | "capitale" | "circuit" | "tapis" | "briques" | "meche" | "crampons" | "escarmouche" | "culbute" | "minigolf";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -40,6 +40,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "crampons", name: "Les Crampons", note: "Du gazon plein les chaussettes" },
   { id: "culbute", name: "La Culbute", note: "Ça vole bas, au village" },
   { id: "escarmouche", name: "L'Escarmouche", note: "Ça sent la poudre au hameau" },
+  { id: "minigolf", name: "Le Minigolf", note: "Par trois, et ça finit à sept" },
 ];
 
 export type CardArt =
@@ -56,6 +57,10 @@ export type CardArt =
       kind: "escarmouche";
       subject:
         "casque" | "douille" | "sacs" | "pistolet" | "pompe" | "grenade" | "couteau" | "lunette" | "drapeau" | "clocher" | "medaille";
+    }
+  | {
+      kind: "minigolf";
+      subject: "putter" | "balle" | "carte" | "tapis" | "moulin" | "tremplin" | "bassin" | "drapeau" | "coucou" | "volcan" | "trou-en-un";
     };
 
 export interface CardDef {
@@ -950,6 +955,96 @@ export const CARDS: CardDef[] = [
     name: "La Culbute",
     quote: "À 150 %, on ne tombe plus : on décolle.",
     art: { kind: "culbute", subject: "vol" },
+  },
+
+  // Le Minigolf (arrivé après les autres : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "golf-putter",
+    family: "minigolf",
+    rarity: "commune",
+    name: "Le Putter",
+    quote: "Il n'a jamais raté un coup. C'est toujours la main qui tremble.",
+    art: { kind: "minigolf", subject: "putter" },
+  },
+  {
+    id: "golf-balle",
+    family: "minigolf",
+    rarity: "commune",
+    name: "La Balle",
+    quote: "Elle connaît tous les recoins du parcours, surtout ceux d'où l'on ne sort pas.",
+    art: { kind: "minigolf", subject: "balle" },
+  },
+  {
+    id: "golf-carte",
+    family: "minigolf",
+    rarity: "commune",
+    name: "La Carte de score",
+    quote: "Le crayon n'a pas de gomme. Exprès.",
+    art: { kind: "minigolf", subject: "carte" },
+  },
+  {
+    id: "golf-tapis",
+    family: "minigolf",
+    rarity: "commune",
+    name: "Le Tapis de départ",
+    quote: "Le seul endroit où tout le monde est encore à égalité.",
+    art: { kind: "minigolf", subject: "tapis" },
+  },
+  {
+    id: "golf-moulin",
+    family: "minigolf",
+    rarity: "peu-commune",
+    name: "Le Moulin",
+    quote: "Il tourne depuis toujours, et toujours au mauvais moment.",
+    art: { kind: "minigolf", subject: "moulin" },
+  },
+  {
+    id: "golf-tremplin",
+    family: "minigolf",
+    rarity: "peu-commune",
+    name: "Le Tremplin",
+    quote: "La balle s'envole. Où elle retombe, c'est une autre histoire.",
+    art: { kind: "minigolf", subject: "tremplin" },
+  },
+  {
+    id: "golf-bassin",
+    family: "minigolf",
+    rarity: "peu-commune",
+    name: "Le Bassin",
+    quote: "Plouf. Un coup de pénalité, et les canards rigolent.",
+    art: { kind: "minigolf", subject: "bassin" },
+  },
+  {
+    id: "golf-drapeau",
+    family: "minigolf",
+    rarity: "rare",
+    name: "Le Drapeau",
+    quote: "Il se lève quand la balle approche, pour mieux voir le raté.",
+    art: { kind: "minigolf", subject: "drapeau" },
+  },
+  {
+    id: "golf-coucou",
+    family: "minigolf",
+    rarity: "rare",
+    name: "Le Coucou",
+    quote: "Il sort toutes les heures. Surtout pendant ton coup.",
+    art: { kind: "minigolf", subject: "coucou" },
+  },
+  {
+    id: "golf-volcan",
+    family: "minigolf",
+    rarity: "epique",
+    name: "Le Volcan",
+    quote: "Le dernier trou du parcours. Les balles n'en reviennent pas.",
+    art: { kind: "minigolf", subject: "volcan" },
+  },
+  {
+    id: "golf-trou-en-un",
+    family: "minigolf",
+    rarity: "legendaire",
+    name: "Le Trou en un",
+    quote: "Une fois dans une vie. Et personne ne regardait.",
+    art: { kind: "minigolf", subject: "trou-en-un" },
   },
 ];
 

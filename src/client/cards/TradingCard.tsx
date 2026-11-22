@@ -3,6 +3,7 @@ import { CARDS, cardNumber, RARITY, type CardArt, type CardDef, type CardFamily 
 import { SHIP_LENGTH } from "../../shared/games/naval/engine.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import { CulbuteCardArt } from "../culbute/CulbuteCardArt.tsx";
+import { MinigolfCardArt } from "../minigolf/MinigolfCardArt.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { Icon, type IconName } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
@@ -379,6 +380,7 @@ function Art({ art, width }: { art: CardArt; width: number }) {
   if (art.kind === "meche") return <MecheArt subject={art.subject} />;
   if (art.kind === "culbute") return <CulbuteCardArt subject={art.subject} />;
   if (art.kind === "escarmouche") return <EscarmoucheArt subject={art.subject} />;
+  if (art.kind === "minigolf") return <MinigolfCardArt subject={art.subject} />;
   if (art.kind === "builder") return <BuilderArt subject={art.subject} />;
   return (
     <span className="tc-uno">
@@ -411,6 +413,7 @@ const FAMILY_ICON: Record<CardFamily, IconName> = {
   crampons: "ball",
   culbute: "smile",
   escarmouche: "shield",
+  minigolf: "flag",
 };
 
 /** Six couleurs de mur pour les Habitués, données dans l'ordre pour que deux voisins n'aient jamais la même */

@@ -1,0 +1,7 @@
+/* La famille « Le Minigolf » dans l'album : un gazon tondu en bandes sous un ciel de fin d'après-midi */
+.fam-minigolf .tc-art {
+  background:
+    radial-gradient(circle at 72% 22%, rgba(255, 226, 160, 0.55), transparent 42%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 14%, transparent 14% 28%) bottom / 100% 40% no-repeat,
+    linear-gradient(180deg, #7fb6e0 0, #cfe3d2 55%, #4fae5a 60%, #2f7d3c 100%);
+}
