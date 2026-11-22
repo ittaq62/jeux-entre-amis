@@ -96,7 +96,7 @@ export const KO_STOP = 30;
 export const PARRY_FRAMES = 5;
 const PARRY_STUN = 14;
 /** L'usure : chaque fois qu'un coup est dans la file des derniers coups qui ont touché, il perd un peu (le plus récent compte le plus) */
-const STALE = [0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.025, 0.02, 0.015];
+const STALE = [0.12, 0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03];
 /** Un coup frais (absent de la file) frappe un peu plus fort */
 const FRESH = 1.05;
 
@@ -108,6 +108,11 @@ export function staleFactor(ft: Fighter, key: string): number {
     if (m === key) k -= STALE[i] ?? 0;
   });
   return k;
+}
+
+/** L'usure pèse aussi sur l'éjection : un coup répété sans cesse pousse moins loin (et sort moins bien) */
+export function staleKnock(fresh: number): number {
+  return 0.5 + 0.5 * Math.min(1, fresh);
 }
 
 function noteStale(ft: Fighter, key: string) {
@@ -232,6 +237,8 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     hopLeft: 0,
     jabs: 0,
     stale: [],
+    puff: 0,
+    walked: 0,
   };
 }
 
@@ -472,6 +479,7 @@ function special(f: Fight, ft: Fighter, x: number, y: number): boolean {
 }
 
 function startShield(ft: Fighter, x: number, y: number) {
+  if (Math.abs(x) > 0.6 || y < -0.6) ft.puff = 0;
   if (Math.abs(x) > 0.6) {
     setState(ft, "roll");
     ft.wait = x < 0 ? -1 : 1;
@@ -480,6 +488,7 @@ function startShield(ft: Fighter, x: number, y: number) {
 }
 
 function jumpFromGround(ft: Fighter) {
+  ft.puff = 0;
   setState(ft, "squat");
 }
 
@@ -496,6 +505,8 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
 
   switch (ft.state) {
     case "stand": {
+      // (le temps de souffler : un instant sans frapper)
+      if (ft.t >= PUFF_REST) ft.puff = 0;
       if (press & GRB) {
         consume(ft, GRB);
         grabOrPick(f, ft, x, y);
@@ -823,6 +834,9 @@ export const GROUND_ACC = 220;
 export const GROUND_STOP = 280;
 
 function groundMove(ft: Fighter, x: number, st: Style, sm: number) {
+  // Quelques pas suffisent à reprendre son souffle
+  ft.walked += Math.abs(ft.vx) * DT;
+  if (ft.walked >= PUFF_WALK) ft.puff = 0;
   if (Math.abs(x) > 0.2) {
     const run = Math.abs(x) >= 0.65;
     const target = (run ? st.run : st.walk) * sign(x) * sm;
@@ -1305,13 +1319,30 @@ function advanceCharged(f: Fight, ft: Fighter, def: MoveDef, inp: Input, solo: b
     else {
       // Un coup au sol qui n'a touché personne (ni corps ni garde) : on reprend son équilibre un instant, de quoi se
       // faire punir. Frapper dans le vide encore et encore ne rapporte plus rien ; le coup qui touche, lui, reste vif
-      const lag = ft.hitIds.length === 0 && ft.holding < 0 ? whiffLag(ft.move, def) : 0;
+      const whiff = ft.hitIds.length === 0 && ft.holding < 0;
+      let lag = whiff ? whiffLag(ft.move, def) : 0;
+      // Et celui qui enchaîne les coups dans le vide (ou les tirs) sans bouger s'essouffle : sa reprise s'allonge à
+      // chaque fois, jusqu'à ce qu'il bouge, souffle un instant ou touche quelqu'un
+      if (whiff && (lag > 0 || def.shoot)) {
+        ft.puff++;
+        ft.walked = 0;
+        lag += puffLag(ft.puff);
+      } else if (!whiff) ft.puff = 0;
       if (lag > 0) {
         setState(ft, "land");
         ft.wait = lag;
       } else setState(ft, "stand");
     }
   }
+}
+
+/** L'essoufflement (voir Fighter.puff) : dès le deuxième coup dans le vide d'affilée, la reprise s'allonge (de 4 images,
+ * puis 8, 12...) ; il passe après tant d'images sans frapper, ou tant de pas */
+const PUFF_LAG = [0, 0, 4, 8, 12, 16, 20];
+const PUFF_REST = 45;
+const PUFF_WALK = 0.75;
+export function puffLag(puff: number): number {
+  return PUFF_LAG[Math.min(puff, PUFF_LAG.length - 1)]!;
 }
 
 /** Ce que coûte un coup manqué au sol, en images : un peu pour le petit coup, plus pour un coup fort ou un spécial */
@@ -1719,6 +1750,8 @@ interface HitSource {
   projectile: boolean;
   /** Le dernier petit coup d'une série : il repousse, mais l'autre reprend vite ses esprits (pas d'enchaînement derrière) */
   finisher?: boolean;
+  /** L'usure du coup (1 : frais) */
+  stale?: number;
 }
 
 function canHit(f: Fight, a: { slot: number; team: number }, v: Fighter): boolean {
@@ -1847,7 +1880,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     pending.push({ k: "hit", a: src.attacker, v: v.slot, dmg, x: src.x, y: src.y, power: 0.2, kind: "hit" });
     return;
   }
-  let speed = launchSpeed(src.kb, src.kbg, v.dmg, st.weight, src.charge);
+  let speed = launchSpeed(src.kb, src.kbg, v.dmg, st.weight, src.charge) * staleKnock(src.stale ?? 1);
   let ang = src.ang;
   // Un coup vers le bas sur quelqu'un au sol le soulève
   if (ang < 0 && !isAirborne(v)) {
@@ -2005,6 +2038,7 @@ function detectHits(f: Fight) {
           charge,
           projectile: false,
           finisher,
+          stale: fresh,
         },
         v,
       });
@@ -2518,7 +2552,7 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
       stop = Math.round(clamp(3 + baseDmg * 0.3, 3, 10));
       power = clamp(baseDmg / 20, 0, 1);
     } else {
-      const speed = launchSpeed(hit.kb, hit.kbg, v.dmg + dmg, styleOf(v).weight, charge);
+      const speed = launchSpeed(hit.kb, hit.kbg, v.dmg + dmg, styleOf(v).weight, charge) * staleKnock(fresh);
       let ang = hit.ang;
       if (ang < 0 && !isAirborne(v)) ang = 40;
       const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;

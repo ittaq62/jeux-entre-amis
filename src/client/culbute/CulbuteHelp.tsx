@@ -61,6 +61,11 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
             travers de ta trajectoire (vers le haut, vers l'arène) : tu iras un peu moins loin.
           </p>
           <p className="hint">
+            Un coup qui ne touche personne se paie : on reprend son équilibre un instant. Frapper dans le vide encore et encore sans bouger
+            essouffle (de petites bouffées le montrent) : la reprise s'allonge à chaque fois, de quoi se faire punir. Quelques pas, un saut,
+            un instant sans frapper ou un coup qui touche, et le souffle revient.
+          </p>
+          <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, le stick droit pour le coup fort, B pour le spécial, la gâchette
             haute droite pour saisir et ramasser, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose
             n'importe où pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial, Saut et Saisir (qui ramasse

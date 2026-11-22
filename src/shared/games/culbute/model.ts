@@ -186,6 +186,10 @@ export interface Fighter {
   jabs: number;
   /** Ses derniers coups qui ont touché, du plus récent au plus ancien : un coup répété s'use */
   stale: string[];
+  /** L'essoufflement : ses coups au sol d'affilée qui n'ont touché personne (et ses tirs), sans bouger entre deux ;
+   * marcher, sauter, rouler, souffler un instant ou toucher quelqu'un le remet à zéro. Le chemin fait à pied depuis */
+  puff: number;
+  walked: number;
 }
 
 export interface FighterStats {

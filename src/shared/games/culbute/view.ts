@@ -141,6 +141,8 @@ export const F_STOP = 2;
 export const F_CREAM = 4;
 export const F_FAST = 8;
 export const F_FASTFALL = 16;
+/** Essoufflé : des coups dans le vide d'affilée (sa reprise s'allonge) */
+export const F_PUFF = 32;
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const r4 = (v: number) => Math.round(v * 10000) / 10000;
@@ -190,7 +192,8 @@ export function packFighter(ft: Fighter, frame: number): number[] {
     (ft.hitstop > 0 ? F_STOP : 0) |
     (ft.creamUntil > frame ? F_CREAM : 0) |
     (ft.fastUntil > frame ? F_FAST : 0) |
-    (ft.fastfall ? F_FASTFALL : 0);
+    (ft.fastfall ? F_FASTFALL : 0) |
+    (ft.puff >= 2 ? F_PUFF : 0);
   return [
     r3(ft.x),
     r3(ft.y),
@@ -292,6 +295,8 @@ const FULL_FIELDS = [
   "holder",
   "hopLeft",
   "jabs",
+  "puff",
+  "walked",
 ] as const satisfies readonly (keyof Fighter)[];
 
 export function packFull(ft: Fighter): number[] {

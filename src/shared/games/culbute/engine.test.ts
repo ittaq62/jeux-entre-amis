@@ -409,6 +409,38 @@ describe("Culbute : le combat", () => {
     expect(b.state).not.toBe("land");
   });
 
+  it("frapper dans le vide encore et encore sans bouger essouffle : la reprise s'allonge ; souffler ou faire quelques pas, et c'est passé", () => {
+    const f = duel();
+    skipIntro(f);
+    const a = f.fighters[0]!;
+    const def = moveDef("ginette", "s")!;
+    /** Le coup de côté dans le vide, dès qu'il peut : combien de temps il lui faut pour se reprendre */
+    const whiff = () => {
+      while (a.state !== "stand") run(f, 1);
+      run(f, 1, [tap(ATK, 1, 0)]);
+      run(f, def.frames);
+      expect(a.state).toBe("land");
+      return a.wait;
+    };
+    const lags = [whiff(), whiff(), whiff(), whiff(), whiff()];
+    expect(lags[0]).toBe(10);
+    expect(lags[1]).toBeGreaterThan(lags[0]!);
+    expect(lags[2]).toBeGreaterThan(lags[1]!);
+    expect(lags[3]).toBeGreaterThan(lags[2]!);
+    expect(lags[4]).toBeGreaterThan(lags[3]!);
+    // Un instant sans frapper : le souffle revient
+    while (a.state !== "stand") run(f, 1);
+    run(f, 50);
+    expect(whiff()).toBe(lags[0]);
+    whiff();
+    whiff();
+    // Quelques pas : aussi
+    while (a.state !== "stand") run(f, 1);
+    run(f, 12, [stick(-1)]);
+    run(f, 4);
+    expect(whiff()).toBe(lags[0]);
+  });
+
   it("dans le vide, le petit coup va jusqu'au bout : marteler ne fait pas un mur de petits coups", () => {
     const f = duel();
     skipIntro(f);

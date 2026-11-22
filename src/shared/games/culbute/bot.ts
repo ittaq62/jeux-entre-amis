@@ -3,7 +3,7 @@
 // Le niveau règle la vitesse de réaction, l'envie d'attaquer, la garde et la justesse.
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
-import { GRAB_FROM, gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef, PARRY_FRAMES } from "./engine.ts";
+import { GRAB_FROM, gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef, PARRY_FRAMES, SHOTS } from "./engine.ts";
 import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
@@ -159,10 +159,14 @@ export interface BotMemory {
   punished: number;
   /** Les coups qu'on lance près de lui, ces dernières secondes (ça s'oublie vite) : celui qui frappe sans arrêt */
   heat: number;
-  /** Les coups qu'on lance dans le vide (lui hors de portée), ces dernières secondes : celui qui reste planté à marteler */
-  camp: number;
   /** Il ne sautera pas par-dessus avant cette image */
   hopAt: number;
+  /** Chaque adversaire (par place) : le chemin qu'il a fait de lui-même ces dernières secondes (marcher, courir, sauter ;
+   * pas ses coups ni ses envols), les coups qu'il a lancés, et où il était à l'image d'avant. Celui qui ne bouge pas et
+   * frappe sans arrêt reste planté à marteler */
+  foeTravel: number[];
+  foeAtk: number[];
+  foeX: number[];
   /** Face à celui qui reste planté : patient (hors de portée) jusqu'à cette image */
   patient: boolean;
   patientUntil: number;
@@ -170,6 +174,10 @@ export interface BotMemory {
   seenEnd: number;
   seenStart: number;
   seenShot: number;
+  /** Le dernier tir (son numéro) contre lequel il a décidé de se protéger, ou pas ; le dernier lasso (l'image de départ
+   * du coup) qu'il a décidé de sauter, ou pas */
+  shotSeen: number;
+  lassoSeen: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
   /** Le même coup qu'on vient de lui relancer de près, encore et encore (ça s'oublie vite) : un marteleur se repère */
@@ -197,13 +205,17 @@ export function newBotMemory(seed: number): BotMemory {
     alerted: -1,
     punished: -1,
     heat: 0,
-    camp: 0,
     hopAt: 0,
+    foeTravel: [],
+    foeAtk: [],
+    foeX: [],
     patient: false,
     patientUntil: 0,
     seenEnd: -1,
     seenStart: -1,
     seenShot: -99,
+    shotSeen: -1,
+    lassoSeen: -1,
     seen: "",
   };
 }
@@ -272,24 +284,6 @@ function startOf(style: HabitueId, key: string): number {
   return def && def.hits.length > 0 ? Math.min(...def.hits.map((h) => h.from)) : 8;
 }
 
-/** Jusqu'où porte ce coup (élan compris) ; un tir porte loin */
-const REACH = new Map<string, number>();
-function moveReach(style: HabitueId, key: string): number {
-  const id = `${style}:${key}`;
-  let r = REACH.get(id);
-  if (r !== undefined) return r;
-  const def = moveDef(style, key);
-  if (!def) r = 1;
-  else if (def.shoot) r = 99;
-  else {
-    const reachOf = def.hits.reduce((mx, h) => Math.max(mx, h.x + h.r), 0);
-    const run = (def.push ?? []).reduce((sum, p) => sum + ((p.vx ?? 0) * (p.to - p.from + 1)) / 60, 0);
-    r = reachOf + run;
-  }
-  REACH.set(id, r);
-  return r;
-}
-
 /** Jusqu'où porte ce style au sol, en comptant l'élan de ses coups qui avancent (une ruée de côté va loin) */
 const THREAT = new Map<HabitueId, number>();
 function threatRange(style: HabitueId): number {
@@ -320,6 +314,80 @@ function incomingShot(f: Fight, me: Fighter): boolean {
   );
 }
 
+/** Ce que fait chaque adversaire de lui-même (voir BotMemory.foeTravel) */
+function watchFoes(f: Fight, me: Fighter, m: BotMemory) {
+  m.foeTravel ??= [];
+  m.foeAtk ??= [];
+  m.foeX ??= [];
+  for (const o of f.fighters) {
+    if (o === me || (f.settings.teams && o.team === me.team)) continue;
+    const i = o.slot;
+    const free = o.state === "stand" || o.state === "air" || o.state === "squat";
+    const moved = free ? Math.min(0.5, Math.abs(o.x - (m.foeX[i] ?? o.x))) + (o.state === "air" ? 0.03 : 0) : 0;
+    // (on le croit mobile tant qu'on ne l'a pas vu rester en place)
+    m.foeTravel[i] = (m.foeTravel[i] ?? 3) * 0.99 + moved;
+    m.foeAtk[i] = (m.foeAtk[i] ?? 0) * 0.99 + (o.state === "move" && o.mt === 1 ? 1 : 0);
+    m.foeX[i] = o.x;
+  }
+}
+
+/** Il reste planté à marteler : debout sur le sol, il ne bouge presque pas de lui-même, et il frappe sans arrêt */
+function planted(m: BotMemory, o: Fighter): boolean {
+  return o.ground >= 0 && (m.foeTravel?.[o.slot] ?? 3) < 1.2 && (m.foeAtk?.[o.slot] ?? 0) >= 2.5;
+}
+
+/** Le tir adverse qui va le toucher le plus tôt (il vient sur lui, et il arrivera à sa hauteur), et dans combien
+ * d'images */
+function shotComing(f: Fight, me: Fighter): { eta: number; id: number } | null {
+  const st = STYLES[me.style];
+  let best: { eta: number; id: number } | null = null;
+  for (const p of f.projectiles) {
+    // (le lasso passe la garde : on ne s'en protège pas ainsi, voir plus bas)
+    if (p.owner === me.slot || (f.settings.teams && p.team === me.team) || p.dmg <= 0 || p.pull) continue;
+    if (Math.abs(p.vx) < 1 || Math.sign(p.vx) !== Math.sign(me.x - p.x)) continue;
+    const eta = (Math.max(0, Math.abs(me.x - p.x) - p.r - st.w / 2) / Math.abs(p.vx)) * 60;
+    if (eta > 20) continue;
+    const s = eta / 60;
+    const y = p.y + p.vy * s - 0.5 * p.g * s * s;
+    if (y < me.y - p.r || y > me.y + st.hgt + p.r) continue;
+    if (!best || eta < best.eta) best = { eta, id: p.id };
+  }
+  return best;
+}
+
+/** Un tir va le toucher : au sol, la garde levée juste avant ; en l'air, l'esquive au dernier moment (une seule
+ * décision par tir, réussie selon son niveau) */
+function dodgeShot(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | null {
+  if (me.state !== "stand" && me.state !== "air") return null;
+  // Le lasso attrape à travers la garde : on le saute, au moment où il part (vers celle qui le lance : elle met du
+  // temps à s'en remettre)
+  if (!airborne(me)) {
+    for (const o of enemies(f, me)) {
+      const def = o.state === "move" ? moveDef(o.style, o.move) : null;
+      const spec = def?.shoot ? SHOTS[def.shoot.kind] : undefined;
+      if (!def?.shoot || !spec?.pull || o.face !== (me.x > o.x ? 1 : -1) || Math.abs(o.y - me.y) > 1) continue;
+      const left = def.shoot.at - o.mt;
+      if (left < 0 || left > 4 || Math.abs(o.x - me.x) > (spec.vx * spec.life) / 60 + 1.2) continue;
+      if (m.lassoSeen === f.frame - o.mt) continue;
+      m.lassoSeen = f.frame - o.mt;
+      if (rnd(m) >= L.shots) continue;
+      m.jumpUntil = f.frame + JUMPSQUAT + 12;
+      return { x: o.x < me.x ? -0.6 : 0.6, y: 0, held: JMP, pressed: JMP };
+    }
+  }
+  const shot = shotComing(f, me);
+  if (!shot || shot.eta > (airborne(me) ? 3 : 6) || m.shotSeen === shot.id) return null;
+  m.shotSeen = shot.id;
+  if (rnd(m) >= L.shots) return null;
+  if (airborne(me)) return me.airdodged ? null : { x: 0, y: 0, held: SHD, pressed: SHD };
+  m.held = SHD;
+  m.holdUntil = f.frame + Math.ceil(shot.eta) + 8;
+  m.press = 0;
+  m.x = 0;
+  m.y = 0;
+  return { x: 0, y: 0, held: SHD, pressed: SHD };
+}
+
 /**
  * Le jeu de distance, debout sur le plateau : celui qui finit un coup manqué (ou retombe) se fait punir, s'il reste le
  * temps d'arriver ; un coup qui part vers lui, alors qu'il est dans sa portée, il s'en écarte (il tourne autour de
@@ -334,6 +402,8 @@ function spacing(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | nul
   const adx = Math.abs(dx);
   const toward = dx < 0 ? -1 : 1;
   const r = reach(me.style);
+  // (les coups portent jusqu'au bord de son corps, pas jusqu'à son milieu)
+  const body = st.w / 2;
   const out = (inp: Input): Input => {
     m.next = f.frame + 1;
     return inp;
@@ -345,9 +415,13 @@ function spacing(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | nul
       return null;
     }
     if (adx > r * 0.8) return out({ x: toward, y: 0, held: 0, pressed: 0 });
+    // Le temps que le coup fort sorte : c'est lui qui part (il fait plus mal, et il sort celui qui est entamé) ; mais pas
+    // lancé en pleine course, il glisserait sur son élan, à côté ou au travers : il freine d'abord (le sol arrête vite)
+    const strong = recoveryLeft(t) > startOf(me.style, "cs") + 1;
+    if (strong && Math.abs(me.vx) > st.walk && recoveryLeft(t) > startOf(me.style, "cs") + 3)
+      return out({ x: 0, y: 0, held: 0, pressed: 0 });
     m.punishUntil = 0;
-    // Le temps que le coup fort sorte : c'est lui qui part (il fait plus mal, et il sort celui qui est entamé)
-    if (recoveryLeft(t) > startOf(me.style, "cs") + 1) return out({ x: toward, y: 0, held: FRT, pressed: FRT });
+    if (strong && Math.abs(me.vx) <= st.walk) return out({ x: toward, y: 0, held: FRT, pressed: FRT });
     return out({ x: toward, y: 0, held: 0, pressed: adx < 1.1 && t.state === "land" ? GRB : ATK });
   }
   // Une fin de coup à punir : le temps d'arriver (en courant) et de frapper
@@ -362,15 +436,16 @@ function spacing(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | nul
       return out({ x: toward, y: 0, held: 0, pressed: 0 });
     }
   }
-  // Celui qui reste planté à marteler (des coups dans le vide, encore et encore) : on reste juste hors de sa portée, on
+  // Celui qui reste planté à marteler (des coups, encore et encore, sans bouger) : on reste juste hors de sa portée, on
   // attend qu'il manque (voir plus haut), et parfois on saute par-dessus pour frapper d'en haut
   // (le choix d'être patient tient trois quarts de seconde : tiré à chaque image, il lâcherait sans cesse)
-  if (m.camp >= 2 && f.frame >= m.patientUntil) {
+  const camping = planted(m, t);
+  if (camping && f.frame >= m.patientUntil) {
     m.patient = rnd(m) < L.space;
     m.patientUntil = f.frame + 45;
   }
-  if (m.camp >= 2 && m.patient) {
-    const danger = threatRange(t.style) + 0.3;
+  if (camping && m.patient) {
+    const danger = threatRange(t.style) + body + 0.3;
     const room = !nearEdge(me, stage(f), -toward);
     if (adx < danger && room && left === 0) return out({ x: -toward, y: 0, held: 0, pressed: 0 });
     if (adx < danger + 1.2) {
@@ -387,7 +462,7 @@ function spacing(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | nul
   if (t.state === "move" && left === 0 && t.face === toward * -1 && m.seenStart !== f.frame - t.mt) {
     const def = moveDef(t.style, t.move);
     const first = def && def.hits.length > 0 ? Math.min(...def.hits.map((h) => h.from)) : 0;
-    if (def && t.mt < first && adx < threatRange(t.style) + 0.4) {
+    if (def && t.mt < first && adx < threatRange(t.style) + body + 0.4) {
       m.seenStart = f.frame - t.mt;
       if (rnd(m) < L.space && !nearEdge(me, stage(f), -toward)) {
         m.holdUntil = f.frame + Math.min(18, first - t.mt + 6);
@@ -484,6 +559,18 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     const mash = rnd(m) < L.mash;
     return { x: rnd(m) < 0.5 ? -1 : 1, y: 0, held: 0, pressed: mash ? ATK : 0 };
   }
+  // À terre : il se relève (vite, selon ses réflexes) ; tout près de l'adversaire, parfois en frappant, ou il roule
+  // à l'écart, ou il se relève sur place (un instant intouchable)
+  if (me.state === "down") {
+    m.holdUntil = 0;
+    if (me.t < 10 + Math.round((1 - L.reflex) * 20)) return { x: 0, y: 0, held: 0, pressed: 0 };
+    const o = nearest(me, enemies(f, me));
+    const r = rnd(m);
+    if (o && Math.abs(o.x - me.x) < 1.6 && r < 0.4) return { x: 0, y: 0, held: 0, pressed: ATK };
+    const away = o ? (me.x < o.x ? -1 : 1) : 0;
+    if (away !== 0 && r < 0.7 && !nearEdge(me, st, away)) return { x: away, y: 0, held: 0, pressed: 0 };
+    return { x: 0, y: 0, held: JMP, pressed: JMP };
+  }
   // Il en tient un : une petite tape ou deux, puis la projection qui l'arrange
   if (me.state === "holding") {
     m.holdUntil = 0;
@@ -512,17 +599,14 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   // qu'on lance près de lui, quels qu'ils soient
   m.mashed = (m.mashed ?? 0) * 0.985;
   m.heat = (m.heat ?? 0) * 0.985;
-  // (celui-là s'oublie lentement : un joueur planté ne change pas de manière d'une seconde à l'autre)
-  m.camp = (m.camp ?? 0) * 0.99;
   for (const o of f.fighters) {
     if (o === me || o.team === me.team || o.state !== "move" || o.mt !== 1) continue;
     if (Math.abs(o.x - me.x) < 5 && Math.abs(o.y - me.y) < 1.5) m.heat += 1;
-    // Un coup lancé vers lui alors qu'il est hors de portée : dans le vide
-    if (Math.abs(o.x - me.x) < 7 && Math.abs(o.x - me.x) > moveReach(o.style, o.move) + 0.3) m.camp += 1;
     if (Math.abs(o.x - me.x) > 3 || Math.abs(o.y - me.y) > 1.5) continue;
     if (o.move === m.seen) m.mashed += 1;
     m.seen = o.move;
   }
+  watchFoes(f, me, m);
   // Sur ses gardes face à un marteleur : le coup qui arrive, il le voit tout de suite (sans attendre sa prochaine idée)
   if (m.mashed >= 3 && me.state === "stand" && f.frame >= m.holdUntil) {
     const danger = threat(me, enemies(f, me));
@@ -534,6 +618,8 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   }
   // Le jeu de distance, regardé à chaque image (sans attendre sa prochaine idée) : punir une fin de coup, s'écarter
   // d'un coup qui arrive, se protéger d'un tir
+  const dodge = dodgeShot(f, me, m, L);
+  if (dodge) return dodge;
   const neutral = spacing(f, me, m, L);
   if (neutral) return neutral;
   // Il vient d'arrêter un coup dans sa garde : il saisit celui qui finit son coup trop près (la garde punit le martelage)
@@ -679,7 +765,7 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     // Celui qui frappe sans arrêt : on ne lui rentre pas dedans. Au bord de sa portée (élan de ses ruées compris), on
     // attend qu'il manque un coup (voir spacing), on avance sous la garde (il frappe dedans, on le saisit à la fin de
     // son coup), ou on saute par-dessus pour frapper d'en haut
-    const danger = threatRange(t.style) + 0.3;
+    const danger = threatRange(t.style) + STYLES[me.style].w / 2 + 0.3;
     if (!airborne(me) && !airborne(t) && Math.abs(dy) < 1 && m.heat > 2 && adx < danger + 1 && rnd(m) < L.space) {
       const pick = rnd(m);
       if (pick < 0.4 && adx > danger - 0.6) {
@@ -745,22 +831,22 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     return out();
   }
   if (airborne(me)) {
-    if (dy < -0.6 && adx < 1.2) {
-      m.y = -1;
-      m.press = ATK;
-    } else if (dy > 0.8) {
-      m.y = 1;
-      m.press = ATK;
-    } else if (adx > 0.6) {
-      m.x = toward;
-      m.press = ATK;
-    } else m.press = ATK;
+    const key = dy < -0.6 && adx < 1.2 ? "ad" : dy > 0.8 ? "au" : adx > 0.6 ? "as" : "an";
+    // Au-dessus du vide (ou tout au bord) : le coup en l'air seulement s'il pourra encore revenir à la fin (un coup vers
+    // le bas sur celui qui reste planté au bord l'emmenait sous le plateau)
+    if ((me.x < st.x0 + 0.6 || me.x > st.x1 - 0.6) && !aerialSafe(f, me, key)) return out();
+    if (key === "ad") m.y = -1;
+    else if (key === "au") m.y = 1;
+    else if (key === "as") m.x = toward;
+    m.press = ATK;
     return out();
   }
+  // Le coup fort chargé, seulement s'il a le temps de sortir : face à celui qui frappe sans arrêt, quand il se reprend
+  const chargeOk = m.heat < 2 || recoveryLeft(t) > startOf(me.style, "cs") + 1;
   if (dy > 1.1) {
     m.y = 1;
     m.press = ATK;
-    if (t.dmg > 90 && rnd(m) < L.charge) {
+    if (t.dmg > 90 && chargeOk && rnd(m) < L.charge) {
       // Le coup fort vers le haut, chargé un moment
       m.press = FRT;
       m.held = FRT;
@@ -769,7 +855,7 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     return out();
   }
   const killPercent = 95 + STYLES[t.style].weight * 0.3;
-  if (t.dmg > killPercent * 0.75 && rnd(m) < L.charge && !airborne(t)) {
+  if (t.dmg > killPercent * 0.75 && chargeOk && rnd(m) < L.charge && !airborne(t)) {
     // Le coup fort, chargé un moment
     m.x = toward;
     m.press = FRT;
@@ -778,8 +864,8 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
     return out();
   }
   const pick = rnd(m);
-  if (pick < 0.12 && me.style !== "simone") {
-    // Un spécial de côté pour surprendre
+  if (pick < 0.12 && me.style !== "simone" && !rushesOff(me, toward, st)) {
+    // Un spécial de côté pour surprendre (pas une ruée qui l'emporterait hors du plateau s'il manque)
     m.x = toward;
     m.press = SPC;
   } else if (adx < 1 && pick < 0.32) {
@@ -833,6 +919,28 @@ function nearest(me: Fighter, foes: Fighter[]): Fighter | null {
     }
   }
   return best;
+}
+
+/** Sa ruée de côté (son élan), lancée vers là : l'emporterait-elle au-delà du bord du plateau ? */
+function rushesOff(me: Fighter, dir: number, st: { x0: number; x1: number }): boolean {
+  const def = moveDef(me.style, "ps");
+  const run = (def?.push ?? []).reduce((sum, p) => sum + ((p.vx ?? 0) * (p.to - p.from + 1)) / 60, 0);
+  const end = me.x + dir * run;
+  return end < st.x0 + 0.4 || end > st.x1 - 0.4;
+}
+
+/** Ce coup en l'air, lancé au-dessus du vide : à sa fin, sera-t-il encore assez haut pour revenir (avec son saut en
+ * l'air, s'il lui en reste) ? */
+function aerialSafe(f: Fight, me: Fighter, key: string): boolean {
+  const st = STYLES[me.style];
+  const g = st.gravity * gravityOf(f);
+  let y = me.y;
+  let vy = me.vy;
+  for (let i = 0; i < (moveDef(me.style, key)?.frames ?? 30); i++) {
+    vy = Math.max(vy - g / 60, -st.fall);
+    y += vy / 60;
+  }
+  return y + (me.jumps > 0 ? jumpReach(f, me).air : 0) > stage(f).y + 0.5;
 }
 
 /** La hauteur que gagne un grand saut depuis le sol, et un saut en l'air pris au sommet (avec un peu de marge) */

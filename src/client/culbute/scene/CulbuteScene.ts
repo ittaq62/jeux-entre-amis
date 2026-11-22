@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { ARENAS, blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
 import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
+import { F_PUFF } from "../../../shared/games/culbute/view.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
@@ -110,6 +111,8 @@ export class CulbuteScene {
   private grounded: boolean[] = [];
   private lastXs: number[] = [];
   private dustAt: number[] = [];
+  /** La dernière bouffée de celui qui est essoufflé */
+  private breathAt: number[] = [];
   /** La charge de chacun : la dernière étincelle aspirée, et s'il a déjà jeté l'éclair de la charge pleine */
   private chargeAt: number[] = [];
   private chargeFull: boolean[] = [];
@@ -394,6 +397,7 @@ export class CulbuteScene {
       if (this.aim?.slot === i) this.placeAim(f);
       this.placeBlob(i, f, frame.plats);
       this.dust(i, f, dt);
+      this.breath(i, f);
       this.charging(i, f);
       const pad = this.pads[i]!;
       pad.visible = f.state === "respawn";
@@ -1086,6 +1090,15 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
   }
 
   /** La poussière : à l'atterrissage, et de temps en temps sous les pieds de celui qui court */
+  /** Essoufflé (des coups dans le vide d'affilée) : de petites bouffées devant sa bouche pendant qu'il se reprend, chez
+   * lui comme chez l'adversaire (c'est le moment de le punir) */
+  private breath(i: number, f: RenderFrame["fighters"][number]) {
+    if ((f.flags & F_PUFF) === 0 || f.state !== "land") return;
+    if (this.time - (this.breathAt[i] ?? 0) < 0.2) return;
+    this.breathAt[i] = this.time;
+    this.puff(f.x + f.face * 0.3, f.y + 1.35, 0xffffff, 0.11, 0.5);
+  }
+
   private dust(i: number, f: RenderFrame["fighters"][number], dt: number) {
     const was = this.grounded[i] ?? true;
     const on =

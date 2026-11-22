@@ -155,50 +155,69 @@ describe("Culbute : les bots", () => {
   });
 });
 
-/** Le joueur qui reste planté et martèle les deux clics vers l'adversaire (visée au curseur), sans jamais bouger ;
- * éjecté, il revient comme il peut (sauts, puis le spécial vers le haut) */
-function camper(f: Fight, slot: number, home: number, rnd: () => number): Input {
+/** Le joueur qui reste planté et martèle les deux clics vers l'adversaire (visée au curseur), sans jamais bouger, à la
+ * main (de 5 à 16 images entre deux clics) ; comme dans le jeu, le coup qui attend que son combattant puisse le donner
+ * garde la visée jusque-là. Éjecté, il revient comme il peut (sauts, puis le spécial vers le haut) */
+function camper(f: Fight, slot: number, c: { home: number; next: number; aim: number }, rnd: () => number): Input {
   const me = f.fighters[slot]!;
   const foe = f.fighters.find((o) => o.slot !== slot && o.state !== "dead" && o.state !== "out");
   if (!foe || f.phase !== "fight") return { x: 0, y: 0, held: 0, pressed: 0 };
   const st = ARENAS[f.arena as ArenaId].platforms[0]!;
   if (me.ground < 0 && (me.x < st.x0 || me.x > st.x1 || me.y < -0.3)) {
-    const back = me.x < home ? 1 : -1;
+    c.aim = 0;
+    const back = me.x < c.home ? 1 : -1;
     if (me.vy < 0 && me.jumps > 0) return { x: back, y: 1, held: JMP, pressed: JMP };
     if (me.vy < 0 && me.y < 1) return { x: back * 0.4, y: 0.9, held: SPC, pressed: SPC };
     return { x: back, y: 0, held: 0, pressed: 0 };
   }
-  if (me.ground >= 0 && Math.abs(me.x - home) > 1.2 && f.frame % 6 !== 0) return { x: me.x < home ? 1 : -1, y: 0, held: 0, pressed: 0 };
-  if (f.frame % 6 !== 0) return { x: 0, y: 0, held: 0, pressed: 0 };
   const dx = foe.x - me.x;
   const dy = foe.y - me.y;
   const len = Math.hypot(dx, dy);
   const [x, y] = len < 0.75 ? [0, 0] : [dx / len, dy / len];
-  return { x, y, held: 0, pressed: rnd() < 0.5 ? ATK : SPC };
+  if (f.frame >= c.next) {
+    c.next = f.frame + 5 + Math.floor(rnd() * 12);
+    c.aim = 6;
+    return { x, y, held: 0, pressed: rnd() < 0.5 ? ATK : SPC };
+  }
+  if (c.aim > 0) {
+    const ready = me.state === "stand" || me.state === "air";
+    c.aim = ready ? 0 : c.aim - 1;
+    if (!ready) return { x, y, held: 0, pressed: 0 };
+  }
+  if (me.ground >= 0 && Math.abs(me.x - c.home) > 1.2) return { x: me.x < c.home ? 1 : -1, y: 0, held: 0, pressed: 0 };
+  return { x: 0, y: 0, held: 0, pressed: 0 };
+}
+
+/** Le joueur planté contre un bot de ce niveau, un combat par style (le bot, deux styles plus loin) : ses victoires */
+function camperWins(level: "moyen" | "fort", seed: number): number {
+  let wins = 0;
+  for (const [i, style] of HABITUE_IDS.entries()) {
+    const foe = HABITUE_IDS[(i + 2) % HABITUE_IDS.length]!;
+    const f = createFight(
+      { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", stocks: 3 },
+      "place",
+      [
+        { id: "m", team: 0, style },
+        { id: "b", team: 1, style: foe },
+      ],
+      seed + i,
+    );
+    while (f.phase === "intro") stepFight(f, []);
+    const c = { home: f.fighters[0]!.x, next: 0, aim: 0 };
+    const mem = newBotMemory(seed * 3 + 77 + i);
+    let r = 7919 + seed + i * 13;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 6 * 60 * 60 && f.phase !== "over"; k++) stepFight(f, [camper(f, 0, c, rnd), botInput(f, 1, mem, level)]);
+    if (f.fighters[0]!.rank === 1) wins++;
+  }
+  return wins;
 }
 
 describe("Culbute : marteler sans bouger ne suffit pas", () => {
-  it("contre les bots forts, le joueur planté qui martèle perd nettement (un combat par style)", () => {
-    let wins = 0;
-    for (const [i, style] of HABITUE_IDS.entries()) {
-      const foe = HABITUE_IDS[(i + 2) % HABITUE_IDS.length]!;
-      const f = createFight(
-        { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", stocks: 3 },
-        "place",
-        [
-          { id: "m", team: 0, style },
-          { id: "b", team: 1, style: foe },
-        ],
-        40 + i,
-      );
-      while (f.phase === "intro") stepFight(f, []);
-      const home = f.fighters[0]!.x;
-      const mem = newBotMemory(77 + i);
-      let r = 7919 + i * 13;
-      const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
-      for (let k = 0; k < 6 * 60 * 60 && f.phase !== "over"; k++) stepFight(f, [camper(f, 0, home, rnd), botInput(f, 1, mem, "fort")]);
-      if (f.fighters[0]!.rank === 1) wins++;
-    }
-    expect(wins).toBeLessThanOrEqual(2);
+  it("contre les bots moyens et forts, le joueur planté qui martèle perd nettement (douze combats chacun)", () => {
+    const moyen = camperWins("moyen", 40) + camperWins("moyen", 140);
+    const fort = camperWins("fort", 40) + camperWins("fort", 140);
+    expect(moyen).toBeLessThanOrEqual(2);
+    expect(fort).toBeLessThanOrEqual(2);
   });
 });
