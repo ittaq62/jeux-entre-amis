@@ -10,6 +10,15 @@ export type Scheme = "clavier" | "manette" | "tactile";
 
 const BITS: Partial<Record<ActionId, number>> = { attack: ATK, strong: FRT, special: SPC, jump: JMP, shield: SHD, grab: GRB, taunt: NAR };
 
+/** Les appuis qui partent vers le curseur, quand on vise à la souris */
+const AIMED = ATK | FRT | SPC | GRB;
+/** Le curseur sur le combattant (à moins de tant de mètres de son milieu) : le coup sans direction */
+export const AIM_NEUTRAL = 0.75;
+/** Le milieu du combattant, au-dessus de ses pieds */
+export const AIM_CENTER = 0.75;
+/** Un appui visé attend au plus tant d'images que le combattant puisse le donner (la mémoire des appuis du combat) */
+const AIM_WAIT = 6;
+
 /** Un clic sur l'interface (boutons, menus, discussion) n'est pas un coup */
 const UI = "button, a, input, textarea, select, label, summary, [role='dialog'], [role='menu'], .panel";
 
@@ -29,6 +38,14 @@ export class CulbuteControls {
   private settings: CulbuteSettings;
   /** Pendant que l'aide, le menu ou les réglages sont ouverts, le combat n'écoute plus */
   paused = false;
+  /** Le curseur de la souris (coordonnées de la fenêtre) */
+  private mouse: { x: number; y: number } | null = null;
+  /** Images restantes pendant lesquelles le stick vise le curseur (un appui visé qui attend son tour) */
+  private aimLeft = 0;
+  /** Du milieu de son combattant au curseur, en mètres (posé par l'écran du combat) ; null : pas de combattant */
+  aimFrom: ((clientX: number, clientY: number) => [number, number] | null) | null = null;
+  /** Son combattant peut-il agir à cette image (l'appui visé part alors) ? */
+  ready: () => boolean = () => true;
   readonly touch = { sx: 0, sy: 0, atk: false, spc: false, jmp: false, grb: false, taps: 0 };
 
   constructor(settings: CulbuteSettings = loadSettings()) {
@@ -38,6 +55,7 @@ export class CulbuteControls {
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("mousedown", this.onMouseDown);
     window.addEventListener("mouseup", this.onMouseUp);
+    window.addEventListener("mousemove", this.onMouseMove);
     window.addEventListener("contextmenu", this.onContextMenu);
     window.addEventListener("blur", this.onBlur);
   }
@@ -47,6 +65,7 @@ export class CulbuteControls {
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("mousedown", this.onMouseDown);
     window.removeEventListener("mouseup", this.onMouseUp);
+    window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("contextmenu", this.onContextMenu);
     window.removeEventListener("blur", this.onBlur);
   }
@@ -57,6 +76,20 @@ export class CulbuteControls {
 
   get stickJump(): boolean {
     return this.settings.stickJump;
+  }
+
+  /** Vise-t-on à la souris en ce moment (réglage, et le clavier et la souris comme façon de jouer) ? */
+  get aiming(): boolean {
+    return this.settings.aimMouse && this.scheme === "clavier" && this.mouse !== null;
+  }
+
+  /** Où vise le curseur, vu de son combattant : vers le haut, le bas, de côté, ou sur lui (null : on ne vise pas) */
+  aimNow(): [number, number] | null {
+    if (!this.aiming || !this.aimFrom || !this.mouse) return null;
+    const v = this.aimFrom(this.mouse.x, this.mouse.y);
+    if (!v) return null;
+    const len = Math.hypot(v[0], v[1]);
+    return len < AIM_NEUTRAL ? [0, 0] : [v[0] / len, v[1] / len];
   }
 
   setSettings(s: CulbuteSettings) {
@@ -102,6 +135,10 @@ export class CulbuteControls {
     // Pas de défilement automatique (molette) ni de sélection de texte pendant le combat
     e.preventDefault();
     this.press(code);
+  };
+
+  private onMouseMove = (e: MouseEvent) => {
+    this.mouse = { x: e.clientX, y: e.clientY };
   };
 
   private onMouseUp = (e: MouseEvent) => {
@@ -161,6 +198,16 @@ export class CulbuteControls {
     }
     // La touche du haut fait sauter (un appui, un saut) ; enfoncée avec un coup, c'est le coup vers le haut (voir UPJ)
     if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP | UPJ;
+
+    // Viser à la souris : le coup (le spécial, le lancer) part vers le curseur, pas vers les touches tenues ; s'il doit
+    // attendre que son combattant puisse le donner, le stick vise jusque-là
+    // (sauté en même temps, le coup part en l'air après l'élan : on vise jusque-là)
+    if (tapped & AIMED && this.aiming) this.aimLeft = AIM_WAIT;
+    if (this.aimLeft > 0) {
+      const aim = this.aimNow();
+      if (aim) [x, y] = aim;
+      this.aimLeft = aim && (!this.ready() || tapped & JMP) ? this.aimLeft - 1 : 0;
+    }
 
     // La manette : stick gauche ou croix, A ou Y pour sauter, X pour frapper, B pour le spécial, la gâchette haute droite
     // pour saisir, les autres gâchettes pour la garde, le petit bouton de gauche (Retour, Select) pour narguer, le stick

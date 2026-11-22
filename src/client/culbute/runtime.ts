@@ -24,7 +24,7 @@ import {
   type CulbuteView,
   type FighterNet,
 } from "../../shared/games/culbute/view.ts";
-import { CulbuteControls, type Scheme } from "./controls.ts";
+import { AIM_CENTER, CulbuteControls, type Scheme } from "./controls.ts";
 import { CulbuteScene, type FighterLook } from "./scene/CulbuteScene.ts";
 
 const STEP = 1 / 60;
@@ -136,6 +136,16 @@ export class FightRuntime {
     this.scene = new CulbuteScene(host, view.arena, view.scale, opts.looks);
     if (import.meta.env.DEV) (window as unknown as { __cbScene: CulbuteScene }).__cbScene = this.scene;
     this.looksKey = JSON.stringify(opts.looks);
+    // Viser à la souris : du milieu de son combattant (tel qu'anticipé) au point de l'arène sous le curseur
+    this.controls.aimFrom = (cx, cy) => {
+      const me = this.world?.fighters[this.mySlot];
+      const p = me ? this.scene.worldAt(cx, cy) : null;
+      return me && p ? [p[0] - me.x, p[1] - (me.y + AIM_CENTER)] : null;
+    };
+    this.controls.ready = () => {
+      const st = this.world?.fighters[this.mySlot]?.state;
+      return st === "stand" || st === "air" || st === "shield";
+    };
     this.setupWorld(view);
     window.addEventListener("resize", this.fit);
     this.fit();
@@ -529,6 +539,7 @@ export class FightRuntime {
       for (const e of due) this.scene.effect(e, frame);
       this.opts.onEvents(due, frame);
     }
+    this.scene.setAim(this.mySlot, this.mySlot >= 0 ? this.controls.aimNow() : null);
     this.scene.render(dt, frame);
     this.opts.onFrame?.(frame);
     if (import.meta.env.DEV) (window as unknown as { __cbFrame: RenderFrame }).__cbFrame = frame;

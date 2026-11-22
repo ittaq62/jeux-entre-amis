@@ -8,6 +8,7 @@ import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { AIM_CENTER } from "../controls.ts";
 import type { RenderFrame } from "../runtime.ts";
 import { buildArena, type ArenaScene } from "./arenas3d.ts";
 import { FighterModel, type FighterLook } from "./fighter.ts";
@@ -87,6 +88,12 @@ export class CulbuteScene {
   /** De quoi calculer à chaque image sans rien créer (le ramasse-miettes n'a rien à balayer derrière) */
   private tmpA = new THREE.Vector3();
   private tmpB = new THREE.Vector3();
+  private picker = new THREE.Raycaster();
+  /** La visée à la souris : le repère autour de son combattant (la flèche du coup qui partira, ou un rond sur lui) */
+  private aimMark = new THREE.Group();
+  private aimArrow: THREE.Mesh;
+  private aimDot: THREE.Mesh;
+  private aim: { slot: number; v: [number, number] } | null = null;
   private tmpColor = new THREE.Color();
   private seen = new Set<number>();
   private trailAt = new Map<number, number>();
@@ -179,7 +186,72 @@ export class CulbuteScene {
     this.lasso.geometry.translate(0, 0.5, 0);
     this.lasso.visible = false;
     this.scene.add(this.lasso);
+    // Une flèche jaune bordée de sombre (lisible sur le ciel comme sur les murs clairs), un rond sur lui
+    const aimMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xffcf3a, transparent: true, opacity: 0.92, depthTest: false }));
+    const aimEdge = this.keep(new THREE.MeshBasicMaterial({ color: 0x2a1d0e, transparent: true, opacity: 0.7, depthTest: false }));
+    const tri = new THREE.Shape();
+    tri.moveTo(0.24, 0);
+    tri.lineTo(-0.09, 0.19);
+    tri.lineTo(-0.09, -0.19);
+    tri.closePath();
+    const triGeo = this.keep(new THREE.ShapeGeometry(tri));
+    this.aimArrow = new THREE.Mesh(triGeo, aimMat);
+    const arrowEdge = new THREE.Mesh(triGeo, aimEdge);
+    arrowEdge.scale.setScalar(1.4);
+    arrowEdge.position.x = -0.03;
+    arrowEdge.renderOrder = 9;
+    this.aimArrow.add(arrowEdge);
+    this.aimDot = new THREE.Mesh(this.keep(new THREE.RingGeometry(0.44, 0.53, 32)), aimMat);
+    const dotEdge = new THREE.Mesh(this.keep(new THREE.RingGeometry(0.4, 0.57, 32)), aimEdge);
+    dotEdge.renderOrder = 9;
+    this.aimDot.add(dotEdge);
+    this.aimMark.add(this.aimArrow, this.aimDot);
+    this.aimArrow.renderOrder = 10;
+    this.aimDot.renderOrder = 10;
+    this.aimMark.visible = false;
+    this.scene.add(this.aimMark);
     this.setLooks(looks);
+  }
+
+  /** Le point du plan des combattants sous ce point de la fenêtre (en mètres), null si l'écran n'est pas là */
+  worldAt(clientX: number, clientY: number): [number, number] | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    this.picker.setFromCamera(
+      new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1),
+      this.camera,
+    );
+    const o = this.picker.ray.origin;
+    const d = this.picker.ray.direction;
+    if (Math.abs(d.z) < 1e-6) return null;
+    const t = -o.z / d.z;
+    return [o.x + d.x * t, o.y + d.y * t];
+  }
+
+  /** La visée de ce combattant : vers où partira son coup ([0, 0] : sur lui, le coup sans direction ; null : on ne vise pas) */
+  setAim(slot: number, v: [number, number] | null) {
+    this.aim = v ? { slot, v } : null;
+    this.renderer.domElement.style.cursor = v ? "crosshair" : "";
+  }
+
+  /** Le repère de visée autour du combattant : la flèche dans la direction du coup (haut, bas, côté), un rond sur lui */
+  private placeAim(f: RenderFrame["fighters"][number]) {
+    const v = this.aim!.v;
+    const alive = f.state !== "dead" && f.state !== "out" && f.state !== "respawn";
+    this.aimMark.visible = alive;
+    if (!alive) return;
+    this.aimMark.position.set(f.x, f.y + AIM_CENTER, 0.6);
+    const neutral = v[0] === 0 && v[1] === 0;
+    this.aimDot.visible = neutral;
+    this.aimArrow.visible = !neutral;
+    if (neutral) return;
+    // La direction du coup qui partira, comme le combat la lit : vers le haut, vers le bas, ou de côté
+    const ang =
+      v[1] > 0.55 && v[1] >= Math.abs(v[0]) ? Math.PI / 2 : v[1] < -0.55 && -v[1] >= Math.abs(v[0]) ? -Math.PI / 2 : v[0] < 0 ? Math.PI : 0;
+    // (vers le haut, au-dessus de l'étiquette « Toi »)
+    const rad = ang > 1 ? 1.78 : 1.12;
+    this.aimArrow.position.set(Math.cos(ang) * rad, Math.sin(ang) * rad, 0);
+    this.aimArrow.rotation.z = ang;
   }
 
   private buildArena() {
@@ -312,12 +384,14 @@ export class CulbuteScene {
     this.quality.tick(performance.now());
     this.time += dt;
     this.arena.update(this.time, frame.plats);
+    this.aimMark.visible = false;
     frame.fighters.forEach((raw, i) => {
       const m = this.fighters[i];
       if (!m) return;
       const f = this.entrance(raw, i, frame.frame);
       m.teeter = teeterSide(f, frame.plats);
       m.update(dt, f, this.time);
+      if (this.aim?.slot === i) this.placeAim(f);
       this.placeBlob(i, f, frame.plats);
       this.dust(i, f, dt);
       this.charging(i, f);

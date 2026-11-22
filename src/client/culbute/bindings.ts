@@ -20,6 +20,8 @@ export interface CulbuteSettings {
   stickJump: boolean;
   /** La musique pendant le combat */
   music: boolean;
+  /** Les coups, les spéciaux et les lancers partent vers le curseur de la souris (pas vers les touches tenues) */
+  aimMouse: boolean;
 }
 
 export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "strong", "special", "jump", "shield", "grab", "taunt"];
@@ -51,10 +53,11 @@ const MOVES_ZQSD = {
   right: ["KeyD", "ArrowRight"],
 };
 
-export const PRESETS: { id: string; name: string; note: string; bindings: Bindings }[] = [
+export const PRESETS: { id: string; name: string; note: string; aim: boolean; bindings: Bindings }[] = [
   {
     id: "souris",
     name: "ZQSD et souris",
+    aim: true,
     note: "Clic gauche pour frapper, F (ou le bouton avant de la souris) pour le coup fort, clic droit pour le spécial, Espace pour sauter, Maj pour la garde, E pour saisir et ramasser",
     bindings: {
       ...MOVES_ZQSD,
@@ -70,6 +73,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "fleches",
     name: "Flèches et clavier",
+    aim: false,
     note: "La main droite sur les flèches, la gauche sur X (frapper), W (coup fort), C (spécial), Espace, V (garde) et B (saisir, ramasser)",
     bindings: {
       up: ["ArrowUp"],
@@ -88,6 +92,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "lettres",
     name: "ZQSD et lettres",
+    aim: false,
     note: "Sans souris : J pour frapper, H pour le coup fort, K pour le spécial, Espace pour sauter, L pour la garde, U pour saisir et ramasser",
     bindings: {
       ...MOVES_ZQSD,
@@ -108,7 +113,7 @@ const OLD_STICK_KEY = "culbute-saut-au-stick";
 
 export function defaultSettings(): CulbuteSettings {
   const p = PRESETS[0]!;
-  return { preset: p.id, bindings: structuredClone(p.bindings), upJumps: true, stickJump: false, music: true };
+  return { preset: p.id, bindings: structuredClone(p.bindings), upJumps: true, stickJump: false, music: true, aimMouse: p.aim };
 }
 
 function cleanList(v: unknown): Binding[] | null {
@@ -140,6 +145,9 @@ export function loadSettings(): CulbuteSettings {
       upJumps: data.upJumps !== false,
       stickJump: data.stickJump === true,
       music: data.music !== false,
+      // Réglage d'avant la visée : on vise à la souris si l'on frappe à la souris
+      aimMouse:
+        typeof data.aimMouse === "boolean" ? data.aimMouse : [...bindings.attack, ...bindings.special].some((b) => b.startsWith("Mouse")),
     };
   } catch {
     return base;

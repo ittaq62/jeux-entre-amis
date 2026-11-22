@@ -11,7 +11,7 @@ import { avatarPalette, HABITUES, isTenueId, PALETTES, type TenueId } from "../.
 import { HABITUE_IDS, isHabitueId, type Fight, type FightEvent, type HabitueId } from "../../shared/games/culbute/model.ts";
 import { packFighter, unpackFighter } from "../../shared/games/culbute/view.ts";
 import { PLAYER_COLORS } from "./CulbuteFight.tsx";
-import { CulbuteControls } from "./controls.ts";
+import { AIM_CENTER, CulbuteControls } from "./controls.ts";
 import type { RenderFrame } from "./runtime.ts";
 import { CulbuteScene, type FighterLook } from "./scene/CulbuteScene.ts";
 
@@ -85,6 +85,14 @@ export function DevCulbute() {
     const scene = new CulbuteScene(host.current!, arena, f.scale, looks);
     const mem = styles.map((_, i) => newBotMemory(seed * 97 + i));
     const controls = play ? new CulbuteControls() : null;
+    if (controls) {
+      controls.aimFrom = (cx, cy) => {
+        const p = scene.worldAt(cx, cy);
+        const me = f.fighters[0]!;
+        return p ? [p[0] - me.x, p[1] - (me.y + AIM_CENTER)] : null;
+      };
+      controls.ready = () => ["stand", "air", "shield"].includes(f.fighters[0]!.state);
+    }
     let paused = q.get("pause") === "1";
     let speed = 1;
     let pending: FightEvent[] = [];
@@ -123,6 +131,7 @@ export function DevCulbute() {
       const frame = frameOf(f, play ? 0 : -1);
       for (const e of pending) scene.effect(e, frame);
       pending = [];
+      if (controls) scene.setAim(0, controls.aimNow());
       scene.render(paused ? 0 : dt, frame);
       frames++;
       if (now - fpsAt > 500) {

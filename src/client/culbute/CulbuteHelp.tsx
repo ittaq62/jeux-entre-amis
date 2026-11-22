@@ -5,7 +5,7 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
   const s = settings ?? loadSettings();
   const move = [bindingText(s, "left"), bindingText(s, "right"), bindingText(s, "up"), bindingText(s, "down")];
   const rows = [
-    { keys: move.join(" · "), what: "Se déplacer (et diriger les coups)" },
+    { keys: move.join(" · "), what: s.aimMouse ? "Se déplacer" : "Se déplacer (et diriger les coups)" },
     { keys: bindingText(s, "attack"), what: "Frapper, aussitôt (en courant : coup en courant ; vite plusieurs fois : ça enchaîne)" },
     { keys: bindingText(s, "strong"), what: "Coup fort, tout de suite (tenir pour le charger)" },
     { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
@@ -37,6 +37,13 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
               </li>
             ))}
           </ul>
+          {s.aimMouse && (
+            <p className="hint">
+              <strong>Viser à la souris :</strong> les coups, les spéciaux et les lancers partent vers le curseur. Au-dessus du combattant,
+              c'est le coup vers le haut ; dessous, vers le bas ; de côté, de côté ; sur lui, le coup sans direction. La flèche jaune montre
+              le coup qui partira. Spécial vers le haut (clic droit au-dessus) pour remonter vers l'arène.
+            </p>
+          )}
           <p className="hint">
             Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Vers le bas
             en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers. Saut et Frapper en même temps : un

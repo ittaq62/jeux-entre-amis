@@ -12,6 +12,11 @@ beforeAll(async () => {
   const g = globalThis as unknown as Record<string, unknown>;
   g.window ??= { addEventListener() {}, removeEventListener() {} };
   g.navigator ??= {};
+  g.Element ??= class {};
+  g.HTMLElement ??= class {};
+  g.HTMLInputElement ??= class {};
+  g.HTMLTextAreaElement ??= class {};
+  g.document ??= { activeElement: null };
   const { CulbuteControls } = await import("./controls.ts");
   make = () => new CulbuteControls(defaultSettings());
 });
@@ -59,5 +64,62 @@ describe("Culbute, commandes au doigt", () => {
     expect(rest.some((s) => s.pressed & (ATK | FRT))).toBe(false);
     c.touchButton("atk", false);
     expect(c.sample().pressed & (ATK | FRT)).toBe(0);
+  });
+});
+
+/** Les gestes de la souris, tels que la fenêtre les donnerait */
+type Mousy = { onMouseMove(e: unknown): void; onMouseDown(e: unknown): void; onMouseUp(e: unknown): void };
+const mouse = (c: Controls) => c as unknown as Mousy;
+const click = (c: Controls, button: number) => {
+  mouse(c).onMouseDown({ button, target: null, preventDefault() {} });
+  mouse(c).onMouseUp({ button, target: null, preventDefault() {} });
+};
+
+describe("Culbute, viser à la souris", () => {
+  it("le coup part vers le curseur : au-dessus, vers le haut ; sur le combattant, sans direction", () => {
+    const c = make();
+    let aim: [number, number] = [0, 3];
+    c.aimFrom = () => aim;
+    mouse(c).onMouseMove({ clientX: 10, clientY: 10 });
+    click(c, 0);
+    const up = c.sample();
+    expect(up.pressed & ATK).toBe(ATK);
+    expect(up.y).toBeCloseTo(1, 5);
+    expect(up.x).toBeCloseTo(0, 5);
+    aim = [0.2, 0.3];
+    click(c, 2);
+    const self = c.sample();
+    expect(self.x).toBe(0);
+    expect(self.y).toBe(0);
+  });
+
+  it("les touches tenues déplacent toujours ; le coup visé ne vise que le temps de partir", () => {
+    const c = make();
+    c.aimFrom = () => [-4, 0];
+    let ready = false;
+    c.ready = () => ready;
+    mouse(c).onMouseMove({ clientX: 10, clientY: 10 });
+    // Droite tenue, clic à gauche : le stick vise à gauche tant que le combattant ne peut pas frapper
+    (c as unknown as { onKeyDown(e: unknown): void }).onKeyDown({ code: "KeyD", preventDefault() {} });
+    click(c, 0);
+    expect(c.sample().x).toBeCloseTo(-1, 5);
+    expect(c.sample().x).toBeCloseTo(-1, 5);
+    // Il peut frapper : le coup part vers la gauche, puis la touche reprend la main
+    ready = true;
+    expect(c.sample().x).toBeCloseTo(-1, 5);
+    expect(c.sample().x).toBe(1);
+  });
+
+  it("sans le réglage (les dispositions au clavier seul), les touches donnent la direction", () => {
+    const c = new (make().constructor as new (s: ReturnType<typeof defaultSettings>) => Controls)({
+      ...defaultSettings(),
+      aimMouse: false,
+    });
+    c.aimFrom = () => [0, 3];
+    mouse(c).onMouseMove({ clientX: 10, clientY: 10 });
+    click(c, 0);
+    const s = c.sample();
+    expect(s.pressed & ATK).toBe(ATK);
+    expect(s.y).toBe(0);
   });
 });

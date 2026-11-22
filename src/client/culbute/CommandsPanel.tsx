@@ -97,7 +97,7 @@ export function CommandsPanel({
                 key={p.id}
                 type="button"
                 className={settings.preset === p.id ? "is-on" : ""}
-                onClick={() => update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings) })}
+                onClick={() => update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings), aimMouse: p.aim })}
               >
                 <strong>{p.name}</strong>
                 <small>{p.note}</small>
@@ -155,6 +155,13 @@ export function CommandsPanel({
               pouvoir jouer.
             </p>
           )}
+          <label className="cb-check">
+            <input type="checkbox" checked={settings.aimMouse} onChange={(e) => update({ ...settings, aimMouse: e.target.checked })} />
+            <span>
+              Viser à la souris : les coups, les spéciaux et les lancers partent vers le curseur (au-dessus du combattant, vers le haut ;
+              dessous, vers le bas ; sur lui, le coup sans direction)
+            </span>
+          </label>
           <label className="cb-check">
             <input type="checkbox" checked={settings.upJumps} onChange={(e) => update({ ...settings, upJumps: e.target.checked })} />
             <span>La touche Haut fait aussi sauter</span>
