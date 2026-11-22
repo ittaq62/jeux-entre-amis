@@ -787,6 +787,14 @@ export class BowlingRuntime {
         look.set(-side * 0.05, 0.2, -18.7);
         speed = 7;
         shot = "slow";
+      } else if (bz > -3.2 && tb) {
+        // La boule vient de partir : on reste derrière le lanceur (la caméra ne passe pas à travers lui)
+        const p = tb.pos;
+        const side = tb.info.look.left ? -1 : 1;
+        pos.set(p.x - 0.3 * side, 2.75, p.z + 3.7);
+        look.set(bx * 0.5, 0.15, -14.5);
+        speed = 3;
+        shot = "aim";
       } else {
         // Derrière la boule, puis on s'arrête un peu avant les quilles
         const z = Math.max(bz + 2.7, -15.2);
