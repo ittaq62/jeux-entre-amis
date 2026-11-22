@@ -77,6 +77,7 @@ export function CulbuteRoom({ code }: { code: string }) {
           onOpenChat={() => setChatOpen(true)}
           unread={unread}
           onShowLobby={() => !bridge && setLobbyOpen(true)}
+          serverOffset={serverOffset}
         />
       ) : bridge ? (
         // Juste avant le combat de la tournée : l'annonce

@@ -1,6 +1,6 @@
 // La salle de Culbute et les commandes des joueurs : une revanche repart d'une file propre, et un joueur dont plus rien
 // n'arrive (onglet caché, connexion morte) ne continue pas à courir avec la dernière commande reçue.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({
   DurableObject: class {
@@ -18,7 +18,8 @@ vi.mock("../shared/games/culbute/bot.ts", async (actual) => {
 });
 
 import { botInput } from "../shared/games/culbute/bot.ts";
-import type { Fight } from "../shared/games/culbute/engine.ts";
+import { INTRO_FRAMES, type Fight } from "../shared/games/culbute/engine.ts";
+import { LOAD_MAX_MS, type LoadGate } from "../shared/loadGate.ts";
 import type { Input } from "../shared/games/culbute/model.ts";
 import { CulbuteRoom } from "./culbuteRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user } from "./roomHarness.ts";
@@ -194,5 +195,91 @@ describe("Culbute : le bot qui remplace un joueur parti", () => {
     const asked = vi.mocked(botInput).mock.calls.map((c) => [c[1], c[3]]);
     expect(asked).toContainEqual([slot, "facile"]);
     expect(asked.every(([, level]) => level === "facile")).toBe(true);
+  });
+});
+
+describe("Culbute : le combat attend le chargement de chacun", () => {
+  type Gated = Inside & {
+    data: { status: string; fight: Fight | null; gate?: LoadGate | null; seats: { id: string; kind: string; userId: string | null }[] };
+    tick(): Promise<void>;
+  };
+  let clock = 1_000_000;
+  beforeEach(() => {
+    clock = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+  });
+  afterEach(() => {
+    vi.mocked(Date.now).mockRestore();
+  });
+
+  async function gated() {
+    const t = await table();
+    const inside = t.inside as Gated;
+    const tick = async (ms: number) => {
+      clock += ms;
+      await inside.tick();
+      inside.stopLoop();
+    };
+    const loaded = () => t.bench.send(t.host, { t: "loaded", gate: inside.data.gate!.id });
+    return { ...t, inside, tick, loaded };
+  }
+
+  it("ni le compte à rebours ni le bot ne courent pendant le chargement ; il part au départ commun, sans décompte de plus", async () => {
+    const t = await gated();
+    const gate = t.inside.data.gate!;
+    expect(gate.countdown).toBe(0);
+    expect(gate.waiting).toEqual([t.inside.data.seats.find((s) => s.kind === "human")!.id]);
+    // On voit qui charge encore
+    expect(t.host.view<{ gate: LoadGate }>().gate.loaded).toEqual([]);
+    await t.tick(2000);
+    await t.tick(2000);
+    expect(t.inside.data.fight!.frame).toBe(0);
+    await t.loaded();
+    expect(t.inside.data.gate!.goAt).toBe(clock);
+    await t.tick(50);
+    expect(t.inside.data.gate).toBeNull();
+    await t.tick(100);
+    // Le compte à rebours du combat a commencé : il en tient lieu
+    expect(t.inside.data.fight!.frame).toBeGreaterThan(0);
+    expect(t.inside.data.fight!.frame).toBeLessThan(INTRO_FRAMES);
+    expect(t.inside.data.fight!.phase).toBe("intro");
+  });
+
+  it("les commandes envoyées pendant le chargement ne comptent pas (un clic donné en attendant ne part pas en coup)", async () => {
+    const t = await gated();
+    await t.bench.send(t.host, { t: "in", s: 1, d: [1, 0, 1, 1], c: 1 });
+    await t.tick(500);
+    await t.loaded();
+    await t.tick(50);
+    expect(t.inside.data.gate).toBeNull();
+    const seen = t.inside.inputs(t.inside.data.fight!)[t.mine()]!;
+    expect(seen).toMatchObject({ x: 0, held: 0, pressed: 0 });
+  });
+
+  it("au-delà du délai maximum, le combat part sans le retardataire ; le joueur parti n'est plus attendu", async () => {
+    const t = await gated();
+    await t.tick(LOAD_MAX_MS - 50);
+    expect(t.inside.data.gate).not.toBeNull();
+    await t.tick(50);
+    expect(t.inside.data.gate).toBeNull();
+    const u = await gated();
+    await u.bench.drop(u.host);
+    expect(u.inside.data.gate!.goAt).toBe(clock);
+  });
+
+  it("à la revanche, un nouveau chargement (un « chargé » du combat d'avant ne compte pas)", async () => {
+    const t = await gated();
+    const first = t.inside.data.gate!.id;
+    await t.loaded();
+    await t.tick(50);
+    await t.inside.finishGame(clock);
+    await t.bench.send(t.host, { t: "rematch" });
+    await t.bench.send(t.host, { t: "ready" });
+    t.inside.stopLoop();
+    expect(t.inside.data.status).toBe("playing");
+    const second = t.inside.data.gate!;
+    expect(second.id).not.toBe(first);
+    await t.bench.send(t.host, { t: "loaded", gate: first });
+    expect(t.inside.data.gate!.loaded).toEqual([]);
   });
 });

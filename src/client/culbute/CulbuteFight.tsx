@@ -9,6 +9,11 @@ import { AvatarDrawing } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { MenuSound, SoundToggle } from "../components/SoundSettings.tsx";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
+import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
+import { nextFrame } from "../lib/prepare.ts";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
@@ -233,6 +238,9 @@ function TouchButton({
   );
 }
 
+/** L'écran de chargement aux couleurs de la place du village, à la tombée du jour */
+const LOADING_THEME: LoadingTheme = { from: "#e9885a", to: "#3b2346", accent: "#ffd25a" };
+
 export function CulbuteFight({
   room,
   send,
@@ -241,6 +249,7 @@ export function CulbuteFight({
   onOpenChat,
   unread,
   onShowLobby,
+  serverOffset,
 }: {
   room: CulbuteRoomView;
   send: (msg: CulbuteClientMessage) => void;
@@ -249,6 +258,8 @@ export function CulbuteFight({
   onOpenChat: () => void;
   unread: number;
   onShowLobby: () => void;
+  /** L'heure du serveur moins celle de l'appareil */
+  serverOffset: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const runtime = useRef<FightRuntime | null>(null);
@@ -271,6 +282,15 @@ export function CulbuteFight({
   looksRef.current = looks;
   const mySlot = view.fighters.findIndex((f) => f.id === room.you.seatId);
   const lastCount = useRef<number | null>(null);
+  // Le chargement de l'arène (voir shared/loadGate.ts) : on dit « chargé » au serveur ; le combat (et son compte à
+  // rebours) part quand tout le monde l'a dit
+  const [prep, setPrep] = useState({ share: 0, done: false });
+  const gateClock = useGateClock(room.gate, serverOffset);
+  useLoadedSignal(room.gate, room.you.seatId, prep.done, send);
+  const live = prep.done && gateClock.passed && room.status === "playing";
+  useEffect(() => {
+    if (live) return watchFirstSeconds("Culbute");
+  }, [live]);
 
   useEffect(() => {
     preloadSounds(SOUNDS);
@@ -303,7 +323,19 @@ export function CulbuteFight({
     rt.controls.setSettings(settingsRef.current);
     runtime.current = rt;
     listeners.current.onTick = (now, tick) => rt.onTick(now, tick);
+    // L'arène se prépare derrière l'écran de chargement, une fois posée (deux images plus tard)
+    let stopped = false;
+    setPrep({ share: 0, done: false });
+    void (async () => {
+      await nextFrame();
+      await nextFrame();
+      if (stopped) return;
+      await rt.prepare((share) => !stopped && setPrep({ share, done: false }));
+    })()
+      .catch((err: unknown) => console.error("Arène impossible à préparer", err))
+      .then(() => !stopped && setPrep({ share: 1, done: true }));
     return () => {
+      stopped = true;
       listeners.current.onTick = undefined;
       rt.dispose();
       runtime.current = null;
@@ -372,6 +404,21 @@ export function CulbuteFight({
     <div className={`cb-fight ${touch && seated ? "is-touch" : ""}`}>
       <div ref={host} className="cb-stage" />
       {flash > 0 && <div className="cb-flash" key={flash} aria-hidden="true" />}
+      {room.status === "playing" && loadingShown(prep.done, gateClock) && (
+        <GameLoading
+          title="Culbute"
+          theme={LOADING_THEME}
+          share={prep.share}
+          done={prep.done}
+          gate={room.gate}
+          serverOffset={serverOffset}
+          players={room.seats
+            .filter((s) => s.kind === "human")
+            .map((s) => ({ id: s.id, name: s.name, avatar: s.avatar, userId: s.userId }))}
+          me={room.you.seatId}
+        />
+      )}
+      <FirstSecondsPanel />
 
       <header className="cb-top">
         <div className="cb-top-left">

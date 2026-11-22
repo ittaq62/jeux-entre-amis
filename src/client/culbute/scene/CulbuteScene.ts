@@ -9,6 +9,7 @@ import { F_PUFF } from "../../../shared/games/culbute/view.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { warmThree } from "../../lib/prepare.ts";
 import { AIM_CENTER } from "../controls.ts";
 import type { RenderFrame } from "../runtime.ts";
 import { buildArena, type ArenaScene } from "./arenas3d.ts";
@@ -381,6 +382,14 @@ export class CulbuteScene {
     this.camera.lookAt(this.camLook);
     this.arena.dome.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Tout préparer derrière l'écran de chargement (les textures, les shaders, celui des bulles des combattants hors du cadre
+   * compris, et quelques images) : l'arène ne saute plus à son apparition. Voir lib/prepare.ts.
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, { extra: [[this.overlay, this.overlayCam]], onProgress });
   }
 
   render(dt: number, frame: RenderFrame) {

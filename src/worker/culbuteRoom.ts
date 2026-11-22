@@ -42,6 +42,7 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { forgetPlayer, gatePassed, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { randomSeed } from "../shared/rng.ts";
 import { canUse, tenueItem } from "../shared/shop.ts";
 import { variantSettings, type TourInit } from "../shared/tour.ts";
@@ -142,6 +143,8 @@ interface CulbuteData {
   ready?: string[];
   /** En tournée : plusieurs combats d'affilée, et les points de chacun */
   series?: CulbuteSeries | null;
+  /** Le combat retenu le temps que chacun charge l'arène (voir loadGate.ts) ; null : il tourne */
+  gate?: LoadGate | null;
 }
 
 interface Attachment {
@@ -443,6 +446,8 @@ export class CulbuteRoom extends DurableObject<Env> {
       seat.disconnectedAt = now;
       // Il ne bouge plus en attendant : pas de touche restée enfoncée
       this.queues.delete(seat.id);
+      // Parti pendant le chargement : les autres ne l'attendent plus
+      if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -628,6 +633,7 @@ export class CulbuteRoom extends DurableObject<Env> {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
             this.queues.delete(seat.id);
+            if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
             this.systemChat(`${seat.name} a quitté le combat, un bot prend sa place.`);
           } else {
             d.seats = d.seats.filter((s) => s !== seat);
@@ -646,6 +652,13 @@ export class CulbuteRoom extends DurableObject<Env> {
         void this.setPresence(userId, null).catch(() => {});
         if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now, ws);
+      }
+
+      case "loaded": {
+        // Son jeu a fini de charger l'arène : le combat part quand tout le monde l'a dit
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        settleGate(d.gate, now);
+        return this.afterChange([], now);
       }
 
       case "rematch": {
@@ -926,6 +939,15 @@ export class CulbuteRoom extends DurableObject<Env> {
     d.results = null;
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
+    // Le combat attend que chaque joueur présent ait chargé l'arène (au plus quelques secondes) ; le compte à rebours du
+    // combat (3, 2, 1, et l'entrée des combattants) part au départ commun et tient lieu de celui du chargement. À chaque
+    // manche d'une tournée aussi
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+      { countdown: 0 },
+    );
     this.lastKey = stateKey(d.fight);
     this.systemChat(d.series ? `Manche ${d.series.round} sur ${d.series.rounds} : que le meilleur gagne !` : "Que le meilleur gagne !");
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("culbute", d.settings.randomRules, "start"));
@@ -970,6 +992,25 @@ export class CulbuteRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    // Le chargement de chacun : rien ne bouge avant le départ commun, où le compte à rebours part pour tout le monde ; les
+    // commandes envoyées entre-temps ne comptent pas (un clic pendant le chargement ne part pas en coup au départ)
+    if (d.gate) {
+      const settled = settleGate(d.gate, now);
+      this.lastTick = now;
+      this.acc = 0;
+      this.queues.clear();
+      if (!gatePassed(d.gate, now)) {
+        if (settled) {
+          this.saveLive();
+          this.broadcast([]);
+        }
+        return;
+      }
+      d.gate = null;
+      this.saveLive();
+      this.broadcast([]);
+      return;
+    }
     this.acc += Math.min(now - this.lastTick, 200);
     this.lastTick = now;
     let steps = 0;
@@ -1332,6 +1373,7 @@ export class CulbuteRoom extends DurableObject<Env> {
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       culbute: d.fight ? culbuteView(d.fight, cfg) : null,
       series: d.series ?? null,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

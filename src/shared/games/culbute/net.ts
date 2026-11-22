@@ -1,5 +1,6 @@
 // Ce que se disent la table de Culbute et les navigateurs : le salon, le combat, les commandes.
 
+import type { LoadGate } from "../../loadGate.ts";
 import type { AchievementUnlock, ChatMessage, EloResult, RoomStatus, SeatView, SpectatorView, Visibility } from "../../protocol.ts";
 import type { FighterPick } from "./fighters.ts";
 import type { FightEvent } from "./model.ts";
@@ -45,6 +46,8 @@ export interface CulbuteRoomView {
   ready?: string[];
   /** En tournée : les manches enchaînées et les points de chacun */
   series?: CulbuteSeries | null;
+  /** Le combat retenu le temps que chacun charge l'arène (voir loadGate.ts) ; null : il tourne */
+  gate?: LoadGate | null;
 }
 
 export type CulbuteClientMessage =
@@ -71,6 +74,8 @@ export type CulbuteClientMessage =
   | { t: "sit" }
   | { t: "leave" }
   | { t: "ready" }
+  /** Son jeu a fini de charger ce combat (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | { t: "close" };
 
 export type CulbuteServerMessage =

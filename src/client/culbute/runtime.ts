@@ -167,6 +167,11 @@ export class FightRuntime {
     return this.controls.current;
   }
 
+  /** Tout préparer pendant l'écran de chargement (voir lib/prepare.ts) */
+  prepare(onProgress?: (share: number) => void) {
+    return this.scene.prepare(onProgress);
+  }
+
   setPaused(on: boolean) {
     this.controls.paused = on;
   }
