@@ -144,100 +144,169 @@ export class EscSound {
     this.verbIn.connect(this.verb).connect(this.out!);
   }
 
-  /** L'ambiance de la carte, en boucle sous le combat */
-  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige") {
+  /**
+   * Un bruit qui boucle sans couture : on en fabrique un peu plus que la boucle, et ce surplus se fond dans son début
+   * (à puissance égale), si bien qu'on n'entend ni déclic ni raccord.
+   */
+  private loopBuffer(seconds: number, fill: (d: Float32Array, sr: number) => void): AudioBuffer {
+    const ctx = this.ctx!;
+    const sr = ctx.sampleRate;
+    const len = Math.floor(seconds * sr);
+    const fade = Math.floor(0.6 * sr);
+    const raw = new Float32Array(len + fade);
+    fill(raw, sr);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    d.set(raw.subarray(0, len));
+    for (let i = 0; i < fade; i++) {
+      const k = (i / fade) * (Math.PI / 2);
+      d[i] = raw[len + i]! * Math.cos(k) + raw[i]! * Math.sin(k);
+    }
+    return buf;
+  }
+
+  /**
+   * L'ambiance de la carte, sous le combat. Discrète, et jamais pareille : des nappes de longueurs différentes (on ne
+   * repère pas leur boucle), un vent dont le souffle et le timbre dérivent au hasard, et de loin en loin un bruit de
+   * vie (oiseaux, mouettes, corbeau, chouette, tôle, gouttes). Tout passe par le volume « Musique et ambiance », écho
+   * compris, suivi en direct. `weather` : le temps de la carte (la bruine de la gare et la mer du port restent la nuit).
+   */
+  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige", weather: "soir" | "gris" | "aube" | "neige" = "soir") {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
-    const sr = ctx.sampleRate;
-    // Toute l'ambiance passe par un seul volume : celui de « Musique et ambiance » du réglage du son, suivi en direct
     const bus = ctx.createGain();
     bus.gain.value = musicLevel();
     bus.connect(this.out);
-    const unsubscribe = usePrefs.subscribe(() => bus.gain.setTargetAtTime(musicLevel(), ctx.currentTime, 0.2));
-    // Le vent : un bruit très filtré qui enfle et retombe
-    const wind = ctx.createBuffer(1, sr * 8, sr);
-    const d = wind.getChannelData(0);
-    const n = noiseGen(4711);
-    let lp = 0;
-    let lp2 = 0;
-    for (let i = 0; i < d.length; i++) {
-      const t = i / sr;
-      lp += lowpassK(380, sr) * (n() - lp);
-      lp2 += lowpassK(120, sr) * (lp - lp2);
-      // L'enveloppe boucle sans couture sur huit secondes
-      const swell = 0.55 + 0.45 * Math.sin((t / 8) * Math.PI * 2) * Math.sin((t / 8) * Math.PI * 6 + 1);
-      d[i] = (lp * 0.6 + lp2 * 2.2) * swell;
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = wind;
-    src.loop = true;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    src.connect(gain).connect(bus);
-    src.start();
-    gain.gain.setTargetAtTime(light === "neige" ? 0.62 : light === "gris" ? 0.5 : 0.32, ctx.currentTime, 1.5);
-    const nodes: AudioNode[] = [src, gain, bus];
-    if (light === "aube") {
-      // Le clapotis contre le quai : un bruit grave qui va et vient
-      const sea = ctx.createBuffer(1, sr * 6, sr);
-      const sd = sea.getChannelData(0);
-      const sn = noiseGen(77);
-      let a = 0;
-      for (let i = 0; i < sd.length; i++) {
-        const t = i / sr;
-        a += lowpassK(500, sr) * (sn() - a);
-        sd[i] = a * (0.5 + 0.5 * Math.sin((t / 6) * Math.PI * 2 * 3) ** 2);
-      }
-      const ss = ctx.createBufferSource();
-      ss.buffer = sea;
-      ss.loop = true;
-      const sg = ctx.createGain();
-      sg.gain.value = 0;
-      ss.connect(sg).connect(bus);
-      ss.start();
-      sg.gain.setTargetAtTime(0.4, ctx.currentTime, 2);
-      nodes.push(ss, sg);
-    }
-    if (light === "gris") {
-      // La bruine : un chuintement doux, sans fin
-      const rain = ctx.createBuffer(1, sr * 4, sr);
-      const rd = rain.getChannelData(0);
-      const rn = noiseGen(2024);
+    // L'écho des bruits de vie passe lui aussi par le réglage (avant, il sonnait quel que soit le volume choisi)
+    const echo = ctx.createGain();
+    echo.gain.value = musicLevel();
+    if (this.verbIn) echo.connect(this.verbIn);
+    const unsubscribe = usePrefs.subscribe(() => {
+      bus.gain.setTargetAtTime(musicLevel(), ctx.currentTime, 0.2);
+      echo.gain.setTargetAtTime(musicLevel(), ctx.currentTime, 0.2);
+    });
+    const nodes: AudioNode[] = [bus, echo];
+    const between = (a: number, b: number) => a + Math.random() * (b - a);
+    /** Ce qui dérive : une valeur qui va vers une cible tirée au hasard, renouvelée à intervalles irréguliers */
+    const drifts: { param: AudioParam; lo: number; hi: number; every: [number, number]; tau: [number, number]; next: number }[] = [];
+    const drift = (param: AudioParam, lo: number, hi: number, every: [number, number], tau: [number, number]) =>
+      drifts.push({ param, lo, hi, every, tau, next: 0 });
+    /** Une nappe qui boucle, éventuellement filtrée, qui monte doucement à son volume */
+    const layer = (buf: AudioBuffer, level: number, filter?: BiquadFilterNode) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      if (filter) src.connect(filter).connect(gain);
+      else src.connect(gain);
+      gain.connect(bus);
+      // Chaque nappe part d'un endroit différent de sa boucle
+      src.start(ctx.currentTime, Math.random() * buf.duration);
+      gain.gain.setTargetAtTime(level, ctx.currentTime, 2);
+      nodes.push(src, gain);
+      if (filter) nodes.push(filter);
+      return gain;
+    };
+
+    // Le vent : un souffle grave et un sifflement léger, de 17 et 24 secondes (leur ensemble ne se répète qu'après
+    // plusieurs minutes), dont le volume et le timbre changent sans cesse
+    const windLevel = { soir: 0.11, aube: 0.11, gris: 0.13, nuit: 0.09, neige: 0.17 }[light];
+    const low = this.loopBuffer(17.3, (d, sr) => {
+      const n = noiseGen(4711);
       let a = 0;
       let b = 0;
-      for (let i = 0; i < rd.length; i++) {
-        const w = rn();
-        a += lowpassK(6000, sr) * (w - a);
-        b += lowpassK(900, sr) * (a - b);
-        rd[i] = (a - b) * (1 + (rn() > 0.995 ? 3 : 0));
+      for (let i = 0; i < d.length; i++) {
+        a += lowpassK(380, sr) * (n() - a);
+        b += lowpassK(120, sr) * (a - b);
+        d[i] = a * 0.6 + b * 2.2;
       }
-      const rs = ctx.createBufferSource();
-      rs.buffer = rain;
-      rs.loop = true;
-      const rg = ctx.createGain();
-      rg.gain.value = 0;
-      rs.connect(rg).connect(bus);
-      rs.start();
-      rg.gain.setTargetAtTime(0.18, ctx.currentTime, 2);
-      nodes.push(rs, rg);
+    });
+    const lowFilter = ctx.createBiquadFilter();
+    lowFilter.type = "lowpass";
+    lowFilter.frequency.value = 500;
+    const lowGain = layer(low, windLevel, lowFilter);
+    drift(lowGain.gain, windLevel * 0.45, windLevel * 1.05, [3, 8], [1.5, 3.5]);
+    drift(lowFilter.frequency, 260, 900, [4, 11], [2, 4]);
+    const airy = this.loopBuffer(23.9, (d, sr) => {
+      const n = noiseGen(2718);
+      let a = 0;
+      let b = 0;
+      for (let i = 0; i < d.length; i++) {
+        a += lowpassK(1400, sr) * (n() - a);
+        b += lowpassK(420, sr) * (a - b);
+        d[i] = (a - b) * 0.9;
+      }
+    });
+    const airyGain = layer(airy, windLevel * 0.3);
+    drift(airyGain.gain, 0, windLevel * 0.55, [5, 13], [2, 5]);
+
+    // La mer du port : un clapotis grave, des vagues irrégulières
+    if (weather === "aube") {
+      const sea = this.loopBuffer(13.7, (d, sr) => {
+        const n = noiseGen(77);
+        let a = 0;
+        for (let i = 0; i < d.length; i++) {
+          a += lowpassK(500, sr) * (n() - a);
+          d[i] = a;
+        }
+      });
+      const seaGain = layer(sea, 0.12);
+      drift(seaGain.gain, 0.04, 0.17, [2.5, 6], [0.9, 2]);
     }
-    // Les bruits de fond, de temps en temps : des oiseaux le soir au hameau, des tôles et des pigeons à la gare
+    // La bruine de la gare : un chuintement léger (et, plus bas, des gouttes de loin en loin)
+    if (weather === "gris") {
+      const rain = this.loopBuffer(11.1, (d, sr) => {
+        const n = noiseGen(2024);
+        let a = 0;
+        let b = 0;
+        for (let i = 0; i < d.length; i++) {
+          a += lowpassK(6000, sr) * (n() - a);
+          b += lowpassK(900, sr) * (a - b);
+          d[i] = a - b;
+        }
+      });
+      const rainGain = layer(rain, 0.06);
+      drift(rainGain.gain, 0.04, 0.075, [4, 10], [2, 4]);
+    }
+
+    /** Une goutte, ou deux ou trois, qui tombent sur une tôle ou une gouttière, quelque part */
+    const drip = () => {
+      const t0 = ctx.currentTime + 0.02;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = between(-0.9, 0.9);
+      pan.connect(bus);
+      const drops = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < drops; k++) {
+        const at = t0 + k * between(0.08, 0.35);
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime(between(1800, 3400), at);
+        o.frequency.exponentialRampToValueAtTime(between(700, 1200), at + 0.05);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(between(0.006, 0.014), at + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.07);
+        o.connect(g).connect(pan);
+        o.start(at);
+        o.stop(at + 0.08);
+      }
+    };
+
+    // Les bruits de vie, de loin en loin : des oiseaux le soir au hameau, des tôles et des pigeons à la gare
     const chirp = () => {
-      if (!this.ctx || !this.out || musicLevel() === 0) return;
       const t0 = ctx.currentTime + 0.05;
       const pan = ctx.createStereoPanner();
-      pan.pan.value = Math.random() * 1.6 - 0.8;
-      const g = ctx.createGain();
-      g.gain.value = 0;
-      g.connect(pan).connect(bus);
+      pan.pan.value = between(-0.8, 0.8);
+      pan.connect(bus);
       if (light === "neige") {
         // Un corbeau au loin : deux ou trois croassements rauques
         const caws = 2 + Math.floor(Math.random() * 2);
         for (let k = 0; k < caws; k++) {
           const o = ctx.createOscillator();
           o.type = "sawtooth";
-          const at = t0 + k * 0.42;
-          o.frequency.setValueAtTime(520 + Math.random() * 60, at);
+          const at = t0 + k * between(0.36, 0.5);
+          o.frequency.setValueAtTime(between(500, 600), at);
           o.frequency.exponentialRampToValueAtTime(380, at + 0.26);
           const f = ctx.createBiquadFilter();
           f.type = "bandpass";
@@ -245,15 +314,15 @@ export class EscSound {
           f.Q.value = 2.2;
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(0.04, at + 0.03);
+          og.gain.linearRampToValueAtTime(0.026, at + 0.03);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
           o.connect(f).connect(og).connect(pan);
-          og.connect(this.verbIn!);
+          og.connect(echo);
           o.start(at);
           o.stop(at + 0.32);
         }
       } else if (light === "nuit") {
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.35) {
           // Une chouette : un hou bref, puis un long hou-ou qui tremble
           for (const [k, len] of [
             [0, 0.28],
@@ -271,21 +340,21 @@ export class EscSound {
             vib.connect(vg).connect(o.frequency);
             const og = ctx.createGain();
             og.gain.setValueAtTime(0, at);
-            og.gain.linearRampToValueAtTime(0.05, at + 0.08);
+            og.gain.linearRampToValueAtTime(0.032, at + 0.08);
             og.gain.exponentialRampToValueAtTime(0.0001, at + len);
             o.connect(og).connect(pan);
-            og.connect(this.verbIn!);
+            og.connect(echo);
             o.start(at);
             vib.start(at);
             o.stop(at + len + 0.05);
             vib.stop(at + len + 0.05);
           }
         } else {
-          // Des grillons : des trilles aiguës, par petites salves
-          const bursts = 3 + Math.floor(Math.random() * 4);
-          const f0 = 4200 + Math.random() * 600;
+          // Des grillons, loin et bas : quelques trilles
+          const bursts = 2 + Math.floor(Math.random() * 3);
+          const f0 = between(3800, 4600);
           for (let k = 0; k < bursts; k++) {
-            const at = t0 + k * 0.22;
+            const at = t0 + k * between(0.18, 0.3);
             const o = ctx.createOscillator();
             o.frequency.value = f0;
             const am = ctx.createOscillator();
@@ -294,7 +363,7 @@ export class EscSound {
             ag.gain.value = 0.5;
             const og = ctx.createGain();
             og.gain.setValueAtTime(0, at);
-            og.gain.linearRampToValueAtTime(0.03, at + 0.02);
+            og.gain.linearRampToValueAtTime(0.012, at + 0.02);
             og.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
             am.connect(ag).connect(og.gain);
             o.connect(og).connect(pan);
@@ -310,8 +379,8 @@ export class EscSound {
         for (let k = 0; k < cries; k++) {
           const o = ctx.createOscillator();
           o.type = "sawtooth";
-          const at = t0 + k * 0.32;
-          o.frequency.setValueAtTime(1500 + Math.random() * 300, at);
+          const at = t0 + k * between(0.26, 0.4);
+          o.frequency.setValueAtTime(between(1400, 1850), at);
           o.frequency.exponentialRampToValueAtTime(900, at + 0.22);
           const f = ctx.createBiquadFilter();
           f.type = "bandpass";
@@ -319,50 +388,51 @@ export class EscSound {
           f.Q.value = 3;
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(0.05, at + 0.03);
+          og.gain.linearRampToValueAtTime(0.028, at + 0.03);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
           o.connect(f).connect(og).connect(pan);
           o.start(at);
           o.stop(at + 0.28);
         }
       } else if (light === "soir") {
+        // Un oiseau : quelques notes qui montent
         const notes = 2 + Math.floor(Math.random() * 4);
-        const base = 2600 + Math.random() * 1600;
+        const base = between(2600, 4200);
         for (let k = 0; k < notes; k++) {
           const o = ctx.createOscillator();
-          const at = t0 + k * (0.09 + Math.random() * 0.05);
-          o.frequency.setValueAtTime(base * (1 + Math.random() * 0.2), at);
+          const at = t0 + k * between(0.09, 0.14);
+          o.frequency.setValueAtTime(base * between(1, 1.2), at);
           o.frequency.exponentialRampToValueAtTime(base * 1.5, at + 0.06);
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(0.05, at + 0.01);
+          og.gain.linearRampToValueAtTime(0.028, at + 0.01);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.08);
           o.connect(og).connect(pan);
           o.start(at);
           o.stop(at + 0.1);
         }
-      } else if (Math.random() < 0.55) {
+      } else if (Math.random() < 0.5) {
         // Une tôle qui cogne au loin, avec son écho
         const o = ctx.createOscillator();
         o.type = "triangle";
-        o.frequency.value = 180 + Math.random() * 140;
+        o.frequency.value = between(180, 320);
         const og = ctx.createGain();
-        og.gain.setValueAtTime(0.06, t0);
+        og.gain.setValueAtTime(0.035, t0);
         og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
         o.connect(og).connect(pan);
-        og.connect(this.verbIn!);
+        og.connect(echo);
         o.start(t0);
         o.stop(t0 + 1);
       } else {
         // Un pigeon : deux roucoulements graves
         for (let k = 0; k < 2; k++) {
           const o = ctx.createOscillator();
-          const at = t0 + k * 0.45;
+          const at = t0 + k * between(0.4, 0.5);
           o.frequency.setValueAtTime(420, at);
           o.frequency.linearRampToValueAtTime(330, at + 0.3);
           const og = ctx.createGain();
           og.gain.setValueAtTime(0, at);
-          og.gain.linearRampToValueAtTime(0.035, at + 0.06);
+          og.gain.linearRampToValueAtTime(0.022, at + 0.06);
           og.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
           o.connect(og).connect(pan);
           o.start(at);
@@ -370,9 +440,30 @@ export class EscSound {
         }
       }
     };
+
+    // Une fois par seconde : les dérives qui changent de cible, et le prochain bruit de vie s'il est dû (à des
+    // intervalles irréguliers, de quelques secondes à une demi-minute)
+    const gap: [number, number] = light === "neige" ? [14, 32] : light === "nuit" ? [7, 18] : [8, 22];
+    let nextLife = ctx.currentTime + between(4, 10);
+    let nextDrip = ctx.currentTime + between(2, 6);
     const timer = window.setInterval(() => {
-      if (Math.random() < 0.45) chirp();
-    }, 2600);
+      if (!this.ctx) return;
+      const now = ctx.currentTime;
+      for (const dr of drifts) {
+        if (now < dr.next) continue;
+        dr.param.setTargetAtTime(between(dr.lo, dr.hi), now, between(dr.tau[0], dr.tau[1]));
+        dr.next = now + between(dr.every[0], dr.every[1]);
+      }
+      if (musicLevel() === 0) return;
+      if (now >= nextLife) {
+        chirp();
+        nextLife = now + between(gap[0], gap[1]);
+      }
+      if (weather === "gris" && now >= nextDrip) {
+        drip();
+        nextDrip = now + between(1.5, 7);
+      }
+    }, 1000);
     this.ambience = { nodes, timer, unsubscribe };
   }
 
