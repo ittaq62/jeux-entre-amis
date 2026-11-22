@@ -273,43 +273,120 @@ export function scoreBeads(keep: Keep, x: number, y: number, z: number, yaw: num
   return g;
 }
 
-/** Un tapis d'Orient (une bordure, un médaillon), posé au sol sous la table */
+/**
+ * Un tapis d'Orient : un champ semé de petits motifs en losange, un médaillon central à lobes, des écoinçons, une
+ * bordure à rinceaux entre deux galons ; la laine un peu usée.
+ */
 export function rug(keep: Keep, w: number, d: number, colors: [string, string, string]): THREE.Mesh {
   const [ground, border, motif] = colors;
+  const W = 1024,
+    H = Math.round((1024 * d) / w);
   const t = keep(
-    canvasTex(512, Math.round((512 * d) / w), (g) => {
-      const W = 512,
-        H = Math.round((512 * d) / w);
+    canvasTex(W, H, (g) => {
+      const mixC = (a: string, b: string, k: number) => `#${new THREE.Color(a).lerp(new THREE.Color(b), k).getHexString()}`;
+      const deep = mixC(ground, "#000000", 0.35);
       g.fillStyle = ground;
       g.fillRect(0, 0, W, H);
-      g.strokeStyle = border;
-      for (let k = 0; k < 3; k++) {
-        g.lineWidth = 10 - k * 3;
-        g.strokeRect(12 + k * 16, 12 + k * 16, W - 24 - k * 32, H - 24 - k * 32);
-      }
-      g.fillStyle = border;
+      const bw = Math.round(W * 0.075);
+      // Le champ : un treillis de petits losanges
+      g.save();
       g.beginPath();
-      g.ellipse(W / 2, H / 2, W * 0.2, H * 0.28, 0, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = motif;
-      g.beginPath();
-      g.ellipse(W / 2, H / 2, W * 0.12, H * 0.17, 0, 0, Math.PI * 2);
-      g.fill();
-      const rnd = seeded(4);
-      for (let k = 0; k < 60; k++) {
-        g.fillStyle = k % 2 ? motif : border;
-        const x = 60 + rnd() * (W - 120),
-          y = 60 + rnd() * (H - 120);
+      g.rect(bw + 14, bw + 14, W - 2 * bw - 28, H - 2 * bw - 28);
+      g.clip();
+      const step = 46;
+      for (let y = 0; y < H + step; y += step)
+        for (let x = 0; x < W + step; x += step) {
+          const ox = (y / step) % 2 ? step / 2 : 0;
+          g.fillStyle = mixC(ground, motif, 0.35);
+          g.beginPath();
+          g.moveTo(x + ox, y - 9);
+          g.lineTo(x + ox + 7, y);
+          g.lineTo(x + ox, y + 9);
+          g.lineTo(x + ox - 7, y);
+          g.fill();
+          g.fillStyle = mixC(ground, border, 0.5);
+          g.fillRect(x + ox - 1.5, y - 1.5, 3, 3);
+        }
+      g.restore();
+      // Le médaillon : des lobes, de plus en plus petits
+      const cx = W / 2,
+        cy = H / 2;
+      const lobes = (r: number, n: number, depth: number, fill: string) => {
+        g.fillStyle = fill;
         g.beginPath();
-        g.arc(x, y, 3 + rnd() * 5, 0, Math.PI * 2);
+        for (let k = 0; k <= 200; k++) {
+          const a = (k / 200) * Math.PI * 2;
+          const rr = r * (1 + depth * Math.cos(a * n));
+          g.lineTo(cx + Math.cos(a) * rr * 1.5, cy + Math.sin(a) * rr);
+        }
+        g.fill();
+      };
+      lobes(H * 0.26, 8, 0.12, deep);
+      lobes(H * 0.23, 8, 0.12, border);
+      lobes(H * 0.17, 16, 0.08, mixC(motif, ground, 0.2));
+      lobes(H * 0.1, 8, 0.15, border);
+      lobes(H * 0.05, 4, 0.2, ground);
+      // Les écoinçons : des quarts de médaillon dans les coins du champ
+      for (const [sx, sy] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ] as [number, number][]) {
+        const ex = sx ? W - bw - 14 : bw + 14,
+          ey = sy ? H - bw - 14 : bw + 14;
+        g.fillStyle = border;
+        g.beginPath();
+        g.ellipse(ex, ey, W * 0.12, H * 0.14, 0, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = mixC(motif, ground, 0.2);
+        g.beginPath();
+        g.ellipse(ex, ey, W * 0.08, H * 0.09, 0, 0, Math.PI * 2);
         g.fill();
       }
-      // Le velours un peu usé
-      const n = valueNoise(8, 32);
+      // La bordure : un galon, une bande à rinceaux, un galon
+      g.fillStyle = deep;
+      g.fillRect(0, 0, W, bw);
+      g.fillRect(0, H - bw, W, bw);
+      g.fillRect(0, 0, bw, H);
+      g.fillRect(W - bw, 0, bw, H);
+      g.strokeStyle = border;
+      g.lineWidth = 6;
+      g.strokeRect(8, 8, W - 16, H - 16);
+      g.strokeRect(bw + 6, bw + 6, W - 2 * bw - 12, H - 2 * bw - 12);
+      g.strokeStyle = mixC(motif, border, 0.3);
+      g.lineWidth = 4;
+      const vine = (x0: number, y0: number, x1: number, y1: number) => {
+        const len = Math.hypot(x1 - x0, y1 - y0);
+        const ux = (x1 - x0) / len,
+          uy = (y1 - y0) / len;
+        g.beginPath();
+        for (let s = 0; s <= len; s += 4) {
+          const off = Math.sin(s / 18) * bw * 0.22;
+          g.lineTo(x0 + ux * s - uy * off, y0 + uy * s + ux * off);
+        }
+        g.stroke();
+        g.fillStyle = border;
+        for (let s = 18; s < len; s += 56) {
+          g.beginPath();
+          g.arc(x0 + ux * s, y0 + uy * s, 5, 0, Math.PI * 2);
+          g.fill();
+        }
+      };
+      const m = bw / 2 + 4;
+      vine(m, m, W - m, m);
+      vine(m, H - m, W - m, H - m);
+      vine(m, m, m, H - m);
+      vine(W - m, m, W - m, H - m);
+      // La laine : un grain fin, un peu d'usure au milieu
+      const n = valueNoise(8, 64);
       const img = g.getImageData(0, 0, W, H);
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
-          const k = 0.82 + fbm(n, x / 10, y / 10, 3) * 0.3;
+          const dx = (x - cx) / W,
+            dy = (y - cy) / H;
+          const wear = 1 - 0.12 * Math.exp(-(dx * dx + dy * dy) * 8);
+          const k = (0.86 + fbm(n, x / 3, y / 3, 2) * 0.2) * wear;
           const i = (y * W + x) * 4;
           img.data[i] = img.data[i]! * k;
           img.data[i + 1] = img.data[i + 1]! * k;

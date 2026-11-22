@@ -45,6 +45,7 @@ export class TableScene {
   private ro: ResizeObserver;
   private clock = 0;
   private envMap: THREE.Texture | null = null;
+  private ballEnv: THREE.Texture | null = null;
   private salleBin: { dispose: () => void }[] = [];
   private tableDef: Table | null = null;
   private ballIds: number[] = [];
@@ -193,19 +194,33 @@ export class TableScene {
   }
 
   /** Les reflets dans le vernis : la salle elle-même, vue d'au-dessus de la table (sans les billes) */
+  /**
+   * Deux reflets : la salle vue du milieu de la pièce sans la table (pour le bois, les pieds, le décor : leur moitié basse
+   * voit le sol, pas un grand tapis vert), et la table vue d'au-dessus du tapis (pour les billes et la queue, qui
+   * reflètent le feutre sous elles et la lampe au-dessus).
+   */
   private makeEnv() {
     const hidden: THREE.Object3D[] = [];
-    for (const o of [this.balls?.group, this.cue.group, this.overlay]) {
+    const hide = (o: THREE.Object3D | null | undefined) => {
       if (o && o.visible) {
         o.visible = false;
         hidden.push(o);
       }
-    }
+    };
+    for (const o of [this.balls?.group, this.cue.group, this.overlay]) hide(o);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envMap?.dispose();
-    this.envMap = pmrem.fromScene(this.scene, 0.015, 0.05, 60, { position: new THREE.Vector3(0, 0.35, 0) }).texture;
+    this.ballEnv?.dispose();
+    this.ballEnv = pmrem.fromScene(this.scene, 0.015, 0.05, 60, { position: new THREE.Vector3(0, 0.35, 0) }).texture;
+    const table = this.table?.group;
+    const tableWas = table?.visible ?? false;
+    if (table) table.visible = false;
+    this.envMap = pmrem.fromScene(this.scene, 0.02, 0.05, 60, { position: new THREE.Vector3(0, 0.55, 0) }).texture;
+    if (table) table.visible = tableWas;
     pmrem.dispose();
     this.scene.environment = this.envMap;
+    this.balls?.setEnv(this.ballEnv);
+    this.cue.setEnv(this.ballEnv);
     for (const o of hidden) o.visible = true;
   }
 
@@ -262,6 +277,7 @@ export class TableScene {
     for (const d of this.salleBin) d.dispose();
     this.composer?.dispose();
     this.envMap?.dispose();
+    this.ballEnv?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

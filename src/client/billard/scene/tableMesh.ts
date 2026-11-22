@@ -226,9 +226,10 @@ export function buildTable(t: Table, style: TableStyle, touch: boolean): TableMe
       normalScale: new THREE.Vector2(0.35, 0.35),
       roughness: 0.92,
       metalness: 0,
-      sheen: touch ? 0 : 0.6,
-      sheenRoughness: 0.7,
-      sheenColor: new THREE.Color(style.cloth[0]).lerp(new THREE.Color("#ffffff"), 0.35),
+      // Un velouté discret : trop fort, le feutre blanchit quand on le regarde à ras (la vue de la queue)
+      sheen: touch ? 0 : 0.28,
+      sheenRoughness: 0.8,
+      sheenColor: new THREE.Color(style.cloth[0]).lerp(new THREE.Color("#ffffff"), 0.12),
       envMapIntensity: 0.25,
     }),
   );
@@ -240,9 +241,9 @@ export function buildTable(t: Table, style: TableStyle, touch: boolean): TableMe
       normalMap: normal,
       normalScale: new THREE.Vector2(0.25, 0.25),
       roughness: 0.9,
-      sheen: touch ? 0 : 0.5,
-      sheenRoughness: 0.7,
-      sheenColor: new THREE.Color(style.cloth[0]).lerp(new THREE.Color("#ffffff"), 0.3),
+      sheen: touch ? 0 : 0.3,
+      sheenRoughness: 0.8,
+      sheenColor: new THREE.Color(style.cloth[0]).lerp(new THREE.Color("#ffffff"), 0.12),
       envMapIntensity: 0.3,
     }),
   );

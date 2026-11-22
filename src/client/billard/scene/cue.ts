@@ -76,6 +76,11 @@ export class CueStick {
     this.mesh.position.copy(tip);
   }
 
+  setEnv(env: THREE.Texture) {
+    this.mat.envMap = env;
+    this.mat.needsUpdate = true;
+  }
+
   set visible(v: boolean) {
     this.group.visible = v;
   }

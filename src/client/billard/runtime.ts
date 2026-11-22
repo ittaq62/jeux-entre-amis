@@ -74,6 +74,8 @@ interface Replay {
   stage: "windup" | "roll" | "pause" | "slow" | "end";
   stageAt: number;
   acc: number;
+  /** Le temps déjà montré depuis la frappe (pour rattraper un onglet resté en arrière-plan) */
+  played: number;
   seen: number;
   /** Le coup que je viens de jouer, avant que le serveur ne le confirme */
   local: boolean;
@@ -439,6 +441,7 @@ export class BillardRuntime {
       stage: "windup",
       stageAt: now(),
       acc: 0,
+      played: 0,
       seen: 0,
       local,
       slowWorld: null,
@@ -486,17 +489,23 @@ export class BillardRuntime {
       this.o.onMoment?.({ k: "strike", id: r.rec.id, p: r.rec.shot.p, mine: r.rec.id === this.o.me });
     }
     if (r.stage === "roll") {
-      r.acc += dt;
+      // Un onglet resté en arrière-plan (ou un appareil qui rame) prend du retard : au-delà d'une demi-seconde, on
+      // rattrape l'horloge d'un coup, sans les sons
+      const lag = t - r.t0 - r.played - dt;
+      const catchUp = lag > 0.5 ? lag : 0;
+      r.played += dt + catchUp;
+      r.acc += dt + catchUp;
       const w = r.world;
       let guard = 0;
-      while (w.moving && guard++ < 200) {
+      const limit = catchUp > 0 ? 40000 : 200;
+      while (w.moving && guard++ < limit) {
         const need = DT / playbackRate(maxSpeed(w));
         if (r.acc < need) break;
         r.acc -= need;
         w.advance();
-        for (const b of w.balls) if (b.on) set.spin(b.id, b.wx, b.wy, b.wz, DT);
+        if (catchUp === 0) for (const b of w.balls) if (b.on) set.spin(b.id, b.wx, b.wy, b.wz, DT);
       }
-      this.flushEvents(r, true);
+      this.flushEvents(r, catchUp === 0);
       for (const b of w.balls) if (b.on) set.place(b.id, b.x, b.y);
       this.o.onRoll?.(maxSpeed(w));
       if (!w.moving) {

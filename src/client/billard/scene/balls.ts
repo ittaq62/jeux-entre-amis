@@ -87,6 +87,14 @@ export class BallSet {
     this.balls.set(id, { mesh, shadow, drop: null });
   }
 
+  /** Le reflet que voient les billes (la table d'au-dessus du tapis) */
+  setEnv(env: THREE.Texture) {
+    for (const m of this.mats) {
+      (m as THREE.MeshPhysicalMaterial).envMap = env;
+      m.needsUpdate = true;
+    }
+  }
+
   /** Une bille posée sur le tapis (coordonnées de la physique) */
   place(id: number, x: number, y: number) {
     const b = this.balls.get(id);
