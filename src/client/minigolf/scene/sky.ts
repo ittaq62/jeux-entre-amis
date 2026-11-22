@@ -64,6 +64,7 @@ uniform vec4 ridge;
 uniform vec3 ridgeFar;
 uniform vec3 ridgeNear;
 uniform vec3 ridgeCaps;
+uniform vec3 fogCol;
 varying vec3 vDir;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -122,12 +123,15 @@ void main() {
     float mf = smoothstep(far + aa, far - aa, h);
     vec3 fc = mix(ridgeFar, horizon, smoothstep(far, far - 0.05, h) * 0.35);
     fc = mix(fc, mix(ridgeCaps, horizon, 0.25), ridge.w * smoothstep(far * 0.7, far * 0.84, h));
+    // Le pied des silhouettes se perd dans la brume, comme le sol au loin : pas de bande claire entre les deux
+    fc = mix(fc, fogCol, smoothstep(far * 0.35, -0.012, h) * 0.9);
     col = mix(col, fc, mf);
     float near = ridgeAt(dir, 1.5, ridge.z + 17.0, ridge.y) * ridge.x * 0.62;
     float mn = smoothstep(near + aa, near - aa, h);
     // Le pied dans la brume, les sommets parfois enneigés
     vec3 nc = mix(ridgeNear, mix(ridgeFar, horizon, 0.3), smoothstep(near * 0.7, -0.03, h) * 0.4);
     nc = mix(nc, ridgeCaps, ridge.w * smoothstep(near * 0.72, near * 0.86, h));
+    nc = mix(nc, fogCol, smoothstep(near * 0.3, -0.012, h) * 0.85);
     col = mix(col, nc, mn);
   }
   if (stars > 0.0 && h > 0.0) {
@@ -171,6 +175,7 @@ export class Sky {
         ridgeFar: { value: c(def.ridges?.far ?? 0) },
         ridgeNear: { value: c(def.ridges?.near ?? 0) },
         ridgeCaps: { value: c(def.ridges?.caps ?? 0xffffff) },
+        fogCol: { value: c(def.fog) },
       },
       side: THREE.BackSide,
       depthWrite: false,

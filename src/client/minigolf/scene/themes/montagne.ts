@@ -303,33 +303,44 @@ function montagneDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     drifts.add(x, base - s * 0.75, z, [s * 1.4, s, s * 1.2], rng() * 6);
   }
 
-  // Les sapins, en forêt tout autour
+  // Derrière le trou, la forêt s'ouvre : on y voit la combe enneigée et les sommets au loin
+  const cup0 = c.cups[0]!;
+  const vx = cup0.x - c.tee.x;
+  const vz = cup0.z - c.tee.z;
+  const vl = Math.hypot(vx, vz) || 1;
+  const view = Math.atan2(vz / vl, vx / vl);
+  const inView = (x: number, z: number) => {
+    const a = Math.atan2(z - cup0.z, x - cup0.x);
+    let d = Math.abs(a - view);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    return d < 0.42 && Math.hypot(x - cup0.x, z - cup0.z) > 2.5;
+  };
+
+  // Les sapins, en forêt tout autour (clairsemés dans la trouée)
   const firs = [new Scatter(m.fir.green, m.firGreen), new Scatter(m.fir.snow, m.firSnow), new Scatter(m.fir.trunk, m.bark)];
-  for (let k = 0; k < 150; k++) {
+  for (let k = 0; k < 170; k++) {
     const a = rng() * Math.PI * 2;
     const r = 3 + rng() * 40;
     const x = box.cx + Math.cos(a) * (r + (box.x1 - box.x0) / 2);
     const z = box.cz + Math.sin(a) * (r + (box.z1 - box.z0) / 2);
     if (onCourse(c, x, z, 1.6)) continue;
-    const s = 1.6 + rng() * 2.8;
+    const opening = inView(x, z);
+    if (opening && rng() < 0.85) continue;
+    const s = (1.6 + rng() * 2.8) * (opening ? 0.6 : 1);
     for (const f of firs) f.add(x, base, z, [s, s * (0.9 + rng() * 0.3), s], rng() * 6);
   }
 
-  // Les cimes tout autour, blanches en haut
-  const peakRock = new THREE.MeshStandardMaterial({ color: 0x8b95a3, roughness: 1, flatShading: true });
-  const peakSnow = new THREE.MeshStandardMaterial({ color: 0xf5f8fc, roughness: 0.9, flatShading: true });
-  for (let k = 0; k < 9; k++) {
-    const a = (k / 9) * Math.PI * 2 + rng() * 0.4;
-    const r = 120 + rng() * 60;
-    const h = 40 + rng() * 45;
-    const w = 45 + rng() * 30;
-    const peak = new THREE.Mesh(new THREE.ConeGeometry(w, h, 7, 3), peakRock);
-    peak.position.set(box.cx + Math.cos(a) * r, base + h / 2 - 4, box.cz + Math.sin(a) * r);
+  // Les sommets au loin : des pics ravinés, la neige au-dessus d'une ligne irrégulière ; le plus grand dans la trouée
+  const peaks = peakVariants();
+  for (let k = 0; k < 10; k++) {
+    const a = k === 0 ? view + (rng() - 0.5) * 0.2 : (k / 10) * Math.PI * 2 + rng() * 0.5;
+    const r = k === 0 ? 135 : 120 + rng() * 60;
+    const h = k === 0 ? 78 : 40 + rng() * 40;
+    const peak = new THREE.Mesh(peaks[k % peaks.length]!, peakMat());
+    peak.scale.set(h * (0.85 + rng() * 0.3), h, h * (0.85 + rng() * 0.3));
+    peak.position.set(cup0.x + Math.cos(a) * r, base - 4, cup0.z + Math.sin(a) * r);
     peak.rotation.y = rng() * 6;
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(w * 0.42, h * 0.42, 7, 1), peakSnow);
-    cap.position.copy(peak.position).add(new THREE.Vector3(0, h * 0.29 + 0.3, 0));
-    cap.rotation.y = peak.rotation.y;
-    g.add(peak, cap);
+    g.add(peak);
   }
 
   // Des chalets de bois aux toits enneigés, les fenêtres allumées
@@ -426,4 +437,50 @@ function montagneDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   }
   void m.rock;
   return g;
+}
+
+/**
+ * Trois pics de montagne, faits une fois (1 de haut, environ 1 de rayon au pied) : des flancs qui se creusent, des
+ * arêtes et des ravines, un sommet décalé ; la neige (blanche) au-dessus d'une ligne qui ondule, la roche dessous,
+ * plus sombre dans les ravines
+ */
+let peakGeos: THREE.BufferGeometry[] | null = null;
+function peakVariants(): THREE.BufferGeometry[] {
+  if (peakGeos) return peakGeos;
+  peakGeos = [0, 1, 2].map((v) => {
+    const g = new THREE.ConeGeometry(1, 1, 40, 14, true);
+    g.translate(0, 0.5, 0);
+    const p = g.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(p.count * 3);
+    const off = 0.18 + v * 0.07;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const y = p.getY(i);
+      const z = p.getZ(i);
+      const a = Math.atan2(z, x);
+      // Des arêtes et des ravines, plus marquées à mi-hauteur ; les flancs creusés (le pied s'étale)
+      const ridge = Math.abs(Math.sin(a * (3 + v) + v * 1.7)) * 0.6 + Math.abs(Math.sin(a * (7 + v) + v)) * 0.4;
+      const k = Math.sin(Math.min(1, y / 0.95) * Math.PI) * 0.22;
+      const flare = 1 + (1 - y) * (1 - y) * 0.35;
+      const sx = (1 - k * (1 - ridge)) * flare;
+      // Le sommet n'est pas au centre
+      p.setXYZ(i, x * sx + off * y * Math.cos(v * 2.1), y, z * sx + off * y * Math.sin(v * 2.1));
+      const snowLine = 0.55 + 0.1 * Math.sin(a * 5 + v) + 0.08 * Math.sin(a * 11);
+      const snow = y > snowLine + (1 - ridge) * 0.12 ? 1 : 0;
+      const rock = 0.42 + ridge * 0.22;
+      col[i * 3] = snow ? 0.95 : rock * 0.92;
+      col[i * 3 + 1] = snow ? 0.97 : rock * 0.95;
+      col[i * 3 + 2] = snow ? 1.0 : rock * 1.05;
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    return g;
+  });
+  return peakGeos;
+}
+
+let peakMaterial: THREE.MeshStandardMaterial | null = null;
+function peakMat(): THREE.MeshStandardMaterial {
+  peakMaterial ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  return peakMaterial;
 }

@@ -20,7 +20,7 @@ import {
   type Theme,
 } from "./common.ts";
 
-const FELT = 0x3a9a6c;
+const FELT = 0x6cbb66;
 
 let made: Theme | null = null;
 
@@ -398,19 +398,24 @@ function merDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     h.rotation.y = rot;
     huts.add(h);
   };
-  for (let k = -6; k <= 6; k++) {
-    const along = k * 1.7;
-    const x = shore.x - dx * 3.2 + -dz * along;
-    const z = shore.z - dz * 3.2 + dx * along;
+  // (en deux rangs, de part et d'autre de l'axe du trou : au milieu, on voit la mer et l'horizon)
+  for (let k = -9; k <= 9; k++) {
+    if (Math.abs(k) < 4) continue;
+    const along = k * 1.7 + Math.sign(k) * 1.5;
+    const back = 3.2 + Math.abs(k) * 0.25;
+    const x = shore.x - dx * back + -dz * along;
+    const z = shore.z - dz * back + dx * along;
     if (onCourse(c, x, z, 1.2)) continue;
-    hut(x, z, angle + Math.PI, k + 6);
+    hut(x, z, angle + Math.PI - Math.sign(k) * 0.12, k + 9);
   }
   g.add(huts);
   const umbrellaMats = ["#e9483f", "#2f7fd6", "#f5c537"].map(
     (col) => new THREE.MeshStandardMaterial({ map: stripes("#fbf3e2", col, 16), side: THREE.DoubleSide, roughness: 0.7 }),
   );
   for (let k = 0; k < 14; k++) {
-    const along = (rng() - 0.5) * 40;
+    // (pas dans l'axe du trou, pour ne pas cacher la mer)
+    const side = k % 2 ? 1 : -1;
+    const along = side * (5 + rng() * 16);
     const back = 0.5 + rng() * 2;
     const x = shore.x - dx * back + -dz * along;
     const z = shore.z - dz * back + dx * along;
