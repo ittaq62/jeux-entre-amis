@@ -31,6 +31,17 @@ const STEP = 1 / 60;
 /** En développement : une latence simulée, en millisecondes aller-retour (`localStorage.cbLag = "80"`, l'adresse d'une
  * table perd ses paramètres avant que le jeu ne se charge) */
 const LAG = import.meta.env.DEV ? Number(localStorage.getItem("cbLag") ?? 0) || 0 : 0;
+/** En développement : la gigue, un retard en plus tiré pour chaque paquet, jusqu'à tant de millisecondes
+ * (`localStorage.cbJitter = "60"`) ; les paquets restent dans l'ordre, comme sur une vraie connexion */
+const JITTER = import.meta.env.DEV ? Number(localStorage.getItem("cbJitter") ?? 0) || 0 : 0;
+const lastArrival = { in: 0, out: 0 };
+/** En développement, pour comparer : les autres aussi tels que devinés (l'ancienne façon, `localStorage.cbPredictOthers = "1"`) */
+const PREDICT_OTHERS = import.meta.env.DEV && localStorage.getItem("cbPredictOthers") === "1";
+function later(way: "in" | "out", fn: () => void) {
+  const at = Math.max(lastArrival[way], performance.now() + LAG / 2 + Math.random() * JITTER);
+  lastArrival[way] = at;
+  window.setTimeout(fn, at - performance.now());
+}
 const SEND_EVERY = 2;
 const HEARTBEAT_MS = 120;
 const MIN_DELAY = 3;
@@ -199,8 +210,8 @@ export class FightRuntime {
   };
 
   onTick(now: number, tick: CulbuteTick) {
-    if (LAG > 0) {
-      window.setTimeout(() => !this.disposed && this.receive(now, tick), LAG / 2);
+    if (LAG > 0 || JITTER > 0) {
+      later("in", () => !this.disposed && this.receive(now, tick));
       return;
     }
     this.receive(now, tick);
@@ -284,8 +295,8 @@ export class FightRuntime {
       this.keepPrev();
       this.showPredicted(stepPredict(world, this.inputsWith(u.input)));
     }
-    // Un petit écart se rattrape en douceur ; un grand (une sortie, un retour, un saut de plusieurs mètres) se suit
-    // tout de suite
+    // Un écart se rattrape en douceur : il s'ajoute à ce qui restait à rattraper (le remplacer faisait sauter le
+    // combattant à chaque état reçu) ; un très grand (une sortie, un retour) se suit tout de suite
     world.fighters.forEach((ft, i) => {
       const [nx, ny] = this.shown(i);
       const [ox, oy] = before[i]!;
@@ -297,9 +308,11 @@ export class FightRuntime {
         if (i === this.mySlot) net.mine++;
         else net.others++;
       }
-      if (Math.hypot(dx, dy) < 2.5 && ft.state !== "dead" && ft.state !== "respawn" && ft.state !== "out") {
-        o.x = dx;
-        o.y = dy;
+      const ax = o.x + dx;
+      const ay = o.y + dy;
+      if (Math.hypot(ax, ay) < 2.5 && ft.state !== "dead" && ft.state !== "respawn" && ft.state !== "out") {
+        o.x = ax;
+        o.y = ay;
       } else {
         o.x = 0;
         o.y = 0;
@@ -387,7 +400,7 @@ export class FightRuntime {
     if (this.acc > STEP * 5) this.acc = 0;
     if (this.mySlot >= 0 && this.outbox.length > 0 && (this.sinceSend >= SEND_EVERY || now - this.lastSendAt > HEARTBEAT_MS)) {
       const msg: CulbuteClientMessage = { t: "in", s: this.outFirst, d: this.outbox, c: now };
-      if (LAG > 0) window.setTimeout(() => this.opts.send(msg), LAG / 2);
+      if (LAG > 0 || JITTER > 0) later("out", () => this.opts.send(msg));
       else this.opts.send(msg);
       this.outbox = [];
       this.sinceSend = 0;
@@ -442,10 +455,13 @@ export class FightRuntime {
         me: false,
       });
     }
-    // Un joueur : tout le monde tel qu'anticipé, au présent (les vies et les points restent ceux du serveur)
+    // Un joueur : son combattant tel qu'anticipé, au présent (les vies et les points restent ceux du serveur) ; les
+    // autres tels que le serveur les a montrés, un peu en retard : deviner leurs gestes les faisait sauter sans cesse
+    // (le calcul anticipé sert encore à montrer tout de suite ses coups qui touchent)
     const world = this.world;
     if (world && this.mySlot >= 0) {
       world.fighters.forEach((ft, i) => {
+        if (i !== this.mySlot && !PREDICT_OTHERS) return;
         const server = fighters[i];
         const [x, y] = this.shown(i);
         fighters[i] = {
@@ -494,11 +510,26 @@ export class FightRuntime {
     const traps: RenderFrame["traps"] = [];
     for (let o = 0; o + TRAP_STRIDE <= b.r.length; o += TRAP_STRIDE)
       traps.push({ id: b.r[o]!, x: b.r[o + 1]!, y: b.r[o + 2]!, owner: b.r[o + 3]! });
-    // Les plateformes qui bougent : au présent pour un joueur (comme les combattants), sinon à l'heure de lecture
+    // Les plateformes qui bougent : au présent pour un joueur (comme son combattant), sinon à l'heure de lecture
     const now = world && this.mySlot >= 0 ? world.frame : at;
     const plats = platformsAt(this.view.arena as ArenaId, this.view.scale, Math.round(now));
-    // Debout sur une plateforme qui bouge : les pieds suivent la plateforme telle qu'on la voit
-    if (world) for (const r of fighters) if (r.ground >= 0 && plats[r.ground]) r.y = plats[r.ground]!.y;
+    // Debout sur une plateforme qui bouge : les pieds suivent la plateforme telle qu'on la voit (les autres, montrés
+    // en retard, sont emportés avec elle jusqu'au présent)
+    if (world) {
+      const then = now !== at ? platformsAt(this.view.arena as ArenaId, this.view.scale, Math.round(at)) : plats;
+      for (const r of fighters) {
+        if (r.ground >= 0 && plats[r.ground]) r.y = plats[r.ground]!.y;
+        else if (!r.me && then !== plats) {
+          const pi = then.findIndex((p) => Math.abs(r.y - p.y) < 0.06 && r.x >= p.x0 - 0.05 && r.x <= p.x1 + 0.05);
+          const p0 = then[pi];
+          const p1 = plats[pi];
+          if (p0 && p1 && (p1.x0 !== p0.x0 || p1.y !== p0.y)) {
+            r.x += p1.x0 - p0.x0;
+            r.y = p1.y;
+          }
+        }
+      }
+    }
     // Ce qui vole, reçu en retard : poussé jusqu'au présent d'après sa vitesse (sinon il toucherait après coup)
     const ahead = world ? Math.max(0, Math.min(0.25, (now - at) / 60)) : 0;
     const flying = lerpList(shots(a), shots(b)).map((q) => (ahead > 0 ? { ...q, x: q.x + q.vx * ahead, y: q.y + q.vy * ahead } : q));
@@ -542,7 +573,22 @@ export class FightRuntime {
     this.scene.setAim(this.mySlot, this.mySlot >= 0 ? this.controls.aimNow() : null);
     this.scene.render(dt, frame);
     this.opts.onFrame?.(frame);
-    if (import.meta.env.DEV) (window as unknown as { __cbFrame: RenderFrame }).__cbFrame = frame;
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __cbFrame?: RenderFrame; __cbFrameAt?: number; __cbNet?: Record<string, number> };
+      // Les autres qui sautent d'une image à l'autre : plus de 40 m/s, plus vite que tout ce qui court ou vole
+      const old = w.__cbFrame;
+      const dtShown = (now - (w.__cbFrameAt ?? now)) / 1000;
+      if (old && old !== frame && dtShown > 0) {
+        const net = (w.__cbNet ??= { mine: 0, others: 0 });
+        for (const f of frame.fighters) {
+          const p = old.fighters[f.slot];
+          if (!p || f.me || f.state === "dead" || f.state === "respawn" || p.state === "dead" || p.state === "respawn") continue;
+          if (Math.hypot(f.x - p.x, f.y - p.y) / dtShown > 40) net.jumps = (net.jumps ?? 0) + 1;
+        }
+      }
+      w.__cbFrame = frame;
+      w.__cbFrameAt = now;
+    }
     if (now - this.hudAt > 100) {
       this.hudAt = now;
       const latest = this.snaps.at(-1)!;
