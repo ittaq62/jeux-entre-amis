@@ -1,8 +1,8 @@
 // Le geste du lancer, à la souris ou au doigt : on garde appuyé sur la boule, on recule (le bras part en arrière), on
-// pousse vers l'avant et on lâche. La vitesse du geste au moment de lâcher donne la force ; s'il part de travers, la
-// boule dévie d'autant ; un coup de poignet sur le côté juste avant de lâcher donne l'effet (vers la gauche : la boule
-// courbe vers la gauche). Tout se mesure en hauteurs d'écran, pour que le geste soit le même sur un téléphone et un
-// grand écran.
+// pousse vers l'avant et on lâche. Le plus fort de la poussée, juste avant de lâcher, donne la force (la main peut
+// s'arrêter un instant avant que le doigt se lève : le lancer part quand même) ; s'il part de travers, la boule dévie
+// d'autant ; un coup de poignet sur le côté au bout du geste donne l'effet (vers la gauche : la boule courbe vers la
+// gauche). Tout se mesure en hauteurs d'écran, pour que le geste soit le même sur un téléphone et un grand écran.
 
 import { DIR_MAX, SPEED_MAX, SPEED_MIN, SPIN_MAX } from "../../shared/games/bowling/throw.ts";
 
@@ -35,6 +35,8 @@ export interface Release {
 export type Refusal = "back" | "slow";
 
 const MIN_UP = 0.9;
+/** En dessous (hauteurs d'écran par seconde), la main ne bouge plus */
+const STILL = 0.3;
 
 /**
  * Le lancer que donne ce geste (tous les points depuis l'appui, le dernier au moment de lâcher), ou la raison pour
@@ -48,28 +50,47 @@ export function release(samples: readonly Sample[], h: number): Release | Refusa
   for (let i = 1; i < samples.length; i++) if (samples[i]!.y > samples[low]!.y) low = i;
   const back = (samples[low]!.y - first.y) / h;
   if (back < 0.04) return "back";
-  const last = samples[samples.length - 1]!;
-  // La vitesse à la fin : sur les 70 dernières millisecondes
-  let i0 = samples.length - 1;
-  while (i0 > low && last.t - samples[i0 - 1]!.t <= 70) i0--;
-  if (i0 === samples.length - 1 && i0 > low) i0--;
-  const a = samples[i0]!;
-  const dt = Math.max(8, last.t - a.t) / 1000;
-  const vy = (a.y - last.y) / h / dt;
-  const vx = (last.x - a.x) / h / dt;
-  if (vy < MIN_UP) return "slow";
+  // La fin du mouvement : le dernier point où la main bougeait encore (elle a pu s'arrêter avant de lâcher)
+  let end = samples.length - 1;
+  while (end > low + 1) {
+    const p = samples[end]!,
+      q = samples[end - 1]!;
+    const speed = Math.hypot(p.x - q.x, p.y - q.y) / h / (Math.max(4, p.t - q.t) / 1000);
+    if (speed >= STILL) break;
+    end--;
+  }
+  // Le point 70 ms avant celui-ci (au moins un point plus tôt), sans remonter avant le point bas
+  const before = (j: number) => {
+    let i = j;
+    while (i > low && samples[j]!.t - samples[i - 1]!.t <= 70) i--;
+    return i === j && i > low ? i - 1 : i;
+  };
+  // La force : le plus fort de la poussée (sur 70 ms) dans le dernier quart de seconde du mouvement
+  let up = 0;
+  for (let j = end; j > low && samples[end]!.t - samples[j]!.t <= 250; j--) {
+    const i = before(j);
+    const vy = (samples[i]!.y - samples[j]!.y) / h / (Math.max(8, samples[j]!.t - samples[i]!.t) / 1000);
+    if (vy > up) up = vy;
+  }
+  // Tenir le bouton longtemps après avoir poussé, c'est ne pas lancer
+  if (up < MIN_UP || samples[samples.length - 1]!.t - samples[end]!.t > 250) return "slow";
+  const a = samples[before(end)]!,
+    b = samples[end]!;
+  const dt = Math.max(8, b.t - a.t) / 1000;
+  const vy = (a.y - b.y) / h / dt;
+  const vx = (b.x - a.x) / h / dt;
   // Le geste vers l'avant, du point bas jusqu'au coup de poignet : s'il penche, la boule dévie
   const fwdY = (samples[low]!.y - a.y) / h;
   const fwdX = (a.x - samples[low]!.x) / h;
   const tilt = fwdY > 0.02 ? fwdX / fwdY : 0;
   // Le coup de poignet : ce que la fin du geste a de plus sur le côté que tout le reste
-  const flick = vx / vy - tilt;
-  const v = Math.max(SPEED_MIN, Math.min(SPEED_MAX, 3.2 + vy * 1.5));
+  const flick = vy > STILL ? vx / vy - tilt : 0;
+  const v = Math.max(SPEED_MIN, Math.min(SPEED_MAX, 3.0 + up * 1.4));
   const dev = Math.max(-DIR_MAX, Math.min(DIR_MAX, tilt * 0.0085));
   // Un petit écart de la main ne compte pas : l'effet ne vient que d'un vrai coup de poignet
   const f = Math.abs(flick) < 0.06 ? 0 : flick - Math.sign(flick) * 0.06;
   const s = Math.max(-SPIN_MAX, Math.min(SPIN_MAX, -f * 42));
-  return { v, dev, s, up: vy, flick };
+  return { v, dev, s, up, flick };
 }
 
 /** Le nom de l'effet, pour le montrer après le lancer */

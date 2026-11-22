@@ -135,7 +135,7 @@ export function BowlingGame({
       },
       onGesture: (g) => {
         if (typeof g === "string")
-          setReadout(g === "back" ? "Recule d'abord : ton bras part en arrière." : "Pousse plus vite vers l'avant en lâchant !");
+          setReadout(g === "back" ? "Recule d'abord : ton bras part en arrière." : "Pousse plus vite vers l'avant, et lâche aussitôt !");
         else setReadout(`${kmh(g.v)} km/h · ${spinName(g.s)}`);
       },
     });

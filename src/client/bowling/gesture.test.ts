@@ -4,8 +4,8 @@ import { armAngle, release, spinName, type Sample } from "./gesture.ts";
 const H = 800;
 
 /** Un geste : on descend de `back` hauteurs d'écran en `tBack` ms, puis on remonte de `up` en `tUp` ms (pas de 10 ms) */
-function swing(o: { back?: number; tBack?: number; up?: number; tUp?: number; drift?: number; flick?: number }): Sample[] {
-  const { back = 0.25, tBack = 400, up = 0.5, tUp = 160, drift = 0, flick = 0 } = o;
+function swing(o: { back?: number; tBack?: number; up?: number; tUp?: number; drift?: number; flick?: number; hold?: number }): Sample[] {
+  const { back = 0.25, tBack = 400, up = 0.5, tUp = 160, drift = 0, flick = 0, hold = 0 } = o;
   const out: Sample[] = [];
   let t = 0;
   for (let k = 0; k <= tBack; k += 10) out.push({ t: (t = k), x: 400, y: 500 + (k / tBack) * back * H });
@@ -16,6 +16,8 @@ function swing(o: { back?: number; tBack?: number; up?: number; tUp?: number; dr
     const late = Math.max(0, (k - (tUp - 60)) / 60);
     out.push({ t: t + k, x: 400 + u * drift * H + late * flick * H, y: y0 - u * up * H });
   }
+  // La main s'arrête, et le doigt se lève un peu plus tard
+  if (hold > 0) out.push({ ...out[out.length - 1]!, t: t + tUp + hold });
   return out;
 }
 
@@ -51,6 +53,18 @@ describe("bowling : le geste du lancer", () => {
     if (typeof r !== "object") throw new Error("pas de lancer");
     expect(r.dev).toBeGreaterThan(0.001);
     expect(Math.abs(r.s)).toBeLessThan(2);
+  });
+
+  it("la main peut s'arrêter un instant avant de lâcher : le lancer part avec la même force", () => {
+    const now = release(swing({}), H);
+    const late = release(swing({ hold: 120 }), H);
+    if (typeof now !== "object" || typeof late !== "object") throw new Error("pas de lancer");
+    expect(Math.abs(late.v - now.v)).toBeLessThan(0.3);
+    expect(Math.abs(late.s)).toBeLessThan(0.5);
+  });
+
+  it("garder le bouton longtemps après avoir poussé, ce n'est pas lancer", () => {
+    expect(release(swing({ hold: 600 }), H)).toBe("slow");
   });
 
   it("sans élan en arrière, ou en poussant trop mollement, la boule ne part pas", () => {
