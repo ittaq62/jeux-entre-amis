@@ -36,7 +36,11 @@ export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "special", label: "Spécial", note: "haut + Spécial : remonter vers l'arène" },
   { id: "jump", label: "Sauter", note: "deux fois, une au sol et une en l'air" },
   { id: "shield", label: "Garde", note: "avec une direction : esquive ou roulade" },
-  { id: "grab", label: "Saisir, ramasser", note: "ramasse l'objet à ses pieds, lance celui qu'on tient ; sinon saisit (puis une direction pour projeter)" },
+  {
+    id: "grab",
+    label: "Saisir, ramasser",
+    note: "ramasse l'objet à ses pieds, lance celui qu'on tient ; sinon saisit (puis une direction pour projeter)",
+  },
   { id: "taunt", label: "Narguer", note: "pour rire, sans effet sur le combat (mais on reste à découvert)" },
 ];
 

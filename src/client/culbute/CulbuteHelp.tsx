@@ -49,9 +49,9 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, le stick droit pour le coup fort, B pour le spécial, la gâchette
-            haute droite pour saisir et ramasser, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose n'importe où
-            pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial, Saut et Saisir (qui ramasse aussi les objets) ; pose le pouce sur Frapper et Spécial
-            à la fois pour te protéger (avec une direction : une esquive).
+            haute droite pour saisir et ramasser, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose
+            n'importe où pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial, Saut et Saisir (qui ramasse
+            aussi les objets) ; pose le pouce sur Frapper et Spécial à la fois pour te protéger (avec une direction : une esquive).
           </p>
         </>
       )}
