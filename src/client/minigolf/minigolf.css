@@ -248,6 +248,13 @@
   opacity: 0.85;
 }
 
+/* Sur un écran étroit, la rangée du bas est prise (les joueurs, les coups) : le pouvoir passe au-dessus */
+@media (max-width: 600px) {
+  .mg-bonus {
+    bottom: calc(96px + var(--safe-bottom, 0px));
+  }
+}
+
 .mg-power {
   position: absolute;
   left: 50%;
