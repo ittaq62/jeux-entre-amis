@@ -85,7 +85,7 @@ export function flashTexture(): THREE.CanvasTexture {
 }
 
 /** Une volute de fumée ou de poussière : des taches floues serrées, plus denses au milieu */
-function smokeTexture(): THREE.CanvasTexture {
+export function smokeTexture(): THREE.CanvasTexture {
   return canvasTexture(128, (g, s) => {
     let seed = 7;
     const r = () => {

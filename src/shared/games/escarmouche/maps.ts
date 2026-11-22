@@ -8,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine"];
 
 export interface Spawn {
   x: number;
@@ -68,7 +68,9 @@ export type Decor =
   /** Un palmier : son stipe qui se courbe un peu, ses palmes en couronne */
   | { k: "palm"; x: number; z: number; h: number }
   /** Une toile tendue (l'auvent d'un souk) : rayée, un peu creusée, à la hauteur y */
-  | { k: "awning"; x0: number; z0: number; x1: number; z1: number; y: number; color: string };
+  | { k: "awning"; x0: number; z0: number; x1: number; z1: number; y: number; color: string }
+  /** Une cheminée d'usine : une colonne de brique qui s'amincit, cerclée de fer, et sa fumée */
+  | { k: "chimney"; x: number; z: number; r: number; h: number };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -130,6 +132,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     name: "Le Village du désert",
     blurb:
       "Des maisons d'enduit ocre sous le soleil de midi : le souk couvert de toiles, la grand-rue et sa tour de guet, la palmeraie et ses murets, le bassin de l'oasis au milieu. On monte sur les toits-terrasses.",
+  },
+  usine: {
+    name: "L'Usine",
+    blurb:
+      "Des halles de brique au soleil couchant : la halle des machines au milieu et ses passerelles, le parc des citernes sous les tuyaux, le quai de chargement et ses remorques, les bureaux à étage et la grande cheminée qui fume.",
   },
   port: {
     name: "Le Port",
@@ -201,6 +208,7 @@ class Builder {
       case "tree":
       case "pine":
       case "palm":
+      case "chimney":
       case "lamp":
       case "tower":
         this.decor.push({ ...d, x: -d.x, z: -d.z });
@@ -1734,29 +1742,234 @@ function desert(): GameMap {
   };
 }
 
+// ---------------------------------------------------------------------------
+// L'Usine
+// ---------------------------------------------------------------------------
+
+function usineSide(b: Builder) {
+  // Les bâtiments du bord, en brique et en béton, aux toits de tôle
+  b.block(-48, 26, -34, 30, 8, "brique", { m: "metal", axis: "x" });
+  b.block(-34, 25.5, -20, 30, 10, "brique", { m: "metal", axis: "x" });
+  b.block(-20, 26, -8, 30, 7, "beton", { m: "metal", axis: "x" });
+  b.block(-8, 26, 0, 30, 9, "brique", { m: "metal", axis: "x" });
+  b.block(-48, -30, -36, -26, 7, "beton", { m: "metal", axis: "x" });
+  b.block(-36, -30, -24, -25.5, 9, "brique", { m: "metal", axis: "x" });
+  b.block(-24, -30, -12, -26, 8, "brique", { m: "metal", axis: "x" });
+  b.block(-12, -30, 0, -26, 6.5, "beton", { m: "metal", axis: "x" });
+
+  // La base : l'enceinte de brique, trois passages vers la cour, la loge du gardien
+  b.box(-48, 0, 12, -38, 2.2, 12.5, "brique");
+  b.box(-48, 0, -12.5, -38, 2.2, -12, "brique");
+  b.box(-48, 0, -12, -47.5, 2.2, 12, "brique");
+  b.box(-38.5, 0, -12, -38, 2.2, -7.2, "brique");
+  b.box(-38.5, 0, -2.6, -38, 2.2, 2.6, "brique");
+  b.box(-38.5, 0, 7.2, -38, 2.2, 12, "brique");
+  flatHouse(b, -46.6, 8, -43, 11.4, {
+    open: [
+      { side: "e", at: 9, w: 1.4, kind: "door" },
+      { side: "s", at: -45.4, w: 1.2, kind: "win" },
+    ],
+    wall: "brique",
+  });
+  b.crate(-46.4, -10.8);
+  b.crate(-45.2, -10.8);
+
+  // La halle des machines, au milieu (ce côté-ci : son mur ouest et la moitié des deux autres) : une grande porte, des
+  // portes de côté, des fenêtres hautes ; dedans, une passerelle tout autour à 3,5 m et des machines
+  b.wall(
+    "z",
+    -8,
+    8,
+    -11.85,
+    0.3,
+    0,
+    8,
+    [
+      { a: -2.2, b: 2.2, y0: 0, y1: 4.2 },
+      { a: -6.2, b: -4.6, y0: 5, y1: 6.6 },
+      { a: 4.6, b: 6.2, y0: 5, y1: 6.6 },
+    ],
+    "brique",
+  );
+  b.wall(
+    "x",
+    -12,
+    0,
+    7.85,
+    0.3,
+    0,
+    8,
+    [
+      { a: -7.2, b: -5.2, y0: 0, y1: 3 },
+      { a: -10.4, b: -8.8, y0: 5, y1: 6.6 },
+      { a: -4, b: -2.4, y0: 5, y1: 6.6 },
+    ],
+    "brique",
+  );
+  b.wall(
+    "x",
+    -12,
+    0,
+    -7.85,
+    0.3,
+    0,
+    8,
+    [
+      { a: -7.2, b: -5.2, y0: 0, y1: 3 },
+      { a: -10.4, b: -8.8, y0: 5, y1: 6.6 },
+      { a: -4, b: -2.4, y0: 5, y1: 6.6 },
+    ],
+    "brique",
+  );
+  // Les passerelles, et l'escalier qui y monte le long du mur ouest
+  b.box(-11.7, 3.3, 6.4, 0, 3.5, 7.7, "metal");
+  b.box(-11.7, 3.3, -7.7, 0, 3.5, -6.4, "metal");
+  // Leurs garde-corps : une main courante, une lisse, des montants (on voit et on tire au travers)
+  for (const z of [6.4, -6.4]) {
+    b.box(-10.3, 4.42, z - 0.03, 0, 4.5, z + 0.03, "metal");
+    b.box(-10.3, 3.95, z - 0.02, 0, 4.0, z + 0.02, "metal");
+    for (let x = -10.3; x < 0; x += 2) b.box(x, 3.5, z - 0.03, x + 0.06, 4.42, z + 0.03, "metal");
+  }
+  b.stairs("z", 2.56, 1, -11.7, -10.4, 0, 3.5, "metal");
+  b.stairs("z", -2.56, -1, -11.7, -10.4, 0, 3.5, "metal");
+  // Les machines : une presse, un tour, un bâti couché
+  b.box(-9, 0, -4.2, -6, 2.4, -1.6, "metal");
+  b.box(-4.2, 0, 2.2, -1.6, 1.6, 4.6, "rouille");
+  b.box(-5.4, 0, -5.8, -3.6, 3.2, -4.2, "metal");
+  b.crate(-8.6, 4.6);
+
+  // Le parc, au nord : deux citernes couchées, une rampe de tuyaux au-dessus, des palettes, un chariot élévateur
+  b.box(-36, 0, 18.6, -28.4, 3, 21.4, "citerne");
+  b.add({ k: "tank", x0: -36, x1: -28.4, z: 20, y: 1.35, r: 1.5 });
+  b.box(-25, 0, 21.7, -19, 2.4, 23.9, "citerne");
+  b.add({ k: "tank", x0: -25, x1: -19, z: 22.8, y: 1, r: 1.2 });
+  // Les berceaux des citernes
+  for (const x of [-35, -29.4]) b.box(x - 0.2, 0, 18.7, x + 0.2, 0.6, 21.3, "beton");
+  for (const x of [-24, -20]) b.box(x - 0.2, 0, 21.8, x + 0.2, 0.5, 23.8, "beton");
+  b.add({ k: "tank", x0: -38, x1: -12, z: 15, y: 3.4, r: 0.32 });
+  b.add({ k: "tank", x0: -38, x1: -12, z: 15.9, y: 3.4, r: 0.22 });
+  // La rampe des tuyaux : des portiques de deux poteaux et leur traverse
+  for (const x of [-37, -30, -23, -16]) {
+    for (const z of [14.6, 16.2]) b.box(x - 0.12, 0, z - 0.12, x + 0.12, 3.6, z + 0.12, "metal");
+    b.box(x - 0.12, 3.45, 14.5, x + 0.12, 3.6, 16.3, "metal");
+  }
+  b.crate(-25.4, 17.6);
+  b.crate(-24.2, 17.6);
+  b.crate(-24.8, 17.6, 1.2, 1.2, 1.2);
+  car(b, -17.6, 19.4, -15.2, 20.8, "#c9a227");
+  b.barrel(-32, 23.6);
+
+  // La cour, entre la base et la halle : un chariot, des caisses, un bloc de béton, des fûts
+  car(b, -31.2, -5.8, -28.8, -4.4, "#c9a227");
+  b.crate(-24, 3);
+  b.crate(-24, 4.2);
+  b.crate(-24, 3.6, 1.2, 1.2, 1.2);
+  b.box(-34.4, 0, 5.4, -30.8, 1.05, 6, "beton");
+  b.barrel(-21, -6.4);
+  b.barrel(-34, 9.4);
+
+  // Le quai de chargement, au sud : une plate-forme surélevée (des marches à chaque bout), des remorques garées
+  b.box(-36.2, 0, -25.5, -14.2, 1.2, -21.6, "beton");
+  b.stairs("x", -37.5, 1, -24.5, -22.6, 0, 1.2, "beton");
+  b.stairs("x", -12.9, -1, -24.5, -22.6, 0, 1.2, "beton");
+  car(b, -34, -21.2, -26, -18.9, "#7b8a92");
+  car(b, -22, -21.2, -14.6, -18.9, "#8a3a2c");
+  // Les bureaux : deux niveaux, des fenêtres sur la cour et sur le quai
+  flatHouse(b, -34.4, -16.4, -26, -11, {
+    floors: 2,
+    open: [
+      { side: "n", at: -31, w: 1.4, kind: "door" },
+      { side: "e", at: -14.4, w: 1.4, kind: "door" },
+      { side: "n", at: -33.6, w: 1.2, kind: "win" },
+      { side: "n", at: -28.6, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: -32.8, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: -30.4, w: 1.2, kind: "win", floor: 1 },
+      { side: "e", at: -12.8, w: 1.2, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -34, dir: 1, c0: -16.1, c1: -14.8 },
+    wall: "brique",
+  });
+  // La cheminée : un pied de brique, et sa colonne qui fume
+  b.box(-21.2, 0, -15.2, -18.8, 4, -12.8, "brique");
+  b.add({ k: "chimney", x: -20, z: -14, r: 1, h: 26 });
+  b.add({ k: "lamp", x: -24, z: -9, h: 5 });
+  b.add({ k: "patch", x0: -38, z0: -18, x1: -12, z1: -10, m: "gravier" });
+  b.add({ k: "patch", x0: -38, z0: 13, x1: -12, z1: 25, m: "gravier" });
+}
+
+function usine(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "beton");
+  fence(b, -48, -30, 48, 30);
+  // Le toit de la halle : deux pans de tôle, et entre eux une verrière brisée qui laisse entrer le jour ; ses poutres
+  b.box(-12.2, 8, -8.2, 12.2, 8.25, -1.6, "metal");
+  b.box(-12.2, 8, 1.6, 12.2, 8.25, 8.2, "metal");
+  for (let x = -10; x <= 10; x += 4) b.box(x - 0.12, 7.75, -1.6, x + 0.12, 8, 1.6, "metal");
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    usineSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-44, 6, 0, 6),
+      b.spawn(-43, -9, 0, -9),
+      b.spawn(-41, 4.5, 0, 4.5),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-27, 17, 0, 17),
+      b.spawn(-28, -14, 0, -14),
+      b.spawn(-28, 0, 0, 0),
+      b.spawn(-9, 1.6, 0, 0),
+      b.spawn(-18, -23.5, 0, -23.5, 1.2),
+    );
+    ffa.push(b.spawn(-15, 10.5, 0, 10.5));
+  }
+  b.s = 1;
+  return {
+    id: "usine",
+    ...MAP_NAMES.usine,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 23, y: 0, z: 17 },
+      { x: 28, y: 0, z: -3 },
+    ],
+    points: [
+      { x: -26, y: 0, z: 18.8 },
+      { x: 0, y: 0, z: 0 },
+      { x: 26, y: 0, z: -18.8 },
+    ],
+    light: "soir",
+  };
+}
+
+const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine };
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {
   let m = cache.get(id);
   if (!m) {
-    m =
-      id === "gare"
-        ? gare()
-        : id === "port"
-          ? port()
-          : id === "col"
-            ? col()
-            : id === "ruines"
-              ? ruines()
-              : id === "desert"
-                ? desert()
-                : hameau();
+    m = BUILD[id]();
     cache.set(id, m);
   }
   return m;
 }
 
 export function isMapId(v: unknown): v is MapId {
-  return v === "hameau" || v === "gare" || v === "port" || v === "col" || v === "ruines" || v === "desert";
+  return typeof v === "string" && (MAP_IDS as string[]).includes(v);
 }

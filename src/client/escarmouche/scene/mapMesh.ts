@@ -9,6 +9,7 @@ import { addContainer, addCrane, addHouse, addQuay, addWagon, instancedParts, ty
 import { addBox, addChamferBox, addCrate, addRock, Bucket, pushFace, tintOf } from "./geom.ts";
 import type { Quality } from "./quality.ts";
 import { boardTexture, clothTexture, corrugatedTexture, matTexture, normalFrom, normalTexture, TILE } from "./textures.ts";
+import { smokeTexture } from "./effects.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 /** Les teintes de base : elles colorent la toile (et la remplacent quand il n'y en a pas) */
@@ -395,7 +396,7 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
         }),
   );
   gm.boxes.forEach((bx, i) => {
-    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse") return;
+    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse" || bx.m === "citerne") return;
     if (rocks.has(bx)) {
       const snowy = gm.light === "neige";
       addRock(
@@ -473,6 +474,11 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   ]);
   const ctx: Ctx = { bucket, group, low: q === "bas", night, instance: (kind, m) => parts.get(kind)!.push(m.clone()) };
   for (const d of gm.decor) addDecor(d, ctx, q);
+  const smoke = chimneys(
+    gm.decor.filter((d): d is Extract<Decor, { k: "chimney" }> => d.k === "chimney"),
+    group,
+    q,
+  );
   instancedParts(parts, q === "bas", group);
   if (bags.length > 0) group.add(sandbagMesh(bags, q));
   if (bales.length > 0) group.add(baleMesh(bales, q));
@@ -486,6 +492,7 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   return {
     group,
     update(t: number) {
+      smoke(t);
       const n = (seaMaterial as THREE.MeshStandardMaterial).normalMap;
       if (n) n.offset.set(t * 0.012, t * 0.007);
     },
@@ -851,6 +858,56 @@ function awning(d: Extract<Decor, { k: "awning" }>, group: THREE.Group) {
   m.castShadow = true;
   m.receiveShadow = true;
   group.add(m);
+}
+
+/**
+ * Les cheminées d'usine : une colonne de brique qui s'amincit vers le haut, cerclée de fer, son couronnement sombre ; et
+ * leur fumée, quelques nuages qui montent, s'élargissent, dérivent avec le vent et s'effacent (sans fin, toujours les
+ * mêmes : rien à créer pendant la partie). Renvoie ce qui anime la fumée.
+ */
+function chimneys(list: Extract<Decor, { k: "chimney" }>[], group: THREE.Group, q: Quality): (t: number) => void {
+  const low = q === "bas";
+  const puffs: { s: THREE.Sprite; m: THREE.SpriteMaterial; x: number; y: number; z: number; phase: number }[] = [];
+  const smokeTex = list.length > 0 && !low ? smokeTexture() : null;
+  for (const d of list) {
+    const tex = matTexture("brique", 256)!.clone();
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set((Math.PI * 2 * d.r) / 2.4, d.h / 2.4);
+    const brick = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92 });
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(d.r * 0.72, d.r, d.h, low ? 10 : 20, 1, true), brick);
+    col.position.set(d.x, d.h / 2, d.z);
+    col.castShadow = true;
+    group.add(col);
+    const iron = new THREE.MeshStandardMaterial({ color: "#2a2724", roughness: 0.6, metalness: 0.5 });
+    for (const k of [0.3, 0.55, 0.78]) {
+      const r = d.r * (1 - 0.28 * k) + 0.03;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.14, low ? 10 : 20, 1, true), iron);
+      band.position.set(d.x, d.h * k, d.z);
+      group.add(band);
+    }
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(d.r * 0.8, d.r * 0.74, 0.7, low ? 10 : 20), iron);
+    crown.position.set(d.x, d.h + 0.2, d.z);
+    group.add(crown);
+    if (low) continue;
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.SpriteMaterial({ map: smokeTex, color: "#8a8681", transparent: true, depthWrite: false, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      group.add(s);
+      puffs.push({ s, m, x: d.x, y: d.h + 0.6, z: d.z, phase: i / 12 });
+    }
+  }
+  const c = new THREE.Color();
+  return (t: number) => {
+    for (const p of puffs) {
+      const age = (t * 0.06 + p.phase) % 1;
+      p.s.position.set(p.x + age * 11 + Math.sin(t * 0.3 + p.phase * 9) * 0.8, p.y + age * 12, p.z + age * 4);
+      p.s.scale.setScalar(2 + age * 10);
+      p.m.rotation = p.phase * 6 + age * 1.2;
+      p.m.opacity = 0.42 * Math.min(1, age * 8) * (1 - age) ** 1.4;
+      p.m.color.copy(c.set("#6a6661").lerp(c.clone().set("#c2beb8"), age));
+    }
+  };
 }
 
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
