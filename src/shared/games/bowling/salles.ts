@@ -20,9 +20,9 @@ export const SALLES: Record<SalleId, SalleInfo> = {
 
 export const SALLE_IDS = Object.keys(SALLES) as SalleId[];
 
-/** Les salles déjà construites (les autres arrivent) */
+/** Les salles où l'on peut jouer (toutes sont construites) */
 export function readySalles(): SalleId[] {
-  return ["retro", "fluo", "chalet", "guinguette", "foire", "paquebot", "temple"];
+  return [...SALLE_IDS];
 }
 
 export function isSalle(id: unknown): id is SalleId {

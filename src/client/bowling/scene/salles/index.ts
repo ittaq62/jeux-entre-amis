@@ -7,6 +7,7 @@ import { foireSalle } from "./foire.ts";
 import { guinguetteSalle } from "./guinguette.ts";
 import { paquebotSalle } from "./paquebot.ts";
 import { retroSalle } from "./retro.ts";
+import { stationSalle } from "./station.ts";
 import { templeSalle } from "./temple.ts";
 
 export function salleOf(id: SalleId): Salle {
@@ -23,6 +24,8 @@ export function salleOf(id: SalleId): Salle {
       return paquebotSalle();
     case "temple":
       return templeSalle();
+    case "station":
+      return stationSalle();
     default:
       return retroSalle();
   }
