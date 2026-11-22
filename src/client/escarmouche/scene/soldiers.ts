@@ -384,34 +384,36 @@ export class SoldierModel {
     this.root.add(this.hips);
     this.hips.position.y = 0.95;
     // Le bassin et le ceinturon
-    rbox(0.36, 0.22, 0.22, 0.07, m.trousers, this.hips, 0, 0.0, 0);
-    rbox(0.345, 0.055, 0.215, 0.02, m.belt, this.hips, 0, 0.1, 0);
-    rbox(0.05, 0.04, 0.02, 0.008, m.accent ?? m.pouch, this.hips, 0, 0.1, -0.11);
+    // Une carrure de soldat équipé : assez large pour se repérer de loin (et pour remplir sa zone de touche, qui n'a pas
+    // changé : 54 cm au buste, 44 cm aux jambes)
+    rbox(0.4, 0.23, 0.24, 0.07, m.trousers, this.hips, 0, 0.0, 0);
+    rbox(0.385, 0.06, 0.235, 0.02, m.belt, this.hips, 0, 0.1, 0);
+    rbox(0.055, 0.045, 0.02, 0.008, m.accent ?? m.pouch, this.hips, 0, 0.1, -0.12);
     if (u.vest) {
-      rbox(0.07, 0.08, 0.06, 0.015, m.pouch, this.hips, -0.15, 0.06, 0.06);
-      rbox(0.07, 0.08, 0.06, 0.015, m.pouch, this.hips, 0.15, 0.06, 0.06);
+      rbox(0.08, 0.09, 0.07, 0.015, m.pouch, this.hips, -0.17, 0.06, 0.06);
+      rbox(0.08, 0.09, 0.07, 0.015, m.pouch, this.hips, 0.17, 0.06, 0.06);
     }
     // Les jambes : cuisse et tibia, articulés aux hanches et aux genoux ; genouillères et rangers
     for (const side of [-1, 1]) {
       const thigh = new THREE.Group();
-      thigh.position.set(side * 0.095, 0, 0);
+      thigh.position.set(side * 0.105, 0, 0);
       this.hips.add(thigh);
-      capsule(0.086, 0.3, m.trousers, thigh, 0, -0.22, 0, seg);
-      if (u.vest) rbox(0.07, 0.12, 0.05, 0.015, m.pouch, thigh, side * 0.07, -0.2, 0.0);
+      capsule(0.102, 0.29, m.trousers, thigh, 0, -0.22, 0, seg);
+      if (u.vest) rbox(0.075, 0.13, 0.06, 0.015, m.pouch, thigh, side * 0.09, -0.2, 0.0);
       const shin = new THREE.Group();
       shin.position.y = -0.46;
       thigh.add(shin);
-      capsule(0.072, 0.3, m.trousers, shin, 0, -0.2, 0, seg);
-      if (u.id !== "parade" && u.id !== "perso") rbox(0.1, 0.11, 0.05, 0.02, m.vest ?? m.pouch, shin, 0, -0.02, -0.06);
-      rbox(0.12, 0.13, 0.25, 0.035, m.boots, shin, 0, -0.415, -0.035);
-      rbox(0.126, 0.03, 0.265, 0.01, std(keep, "#141210", 0.9), shin, 0, -0.475, -0.035);
+      capsule(0.086, 0.29, m.trousers, shin, 0, -0.2, 0, seg);
+      if (u.id !== "parade" && u.id !== "perso") rbox(0.115, 0.12, 0.055, 0.02, m.vest ?? m.pouch, shin, 0, -0.02, -0.07);
+      rbox(0.14, 0.14, 0.27, 0.04, m.boots, shin, 0, -0.415, -0.035);
+      rbox(0.146, 0.03, 0.285, 0.01, std(keep, "#141210", 0.9), shin, 0, -0.475, -0.035);
       this.legs.push({ thigh, shin });
     }
     // Le buste, les épaules, le gilet et ses poches, le foulard du camp
     this.hips.add(this.spine);
-    const torso = capsule(0.16, 0.24, m.coat, this.spine, 0, 0.31, 0, seg + 2);
-    torso.scale.set(1.14, 1, 0.8);
-    const shoulders = capsule(0.075, 0.27, m.coat, this.spine, 0, 0.47, 0, seg);
+    const torso = capsule(0.185, 0.22, m.coat, this.spine, 0, 0.31, 0, seg + 2);
+    torso.scale.set(1.18, 1, 0.86);
+    const shoulders = capsule(0.095, 0.31, m.coat, this.spine, 0, 0.47, 0, seg);
     shoulders.rotation.z = Math.PI / 2;
     capsule(0.05, 0.05, m.skin, this.spine, 0, 0.56, 0, seg);
     const scarf = new THREE.Mesh(keep(new THREE.TorusGeometry(0.075, 0.03, 6, 14)), this.bandMat);
@@ -419,24 +421,37 @@ export class SoldierModel {
     scarf.position.set(0, 0.53, -0.01);
     this.spine.add(scarf);
     if (m.vest) {
-      rbox(0.37, 0.34, 0.27, 0.05, m.vest, this.spine, 0, 0.31, 0);
-      for (const x of [-0.095, 0, 0.095]) rbox(0.078, 0.105, 0.05, 0.015, m.pouch, this.spine, x, 0.21, -0.15);
-      rbox(0.12, 0.07, 0.04, 0.012, m.pouch, this.spine, -0.08, 0.38, -0.145);
-      rbox(0.11, 0.19, 0.07, 0.02, m.pouch, this.spine, 0.02, 0.33, 0.16);
-      const antenna = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.004, 0.004, 0.32, 4)), m.belt);
-      antenna.position.set(0.06, 0.55, 0.17);
-      this.spine.add(antenna);
+      // Le gilet de combat : épais, avec ses épaulières et ses poches
+      rbox(0.46, 0.36, 0.34, 0.06, m.vest, this.spine, 0, 0.31, 0);
+      for (const side of [-1, 1]) rbox(0.13, 0.05, 0.2, 0.02, m.vest, this.spine, side * 0.2, 0.5, 0);
+      for (const x of [-0.115, 0, 0.115]) rbox(0.09, 0.115, 0.055, 0.015, m.pouch, this.spine, x, 0.21, -0.185);
+      rbox(0.13, 0.075, 0.045, 0.012, m.pouch, this.spine, -0.09, 0.39, -0.18);
     } else {
       // Une veste : deux poches de poitrine, une rangée de boutons
-      for (const x of [-0.08, 0.08]) rbox(0.095, 0.085, 0.025, 0.01, m.pouch, this.spine, x, 0.37, -0.13);
+      for (const x of [-0.09, 0.09]) rbox(0.105, 0.09, 0.025, 0.01, m.pouch, this.spine, x, 0.37, -0.158);
       for (let k = 0; k < 4; k++)
-        rbox(0.018, 0.018, 0.012, 0.005, m.accent ?? m.pouch, this.spine, u.id === "parade" ? -0.05 : 0, 0.42 - k * 0.07, -0.14);
+        rbox(0.018, 0.018, 0.012, 0.005, m.accent ?? m.pouch, this.spine, u.id === "parade" ? -0.05 : 0, 0.42 - k * 0.07, -0.165);
       if (u.id === "parade") {
-        for (let k = 0; k < 4; k++) rbox(0.018, 0.018, 0.012, 0.005, m.accent ?? m.pouch, this.spine, 0.05, 0.42 - k * 0.07, -0.14);
-        for (const side of [-1, 1]) rbox(0.1, 0.025, 0.12, 0.01, m.accent ?? m.pouch, this.spine, side * 0.2, 0.53, 0);
+        for (let k = 0; k < 4; k++) rbox(0.018, 0.018, 0.012, 0.005, m.accent ?? m.pouch, this.spine, 0.05, 0.42 - k * 0.07, -0.165);
+        for (const side of [-1, 1]) rbox(0.11, 0.025, 0.13, 0.01, m.accent ?? m.pouch, this.spine, side * 0.23, 0.53, 0);
         const collar = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.07, 0.08, 0.05, 12, 1, true)), m.accent ?? m.pouch);
         collar.position.y = 0.55;
         this.spine.add(collar);
+      }
+    }
+    // Le sac : un paquetage dans le dos, la couverture roulée dessus (et l'antenne de la radio, avec un gilet) ; il
+    // épaissit la silhouette vue de côté et de dos
+    if (u.id !== "parade" && u.id !== "perso") {
+      rbox(0.3, 0.33, 0.14, 0.045, m.pouch, this.spine, 0, 0.3, 0.215);
+      rbox(0.24, 0.1, 0.05, 0.02, m.belt, this.spine, 0, 0.22, 0.29);
+      const roll = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.06, 0.34, low ? 8 : 12)), m.trousers);
+      roll.rotation.z = Math.PI / 2;
+      roll.position.set(0, 0.5, 0.215);
+      this.spine.add(roll);
+      if (m.vest) {
+        const antenna = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.004, 0.004, 0.32, 4)), m.belt);
+        antenna.position.set(0.1, 0.62, 0.24);
+        this.spine.add(antenna);
       }
     }
     // Dans sa propre tenue : la capuche, la cape, le collier de fleurs, le nœud du smoking, l'armure… de son personnage
@@ -495,7 +510,7 @@ export class SoldierModel {
     this.aim.add(this.arms);
     // Le drapeau porté dans le dos
     this.flag = new THREE.Group();
-    this.flag.position.set(0.12, 0.3, 0.16);
+    this.flag.position.set(0.12, 0.3, 0.3);
     this.flag.visible = false;
     this.spine.add(this.flag);
     const pole = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.015, 0.015, 1.3, 5)), std(keep, "#3a3a3a", 0.6, 0.4));
@@ -528,10 +543,10 @@ export class SoldierModel {
     const m = this.mats;
     const seg = this.low ? 6 : 8;
     const at = gun.group.position;
-    const right = { shoulder: new THREE.Vector3(0.19, 0.0, -0.02), hand: new THREE.Vector3(at.x, at.y - 0.03, at.z + 0.01) };
+    const right = { shoulder: new THREE.Vector3(0.235, 0.0, -0.02), hand: new THREE.Vector3(at.x, at.y - 0.03, at.z + 0.01) };
     const front = gun.pistol ? 0 : Math.max(gun.front, -0.34);
     const left = {
-      shoulder: new THREE.Vector3(-0.19, 0.0, -0.02),
+      shoulder: new THREE.Vector3(-0.235, 0.0, -0.02),
       hand: gun.pistol ? new THREE.Vector3(at.x - 0.03, at.y - 0.04, at.z + 0.0) : new THREE.Vector3(at.x, at.y + 0.02, at.z + front),
     };
     for (const [arm, bend] of [
@@ -543,12 +558,12 @@ export class SoldierModel {
       const d = arm.hand.clone().sub(arm.shoulder);
       if (d.length() > reach) arm.hand.copy(arm.shoulder).addScaledVector(d.normalize(), reach);
       const e = elbow(arm.shoulder, arm.hand, 0.3, bend);
-      segment(arm.shoulder, e, 0.056, m.coat, this.arms, seg);
-      segment(e, arm.hand, 0.048, m.coat, this.arms, seg);
+      segment(arm.shoulder, e, 0.07, m.coat, this.arms, seg);
+      segment(e, arm.hand, 0.059, m.coat, this.arms, seg);
       // Le brassard du camp, en haut du bras
       const band = new THREE.Vector3().lerpVectors(arm.shoulder, e, 0.35);
-      segment(band.clone().lerp(arm.shoulder, 0.12), band.clone().lerp(e, 0.12), 0.06, this.bandMat, this.arms, seg);
-      const hand = rbox(0.075, 0.085, 0.095, 0.03, m.glove, this.arms, arm.hand.x, arm.hand.y, arm.hand.z);
+      segment(band.clone().lerp(arm.shoulder, 0.12), band.clone().lerp(e, 0.12), 0.075, this.bandMat, this.arms, seg);
+      const hand = rbox(0.085, 0.09, 0.1, 0.03, m.glove, this.arms, arm.hand.x, arm.hand.y, arm.hand.z);
       hand.rotation.x = 0.3;
     }
     fuse(this.arms);
