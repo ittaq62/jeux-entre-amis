@@ -5,6 +5,7 @@ import type { Card } from "../../shared/games/uno/cards.ts";
 import { CulbuteCardArt } from "../culbute/CulbuteCardArt.tsx";
 import { MinigolfCardArt } from "../minigolf/MinigolfCardArt.tsx";
 import { BowlingCardArt } from "../bowling/BowlingCardArt.tsx";
+import { BillardCardArt } from "../billard/BillardCardArt.tsx";
 import { CardFace } from "../components/Card.tsx";
 import { Icon, type IconName } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
@@ -410,6 +411,7 @@ function Art({ art, width }: { art: CardArt; width: number }) {
   if (art.kind === "escarmouche") return <EscarmoucheArt subject={art.subject} />;
   if (art.kind === "minigolf") return <MinigolfCardArt subject={art.subject} />;
   if (art.kind === "bowling") return <BowlingCardArt subject={art.subject} />;
+  if (art.kind === "billard") return <BillardCardArt subject={art.subject} />;
   if (art.kind === "builder") return <BuilderArt subject={art.subject} />;
   return (
     <span className="tc-uno">
@@ -444,6 +446,7 @@ const FAMILY_ICON: Record<CardFamily, IconName> = {
   escarmouche: "shield",
   minigolf: "flag",
   bowling: "target",
+  billard: "target",
 };
 
 /** Six couleurs de mur pour les Habitués, données dans l'ordre pour que deux voisins n'aient jamais la même */

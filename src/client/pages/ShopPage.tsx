@@ -27,6 +27,7 @@ import { BombArt } from "../meche/bombs/BombArt.tsx";
 import { BombShow } from "../meche/bombs/BombShow.tsx";
 import { BallSwatch, TrailSwatch } from "../minigolf/BallPicker.tsx";
 import { BowlingShopLook } from "../bowling/ShopLooks.tsx";
+import { BillardShopLook } from "../billard/ShopLooks.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
@@ -73,6 +74,10 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
   { kind: "bowlfx", game: "bowling", title: "Bowling", note: "Ce qui éclate à l'écran quand tu fais un strike" },
   { kind: "bowldanse", game: "bowling", title: "Bowling", note: "La danse de ton personnage après un strike ou un spare" },
   { kind: "bowlquilles", game: "bowling", title: "Bowling", note: "Les quilles que tu fais tomber, quand c'est toi qui lances" },
+  { kind: "bilqueue", game: "billard", title: "Billard", note: "Ta queue : les autres la voient quand c'est toi qui joues" },
+  { kind: "biltapis", game: "billard", title: "Billard", note: "Le tapis de la table que tu ouvres" },
+  { kind: "bilbilles", game: "billard", title: "Billard", note: "Le jeu de billes de la table que tu ouvres" },
+  { kind: "bileffet", game: "billard", title: "Billard", note: "Ce qui éclate à l'écran sur tes beaux coups" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -90,6 +95,7 @@ export function ShopPage() {
     if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={52} />;
     if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={46} />;
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} />;
+    if (item.kind.startsWith("bil")) return <BillardShopLook kind={item.kind} id={item.ref} />;
     if (item.kind === "uno") return <CardBack width={46} skin={item.ref as BackId} />;
     if (item.kind === "token") {
       const src = thumbs?.[item.ref as TokenId];
@@ -147,6 +153,7 @@ export function ShopPage() {
     if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={140} />;
     if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={110} />;
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} big />;
+    if (item.kind.startsWith("bil")) return <BillardShopLook kind={item.kind} id={item.ref} big />;
     if (item.kind === "tenue") return <TenueStage item={item} />;
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)

@@ -31,6 +31,16 @@ import {
   STRIKE_FX as BOWL_FX,
   TRAILS as BOWL_TRAILS,
 } from "./games/bowling/looks.ts";
+import {
+  BALL_SETS as BIL_SETS,
+  bilClothItem,
+  bilCueItem,
+  bilFxItem,
+  bilSetItem,
+  CLOTHS as BIL_CLOTHS,
+  CUES as BIL_CUES,
+  SHOT_FX as BIL_FX,
+} from "./games/billard/looks.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
@@ -57,7 +67,11 @@ export type ShopKind =
   | "bowltrace"
   | "bowlfx"
   | "bowldanse"
-  | "bowlquilles";
+  | "bowlquilles"
+  | "bilqueue"
+  | "biltapis"
+  | "bilbilles"
+  | "bileffet";
 
 export interface ShopItem {
   id: string;
@@ -138,6 +152,11 @@ export const SHOP_ITEMS: ShopItem[] = [
   ...BOWL_FX.map((f): ShopItem => ({ id: bowlFxItem(f.id), kind: "bowlfx", ref: f.id, name: f.name, price: f.price })),
   ...BOWL_DANCES.map((d): ShopItem => ({ id: bowlDanceItem(d.id), kind: "bowldanse", ref: d.id, name: d.name, price: d.price })),
   ...BOWL_PINS.map((p): ShopItem => ({ id: bowlPinsItem(p.id), kind: "bowlquilles", ref: p.id, name: p.name, price: p.price })),
+  // Billard : sa queue, ce qui éclate sur ses beaux coups, et pour la table qu'on ouvre, le tapis et le jeu de billes
+  ...BIL_CUES.map((c): ShopItem => ({ id: bilCueItem(c.id), kind: "bilqueue", ref: c.id, name: c.name, price: c.price })),
+  ...BIL_CLOTHS.map((c): ShopItem => ({ id: bilClothItem(c.id), kind: "biltapis", ref: c.id, name: c.name, price: c.price })),
+  ...BIL_SETS.map((b): ShopItem => ({ id: bilSetItem(b.id), kind: "bilbilles", ref: b.id, name: b.name, price: b.price })),
+  ...BIL_FX.map((f): ShopItem => ({ id: bilFxItem(f.id), kind: "bileffet", ref: f.id, name: f.name, price: f.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

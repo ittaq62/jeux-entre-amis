@@ -38,7 +38,8 @@ export type CardFamily =
   | "escarmouche"
   | "culbute"
   | "minigolf"
-  | "bowling";
+  | "bowling"
+  | "billard";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -53,6 +54,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "escarmouche", name: "L'Escarmouche", note: "Ça sent la poudre au hameau" },
   { id: "minigolf", name: "Le Minigolf", note: "Par trois, et ça finit à sept" },
   { id: "bowling", name: "La Piste", note: "Strike, spare, et la rigole" },
+  { id: "billard", name: "La Bande", note: "Sept pleines, sept rayées, et la noire" },
 ];
 
 export type CardArt =
@@ -77,6 +79,10 @@ export type CardArt =
   | {
       kind: "bowling";
       subject: "quille" | "boule" | "chaussures" | "rigole" | "feuille" | "retour" | "jukebox" | "split" | "machine" | "dinde" | "parfaite";
+    }
+  | {
+      kind: "billard";
+      subject: "queue" | "craie" | "triangle" | "blanche" | "poche" | "lampe" | "rateau" | "noire" | "neuf" | "bandes" | "casse";
     };
 
 export interface CardDef {
@@ -1151,6 +1157,96 @@ export const CARDS: CardDef[] = [
     name: "La Partie parfaite",
     quote: "Douze strikes, trois cents points, pas un de moins.",
     art: { kind: "bowling", subject: "parfaite" },
+  },
+
+  // La Bande (le billard, arrivé après le bowling : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "bil-queue",
+    family: "billard",
+    rarity: "commune",
+    name: "La Queue",
+    quote: "Un mètre quarante-sept de bois, et toute ta réputation au bout.",
+    art: { kind: "billard", subject: "queue" },
+  },
+  {
+    id: "bil-craie",
+    family: "billard",
+    rarity: "commune",
+    name: "La Craie",
+    quote: "Bleue, poudreuse, et toujours là quand on cherche une excuse.",
+    art: { kind: "billard", subject: "craie" },
+  },
+  {
+    id: "bil-triangle",
+    family: "billard",
+    rarity: "commune",
+    name: "Le Triangle",
+    quote: "Quinze billes bien rangées. Ça ne dure jamais.",
+    art: { kind: "billard", subject: "triangle" },
+  },
+  {
+    id: "bil-blanche",
+    family: "billard",
+    rarity: "commune",
+    name: "La Blanche",
+    quote: "Elle frappe toutes les autres et n'entre jamais. Enfin, presque jamais.",
+    art: { kind: "billard", subject: "blanche" },
+  },
+  {
+    id: "bil-poche",
+    family: "billard",
+    rarity: "peu-commune",
+    name: "La Poche",
+    quote: "Six trous dans une table, et on trouve encore le moyen de les rater.",
+    art: { kind: "billard", subject: "poche" },
+  },
+  {
+    id: "bil-lampe",
+    family: "billard",
+    rarity: "peu-commune",
+    name: "La Lampe",
+    quote: "Trois abat-jour verts, et la nuit peut commencer.",
+    art: { kind: "billard", subject: "lampe" },
+  },
+  {
+    id: "bil-rateau",
+    family: "billard",
+    rarity: "peu-commune",
+    name: "Le Râteau",
+    quote: "Pour les coups trop loin et les bras trop courts.",
+    art: { kind: "billard", subject: "rateau" },
+  },
+  {
+    id: "bil-noire",
+    family: "billard",
+    rarity: "rare",
+    name: "La Noire",
+    quote: "Trop tôt, elle te fait perdre. À temps, elle te fait roi.",
+    art: { kind: "billard", subject: "noire" },
+  },
+  {
+    id: "bil-neuf",
+    family: "billard",
+    rarity: "rare",
+    name: "La 9",
+    quote: "Jaune et blanche, et toute la table ne regarde qu'elle.",
+    art: { kind: "billard", subject: "neuf" },
+  },
+  {
+    id: "bil-bandes",
+    family: "billard",
+    rarity: "epique",
+    name: "Trois bandes",
+    quote: "Une, deux, trois bandes, puis la rouge : la salle retient son souffle.",
+    art: { kind: "billard", subject: "bandes" },
+  },
+  {
+    id: "bil-casse",
+    family: "billard",
+    rarity: "legendaire",
+    name: "Casse et file",
+    quote: "Il casse, il rentre tout, il range sa queue. L'autre n'a pas joué.",
+    art: { kind: "billard", subject: "casse" },
   },
 ];
 

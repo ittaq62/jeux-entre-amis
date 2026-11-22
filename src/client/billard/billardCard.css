@@ -1,0 +1,6 @@
+/* La famille « La Bande » dans l'album : une salle de billard le soir, la lampe au-dessus du feutre */
+.fam-billard .tc-art {
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 6%, rgba(255, 214, 150, 0.4), transparent 70%),
+    linear-gradient(180deg, #2a1a10 0, #3a2214 50%, #1a3a26 100%);
+}
