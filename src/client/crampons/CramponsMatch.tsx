@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import {
   HUMAN_KEEPER_WAIT,
   HUMAN_RESTART_WAIT,
@@ -6,6 +6,7 @@ import {
   type MatchEvent,
   type RestartKind,
 } from "../../shared/games/crampons/model.ts";
+import type { CramponsView } from "../../shared/games/crampons/view.ts";
 import type { CramponsClientMessage, CramponsRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
@@ -79,6 +80,36 @@ function celebrationFor(room: CramponsRoomView, team: number, human: string | nu
   const seats = room.seats.filter((s) => s.kind === "human" && room.teams[s.id] === team);
   const seat = (human !== null ? seats.find((s) => s.id === human) : undefined) ?? seats.find((s) => s.fete);
   return seat?.fete ? (FETE_BY_ID.get(seat.fete)?.pose ?? null) : null;
+}
+
+/**
+ * Les cartons d'une équipe, sous sa ligne du tableau : un petit carton à côté du numéro de chacun ; l'exclu, carton
+ * rouge et numéro barré. Le nom de chacun pour les lecteurs d'écran, et au survol.
+ */
+function BugCards({ team, view }: { team: 0 | 1; view: CramponsView }) {
+  const list = view.cards.filter((c) => view.players[c.i]?.team === team);
+  if (list.length === 0) return null;
+  const said = list.map((c) => `${view.players[c.i]?.name ?? ""}, ${c.off ? "carton rouge, exclu" : "carton jaune"}`).join(" ; ");
+  return (
+    <div className="cr-bug-cards" aria-label={`Cartons de ${view.teams[team].name} : ${said}`}>
+      {list.map((c) => (
+        <span key={c.i} className={c.off ? "is-out" : ""} title={view.players[c.i]?.name}>
+          <i className={c.off ? "is-red" : "is-yellow"} aria-hidden="true" />
+          <span className="num">{view.players[c.i]?.shirt}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** La place que prennent les lignes de cartons sous le tableau, au téléphone (deux cartons par ligne) */
+function cardsHeight(view: CramponsView): number {
+  let h = 0;
+  for (const team of [0, 1]) {
+    const n = view.cards.filter((c) => view.players[c.i]?.team === team).length;
+    if (n > 0) h += 20 + 13 * (Math.ceil(n / 2) - 1);
+  }
+  return h;
 }
 
 function formatClock(seconds: number) {
@@ -565,7 +596,7 @@ export function CramponsMatch({
   const keyOf = (shot: boolean) => (screenKeys ? (shot ? "Tir" : "Passe") : mainKey(hud.scheme, settings.bindings, shot));
   const key = keyOf(restart?.kind === "penalty");
   return (
-    <div className="cr-root">
+    <div className="cr-root" style={{ "--cr-cards-h": `${cardsHeight(view)}px` } as CSSProperties}>
       <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
       {/* Au doigt, pendant la présentation, le gros plan ou le ralenti : toucher l'écran n'importe où les passe */}
       {touch && cinema && seatId !== null && (
@@ -580,23 +611,36 @@ export function CramponsMatch({
         />
       )}
 
-      <div className={`cr-bug ${cinema === "intro" ? "is-hidden" : ""}`} role="status">
-        <div className="cr-bug-teams">
-          <div className="cr-bug-team">
-            <i style={{ background: left.kit.shirt }} />
-            <b>{left.short}</b>
-            <strong className="num">{score[0]}</strong>
+      {/* En haut à gauche : le tableau, et au téléphone, juste dessous, le joueur dirigé (il suit la hauteur des cartons) */}
+      <div className="cr-topleft">
+        <div className={`cr-bug ${cinema === "intro" ? "is-hidden" : ""}`} role="status">
+          <div className="cr-bug-teams">
+            <div className="cr-bug-team">
+              <i style={{ background: left.kit.shirt }} />
+              <b>{left.short}</b>
+              <strong className="num">{score[0]}</strong>
+            </div>
+            <BugCards team={0} view={view} />
+            <div className="cr-bug-team">
+              <i style={{ background: right.kit.shirt }} />
+              <b>{right.short}</b>
+              <strong className="num">{score[1]}</strong>
+            </div>
+            <BugCards team={1} view={view} />
           </div>
-          <div className="cr-bug-team">
-            <i style={{ background: right.kit.shirt }} />
-            <b>{right.short}</b>
-            <strong className="num">{score[1]}</strong>
+          <div className="cr-bug-clock num">
+            {view.period === 5 ? "T.A.B." : formatClock(hud.clock)}
+            <small>{PERIODS[view.period] ?? ""}</small>
           </div>
         </div>
-        <div className="cr-bug-clock num">
-          {view.period === 5 ? "T.A.B." : formatClock(hud.clock)}
-          <small>{PERIODS[view.period] ?? ""}</small>
-        </div>
+        {seatId !== null && hud.activeName && !over && !cinema && !(touch && shootout) && (
+          <div className="cr-player">
+            <span className="cr-pname">{hud.activeName}</span>
+            <span className="cr-bar" aria-hidden="true">
+              <i style={{ width: `${Math.round(hud.stamina * 100)}%` }} className={hud.stamina < 0.3 ? "is-low" : ""} />
+            </span>
+          </div>
+        )}
       </div>
 
       <div className={`cr-tools ${cinema === "intro" ? "is-hidden" : ""}`}>
@@ -668,16 +712,33 @@ export function CramponsMatch({
 
       {!banner &&
         !cinema &&
-        restart?.ready &&
+        restart &&
+        (restart.ready || restart.kind !== "kickoff") &&
         view.phase !== "play" &&
         (taking ? (
+          // À lui : la touche, et le temps qu'il lui reste avant que l'ordinateur ne la joue à sa place
           <div className="cr-prompt">
             <b className="cr-prompt-me">À toi !</b>
             <kbd>{key}</kbd> {RESTART_ACTION[restart.kind]}
-            {restartLeft !== null && restartLeft <= 5 && <span className="cr-prompt-count num">{restartLeft}</span>}
+            {restartLeft !== null && (
+              <span className={`cr-prompt-count num ${restartLeft <= 3 ? "is-late" : ""}`} title="Sinon, l'ordinateur la joue">
+                {restartLeft}
+              </span>
+            )}
+            <i key={takingKey} className="cr-prompt-bar" style={{ animationDuration: `${HUMAN_RESTART_WAIT}s` }} />
           </div>
         ) : (
-          <div className="cr-prompt is-quiet">{RESTART_LABEL[restart.kind]}</div>
+          // Qui la joue ; tant qu'il va chercher le ballon, elle ne part pas
+          <div className="cr-prompt is-quiet">
+            {RESTART_LABEL[restart.kind]}
+            <small>
+              {restart.ready
+                ? `${view.teams[restart.team].short} · ${view.players[restart.taker]?.name ?? ""}`
+                : restart.taker === hud.active
+                  ? "ton joueur va au ballon"
+                  : `${view.players[restart.taker]?.name ?? ""} va au ballon`}
+            </small>
+          </div>
         ))}
 
       {!banner && keeperHold && seatId !== null && (
@@ -685,7 +746,12 @@ export function CramponsMatch({
           <b className="cr-prompt-me">À toi !</b>
           <kbd>{keyOf(false)}</kbd> Relancer
           <kbd>{keyOf(true)}</kbd> Dégager
-          {restartLeft !== null && restartLeft <= 4 && <span className="cr-prompt-count num">{restartLeft}</span>}
+          {restartLeft !== null && (
+            <span className={`cr-prompt-count num ${restartLeft <= 3 ? "is-late" : ""}`} title="Sinon, l'ordinateur relance">
+              {restartLeft}
+            </span>
+          )}
+          <i key={takingKey} className="cr-prompt-bar" style={{ animationDuration: `${HUMAN_KEEPER_WAIT}s` }} />
         </div>
       )}
 
@@ -710,15 +776,6 @@ export function CramponsMatch({
         <KeyHints scheme={hud.scheme} defending={hud.defending} bindings={settings.bindings} />
       )}
       {!over && !cinema && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
-
-      {seatId !== null && hud.activeName && !over && !cinema && !(touch && shootout) && (
-        <div className="cr-player">
-          <span className="cr-pname">{hud.activeName}</span>
-          <span className="cr-bar" aria-hidden="true">
-            <i style={{ width: `${Math.round(hud.stamina * 100)}%` }} className={hud.stamina < 0.3 ? "is-low" : ""} />
-          </span>
-        </div>
-      )}
 
       {touch && seatId !== null && !over && (
         <div className={`cr-pad is-${settings.touchPad} ${cinema ? "is-cinema" : ""}`} data-ball={withBall ? "" : undefined}>

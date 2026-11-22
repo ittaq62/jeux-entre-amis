@@ -65,8 +65,53 @@ html:has(.cr-root) body {
   letter-spacing: 0.04em;
 }
 
-.cr-bug-team + .cr-bug-team {
+.cr-bug-team + .cr-bug-team,
+.cr-bug-cards + .cr-bug-team {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Les cartons d'une équipe, sous sa ligne : la largeur de la colonne, sans l'élargir (ils passent à la ligne) */
+.cr-bug-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  padding: 3px 6px 4px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.cr-bug-cards > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cr-bug-cards i {
+  width: 7px;
+  height: 10px;
+  border-radius: 1.5px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.cr-bug-cards i.is-yellow {
+  background: #ffd23f;
+}
+
+.cr-bug-cards i.is-red {
+  background: #e53935;
+}
+
+/* Exclu : il ne joue plus */
+.cr-bug-cards .is-out .num {
+  opacity: 0.6;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
 }
 
 .cr-bug-team i {
@@ -273,22 +318,57 @@ html:has(.cr-root) body {
   color: #ffe066;
 }
 
-/* Les dernières secondes avant que l'ordinateur ne joue la remise en jeu à sa place */
+/* Le temps qu'il reste avant que l'ordinateur ne joue la remise en jeu à sa place : rouge sur la fin */
 .cr-prompt-count {
   display: grid;
   place-items: center;
   min-width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #e94a3a;
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
   font-size: 15px;
+}
+
+.cr-prompt-count.is-late {
+  background: #e94a3a;
+}
+
+/* Le même temps, qui se vide sous le bandeau */
+.cr-prompt-bar {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  left: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: #ffe066;
+  transform-origin: left;
+  animation: cr-drain linear forwards;
+}
+
+@keyframes cr-drain {
+  to {
+    transform: scaleX(0);
+  }
 }
 
 .cr-prompt.is-quiet {
   padding: 4px 14px;
   font-size: 15px;
   animation: none;
+}
+
+.cr-prompt.is-quiet small {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cr-prompt-bar {
+    display: none;
+  }
 }
 
 @keyframes cr-breathe {
@@ -619,16 +699,35 @@ kbd {
   color: #2a1c08;
 }
 
-/* Sur téléphone, le stick et les boutons prennent le bas : le nom du joueur se range sous le score, en petit */
+/* Le tableau et le joueur dirigé : au PC, chacun à sa place (le joueur en bas au milieu) */
+.cr-topleft {
+  display: contents;
+}
+
+/* Sur téléphone, le stick et les boutons prennent le bas : le nom du joueur se range sous le score (et ses cartons), en petit */
 @media (pointer: coarse) {
   .cr-hints,
   .cr-radar {
     display: none;
   }
 
-  .cr-player {
+  .cr-topleft {
+    position: absolute;
+    top: calc(12px + var(--safe-top));
     left: calc(12px + var(--safe-left, 0px));
-    top: calc(78px + var(--safe-top));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .cr-topleft .cr-bug {
+    position: static;
+  }
+
+  .cr-player {
+    position: static;
     bottom: auto;
     translate: none;
     flex-direction: row;
@@ -645,9 +744,9 @@ kbd {
     height: 4px;
   }
 
-  /* L'invite « À toi ! » passe sous le nom du joueur */
+  /* L'invite « À toi ! » passe sous le nom du joueur, et sous les lignes de cartons */
   .cr-prompt {
-    top: max(16%, calc(112px + var(--safe-top)));
+    top: max(16%, calc(112px + var(--cr-cards-h, 0px) + var(--safe-top)));
   }
 }
 
@@ -661,7 +760,8 @@ kbd {
 
 /* Un téléphone étroit : le score et les boutons du haut se serrent pour tenir côte à côte */
 @media (max-width: 430px) {
-  .cr-bug {
+  .cr-bug,
+  .cr-topleft {
     left: calc(8px + var(--safe-left, 0px));
   }
 
@@ -680,8 +780,12 @@ kbd {
     font-size: 18px;
   }
 
+  /* Sept boutons ne tiennent pas à côté du score : deux rangées, serrées à droite */
   .cr-tools {
     right: calc(8px + var(--safe-right, 0px));
+    max-width: 148px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 4px;
   }
 
