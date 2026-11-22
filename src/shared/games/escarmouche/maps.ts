@@ -94,7 +94,13 @@ export type Decor =
   /** La scie de la scierie, sur son établi */
   | { k: "saw"; x0: number; z0: number; x1: number; z1: number }
   /** Un camion bâché, la cabine du côté `front` */
-  | { k: "truck"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1; color: string };
+  | { k: "truck"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1; color: string }
+  /** Un étal du marché, ses cagettes de fruits et de légumes */
+  | { k: "stall"; x0: number; z0: number; x1: number; z1: number }
+  /** Un chariot à bagages chargé */
+  | { k: "baggage"; x0: number; z0: number; x1: number; z1: number }
+  /** Un abribus, ouvert du côté `front` (+1 : vers z1, ou x1 s'il est couché le long de z) */
+  | { k: "shelter"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -264,10 +270,13 @@ class Builder {
         return;
       case "cart":
       case "truck":
+      case "shelter":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), front: d.front === 1 ? -1 : 1 });
         return;
       case "logs":
       case "saw":
+      case "stall":
+      case "baggage":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
       case "tun":
@@ -675,8 +684,10 @@ function hameau(): GameMap {
   }
   b.box(-6.5, 4, -5, 6.5, 4.35, 5, "bois");
   b.add({ k: "roof", x0: -6.9, z0: -5.4, x1: 6.9, z1: 5.4, y: 4.35, h: 2.4, axis: "x", m: "tuile" });
-  b.box(-4.5, 0, -1, -2.5, 0.9, 1, "bois");
-  b.box(2.5, 0, -1, 4.5, 0.9, 1, "bois");
+  for (const x of [-3.5, 3.5]) {
+    b.box(x - 1, 0, -1, x + 1, 0.9, 1, "decor");
+    b.add({ k: "stall", x0: x - 1, z0: -1, x1: x + 1, z1: 1 });
+  }
 
   const spawns: [Spawn[], Spawn[]] = [[], []];
   const ffa: Spawn[] = [];
@@ -1456,8 +1467,9 @@ function ruinesSide(b: Builder) {
     wall: "crepi2",
     seed: 41,
   });
-  b.box(-27, 0, -9.2, -23, 2.4, -8.9, "metal");
-  b.box(-26.6, 0, -8.9, -23.4, 0.5, -8.5, "bois");
+  b.box(-27, 0, -9.2, -23, 2.4, -8.9, "decor");
+  b.box(-26.6, 0, -8.9, -23.4, 0.5, -8.5, "decor");
+  b.add({ k: "shelter", x0: -27, z0: -9.2, x1: -23, z1: -8.5, front: 1 });
   b.sandbags(-18.5, -10, -15.5, -9.4);
 
   // Le grand magasin, au sud : un hall sans toit, des brèches de tous côtés, des piliers, des comptoirs
@@ -2149,8 +2161,10 @@ function aerodromeSide(b: Builder) {
     [-22, 4.6],
     [-20, 4.6],
     [-18, 4.6],
-  ] as const)
-    b.box(x - 0.8, 0, z - 0.45, x + 0.8, 1, z + 0.45, "bois");
+  ] as const) {
+    b.box(x - 0.8, 0, z - 0.45, x + 0.8, 1, z + 0.45, "decor");
+    b.add({ k: "baggage", x0: x - 0.8, z0: z - 0.45, x1: x + 0.8, z1: z + 0.45 });
+  }
   b.box(-14.4, 0, -5.4, -14, 2, -2, "beton");
   b.box(-34.4, 0, -10, -30.8, 1.05, -9.4, "beton");
   b.barrel(-12.6, 3.2);

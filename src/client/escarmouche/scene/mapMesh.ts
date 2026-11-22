@@ -1301,6 +1301,222 @@ function boxFrame(d: { x0: number; z0: number; x1: number; z1: number }, front: 
   return { L, W, place };
 }
 
+/** Un petit générateur pseudo-aléatoire, toujours le même pour un même objet */
+function seededRand(x: number, z: number, salt: number) {
+  let seed = Math.abs(Math.round(x * 31 + z * 17 + salt * 7)) + 1;
+  return () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+}
+
+/**
+ * Un étal du marché : la table sur ses pieds, une toile dessus, des cagettes de fruits et de légumes (oranges, pommes,
+ * choux, pommes de terre), deux paniers dessous
+ */
+function stall(d: Extract<Decor, { k: "stall" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d);
+  const r = seededRand(d.x0, d.z0, 3);
+  const wood = new THREE.Color("#7a5a3a");
+  const top = new THREE.BoxGeometry(L, 0.05, W);
+  top.translate(0, 0.86, 0);
+  pushTinted(parts, place(top), wood);
+  const cloth = new THREE.BoxGeometry(L - 0.12, 0.012, W - 0.12);
+  cloth.translate(0, 0.89, 0);
+  pushTinted(parts, place(cloth), new THREE.Color(r() < 0.5 ? "#b8452f" : "#3f6a8a"));
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.BoxGeometry(0.07, 0.84, 0.07);
+      leg.translate(sx * (L / 2 - 0.12), 0.42, sz * (W / 2 - 0.12));
+      pushTinted(parts, place(leg), wood, () => 0.75);
+    }
+  for (const sz of [-1, 1]) {
+    const bar = new THREE.BoxGeometry(L - 0.24, 0.05, 0.05);
+    bar.translate(0, 0.22, sz * (W / 2 - 0.12));
+    pushTinted(parts, place(bar), wood, () => 0.75);
+  }
+  // Les cagettes et ce qu'il y a dedans
+  const produce: [string, number][] = [
+    ["#d9822b", 0.075],
+    ["#a8322a", 0.07],
+    ["#6f8f3a", 0.12],
+    ["#9a7a4a", 0.065],
+    ["#c9b23a", 0.07],
+  ];
+  const crate = new THREE.Color("#a0805a");
+  const cols = 2;
+  const rows = 2;
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++) {
+      const cx = -L / 2 + (L / cols) * (i + 0.5);
+      const cz = -W / 2 + (W / rows) * (j + 0.5);
+      const cw = L / cols - 0.18;
+      const cd = W / rows - 0.2;
+      const base = new THREE.BoxGeometry(cw, 0.03, cd);
+      base.translate(cx, 0.91, cz);
+      pushTinted(parts, place(base), crate);
+      for (const s of [-1, 1]) {
+        const side = new THREE.BoxGeometry(cw, 0.14, 0.025);
+        side.translate(cx, 0.97, cz + (s * cd) / 2);
+        pushTinted(parts, place(side), crate, () => 0.9);
+        const end = new THREE.BoxGeometry(0.025, 0.14, cd);
+        end.translate(cx + (s * cw) / 2, 0.97, cz);
+        pushTinted(parts, place(end), crate, () => 0.9);
+      }
+      const [color, rad] = produce[Math.floor(r() * produce.length)]!;
+      const c = new THREE.Color(color);
+      const nx = Math.max(1, Math.floor(cw / (rad * 2.1)));
+      const nz = Math.max(1, Math.floor(cd / (rad * 2.1)));
+      for (let a = 0; a < nx; a++)
+        for (let b = 0; b < nz; b++) {
+          if (low && (a + b) % 2) continue;
+          const g = new THREE.IcosahedronGeometry(rad * (0.9 + r() * 0.2), 0);
+          g.translate(cx - cw / 2 + (cw / nx) * (a + 0.5), 0.94 + rad * 0.8, cz - cd / 2 + (cd / nz) * (b + 0.5));
+          pushTinted(parts, place(g), c, () => 0.85 + r() * 0.3);
+        }
+    }
+  // Deux paniers sous la table
+  if (!low)
+    for (const s of [-1, 1]) {
+      const basket = new THREE.CylinderGeometry(0.24, 0.18, 0.26, 10, 1, true);
+      basket.translate(s * L * 0.22, 0.13, 0);
+      pushTinted(parts, place(basket), new THREE.Color("#9c7a48"));
+      const bottom = new THREE.CircleGeometry(0.18, 10);
+      bottom.rotateX(-Math.PI / 2);
+      bottom.translate(s * L * 0.22, 0.01, 0);
+      pushTinted(parts, place(bottom), new THREE.Color("#7c5e36"));
+    }
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
+/**
+ * Un chariot à bagages : un plateau bas sur quatre petites roues, des ridelles aux deux bouts, le timon d'attelage ; des
+ * valises et des sacs entassés dessus
+ */
+function baggage(d: Extract<Decor, { k: "baggage" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d);
+  const r = seededRand(d.x0, d.z0, 5);
+  const frame = new THREE.Color("#5e6266");
+  const rubber = new THREE.Color("#1c1c1b");
+  const deck = new THREE.BoxGeometry(L, 0.06, W);
+  deck.translate(0, 0.36, 0);
+  pushTinted(parts, place(deck), frame);
+  const skirt = new THREE.BoxGeometry(L - 0.1, 0.12, W - 0.16);
+  skirt.translate(0, 0.27, 0);
+  pushTinted(parts, place(skirt), frame, () => 0.7);
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const wheel = new THREE.CylinderGeometry(0.13, 0.13, 0.09, low ? 8 : 12);
+      wheel.rotateX(Math.PI / 2);
+      wheel.translate(sx * (L / 2 - 0.22), 0.13, sz * (W / 2 - 0.08));
+      pushTinted(parts, place(wheel), rubber);
+    }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const post = new THREE.BoxGeometry(0.04, 0.62, 0.04);
+      post.translate(sx * (L / 2 - 0.03), 0.7, sz * (W / 2 - 0.04));
+      pushTinted(parts, place(post), frame);
+    }
+    for (const y of [0.68, 1.0]) {
+      const bar = new THREE.BoxGeometry(0.04, 0.04, W - 0.08);
+      bar.translate(sx * (L / 2 - 0.03), y, 0);
+      pushTinted(parts, place(bar), frame);
+    }
+  }
+  const tow = new THREE.BoxGeometry(0.75, 0.05, 0.05);
+  tow.rotateZ(-0.38);
+  tow.translate(L / 2 + 0.32, 0.22, 0);
+  pushTinted(parts, place(tow), frame, () => 0.8);
+  // Les bagages : deux rangées de valises couchées, d'autres posées dessus, un sac de toile
+  const colors = ["#6b2f2a", "#2f4a6b", "#3d3d3a", "#7a6a4a", "#4f5f3a", "#8a5a2a"].map((c) => new THREE.Color(c));
+  let y0 = 0.39;
+  for (let layer = 0; layer < 2; layer++) {
+    let x = -L / 2 + 0.1;
+    while (x < L / 2 - 0.3) {
+      const w = 0.42 + r() * 0.2;
+      if (x + w > L / 2 - 0.08) break;
+      const h = layer === 0 ? 0.26 : 0.18 + r() * 0.08;
+      const dz = W - 0.2 - r() * 0.12;
+      if (layer === 1 && r() < 0.35) {
+        x += w + 0.05;
+        continue;
+      }
+      const g = new THREE.BoxGeometry(w, h, dz);
+      g.rotateY((r() - 0.5) * 0.12);
+      g.translate(x + w / 2, y0 + h / 2, (r() - 0.5) * 0.06);
+      const c = colors[Math.floor(r() * colors.length)]!;
+      pushTinted(parts, place(g), c, () => 0.9 + r() * 0.1);
+      const handle = new THREE.BoxGeometry(0.16, 0.03, 0.03);
+      handle.translate(x + w / 2, y0 + h + 0.015, 0);
+      pushTinted(parts, place(handle), rubber);
+      x += w + 0.04;
+    }
+    y0 += 0.27;
+  }
+  if (!low) {
+    const bag = new THREE.CylinderGeometry(0.15, 0.15, 0.6, 8);
+    bag.rotateZ(Math.PI / 2);
+    bag.scale(1, 0.8, 1);
+    bag.translate(L * 0.18, 0.39 + 0.27 * 2 + 0.06, 0.05);
+    pushTinted(parts, place(bag), new THREE.Color("#6e6a50"));
+  }
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
+/**
+ * Un abribus : le panneau du fond sur son cadre (une affiche délavée à un bout, de la tôle ailleurs), le toit en
+ * porte-à-faux un peu de travers, le banc ; l'abri s'ouvre du côté `front`
+ */
+function shelter(d: Extract<Decor, { k: "shelter" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d);
+  // boxFrame tourne pour mettre la longueur sur x ; l'ouverture est vers +z local quand front vaut 1
+  const open = d.front;
+  const back = (-open * W) / 2;
+  const frame = new THREE.Color("#2f3d36");
+  const sheet = new THREE.Color("#55605a");
+  const bx = (sx: number, sy: number, sz: number, x: number, y: number, z: number, c: THREE.Color, k = 1) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    g.translate(x, y, z);
+    pushTinted(parts, place(g), c, () => k);
+  };
+  const wallZ = back + open * 0.15;
+  // Les montants et les traverses du cadre
+  const posts = 4;
+  for (let k = 0; k < posts; k++) bx(0.08, 2.5, 0.08, -L / 2 + 0.04 + (k * (L - 0.08)) / (posts - 1), 1.25, wallZ, frame);
+  for (const y of [0.18, 2.3]) bx(L, 0.06, 0.06, 0, y, wallZ, frame);
+  // Les panneaux : une affiche au bout, de la tôle cabossée ailleurs
+  const panel = (L - 0.08) / (posts - 1);
+  for (let k = 0; k < posts - 1; k++) {
+    const x = -L / 2 + 0.04 + panel * (k + 0.5);
+    if (k === 0) {
+      bx(panel - 0.1, 2.06, 0.05, x, 1.24, wallZ, new THREE.Color("#d8d2c0"));
+      // L'affiche délavée : un ciel, une bande, un soleil
+      bx(panel - 0.3, 0.9, 0.02, x, 1.6, wallZ + open * 0.035, new THREE.Color("#6f9ab0"));
+      bx(panel - 0.3, 0.5, 0.02, x, 0.86, wallZ + open * 0.035, new THREE.Color("#c9a24a"));
+      const sun = new THREE.CircleGeometry(0.16, 12);
+      if (open < 0) sun.rotateY(Math.PI);
+      sun.translate(x + 0.15, 1.75, wallZ + open * 0.05);
+      pushTinted(parts, place(sun), new THREE.Color("#e6d9a0"));
+    } else bx(panel - 0.1, 2.06, 0.04, x, 1.24, wallZ, sheet, k === 1 ? 0.92 : 1.04);
+  }
+  // Le toit, en porte-à-faux, un peu affaissé
+  const roof = new THREE.BoxGeometry(L + 0.15, 0.07, 1.6);
+  roof.rotateZ(0.04);
+  roof.rotateX(open * 0.06);
+  roof.translate(0, 2.5, back + open * 0.75);
+  pushTinted(parts, place(roof), frame, () => 0.9);
+  // Le banc
+  bx(L - 0.6, 0.05, 0.34, 0, 0.46, back + open * 0.5, new THREE.Color("#7a5a3a"));
+  for (const s of [-1, 1]) bx(0.05, 0.44, 0.3, s * (L / 2 - 0.5), 0.22, back + open * 0.5, frame);
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
 /** Une pile de grumes en pyramide : l'écorce, les bouts sciés plus clairs au cœur ; dehors en hiver, la neige dessus */
 function logs(d: Extract<Decor, { k: "logs" }>, group: THREE.Group, q: Quality) {
   const low = q === "bas";
@@ -1959,6 +2175,15 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "truck":
       truck(d, group, q);
+      return;
+    case "stall":
+      stall(d, group, q);
+      return;
+    case "baggage":
+      baggage(d, group, q);
+      return;
+    case "shelter":
+      shelter(d, group, q);
       return;
     case "awning":
       awning(d, group);
