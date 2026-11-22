@@ -23,6 +23,12 @@ const PACE_HINTS: Record<Pace, string> = {
   long: "Tout le temps de viser.",
 };
 
+const TURN_HINTS: Record<Pace, string> = {
+  court: "21 secondes pour jouer son coup.",
+  normal: "30 secondes pour jouer son coup.",
+  long: "45 secondes pour jouer son coup.",
+};
+
 interface Props {
   room: MinigolfRoomView;
   send: (msg: MinigolfClientMessage) => void;
@@ -47,7 +53,15 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
     s.glace ? "tout glisse" : null,
     s.bonus ? "bulles bonus" : null,
   ].filter(Boolean);
-  const summary = [`${s.holes} trous`, courseName, ...house, s.teams ? "en équipes" : null].filter(Boolean).join(" · ");
+  const summary = [
+    `${s.holes} trous`,
+    courseName,
+    s.turns ? "chacun son tour" : "tous en même temps",
+    ...house,
+    s.teams ? "en équipes" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const rule = (key: "mirror" | "lune" | "glace" | "bonus", title: string, hint: string) => (
     <div className={`rule-row ${locked(key) ? "is-forced" : ""}`} onClick={() => isHost && !locked(key) && update({ [key]: !s[key] })}>
@@ -135,6 +149,25 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
             </p>
           </div>
 
+          <div className="field">
+            <span className="field-label">Déroulé</span>
+            <Options<"tour" | "ensemble">
+              label="Déroulé"
+              value={s.turns === false ? "ensemble" : "tour"}
+              disabled={!isHost || locked("turns")}
+              onChange={(v) => update({ turns: v === "tour" })}
+              options={[
+                { value: "tour", label: "Chacun son tour" },
+                { value: "ensemble", label: "Tous en même temps" },
+              ]}
+            />
+            <p className="hint" style={{ margin: 0 }}>
+              {s.turns !== false
+                ? "Un coup chacun, à tour de rôle, pendant que les autres regardent. Au trou suivant, le meilleur commence."
+                : "Tout le monde joue sa balle en même temps : plus rapide, plus chaotique."}
+            </p>
+          </div>
+
           {!room.tour && (
             <div className="field">
               <span className="field-label">Équipes</span>
@@ -156,9 +189,9 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
       moreRules={
         <>
           <div className="field">
-            <span className="field-label">Temps par trou</span>
+            <span className="field-label">{s.turns ? "Temps par coup" : "Temps par trou"}</span>
             <Options<Pace>
-              label="Temps par trou"
+              label={s.turns ? "Temps par coup" : "Temps par trou"}
               value={s.pace}
               disabled={!isHost || locked("pace")}
               onChange={(pace) => update({ pace })}
@@ -169,7 +202,9 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
               ]}
             />
             <p className="hint" style={{ margin: 0 }}>
-              {PACE_HINTS[s.pace]} Quand la moitié des joueurs a fini, les autres ont encore 20 secondes.
+              {s.turns
+                ? `${TURN_HINTS[s.pace]} Le temps écoulé, le coup compte quand même.`
+                : `${PACE_HINTS[s.pace]} Quand la moitié des joueurs a fini, les autres ont encore 20 secondes.`}
             </p>
           </div>
 

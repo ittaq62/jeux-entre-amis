@@ -70,6 +70,8 @@ export type MinigolfClientMessage =
   | { t: "rematch" }
   | { t: "sit" }
   | { t: "leave" }
+  /** Un bot jouait sa balle (il laissait passer ses tours) : il reprend la main */
+  | { t: "takeBack" }
   | { t: "ready" }
   | { t: "close" };
 

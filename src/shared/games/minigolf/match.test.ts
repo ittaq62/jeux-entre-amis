@@ -13,6 +13,8 @@ import {
   nowTick,
   physOf,
   readyToShoot,
+  SETTLE_MS,
+  activePlayer,
   shoot,
   tickMatch,
   totals,
@@ -58,8 +60,8 @@ describe("minigolf : la partie", () => {
     expect(eighteen.slice(9).every((h) => h.c !== "jardin" && !h.m)).toBe(true);
   });
 
-  it("refuse un coup pendant la présentation, puis quand la balle roule encore", () => {
-    const m = createMatch(cfg({ holes: 3 }), [{ id: "a", team: 0 }], 7, T0);
+  it("refuse un coup pendant la présentation, puis quand la balle roule encore (tous en même temps)", () => {
+    const m = createMatch(cfg({ holes: 3, turns: false }), [{ id: "a", team: 0 }], 7, T0);
     expect(typeof shoot(m, "a", -Math.PI / 2, 0.5, 0, T0 + 100)).toBe("string");
     expect(tickMatch(m, T0 + INTRO_MS)).toBe(true);
     expect(m.phase).toBe("play");
@@ -75,6 +77,85 @@ describe("minigolf : la partie", () => {
     tickMatch(m, now);
     const s = shoot(m, "a", -Math.PI / 2, 0.3, 0, now);
     expect(typeof s === "object" && s.at).toBe(nowTick(m, now) - Math.round(0.35 * STEPS_PER_S));
+  });
+
+  it("chacun son tour : un seul joueur a la main, les autres attendent ; le suivant après l'arrêt de la balle", () => {
+    const m = createMatch(
+      cfg({ holes: 3 }),
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 1 },
+      ],
+      7,
+      T0,
+    );
+    expect(m.cfg.turns).toBe(true);
+    let now = T0 + INTRO_MS;
+    tickMatch(m, now);
+    expect(m.phase).toBe("play");
+    expect(activePlayer(m)?.id).toBe("a");
+    expect(readyToShoot(m, now).map((p) => p.id)).toEqual(["a"]);
+    expect(shoot(m, "b", -Math.PI / 2, 0.4, nowTick(m, now), now)).toBe("Ce n'est pas ton tour.");
+    const s = shoot(m, "a", -Math.PI / 2, 0.35, nowTick(m, now), now);
+    expect(typeof s).toBe("object");
+    expect(shoot(m, "a", -Math.PI / 2, 0.35, nowTick(m, now), now)).toBe("Tu as déjà joué ce coup.");
+    // Tant que sa balle roule, c'est encore son tour
+    tickMatch(m, now + 200);
+    expect(activePlayer(m)?.id).toBe("a");
+    expect(readyToShoot(m, now + 200)).toEqual([]);
+    // Elle s'arrête : un instant, puis c'est à b
+    if (typeof s !== "object") return;
+    now = m.holeStart + Math.ceil((s.end * 1000) / STEPS_PER_S) + SETTLE_MS + 50;
+    tickMatch(m, now);
+    expect(m.players[0]!.done || activePlayer(m)?.id === "b").toBe(true);
+  });
+
+  it("chacun son tour : le temps écoulé coûte un coup, et la main passe", () => {
+    const m = createMatch(
+      cfg({ holes: 3 }),
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 1 },
+      ],
+      7,
+      T0,
+    );
+    let now = T0 + INTRO_MS;
+    tickMatch(m, now);
+    now = m.turnEnd + 10;
+    tickMatch(m, now);
+    expect(m.players[0]!.cur).toBe(1);
+    expect(m.players[0]!.shot?.skip).toBe(true);
+    now += SETTLE_MS + 200;
+    tickMatch(m, now);
+    expect(activePlayer(m)?.id).toBe("b");
+  });
+
+  it("chacun son tour : au trou suivant, le meilleur du trou d'avant commence", () => {
+    const m = createMatch(
+      cfg({ holes: 3 }),
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 1 },
+      ],
+      7,
+      T0,
+    );
+    // a ne joue jamais (il prend la limite) ; b joue : b commence le trou 2
+    let now = T0;
+    const rng = { rng: 5 };
+    while (m.hole === 0) {
+      now += 200;
+      tickMatch(m, now);
+      for (const p of readyToShoot(m, now)) {
+        if (p.id === "a") continue;
+        const c = courseOf(currentRef(m));
+        const plan = planShot(c, { x: p.ball[0], y: p.ball[1], z: p.ball[2] }, nowTick(m, now), physOf(m.cfg, currentRef(m)), "fort", rng);
+        shoot(m, p.id, plan.a, plan.p, nowTick(m, now), now);
+      }
+    }
+    expect(m.players[1]!.scores[0]!).toBeLessThan(m.players[0]!.scores[0]!);
+    expect(m.order).toEqual([1, 0]);
   });
 
   it("se joue jusqu'au bout avec des bots, et classe les joueurs", () => {
@@ -102,9 +183,9 @@ describe("minigolf : la partie", () => {
     m.ranks!.forEach((r, i) => r === 1 && expect(tot[i]).toBe(best));
   });
 
-  it("presse les retardataires quand la moitié a fini, et donne la limite à qui n'a pas joué", () => {
+  it("presse les retardataires quand la moitié a fini, et donne la limite à qui n'a pas joué (tous en même temps)", () => {
     const m = createMatch(
-      cfg({ holes: 3 }),
+      cfg({ holes: 3, turns: false }),
       [
         { id: "a", team: 0 },
         { id: "b", team: 1 },

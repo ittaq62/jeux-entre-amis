@@ -1,6 +1,7 @@
-// Le déroulé d'une partie de minigolf : les trous tirés, puis pour chacun la présentation, le jeu (tout le monde en
-// même temps, chacun sa balle), le tableau des scores, et à la fin le classement. Le serveur joue chaque coup avec la
-// physique partagée : les appareils refont le même calcul pour l'animer.
+// Le déroulé d'une partie de minigolf : les trous tirés, puis pour chacun la présentation, le jeu, le tableau des
+// scores, et à la fin le classement. Le jeu se joue chacun son tour (par défaut) : un coup chacun, dans l'ordre décidé
+// au trou d'avant (le meilleur commence, comme au golf), pendant que les autres regardent sa balle ; ou tous en même
+// temps. Le serveur joue chaque coup avec la physique partagée : les appareils refont le même calcul pour l'animer.
 
 import { isBotLevel, type BotLevel } from "./bot.ts";
 import { bonusCourse, bonusMods, bonusSpots, lastBubble, type BonusKind } from "./bonus.ts";
@@ -27,9 +28,11 @@ export interface MinigolfConfig {
   bonus: boolean;
   /** Deux équipes : sur chaque trou, la meilleure balle de l'équipe compte */
   teams: boolean;
-  /** Le temps laissé pour chaque trou */
+  /** Le temps laissé pour chaque trou (ou pour chaque coup, chacun son tour) */
   pace: Pace;
   botLevel: BotLevel;
+  /** Chacun son tour (vrai, par défaut) ; faux : tout le monde joue en même temps */
+  turns: boolean;
 }
 
 export const DEFAULT_CONFIG: MinigolfConfig = {
@@ -42,6 +45,7 @@ export const DEFAULT_CONFIG: MinigolfConfig = {
   teams: false,
   pace: "normal",
   botLevel: "moyen",
+  turns: true,
 };
 
 /** Applique les réglages reçus, en refusant ce qui n'existe pas */
@@ -49,7 +53,7 @@ export function mergeConfig(current: MinigolfConfig, patch: Partial<MinigolfConf
   const next = { ...DEFAULT_CONFIG, ...current };
   if (patch.course === "hasard" || patch.course === "melange" || isCourseId(patch.course)) next.course = patch.course;
   if ((HOLE_CHOICES as readonly number[]).includes(patch.holes as number)) next.holes = patch.holes!;
-  for (const k of ["mirror", "lune", "glace", "bonus", "teams"] as const) if (typeof patch[k] === "boolean") next[k] = patch[k];
+  for (const k of ["mirror", "lune", "glace", "bonus", "teams", "turns"] as const) if (typeof patch[k] === "boolean") next[k] = patch[k];
   if (patch.pace === "court" || patch.pace === "normal" || patch.pace === "long") next.pace = patch.pace;
   if (isBotLevel(patch.botLevel)) next.botLevel = patch.botLevel;
   return next;
@@ -65,6 +69,10 @@ export const HURRY_MS = 20_000;
 const AFTER_DONE_MS = 1600;
 /** Un coup peut partir un peu avant que le serveur ne le reçoive (le temps du voyage), pas plus */
 export const MAX_LAG_TICKS = Math.round(0.35 * STEPS_PER_S);
+/** Chacun son tour : le temps pour jouer son coup (au rythme normal) */
+export const TURN_MS = 30_000;
+/** Chacun son tour : une fois la balle arrêtée, le petit moment avant le joueur suivant */
+export const SETTLE_MS = 900;
 
 export interface GolfShot {
   a: number;
@@ -79,6 +87,8 @@ export interface GolfShot {
   lost: LostWhy | null;
   /** Ses coups sur ce trou après celui-ci (pénalité comprise) */
   n: number;
+  /** Chacun son tour : le temps est écoulé sans qu'il tire (le coup compte, la balle ne bouge pas) */
+  skip?: true;
   mods?: ShotMods;
   /** Le pouvoir gagné en traversant une bulle pendant ce coup (règle des bulles bonus) */
   got?: BonusKind;
@@ -134,6 +144,15 @@ export interface Match {
   /** À la fin : la place de chacun */
   ranks: number[] | null;
   rng: number;
+  /** Chacun son tour : l'ordre de jeu sur ce trou (des places dans `players`) */
+  order: number[];
+  /** Celui qui joue (sa place dans `players`), ou -1 (personne : avant le jeu, ou tous en même temps) */
+  turn: number;
+  /** Son tour a commencé à cette heure ; s'il n'a pas tiré à `turnEnd`, le coup compte quand même */
+  turnAt: number;
+  turnEnd: number;
+  /** Il a tiré pendant ce tour : on attend que sa balle s'arrête pour passer au suivant */
+  turnShot: boolean;
 }
 
 /** Les trous de la partie */
@@ -194,6 +213,11 @@ export function createMatch(cfg: MinigolfConfig, seats: { id: string; team: 0 | 
     })),
     ranks: null,
     rng: holder.rng,
+    order: seats.map((_, i) => i),
+    turn: -1,
+    turnAt: now,
+    turnEnd: now,
+    turnShot: false,
   };
   startHole(m, 0, now);
   return m;
@@ -219,14 +243,35 @@ export function holeDuration(m: Match): number {
   return Math.round(holeTime(holeDef(currentRef(m))) * PACE_FACTOR[m.cfg.pace] * 1000);
 }
 
+/** Chacun son tour : le temps pour un coup, selon le rythme choisi */
+export function turnDuration(m: Match): number {
+  return Math.round(TURN_MS * PACE_FACTOR[m.cfg.pace]);
+}
+
+/**
+ * L'ordre de jeu du trou `index` : au premier, celui des places ; ensuite, le meilleur score du trou d'avant commence,
+ * puis les suivants (à égalité, l'ordre d'avant)
+ */
+export function holeOrder(m: Match, index: number): number[] {
+  if (index === 0) return m.players.map((_, i) => i);
+  // (une partie gardée d'avant le jeu chacun son tour n'a pas d'ordre)
+  const before = m.order?.length === m.players.length ? m.order : m.players.map((_, i) => i);
+  const score = (i: number) => m.players[i]!.scores[index - 1] ?? 99;
+  return [...before].sort((a, b) => score(a) - score(b) || before.indexOf(a) - before.indexOf(b));
+}
+
 /** Commence le trou `index` (présentation, balles au départ) */
 export function startHole(m: Match, index: number, now: number) {
+  m.order = holeOrder(m, index);
   m.hole = index;
   m.phase = "intro";
   m.phaseAt = now;
   m.holeStart = now + INTRO_MS;
-  m.deadline = m.holeStart + holeDuration(m);
+  // Chacun son tour : pas de temps pour le trou entier (chaque coup a le sien), juste une limite de sûreté
+  m.deadline = m.holeStart + (m.cfg.turns ? 3_600_000 : holeDuration(m));
   m.hurry = false;
+  m.turn = -1;
+  m.turnShot = false;
   const c = courseOf(currentRef(m));
   for (const p of m.players) {
     p.ball = [c.tee.x, c.tee.y, c.tee.z];
@@ -251,6 +296,8 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
   const p = m.players.find((x) => x.id === id);
   if (!p) return "Tu ne joues pas cette partie.";
   if (p.done) return "Tu as fini ce trou.";
+  if (m.cfg.turns && (m.turn < 0 || m.players[m.turn] !== p)) return "Ce n'est pas ton tour.";
+  if (m.cfg.turns && m.turnShot) return "Tu as déjà joué ce coup.";
   if (!Number.isFinite(angle) || !Number.isFinite(power)) return "Coup invalide.";
   const nowT = nowTick(m, now);
   if (nowT < p.restAt) return "Ta balle roule encore.";
@@ -290,10 +337,46 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
     }
   }
   p.shot = shot;
+  if (m.cfg.turns) m.turnShot = true;
   const limit = strokeLimit(c.def.par);
   if (r.outcome === "in") finishPlayer(p, m.hole, p.cur, r.end);
   else if (p.cur >= limit) finishPlayer(p, m.hole, limit + 1, r.end);
   return shot;
+}
+
+/** Chacun son tour : le joueur qui doit jouer (null : personne pour l'instant) */
+export function activePlayer(m: Match): GolfPlayer | null {
+  return m.cfg.turns && m.turn >= 0 ? (m.players[m.turn] ?? null) : null;
+}
+
+/** Chacun son tour : donne la main au joueur `index` */
+function beginTurn(m: Match, index: number, now: number) {
+  m.turn = index;
+  m.turnAt = now;
+  m.turnEnd = now + turnDuration(m);
+  m.turnShot = false;
+}
+
+/** Chacun son tour : le suivant dans l'ordre qui n'a pas fini (en partant après `from`), ou -1 */
+function nextInOrder(m: Match, from: number): number {
+  const n = m.order.length;
+  const at = m.order.indexOf(from);
+  for (let k = 1; k <= n; k++) {
+    const i = m.order[(at + k + n) % n]!;
+    if (!m.players[i]!.done) return i;
+  }
+  return -1;
+}
+
+/** Chacun son tour : le temps est écoulé sans qu'il tire ; le coup compte, sa balle reste où elle est */
+function missTurn(m: Match, p: GolfPlayer, now: number) {
+  const t = Math.max(p.restAt, nowTick(m, now));
+  p.cur += 1;
+  p.restAt = t;
+  p.shot = { a: 0, p: 0, at: t, from: [...p.ball], end: t, out: "rest", to: [...p.ball], lost: null, n: p.cur, skip: true };
+  m.turnShot = true;
+  const limit = strokeLimit(holeDef(currentRef(m)).par);
+  if (p.cur >= limit) finishPlayer(p, m.hole, limit + 1, t);
 }
 
 function finishPlayer(p: GolfPlayer, hole: number, score: number, at: number) {
@@ -302,10 +385,14 @@ function finishPlayer(p: GolfPlayer, hole: number, score: number, at: number) {
   p.scores[hole] = score;
 }
 
-/** Ceux qui peuvent jouer maintenant (leur balle est arrêtée, ils n'ont pas fini) */
+/** Ceux qui peuvent jouer maintenant (leur balle est arrêtée, ils n'ont pas fini ; chacun son tour : celui dont c'est le tour) */
 export function readyToShoot(m: Match, now: number): GolfPlayer[] {
   if (m.phase !== "play") return [];
   const t = nowTick(m, now);
+  if (m.cfg.turns) {
+    const p = activePlayer(m);
+    return p && !m.turnShot && !p.done && t >= p.restAt ? [p] : [];
+  }
   return m.players.filter((p) => !p.done && t >= p.restAt);
 }
 
@@ -316,11 +403,37 @@ export function tickMatch(m: Match, now: number): boolean {
       if (now < m.holeStart) return false;
       m.phase = "play";
       m.phaseAt = now;
+      if (m.cfg.turns) beginTurn(m, m.order.find((i) => !m.players[i]!.done) ?? -1, now);
       return true;
     case "play": {
       const t = nowTick(m, now);
       const n = m.players.length;
       let changed = false;
+      if (m.cfg.turns) {
+        // Personne n'a la main alors qu'il reste des joueurs (ne devrait pas arriver) : au suivant
+        if (!activePlayer(m) && !m.players.every((q) => q.done)) {
+          beginTurn(m, nextInOrder(m, -1), now);
+          changed = true;
+        }
+        const p = activePlayer(m);
+        if (p && !m.turnShot && !p.done && now >= m.turnEnd) {
+          missTurn(m, p, now);
+          changed = true;
+        }
+        // Sa balle est arrêtée (ou il a fini) : un instant, puis le suivant
+        if (p && m.turnShot && t >= p.restAt + Math.round((SETTLE_MS * STEPS_PER_S) / 1000)) {
+          const next = nextInOrder(m, m.turn);
+          if (next >= 0) beginTurn(m, next, now);
+          else m.turn = -1;
+          changed = true;
+        }
+        const last = Math.max(...m.players.map((q) => q.doneAt));
+        if (m.players.every((q) => q.done) && t >= last + Math.round((AFTER_DONE_MS * STEPS_PER_S) / 1000)) {
+          endHole(m, now);
+          return true;
+        }
+        return changed;
+      }
       const seen = m.players.filter((p) => p.done && p.doneAt <= t).length;
       if (!m.hurry && n > 1 && seen >= Math.ceil(n / 2) && seen < n) {
         m.hurry = true;
@@ -354,6 +467,7 @@ export function tickMatch(m: Match, now: number): boolean {
 }
 
 function endHole(m: Match, now: number) {
+  m.turn = -1;
   const par = holeDef(currentRef(m)).par;
   for (const p of m.players) {
     const s = p.scores[m.hole] ?? strokeLimit(par) + 1;
@@ -409,8 +523,13 @@ export function nextEvent(m: Match): number | null {
   switch (m.phase) {
     case "intro":
       return m.holeStart;
-    case "play":
-      return m.deadline;
+    case "play": {
+      if (!m.cfg.turns) return m.deadline;
+      const p = activePlayer(m);
+      if (!p) return m.phaseAt + 1000;
+      if (!m.turnShot) return m.turnEnd;
+      return m.holeStart + Math.ceil((p.restAt * 1000) / STEPS_PER_S + SETTLE_MS + AFTER_DONE_MS);
+    }
     case "scores":
       return m.phaseAt + SCORES_MS;
     case "over":

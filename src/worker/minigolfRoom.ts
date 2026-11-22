@@ -16,8 +16,10 @@ import {
   shoot,
   tickMatch,
   totals,
+  type GolfShot,
   type Match,
 } from "../shared/games/minigolf/match.ts";
+import { STEPS_PER_S } from "../shared/games/minigolf/physics.ts";
 import {
   MINIGOLF_MAX_PLAYERS,
   type MinigolfClientMessage,
@@ -83,11 +85,19 @@ interface Seat {
   avatar: AvatarConfig;
   photo: number;
   admin?: boolean;
-  autoplay: false | "away";
+  /** « away » : déconnecté ; « afk » : a laissé passer ses tours (chacun son tour) */
+  autoplay: false | "away" | "afk";
+  /** Chacun son tour : ses tours passés de suite sans tirer */
+  missed?: number;
   disconnectedAt: number | null;
   team: 0 | 1;
   look: BallLook;
 }
+
+/** Chacun son tour : deux tours passés de suite sans tirer, et un bot joue sa balle (il reprend la main quand il veut) */
+const MAX_MISSED_TURNS = 2;
+/** Chacun son tour : le bot vise un moment avant de frapper, pour qu'on le voie faire */
+const BOT_AIM_TICKS = Math.round(1.2 * STEPS_PER_S);
 
 type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart";
 
@@ -127,7 +137,7 @@ interface Attachment {
   replaced?: boolean;
 }
 
-/** Une table de minigolf : le salon commun, puis une partie où chacun joue sa balle en même temps. */
+/** Une table de minigolf : le salon commun, puis une partie où chacun joue sa balle à son tour (ou tous en même temps). */
 export class MinigolfRoom extends DurableObject<Env> {
   private data: MinigolfData | null = null;
   private lastSummary = "";
@@ -137,7 +147,7 @@ export class MinigolfRoom extends DurableObject<Env> {
   /** Quand chaque bot (ou joueur remplacé) jouera son prochain coup */
   private botAt = new Map<string, number>();
   /** Le coup qu'un bot a choisi de jouer un peu plus tard (le bon moment pour passer un obstacle qui bouge) */
-  private botPlan = new Map<string, { a: number; p: number; at: number; hole: number }>();
+  private botPlan = new Map<string, { a: number; p: number; at: number; hole: number; pulled?: boolean }>();
   private botRng = { rng: 1 };
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -505,12 +515,22 @@ export class MinigolfRoom extends DurableObject<Env> {
     switch (msg.t) {
       case "shot": {
         const m = d.match;
-        if (!seat || !m || d.status !== "playing" || seat.autoplay || msg.h !== m.hole) return;
+        if (!seat || !m || d.status !== "playing" || msg.h !== m.hole) return;
+        // Un bot jouait pour lui parce qu'il laissait passer ses tours : il tire, il reprend la main
+        if (seat.autoplay === "afk") this.takeBack(seat);
+        if (seat.autoplay) return;
         if (!this.allowMessage(`shot:${userId}`, 150)) return;
         const r = shoot(m, seat.id, Number(msg.a), Number(msg.p), Number(msg.at), now);
         if (typeof r === "string") return error(r);
+        seat.missed = 0;
         this.botAt.delete(seat.id);
         this.botPlan.delete(seat.id);
+        return this.afterChange(now);
+      }
+
+      case "takeBack": {
+        if (!seat || seat.autoplay !== "afk" || d.status !== "playing") return;
+        this.takeBack(seat);
         return this.afterChange(now);
       }
 
@@ -829,7 +849,9 @@ export class MinigolfRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    const before = m.cfg.turns ? m.players.map((p) => p.shot) : null;
     let changed = tickMatch(m, now);
+    if (before) this.noteMissed(m, before);
     if (m.phase === "over") return this.finishGame(now);
     // Les bots, et ceux qu'un bot remplace : un coup à la fois, chacun après avoir regardé un moment
     const level = d.settings.minigolf.botLevel ?? "moyen";
@@ -842,6 +864,11 @@ export class MinigolfRoom extends DurableObject<Env> {
       if (planned) {
         if (planned.hole !== m.hole) this.botPlan.delete(p.id);
         else {
+          // Chacun son tour : on le voit tirer sa balle en arrière juste avant de frapper
+          if (m.cfg.turns && !planned.pulled && nowTick(m, now) >= planned.at - BOT_AIM_TICKS / 2) {
+            planned.pulled = true;
+            this.botAim(p.id, planned.a, planned.p);
+          }
           if (nowTick(m, now) < planned.at) continue;
           this.botPlan.delete(p.id);
           const r = shoot(m, p.id, planned.a, planned.p, planned.at, now);
@@ -859,16 +886,19 @@ export class MinigolfRoom extends DurableObject<Env> {
       this.botAt.delete(p.id);
       const ref = currentRef(m);
       const t = nowTick(m, now);
+      // Chacun son tour : il vise un moment (les autres le regardent), le coup est choisi pour ce moment-là
+      const lead = m.cfg.turns ? BOT_AIM_TICKS : 0;
       const plan = planShot(
         courseOf(ref),
         { x: p.ball[0], y: p.ball[1], z: p.ball[2] },
-        t,
+        t + lead,
         physOf(m.cfg, ref, powerOf(m, p)),
         level,
         this.botRng,
       );
-      if (plan.wait > 0) {
-        this.botPlan.set(p.id, { a: plan.a, p: plan.p, at: t + plan.wait, hole: m.hole });
+      if (plan.wait + lead > 0) {
+        this.botPlan.set(p.id, { a: plan.a, p: plan.p, at: t + lead + plan.wait, hole: m.hole, pulled: false });
+        if (m.cfg.turns) this.botAim(p.id, plan.a, 0);
         continue;
       }
       const r = shoot(m, p.id, plan.a, plan.p, t, Date.now());
@@ -1153,6 +1183,34 @@ export class MinigolfRoom extends DurableObject<Env> {
       if (!att) continue;
       this.send(ws, { t: "room", room: this.viewFor(att.userId, connected) });
     }
+  }
+
+  /** Chacun son tour : les autres voient où vise un bot (ou le bot qui joue pour un absent) */
+  private botAim(id: string, a: number, p: number) {
+    this.broadcastRaw({ t: "aim", id, a: Math.round(a * 1000) / 1000, p: Math.round(p * 1000) / 1000 });
+  }
+
+  /** Chacun son tour : celui qui laisse passer son tour deux fois de suite, un bot joue sa balle */
+  private noteMissed(m: Match, before: (GolfShot | null)[]) {
+    m.players.forEach((p, i) => {
+      if (!p.shot?.skip || p.shot === before[i]) return;
+      const seat = this.data!.seats.find((s) => s.id === p.id);
+      if (!seat || seat.kind !== "human" || seat.autoplay) return;
+      seat.missed = (seat.missed ?? 0) + 1;
+      if (seat.missed >= MAX_MISSED_TURNS) {
+        seat.autoplay = "afk";
+        this.systemChat(`${seat.name} laisse passer ses tours : un bot joue sa balle en attendant.`);
+      }
+    });
+  }
+
+  /** Il reprend sa balle au bot qui jouait pour lui */
+  private takeBack(seat: Seat) {
+    seat.autoplay = false;
+    seat.missed = 0;
+    this.botAt.delete(seat.id);
+    this.botPlan.delete(seat.id);
+    this.systemChat(`${seat.name} reprend la main.`);
   }
 
   private broadcastRaw(msg: MinigolfServerMessage) {

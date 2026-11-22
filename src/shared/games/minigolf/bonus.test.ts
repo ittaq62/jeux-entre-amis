@@ -40,7 +40,7 @@ describe("minigolf : les bulles bonus", () => {
 
   it("une bulle traversée donne son pouvoir au coup suivant, une seule fois", () => {
     const T0 = 1_000_000;
-    const cfg = mergeConfig(DEFAULT_CONFIG, { course: "jardin", holes: 9, bonus: true });
+    const cfg = mergeConfig(DEFAULT_CONFIG, { course: "jardin", holes: 9, bonus: true, turns: false });
     const m = createMatch(cfg, [{ id: "a", team: 0 }], 3, T0);
     const now = m.holeStart + 10;
     tickMatch(m, now);
