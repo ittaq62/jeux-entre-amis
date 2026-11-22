@@ -54,7 +54,7 @@ class Bulbs {
 
   constructor(points: THREE.Vector3[], colors: number[], keep: Keep, r = 0.05) {
     this.mesh = new THREE.InstancedMesh(
-      keep(new THREE.SphereGeometry(r, 8, 6)),
+      keep(new THREE.SphereGeometry(r, 6, 4)),
       keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.4, 2.4) })),
       points.length,
     );
@@ -236,9 +236,9 @@ function horseGeometry(): THREE.BufferGeometry {
     g.translate(x, y, z);
     parts.push(g);
   };
-  add(new THREE.CapsuleGeometry(0.15, 0.4, 4, 12), 0, 0, 0, Math.PI / 2);
+  add(new THREE.CapsuleGeometry(0.15, 0.4, 3, 10), 0, 0, 0, Math.PI / 2);
   add(new THREE.CylinderGeometry(0.075, 0.11, 0.36, 10), 0.26, 0.19, 0, -0.55);
-  add(new THREE.CapsuleGeometry(0.075, 0.18, 4, 10), 0.44, 0.33, 0, 1.04);
+  add(new THREE.CapsuleGeometry(0.075, 0.18, 3, 8), 0.44, 0.33, 0, 1.04);
   for (const z of [-0.035, 0.035]) add(new THREE.ConeGeometry(0.025, 0.08, 6), 0.4, 0.46, z, 0.3);
   for (const z of [-0.075, 0.075]) {
     add(new THREE.CylinderGeometry(0.035, 0.028, 0.42, 8), 0.24, -0.2, z, 0.6);
@@ -761,9 +761,6 @@ export function foireSalle(): Salle {
   const stallLight = new THREE.PointLight(0xffc890, 6, 14, 1.4);
   stallLight.position.set(-3.6, 2.4, -2.5);
   root.add(stallLight);
-  const waffleLight = new THREE.PointLight(0xffb070, 3, 6, 1.5);
-  waffleLight.position.set(4.2, 2.2, 3.6);
-  root.add(waffleLight);
 
   // Des tentes rayées au loin, tout autour
   const tentCols: [string, string][] = [
@@ -794,7 +791,7 @@ export function foireSalle(): Salle {
 
   // Un bouquet de ballons attaché près de l'élan
   const balloons = new THREE.Group();
-  balloons.position.set(2.5, 0, 5.2);
+  balloons.position.set(-2.9, 0, 6.3);
   balloons.userData.live = true;
   root.add(balloons);
   balloons.add(roundBlock(0.5, 0.7, 0.4, 0.05, std(keep, 0x1d6fc8, 0.5), 0, 0, 0, keep));
@@ -825,12 +822,10 @@ export function foireSalle(): Salle {
   const moon = new THREE.DirectionalLight(0x8aa0ff, 0.5);
   moon.position.set(6, 10, 4);
   root.add(moon);
-  const archGlow = new THREE.PointLight(0xffd8a0, 4, 14, 1.3);
-  archGlow.position.set(0, 3.2, -7);
+  // Une seule lueur chaude pour les arches et la façade
+  const archGlow = new THREE.PointLight(0xffd8a0, 5, 17, 1.3);
+  archGlow.position.set(0, 3.2, -9);
   root.add(archGlow);
-  const facGlow = new THREE.PointLight(0xffc890, 3, 6, 1.5);
-  facGlow.position.set(0, 2.6, FACADE_Z + 1.6);
-  root.add(facGlow);
 
   mergeStatic(root, keep);
 
