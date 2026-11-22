@@ -807,26 +807,27 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
         const speed = Math.abs(this.vx);
         if (speed < 0.6 && this.teeter !== 0 && f.state === "stand") {
           // Au bord : il vacille, les bras en moulinet (penché en arrière s'il regarde le vide, en avant s'il lui tourne le dos)
-          const w = Math.sin(time * 11);
-          const w2 = Math.sin(time * 11 + 1.7);
+          const w = Math.sin(time * 9);
+          const w2 = Math.cos(time * 9);
           const facing = this.teeter === f.face;
           return {
             pose: with_(REST, {
-              lean: facing ? -0.14 + w * 0.05 : 0.2 + w * 0.04,
+              lean: facing ? -0.26 + w * 0.1 : 0.32 + w * 0.08,
+              crouch: 0.04,
               hands: [
-                [-0.38, 0.92 + w * 0.14, 0.12 + w2 * 0.2],
-                [0.38, 0.92 - w * 0.14, 0.12 - w2 * 0.2],
+                [-0.42, 1.05 + w * 0.28, 0.1 + w2 * 0.34],
+                [0.42, 1.05 - w * 0.28, 0.1 - w2 * 0.34],
               ],
               feet: facing
                 ? [
-                    [-0.12, 0, -0.04],
-                    [0.12, 0.07 + Math.max(0, w) * 0.05, 0.18],
+                    [-0.12, 0, -0.08],
+                    [0.12, 0.16 + Math.max(0, w) * 0.1, 0.26],
                   ]
                 : [
-                    [-0.12, 0.06 + Math.max(0, w) * 0.05, -0.18],
-                    [0.12, 0, 0.04],
+                    [-0.12, 0.16 + Math.max(0, w) * 0.1, -0.26],
+                    [0.12, 0, 0.08],
                   ],
-              headTilt: w2 * 0.08,
+              headTilt: w2 * 0.14,
             }),
             strike,
             charging,
