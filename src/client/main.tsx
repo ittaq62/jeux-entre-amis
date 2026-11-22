@@ -10,6 +10,17 @@ import "./styles/app.css";
 import "./styles/game.css";
 import { App } from "./App.tsx";
 
+// « ?perf » dans l'adresse (n'importe quelle page) : le panneau des premières secondes des parties, retenu sur cet
+// appareil jusqu'à « ?perf=0 » (voir lib/firstSeconds.ts). Lu ici : la page d'une table retire vite ses paramètres
+const perf = new URLSearchParams(window.location.search).get("perf");
+if (perf !== null) {
+  try {
+    localStorage.setItem("tablee:perf", perf === "0" ? "0" : "1");
+  } catch {
+    // Pas de stockage : pas de panneau
+  }
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

@@ -1,6 +1,7 @@
 // Ce qu'on voit d'un match : le stade, les joueurs, le ballon, les ombres, et la caméra qui suit l'action comme à la télévision.
 
 import * as THREE from "three";
+import { warmThree } from "../../lib/prepare.ts";
 import { clamp, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
 import type { BallId } from "../../../shared/games/crampons/boutique.ts";
 import { ballCanvas, ballMaterial } from "./balls.ts";
@@ -286,8 +287,14 @@ export class CramponsScene {
     this.mateArrow.visible = false;
     this.mateArrow.scale.setScalar(0.8);
     this.scene.add(this.mateArrow);
-    // Tout est préparé d'un coup, derrière le rideau : sinon le jeu se fige en pleine partie à la première apparition de chaque matière
-    this.renderer.compile(this.scene, this.camera);
+  }
+
+  /**
+   * Tout préparer derrière l'écran de chargement (les textures, les shaders, quelques images) : sinon le jeu se fige en
+   * pleine partie à la première apparition de chaque matière. Voir lib/prepare.ts.
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, { extra: [[this.hud, this.hudCam]], onProgress });
   }
 
   /** Allège ou affine l'image, sans toucher à ce qu'on voit */

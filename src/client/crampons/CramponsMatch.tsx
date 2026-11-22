@@ -11,7 +11,12 @@ import type { CramponsClientMessage, CramponsRoomView } from "../../shared/proto
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
-import { CRAMPONS_SOUNDS, play, preloadSounds } from "../lib/sound.ts";
+import { CRAMPONS_SOUNDS, play, preloadSounds, soundsLoaded } from "../lib/sound.ts";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
+import { atMost } from "../lib/prepare.ts";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
+import { GameLoading, GateCountdown, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
 import { FETE_BY_ID } from "../../shared/games/crampons/boutique.ts";
 import { ballItem } from "../../shared/shop.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -317,8 +322,12 @@ function SwapButton({ runtime }: { runtime: MutableRefObject<MatchRuntime | null
   );
 }
 
+/** L'écran de chargement aux couleurs du stade */
+const LOADING_THEME: LoadingTheme = { from: "#2f7d3b", to: "#0b2614", accent: "#f6d55c" };
+
 export function CramponsMatch({
   room,
+  serverOffset,
   send,
   listeners,
   onLeave,
@@ -327,6 +336,7 @@ export function CramponsMatch({
   onShowLobby,
 }: {
   room: CramponsRoomView;
+  serverOffset: number;
   send: (m: CramponsClientMessage) => void;
   listeners: MutableRefObject<MatchListeners>;
   onLeave: () => void;
@@ -388,6 +398,12 @@ export function CramponsMatch({
     view.phase === "kickoff" && view.period === 1 && view.score[0] + view.score[1] === 0 ? "intro" : null,
   );
   const [ready, setReady] = useState(false);
+  // Le chargement du match (voir shared/loadGate.ts) : la scène se prépare derrière l'écran de chargement, puis on dit
+  // « chargé » au serveur ; le coup d'envoi part quand tout le monde l'a dit
+  const [prep, setPrep] = useState({ key: "", share: 0, done: false });
+  const prepared = prep.key === matchKey && prep.done;
+  const gateClock = useGateClock(room.gate, serverOffset);
+  useLoadedSignal(room.gate, seatId, prepared, send);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // L'aide s'ouvre d'elle-même au tout premier match, pas sur un match fini (elle cacherait le tableau de fin)
@@ -529,7 +545,17 @@ export function CramponsMatch({
     const last = listeners.current.last;
     if (last && roomRef.current.status === "finished") rt.onTick(last.now, { ...last.tick, e: [] });
     preloadSounds(CRAMPONS_SOUNDS);
+    let cancelled = false;
+    rt.holdIntro(true);
+    setPrep({ key: matchKey, share: 0, done: false });
+    void Promise.all([
+      rt.prepare((share) => !cancelled && setPrep({ key: matchKey, share: share * 0.9, done: false })),
+      atMost(soundsLoaded(CRAMPONS_SOUNDS), 6000),
+    ])
+      .catch((err: unknown) => console.error("Match impossible à préparer", err))
+      .then(() => !cancelled && setPrep({ key: matchKey, share: 1, done: true }));
     return () => {
+      cancelled = true;
       listeners.current.onTick = undefined;
       listeners.current.onEvents = undefined;
       stadium.stop();
@@ -542,6 +568,15 @@ export function CramponsMatch({
     // Le match se crée une fois : ses données changent ensuite par setView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchKey, seatId]);
+
+  const counting = gateClock.countdown !== null;
+  useEffect(() => {
+    runtime.current?.holdIntro(!gateClock.passed && !counting);
+  }, [gateClock.passed, counting, matchKey]);
+  const live = prepared && gateClock.passed && room.status === "playing";
+  useEffect(() => {
+    if (live) return watchFirstSeconds("Crampons");
+  }, [live, matchKey]);
 
   // Le ballon choisi, s'il arrive après le coup d'envoi (la liste de ses achats relue au retour dans un match en cours)
   useEffect(() => runtime.current?.setBall(ball), [ball]);
@@ -597,6 +632,22 @@ export function CramponsMatch({
   const key = keyOf(restart?.kind === "penalty");
   return (
     <div className="cr-root" style={{ "--cr-cards-h": `${cardsHeight(view)}px` } as CSSProperties}>
+      {room.status === "playing" && loadingShown(prepared, gateClock) && (
+        <GameLoading
+          title="Crampons"
+          theme={LOADING_THEME}
+          share={prep.key === matchKey ? prep.share : 0}
+          done={prepared}
+          gate={room.gate}
+          serverOffset={serverOffset}
+          players={room.seats
+            .filter((s) => s.kind === "human")
+            .map((s) => ({ id: s.id, name: s.name, avatar: s.avatar, userId: s.userId }))}
+          me={seatId}
+        />
+      )}
+      {room.status === "playing" && prepared && <GateCountdown countdown={gateClock.countdown} accent={LOADING_THEME.accent} />}
+      <FirstSecondsPanel />
       <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
       {/* Au doigt, pendant la présentation, le gros plan ou le ralenti : toucher l'écran n'importe où les passe */}
       {touch && cinema && seatId !== null && (

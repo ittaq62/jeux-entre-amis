@@ -21,6 +21,7 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { forgetPlayer, gatePassed, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { randomSeed } from "../shared/rng.ts";
 import { lookOf } from "../shared/looks.ts";
 import { canUse, clubItem, feteItem } from "../shared/shop.ts";
@@ -122,6 +123,8 @@ interface CramponsData {
   /** Tournée : la fenêtre de choix des skins avant la partie, jusqu'à cette heure ; ceux qui sont déjà prêts */
   pickUntil?: number | null;
   ready?: string[];
+  /** Le coup d'envoi retenu le temps que chacun charge le match (voir loadGate.ts) ; null : le match tourne */
+  gate?: LoadGate | null;
 }
 
 interface Attachment {
@@ -142,6 +145,8 @@ export class CramponsRoom extends DurableObject<Env> {
   private acc = 0;
   private lastKey = "";
   private lastSave = 0;
+  /** Le dernier envoi des positions pendant le compte à rebours du départ */
+  private gateTickAt = 0;
   /** La dernière commande de chaque joueur, renvoyée telle quelle pour qu'il mesure son temps de trajet */
   private stamps = new Map<string, number>();
 
@@ -442,6 +447,8 @@ export class CramponsRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : les autres ne l'attendent plus
+      if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -600,6 +607,13 @@ export class CramponsRoom extends DurableObject<Env> {
         return this.afterChange([], now);
       }
 
+      case "loaded": {
+        // Son jeu a fini de charger le match : le coup d'envoi part quand tout le monde l'a dit
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        settleGate(d.gate, now);
+        return this.afterChange([], now);
+      }
+
       case "ready": {
         // Prêt à jouer, sans attendre la fin de l'annonce : avant un jeu de tournée, ou avant la revanche
         if (!this.announcing() || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
@@ -631,6 +645,7 @@ export class CramponsRoom extends DurableObject<Env> {
           if (d.status === "playing") {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
+            if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
             if (d.match) dropHuman(d.match, seat.id);
             this.systemChat(`${seat.name} a quitté le match, l'ordinateur prend sa place.`);
           } else {
@@ -837,6 +852,12 @@ export class CramponsRoom extends DurableObject<Env> {
     d.results = null;
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
+    // Le coup d'envoi attend que chaque joueur présent ait chargé le match (au plus quelques secondes)
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+    );
     this.lastKey = stateKey(d.match);
     this.systemChat("Coup d'envoi !");
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("crampons", d.settings.randomRules, "start"));
@@ -865,6 +886,26 @@ export class CramponsRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    // Le chargement de chacun : rien ne bouge avant le coup d'envoi, qui part pour tous au même instant
+    if (d.gate) {
+      if (settleGate(d.gate, now)) await this.afterChange([], now);
+      this.lastTick = now;
+      this.acc = 0;
+      if (!gatePassed(d.gate, now)) {
+        // Le compte à rebours : les joueurs en place pour le coup d'envoi, à une heure de match négative qui rejoint zéro
+        // au départ (le stade et la présentation se voient déjà, et l'horloge de chacun reste continue)
+        if (d.gate.goAt !== null && now - this.gateTickAt >= 100) {
+          this.gateTickAt = now;
+          this.broadcastRaw({ t: "tick", now, ...encodeTick(m, [], this.stamps), s: -(d.gate.goAt - now) / 1000 });
+        }
+        return;
+      }
+      d.gate = null;
+      this.lastSave = now;
+      this.saveLive();
+      this.broadcast([]);
+      return;
+    }
     this.acc += Math.min(now - this.lastTick, 250);
     this.lastTick = now;
     const events: MatchEvent[] = [];
@@ -1178,6 +1219,7 @@ export class CramponsRoom extends DurableObject<Env> {
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       crampons: d.match ? cramponsView(d.match, d.settings.crampons) : null,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

@@ -1,4 +1,5 @@
 import type { AvatarConfig } from "./avatar.ts";
+import type { LoadGate } from "./loadGate.ts";
 import type { SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
@@ -764,6 +765,8 @@ export interface CramponsRoomView {
   /** Dans quelle équipe joue chaque siège */
   teams: Record<string, 0 | 1>;
   crampons: CramponsView | null;
+  /** Le départ retenu le temps que chacun charge le match (voir loadGate.ts) ; null : il tourne */
+  gate?: LoadGate | null;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
@@ -795,6 +798,8 @@ export type CramponsClientMessage =
   | { t: "in"; x: number; z: number; s: boolean; p: boolean; c?: number }
   /** Un geste : passer, frapper, tacler, changer de joueur */
   | { t: "act"; k: string; p: number; x: number; z: number; to?: number }
+  /** Son jeu a fini de charger ce départ (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

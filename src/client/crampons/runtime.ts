@@ -232,6 +232,8 @@ export class MatchRuntime {
   /** Le carton brandi au-dessus d'un joueur */
   private cardShow: { p: number; red: boolean; at: number } | null = null;
   private intro = true;
+  /** La présentation attend le compte à rebours (pendant le chargement de chacun, la caméra reste sur son premier plan) */
+  private introHeld = false;
   private cursorPoint: [number, number] | null = null;
   private aimX = 0;
   private aimZ = 0;
@@ -327,6 +329,16 @@ export class MatchRuntime {
 
   get pad() {
     return this.controls;
+  }
+
+  /** Tout préparer pendant l'écran de chargement (voir lib/prepare.ts) */
+  prepare(onProgress?: (share: number) => void) {
+    return this.scene.prepare(onProgress);
+  }
+
+  /** Retenir la présentation d'avant-match sur son premier plan (jusqu'au compte à rebours du départ commun) */
+  holdIntro(on: boolean) {
+    this.introHeld = on;
   }
 
   setView(view: CramponsView) {
@@ -1471,7 +1483,7 @@ export class MatchRuntime {
         return frame;
       }
     }
-    this.cinemaT += dt;
+    if (this.cinema !== "intro" || !this.introHeld) this.cinemaT += dt;
     if (this.cinema === "intro") {
       if (this.cinemaT > INTRO_S || this.shown.phase === "play") {
         this.cinema = null;

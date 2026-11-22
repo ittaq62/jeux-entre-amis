@@ -80,6 +80,7 @@ export function CramponsRoom({ code }: { code: string }) {
       {showMatch ? (
         <CramponsMatch
           room={view}
+          serverOffset={serverOffset}
           send={send}
           listeners={listeners}
           onLeave={leave}
