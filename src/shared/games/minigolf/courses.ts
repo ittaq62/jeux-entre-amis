@@ -9,6 +9,7 @@ import { CUISINE } from "./holes/cuisine.ts";
 import { JUNGLE } from "./holes/jungle.ts";
 import { HORLOGER } from "./holes/horloger.ts";
 import { LUNE } from "./holes/lune.ts";
+import { VOLCAN } from "./holes/volcan.ts";
 
 export const COURSE_IDS = ["jardin", "mer", "montagne", "cuisine", "jungle", "horloger", "lune", "volcan"] as const;
 export type CourseId = (typeof COURSE_IDS)[number];
@@ -72,7 +73,13 @@ export const COURSES: Record<CourseId, CourseInfo> = {
     holes: LUNE,
     g: 3.2,
   },
-  volcan: { id: "volcan", name: "Volcan", blurb: "Lave, roche noire et geysers, sous les lueurs rouges.", holes: [], g: GRAVITY },
+  volcan: {
+    id: "volcan",
+    name: "Volcan",
+    blurb: "Le basalte noir au-dessus de la lave : les ponts de pierre, les geysers, l'obsidienne, la forge, le lac de feu au sommet.",
+    holes: VOLCAN,
+    g: GRAVITY,
+  },
 };
 
 export function isCourseId(v: unknown): v is CourseId {

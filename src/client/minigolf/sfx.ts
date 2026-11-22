@@ -234,7 +234,16 @@ export function applause(vol = 1) {
 // ---------------------------------------------------------------------------
 
 /** Le bruit de fond de chaque parcours : jusqu'où on laisse passer les aigus (Hz) */
-const ROOM_TONE: Record<string, number> = { jardin: 420, mer: 650, montagne: 520, cuisine: 240, jungle: 900, horloger: 200, lune: 120 };
+const ROOM_TONE: Record<string, number> = {
+  jardin: 420,
+  mer: 650,
+  montagne: 520,
+  cuisine: 240,
+  jungle: 900,
+  horloger: 200,
+  lune: 120,
+  volcan: 160,
+};
 
 export class Ambience {
   private wind: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
@@ -263,11 +272,11 @@ export class Ambience {
     const gain = o.ctx.createGain();
     gain.gain.value = 0.035 * o.vol;
     src.connect(f).connect(gain).connect(o.dest);
-    // Au bord de la mer : le ressac, une vague toutes les sept secondes environ
-    if (this.kind === "mer" || this.kind === "montagne") {
+    // Au bord de la mer : le ressac, une vague toutes les sept secondes environ ; au volcan, le grondement
+    if (this.kind === "mer" || this.kind === "montagne" || this.kind === "volcan") {
       // En montagne : des rafales, plus lentes et plus fortes
       const lfo = o.ctx.createOscillator();
-      lfo.frequency.value = this.kind === "mer" ? 0.14 : 0.07;
+      lfo.frequency.value = this.kind === "mer" ? 0.14 : this.kind === "volcan" ? 0.05 : 0.07;
       const depth = o.ctx.createGain();
       depth.gain.value = (this.kind === "mer" ? 0.03 : 0.035) * o.vol;
       lfo.connect(depth).connect(gain.gain);
@@ -414,6 +423,33 @@ export class Ambience {
           const f = [880, 1175, 988, 1319, 1047][k]!;
           tone(o.ctx, o.dest, t + k * 0.09, "square", f, f, o.vol * 0.006, 0.002, 0.06);
         }
+    }
+    if (o && this.kind === "volcan") {
+      const t = o.ctx.currentTime + 0.02;
+      const r = Math.random();
+      if (r < 0.55) {
+        // La lave qui bouillonne : quelques « bloups » graves
+        const n = 2 + Math.floor(Math.random() * 3);
+        for (let k = 0; k < n; k++)
+          tone(
+            o.ctx,
+            o.dest,
+            t + k * (0.15 + Math.random() * 0.2),
+            "sine",
+            90 + Math.random() * 50,
+            180 + Math.random() * 80,
+            o.vol * 0.06,
+            0.01,
+            0.12,
+          );
+      } else if (r < 0.8) {
+        // Un sifflement de vapeur
+        burst(o.ctx, o.dest, t, "bandpass", 2600, 0.8, o.vol * 0.04, 0.05, 0.9);
+      } else {
+        // Une explosion sourde, au loin
+        tone(o.ctx, o.dest, t, "sine", 60, 32, o.vol * 0.12, 0.02, 1.2);
+        burst(o.ctx, o.dest, t, "lowpass", 220, 0.7, o.vol * 0.08, 0.02, 1.0);
+      }
     }
     if (o && this.kind === "horloger" && Math.random() < 0.3) {
       // Une horloge qui sonne, au loin : trois ou quatre notes de carillon

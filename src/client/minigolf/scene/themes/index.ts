@@ -6,6 +6,7 @@ import { cuisineTheme } from "./cuisine.ts";
 import { horlogerTheme } from "./horloger.ts";
 import { jungleTheme } from "./jungle.ts";
 import { luneTheme } from "./lune.ts";
+import { volcanTheme } from "./volcan.ts";
 import { jardinTheme } from "./jardin.ts";
 import { merTheme } from "./mer.ts";
 import { montagneTheme } from "./montagne.ts";
@@ -24,6 +25,8 @@ export function themeOf(id: CourseId): Theme {
       return horlogerTheme();
     case "lune":
       return luneTheme();
+    case "volcan":
+      return volcanTheme();
     default:
       return jardinTheme();
   }
