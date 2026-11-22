@@ -28,7 +28,7 @@ export interface ThemeKit {
   side(look?: string): THREE.Material;
   /** Les bordures du tour : leur matière, et combien elles dépassent en plus de leur hauteur de jeu */
   /** `bevel` : le rayon de l'arrondi du dessus (par défaut un petit arrondi ; 0 pour une arête vive) */
-  rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean; bevel?: number };
+  rail(look?: string): { material: THREE.Material; extra: number; widen: number; round?: boolean; tube?: boolean; bevel?: number };
   wall(look?: string): THREE.Material;
   post(look: string | undefined, r: number, h: number): THREE.Object3D;
   /**
@@ -404,6 +404,87 @@ function contactGradient(): THREE.CanvasTexture {
   return contactTex;
 }
 
+/** Les bordures mises bout à bout (la fin de l'une est le début de la suivante) : des chaînes, ouvertes ou fermées */
+function railChains(list: CWall[]): CWall[][] {
+  const key = (x: number, z: number) => `${Math.round(x * 1000)},${Math.round(z * 1000)}`;
+  const byStart = new Map<string, CWall[]>();
+  const byEnd = new Map<string, CWall[]>();
+  for (const w of list) {
+    const ks = key(w.ax, w.az);
+    const ke = key(w.bx, w.bz);
+    if (!byStart.has(ks)) byStart.set(ks, []);
+    if (!byEnd.has(ke)) byEnd.set(ke, []);
+    byStart.get(ks)!.push(w);
+    byEnd.get(ke)!.push(w);
+  }
+  const used = new Set<CWall>();
+  const out: CWall[][] = [];
+  for (const w of list) {
+    if (used.has(w)) continue;
+    used.add(w);
+    const chain = [w];
+    for (;;) {
+      const last = chain[chain.length - 1]!;
+      const next = byStart.get(key(last.bx, last.bz))?.find((x) => !used.has(x));
+      if (!next) break;
+      used.add(next);
+      chain.push(next);
+    }
+    for (;;) {
+      const first = chain[0]!;
+      const prev = byEnd.get(key(first.ax, first.az))?.find((x) => !used.has(x));
+      if (!prev) break;
+      used.add(prev);
+      chain.unshift(prev);
+    }
+    out.push(chain);
+  }
+  return out;
+}
+
+/**
+ * Un tube rond qui suit une chaîne de bordures, son dessus au haut de la bordure (plus `extra`). Il reste sur la ligne
+ * des bordures et ne s'arrondit qu'au ras des coins.
+ */
+function railTube(chain: CWall[], r: number, extra: number): THREE.BufferGeometry {
+  const first = chain[0]!;
+  const last = chain[chain.length - 1]!;
+  const closed = chain.length > 2 && Math.hypot(last.bx - first.ax, last.bz - first.az) < 1e-3;
+  const pts: THREE.Vector3[] = [];
+  const at = (x: number, y: number, z: number) => pts.push(new THREE.Vector3(x, y + extra - r, z));
+  chain.forEach((w, i) => {
+    const len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+    const k = Math.min(0.06, len * 0.3) / (len || 1);
+    if (i === 0 && !closed) at(w.ax, w.a1, w.az);
+    // Deux points près des bouts : la courbe reste droite entre eux
+    at(w.ax + (w.bx - w.ax) * k, w.a1 + (w.b1 - w.a1) * k, w.az + (w.bz - w.az) * k);
+    at(w.bx - (w.bx - w.ax) * k, w.b1 - (w.b1 - w.a1) * k, w.bz - (w.bz - w.az) * k);
+    if (i === chain.length - 1 && !closed) at(w.bx, w.b1, w.bz);
+  });
+  const curve = new THREE.CatmullRomCurve3(pts, closed, "centripetal");
+  const length = chain.reduce((s, w) => s + Math.hypot(w.bx - w.ax, w.bz - w.az), 0);
+  const g = new THREE.TubeGeometry(curve, Math.max(8, Math.ceil(length / 0.04)), r, 12, closed);
+  // Des uv en mètres le long du tube
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * length, uv.getY(i) * Math.PI * 2 * r);
+  if (!closed) {
+    // Des bouchons ronds aux deux bouts
+    const caps = [first, last].map((w, j) => {
+      const s = new THREE.SphereGeometry(r, 12, 8);
+      const x = j === 0 ? w.ax : w.bx;
+      const z = j === 0 ? w.az : w.bz;
+      const y = (j === 0 ? w.a1 : w.b1) + extra - r;
+      s.translate(x, y, z);
+      return s;
+    });
+    const all = mergeGeometries([g, ...caps].map((x) => x.toNonIndexed()))!;
+    g.dispose();
+    for (const c of caps) c.dispose();
+    return all;
+  }
+  return g;
+}
+
 function merged(list: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (list.length === 0) return null;
   const g = mergeGeometries(
@@ -601,20 +682,33 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   const rails = c.walls.filter((w) => w.kind === "rail");
   for (const [look, list] of groupBy(rails, (w) => w.look ?? "")) {
     const style = kit.rail(look || undefined);
+    if (style.round && style.tube) {
+      // Un tube continu (une rampe de laiton) : il suit les bordures bout à bout et se courbe avec elles
+      const r = w0(list).t + style.widen;
+      const tubes = merged(railChains(list).map((ch) => railTube(ch, r, style.extra)));
+      if (tubes) {
+        const mesh = new THREE.Mesh(keep(tubes), style.material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        root.add(mesh);
+      }
+    }
     if (style.round) {
       // Des rondins : un tronc couché le long de chaque bordure, sur un flanc jusqu'au sol du décor
       const r = w0(list).t + style.widen;
-      const logs = merged(
-        list.map((w) => {
-          const len = Math.hypot(w.bx - w.ax, w.bz - w.az) + r * 1.6;
-          const g = new THREE.CylinderGeometry(r, r, len, 12, 1);
-          g.rotateZ(Math.PI / 2);
-          g.rotateY(-Math.atan2(w.bz - w.az, w.bx - w.ax));
-          const top = (w.a1 + w.b1) / 2 + style.extra;
-          g.translate((w.ax + w.bx) / 2, top - r, (w.az + w.bz) / 2);
-          return g;
-        }),
-      );
+      const logs = style.tube
+        ? null
+        : merged(
+            list.map((w) => {
+              const len = Math.hypot(w.bx - w.ax, w.bz - w.az) + r * 1.6;
+              const g = new THREE.CylinderGeometry(r, r, len, 12, 1);
+              g.rotateZ(Math.PI / 2);
+              g.rotateY(-Math.atan2(w.bz - w.az, w.bx - w.ax));
+              const top = (w.a1 + w.b1) / 2 + style.extra;
+              g.translate((w.ax + w.bx) / 2, top - r, (w.az + w.bz) / 2);
+              return g;
+            }),
+          );
       if (logs) {
         const mesh = new THREE.Mesh(keep(logs), style.material);
         mesh.castShadow = true;

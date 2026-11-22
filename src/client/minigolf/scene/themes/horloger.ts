@@ -545,7 +545,7 @@ export function horlogerTheme(): Theme {
       return null;
     },
     side: darkWood,
-    rail: () => ({ material: railBrass, extra: 0, widen: 0.012, round: true }),
+    rail: () => ({ material: railBrass, extra: 0, widen: 0.012, round: true, tube: true }),
     wall: (look) => (look === "facade" ? darkWood : brass),
     post,
     mover,

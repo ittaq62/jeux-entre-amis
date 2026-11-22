@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { box, circle, ellipse, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, laneSides, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -88,24 +88,85 @@ const tapis = hole(
 );
 
 /** Un pendule : la lentille (un disque épais) au bout de sa tige, qui se balance en travers de l'allée */
-function bob(z: number): Part[] {
-  return [{ k: "cap", a: [0, 0.3, z - 0.12], b: [0, 0.3, z + 0.12], r: 0.3 }];
+function bob(z: number, x = 0, y = 0): Part[] {
+  return [{ k: "cap", a: [x, 0.3 + y, z - 0.12], b: [x, 0.3 + y, z + 0.12], r: 0.3 }];
 }
 
-// 4. Les pendules : deux balanciers d'horloge traversent l'allée, chacun à son rythme
+// 4. Les pendules : une passerelle de parquet part d'une estrade, descend palier après palier et dessine un S ; sur
+// chaque palier, un balancier d'horloge la traverse à son rythme ; au bout, la coupelle ronde où attend le trou
 const pendules = hole(
   "Les pendules",
   3,
   (b) => {
-    b.tile(box(-1.0, -11.2, 1.0, 0), 0, "wood", { look: "parquet" });
-    b.mover({ motion: { k: "swing", c: [0, 3.1, -4.2], axis: [0, 1], amp: 0.5, w: 1.75 }, parts: bob(-4.2), look: "pendule", e: 0.6 });
-    b.mover({
-      motion: { k: "swing", c: [0, 3.1, -7.4], axis: [0, 1], amp: 0.5, w: 1.75, a0: 1.6 },
-      parts: bob(-7.4),
-      look: "pendule",
-      e: 0.6,
-    });
-    b.tee(0, -0.45, UP).cup(0, -10.3);
+    const W = 2.0;
+    const hw = W / 2;
+    const C: Pt = [0.2, -10.35];
+    const R = 1.12;
+    const zIn = C[1] + Math.sqrt(R * R - hw * hw);
+    const line = smooth(
+      [
+        [0, 0],
+        [0, -0.8],
+        [0, -3.0],
+        [0, -4.8],
+        [0.85, -6.6],
+        [0.85, -8.2],
+        [0.22, -9.3],
+        [0.2, -9.6],
+        [0.2, zIn],
+      ],
+      0.25,
+    );
+    const { left, right } = laneSides(line, W);
+    const run = [0];
+    for (let i = 1; i < line.length; i++) run.push(run[i - 1]! + Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]));
+    const total = run[run.length - 1]!;
+    // L'estrade du départ, deux paliers (un balancier sur chacun), la coupelle ; des pentes douces entre eux
+    const keys: [number, number][] = [
+      [0, 0.3],
+      [0.08, 0.3],
+      [0.22, 0.17],
+      [0.47, 0.17],
+      [0.58, 0.06],
+      [0.82, 0.06],
+      [0.92, 0],
+      [1, 0],
+    ];
+    const hAt = (u: number) => {
+      let k = 1;
+      while (k < keys.length - 1 && keys[k]![0] < u) k++;
+      const [u0, h0] = keys[k - 1]!;
+      const [u1, h1] = keys[k]!;
+      const t = Math.min(1, Math.max(0, (u - u0) / (u1 - u0 || 1)));
+      return h0 + (h1 - h0) * t * t * (3 - 2 * t);
+    };
+    const aL = Math.atan2(zIn - C[1], -hw);
+    const aR = Math.atan2(zIn - C[1], hw) + Math.PI * 2;
+    const dish = arc(C[0], C[1], R, aL, aR, 40).slice(1, -1);
+    b.tile(
+      [...left, ...dish, ...[...right].reverse()],
+      { k: "path", pts: [...line, C], hs: [...run.map((r) => hAt(r / total)), 0] },
+      "wood",
+      {
+        look: "parquet",
+      },
+    );
+    // Un balancier là où la passerelle file tout droit, sur son palier
+    const pendulum = (z: number, a0: number) => {
+      let i = 0;
+      while (i < line.length - 1 && line[i]![1] > z) i++;
+      const x = line[i]![0];
+      const y = hAt(run[i]! / total);
+      b.mover({
+        motion: { k: "swing", c: [x, 3.1 + y, z], axis: [0, 1], amp: 0.5, w: 1.75, a0 },
+        parts: bob(z, x, y),
+        look: "pendule",
+        e: 0.6,
+      });
+    };
+    pendulum(-3.9, 0);
+    pendulum(-7.4, 1.6);
+    b.tee(0, -0.45, UP).cup(0.2, -10.45);
   },
   { hint: "Passe quand la lentille est d'un côté : les deux pendules ne battent pas ensemble." },
 );

@@ -417,7 +417,7 @@ export function plainKit(o: {
   felt: THREE.Material;
   ground: (mat: Mat, look?: string) => THREE.Material | null;
   side: THREE.Material;
-  rail: (look?: string) => { material: THREE.Material; extra: number; widen: number; round?: boolean; bevel?: number };
+  rail: (look?: string) => { material: THREE.Material; extra: number; widen: number; round?: boolean; tube?: boolean; bevel?: number };
   wall: (look?: string) => THREE.Material;
   post: ThemeKit["post"];
   mover: (def: MoverDef, c: Course) => THREE.Object3D | null;
