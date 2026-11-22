@@ -1049,8 +1049,362 @@ function workshopDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
   g.add(motes);
   life.motes = { pts: motes, base: mp };
 
+  workshopRoom(g, m, rm, base, left, right, farZ, frontZ, cz, above, new THREE.Vector3(b.x0 - 10 + 6.7, base + 7.0, cz - 2));
   holeDecor(c, g, m, base, life, above);
   return g;
+}
+
+/**
+ * Les murs de côté de l'atelier, son plafond et sa lumière. À gauche : le meuble à tiroirs de l'horloger, ses dizaines
+ * de petits tiroirs, leurs boutons de laiton et leurs étiquettes ; une porte entrouverte sur le couloir éclairé (la
+ * profondeur). À droite : le tableau des outils, tournevis, brucelles, pince, loupe, chacun à son crochet. En haut, les
+ * poutres. La lampe de l'établi verse un cône de lumière chaude et une flaque claire sur le chêne
+ */
+function workshopRoom(
+  g: THREE.Group,
+  m: Mats,
+  rm: NonNullable<typeof roomMats>,
+  base: number,
+  left: number,
+  right: number,
+  farZ: number,
+  frontZ: number,
+  cz: number,
+  above: THREE.Object3D[],
+  bulb: THREE.Vector3,
+) {
+  const xL = left;
+  const xR = right;
+  const add = (o: THREE.Object3D, cast = true) => {
+    shadows(o, cast);
+    g.add(o);
+    return o;
+  };
+
+  // --- À gauche : le meuble à tiroirs (devant : sa façade de tiroirs ; ailleurs : le bois sombre)
+  const front = new THREE.MeshStandardMaterial({ map: drawersTex(), roughness: 0.6 });
+  const cabinet = new THREE.Mesh(new THREE.BoxGeometry(3.4, 17, 15), [front, m.darkWood, m.darkWood, m.darkWood, m.darkWood, m.darkWood]);
+  cabinet.position.set(xL + 1.7, base + 8.5, cz - 3);
+  add(cabinet);
+  const crown = new THREE.Mesh(boxMeters(4.0, 0.8, 16), m.darkWood);
+  crown.position.set(xL + 2.0, base + 17.4, cz - 3);
+  add(crown);
+  // Sur le meuble, une pendule sous son globe de verre
+  const dome = new THREE.Group();
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.5, 0.5, 32), m.darkWood);
+  plinth.position.y = 0.25;
+  const pend = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.5, 32), m.brass);
+  pend.rotation.x = Math.PI / 2;
+  pend.position.y = 1.6;
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32), m.enamel);
+  dial.position.set(0, 1.6, 0.26);
+  const bell = new THREE.Mesh(new THREE.SphereGeometry(1.25, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2), rm.glass);
+  bell.scale.set(1, 2.1, 1);
+  bell.position.y = 0.5;
+  bell.renderOrder = 3;
+  dome.add(plinth, pend, dial, bell);
+  dome.rotation.y = Math.PI / 2;
+  dome.position.set(xL + 2.0, base + 17.8, cz - 6);
+  add(dome);
+  above.push(dome);
+
+  // --- À gauche, plus loin : la porte entrouverte, le couloir éclairé derrière (un trompe-l'œil dans son chambranle)
+  const doorZ = cz + 9;
+  const corridor = new THREE.Mesh(
+    new THREE.PlaneGeometry(9, 22),
+    new THREE.MeshStandardMaterial({
+      map: corridorTex(),
+      emissive: 0xffffff,
+      emissiveMap: corridorTex(),
+      emissiveIntensity: 0.7,
+      roughness: 1,
+    }),
+  );
+  corridor.rotation.y = Math.PI / 2;
+  corridor.position.set(xL + 0.05, base + 11, doorZ);
+  g.add(corridor);
+  for (const [h, w, y, dz] of [
+    [0.8, 10.6, 22.4, 0],
+    [22.4, 0.8, 11, -4.9],
+    [22.4, 0.8, 11, 4.9],
+  ] as const) {
+    const piece = new THREE.Mesh(boxMeters(0.6, h, w), m.darkWood);
+    piece.position.set(xL + 0.3, base + y, doorZ + dz);
+    add(piece);
+  }
+  // Le battant, ouvert vers nous, sa poignée de laiton
+  const leaf = new THREE.Group();
+  const panel = new THREE.Mesh(boxMeters(0.5, 21.6, 8.8), m.darkWood);
+  panel.position.set(0, 10.8, 4.4);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), m.polished);
+  knob.position.set(0.45, 10, 7.8);
+  leaf.add(panel, knob);
+  leaf.position.set(xL + 0.6, base, doorZ - 4.4);
+  leaf.rotation.y = -0.9;
+  add(leaf);
+  // La lumière du couloir qui tombe sur l'établi par la porte
+  const spill = new THREE.Mesh(
+    new THREE.PlaneGeometry(10, 9),
+    new THREE.MeshBasicMaterial({
+      map: lightPoolTex(),
+      color: 0xffd9a0,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  spill.rotation.x = -Math.PI / 2;
+  spill.position.set(xL + 5, base + 0.03, doorZ);
+  g.add(spill);
+
+  // --- À droite : le tableau des outils (un panneau perforé) et les outils à leurs crochets
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.4, 12, 16), new THREE.MeshStandardMaterial({ map: pegboardTex(), roughness: 0.9 }));
+  board.position.set(xR - 0.2, base + 11, cz - 1);
+  add(board, false);
+  const tool = (dz: number, y: number, tilt: number, make: (t: THREE.Group) => void) => {
+    const t = new THREE.Group();
+    make(t);
+    t.rotation.x = tilt;
+    t.position.set(xR - 0.7, base + y, cz - 1 + dz);
+    add(t);
+  };
+  const handleCols = [m.red, m.blued, m.oak, m.black];
+  // Trois tournevis, du plus grand au plus petit
+  for (let k = 0; k < 3; k++)
+    tool(-6 + k * 1.6, 13, 0, (t) => {
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.45 - k * 0.08, 0.4 - k * 0.08, 2.6 - k * 0.4, 12), handleCols[k]!);
+      handle.position.y = 1.3;
+      const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4.2 - k * 0.8, 8), m.steel);
+      blade.position.y = -(2.1 - k * 0.4);
+      t.add(handle, blade);
+    });
+  // Les brucelles : deux lames fines qui se rejoignent en haut
+  tool(-0.6, 12, 0, (t) => {
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(boxMeters(0.12, 6, 0.32), m.steel);
+      arm.rotation.x = s * 0.06;
+      arm.position.set(0, 0, s * 0.18);
+      t.add(arm);
+    }
+  });
+  // La pince
+  tool(2.2, 12, 0, (t) => {
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(boxMeters(0.3, 5.2, 0.4), s < 0 ? m.red : m.steel);
+      arm.rotation.x = s * 0.2;
+      arm.position.set(0, -0.3, s * 0.45);
+      t.add(arm);
+    }
+    const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 12), m.steel);
+    pivot.rotation.z = Math.PI / 2;
+    pivot.position.y = 1.6;
+    t.add(pivot);
+  });
+  // La loupe : son cercle de laiton, son verre, son manche
+  tool(5.6, 13, 0, (t) => {
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.18, 10, 36), m.brass);
+    rim.rotation.y = Math.PI / 2;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(1.5, 32), rm.glass);
+    lens.rotation.y = -Math.PI / 2;
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 3.2, 12), m.darkWood);
+    handle.position.y = -3.2;
+    t.add(rim, lens, handle);
+  });
+
+  // --- Le mur derrière nous (juste après le bord de l'établi, jusque sous lui) et le plafond : la pièce est fermée
+  const back = new THREE.Mesh(planeMeters(right - left, 64), rm.panel);
+  back.rotation.y = Math.PI;
+  back.position.set((left + right) / 2, base + 8, frontZ + 0.4);
+  g.add(back);
+  const ceiling = new THREE.Mesh(planeMeters(right - left, frontZ - farZ + 2), m.darkWood);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.set((left + right) / 2, base + 40, (farZ + frontZ) / 2);
+  g.add(ceiling);
+  above.push(ceiling);
+
+  // --- Les poutres du plafond
+  for (const dz of [-14, -2, 10]) {
+    const beam = new THREE.Mesh(boxMeters(right - left, 1.6, 1.4), m.darkWood);
+    beam.position.set((left + right) / 2, base + 36, cz + dz);
+    add(beam, false);
+    above.push(beam);
+  }
+
+  // --- La lampe de l'établi : son cône de lumière chaude, la flaque claire sur le chêne
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(5, bulb.y - base, 40, 1, true),
+    new THREE.MeshBasicMaterial({
+      map: coneTex(),
+      color: 0xffd99a,
+      transparent: true,
+      opacity: 0.04,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  cone.position.set(bulb.x + 1.2, base + (bulb.y - base) / 2, bulb.z);
+  g.add(cone);
+  above.push(cone);
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(15, 15),
+    new THREE.MeshBasicMaterial({
+      map: lightPoolTex(),
+      color: 0xffd28a,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(bulb.x + 1.5, base + 0.03, bulb.z);
+  g.add(pool);
+}
+
+/** La façade du meuble à tiroirs : des rangées de petits tiroirs, leur bouton de laiton, leur porte-étiquette */
+function drawersTex(): THREE.CanvasTexture {
+  const t = canvasTex(256, (g, s) => {
+    g.fillStyle = "#3a2618";
+    g.fillRect(0, 0, s, s);
+    const cols = 5;
+    const rows = 8;
+    const w = s / cols;
+    const h = s / rows;
+    for (let r = 0; r < rows; r++)
+      for (let k = 0; k < cols; k++) {
+        const x = k * w;
+        const y = r * h;
+        const tone = 88 + ((r * 7 + k * 5) % 9) * 3;
+        g.fillStyle = `rgb(${tone},${Math.round(tone * 0.66)},${Math.round(tone * 0.42)})`;
+        g.fillRect(x + 3, y + 3, w - 6, h - 6);
+        g.fillStyle = "rgba(255,230,190,0.12)";
+        g.fillRect(x + 3, y + 3, w - 6, 2);
+        // Le porte-étiquette, l'étiquette crème
+        g.fillStyle = "#c9a04a";
+        g.fillRect(x + w * 0.3, y + h * 0.22, w * 0.4, h * 0.26);
+        g.fillStyle = "#f3ead4";
+        g.fillRect(x + w * 0.33, y + h * 0.26, w * 0.34, h * 0.18);
+        g.fillStyle = "#6a5a48";
+        g.fillRect(x + w * 0.37, y + h * 0.33, w * 0.26, 1);
+        // Le bouton
+        g.fillStyle = "#e0bc6a";
+        g.beginPath();
+        g.arc(x + w / 2, y + h * 0.68, Math.min(w, h) * 0.08, 0, Math.PI * 2);
+        g.fill();
+      }
+  });
+  return t;
+}
+
+/** Le couloir par la porte entrouverte : des murs clairs qui fuient, une lampe, une fenêtre au fond */
+function corridorTex(): THREE.CanvasTexture {
+  return canvasTex(256, (g, s) => {
+    g.fillStyle = "#3a2a1e";
+    g.fillRect(0, 0, s, s);
+    const back = { x0: s * 0.36, y0: s * 0.3, x1: s * 0.64, y1: s * 0.7 };
+    const wall = (pts: number[][], col: string) => {
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(pts[0]![0]!, pts[0]![1]!);
+      for (const p of pts.slice(1)) g.lineTo(p[0]!, p[1]!);
+      g.fill();
+    };
+    wall(
+      [
+        [0, 0],
+        [back.x0, back.y0],
+        [back.x0, back.y1],
+        [0, s],
+      ],
+      "#b8946a",
+    );
+    wall(
+      [
+        [s, 0],
+        [back.x1, back.y0],
+        [back.x1, back.y1],
+        [s, s],
+      ],
+      "#a8845c",
+    );
+    wall(
+      [
+        [0, 0],
+        [s, 0],
+        [back.x1, back.y0],
+        [back.x0, back.y0],
+      ],
+      "#d9bf94",
+    );
+    wall(
+      [
+        [0, s],
+        [s, s],
+        [back.x1, back.y1],
+        [back.x0, back.y1],
+      ],
+      "#6a4a30",
+    );
+    g.fillStyle = "#c9a878";
+    g.fillRect(back.x0, back.y0, back.x1 - back.x0, back.y1 - back.y0);
+    g.fillStyle = "#1c2a4e";
+    g.fillRect(s * 0.44, s * 0.38, s * 0.12, s * 0.18);
+    const grd = g.createRadialGradient(s * 0.5, s * 0.22, 0, s * 0.5, s * 0.22, s * 0.45);
+    grd.addColorStop(0, "rgba(255,220,150,0.7)");
+    grd.addColorStop(1, "rgba(255,220,150,0)");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, s, s);
+  });
+}
+
+/** Le panneau perforé des outils : une plaque claire et ses rangées de trous */
+function pegboardTex(): THREE.CanvasTexture {
+  const t = canvasTex(256, (g, s) => {
+    g.fillStyle = "#b89a72";
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = "#4a3624";
+    for (let y = 8; y < s; y += 16)
+      for (let x = 8; x < s; x += 16) {
+        g.beginPath();
+        g.arc(x, y, 2.2, 0, Math.PI * 2);
+        g.fill();
+      }
+  });
+  t.repeat.set(3, 2.2);
+  return t;
+}
+
+/** Une flaque de lumière : un disque doux */
+function lightPoolTex(): THREE.CanvasTexture {
+  return canvasTex(
+    128,
+    (g, s) => {
+      const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+      grd.addColorStop(0, "rgba(255,255,255,1)");
+      grd.addColorStop(0.5, "rgba(255,255,255,0.4)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(0, 0, s, s);
+    },
+    true,
+  );
+}
+
+/** Le cône de la lampe : clair en haut, qui s'efface vers le bas */
+function coneTex(): THREE.CanvasTexture {
+  return canvasTex(
+    64,
+    (g, s) => {
+      const grd = g.createLinearGradient(0, 0, 0, s);
+      grd.addColorStop(0, "rgba(255,255,255,0.9)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(0, 0, s, s);
+    },
+    true,
+  );
 }
 
 /** Ce que chaque trou demande */

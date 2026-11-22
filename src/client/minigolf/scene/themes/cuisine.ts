@@ -929,8 +929,490 @@ function cuisineDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     if (mesh) g.add(mesh);
   }
 
+  cuisineRoom(g, m, base, left, right, farZ, cx, (b.z0 + b.z1) / 2);
   holeDecor(c, g, m, base, life);
   return g;
+}
+
+/**
+ * Les murs de côté de la cuisine et sa lumière. À gauche : une étagère d'assiettes et de tasses, une barre où pendent
+ * une louche, une écumoire, un fouet et une spatule, une horloge. À droite : un passe-plat ouvert sur la salle à
+ * manger, un calendrier, des casseroles de cuivre pendues. Au-dessus du plan de travail, deux suspensions émaillées et
+ * leur halo ; par la fenêtre, le soleil entre en un faisceau poudreux et pose sur la pierre la tache claire de la
+ * fenêtre et de ses croisillons. Tout à l'échelle de la balle : un carreau fait dix centimètres
+ */
+function cuisineRoom(g: THREE.Group, m: Mats, base: number, left: number, right: number, farZ: number, cx: number, cz: number) {
+  const above = (g.userData.hideAbove ??= []) as THREE.Object3D[];
+  const xL = left - 0.25;
+  const xR = right + 0.25;
+  const add = (o: THREE.Object3D, cast = true) => {
+    shadows(o, cast);
+    g.add(o);
+    return o;
+  };
+  const blue = new THREE.MeshStandardMaterial({ color: 0x2f5fa8, roughness: 0.4 });
+  const copper = new THREE.MeshStandardMaterial({ color: 0xc87a4a, roughness: 0.32, metalness: 0.95 });
+  const shelfWood = m.board;
+
+  // --- À gauche : l'étagère, ses consoles, les assiettes debout contre le mur, les tasses
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 15), shelfWood);
+  shelf.position.set(xL + 1.7, base + 17, cz - 2);
+  add(shelf);
+  for (const dz of [-6.5, 0, 6.5]) {
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 0.35), shelfWood);
+    bracket.position.set(xL + 1.3, base + 15.7, cz - 2 + dz);
+    add(bracket);
+  }
+  for (let k = 0; k < 5; k++) {
+    const plate = new THREE.Group();
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 1.9, 0.2, 40), m.porcelain);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.07, 6, 48), blue);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.11;
+    plate.add(disc, rim);
+    plate.rotation.z = Math.PI / 2 - 0.16;
+    plate.position.set(xL + 0.75, base + 17.2 + 2.05, cz - 8.2 + k * 1.15);
+    add(plate);
+  }
+  for (let k = 0; k < 3; k++) {
+    const cup = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.7, 1.3, 28), m.porcelain);
+    body.position.y = 0.65;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.86, 0.84, 0.18, 28, 1, true), k === 1 ? m.red : blue);
+    band.position.y = 1.0;
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.09, 8, 20), m.porcelain);
+    handle.position.set(0.9, 0.7, 0);
+    cup.add(body, band, handle);
+    cup.position.set(xL + 1.8, base + 17.2, cz + 1.2 + k * 2.1);
+    cup.rotation.y = k * 0.9;
+    add(cup);
+  }
+
+  // --- À gauche, plus bas : la barre des ustensiles, et ce qui y pend
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 15, 12), m.chrome);
+  bar.rotation.x = Math.PI / 2;
+  bar.position.set(xL + 0.7, base + 11.5, cz + 4);
+  add(bar);
+  const hang = (z: number, make: (u: THREE.Group) => void) => {
+    const u = new THREE.Group();
+    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 6, 16, Math.PI * 1.4), m.chrome);
+    hook.rotation.y = Math.PI / 2;
+    u.add(hook);
+    make(u);
+    u.position.set(xL + 0.85, base + 11.3, z);
+    u.rotation.x = (z % 2) * 0.05;
+    add(u);
+  };
+  const shaft = (u: THREE.Group, len: number, mat: THREE.Material, r = 0.12) => {
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), mat);
+    sh.position.y = -0.3 - len / 2;
+    u.add(sh);
+  };
+  // La louche
+  hang(cz - 2, (u) => {
+    shaft(u, 5.2, m.steel);
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(1.0, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.steel);
+    bowl.position.y = -5.9;
+    u.add(bowl);
+  });
+  // L'écumoire
+  hang(cz + 0.5, (u) => {
+    shaft(u, 4.8, m.steel);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.1, 28), m.steel);
+    disc.rotation.z = Math.PI / 2;
+    disc.position.y = -6.0;
+    u.add(disc);
+  });
+  // Le fouet
+  hang(cz + 3, (u) => {
+    shaft(u, 2.6, m.board, 0.2);
+    for (let k = 0; k < 6; k++) {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.035, 6, 24), m.chrome);
+      loop.scale.set(1, 2.2, 1);
+      loop.rotation.y = (k / 6) * Math.PI;
+      loop.position.y = -4.4;
+      u.add(loop);
+    }
+  });
+  // La spatule de bois
+  hang(cz + 5.5, (u) => {
+    shaft(u, 4.0, m.board, 0.15);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.0, 1.3), m.board);
+    blade.position.y = -5.3;
+    u.add(blade);
+  });
+  // La cuillère de bois
+  hang(cz + 8, (u) => {
+    shaft(u, 4.6, m.board, 0.15);
+    const spoon = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 12), m.board);
+    spoon.scale.set(0.45, 1.3, 1);
+    spoon.position.y = -5.6;
+    u.add(spoon);
+  });
+
+  // --- À gauche, en haut : l'horloge de la cuisine (10 h 10)
+  const clock = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.CircleGeometry(3, 48), new THREE.MeshStandardMaterial({ map: kitchenDialTex(), roughness: 0.5 }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(3.05, 0.32, 10, 48), m.mint);
+  clock.add(face, ring);
+  clock.rotation.y = Math.PI / 2;
+  clock.position.set(xL + 0.35, base + 27, cz + 8);
+  add(clock, false);
+  above.push(clock);
+
+  // --- À droite : le passe-plat ouvert sur la salle à manger (un trompe-l'œil), son cadre, son appui
+  const hatchZ = cz - 3;
+  const hatch = new THREE.Mesh(
+    new THREE.PlaneGeometry(11, 9),
+    new THREE.MeshStandardMaterial({
+      map: diningTex(),
+      emissive: 0xffffff,
+      emissiveMap: diningTex(),
+      emissiveIntensity: 0.55,
+      roughness: 1,
+    }),
+  );
+  hatch.rotation.y = -Math.PI / 2;
+  hatch.position.set(xR - 0.05, base + 9.5, hatchZ);
+  g.add(hatch);
+  const frame = new THREE.MeshStandardMaterial({ color: 0xfbf7ee, roughness: 0.5 });
+  for (const [h, w, y, dz] of [
+    [0.6, 12.2, 14.2, 0],
+    [0.6, 12.6, 4.8, 0],
+    [9.8, 0.6, 9.5, -5.8],
+    [9.8, 0.6, 9.5, 5.8],
+  ] as const) {
+    const piece = new THREE.Mesh(new THREE.BoxGeometry(0.5, h, w), frame);
+    piece.position.set(xR - 0.25, base + y, hatchZ + dz);
+    add(piece);
+  }
+  const ledge = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 13), frame);
+  ledge.position.set(xR - 1.1, base + 4.6, hatchZ);
+  add(ledge);
+
+  // --- À droite : le calendrier, et les casseroles de cuivre pendues à leur barre
+  const cal = new THREE.Mesh(new THREE.PlaneGeometry(4, 5.4), new THREE.MeshStandardMaterial({ map: calendarTex(), roughness: 0.9 }));
+  cal.rotation.y = -Math.PI / 2;
+  cal.position.set(xR - 0.08, base + 18, hatchZ + 9.5);
+  g.add(cal);
+  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 12, 12), copper);
+  rail.rotation.x = Math.PI / 2;
+  rail.position.set(xR - 0.7, base + 22, hatchZ - 2);
+  add(rail);
+  for (let k = 0; k < 3; k++) {
+    const pan = new THREE.Group();
+    const r = 1.6 + k * 0.35;
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 0.9 + k * 0.2, 32, 1, true), copper);
+    pot.material = copper;
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(r * 0.92, 32), copper);
+    bottom.rotation.x = Math.PI / 2;
+    bottom.position.y = -(0.45 + k * 0.1);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.4, 0.3), m.black);
+    handle.position.set(0, r + 1.4, 0);
+    pan.add(pot, bottom, handle);
+    // Pendue par la queue : la casserole présente son fond
+    pan.rotation.z = Math.PI / 2;
+    pan.rotation.y = Math.PI / 2;
+    pan.position.set(xR - 1.0 - r * 0.2, base + 22 - (r + 3.0), hatchZ - 6 + k * 4.2);
+    add(pan);
+    above.push(pan);
+  }
+
+  // --- Les deux suspensions émaillées au-dessus du plan de travail, et le halo de leur ampoule
+  const enamel = new THREE.MeshStandardMaterial({ color: 0x9cc7b4, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide });
+  const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff4d6, emissive: 0xffd99a, emissiveIntensity: 3 });
+  const glow = new THREE.MeshBasicMaterial({
+    map: softDiscTex(),
+    color: 0xffd9a0,
+    transparent: true,
+    opacity: 0.24,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  for (const s of [-1, 1]) {
+    const lamp = new THREE.Group();
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 40, 6), m.black);
+    cord.position.y = 21;
+    const shade = new THREE.Mesh(
+      new THREE.LatheGeometry(
+        [
+          [0.5, 1.6],
+          [0.7, 1.4],
+          [1.3, 0.8],
+          [2.6, 0.0],
+          [2.7, -0.15],
+        ].map(([r, y]) => new THREE.Vector2(r!, y!)),
+        32,
+      ),
+      enamel,
+    );
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 10), bulbMat);
+    bulb.position.y = 0.2;
+    lamp.add(cord, shade, bulb);
+    lamp.position.set(cx + s * 11, base + 24, cz - 1);
+    add(lamp, false);
+    above.push(lamp);
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), glow);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(cx + s * 11, base + 0.03, cz - 1);
+    g.add(pool);
+  }
+
+  // --- Le soleil par la fenêtre : un faisceau poudreux, et la tache claire de la fenêtre sur la pierre
+  const wx0 = cx - 5.5;
+  const wx1 = cx + 5.5;
+  const wyT = base + 19;
+  const wyB = base + 7;
+  const shift = 3.5;
+  const zNear = farZ + 9;
+  const zFar = farZ + 23;
+  const P = {
+    A: [wx0, wyT, farZ + 0.3],
+    B: [wx1, wyT, farZ + 0.3],
+    C: [wx1, wyB, farZ + 0.3],
+    D: [wx0, wyB, farZ + 0.3],
+    A2: [wx0 + shift, base + 0.05, zFar],
+    B2: [wx1 + shift, base + 0.05, zFar],
+    C2: [wx1 + shift, base + 0.05, zNear],
+    D2: [wx0 + shift, base + 0.05, zNear],
+  } as const;
+  const quads: (keyof typeof P)[][] = [
+    ["A", "D", "D2", "A2"],
+    ["B", "C", "C2", "B2"],
+    ["A", "B", "B2", "A2"],
+    ["D", "C", "C2", "D2"],
+  ];
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (const q of quads) {
+    const corners = q.map((k) => P[k]);
+    const uvs = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ];
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      pos.push(...corners[i]!);
+      uv.push(uvs[i]![0]!, uvs[i]![1]!);
+    }
+  }
+  const beamGeo = new THREE.BufferGeometry();
+  beamGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  beamGeo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  const beam = new THREE.Mesh(
+    beamGeo,
+    new THREE.MeshBasicMaterial({
+      map: beamTex(),
+      color: 0xfff0c8,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  g.add(beam);
+  above.push(beam);
+  const patchGeo = new THREE.BufferGeometry();
+  const pp = [P.D2, P.C2, P.B2, P.D2, P.B2, P.A2].flat();
+  patchGeo.setAttribute("position", new THREE.Float32BufferAttribute(pp, 3));
+  patchGeo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
+  const patch = new THREE.Mesh(
+    patchGeo,
+    new THREE.MeshBasicMaterial({
+      map: sunPatchTex(),
+      color: 0xffd28a,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  patch.renderOrder = 1;
+  g.add(patch);
+}
+
+/** Le cadran de l'horloge de cuisine : blanc, ses chiffres en points, ses deux aiguilles à 10 h 10 */
+function kitchenDialTex(): THREE.CanvasTexture {
+  return canvasTex(256, (g, s) => {
+    g.fillStyle = "#fbf8f0";
+    g.fillRect(0, 0, s, s);
+    g.translate(s / 2, s / 2);
+    g.fillStyle = "#2a2a2a";
+    for (let k = 0; k < 60; k++) {
+      const a = (k / 60) * Math.PI * 2;
+      const big = k % 5 === 0;
+      g.save();
+      g.rotate(a);
+      g.fillRect(-(big ? 3 : 1), -s * 0.46, big ? 6 : 2, big ? 18 : 8);
+      g.restore();
+    }
+    const hand = (a: number, len: number, w: number) => {
+      g.save();
+      g.rotate(a);
+      g.fillRect(-w / 2, -len, w, len + 10);
+      g.restore();
+    };
+    hand((10 / 12) * Math.PI * 2 + (10 / 60) * (Math.PI / 6), s * 0.26, 9);
+    hand((10 / 60) * Math.PI * 2, s * 0.38, 6);
+    g.fillStyle = "#d33a32";
+    hand((40 / 60) * Math.PI * 2, s * 0.4, 2);
+    g.beginPath();
+    g.arc(0, 0, 8, 0, Math.PI * 2);
+    g.fill();
+  });
+}
+
+/** Le passe-plat : la salle à manger en enfilade, une table, une suspension allumée, une fenêtre au fond */
+function diningTex(): THREE.CanvasTexture {
+  return canvasTex(256, (g, s) => {
+    // La pièce en perspective : le plafond, les murs, le sol qui fuient vers le fond
+    g.fillStyle = "#6e5a46";
+    g.fillRect(0, 0, s, s);
+    const back = { x0: s * 0.32, y0: s * 0.26, x1: s * 0.68, y1: s * 0.62 };
+    g.fillStyle = "#c9b48e";
+    g.fillRect(back.x0, back.y0, back.x1 - back.x0, back.y1 - back.y0);
+    const wall = (pts: number[][], col: string) => {
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(pts[0]![0]!, pts[0]![1]!);
+      for (const p of pts.slice(1)) g.lineTo(p[0]!, p[1]!);
+      g.fill();
+    };
+    wall(
+      [
+        [0, 0],
+        [back.x0, back.y0],
+        [back.x0, back.y1],
+        [0, s],
+      ],
+      "#a8936e",
+    );
+    wall(
+      [
+        [s, 0],
+        [back.x1, back.y0],
+        [back.x1, back.y1],
+        [s, s],
+      ],
+      "#9a8562",
+    );
+    wall(
+      [
+        [0, 0],
+        [s, 0],
+        [back.x1, back.y0],
+        [back.x0, back.y0],
+      ],
+      "#d8c8a6",
+    );
+    wall(
+      [
+        [0, s],
+        [s, s],
+        [back.x1, back.y1],
+        [back.x0, back.y1],
+      ],
+      "#7a5a3a",
+    );
+    // La fenêtre au fond, lumineuse
+    g.fillStyle = "#fff4d6";
+    g.fillRect(s * 0.44, s * 0.32, s * 0.12, s * 0.18);
+    g.fillStyle = "#c9b48e";
+    g.fillRect(s * 0.495, s * 0.32, s * 0.01, s * 0.18);
+    // La table et ses chaises
+    g.fillStyle = "#5a3a22";
+    g.fillRect(s * 0.3, s * 0.7, s * 0.4, s * 0.05);
+    g.fillRect(s * 0.33, s * 0.75, s * 0.02, s * 0.15);
+    g.fillRect(s * 0.65, s * 0.75, s * 0.02, s * 0.15);
+    // La suspension et son halo
+    const grd = g.createRadialGradient(s * 0.5, s * 0.45, 0, s * 0.5, s * 0.45, s * 0.3);
+    grd.addColorStop(0, "rgba(255,228,170,0.75)");
+    grd.addColorStop(1, "rgba(255,228,170,0)");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = "#2a2a2a";
+    g.fillRect(s * 0.497, 0, s * 0.006, s * 0.4);
+    g.fillStyle = "#e9d9b0";
+    g.beginPath();
+    g.moveTo(s * 0.44, s * 0.45);
+    g.lineTo(s * 0.56, s * 0.45);
+    g.lineTo(s * 0.52, s * 0.4);
+    g.lineTo(s * 0.48, s * 0.4);
+    g.fill();
+  });
+}
+
+/** Le calendrier des postes : une image en haut, les jours du mois en grille */
+function calendarTex(): THREE.CanvasTexture {
+  return canvasTex(256, (g, s) => {
+    g.fillStyle = "#fbf7ee";
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = "#7aa6c8";
+    g.fillRect(s * 0.08, s * 0.06, s * 0.84, s * 0.36);
+    g.fillStyle = "#5f8f4a";
+    g.fillRect(s * 0.08, s * 0.3, s * 0.84, s * 0.12);
+    g.fillStyle = "#d33a32";
+    g.fillRect(s * 0.08, s * 0.46, s * 0.84, s * 0.06);
+    g.fillStyle = "#555";
+    for (let r = 0; r < 5; r++) for (let k = 0; k < 7; k++) g.fillRect(s * (0.1 + k * 0.118), s * (0.56 + r * 0.08), s * 0.08, s * 0.05);
+  });
+}
+
+/** Un disque doux (le halo d'une lampe) */
+function softDiscTex(): THREE.CanvasTexture {
+  return canvasTex(
+    128,
+    (g, s) => {
+      const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+      grd.addColorStop(0, "rgba(255,255,255,1)");
+      grd.addColorStop(0.4, "rgba(255,255,255,0.45)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(0, 0, s, s);
+    },
+    true,
+  );
+}
+
+/** Le faisceau du soleil : clair à la fenêtre, qui s'efface vers le sol et sur ses bords */
+function beamTex(): THREE.CanvasTexture {
+  return canvasTex(
+    128,
+    (g, s) => {
+      for (let y = 0; y < s; y++) {
+        const a = Math.pow(1 - y / s, 1.4);
+        const grd = g.createLinearGradient(0, 0, s, 0);
+        grd.addColorStop(0, `rgba(255,255,255,0)`);
+        grd.addColorStop(0.2, `rgba(255,255,255,${a})`);
+        grd.addColorStop(0.8, `rgba(255,255,255,${a})`);
+        grd.addColorStop(1, `rgba(255,255,255,0)`);
+        g.fillStyle = grd;
+        g.fillRect(0, y, s, 1);
+      }
+    },
+    true,
+  );
+}
+
+/** La tache du soleil sur la pierre : la fenêtre et ses croisillons, aux bords adoucis */
+function sunPatchTex(): THREE.CanvasTexture {
+  return canvasTex(
+    256,
+    (g, s) => {
+      g.filter = "blur(6px)";
+      g.fillStyle = "rgba(255,255,255,1)";
+      g.fillRect(s * 0.08, s * 0.08, s * 0.84, s * 0.84);
+      g.fillStyle = "rgba(0,0,0,1)";
+      g.globalCompositeOperation = "destination-out";
+      g.fillRect(s * 0.485, 0, s * 0.03, s);
+      g.fillRect(0, s * 0.37, s, s * 0.03);
+      g.globalCompositeOperation = "source-over";
+      g.filter = "none";
+    },
+    true,
+  );
 }
 
 /** Le bord de la piste le long d'une ligne z = cte, en partant de x vers la gauche (dir −1) ou la droite (+1) */
