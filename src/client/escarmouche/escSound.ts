@@ -169,9 +169,10 @@ export class EscSound {
    * L'ambiance de la carte, sous le combat. Discrète, et jamais pareille : des nappes de longueurs différentes (on ne
    * repère pas leur boucle), un vent dont le souffle et le timbre dérivent au hasard, et de loin en loin un bruit de
    * vie (oiseaux, mouettes, corbeau, chouette, tôle, gouttes). Tout passe par le volume « Musique et ambiance », écho
-   * compris, suivi en direct. `weather` : le temps de la carte (la bruine de la gare et la mer du port restent la nuit).
+   * compris, suivi en direct. `weather` : le temps de la carte (la bruine de la gare reste la nuit) ; `sea` : la mer est
+   * là (son clapotis et ses mouettes ; sans elle, à l'aube, ce sont des tôles et des pigeons, comme en ville).
    */
-  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige", weather: "soir" | "gris" | "aube" | "neige" = "soir") {
+  startAmbience(light: "soir" | "gris" | "aube" | "nuit" | "neige", weather: "soir" | "gris" | "aube" | "neige" = "soir", sea = false) {
     const ctx = this.ctx;
     if (!ctx || !this.out || this.ambience) return;
     const bus = ctx.createGain();
@@ -242,7 +243,7 @@ export class EscSound {
     drift(airyGain.gain, 0, windLevel * 0.55, [5, 13], [2, 5]);
 
     // La mer du port : un clapotis grave, des vagues irrégulières
-    if (weather === "aube") {
+    if (sea) {
       const sea = this.loopBuffer(13.7, (d, sr) => {
         const n = noiseGen(77);
         let a = 0;
@@ -373,7 +374,7 @@ export class EscSound {
             am.stop(at + 0.16);
           }
         }
-      } else if (light === "aube") {
+      } else if (light === "aube" && sea) {
         // Une mouette : deux ou trois cris qui glissent vers le grave
         const cries = 2 + Math.floor(Math.random() * 2);
         for (let k = 0; k < cries; k++) {

@@ -1,5 +1,6 @@
 // Les cartes d'Escarmouche : Le Hameau (un village de pierre), La Gare de triage (wagons, quais, hangar), Le Port
-// (conteneurs, portique) et Le Col (un col enneigé : chalet, scierie, chapelle en ruine).
+// (conteneurs, portique), Le Col (un col enneigé : chalet, scierie, chapelle en ruine) et La Ville en ruines (immeubles
+// éventrés, avenue encombrée, grand magasin sans toit).
 // Chaque carte est symétrique par un demi-tour autour de son centre : ce que voit une équipe depuis sa base, l'autre le
 // voit depuis la sienne. Une base de chaque côté, la zone au centre : les quatre modes s'y jouent.
 //
@@ -7,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines"];
 
 export interface Spawn {
   x: number;
@@ -61,7 +62,9 @@ export type Decor =
   /** Des barbelés */
   | { k: "wire"; x0: number; z0: number; x1: number; z1: number }
   /** Une horloge sur une façade : centre, direction vers où elle regarde */
-  | { k: "clock"; x: number; y: number; z: number; nx: number; nz: number };
+  | { k: "clock"; x: number; y: number; z: number; nx: number; nz: number }
+  /** Une voiture brûlée (ou un autobus, s'il est long) : ses roues, ses vitres crevées, sa couleur sous la suie */
+  | { k: "car"; x0: number; z0: number; x1: number; z1: number; color: string };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -113,6 +116,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
   col: {
     name: "Le Col",
     blurb: "Un col sous la neige : le chalet à étage, la scierie et ses grumes, la chapelle en ruine au milieu, des rochers et des sapins.",
+  },
+  ruines: {
+    name: "La Ville en ruines",
+    blurb:
+      "Un centre-ville bombardé : des immeubles éventrés où l'on monte à l'étage, une avenue encombrée de voitures brûlées, le grand magasin sans toit, la place et sa fontaine.",
   },
   port: {
     name: "Le Port",
@@ -206,6 +214,7 @@ class Builder {
         });
         return;
       case "wagon":
+      case "car":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
       case "container": {
@@ -1104,18 +1113,358 @@ function col(): GameMap {
   };
 }
 
+// ---------------------------------------------------------------------------
+// La Ville en ruines
+// ---------------------------------------------------------------------------
+
+/** Un nombre entre 0 et 1, toujours le même pour les mêmes entrées (les deux moitiés de la carte sont identiques) */
+function ruinHash(a: number, b: number): number {
+  const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/**
+ * Un immeuble éventré, où l'on entre : ses murs coupés en tronçons de hauteurs inégales (entre `lo` et `hi` : le haut
+ * s'est effondré), percés de portes, de fenêtres et de brèches ; sans toit. Avec `stairs`, un étage à 3 m, ouvert au
+ * ciel, d'où l'on tire par-dessus les murs les plus bas.
+ */
+function ruin(
+  b: Builder,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  o: {
+    open: Opening[];
+    lo: number;
+    hi: number;
+    wall: Mat;
+    seed: number;
+    stairs?: { axis: "x" | "z"; start: number; dir: 1 | -1; c0: number; c1: number };
+  },
+) {
+  const holesFor = (side: Side) =>
+    o.open
+      .filter((p) => p.side === side)
+      .map((p) => {
+        const base = (p.floor ?? 0) === 1 ? STORY + SLAB : 0;
+        const [lo, hi] = p.kind === "door" ? [0, 2.3] : p.kind === "big" ? [0, 3.6] : [1.05, 2.2];
+        // Les portes d'une ruine ont perdu leur chambranle : 1,8 m au moins (on ne s'y accroche pas en passant)
+        const grow = p.kind === "door" ? Math.max(0, 1.8 - p.w) / 2 : 0;
+        return { a: p.at - grow, b: p.at + p.w + grow, y0: base + lo, y1: base + hi };
+      });
+  const broken = (
+    axis: "x" | "z",
+    a0: number,
+    a1: number,
+    c: number,
+    holes: { a: number; b: number; y0: number; y1: number }[],
+    k0: number,
+  ) => {
+    let a = a0;
+    let k = k0;
+    while (a < a1 - 0.01) {
+      const len = Math.min(a1 - a, 1.1 + ruinHash(o.seed, k) * 1.6);
+      // Pas de tronçon trop court au bout
+      const end = a1 - (a + len) < 0.6 ? a1 : a + len;
+      const top = o.lo + ruinHash(o.seed + 7, k) * (o.hi - o.lo);
+      const cut = holes.filter((h) => h.b > a && h.a < end).map((h) => ({ ...h, a: Math.max(h.a, a), b: Math.min(h.b, end) }));
+      b.wall(axis, a, end, c, WALL, 0, top, cut, o.wall);
+      a = end;
+      k++;
+    }
+  };
+  broken("x", x0, x1, z0 + WALL / 2, holesFor("s"), 0);
+  broken("x", x0, x1, z1 - WALL / 2, holesFor("n"), 20);
+  broken("z", z0 + WALL, z1 - WALL, x0 + WALL / 2, holesFor("w"), 40);
+  broken("z", z0 + WALL, z1 - WALL, x1 - WALL / 2, holesFor("e"), 60);
+  if (o.stairs) {
+    const st = o.stairs;
+    const r = b.stairs(st.axis, st.start, st.dir, st.c0, st.c1, 0, STORY + SLAB, "beton");
+    const pad = 0.4;
+    const hole: [number, number, number, number] =
+      st.axis === "z"
+        ? [r[0], st.dir === 1 ? r[1] - pad : r[1], r[2], st.dir === 1 ? r[3] : r[3] + pad]
+        : [st.dir === 1 ? r[0] - pad : r[0], r[1], st.dir === 1 ? r[2] : r[2] + pad, r[3]];
+    b.slab(x0 + WALL, z0 + WALL, x1 - WALL, z1 - WALL, STORY, STORY + SLAB, hole, "beton");
+  }
+}
+
+/** Une voiture brûlée (de x0 à x1, de z0 à z1, couchée le long du plus grand côté) : sa caisse et son habitacle arrêtent les balles */
+function car(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
+  const alongX = x1 - x0 >= z1 - z0;
+  const inset = 0.12;
+  b.box(x0, 0, z0, x1, 0.95, z1, "rouille");
+  const L = alongX ? x1 - x0 : z1 - z0;
+  // L'habitacle, un peu en arrière du milieu
+  const c0 = L * 0.32;
+  const c1 = L * 0.8;
+  if (alongX) b.box(x0 + c0, 0.95, z0 + inset, x0 + c1, 1.45, z1 - inset, "rouille");
+  else b.box(x0 + inset, 0.95, z0 + c0, x1 - inset, 1.45, z0 + c1, "rouille");
+  b.add({ k: "car", x0, z0, x1, z1, color });
+}
+
+/** Un tas de gravats : des blocs de béton éboulés, de plus en plus petits vers le haut */
+function rubble(b: Builder, x: number, z: number, r: number, h: number, seed: number) {
+  for (let k = 0; k < 3; k++) {
+    const rr = r * (1 - k * 0.3);
+    const dx = (ruinHash(seed, k) - 0.5) * r * 0.5;
+    const dz = (ruinHash(seed + 3, k) - 0.5) * r * 0.5;
+    b.box(x + dx - rr, h * k * 0.34, z + dz - rr * 0.8, x + dx + rr, h * (k + 1) * 0.34, z + dz + rr * 0.8, "beton");
+  }
+}
+
+function ruinesSide(b: Builder) {
+  // Les façades du bord, au nord et au sud : des immeubles debout (on n'y entre pas) et des pans effondrés
+  b.block(-48, 25, -37, 30, 12, "crepi", { m: "tuile", axis: "x" });
+  b.box(-37, 0, 26, -31, 8.5, 30, "beton");
+  b.box(-31, 0, 26.6, -27, 5.2, 30, "beton");
+  b.box(-27, 0, 26, -22, 10, 30, "beton");
+  b.block(-22, 25, -9, 30, 14, "crepi2", { m: "metal", axis: "x" });
+  b.block(-9, 26, 0, 30, 10, "pierre", { m: "tuile", axis: "x" });
+  b.block(-48, -30, -38, -25, 10, "pierre", { m: "tuile", axis: "x" });
+  b.box(-38, 0, -30, -33, 7, -26, "beton");
+  b.box(-33, 0, -30, -30, 4.2, -26.6, "beton");
+  b.block(-30, -30, -20, -26, 12, "crepi", { m: "tuile", axis: "x" });
+  b.block(-20, -30, 0, -26, 9, "beton", { m: "metal", axis: "x" });
+  // Derrière la base : un mur d'enceinte à moitié tombé
+  for (let k = 0; k < 10; k++) b.box(-48, 0, -25 + k * 5, -47.4, 2.2 + ruinHash(5, k) * 2.2, -20 + k * 5, "beton");
+
+  // La base : un barrage de sacs de sable et de blocs de béton, un autobus brûlé, des caisses
+  b.sandbags(-39, -7, -38.4, -2.2);
+  b.sandbags(-39, 2.2, -38.4, 7);
+  b.box(-42.5, 0, 9.5, -40, 1.05, 10.1, "beton");
+  b.box(-42.5, 0, -10.1, -40, 1.05, -9.5, "beton");
+  car(b, -47.2, 17.6, -39.7, 19.8, "#4a5d6e");
+
+  // Une maison basse éventrée entre la base et l'immeuble A (une ruelle de 1,6 m les sépare)
+  ruin(b, -38.5, 9.5, -33.6, 15.5, {
+    open: [
+      { side: "n", at: -37.4, w: 1.4, kind: "door" },
+      { side: "s", at: -37, w: 2.4, kind: "big" },
+      { side: "e", at: 12.6, w: 1.4, kind: "door" },
+      { side: "w", at: 12.2, w: 1.2, kind: "win" },
+    ],
+    lo: 1.6,
+    hi: 3.6,
+    wall: "pierre",
+    seed: 31,
+  });
+  // Un garage sans toit au sud de la base : de quoi sortir à couvert vers la ruelle du magasin
+  ruin(b, -46, -24, -40, -17.5, {
+    open: [
+      { side: "n", at: -44.6, w: 3, kind: "big" },
+      { side: "e", at: -22.6, w: 2.4, kind: "big" },
+    ],
+    lo: 1.8,
+    hi: 3.4,
+    wall: "beton",
+    seed: 43,
+  });
+  b.crate(-45.4, -12.6);
+  b.crate(-44.2, -12.6);
+  b.crate(-45.4, -12.6, 1.2, 1.2, 1.2);
+  b.add({ k: "lamp", x: -40, z: -12, h: 4.5 });
+
+  // L'immeuble A, entre la rue nord et l'avenue : deux niveaux éventrés, un escalier, des fenêtres sur les deux rues
+  ruin(b, -32, 9, -20, 18, {
+    open: [
+      { side: "s", at: -27, w: 1.4, kind: "door" },
+      { side: "s", at: -23.6, w: 2.4, kind: "big" },
+      { side: "s", at: -30.4, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: -25, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: -26, w: 1.4, kind: "door" },
+      { side: "n", at: -30.6, w: 1.2, kind: "win" },
+      { side: "n", at: -29, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: -23, w: 1.2, kind: "win", floor: 1 },
+      { side: "e", at: 12.4, w: 1.4, kind: "door" },
+      { side: "e", at: 14.6, w: 1.2, kind: "win", floor: 1 },
+      { side: "w", at: 12, w: 1.2, kind: "win" },
+    ],
+    stairs: { axis: "z", start: 9.6, dir: 1, c0: -31.7, c1: -30.2 },
+    lo: 3.4,
+    hi: 6.9,
+    wall: "crepi2",
+    seed: 11,
+  });
+
+  // L'immeuble B, au bout de la rue nord, au bord de la place : un rez-de-chaussée sans toit
+  ruin(b, -17, 11, -10.5, 18, {
+    open: [
+      { side: "n", at: -15, w: 1.4, kind: "door" },
+      { side: "s", at: -15.4, w: 2.4, kind: "big" },
+      { side: "e", at: 13, w: 2.4, kind: "big" },
+      { side: "w", at: 15.6, w: 1.2, kind: "win" },
+    ],
+    lo: 2.2,
+    hi: 4.4,
+    wall: "crepi",
+    seed: 37,
+  });
+
+  // La rue nord : des voitures brûlées, des gravats, une barricade de caisses
+  car(b, -38.5, 20.2, -34.3, 22, "#7a2c22");
+  rubble(b, -29.6, 22.3, 1.1, 1.3, 3);
+  b.crate(-17, 22.8);
+  b.crate(-15.8, 22.8);
+  b.crate(-16.4, 22.8, 1.2, 1.2, 1.2);
+  car(b, -12.4, 19.4, -8.2, 21.2, "#33533e");
+  b.add({ k: "lamp", x: -21, z: 24.4, h: 4.6 });
+
+  // L'avenue : des voitures en travers, un trou d'obus et ses gravats, un bloc de béton
+  car(b, -35, 2.4, -30.8, 4.2, "#8a7a5a");
+  car(b, -28, -4.4, -23.8, -2.6, "#3c4a66");
+  b.add({ k: "patch", x0: -19.5, z0: -2.2, x1: -15.3, z1: 2.2, m: "terre" });
+  rubble(b, -19.6, 2.6, 0.8, 0.9, 7);
+  rubble(b, -15.2, -2.8, 0.7, 0.8, 9);
+  b.box(-13, 0, 3, -12.4, 1.05, 6.4, "beton");
+  // Un tramway renversé en travers de l'avenue : on passe devant ou derrière
+  car(b, -21.4, -1.2, -19.6, 6.4, "#9a7d2e");
+  b.add({ k: "lamp", x: -24, z: 6.6, h: 4.6 });
+
+  // Le long de l'avenue, côté sud : un kiosque éventré, un abribus, un poste de sacs de sable
+  ruin(b, -37, -11.5, -33.5, -8, {
+    open: [
+      { side: "n", at: -35.8, w: 1.4, kind: "door" },
+      { side: "e", at: -10.5, w: 1.2, kind: "win" },
+      { side: "w", at: -10.6, w: 1.2, kind: "win" },
+    ],
+    lo: 1.4,
+    hi: 2.8,
+    wall: "crepi2",
+    seed: 41,
+  });
+  b.box(-27, 0, -9.2, -23, 2.4, -8.9, "metal");
+  b.box(-26.6, 0, -8.9, -23.4, 0.5, -8.5, "bois");
+  b.sandbags(-18.5, -10, -15.5, -9.4);
+
+  // Le grand magasin, au sud : un hall sans toit, des brèches de tous côtés, des piliers, des comptoirs
+  ruin(b, -30, -24, -12, -13, {
+    open: [
+      { side: "n", at: -28.4, w: 3, kind: "big" },
+      { side: "n", at: -19.5, w: 3, kind: "big" },
+      { side: "n", at: -14.6, w: 1.4, kind: "door" },
+      { side: "s", at: -26, w: 1.4, kind: "door" },
+      { side: "e", at: -21, w: 3, kind: "big" },
+      { side: "w", at: -20.5, w: 3, kind: "big" },
+    ],
+    lo: 2.6,
+    hi: 5.4,
+    wall: "beton",
+    seed: 23,
+  });
+  for (const x of [-24.5, -18])
+    for (const z of [-20.2, -16.6]) b.box(x - 0.3, 0, z - 0.3, x + 0.3, 2.4 + ruinHash(x, z) * 2.6, z + 0.3, "beton");
+  b.box(-27.8, 0, -17.6, -25.2, 1.05, -16.8, "bois");
+  b.box(-16.8, 0, -21.2, -16, 1.05, -18.2, "bois");
+  b.crate(-22, -22.6);
+  b.crate(-13.4, -15.2);
+  b.crate(-13.4, -15.2, 1.2, 1.2, 1.2);
+  rubble(b, -21.5, -15, 0.9, 1.1, 13);
+
+  // La ruelle à l'ouest du magasin : une voiture, des sacs de sable
+  car(b, -37, -20, -35.2, -15.8, "#5c5c58");
+  b.sandbags(-33.4, -15.6, -31, -15);
+
+  // Au bord de la place, au sud : le kiosque à journaux, ses murs à hauteur d'homme
+  ruin(b, -9.5, -16.5, -6, -12.5, {
+    open: [
+      { side: "n", at: -8.4, w: 1.4, kind: "door" },
+      { side: "e", at: -15.4, w: 1.2, kind: "win" },
+    ],
+    lo: 1.3,
+    hi: 2.6,
+    wall: "pierre",
+    seed: 47,
+  });
+
+  // Le bord de la place : un pan de muret, une voiture, des sacs de sable
+  b.box(-9, 0, 6.5, -8.6, 1.4, 8.4, "pierre");
+  b.box(-9, 0, 8.4, -8.6, 2.2, 10.2, "pierre");
+  car(b, -7.6, -9.6, -3.4, -7.8, "#6e2f2a");
+  b.sandbags(-4.2, 4.4, -1.6, 5);
+  b.barrel(-14.5, 8.2);
+  b.barrel(-31.5, -10);
+  b.barrel(-6, 12);
+  b.add({ k: "lamp", x: -10, z: -11.5, h: 4.6 });
+  b.add({ k: "patch", x0: -38, z0: -26, x1: -30, z1: -24, m: "gravier" });
+  b.add({ k: "patch", x0: -46, z0: -6, x1: -40, z1: 6, m: "gravier" });
+}
+
+function ruines(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "beton");
+  fence(b, -48, -30, 48, 30);
+  // Au milieu de la place : le bassin d'une fontaine éventrée (sa margelle s'enjambe), le drapeau du milieu au centre
+  b.box(-2.6, 0, 2.2, 2.2, 0.35, 2.6, "pierre");
+  b.box(-2.2, 0, -2.6, 2.6, 0.35, -2.2, "pierre");
+  b.box(2.2, 0, -2.2, 2.6, 0.35, 2.6, "pierre");
+  b.box(-2.6, 0, -2.6, -2.2, 0.35, 2.2, "pierre");
+  b.add({ k: "patch", x0: -6, z0: -6, x1: 6, z1: 6, m: "pave" });
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    ruinesSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-44, 6, 0, 6),
+      b.spawn(-46, -8, 0, -8),
+      b.spawn(-45, 10.5, 0, 10.5),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-25, 22, 0, 22),
+      b.spawn(-35, -21.5, 0, -21.5),
+      b.spawn(-21.2, -18.4, 0, -18.4),
+      b.spawn(-26, 13, 0, 13),
+      b.spawn(-15, 0, 0, 0),
+    );
+    ffa.push(b.spawn(-8, 3, 0, 0));
+  }
+  b.s = 1;
+  return {
+    id: "ruines",
+    ...MAP_NAMES.ruines,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 21, y: 0, z: 18.5 },
+      { x: 28, y: 0, z: -7.4 },
+    ],
+    points: [
+      { x: -25, y: 0, z: 21.5 },
+      { x: 0, y: 0, z: 0 },
+      { x: 25, y: 0, z: -21.5 },
+    ],
+    light: "aube",
+  };
+}
+
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {
   let m = cache.get(id);
   if (!m) {
-    m = id === "gare" ? gare() : id === "port" ? port() : id === "col" ? col() : hameau();
+    m = id === "gare" ? gare() : id === "port" ? port() : id === "col" ? col() : id === "ruines" ? ruines() : hameau();
     cache.set(id, m);
   }
   return m;
 }
 
 export function isMapId(v: unknown): v is MapId {
-  return v === "hameau" || v === "gare" || v === "port" || v === "col";
+  return v === "hameau" || v === "gare" || v === "port" || v === "col" || v === "ruines";
 }

@@ -45,6 +45,13 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  ruines: [
+    { name: "La base ouest, vers l'avenue", x: -43, y: 1.62, z: 1.5, yaw: yawTo(-43, 1.5, 0, 0), pitch: -0.02 },
+    { name: "L'avenue", x: -33, y: 1.62, z: -1, yaw: yawTo(-33, -1, 0, 2), pitch: 0 },
+    { name: "De l'étage de l'immeuble A", x: -26, y: 4.82, z: 10.2, yaw: yawTo(-26, 10.2, 0, -4), pitch: -0.12 },
+    { name: "Dans le grand magasin", x: -27.5, y: 1.62, z: -19, yaw: yawTo(-27.5, -19, -12, -19.5), pitch: 0 },
+    { name: "La rue nord", x: -41, y: 1.62, z: 22, yaw: yawTo(-41, 22, 0, 22), pitch: 0 },
+  ],
   col: [
     { name: "La base ouest, vers la ruine", x: -43, y: 1.7, z: 1.5, yaw: -Math.PI / 2, pitch: -0.02 },
     { name: "Devant le chalet", x: -18, y: 1.7, z: 6, yaw: Math.atan2(27 - 18, -(17.5 - 6)), pitch: 0.05 },

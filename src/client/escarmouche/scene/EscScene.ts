@@ -137,7 +137,7 @@ export class EscScene {
     const night = light === "nuit";
     setRimStrength(night ? 0.3 : light === "gris" || light === "neige" ? 0.14 : 0.1);
     // Le sol mouillé : sous la bruine de la gare, et un peu le matin au port
-    setWetness(gm.light === "gris" ? 0.9 : gm.light === "aube" ? 0.3 : 0);
+    setWetness(gm.light === "gris" ? 0.9 : gm.sea ? 0.3 : 0);
     const look = SKIES[light];
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q === "moyen", powerPreference: "high-performance" });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q === "bas" ? 1.25 : q === "moyen" ? 1.5 : 1.75);

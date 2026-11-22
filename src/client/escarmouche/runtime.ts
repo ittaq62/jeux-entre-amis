@@ -363,7 +363,7 @@ export class BattleRuntime {
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    this.sound.startAmbience(this.room.escarmouche?.settings.night ? "nuit" : this.gm.light, this.gm.light);
+    this.sound.startAmbience(this.room.escarmouche?.settings.night ? "nuit" : this.gm.light, this.gm.light, Boolean(this.gm.sea));
     const loop = () => {
       if (!this.running) return;
       this.frame();

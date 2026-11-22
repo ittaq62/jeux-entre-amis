@@ -372,21 +372,38 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
     return !covered(bx) && !solids.some((o) => o !== bx && touching(o, bx));
   };
   // Les rochers du col (des blocs de pierre trapus, posés seuls) : une vraie roche facettée, la neige sur le dessus
+  // (et les gravats de la ville en ruines : des blocs de béton éboulés, sans neige)
+  const rockMat: Mat | null = gm.light === "neige" ? "pierre" : gm.id === "ruines" ? "beton" : null;
   const rocks = new Set<Box>(
-    gm.light !== "neige"
+    !rockMat
       ? []
       : solids.filter((b) => {
           const w = b.x1 - b.x0;
           const d = b.z1 - b.z0;
           const h = b.y1 - b.y0;
-          if (b.m !== "pierre" || covered(b) || Math.min(w, d) < 0.9 || h > 2.6 || Math.max(w, d) / Math.min(w, d) > 2.4) return false;
-          return !solids.some((o) => o !== b && o.m !== "pierre" && touching(o, b));
+          const small = rockMat === "pierre" ? Math.min(w, d) >= 0.9 && h <= 2.6 : Math.min(w, d) >= 0.5 && h <= 1.5;
+          if (b.m !== rockMat || covered(b) || !small || Math.max(w, d) / Math.min(w, d) > 2.4) return false;
+          return !solids.some((o) => o !== b && o.m !== rockMat && touching(o, b));
         }),
   );
   gm.boxes.forEach((bx, i) => {
     if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse") return;
     if (rocks.has(bx)) {
-      addRock(bucket("pierre"), bucket("neige"), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.pierre ?? 3, tintOf(i), i, bx.y0 <= 0.001);
+      const snowy = gm.light === "neige";
+      addRock(
+        bucket(bx.m),
+        snowy ? bucket("neige") : null,
+        bx.x0,
+        bx.y0,
+        bx.z0,
+        bx.x1,
+        bx.y1,
+        bx.z1,
+        TILE[bx.m] ?? 3,
+        tintOf(i),
+        i,
+        bx.y0 <= 0.001,
+      );
       return;
     }
     // Les congères : de la neige amoncelée, arrondie (pas un bloc)
@@ -1013,7 +1030,69 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       }
       return;
     }
+    case "car":
+      addCar(d, ctx);
+      return;
   }
+}
+
+const carPaints = new Map<string, THREE.Material>();
+const sootGlass = new THREE.MeshStandardMaterial({ color: "#0d0e10", roughness: 0.35, metalness: 0.2 });
+/**
+ * Une voiture brûlée : la tôle rouillée (ses boîtes), et par-dessus ses roues, sa couleur qui reste sous la suie le long
+ * des flancs, ses vitres noires et crevées, ses pare-chocs. Un autobus, s'il est long.
+ */
+function addCar(d: Extract<Decor, { k: "car" }>, ctx: Ctx) {
+  const alongX = d.x1 - d.x0 >= d.z1 - d.z0;
+  const L = alongX ? d.x1 - d.x0 : d.z1 - d.z0;
+  const W = alongX ? d.z1 - d.z0 : d.x1 - d.x0;
+  const bus = L > 7;
+  const r = bus ? 0.48 : 0.34;
+  // Les roues : celles des wagons, ramenées à la taille d'une roue de voiture
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(alongX ? 1 : 0, 0, alongX ? 0 : 1), Math.PI / 2);
+  const scale = new THREE.Vector3(r / 0.44, 0.24 / 0.13, r / 0.44);
+  for (const k of bus ? [0.14, 0.78] : [0.18, 0.82])
+    for (const side of [-1, 1]) {
+      const along = (alongX ? d.x0 : d.z0) + L * k;
+      const across = (alongX ? (d.z0 + d.z1) / 2 : (d.x0 + d.x1) / 2) + side * (W / 2 + 0.02);
+      const pos = alongX ? new THREE.Vector3(along, r, across) : new THREE.Vector3(across, r, along);
+      ctx.instance("wheel", m4.compose(pos, q, scale));
+    }
+  // La couleur d'origine, en bande sur les flancs (noircie), les vitres noires, les pare-chocs
+  let paint = carPaints.get(d.color);
+  if (!paint) {
+    paint = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color).multiplyScalar(0.62), roughness: 0.75, metalness: 0.3 });
+    carPaints.set(d.color, paint);
+  }
+  const slab = (a0: number, a1: number, y0: number, y1: number, c0: number, c1: number, mat: THREE.Material) => {
+    const g = new THREE.BoxGeometry(alongX ? a1 - a0 : c1 - c0, y1 - y0, alongX ? c1 - c0 : a1 - a0);
+    const m = new THREE.Mesh(g, mat);
+    const ca = (a0 + a1) / 2;
+    const cc = (c0 + c1) / 2;
+    m.position.set(alongX ? ca : cc, (y0 + y1) / 2, alongX ? cc : ca);
+    m.castShadow = !ctx.low;
+    ctx.group.add(m);
+  };
+  const a0 = alongX ? d.x0 : d.z0;
+  const c0 = alongX ? d.z0 : d.x0;
+  const c1 = alongX ? d.z1 : d.x1;
+  for (const [p, q2] of [
+    [c0 - 0.015, c0 + 0.01],
+    [c1 - 0.01, c1 + 0.015],
+  ] as const) {
+    slab(a0 + 0.15, a0 + L - 0.15, 0.48, 0.82, p, q2, paint);
+    // Les vitres de l'habitacle (ou toute la rangée de fenêtres d'un autobus)
+    if (bus) slab(a0 + 0.4, a0 + L - 0.6, 1.0, 1.4, p, q2, sootGlass);
+    else slab(a0 + L * 0.34, a0 + L * 0.78, 1.0, 1.4, p + (p < c0 ? 0.12 : -0.12), q2 + (p < c0 ? 0.12 : -0.12), sootGlass);
+  }
+  // Le pare-brise et la lunette arrière, les pare-chocs
+  if (!bus) {
+    slab(a0 + L * 0.32 - 0.02, a0 + L * 0.32 + 0.01, 1.0, 1.4, c0 + 0.2, c1 - 0.2, sootGlass);
+    slab(a0 + L * 0.8 - 0.01, a0 + L * 0.8 + 0.02, 1.0, 1.4, c0 + 0.2, c1 - 0.2, sootGlass);
+  }
+  slab(a0 - 0.06, a0 + 0.02, 0.3, 0.5, c0 + 0.1, c1 - 0.1, sootGlass);
+  slab(a0 + L - 0.02, a0 + L + 0.06, 0.3, 0.5, c0 + 0.1, c1 - 0.1, sootGlass);
 }
 
 /**
