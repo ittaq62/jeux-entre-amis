@@ -224,3 +224,119 @@ export function mergeStatic(root: THREE.Object3D, keep: Keep) {
     root.add(mesh);
   }
 }
+
+/**
+ * Une banquette en arc face aux pistes (le siège, le dossier, des boutons de capitonnage), centrée en (0, cz), de rayon
+ * R ; renvoie les places assises, de gauche à droite.
+ */
+export function arcBench(root: THREE.Object3D, keep: Keep, mat: THREE.Material, cz: number, R = 1.55, tufts?: THREE.Material): BenchSpot[] {
+  const arcShape = (r0: number, r1: number, a0: number, a1: number) => {
+    const s = new THREE.Shape();
+    s.absarc(0, 0, r1, a0, a1, false);
+    s.absarc(0, 0, r0, a1, a0, true);
+    return s;
+  };
+  const a0 = Math.PI * 1.12,
+    a1 = Math.PI * 1.88;
+  const ext = (r0: number, r1: number, depth: number, bevel: number) =>
+    keep(
+      new THREE.ExtrudeGeometry(arcShape(r0, r1, a0, a1), {
+        depth,
+        bevelEnabled: true,
+        bevelSize: bevel,
+        bevelThickness: bevel,
+        bevelSegments: 2,
+        curveSegments: 40,
+      }),
+    );
+  for (const [g, y] of [
+    [ext(R - 0.32, R + 0.22, 0.42, 0.03), 0],
+    [ext(R + 0.22, R + 0.42, 0.95, 0.05), 0],
+  ] as const) {
+    const m = new THREE.Mesh(g, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(0, y, cz);
+    m.receiveShadow = true;
+    root.add(m);
+  }
+  if (tufts) {
+    const tuft = keep(new THREE.SphereGeometry(0.018, 8, 6));
+    for (let k = 0; k < 14; k++) {
+      const a = a0 + ((k + 0.5) / 14) * (a1 - a0);
+      for (const y of [0.62, 0.84]) {
+        const t = new THREE.Mesh(tuft, tufts);
+        t.position.set(Math.cos(a) * (R + 0.2), y, cz - Math.sin(a) * (R + 0.2));
+        root.add(t);
+      }
+    }
+  }
+  const spots: BenchSpot[] = [];
+  for (let k = 0; k < 8; k++) {
+    const a = a0 + ((k + 0.5) / 8) * (a1 - a0);
+    spots.push({ x: Math.cos(a) * R, y: 0.45, z: cz - Math.sin(a) * R, yaw: Math.atan2(-Math.cos(a), Math.sin(a)) + Math.PI });
+  }
+  return spots;
+}
+
+/** Un banc droit (bois ou pierre), face aux pistes, en (0, z) ; ses huit places */
+export function straightBench(root: THREE.Object3D, keep: Keep, mat: THREE.Material, z: number, width = 4.2, back = true): BenchSpot[] {
+  root.add(roundBlock(width, 0.08, 0.5, 0.03, mat, 0, 0.38, z, keep));
+  for (const x of [-width / 2 + 0.25, 0, width / 2 - 0.25]) root.add(block(0.12, 0.38, 0.42, mat, x, 0, z, keep));
+  if (back) root.add(roundBlock(width, 0.5, 0.08, 0.03, mat, 0, 0.5, z + 0.24, keep));
+  return Array.from({ length: 8 }, (_, k) => ({ x: -width / 2 + 0.3 + (k * (width - 0.6)) / 7, y: 0.45, z: z - 0.02, yaw: Math.PI }));
+}
+
+/** Un retour de boules entre deux pistes, avec ses boules de couleur */
+export function ballReturn(root: THREE.Object3D, keep: Keep, x: number, hood: THREE.Material, rail: THREE.Material, seed = 0) {
+  root.add(roundBlock(0.42, 0.42, 1.6, 0.12, hood, x, 0.0, 2.6, keep));
+  root.add(roundBlock(0.46, 0.05, 1.7, 0.02, rail, x, 0.42, 2.6, keep));
+  const cols = [0x1d3c8f, 0xee7a1e, 0x6b3cc9, 0x1f7a4a, 0xc8263a, 0x1fb5b0, 0xf2c12e];
+  const geo = keep(new THREE.SphereGeometry(0.1085, 24, 16));
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.Mesh(geo, phys(keep, { color: cols[(k + seed) % cols.length]!, roughness: 0.15, clearcoat: 1 }));
+    b.position.set(x + (k % 2 ? 0.11 : -0.11), 0.55, 3.15 - Math.floor(k / 2) * 0.24 + (k % 2) * 0.05);
+    root.add(b);
+  }
+}
+
+/** Un ciel : une grande sphère peinte d'un dégradé (du zénith à l'horizon, puis le sol au loin) */
+export function skyDome(keep: Keep, stops: [number, string][], radius = 180): THREE.Mesh {
+  const t = canvasTex(8, 256, (g) => {
+    const grd = g.createLinearGradient(0, 0, 0, 256);
+    for (const [k, c] of stops) grd.addColorStop(k, c);
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 8, 256);
+  });
+  const m = new THREE.Mesh(
+    keep(new THREE.SphereGeometry(radius, 32, 24)),
+    keep(new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, fog: false, depthWrite: false })),
+  );
+  m.renderOrder = -10;
+  return m;
+}
+
+/** Une guirlande de lampions entre deux points : un fil qui pend, et des boules de couleur qui luisent */
+export function lampions(a: THREE.Vector3, b: THREE.Vector3, sag: number, colors: number[], keep: Keep, n = 14): THREE.Group {
+  const g = new THREE.Group();
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 20; i++) {
+    const u = i / 20;
+    pts.push(new THREE.Vector3().lerpVectors(a, b, u).add(new THREE.Vector3(0, -sag * 4 * u * (1 - u), 0)));
+  }
+  const wire = new THREE.Mesh(
+    keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.006, 4)),
+    keep(new THREE.MeshBasicMaterial({ color: 0x222222 })),
+  );
+  g.add(wire);
+  const geo = keep(new THREE.SphereGeometry(0.09, 14, 10));
+  const mats = colors.map((c) => keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(1.9) })));
+  for (let i = 1; i < n; i++) {
+    const u = i / n;
+    const p = new THREE.Vector3().lerpVectors(a, b, u).add(new THREE.Vector3(0, -sag * 4 * u * (1 - u) - 0.1, 0));
+    const m = new THREE.Mesh(geo, mats[i % mats.length]!);
+    m.position.copy(p);
+    m.scale.set(1, 1.25, 1);
+    g.add(m);
+  }
+  return g;
+}

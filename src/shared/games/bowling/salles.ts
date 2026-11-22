@@ -22,7 +22,7 @@ export const SALLE_IDS = Object.keys(SALLES) as SalleId[];
 
 /** Les salles déjà construites (les autres arrivent) */
 export function readySalles(): SalleId[] {
-  return ["retro"];
+  return ["retro", "fluo"];
 }
 
 export function isSalle(id: unknown): id is SalleId {
