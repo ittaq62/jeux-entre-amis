@@ -8,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine" | "aerodrome";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine", "aerodrome"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine" | "aerodrome" | "carriere";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine", "aerodrome", "carriere"];
 
 export interface Spawn {
   x: number;
@@ -78,7 +78,9 @@ export type Decor =
   /** Une manche à air, rayée, au bout de son mât */
   | { k: "windsock"; x: number; z: number }
   /** Une ligne peinte au sol, en tirets, le long de x */
-  | { k: "marks"; x0: number; x1: number; z: number; color: string };
+  | { k: "marks"; x0: number; x1: number; z: number; color: string }
+  /** Un tapis roulant en pente, d'un point à un autre, sur ses pieds */
+  | { k: "conveyor"; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -150,6 +152,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     name: "L'Aérodrome",
     blurb:
       "Un terrain d'aviation sous la bruine : le hangar voûté qu'on traverse autour d'un avion, l'atelier et son camion-citerne, l'aire et sa tour de contrôle vitrée, des avions garés dans leurs alvéoles de sacs de sable.",
+  },
+  carriere: {
+    name: "La Carrière",
+    blurb:
+      "Une carrière de pierre en plein soleil : des gradins taillés où l'on monte pour tirer de haut, le fond de la fosse et son concasseur, une galerie de mine sous un massif de roche.",
   },
   port: {
     name: "Le Port",
@@ -233,6 +240,9 @@ class Builder {
         return;
       case "marks":
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
+        return;
+      case "conveyor":
+        this.decor.push({ ...d, x0: -d.x0, z0: -d.z0, x1: -d.x1, z1: -d.z1 });
         return;
       case "plane": {
         const flip = { "+x": "-x", "-x": "+x", "+z": "-z", "-z": "+z" } as const;
@@ -2148,7 +2158,173 @@ function aerodrome(): GameMap {
   };
 }
 
-const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome };
+// ---------------------------------------------------------------------------
+// La Carrière
+// ---------------------------------------------------------------------------
+
+/** Un éboulis : des blocs de roche entassés, de plus en plus petits vers le haut (dessinés en vraies roches) */
+function boulders(b: Builder, x: number, z: number, r: number, h: number, seed: number, y = 0) {
+  for (let k = 0; k < 3; k++) {
+    const rr = r * (1 - k * 0.28);
+    const dx = (ruinHash(seed, k) - 0.5) * r * 0.5;
+    const dz = (ruinHash(seed + 3, k) - 0.5) * r * 0.5;
+    b.box(x + dx - rr, y + h * k * 0.34, z + dz - rr * 0.85, x + dx + rr, y + h * (k + 1) * 0.34, z + dz + rr * 0.85, "roche");
+  }
+}
+
+/**
+ * Un escalier taillé en pente douce (marches de 20 cm au plus) : il monte de y0 à y1 le long de `axis` et finit à `end`,
+ * en montant dans le sens `dir`, entre c0 et c1 sur l'autre axe
+ */
+function gentleStairs(b: Builder, axis: "x" | "z", end: number, dir: 1 | -1, c0: number, c1: number, y0: number, y1: number, m: Mat) {
+  const n = Math.ceil((y1 - y0) / 0.2 - 1e-6);
+  const rise = (y1 - y0) / n;
+  const run = 0.32;
+  for (let i = 0; i < n; i++) {
+    const from = end - dir * (n - i) * run;
+    const lo = Math.min(from, end);
+    const hi = Math.max(from, end);
+    if (axis === "z") b.box(c0, y0, lo, c1, y0 + (i + 1) * rise, hi, m);
+    else b.box(lo, y0, c0, hi, y0 + (i + 1) * rise, c1, m);
+  }
+}
+
+function carriereSide(b: Builder) {
+  // Le front de taille, au nord et au sud : la paroi de la fosse
+  b.box(-48, 0, 29, 0, 9.5, 30, "roche");
+  b.box(-48, 0, -30, 0, 9.5, -29, "roche");
+
+  // Au nord : les gradins. Le premier à 2,4 m, le second à 4,8 m, des escaliers taillés pour y monter
+  b.box(-40, 0, 16, -8, 2.4, 29, "roche");
+  b.box(-36, 2.4, 22, -14, 4.8, 29, "roche");
+  gentleStairs(b, "z", 16, 1, -30, -27.4, 0, 2.4, "roche");
+  gentleStairs(b, "z", 16, 1, -13.6, -11, 0, 2.4, "roche");
+  gentleStairs(b, "z", 22, 1, -24, -21.4, 2.4, 4.8, "roche");
+  // Des blocs au bord des gradins, pour s'abriter en haut
+  boulders(b, -34, 16.9, 0.8, 0.9, 21, 2.4);
+  boulders(b, -18.5, 16.9, 0.7, 0.8, 23, 2.4);
+  boulders(b, -30.4, 22.8, 0.7, 0.8, 25, 4.8);
+  boulders(b, -17, 22.8, 0.7, 0.8, 27, 4.8);
+
+  // La base : la cabane du chantier, un mur de blocs taillés (trois passages), des caisses
+  for (const [z0, z1] of [
+    [-12, -7.2],
+    [-2.6, 2.6],
+    [7.2, 12],
+  ] as const)
+    b.box(-39.2, 0, z0, -38.4, 1.9, z1, "roche");
+  b.box(-48, 0, 11.4, -39.2, 1.9, 12.2, "roche");
+  b.box(-48, 0, -12.2, -39.2, 1.9, -11.4, "roche");
+  b.box(-48, 0, -11.4, -47.4, 1.9, 11.4, "roche");
+  flatHouse(b, -46.6, 7.4, -42.6, 10.8, {
+    open: [
+      { side: "s", at: -45.4, w: 1.4, kind: "door" },
+      { side: "e", at: 8.6, w: 1.1, kind: "win" },
+    ],
+    wall: "crepi2",
+  });
+  b.crate(-46.2, -10.2);
+  b.crate(-45, -10.2);
+
+  // Au sud : le massif de roche et sa galerie, qu'on traverse à couvert ; des étais de bois, les rails, un wagonnet ;
+  // un escalier taillé pour monter sur le massif
+  b.box(-34, 0, -26, -16, 4.5, -21.5, "roche");
+  b.box(-34, 0, -18.5, -16, 4.5, -14, "roche");
+  b.box(-34, 3, -21.5, -16, 4.5, -18.5, "roche");
+  for (const x of [-33.6, -28, -22.4, -16.4]) {
+    b.box(x - 0.15, 0, -21.5, x + 0.15, 3, -21.2, "bois");
+    b.box(x - 0.15, 0, -18.8, x + 0.15, 3, -18.5, "bois");
+    b.box(x - 0.15, 2.8, -21.2, x + 0.15, 3, -18.8, "bois");
+  }
+  b.add({ k: "rail", x0: -36, x1: -14, z: -20 });
+  car(b, -38, -23.6, -36, -22.2, "#6a4a32");
+  gentleStairs(b, "x", -34, 1, -16.6, -14.6, 0, 4.5, "roche");
+  boulders(b, -26, -16.2, 0.6, 0.8, 29, 4.5);
+
+  // Le fond de la fosse : le concasseur et sa plate-forme (un escalier), son tapis roulant, des tas, un camion-benne,
+  // des blocs taillés
+  for (const [x, z] of [
+    [-9, 5],
+    [-5, 5],
+    [-9, 9],
+    [-5, 9],
+  ] as const)
+    b.box(x - 0.15, 0, z - 0.15, x + 0.15, 3, z + 0.15, "metal");
+  b.box(-9.2, 3, 4.8, -4.8, 3.2, 9.2, "metal");
+  b.box(-8.4, 3.2, 6.2, -6, 5, 8.6, "metal");
+  gentleStairs(b, "z", 4.9, 1, -7, -5.6, 0, 3.2, "metal");
+  b.add({ k: "conveyor", x0: -3.4, y0: 0.6, z0: 13, x1: -7.2, y1: 5.1, z1: 8.2 });
+  boulders(b, -3, 13.4, 1.4, 1.6, 31);
+  car(b, -31.6, 3.2, -24.4, 5.8, "#c9a227");
+  boulders(b, -21, -6.4, 1, 1.2, 33);
+  boulders(b, -34, -7.6, 0.8, 0.9, 35);
+  b.box(-15, 0, -1.6, -13.6, 1.3, -0.2, "roche");
+  b.box(-16.4, 0, 3.4, -15.2, 1.1, 4.8, "roche");
+  b.barrel(-11.6, -9.6);
+  b.barrel(-36, 13);
+  b.add({ k: "patch", x0: -40, z0: -12, x1: -8, z1: 12, m: "sable" });
+}
+
+function carriere(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "gravier");
+  fence(b, -48, -30, 48, 30);
+  // Au milieu : un gros bloc à demi taillé, d'où l'on surveille la fosse à couvert
+  b.box(-1.2, 0, 2.6, 1.2, 1.2, 3.8, "roche");
+  b.box(-1.2, 0, -3.8, 1.2, 1.2, -2.6, "roche");
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    carriereSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-44, 5, 0, 5),
+      b.spawn(-46, -7.4, 0, -7.4),
+      b.spawn(-41, -9, 0, -9),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-26, 19, 0, 19, 2.4),
+      b.spawn(-29, -20, 0, -20),
+      b.spawn(-28, -8, 0, 0),
+      b.spawn(-20, 26, 0, 26, 4.8),
+      b.spawn(-6, -6, 0, 0),
+    );
+    ffa.push(b.spawn(-12, 11, 0, 11));
+  }
+  b.s = 1;
+  return {
+    id: "carriere",
+    ...MAP_NAMES.carriere,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 26, y: 0, z: 9 },
+      { x: 20, y: 0, z: 20 },
+    ],
+    points: [
+      { x: -18, y: 2.4, z: 19 },
+      { x: 0, y: 0, z: 0 },
+      { x: 18, y: 2.4, z: -19 },
+    ],
+    light: "midi",
+  };
+}
+
+const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome, carriere };
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */

@@ -45,6 +45,13 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  carriere: [
+    { name: "La base, vers la fosse", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
+    { name: "Du haut des gradins", x: -30, y: 6.42, z: 24, yaw: yawTo(-30, 24, 0, 0), pitch: -0.16 },
+    { name: "Le fond de la fosse", x: -20, y: 1.62, z: 9, yaw: yawTo(-20, 9, 0, 4), pitch: 0.06 },
+    { name: "Dans la galerie", x: -37, y: 1.62, z: -20, yaw: yawTo(-37, -20, -14, -20), pitch: 0 },
+    { name: "Sur le massif", x: -32, y: 6.12, z: -16, yaw: yawTo(-32, -16, 0, 0), pitch: -0.12 },
+  ],
   aerodrome: [
     { name: "La base, vers l'aire", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
     { name: "Dans le hangar", x: -35, y: 1.62, z: 15.2, yaw: yawTo(-35, 15.2, -24, 21), pitch: 0.08 },

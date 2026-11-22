@@ -382,7 +382,7 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   };
   // Les rochers du col (des blocs de pierre trapus, posés seuls) : une vraie roche facettée, la neige sur le dessus
   // (et les gravats de la ville en ruines : des blocs de béton éboulés, sans neige)
-  const rockMat: Mat | null = gm.light === "neige" ? "pierre" : gm.id === "ruines" ? "beton" : null;
+  const rockMat: Mat | null = gm.light === "neige" ? "pierre" : gm.id === "ruines" ? "beton" : gm.id === "carriere" ? "roche" : null;
   const rocks = new Set<Box>(
     !rockMat
       ? []
@@ -390,7 +390,8 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
           const w = b.x1 - b.x0;
           const d = b.z1 - b.z0;
           const h = b.y1 - b.y0;
-          const small = rockMat === "pierre" ? Math.min(w, d) >= 0.9 && h <= 2.6 : Math.min(w, d) >= 0.5 && h <= 1.5;
+          const small =
+            rockMat === "pierre" ? Math.min(w, d) >= 0.9 && h <= 2.6 : Math.min(w, d) >= 0.5 && h <= (rockMat === "roche" ? 1.8 : 1.5);
           if (b.m !== rockMat || covered(b) || !small || Math.max(w, d) / Math.min(w, d) > 2.4) return false;
           return !solids.some((o) => o !== b && o.m !== rockMat && touching(o, b));
         }),
@@ -1035,6 +1036,47 @@ function groundMarks(d: Extract<Decor, { k: "marks" }>, group: THREE.Group) {
   group.add(m);
 }
 
+/** Un tapis roulant : la bande sombre entre deux longerons, des rouleaux dessous, des pieds jusqu'au sol */
+function conveyor(d: Extract<Decor, { k: "conveyor" }>, group: THREE.Group) {
+  const a = new THREE.Vector3(d.x0, d.y0, d.z0);
+  const b = new THREE.Vector3(d.x1, d.y1, d.z1);
+  const len = a.distanceTo(b);
+  const g = new THREE.Group();
+  const belt = new THREE.MeshStandardMaterial({ color: "#2b2a28", roughness: 0.9 });
+  const frame = new THREE.MeshStandardMaterial({ color: "#c9902c", roughness: 0.6, metalness: 0.4 });
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    g.add(m);
+  };
+  add(new THREE.BoxGeometry(0.8, 0.06, len), belt, 0, 0, 0);
+  for (const x of [-0.46, 0.46]) add(new THREE.BoxGeometry(0.1, 0.22, len), frame, x, -0.06, 0);
+  for (let k = -len / 2 + 0.4; k < len / 2; k += 0.8) {
+    const r = new THREE.CylinderGeometry(0.05, 0.05, 0.86, 6);
+    r.rotateZ(Math.PI / 2);
+    add(r, frame, 0, -0.08, k);
+  }
+  g.position.copy(a).add(b).multiplyScalar(0.5);
+  g.lookAt(b);
+  group.add(g);
+  // Les pieds : du dessous de la bande jusqu'au sol, tous les 2,5 m
+  const legs = Math.max(1, Math.floor(len / 2.5));
+  for (let k = 1; k <= legs; k++) {
+    const p = a.clone().lerp(b, k / (legs + 1));
+    for (const side of [-0.42, 0.42]) {
+      const dir = b.clone().sub(a).setY(0).normalize();
+      const off = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(side);
+      const h = p.y - 0.12;
+      if (h < 0.2) continue;
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.08), frame);
+      leg.position.set(p.x + off.x, h / 2, p.z + off.z);
+      leg.castShadow = true;
+      group.add(leg);
+    }
+  }
+}
+
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
 const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe2a8" });
 const water = new THREE.MeshLambertMaterial({ color: "#3f5f6a", transparent: true, opacity: 0.82, emissive: "#0d1a1f" });
@@ -1400,6 +1442,9 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "marks":
       groundMarks(d, group);
+      return;
+    case "conveyor":
+      conveyor(d, group);
       return;
     case "awning":
       awning(d, group);
