@@ -45,6 +45,13 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  vignoble: [
+    { name: "La base, vers l'allée", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
+    { name: "Les rangs de vigne", x: -38, y: 1.62, z: 21.3, yaw: yawTo(-38, 21.3, -8, 20), pitch: -0.04 },
+    { name: "La cour du château", x: -8.4, y: 1.62, z: -6, yaw: yawTo(-8.4, -6, 4, 4), pitch: 0.05 },
+    { name: "De l'étage du château", x: -0.6, y: 4.82, z: 8.7, yaw: yawTo(-0.6, 8.7, 0, -4), pitch: -0.2 },
+    { name: "Dans le chai", x: -35, y: 1.62, z: -23.1, yaw: yawTo(-35, -23.1, -18, -23.1), pitch: 0 },
+  ],
   carriere: [
     { name: "La base, vers la fosse", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
     { name: "Du haut des gradins", x: -30, y: 6.42, z: 24, yaw: yawTo(-30, 24, 0, 0), pitch: -0.16 },

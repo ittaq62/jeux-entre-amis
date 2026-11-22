@@ -8,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine" | "aerodrome" | "carriere";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine", "aerodrome", "carriere"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine" | "aerodrome" | "carriere" | "vignoble";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine", "aerodrome", "carriere", "vignoble"];
 
 export interface Spawn {
   x: number;
@@ -80,7 +80,13 @@ export type Decor =
   /** Une ligne peinte au sol, en tirets, le long de x */
   | { k: "marks"; x0: number; x1: number; z: number; color: string }
   /** Un tapis roulant en pente, d'un point à un autre, sur ses pieds */
-  | { k: "conveyor"; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number };
+  | { k: "conveyor"; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }
+  /** Un rang de vigne le long de x : ses piquets, ses fils, son feuillage et ses grappes */
+  | { k: "vines"; x0: number; x1: number; z: number }
+  /** Des tonneaux couchés sur leur chantier, le long de x, le fond tourné vers ±z */
+  | { k: "casks"; x0: number; x1: number; z: number }
+  /** Une charrette, dans le sens de sa boîte la plus longue ; ses brancards du côté `front` (+1 : vers x1 ou z1) */
+  | { k: "cart"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -157,6 +163,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     name: "La Carrière",
     blurb:
       "Une carrière de pierre en plein soleil : des gradins taillés où l'on monte pour tirer de haut, le fond de la fosse et son concasseur, une galerie de mine sous un massif de roche.",
+  },
+  vignoble: {
+    name: "Le Vignoble",
+    blurb:
+      "Un domaine viticole au petit matin : la cour du château entre ses deux ailes à étage, l'allée de platanes, les rangs de vigne et la cabane du vigneron, le chai qu'on traverse entre les tonneaux.",
   },
   port: {
     name: "Le Port",
@@ -239,7 +250,12 @@ class Builder {
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
         return;
       case "marks":
+      case "vines":
+      case "casks":
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
+        return;
+      case "cart":
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), front: d.front === 1 ? -1 : 1 });
         return;
       case "conveyor":
         this.decor.push({ ...d, x0: -d.x0, z0: -d.z0, x1: -d.x1, z1: -d.z1 });
@@ -2324,7 +2340,238 @@ function carriere(): GameMap {
   };
 }
 
-const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome, carriere };
+// ---------------------------------------------------------------------------
+// Le Vignoble
+// ---------------------------------------------------------------------------
+
+/**
+ * Un rang de vigne le long de x, coupé de passages (`gaps` : où l'on traverse) : à hauteur de hanche, il arrête les pas
+ * et les balles ; les piquets, les fils, le feuillage et les grappes sont du décor
+ */
+function vineRow(b: Builder, x0: number, x1: number, z: number, gaps: [number, number][]) {
+  const cuts = [x0, ...gaps.flat(), x1];
+  for (let k = 0; k + 1 < cuts.length; k += 2) {
+    const a = cuts[k]!;
+    const c = cuts[k + 1]!;
+    if (c - a < 0.5) continue;
+    b.box(a, 0, z - 0.22, c, 1.15, z + 0.22, "decor");
+    b.add({ k: "vines", x0: a, x1: c, z });
+  }
+}
+
+/** Des tonneaux couchés sur leur chantier : ils arrêtent les pas et les balles jusqu'à la hanche */
+function caskRack(b: Builder, x0: number, x1: number, z: number) {
+  b.box(x0, 0, z - 0.6, x1, 1.08, z + 0.6, "decor");
+  b.add({ k: "casks", x0, x1, z });
+}
+
+/** Une charrette : on s'abrite derrière ; les brancards (côté `front`) ne sont que du décor */
+function farmCart(b: Builder, x0: number, z0: number, x1: number, z1: number, front: 1 | -1) {
+  b.box(x0, 0, z0, x1, 1.15, z1, "decor");
+  b.add({ k: "cart", x0, z0, x1, z1, front });
+}
+
+function vignobleSide(b: Builder) {
+  // La base : un mur de pierres sèches (trois passages), une charrette, des bottes de paille
+  for (const [z0, z1] of [
+    [-12, -7.2],
+    [-2.6, 2.6],
+    [7.2, 12],
+  ] as const)
+    b.box(-39.2, 0, z0, -38.5, 1.9, z1, "pierre");
+  b.box(-48, 0, 11.4, -39.2, 1.9, 12.1, "pierre");
+  b.box(-48, 0, -12.1, -39.2, 1.9, -11.4, "pierre");
+  b.box(-48, 0, -11.4, -47.4, 1.9, 11.4, "pierre");
+  farmCart(b, -46.6, 8.4, -44, 10, 1);
+  b.box(-46.8, 0, -10.6, -45.6, 1.2, -9.4, "foin");
+  b.box(-45.6, 0, -10.6, -44.4, 1.2, -9.4, "foin");
+
+  // L'aile nord du château (de l'autre côté, l'aile sud) : deux niveaux de pierre, des fenêtres sur la cour et sur les
+  // vignes ; le mur de la cour et son portail
+  b.house(-10, 8, 10, 14.5, {
+    floors: 2,
+    open: [
+      { side: "s", at: -3, w: 1.4, kind: "door" },
+      { side: "s", at: 4, w: 1.4, kind: "door" },
+      { side: "s", at: -7.6, w: 1.2, kind: "win" },
+      { side: "s", at: 7, w: 1.2, kind: "win" },
+      { side: "s", at: -8, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: -4.4, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: -0.6, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: 3, w: 1.2, kind: "win", floor: 1 },
+      { side: "s", at: 6.6, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: 0, w: 1.4, kind: "door" },
+      { side: "n", at: -4, w: 1.2, kind: "win" },
+      { side: "n", at: 5, w: 1.2, kind: "win" },
+      { side: "n", at: -7, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: -2, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: 3, w: 1.2, kind: "win", floor: 1 },
+      { side: "n", at: 7.4, w: 1.2, kind: "win", floor: 1 },
+      { side: "w", at: 10, w: 1.2, kind: "win" },
+      { side: "w", at: 9.4, w: 1.2, kind: "win", floor: 1 },
+      { side: "e", at: 10.6, w: 1.2, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -9.6, dir: 1, c0: 12.7, c1: 14.1 },
+    wall: "pierre",
+    roof: "tuile",
+    roofAxis: "x",
+  });
+  b.box(-10, 0, -8, -9.6, 3.2, -2, "pierre");
+  b.box(-10, 0, 2, -9.6, 3.2, 8, "pierre");
+  b.box(-10.1, 3.2, -8, -9.5, 3.45, 8, "tuile");
+  b.tree(-5, 4.2, 7.2, 2.6);
+  b.sandbags(-6.4, -5.6, -4, -5);
+
+  // L'allée de platanes, de la base au portail : une charrette, des caisses de vendange
+  for (const x of [-34, -26, -18]) {
+    b.tree(x, 6.6, 8.5, 2.8);
+    b.tree(x + 4, -6.6, 8.5, 2.8);
+  }
+  farmCart(b, -31.4, 1.4, -29, 2.8, -1);
+  b.crate(-23, -2.6, 0.9, 0.7);
+  b.crate(-22.1, -2.6, 0.9, 0.7);
+  b.crate(-22.55, -2.6, 0.9, 0.7, 0.7);
+  b.barrel(-12.4, -3.4);
+  b.barrel(-36, 14);
+  b.barrel(-16, -15);
+
+  // Au nord : les rangs de vigne (des passages en quinconce), la cabane du vigneron, un chemin de terre
+  const rows: [number, [number, number][]][] = [
+    [
+      17.4,
+      [
+        [-31.2, -29.6],
+        [-20.8, -19.2],
+      ],
+    ],
+    [
+      20,
+      [
+        [-36, -34.4],
+        [-25.6, -24],
+        [-15.2, -13.6],
+      ],
+    ],
+    [
+      22.6,
+      [
+        [-31.2, -29.6],
+        [-20.8, -19.2],
+      ],
+    ],
+    [
+      25.2,
+      [
+        [-36, -34.4],
+        [-25.6, -24],
+        [-15.2, -13.6],
+      ],
+    ],
+  ];
+  for (const [z, gaps] of rows) vineRow(b, -38, -8, z, gaps);
+  b.house(-46, 16, -41, 21, {
+    floors: 1,
+    open: [
+      { side: "e", at: 17.8, w: 1.4, kind: "door" },
+      { side: "s", at: -44.4, w: 1.1, kind: "win" },
+    ],
+    wall: "pierre",
+    roof: "tuile",
+    roofAxis: "z",
+    height: 3,
+  });
+  b.add({ k: "patch", x0: -40, z0: 14.6, x1: -6, z1: 16.2, m: "terre" });
+  b.add({ k: "patch", x0: -38, z0: 16.4, x1: -8, z1: 26.6, m: "herbe" });
+
+  // Au sud : le chai, une longue grange qu'on traverse d'un bout à l'autre entre les tonneaux
+  b.house(-36, -27, -18, -18.5, {
+    floors: 1,
+    height: 4.6,
+    open: [
+      { side: "w", at: -24.6, w: 3, kind: "big" },
+      { side: "e", at: -24.6, w: 3, kind: "big" },
+      { side: "n", at: -30, w: 1.4, kind: "door" },
+      { side: "n", at: -23, w: 1.4, kind: "door" },
+      { side: "n", at: -33.6, w: 1.1, kind: "win" },
+      { side: "n", at: -26.6, w: 1.1, kind: "win" },
+      { side: "s", at: -27.4, w: 1.1, kind: "win" },
+    ],
+    wall: "crepi",
+    roof: "tuile",
+    roofAxis: "x",
+  });
+  for (const x of [-34, -30.4, -26.8, -23.2]) caskRack(b, x, x + 2.4, -26);
+  for (const x of [-35.4, -27.8, -20.6]) caskRack(b, x, x + 2.2, -19.5);
+  b.box(-21, 0, -22.6, -19.8, 1.6, -21.4, "bois");
+  b.crate(-32, -22.4);
+  b.add({ k: "lamp", x: -14, z: -16, h: 4.4 });
+  b.add({ k: "patch", x0: -36, z0: -17.8, x1: -12, z1: -15.6, m: "terre" });
+}
+
+function vignoble(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "terre");
+  fence(b, -48, -30, 48, 30);
+  // La cour du château : le puits au milieu, une margelle qu'on enjambe
+  b.box(-1.4, 0, 1.1, 1.1, 0.4, 1.4, "pierre");
+  b.box(-1.1, 0, -1.4, 1.4, 0.4, -1.1, "pierre");
+  b.box(1.1, 0, -1.1, 1.4, 0.4, 1.4, "pierre");
+  b.box(-1.4, 0, -1.4, -1.1, 0.4, 1.1, "pierre");
+  b.add({ k: "water", x0: -1.1, z0: -1.1, x1: 1.1, z1: 1.1, y: 0.1 });
+  b.add({ k: "patch", x0: -9.6, z0: -8, x1: 9.6, z1: 8, m: "pave" });
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    vignobleSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-43, 5.4, 0, 5.4),
+      b.spawn(-46, -7, 0, -7),
+      b.spawn(-41, -9, 0, -9),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-26, 23.9, 0, 23.9),
+      b.spawn(-28.5, -22.4, 0, -22.4),
+      b.spawn(-30, -3, 0, 0),
+      b.spawn(-4, 11, 0, 11),
+      b.spawn(-6, -3, 0, 0),
+    );
+    ffa.push(b.spawn(-20, 15.4, 0, 15.4));
+  }
+  b.s = 1;
+  return {
+    id: "vignoble",
+    ...MAP_NAMES.vignoble,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 24, y: 0, z: -21.3 },
+      { x: 28, y: 0, z: 3 },
+    ],
+    points: [
+      { x: -27, y: 0, z: 21.3 },
+      { x: 0, y: 0, z: 0 },
+      { x: 27, y: 0, z: -21.3 },
+    ],
+    light: "aube",
+  };
+}
+
+const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome, carriere, vignoble };
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */

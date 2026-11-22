@@ -1077,6 +1077,279 @@ function conveyor(d: Extract<Decor, { k: "conveyor" }>, group: THREE.Group) {
   }
 }
 
+/** Range une pièce teintée (couleur par sommet, sans uv ni normales : elles sont refaites après la fusion) */
+function pushTinted(parts: THREE.BufferGeometry[], g: THREE.BufferGeometry, c: THREE.Color, shade?: (i: number) => number) {
+  const src = g.index ? g.toNonIndexed() : g;
+  if (src !== g) g.dispose();
+  const n = src.attributes.position!.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const k = shade ? shade(i) : 1;
+    col[i * 3] = c.r * k;
+    col[i * 3 + 1] = c.g * k;
+    col[i * 3 + 2] = c.b * k;
+  }
+  src.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  if (src.attributes.uv) src.deleteAttribute("uv");
+  if (src.attributes.normal) src.deleteAttribute("normal");
+  parts.push(src);
+}
+
+/** Fond les pièces teintées en un maillage */
+function mergeTinted(parts: THREE.BufferGeometry[], mat: THREE.Material, group: THREE.Group, shadow: boolean) {
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  if (!merged) return;
+  merged.computeVertexNormals();
+  const m = new THREE.Mesh(merged, mat);
+  m.castShadow = shadow;
+  m.receiveShadow = true;
+  group.add(m);
+}
+
+const tintedMats = new Map<string, THREE.Material>();
+/** Le bois, le fer et la toile des objets du décor : leur couleur est dans les sommets */
+function tintedMaterial(q: Quality): THREE.Material {
+  let m = tintedMats.get(q);
+  if (!m) {
+    m =
+      q === "bas"
+        ? new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })
+        : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, flatShading: true });
+    tintedMats.set(q, m);
+  }
+  return m;
+}
+
+/**
+ * Un rang de vigne : les ceps tordus au pied, des piquets et trois fils, une haie de feuillage serrée (deux étages de
+ * touffes cabossées, plus sombres dessous) et des grappes qui pendent sous les feuilles, des deux côtés
+ */
+function vines(d: Extract<Decor, { k: "vines" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  let seed = Math.abs(Math.round(d.x0 * 31 + d.z * 17)) + 7;
+  const r = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const bark = new THREE.Color("#4a3626");
+  for (let x = d.x0 + 0.35; x < d.x1 - 0.2; x += 1) {
+    const h = 0.42 + r() * 0.08;
+    const g = new THREE.CylinderGeometry(0.035, 0.06, h, 5);
+    g.translate(0, h / 2, 0);
+    g.rotateZ((r() - 0.5) * 0.5);
+    g.rotateX((r() - 0.5) * 0.3);
+    g.translate(x, 0, d.z);
+    pushTinted(parts, g, bark);
+  }
+  const wood = new THREE.Color("#6b5137");
+  for (let x = d.x0 + 0.1; x <= d.x1 - 0.05; x += 2.4) {
+    const p = new THREE.BoxGeometry(0.06, 1.38, 0.06);
+    p.translate(x, 0.69, d.z);
+    pushTinted(parts, p, wood);
+  }
+  const wire = new THREE.Color("#55554f");
+  for (const y of [0.5, 0.95, 1.3]) {
+    const w = new THREE.BoxGeometry(d.x1 - d.x0, 0.012, 0.012);
+    w.translate((d.x0 + d.x1) / 2, y, d.z);
+    pushTinted(parts, w, wire);
+  }
+  const greens = ["#4f6e2a", "#5a7a2e", "#46632a", "#68843a", "#3f5a22"].map((c) => new THREE.Color(c));
+  const grape = new THREE.Color("#33203c");
+  const detail = q === "haut" ? 1 : 0;
+  const step = low ? 0.75 : 0.42;
+  for (const [y0, sy] of low
+    ? ([[0.95, 0.42]] as const)
+    : ([
+        [0.74, 0.27],
+        [1.14, 0.25],
+      ] as const)) {
+    for (let x = d.x0 + 0.25; x < d.x1 - 0.15; x += step * (0.85 + r() * 0.3)) {
+      const g = new THREE.IcosahedronGeometry(1, detail);
+      const pos = g.attributes.position as THREE.BufferAttribute;
+      const k = r() * 10;
+      for (let i = 0; i < pos.count; i++) {
+        const j = 0.84 + Math.sin(pos.getX(i) * 6.3 + k) * 0.09 + Math.cos(pos.getZ(i) * 5.1 + k) * 0.09;
+        pos.setXYZ(i, pos.getX(i) * j, pos.getY(i) * j, pos.getZ(i) * j);
+      }
+      const sx = 0.32 + r() * 0.1;
+      const syy = sy + r() * 0.06;
+      g.scale(sx, syy, 0.24 + r() * 0.05);
+      const y = y0 + (r() - 0.5) * 0.08;
+      g.translate(x + (r() - 0.5) * 0.12, y, d.z + (r() - 0.5) * 0.08);
+      const gp = g.attributes.position as THREE.BufferAttribute;
+      const ys = Array.from({ length: gp.count }, (_, i) => gp.getY(i));
+      pushTinted(
+        parts,
+        g,
+        greens[Math.floor(r() * greens.length)]!,
+        (i) => 0.7 + Math.max(0, Math.min(1, (ys[i]! - (y - syy)) / (syy * 2))) * 0.42,
+      );
+      if (!low && r() < 0.5) {
+        const side = r() < 0.5 ? -1 : 1;
+        const c = new THREE.ConeGeometry(0.07, 0.2, 6);
+        c.rotateX(Math.PI);
+        c.translate(x + (r() - 0.5) * 0.3, 0.42 + r() * 0.06, d.z + side * (0.17 + r() * 0.04));
+        pushTinted(parts, c, grape);
+      }
+    }
+  }
+  mergeTinted(parts, leafMaterial(q), group, !low);
+}
+
+/**
+ * Des tonneaux couchés sur leur chantier (deux poutres), le fond tourné vers l'allée : des douelles plus ou moins
+ * foncées, quatre cercles de fer, le fond plus sombre
+ */
+function casks(d: Extract<Decor, { k: "casks" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const beam = new THREE.Color("#4a3828");
+  for (const side of [-0.3, 0.3]) {
+    const g = new THREE.BoxGeometry(d.x1 - d.x0, 0.16, 0.14);
+    g.translate((d.x0 + d.x1) / 2, 0.08, d.z + side);
+    pushTinted(parts, g, beam);
+  }
+  const n = Math.max(1, Math.floor((d.x1 - d.x0) / 0.98));
+  const gap = (d.x1 - d.x0) / n;
+  const L = 1.08;
+  const prof: THREE.Vector2[] = [];
+  for (let k = 0; k <= 8; k++) {
+    const t = k / 8;
+    prof.push(new THREE.Vector2(0.36 + Math.sin(t * Math.PI) * 0.08, -L / 2 + t * L));
+  }
+  const seg = low ? 10 : 16;
+  const iron = new THREE.Color("#2c2926");
+  for (let i = 0; i < n; i++) {
+    const x = d.x0 + gap * (i + 0.5);
+    const y = 0.16 + 0.44;
+    const wood = new THREE.Color().setHSL(0.07 + ((i * 7) % 5) * 0.006, 0.45, 0.25 + ((i * 3) % 4) * 0.02);
+    const body = new THREE.LatheGeometry(prof, seg);
+    body.rotateX(Math.PI / 2);
+    body.translate(x, y, d.z);
+    // Une douelle sur deux un peu plus foncée
+    const bp = body.index ? body.toNonIndexed() : body;
+    const pp = bp.attributes.position as THREE.BufferAttribute;
+    const shades: number[] = [];
+    for (let v = 0; v < pp.count; v += 3) {
+      const cx = (pp.getX(v) + pp.getX(v + 1) + pp.getX(v + 2)) / 3 - x;
+      const cy = (pp.getY(v) + pp.getY(v + 1) + pp.getY(v + 2)) / 3 - y;
+      const stave = Math.floor(((Math.atan2(cy, cx) + Math.PI) / (Math.PI * 2)) * seg);
+      const k = stave % 2 === 0 ? 1 : 0.86;
+      shades.push(k, k, k);
+    }
+    pushTinted(parts, bp, wood, (v) => shades[v]!);
+    if (bp !== body) body.dispose();
+    for (const t of [-0.44, -0.2, 0.2, 0.44]) {
+      const rr = 0.36 + Math.sin((t / L + 0.5) * Math.PI) * 0.08 + 0.012;
+      const h = new THREE.CylinderGeometry(rr, rr, 0.05, seg, 1, true);
+      h.rotateX(Math.PI / 2);
+      h.translate(x, y, d.z + t);
+      pushTinted(parts, h, iron);
+    }
+    for (const e of [-1, 1]) {
+      const c = new THREE.CircleGeometry(0.355, seg);
+      if (e < 0) c.rotateY(Math.PI);
+      c.translate(x, y, d.z + (e * L) / 2 - e * 0.02);
+      pushTinted(parts, c, wood, () => 0.7);
+    }
+  }
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
+/**
+ * Une charrette : un plateau de planches et ses ridelles, deux grandes roues à rayons sur leur essieu, les brancards
+ * posés au sol à l'avant ; quelques caisses de vendange dessus
+ */
+function farmCart(d: Extract<Decor, { k: "cart" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const alongX = d.x1 - d.x0 >= d.z1 - d.z0;
+  const L = alongX ? d.x1 - d.x0 : d.z1 - d.z0;
+  const W = alongX ? d.z1 - d.z0 : d.x1 - d.x0;
+  const cx = (d.x0 + d.x1) / 2;
+  const cz = (d.z0 + d.z1) / 2;
+  // Tout est construit le long de x autour de l'origine, puis tourné et posé
+  const place = (g: THREE.BufferGeometry) => {
+    if (!alongX) g.rotateY(-Math.PI / 2);
+    g.translate(cx, 0, cz);
+    return g;
+  };
+  const plank = new THREE.Color("#7a5a3a");
+  const dark = new THREE.Color("#4e3a28");
+  const iron = new THREE.Color("#2c2926");
+  const w = W - 0.3;
+  const bedL = L - 0.1;
+  const bedY = 0.74;
+  const bed = new THREE.BoxGeometry(bedL, 0.08, w);
+  bed.translate(0, bedY, 0);
+  pushTinted(parts, place(bed), plank);
+  for (const s of [-1, 1]) {
+    const side = new THREE.BoxGeometry(bedL, 0.3, 0.05);
+    side.translate(0, bedY + 0.19, (s * (w - 0.05)) / 2);
+    pushTinted(parts, place(side), plank, () => 0.92);
+    for (let k = 0; k < 4; k++) {
+      const post = new THREE.BoxGeometry(0.06, 0.42, 0.07);
+      post.translate(-bedL / 2 + 0.05 + (k * (bedL - 0.1)) / 3, bedY + 0.16, (s * (w + 0.02)) / 2);
+      pushTinted(parts, place(post), dark);
+    }
+  }
+  const back = new THREE.BoxGeometry(0.05, 0.3, w);
+  back.translate((-d.front * (bedL - 0.05)) / 2, bedY + 0.19, 0);
+  pushTinted(parts, place(back), plank, () => 0.92);
+  // L'essieu et les roues, au milieu
+  const R = Math.min(0.62, bedY + 0.02);
+  const axle = new THREE.CylinderGeometry(0.05, 0.05, w + 0.5, 6);
+  axle.rotateX(Math.PI / 2);
+  axle.translate(0, R, 0);
+  pushTinted(parts, place(axle), dark);
+  for (const s of [-1, 1]) {
+    const z = s * (w / 2 + 0.16);
+    const rim = new THREE.TorusGeometry(R - 0.05, 0.05, low ? 4 : 6, low ? 12 : 20);
+    rim.translate(0, R, z);
+    pushTinted(parts, place(rim), dark);
+    const hub = new THREE.CylinderGeometry(0.1, 0.1, 0.18, 8);
+    hub.rotateX(Math.PI / 2);
+    hub.translate(0, R, z);
+    pushTinted(parts, place(hub), iron);
+    const spokes = low ? 6 : 10;
+    for (let k = 0; k < spokes; k++) {
+      const sp = new THREE.BoxGeometry(0.04, R - 0.1, 0.04);
+      sp.translate(0, (R - 0.1) / 2, 0);
+      sp.rotateZ((k / spokes) * Math.PI * 2);
+      sp.translate(0, R, z);
+      pushTinted(parts, place(sp), plank, () => 0.8);
+    }
+  }
+  // Les brancards : de l'avant du plateau jusqu'au sol
+  for (const s of [-1, 1]) {
+    const len = 1.9;
+    const sh = new THREE.BoxGeometry(len, 0.07, 0.07);
+    const drop = bedY - 0.06;
+    sh.rotateZ(-Math.atan2(drop, len) * d.front);
+    sh.translate(d.front * (bedL / 2 + len / 2 - 0.15), bedY / 2 + 0.03, (s * (w - 0.2)) / 2);
+    pushTinted(parts, place(sh), dark);
+  }
+  // Des caisses de vendange sur le plateau, des grappes dedans
+  if (!low) {
+    const grape = new THREE.Color("#3a2242");
+    for (const [ox, oz] of [
+      [-0.35, -0.22],
+      [-0.35, 0.24],
+      [0.3, 0.05],
+    ] as const) {
+      const c = new THREE.BoxGeometry(0.55, 0.28, 0.4);
+      c.translate(ox * (bedL / 2), bedY + 0.18, oz * (w / 2) * 1.2);
+      pushTinted(parts, place(c), plank, () => 1.08);
+      const g = new THREE.BoxGeometry(0.5, 0.05, 0.35);
+      g.translate(ox * (bedL / 2), bedY + 0.32, oz * (w / 2) * 1.2);
+      pushTinted(parts, place(g), grape);
+    }
+  }
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
 const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe2a8" });
 const water = new THREE.MeshLambertMaterial({ color: "#3f5f6a", transparent: true, opacity: 0.82, emissive: "#0d1a1f" });
@@ -1445,6 +1718,15 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "conveyor":
       conveyor(d, group);
+      return;
+    case "vines":
+      vines(d, group, q);
+      return;
+    case "casks":
+      casks(d, group, q);
+      return;
+    case "cart":
+      farmCart(d, group, q);
       return;
     case "awning":
       awning(d, group);
