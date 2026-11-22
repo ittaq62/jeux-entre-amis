@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RACK } from "../../../../shared/games/bowling/lane.ts";
-import { lookKey } from "../../../lib/sameLook.ts";
+import { colorless, lookKey, paintVertices } from "../../../lib/sameLook.ts";
 import { PIN_COM } from "../../../../shared/games/bowling/physics.ts";
 import type { LaneStyle } from "../laneMesh.ts";
 import { pinGeometry, pinMaterial } from "../pins.ts";
@@ -188,7 +188,10 @@ export function glowSign(text: string, color: string, font: string, height: numb
  */
 export function mergeStatic(root: THREE.Object3D, keep: Keep) {
   root.updateMatrixWorld(true);
-  const groups = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; receive: boolean; reflect: boolean }>();
+  const groups = new Map<
+    string,
+    { mat: THREE.Material; geos: THREE.BufferGeometry[]; colors: (THREE.Color | null)[]; receive: boolean; reflect: boolean }
+  >();
   const remove: THREE.Mesh[] = [];
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   root.traverse((o) => {
@@ -205,14 +208,23 @@ export function mergeStatic(root: THREE.Object3D, keep: Keep) {
     if (!g.getAttribute("uv"))
       g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute("position").count * 2), 2));
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
-    const entry = groups.get(key) ?? { mat, geos: [], receive: false, reflect };
+    const entry = groups.get(key) ?? { mat, geos: [], colors: [], receive: false, reflect };
     entry.geos.push(g);
+    entry.colors.push((mat as THREE.MeshStandardMaterial).color ?? null);
     entry.receive ||= o.receiveShadow;
     groups.set(key, entry);
     remove.push(o);
   });
   for (const m of remove) m.parent?.remove(m);
-  for (const { mat, geos, receive, reflect } of groups.values()) {
+  for (const entry of groups.values()) {
+    const { geos, colors, receive, reflect } = entry;
+    let mat = entry.mat;
+    // Des matières qui ne diffèrent que par leur couleur : la couleur de chacune passe dans ses sommets
+    const first = colors[0];
+    if (first && colors.some((c) => c && !c.equals(first))) {
+      geos.forEach((g, i) => paintVertices(g, colors[i] ?? first));
+      mat = keep(colorless(mat as THREE.MeshStandardMaterial));
+    }
     const merged = geos.length === 1 ? geos[0]! : mergeGeometries(geos, false);
     if (!merged) continue;
     if (geos.length > 1) for (const g of geos) g.dispose();
