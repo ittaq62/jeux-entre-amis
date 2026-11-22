@@ -59,9 +59,16 @@ const MACRO: Partial<Record<Mat, number>> = {
 };
 
 /** Ajoute à une matière ses taches à grande échelle, d'après la position dans le monde (le même endroit, la même tache) */
+/** Le sol mouillé (de 0, sec, à 1, sous la bruine) : partagé par toutes les matières, réglé par la scène selon le temps */
+const WET = { value: 0 };
+export function setWetness(k: number) {
+  WET.value = k;
+}
+
 function macroVariation(mat: THREE.MeshStandardMaterial, strength: number) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.macroK = { value: strength };
+    shader.uniforms.wetK = WET;
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -79,6 +86,7 @@ vMacro = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
         `#include <common>
 varying vec3 vMacro;
 uniform float macroK;
+uniform float wetK;
 float macroHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float macroNoise(vec2 p) {
   vec2 i = floor(p);
@@ -96,6 +104,18 @@ float macroNoise(vec2 p) {
   float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
   diffuseColor.rgb *= 1.0 + (mn - 0.5) * 2.0 * macroK;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum), (0.5 - mn) * macroK * 0.6);
+}`,
+      )
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+// Mouillé : ce qui regarde le ciel s'assombrit et brille, plus encore par plaques (là où l'eau s'attarde)
+if (wetK > 0.0) {
+  float wetUp = smoothstep(0.55, 0.92, (vec4(normal, 0.0) * viewMatrix).y);
+  float pool = smoothstep(0.38, 0.68, macroNoise(vMacro.xz * 0.11 + 11.0));
+  float w = wetUp * wetK * (0.5 + 0.5 * pool);
+  roughnessFactor = mix(roughnessFactor, 0.14, w);
+  diffuseColor.rgb *= 1.0 - 0.3 * w;
 }`,
       );
   };

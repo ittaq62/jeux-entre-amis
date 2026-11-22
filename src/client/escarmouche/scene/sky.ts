@@ -104,8 +104,9 @@ export const SKIES: Record<Light, SkyLook> = {
     cloudLit: "#d9dcdd",
     cloudShade: "#6f7780",
     fog: "#a9b0b4",
-    fogNear: 28,
-    fogFar: 190,
+    // La bruine voile le lointain un peu plus tôt
+    fogNear: 20,
+    fogFar: 160,
   },
 };
 

@@ -10,7 +10,7 @@ import type { GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
 import { Effects, flashTexture } from "./effects.ts";
 import { buildGrenade, buildGun, buildKnife, NO_GEAR, type Gear, type Gun } from "./guns.ts";
-import { buildCrates, buildMap, type MapMesh } from "./mapMesh.ts";
+import { buildCrates, buildMap, setWetness, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
 import { DEPOT_NAMES, POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
@@ -136,6 +136,8 @@ export class EscScene {
     const light: Light = opts.night ? "nuit" : gm.light;
     const night = light === "nuit";
     setRimStrength(night ? 0.3 : light === "gris" || light === "neige" ? 0.14 : 0.1);
+    // Le sol mouillé : sous la bruine de la gare, et un peu le matin au port
+    setWetness(gm.light === "gris" ? 0.9 : gm.light === "aube" ? 0.3 : 0);
     const look = SKIES[light];
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q === "moyen", powerPreference: "high-performance" });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q === "bas" ? 1.25 : q === "moyen" ? 1.5 : 1.75);
@@ -229,9 +231,11 @@ export class EscScene {
       this.snow = new Snow(q === "haut" ? 1800 : q === "moyen" ? 900 : 300);
       this.scene.add(this.snow.points);
     }
-    if (gm.light === "gris" && q !== "bas") {
-      this.rain = new Rain(q === "haut" ? 1500 : 700);
-      this.scene.add(this.rain.lines);
+    // La bruine de la gare : des gouttes clairsemées, des éclaboussures et des gouttières (au téléphone, peu de gouttes
+    // et rien d'autre)
+    if (gm.light === "gris") {
+      this.rain = new Rain(q === "haut" ? 700 : q === "moyen" ? 420 : 160, worldOf(gm.id), q !== "bas");
+      this.scene.add(this.rain.group);
     }
     this.effects = new Effects(this.low);
     this.scene.add(this.effects.group);
