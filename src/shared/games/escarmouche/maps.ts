@@ -582,6 +582,29 @@ class Builder {
     this.box(x - 0.3, 0, z - 0.3, x + 0.3, 0.95, z + 0.3, "bidon");
   }
 
+  /** Un lampadaire : son poteau arrête les pas et les balles */
+  lamp(x: number, z: number, h: number) {
+    this.box(x - 0.1, 0, z - 0.1, x + 0.1, h, z + 0.1, "decor");
+    this.add({ k: "lamp", x, z, h });
+  }
+
+  /** La manche à air, sur son mât */
+  windsock(x: number, z: number) {
+    this.box(x - 0.08, 0, z - 0.08, x + 0.08, 5, z + 0.08, "decor");
+    this.add({ k: "windsock", x, z });
+  }
+
+  /** Des barbelés tendus d'un poteau à l'autre : on ne passe pas au travers (on fait le tour, ou on saute par-dessus) */
+  wire(x0: number, z0: number, x1: number, z1: number) {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.35));
+    for (let k = 0; k <= n; k++) {
+      const x = x0 + ((x1 - x0) * k) / n;
+      const z = z0 + ((z1 - z0) * k) / n;
+      this.box(x - 0.16, 0, z - 0.16, x + 0.16, 0.95, z + 0.16, "decor");
+    }
+    this.add({ k: "wire", x0, z0, x1, z1 });
+  }
+
   /** Un sapin : son tronc arrête les balles, ses branches ne sont que du décor */
   pine(x: number, z: number, h = 8, r = 2.2) {
     this.box(x - 0.25, 0, z - 0.25, x + 0.25, h * 0.6, z + 0.25, "bois");
@@ -589,7 +612,8 @@ class Builder {
   }
 
   tree(x: number, z: number, h = 7, r = 2.6) {
-    this.box(x - 0.25, 0, z - 0.25, x + 0.25, h * 0.55, z + 0.25, "bois");
+    // Le tronc dessiné fait de 0,3 à 0,42 m de rayon : sa boîte le suit, on ne s'enfonce pas dans l'écorce
+    this.box(x - 0.34, 0, z - 0.34, x + 0.34, h * 0.55, z + 0.34, "bois");
     this.add({ k: "tree", x, z, h, r });
   }
 }
@@ -712,15 +736,15 @@ function hameauSide(b: Builder) {
   b.box(-22.5, 0, -20.8, -20.6, 2.1, -18.8, "decor");
   b.add({ k: "truck", x0: -28, z0: -21, x1: -20.6, z1: -18.6, front: 1, color: "#5b6247" });
   b.sandbags(-18, -18.8, -15.6, -18.2);
-  b.add({ k: "wire", x0: -12, z0: -19.6, x1: -9, z1: -19 });
+  b.wire(-12, -19.6, -9, -19);
 
   // La place : le monument (de l'autre côté, une fontaine), un arbre, une fontaine devant la halle
   b.box(-5, 0, 14, -3, 2.6, 16, "pierre");
   b.tree(-9, 18, 8, 3);
   b.box(-11, 0, -1.3, -8.6, 0.8, 1.3, "pierre");
   b.add({ k: "water", x0: -10.8, z0: -1.1, x1: -8.8, z1: 1.1, y: 0.62 });
-  b.add({ k: "lamp", x: -7, z: 10, h: 4.2 });
-  b.add({ k: "lamp", x: -12, z: -16, h: 4.2 });
+  b.lamp(-7, 10, 4.2);
+  b.lamp(-12, -16, 4.2);
   b.add({ k: "patch", x0: -12, z0: 10, x1: -6, z1: 22, m: "terre" });
 }
 
@@ -867,7 +891,7 @@ function gareSide(b: Builder) {
   b.add({ k: "tower", x: -42, z: -24, y: 7, r: 2.2, h: 3.2 });
   b.sandbags(-12, -9.4, -9, -8.8);
   b.sandbags(-11, 8.8, -8, 9.4);
-  b.add({ k: "wire", x0: -36, z0: 1.6, x1: -32, z1: 2.2 });
+  b.wire(-36, 1.6, -32, 2.2);
   b.crate(-34, -1.5, 1.3, 1.3);
   b.crate(-9, 15.6, 1.2, 1.2);
   b.crate(-9, 22.4, 1.2, 2.2);
@@ -892,8 +916,8 @@ function gareSide(b: Builder) {
     [24, -50, -30],
   ] as const)
     b.add({ k: "rail", x0, x1, z });
-  b.add({ k: "lamp", x: -38, z: -3.5, h: 6 });
-  b.add({ k: "lamp", x: -14, z: 9.5, h: 6 });
+  b.lamp(-38, -3.5, 6);
+  b.lamp(-14, 9.5, 6);
   b.add({ k: "patch", x0: -50, z0: -16, x1: -42, z1: 16, m: "beton" });
 }
 
@@ -1043,8 +1067,8 @@ function portSide(b: Builder) {
   b.sandbags(-12, 2.4, -9.6, 3);
   b.crate(-24, 12.6);
   b.crate(-16, 1.4, 1.3, 1.3);
-  b.add({ k: "lamp", x: -34, z: 0.6, h: 8 });
-  b.add({ k: "lamp", x: -12, z: 8.4, h: 8 });
+  b.lamp(-34, 0.6, 8);
+  b.lamp(-12, 8.4, 8);
 }
 
 function port(): GameMap {
@@ -1128,7 +1152,7 @@ function colSide(b: Builder) {
   b.crate(-45.4, 9.7, 1.2, 2.4);
   b.sandbags(-37.6, -3.5, -37, 3.5);
   b.box(-36.4, 0, 6.5, -33.4, 0.9, 7.6, "neige");
-  b.add({ k: "lamp", x: -38.5, z: -7, h: 5 });
+  b.lamp(-38.5, -7, 5);
 
   // Le chalet : deux niveaux de rondins, l'escalier le long du mur nord, des fenêtres sur la vallée
   b.house(-31, 14, -23, 21, {
@@ -1205,7 +1229,7 @@ function colSide(b: Builder) {
   b.barrel(-13.5, -14.6);
   b.barrel(-34, 10);
   b.crate(-16, 4.6);
-  b.add({ k: "lamp", x: -14, z: 9.6, h: 5 });
+  b.lamp(-14, 9.6, 5);
 }
 
 function col(): GameMap {
@@ -1467,7 +1491,7 @@ function ruinesSide(b: Builder) {
   b.crate(-45.4, -12.6);
   b.crate(-44.2, -12.6);
   b.crate(-45.4, -12.6, 1.2, 1.2, 1.2);
-  b.add({ k: "lamp", x: -40, z: -12, h: 4.5 });
+  b.lamp(-40, -12, 4.5);
 
   // L'immeuble A, entre la rue nord et l'avenue : deux niveaux éventrés, un escalier, des fenêtres sur les deux rues
   ruin(b, -32, 9, -20, 18, {
@@ -1512,7 +1536,7 @@ function ruinesSide(b: Builder) {
   b.crate(-15.8, 22.8);
   b.crate(-16.4, 22.8, 1.2, 1.2, 1.2);
   car(b, -12.4, 19.4, -8.2, 21.2, "#33533e");
-  b.add({ k: "lamp", x: -21, z: 24.4, h: 4.6 });
+  b.lamp(-21, 24.4, 4.6);
 
   // L'avenue : des voitures en travers, un trou d'obus et ses gravats, un bloc de béton
   car(b, -35, 2.4, -30.8, 4.2, "#8a7a5a");
@@ -1523,7 +1547,7 @@ function ruinesSide(b: Builder) {
   b.box(-13, 0, 3, -12.4, 1.05, 6.4, "beton");
   // Un tramway renversé en travers de l'avenue : on passe devant ou derrière
   tramWreck(b, -21.4, -1.2, -19.6, 6.4, "#9a7d2e");
-  b.add({ k: "lamp", x: -24, z: 6.6, h: 4.6 });
+  b.lamp(-24, 6.6, 4.6);
 
   // Le long de l'avenue, côté sud : un kiosque éventré, un abribus, un poste de sacs de sable
   ruin(b, -37, -11.5, -33.5, -8, {
@@ -1590,7 +1614,7 @@ function ruinesSide(b: Builder) {
   b.barrel(-14.5, 8.2);
   b.barrel(-31.5, -10);
   b.barrel(-6, 12);
-  b.add({ k: "lamp", x: -10, z: -11.5, h: 4.6 });
+  b.lamp(-10, -11.5, 4.6);
   b.add({ k: "patch", x0: -38, z0: -26, x1: -30, z1: -24, m: "gravier" });
   b.add({ k: "patch", x0: -46, z0: -6, x1: -40, z1: 6, m: "gravier" });
 }
@@ -2077,7 +2101,7 @@ function usineSide(b: Builder) {
   // La cheminée : un pied de brique, et sa colonne qui fume
   b.box(-21.2, 0, -15.2, -18.8, 4, -12.8, "brique");
   b.add({ k: "chimney", x: -20, z: -14, r: 1, h: 26 });
-  b.add({ k: "lamp", x: -24, z: -9, h: 5 });
+  b.lamp(-24, -9, 5);
   b.add({ k: "patch", x0: -38, z0: -18, x1: -12, z1: -10, m: "gravier" });
   b.add({ k: "patch", x0: -38, z0: 13, x1: -12, z1: 25, m: "gravier" });
 }
@@ -2190,8 +2214,8 @@ function aerodromeSide(b: Builder) {
   car(b, -46.4, 7.6, -43.6, 9.2, "#4b5a3a");
   b.crate(-46.4, -9.8);
   b.crate(-45.2, -9.8);
-  b.add({ k: "windsock", x: -44, z: -6.4 });
-  b.add({ k: "lamp", x: -40, z: 11, h: 5 });
+  b.windsock(-44, -6.4);
+  b.lamp(-40, 11, 5);
 
   // Au nord : le hangar, qu'on traverse autour d'un avion ; l'atelier et son camion-citerne
   hangar(b, -36, 14, -24, 28, 7.5);
@@ -2250,7 +2274,7 @@ function aerodromeSide(b: Builder) {
   b.add({ k: "marks", x0: -42, x1: -6, z: -15, color: "#d9b52e" });
   b.crate(-12.4, -22.6);
   b.crate(-12.4, -21.4);
-  b.add({ k: "windsock", x: -10, z: -27 });
+  b.windsock(-10, -27);
   b.add({ k: "patch", x0: -48, z0: -30, x1: -40, z1: -13, m: "herbe" });
   b.add({ k: "patch", x0: -12, z0: 12, x1: -1, z1: 28, m: "herbe" });
 }
@@ -2344,6 +2368,71 @@ function gentleStairs(b: Builder, axis: "x" | "z", end: number, dir: 1 | -1, c0:
   }
 }
 
+/**
+ * Un tapis roulant en pente : son bas, à hauteur d'homme, arrête les pas (des tronçons trop hauts l'un sur l'autre pour
+ * qu'on y monte comme un escalier) ; plus haut, on passe dessous, entre ses pieds, qui arrêtent les pas eux aussi
+ */
+function conveyorAt(b: Builder, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) {
+  const flat = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(1, Math.ceil(flat / 0.7));
+  for (let k = 0; k < n; k++) {
+    const t0 = k / n;
+    const t1 = (k + 1) / n;
+    if (y0 + (y1 - y0) * t0 > 1.9) break;
+    const ax = x0 + (x1 - x0) * t0;
+    const az = z0 + (z1 - z0) * t0;
+    const bx = x0 + (x1 - x0) * t1;
+    const bz = z0 + (z1 - z0) * t1;
+    const top = y0 + (y1 - y0) * t1 + 0.05;
+    b.box(Math.min(ax, bx) - 0.3, 0, Math.min(az, bz) - 0.3, Math.max(ax, bx) + 0.3, top, Math.max(az, bz) + 0.3, "decor");
+  }
+  for (const [x, h, z] of conveyorLegs(x0, y0, z0, x1, y1, z1)) b.box(x - 0.06, 0, z - 0.06, x + 0.06, h, z + 0.06, "decor");
+  b.add({ k: "conveyor", x0, y0, z0, x1, y1, z1 });
+}
+
+/** Les pieds d'un tapis roulant (là où le dessin les pose) : x, hauteur, z */
+export function conveyorLegs(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): [number, number, number][] {
+  const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+  const flat = Math.hypot(x1 - x0, z1 - z0) || 1;
+  const dx = (x1 - x0) / flat;
+  const dz = (z1 - z0) / flat;
+  const legs = Math.max(1, Math.floor(len / 2.5));
+  const out: [number, number, number][] = [];
+  for (let k = 1; k <= legs; k++) {
+    const t = k / (legs + 1);
+    const px = x0 + (x1 - x0) * t;
+    const py = y0 + (y1 - y0) * t;
+    const pz = z0 + (z1 - z0) * t;
+    const h = py - 0.12;
+    if (h < 0.2) continue;
+    for (const side of [-0.42, 0.42]) out.push([px - dz * side, h, pz + dx * side]);
+  }
+  return out;
+}
+
+/** Un escalier d'acier : les marches de gentleStairs, et ses rampes au bord des marches, qui arrêtent les pas */
+function steelStairsAt(b: Builder, axis: "x" | "z", end: number, dir: 1 | -1, c0: number, c1: number, y0: number, y1: number) {
+  gentleStairs(b, axis, end, dir, c0, c1, y0, y1, "decor");
+  const n = Math.ceil((y1 - y0) / 0.2 - 1e-6);
+  const rise = (y1 - y0) / n;
+  const run = 0.32;
+  for (let i = 0; i < n; i++) {
+    const a = end - dir * (n - i) * run;
+    const c = end - dir * (n - i - 1) * run;
+    const lo = Math.min(a, c);
+    const hi = Math.max(a, c);
+    const top = y0 + (i + 1) * rise;
+    for (const [w0, w1] of [
+      [c0, c0 + 0.06],
+      [c1 - 0.06, c1],
+    ] as const) {
+      if (axis === "z") b.box(w0, top, lo, w1, top + 1, hi, "decor");
+      else b.box(lo, top, w0, hi, top + 1, w1, "decor");
+    }
+  }
+  b.add({ k: "steelstairs", axis, end, dir, c0, c1, y0, y1 });
+}
+
 function carriereSide(b: Builder) {
   // Le front de taille, au nord et au sud : la paroi de la fosse
   b.box(-48, 0, 29, 0, 9.5, 30, "roche");
@@ -2409,9 +2498,12 @@ function carriereSide(b: Builder) {
   b.box(-9.2, 3, 4.8, -4.8, 3.2, 9.2, "decor");
   b.box(-8.4, 3.2, 6.2, -6, 5, 8.6, "decor");
   b.add({ k: "crusher", x0: -9.2, z0: 4.8, x1: -4.8, z1: 9.2, y: 3.2, hx0: -8.4, hz0: 6.2, hx1: -6, hz1: 8.6, top: 5, open: -1 });
-  gentleStairs(b, "z", 4.9, 1, -7, -5.6, 0, 3.2, "decor");
-  b.add({ k: "steelstairs", axis: "z", end: 4.9, dir: 1, c0: -7, c1: -5.6, y0: 0, y1: 3.2 });
-  b.add({ k: "conveyor", x0: -3.4, y0: 0.6, z0: 13, x1: -7.2, y1: 5.1, z1: 8.2 });
+  // Le garde-corps de la plate-forme, sur les trois côtés où l'escalier n'arrive pas
+  b.box(-9.2, 3.2, 4.8, -9.12, 4.25, 9.2, "decor");
+  b.box(-4.88, 3.2, 4.8, -4.8, 4.25, 9.2, "decor");
+  b.box(-9.12, 3.2, 9.12, -4.88, 4.25, 9.2, "decor");
+  steelStairsAt(b, "z", 4.9, 1, -7, -5.6, 0, 3.2);
+  conveyorAt(b, -3.4, 0.6, 13, -7.2, 5.1, 8.2);
   boulders(b, -3, 13.4, 1.4, 1.6, 31);
   b.box(-31.6, 0, 3.2, -26.4, 1.96, 5.8, "decor");
   b.box(-26.4, 0, 3.4, -24.4, 2.1, 5.6, "decor");
@@ -2636,7 +2728,7 @@ function vignobleSide(b: Builder) {
   for (const x of [-35.4, -27.8, -20.6]) caskRack(b, x, x + 2.2, -19.5);
   b.box(-21, 0, -22.6, -19.8, 1.6, -21.4, "bois");
   b.crate(-32, -22.4);
-  b.add({ k: "lamp", x: -14, z: -16, h: 4.4 });
+  b.lamp(-14, -16, 4.4);
   b.add({ k: "patch", x0: -36, z0: -17.8, x1: -12, z1: -15.6, m: "terre" });
 }
 
@@ -2705,6 +2797,105 @@ function vignoble(): GameMap {
 
 const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome, carriere, vignoble };
 const cache = new Map<MapId, GameMap>();
+
+/**
+ * Là où un objet dessiné est plein à hauteur d'homme, là où l'on buterait dedans : chacun de ces points doit tomber
+ * dans une boîte qui arrête les pas, sinon on passe à travers ce qu'on voit. (Les maisons, les murs, les conteneurs, les
+ * wagons sont faits de leurs boîtes ; les toits, les sols peints, les rails ne se traversent pas à pied.)
+ */
+export function decorSolids(d: Decor): [number, number, number][] {
+  const mid = (a: number, b: number) => (a + b) / 2;
+  switch (d.k) {
+    case "tree":
+      return [
+        [d.x, 1, d.z],
+        [d.x + 0.3, 1, d.z],
+        [d.x - 0.3, 1, d.z],
+        [d.x, 1, d.z + 0.3],
+        [d.x, 1, d.z - 0.3],
+      ];
+    case "pine":
+    case "palm":
+    case "lamp":
+    case "windsock":
+    case "tower":
+    case "chimney":
+      return [[d.x, 1, d.z]];
+    case "tun":
+      return [[d.x, 0.5, d.z]];
+    case "wire":
+      return [
+        [d.x0, 0.5, d.z0],
+        [d.x1, 0.5, d.z1],
+      ];
+    case "car":
+    case "tram":
+    case "forklift":
+    case "minecart":
+    case "truck":
+    case "cart":
+    case "stall":
+    case "baggage":
+    case "saw":
+    case "logs":
+    case "twall":
+    case "shelter":
+      return [[mid(d.x0, d.x1), 0.3, mid(d.z0, d.z1)]];
+    case "casks":
+    case "vines":
+      return [[mid(d.x0, d.x1), 0.5, d.z]];
+    case "tankcar":
+      return [[mid(d.x0, d.x1), 1.5, d.z]];
+    case "tank":
+      return d.y + 0.2 - d.r < 1.8 ? [[mid(d.x0, d.x1), d.y + 0.2, d.z]] : [];
+    case "plane": {
+      const alongX = d.dir === "+x" || d.dir === "-x";
+      const s = d.dir === "+x" || d.dir === "+z" ? 1 : -1;
+      const at = (a: number, c: number, y: number): [number, number, number] => (alongX ? [d.x + a, y, d.z + c] : [d.x + c, y, d.z + a]);
+      return [at(0, 0, 1.2), at(s * 0.6, d.span * 0.45, 1.2), at(s * 0.6, -d.span * 0.45, 1.2)];
+    }
+    case "hangar":
+      return [
+        [mid(d.x0, d.x1), 1, d.z0 + 0.2],
+        [mid(d.x0, d.x1), 1, d.z1 - 0.2],
+      ];
+    case "conveyor": {
+      // Le tapis, partout où il passe à hauteur d'homme
+      const out: [number, number, number][] = [];
+      for (let k = 1; k < 10; k++) {
+        const t = k / 10;
+        const y = d.y0 + (d.y1 - d.y0) * t;
+        if (y > 0.25 && y < 1.7) out.push([d.x0 + (d.x1 - d.x0) * t, y - 0.05, d.z0 + (d.z1 - d.z0) * t]);
+      }
+      for (const [x, h, z] of conveyorLegs(d.x0, d.y0, d.z0, d.x1, d.y1, d.z1)) out.push([x, Math.min(1, h / 2), z]);
+      return out;
+    }
+    case "crusher": {
+      const out: [number, number, number][] = [
+        [d.x0 + 0.2, 1, d.z0 + 0.2],
+        [d.x1 - 0.2, 1, d.z1 - 0.2],
+        [mid(d.hx0, d.hx1), d.top - 0.6, mid(d.hz0, d.hz1)],
+      ];
+      // Le garde-corps : les deux côtés et le fond (l'escalier arrive par le côté `open`)
+      const y = d.y + 0.6;
+      out.push([d.x0 + 0.04, y, mid(d.z0, d.z1)], [d.x1 - 0.04, y, mid(d.z0, d.z1)]);
+      out.push([mid(d.x0, d.x1), y, d.open < 0 ? d.z1 - 0.04 : d.z0 + 0.04]);
+      return out;
+    }
+    case "steelstairs": {
+      // Les rampes, au bord des marches, à mi-hauteur au-dessus de la marche du milieu
+      const n = Math.ceil((d.y1 - d.y0) / 0.2 - 1e-6);
+      const run = 0.32;
+      const i = Math.floor(n / 2);
+      const u = (i + 0.5) * run;
+      const a = d.end - d.dir * (n * run - u);
+      const y = d.y0 + ((i + 1) * (d.y1 - d.y0)) / n + 0.5;
+      return [d.c0 + 0.03, d.c1 - 0.03].map((w) => (d.axis === "z" ? [w, y, a] : [a, y, w]) as [number, number, number]);
+    }
+    default:
+      return [];
+  }
+}
 
 /** Une carte, construite une fois pour toutes */
 export function getMap(id: MapId): GameMap {

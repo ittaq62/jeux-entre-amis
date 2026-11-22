@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { botCommand, buildNav, findPath, nearestNode, newBotMemory } from "./bot.ts";
-import { getMap, MAP_IDS, yawToward, type MapId } from "./maps.ts";
+import { decorSolids, getMap, MAP_IDS, yawToward, type MapId } from "./maps.ts";
 import {
   applyCmd,
   chooseNext,
@@ -1476,4 +1476,19 @@ describe("Escarmouche : les repères", () => {
     for (let k = 0; k < Math.round((PING.time + 0.1) / DT); k++) worldStep(m, ev);
     expect(m.pings).toHaveLength(0);
   });
+});
+
+describe("Escarmouche : ce qu'on voit, on ne le traverse pas", () => {
+  for (const id of MAP_IDS) {
+    it(`${id} : chaque objet dessiné plein à hauteur d'homme a sa boîte`, () => {
+      const gm = getMap(id);
+      const world = worldOf(id);
+      const holes: string[] = [];
+      for (const d of gm.decor)
+        for (const [x, y, z] of decorSolids(d))
+          if (!world.overlaps(x - 0.02, y - 0.02, z - 0.02, x + 0.02, y + 0.02, z + 0.02))
+            holes.push(`${d.k} en (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+      expect(holes).toEqual([]);
+    });
+  }
 });

@@ -1986,7 +1986,7 @@ function steelStairs(d: Extract<Decor, { k: "steelstairs" }>, group: THREE.Group
   if (q !== "bas") {
     const tmp: THREE.BufferGeometry[] = [];
     const p = (u: number, y: number, w: number) => (d.axis === "z" ? new THREE.Vector3(w, y, at(u)) : new THREE.Vector3(at(u), y, w));
-    for (const w of [d.c0 - 0.03, d.c1 + 0.03]) {
+    for (const w of [d.c0 + 0.03, d.c1 - 0.03]) {
       strut(tmp, p(0.1, d.y0 + rise + 0.95, w), p(N - 0.1, d.y1 + 0.95, w), 0.025, yellow);
       for (let i = 0; i < n; i += 4) {
         const u = i * run + 0.16;
