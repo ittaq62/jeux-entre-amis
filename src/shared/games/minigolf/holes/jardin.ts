@@ -212,14 +212,19 @@ function sails(hub: Pt, y: number): Part[] {
   return parts;
 }
 
-// 7. Le moulin de l'orangerie : passer sous les ailes, par la porte du moulin, puis redescendre vers le trou
+// 7. Le moulin de l'orangerie : l'allée descend d'une terrasse jusqu'au moulin ; passer sous les ailes, par la porte
+// du moulin, puis redescendre vers le trou, au fond de l'arrondi
 const moulin = hole(
   "Le moulin",
   3,
   (b) => {
-    b.tile(box(-0.8, -7, 0.8, 0), 0, "green", { look: "buis" });
+    // L'allée part d'une petite terrasse et descend en douceur vers la porte du moulin
+    b.tile(box(-0.8, -7, 0.8, 0), ramp([0, -0.85], [0, -5.6], 0.18, 0, "s"), "green", { look: "buis" });
     b.tile(box(-0.25, -8.6, 0.25, -7), 0, "stone", { look: "porte" });
-    b.tile(box(-1.4, -12, 1.4, -8.6), ramp([0, -8.6], [0, -9.7], 0, -0.25, "s"), "green", { look: "buis" });
+    // En bas, l'arrivée arrondie, qui descend encore un peu
+    b.tile([[-1.4, -8.6], [1.4, -8.6], ...arc(0, -10.6, 1.4, 0, -Math.PI, 18)], ramp([0, -8.6], [0, -9.7], 0, -0.25, "s"), "green", {
+      look: "buis",
+    });
     b.mover({ motion: { k: "wheel", c: [0, 1.05, -6.9], axis: [0, 1], w: 1.15 }, parts: sails([0, -6.9], 1.05), look: "moulin" });
     b.deco("moulin", 0, -7);
     b.tee(0, -0.45, UP).cup(0.55, -11.2);
