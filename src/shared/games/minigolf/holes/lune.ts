@@ -4,7 +4,7 @@
 
 import { hole, radial, ramp, wave, type HoleBuilder } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, lanePath, type Pt } from "../geom.ts";
+import { arc, box, circle, lanePath, roundRect, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -64,10 +64,10 @@ const tremplin = hole(
   "Le tremplin",
   3,
   (b) => {
-    b.tile(box(-0.9, -4, 0.9, 0), 0, "metal", { look: "grille" });
+    b.tile(roundRect(-0.9, -4, 0.9, 0, 0.5, 0), 0, "metal", { look: "grille" });
     b.tile(box(-0.9, -5.2, 0.9, -4), ramp([0, -4], [0, -5.2], 0, 0.35, "in"), "metal", { look: "tremplin" });
     b.tile(box(0.9, -8.6, 1.4, -1.0), 0, "metal", { look: "passerelle", noRail: true });
-    b.tile(box(-1.8, -14, 1.8, -8.6), 0, "moon", { look: "regolithe" });
+    b.tile(roundRect(-1.8, -14, 1.8, -8.6, 0, 0.8), 0, "moon", { look: "regolithe" });
     b.open(box(-1.0, -5.4, 0.92, -5.0));
     b.open(box(-1.9, -8.8, 0.88, -8.4));
     b.link([0, -5.0], [0, -9.6]);
@@ -183,9 +183,9 @@ const pasDeTir = hole(
   "Le pas de tir",
   3,
   (b) => {
-    b.tile(box(-0.9, -5, 0.9, 0), 0, "metal", { look: "grille" });
+    b.tile(roundRect(-0.9, -5, 0.9, 0, 0.5, 0), 0, "metal", { look: "grille" });
     b.tile(box(0.9, -6.6, 1.6, -0.6), ramp([0, -0.6], [0, -6.6], 0, 0.8), "metal", { look: "grille" });
-    b.tile(box(-1.6, -12.6, 1.6, -6.6), 0.8, "metal", { look: "pas-de-tir" });
+    b.tile(roundRect(-1.6, -12.6, 1.6, -6.6, 0, 1.1), 0.8, "metal", { look: "pas-de-tir" });
     b.pad([0, -4.2], 0.25, 3.3, { push: [0, -1.0], look: "propulseur" });
     b.open(box(-1.7, -6.7, 0.88, -6.5));
     b.link([0, -4.2], [0, -7.6]);

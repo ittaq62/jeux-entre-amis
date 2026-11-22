@@ -224,6 +224,28 @@ export function lanePath(ctrl: readonly Pt[], w: number, keys: readonly (readonl
   return { ring, h, line, total, hAt, at };
 }
 
+/**
+ * Un rectangle aux coins arrondis, de x0 à x1 et de z0 (le bas, loin du départ) à z1 (le haut) : rayon `rt` aux deux
+ * coins du haut, `rb` aux deux du bas (0 : un coin vif ; la demi-largeur : un bout en demi-cercle)
+ */
+export function roundRect(x0: number, z0: number, x1: number, z1: number, rt: number, rb: number): Pt[] {
+  const out: Pt[] = [];
+  const corner = (cx: number, cz: number, r: number, a0: number, a1: number, px: number, pz: number) => {
+    if (r <= 1e-6) out.push([px, pz]);
+    else out.push(...arc(cx, cz, r, a0, a1, Math.max(4, Math.ceil(r * 14))));
+  };
+  corner(x0 + rt, z1 - rt, rt, Math.PI, Math.PI / 2, x0, z1);
+  corner(x1 - rt, z1 - rt, rt, Math.PI / 2, 0, x1, z1);
+  corner(x1 - rb, z0 + rb, rb, 0, -Math.PI / 2, x1, z0);
+  corner(x0 + rb, z0 + rb, rb, -Math.PI / 2, -Math.PI, x0, z0);
+  // Sans points doublés (deux arcs qui se touchent, le dernier point sur le premier)
+  const clean = out.filter((p, i) => {
+    const q = out[(i + out.length - 1) % out.length]!;
+    return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-6;
+  });
+  return clean;
+}
+
 /** Les points d'un bord (voir `wavyEdge`) entre x = a et x = b */
 export function edgeSpan(edge: readonly Pt[], a: number, b: number): Pt[] {
   return edge.filter((p) => p[0] >= a - 1e-6 && p[0] <= b + 1e-6).map((p) => [p[0], p[1]] as Pt);

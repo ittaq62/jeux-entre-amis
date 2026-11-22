@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, ellipse, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, lanePath, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -25,12 +25,30 @@ function laneIntoEllipse(c: Pt, rx: number, rz: number, hw: number, top: number,
   return pts;
 }
 
-// 1. Le chalet : tout droit, une plaque de glace au milieu et un bonhomme de neige à contourner
+// 1. Le chalet : du perron du départ, l'allée descend et ondule entre les congères ; une plaque de glace au milieu,
+// un bonhomme de neige à contourner, le trou au fond de l'arrondi
 const chalet = hole(
   "Le chalet",
   2,
   (b) => {
-    const g = b.tile(box(-0.9, -9, 0.9, 0), 0, "green", { look: "rondin" });
+    const lane = lanePath(
+      [
+        [0, 0],
+        [0, -0.8],
+        [0, -2.2],
+        [0.22, -4.6],
+        [-0.12, -6.6],
+        [0.15, -8.2],
+      ],
+      1.9,
+      [
+        [0, 0.18],
+        [0.9, 0.18],
+        [2.4, 0],
+      ],
+      { c: [0.15, -8.2], r: 0.95 },
+    );
+    const g = b.tile(lane.ring, lane.h, "green", { look: "rondin" });
     b.inset(g, ellipse(0.1, -4.6, 0.55, 1.1, 30), -0.004, "ice", { look: "glace" });
     b.post([-0.35, -6.4], 0.2, 0.7, { look: "bonhomme" });
     b.tee(0, -0.45, UP).cup(0.15, -8.2);
@@ -66,7 +84,14 @@ const tremplin = hole(
     b.tile(box(-2.2, -4.6, -0.8, -3.6), 0, "green", { look: "rondin" });
     b.tile(box(-2.2, -7.6, -1.75, -4.6), 0, "ice", { look: "pontglace", noRail: true });
     // L'autre bord, qui descend vers le trou
-    b.tile(box(-2.2, -12.5, 1.2, -7.6), ramp([0, -7.6], [0, -12.5], 0, -0.35, "s"), "green", { look: "rondin" });
+    b.tile(
+      [[-2.2, -7.6], [1.2, -7.6], [1.2, -10.8], ...arc(-0.5, -10.8, 1.7, 0, -Math.PI, 24)],
+      ramp([0, -7.6], [0, -12.5], 0, -0.35, "s"),
+      "green",
+      {
+        look: "rondin",
+      },
+    );
     b.open(box(-1.8, -7.8, 1.3, -7.4));
     b.open(box(-0.9, -6.2, 0.9, -5.8));
     b.link([0, -5.8], [0, -8.4]);
@@ -111,7 +136,14 @@ const telesiege = hole(
   "Le télésiège",
   3,
   (b) => {
-    b.tile(box(-0.9, -11, 0.9, 0), ramp([0, 0], [0, -11], 0, 0.3), "green", { look: "rondin" });
+    b.tile(
+      [...arc(-0.4, -0.5, 0.5, Math.PI, Math.PI / 2, 6), ...arc(0.4, -0.5, 0.5, Math.PI / 2, 0, 6), ...arc(0, -10.1, 0.9, 0, -Math.PI, 16)],
+      ramp([0, 0], [0, -11], 0, 0.3),
+      "green",
+      {
+        look: "rondin",
+      },
+    );
     b.mover({ motion: { k: "slide", d: [3.2, 0, 0], period: 3.6 }, parts: chairs(-4.2), look: "telesiege", e: 0.4 });
     b.mover({ motion: { k: "slide", d: [-3.2, 0, 0], period: 4.4, a0: 0.3 }, parts: chairs(-7.4), look: "telesiege", e: 0.4 });
     b.tee(0, -0.45, UP).cup(0, -10.1);
@@ -158,15 +190,22 @@ const sapins = hole(
   { hint: "Trouve un chemin entre les sapins." },
 );
 
-// 7. La grotte de glace : un tube creusé dans la glace descend du plateau vers le trou
+// 7. La grotte de glace : un tube creusé dans la glace descend du plateau vers le trou, au fond d'un cirque rond
 const grotte = hole(
   "La grotte de glace",
   3,
   (b) => {
-    b.tile(box(-0.9, -4, 0.9, 0), ramp([0, 0], [0, -4], 0, 0.2), "green", { look: "rondin" });
+    b.tile(
+      [...arc(-0.4, -0.5, 0.5, Math.PI, Math.PI / 2, 6), ...arc(0.4, -0.5, 0.5, Math.PI / 2, 0, 6), [0.9, -4], [-0.9, -4]],
+      ramp([0, 0], [0, -4], 0, 0.2),
+      "green",
+      {
+        look: "rondin",
+      },
+    );
     b.tile(box(-0.9, -5.5, 0.9, -4), 0.2, "green", { look: "rondin" });
-    // Le trou, en contrebas sur la droite
-    b.tile(box(2.4, -11, 5.2, -6.4), -0.4, "green", { look: "rondin" });
+    // Le trou, en contrebas sur la droite, au fond d'un cirque rond
+    b.tile(circle(3.8, -8.8, 1.7, 48), -0.4, "green", { look: "rondin" });
     // L'entrée du tube au bout du plateau, sa sortie près du trou
     const y = 0.2 + 0.055;
     b.rail(

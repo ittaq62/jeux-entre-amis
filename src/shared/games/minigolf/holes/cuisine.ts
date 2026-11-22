@@ -4,7 +4,7 @@
 
 import { hole, radial, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, ellipse, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, roundRect, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -13,14 +13,14 @@ const planche = hole(
   "La planche à découper",
   2,
   (b) => {
-    const g = b.tile(box(-0.9, -9, 0.9, 0), 0, "wood", { look: "planche-cuisine" });
+    const g = b.tile(roundRect(-0.9, -9, 0.9, 0, 0.6, 0.6), 0, "wood", { look: "planche-cuisine" });
     b.inset(g, ellipse(0.25, -5.2, 0.45, 0.7, 28), -0.004, "sand", { look: "farine" });
     b.post([-0.4, -3.4], 0.16, 0.3, { look: "tomate" })
       .post([0.45, -3.9], 0.16, 0.3, { look: "tomate" })
       .post([-0.2, -6.9], 0.16, 0.3, { look: "tomate" });
     b.tee(0, -0.45, UP).cup(0.1, -8.2);
   },
-  { hint: "Les tomates cerises renvoient la balle ; la farine la freine." },
+  { hint: "Les tomates cerises renvoient la balle ; la farine la freine.", outY: -0.28 },
 );
 
 // 2. Le plan de travail : un coude de marbre autour d'une corbeille de fruits
@@ -28,10 +28,22 @@ const plan = hole(
   "Le plan de travail",
   3,
   (b) => {
-    b.tile(box(-0.9, -5, 0.9, 0), 0, "green", { look: "nappe" });
-    const corner = b.tile(box(-0.9, -9, 4.6, -5), 0, "stone", { look: "marbre" });
+    b.tile(roundRect(-0.9, -5, 0.9, 0, 0.5, 0), 0, "green", { look: "nappe" });
+    const corner = b.tile(
+      [
+        [-0.9, -5],
+        [0.9, -5],
+        ...arc(4.0, -5.6, 0.6, Math.PI / 2, 0, 8),
+        [4.6, -9],
+        [2.6, -9],
+        ...arc(-0.3, -8.4, 0.6, -Math.PI / 2, -Math.PI, 8),
+      ],
+      0,
+      "stone",
+      { look: "marbre" },
+    );
     b.inset(corner, circle(2.1, -7.2, 0.5, 28), -0.004, "sand", { look: "farine" });
-    b.tile(box(2.6, -12, 4.6, -9), 0, "green", { look: "nappe" });
+    b.tile(roundRect(2.6, -12, 4.6, -9, 0, 1.0), 0, "green", { look: "nappe" });
     b.block(circle(-0.05, -7.1, 0.6, 24), 0.5, { look: "corbeille" });
     b.tee(0, -0.45, UP).cup(3.6, -11.2);
   },
@@ -198,7 +210,7 @@ const rouleau = hole(
   "Le rouleau à pâtisserie",
   3,
   (b) => {
-    const g = b.tile(box(-1.0, -11, 1.0, 0), 0, "green", { look: "nappe" });
+    const g = b.tile(roundRect(-1.0, -11, 1.0, 0, 0.55, 1.0), 0, "green", { look: "nappe" });
     b.inset(g, box(-0.85, -8.4, 0.85, -3.2), 0.0, "dirt", { look: "pate" });
     const pin: Part[] = [{ k: "cap", a: [-1.1, 0.12, -4.0], b: [1.1, 0.12, -4.0], r: 0.12 }];
     // Il se soulève en s'éloignant (la balle passe dessous), et redescend en revenant

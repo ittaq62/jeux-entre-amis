@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, ellipse, lanePath, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, lanePath, laneSides, roundRect, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -42,7 +42,7 @@ const etabli = hole(
   "L'établi",
   2,
   (b) => {
-    const t = b.tile(box(-0.9, -9.5, 0.9, 0), 0, "wood", { look: "etabli" });
+    const t = b.tile(roundRect(-0.9, -9.5, 0.9, 0, 0.5, 0.9), ramp([0, -0.9], [0, -2.1], 0.12, 0, "s"), "wood", { look: "etabli" });
     b.inset(t, ellipse(0.3, -3.2, 0.5, 0.85, 30), 0, "carpet", { look: "cuir" });
     b.post([-0.38, -4.6], 0.11, 0.22, { look: "vis" })
       .post([0.42, -6.1], 0.11, 0.22, { look: "vis" })
@@ -226,7 +226,7 @@ const sablier = hole(
   "Le sablier",
   3,
   (b) => {
-    const t = b.tile(box(-1.4, -11.2, 1.4, 0), 0, "wood", { look: "parquet" });
+    const t = b.tile(roundRect(-1.4, -11.2, 1.4, 0, 0.7, 1.0), 0, "wood", { look: "parquet" });
     b.inset(
       t,
       [

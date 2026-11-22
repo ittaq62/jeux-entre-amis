@@ -8,26 +8,53 @@ import { arc, box, circle, ellipse, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
-// 1. La promenade : des planches toutes droites, deux flaques de sable et un ballon de plage
+// 1. La promenade : des planches, surélevées au-dessus du sable, qui descendent doucement vers la mer ; deux flaques
+// de sable et un ballon de plage ; les deux bouts arrondis
 const promenade = hole(
   "La promenade",
   2,
   (b) => {
-    const deck = b.tile(box(-0.8, -9, 0.8, 0), 0, "wood", { look: "planche" });
+    const deck = b.tile(
+      [...arc(0, -0.8, 0.8, Math.PI, 0, 14), ...arc(0, -8.2, 0.8, 0, -Math.PI, 14)],
+      ramp([0, -0.9], [0, -3.0], 0.1, 0, "s"),
+      "wood",
+      { look: "planche" },
+    );
     b.inset(deck, circle(-0.35, -3.7, 0.3, 26), -0.012, "sand", { look: "plage" });
     b.inset(deck, circle(0.38, -6.4, 0.28, 26), -0.012, "sand", { look: "plage" });
     b.post([0.22, -5.0], 0.17, 0.34, { look: "ballon", e: 0.85 });
     b.tee(0, -0.45, UP).cup(-0.1, -8.2);
   },
-  { hint: "Les planches filent vite : dose bien." },
+  { hint: "Les planches filent vite, et descendent un peu : dose bien.", outY: -0.38 },
 );
 
-// 2. Le château de sable : par la porte du château, ou par les côtés ensablés
+// 2. Le château de sable : la plage ondule de part et d'autre ; par la porte du château, ou par les côtés ensablés
 const chateauSable = hole(
   "Le château de sable",
   3,
   (b) => {
-    const g = b.tile(box(-1.6, -10, 1.6, 0), 0, "green", { look: "planche", bumps: [{ c: [0.6, -2.6], r: 0.8, a: 0.05 }] });
+    // Les bords ondulent, sauf le long du château et de ses fossés de sable
+    const wig = (z: number, ph: number) => {
+      const calm = z < -3.6 && z > -7.2 ? 0 : Math.min(1, Math.min(Math.abs(z + 3.6), Math.abs(z + 7.2)) / 0.6);
+      const ends = Math.min(1, Math.max(0, Math.min(-0.8 - z, z + 8.4) / 0.8));
+      return calm * ends * Math.abs(0.16 * Math.sin(z * 1.7 + ph) + 0.08 * Math.sin(z * 4.1 + 1 + ph));
+    };
+    const zs: number[] = [];
+    for (let z = -0.8; z > -8.4; z -= 0.2) zs.push(Math.round(z * 100) / 100);
+    const right = zs.map((z) => [1.6 - wig(z, 0), z] as Pt);
+    const left = [...zs].reverse().map((z) => [-1.6 + wig(z, 1.3), z] as Pt);
+    const g = b.tile(
+      [
+        ...arc(-0.8, -0.8, 0.8, Math.PI, Math.PI / 2, 8),
+        ...arc(0.8, -0.8, 0.8, Math.PI / 2, 0, 8),
+        ...right,
+        ...arc(0, -8.4, 1.6, 0, -Math.PI, 24),
+        ...left,
+      ],
+      0,
+      "green",
+      { look: "planche", bumps: [{ c: [0.6, -2.6], r: 0.8, a: 0.05 }] },
+    );
     b.inset(g, box(1.02, -6.4, 1.5, -4.4), -0.012, "sand", { look: "plage" });
     b.inset(g, box(-1.5, -6.4, -1.02, -4.4), -0.012, "sand", { look: "plage" });
     const castle = { look: "chateau", t: 0.05 } as const;
@@ -35,7 +62,7 @@ const chateauSable = hole(
     b.deco("chateau-sable", 0, -5.4);
     b.tee(0, -0.45, UP).cup(0.2, -8.7);
   },
-  { hint: "La porte du château est étroite ; le sable, lui, freine." },
+  { hint: "La porte du château est étroite ; le sable, lui, freine.", outY: -0.3 },
 );
 
 // 3. La jetée : une longue passerelle sans garde-fou au-dessus de la mer, deux bittes d'amarrage
@@ -77,19 +104,25 @@ const rochers = hole(
   { hint: "Les rochers renvoient la balle : sers-t'en." },
 );
 
-// 5. La vague : une vague qui monte et repousse tout ce qu'elle trouve vers le départ
+// 5. La vague : l'allée part d'une petite terrasse et finit en arrondi au bord de l'eau ; une vague monte et repousse
+// tout ce qu'elle trouve vers le départ
 const vague = hole(
   "La vague",
   3,
   (b) => {
-    const g = b.tile(box(-0.9, -11, 0.9, 0), 0, "green", { look: "planche" });
+    const g = b.tile(
+      [...arc(-0.4, -0.5, 0.5, Math.PI, Math.PI / 2, 6), ...arc(0.4, -0.5, 0.5, Math.PI / 2, 0, 6), ...arc(0, -10.1, 0.9, 0, -Math.PI, 16)],
+      ramp([0, -1.0], [0, -2.8], 0.12, 0, "s"),
+      "green",
+      { look: "planche" },
+    );
     b.inset(g, box(-0.6, -8.7, 0.6, -8.2), -0.012, "sand", { look: "plage" });
     // Retirée, la vague dort sous le gazon (on passe par-dessus) ; elle monte en déferlant vers le départ, puis redescend
     const wave: Part[] = [{ k: "wall", a: [-0.86, -7.2], b: [0.86, -7.2], y0: -1.2, y1: -0.22, t: 0.06 }];
     b.mover({ motion: { k: "slide", d: [0, 0.38, 2.6], period: 5, shape: "piston" }, parts: wave, look: "vague", e: 0.45 });
     b.tee(0, -0.45, UP).cup(0, -10.1);
   },
-  { hint: "Passe quand la vague se retire." },
+  { hint: "Passe quand la vague se retire.", outY: -0.3 },
 );
 
 // 6. Le phare : une allée qui monte en tournant autour du phare, jusqu'à sa terrasse

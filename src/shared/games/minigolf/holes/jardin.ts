@@ -3,7 +3,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, type Pt } from "../geom.ts";
+import { arc, box, circle, roundRect, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -40,16 +40,22 @@ const allee = hole(
   { hint: "Pour se mettre en jambes : descends la rampe et évite les ifs." },
 );
 
-// 2. Le parterre : un coude autour d'un massif de fleurs, une fosse de gravier dans le virage
+// 2. Le parterre : une petite terrasse au départ, puis un coude au coin arrondi autour d'un massif de fleurs, une
+// fosse de gravier dans le virage, le trou au bout de l'arrondi
 const parterre = hole(
   "Le parterre",
   3,
   (b) => {
-    b.tile(box(-0.8, -6, 0.8, 0), 0, "green", { look: "buis" });
-    const bend = b.tile(box(-0.8, -7.6, 6, -6), 0, "green", {
-      look: "buis",
-      bumps: [{ c: [3.8, -6.8], r: 0.8, a: 0.045 }],
-    });
+    b.tile(roundRect(-0.8, -6, 0.8, 0, 0.5, 0), ramp([0, -0.9], [0, -2.4], 0.14, 0, "s"), "green", { look: "buis" });
+    const bend = b.tile(
+      [[-0.8, -6], [0.8, -6], ...arc(5.2, -6.8, 0.8, Math.PI / 2, -Math.PI / 2, 14), ...arc(0.0, -6.8, 0.8, -Math.PI / 2, -Math.PI, 8)],
+      0,
+      "green",
+      {
+        look: "buis",
+        bumps: [{ c: [3.8, -6.8], r: 0.8, a: 0.045 }],
+      },
+    );
     b.inset(bend, circle(2.4, -7.05, 0.42, 28), -0.04, "sand", { look: "gravier" });
     b.tee(0, -0.45, UP).cup(5.2, -6.8);
   },
@@ -100,7 +106,7 @@ const grilles = hole(
   "Les grilles",
   3,
   (b) => {
-    b.tile(box(-0.9, -11, 0.9, 0), ramp([0, 0], [0, -11], 0.22, 0), "green", { look: "buis" });
+    b.tile(roundRect(-0.9, -11, 0.9, 0, 0.5, 0.9), ramp([0, 0], [0, -11], 0.22, 0), "green", { look: "buis" });
     b.mover({ motion: { k: "spin", c: [0, -3.6], w: 0.95 }, parts: gate([0, -3.6], 1.5), look: "grille" });
     b.mover({ motion: { k: "spin", c: [0, -7.1], w: -0.8, a0: 0.9 }, parts: gate([0, -7.1], 1.5), look: "grille" });
     b.tee(0, -0.45, UP).cup(0, -10.2);
@@ -261,7 +267,7 @@ const chateau = hole(
   "Le château",
   3,
   (b) => {
-    b.tile(box(-2.5, -6, 2.5, 0), 0, "green", {
+    b.tile(roundRect(-2.5, -6, 2.5, 0, 1.0, 0), 0, "green", {
       look: "buis",
       bumps: [
         { c: [-1, -2.4], r: 0.75, a: 0.07 },
@@ -270,7 +276,7 @@ const chateau = hole(
       ],
     });
     b.tile(box(-0.7, -8, 0.7, -6), ramp([0, -6], [0, -8], 0, 0.42, "s"), "stone", { look: "pierre" });
-    b.tile(box(-2.5, -11, 2.5, -8), 0.42, "green", { look: "buis" });
+    b.tile(roundRect(-2.5, -11, 2.5, -8, 0, 1.0), 0.42, "green", { look: "buis" });
     // Le trou d'en bas, caché derrière une haie
     b.wall(
       [

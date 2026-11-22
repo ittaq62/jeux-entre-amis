@@ -5,7 +5,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, laneSides, smooth, wavyEdge, type Pt } from "../geom.ts";
+import { arc, box, circle, lanePath, laneSides, roundRect, smooth, wavyEdge, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -26,9 +26,50 @@ const entree = hole(
   "L'entrée du temple",
   2,
   (b) => {
-    b.tile(box(-0.9, -5, 0.9, 0), 0, "green", { look: "mousse" });
+    // L'allée de mousse ondule un peu, des racines la soulèvent par endroits ; elle arrive bien droite aux marches
+    const lane = lanePath(
+      [
+        [0, 0],
+        [0, -0.5],
+        [0, -0.9],
+        [0.24, -2.6],
+        [0, -4.2],
+        [0, -4.6],
+        [0, -5],
+      ],
+      1.8,
+      [],
+    );
+    b.tile(
+      [
+        ...arc(-0.4, -0.5, 0.5, Math.PI, Math.PI / 2, 6),
+        ...arc(0.4, -0.5, 0.5, Math.PI / 2, 0, 6),
+        ...[...lane.ring].reverse().filter((p) => p[1] < -0.5),
+      ],
+      0,
+      "green",
+      {
+        look: "mousse",
+        bumps: [
+          { c: [-0.35, -2.2], r: 0.45, a: 0.035 },
+          { c: [0.4, -3.6], r: 0.4, a: 0.03 },
+        ],
+      },
+    );
     b.tile(box(-0.9, -6.2, 0.9, -5), ramp([0, -5], [0, -6.2], 0, 0.22, "s"), "stone", { look: "marche" });
-    b.tile(box(-1.3, -9.6, 1.3, -6.2), 0.22, "stone", { look: "dalle" });
+    b.tile(
+      [
+        [-0.9, -6.2],
+        [0.9, -6.2],
+        ...arc(0.9, -6.6, 0.4, Math.PI / 2, 0, 6),
+        [1.3, -9.6],
+        [-1.3, -9.6],
+        ...arc(-0.9, -6.6, 0.4, Math.PI, Math.PI / 2, 6),
+      ],
+      0.22,
+      "stone",
+      { look: "dalle" },
+    );
     b.post([-0.62, -6.75], 0.2, 0.9, { look: "serpent" });
     b.post([0.62, -6.75], 0.2, 0.9, { look: "serpent" });
     b.deco("porte", 0, -9.6);
@@ -257,8 +298,8 @@ const puits = hole(
   "Le puits sacré",
   3,
   (b) => {
-    b.tile(box(-0.9, -5, 0.9, 0), 0.4, "stone", { look: "dalle" });
-    const low = b.tile(box(-2.6, -11.5, 2.6, -5), 0, "green", { look: "mousse" });
+    b.tile(roundRect(-0.9, -5, 0.9, 0, 0.5, 0), 0.4, "stone", { look: "dalle" });
+    const low = b.tile(roundRect(-2.6, -11.5, 2.6, -5, 0.7, 1.4), 0, "green", { look: "mousse" });
     b.inset(low, circle(1.2, -7.6, 0.55, 28), 0, "sand", { look: "sable" });
     b.post([-1.3, -7.4], 0.2, 0.8, { look: "colonne-brisee" });
     b.post([0.2, -9.0], 0.2, 0.8, { look: "colonne-brisee" });
@@ -300,7 +341,7 @@ const sanctuaire = hole(
   "Le sanctuaire",
   4,
   (b) => {
-    b.tile(box(-0.9, -5, 0.9, 0), 0, "stone", { look: "dalle" });
+    b.tile(roundRect(-0.9, -5, 0.9, 0, 0.5, 0), 0, "stone", { look: "dalle" });
     b.tile(box(-0.9, -5.8, 0.9, -5), ramp([0, -5], [0, -5.8], 0, 0.15, "s"), "stone", { look: "marche" });
     const hall = b.tile(box(-2.3, -12.4, 2.3, -5.8), 0.15, "stone", { look: "dalle" });
     // Le grand disque de pierre gravé, au milieu de la salle, qui tourne lentement et emporte la balle

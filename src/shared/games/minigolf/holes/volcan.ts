@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, edgeAt, edgeSpan, ellipse, laneSides, smooth, wavyEdge, type Pt } from "../geom.ts";
+import { arc, box, circle, edgeAt, edgeSpan, ellipse, laneSides, roundRect, smooth, wavyEdge, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 /** La lave, un peu plus bas que la roche : la balle y tombe */
@@ -22,12 +22,30 @@ function laneIntoCircle(c: Pt, r: number, hw: number, top: number, n = 72): Pt[]
   return pts;
 }
 
-// 1. Le sentier de cendre : le basalte, deux mares de lave à éviter, des plaques de cendre qui freinent
+// 1. Le sentier de cendre : le basalte, ses bords qui s'évasent et se resserrent, ses deux bouts arrondis ; deux mares
+// de lave à éviter, des plaques de cendre qui freinent
 const sentier = hole(
   "Le sentier de cendre",
   2,
   (b) => {
-    const t = b.tile(box(-1.0, -9.6, 1.0, 0), 0, "stone", { look: "basalte" });
+    // Les bords du sentier s'évasent et se resserrent (jamais vers l'intérieur : les mares restent à leur place)
+    const zs: number[] = [];
+    for (let z = -1.15; z > -8.6; z -= 0.25) zs.push(Math.round(z * 100) / 100);
+    const out = (z: number, ph: number) => {
+      const ends = Math.min(1, Math.max(0, Math.min(-0.9 - z, z + 8.7) / 1.0));
+      return ends * (0.12 + 0.12 * Math.sin(z * 1.3 + ph) + 0.05 * Math.sin(z * 3.7 + ph * 2));
+    };
+    const t = b.tile(
+      [
+        ...arc(0, -0.9, 1.0, Math.PI, 0, 14),
+        ...zs.map((z) => [1.0 + out(z, 0), z] as Pt),
+        ...arc(0, -8.7, 1.0, 0, -Math.PI, 14),
+        ...[...zs].reverse().map((z) => [-1.0 - out(z, 2.1), z] as Pt),
+      ],
+      0,
+      "stone",
+      { look: "basalte" },
+    );
     b.inset(t, ellipse(-0.52, -3.7, 0.34, 0.8, 30), LAVA, "lava", { look: "lave" });
     b.inset(t, ellipse(0.5, -6.5, 0.36, 0.85, 30), LAVA, "lava", { look: "lave" });
     b.inset(t, ellipse(0.35, -2.0, 0.4, 0.5, 24), 0, "dirt", { look: "cendre" });
@@ -238,11 +256,11 @@ const obsidienne = hole(
   "L'obsidienne",
   3,
   (b) => {
-    b.tile(box(-1.0, -3, 1.0, 0), 0, "stone", { look: "basalte" });
+    b.tile(roundRect(-1.0, -3, 1.0, 0, 0.55, 0), 0, "stone", { look: "basalte" });
     const slab = b.tile(box(-1.0, -8.5, 1.0, -3), ramp([0, -3], [0, -8.5], 0, -0.3), "glass", { look: "obsidienne" });
     b.inset(slab, circle(-0.42, -5.0, 0.3, 28), -0.42, "lava", { look: "lave" });
     b.inset(slab, circle(0.45, -7.0, 0.32, 28), -0.48, "lava", { look: "lave" });
-    b.tile(box(-1.6, -12.2, 1.6, -8.5), -0.3, "dirt", { look: "cendre" });
+    b.tile(roundRect(-1.6, -12.2, 1.6, -8.5, 0, 1.6), -0.3, "dirt", { look: "cendre" });
     b.tee(0, -0.45, UP).cup(0.5, -10.9);
   },
   { hint: "L'obsidienne glisse et descend : un petit coup suffit, la cendre arrête la balle en bas." },
@@ -253,7 +271,7 @@ const forge = hole(
   "La forge",
   3,
   (b) => {
-    const t = b.tile(box(-1.0, -11.2, 1.0, 0), 0, "stone", { look: "dalle-forge" });
+    const t = b.tile(roundRect(-1.0, -11.2, 1.0, 0, 0.55, 1.0), 0, "stone", { look: "dalle-forge" });
     const head: Part[] = [{ k: "cap", a: [-0.45, 0.24, -4.8], b: [0.45, 0.24, -4.8], r: 0.24 }];
     b.mover({ motion: { k: "swing", c: [0, 2.3, -4.8], axis: [1, 0], amp: 0.85, w: 1.4 }, parts: head, look: "marteau", e: 0.4 });
     b.boxWall(-0.38, -7.7, 0.38, -7.1, 0.45, { look: "enclume" });
