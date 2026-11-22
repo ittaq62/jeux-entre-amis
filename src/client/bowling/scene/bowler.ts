@@ -118,17 +118,35 @@ export function swingHand(angle: number, crouch: number, lean: number): V3 {
  */
 export function approachPose(step: number, arm: number): Pose {
   const s = Math.max(0, Math.min(1, step));
-  // Les pieds : droite, gauche, droite, puis le gauche glisse loin devant
-  const stride = 0.42;
-  const fz = (k: number) => k * stride;
+  // Les pieds, par rapport aux hanches (le corps, lui, avance sur la piste) : droite, gauche, droite, puis le gauche
+  // glisse devant pendant que la jambe droite part en arrière. Un pied passe devant en l'air, puis recule posé au sol
+  // pendant que le corps avance ; jamais plus loin que la jambe ne l'atteint.
   const phase = s * 4;
-  const footR = phase < 1 ? fz(ease(phase)) : phase < 3 ? fz(1 + ease(phase - 2)) : fz(2);
-  const footL = phase < 2 ? fz(ease(phase - 1)) : phase < 3 ? fz(1) : fz(1 + ease(phase - 3) * 1.6);
+  const go = (u: number, from: number, to: number) => from + (to - from) * ease(Math.max(0, Math.min(1, u)));
+  const AHEAD = 0.22,
+    BEHIND = -0.2;
+  const footR =
+    phase < 1
+      ? go(phase, 0.02, AHEAD)
+      : phase < 2
+        ? go(phase - 1, AHEAD, BEHIND)
+        : phase < 3
+          ? go(phase - 2, BEHIND, AHEAD)
+          : go(phase - 3, AHEAD, -0.36);
+  const footL =
+    phase < 1
+      ? go(phase, -0.02, BEHIND)
+      : phase < 2
+        ? go(phase - 1, BEHIND, AHEAD)
+        : phase < 3
+          ? go(phase - 2, AHEAD, BEHIND + 0.04)
+          : go(phase - 3, BEHIND + 0.04, 0.36);
   const liftR = phase < 1 ? Math.sin(phase * Math.PI) * 0.06 : phase > 2 && phase < 3 ? Math.sin((phase - 2) * Math.PI) * 0.06 : 0;
   const liftL = phase > 1 && phase < 2 ? Math.sin((phase - 1) * Math.PI) * 0.06 : 0;
   const slide = Math.max(0, phase - 3);
-  const crouch = 0.04 + ease(slide) * 0.2;
-  const lean = 0.08 + ease(slide) * 0.42 + Math.max(0, Math.min(1, phase - 2)) * 0.06;
+  // Le genou fléchit et le buste se penche sur la glissade, sans s'accroupir jusqu'au sol
+  const crouch = 0.04 + ease(slide) * 0.12;
+  const lean = 0.08 + ease(slide) * 0.3 + Math.max(0, Math.min(1, phase - 2)) * 0.06;
   const hand = swingHand(arm, crouch, lean);
   // L'autre bras s'écarte pour l'équilibre
   const other: V3 = [0.42 + ease(slide) * 0.12, 0.82 - crouch * 0.6, 0.12 + ease(slide) * 0.15];
@@ -140,7 +158,7 @@ export function approachPose(step: number, arm: number): Pose {
     hands: [hand, other],
     feet: [
       // La jambe droite, à la fin, part en arrière et croise derrière (le pied presque à plat)
-      [-0.11 + ease(slide) * 0.18, liftR + ease(slide) * 0.06, footR - ease(slide) * 0.35],
+      [-0.11 + ease(slide) * 0.18, liftR + ease(slide) * 0.06, footR],
       [0.11 - ease(slide) * 0.06, liftL, footL],
     ],
     nod: 0.15 + ease(slide) * 0.25,
