@@ -7,6 +7,7 @@ import { foireSalle } from "./foire.ts";
 import { guinguetteSalle } from "./guinguette.ts";
 import { paquebotSalle } from "./paquebot.ts";
 import { retroSalle } from "./retro.ts";
+import { templeSalle } from "./temple.ts";
 
 export function salleOf(id: SalleId): Salle {
   switch (id) {
@@ -20,6 +21,8 @@ export function salleOf(id: SalleId): Salle {
       return foireSalle();
     case "paquebot":
       return paquebotSalle();
+    case "temple":
+      return templeSalle();
     default:
       return retroSalle();
   }
