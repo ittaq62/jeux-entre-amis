@@ -34,6 +34,12 @@ export class CulbuteControls {
    * relâchement), et s'il est devenu le coup fort */
   private touchAtk = -1;
   private touchStrong = false;
+  /** Le bouton de souris qui frappe, tenu : depuis combien d'images (-1 : pas tenu), s'il est devenu le coup fort, et un
+   * clic relâché depuis la dernière lecture (le coup simple part au relâchement) */
+  private clickCode = "";
+  private clickFrames = -1;
+  private clickStrong = false;
+  private clickDone = false;
   private scheme: Scheme = "clavier";
   private settings: CulbuteSettings;
   /** Pendant que l'aide, le menu ou les réglages sont ouverts, le combat n'écoute plus */
@@ -134,6 +140,16 @@ export class CulbuteControls {
     if (e.target instanceof Element && e.target.closest(UI)) return;
     // Pas de défilement automatique (molette) ni de sélection de texte pendant le combat
     e.preventDefault();
+    // Le clic qui frappe, maintenu, devient le coup fort : on attend de savoir (voir sample)
+    if (this.settings.holdStrong && this.byCode.get(code)?.includes("attack")) {
+      this.scheme = "clavier";
+      if (this.clickFrames < 0) {
+        this.clickCode = code;
+        this.clickFrames = 0;
+        this.clickStrong = false;
+      }
+      return;
+    }
     this.press(code);
   };
 
@@ -144,6 +160,12 @@ export class CulbuteControls {
   private onMouseUp = (e: MouseEvent) => {
     const code = `Mouse${e.button}`;
     this.held.delete(code);
+    if (code === this.clickCode && this.clickFrames >= 0) {
+      // Relâché avant d'être devenu le coup fort : le coup simple
+      if (!this.clickStrong) this.clickDone = true;
+      this.clickFrames = -1;
+      this.clickStrong = false;
+    }
     // Les boutons de côté de la souris feraient revenir le navigateur en arrière
     if (!this.paused && this.byCode.has(code) && e.button >= 3) e.preventDefault();
   };
@@ -157,6 +179,9 @@ export class CulbuteControls {
 
   private onBlur = () => {
     this.held.clear();
+    this.clickFrames = -1;
+    this.clickStrong = false;
+    this.clickDone = false;
   };
 
   /** Un doigt sur un bouton de l'écran */
@@ -198,6 +223,21 @@ export class CulbuteControls {
     }
     // La touche du haut fait sauter (un appui, un saut) ; enfoncée avec un coup, c'est le coup vers le haut (voir UPJ)
     if (this.settings.upJumps && keys.tapped.has("up")) tapped |= JMP | UPJ;
+
+    // Le clic qui frappe : relâché vite, le coup simple (au relâchement) ; maintenu un cinquième de seconde, le coup fort,
+    // chargé tant que le bouton reste enfoncé
+    if (this.clickFrames >= 0) {
+      this.clickFrames++;
+      if (this.clickFrames >= CHARGE_DECIDE && !this.clickStrong) {
+        this.clickStrong = true;
+        tapped |= FRT;
+      }
+      if (this.clickStrong) held |= FRT;
+    }
+    if (this.clickDone) {
+      tapped |= ATK;
+      this.clickDone = false;
+    }
 
     // Viser à la souris : le coup (le spécial, le lancer) part vers le curseur, pas vers les touches tenues ; s'il doit
     // attendre que son combattant puisse le donner, le stick vise jusque-là

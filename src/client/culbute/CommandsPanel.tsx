@@ -97,7 +97,9 @@ export function CommandsPanel({
                 key={p.id}
                 type="button"
                 className={settings.preset === p.id ? "is-on" : ""}
-                onClick={() => update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings), aimMouse: p.aim })}
+                onClick={() =>
+                  update({ ...settings, preset: p.id, bindings: structuredClone(p.bindings), aimMouse: p.aim, holdStrong: p.aim })
+                }
               >
                 <strong>{p.name}</strong>
                 <small>{p.note}</small>
@@ -160,6 +162,13 @@ export function CommandsPanel({
             <span>
               Viser à la souris : les coups, les spéciaux et les lancers partent vers le curseur (au-dessus du combattant, vers le haut ;
               dessous, vers le bas ; sur lui, le coup sans direction)
+            </span>
+          </label>
+          <label className="cb-check">
+            <input type="checkbox" checked={settings.holdStrong} onChange={(e) => update({ ...settings, holdStrong: e.target.checked })} />
+            <span>
+              Clic maintenu : le coup fort (garder le bouton de souris qui frappe un cinquième de seconde ; le charger en le tenant). Le
+              coup simple part alors au relâchement du clic
             </span>
           </label>
           <label className="cb-check">

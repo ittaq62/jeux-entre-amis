@@ -123,3 +123,42 @@ describe("Culbute, viser à la souris", () => {
     expect(s.y).toBe(0);
   });
 });
+
+describe("Culbute, le clic maintenu", () => {
+  const down = (c: Controls, button = 0) => mouse(c).onMouseDown({ button, target: null, preventDefault() {} });
+  const up = (c: Controls, button = 0) => mouse(c).onMouseUp({ button, target: null, preventDefault() {} });
+
+  it("un clic bref : le coup simple, au relâchement", () => {
+    const c = make();
+    down(c);
+    expect(samples(c, 3).some((s) => s.pressed & (ATK | FRT))).toBe(false);
+    up(c);
+    const s = c.sample();
+    expect(s.pressed & ATK).toBe(ATK);
+    expect(s.pressed & FRT).toBe(0);
+    expect(c.sample().pressed).toBe(0);
+  });
+
+  it("le clic gardé un cinquième de seconde : le coup fort, chargé tant qu'on tient, et rien au relâchement", () => {
+    const c = make();
+    down(c);
+    const seen = samples(c, CHARGE_DECIDE + 10);
+    expect(seen.filter((s) => s.pressed & FRT)).toHaveLength(1);
+    expect(seen.some((s) => s.pressed & ATK)).toBe(false);
+    expect(seen.at(-1)!.held & FRT).toBe(FRT);
+    up(c);
+    const after = c.sample();
+    expect(after.pressed & (ATK | FRT)).toBe(0);
+    expect(after.held & FRT).toBe(0);
+  });
+
+  it("sans le réglage, le clic frappe dès l'appui", () => {
+    const c = new (make().constructor as new (s: ReturnType<typeof defaultSettings>) => Controls)({
+      ...defaultSettings(),
+      holdStrong: false,
+    });
+    down(c);
+    expect(c.sample().pressed & ATK).toBe(ATK);
+    up(c);
+  });
+});

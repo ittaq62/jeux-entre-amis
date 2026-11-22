@@ -7,7 +7,12 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
   const rows = [
     { keys: move.join(" · "), what: s.aimMouse ? "Se déplacer" : "Se déplacer (et diriger les coups)" },
     { keys: bindingText(s, "attack"), what: "Frapper, aussitôt (en courant : coup en courant ; vite plusieurs fois : ça enchaîne)" },
-    { keys: bindingText(s, "strong"), what: "Coup fort, tout de suite (tenir pour le charger)" },
+    {
+      keys: bindingText(s, "strong"),
+      what: s.holdStrong
+        ? "Coup fort, tout de suite (tenir pour le charger) ; ou garder le clic qui frappe enfoncé"
+        : "Coup fort, tout de suite (tenir pour le charger)",
+    },
     { keys: bindingText(s, "special"), what: "Spécial (haut + Spécial : remonter)" },
     {
       keys: bindingText(s, "jump"),

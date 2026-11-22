@@ -22,6 +22,8 @@ export interface CulbuteSettings {
   music: boolean;
   /** Les coups, les spéciaux et les lancers partent vers le curseur de la souris (pas vers les touches tenues) */
   aimMouse: boolean;
+  /** Le bouton de souris qui frappe, maintenu, donne le coup fort (le coup simple part alors au relâchement du clic) */
+  holdStrong: boolean;
 }
 
 export const ACTION_IDS: ActionId[] = ["up", "down", "left", "right", "attack", "strong", "special", "jump", "shield", "grab", "taunt"];
@@ -113,7 +115,15 @@ const OLD_STICK_KEY = "culbute-saut-au-stick";
 
 export function defaultSettings(): CulbuteSettings {
   const p = PRESETS[0]!;
-  return { preset: p.id, bindings: structuredClone(p.bindings), upJumps: true, stickJump: false, music: true, aimMouse: p.aim };
+  return {
+    preset: p.id,
+    bindings: structuredClone(p.bindings),
+    upJumps: true,
+    stickJump: false,
+    music: true,
+    aimMouse: p.aim,
+    holdStrong: p.aim,
+  };
 }
 
 function cleanList(v: unknown): Binding[] | null {
@@ -148,6 +158,8 @@ export function loadSettings(): CulbuteSettings {
       // Réglage d'avant la visée : on vise à la souris si l'on frappe à la souris
       aimMouse:
         typeof data.aimMouse === "boolean" ? data.aimMouse : [...bindings.attack, ...bindings.special].some((b) => b.startsWith("Mouse")),
+      // Réglage d'avant le clic maintenu : on l'a si l'on frappe à la souris
+      holdStrong: typeof data.holdStrong === "boolean" ? data.holdStrong : bindings.attack.some((b) => b.startsWith("Mouse")),
     };
   } catch {
     return base;
