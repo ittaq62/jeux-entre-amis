@@ -852,21 +852,62 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
     flags.push(flag);
   }
 
-  // Le tapis de départ
-  const teeMat = keep(new THREE.MeshStandardMaterial({ color: 0x2e6f3a, roughness: 0.9 }));
-  const tee = new THREE.Mesh(keep(new THREE.BoxGeometry(0.5, 0.012, 0.5)), teeMat);
-  tee.position.set(c.tee.x, c.tee.y - BALL_R + 0.004, c.tee.z);
-  tee.rotation.y = -c.tee.aim;
-  tee.receiveShadow = true;
-  root.add(tee);
-  const marker = keep(new THREE.MeshStandardMaterial({ color: 0xf6f3ea, roughness: 0.6 }));
+  // Le tapis de départ : un carré aux coins arrondis, une bordure plus claire, le point blanc où poser la balle ; de part
+  // et d'autre, deux petites bornes de bois au chapeau rouge (pas des boules : on les prendrait pour des balles)
+  const teeShape = (h: number, r: number) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-h + r, -h);
+    sh.lineTo(h - r, -h);
+    sh.quadraticCurveTo(h, -h, h, -h + r);
+    sh.lineTo(h, h - r);
+    sh.quadraticCurveTo(h, h, h - r, h);
+    sh.lineTo(-h + r, h);
+    sh.quadraticCurveTo(-h, h, -h, h - r);
+    sh.lineTo(-h, -h + r);
+    sh.quadraticCurveTo(-h, -h, -h + r, -h);
+    return sh;
+  };
+  const teeGroup = new THREE.Group();
+  teeGroup.position.set(c.tee.x, c.tee.y - BALL_R, c.tee.z);
+  teeGroup.rotation.y = -c.tee.aim;
+  const rim = new THREE.Mesh(
+    keep(new THREE.ExtrudeGeometry(teeShape(0.26, 0.06), { depth: 0.012, bevelEnabled: false, curveSegments: 6 })),
+    keep(new THREE.MeshStandardMaterial({ color: 0x4d9a52, roughness: 0.9 })),
+  );
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.001;
+  rim.receiveShadow = true;
+  const pad = new THREE.Mesh(
+    keep(new THREE.ExtrudeGeometry(teeShape(0.225, 0.045), { depth: 0.004, bevelEnabled: false, curveSegments: 6 })),
+    keep(new THREE.MeshStandardMaterial({ color: 0x2e6f3a, roughness: 0.95 })),
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.012;
+  pad.receiveShadow = true;
+  const spot = new THREE.Mesh(
+    keep(new THREE.CircleGeometry(0.028, 20)),
+    keep(new THREE.MeshStandardMaterial({ color: 0xf2efe4, roughness: 0.8 })),
+  );
+  spot.rotation.x = -Math.PI / 2;
+  spot.position.y = 0.0175;
+  teeGroup.add(rim, pad, spot);
+  const post = keep(new THREE.CylinderGeometry(0.022, 0.026, 0.075, 12));
+  const cap = keep(new THREE.SphereGeometry(0.03, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2));
+  const postMat = keep(new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.7 }));
+  const capMat = keep(new THREE.MeshStandardMaterial({ color: 0xc8392d, roughness: 0.45 }));
   for (const side of [-1, 1]) {
-    const m = new THREE.Mesh(keep(new THREE.SphereGeometry(0.035, 12, 8)), marker);
-    const a = c.tee.aim + (side * Math.PI) / 2;
-    m.position.set(c.tee.x + Math.cos(a) * 0.32, c.tee.y - BALL_R + 0.03, c.tee.z + Math.sin(a) * 0.32);
-    m.castShadow = true;
-    root.add(m);
+    const m = new THREE.Group();
+    const body = new THREE.Mesh(post, postMat);
+    body.position.y = 0.0375;
+    const top = new THREE.Mesh(cap, capMat);
+    top.scale.y = 0.7;
+    top.position.y = 0.074;
+    m.add(body, top);
+    m.position.set(0, 0, side * 0.34);
+    m.traverse((o) => (o.castShadow = true));
+    teeGroup.add(m);
   }
+  root.add(teeGroup);
 
   // Les tubes : un verre clair qui laisse voir la balle
   const glass = keep(
