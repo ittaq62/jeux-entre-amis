@@ -518,6 +518,8 @@ export interface CapitaleRoomView {
   hostId: string;
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   capitale: CapitaleView | null;
+  /** Le premier coup retenu le temps que chacun charge le plateau (voir loadGate.ts) ; null : la partie tourne */
+  gate?: LoadGate | null;
   /** Fin du temps laissé à la décision en cours */
   deadline: number | null;
   /** Fin de l'enchère en cours (le chrono repart à chaque offre) */
@@ -548,6 +550,8 @@ export type CapitaleClientMessage =
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
   | { t: "start" }
+  /** Son jeu a fini de charger le plateau (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | { t: "action"; action: CapitaleAction }
   | { t: "takeBack" }
   | { t: "chat"; text: string }

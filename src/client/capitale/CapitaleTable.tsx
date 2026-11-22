@@ -38,6 +38,10 @@ import type { EventBatch } from "./useCapitaleRoom.ts";
 import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
 import { inTeams, sidesOf, teamIn } from "./teamsUi.tsx";
 import { useViewport } from "../lib/viewport.ts";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
+import { GameLoading, GateCountdown, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
 import { DrawnRulesNote } from "../game/RandomRules.tsx";
 import { BuilderPanel, type CellHandler } from "./BuilderPanel.tsx";
 import type { BuilderPreview } from "./scene/builderCity.ts";
@@ -94,9 +98,22 @@ function anchorOf(account: string): { x: number; y: number } | null {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
+/** L'écran de chargement aux couleurs du plateau */
+const LOADING_THEME: LoadingTheme = { from: "#2f7a52", to: "#0c2a1c", accent: "#e8c36a" };
+
 export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.capitale!;
+  // Le chargement du plateau (voir shared/loadGate.ts) : on dit « chargé » au serveur, le premier coup part quand tout
+  // le monde l'a dit
+  const [prep, setPrep] = useState({ share: 0, done: false });
+  const onPrepared = useCallback((share: number, done: boolean) => setPrep({ share, done }), []);
+  const gateClock = useGateClock(room.gate, serverOffset);
+  useLoadedSignal(room.gate, room.you.seatId, prep.done, send);
+  const live = prep.done && gateClock.passed && room.status === "playing";
+  useEffect(() => {
+    if (live) return watchFirstSeconds(room.settings.capitale.builder ? "Builder" : "Capitale");
+  }, [live, room.settings.capitale.builder]);
   const me = g.you;
   const { w, h } = useViewport();
   /**
@@ -445,6 +462,22 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       className={`table-root cap-root cap-bright ${phone ? "is-phone" : ""}${landscape ? " is-land" : ""}`}
       style={phone && topH && tallTop ? { ["--cap-top" as string]: `${topH + 4}px` } : undefined}
     >
+      {room.status === "playing" && loadingShown(prep.done, gateClock) && (
+        <GameLoading
+          title={room.settings.capitale.builder ? "Capitale Builder" : "Capitale"}
+          theme={LOADING_THEME}
+          share={prep.share}
+          done={prep.done}
+          gate={room.gate}
+          serverOffset={serverOffset}
+          players={room.seats
+            .filter((s) => s.kind === "human")
+            .map((s) => ({ id: s.id, name: s.name, avatar: s.avatar, userId: s.userId }))}
+          me={room.you.seatId}
+        />
+      )}
+      {room.status === "playing" && prep.done && <GateCountdown countdown={gateClock.countdown} accent={LOADING_THEME.accent} />}
+      <FirstSecondsPanel />
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <Icon name="menu" />
@@ -534,6 +567,7 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
       <main className="cap-arena">
         <div className="cap-board-zone">
           <Board3D
+            onPrepared={onPrepared}
             g={g}
             shown={shown}
             deeds={deeds}

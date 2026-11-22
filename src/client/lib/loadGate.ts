@@ -2,7 +2,7 @@
 // son jeu prêt (et le redire, au cas où le message se perdrait dans une coupure), et suivre le compte à rebours.
 
 import { useEffect, useState } from "react";
-import { gatePassed, stillLoading, type LoadGate } from "../../shared/loadGate.ts";
+import { gatePassed, LOAD_COUNTDOWN_MS, stillLoading, type LoadGate } from "../../shared/loadGate.ts";
 
 /** Le temps qu'on attend avant de redire « chargé » si le serveur ne l'a pas noté */
 const AGAIN_MS = 2500;
@@ -38,7 +38,11 @@ export interface GateClock {
 export function gateClock(gate: LoadGate | null | undefined, serverNow: number): GateClock {
   if (gatePassed(gate, serverNow)) return { passed: true, countdown: null, left: null };
   const g = gate!;
-  if (g.goAt !== null) return { passed: false, countdown: Math.max(1, Math.ceil((g.goAt - serverNow) / 1000)), left: null };
+  if (g.goAt !== null) {
+    // Jamais plus que le compte à rebours lui-même (l'horloge du serveur n'est connue qu'à quelques centièmes près)
+    const n = Math.ceil((g.goAt - serverNow) / 1000);
+    return { passed: false, countdown: Math.max(1, Math.min(LOAD_COUNTDOWN_MS / 1000, n)), left: null };
+  }
   return { passed: false, countdown: null, left: Math.max(0, Math.ceil((g.until - serverNow) / 1000)) };
 }
 

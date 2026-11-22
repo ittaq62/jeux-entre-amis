@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SQUARES, type DeckId, type SpecialKind } from "../../../shared/games/capitale/board.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { warmThree } from "../../lib/prepare.ts";
 import { play } from "../../lib/sound.ts";
 import type { TokenId } from "../../../shared/games/capitale/tokens.ts";
 import * as B from "./buildings.ts";
@@ -2070,6 +2071,14 @@ export class CapitaleScene {
     this.updateCamera(dt);
     this.updateAnchors();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Tout préparer derrière l'écran de chargement (les textures, les shaders, quelques images) : la première partie de
+   * plateau ne saute plus en découvrant chaque matière. Voir lib/prepare.ts.
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, { onProgress });
   }
 
   private applyQuality(on: readonly boolean[]) {

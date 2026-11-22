@@ -1,4 +1,4 @@
-// Le chargement de tous avant le départ (shared/loadGate.ts), dans une vraie salle : le coup d'envoi attend que chaque
+// Le chargement de tous avant le départ (shared/loadGate.ts), dans de vraies salles (Crampons, Capitale) : le départ attend que chaque
 // joueur ait dit « chargé », au plus LOAD_MAX_MS, puis un court compte à rebours ; un joueur parti n'est plus attendu.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,8 @@ vi.mock("cloudflare:workers", () => ({
 }));
 
 import { LOAD_COUNTDOWN_MS, LOAD_MAX_MS, type LoadGate } from "../shared/loadGate.ts";
+import type { CapitaleState } from "../shared/games/capitale/engine.ts";
+import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket, type RoomLike } from "./roomHarness.ts";
 
@@ -139,5 +141,78 @@ describe("le coup d'envoi attend le chargement de chacun (Crampons)", () => {
     expect(t.d().status).toBe("playing");
     expect(t.d().gate!.id).not.toBe(first);
     expect(t.d().gate!.loaded).toEqual([]);
+  });
+});
+
+describe("le premier coup attend le chargement de chacun (Capitale)", () => {
+  interface CapData {
+    status: string;
+    gate?: LoadGate | null;
+    capitale: CapitaleState;
+    seats: { id: string; kind: string; userId: string | null }[];
+    timers: { at: number; kind: string }[];
+    endsAt: number | null;
+  }
+
+  async function capitaleTable(settings: Record<string, unknown> = {}) {
+    const state = new FakeState();
+    const r = new CapitaleRoom(state as never, fakeEnv() as never) as unknown as RoomLike & { init(o: unknown): Promise<boolean> };
+    await state.ready;
+    await r.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(r, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "addBot" });
+    if (Object.keys(settings).length > 0) await bench.send(host, { t: "settings", settings });
+    await bench.send(host, { t: "start" });
+    const d = () => bench.data<CapData>();
+    const me = d().seats.find((s) => s.kind === "human")!.id;
+    return { bench, host, d, me };
+  }
+
+  it("ni coup, ni bot, ni chrono avant le départ commun ; puis la partie part", async () => {
+    const t = await capitaleTable();
+    expect(t.d().gate!.waiting).toEqual([t.me]);
+    // Les bots et le chrono attendent au moins la fin de l'attente des retardataires et le compte à rebours
+    const gateEnd = t.d().gate!.until + LOAD_COUNTDOWN_MS;
+    const firstBefore = Math.min(
+      ...t
+        .d()
+        .timers.filter((x) => x.kind === "bot" || x.kind === "timeout")
+        .map((x) => x.at),
+    );
+    expect(firstBefore).toBeGreaterThanOrEqual(gateEnd);
+    // Un coup trop tôt est ignoré
+    const g = t.d().capitale;
+    g.turn = g.players.findIndex((p) => p.id === t.me);
+    g.step = "roll";
+    await t.bench.send(t.host, { t: "action", action: { type: "roll" } });
+    expect(t.d().capitale.step).toBe("roll");
+    // Chargé : le départ dans 3 s, les bots et le chrono s'y recalent
+    await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
+    const goAt = t.d().gate!.goAt!;
+    expect(goAt).toBe(clock + LOAD_COUNTDOWN_MS);
+    const next = Math.min(
+      ...t
+        .d()
+        .timers.filter((x) => x.kind === "bot" || x.kind === "timeout")
+        .map((x) => x.at),
+    );
+    expect(next).toBeGreaterThanOrEqual(goAt);
+    // Après le départ, le coup passe
+    clock = goAt + 200;
+    await t.bench.send(t.host, { t: "action", action: { type: "roll" } });
+    expect(t.d().capitale.step).not.toBe("roll");
+  });
+
+  it("une partie en temps limité commence au départ commun", async () => {
+    const t = await capitaleTable({ end: "timed", minutes: 30 });
+    await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
+    expect(t.d().endsAt).toBe(t.d().gate!.goAt! + 30 * 60_000);
+  });
+
+  it("le joueur parti pendant le chargement n'est plus attendu", async () => {
+    const t = await capitaleTable();
+    await t.bench.drop(t.host);
+    expect(t.d().gate!.goAt).toBe(clock + LOAD_COUNTDOWN_MS);
   });
 });

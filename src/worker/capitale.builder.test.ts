@@ -12,8 +12,9 @@ vi.mock("cloudflare:workers", () => ({
 }));
 
 import { actorOf, type CapitaleState } from "../shared/games/capitale/engine.ts";
+import { LOAD_COUNTDOWN_MS, type LoadGate } from "../shared/loadGate.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
-import { Bench, FakeState, fakeEnv, installWorkerGlobals, user } from "./roomHarness.ts";
+import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket } from "./roomHarness.ts";
 
 installWorkerGlobals();
 
@@ -29,6 +30,14 @@ async function table(settings: Record<string, unknown>, bots = 3) {
   for (let k = 0; k < bots; k++) await bench.send(host, { t: "addBot" });
   await bench.send(host, { t: "settings", settings });
   return { room, bench, host };
+}
+
+/** Le plateau chargé chez l'hôte, et le compte à rebours du départ commun passé (voir shared/loadGate.ts) */
+async function loaded(bench: Bench<CapitaleRoom>, host: FakeSocket, now: number): Promise<number> {
+  await bench.send(host, { t: "loaded", gate: bench.data<{ gate: LoadGate }>().gate.id });
+  const go = now + LOAD_COUNTDOWN_MS;
+  vi.setSystemTime(go);
+  return go;
 }
 
 describe("Capitale Builder à la table", () => {
@@ -66,10 +75,11 @@ describe("Capitale Builder à la table", () => {
 
   it("on bâtit chez soi pendant le tour d'un bot : accepté, sans faire attendre le bot", async () => {
     vi.useFakeTimers();
-    const now = Date.now();
+    let now = Date.now();
     vi.setSystemTime(now);
     const { bench, host } = await table({ builder: true, end: "bankrupt" }, 2);
     await bench.send(host, { t: "start" });
+    now = await loaded(bench, host, now);
     const d = bench.data<{ capitale: CapitaleState; actionSeq: number; seats: { id: string; kind: string }[] }>();
     const g = d.capitale;
     const me = d.seats.find((s) => s.kind === "human")!.id;
@@ -96,6 +106,7 @@ describe("Capitale Builder à la table", () => {
     vi.setSystemTime(now);
     const { bench, host } = await table({ builder: true, end: "bankrupt" }, 2);
     await bench.send(host, { t: "start" });
+    now = await loaded(bench, host, now);
     const d = bench.data<{ capitale: CapitaleState; animUntil: number; seats: { id: string; kind: string }[] }>();
     const g = d.capitale;
     const me = d.seats.find((s) => s.kind === "human")!.id;

@@ -5,6 +5,7 @@ import type { Deed } from "../../shared/games/capitale/engine.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
 import type { CapitaleView } from "../../shared/games/capitale/view.ts";
 import { Icon } from "../components/Icon.tsx";
+import { nextFrame } from "../lib/prepare.ts";
 import { toast } from "../lib/toast.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { colorOf } from "./boardUi.ts";
@@ -46,6 +47,8 @@ interface Props {
   onCell?: (kind: "hover" | "tap", cell: number | null) => void;
   /** La caméra va voir une ville (n change à chaque demande) */
   focus?: { square: number; n: number } | null;
+  /** Où en est la préparation du plateau (voir lib/prepare.ts), de 0 à 1, et quand il est prêt */
+  onPrepared?: (share: number, done: boolean) => void;
 }
 
 /** Les villes qu'on regarde : toutes, les siennes, celles des adversaires, celles d'une équipe, ou celles d'un joueur */
@@ -74,8 +77,11 @@ export function Board3D({
   preview = null,
   onCell,
   focus = null,
+  onPrepared,
 }: Props) {
   const box = useRef<HTMLDivElement>(null);
+  const prepared = useRef(onPrepared);
+  prepared.current = onPrepared;
   const bank = useRef<HTMLSpanElement>(null);
   const pot = useRef<HTMLSpanElement>(null);
   const scene = useRef<CapitaleScene | null>(null);
@@ -119,9 +125,21 @@ export function Board3D({
       });
     } catch {
       setFailed(true);
+      prepared.current?.(1, true);
       return;
     }
     scene.current = s;
+    // Le plateau se prépare derrière l'écran de chargement, une fois les pions posés (deux images plus tard)
+    let stopped = false;
+    void (async () => {
+      await nextFrame();
+      await nextFrame();
+      if (stopped) return;
+      prepared.current?.(0, false);
+      await s.prepare((share) => !stopped && prepared.current?.(share, false));
+    })()
+      .catch((err: unknown) => console.error("Plateau impossible à préparer", err))
+      .then(() => !stopped && prepared.current?.(1, true));
     // En développement seulement : les tests de l'écran visent les cases à travers la scène
     if (import.meta.env.DEV) (window as unknown as { __capScene?: CapitaleScene }).__capScene = s;
     s.setAnchors({ bank: bank.current, pot: pot.current });
@@ -129,6 +147,7 @@ export function Board3D({
     setMoved(false);
     setVersion((v) => v + 1);
     return () => {
+      stopped = true;
       s.dispose();
       scene.current = null;
     };

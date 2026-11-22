@@ -28,6 +28,7 @@ import {
   type TeamCount,
 } from "../shared/games/capitale/engine.ts";
 import { batchMs } from "../shared/games/capitale/timing.ts";
+import { forgetPlayer, gatePassed, LOAD_COUNTDOWN_MS, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { FREE_TOKENS, isTokenId, TOKEN_BY_ID, type TokenId } from "../shared/games/capitale/tokens.ts";
 import { lookOf } from "../shared/looks.ts";
 import { tokenItem } from "../shared/shop.ts";
@@ -119,7 +120,8 @@ type TimerKind =
   | "cleanup"
   | "emote"
   | "tourStart"
-  | "help";
+  | "help"
+  | "gate";
 
 interface Timer {
   at: number;
@@ -155,6 +157,8 @@ interface CapitaleData {
   /** Tournée : tout le monde est là, on choisit son pion jusqu'à cette heure (ou jusqu'à ce que tous soient prêts) */
   pickUntil?: number | null;
   ready?: string[];
+  /** Le premier coup retenu le temps que chacun charge le plateau (voir loadGate.ts) ; null : la partie tourne */
+  gate?: LoadGate | null;
   botKey: string;
   /** La dette pour laquelle les bots coéquipiers ont déjà prévu d'aider (une seule fois par décision) */
   helpKey?: string;
@@ -492,6 +496,8 @@ export class CapitaleRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : les autres ne l'attendent plus
+      if (forgetPlayer(d.gate, seat.id)) this.settleLoading(now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -610,9 +616,17 @@ export class CapitaleRoom extends DurableObject<Env> {
     if (d.tour && TOUR_LOCKED.has(msg.t)) return;
 
     switch (msg.t) {
+      case "loaded": {
+        // Son jeu a fini de charger le plateau : le premier coup part quand tout le monde l'a dit
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        this.settleLoading(now);
+        return this.afterChange([], now);
+      }
+
       case "action": {
         const g = d.capitale;
         if (d.status !== "playing" || !g) return error("Aucune partie en cours.");
+        if (!gatePassed(d.gate, now)) return;
         if (!seat) return error("Tu regardes la partie : attends la prochaine pour jouer.");
         if (seat.autoplay) {
           seat.autoplay = false;
@@ -703,6 +717,7 @@ export class CapitaleRoom extends DurableObject<Env> {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
             d.botKey = "";
+            if (forgetPlayer(d.gate, seat.id)) this.settleLoading(now);
             this.systemChat(`${seat.name} a quitté la table, un bot gère ses affaires.`);
           } else {
             d.seats = d.seats.filter((s) => s !== seat);
@@ -943,12 +958,42 @@ export class CapitaleRoom extends DurableObject<Env> {
     d.botKey = "";
     d.botTraded = {};
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
-    d.endsAt = d.settings.capitale.end === "timed" ? now + d.settings.capitale.minutes * 60_000 : null;
+    // Le premier coup attend que chaque joueur présent ait chargé le plateau (au plus quelques secondes) ; une partie en
+    // temps limité commence au départ commun
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+    );
+    if (d.gate.goAt === null) this.addTimer({ at: d.gate.until, kind: "gate" });
+    d.endsAt = d.settings.capitale.end === "timed" ? this.gateStart() + d.settings.capitale.minutes * 60_000 : null;
     if (d.endsAt) this.addTimer({ at: d.endsAt, kind: "timeUp" });
     const first = this.seatById(state.players[state.turn]!.id);
     this.systemChat(`La partie commence : ${first?.name ?? "?"} lance les dés en premier.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("capitale", d.settings.randomRules, "start"));
     return this.afterChange(events, now);
+  }
+
+  /** L'heure du premier coup : le départ commun, ou au plus tard la fin de l'attente des retardataires */
+  private gateStart(): number {
+    const g = this.data!.gate;
+    if (!g) return 0;
+    return g.goAt ?? g.until + LOAD_COUNTDOWN_MS;
+  }
+
+  /** Le chargement de chacun a peut-être fini : le départ est fixé, les chronos, les bots et la fin de partie s'y recalent */
+  private settleLoading(now: number) {
+    const d = this.data!;
+    if (!settleGate(d.gate, now)) return;
+    d.botKey = "";
+    d.deadlineKey = "";
+    d.auctionKey = "";
+    d.timers = d.timers.filter((t) => t.kind !== "gate" && t.kind !== "bot" && t.kind !== "timeout");
+    if (d.endsAt !== null && d.settings.capitale.end === "timed") {
+      d.endsAt = this.gateStart() + d.settings.capitale.minutes * 60_000;
+      d.timers = d.timers.filter((t) => t.kind !== "timeUp");
+      this.addTimer({ at: d.endsAt, kind: "timeUp" });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1082,8 +1127,9 @@ export class CapitaleRoom extends DurableObject<Env> {
     const d = this.data!;
     const g = d.capitale;
     const decisionKinds: TimerKind[] = ["bot", "timeout", "auction", "botBid", "answer", "tradeExpiry"];
-    // Rien ne repart avant que les écrans aient montré le coup précédent
-    const ready = Math.max(now, d.animUntil ?? 0);
+    // Rien ne repart avant que les écrans aient montré le coup précédent, ni avant le départ commun
+    if (d.gate && gatePassed(d.gate, now)) d.gate = null;
+    const ready = Math.max(now, d.animUntil ?? 0, this.gateStart());
     if (!g || d.status !== "playing" || g.step === "over") {
       d.timers = d.timers.filter((t) => !decisionKinds.includes(t.kind) && t.kind !== "timeUp");
       d.deadline = null;
@@ -1291,6 +1337,12 @@ export class CapitaleRoom extends DurableObject<Env> {
     const seat = t.seatId ? this.seatById(t.seatId) : undefined;
 
     switch (t.kind) {
+      case "gate": {
+        // On a assez attendu les retardataires : le compte à rebours part sans eux
+        if (!playing || !d.gate) return null;
+        this.settleLoading(Date.now());
+        return [];
+      }
       case "bot": {
         if (!playing || !seat || t.key !== `${d.actionSeq}` || actorOf(g) !== seat.id || !this.plays(seat)) return null;
         const allowTrade = seat.kind === "bot" && d.botTraded[seat.id] !== g.turnId;
@@ -1522,6 +1574,7 @@ export class CapitaleRoom extends DurableObject<Env> {
         isAdmin: Boolean(connected.get(userId)?.admin),
       },
       capitale: d.capitale ? viewFor(d.capitale, seat?.id ?? null) : null,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       deadline: d.deadline,
       auctionDeadline: d.auctionDeadline,
       pickUntil: d.pickUntil ?? null,
