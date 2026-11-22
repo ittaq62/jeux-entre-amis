@@ -1679,7 +1679,7 @@ export class BattleRuntime {
 function surfaceOf(m: Mat | undefined): Surface {
   switch (m) {
     case "metal":
-    case "citerne":
+    case "decor":
     case "rouille":
     case "wagon":
     case "wagon2":

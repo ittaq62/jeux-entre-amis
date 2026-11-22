@@ -38,8 +38,11 @@ export type Mat =
   | "sacs"
   /** Un bidon d'essence : il explose quand on tire dessus */
   | "bidon"
-  /** Une citerne : sa boîte arrête les pas et les balles, la citerne ronde est dessinée par le décor */
-  | "citerne"
+  /**
+   * Ce que dessine le décor (une citerne ronde, un avion, la voûte d'un hangar) : sa boîte arrête les pas et les balles,
+   * mais on ne la dessine pas
+   */
+  | "decor"
   /** Un conteneur maritime (dessiné avec ses ondulations, ses portes et sa couleur) */
   | "conteneur"
   | "invisible";

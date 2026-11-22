@@ -8,8 +8,8 @@
 
 import type { Box, Mat } from "./world.ts";
 
-export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine";
-export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine"];
+export type MapId = "hameau" | "gare" | "port" | "col" | "ruines" | "desert" | "usine" | "aerodrome";
+export const MAP_IDS: MapId[] = ["hameau", "gare", "port", "col", "ruines", "desert", "usine", "aerodrome"];
 
 export interface Spawn {
   x: number;
@@ -70,7 +70,15 @@ export type Decor =
   /** Une toile tendue (l'auvent d'un souk) : rayée, un peu creusée, à la hauteur y */
   | { k: "awning"; x0: number; z0: number; x1: number; z1: number; y: number; color: string }
   /** Une cheminée d'usine : une colonne de brique qui s'amincit, cerclée de fer, et sa fumée */
-  | { k: "chimney"; x: number; z: number; r: number; h: number };
+  | { k: "chimney"; x: number; z: number; r: number; h: number }
+  /** Un hangar voûté, en tôle ondulée, le long de x, ouvert aux deux bouts */
+  | { k: "hangar"; x0: number; z0: number; x1: number; z1: number; h: number }
+  /** Un avion garé : fuselage, ailes, dérive, hélice, verrière ; le nez vers `dir` */
+  | { k: "plane"; x: number; z: number; dir: "+x" | "-x" | "+z" | "-z"; color: string; L: number; span: number }
+  /** Une manche à air, rayée, au bout de son mât */
+  | { k: "windsock"; x: number; z: number }
+  /** Une ligne peinte au sol, en tirets, le long de x */
+  | { k: "marks"; x0: number; x1: number; z: number; color: string };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -138,6 +146,11 @@ export const MAP_NAMES: Record<MapId, { name: string; blurb: string }> = {
     blurb:
       "Des halles de brique au soleil couchant : la halle des machines au milieu et ses passerelles, le parc des citernes sous les tuyaux, le quai de chargement et ses remorques, les bureaux à étage et la grande cheminée qui fume.",
   },
+  aerodrome: {
+    name: "L'Aérodrome",
+    blurb:
+      "Un terrain d'aviation sous la bruine : le hangar voûté qu'on traverse autour d'un avion, l'atelier et son camion-citerne, l'aire et sa tour de contrôle vitrée, des avions garés dans leurs alvéoles de sacs de sable.",
+  },
   port: {
     name: "Le Port",
     blurb: "Des rangées de conteneurs, un entrepôt, la capitainerie et le grand portique au milieu : on grimpe, on contourne, on surprend.",
@@ -203,12 +216,14 @@ class Builder {
       case "water":
       case "wire":
       case "awning":
+      case "hangar":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
         return;
       case "tree":
       case "pine":
       case "palm":
       case "chimney":
+      case "windsock":
       case "lamp":
       case "tower":
         this.decor.push({ ...d, x: -d.x, z: -d.z });
@@ -216,6 +231,14 @@ class Builder {
       case "rail":
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
         return;
+      case "marks":
+        this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
+        return;
+      case "plane": {
+        const flip = { "+x": "-x", "-x": "+x", "+z": "-z", "-z": "+z" } as const;
+        this.decor.push({ ...d, x: -d.x, z: -d.z, dir: flip[d.dir] });
+        return;
+      }
       case "tank":
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
         return;
@@ -1839,9 +1862,9 @@ function usineSide(b: Builder) {
   b.crate(-8.6, 4.6);
 
   // Le parc, au nord : deux citernes couchées, une rampe de tuyaux au-dessus, des palettes, un chariot élévateur
-  b.box(-36, 0, 18.6, -28.4, 3, 21.4, "citerne");
+  b.box(-36, 0, 18.6, -28.4, 3, 21.4, "decor");
   b.add({ k: "tank", x0: -36, x1: -28.4, z: 20, y: 1.35, r: 1.5 });
-  b.box(-25, 0, 21.7, -19, 2.4, 23.9, "citerne");
+  b.box(-25, 0, 21.7, -19, 2.4, 23.9, "decor");
   b.add({ k: "tank", x0: -25, x1: -19, z: 22.8, y: 1, r: 1.2 });
   // Les berceaux des citernes
   for (const x of [-35, -29.4]) b.box(x - 0.2, 0, 18.7, x + 0.2, 0.6, 21.3, "beton");
@@ -1957,7 +1980,175 @@ function usine(): GameMap {
   };
 }
 
-const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine };
+// ---------------------------------------------------------------------------
+// L'Aérodrome
+// ---------------------------------------------------------------------------
+
+/**
+ * Un hangar voûté qu'on traverse de part en part, le long de x : une voûte de tôle de x0 à x1, large de z0 à z1, haute
+ * de h. Ce qui arrête les pas et les balles suit la voûte de près (le bas des parois, ses épaules, le haut).
+ */
+function hangar(b: Builder, x0: number, z0: number, x1: number, z1: number, h: number) {
+  const w = (z1 - z0) / 2;
+  b.box(x0, 0, z0, x1, h * 0.5, z0 + 0.4, "decor");
+  b.box(x0, 0, z1 - 0.4, x1, h * 0.5, z1, "decor");
+  b.box(x0, h * 0.5, z0, x1, h * 0.8, z0 + w * 0.4, "decor");
+  b.box(x0, h * 0.5, z1 - w * 0.4, x1, h * 0.8, z1, "decor");
+  b.box(x0, h * 0.8, z0 + w * 0.4, x1, h, z1 - w * 0.4, "decor");
+  b.add({ k: "hangar", x0, z0, x1, z1, h });
+}
+
+/**
+ * Un avion garé, le nez vers `dir` (±x ou ±z) : son fuselage et ses ailes arrêtent les pas et les balles (sous les
+ * ailes, on ne passe pas debout), sa dérive aussi
+ */
+function plane(b: Builder, x: number, z: number, dir: "+x" | "-x" | "+z" | "-z", color: string, L = 8.6, span = 10) {
+  const alongX = dir === "+x" || dir === "-x";
+  const s = dir === "+x" || dir === "+z" ? 1 : -1;
+  const at = (a: number, c: number) => (alongX ? [x + a, z + c] : [x + c, z + a]) as [number, number];
+  const box = (a0: number, a1: number, y0: number, y1: number, c0: number, c1: number) => {
+    const [px0, pz0] = at(a0, c0);
+    const [px1, pz1] = at(a1, c1);
+    b.box(Math.min(px0, px1), y0, Math.min(pz0, pz1), Math.max(px0, px1), y1, Math.max(pz0, pz1), "decor");
+  };
+  box(-L / 2, L / 2, 0.55, 2.2, -0.85, 0.85);
+  box(s * 0.6 - 1.1, s * 0.6 + 1.1, 1.05, 1.35, -span / 2, span / 2);
+  box(-s * L * 0.5, -s * (L * 0.5 - 1.1), 2.2, 3.5, -0.1, 0.1);
+  b.add({ k: "plane", x, z, dir, color, L, span });
+}
+
+function aerodromeSide(b: Builder) {
+  // La base : un rempart de sacs de sable, trois passages, une jeep, des caisses, la manche à air
+  b.box(-39.2, 0, -12, -38.6, 1.9, -7.2, "sacs");
+  b.box(-39.2, 0, -2.6, -38.6, 1.9, 2.6, "sacs");
+  b.box(-39.2, 0, 7.2, -38.6, 1.9, 12, "sacs");
+  b.box(-48, 0, 11.4, -39.2, 1.9, 12, "sacs");
+  b.box(-48, 0, -12, -39.2, 1.9, -11.4, "sacs");
+  b.box(-48, 0, -11.4, -47.6, 1.9, 11.4, "sacs");
+  car(b, -46.4, 7.6, -43.6, 9.2, "#4b5a3a");
+  b.crate(-46.4, -9.8);
+  b.crate(-45.2, -9.8);
+  b.add({ k: "windsock", x: -44, z: -6.4 });
+  b.add({ k: "lamp", x: -40, z: 11, h: 5 });
+
+  // Au nord : le hangar, qu'on traverse autour d'un avion ; l'atelier et son camion-citerne
+  hangar(b, -36, 14, -24, 28, 7.5);
+  plane(b, -30, 21, "+x", "#6f7f5c");
+  car(b, -21.6, 15.2, -15.4, 17.4, "#8a8a2c");
+  flatHouse(b, -20, 20, -13.6, 26, {
+    open: [
+      { side: "s", at: -17.8, w: 1.4, kind: "door" },
+      { side: "w", at: 22.6, w: 1.1, kind: "win" },
+      { side: "e", at: 23.2, w: 1.4, kind: "door" },
+    ],
+    wall: "crepi2",
+    climb: { side: "n", axis: "x", start: -19.6, dir: 1, c0: 26.1, c1: 27.5, gap: [-16.4, -14.8] },
+  });
+  b.crate(-22.6, 22.6);
+  b.crate(-22.6, 23.8);
+  b.barrel(-11.2, 18.4);
+  b.barrel(-22.4, 27);
+
+  // L'aire de stationnement, au milieu : la tour de contrôle (un étage vitré), des chariots à bagages, un mur
+  // pare-souffle, un camion-citerne
+  flatHouse(b, -9.5, 6, -4, 11.5, {
+    floors: 2,
+    open: [
+      { side: "e", at: 9, w: 1.4, kind: "door" },
+      { side: "w", at: 9, w: 1.2, kind: "win" },
+      { side: "n", at: -8.2, w: 1.6, kind: "win", floor: 1 },
+      { side: "s", at: -8.4, w: 1.6, kind: "win", floor: 1 },
+      { side: "e", at: 7, w: 1.4, kind: "win", floor: 1 },
+      { side: "w", at: 8.4, w: 1.6, kind: "win", floor: 1 },
+    ],
+    stairs: { axis: "x", start: -9.1, dir: 1, c0: 6.3, c1: 7.6 },
+    wall: "crepi2",
+  });
+  car(b, -31.4, -1.2, -25.4, 1, "#9a3a2c");
+  for (const [x, z] of [
+    [-22, 4.6],
+    [-20, 4.6],
+    [-18, 4.6],
+  ] as const)
+    b.box(x - 0.8, 0, z - 0.45, x + 0.8, 1, z + 0.45, "bois");
+  b.box(-14.4, 0, -5.4, -14, 2, -2, "beton");
+  b.box(-34.4, 0, -10, -30.8, 1.05, -9.4, "beton");
+  b.barrel(-12.6, 3.2);
+
+  // Au sud : deux avions dans leurs alvéoles de sacs de sable, ouvertes vers le nord ; la ligne jaune du roulage
+  for (const x0 of [-38, -24]) {
+    b.box(x0, 0, -26.4, x0 + 10, 1.6, -25.8, "sacs");
+    b.box(x0, 0, -25.8, x0 + 0.6, 1.6, -18.6, "sacs");
+    b.box(x0 + 9.4, 0, -25.8, x0 + 10, 1.6, -18.6, "sacs");
+    plane(b, x0 + 5, -21.8, "+z", x0 === -38 ? "#5c6e7e" : "#7e6a4c", 7.4, 8);
+  }
+  b.add({ k: "marks", x0: -42, x1: -6, z: -15, color: "#d9b52e" });
+  b.crate(-12.4, -22.6);
+  b.crate(-12.4, -21.4);
+  b.add({ k: "windsock", x: -10, z: -27 });
+  b.add({ k: "patch", x0: -48, z0: -30, x1: -40, z1: -13, m: "herbe" });
+  b.add({ k: "patch", x0: -12, z0: 12, x1: -1, z1: 28, m: "herbe" });
+}
+
+function aerodrome(): GameMap {
+  const b = new Builder();
+  b.box(-48, -1, -30, 48, 0, 30, "beton");
+  fence(b, -48, -30, 48, 30);
+  // La ligne blanche au milieu de l'aire
+  b.add({ k: "marks", x0: -40, x1: 40, z: 0, color: "#e6e2d6" });
+  const spawns: [Spawn[], Spawn[]] = [[], []];
+  const ffa: Spawn[] = [];
+  for (const s of [1, -1] as const) {
+    b.s = s;
+    aerodromeSide(b);
+    const team = s === 1 ? 0 : 1;
+    spawns[team] = [
+      b.spawn(-46, -3, 0, -3),
+      b.spawn(-46, 3, 0, 3),
+      b.spawn(-44, -6, 0, -6),
+      b.spawn(-43, 5, 0, 5),
+      b.spawn(-46, -6.5, 0, -6.5),
+      b.spawn(-41, -9, 0, -9),
+      b.spawn(-41, 0, 0, 0),
+    ];
+    ffa.push(
+      b.spawn(-44, 0, 0, 0),
+      b.spawn(-30, 15.2, 0, 15.2),
+      b.spawn(-19, -16, 0, -16),
+      b.spawn(-28, -4, 0, 0),
+      b.spawn(-6, 16, 0, 16),
+      b.spawn(-5.6, 10.4, 0, 0),
+    );
+    ffa.push(b.spawn(-4, -5, 0, 0));
+  }
+  b.s = 1;
+  return {
+    id: "aerodrome",
+    ...MAP_NAMES.aerodrome,
+    boxes: b.boxes,
+    decor: b.decor,
+    bounds: { x0: -48, z0: -30, x1: 48, z1: 30 },
+    spawns,
+    ffa,
+    flags: [
+      { x: -44, y: 0, z: 0 },
+      { x: 44, y: 0, z: 0 },
+    ],
+    zone: { x: 0, z: 0, r: 6 },
+    depots: [
+      { x: 26, y: 0, z: -19 },
+      { x: 24, y: 0, z: 4 },
+    ],
+    points: [
+      { x: -18, y: 0, z: 18.8 },
+      { x: 0, y: 0, z: 0 },
+      { x: 18, y: 0, z: -18.8 },
+    ],
+    light: "gris",
+  };
+}
+
+const BUILD: Record<MapId, () => GameMap> = { hameau, gare, port, col, ruines, desert, usine, aerodrome };
 const cache = new Map<MapId, GameMap>();
 
 /** Une carte, construite une fois pour toutes */

@@ -45,6 +45,13 @@ const VIEWS: Record<MapId, View[]> = {
     { name: "Le quai, vers la mer", x: -20, y: 1.62, z: 25, yaw: yawTo(-20, 25, 10, 40), pitch: -0.02 },
     { name: "De la capitainerie", x: -27, y: 4.82, z: 18.5, yaw: yawTo(-27, 18.5, 0, 0), pitch: -0.12 },
   ],
+  aerodrome: [
+    { name: "La base, vers l'aire", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
+    { name: "Dans le hangar", x: -35, y: 1.62, z: 15.2, yaw: yawTo(-35, 15.2, -24, 21), pitch: 0.08 },
+    { name: "De la tour de contrôle", x: -6, y: 4.82, z: 8, yaw: yawTo(-6, 8, 6, -8), pitch: -0.12 },
+    { name: "Les alvéoles", x: -40, y: 1.62, z: -15, yaw: yawTo(-40, -15, -19, -22), pitch: -0.02 },
+    { name: "L'atelier", x: -10, y: 1.62, z: 17, yaw: yawTo(-10, 17, -30, 20), pitch: 0.02 },
+  ],
   usine: [
     { name: "La base, vers la halle", x: -42, y: 1.62, z: 1.2, yaw: yawTo(-42, 1.2, 0, 0), pitch: 0 },
     { name: "Dans la halle", x: -10.6, y: 1.62, z: 0, yaw: yawTo(-10.6, 0, 4, 1), pitch: 0.06 },

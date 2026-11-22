@@ -396,7 +396,7 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
         }),
   );
   gm.boxes.forEach((bx, i) => {
-    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse" || bx.m === "citerne") return;
+    if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse" || bx.m === "decor") return;
     if (rocks.has(bx)) {
       const snowy = gm.light === "neige";
       addRock(
@@ -910,6 +910,131 @@ function chimneys(list: Extract<Decor, { k: "chimney" }>[], group: THREE.Group, 
   };
 }
 
+/** La voûte d'un hangar : une demi-coque de tôle ondulée (on la voit dedans comme dehors), cerclée à ses deux bouts */
+function hangarVault(d: Extract<Decor, { k: "hangar" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const len = d.x1 - d.x0;
+  const w = (d.z1 - d.z0) / 2;
+  const tex = corrugatedTexture().clone();
+  tex.needsUpdate = true;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set((Math.PI * w) / 2.4, len / 2.4);
+  const mat = new THREE.MeshStandardMaterial({ map: tex, color: "#9aa3a8", roughness: 0.55, metalness: 0.45, side: THREE.DoubleSide });
+  const g = new THREE.CylinderGeometry(1, 1, len, low ? 14 : 28, 1, true, 0, Math.PI);
+  g.rotateZ(Math.PI / 2);
+  g.scale(1, d.h, w);
+  const vault = new THREE.Mesh(g, mat);
+  vault.position.set((d.x0 + d.x1) / 2, 0, (d.z0 + d.z1) / 2);
+  vault.castShadow = true;
+  vault.receiveShadow = true;
+  group.add(vault);
+  const rib = new THREE.MeshStandardMaterial({ color: "#3b3f42", roughness: 0.6, metalness: 0.5 });
+  for (const x of [d.x0, d.x1]) {
+    const tg = new THREE.TorusGeometry(1, 0.06, 6, low ? 14 : 28, Math.PI);
+    tg.scale(w, d.h, 1);
+    const ring = new THREE.Mesh(tg, rib);
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(x, 0, (d.z0 + d.z1) / 2);
+    group.add(ring);
+  }
+}
+
+/** Un avion garé : son fuselage qui s'effile, son capot et son hélice, ses ailes, son empennage, sa verrière, ses roues */
+function parkedPlane(d: Extract<Decor, { k: "plane" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const seg = low ? 8 : 14;
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: d.color, roughness: 0.55, metalness: 0.3 });
+  const dark = new THREE.MeshStandardMaterial({ color: "#26282a", roughness: 0.5, metalness: 0.4 });
+  const glass = new THREE.MeshStandardMaterial({ color: "#1b2a34", roughness: 0.1, metalness: 0.6 });
+  const L = d.L;
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  };
+  const body = new THREE.CylinderGeometry(0.85, 0.3, L * 0.82, seg);
+  body.rotateZ(-Math.PI / 2);
+  add(body, paint, -L * 0.06, 1.4, 0);
+  const cowl = new THREE.SphereGeometry(0.86, seg, 8);
+  cowl.scale(0.7, 1, 1);
+  add(cowl, dark, L * 0.35, 1.4, 0);
+  for (let k = 0; k < 3; k++) {
+    const blade = add(new THREE.BoxGeometry(0.06, 1.3, 0.16), dark, L * 0.35 + 0.66, 1.4, 0);
+    blade.rotation.x = (k / 3) * Math.PI * 2;
+    blade.geometry.translate(0, 0.65, 0);
+  }
+  const canopy = new THREE.SphereGeometry(0.5, seg, 8);
+  canopy.scale(1.3, 0.65, 0.62);
+  add(canopy, glass, L * 0.06, 2.1, 0);
+  add(new THREE.BoxGeometry(2.2, 0.2, d.span), paint, 0.6, 1.2, 0);
+  add(new THREE.BoxGeometry(1.1, 0.12, d.span * 0.38), paint, -L * 0.42, 1.55, 0);
+  add(new THREE.BoxGeometry(1.1, 1.3, 0.12), paint, -L * 0.44, 2.85, 0);
+  const wheel = new THREE.CylinderGeometry(0.34, 0.34, 0.18, seg);
+  wheel.rotateX(Math.PI / 2);
+  for (const z of [-1.6, 1.6]) {
+    add(wheel, dark, 0.9, 0.34, z);
+    add(new THREE.BoxGeometry(0.1, 0.85, 0.1), dark, 0.9, 0.78, z);
+  }
+  add(new THREE.CylinderGeometry(0.16, 0.16, 0.1, seg).rotateX(Math.PI / 2), dark, -L * 0.44, 0.45, 0);
+  g.rotation.y = d.dir === "+x" ? 0 : d.dir === "-x" ? Math.PI : d.dir === "+z" ? -Math.PI / 2 : Math.PI / 2;
+  g.position.set(d.x, 0, d.z);
+  group.add(g);
+}
+
+/** La manche à air : son mât, et la manche rayée qui retombe un peu au bout */
+function windsock(d: Extract<Decor, { k: "windsock" }>, group: THREE.Group) {
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 5, 6), steel);
+  pole.position.set(d.x, 2.5, d.z);
+  group.add(pole);
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 8;
+  const g = c.getContext("2d")!;
+  for (let k = 0; k < 5; k++) {
+    g.fillStyle = k % 2 === 0 ? "#e2622c" : "#f2ede2";
+    g.fillRect((k * 64) / 5, 0, 64 / 5 + 1, 8);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const cone = new THREE.CylinderGeometry(0.32, 0.14, 1.8, 10, 1, true);
+  cone.rotateZ(-Math.PI / 2 - 0.25);
+  // Le dessin des bandes court le long de la manche
+  const uv = cone.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i), uv.getX(i));
+  const sock = new THREE.Mesh(cone, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, side: THREE.DoubleSide }));
+  sock.position.set(d.x + 0.9, 4.75, d.z);
+  sock.castShadow = true;
+  group.add(sock);
+}
+
+/** Une ligne peinte en tirets, au ras du sol (décalée pour ne pas scintiller) */
+function groundMarks(d: Extract<Decor, { k: "marks" }>, group: THREE.Group) {
+  const pos: number[] = [];
+  for (let x = d.x0; x < d.x1; x += 5.5) {
+    const a = x;
+    const b = Math.min(d.x1, x + 3);
+    pos.push(a, 0.02, d.z - 0.18, a, 0.02, d.z + 0.18, b, 0.02, d.z + 0.18, a, 0.02, d.z - 0.18, b, 0.02, d.z + 0.18, b, 0.02, d.z - 0.18);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(
+    g,
+    new THREE.MeshStandardMaterial({
+      color: d.color,
+      roughness: 0.75,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      side: THREE.DoubleSide,
+    }),
+  );
+  m.receiveShadow = true;
+  group.add(m);
+}
+
 const steel = new THREE.MeshLambertMaterial({ color: "#3e4246" });
 const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe2a8" });
 const water = new THREE.MeshLambertMaterial({ color: "#3f5f6a", transparent: true, opacity: 0.82, emissive: "#0d1a1f" });
@@ -1263,6 +1388,18 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "palm":
       palm(d, group, q);
+      return;
+    case "hangar":
+      hangarVault(d, group, q);
+      return;
+    case "plane":
+      parkedPlane(d, group, q);
+      return;
+    case "windsock":
+      windsock(d, group);
+      return;
+    case "marks":
+      groundMarks(d, group);
       return;
     case "awning":
       awning(d, group);
