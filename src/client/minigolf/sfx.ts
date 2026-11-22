@@ -218,6 +218,25 @@ export function sparkle(vol = 1) {
   for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.06, "sine", 1600 + k * 400, 1700 + k * 420, o.vol * vol * 0.2, 0.002, 0.15);
 }
 
+/** À lui de jouer : deux notes claires, comme un carillon de bois */
+export function yourTurn(vol = 1) {
+  const o = out();
+  if (!o) return;
+  const t = o.ctx.currentTime + 0.01;
+  const v = o.vol * vol;
+  tone(o.ctx, o.dest, t, "triangle", 660, 650, v * 0.32, 0.004, 0.32);
+  tone(o.ctx, o.dest, t + 0.13, "triangle", 990, 980, v * 0.3, 0.004, 0.45);
+  tone(o.ctx, o.dest, t + 0.13, "sine", 1980, 1970, v * 0.08, 0.004, 0.3);
+}
+
+/** Les dernières secondes de son tour : un petit tic */
+export function clockTick(vol = 1) {
+  const o = out();
+  if (!o) return;
+  const t = o.ctx.currentTime + 0.003;
+  tone(o.ctx, o.dest, t, "square", 1500, 1400, o.vol * vol * 0.05, 0.001, 0.03);
+}
+
 /** Des applaudissements (un trou en un) */
 export function applause(vol = 1) {
   const o = out();

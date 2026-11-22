@@ -43,6 +43,9 @@ export class HoleScene {
   private aimArrow: THREE.Mesh;
   private aimLine: THREE.Mesh;
   private aimMat: THREE.MeshBasicMaterial;
+  private aimLineMat: THREE.MeshBasicMaterial;
+  /** L'anneau autour de sa balle quand c'est à lui : on l'attrape pour tirer */
+  private grab: THREE.Mesh;
   private host: HTMLElement;
   private baseRatio = Math.min(window.devicePixelRatio || 1, TOUCH ? 2 : 2);
   /** Les effets de l'image (le halo des lumières, l'étalonnage) : le premier cran qu'on retire si l'appareil peine */
@@ -70,30 +73,44 @@ export class HoleScene {
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target, this.hemi);
 
-    // La flèche de visée : un trait pointillé jusqu'au premier mur, et une flèche dont la longueur dit la force
+    // La visée : un pointillé court devant la balle (la direction, arrêté au premier mur), et une flèche dont la
+    // longueur et la couleur disent la force
     this.aim = new THREE.Group();
-    this.aimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false });
+    // (hors de l'étalonnage de l'image : la couleur de la force reste franche)
+    this.aimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, depthWrite: false, toneMapped: false });
     const arrow = new THREE.Shape();
-    arrow.moveTo(-0.03, 0);
-    arrow.lineTo(0.03, 0);
-    arrow.lineTo(0.03, 0.8);
-    arrow.lineTo(0.08, 0.8);
+    arrow.moveTo(-0.022, 0);
+    arrow.lineTo(0.022, 0);
+    arrow.lineTo(0.03, 0.78);
+    arrow.lineTo(0.075, 0.76);
     arrow.lineTo(0, 1);
-    arrow.lineTo(-0.08, 0.8);
-    arrow.lineTo(-0.03, 0.8);
+    arrow.lineTo(-0.075, 0.76);
+    arrow.lineTo(-0.03, 0.78);
     this.aimArrow = new THREE.Mesh(new THREE.ShapeGeometry(arrow), this.aimMat);
     this.aimArrow.rotation.x = -Math.PI / 2;
     this.aimArrow.renderOrder = 10;
-    const dots = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.03, 1),
-      new THREE.MeshBasicMaterial({ map: dotsTex(), transparent: true, opacity: 0.85, depthWrite: false }),
-    );
+    this.aimLineMat = new THREE.MeshBasicMaterial({
+      map: dotsTex(),
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const dots = new THREE.Mesh(new THREE.PlaneGeometry(0.034, 1), this.aimLineMat);
     dots.rotation.x = -Math.PI / 2;
     dots.renderOrder = 9;
     this.aimLine = dots;
     this.aim.add(this.aimArrow, this.aimLine);
     this.aim.visible = false;
     this.scene.add(this.aim);
+    this.grab = new THREE.Mesh(
+      new THREE.RingGeometry(BALL_R * 1.75, BALL_R * 2.1, 48),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }),
+    );
+    this.grab.rotation.x = -Math.PI / 2;
+    this.grab.renderOrder = 11;
+    this.grab.visible = false;
+    this.scene.add(this.grab);
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
@@ -261,7 +278,11 @@ export class HoleScene {
   }
 
   /** La visée : depuis la balle, dans la direction `angle`, de force `power` (0 à 1) ; null pour la cacher */
-  setAim(at: { x: number; y: number; z: number } | null, angle = 0, power = 0) {
+  /**
+   * La visée sur une balle : sa direction (le pointillé, court) et sa force (la flèche, si `power` > 0). `ghost` : celle
+   * d'un autre joueur, qu'on regarde viser (plus pâle)
+   */
+  setAim(at: { x: number; y: number; z: number } | null, angle = 0, power = 0, ghost = false) {
     if (!at || !this.course) {
       this.aim.visible = false;
       return;
@@ -270,18 +291,63 @@ export class HoleScene {
     const y = this.groundAt(at.x, at.z) + 0.012;
     this.aim.position.set(at.x, y, at.z);
     this.aim.rotation.y = -angle - Math.PI / 2;
-    // La flèche : jusqu'à 1,4 m, du vert au rouge
-    const len = 0.2 + power * 1.2;
-    this.aimArrow.scale.set(1, len, 1);
-    this.aimArrow.position.z = 0;
-    this.aimMat.color.setHSL(0.33 - power * 0.33, 0.85, 0.55);
-    // Le pointillé : tout droit jusqu'au premier mur
-    const reach = Math.min(rayToWall(this.course, at.x, at.z, angle, 12), 12);
+    // La flèche : jusqu'à un mètre, du vert au rouge, qui part du bord de la balle
+    this.aimArrow.visible = power > 0.001;
+    const len = 0.12 + power * 0.95;
+    this.aimArrow.scale.set(1 + power * 0.4, len, 1);
+    this.aimArrow.position.z = -BALL_R * 1.1;
+    this.aimMat.color.setHSL(0.33 - power * 0.33, 0.9, 0.5);
+    this.aimMat.opacity = ghost ? 0.55 : 0.92;
+    // Le pointillé : un mètre et demi au plus, arrêté au premier mur, qui s'efface au bout
+    const reach = Math.min(rayToWall(this.course, at.x, at.z, angle, AIM_GUIDE), AIM_GUIDE);
     this.aimLine.scale.set(1, reach, 1);
     this.aimLine.position.set(0, -0.002, -reach / 2);
-    const tex = (this.aimLine.material as THREE.MeshBasicMaterial).map!;
-    tex.repeat.set(1, reach * 6);
-    void BALL_R;
+    const tex = this.aimLineMat.map!;
+    tex.repeat.set(1, reach / AIM_GUIDE);
+    this.aimLineMat.opacity = ghost ? 0.5 : 0.9;
+  }
+
+  /** L'anneau qui invite à attraper sa balle (null : on le cache) ; `t` le fait respirer */
+  setGrab(at: { x: number; y: number; z: number } | null, t = 0) {
+    if (!at) {
+      this.grab.visible = false;
+      return;
+    }
+    this.grab.visible = true;
+    this.grab.position.set(at.x, this.groundAt(at.x, at.z) + 0.02, at.z);
+    const k = 0.5 + 0.5 * Math.sin(t * 3.2);
+    this.grab.scale.setScalar(1 + k * 0.12);
+    (this.grab.material as THREE.MeshBasicMaterial).opacity = 0.32 + k * 0.3;
+  }
+
+  /**
+   * L'angle (au-dessus de l'horizontale) d'où l'on voit la balle en `at` par-dessus les murs qui sont derrière elle,
+   * dans la direction `angle`, jusqu'à `max` mètres ; -Infinity s'il n'y en a pas
+   */
+  clearPitch(at: { x: number; y: number; z: number }, angle: number, max: number): number {
+    const c = this.course;
+    if (!c) return -Infinity;
+    const dx = Math.cos(angle);
+    const dz = Math.sin(angle);
+    let need = -Infinity;
+    for (const w of c.walls) {
+      if (w.kind === "cliff") continue;
+      const ex = w.bx - w.ax;
+      const ez = w.bz - w.az;
+      const den = dx * ez - dz * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      const r = ((w.ax - at.x) * ez - (w.az - at.z) * ex) / den;
+      const s = ((w.ax - at.x) * dz - (w.az - at.z) * dx) / den;
+      if (r < 0.03 || r > max || s < 0 || s > 1) continue;
+      const top = w.a1 + (w.b1 - w.a1) * s + 0.05;
+      need = Math.max(need, Math.atan2(top - at.y, Math.max(0.05, r - w.t)));
+    }
+    return need;
+  }
+
+  /** Jusqu'où une balle roulerait tout droit avant le premier mur (au plus `max`) */
+  reach(x: number, z: number, angle: number, max: number): number {
+    return this.course ? rayToWall(this.course, x, z, angle, max) : max;
   }
 
   /** Le trou bouge selon son temps ; le ciel et l'eau vivent ; on dessine */
@@ -453,18 +519,28 @@ function rayToWall(c: Course, x: number, z: number, angle: number, max: number):
   return Math.max(0.1, best);
 }
 
+/** La longueur du pointillé de visée */
+const AIM_GUIDE = 1.5;
+
 let dots: THREE.Texture | null = null;
+/** Le pointillé de visée, sur toute sa longueur : des points ronds, de plus en plus petits et pâles vers le bout */
 function dotsTex(): THREE.Texture {
   if (dots) return dots;
   const c = document.createElement("canvas");
-  c.width = 16;
-  c.height = 32;
+  c.width = 32;
+  c.height = 512;
   const g = c.getContext("2d")!;
-  g.fillStyle = "#fff";
-  g.beginPath();
-  g.arc(8, 8, 6, 0, Math.PI * 2);
-  g.fill();
+  const n = 11;
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1);
+    // Le bas de l'image est au pied de la balle
+    const y = c.height - (i + 0.5) * (c.height / n);
+    g.fillStyle = `rgba(255,255,255,${(1 - k * 0.85).toFixed(3)})`;
+    g.beginPath();
+    g.arc(16, y, 13 * (1 - k * 0.45), 0, Math.PI * 2);
+    g.fill();
+  }
   dots = new THREE.CanvasTexture(c);
-  dots.wrapT = THREE.RepeatWrapping;
+  dots.colorSpace = THREE.SRGBColorSpace;
   return dots;
 }

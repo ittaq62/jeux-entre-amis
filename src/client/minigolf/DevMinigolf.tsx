@@ -1,7 +1,7 @@
 // Page de travail (seulement en développement) : une partie de minigolf jouée sur l'appareil, sans serveur, avec la même
 // logique que la table. /dev/minigolf?parcours=jardin&trou=3&bots=2&envers&bonus&motif=pois&trace=flammes&vite (vite : pas de
-// présentation du trou).
-// En console, `__mg` donne la partie (`m`) et l'écran (`rt`).
+// présentation du trou ; simultane : tout le monde en même temps plutôt que chacun son tour).
+// En console, `__mg` donne la partie (`m`), l'écran (`rt`) et un pas de la boucle de la table (`tick`).
 
 import { useEffect, useRef, useState } from "react";
 import { planShot } from "../../shared/games/minigolf/bot.ts";
@@ -19,6 +19,7 @@ import {
   startHole,
   tickMatch,
 } from "../../shared/games/minigolf/match.ts";
+import { PowerGauge } from "./MinigolfGame.tsx";
 import { GolfRuntime, type HudState } from "./runtime.ts";
 import * as sfx from "./sfx.ts";
 import "./minigolf.css";
@@ -40,6 +41,7 @@ export function DevMinigolf() {
       lune: q.has("lune"),
       glace: q.has("glace"),
       bonus: q.has("bonus"),
+      turns: !q.has("simultane"),
     });
     const seats = [{ id: "moi", team: 0 as const }, ...Array.from({ length: bots }, (_, i) => ({ id: `bot-${i + 1}`, team: 0 as const }))];
     const m = createMatch(cfg, seats, 7, Date.now());
@@ -60,7 +62,8 @@ export function DevMinigolf() {
       onShot: (_id, mine, power) => sfx.putt(power, mine ? 1 : 0.35),
       onHud: setHud,
     });
-    (window as unknown as { __mg: unknown }).__mg = { m, rt };
+    const dev = { m, rt, tick: () => {} };
+    (window as unknown as { __mg: unknown }).__mg = dev;
     rt.setPlayers(
       seats.map((s, i) => ({
         id: s.id,
@@ -75,11 +78,24 @@ export function DevMinigolf() {
     );
     rt.setView(structuredClone(m));
     const botAt = new Map<string, number>();
-    const timer = setInterval(() => {
+    // Comme à la table : chacun son tour, le bot vise un moment avant de frapper
+    const botPlan = new Map<string, { a: number; p: number; at: number }>();
+    const loop = () => {
       const now = Date.now();
       let changed = tickMatch(m, now);
       for (const p of readyToShoot(m, now)) {
         if (p.id === "moi") continue;
+        const planned = botPlan.get(p.id);
+        if (planned) {
+          if (now < planned.at - 600) continue;
+          if (now < planned.at) {
+            rt.setOtherAim(p.id, planned.a, planned.p);
+            continue;
+          }
+          botPlan.delete(p.id);
+          if (typeof shoot(m, p.id, planned.a, planned.p, nowTick(m, now), now) !== "string") changed = true;
+          continue;
+        }
         const due = botAt.get(p.id);
         if (due === undefined) {
           botAt.set(p.id, now + 1500 + Math.random() * 2000);
@@ -91,13 +107,20 @@ export function DevMinigolf() {
         const plan = planShot(courseOf(ref), { x: p.ball[0], y: p.ball[1], z: p.ball[2] }, nowTick(m, now), physOf(m.cfg, ref), "moyen", {
           rng: now,
         });
+        if (m.cfg.turns) {
+          botPlan.set(p.id, { a: plan.a, p: plan.p, at: now + 1200 });
+          rt.setOtherAim(p.id, plan.a, 0);
+          continue;
+        }
         if (typeof shoot(m, p.id, plan.a, plan.p, nowTick(m, now), now) !== "string") changed = true;
       }
       if (changed) rt.setView(structuredClone(m));
       const me = m.players[0]!;
       const c = courseOf(currentRef(m));
       setInfo(`Trou ${m.hole + 1} · ${c.def.name} · par ${c.def.par} · coups : ${me.cur}${me.done ? " (fini)" : ""} · ${m.phase}`);
-    }, 100);
+    };
+    dev.tick = loop;
+    const timer = setInterval(loop, 100);
     return () => {
       clearInterval(timer);
       rt.dispose();
@@ -110,11 +133,7 @@ export function DevMinigolf() {
       <p className="mg-dev-info">
         {info} · {hud?.fps ?? 0} i/s
       </p>
-      {hud?.power !== null && hud?.power !== undefined && (
-        <div className="mg-power" aria-hidden="true">
-          <span style={{ width: `${Math.round(hud.power * 100)}%` }} />
-        </div>
-      )}
+      {hud?.power !== null && hud?.power !== undefined && <PowerGauge power={hud.power} last={hud.lastPower} />}
     </div>
   );
 }

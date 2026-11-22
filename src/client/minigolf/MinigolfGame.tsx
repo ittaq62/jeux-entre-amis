@@ -11,7 +11,7 @@ import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./MinigolfHelp.tsx";
-import { GolfRuntime, type HudState, type RuntimeEvent } from "./runtime.ts";
+import { GolfRuntime, MIN_PULL, type HudState, type RuntimeEvent } from "./runtime.ts";
 import { Scorecard, scoreName } from "./Scorecard.tsx";
 import * as sfx from "./sfx.ts";
 import type { GolfListeners } from "./useMinigolfRoom.ts";
@@ -56,7 +56,6 @@ export function MinigolfGame({
   const [hud, setHud] = useState<HudState | null>(null);
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
-  const [overview, setOverview] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [, setClock] = useState(0);
   const bridge = useTourBridge();
@@ -79,6 +78,11 @@ export function MinigolfGame({
   const playersKey = JSON.stringify(players.map((p) => [p.id, p.name, p.look]));
 
   const say = (text: string, tone: Banner["tone"], sub?: string) => setBanner({ key: ++bannerKey.current, text, sub, tone });
+  // Chacun son tour : celui qui joue
+  const turns = Boolean(v.cfg.turns);
+  const active = turns && v.turn >= 0 ? (v.players[v.turn] ?? null) : null;
+  const myTurn = active !== null && active.id === mySeat;
+  const mySeatView = room.seats.find((s) => s.id === mySeat) ?? null;
 
   // Une boucle par écran de partie
   useEffect(() => {
@@ -132,7 +136,7 @@ export function MinigolfGame({
       },
     });
     runtime.current = rt;
-    listeners.current.onAim = () => {};
+    listeners.current.onAim = (id, a, p) => rt.setOtherAim(id, a, p);
     return () => {
       listeners.current.onAim = undefined;
       rt.dispose();
@@ -208,6 +212,30 @@ export function MinigolfGame({
     if (v.phase === "intro") say(`Trou ${v.hole + 1}`, "info", `${def.name} · par ${def.par}`);
   }, [v.hole, v.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Chacun son tour : à lui de jouer (seul sur le parcours, on ne le lui répète pas)
+  const turnKey = active ? `${v.hole}:${active.id}:${active.cur}` : "";
+  useEffect(() => {
+    if (!myTurn || v.turnShot || v.players.length < 2) return;
+    sfx.yourTurn(0.9);
+    say("À toi de jouer", "great", me && me.cur > 0 ? `Coup ${me.cur + 1}` : undefined);
+  }, [turnKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Son temps est passé sans qu'il tire : le coup compte quand même
+  const skipKey = me?.shot?.skip ? `${v.hole}:${me.shot.n}` : "";
+  useEffect(() => {
+    if (skipKey && !shown.current.has(`skip:${skipKey}`)) {
+      shown.current.add(`skip:${skipKey}`);
+      say("Temps écoulé", "bad", "Le coup compte, la main passe");
+    }
+  }, [skipKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Les cinq dernières secondes de son tour, un petit tic
+  const now0 = serverNow();
+  const turnLeft = active && !v.turnShot && v.phase === "play" ? Math.max(0, Math.ceil((v.turnEnd - now0) / 1000)) : null;
+  useEffect(() => {
+    if (myTurn && turnLeft !== null && turnLeft > 0 && turnLeft <= 5) sfx.clockTick(0.8);
+  }, [turnLeft]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const nowTickOf = () => ((serverNow() - v.holeStart) * 240) / 1000;
   const now = serverNow();
   const left = Math.max(0, Math.ceil((v.deadline - now) / 1000));
@@ -230,15 +258,39 @@ export function MinigolfGame({
             </small>
           </span>
         </div>
-        {v.phase === "play" && (
+        {v.phase === "play" && !turns && (
           <div className={`mg-clock num ${v.hurry ? "is-hurry" : ""} ${left <= 10 ? "is-late" : ""}`} aria-label="Temps restant">
             {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
           </div>
         )}
+        {v.phase === "play" && active && (
+          <div
+            className={`mg-turn ${myTurn ? "is-me" : ""} ${turnLeft !== null && turnLeft <= 5 ? "is-late" : ""}`}
+            style={{ "--c": colorOf(players.find((x) => x.id === active.id)?.look.color ?? "blanche").hex } as CSSProperties}
+            aria-live="polite"
+          >
+            <span className="mg-dot" />
+            <span className="mg-turn-name">
+              {myTurn ? (
+                "À toi"
+              ) : (
+                <>
+                  <span className="mg-turn-pre">Au tour de </span>
+                  {players.find((x) => x.id === active.id)?.name ?? "?"}
+                </>
+              )}
+            </span>
+            {turnLeft !== null && (
+              <span className="mg-turn-clock num" aria-label="Temps pour ce coup">
+                {turnLeft}
+              </span>
+            )}
+          </div>
+        )}
         <div className="mg-top-right">
           <button
-            className={`btn btn-sm btn-ghost mg-icon-btn ${overview ? "is-on" : ""}`}
-            onClick={() => (runtime.current?.toggleOverview(), setOverview((o) => !o))}
+            className={`btn btn-sm btn-ghost mg-icon-btn ${hud?.overview ? "is-on" : ""}`}
+            onClick={() => runtime.current?.toggleOverview()}
             title="Vue du trou (V)"
           >
             <Icon name="eye" size={18} />
@@ -255,15 +307,15 @@ export function MinigolfGame({
         </div>
       </header>
 
-      <aside className="mg-players" aria-label="Les joueurs">
-        {v.players.map((p) => {
+      <aside className="mg-players" aria-label={turns ? "Les joueurs, dans l'ordre de jeu" : "Les joueurs"}>
+        {(turns && v.order?.length === v.players.length ? v.order.map((i) => v.players[i]!) : v.players).map((p) => {
           const info = players.find((x) => x.id === p.id);
           const color = colorOf(info?.look.color ?? "blanche").hex;
           const tot = p.scores.reduce<number>((s, x, i) => s + (i < v.hole && x !== null ? x : 0), 0);
           return (
             <div
               key={p.id}
-              className={`mg-player ${p.id === mySeat ? "is-me" : ""} ${p.done ? "is-done" : ""}`}
+              className={`mg-player ${p.id === mySeat ? "is-me" : ""} ${p.done ? "is-done" : ""} ${active?.id === p.id ? "is-turn" : ""}`}
               style={{ "--c": color } as CSSProperties}
             >
               <span className="mg-dot" />
@@ -294,14 +346,19 @@ export function MinigolfGame({
         </div>
       )}
 
-      {hud?.power !== null && hud?.power !== undefined && (
-        <div className="mg-power" aria-hidden="true">
-          <span style={{ width: `${Math.round(hud.power * 100)}%` }} />
-        </div>
-      )}
+      {hud?.power !== null && hud?.power !== undefined && <PowerGauge power={hud.power} last={hud.lastPower} />}
 
       {seated && hud?.canShoot && hud.power === null && v.phase === "play" && me && me.cur === 0 && (
-        <p className="mg-tip">Glisse en arrière pour viser, lâche pour frapper</p>
+        <p className="mg-tip">Tourne la vue pour viser, puis attrape ta balle et tire-la vers toi</p>
+      )}
+
+      {mySeatView?.autoplayReason === "afk" && room.status === "playing" && v.phase !== "over" && (
+        <div className="mg-relay panel">
+          <span>Un bot joue ta balle pendant ton absence.</span>
+          <button className="btn btn-sm btn-primary" onClick={() => send({ t: "takeBack" })}>
+            Je reprends la main
+          </button>
+        </div>
       )}
 
       {banner && (
@@ -360,6 +417,28 @@ export function MinigolfGame({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * La force du coup qu'il prépare : une jauge haute et lisible sur le côté, ses quarts marqués, le pourcentage, et un
+ * repère pour la force de son coup d'avant ; trop peu tirée, elle dit qu'en lâchant il annule
+ */
+export function PowerGauge({ power, last }: { power: number; last: number | null }) {
+  const pct = Math.round(power * 100);
+  const cancel = power < MIN_PULL;
+  return (
+    <div className={`mg-gauge ${cancel ? "is-cancel" : ""}`} aria-hidden="true">
+      <strong className="num">{cancel ? "–" : `${pct} %`}</strong>
+      <div className="mg-gauge-bar">
+        <span className="mg-gauge-fill" style={{ height: `${pct}%` }} />
+        {[25, 50, 75].map((q) => (
+          <i key={q} style={{ bottom: `${q}%` }} />
+        ))}
+        {last !== null && <b className="mg-gauge-last" style={{ bottom: `${Math.round(last * 100)}%` }} title="Ton coup d'avant" />}
+      </div>
+      <small>{cancel ? "lâche : annulé" : "force"}</small>
     </div>
   );
 }

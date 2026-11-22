@@ -3,21 +3,27 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`mg-howto ${compact ? "is-compact" : ""}`}>
       <p>
-        <strong>Mets ta balle dans le trou en le moins de coups possible.</strong> Tout le monde joue en même temps, chacun sa balle : on
-        voit celles des autres, un peu transparentes, et on passe au travers.
+        <strong>Mets ta balle dans le trou en le moins de coups possible.</strong> On joue chacun son tour, un coup à la fois, pendant que
+        les autres regardent ; au trou suivant, le meilleur du trou d'avant commence. Les balles se traversent. (L'hôte peut aussi faire
+        jouer tout le monde en même temps.)
       </p>
       {!compact && (
         <>
           <ul className="mg-keys">
             <li>
-              <kbd>Glisser en arrière</kbd>
+              <kbd>Glisser</kbd>
+              <span>Tourner la vue autour de sa balle : on vise là où elle regarde (le pointillé montre la direction)</span>
+            </li>
+            <li>
+              <kbd>Tirer sa balle vers soi</kbd>
               <span>
-                Viser et doser, comme une fronde : on tire à l'opposé de là où va la balle, plus loin pour plus fort. On lâche pour frapper.
+                Attraper sa balle (l'anneau) et la tirer vers soi pour doser la force, lâcher pour frapper. Un écart sur le côté affine la
+                direction ; revenir au départ, Échap ou le clic droit annulent.
               </span>
             </li>
             <li>
               <kbd>Clic droit · deux doigts</kbd>
-              <span>Tourner la caméra autour de sa balle (deux doigts écartés ou pincés : zoomer)</span>
+              <span>Tourner la vue (deux doigts écartés ou pincés : zoomer)</span>
             </li>
             <li>
               <kbd>Molette</kbd>
@@ -25,7 +31,7 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
             </li>
             <li>
               <kbd>← → ↑ ↓</kbd>
-              <span>Tourner la caméra au clavier</span>
+              <span>Tourner la vue au clavier (avec Maj : tout doucement)</span>
             </li>
             <li>
               <kbd>V</kbd>
@@ -33,9 +39,10 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
             </li>
           </ul>
           <p className="hint">
-            Au plus le par + 5 coups par trou ; au-delà, ou si le temps est écoulé, on marque le par + 6. Une balle dans l'eau ou hors du
-            parcours coûte un coup de pénalité et revient là d'où elle est partie. Quand la moitié des joueurs a fini, les autres ont encore
-            20 secondes.
+            Au plus le par + 5 coups par trou ; au-delà, on marque le par + 6. Chacun son tour, un coup qu'on ne joue pas à temps compte
+            quand même ; deux tours laissés passer, un bot joue la balle jusqu'à ce qu'on reprenne la main. Une balle dans l'eau ou hors du
+            parcours coûte un coup de pénalité et revient là d'où elle est partie. Tous en même temps, le trou a son temps, et quand la
+            moitié des joueurs a fini, les autres ont encore 20 secondes.
           </p>
           <p className="hint">
             La balle tombe dans le trou seulement si elle passe assez lentement : trop vite, elle saute par-dessus ou frôle le bord et

@@ -255,25 +255,142 @@
   }
 }
 
-.mg-power {
+/* La jauge de force : haute, sur le côté (le doigt qui tire la balle ne la cache pas), ses quarts marqués, le repère du
+   coup d'avant */
+.mg-gauge {
   position: absolute;
-  left: 50%;
-  bottom: calc(26px + var(--safe-bottom, 0px));
-  width: min(280px, 60vw);
-  height: 12px;
-  transform: translateX(-50%);
-  border-radius: 7px;
-  background: rgba(0, 0, 0, 0.45);
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.5);
-  overflow: hidden;
+  right: calc(18px + var(--safe-right, 0px));
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-radius: 16px;
+  background: rgba(10, 16, 12, 0.62);
+  backdrop-filter: blur(4px);
   pointer-events: none;
 }
 
-.mg-power span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #6ad36a, #f2c94c 55%, #e5533d);
-  background-size: min(280px, 60vw) 100%;
+.mg-gauge strong {
+  min-width: 3.4em;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.mg-gauge small {
+  font-size: 11px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.mg-gauge-bar {
+  position: relative;
+  width: 18px;
+  height: min(38vh, 260px);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+}
+
+.mg-gauge-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(0deg, #6ad36a, #f2c94c 55%, #e5533d) bottom / 100% min(38vh, 260px) no-repeat;
+}
+
+.mg-gauge-bar i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.mg-gauge-last {
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 3px;
+  margin-bottom: -1.5px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.mg-gauge.is-cancel strong {
+  opacity: 0.6;
+}
+
+/* Chacun son tour : qui joue, et le temps qu'il lui reste pour ce coup */
+.mg-turn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 6px 8px 6px 12px;
+  border-radius: 14px;
+  background: rgba(10, 16, 12, 0.72);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 70%, transparent);
+  font-size: 15px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.mg-turn.is-me {
+  background: linear-gradient(180deg, rgba(40, 92, 48, 0.92), rgba(22, 60, 30, 0.9));
+}
+
+.mg-turn-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mg-turn-clock {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 17px;
+}
+
+.mg-turn.is-late .mg-turn-clock {
+  background: rgba(170, 30, 30, 0.9);
+  animation: mg-pulse 1s ease-in-out infinite;
+}
+
+.mg-player.is-turn {
+  background: rgba(10, 16, 12, 0.86);
+  box-shadow:
+    inset 0 0 0 1.5px var(--c),
+    0 0 12px color-mix(in srgb, var(--c) 45%, transparent);
+}
+
+.mg-player.is-turn .mg-dot {
+  animation: mg-pulse 1.2s ease-in-out infinite;
+}
+
+/* Un bot joue sa balle (il laissait passer ses tours) : il reprend la main d'un clic */
+.mg-relay {
+  position: absolute;
+  left: 50%;
+  bottom: calc(80px + var(--safe-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 .mg-tip {
@@ -661,11 +778,31 @@
   .mg-hole-text small {
     display: none;
   }
+  .mg-turn {
+    position: absolute;
+    top: 54px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 70vw;
+  }
+  .mg-turn-pre {
+    display: none;
+  }
+  .mg-gauge {
+    right: calc(10px + var(--safe-right, 0px));
+  }
+  .mg-relay {
+    white-space: normal;
+    width: max-content;
+    max-width: 90vw;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mg-banner,
-  .mg-clock.is-late {
+  .mg-clock.is-late,
+  .mg-turn.is-late .mg-turn-clock,
+  .mg-player.is-turn .mg-dot {
     animation-duration: 0.01s;
   }
 }
