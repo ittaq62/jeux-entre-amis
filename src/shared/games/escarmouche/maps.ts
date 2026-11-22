@@ -107,6 +107,8 @@ export type Decor =
   | { k: "tram"; x0: number; z0: number; x1: number; z1: number; color: string; flip?: boolean }
   /** Un wagonnet de mine chargé (dans les boîtes d'une voiture) */
   | { k: "minecart"; x0: number; z0: number; x1: number; z1: number; color: string }
+  /** Un chariot élévateur (dans les boîtes d'une voiture : les fourches du côté du capot, `flip` comme une voiture) */
+  | { k: "forklift"; x0: number; z0: number; x1: number; z1: number; color: string; flip?: boolean }
   /** Un mur pare-souffle en éléments de béton en T, haut de `h` */
   | { k: "twall"; x0: number; z0: number; x1: number; z1: number; h: number }
   /** Le concasseur : sa plate-forme (à `y`), sa trémie (hx0..hx1, hz0..hz1, jusqu'à `top`), l'escalier du côté `open` en z */
@@ -337,6 +339,7 @@ class Builder {
         return;
       case "car":
       case "tram":
+      case "forklift":
         // Le demi-tour met le capot de l'autre côté de la boîte
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), flip: !d.flip });
         return;
@@ -1392,6 +1395,12 @@ function car(b: Builder, x0: number, z0: number, x1: number, z1: number, color: 
   b.add({ k: "car", x0, z0, x1, z1, color });
 }
 
+/** Un chariot élévateur, dans les boîtes d'une voiture */
+function forkliftAt(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
+  carBoxes(b, x0, z0, x1, z1);
+  b.add({ k: "forklift", x0, z0, x1, z1, color });
+}
+
 /** Un tram renversé, dans les boîtes d'une voiture */
 function tramWreck(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
   carBoxes(b, x0, z0, x1, z1);
@@ -2032,11 +2041,11 @@ function usineSide(b: Builder) {
   b.crate(-25.4, 17.6);
   b.crate(-24.2, 17.6);
   b.crate(-24.8, 17.6, 1.2, 1.2, 1.2);
-  car(b, -17.6, 19.4, -15.2, 20.8, "#c9a227");
+  forkliftAt(b, -17.6, 19.4, -15.2, 20.8, "#c9a227");
   b.barrel(-32, 23.6);
 
-  // La cour, entre la base et la halle : un chariot, des caisses, un bloc de béton, des fûts
-  car(b, -31.2, -5.8, -28.8, -4.4, "#c9a227");
+  // La cour, entre la base et la halle : un chariot élévateur, des caisses, un bloc de béton, des fûts
+  forkliftAt(b, -31.2, -5.8, -28.8, -4.4, "#c9a227");
   b.crate(-24, 3);
   b.crate(-24, 4.2);
   b.crate(-24, 3.6, 1.2, 1.2, 1.2);

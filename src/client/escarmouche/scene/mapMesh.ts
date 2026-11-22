@@ -2042,6 +2042,115 @@ function mineCart(d: Extract<Decor, { k: "minecart" }>, group: THREE.Group, q: Q
   mergeTinted(parts, tintedMaterial(q), group, q !== "bas");
 }
 
+/**
+ * Un chariot élévateur, dans les boîtes d'une voiture (le capot devient le mât) : le mât et son vérin, le tablier et les
+ * deux fourches posées au sol, le châssis, la cabine à arceau (quatre montants, le toit en grille, le siège, le volant),
+ * le contrepoids arrondi à l'arrière, les grosses roues devant, les petites derrière, le gyrophare
+ */
+function forklift(d: Extract<Decor, { k: "forklift" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d, d.flip ? -1 : 1);
+  const x0 = -L / 2;
+  const x1 = L / 2;
+  const c0 = x0 + 0.32 * L;
+  const c1 = x0 + 0.8 * L;
+  const paint = new THREE.Color(d.color);
+  const dark = new THREE.Color("#262523");
+  const steel = new THREE.Color("#55595c");
+  const r = seededRand(d.x0, d.z0, 31);
+  const worn = () => 0.85 + r() * 0.2;
+  const box = (sx: number, sy: number, sz: number, x: number, y: number, z: number, c: THREE.Color, k?: () => number) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    g.translate(x, y, z);
+    pushTinted(parts, place(g), c, k);
+  };
+  const tmp: THREE.BufferGeometry[] = [];
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // Le châssis et le capot moteur sous le siège
+  const body = profile(
+    [
+      [x0 + 0.28, 0.3],
+      [c1, 0.3],
+      [c1, 0.8],
+      [c0 + 0.1, 0.8],
+      [x0 + 0.28, 0.62],
+    ],
+    W - 0.22,
+  );
+  pushTinted(parts, place(body), paint, worn);
+  // Le contrepoids, arrondi à l'arrière
+  const weight = profile(
+    [
+      [c1 - 0.05, 0.26],
+      [x1 - 0.06, 0.26],
+      [x1, 0.42],
+      [x1, 0.82],
+      [x1 - 0.1, 0.95],
+      [c1 - 0.05, 0.95],
+    ],
+    W - 0.12,
+  );
+  pushTinted(parts, place(weight), paint, () => 0.78 + r() * 0.12);
+  // Les roues : grosses devant (sous le mât), petites derrière
+  for (const s of [-1, 1]) {
+    for (const [x, rad] of [
+      [x0 + 0.48, 0.3],
+      [x1 - 0.5, 0.24],
+    ] as const) {
+      const w = new THREE.CylinderGeometry(rad, rad, 0.22, low ? 10 : 16);
+      w.rotateX(Math.PI / 2);
+      w.translate(x, rad, s * (W / 2 - 0.12));
+      pushTinted(parts, place(w), dark);
+      const hub = new THREE.CylinderGeometry(rad * 0.45, rad * 0.45, 0.24, 8);
+      hub.rotateX(Math.PI / 2);
+      hub.translate(x, rad, s * (W / 2 - 0.12));
+      pushTinted(parts, place(hub), paint, () => 0.8);
+    }
+  }
+  // Le siège et le volant
+  box(0.42, 0.1, 0.46, c1 - 0.32, 0.86, 0, dark);
+  box(0.08, 0.42, 0.46, c1 - 0.1, 1.1, 0, dark);
+  strut(tmp, v(c0 + 0.18, 0.8, 0), v(c0 + 0.32, 1.18, 0), 0.03, dark);
+  if (!low) {
+    const wheel = new THREE.TorusGeometry(0.16, 0.022, 4, 12);
+    wheel.rotateX(Math.PI / 2);
+    wheel.rotateZ(-0.6);
+    wheel.translate(c0 + 0.33, 1.2, 0);
+    pushTinted(parts, place(wheel), dark);
+  }
+  // La cabine à arceau : quatre montants, le toit en grille
+  const roofY = 2.05;
+  const zs = W / 2 - 0.12;
+  for (const s of [-1, 1]) {
+    strut(tmp, v(c0 + 0.02, 0.78, s * zs), v(c0 + 0.12, roofY, s * zs), 0.04, dark, 6);
+    strut(tmp, v(c1 - 0.04, 0.9, s * zs), v(c1 - 0.04, roofY, s * zs), 0.04, dark, 6);
+    strut(tmp, v(c0 + 0.12, roofY, s * zs), v(c1 - 0.04, roofY, s * zs), 0.035, dark, 5);
+  }
+  for (let k = 0; k <= 4; k++) {
+    const x = c0 + 0.12 + ((c1 - 0.16 - c0) * k) / 4;
+    strut(tmp, v(x, roofY, -zs), v(x, roofY, zs), 0.025, dark, 4);
+  }
+  // Le mât : deux montants d'acier, des traverses, le vérin au milieu
+  const mx = x0 + 0.12;
+  for (const s of [-1, 1]) box(0.09, 2.25, 0.12, mx, 0.08 + 2.25 / 2, s * 0.34, steel);
+  box(0.08, 0.08, 0.8, mx, 0.95, 0, steel);
+  box(0.08, 0.08, 0.8, mx, 2.28, 0, steel);
+  strut(tmp, v(mx + 0.06, 0.2, 0), v(mx + 0.06, 1.8, 0), 0.05, new THREE.Color("#8a8d90"), 8);
+  // Le tablier et les fourches, posées au sol devant
+  box(0.06, 0.55, 0.9, x0 - 0.02, 0.4, 0, dark);
+  for (const s of [-1, 1]) {
+    box(0.06, 0.5, 0.1, x0 - 0.06, 0.32, s * 0.26, steel);
+    box(1.05, 0.045, 0.11, x0 - 0.06 - 0.525, 0.05, s * 0.26, steel);
+  }
+  // Le gyrophare orange sur le toit
+  const beacon = new THREE.CylinderGeometry(0.06, 0.07, 0.1, 8);
+  beacon.translate(c1 - 0.25, roofY + 0.08, 0);
+  pushTinted(parts, place(beacon), new THREE.Color("#e07a1f"));
+  for (const g of tmp) parts.push(place(g));
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
 /** Une pile de grumes en pyramide : l'écorce, les bouts sciés plus clairs au cœur ; dehors en hiver, la neige dessus */
 function logs(d: Extract<Decor, { k: "logs" }>, group: THREE.Group, q: Quality) {
   const low = q === "bas";
@@ -2775,6 +2884,9 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "minecart":
       mineCart(d, group, q);
+      return;
+    case "forklift":
+      forklift(d, group, q);
       return;
     case "twall":
       blastWall(d, group, q);
