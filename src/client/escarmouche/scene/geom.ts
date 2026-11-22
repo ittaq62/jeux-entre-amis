@@ -339,3 +339,44 @@ export function addRock(
   }
   ico.dispose();
 }
+
+/**
+ * Une caisse en bois : un corps aux arêtes adoucies et, en relief, son cadre (quatre montants et huit traverses qui
+ * dépassent de 2 cm, un ton plus sombre). Le tout tient dans sa boîte, à 1 cm près.
+ */
+export function addCrate(
+  b: Bucket,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  tile: number,
+  tint: number,
+  grounded: boolean,
+) {
+  const f = Math.min(0.075, (x1 - x0) * 0.12, (z1 - z0) * 0.12, (y1 - y0) * 0.12);
+  const p = 0.012;
+  addChamferBox(b, x0 + p, y0, z0 + p, x1 - p, y1 - p, z1 - p, tile, tint, 0.015, grounded);
+  const dark = tint * 0.74;
+  // Les montants, aux quatre coins
+  for (const [cx, cz] of [
+    [x0, z0],
+    [x1 - f, z0],
+    [x0, z1 - f],
+    [x1 - f, z1 - f],
+  ] as const) {
+    addBox(b, cx - p / 2, y0, cz - p / 2, cx + f + p / 2, y1, cz + f + p / 2, tile, dark, grounded);
+  }
+  // Les traverses du haut et du bas, sur les quatre côtés
+  for (const [ya, yb] of [
+    [y0, y0 + f],
+    [y1 - f, y1],
+  ] as const) {
+    addBox(b, x0 + f, ya, z0 - p / 2, x1 - f, yb, z0 + f, tile, dark, grounded && ya === y0);
+    addBox(b, x0 + f, ya, z1 - f, x1 - f, yb, z1 + p / 2, tile, dark, grounded && ya === y0);
+    addBox(b, x0 - p / 2, ya, z0 + f, x0 + f, yb, z1 - f, tile, dark, grounded && ya === y0);
+    addBox(b, x1 - f, ya, z0 + f, x1 + p / 2, yb, z1 - f, tile, dark, grounded && ya === y0);
+  }
+}

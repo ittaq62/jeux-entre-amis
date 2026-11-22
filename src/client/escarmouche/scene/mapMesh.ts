@@ -6,7 +6,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Decor, GameMap } from "../../../shared/games/escarmouche/maps.ts";
 import type { Box, Mat } from "../../../shared/games/escarmouche/world.ts";
 import { addContainer, addCrane, addHouse, addQuay, addWagon, instancedParts, type Ctx, type Paint } from "./architecture.ts";
-import { addBox, addChamferBox, addRock, Bucket, pushFace, tintOf } from "./geom.ts";
+import { addBox, addChamferBox, addCrate, addRock, Bucket, pushFace, tintOf } from "./geom.ts";
 import type { Quality } from "./quality.ts";
 import { boardTexture, clothTexture, corrugatedTexture, matTexture, normalFrom, normalTexture, TILE } from "./textures.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -428,6 +428,14 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
       );
       return;
     }
+    // Les petites caisses en bois (empilées ou non) : un vrai cadre en relief
+    const cw = bx.x1 - bx.x0;
+    const ch = bx.y1 - bx.y0;
+    const cd = bx.z1 - bx.z0;
+    if (q !== "bas" && bx.m === "bois" && !covered(bx) && Math.min(cw, ch, cd) >= 0.5 && Math.max(cw, ch, cd) <= 1.8) {
+      addCrate(bucket(bx.m), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE[bx.m] ?? 3, tintOf(i), bx.y0 <= 0.001);
+      return;
+    }
     if (chamfered(bx)) {
       const e = Math.min(0.06, 0.12 * Math.min(bx.x1 - bx.x0, bx.y1 - bx.y0, bx.z1 - bx.z0));
       addChamferBox(bucket(bx.m), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE[bx.m] ?? 3, tintOf(i), e, bx.y0 <= 0.001);
@@ -475,7 +483,8 @@ export function buildCrates(gm: GameMap, q: Quality): Map<number, { whole: THREE
   gm.boxes.forEach((bx, i) => {
     if (bx.m !== "caisse") return;
     const b = new Bucket();
-    addBox(b, bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.caisse ?? 3, tintOf(i), bx.y0 <= 0.001);
+    if (q === "bas") addBox(b, bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.caisse ?? 3, tintOf(i), bx.y0 <= 0.001);
+    else addCrate(b, bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.caisse ?? 3, tintOf(i), bx.y0 <= 0.001);
     const whole = new THREE.Mesh(b.geometry(), mat);
     whole.castShadow = true;
     whole.receiveShadow = true;
