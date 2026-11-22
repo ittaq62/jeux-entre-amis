@@ -163,8 +163,8 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
             />
             <p className="hint" style={{ margin: 0 }}>
               {s.turns !== false
-                ? "Un coup chacun, à tour de rôle, pendant que les autres regardent. Au trou suivant, le meilleur commence."
-                : "Tout le monde joue sa balle en même temps : plus rapide, plus chaotique."}
+                ? "Un coup chacun, à tour de rôle, pendant que les autres regardent ; on peut pousser la balle des autres. Au trou suivant, le meilleur commence."
+                : "Tout le monde joue sa balle en même temps, les balles se traversent : plus rapide, plus chaotique."}
             </p>
           </div>
 

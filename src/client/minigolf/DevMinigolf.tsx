@@ -9,6 +9,7 @@ import { planShot } from "../../shared/games/minigolf/bot.ts";
 import { courseOf, isCourseId } from "../../shared/games/minigolf/courses.ts";
 import { BALL_COLORS } from "../../shared/games/minigolf/looks.ts";
 import {
+  ballsInPlay,
   createMatch,
   currentRef,
   DEFAULT_CONFIG,
@@ -109,9 +110,15 @@ export function DevMinigolf() {
         if (now < due) continue;
         botAt.delete(p.id);
         const ref = currentRef(m);
-        const plan = planShot(courseOf(ref), { x: p.ball[0], y: p.ball[1], z: p.ball[2] }, nowTick(m, now), physOf(m.cfg, ref), "moyen", {
-          rng: now,
-        });
+        const plan = planShot(
+          courseOf(ref),
+          { x: p.ball[0], y: p.ball[1], z: p.ball[2] },
+          nowTick(m, now),
+          physOf(m.cfg, ref),
+          "moyen",
+          { rng: now },
+          ballsInPlay(m, p.id).map((q) => ({ x: q.ball[0], y: q.ball[1], z: q.ball[2] })),
+        );
         if (m.cfg.turns) {
           botPlan.set(p.id, { a: plan.a, p: plan.p, at: now + 1200 });
           rt.setOtherAim(p.id, plan.a, 0);

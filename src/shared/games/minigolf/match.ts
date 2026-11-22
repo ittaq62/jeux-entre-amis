@@ -7,7 +7,7 @@ import { isBotLevel, type BotLevel } from "./bot.ts";
 import { bonusCourse, bonusMods, bonusSpots, lastBubble, type BonusKind } from "./bonus.ts";
 import { holeTime, strokeLimit } from "./course.ts";
 import { COURSE_IDS, COURSES, courseOf, holeDef, isCourseId, readyCourses, type CourseId, type HoleRef } from "./courses.ts";
-import { DEFAULT_PHYS, simulateShot, STEPS_PER_S, type LostWhy, type PhysOpts, type ShotMods } from "./physics.ts";
+import { DEFAULT_PHYS, simulateWorld, STEPS_PER_S, type LostWhy, type PhysOpts, type ShotMods } from "./physics.ts";
 import { random, shuffle, type RngHolder } from "../../rng.ts";
 
 export type Pace = "court" | "normal" | "long";
@@ -92,6 +92,21 @@ export interface GolfShot {
   mods?: ShotMods;
   /** Le pouvoir gagné en traversant une bulle pendant ce coup (règle des bulles bonus) */
   got?: BonusKind;
+  /**
+   * Chacun son tour : les balles des autres que ce coup a poussées, dans l'ordre où la physique les a reçues (de quoi
+   * rejouer le coup à l'identique), d'où elles partent, où elles finissent, et quand
+   */
+  hits?: GolfHit[];
+}
+
+/** Une balle poussée par le coup d'un autre */
+export interface GolfHit {
+  id: string;
+  from: [number, number, number];
+  to: [number, number, number];
+  /** Arrêtée là, poussée dans le trou (elle compte : son joueur a fini le trou), ou perdue (elle revient d'où elle était) */
+  out: "rest" | "in" | "lost";
+  end: number;
 }
 
 export interface GolfStats {
@@ -290,6 +305,16 @@ export function powerOf(m: Match, p: GolfPlayer): ShotMods | undefined {
   return m.cfg.bonus ? bonusMods(p.power) : undefined;
 }
 
+/**
+ * Les balles des autres sur le parcours, que ce coup peut heurter : chacun son tour, celles des joueurs qui ont déjà
+ * joué sur ce trou et n'ont pas fini (les autres attendent dans leur poche) ; tous en même temps, aucune (les balles se
+ * traversent, sinon chacun dérangerait le coup des autres en plein vol)
+ */
+export function ballsInPlay(m: Match, id: string): GolfPlayer[] {
+  if (!m.cfg.turns) return [];
+  return m.players.filter((q) => q.id !== id && !q.done && q.cur > 0);
+}
+
 /** Un joueur frappe : le coup joué jusqu'au bout, ou pourquoi il est refusé */
 export function shoot(m: Match, id: string, angle: number, power: number, at: number, now: number): GolfShot | string {
   if (m.phase !== "play") return m.phase === "intro" ? "Le trou n'a pas encore commencé." : "Le trou est fini.";
@@ -309,11 +334,40 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
   // Le pouvoir gardé part avec ce coup, et s'use
   const mods = powerOf(m, p);
   if (m.cfg.bonus) p.power = null;
-  const r = simulateShot(m.cfg.bonus ? bonusCourse(ref) : c, from, angle, pw, tick, physOf(m.cfg, ref, mods));
+  const others = ballsInPlay(m, p.id);
+  const world = simulateWorld(
+    m.cfg.bonus ? bonusCourse(ref) : c,
+    from,
+    angle,
+    pw,
+    tick,
+    physOf(m.cfg, ref, mods),
+    others.map((q) => ({ x: q.ball[0], y: q.ball[1], z: q.ball[2] })),
+    physOf(m.cfg, ref),
+  );
+  const r = world.shot;
   p.cur += r.outcome === "lost" ? 2 : 1;
   if (r.outcome === "lost") p.stats.lost++;
   else p.ball = [r.x, r.y, r.z];
-  p.restAt = r.end;
+  // Les balles poussées : là où elles s'arrêtent ; dans le trou, leur joueur a fini (sans coup de plus) ; perdues, elles
+  // reviennent d'où elles étaient, sans pénalité (ce n'est pas leur faute)
+  const hits: GolfHit[] = [];
+  let end = r.end;
+  world.others.forEach((o, i) => {
+    if (!o.moved) return;
+    const q = others[i]!;
+    const was: [number, number, number] = [...q.ball];
+    hits.push({ id: q.id, from: was, to: o.outcome === "lost" ? was : [o.x, o.y, o.z], out: o.outcome, end: o.end });
+    if (o.outcome === "rest") q.ball = [o.x, o.y, o.z];
+    q.restAt = Math.max(q.restAt, o.end);
+    if (o.outcome === "in") {
+      q.ball = [o.x, o.y, o.z];
+      finishPlayer(q, m.hole, q.cur, o.end);
+    }
+    end = Math.max(end, o.end);
+  });
+  // Le tour ne passe qu'une fois tout arrêté
+  p.restAt = end;
   const shot: GolfShot = {
     a: angle,
     p: pw,
@@ -325,6 +379,7 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
     lost: r.lost,
     n: p.cur,
     ...(mods ? { mods } : {}),
+    ...(hits.length ? { hits } : {}),
   };
   // Une bulle traversée pour la première fois : son pouvoir, pour le coup d'après
   if (m.cfg.bonus && r.outcome !== "in") {

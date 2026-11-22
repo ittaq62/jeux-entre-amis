@@ -5,7 +5,7 @@
 
 import { BALL_R, MATS, tileAt, tileHeight, type Course } from "./course.ts";
 import { segClosest } from "./geom.ts";
-import { shotSpeed, simulateShot, type PhysOpts, type ShotResult } from "./physics.ts";
+import { shotSpeed, simulateWorld, type PhysOpts, type ShotResult } from "./physics.ts";
 import { random, type RngHolder } from "../../rng.ts";
 
 export type BotLevel = "facile" | "moyen" | "fort";
@@ -302,8 +302,18 @@ function powerFor(d: number, roll: number): number {
   return (lo + hi) / 2;
 }
 
+/** Une autre balle sur le parcours, pour le bot : où elle est, et si c'est celle d'un équipier */
+export interface OtherBall {
+  x: number;
+  y: number;
+  z: number;
+  ally?: boolean;
+}
+
 /**
- * Le coup du bot, depuis la balle posée en `from`, au pas `tick` du trou. `budget` borne le nombre de coups essayés.
+ * Le coup du bot, depuis la balle posée en `from`, au pas `tick` du trou. `others` : les autres balles sur le parcours
+ * (chacun son tour), que ses coups peuvent pousser ; il évite d'envoyer celle d'un adversaire dans le trou, et ne
+ * déteste pas y envoyer celle d'un équipier. `plain` : la physique de ces balles (sans le pouvoir de la sienne)
  */
 export function planShot(
   c: Course,
@@ -312,6 +322,8 @@ export function planShot(
   phys: PhysOpts,
   level: BotLevel,
   rng: RngHolder,
+  others: readonly OtherBall[] = [],
+  plain: PhysOpts = { ...phys, mods: undefined },
 ): Plan {
   const nav = navOf(c);
   const L = LEVEL[level];
@@ -346,11 +358,20 @@ export function planShot(
   let bestScore = Infinity;
   const scored: { plan: Plan; s: number }[] = [];
   const all: { plan: Plan; s: number }[] = [];
+  // Le coup joué avec les autres balles ; ce qu'il fait des autres compte un peu dans la note
+  const play = (a: number, p: number, at: number): { r: ShotResult; extra: number } => {
+    const w = simulateWorld(c, from, a, p, at, phys, others, plain);
+    let extra = 0;
+    w.others.forEach((o, i) => {
+      if (o.moved && o.outcome === "in") extra += others[i]!.ally ? -0.4 : 0.8;
+    });
+    return { r: w.shot, extra };
+  };
   const tryPlan = (a: number, power: number, wait: number) => {
     const p = Math.max(0, Math.min(1, power));
-    const r = simulateShot(c, from, a, p, tick + wait, phys);
+    const { r, extra } = play(a, p, tick + wait);
     // Un peu moins bien noté d'attendre : à coups égaux, on joue tout de suite
-    const s = expected(c, nav, r, fromCost) + p * 0.01 + wait * 0.0004;
+    const s = expected(c, nav, r, fromCost) + extra + p * 0.01 + wait * 0.0004;
     if (wait === 0) scored.push({ plan: { a, p, wait }, s });
     all.push({ plan: { a, p, wait }, s });
     if (s < bestScore) {
@@ -395,8 +416,8 @@ export function planShot(
       [0, -1.1],
     ] as const) {
       const pp = Math.max(0, Math.min(1, p * (1 + dp * L.power)));
-      const r = simulateShot(c, from, a + da * L.aim, pp, tick + wait, phys);
-      sum += expected(c, nav, r, fromCost);
+      const { r, extra } = play(a + da * L.aim, pp, tick + wait);
+      sum += expected(c, nav, r, fromCost) + extra;
     }
     const mean = sum / 5;
     if (mean < robust) {

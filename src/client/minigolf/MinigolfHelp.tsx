@@ -4,8 +4,9 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
     <div className={`mg-howto ${compact ? "is-compact" : ""}`}>
       <p>
         <strong>Mets ta balle dans le trou en le moins de coups possible.</strong> On joue chacun son tour, un coup à la fois, pendant que
-        les autres regardent ; au trou suivant, le meilleur du trou d'avant commence. Les balles se traversent. (L'hôte peut aussi faire
-        jouer tout le monde en même temps.)
+        les autres regardent ; au trou suivant, le meilleur du trou d'avant commence. Les balles se heurtent : on peut pousser celle d'un
+        autre (poussée dans le trou, elle compte pour lui ; dehors, elle revient où elle était). L'hôte peut aussi faire jouer tout le monde
+        en même temps : les balles se traversent alors.
       </p>
       {!compact && (
         <>

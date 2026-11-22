@@ -1,7 +1,8 @@
 // La physique de la balle, pas à pas (240 pas par seconde) : elle roule en suivant le sol (pentes, bosses, tapis
 // roulants, plateaux tournants), décolle au bout d'un tremplin, retombe et rebondit, cogne les bordures, les murs, les
 // poteaux et ce qui bouge, entre dans les tubes, passe par les téléporteurs, et tombe dans le trou seulement si elle
-// passe assez lentement au-dessus. Tout est déterministe : le serveur et les appareils trouvent la même chose.
+// passe assez lentement au-dessus. Les balles se heurtent : celle qu'on frappe peut pousser les autres. Tout est
+// déterministe : le serveur et les appareils trouvent la même chose.
 
 import {
   BALL_R,
@@ -105,6 +106,8 @@ export type PhysEvent =
   | { k: "pad"; i: number }
   | { k: "rail"; i: number; out: boolean }
   | { k: "item"; i: number }
+  /** Une autre balle heurtée */
+  | { k: "ball"; v: number }
   | { k: "rest" };
 
 export type Emit = (e: PhysEvent, b: Ball) => void;
@@ -884,6 +887,160 @@ export interface ShotResult {
   cup: number;
   lost: LostWhy | null;
   items: number;
+}
+
+// ---------------------------------------------------------------------------
+// Plusieurs balles : elles se heurtent
+// ---------------------------------------------------------------------------
+
+/** Le rebond entre deux balles (presque sans perte) */
+const E_BALLS = 0.9;
+
+/** Peut-elle être heurtée (sur le parcours, pas dans un tube, pas tombée ni perdue) ? */
+function hittable(b: Ball): boolean {
+  return b.mode === "roll" || b.mode === "air" || b.mode === "rest";
+}
+
+/** Une balle arrêtée qu'une autre vient de toucher : elle se remet à rouler */
+function wake(c: Course, b: Ball) {
+  if (b.mode !== "rest") return;
+  b.tile = tileAt(c, b.x, b.z, b.tile);
+  b.mode = b.tile >= 0 ? "roll" : "air";
+  b.still = 0;
+  b.steps = 0;
+}
+
+/**
+ * Les chocs entre balles, après un pas de chacune : deux balles qui se touchent en se rapprochant échangent leur
+ * vitesse le long de la ligne qui les joint (de même masse, un rebond presque parfait). Au sol, le choc est à
+ * l'horizontale (l'une ne soulève pas l'autre). `solid[i]` : la balle i peut-elle en heurter d'autres
+ */
+export function collideBalls(c: Course, balls: Ball[], solid: readonly boolean[], emit?: (i: number, e: PhysEvent, b: Ball) => void) {
+  const lim = 2 * BALL_R;
+  for (let i = 0; i < balls.length; i++) {
+    const a = balls[i]!;
+    if (!solid[i] || !hittable(a)) continue;
+    for (let j = i + 1; j < balls.length; j++) {
+      const b = balls[j]!;
+      if (!solid[j] || !hittable(b) || (a.mode === "rest" && b.mode === "rest")) continue;
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      let dz = b.z - a.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= lim * lim) continue;
+      if (a.mode !== "air" && b.mode !== "air") dy = 0;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d < 1e-9) continue;
+      dx /= d;
+      dy /= d;
+      dz /= d;
+      const vn = (b.vx - a.vx) * dx + (b.vy - a.vy) * dy + (b.vz - a.vz) * dz;
+      if (vn >= 0) continue;
+      // Écartées l'une de l'autre, puis le choc
+      const pen = (lim - Math.sqrt(d2)) / 2;
+      wake(c, a);
+      wake(c, b);
+      a.x -= dx * pen;
+      a.y -= dy * pen;
+      a.z -= dz * pen;
+      b.x += dx * pen;
+      b.y += dy * pen;
+      b.z += dz * pen;
+      const jn = (-(1 + E_BALLS) * vn) / 2;
+      a.vx -= jn * dx;
+      a.vy -= jn * dy;
+      a.vz -= jn * dz;
+      b.vx += jn * dx;
+      b.vy += jn * dy;
+      b.vz += jn * dz;
+      emit?.(i, { k: "ball", v: -vn }, a);
+      emit?.(j, { k: "ball", v: -vn }, b);
+    }
+  }
+}
+
+/** Un pas pour toutes les balles qui bougent, puis leurs chocs. `opts[i]` : la physique de la balle i */
+export function stepWorld(
+  c: Course,
+  balls: Ball[],
+  tick: number,
+  opts: readonly PhysOpts[],
+  solid: readonly boolean[],
+  emit?: (i: number, e: PhysEvent, b: Ball) => void,
+) {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i]!;
+    if (moving(b)) stepBall(c, b, tick, opts[i]!, emit ? (e, bb) => emit(i, e, bb) : undefined);
+  }
+  if (balls.length > 1) collideBalls(c, balls, solid, emit);
+}
+
+/** Les balles d'un coup : celle qu'on frappe (la première) et les autres, posées là où elles sont */
+export function worldBalls(
+  c: Course,
+  from: { x: number; y: number; z: number },
+  others: readonly { x: number; y: number; z: number }[],
+): Ball[] {
+  return [restingBall(c, from.x, from.y, from.z), ...others.map((p) => restingBall(c, p.x, p.y, p.z))];
+}
+
+/** Qui peut heurter qui : la balle frappée ne heurte personne si elle traverse tout (le pouvoir « fantôme ») */
+export function solidOf(n: number, o: PhysOpts): boolean[] {
+  return Array.from({ length: n }, (_, i) => i > 0 || !o.mods?.ghost);
+}
+
+export interface WorldResult {
+  /** La balle frappée */
+  shot: ShotResult;
+  /** Les autres, dans l'ordre donné : où elles finissent (`moved` : elles ont été poussées) */
+  others: (ShotResult & { moved: boolean })[];
+}
+
+/**
+ * Joue un coup jusqu'au bout avec les autres balles sur le parcours : la balle frappée (physique `o`, avec son pouvoir)
+ * peut les pousser, elles roulent à leur tour (physique `plain`), et tout continue jusqu'à ce que plus rien ne bouge.
+ * Sans autre balle, exactement `simulateShot`
+ */
+export function simulateWorld(
+  c: Course,
+  from: { x: number; y: number; z: number },
+  angle: number,
+  power: number,
+  tick: number,
+  o: PhysOpts,
+  others: readonly { x: number; y: number; z: number }[],
+  plain: PhysOpts,
+): WorldResult {
+  if (others.length === 0) return { shot: simulateShot(c, from, angle, power, tick, o), others: [] };
+  const balls = worldBalls(c, from, others);
+  strike(c, balls[0]!, angle, power, o.mods);
+  const opts = balls.map((_, i) => (i === 0 ? o : plain));
+  const solid = solidOf(balls.length, o);
+  const ends = balls.map(() => tick);
+  let k = tick;
+  while (balls.some(moving)) {
+    k++;
+    const was = balls.map(moving);
+    stepWorld(c, balls, k, opts, solid);
+    for (let i = 0; i < balls.length; i++) if (was[i]) ends[i] = k;
+  }
+  const result = (b: Ball, end: number): ShotResult => ({
+    x: b.x,
+    y: b.y,
+    z: b.z,
+    end,
+    outcome: b.mode === "in" ? "in" : b.mode === "lost" ? "lost" : "rest",
+    cup: b.mode === "in" ? b.cup : -1,
+    lost: b.lost,
+    items: b.items,
+  });
+  return {
+    shot: result(balls[0]!, ends[0]!),
+    others: balls.slice(1).map((b, i) => {
+      const p = others[i]!;
+      return { ...result(b, ends[i + 1]!), moved: b.mode !== "rest" || b.x !== p.x || b.z !== p.z || ends[i + 1]! !== tick };
+    }),
+  };
 }
 
 /** Joue un coup jusqu'au bout, depuis la balle posée en (x, y, z), frappée au pas `tick` */

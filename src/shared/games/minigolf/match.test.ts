@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planShot } from "./bot.ts";
-import { strokeLimit } from "./course.ts";
+import { BALL_R, heightAt, strokeLimit } from "./course.ts";
 import { courseOf } from "./courses.ts";
 import {
   createMatch,
@@ -248,5 +248,87 @@ describe("minigolf : la partie", () => {
     m.players[1]!.scores = [3, 4, 4];
     m.players[2]!.scores = [3, 3, 3];
     expect(totals(m)).toEqual([3 + 2 + 4, 3 + 2 + 4, 9]);
+  });
+});
+
+describe("minigolf : les balles se poussent (chacun son tour)", () => {
+  /** Deux joueurs, a joue ; la balle de b est déjà sur le parcours */
+  function setup() {
+    const m = createMatch(
+      cfg({ holes: 3 }),
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 0 },
+      ],
+      3,
+      T0,
+    );
+    const now = T0 + INTRO_MS + 50;
+    tickMatch(m, now);
+    expect(activePlayer(m)?.id).toBe("a");
+    const c = courseOf(currentRef(m));
+    const put = (id: string, x: number, z: number) => {
+      const p = m.players.find((q) => q.id === id)!;
+      p.cur = 1;
+      p.ball = [x, heightAt(c, x, z) + BALL_R, z];
+    };
+    return { m, now, c, put };
+  }
+
+  it("le coup pousse la balle de l'autre : elle change de place, le tour attend qu'elle s'arrête", () => {
+    const { m, now, c, put } = setup();
+    const dx = Math.cos(c.tee.aim);
+    const dz = Math.sin(c.tee.aim);
+    put("b", c.tee.x + dx * 0.9, c.tee.z + dz * 0.9);
+    const before = [...m.players[1]!.ball];
+    const shot = shoot(m, "a", c.tee.aim, 0.4, nowTick(m, now), now);
+    if (typeof shot === "string") throw new Error(shot);
+    expect(shot.hits?.[0]?.id).toBe("b");
+    expect(shot.hits![0]!.from).toEqual(before);
+    expect(m.players[1]!.ball).not.toEqual(before);
+    expect(m.players[0]!.restAt).toBeGreaterThanOrEqual(shot.hits![0]!.end);
+  });
+
+  it("poussée dans le trou, elle compte pour son joueur, sans coup de plus", () => {
+    // Une force qui fait tomber la balle de b : on la cherche (le gazon et la pente changent d'un trou à l'autre)
+    let found = false;
+    for (let k = 4; k <= 40 && !found; k++) {
+      const { m, now, c, put } = setup();
+      const cup = c.cups[0]!;
+      const a = Math.atan2(cup.z - c.tee.z, cup.x - c.tee.x);
+      put("b", cup.x - Math.cos(a) * 0.22, cup.z - Math.sin(a) * 0.22);
+      put("a", cup.x - Math.cos(a) * 0.6, cup.z - Math.sin(a) * 0.6);
+      const shot = shoot(m, "a", a, k / 100, nowTick(m, now), now);
+      if (typeof shot === "string") throw new Error(shot);
+      const hit = shot.hits?.find((h) => h.id === "b");
+      if (hit?.out !== "in") continue;
+      found = true;
+      const b = m.players[1]!;
+      expect(b.done).toBe(true);
+      expect(b.scores[m.hole]).toBe(1);
+      expect(b.doneAt).toBe(hit.end);
+    }
+    expect(found).toBe(true);
+  });
+
+  it("tous en même temps, les balles se traversent", () => {
+    const m = createMatch(
+      cfg({ holes: 3, turns: false }),
+      [
+        { id: "a", team: 0 },
+        { id: "b", team: 0 },
+      ],
+      3,
+      T0,
+    );
+    const now = T0 + INTRO_MS + 50;
+    tickMatch(m, now);
+    const c = courseOf(currentRef(m));
+    const b = m.players[1]!;
+    b.cur = 1;
+    b.ball = [c.tee.x + Math.cos(c.tee.aim) * 0.9, c.tee.y, c.tee.z + Math.sin(c.tee.aim) * 0.9];
+    const shot = shoot(m, "a", c.tee.aim, 0.4, nowTick(m, now), now);
+    if (typeof shot === "string") throw new Error(shot);
+    expect(shot.hits).toBeUndefined();
   });
 });

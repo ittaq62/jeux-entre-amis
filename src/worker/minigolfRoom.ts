@@ -4,6 +4,7 @@ import { planShot, thinkTime, type BotLevel } from "../shared/games/minigolf/bot
 import { courseOf } from "../shared/games/minigolf/courses.ts";
 import { botLook, DEFAULT_LOOK, isBallLook, usableLook, type BallLook } from "../shared/games/minigolf/looks.ts";
 import {
+  ballsInPlay,
   createMatch,
   currentRef,
   DEFAULT_CONFIG,
@@ -895,6 +896,9 @@ export class MinigolfRoom extends DurableObject<Env> {
         physOf(m.cfg, ref, powerOf(m, p)),
         level,
         this.botRng,
+        // Les autres balles sur le parcours (chacun son tour) : il en tient compte, et peut les pousser
+        ballsInPlay(m, p.id).map((q) => ({ x: q.ball[0], y: q.ball[1], z: q.ball[2], ally: m.cfg.teams && q.team === p.team })),
+        physOf(m.cfg, ref),
       );
       if (plan.wait + lead > 0) {
         this.botPlan.set(p.id, { a: plan.a, p: plan.p, at: t + lead + plan.wait, hole: m.hole, pulled: false });

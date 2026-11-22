@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { hole, ramp } from "./build.ts";
 import { BALL_R, compileHole, heightAt, MATS, RAIL_T, tileAt, type Course } from "./course.ts";
 import { box, circle, inRings, rect } from "./geom.ts";
-import { DEFAULT_PHYS, restingBall, shotSpeed, simulateShot, stepBall, strike, type PhysEvent } from "./physics.ts";
+import { DEFAULT_PHYS, restingBall, shotSpeed, simulateShot, simulateWorld, stepBall, strike, type PhysEvent } from "./physics.ts";
 
 /** Une allée droite de 2 m de large, de z = 0 à z = -L, le trou au bout */
 function lane(L = 12, cupAt = -10) {
@@ -334,5 +334,63 @@ describe("minigolf : la construction d'un trou", () => {
     expect(rm.x).toBeCloseTo(-ra.x, 6);
     expect(rm.z).toBeCloseTo(ra.z, 6);
     expect(rm.outcome).toBe(ra.outcome);
+  });
+});
+
+describe("minigolf : les balles se heurtent", () => {
+  it("sans autre balle, le coup est exactement le même qu'avant", () => {
+    const c = lane();
+    const a = simulateShot(c, teeBall(c), UP + 0.2, 0.6, 30, DEFAULT_PHYS);
+    const w = simulateWorld(c, teeBall(c), UP + 0.2, 0.6, 30, DEFAULT_PHYS, [], DEFAULT_PHYS);
+    expect(w.shot).toEqual(a);
+    expect(w.others).toEqual([]);
+  });
+
+  it("la balle frappée pousse celle qui est sur son chemin, et s'arrête plus tôt", () => {
+    const c = lane(20, -19);
+    const target = { x: 0, y: c.tee.y, z: -3 };
+    const alone = simulateShot(c, teeBall(c), UP, powerFor(4), 0, DEFAULT_PHYS);
+    const w = simulateWorld(c, teeBall(c), UP, powerFor(4), 0, DEFAULT_PHYS, [target], DEFAULT_PHYS);
+    expect(w.others[0]!.moved).toBe(true);
+    // Choc de face, de même masse : la balle poussée part loin devant, celle qui frappe repart à peine
+    expect(w.others[0]!.z).toBeLessThan(-6);
+    expect(w.shot.z).toBeGreaterThan(-3.2);
+    expect(w.shot.z).toBeGreaterThan(alone.z);
+    expect(Math.abs(w.others[0]!.x)).toBeLessThan(1e-6);
+    // Et à l'identique d'une fois sur l'autre
+    expect(simulateWorld(c, teeBall(c), UP, powerFor(4), 0, DEFAULT_PHYS, [target], DEFAULT_PHYS)).toEqual(w);
+  });
+
+  it("une balle à côté du chemin n'est pas touchée ; frappée de biais, elle part de biais", () => {
+    const c = lane(20, -19);
+    const aside = { x: 0.5, y: c.tee.y, z: -3 };
+    const w = simulateWorld(c, teeBall(c), UP, powerFor(4), 0, DEFAULT_PHYS, [aside], DEFAULT_PHYS);
+    expect(w.others[0]!.moved).toBe(false);
+    // (sur un grand gazon, pour qu'elle ne revienne pas d'une bordure)
+    const wide = compileHole(
+      hole("Large", 3, (b) => {
+        b.tile(box(-8, -20, 8, 0));
+        b.tee(0, -0.5, UP).cup(0, -19);
+      }),
+    );
+    const grazed = { x: 0.06, y: wide.tee.y, z: -3 };
+    const g = simulateWorld(wide, teeBall(wide), UP, powerFor(4), 0, DEFAULT_PHYS, [grazed], DEFAULT_PHYS);
+    expect(g.others[0]!.moved).toBe(true);
+    expect(g.others[0]!.x).toBeGreaterThan(0.06);
+  });
+
+  it("poussée assez doucement au bord du trou, elle y tombe", () => {
+    const c = lane(12, -6);
+    const nearCup = { x: 0, y: c.tee.y, z: -5.75 };
+    const w = simulateWorld(c, { x: 0, y: c.tee.y, z: -5.2 }, UP, powerFor(1.2), 0, DEFAULT_PHYS, [nearCup], DEFAULT_PHYS);
+    expect(w.others[0]!.outcome).toBe("in");
+  });
+
+  it("le pouvoir « fantôme » traverse aussi les balles", () => {
+    const c = lane(20, -19);
+    const target = { x: 0, y: c.tee.y, z: -3 };
+    const ghost = { ...DEFAULT_PHYS, mods: { ghost: true } };
+    const w = simulateWorld(c, teeBall(c), UP, powerFor(4), 0, ghost, [target], DEFAULT_PHYS);
+    expect(w.others[0]!.moved).toBe(false);
   });
 });

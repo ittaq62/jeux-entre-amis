@@ -13,7 +13,18 @@ import { bonusCourse, bonusSpots } from "../../shared/games/minigolf/bonus.ts";
 import type { BallLook } from "../../shared/games/minigolf/looks.ts";
 import { physOf, type GolfShot, type MinigolfConfig } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfView } from "../../shared/games/minigolf/net.ts";
-import { restingBall, stepBall, strike, STEPS_PER_S, type Ball, type PhysEvent } from "../../shared/games/minigolf/physics.ts";
+import {
+  moving,
+  restingBall,
+  solidOf,
+  stepWorld,
+  strike,
+  STEPS_PER_S,
+  worldBalls,
+  type Ball,
+  type PhysEvent,
+  type PhysOpts,
+} from "../../shared/games/minigolf/physics.ts";
 import { HoleScene } from "./scene/HoleScene.ts";
 import * as THREE from "three";
 
@@ -61,14 +72,24 @@ export interface RuntimeOptions {
 
 type CamMode = "aim" | "follow" | "overview" | "intro";
 
-/** Ce qu'on rejoue d'un coup : la balle de la physique, avancée pas à pas jusqu'à maintenant */
+/**
+ * Ce qu'on rejoue d'un coup : les balles de la physique, celle qu'on frappe d'abord puis celles qu'elle peut pousser,
+ * avancées ensemble pas à pas jusqu'à maintenant (le même calcul que le serveur)
+ */
 interface Replay {
   key: string;
-  ball: Ball;
+  balls: Ball[];
+  /** Le joueur de chaque balle */
+  ids: string[];
+  opts: PhysOpts[];
+  solid: boolean[];
   tick: number;
   shot: GolfShot;
-  /** La balle est tombée dans le trou à ce moment (pour l'animation) */
-  inAt: number | null;
+  /** Où revient chaque balle si elle se perd (d'où elle est partie) */
+  home: [number, number, number][];
+  /** Le pas où elle s'est perdue, le moment où elle est tombée dans le trou (pour l'animation) */
+  lostAt: (number | null)[];
+  inAt: (number | null)[];
 }
 
 /** En dessous de cette force, il n'a pas vraiment tiré sa balle : lâcher annule */
@@ -85,6 +106,8 @@ export class GolfRuntime {
   private ref: HoleRef | null = null;
   private cfg: MinigolfConfig | null = null;
   private replays = new Map<string, Replay>();
+  /** Le coup rejoué qui montre la balle de chacun (le sien, ou celui d'un autre qui l'a poussée) */
+  private owner = new Map<string, { r: Replay; i: number }>();
   private raf = 0;
   private lastFrame = performance.now();
   private disposed = false;
@@ -165,6 +188,7 @@ export class GolfRuntime {
       this.scene.setHole(this.course, ref.c, ref.i * 7919 + (ref.m ? 1 : 0) + 17);
       this.scene.setBonus(v.cfg.bonus ? bonusSpots(ref) : null);
       this.replays.clear();
+      this.owner.clear();
       this.others.clear();
       this.yaw = this.course.tee.aim;
       this.yawGoal = null;
@@ -199,7 +223,20 @@ export class GolfRuntime {
       if (s.skip) {
         // Le temps de son tour est passé : le coup compte, la balle n'a pas bougé
         const ball = restingBall(this.course!, s.from[0], s.from[1], s.from[2]);
-        this.replays.set(p.id, { key: k, ball, tick: s.at, shot: s, inAt: null });
+        const r: Replay = {
+          key: k,
+          balls: [ball],
+          ids: [p.id],
+          opts: [],
+          solid: [true],
+          tick: s.at,
+          shot: s,
+          home: [s.from],
+          lostAt: [null],
+          inAt: [null],
+        };
+        this.replays.set(p.id, r);
+        this.own(r);
         continue;
       }
       // Notre propre coup, déjà lancé à l'écran avec les mêmes valeurs : on garde l'animation
@@ -208,7 +245,7 @@ export class GolfRuntime {
         old.shot = s;
         continue;
       }
-      this.replays.set(p.id, this.newReplay(k, s));
+      this.replays.set(p.id, this.newReplay(k, s, p.id));
       // Un coup qui part maintenant (pas un coup d'avant, rejoué à l'arrivée)
       if (prev && this.tickNow() - s.at < STEPS_PER_S * 0.6) this.o.onShot?.(p.id, p.id === this.o.me, s.p);
     }
@@ -296,11 +333,56 @@ export class GolfRuntime {
     return this.focus ?? v.players[0]?.id ?? null;
   }
 
-  private newReplay(key: string, s: GolfShot): Replay {
+  /**
+   * Le coup à rejouer : la balle frappée, et les balles que le serveur dit poussées (dans le même ordre). Pour son propre
+   * coup, pas encore confirmé, toutes les balles sur le parcours (le serveur fera le même calcul)
+   */
+  private newReplay(key: string, s: GolfShot, id: string, pending = false): Replay {
     const c = this.course!;
-    const b = restingBall(c, s.from[0], s.from[1], s.from[2]);
-    strike(c, b, s.a, s.p, s.mods);
-    return { key, ball: b, tick: s.at, shot: s, inAt: null };
+    const v = this.view!;
+    const others: { id: string; at: [number, number, number] }[] = pending
+      ? v.cfg.turns
+        ? v.players
+            .filter((q) => q.id !== id && !q.done && q.cur > 0)
+            .map((q) => ({ id: q.id, at: [...q.ball] as [number, number, number] }))
+        : []
+      : (s.hits ?? []).map((h) => ({ id: h.id, at: h.from }));
+    const balls = worldBalls(
+      c,
+      { x: s.from[0], y: s.from[1], z: s.from[2] },
+      others.map((o) => ({ x: o.at[0], y: o.at[1], z: o.at[2] })),
+    );
+    strike(c, balls[0]!, s.a, s.p, s.mods);
+    const opts = balls.map((_, i) => physOf(this.cfg!, this.ref!, i === 0 ? s.mods : undefined));
+    const r: Replay = {
+      key,
+      balls,
+      ids: [id, ...others.map((o) => o.id)],
+      opts,
+      solid: solidOf(balls.length, opts[0]!),
+      tick: s.at,
+      shot: s,
+      home: [s.to, ...others.map((o) => o.at)],
+      lostAt: balls.map(() => null),
+      inAt: balls.map(() => null),
+    };
+    this.own(r);
+    return r;
+  }
+
+  /** Ce coup montre désormais ces balles (sauf celle qu'un coup plus récent montre déjà) */
+  private own(r: Replay) {
+    r.ids.forEach((id, i) => {
+      const was = this.owner.get(id);
+      if (!was || was.r === r || was.r.shot.at <= r.shot.at) this.owner.set(id, { r, i });
+    });
+  }
+
+  /** La balle de la physique d'un joueur, si un coup rejoué la montre */
+  private physBall(id: string | null): Ball | null {
+    if (!id) return null;
+    const o = this.owner.get(id);
+    return o ? o.r.balls[o.i]! : null;
   }
 
   /** Le pas du trou à cette heure */
@@ -319,8 +401,8 @@ export class GolfRuntime {
     const p = this.me();
     if (!v || !p || v.phase !== "play" || p.done) return false;
     if (v.cfg.turns && (this.activeId() !== p.id || v.turnShot)) return false;
-    const r = this.replays.get(p.id);
-    if (r && (r.ball.mode === "roll" || r.ball.mode === "air" || r.ball.mode === "rail")) return false;
+    const b = this.physBall(p.id);
+    if (b && moving(b)) return false;
     return this.tickNow() >= p.restAt;
   }
 
@@ -329,8 +411,9 @@ export class GolfRuntime {
     const v = this.view;
     const p = v?.players.find((x) => x.id === id);
     if (!p) return null;
-    const r = this.replays.get(id);
-    if (r && r.ball.mode !== "rest" && r.ball.mode !== "lost" && r.ball.mode !== "in") return { x: r.ball.x, y: r.ball.y, z: r.ball.z };
+    // Là où la physique l'a menée (elle roule, ou vient de s'arrêter) ; sinon, là où le serveur la dit
+    const b = this.physBall(id);
+    if (b && (moving(b) || b.mode === "rest")) return { x: b.x, y: b.y, z: b.z };
     return { x: p.ball[0], y: p.ball[1], z: p.ball[2] };
   }
 
@@ -416,25 +499,37 @@ export class GolfRuntime {
   }
 
   private isRolling(id: string | null): boolean {
-    if (!id) return false;
-    const r = this.replays.get(id);
-    return Boolean(r && (r.ball.mode === "roll" || r.ball.mode === "air" || r.ball.mode === "rail"));
+    const b = this.physBall(id);
+    return Boolean(b && moving(b));
   }
 
   /** Chaque coup rejoué avance jusqu'au pas actuel (sans bruit pour ce qui est déjà loin dans le passé) */
   private advance(tick: number) {
     const c = this.course!;
-    const cfg = this.cfg!;
-    const ref = this.ref!;
     const target = Math.floor(tick);
-    for (const [id, r] of this.replays) {
-      const phys = physOf(cfg, ref, r.shot.mods);
-      const mine = id === this.o.me;
-      while (r.tick < target && (r.ball.mode === "roll" || r.ball.mode === "air" || r.ball.mode === "rail")) {
+    for (const r of this.replays.values()) {
+      if (r.opts.length === 0) continue;
+      while (r.tick < target && r.balls.some(moving)) {
         r.tick++;
         const live = target - r.tick < STEPS_PER_S * 0.25;
-        stepBall(c, r.ball, r.tick, phys, live ? (e, b) => this.emit(id, mine, e, b) : undefined);
-        if ((r.ball.mode as string) === "in" && r.inAt === null) r.inAt = performance.now();
+        stepWorld(
+          c,
+          r.balls,
+          r.tick,
+          r.opts,
+          r.solid,
+          live
+            ? (i, e, b) => {
+                // Les bulles bonus : seulement pour la balle frappée (le serveur ne compte que celles-là)
+                if (i > 0 && e.k === "item") return;
+                this.emit(r.ids[i]!, r.ids[i] === this.o.me, e, b);
+              }
+            : undefined,
+        );
+        r.balls.forEach((b, i) => {
+          if (b.mode === "in" && r.inAt[i] === null) r.inAt[i] = performance.now();
+          if (b.mode === "lost" && r.lostAt[i] === null) r.lostAt[i] = r.tick;
+        });
       }
     }
   }
@@ -453,30 +548,32 @@ export class GolfRuntime {
         this.players.find((x) => x.id === p.id)?.look ?? { color: "blanche", pattern: "unie", trail: "fil" },
         p.id === this.o.me,
       );
-      const r = this.replays.get(p.id);
+      const o = this.owner.get(p.id);
+      const b = o ? o.r.balls[o.i]! : null;
       let pos = { x: p.ball[0], y: p.ball[1], z: p.ball[2] };
-      let visible = !(p.done && p.doneAt <= tick && (!r || r.ball.mode === "in"));
+      let visible = !(p.done && p.doneAt <= tick && (!b || b.mode === "in"));
       // Chacun son tour : une balle pas encore jouée reste dans la poche de son joueur jusqu'à son tour (sinon, au
       // départ, toutes les balles se cacheraient l'une l'autre)
-      if (v.cfg.turns && p.cur === 0 && !r && p.id !== this.activeId()) visible = false;
-      if (r) {
-        if (r.ball.mode === "lost") {
-          // Perdue : on la voit encore un instant là où elle est, puis elle revient au départ du coup
-          visible = tick < r.shot.end + STEPS_PER_S * 0.6;
-          pos = visible ? { x: r.ball.x, y: r.ball.y, z: r.ball.z } : { x: r.shot.to[0], y: r.shot.to[1], z: r.shot.to[2] };
+      if (v.cfg.turns && p.cur === 0 && !o && p.id !== this.activeId()) visible = false;
+      if (o && b) {
+        if (b.mode === "lost") {
+          // Perdue : on la voit encore un instant là où elle est, puis elle revient d'où elle était partie
+          const at = o.r.lostAt[o.i] ?? o.r.tick;
+          visible = tick < at + STEPS_PER_S * 0.6;
+          const home = o.r.home[o.i]!;
+          pos = visible ? { x: b.x, y: b.y, z: b.z } : { x: home[0], y: home[1], z: home[2] };
           if (!visible) visible = !p.done;
-        } else if (r.ball.mode === "in") {
-          const k = r.inAt === null ? 1 : Math.min(1, (performance.now() - r.inAt) / 350);
-          pos = { x: r.ball.x, y: r.ball.y + 0.06, z: r.ball.z };
+        } else if (b.mode === "in") {
+          const inAt = o.r.inAt[o.i] ?? null;
+          const k = inAt === null ? 1 : Math.min(1, (performance.now() - inAt) / 350);
+          pos = { x: b.x, y: b.y + 0.06, z: b.z };
           model.sink(k);
           visible = k < 1;
-        } else if (r.ball.mode !== "rest") {
-          pos = { x: r.ball.x, y: r.ball.y, z: r.ball.z };
         } else {
-          pos = { x: r.shot.to[0], y: r.shot.to[1], z: r.shot.to[2] };
+          pos = { x: b.x, y: b.y, z: b.z };
         }
       }
-      if (!r || r.ball.mode !== "in") model.sink(0);
+      if (!b || b.mode !== "in") model.sink(0);
       model.show(visible);
       model.set(pos.x, pos.y, pos.z, this.scene.groundAt(pos.x, pos.z));
     }
@@ -741,7 +838,7 @@ export class GolfRuntime {
       lost: null,
       n: me.cur + 1,
     };
-    this.replays.set(me.id, { ...this.newReplay(`${this.view.hole}:pending`, shot) });
+    this.replays.set(me.id, this.newReplay(`${this.view.hole}:pending`, shot, me.id, true));
     this.o.onShot?.(me.id, true, power);
     this.o.onShoot(this.view.hole, angle, power, at);
   }

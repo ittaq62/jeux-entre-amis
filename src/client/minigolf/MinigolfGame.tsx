@@ -132,11 +132,16 @@ export function MinigolfGame({
           case "item":
             sfx.sparkle(vol);
             break;
+          case "ball":
+            sfx.clack(ev.v, vol);
+            break;
         }
       },
     });
     runtime.current = rt;
     listeners.current.onAim = (id, a, p) => rt.setOtherAim(id, a, p);
+    // En développement seulement : l'écran de jeu en console (`__mgGame`), pour essayer des coups à plusieurs onglets
+    if (import.meta.env.DEV) (window as unknown as { __mgGame?: GolfRuntime }).__mgGame = rt;
     return () => {
       listeners.current.onAim = undefined;
       rt.dispose();
@@ -219,6 +224,24 @@ export function MinigolfGame({
     sfx.yourTurn(0.9);
     say("À toi de jouer", "great", me && me.cur > 0 ? `Coup ${me.cur + 1}` : undefined);
   }, [turnKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Un autre a poussé sa balle : dans le trou (elle compte), ou perdue (elle revient), dit quand elle s'arrête
+  const pushed = v.players
+    .filter((q) => q.id !== mySeat && q.shot?.hits?.some((h) => h.id === mySeat))
+    .map((q) => ({ by: q.id, hit: q.shot!.hits!.find((h) => h.id === mySeat)!, key: `${v.hole}:${q.id}:${q.shot!.n}:${q.shot!.at}` }))
+    .at(-1);
+  useEffect(() => {
+    if (!pushed || shown.current.has(`push:${pushed.key}`)) return;
+    const name = players.find((x) => x.id === pushed.by)?.name ?? "?";
+    const wait = Math.max(0, ((pushed.hit.end - nowTickOf()) * 1000) / 240);
+    const t = setTimeout(() => {
+      shown.current.add(`push:${pushed.key}`);
+      if (pushed.hit.out === "in") say("Poussée dans le trou !", "great", `Merci ${name}`);
+      else if (pushed.hit.out === "lost") say("Ta balle a été poussée dehors", "info", "Elle revient où elle était");
+      else say(`${name} a poussé ta balle`, "info");
+    }, wait);
+    return () => clearTimeout(t);
+  }, [pushed?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Son temps est passé sans qu'il tire : le coup compte quand même
   const skipKey = me?.shot?.skip ? `${v.hole}:${me.shot.n}` : "";

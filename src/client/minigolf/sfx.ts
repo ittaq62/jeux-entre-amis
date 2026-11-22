@@ -218,6 +218,16 @@ export function sparkle(vol = 1) {
   for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.06, "sine", 1600 + k * 400, 1700 + k * 420, o.vol * vol * 0.2, 0.002, 0.15);
 }
 
+/** Deux balles qui se heurtent : un « clac » sec, plus fort quand le choc est fort */
+export function clack(speed: number, vol = 1) {
+  const o = out();
+  if (!o || !spaced("clack", 40)) return;
+  const t = o.ctx.currentTime + 0.003;
+  const v = o.vol * vol * Math.min(1, 0.25 + speed * 0.3);
+  tone(o.ctx, o.dest, t, "triangle", 2600, 2100, v * 0.42, 0.001, 0.05);
+  burst(o.ctx, o.dest, t, "bandpass", 3200, 2.5, v * 0.3, 0.001, 0.03);
+}
+
 /** À lui de jouer : deux notes claires, comme un carillon de bois */
 export function yourTurn(vol = 1) {
   const o = out();
