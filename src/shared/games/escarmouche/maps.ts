@@ -93,8 +93,8 @@ export type Decor =
   | { k: "logs"; x0: number; z0: number; x1: number; z1: number; n: number; snow?: boolean }
   /** La scie de la scierie, sur son établi */
   | { k: "saw"; x0: number; z0: number; x1: number; z1: number }
-  /** Un camion bâché, la cabine du côté `front` */
-  | { k: "truck"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1; color: string }
+  /** Un camion bâché (ou à benne, `kind`), la cabine du côté `front` */
+  | { k: "truck"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1; color: string; kind?: "benne" }
   /** Un étal du marché, ses cagettes de fruits et de légumes */
   | { k: "stall"; x0: number; z0: number; x1: number; z1: number }
   /** Un chariot à bagages chargé */
@@ -2342,7 +2342,9 @@ function carriereSide(b: Builder) {
   gentleStairs(b, "z", 4.9, 1, -7, -5.6, 0, 3.2, "metal");
   b.add({ k: "conveyor", x0: -3.4, y0: 0.6, z0: 13, x1: -7.2, y1: 5.1, z1: 8.2 });
   boulders(b, -3, 13.4, 1.4, 1.6, 31);
-  car(b, -31.6, 3.2, -24.4, 5.8, "#c9a227");
+  b.box(-31.6, 0, 3.2, -26.4, 1.96, 5.8, "decor");
+  b.box(-26.4, 0, 3.4, -24.4, 2.1, 5.6, "decor");
+  b.add({ k: "truck", x0: -31.6, z0: 3.2, x1: -24.4, z1: 5.8, front: 1, color: "#c9a227", kind: "benne" });
   boulders(b, -21, -6.4, 1, 1.2, 33);
   boulders(b, -34, -7.6, 0.8, 0.9, 35);
   b.box(-15, 0, -1.6, -13.6, 1.3, -0.2, "roche");

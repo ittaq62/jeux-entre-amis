@@ -580,6 +580,7 @@ function barkMaterial(q: Quality): THREE.Material {
   return m;
 }
 const LEAVES = ["#3f5226", "#4b5f2b", "#55682f", "#36461f", "#5f6f33"];
+const BRANCH = new THREE.Color("#4a3a2c");
 
 /** Un arbre : son tronc rond (il cache le pied carré qui arrête les balles), trois branches, sept grappes de feuilles */
 /** Un sapin sous la neige : son tronc, des étages de branches en cônes, la neige posée sur chacun */
@@ -657,7 +658,13 @@ function tree(d: Extract<Decor, { k: "tree" }>, group: THREE.Group, q: Quality) 
     g.rotateZ(-0.9);
     g.rotateY(a);
     g.translate(d.x, trunkH * (0.75 + k * 0.08), d.z);
-    const col = new Float32Array(g.attributes.position!.count * 3).fill(0.32);
+    // Le brun de l'écorce (en couleur linéaire : un gris à 0,32 sortait presque blanc)
+    const col = new Float32Array(g.attributes.position!.count * 3);
+    for (let i = 0; i < col.length; i += 3) {
+      col[i] = BRANCH.r;
+      col[i + 1] = BRANCH.g;
+      col[i + 2] = BRANCH.b;
+    }
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     parts.push(g.index ? g.toNonIndexed() : g);
   }
@@ -1740,30 +1747,52 @@ function truck(d: Extract<Decor, { k: "truck" }>, group: THREE.Group, q: Quality
       h.translate(x, R, z);
       pushTinted(parts, place(h), steelC);
     }
-  // Le plateau, ses ridelles, la bâche sur ses arceaux
-  box(cargoL, 0.12, W, cargoX, 1.0, 0, plank);
-  for (const s of [-1, 1]) box(cargoL, 0.5, 0.06, cargoX, 1.31, s * (W / 2 - 0.03), paint, true);
-  box(0.06, 0.5, W, -L / 2 + 0.03, 1.31, 0, paint, true);
-  const sideH = 0.68;
-  const cover = new THREE.BoxGeometry(cargoL - 0.04, sideH, W - 0.02);
-  cover.translate(cargoX, 1.56 + sideH / 2, 0);
-  pushTinted(parts, place(cover), canvas, () => 0.94);
-  const roofR = (W - 0.02) / 2;
-  const roofH = Math.max(0.2, 2.7 - (1.56 + sideH));
-  const roof = new THREE.CylinderGeometry(roofR, roofR, cargoL - 0.04, low ? 8 : 14, 1, false, 0, Math.PI);
-  roof.rotateZ(Math.PI / 2);
-  roof.scale(1, roofH / roofR, 1);
-  roof.translate(cargoX, 1.56 + sideH, 0);
-  pushTinted(parts, place(roof), canvas);
-  // Les arceaux qui marquent la bâche
-  for (let k = 1; k < 4; k++) {
-    const x = -L / 2 + (cargoL * k) / 4;
-    box(0.05, sideH, W + 0.01, x, 1.56 + sideH / 2, 0, canvas, false);
-    const arc = new THREE.CylinderGeometry(roofR + 0.01, roofR + 0.01, 0.05, low ? 8 : 14, 1, true, 0, Math.PI);
-    arc.rotateZ(Math.PI / 2);
-    arc.scale(1, roofH / roofR, 1);
-    arc.translate(x, 1.56 + sideH, 0);
-    pushTinted(parts, place(arc), canvas, () => 0.8);
+  if (d.kind === "benne") {
+    // La benne d'acier, ses renforts, son bouclier au-dessus de la cabine, le tas de gravier dedans
+    const steelBox = new THREE.Color(d.color).multiplyScalar(0.85);
+    box(cargoL, 0.14, W - 0.1, cargoX, 1.06, 0, steelBox, true);
+    for (const s of [-1, 1]) {
+      box(cargoL, 0.86, 0.07, cargoX, 1.56, s * (W / 2 - 0.08), steelBox, true);
+      for (let k = 0; k < 4; k++) box(0.08, 0.86, 0.05, -L / 2 + 0.3 + (k * (cargoL - 0.5)) / 3, 1.56, s * (W / 2 - 0.02), steelBox, true);
+    }
+    box(0.08, 0.86, W - 0.1, -L / 2 + 0.06, 1.56, 0, steelBox, true);
+    box(0.1, 1.08, W - 0.1, cargoX + cargoL / 2 - 0.05, 1.67, 0, steelBox, true);
+    box(0.5, 0.06, W - 0.3, cargoX + cargoL / 2 + 0.2, 2.2, 0, steelBox, true);
+    const heap = new THREE.IcosahedronGeometry(1, low ? 1 : 2);
+    const hp = heap.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < hp.count; i++) {
+      const j = 0.9 + Math.sin(hp.getX(i) * 9.1) * 0.06 + Math.cos(hp.getZ(i) * 7.7) * 0.06;
+      hp.setXYZ(i, hp.getX(i) * j, Math.max(0, hp.getY(i)) * j, hp.getZ(i) * j);
+    }
+    heap.scale(cargoL * 0.44, 0.75, (W - 0.3) / 2);
+    heap.translate(cargoX - 0.1, 1.12, 0);
+    pushTinted(parts, place(heap), new THREE.Color("#9a9184"), () => 0.85 + r() * 0.25);
+  } else {
+    // Le plateau, ses ridelles, la bâche sur ses arceaux
+    box(cargoL, 0.12, W, cargoX, 1.0, 0, plank);
+    for (const s of [-1, 1]) box(cargoL, 0.5, 0.06, cargoX, 1.31, s * (W / 2 - 0.03), paint, true);
+    box(0.06, 0.5, W, -L / 2 + 0.03, 1.31, 0, paint, true);
+    const sideH = 0.68;
+    const cover = new THREE.BoxGeometry(cargoL - 0.04, sideH, W - 0.02);
+    cover.translate(cargoX, 1.56 + sideH / 2, 0);
+    pushTinted(parts, place(cover), canvas, () => 0.94);
+    const roofR = (W - 0.02) / 2;
+    const roofH = Math.max(0.2, 2.7 - (1.56 + sideH));
+    const roof = new THREE.CylinderGeometry(roofR, roofR, cargoL - 0.04, low ? 8 : 14, 1, false, 0, Math.PI);
+    roof.rotateZ(Math.PI / 2);
+    roof.scale(1, roofH / roofR, 1);
+    roof.translate(cargoX, 1.56 + sideH, 0);
+    pushTinted(parts, place(roof), canvas);
+    // Les arceaux qui marquent la bâche
+    for (let k = 1; k < 4; k++) {
+      const x = -L / 2 + (cargoL * k) / 4;
+      box(0.05, sideH, W + 0.01, x, 1.56 + sideH / 2, 0, canvas, false);
+      const arc = new THREE.CylinderGeometry(roofR + 0.01, roofR + 0.01, 0.05, low ? 8 : 14, 1, true, 0, Math.PI);
+      arc.rotateZ(Math.PI / 2);
+      arc.scale(1, roofH / roofR, 1);
+      arc.translate(x, 1.56 + sideH, 0);
+      pushTinted(parts, place(arc), canvas, () => 0.8);
+    }
   }
   // La cabine : la caisse, le capot, la calandre, les phares, le pare-chocs, les vitres
   const cab0 = front - cabL;
@@ -2176,11 +2205,46 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     }
     case "tank": {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(d.r, d.r, d.x1 - d.x0, low ? 10 : 18), matMaterial("metal", q, false));
-      m.rotation.z = Math.PI / 2;
-      m.position.set((d.x0 + d.x1) / 2, d.y + 0.2, d.z);
-      m.castShadow = true;
-      group.add(m);
+      // Les tuyaux restent des cylindres de tôle ; une vraie citerne a des fonds bombés, une peinture lisse, des cerclages
+      if (d.r < 0.8) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(d.r, d.r, d.x1 - d.x0, low ? 10 : 18), matMaterial("metal", q, false));
+        m.rotation.z = Math.PI / 2;
+        m.position.set((d.x0 + d.x1) / 2, d.y + 0.2, d.z);
+        m.castShadow = true;
+        group.add(m);
+        return;
+      }
+      const parts: THREE.BufferGeometry[] = [];
+      const r = seededRand(d.x0, d.z, 13);
+      const paint = new THREE.Color("#8d978f");
+      const iron = new THREE.Color("#4a4c4a");
+      const cx = (d.x0 + d.x1) / 2;
+      const y = d.y + 0.2;
+      const dome = d.r * 0.35;
+      const len = d.x1 - d.x0 - dome * 2;
+      const seg = low ? 14 : 24;
+      const grime = () => 0.92 + r() * 0.1;
+      const body = new THREE.CylinderGeometry(d.r, d.r, len, seg, 1, true);
+      body.rotateZ(Math.PI / 2);
+      body.translate(cx, y, d.z);
+      pushTinted(parts, body, paint, grime);
+      for (const s of [-1, 1]) {
+        const end = new THREE.SphereGeometry(d.r, seg, low ? 5 : 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        end.rotateZ((-s * Math.PI) / 2);
+        end.scale(0.35, 1, 1);
+        end.translate(cx + (s * len) / 2, y, d.z);
+        pushTinted(parts, end, paint, grime);
+      }
+      for (const f of [-0.38, 0, 0.38]) {
+        const band = new THREE.CylinderGeometry(d.r + 0.025, d.r + 0.025, 0.12, seg, 1, true);
+        band.rotateZ(Math.PI / 2);
+        band.translate(cx + f * len, y, d.z);
+        pushTinted(parts, band, iron);
+      }
+      const hatch = new THREE.CylinderGeometry(0.32, 0.36, 0.3, 12);
+      hatch.translate(cx + len * 0.2, y + d.r + 0.08, d.z);
+      pushTinted(parts, hatch, paint, () => 0.85);
+      mergeTinted(parts, tintedMaterial(q), group, true);
       return;
     }
     case "tower": {
@@ -2454,10 +2518,68 @@ function roofExtras(d: Extract<Decor, { k: "roof" }>, ctx: Ctx, q: Quality) {
   addBox(ctx.bucket("tuile"), cx - 0.12, top + 1.05, cz - 0.12, cx + 0.12, top + 1.3, cz + 0.12, 1, 0.85, true);
 }
 
-/** Des sacs de sable posés en quinconce, rang par rang, un peu de travers, de teintes un peu différentes */
+/**
+ * Un sac de sable, en coussin : le dessus et le dessous à plat, les flancs arrondis, les deux bouts pincés (64
+ * triangles, ombré en douceur), de la taille d'un vrai sac (0,56 × 0,17 × 0,34)
+ */
+function pillowGeometry(): THREE.BufferGeometry {
+  const P: [number, number][] = [
+    [-0.36, 0.5],
+    [0.36, 0.5],
+    [0.5, 0.28],
+    [0.5, -0.32],
+    [0.4, -0.5],
+    [-0.4, -0.5],
+    [-0.5, -0.32],
+    [-0.5, 0.28],
+  ];
+  const rings: [number, number][] = [
+    [-0.5, 0.72],
+    [-0.4, 1],
+    [0.4, 1],
+    [0.5, 0.72],
+  ];
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (const [x, k] of rings)
+    for (let i = 0; i < 8; i++) {
+      const [z, y] = P[i]!;
+      pos.push(x, y * k, z * k);
+      uv.push(x + 0.5, i / 8);
+    }
+  for (let r = 0; r < 3; r++)
+    for (let i = 0; i < 8; i++) {
+      const a = r * 8 + i;
+      const b = r * 8 + ((i + 1) % 8);
+      const c = (r + 1) * 8 + ((i + 1) % 8);
+      const d = (r + 1) * 8 + i;
+      idx.push(a, b, c, a, c, d);
+    }
+  const c0 = pos.length / 3;
+  pos.push(-0.5, 0, 0);
+  uv.push(0, 0.5);
+  const c1 = pos.length / 3;
+  pos.push(0.5, 0, 0);
+  uv.push(1, 0.5);
+  for (let i = 0; i < 8; i++) idx.push(c0, (i + 1) % 8, i, c1, 24 + i, 24 + ((i + 1) % 8));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.scale(0.56, 0.17, 0.34);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Des sacs de sable posés en quinconce, rang par rang, un peu de travers, de teintes un peu différentes. Un rempart en
+ * aligne des milliers : chaque sac est un coussin léger (64 triangles), les rangs du milieu d'un mur épais (qu'on ne voit
+ * pas) ne sont pas dessinés, et l'ombre vient d'une boîte invisible par mur, pas de chaque sac
+ */
 function sandbagMesh(boxes: THREE.Box3[], q: Quality): THREE.Mesh {
   const parts: THREE.BufferGeometry[] = [];
-  const base = new RoundedBoxGeometry(0.56, 0.17, 0.34, q === "haut" ? 2 : 1, 0.07);
+  const base = pillowGeometry();
   const tints = ["#a8996f", "#9c8d64", "#b3a479", "#8f835e", "#a39270"];
   const c = new THREE.Color();
   let n = 0;
@@ -2473,6 +2595,7 @@ function sandbagMesh(boxes: THREE.Box3[], q: Quality): THREE.Mesh {
     const step = len / per;
     for (let l = 0; l < layers; l++) {
       for (let r = 0; r < rows; r++) {
+        if (rows > 2 && r > 0 && r < rows - 1 && l < layers - 1) continue;
         const shift = (l + r) % 2 ? step / 2 : 0;
         for (let k = 0; k < per + (shift ? 1 : 0); k++) {
           const a = -len / 2 + step * (k + 0.5) - shift;
@@ -2508,8 +2631,26 @@ function sandbagMesh(boxes: THREE.Box3[], q: Quality): THREE.Mesh {
       ? new THREE.MeshLambertMaterial({ map: tex, vertexColors: true })
       : new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 1, normalMap: normalFrom(tex, "normal:jute", 1.5) });
   const mesh = new THREE.Mesh(merged, mat);
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   mesh.receiveShadow = true;
+  // L'ombre des murs de sacs : une boîte par mur, invisible à l'écran (et pour l'occlusion ambiante)
+  const shadow = mergeGeometries(
+    boxes.map((b) => {
+      const g = new THREE.BoxGeometry(b.max.x - b.min.x - 0.04, b.max.y - b.min.y - 0.02, b.max.z - b.min.z - 0.04);
+      g.translate((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2 - 0.01, (b.min.z + b.max.z) / 2);
+      return g;
+    }),
+    false,
+  );
+  if (shadow) {
+    const caster = new THREE.Mesh(
+      shadow,
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }),
+    );
+    caster.castShadow = true;
+    caster.receiveShadow = false;
+    mesh.add(caster);
+  }
   return mesh;
 }
 
