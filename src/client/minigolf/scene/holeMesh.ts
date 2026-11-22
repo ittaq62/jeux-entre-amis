@@ -752,7 +752,9 @@ export function buildHoleMeshes(c: Course, kit: ThemeKit): HoleMeshes {
   }
   const walls = c.walls.filter((w) => w.kind === "wall");
   for (const [look, list] of groupBy(walls, (w) => w.look ?? "")) {
-    const geo = merged(list.map((w) => prism(w.ax, w.az, w.bx, w.bz, w.a1 - 0.6, w.a1, w.b1 - 0.6, w.b1, w.t, w.t)));
+    const geo = merged(
+      list.map((w) => railBody(w.ax, w.az, w.bx, w.bz, w.a1 - 0.6, w.a1, w.b1 - 0.6, w.b1, w.t, w.t, Math.min(0.45 * w.t, 0.03))),
+    );
     if (!geo) continue;
     const mesh = new THREE.Mesh(keep(geo), kit.wall(look || undefined));
     mesh.castShadow = true;

@@ -3,7 +3,7 @@
 // au bout du jardin le château, ses toits d'ardoise et ses hautes fenêtres.
 
 import * as THREE from "three";
-import type { Course, MoverDef } from "../../../../shared/games/minigolf/course.ts";
+import { heightAt, type Course, type MoverDef } from "../../../../shared/games/minigolf/course.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { barkTex, gravelTex, grassTex, hedgeTex, sandTex, stoneTex, woodTex } from "../textures.ts";
 import {
@@ -40,6 +40,8 @@ export function jardinTheme(): Theme {
   const sand = surfaceMat(sandTex(), { color: 0xffffff, roughness: 1 });
   const wood = surfaceMat(woodTex(), { color: 0xffffff, roughness: 0.75 });
   const felt = feltMat(FELT, 0.5, 0.075);
+  // Le gazon du labyrinthe, tondu en damier
+  const feltDamier = feltMat(FELT, 0.85, 0.07, "damier");
   const water = waterMat(0x2f6f6a, 0.84);
   const iron = new THREE.MeshStandardMaterial({ color: 0x1c1f22, roughness: 0.45, metalness: 0.7 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xd4a842, roughness: 0.3, metalness: 0.9 });
@@ -227,6 +229,7 @@ export function jardinTheme(): Theme {
   const kit = plainKit({
     felt,
     ground: (mat, look) => {
+      if (look === "labyrinthe") return feltDamier;
       if (mat === "sand") return look === "gravier" ? gravel : sand;
       if (mat === "wood") return wood;
       if (mat === "stone") return stone;
@@ -541,11 +544,26 @@ function jardinDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     g.add(hedgesMesh);
   }
 
-  // Ce que le trou demande en particulier : le moulin, les jets de la fontaine
+  // Ce que le trou demande en particulier : le moulin, les jets de la fontaine, l'urne au fond du labyrinthe
   for (const d of c.def.decos) {
     if (d.k === "moulin") g.add(windmillHouse(d.at[0], d.at[1], c, m));
     if (d.k === "jets") g.add(fountainJets(d.at[0], d.at[1], d.s ?? 1.3));
+    if (d.k === "urne") {
+      const urn = new THREE.Mesh(urnGeometry(), m.stone);
+      urn.position.set(d.at[0], base, d.at[1]);
+      urn.scale.setScalar(1.15);
+      shadows(urn);
+      g.add(urn);
+    }
   }
+  // Une boule de buis taillée au bout de chaque haie du parcours
+  const finials = new Scatter(leafyBall(1, 0.05, 4), m.hedge);
+  for (const w of c.def.walls) {
+    if (w.look !== "haie") continue;
+    for (const p of [w.pts[0]!, w.pts[w.pts.length - 1]!]) finials.add(p[0], heightAt(c, p[0], p[1]) + w.h + 0.08, p[1], 0.11);
+  }
+  const fm = finials.build();
+  if (fm) g.add(fm);
   return g;
 }
 

@@ -55,7 +55,7 @@ export function surfaceMat(s: SurfaceTex, o: THREE.MeshStandardMaterialParameter
 }
 
 /** Le gazon des pistes : la couleur du thème, les fibres, et les bandes de tonte claires et foncées */
-export function feltMat(color: number, stripe = 0.5, amount = 0.07): THREE.MeshStandardMaterial {
+export function feltMat(color: number, stripe = 0.5, amount = 0.07, pattern: "bandes" | "damier" = "bandes"): THREE.MeshStandardMaterial {
   const s = feltTex();
   const m = new THREE.MeshStandardMaterial({
     color,
@@ -76,11 +76,15 @@ export function feltMat(color: number, stripe = 0.5, amount = 0.07): THREE.MeshS
       .replace(
         "#include <map_fragment>",
         `#include <map_fragment>
-        float band = step(0.5, fract((vWPos.x + vWPos.z * 0.08) / (stripeW * 2.0)));
+        ${
+          pattern === "damier"
+            ? "float band = mod(floor(vWPos.x / stripeW) + floor(vWPos.z / stripeW), 2.0);"
+            : "float band = step(0.5, fract((vWPos.x + vWPos.z * 0.08) / (stripeW * 2.0)));"
+        }
         diffuseColor.rgb *= 1.0 + stripeA * (band * 2.0 - 1.0);`,
       );
   };
-  m.customProgramCacheKey = () => `felt-${stripe}-${amount}`;
+  m.customProgramCacheKey = () => `felt-${stripe}-${amount}-${pattern}`;
   return m;
 }
 

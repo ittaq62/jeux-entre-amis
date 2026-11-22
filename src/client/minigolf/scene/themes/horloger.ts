@@ -35,6 +35,50 @@ function noise(seed: number): () => number {
   };
 }
 
+/**
+ * Le perlage d'une platine d'horlogerie : des petits cercles brossés en rond qui se chevauchent en écailles, chacun
+ * clair d'un côté et sombre de l'autre (la lumière tourne avec le brossage)
+ */
+function perlageTex(): THREE.CanvasTexture {
+  return canvasTex(256, (g, s) => {
+    g.fillStyle = "#c7a04e";
+    g.fillRect(0, 0, s, s);
+    const step = s / 5;
+    const r = step * 0.68;
+    for (let row = -1; row <= 5; row++)
+      for (let col = -1; col <= 5; col++) {
+        const x = col * step + (row % 2 ? step / 2 : 0);
+        const y = row * step;
+        // Recopié de l'autre côté du bord : la texture se répète sans couture
+        for (const [ox, oy] of [
+          [0, 0],
+          [s, 0],
+          [0, s],
+          [s, s],
+          [-s, 0],
+          [0, -s],
+        ]) {
+          const cx = x + ox!;
+          const cy = y + oy!;
+          if (cx < -r || cx > s + r || cy < -r || cy > s + r) continue;
+          const grd = g.createConicGradient(((row * 7 + col * 3) % 6) * 0.5, cx, cy);
+          grd.addColorStop(0, "#e8cc88");
+          grd.addColorStop(0.25, "#bf9a50");
+          grd.addColorStop(0.5, "#e4c682");
+          grd.addColorStop(0.75, "#b8924a");
+          grd.addColorStop(1, "#e8cc88");
+          g.fillStyle = grd;
+          g.beginPath();
+          g.arc(cx, cy, r, 0, Math.PI * 2);
+          g.fill();
+          g.strokeStyle = "rgba(90,60,20,0.14)";
+          g.lineWidth = 1;
+          g.stroke();
+        }
+      }
+  });
+}
+
 /** Le laiton brossé : un jaune chaud, des rayures fines dans un seul sens, quelques rivets */
 function brassTex(rivets: boolean): THREE.CanvasTexture {
   return canvasTex(256, (g, s) => {
@@ -310,6 +354,10 @@ export function horlogerTheme(): Theme {
   const bt = brassTex(true);
   bt.repeat.set(1 / 1.2, 1 / 1.2);
   const brassFloor = new THREE.MeshStandardMaterial({ map: bt, color: 0xffffff, roughness: 0.38, metalness: 0.8, envMapIntensity: 1.1 });
+  // La platine d'un mouvement : le laiton perlé (des cercles brossés qui se chevauchent)
+  const pt = perlageTex();
+  pt.repeat.set(1 / 1.1, 1 / 1.1);
+  const platine = new THREE.MeshStandardMaterial({ map: pt, color: 0xfff2d8, roughness: 0.34, metalness: 0.85, envMapIntensity: 1.15 });
   const plain = brassTex(false);
   plain.repeat.set(1.5, 1.5);
   const brass = new THREE.MeshStandardMaterial({ map: plain, color: 0xffffff, roughness: 0.32, metalness: 0.85, envMapIntensity: 1.2 });
@@ -534,6 +582,7 @@ export function horlogerTheme(): Theme {
       if (look === "etabli") return oak;
       if (look === "parquet") return parquet;
       if (look === "laiton") return brassFloor;
+      if (look === "platine") return platine;
       if (look === "engrenage") return gearBed;
       if (look === "tapis") return rubber;
       if (look === "acier") return tread;

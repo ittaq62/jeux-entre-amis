@@ -139,12 +139,13 @@ const escalier = hole(
   { hint: "Assez fort pour monter les deux rampes, pas trop pour ne pas taper le fond." },
 );
 
-// 6. Le labyrinthe : des haies en zigzag ; trois brèches alignées pour les plus adroits
+// 6. Le labyrinthe : des haies en zigzag, une boule de buis au bout de chacune ; le gazon tondu en damier descend
+// doucement vers le trou ; trois brèches alignées pour les plus adroits ; une urne au fond
 const labyrinthe = hole(
   "Le labyrinthe",
   4,
   (b) => {
-    b.tile(box(-2.5, -6.6, 2.5, 0), 0, "green", { look: "buis" });
+    b.tile(box(-2.5, -6.6, 2.5, 0), ramp([0, 0], [0, -6.6], 0.24, 0), "green", { look: "labyrinthe" });
     const hedge = { look: "haie", t: 0.07 } as const;
     // Chaque haie a une brèche étroite en x = 0 (la balle y passe tout juste) et un grand passage d'un côté
     b.wall(
@@ -192,6 +193,7 @@ const labyrinthe = hole(
       0.42,
       hedge,
     );
+    b.deco("urne", 0, -7.4);
     b.tee(0, -0.45, UP).cup(0, -6.0);
   },
   { hint: "Le long chemin en zigzag, ou les trois brèches d'un seul coup." },

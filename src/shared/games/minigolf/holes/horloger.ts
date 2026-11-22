@@ -53,12 +53,13 @@ const etabli = hole(
   { hint: "Le cuir freine la balle ; les vis la renvoient." },
 );
 
-// 2. Les engrenages : deux roues couchées tournent en sens contraire ; leurs dents balaient, leur plateau emporte
+// 2. Les engrenages : sur la platine d'un mouvement d'horloge, perlée et arrondie aux deux bouts, deux roues couchées
+// tournent en sens contraire ; leurs dents balaient, leur plateau emporte ; le départ sur un petit gradin
 const engrenages = hole(
   "Les engrenages",
   3,
   (b) => {
-    const floor = b.tile(box(-2.6, -11.2, 2.6, 0), 0, "metal", { look: "laiton" });
+    const floor = b.tile(roundRect(-2.6, -11.2, 2.6, 0, 2.6, 2.6), ramp([0, -0.9], [0, -2.4], 0.12, 0, "s"), "metal", { look: "platine" });
     const ga: Pt = [-1.15, -4.3];
     const gb: Pt = [1.15, -7.5];
     b.inset(floor, circle(ga[0], ga[1], 0.9, 48), 0, "metal", { look: "engrenage", flow: { k: "spin", c: ga, w: 0.9 } });

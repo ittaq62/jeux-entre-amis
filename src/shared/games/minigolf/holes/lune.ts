@@ -77,15 +77,16 @@ const tremplin = hole(
   { hint: "Plein élan sur le tremplin : la Lune porte loin. La passerelle à droite n'a pas de garde-fou." },
 );
 
-// 4. Les téléporteurs : des plateformes isolées, reliées seulement par des téléporteurs
+// 4. Les téléporteurs : des aires rondes isolées, reliées seulement par des téléporteurs
 const teleporteurs = hole(
   "Les téléporteurs",
   3,
   (b) => {
-    b.tile(box(-1.3, -3.4, 1.3, 0), 0, "metal", { look: "grille" });
-    b.tile(box(-3.4, -8, -1.0, -5.4), 0.2, "metal", { look: "grille" });
-    b.tile(box(1.0, -8, 3.4, -5.4), 0.2, "metal", { look: "grille" });
-    b.tile(box(-1.1, -12.6, 1.1, -10.0), 0.4, "metal", { look: "grille" });
+    // Des aires rondes, de plus en plus hautes : le départ, deux plateformes, celle du trou
+    b.tile(roundRect(-1.3, -3.4, 1.3, 0, 0.7, 1.3), 0, "metal", { look: "grille" });
+    b.tile(circle(-2.2, -6.7, 1.3, 40), 0.2, "metal", { look: "grille" });
+    b.tile(circle(2.2, -6.7, 1.3, 40), 0.2, "metal", { look: "grille" });
+    b.tile(circle(0, -11.3, 1.3, 40), 0.4, "metal", { look: "grille" });
     b.portal([-0.65, -2.7], [-2.2, -5.9], UP, 0.2, "tele");
     b.portal([0.65, -2.7], [2.2, -5.9], UP, 0.2, "tele");
     b.portal([-2.2, -7.4], [-0.5, -10.4], UP + 0.25, 0.2, "tele");
@@ -159,7 +160,8 @@ const sas = hole(
   { hint: "Une porte s'ouvre quand l'autre se ferme : attends dans le sas." },
 );
 
-// 7. Les dunes : le régolithe ondule en travers ; lancée trop vite, la balle s'envole d'une crête à l'autre
+// 7. Les dunes : dans une vallée aux bords irréguliers, le régolithe ondule en travers ; lancée trop vite, la balle
+// s'envole d'une crête à l'autre
 const dunes = hole(
   "Les dunes",
   3,
@@ -168,7 +170,24 @@ const dunes = hole(
     const len = 2.4;
     // Le départ dans un creux : là, le sol est plat
     const at: Pt = [0 - dir[0] * 0.75 * len, -0.45 - dir[1] * 0.75 * len];
-    b.tile(box(-1.6, -13, 1.6, 0), wave(at, dir, len, 0.11), "moon", { look: "regolithe" });
+    // La vallée de régolithe : ses bords s'évasent et se resserrent, ses deux bouts arrondis
+    const zs: number[] = [];
+    for (let z = -1.85; z > -11.1; z -= 0.3) zs.push(Math.round(z * 100) / 100);
+    const out = (z: number, ph: number) => {
+      const ends = Math.min(1, Math.max(0, Math.min(-1.6 - z, z + 11.4) / 1.2));
+      return ends * (0.22 + 0.2 * Math.sin(z * 0.9 + ph) + 0.08 * Math.sin(z * 2.7 + ph * 2));
+    };
+    b.tile(
+      [
+        ...arc(0, -1.6, 1.6, Math.PI, 0, 18),
+        ...zs.map((z) => [1.6 + out(z, 0), z] as Pt),
+        ...arc(0, -11.4, 1.6, 0, -Math.PI, 18),
+        ...[...zs].reverse().map((z) => [-1.6 - out(z, 1.9), z] as Pt),
+      ],
+      wave(at, dir, len, 0.11),
+      "moon",
+      { look: "regolithe" },
+    );
     b.post([-0.7, -4.4], 0.2, 0.35, { look: "rocher" });
     b.post([0.8, -7.3], 0.24, 0.4, { look: "rocher" });
     b.post([-0.5, -10.0], 0.18, 0.3, { look: "rocher" });
