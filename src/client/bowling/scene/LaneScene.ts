@@ -57,7 +57,11 @@ export class LaneScene {
   /** Ce que la fusion des pistes voisines a créé (à libérer avec la salle) */
   private mergedBin: { dispose: () => void }[] = [];
 
-  constructor(host: HTMLElement) {
+  /** `fixed` : la qualité ne s'allège jamais (une image à photographier) */
+  constructor(
+    host: HTMLElement,
+    private fixed = false,
+  ) {
     this.host = host;
     this.renderer = new THREE.WebGLRenderer({ antialias: !TOUCH || this.baseRatio < 2, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(this.baseRatio);
@@ -240,7 +244,7 @@ export class LaneScene {
   render(dt: number) {
     this.renderer.info.reset();
     this.clock += dt;
-    this.quality.tick(performance.now());
+    if (!this.fixed) this.quality.tick(performance.now());
     this.salle?.update?.(this.clock, this.camera);
     const refl = this.lanes[0]?.reflector;
     if (refl) {
