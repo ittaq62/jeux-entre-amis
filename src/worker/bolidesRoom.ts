@@ -396,6 +396,8 @@ export class BolidesRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : les feux ne l'attendent plus (comme le chargement commun, voir shared/loadGate.ts)
+      if (d.race?.phase === "loading" && markLoaded(d.race, seat.id)) this.dirty = true;
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }

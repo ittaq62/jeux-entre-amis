@@ -9,6 +9,8 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { MenuSound, SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { ConfirmButton } from "../components/ui.tsx";
 import { BOLIDES_SOUNDS, preloadSounds, unlockAudio } from "../lib/sound.ts";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
@@ -312,6 +314,10 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const over = g.phase === "over";
   const loading = !over && (!load.done || load.failed || g.phase === "loading");
   const h = loading ? null : hud;
+  // Les premières secondes de la course (le survol, les feux, le départ) : mesurées, et montrées avec « ?perf »
+  useEffect(() => {
+    if (!loading && !over) return watchFirstSeconds("Bolides");
+  }, [loading, over, raceKey]);
   const showItem = g.settings.items && me !== null;
   const rollingMain = Boolean(h?.rolling && h.rollSlot === 1);
   const rollingSpare = Boolean(h?.rolling && h.rollSlot === 2);
@@ -319,6 +325,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   return (
     <div className={`bolides-root ${phone ? "is-phone" : ""}`} onPointerDown={() => unlockAudio()}>
       <div ref={box} className="bolides-stage" onPointerDown={stageDown} />
+      <FirstSecondsPanel />
 
       <header className="bolides-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
