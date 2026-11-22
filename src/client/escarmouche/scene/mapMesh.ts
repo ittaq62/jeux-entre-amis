@@ -1517,6 +1517,98 @@ function shelter(d: Extract<Decor, { k: "shelter" }>, group: THREE.Group, q: Qua
   mergeTinted(parts, tintedMaterial(q), group, !low);
 }
 
+/**
+ * Un wagon-citerne sur sa voie (le long de x) : le châssis et ses tampons, deux bogies et leurs roues, la citerne aux
+ * fonds bombés, sale et piquée de rouille, ses cerclages, le dôme du dessus, la rambarde, une échelle de chaque côté
+ */
+function tankCar(d: Extract<Decor, { k: "tankcar" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const r = seededRand(d.x0, d.z, 9);
+  const len = d.x1 - d.x0;
+  const cx = (d.x0 + d.x1) / 2;
+  const z = d.z;
+  const dark = new THREE.Color("#26262a");
+  const iron = new THREE.Color("#3b3a38");
+  const body = new THREE.Color(d.color);
+  const grime = () => 0.78 + r() * 0.3;
+  const bx = (sx: number, sy: number, sz: number, x: number, y: number, zz: number, c: THREE.Color, k = 1) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    g.translate(x, y, zz);
+    pushTinted(parts, g, c, () => k);
+  };
+  // Le châssis, les traverses des bouts, les tampons
+  bx(len - 0.4, 0.26, 2.0, cx, 1.0, z, dark);
+  for (const s of [-1, 1]) {
+    bx(0.22, 0.36, 2.5, cx + (s * (len - 0.3)) / 2, 1.0, z, iron);
+    for (const t of [-0.85, 0.85]) {
+      const buf = new THREE.CylinderGeometry(0.16, 0.16, 0.42, 10);
+      buf.rotateZ(Math.PI / 2);
+      buf.translate(cx + s * (len / 2 + 0.03), 1.0, z + t);
+      pushTinted(parts, buf, iron);
+    }
+  }
+  // Les bogies : un cadre, deux essieux, quatre roues
+  const segW = low ? 10 : 16;
+  for (const s of [-1, 1]) {
+    const bxc = cx + s * (len / 2 - 2.1);
+    bx(2.3, 0.3, 1.7, bxc, 0.62, z, dark, 0.9);
+    for (const a of [-0.75, 0.75])
+      for (const t of [-0.72, 0.72]) {
+        const w = new THREE.CylinderGeometry(0.42, 0.42, 0.12, segW);
+        w.rotateX(Math.PI / 2);
+        w.translate(bxc + a, 0.42, z + t);
+        pushTinted(parts, w, iron);
+        const hub = new THREE.CylinderGeometry(0.12, 0.12, 0.16, 8);
+        hub.rotateX(Math.PI / 2);
+        hub.translate(bxc + a, 0.42, z + t * 1.08);
+        pushTinted(parts, hub, dark);
+      }
+  }
+  // La citerne, ses fonds bombés
+  const R = d.r;
+  const y = 1.13 + R;
+  const tl = len - 1.4;
+  const tank = new THREE.CylinderGeometry(R, R, tl, low ? 14 : 24, 1, true);
+  tank.rotateZ(Math.PI / 2);
+  tank.translate(cx, y, z);
+  pushTinted(parts, tank, body, grime);
+  for (const s of [-1, 1]) {
+    const end = new THREE.SphereGeometry(R, low ? 14 : 24, low ? 5 : 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    end.rotateZ((-s * Math.PI) / 2);
+    end.scale(0.32, 1, 1);
+    end.translate(cx + (s * tl) / 2, y, z);
+    pushTinted(parts, end, body, grime);
+  }
+  // Les cerclages
+  for (const f of [-0.42, -0.14, 0.14, 0.42]) {
+    const band = new THREE.CylinderGeometry(R + 0.025, R + 0.025, 0.1, low ? 14 : 24, 1, true);
+    band.rotateZ(Math.PI / 2);
+    band.translate(cx + f * tl, y, z);
+    pushTinted(parts, band, iron);
+  }
+  // Le dôme et son couvercle
+  const dome = new THREE.CylinderGeometry(0.42, 0.46, 0.34, 14);
+  dome.translate(cx, y + R + 0.1, z);
+  pushTinted(parts, dome, body, () => 0.9);
+  const lid = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 12);
+  lid.translate(cx, y + R + 0.3, z);
+  pushTinted(parts, lid, iron);
+  // La rambarde le long du dessus, l'échelle au milieu de chaque flanc
+  if (!low) {
+    for (const t of [-0.55, 0.55]) {
+      bx(tl * 0.5, 0.03, 0.03, cx, y + R + 0.35, z + t, iron);
+      for (const f of [-0.24, 0, 0.24]) bx(0.03, 0.55, 0.03, cx + f * tl, y + R + 0.075, z + t, iron);
+    }
+    for (const s of [-1, 1]) {
+      const zz = z + s * (R + 0.08);
+      for (const t of [-0.22, 0.22]) bx(0.04, y + R * 0.4 - 1.1, 0.04, cx + t, (y + R * 0.4 + 1.1) / 2, zz, iron);
+      for (let k = 0; k < 6; k++) bx(0.44, 0.03, 0.03, cx, 1.3 + k * ((y + R * 0.4 - 1.4) / 5), zz, iron);
+    }
+  }
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
 /** Une pile de grumes en pyramide : l'écorce, les bouts sciés plus clairs au cœur ; dehors en hiver, la neige dessus */
 function logs(d: Extract<Decor, { k: "logs" }>, group: THREE.Group, q: Quality) {
   const low = q === "bas";
@@ -2184,6 +2276,9 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
       return;
     case "shelter":
       shelter(d, group, q);
+      return;
+    case "tankcar":
+      tankCar(d, group, q);
       return;
     case "awning":
       awning(d, group);

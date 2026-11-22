@@ -100,7 +100,9 @@ export type Decor =
   /** Un chariot à bagages chargé */
   | { k: "baggage"; x0: number; z0: number; x1: number; z1: number }
   /** Un abribus, ouvert du côté `front` (+1 : vers z1, ou x1 s'il est couché le long de z) */
-  | { k: "shelter"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 };
+  | { k: "shelter"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 }
+  /** Un wagon-citerne sur sa voie, le long de x */
+  | { k: "tankcar"; x0: number; x1: number; z: number; r: number; color: string };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -266,6 +268,7 @@ class Builder {
       case "marks":
       case "vines":
       case "casks":
+      case "tankcar":
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
         return;
       case "cart":
@@ -803,8 +806,8 @@ function gareSide(b: Builder) {
   b.add({ k: "wagon", x0: -26, x1: -14, z0: 4.8, z1: 7.2, h: 1.3, m: "wagon2" });
   b.crate(-20, 6, 1.4, 1.4, 1.3);
   boxcar(b, -38, -26, 12, "wagon2");
-  b.box(-36, 0, -13.4, -24, 3.2, -10.6, "metal");
-  b.add({ k: "tank", x0: -35.6, x1: -24.4, z: -12, y: 2, r: 1.45 });
+  b.box(-36, 0, -13.4, -24, 3.2, -10.6, "decor");
+  b.add({ k: "tankcar", x0: -35.8, x1: -24.2, z: -12, r: 1.1, color: "#6a6e6c" });
   boxcar(b, -20, -8, 19);
   boxcar(b, -46, -38, 24, "wagon2");
 
