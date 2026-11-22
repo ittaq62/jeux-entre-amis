@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armAngle, release, spinName, type Sample } from "./gesture.ts";
+import { armAngle, release, slantName, spinName, type Sample } from "./gesture.ts";
 
 const H = 800;
 
@@ -48,11 +48,16 @@ describe("bowling : le geste du lancer", () => {
     expect(spinName(left.s)).toMatch(/gauche/);
   });
 
-  it("un geste qui penche fait dévier la boule, sans donner d'effet", () => {
+  it("un geste qui penche fait dévier la boule, sans donner d'effet, et on le dit", () => {
     const r = release(swing({ drift: 0.15 }), H);
     if (typeof r !== "object") throw new Error("pas de lancer");
-    expect(r.dev).toBeGreaterThan(0.001);
+    // Un geste qui penche de 30 % : la boule part à plus de 20 cm de sa cible au bout de la piste
+    expect(r.dev * 18.3).toBeGreaterThan(0.2);
     expect(Math.abs(r.s)).toBeLessThan(2);
+    expect(slantName(r.dev)).toBe("geste de travers, à droite");
+    const straight = release(swing({}), H);
+    if (typeof straight !== "object") throw new Error("pas de lancer");
+    expect(slantName(straight.dev)).toBe("");
   });
 
   it("la main peut s'arrêter un instant avant de lâcher : le lancer part avec la même force", () => {

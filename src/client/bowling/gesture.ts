@@ -86,11 +86,20 @@ export function release(samples: readonly Sample[], h: number): Release | Refusa
   // Le coup de poignet : ce que la fin du geste a de plus sur le côté que tout le reste
   const flick = vy > STILL ? vx / vy - tilt : 0;
   const v = Math.max(SPEED_MIN, Math.min(SPEED_MAX, 3.0 + up * 1.4));
-  const dev = Math.max(-DIR_MAX, Math.min(DIR_MAX, tilt * 0.0085));
+  // Un geste qui penche de 10 % envoie la boule à près de 10 cm de sa cible, au bout de la piste
+  const dev = Math.max(-DIR_MAX, Math.min(DIR_MAX, tilt * 0.05));
   // Un petit écart de la main ne compte pas : l'effet ne vient que d'un vrai coup de poignet
   const f = Math.abs(flick) < 0.06 ? 0 : flick - Math.sign(flick) * 0.06;
   const s = Math.max(-SPIN_MAX, Math.min(SPIN_MAX, -f * 42));
   return { v, dev, s, up, flick };
+}
+
+/** Le geste parti de travers, pour comprendre où est allée la boule ("" : un geste droit) */
+export function slantName(dev: number): string {
+  const a = Math.abs(dev);
+  if (a < 0.0015) return "";
+  const side = dev > 0 ? "à droite" : "à gauche";
+  return a < 0.004 ? `geste un peu de travers, ${side}` : `geste de travers, ${side}`;
 }
 
 /** Le nom de l'effet, pour le montrer après le lancer */

@@ -15,7 +15,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./BowlingHelp.tsx";
 import { BallSwatch } from "./LookPicker.tsx";
 import { strikeBurst } from "./strikeFx.ts";
-import { kmh, spinName } from "./gesture.ts";
+import { kmh, slantName, spinName } from "./gesture.ts";
 import { BowlingRuntime, type HudState, type Moment } from "./runtime.ts";
 import { FinalSheet, Sheet, type SheetPlayer } from "./Scoresheet.tsx";
 import * as sfx from "./sfx.ts";
@@ -136,7 +136,7 @@ export function BowlingGame({
       onGesture: (g) => {
         if (typeof g === "string")
           setReadout(g === "back" ? "Recule d'abord : ton bras part en arrière." : "Pousse plus vite vers l'avant, et lâche aussitôt !");
-        else setReadout(`${kmh(g.v)} km/h · ${spinName(g.s)}`);
+        else setReadout([`${kmh(g.v)} km/h`, spinName(g.s), slantName(g.dev)].filter(Boolean).join(" · "));
       },
     });
     runtime.current = rt;

@@ -68,11 +68,11 @@ export const DEFAULT_PHYS: PhysConfig = {
   oilEnd: OIL_END,
   bumpers: false,
   pinMass: 1.53,
-  pinBounce: 0.75,
-  pinFriction: 0.1,
-  ballBounce: 0.7,
+  pinBounce: 0.58,
+  pinFriction: 0.12,
+  ballBounce: 0.58,
   ballFriction: 0.12,
-  deckFriction: 0.32,
+  deckFriction: 0.42,
   deckBounce: 0.35,
 };
 
@@ -683,7 +683,8 @@ export class World {
         break;
       case Static.Wall:
         c.mu = 0.2;
-        c.target = ball ? 0.3 : 0.6;
+        // Les parois du plateau renvoient les quilles sans trop d'élan : elles en fauchent parfois une, pas tout le jeu
+        c.target = ball ? 0.3 : 0.4;
         break;
       case Static.Bumper:
         c.mu = 0.05;

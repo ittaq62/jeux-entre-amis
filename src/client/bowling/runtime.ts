@@ -142,6 +142,8 @@ export class BowlingRuntime {
   // Ma visée
   private stanceX = 0;
   private aimD = 0;
+  /** La place et la visée de sa dernière première boule */
+  private home: { x: number; d: number } | null = null;
   private drag: { mode: "swing" | "move" | "aim"; x: number; y: number; id: number; x0: number; d0: number } | null = null;
   private samples: Sample[] = [];
   private backAt = 0;
@@ -292,12 +294,12 @@ export class BowlingRuntime {
           this.scene.placeRack(v.rack);
         }
         this.replay = null;
-        // Le lanceur se place : au milieu (un peu à droite pour un droitier), visée droite
+        // Le lanceur se place : pour une première boule, là où il s'était mis la fois d'avant (au milieu, visée droite,
+        // la toute première fois : la poche, c'est à lui de la trouver) ; pour un spare, au milieu
         if (thrower && thrower.id === this.o.me) {
-          const b = this.bowlers.get(thrower.id);
-          this.stanceX = b?.info.look.left ? -0.12 : 0.12;
-          if (v.rack.length < 10 && v.cfg.mode === "classique") this.stanceX = 0;
-          this.aimD = 0;
+          const full = v.rack.length === 10;
+          this.stanceX = full ? (this.home?.x ?? 0) : 0;
+          this.aimD = full ? (this.home?.d ?? 0) : 0;
           this.drag = null;
           this.arm = 0;
         }
@@ -913,6 +915,7 @@ export class BowlingRuntime {
     const v = this.view!;
     const t = cleanThrow({ x: this.stanceX, d: clamp(this.aimD + r.dev, -DIR_MAX, DIR_MAX), v: r.v, s: r.s });
     if (!t) return;
+    if (v.rack.length === 10) this.home = { x: this.stanceX, d: this.aimD };
     const at = performance.now();
     const n = v.throws;
     this.pending = { n, t, at };

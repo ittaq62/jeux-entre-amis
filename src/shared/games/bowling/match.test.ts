@@ -22,7 +22,8 @@ import {
 import { frameScores } from "./score.ts";
 
 const GUTTER = { x: 0.4, d: 0.012, v: 8, s: 0 };
-const POCKET = { x: 0.35, d: aimDirection(0.35, 8.2, 20, 0.06, HEAD_PIN, physOf(DEFAULT_CONFIG)), v: 8.2, s: 20 };
+// Un lancer bien dans la poche, avec de l'angle (le strike y tient sur plusieurs centimètres)
+const POCKET = { x: 0.35, d: aimDirection(0.35, 8.2, 20, 0.05, HEAD_PIN, physOf(DEFAULT_CONFIG)), v: 8.2, s: 20 };
 
 function start(cfg: Partial<BowlingConfig>, ids: string[], teams?: (0 | 1)[]): Match {
   const m = createMatch(
