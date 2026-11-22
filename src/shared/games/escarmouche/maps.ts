@@ -86,7 +86,15 @@ export type Decor =
   /** Des tonneaux couchés sur leur chantier, le long de x, le fond tourné vers ±z */
   | { k: "casks"; x0: number; x1: number; z: number }
   /** Une charrette, dans le sens de sa boîte la plus longue ; ses brancards du côté `front` (+1 : vers x1 ou z1) */
-  | { k: "cart"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 };
+  | { k: "cart"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 }
+  /** Un tonneau debout */
+  | { k: "tun"; x: number; z: number }
+  /** Une pile de grumes en pyramide, dans le sens de la boîte la plus longue, `n` grumes au rang du bas */
+  | { k: "logs"; x0: number; z0: number; x1: number; z1: number; n: number; snow?: boolean }
+  /** La scie de la scierie, sur son établi */
+  | { k: "saw"; x0: number; z0: number; x1: number; z1: number }
+  /** Un camion bâché, la cabine du côté `front` */
+  | { k: "truck"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1; color: string };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -255,7 +263,15 @@ class Builder {
         this.decor.push({ ...d, x0: -d.x1, x1: -d.x0, z: -d.z });
         return;
       case "cart":
+      case "truck":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), front: d.front === 1 ? -1 : 1 });
+        return;
+      case "logs":
+      case "saw":
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
+        return;
+      case "tun":
+        this.decor.push({ ...d, x: -d.x, z: -d.z });
         return;
       case "conveyor":
         this.decor.push({ ...d, x0: -d.x0, z0: -d.z0, x1: -d.x1, z1: -d.z1 });
@@ -616,7 +632,7 @@ function hameauSide(b: Builder) {
   b.tree(-25, -10, 6.5, 2.4);
 
   // L'avenue : une charrette, des caisses
-  b.box(-26, 0, -1.5, -23, 1.3, 0.3, "bois");
+  farmCart(b, -26, -1.5, -23, 0.3, 1, 1.3);
   b.crate(-17.6, 2.6);
   b.crate(-17.6, 3.8, 1.2, 2.4);
   b.sandbags(-21, -4.6, -18.6, -4);
@@ -626,11 +642,12 @@ function hameauSide(b: Builder) {
   b.barrel(-16.2, 5.6);
 
   // La rue haute : des tonneaux, une charrette ; la rue basse : un camion abandonné, des sacs de sable
-  b.box(-24.35, 0, 17.65, -23.65, 1, 18.35, "bois");
-  b.box(-23.5, 0, 18.3, -22.8, 1, 19, "bois");
-  b.box(-16, 0, 19, -13, 1.4, 20.5, "bois");
-  b.box(-28, 0, -21, -22.5, 2.7, -18.6, "rouille");
-  b.box(-22.5, 0, -20.8, -20.6, 2.1, -18.8, "metal");
+  tun(b, -24, 18);
+  tun(b, -23.15, 18.65);
+  farmCart(b, -16, 19, -13, 20.5, -1, 1.4);
+  b.box(-28, 0, -21, -22.5, 2.7, -18.6, "decor");
+  b.box(-22.5, 0, -20.8, -20.6, 2.1, -18.8, "decor");
+  b.add({ k: "truck", x0: -28, z0: -21, x1: -20.6, z1: -18.6, front: 1, color: "#5b6247" });
   b.sandbags(-18, -18.8, -15.6, -18.2);
   b.add({ k: "wire", x0: -12, z0: -19.6, x1: -9, z1: -19 });
 
@@ -934,7 +951,7 @@ function portSide(b: Builder) {
   b.crate(-27.6, -24.2);
   b.crate(-27.6, -22.9, 1.2, 2.4);
   b.crate(-18.4, -24.2, 1.3, 1.3);
-  b.box(-24.6, 0, -24.6, -20.6, 1.4, -22.8, "bois");
+  logPile(b, -24.6, -24.6, -20.6, -22.8, 3);
 
   // Les conteneurs : des rangées, des piles, quelques caisses pour grimper dessus
   b.container(-36, 6, "x", RED);
@@ -1077,13 +1094,13 @@ function colSide(b: Builder) {
     b.box(x, 0, z, x + 0.3, 4, z + 0.3, "bois");
   b.box(-30.3, 4, -24.3, -18, 4.2, -17, "planche");
   b.add({ k: "roof", x0: -30.6, z0: -24.6, x1: -17.7, z1: -16.7, y: 4.2, h: 1.6, axis: "x", m: "neige" });
-  b.box(-28, 0, -23.2, -22, 0.9, -21.6, "bois");
-  b.box(-27.4, 0.9, -23.1, -23, 1.7, -22, "bois");
-  b.box(-25.4, 0, -19.6, -21.2, 0.9, -18.7, "metal");
+  logPile(b, -28, -23.2, -22, -21.6, 3);
+  b.box(-25.4, 0, -19.6, -21.2, 0.9, -18.7, "decor");
+  b.add({ k: "saw", x0: -25.4, z0: -19.6, x1: -21.2, z1: -18.7 });
   b.crate(-20, -22.6);
   b.crate(-19.4, -20.4, 1.2, 2.4);
   // Des grumes dehors, sur le chemin : un abri bas
-  b.box(-14, 0, -12.2, -9.2, 1.1, -10.8, "bois");
+  logPile(b, -14, -12.2, -9.2, -10.8, 2, true);
 
   // La chapelle : le clocher, plein, et son toit en pointe
   b.block(-7, 20, -2.6, 24.4, 8, "pierre");
@@ -1259,6 +1276,43 @@ function ruin(
 }
 
 /** Une voiture brûlée (de x0 à x1, de z0 à z1, couchée le long du plus grand côté) : sa caisse et son habitacle arrêtent les balles */
+/** Des tonneaux couchés sur leur chantier : ils arrêtent les pas et les balles jusqu'à la hanche */
+function caskRack(b: Builder, x0: number, x1: number, z: number) {
+  b.box(x0, 0, z - 0.6, x1, 1.08, z + 0.6, "decor");
+  b.add({ k: "casks", x0, x1, z });
+}
+
+/** Un tonneau debout */
+function tun(b: Builder, x: number, z: number) {
+  b.box(x - 0.35, 0, z - 0.35, x + 0.35, 0.98, z + 0.35, "decor");
+  b.add({ k: "tun", x, z });
+}
+
+/** Une charrette : on s'abrite derrière ; les brancards (côté `front`) ne sont que du décor */
+function farmCart(b: Builder, x0: number, z0: number, x1: number, z1: number, front: 1 | -1, h = 1.15) {
+  b.box(x0, 0, z0, x1, h, z1, "decor");
+  b.add({ k: "cart", x0, z0, x1, z1, front });
+}
+
+/**
+ * Une pile de grumes : `n` au rang du bas, une de moins à chaque rang ; chaque rang arrête les pas et les balles (une
+ * marche trop haute pour qu'on y monte sans sauter)
+ */
+function logPile(b: Builder, x0: number, z0: number, x1: number, z1: number, n: number, snow = false) {
+  const alongX = x1 - x0 >= z1 - z0;
+  const W = alongX ? z1 - z0 : x1 - x0;
+  const c = alongX ? (z0 + z1) / 2 : (x0 + x1) / 2;
+  const dd = W / n;
+  for (let k = 0; k < n; k++) {
+    const half = ((n - k) * dd) / 2;
+    const y0 = k * dd * 0.866;
+    const y1 = k === n - 1 ? y0 + dd : (k + 1) * dd * 0.866;
+    if (alongX) b.box(x0, y0, c - half, x1, y1, c + half, "decor");
+    else b.box(c - half, y0, z0, c + half, y1, z1, "decor");
+  }
+  b.add({ k: "logs", x0, z0, x1, z1, n, snow });
+}
+
 function car(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
   const alongX = x1 - x0 >= z1 - z0;
   const inset = 0.12;
@@ -1670,7 +1724,7 @@ function desertSide(b: Builder) {
   });
 
   // La grand-rue : une charrette, des caisses, des jarres (des bidons qu'on évite), un muret, des palmiers
-  b.box(-33.2, 0, 1, -31, 1.1, 2.3, "bois");
+  farmCart(b, -33.2, 1, -31, 2.3, -1, 1.1);
   b.crate(-26.4, -3.2);
   b.crate(-25.2, -3.2, 1.2, 0.9);
   b.box(-22.4, 0, 0.4, -22, 1.1, 3.2, "ocre");
@@ -2357,18 +2411,6 @@ function vineRow(b: Builder, x0: number, x1: number, z: number, gaps: [number, n
     b.box(a, 0, z - 0.22, c, 1.15, z + 0.22, "decor");
     b.add({ k: "vines", x0: a, x1: c, z });
   }
-}
-
-/** Des tonneaux couchés sur leur chantier : ils arrêtent les pas et les balles jusqu'à la hanche */
-function caskRack(b: Builder, x0: number, x1: number, z: number) {
-  b.box(x0, 0, z - 0.6, x1, 1.08, z + 0.6, "decor");
-  b.add({ k: "casks", x0, x1, z });
-}
-
-/** Une charrette : on s'abrite derrière ; les brancards (côté `front`) ne sont que du décor */
-function farmCart(b: Builder, x0: number, z0: number, x1: number, z1: number, front: 1 | -1) {
-  b.box(x0, 0, z0, x1, 1.15, z1, "decor");
-  b.add({ k: "cart", x0, z0, x1, z1, front });
 }
 
 function vignobleSide(b: Builder) {
