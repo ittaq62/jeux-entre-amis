@@ -383,7 +383,8 @@ function jardinDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
 
   // Le long du gravier : des ifs en cône, et des massifs ronds bordés d'un anneau de buis, une butte de feuilles et
   // ses fleurs dessus
-  const flowers = new Scatter(new THREE.SphereGeometry(1, 7, 5), new THREE.MeshStandardMaterial({ roughness: 0.8 }), false);
+  // (des fleurs à vingt facettes : à cette taille, on ne voit pas la différence avec une sphère)
+  const flowers = new Scatter(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.8 }), false);
   const rims = new Scatter(new THREE.TorusGeometry(1, 0.09, 6, 28).rotateX(Math.PI / 2), m.hedge);
   const soil = new Scatter(new THREE.CylinderGeometry(1, 1, 1, 24), m.soil, false);
   const mounds = new Scatter(leafyBall(2, 0.1, 7), m.hedge);
@@ -506,8 +507,13 @@ function jardinDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
 
   // Les grands arbres au-delà des haies : des tilleuls (quelques variantes, tournées, à leur taille) et des peupliers
   const kinds = treeVariants();
+  // Ceux qui sont près du parcours portent une ombre (la carte des ombres ne couvre que lui et un peu autour) ; les
+  // autres non, pour ne pas les dessiner une seconde fois pour rien
   const woodSc = kinds.map((v) => new Scatter(v.wood, m.bark));
   const leafSc = kinds.map((v) => new Scatter(v.leaves, m.leaf));
+  const woodFar = kinds.map((v) => new Scatter(v.wood, m.bark, false));
+  const leafFar = kinds.map((v) => new Scatter(v.leaves, m.leaf, false));
+  const shadowR = Math.max(c.box.x1 - c.box.x0, c.box.z1 - c.box.z0) / 2 + 3 + 4;
   const tint = () => new THREE.Color(0x74b25c).offsetHSL((rng() - 0.5) * 0.05, (rng() - 0.5) * 0.12, (rng() - 0.5) * 0.08);
   for (let k = 0; k < 52; k++) {
     const a = rng() * Math.PI * 2;
@@ -519,11 +525,12 @@ function jardinDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     const v = rng() < 0.22 ? 3 + Math.floor(rng() * 2) : Math.floor(rng() * 3);
     const s = 0.85 + rng() * 0.4;
     const rot = rng() * Math.PI * 2;
-    woodSc[v]!.add(x, base, z, s, rot);
-    leafSc[v]!.add(x, base, z, s, rot, tint());
+    const near = Math.hypot(x - box.cx, z - box.cz) < shadowR;
+    (near ? woodSc : woodFar)[v]!.add(x, base, z, s, rot);
+    (near ? leafSc : leafFar)[v]!.add(x, base, z, s, rot, tint());
   }
 
-  for (const sc of [cones, balls, urns, flowers, rims, soil, mounds, ...woodSc, ...leafSc]) {
+  for (const sc of [cones, balls, urns, flowers, rims, soil, mounds, ...woodSc, ...leafSc, ...woodFar, ...leafFar]) {
     const mesh = sc.build();
     if (mesh) g.add(mesh);
   }
