@@ -134,6 +134,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de minigolf",
   },
+  {
+    id: "bowling",
+    name: "Bowling",
+    desc: "Du bowling en 3D, de 1 à 8, chacun son tour : un vrai geste de lancer à la souris ou au doigt, de l'effet qui fait courber la boule, les quilles qui volent au ralenti sur un strike. Partie classique ou défi des spares, et des pronostics pour ceux qui attendent.",
+    keywords: "bowling quilles quille boule strike spare piste",
+    players: [1, GAME_SEATS.bowling.max],
+    quick: "Partie rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de bowling",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

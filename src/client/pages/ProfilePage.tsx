@@ -45,6 +45,7 @@ interface Profile {
   culbute: GameStats;
   escarmouche?: GameStats;
   minigolf?: GameStats;
+  bowling?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -132,12 +133,28 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const minigolf = profile.minigolf ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const gt = minigolf.totals as Record<string, number>;
   const showMinigolf = games.includes("minigolf") || minigolf.played > 0;
+  const bowling = profile.bowling ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const bwt = bowling.totals as Record<string, number>;
+  const showBowling = games.includes("bowling") || bowling.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
   const showTour = tourOn || tour.played > 0;
   const shelfGames = (
-    ["uno", "naval", "bricks", "capitale", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf", "tour"] as TableGame[]
+    [
+      "uno",
+      "naval",
+      "bricks",
+      "capitale",
+      "meche",
+      "bolides",
+      "crampons",
+      "culbute",
+      "escarmouche",
+      "minigolf",
+      "bowling",
+      "tour",
+    ] as TableGame[]
   ).filter(
     (g) =>
       g === "uno" ||
@@ -157,9 +174,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                     ? showCulbute
                     : g === "minigolf"
                       ? showMinigolf
-                      : g === "bolides"
-                        ? showBolides
-                        : showTour),
+                      : g === "bowling"
+                        ? showBowling
+                        : g === "bolides"
+                          ? showBolides
+                          : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -252,6 +271,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{minigolf.points.toLocaleString("fr-FR")}</strong> points au minigolf
                 <span className="profile-elo">
                   Elo <strong className="num">{minigolf.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showBowling && bowling.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{bowling.points.toLocaleString("fr-FR")}</strong> points au bowling
+                <span className="profile-elo">
+                  Elo <strong className="num">{bowling.elo}</strong>
                 </span>
               </p>
             )}
@@ -474,6 +501,27 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </section>
             )}
 
+            {showBowling && (
+              <section className="carnet panel">
+                <h2>La piste</h2>
+                <p className="carnet-summary">
+                  {bowling.played === 0
+                    ? "Aucune partie de bowling pour l'instant."
+                    : `${bowling.played} partie${bowling.played > 1 ? "s" : ""}, ${bowling.won} gagnée${bowling.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Meilleure partie (10 frames)" value={bwt.bestScore} strong />
+                  <LedgerRow label="Moyenne (10 frames)" value={bwt.games10 ? Math.round((bwt.pins10 ?? 0) / bwt.games10) : undefined} />
+                  <LedgerRow label="Strikes" value={bwt.strikes} />
+                  <LedgerRow label="Spares" value={bwt.spares} />
+                  <LedgerRow label="Splits relevés" value={bwt.splitsMade} />
+                  <LedgerRow label="Plus longue série de strikes" value={bwt.bestRun} />
+                  <LedgerRow label="Boules dans la rigole" value={bwt.gutters} />
+                  <LedgerRow label="Points de pronostics" value={bwt.seer} />
+                </dl>
+              </section>
+            )}
+
             {showTour && (
               <section className="carnet panel">
                 <h2>Les tournées</h2>
@@ -620,6 +668,7 @@ function recentLabel(g: Profile["recent"][number]): string {
     return g.variant === "temps" ? "Culbute au temps" : g.variant === "subite" ? "Culbute en mort subite" : "Culbute aux vies";
   if (g.game === "escarmouche") return `Escarmouche, ${ESC_MODES[g.variant] ?? "combat"}`;
   if (g.game === "minigolf") return g.variant in COURSES ? `Minigolf, ${COURSES[g.variant as CourseId].name}` : "Minigolf";
+  if (g.game === "bowling") return g.variant === "spares" ? "Bowling, défi des spares" : "Bowling";
   if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }

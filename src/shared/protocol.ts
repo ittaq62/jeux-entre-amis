@@ -27,7 +27,8 @@ import type { EscarmoucheView, EscMe, EscTick } from "./games/escarmouche/view.t
 import type { UniformId } from "./games/escarmouche/uniforms.ts";
 import type { ExtraId, MuzzleId, PrimaryId, SecondaryId } from "./games/escarmouche/weapons.ts";
 
-export type GameId = "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons" | "escarmouche" | "culbute" | "minigolf";
+export type GameId =
+  "uno" | "naval" | "bricks" | "capitale" | "meche" | "bolides" | "crampons" | "escarmouche" | "culbute" | "minigolf" | "bowling";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
@@ -43,6 +44,7 @@ export const GAME_NAMES: Record<GameId, string> = {
   culbute: "Culbute",
   escarmouche: "Escarmouche",
   minigolf: "Minigolf",
+  bowling: "Bowling",
 };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
@@ -58,6 +60,7 @@ export const BETA_GAMES = [
   "escarmouche",
   "culbute",
   "minigolf",
+  "bowling",
 ] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------

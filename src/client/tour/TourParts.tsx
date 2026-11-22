@@ -67,6 +67,8 @@ export function GameTicket({
             <EscarmoucheArt />
           ) : game === "minigolf" ? (
             <MinigolfArt />
+          ) : game === "bowling" ? (
+            <BowlingArt />
           ) : (
             <NavalArt />
           )}
@@ -74,6 +76,36 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Une boule qui entre dans les quilles, et celles qui volent */
+function BowlingArt() {
+  const pin = (x: number, y: number, r: number, s = 1) => (
+    <g transform={`translate(${x} ${y}) rotate(${r}) scale(${s})`}>
+      <path
+        d="M0 -15C2.6 -15 3 -12 2.2 -9.5C1.6 -7.6 4.8 -5.5 4.8 -1C4.8 3 3 5 2.4 7H-2.4C-3 5 -4.8 3 -4.8 -1C-4.8 -5.5 -1.6 -7.6 -2.2 -9.5C-3 -12 -2.6 -15 0 -15Z"
+        fill="#fbf7ee"
+      />
+      <path d="M-2.3 -9.4H2.3M-2.6 -8H2.6" stroke="#e2453c" strokeWidth="0.9" />
+    </g>
+  );
+  return (
+    <>
+      <path d="M8 64L40 44H60L92 64Z" fill="#d9a865" />
+      <path d="M40 44H60" stroke="#8a5a2a" strokeWidth="1" />
+      {pin(44, 44, -8)}
+      {pin(56, 44, 6)}
+      {pin(50, 40, 0, 0.9)}
+      {pin(30, 34, -55, 0.95)}
+      {pin(70, 30, 48, 0.95)}
+      {pin(62, 22, 80, 0.85)}
+      <circle cx="40" cy="56" r="8" fill="#1d3c8f" />
+      <circle cx="37" cy="53" r="2.2" fill="#7fd3ff" opacity="0.7" />
+      <circle cx="42.5" cy="54" r="1" fill="#0b1430" />
+      <circle cx="44" cy="56.5" r="1" fill="#0b1430" />
+      <path d="M14 62C22 59 28 58 32 57" stroke="#fbf5e6" strokeWidth="1.2" strokeDasharray="2 3" opacity="0.7" fill="none" />
+    </>
   );
 }
 

@@ -411,8 +411,9 @@ export class World {
   readonly pins: Body[];
   step = 0;
   events: PhysEvent[] = [];
-  /** La boule est dans une rigole (elle n'en ressort pas) */
+  /** La boule est dans une rigole (elle n'en ressort pas), depuis ce pas */
   inGutter = false;
+  gutterAt = -1;
   /** Le pas où la boule a touché sa première quille, -1 sinon */
   firstHit = -1;
   /** La boule a touché la piste */
@@ -675,7 +676,10 @@ export class World {
         c.mu = ball ? 0.06 : 0.25;
         c.target = 0.2;
         a.grounded = true;
-        if (ball && f === Static.Gutter) this.inGutter = true;
+        if (ball && f === Static.Gutter && !this.inGutter) {
+          this.inGutter = true;
+          this.gutterAt = this.step;
+        }
         break;
       case Static.Wall:
         c.mu = 0.2;

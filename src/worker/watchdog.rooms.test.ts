@@ -15,6 +15,7 @@ import { BolidesRoom } from "./bolidesRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
 import { CulbuteRoom } from "./culbuteRoom.ts";
 import { MinigolfRoom } from "./minigolfRoom.ts";
+import { BowlingRoom } from "./bowlingRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type RoomLike } from "./roomHarness.ts";
 
@@ -31,6 +32,7 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "culbute", Room: CulbuteRoom as unknown as RoomClass, bots: true },
   { game: "escarmouche", Room: EscarmoucheRoom as unknown as RoomClass, bots: true },
   { game: "minigolf", Room: MinigolfRoom as unknown as RoomClass, bots: true },
+  { game: "bowling", Room: BowlingRoom as unknown as RoomClass, bots: true },
 ];
 
 const open: { stopLoop(): void }[] = [];

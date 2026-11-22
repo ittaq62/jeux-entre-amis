@@ -95,9 +95,41 @@ export interface ThrowOutcome {
   steps: number;
   /** Le pas où la boule touche la première quille (-1 : aucune) */
   firstHit: number;
+  /** Le pas où le résultat est joué : plus aucune quille ne tombe ni ne se relève (on peut l'annoncer) */
+  decided: number;
 }
 
-export function outcomeOf(w: World): ThrowOutcome {
+/** Le suivi d'un lancer pas à pas : le dernier moment où une quille a changé (debout ou tombée), et la boule partie */
+export interface Watch {
+  up: boolean[];
+  lastChange: number;
+  ballGone: number;
+}
+
+export function watchStart(w: World): Watch {
+  return { up: w.pins.map((p) => standing(p)), lastChange: 0, ballGone: -1 };
+}
+
+/** À chaque pas : une quille qui tombe (ou qui vacille au point de compter tombée) repousse le moment du résultat */
+export function watchStep(w: World, s: Watch) {
+  for (let i = 0; i < w.pins.length; i++) {
+    const up = standing(w.pins[i]!);
+    if (up !== s.up[i]) {
+      s.up[i] = up;
+      s.lastChange = w.step;
+    }
+  }
+  if (s.ballGone < 0 && (w.ball.gone || (w.inGutter && -w.ball.pz > DECK_END - 0.3))) s.ballGone = w.step;
+}
+
+/** Le pas où le résultat est joué : un peu après le dernier changement, jamais avant que la boule soit au bout */
+export function decidedStep(w: World, s: Watch): number {
+  let d = Math.max(s.lastChange + Math.round(0.45 * HZ), s.ballGone >= 0 ? s.ballGone + Math.round(0.2 * HZ) : 0);
+  if (w.firstHit >= 0) d = Math.max(d, w.firstHit + Math.round(0.9 * HZ));
+  return Math.min(w.step, d);
+}
+
+export function outcomeOf(w: World, decided = w.step): ThrowOutcome {
   const up: PinSpot[] = [];
   const down: number[] = [];
   for (const p of w.pins) {
@@ -107,21 +139,26 @@ export function outcomeOf(w: World): ThrowOutcome {
   return {
     down: down.sort((a, b) => a - b),
     standing: up.sort((a, b) => a.n - b.n),
-    gutter: w.inGutter && (w.firstHit < 0 || w.firstHit > w.events.findIndex((e) => e.k === "gutter")),
+    // Dans la rigole avant d'avoir touché la moindre quille
+    gutter: w.inGutter && (w.firstHit < 0 || w.gutterAt < w.firstHit),
     steps: w.step,
     firstHit: w.firstHit,
+    decided,
   };
 }
 
-/** Faire avancer un lancer jusqu'au bout ; renvoie le pas où tout s'est arrêté */
-export function runToEnd(w: World): void {
+/** Faire avancer un lancer jusqu'au bout ; renvoie le pas où le résultat a été joué */
+export function runToEnd(w: World): number {
   let calm = 0;
+  const watch = watchStart(w);
   while (w.step < MAX_STEPS) {
     w.advance();
+    watchStep(w, watch);
     if (settled(w)) {
       if (++calm >= SETTLE_STEPS) break;
     } else calm = 0;
   }
+  return decidedStep(w, watch);
 }
 
 /** Tout le lancer, d'un coup (le serveur, les bots, les tests) */
@@ -131,8 +168,8 @@ export function simulateThrow(
   cfg: PhysConfig = DEFAULT_PHYS,
 ): ThrowOutcome & { events: PhysEvent[] } {
   const w = startThrow(rack, t, cfg);
-  runToEnd(w);
-  return { ...outcomeOf(w), events: w.events };
+  const decided = runToEnd(w);
+  return { ...outcomeOf(w, decided), events: w.events };
 }
 
 /** Les quilles debout d'un jeu, triées de l'avant vers le fond (pour viser la plus proche) */

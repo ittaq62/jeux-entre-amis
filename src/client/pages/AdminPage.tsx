@@ -397,9 +397,11 @@ function GameLine({ game }: { game: AdminGame }) {
                           ? "Bolides"
                           : game.game === "minigolf"
                             ? "Minigolf"
-                            : game.variant === "nomercy"
-                              ? "UNO No Mercy"
-                              : "UNO classique"}
+                            : game.game === "bowling"
+                              ? "Bowling"
+                              : game.variant === "nomercy"
+                                ? "UNO No Mercy"
+                                : "UNO classique"}
           {game.rounds > 1 ? `, ${game.rounds} manches` : ""}
         </strong>
         <span className="hint">contre {others.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ") || "personne"}</span>

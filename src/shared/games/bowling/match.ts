@@ -34,8 +34,6 @@ export interface BowlingConfig {
   geante: boolean;
   /** La piste glisse d'un bout à l'autre : plus aucune boule ne courbe */
   glisse: boolean;
-  /** Des obstacles qui vont et viennent en travers de la piste */
-  obstacles: boolean;
   /** La pesanteur de la lune : les quilles s'envolent et retombent lentement */
   lune: boolean;
 }
@@ -51,13 +49,12 @@ export const DEFAULT_CONFIG: BowlingConfig = {
   bumpers: false,
   geante: false,
   glisse: false,
-  obstacles: false,
   lune: false,
 };
 
 export const FRAME_CHOICES = [3, 5, 10] as const;
 export const ROUND_CHOICES = [5, 10] as const;
-const RULES = ["teams", "pronostics", "bumpers", "geante", "glisse", "obstacles", "lune"] as const;
+const RULES = ["teams", "pronostics", "bumpers", "geante", "glisse", "lune"] as const;
 
 /** Des réglages valides, à partir de ceux d'avant et de ce qu'on change */
 export function mergeConfig(base: BowlingConfig, patch: Partial<BowlingConfig> | null | undefined): BowlingConfig {
@@ -138,6 +135,8 @@ export interface ThrowRecord {
   gutter: boolean;
   steps: number;
   firstHit: number;
+  /** Le pas où le résultat est joué (on l'annonce, le lanceur réagit) */
+  decided: number;
   /** L'heure du lâcher, et la fin de sa présentation */
   at: number;
   until: number;
@@ -285,16 +284,28 @@ export function thrower(m: Match): BowlingPlayer | null {
 }
 
 /** Le temps de montrer un lancer : la boule et les quilles, le ralenti d'un strike, la réaction */
-export function showMs(rec: { rack: readonly PinSpot[]; down: readonly number[]; gutter: boolean; steps: number }): number {
-  const sim = (Math.min(rec.steps, MAX_STEPS) / HZ) * 1000;
+export function showMs(rec: {
+  rack: readonly PinSpot[];
+  down: readonly number[];
+  gutter: boolean;
+  steps: number;
+  decided?: number;
+}): number {
+  const sim = (Math.min(rec.decided ?? rec.steps, MAX_STEPS) / HZ) * 1000;
   const cleared = rec.down.length === rec.rack.length && rec.rack.length > 0;
   const slow = cleared && rec.rack.length >= 6 ? SLOWMO_MS : 0;
   const react = cleared ? (rec.rack.length === 10 ? 2600 : 2200) : rec.gutter ? 1800 : 1400;
   return Math.round(sim + slow + react);
 }
 
-/** Un lancer du joueur dont c'est le tour ; renvoie le lancer joué, ou la raison du refus */
-export function throwBall(m: Match, id: string, raw: Partial<ThrowParams>, now: number, auto = false): ThrowRecord | string {
+/** L'élan d'un bot (ou d'un joueur qu'un bot remplace) : les écrans le montrent avant que la boule parte */
+export const WINDUP_MS = 1400;
+
+/**
+ * Un lancer du joueur dont c'est le tour ; renvoie le lancer joué, ou la raison du refus. `windup` : le temps de
+ * l'élan avant le lâcher (un joueur a déjà fait le sien avant d'envoyer son lancer ; un bot le fait maintenant).
+ */
+export function throwBall(m: Match, id: string, raw: Partial<ThrowParams>, now: number, auto = false, windup = 0): ThrowRecord | string {
   if (m.phase !== "aim") return "Ce n'est pas le moment de lancer.";
   const p = m.players[m.turn];
   if (!p || p.id !== id) return "Ce n'est pas ton tour.";
@@ -314,11 +325,12 @@ export function throwBall(m: Match, id: string, raw: Partial<ThrowParams>, now: 
     gutter: out.gutter,
     steps: out.steps,
     firstHit: out.firstHit,
-    at: now,
+    decided: out.decided,
+    at: now + windup,
     until: 0,
     auto,
   };
-  rec.until = now + showMs(rec);
+  rec.until = rec.at + showMs(rec);
   m.last = rec;
   m.phase = "roll";
   m.phaseAt = now;

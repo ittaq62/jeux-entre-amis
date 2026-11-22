@@ -399,6 +399,71 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Pieds au sec",
     description: "Finir une partie de neuf trous ou plus sans perdre une seule balle.",
   },
+  // Bowling
+  {
+    id: "bowling-first-win",
+    game: "bowling",
+    chip: "1re",
+    tone: "red",
+    title: "Roi de la piste",
+    description: "Gagner une partie de bowling.",
+  },
+  {
+    id: "bowling-regular",
+    game: "bowling",
+    chip: "25",
+    tone: "blue",
+    title: "Chaussures de location",
+    description: "Jouer 25 parties de bowling.",
+  },
+  {
+    id: "bowling-strike",
+    game: "bowling",
+    chip: "X",
+    tone: "red",
+    title: "Strike !",
+    description: "Faire tomber les dix quilles d'une seule boule.",
+  },
+  {
+    id: "bowling-turkey",
+    game: "bowling",
+    chip: "XXX",
+    tone: "black",
+    title: "La dinde",
+    description: "Faire trois strikes de suite.",
+  },
+  {
+    id: "bowling-split",
+    game: "bowling",
+    chip: "7-10",
+    tone: "green",
+    title: "Le grand écart",
+    description: "Relever un split en spare.",
+  },
+  {
+    id: "bowling-200",
+    game: "bowling",
+    chip: "200",
+    tone: "ivory",
+    title: "La barre des 200",
+    description: "Dépasser 200 dans une partie de dix frames.",
+  },
+  {
+    id: "bowling-perfect",
+    game: "bowling",
+    chip: "300",
+    tone: "black",
+    title: "La partie parfaite",
+    description: "Faire 300 : douze strikes de suite, sans en rater un.",
+  },
+  {
+    id: "bowling-seer",
+    game: "bowling",
+    chip: "?",
+    tone: "blue",
+    title: "Devin",
+    description: "Marquer 10 points de pronostics dans une même partie.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -605,6 +670,26 @@ export function earnedMinigolfAchievements(o: MinigolfOutcome): string[] {
   add("minigolf-ace", o.stats.aces >= 1);
   add("minigolf-under", o.stats.holes >= 9 && o.stats.toPar < 0);
   add("minigolf-dry", o.stats.holes >= 9 && o.stats.lost === 0);
+  return out;
+}
+
+export interface BowlingOutcome {
+  won: boolean;
+  played: number;
+  stats: { strikes: number; bestRun: number; splitsMade: number; full: number; perfect: number; seer: number };
+}
+
+export function earnedBowlingAchievements(o: BowlingOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("bowling-first-win", o.won);
+  add("bowling-regular", o.played >= 25);
+  add("bowling-strike", o.stats.strikes >= 1);
+  add("bowling-turkey", o.stats.bestRun >= 3);
+  add("bowling-split", o.stats.splitsMade >= 1);
+  add("bowling-200", o.stats.full > 200);
+  add("bowling-perfect", o.stats.perfect >= 1);
+  add("bowling-seer", o.stats.seer >= 10);
   return out;
 }
 

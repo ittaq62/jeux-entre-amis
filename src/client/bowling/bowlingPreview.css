@@ -1,0 +1,82 @@
+/* L'illustration du bowling sur l'accueil */
+.bw-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 70%, #6b3b1c, #1a0f0c 70%);
+}
+
+.bw-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 55%;
+  animation: bw-preview-drift 22s ease-in-out infinite alternate;
+}
+
+/* Les néons de la salle qui respirent */
+.bw-preview-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 45% 22% at 12% 30%, rgba(255, 79, 163, 0.22), transparent 70%),
+    radial-gradient(ellipse 45% 22% at 88% 30%, rgba(55, 224, 208, 0.2), transparent 70%);
+  mix-blend-mode: screen;
+  animation: bw-preview-glow 4.5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* Un reflet qui glisse lentement sur le vernis de la piste */
+.bw-preview-shine {
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 236, 200, 0.16) 50%, transparent 60%);
+  animation: bw-preview-shine 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes bw-preview-drift {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(0.8%, -1.2%);
+  }
+}
+
+@keyframes bw-preview-glow {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bw-preview-shine {
+  0% {
+    transform: translateX(-40%);
+  }
+  60%,
+  100% {
+    transform: translateX(40%);
+  }
+}
+
+.game-stage.is-paused .bw-preview img,
+.game-stage.is-paused .bw-preview-glow,
+.game-stage.is-paused .bw-preview-shine {
+  animation-play-state: paused;
+}
+
+.game-stage.is-still .bw-preview img,
+.game-stage.is-still .bw-preview-glow,
+.game-stage.is-still .bw-preview-shine {
+  animation: none;
+}
+
+.game-stage.is-still .bw-preview-shine {
+  opacity: 0;
+}

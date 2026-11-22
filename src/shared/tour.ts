@@ -8,6 +8,7 @@ import type { BotLevel as BricksBotLevel, BricksSettings } from "./games/bricks/
 import type { CramponsConfig } from "./games/crampons/view.ts";
 import type { CulbuteConfig } from "./games/culbute/view.ts";
 import type { MinigolfConfig } from "./games/minigolf/match.ts";
+import type { BowlingConfig } from "./games/bowling/match.ts";
 import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
@@ -28,6 +29,7 @@ export const TOUR_GAMES: GameId[] = [
   "escarmouche",
   "culbute",
   "minigolf",
+  "bowling",
 ];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
@@ -35,7 +37,14 @@ export const TOUR_GAMES: GameId[] = [
  */
 const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
   (g) =>
-    g !== "capitale" && g !== "meche" && g !== "bolides" && g !== "crampons" && g !== "culbute" && g !== "escarmouche" && g !== "minigolf",
+    g !== "capitale" &&
+    g !== "meche" &&
+    g !== "bolides" &&
+    g !== "crampons" &&
+    g !== "culbute" &&
+    g !== "escarmouche" &&
+    g !== "minigolf" &&
+    g !== "bowling",
 );
 
 /** Nombre de joueurs qu'accueille chaque jeu */
@@ -49,6 +58,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   crampons: { min: 2, max: 8 },
   culbute: { min: 2, max: 8 },
   minigolf: { min: 2, max: 8 },
+  bowling: { min: 2, max: 8 },
   escarmouche: { min: 2, max: 8 },
 };
 
@@ -629,6 +639,36 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       chance: 0.25,
     },
   ],
+  bowling: [
+    {
+      id: "barrieres",
+      name: "barrières",
+      blurb: "Des barrières le long des rigoles : la boule rebondit au lieu d'y tomber.",
+      settings: { bumpers: true } satisfies Partial<BowlingConfig>,
+      chance: 0.25,
+    },
+    {
+      id: "geante",
+      name: "boule géante",
+      blurb: "Une boule énorme et lourde : les quilles n'ont aucune chance… presque.",
+      settings: { geante: true } satisfies Partial<BowlingConfig>,
+      chance: 0.2,
+    },
+    {
+      id: "glisse",
+      name: "piste qui glisse",
+      blurb: "La piste est huilée d'un bout à l'autre : plus aucune boule ne courbe.",
+      settings: { glisse: true } satisfies Partial<BowlingConfig>,
+      chance: 0.2,
+    },
+    {
+      id: "lune",
+      name: "sur la lune",
+      blurb: "La pesanteur fond : les quilles s'envolent et retombent tout doucement.",
+      settings: { lune: true } satisfies Partial<BowlingConfig>,
+      chance: 0.2,
+    },
+  ],
 };
 
 /**
@@ -910,6 +950,18 @@ const MINIGOLF_VARIANTS: Format<MinigolfConfig>[] = [
   { id: "melange", name: "Trous mélangés", blurb: "Des trous pris dans tous les parcours.", settings: { course: "melange" } },
 ];
 
+const BOWLING_VARIANTS: Format<BowlingConfig>[] = [
+  // En tournée, une table de bowling joue trois frames ; à une table, dix
+  { id: "classique", name: "La partie", blurb: "Trois frames : strikes et spares comptés comme au vrai bowling.", settings: {}, weight: 3 },
+  { id: "cinq", name: "Cinq frames", blurb: "Une partie de cinq frames.", settings: { frames: 5 } },
+  {
+    id: "spares",
+    name: "Défi des spares",
+    blurb: "Cinq manches : les mêmes quilles pour tous, à abattre en une seule boule.",
+    settings: { mode: "spares", frames: 5 },
+  },
+];
+
 const VARIANTS: Record<GameId, Format<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -921,6 +973,7 @@ const VARIANTS: Record<GameId, Format<object>[]> = {
   culbute: CULBUTE_VARIANTS,
   escarmouche: ESCARMOUCHE_VARIANTS,
   minigolf: MINIGOLF_VARIANTS,
+  bowling: BOWLING_VARIANTS,
 };
 
 /** Les formats d'un jeu (ils s'excluent), sans leurs réglages */
@@ -972,6 +1025,7 @@ export function variantSettings(game: "bolides", id: string | null | undefined):
 export function variantSettings(game: "crampons", id: string | null | undefined): Partial<CramponsConfig>;
 export function variantSettings(game: "culbute", id: string | null | undefined): Partial<CulbuteConfig>;
 export function variantSettings(game: "minigolf", id: string | null | undefined): Partial<MinigolfConfig>;
+export function variantSettings(game: "bowling", id: string | null | undefined): Partial<BowlingConfig>;
 export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);

@@ -24,6 +24,7 @@ export const BOT_ELO = {
   culbute: { facile: 800, moyen: 1000, fort: 1200 },
   escarmouche: { facile: 800, moyen: 1000, fort: 1200 },
   minigolf: { facile: 800, moyen: 1000, fort: 1200 },
+  bowling: { facile: 800, moyen: 1000, fort: 1200 },
 } as const;
 
 export function botElo(game: GameId, botLevel?: string): number {
@@ -36,6 +37,7 @@ export function botElo(game: GameId, botLevel?: string): number {
   if (game === "culbute") return BOT_ELO.culbute[botLevel as keyof typeof BOT_ELO.culbute] ?? BOT_ELO.culbute.moyen;
   if (game === "escarmouche") return BOT_ELO.escarmouche[botLevel as keyof typeof BOT_ELO.escarmouche] ?? BOT_ELO.escarmouche.moyen;
   if (game === "minigolf") return BOT_ELO.minigolf[botLevel as keyof typeof BOT_ELO.minigolf] ?? BOT_ELO.minigolf.moyen;
+  if (game === "bowling") return BOT_ELO.bowling[botLevel as keyof typeof BOT_ELO.bowling] ?? BOT_ELO.bowling.moyen;
   return BOT_ELO.uno;
 }
 

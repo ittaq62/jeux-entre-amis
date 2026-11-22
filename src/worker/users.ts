@@ -8,6 +8,7 @@ import {
   earnedCramponsAchievements,
   earnedCulbuteAchievements,
   earnedMinigolfAchievements,
+  earnedBowlingAchievements,
   earnedEscarmoucheAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
@@ -19,6 +20,8 @@ import type { CramponsConfig } from "../shared/games/crampons/view.ts";
 import type { CulbuteConfig, CulbuteRecordStats } from "../shared/games/culbute/view.ts";
 import type { MinigolfConfig } from "../shared/games/minigolf/match.ts";
 import type { MinigolfRecordStats } from "../shared/games/minigolf/net.ts";
+import type { BowlingConfig } from "../shared/games/bowling/match.ts";
+import type { BowlingRecordStats } from "../shared/games/bowling/net.ts";
 import type { EscarmoucheSettings, Mode as EscarmoucheMode } from "../shared/games/escarmouche/rules.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
@@ -257,6 +260,7 @@ export interface GameRecordPlayer {
     | CramponsRecordStats
     | CulbuteRecordStats
     | MinigolfRecordStats
+    | BowlingRecordStats
     | EscarmoucheRecordStats;
 }
 
@@ -316,6 +320,7 @@ export type GameRecord = {
   | { game: "crampons"; settings: CramponsConfig; mode: string }
   | { game: "culbute"; settings: CulbuteConfig; mode: string }
   | { game: "minigolf"; settings: MinigolfConfig; mode: string }
+  | { game: "bowling"; settings: BowlingConfig; mode: string }
   | { game: "escarmouche"; settings: EscarmoucheSettings; mode: EscarmoucheMode }
 );
 
@@ -445,6 +450,25 @@ function mergeMinigolfTotals(raw: string | null, stats: MinigolfRecordStats): Re
   for (const key of ["strokes", "holes", "aces", "under", "lost"] as const) totals[key] = (totals[key] ?? 0) + stats[key];
   if (stats.holes >= 9) totals.bestToPar = Math.min(totals.bestToPar ?? 99, stats.toPar);
   totals.bestHole = Math.min(totals.bestHole ?? 99, stats.best);
+  return totals;
+}
+
+/** Cumul des stats du bowling : tout s'additionne, sauf les records (meilleure partie de dix frames, plus longue série) */
+function mergeBowlingTotals(raw: string | null, stats: BowlingRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const key of ["strikes", "spares", "gutters", "splitsMade", "perfect", "seer"] as const)
+    totals[key] = (totals[key] ?? 0) + stats[key];
+  if (stats.full > 0) {
+    totals.bestScore = Math.max(totals.bestScore ?? 0, stats.full);
+    totals.games10 = (totals.games10 ?? 0) + 1;
+    totals.pins10 = (totals.pins10 ?? 0) + stats.full;
+  }
+  totals.bestRun = Math.max(totals.bestRun ?? 0, stats.bestRun);
   return totals;
 }
 
@@ -601,6 +625,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const stats = p.stats as MinigolfRecordStats;
       totals = mergeMinigolfTotals(prev?.totals ?? null, stats);
       earnedIds = earnedMinigolfAchievements({ won, played, stats });
+    } else if (rec.game === "bowling") {
+      const stats = p.stats as BowlingRecordStats;
+      totals = mergeBowlingTotals(prev?.totals ?? null, stats);
+      earnedIds = earnedBowlingAchievements({ won, played, stats });
     } else if (rec.game === "escarmouche") {
       const stats = p.stats as EscarmoucheRecordStats;
       totals = mergeEscarmoucheTotals(prev?.totals ?? null, stats);
@@ -976,6 +1004,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const culbute = statRows.results.find((r) => r.game === "culbute");
   const escarmouche = statRows.results.find((r) => r.game === "escarmouche");
   const minigolf = statRows.results.find((r) => r.game === "minigolf");
+  const bowling = statRows.results.find((r) => r.game === "bowling");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -996,6 +1025,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     culbute: { ...statsSummary(culbute), totals: totalsOf(culbute) },
     escarmouche: { ...statsSummary(escarmouche), totals: totalsOf(escarmouche) },
     minigolf: { ...statsSummary(minigolf), totals: totalsOf(minigolf) },
+    bowling: { ...statsSummary(bowling), totals: totalsOf(bowling) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,
