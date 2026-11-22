@@ -927,7 +927,7 @@ function portSide(b: Builder) {
   b.crate(-47, -7.3, 1.2, 2.4);
   b.crate(-47, 8.6);
   b.crate(-41.4, 8.8, 1.3, 1.3);
-  b.sandbags(-37.6, -3.5, -37, 3.5);
+  b.sandbags(-37.6, -3, -37, 3);
 
   // La capitainerie : un étage vitré au-dessus des quais, l'escalier à l'intérieur
   b.house(-30, 16, -24, 22, {
@@ -978,8 +978,8 @@ function portSide(b: Builder) {
   b.crate(-13.2, -6.8);
   b.container(-40, -24, "z", BLUE);
   b.container(-8.5, 20, "x", RED);
-  b.container(-36.5, 13, "x", GREEN);
-  b.container(-36.5, 13, "x", GREY, 2.59);
+  b.container(-37.4, 13, "x", GREEN);
+  b.container(-37.4, 13, "x", GREY, 2.59);
 
   // Le quai au nord : sa bordure, ses bittes d'amarrage
   b.box(-48, 0, 29.4, 0, 0.25, 30, "beton");
