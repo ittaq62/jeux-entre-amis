@@ -11,7 +11,10 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
           <ul className="bw-keys">
             <li>
               <kbd>Glisser en bas</kbd>
-              <span>Te placer, à gauche ou à droite de l'élan (ou les flèches ← →)</span>
+              <span>
+                Te placer, à gauche ou à droite de l'élan (ou les flèches ← →). Tu pars du milieu ; à ta première boule suivante, tu
+                retrouves ta place et ta visée.
+              </span>
             </li>
             <li>
               <kbd>Glisser en haut</kbd>
@@ -21,7 +24,7 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
               <kbd>Appuyer sur la boule</kbd>
               <span>
                 Puis <strong>reculer</strong> (ton bras part en arrière), <strong>pousser vers l'avant et lâcher</strong> : plus ton geste
-                est vif, plus la boule va vite. S'il part de travers, la boule aussi.
+                est vif, plus la boule va vite. S'il part de travers, la boule aussi : après le lancer, on te dit de quel côté.
               </span>
             </li>
             <li>
