@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
+import { BONUS_INFO } from "../../shared/games/minigolf/bonus.ts";
 import { strokeLimit } from "../../shared/games/minigolf/course.ts";
 import { COURSES, holeDef } from "../../shared/games/minigolf/courses.ts";
 import { colorOf, DEFAULT_LOOK } from "../../shared/games/minigolf/looks.ts";
@@ -188,6 +189,20 @@ export function MinigolfGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.hole, me?.done, me?.scores[v.hole]]);
 
+  // Une bulle bonus prise : son pouvoir est annoncé quand la balle s'arrête
+  const gotKey = me?.shot?.got ? `${v.hole}:${me.shot.n}:${me.shot.at}` : "";
+  useEffect(() => {
+    if (!me?.shot?.got || shown.current.has(`got:${gotKey}`)) return;
+    const info = BONUS_INFO[me.shot.got];
+    const wait = Math.max(0, ((me.shot.end - nowTickOf()) * 1000) / 240);
+    const t = setTimeout(() => {
+      shown.current.add(`got:${gotKey}`);
+      say(`Bulle : ${info.name}`, "good", info.blurb);
+    }, wait);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gotKey]);
+
   // Le trou qui commence
   useEffect(() => {
     if (v.phase === "intro") say(`Trou ${v.hole + 1}`, "info", `${def.name} · par ${def.par}`);
@@ -266,6 +281,16 @@ export function MinigolfGame({
           <small>
             coup{me.cur > 1 ? "s" : ""} sur {limit}
           </small>
+        </div>
+      )}
+
+      {me?.power && v.phase === "play" && !me.done && !hud?.rolling && (
+        <div
+          className="mg-bonus"
+          style={{ "--bonus": `#${BONUS_INFO[me.power].color.toString(16).padStart(6, "0")}` } as React.CSSProperties}
+        >
+          <strong>{BONUS_INFO[me.power].name}</strong>
+          <small>pour ce coup</small>
         </div>
       )}
 

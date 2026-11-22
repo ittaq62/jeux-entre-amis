@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { BALL_R } from "../../../shared/games/minigolf/course.ts";
 import { colorOf, type BallLook } from "../../../shared/games/minigolf/looks.ts";
 import { blobTex } from "./textures.ts";
+import { TrailFx } from "./trail.ts";
 
 const maps = new Map<string, THREE.Texture>();
 
@@ -237,6 +238,9 @@ export class BallModel {
   private q = new THREE.Quaternion();
   private axis = new THREE.Vector3();
   private last = new THREE.Vector3(NaN, 0, 0);
+  private trail: TrailFx | null;
+  /** La traînée, à poser dans la scène (elle reste en arrière, dans le monde) */
+  readonly fx: THREE.Object3D | null;
 
   constructor(
     look: BallLook,
@@ -277,6 +281,9 @@ export class BallModel {
       this.tag.position.y = BALL_R + 0.16;
       this.group.add(this.tag);
     }
+    // Sa traînée (celles des autres un peu plus discrètes)
+    this.trail = look.trail !== "aucune" ? new TrailFx(look.trail, mine ? 1 : 0.55) : null;
+    this.fx = this.trail?.points ?? null;
   }
 
   /** La balle en (x, y, z) ; le sol est à `ground` sous elle. Elle tourne sur elle-même d'après son déplacement */
@@ -294,6 +301,7 @@ export class BallModel {
     }
     this.last.set(x, y, z);
     p.set(x, y, z);
+    this.trail?.update(x, y, z, this.group.visible);
     // L'ombre reste au sol, plus pâle et plus large quand la balle est en l'air
     const up = Math.max(0, y - BALL_R - ground);
     this.shadow.position.y = ground - y + 0.004;
@@ -318,6 +326,7 @@ export class BallModel {
   }
 
   dispose() {
+    this.trail?.dispose();
     this.ball.geometry.dispose();
     this.mat.dispose();
     this.shadow.geometry.dispose();

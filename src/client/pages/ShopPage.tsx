@@ -25,6 +25,7 @@ import { CramponsLook, isCramponsKind } from "../crampons/CramponsLook.tsx";
 import { TenueLook, TenueStage } from "../culbute/TenueLook.tsx";
 import { BombArt } from "../meche/bombs/BombArt.tsx";
 import { BombShow } from "../meche/bombs/BombShow.tsx";
+import { BallSwatch, TrailSwatch } from "../minigolf/BallPicker.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
@@ -64,6 +65,8 @@ const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] 
     note: "Les accessoires de ton arme principale : chacun a son prix à payer",
   },
   { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
+  { kind: "golfmotif", game: "minigolf", title: "Minigolf", note: "Le motif de ta balle (sa couleur, tu la choisis au salon)" },
+  { kind: "golftrace", game: "minigolf", title: "Minigolf", note: "La traînée que ta balle laisse derrière elle" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -78,6 +81,8 @@ export function ShopPage() {
 
   const look = (item: ShopItem): ReactNode => {
     if (item.kind === "naval") return <NavalSkinPreview skin={item.ref as NavalSkinId} defs={defs} />;
+    if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={52} />;
+    if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={46} />;
     if (item.kind === "uno") return <CardBack width={46} skin={item.ref as BackId} />;
     if (item.kind === "token") {
       const src = thumbs?.[item.ref as TokenId];
@@ -132,6 +137,8 @@ export function ShopPage() {
       );
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
+    if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={140} />;
+    if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={110} />;
     if (item.kind === "tenue") return <TenueStage item={item} />;
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)

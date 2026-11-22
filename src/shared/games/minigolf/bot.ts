@@ -413,6 +413,11 @@ export function planShot(
   };
 }
 
+/** Le chemin de cases vers le trou le plus proche, depuis (x, z) (il s'arrête à un saut, s'il y en a un) */
+export function pathToCup(c: Course, x: number, z: number): [number, number][] {
+  return descend(navOf(c), x, z, 600);
+}
+
 /** Le chemin le plus court vers le trou depuis ce point (une suite de points, de case en case) */
 function descend(nav: Nav, x: number, z: number, max: number): [number, number][] {
   let i = Math.floor((x - nav.x0) / CELL);

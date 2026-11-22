@@ -4,6 +4,7 @@
 
 import { BALL_R, type Course } from "../../shared/games/minigolf/course.ts";
 import { courseOf, type HoleRef } from "../../shared/games/minigolf/courses.ts";
+import { bonusCourse, bonusSpots } from "../../shared/games/minigolf/bonus.ts";
 import type { BallLook } from "../../shared/games/minigolf/looks.ts";
 import { physOf, type GolfShot, type MinigolfConfig } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfView } from "../../shared/games/minigolf/net.ts";
@@ -129,8 +130,10 @@ export class GolfRuntime {
     if (key !== this.holeKey) {
       this.holeKey = key;
       this.ref = ref;
-      this.course = courseOf(ref);
+      // Avec la règle des bulles bonus, le même trou, plus ses bulles (pour voir la balle les traverser)
+      this.course = v.cfg.bonus ? bonusCourse(ref) : courseOf(ref);
       this.scene.setHole(this.course, ref.c, ref.i * 7919 + (ref.m ? 1 : 0) + 17);
+      this.scene.setBonus(v.cfg.bonus ? bonusSpots(ref) : null);
       this.replays.clear();
       this.yaw = this.course.tee.aim;
       this.pitch = 0.5;
@@ -143,6 +146,10 @@ export class GolfRuntime {
       this.camMode = "intro";
       this.introFrom = performance.now();
     }
+    // Les bulles déjà prises (si notre balle ne roule pas : sinon, elles éclatent quand elle passe dedans)
+    const meNow = v.players.find((p) => p.id === this.o.me);
+    if (v.cfg.bonus && meNow && !this.isRolling(this.o.me))
+      for (let i = 0; i < 31; i++) if (meNow.picked & (1 << i)) this.scene.takeBonus(i, false);
     // Un nouveau coup pour quelqu'un : on le rejoue depuis son départ
     for (const p of v.players) {
       const s = p.shot;
@@ -270,6 +277,7 @@ export class GolfRuntime {
   }
 
   private emit(id: string, mine: boolean, e: PhysEvent, b: Ball) {
+    if (mine && e.k === "item") this.scene.takeBonus(e.i);
     const d = this.scene.camera.position.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
     this.o.onEvent?.({ id, mine, e, dist: d });
   }

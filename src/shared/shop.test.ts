@@ -48,6 +48,8 @@ describe("la boutique", () => {
       "arme",
       "uniforme",
       "accessoire",
+      "golfmotif",
+      "golftrace",
     ] as const) {
       const items = SHOP_ITEMS.filter((i) => i.kind === kind);
       expect(items.some((i) => i.price === 0)).toBe(true);
@@ -88,7 +90,21 @@ describe("la boutique", () => {
 
   it("la migration garde acquis chaque article payant de l'ancien système", () => {
     // Les dos de cartes UNO, tout Crampons, Mèche et le personnage sont arrivés après : l'ancien système ne les connaissait pas
-    const later = new Set(["uno", "club", "ballon", "fete", "bombe", "perso", "camo", "tenue", "arme", "uniforme", "accessoire"]);
+    const later = new Set([
+      "uno",
+      "club",
+      "ballon",
+      "fete",
+      "bombe",
+      "perso",
+      "camo",
+      "tenue",
+      "arme",
+      "uniforme",
+      "accessoire",
+      "golfmotif",
+      "golftrace",
+    ]);
     for (const item of SHOP_ITEMS.filter((i) => i.price > 0 && !later.has(i.kind))) expect(migration).toContain(`'${item.id}'`);
   });
 });

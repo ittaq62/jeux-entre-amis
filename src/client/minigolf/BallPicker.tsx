@@ -41,7 +41,138 @@ export function BallSwatch({ look, size = 56 }: { look: BallLook; size?: number 
     return img.toDataURL();
   }, [look]);
   return (
-    <span className="mg-swatch" style={{ "--size": `${size}px`, backgroundImage: `url(${url})` } as CSSProperties} aria-hidden="true" />
+    // Son style tient tout seul : l'aperçu sert aussi à la boutique, où la feuille du minigolf n'est pas chargée
+    <span
+      className="mg-swatch"
+      style={
+        {
+          "--size": `${size}px`,
+          display: "inline-block",
+          flex: "none",
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          backgroundImage: `url(${url})`,
+          backgroundSize: "200% 100%",
+          backgroundPosition: "25% 50%",
+          boxShadow: "inset -6px -8px 14px rgba(0,0,0,0.35), inset 4px 5px 10px rgba(255,255,255,0.55), 0 3px 6px rgba(0,0,0,0.2)",
+        } as CSSProperties
+      }
+      aria-hidden="true"
+    />
+  );
+}
+
+/** L'aperçu d'une traînée : une balle qui file vers la droite, et ce qu'elle laisse derrière elle */
+export function TrailSwatch({ trail, size = 56 }: { trail: string; size?: number }) {
+  const w = size * 1.8;
+  const h = size;
+  const y = h * 0.55;
+  const bx = w - h * 0.32;
+  const r = h * 0.2;
+  // Des points le long du chemin, de la queue (0) jusqu'à la balle (1)
+  const along = (n: number) => Array.from({ length: n }, (_, i) => i / (n - 1));
+  const wave = (u: number) => y + Math.sin(u * Math.PI * 2.2) * h * 0.06;
+  const xAt = (u: number) => w * 0.06 + (bx - r - w * 0.06) * u;
+  let fx: React.ReactNode = null;
+  if (trail === "fil")
+    fx = (
+      <path
+        d={`M ${xAt(0)} ${wave(0)} ${along(12)
+          .map((u) => `L ${xAt(u)} ${wave(u)}`)
+          .join(" ")}`}
+        stroke="url(#fil)"
+        strokeWidth={h * 0.04}
+        fill="none"
+        strokeLinecap="round"
+      />
+    );
+  else if (trail === "arcenciel")
+    fx = (
+      <path
+        d={`M ${xAt(0)} ${wave(0)} ${along(12)
+          .map((u) => `L ${xAt(u)} ${wave(u)}`)
+          .join(" ")}`}
+        stroke="url(#arc)"
+        strokeWidth={h * 0.13}
+        fill="none"
+        strokeLinecap="round"
+        opacity={0.9}
+      />
+    );
+  else if (trail === "etincelles")
+    fx = along(14).map((u, i) => (
+      <circle
+        key={i}
+        cx={xAt(u) + Math.sin(i * 7) * 3}
+        cy={wave(u) + Math.cos(i * 5) * h * 0.12}
+        r={h * (0.015 + u * 0.03)}
+        fill={i % 3 ? "#ffd75a" : "#fff6c8"}
+        opacity={0.3 + u * 0.7}
+      />
+    ));
+  else if (trail === "bulles")
+    fx = along(8).map((u, i) => (
+      <circle
+        key={i}
+        cx={xAt(u)}
+        cy={wave(u) - (1 - u) * h * 0.22 + Math.sin(i * 3) * 3}
+        r={h * (0.04 + (i % 3) * 0.02)}
+        fill="rgba(190,235,255,0.25)"
+        stroke="#bfeaff"
+        strokeWidth={1.2}
+        opacity={0.4 + u * 0.6}
+      />
+    ));
+  else if (trail === "confettis")
+    fx = along(14).map((u, i) => (
+      <rect
+        key={i}
+        x={xAt(u)}
+        y={wave(u) + Math.sin(i * 9) * h * 0.2}
+        width={h * 0.06}
+        height={h * 0.06}
+        fill={`hsl(${(i * 67) % 360} 85% 55%)`}
+        transform={`rotate(${i * 37} ${xAt(u)} ${wave(u)})`}
+        opacity={0.5 + u * 0.5}
+      />
+    ));
+  else if (trail === "flammes")
+    fx = along(10).map((u, i) => (
+      <ellipse
+        key={i}
+        cx={xAt(0.3 + u * 0.7)}
+        cy={y - u * 2}
+        rx={h * (0.05 + u * 0.1)}
+        ry={h * (0.04 + u * 0.07)}
+        fill={u > 0.6 ? "#ffd75a" : u > 0.3 ? "#ff8a2a" : "#e2401a"}
+        opacity={0.25 + u * 0.6}
+      />
+    ));
+  return (
+    <svg className="mg-trail-swatch" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <defs>
+        <linearGradient id="fil" x1="0" x2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0.95" />
+        </linearGradient>
+        <linearGradient id="arc" x1="0" x2="1">
+          <stop offset="0" stopColor="#ff4a4a" stopOpacity="0.1" />
+          <stop offset="0.25" stopColor="#ffb23a" />
+          <stop offset="0.5" stopColor="#f5e64a" />
+          <stop offset="0.7" stopColor="#4ad06a" />
+          <stop offset="0.85" stopColor="#3a8aff" />
+          <stop offset="1" stopColor="#a05aff" />
+        </linearGradient>
+        <radialGradient id="balle" cx="0.35" cy="0.35" r="0.7">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#c9c4b8" />
+        </radialGradient>
+      </defs>
+      <rect width={w} height={h} rx={h * 0.18} fill="#1d3a2a" />
+      {fx}
+      <circle cx={bx} cy={y} r={r} fill="url(#balle)" />
+    </svg>
   );
 }
 
@@ -134,6 +265,7 @@ export function BallPicker({ room, send }: { room: MinigolfRoomView; send: (msg:
               onClick={() => ok && choose({ trail: t.id })}
               title={ok ? t.name : `${t.name} : ${t.price} points à la boutique`}
             >
+              {t.id !== "aucune" && <TrailSwatch trail={t.id} size={18} />}
               {t.name}
               {!ok && <small className="num"> · {t.price} pts</small>}
             </button>

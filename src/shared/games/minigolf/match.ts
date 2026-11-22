@@ -3,6 +3,7 @@
 // physique partagée : les appareils refont le même calcul pour l'animer.
 
 import { isBotLevel, type BotLevel } from "./bot.ts";
+import { bonusCourse, bonusMods, bonusSpots, lastBubble, type BonusKind } from "./bonus.ts";
 import { holeTime, strokeLimit } from "./course.ts";
 import { COURSE_IDS, COURSES, courseOf, holeDef, isCourseId, readyCourses, type CourseId, type HoleRef } from "./courses.ts";
 import { DEFAULT_PHYS, simulateShot, STEPS_PER_S, type LostWhy, type PhysOpts, type ShotMods } from "./physics.ts";
@@ -79,6 +80,8 @@ export interface GolfShot {
   /** Ses coups sur ce trou après celui-ci (pénalité comprise) */
   n: number;
   mods?: ShotMods;
+  /** Le pouvoir gagné en traversant une bulle pendant ce coup (règle des bulles bonus) */
+  got?: BonusKind;
 }
 
 export interface GolfStats {
@@ -109,6 +112,10 @@ export interface GolfPlayer {
   scores: (number | null)[];
   shot: GolfShot | null;
   stats: GolfStats;
+  /** Les bulles bonus déjà prises sur ce trou (un bit par bulle) */
+  picked: number;
+  /** Le pouvoir gardé pour son prochain coup */
+  power: BonusKind | null;
 }
 
 export type Phase = "intro" | "play" | "scores" | "over";
@@ -182,6 +189,8 @@ export function createMatch(cfg: MinigolfConfig, seats: { id: string; team: 0 | 
       scores: holes.map(() => null),
       shot: null,
       stats: { strokes: 0, holes: 0, aces: 0, under: 0, lost: 0, best: 99 },
+      picked: 0,
+      power: null,
     })),
     ranks: null,
     rng: holder.rng,
@@ -226,11 +235,18 @@ export function startHole(m: Match, index: number, now: number) {
     p.done = false;
     p.doneAt = 0;
     p.shot = null;
+    p.picked = 0;
+    p.power = null;
   }
 }
 
+/** Le pouvoir que ce joueur emporte dans son prochain coup (règle des bulles bonus) */
+export function powerOf(m: Match, p: GolfPlayer): ShotMods | undefined {
+  return m.cfg.bonus ? bonusMods(p.power) : undefined;
+}
+
 /** Un joueur frappe : le coup joué jusqu'au bout, ou pourquoi il est refusé */
-export function shoot(m: Match, id: string, angle: number, power: number, at: number, now: number, mods?: ShotMods): GolfShot | string {
+export function shoot(m: Match, id: string, angle: number, power: number, at: number, now: number): GolfShot | string {
   if (m.phase !== "play") return m.phase === "intro" ? "Le trou n'a pas encore commencé." : "Le trou est fini.";
   const p = m.players.find((x) => x.id === id);
   if (!p) return "Tu ne joues pas cette partie.";
@@ -243,7 +259,10 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
   const c = courseOf(ref);
   const pw = Math.max(0, Math.min(1, power));
   const from = { x: p.ball[0], y: p.ball[1], z: p.ball[2] };
-  const r = simulateShot(c, from, angle, pw, tick, physOf(m.cfg, ref, mods));
+  // Le pouvoir gardé part avec ce coup, et s'use
+  const mods = powerOf(m, p);
+  if (m.cfg.bonus) p.power = null;
+  const r = simulateShot(m.cfg.bonus ? bonusCourse(ref) : c, from, angle, pw, tick, physOf(m.cfg, ref, mods));
   p.cur += r.outcome === "lost" ? 2 : 1;
   if (r.outcome === "lost") p.stats.lost++;
   else p.ball = [r.x, r.y, r.z];
@@ -260,6 +279,16 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
     n: p.cur,
     ...(mods ? { mods } : {}),
   };
+  // Une bulle traversée pour la première fois : son pouvoir, pour le coup d'après
+  if (m.cfg.bonus && r.outcome !== "in") {
+    const fresh = r.items & ~p.picked;
+    p.picked |= r.items;
+    const kind = bonusSpots(ref)[lastBubble(fresh)]?.kind;
+    if (kind) {
+      p.power = kind;
+      shot.got = kind;
+    }
+  }
   p.shot = shot;
   const limit = strokeLimit(c.def.par);
   if (r.outcome === "in") finishPlayer(p, m.hole, p.cur, r.end);

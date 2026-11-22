@@ -2,12 +2,13 @@
 // visée, et la caméra (que le jeu pilote). La qualité s'allège d'elle-même sur un appareil qui peine.
 
 import * as THREE from "three";
+import { BONUS_INFO, type BonusSpot } from "../../../shared/games/minigolf/bonus.ts";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { BALL_R, tileAt, tileHeight, type Course } from "../../../shared/games/minigolf/course.ts";
+import { BALL_R, heightAt, tileAt, tileHeight, type Course } from "../../../shared/games/minigolf/course.ts";
 import type { CourseId } from "../../../shared/games/minigolf/courses.ts";
 import { segClosest } from "../../../shared/games/minigolf/geom.ts";
 import type { BallLook } from "../../../shared/games/minigolf/looks.ts";
@@ -32,6 +33,9 @@ export class HoleScene {
   private envMap: THREE.Texture | null = null;
   private hole: HoleMeshes | null = null;
   private decor: THREE.Group | null = null;
+  /** Les bulles bonus du trou : chacune flotte et tourne ; prise, elle éclate */
+  private bubbles: { root: THREE.Group; list: { o: THREE.Group; y: number; gone: number | null }[] } | null = null;
+  private clock = 0;
   private tmpDir = new THREE.Vector3();
   private course: Course | null = null;
   private balls = new Map<string, BallModel>();
@@ -234,6 +238,7 @@ export class HoleScene {
       b = new BallModel(look, mine, name);
       this.balls.set(id, b);
       this.scene.add(b.group);
+      if (b.fx) this.scene.add(b.fx);
     }
     return b;
   }
@@ -242,6 +247,7 @@ export class HoleScene {
     const b = this.balls.get(id);
     if (!b) return;
     this.scene.remove(b.group);
+    if (b.fx) this.scene.remove(b.fx);
     b.dispose();
     this.balls.delete(id);
   }
@@ -279,8 +285,113 @@ export class HoleScene {
   }
 
   /** Le trou bouge selon son temps ; le ciel et l'eau vivent ; on dessine */
+  /** Les bulles bonus du trou (null : la règle n'est pas jouée) */
+  setBonus(spots: readonly BonusSpot[] | null) {
+    if (this.bubbles) {
+      this.scene.remove(this.bubbles.root);
+      this.bubbles.root.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.bubbles = null;
+    }
+    if (!spots || !this.course) return;
+    const root = new THREE.Group();
+    const list: { o: THREE.Group; y: number; gone: number | null }[] = [];
+    for (const s of spots) {
+      const info = BONUS_INFO[s.kind];
+      const color = new THREE.Color(info.color);
+      const o = new THREE.Group();
+      const shell = new THREE.Mesh(
+        new THREE.SphereGeometry(0.17, 28, 18),
+        new THREE.MeshPhysicalMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.25,
+          transparent: true,
+          opacity: 0.3,
+          roughness: 0.05,
+          clearcoat: 1,
+          depthWrite: false,
+        }),
+      );
+      shell.renderOrder = 4;
+      o.add(shell);
+      const glow = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.4, roughness: 0.4 });
+      // Le signe du pouvoir, au cœur de la bulle
+      if (s.kind === "power") {
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.08, 16), glow);
+        tip.position.y = 0.035;
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.07, 10), glow);
+        stem.position.y = -0.035;
+        o.add(tip, stem);
+      } else if (s.kind === "magnet") {
+        const u = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.018, 8, 20, Math.PI), glow);
+        u.rotation.z = Math.PI;
+        const l = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.04, 8), glow);
+        l.position.set(-0.05, 0.02, 0);
+        const r = l.clone();
+        r.position.x = 0.05;
+        o.add(u, l, r);
+      } else if (s.kind === "ghost") {
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), glow);
+        head.position.y = 0.01;
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.058, 0.06, 16, 1, true), glow);
+        body.position.y = -0.02;
+        o.add(head, body);
+      } else if (s.kind === "ice") {
+        o.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.065, 0), glow));
+      } else {
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.04, 14, 10), glow);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.01, 6, 24), glow);
+        ring.rotation.x = Math.PI / 2.4;
+        o.add(core, ring);
+      }
+      // Sa marque au sol, pour bien voir où elle est
+      const y = heightAt(this.course, s.at[0], s.at[1]);
+      const mark = new THREE.Mesh(
+        new THREE.RingGeometry(0.12, 0.17, 32),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }),
+      );
+      mark.rotation.x = -Math.PI / 2;
+      mark.position.set(s.at[0], y + 0.006, s.at[1]);
+      root.add(mark);
+      o.position.set(s.at[0], y + 0.3, s.at[1]);
+      o.userData.mark = mark;
+      root.add(o);
+      list.push({ o, y: y + 0.3, gone: null });
+    }
+    this.scene.add(root);
+    this.bubbles = { root, list };
+  }
+
+  /** Une bulle prise : elle éclate (ou disparaît tout de suite, sans animation) */
+  takeBonus(i: number, animate = true) {
+    const b = this.bubbles?.list[i];
+    if (!b || b.gone !== null) return;
+    b.gone = animate ? this.clock : this.clock - 1;
+  }
+
   render(t: number, dt: number) {
     this.quality.tick(performance.now());
+    this.clock += dt;
+    if (this.bubbles)
+      this.bubbles.list.forEach((b, i) => {
+        if (b.gone !== null) {
+          const k = (this.clock - b.gone) / 0.3;
+          b.o.scale.setScalar(1 + Math.min(1, k) * 0.7);
+          b.o.traverse((q) => {
+            if (q instanceof THREE.Mesh) (q.material as THREE.Material & { opacity: number }).opacity = Math.max(0, 1 - k) * 0.5;
+          });
+          b.o.visible = k < 1;
+          (b.o.userData.mark as THREE.Object3D).visible = false;
+          return;
+        }
+        b.o.position.y = b.y + Math.sin(this.clock * 2 + i * 1.7) * 0.04;
+        b.o.rotation.y += dt * 1.2;
+      });
     this.hole?.update(t, dt);
     this.theme?.tick?.(t, this.decor);
     // Vu d'en haut, ce qui surplombe la piste (la tête d'un batteur, un toit) s'efface pour laisser voir les obstacles

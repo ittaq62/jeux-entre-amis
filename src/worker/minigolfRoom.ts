@@ -11,6 +11,7 @@ import {
   nextEvent,
   nowTick,
   physOf,
+  powerOf,
   readyToShoot,
   shoot,
   tickMatch,
@@ -858,7 +859,14 @@ export class MinigolfRoom extends DurableObject<Env> {
       this.botAt.delete(p.id);
       const ref = currentRef(m);
       const t = nowTick(m, now);
-      const plan = planShot(courseOf(ref), { x: p.ball[0], y: p.ball[1], z: p.ball[2] }, t, physOf(m.cfg, ref), level, this.botRng);
+      const plan = planShot(
+        courseOf(ref),
+        { x: p.ball[0], y: p.ball[1], z: p.ball[2] },
+        t,
+        physOf(m.cfg, ref, powerOf(m, p)),
+        level,
+        this.botRng,
+      );
       if (plan.wait > 0) {
         this.botPlan.set(p.id, { a: plan.a, p: plan.p, at: t + plan.wait, hole: m.hole });
         continue;

@@ -1,5 +1,6 @@
 // Page de travail (seulement en développement) : une partie de minigolf jouée sur l'appareil, sans serveur, avec la même
-// logique que la table. /dev/minigolf?parcours=jardin&trou=3&bots=2&envers&vite (vite : pas de présentation du trou).
+// logique que la table. /dev/minigolf?parcours=jardin&trou=3&bots=2&envers&bonus&motif=pois&trace=flammes&vite (vite : pas de
+// présentation du trou).
 // En console, `__mg` donne la partie (`m`) et l'écran (`rt`).
 
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +39,7 @@ export function DevMinigolf() {
       mirror: q.has("envers"),
       lune: q.has("lune"),
       glace: q.has("glace"),
+      bonus: q.has("bonus"),
     });
     const seats = [{ id: "moi", team: 0 as const }, ...Array.from({ length: bots }, (_, i) => ({ id: `bot-${i + 1}`, team: 0 as const }))];
     const m = createMatch(cfg, seats, 7, Date.now());
@@ -63,7 +65,12 @@ export function DevMinigolf() {
       seats.map((s, i) => ({
         id: s.id,
         name: s.id === "moi" ? "Moi" : `Bot ${i}`,
-        look: { color: BALL_COLORS[i % BALL_COLORS.length]!.id, pattern: i % 2 ? "rayure" : "unie", trail: "fil" },
+        // Sa propre balle : &motif=pois&trace=flammes pour essayer un skin
+        look: {
+          color: BALL_COLORS[i % BALL_COLORS.length]!.id,
+          pattern: (s.id === "moi" && q.get("motif")) || (i % 2 ? "rayure" : "unie"),
+          trail: (s.id === "moi" && q.get("trace")) || "fil",
+        },
       })),
     );
     rt.setView(structuredClone(m));

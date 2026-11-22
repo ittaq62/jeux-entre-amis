@@ -18,6 +18,7 @@ import { CAMOS, type CamoId } from "./games/escarmouche/camos.ts";
 import { UNIFORMS, type UniformId } from "./games/escarmouche/uniforms.ts";
 import { EXTRAS, MUZZLES, WEAPON_IDS, WEAPONS, type ExtraId, type MuzzleId, type WeaponId } from "./games/escarmouche/weapons.ts";
 import { BOMBS, type BombId } from "./games/meche/bombs.ts";
+import { BALL_PATTERNS, patternItem, trailItem, TRAILS } from "./games/minigolf/looks.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
@@ -37,7 +38,9 @@ export type ShopKind =
   | "tenue"
   | "arme"
   | "uniforme"
-  | "accessoire";
+  | "accessoire"
+  | "golfmotif"
+  | "golftrace";
 
 export interface ShopItem {
   id: string;
@@ -109,6 +112,9 @@ export const SHOP_ITEMS: ShopItem[] = [
   ...[...MUZZLES, ...EXTRAS]
     .filter((a, i, all) => all.findIndex((b) => b.id === a.id) === i)
     .map((a): ShopItem => ({ id: attachmentItem(a.id), kind: "accessoire", ref: a.id, name: a.name, price: a.price })),
+  // Minigolf : le motif de sa balle (sa couleur se choisit au salon, à tout le monde) et la traînée qu'elle laisse
+  ...BALL_PATTERNS.map((p): ShopItem => ({ id: patternItem(p.id), kind: "golfmotif", ref: p.id, name: p.name, price: p.price })),
+  ...TRAILS.map((t): ShopItem => ({ id: trailItem(t.id), kind: "golftrace", ref: t.id, name: t.name, price: t.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

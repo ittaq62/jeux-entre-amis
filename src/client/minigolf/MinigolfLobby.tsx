@@ -41,10 +41,15 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
   const mine = room.you.seatId ? room.teams[room.you.seatId] : undefined;
   const ready = readyCourses();
   const courseName = s.course === "hasard" ? "parcours au hasard" : s.course === "melange" ? "trous mélangés" : COURSES[s.course].name;
-  const house = [s.mirror ? "à l'envers" : null, s.lune ? "sur la lune" : null, s.glace ? "tout glisse" : null].filter(Boolean);
+  const house = [
+    s.mirror ? "à l'envers" : null,
+    s.lune ? "sur la lune" : null,
+    s.glace ? "tout glisse" : null,
+    s.bonus ? "bulles bonus" : null,
+  ].filter(Boolean);
   const summary = [`${s.holes} trous`, courseName, ...house, s.teams ? "en équipes" : null].filter(Boolean).join(" · ");
 
-  const rule = (key: "mirror" | "lune" | "glace", title: string, hint: string) => (
+  const rule = (key: "mirror" | "lune" | "glace" | "bonus", title: string, hint: string) => (
     <div className={`rule-row ${locked(key) ? "is-forced" : ""}`} onClick={() => isHost && !locked(key) && update({ [key]: !s[key] })}>
       <Check label={title} checked={s[key]} disabled={!isHost || locked(key)} onChange={() => {}} />
       <span>
@@ -174,6 +179,11 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
               {rule("mirror", "À l'envers", "Chaque trou se joue en miroir : la gauche devient la droite.")}
               {rule("lune", "Sur la lune", "La pesanteur fond : les sauts durent, les pentes poussent à peine.")}
               {rule("glace", "Tout glisse", "Le gazon devient patinoire : la balle roule bien plus loin.")}
+              {rule(
+                "bonus",
+                "Bulles bonus",
+                "Trois bulles par trou : en traverser une donne un pouvoir pour le coup suivant (force, aimant, fantôme, glisse, rebond).",
+              )}
             </div>
           </div>
 
