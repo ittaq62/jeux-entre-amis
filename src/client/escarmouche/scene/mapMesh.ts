@@ -1616,6 +1616,432 @@ function tankCar(d: Extract<Decor, { k: "tankcar" }>, group: THREE.Group, q: Qua
   mergeTinted(parts, tintedMaterial(q), group, !low);
 }
 
+/** Range une pièce dont chaque sommet reçoit sa couleur (selon sa position) */
+function pushColored(parts: THREE.BufferGeometry[], g: THREE.BufferGeometry, color: (x: number, y: number, z: number) => THREE.Color) {
+  const src = g.index ? g.toNonIndexed() : g;
+  if (src !== g) g.dispose();
+  const pos = src.attributes.position as THREE.BufferAttribute;
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const c = color(pos.getX(i), pos.getY(i), pos.getZ(i));
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+  src.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  if (src.attributes.uv) src.deleteAttribute("uv");
+  if (src.attributes.normal) src.deleteAttribute("normal");
+  for (const k of Object.keys(src.attributes)) if (k !== "position" && k !== "color") src.deleteAttribute(k);
+  parts.push(src);
+}
+
+/** Un profil (x, y) extrudé en travers sur `depth`, centré, aux arêtes adoucies */
+function profile(pts: [number, number][], depth: number, bevel = 0.04): THREE.BufferGeometry {
+  const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.01, depth - bevel * 2),
+    bevelEnabled: bevel > 0,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 1,
+    curveSegments: 1,
+  });
+  g.translate(0, 0, -(depth - bevel * 2) / 2);
+  return g;
+}
+
+/** Une barre ronde d'un point à un autre */
+function strut(parts: THREE.BufferGeometry[], a: THREE.Vector3, b: THREE.Vector3, r: number, c: THREE.Color, sides = 5) {
+  const dir = b.clone().sub(a);
+  const len = dir.length();
+  if (len < 1e-3) return;
+  const g = new THREE.CylinderGeometry(r, r, len, sides);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()));
+  g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  pushTinted(parts, g, c);
+}
+
+/** La tôle brûlée : la peinture d'origine noircie, mangée de rouille et de suie, plus sombre vers le bas */
+function burnt(paint: THREE.Color, salt: number) {
+  const rust = new THREE.Color("#5a301c");
+  const soot = new THREE.Color("#1b1815");
+  const c = new THREE.Color();
+  return (x: number, y: number, z: number) => {
+    const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + salt) * 43758.5453;
+    const n = h - Math.floor(h);
+    c.copy(paint).multiplyScalar(0.62);
+    c.lerp(rust, 0.25 + n * 0.45);
+    if (n > 0.72) c.lerp(soot, 0.6);
+    return c.multiplyScalar(0.75 + Math.min(1, y) * 0.3);
+  };
+}
+
+/**
+ * Une carcasse de voiture : la caisse aux arêtes adoucies (le capot d'un côté, le coffre de l'autre), l'habitacle aux
+ * vitres noires, ses montants et son toit, les pare-chocs ; la tôle brûlée. Tout tient dans ses boîtes (0,95 m, et
+ * 1,45 m sur l'habitacle)
+ */
+function carShell(d: Extract<Decor, { k: "car" }>, group: THREE.Group, q: Quality) {
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d, d.flip ? -1 : 1);
+  const x0 = -L / 2;
+  const x1 = L / 2;
+  const c0 = x0 + 0.32 * L;
+  const c1 = x0 + 0.8 * L;
+  const color = burnt(new THREE.Color(d.color), d.x0 + d.z0);
+  const body = profile(
+    [
+      [x0 + 0.04, 0.26],
+      [x1 - 0.04, 0.26],
+      [x1, 0.4],
+      [x1, 0.76],
+      [x1 - 0.12, 0.88],
+      [c1, 0.91],
+      [c0, 0.91],
+      [x0 + 0.14, 0.86],
+      [x0, 0.74],
+      [x0, 0.4],
+    ],
+    W - 0.06,
+  );
+  pushColored(parts, place(body), color);
+  const glass = new THREE.Color("#141518");
+  const cab = profile(
+    [
+      [c0, 0.88],
+      [c1, 0.88],
+      [c1 - 0.06 * L, 1.4],
+      [c0 + 0.09 * L, 1.4],
+    ],
+    W - 0.3,
+  );
+  pushTinted(parts, place(cab), glass);
+  // Le toit et les montants, dans la couleur de la caisse
+  const roof = new THREE.BoxGeometry(c1 - 0.06 * L - (c0 + 0.09 * L), 0.05, W - 0.28);
+  roof.translate((c1 - 0.06 * L + c0 + 0.09 * L) / 2, 1.425, 0);
+  pushColored(parts, place(roof), color);
+  const tmp: THREE.BufferGeometry[] = [];
+  const paint = new THREE.Color(d.color).multiplyScalar(0.45);
+  for (const s of [-1, 1]) {
+    const z = s * (W / 2 - 0.15);
+    strut(tmp, new THREE.Vector3(c0 + 0.02, 0.92, z), new THREE.Vector3(c0 + 0.09 * L, 1.4, z), 0.035, paint, 4);
+    strut(tmp, new THREE.Vector3((c0 + c1) / 2, 0.92, z), new THREE.Vector3((c0 + c1) / 2, 1.4, z), 0.04, paint, 4);
+    strut(tmp, new THREE.Vector3(c1 - 0.02, 0.92, z), new THREE.Vector3(c1 - 0.06 * L, 1.4, z), 0.035, paint, 4);
+  }
+  for (const g of tmp) parts.push(place(g));
+  const dark = new THREE.Color("#222120");
+  for (const x of [x0 - 0.02, x1 + 0.02]) {
+    const bump = new THREE.BoxGeometry(0.08, 0.14, W - 0.14);
+    bump.translate(x, 0.44, 0);
+    pushTinted(parts, place(bump), dark);
+  }
+  mergeTinted(parts, tintedMaterial(q), group, q !== "bas");
+}
+
+/**
+ * Un tram renversé sur le flanc : la coque couchée, la rangée de fenêtres au-dessus (c'est son flanc), les bogies et
+ * leurs roues d'un côté (le dessous du tram), la perche tombée au sol de l'autre (le toit) ; la peinture brûlée
+ */
+function tramWreck(d: Extract<Decor, { k: "tram" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d, d.flip ? -1 : 1);
+  const x0 = -L / 2;
+  const x1 = L / 2;
+  const c0 = x0 + 0.32 * L;
+  const c1 = x0 + 0.8 * L;
+  const color = burnt(new THREE.Color(d.color), d.x0 + d.z0 + 3);
+  const hull = profile(
+    [
+      [x0, 0],
+      [x1, 0],
+      [x1, 0.8],
+      [x1 - 0.22, 0.93],
+      [x0 + 0.22, 0.93],
+      [x0, 0.8],
+    ],
+    W - 0.06,
+  );
+  pushColored(parts, place(hull), color);
+  const mid = profile(
+    [
+      [c0, 0.88],
+      [c1, 0.88],
+      [c1 - 0.35, 1.4],
+      [c0 + 0.35, 1.4],
+    ],
+    W - 0.3,
+  );
+  pushColored(parts, place(mid), color);
+  // Les fenêtres : sur le dessus (le flanc du tram), et celles des deux postes de conduite
+  const glass = new THREE.Color("#141518");
+  for (let x = c0 + 0.5; x + 0.6 <= c1 - 0.45; x += 0.78) {
+    const w = new THREE.BoxGeometry(0.62, 0.03, W - 0.62);
+    w.translate(x + 0.31, 1.445, 0);
+    pushTinted(parts, place(w), glass);
+  }
+  for (const [a, b] of [
+    [x0 + 0.3, x0 + 1.3],
+    [x1 - 1.3, x1 - 0.3],
+  ] as const) {
+    const w = new THREE.BoxGeometry(b - a, 0.03, W - 0.6);
+    w.translate((a + b) / 2, 0.955, 0);
+    pushTinted(parts, place(w), glass);
+  }
+  // Le dessous du tram, tourné de côté : deux bogies et leurs roues
+  const iron = new THREE.Color("#2a2826");
+  for (const bx of [x0 + 1.4, x1 - 1.4]) {
+    const frame = new THREE.BoxGeometry(1.9, 0.5, 0.1);
+    frame.translate(bx, 0.47, W / 2 - 0.02);
+    pushTinted(parts, place(frame), iron);
+    for (const o of [-0.55, 0.55]) {
+      const wheel = new THREE.CylinderGeometry(0.33, 0.33, 0.1, low ? 10 : 16);
+      wheel.rotateX(Math.PI / 2);
+      wheel.translate(bx + o, 0.46, W / 2 + 0.05);
+      pushTinted(parts, place(wheel), iron, () => 1.3);
+    }
+  }
+  // La perche, tombée du toit jusqu'au sol
+  const tmp: THREE.BufferGeometry[] = [];
+  strut(tmp, new THREE.Vector3(x0 + L * 0.55, 0.45, -W / 2), new THREE.Vector3(x0 + L * 0.55 + 2.2, 0.04, -W / 2 - 1.6), 0.03, iron);
+  for (const g of tmp) parts.push(place(g));
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
+/** Un mur pare-souffle : des éléments de béton préfabriqués en T, posés bout à bout, leurs anneaux de levage */
+function blastWall(d: Extract<Decor, { k: "twall" }>, group: THREE.Group, q: Quality) {
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d);
+  const n = Math.max(1, Math.round(L / 1.15));
+  const seg = L / n;
+  const concrete = new THREE.Color("#8f8d87");
+  const r = seededRand(d.x0, d.z0, 21);
+  for (let i = 0; i < n; i++) {
+    const cx = -L / 2 + seg * (i + 0.5);
+    const k = 0.86 + r() * 0.16;
+    const foot = new THREE.BoxGeometry(seg - 0.03, 0.28, W);
+    foot.translate(cx, 0.14, 0);
+    pushTinted(parts, place(foot), concrete, () => k * 0.92);
+    const slab = profile(
+      [
+        [-W * 0.27, 0.28],
+        [W * 0.27, 0.28],
+        [W * 0.22, d.h - 0.08],
+        [W * 0.12, d.h],
+        [-W * 0.12, d.h],
+        [-W * 0.22, d.h - 0.08],
+      ],
+      seg - 0.05,
+      0.02,
+    );
+    // Le profil est dessiné en travers (x local = épaisseur) : on le tourne pour qu'il s'étende le long du mur
+    slab.rotateY(Math.PI / 2);
+    slab.translate(cx, 0, 0);
+    pushTinted(parts, place(slab), concrete, () => k);
+    if (q !== "bas") {
+      const ring = new THREE.TorusGeometry(0.06, 0.015, 4, 8);
+      ring.translate(cx, d.h + 0.05, 0);
+      pushTinted(parts, place(ring), new THREE.Color("#4a4642"));
+    }
+  }
+  mergeTinted(parts, tintedMaterial(q), group, true);
+}
+
+/**
+ * Le concasseur sur sa plate-forme : quatre pieds d'acier contreventés, le plancher et son garde-corps (ouvert du
+ * côté de l'escalier), la trémie en entonnoir pleine de pierres, la mâchoire et ses deux volants
+ */
+function crusher(d: Extract<Decor, { k: "crusher" }>, group: THREE.Group, q: Quality) {
+  const low = q === "bas";
+  const parts: THREE.BufferGeometry[] = [];
+  const steel = new THREE.Color("#4b4f52");
+  const paint = new THREE.Color("#c98a2c");
+  const yellow = new THREE.Color("#d8b32a");
+  const tmp: THREE.BufferGeometry[] = [];
+  const y = d.y;
+  const legs: [number, number][] = [
+    [d.x0 + 0.2, d.z0 + 0.2],
+    [d.x1 - 0.2, d.z0 + 0.2],
+    [d.x1 - 0.2, d.z1 - 0.2],
+    [d.x0 + 0.2, d.z1 - 0.2],
+  ];
+  for (const [x, z] of legs) {
+    const leg = new THREE.BoxGeometry(0.3, y - 0.2, 0.3);
+    leg.translate(x, (y - 0.2) / 2, z);
+    pushTinted(parts, leg, steel);
+    const plate = new THREE.BoxGeometry(0.5, 0.04, 0.5);
+    plate.translate(x, 0.02, z);
+    pushTinted(parts, plate, steel, () => 0.8);
+  }
+  // Les croix de contreventement, sur les quatre faces
+  for (let k = 0; k < 4; k++) {
+    const [ax, az] = legs[k]!;
+    const [bx, bz] = legs[(k + 1) % 4]!;
+    strut(tmp, new THREE.Vector3(ax, 0.3, az), new THREE.Vector3(bx, y - 0.4, bz), 0.04, steel);
+    strut(tmp, new THREE.Vector3(ax, y - 0.4, az), new THREE.Vector3(bx, 0.3, bz), 0.04, steel);
+  }
+  // Le plancher, son bord jaune, le garde-corps
+  const deck = new THREE.BoxGeometry(d.x1 - d.x0, 0.2, d.z1 - d.z0);
+  deck.translate((d.x0 + d.x1) / 2, y - 0.1, (d.z0 + d.z1) / 2);
+  pushTinted(parts, deck, steel, () => 1.15);
+  for (const z of [d.z0, d.z1]) {
+    const edge = new THREE.BoxGeometry(d.x1 - d.x0, 0.05, 0.06);
+    edge.translate((d.x0 + d.x1) / 2, y - 0.02, z);
+    pushTinted(parts, edge, yellow);
+  }
+  const rail = (a: THREE.Vector3, b: THREE.Vector3) => {
+    strut(tmp, a.clone().setY(y + 1.0), b.clone().setY(y + 1.0), 0.025, yellow);
+    strut(tmp, a.clone().setY(y + 0.5), b.clone().setY(y + 0.5), 0.02, yellow);
+  };
+  const corners = [
+    new THREE.Vector3(d.x0 + 0.05, 0, d.z0 + 0.05),
+    new THREE.Vector3(d.x1 - 0.05, 0, d.z0 + 0.05),
+    new THREE.Vector3(d.x1 - 0.05, 0, d.z1 - 0.05),
+    new THREE.Vector3(d.x0 + 0.05, 0, d.z1 - 0.05),
+  ];
+  // Le côté de l'escalier reste ouvert (z0 si open vaut -1, z1 sinon)
+  const sides: [number, number][] =
+    d.open < 0
+      ? [
+          [1, 2],
+          [2, 3],
+          [3, 0],
+        ]
+      : [
+          [0, 1],
+          [1, 2],
+          [3, 0],
+        ];
+  for (const [a, b] of sides) rail(corners[a]!, corners[b]!);
+  for (const c of corners) strut(tmp, c.clone().setY(y), c.clone().setY(y + 1.0), 0.025, yellow);
+  // La trémie : un entonnoir carré, plein de pierres concassées
+  const hx = (d.hx0 + d.hx1) / 2;
+  const hz = (d.hz0 + d.hz1) / 2;
+  const hw = Math.min(d.hx1 - d.hx0, d.hz1 - d.hz0);
+  const housing = new THREE.BoxGeometry(hw * 0.62, 0.5, hw * 0.62);
+  housing.translate(hx, y + 0.25, hz);
+  pushTinted(parts, housing, paint, () => 0.85);
+  const funnel = new THREE.CylinderGeometry((hw / 2) * Math.SQRT2, hw * 0.3 * Math.SQRT2, d.top - y - 0.5, 4, 1, true, Math.PI / 4);
+  funnel.translate(hx, y + 0.5 + (d.top - y - 0.5) / 2, hz);
+  pushTinted(parts, funnel, paint);
+  const lip = new THREE.CylinderGeometry((hw / 2) * Math.SQRT2 + 0.04, (hw / 2) * Math.SQRT2 + 0.04, 0.1, 4, 1, true, Math.PI / 4);
+  lip.translate(hx, d.top - 0.05, hz);
+  pushTinted(parts, lip, steel);
+  const stones = new THREE.BoxGeometry(hw * 0.92, 0.05, hw * 0.92);
+  stones.translate(hx, d.top - 0.3, hz);
+  pushTinted(parts, stones, new THREE.Color("#8d867a"));
+  for (let k = 0; k < (low ? 4 : 10); k++) {
+    const s = new THREE.IcosahedronGeometry(0.12 + ((k * 7) % 5) * 0.03, 0);
+    s.translate(hx + (((k * 37) % 11) / 11 - 0.5) * hw * 0.7, d.top - 0.24, hz + (((k * 53) % 13) / 13 - 0.5) * hw * 0.7);
+    pushTinted(parts, s, new THREE.Color("#9a9184"));
+  }
+  // Les deux volants de la mâchoire, de part et d'autre
+  for (const s of [-1, 1]) {
+    const wheel = new THREE.CylinderGeometry(0.62, 0.62, 0.12, low ? 12 : 20);
+    wheel.rotateZ(Math.PI / 2);
+    wheel.translate(hx + s * (hw * 0.31 + 0.1), y + 0.72, hz);
+    pushTinted(parts, wheel, steel, () => 0.8);
+    const hub = new THREE.CylinderGeometry(0.12, 0.12, 0.2, 8);
+    hub.rotateZ(Math.PI / 2);
+    hub.translate(hx + s * (hw * 0.31 + 0.12), y + 0.72, hz);
+    pushTinted(parts, hub, paint);
+  }
+  for (const g of tmp) parts.push(g);
+  mergeTinted(parts, tintedMaterial(q), group, !low);
+}
+
+/**
+ * Un escalier d'acier (ses marches pleines arrêtent les balles) : chaque marche en tôle larmée et son nez jaune, les
+ * flancs, une rampe de chaque côté
+ */
+function steelStairs(d: Extract<Decor, { k: "steelstairs" }>, group: THREE.Group, q: Quality) {
+  const parts: THREE.BufferGeometry[] = [];
+  const n = Math.ceil((d.y1 - d.y0) / 0.2 - 1e-6);
+  const rise = (d.y1 - d.y0) / n;
+  const run = 0.32;
+  const N = n * run;
+  const steel = new THREE.Color("#4f5458");
+  const yellow = new THREE.Color("#d8b32a");
+  // u : la distance depuis le pied de l'escalier, en montant
+  const at = (u: number) => d.end - d.dir * (N - u);
+  const box = (u0: number, u1: number, y0: number, y1: number, w0: number, w1: number, c: THREE.Color, k = 1) => {
+    const a = at(u0);
+    const b = at(u1);
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    const g = d.axis === "z" ? new THREE.BoxGeometry(w1 - w0, y1 - y0, hi - lo) : new THREE.BoxGeometry(hi - lo, y1 - y0, w1 - w0);
+    if (d.axis === "z") g.translate((w0 + w1) / 2, (y0 + y1) / 2, (lo + hi) / 2);
+    else g.translate((lo + hi) / 2, (y0 + y1) / 2, (w0 + w1) / 2);
+    pushTinted(parts, g, c, () => k);
+  };
+  for (let i = 0; i < n; i++) {
+    const top = d.y0 + (i + 1) * rise;
+    // La contremarche et la marche, un peu plus claire, et son nez jaune
+    box(i * run, (i + 1) * run, top - rise, top - 0.03, d.c0 + 0.04, d.c1 - 0.04, steel, 0.7);
+    box(i * run, (i + 1) * run, top - 0.03, top, d.c0 + 0.02, d.c1 - 0.02, steel, 1.1);
+    box(i * run, i * run + 0.06, top - 0.01, top + 0.005, d.c0 + 0.04, d.c1 - 0.04, yellow);
+    // Les flancs, en escalier sous chaque marche
+    for (const w of [d.c0, d.c1 - 0.04]) box(i * run, (i + 1) * run, d.y0, top + 0.06, w, w + 0.04, steel, 0.85);
+  }
+  if (q !== "bas") {
+    const tmp: THREE.BufferGeometry[] = [];
+    const p = (u: number, y: number, w: number) => (d.axis === "z" ? new THREE.Vector3(w, y, at(u)) : new THREE.Vector3(at(u), y, w));
+    for (const w of [d.c0 - 0.03, d.c1 + 0.03]) {
+      strut(tmp, p(0.1, d.y0 + rise + 0.95, w), p(N - 0.1, d.y1 + 0.95, w), 0.025, yellow);
+      for (let i = 0; i < n; i += 4) {
+        const u = i * run + 0.16;
+        const yb = d.y0 + (i + 1) * rise;
+        strut(tmp, p(u, yb, w), p(u, d.y0 + rise + 0.95 + (u - 0.1) * ((d.y1 - d.y0 - rise) / (N - 0.2)), w), 0.022, yellow);
+      }
+    }
+    for (const g of tmp) parts.push(g);
+  }
+  mergeTinted(parts, tintedMaterial(q), group, true);
+}
+
+/** Un wagonnet de mine : la benne d'acier évasée sur son châssis et ses quatre petites roues, chargée de minerai */
+function mineCart(d: Extract<Decor, { k: "minecart" }>, group: THREE.Group, q: Quality) {
+  const parts: THREE.BufferGeometry[] = [];
+  const { L, W, place } = boxFrame(d);
+  const iron = new THREE.Color("#2a2826");
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const w = new THREE.CylinderGeometry(0.18, 0.18, 0.08, q === "bas" ? 8 : 12);
+      w.rotateX(Math.PI / 2);
+      w.translate(sx * (L / 2 - 0.35), 0.18, sz * (W / 2 - 0.1));
+      pushTinted(parts, place(w), iron);
+    }
+  const chassis = new THREE.BoxGeometry(L - 0.3, 0.12, W - 0.3);
+  chassis.translate(0, 0.32, 0);
+  pushTinted(parts, place(chassis), iron);
+  const color = burnt(new THREE.Color(d.color), d.x0 + d.z0 + 7);
+  const tub = profile(
+    [
+      [-L / 2 + 0.25, 0.38],
+      [L / 2 - 0.25, 0.38],
+      [L / 2, 0.95],
+      [-L / 2, 0.95],
+    ],
+    W - 0.08,
+    0.03,
+  );
+  pushColored(parts, place(tub), color);
+  const rim = new THREE.BoxGeometry(L + 0.04, 0.06, W - 0.02);
+  rim.translate(0, 0.95, 0);
+  pushTinted(parts, place(rim), iron, () => 1.4);
+  // Le minerai, en tas qui dépasse au milieu
+  const heap = new THREE.IcosahedronGeometry(1, 1);
+  const hp = heap.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < hp.count; i++) {
+    const j = 0.88 + Math.sin(hp.getX(i) * 11.3) * 0.08 + Math.cos(hp.getZ(i) * 9.1) * 0.08;
+    hp.setXYZ(i, hp.getX(i) * j, hp.getY(i) * j, hp.getZ(i) * j);
+  }
+  heap.scale(L * 0.42, 0.5, W * 0.4);
+  heap.translate(0, 0.95, 0);
+  pushTinted(parts, place(heap), new THREE.Color("#7d766c"), () => 0.95);
+  mergeTinted(parts, tintedMaterial(q), group, q !== "bas");
+}
+
 /** Une pile de grumes en pyramide : l'écorce, les bouts sciés plus clairs au cœur ; dehors en hiver, la neige dessus */
 function logs(d: Extract<Decor, { k: "logs" }>, group: THREE.Group, q: Quality) {
   const low = q === "bas";
@@ -2344,17 +2770,30 @@ function addDecor(d: Decor, ctx: Ctx, q: Quality) {
     case "tankcar":
       tankCar(d, group, q);
       return;
+    case "tram":
+      tramWreck(d, group, q);
+      return;
+    case "minecart":
+      mineCart(d, group, q);
+      return;
+    case "twall":
+      blastWall(d, group, q);
+      return;
+    case "crusher":
+      crusher(d, group, q);
+      return;
+    case "steelstairs":
+      steelStairs(d, group, q);
+      return;
     case "awning":
       awning(d, group);
       return;
   }
 }
 
-const carPaints = new Map<string, THREE.Material>();
-const sootGlass = new THREE.MeshStandardMaterial({ color: "#0d0e10", roughness: 0.35, metalness: 0.2 });
 /**
- * Une voiture brûlée : la tôle rouillée (ses boîtes), et par-dessus ses roues, sa couleur qui reste sous la suie le long
- * des flancs, ses vitres noires et crevées, ses pare-chocs. Un autobus, s'il est long.
+ * Une voiture brûlée : ses roues, et sa carcasse (la caisse, l'habitacle, les montants, la tôle brûlée) qui habille
+ * ses boîtes
  */
 function addCar(d: Extract<Decor, { k: "car" }>, ctx: Ctx) {
   const alongX = d.x1 - d.x0 >= d.z1 - d.z0;
@@ -2373,40 +2812,7 @@ function addCar(d: Extract<Decor, { k: "car" }>, ctx: Ctx) {
       const pos = alongX ? new THREE.Vector3(along, r, across) : new THREE.Vector3(across, r, along);
       ctx.instance("wheel", m4.compose(pos, q, scale));
     }
-  // La couleur d'origine, en bande sur les flancs (noircie), les vitres noires, les pare-chocs
-  let paint = carPaints.get(d.color);
-  if (!paint) {
-    paint = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color).multiplyScalar(0.62), roughness: 0.75, metalness: 0.3 });
-    carPaints.set(d.color, paint);
-  }
-  const slab = (a0: number, a1: number, y0: number, y1: number, c0: number, c1: number, mat: THREE.Material) => {
-    const g = new THREE.BoxGeometry(alongX ? a1 - a0 : c1 - c0, y1 - y0, alongX ? c1 - c0 : a1 - a0);
-    const m = new THREE.Mesh(g, mat);
-    const ca = (a0 + a1) / 2;
-    const cc = (c0 + c1) / 2;
-    m.position.set(alongX ? ca : cc, (y0 + y1) / 2, alongX ? cc : ca);
-    m.castShadow = !ctx.low;
-    ctx.group.add(m);
-  };
-  const a0 = alongX ? d.x0 : d.z0;
-  const c0 = alongX ? d.z0 : d.x0;
-  const c1 = alongX ? d.z1 : d.x1;
-  for (const [p, q2] of [
-    [c0 - 0.015, c0 + 0.01],
-    [c1 - 0.01, c1 + 0.015],
-  ] as const) {
-    slab(a0 + 0.15, a0 + L - 0.15, 0.48, 0.82, p, q2, paint);
-    // Les vitres de l'habitacle (ou toute la rangée de fenêtres d'un autobus)
-    if (bus) slab(a0 + 0.4, a0 + L - 0.6, 1.0, 1.4, p, q2, sootGlass);
-    else slab(a0 + L * 0.34, a0 + L * 0.78, 1.0, 1.4, p + (p < c0 ? 0.12 : -0.12), q2 + (p < c0 ? 0.12 : -0.12), sootGlass);
-  }
-  // Le pare-brise et la lunette arrière, les pare-chocs
-  if (!bus) {
-    slab(a0 + L * 0.32 - 0.02, a0 + L * 0.32 + 0.01, 1.0, 1.4, c0 + 0.2, c1 - 0.2, sootGlass);
-    slab(a0 + L * 0.8 - 0.01, a0 + L * 0.8 + 0.02, 1.0, 1.4, c0 + 0.2, c1 - 0.2, sootGlass);
-  }
-  slab(a0 - 0.06, a0 + 0.02, 0.3, 0.5, c0 + 0.1, c1 - 0.1, sootGlass);
-  slab(a0 + L - 0.02, a0 + L + 0.06, 0.3, 0.5, c0 + 0.1, c1 - 0.1, sootGlass);
+  carShell(d, ctx.group, ctx.low ? "bas" : "haut");
 }
 
 /**

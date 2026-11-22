@@ -64,7 +64,7 @@ export type Decor =
   /** Une horloge sur une façade : centre, direction vers où elle regarde */
   | { k: "clock"; x: number; y: number; z: number; nx: number; nz: number }
   /** Une voiture brûlée (ou un autobus, s'il est long) : ses roues, ses vitres crevées, sa couleur sous la suie */
-  | { k: "car"; x0: number; z0: number; x1: number; z1: number; color: string }
+  | { k: "car"; x0: number; z0: number; x1: number; z1: number; color: string; flip?: boolean }
   /** Un palmier : son stipe qui se courbe un peu, ses palmes en couronne */
   | { k: "palm"; x: number; z: number; h: number }
   /** Une toile tendue (l'auvent d'un souk) : rayée, un peu creusée, à la hauteur y */
@@ -102,7 +102,30 @@ export type Decor =
   /** Un abribus, ouvert du côté `front` (+1 : vers z1, ou x1 s'il est couché le long de z) */
   | { k: "shelter"; x0: number; z0: number; x1: number; z1: number; front: 1 | -1 }
   /** Un wagon-citerne sur sa voie, le long de x */
-  | { k: "tankcar"; x0: number; x1: number; z: number; r: number; color: string };
+  | { k: "tankcar"; x0: number; x1: number; z: number; r: number; color: string }
+  /** Un tram renversé sur le flanc (dans les boîtes d'une voiture : `flip`, le capot du côté x1 ou z1) */
+  | { k: "tram"; x0: number; z0: number; x1: number; z1: number; color: string; flip?: boolean }
+  /** Un wagonnet de mine chargé (dans les boîtes d'une voiture) */
+  | { k: "minecart"; x0: number; z0: number; x1: number; z1: number; color: string }
+  /** Un mur pare-souffle en éléments de béton en T, haut de `h` */
+  | { k: "twall"; x0: number; z0: number; x1: number; z1: number; h: number }
+  /** Le concasseur : sa plate-forme (à `y`), sa trémie (hx0..hx1, hz0..hz1, jusqu'à `top`), l'escalier du côté `open` en z */
+  | {
+      k: "crusher";
+      x0: number;
+      z0: number;
+      x1: number;
+      z1: number;
+      y: number;
+      hx0: number;
+      hz0: number;
+      hx1: number;
+      hz1: number;
+      top: number;
+      open: 1 | -1;
+    }
+  /** Un escalier d'acier, celui de gentleStairs (mêmes marches) */
+  | { k: "steelstairs"; axis: "x" | "z"; end: number; dir: 1 | -1; c0: number; c1: number; y0: number; y1: number };
 
 /** Une ouverture dans un mur : le long de `axis` de a0 à a1, le mur centré en `c`, l'extérieur du côté `out` */
 export interface Hole {
@@ -310,8 +333,33 @@ class Builder {
         });
         return;
       case "wagon":
-      case "car":
         this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
+        return;
+      case "car":
+      case "tram":
+        // Le demi-tour met le capot de l'autre côté de la boîte
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0), flip: !d.flip });
+        return;
+      case "twall":
+      case "minecart":
+        this.decor.push({ ...d, x0: sx(d.x1), x1: sx(d.x0), z0: sx(d.z1), z1: sx(d.z0) });
+        return;
+      case "crusher":
+        this.decor.push({
+          ...d,
+          x0: sx(d.x1),
+          x1: sx(d.x0),
+          z0: sx(d.z1),
+          z1: sx(d.z0),
+          hx0: sx(d.hx1),
+          hx1: sx(d.hx0),
+          hz0: sx(d.hz1),
+          hz1: sx(d.hz0),
+          open: d.open === 1 ? -1 : 1,
+        });
+        return;
+      case "steelstairs":
+        this.decor.push({ ...d, end: -d.end, dir: d.dir === 1 ? -1 : 1, c0: -d.c1, c1: -d.c0 });
         return;
       case "container": {
         const flip = { x0: "x1", x1: "x0", z0: "z1", z1: "z0" } as const;
@@ -1327,17 +1375,27 @@ function logPile(b: Builder, x0: number, z0: number, x1: number, z1: number, n: 
   b.add({ k: "logs", x0, z0, x1, z1, n, snow });
 }
 
-function car(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
+/** Les boîtes d'une voiture : la caisse (0,95 m), l'habitacle (1,45 m) un peu en arrière du milieu */
+function carBoxes(b: Builder, x0: number, z0: number, x1: number, z1: number) {
   const alongX = x1 - x0 >= z1 - z0;
   const inset = 0.12;
-  b.box(x0, 0, z0, x1, 0.95, z1, "rouille");
+  b.box(x0, 0, z0, x1, 0.95, z1, "decor");
   const L = alongX ? x1 - x0 : z1 - z0;
-  // L'habitacle, un peu en arrière du milieu
   const c0 = L * 0.32;
   const c1 = L * 0.8;
-  if (alongX) b.box(x0 + c0, 0.95, z0 + inset, x0 + c1, 1.45, z1 - inset, "rouille");
-  else b.box(x0 + inset, 0.95, z0 + c0, x1 - inset, 1.45, z0 + c1, "rouille");
+  if (alongX) b.box(x0 + c0, 0.95, z0 + inset, x0 + c1, 1.45, z1 - inset, "decor");
+  else b.box(x0 + inset, 0.95, z0 + c0, x1 - inset, 1.45, z0 + c1, "decor");
+}
+
+function car(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
+  carBoxes(b, x0, z0, x1, z1);
   b.add({ k: "car", x0, z0, x1, z1, color });
+}
+
+/** Un tram renversé, dans les boîtes d'une voiture */
+function tramWreck(b: Builder, x0: number, z0: number, x1: number, z1: number, color: string) {
+  carBoxes(b, x0, z0, x1, z1);
+  b.add({ k: "tram", x0, z0, x1, z1, color });
 }
 
 /** Un tas de gravats : des blocs de béton éboulés, de plus en plus petits vers le haut */
@@ -1455,7 +1513,7 @@ function ruinesSide(b: Builder) {
   rubble(b, -15.2, -2.8, 0.7, 0.8, 9);
   b.box(-13, 0, 3, -12.4, 1.05, 6.4, "beton");
   // Un tramway renversé en travers de l'avenue : on passe devant ou derrière
-  car(b, -21.4, -1.2, -19.6, 6.4, "#9a7d2e");
+  tramWreck(b, -21.4, -1.2, -19.6, 6.4, "#9a7d2e");
   b.add({ k: "lamp", x: -24, z: 6.6, h: 4.6 });
 
   // Le long de l'avenue, côté sud : un kiosque éventré, un abribus, un poste de sacs de sable
@@ -2168,7 +2226,8 @@ function aerodromeSide(b: Builder) {
     b.box(x - 0.8, 0, z - 0.45, x + 0.8, 1, z + 0.45, "decor");
     b.add({ k: "baggage", x0: x - 0.8, z0: z - 0.45, x1: x + 0.8, z1: z + 0.45 });
   }
-  b.box(-14.4, 0, -5.4, -14, 2, -2, "beton");
+  b.box(-14.4, 0, -5.4, -14, 2, -2, "decor");
+  b.add({ k: "twall", x0: -14.4, z0: -5.4, x1: -14, z1: -2, h: 2 });
   b.box(-34.4, 0, -10, -30.8, 1.05, -9.4, "beton");
   b.barrel(-12.6, 3.2);
 
@@ -2324,7 +2383,8 @@ function carriereSide(b: Builder) {
     b.box(x - 0.15, 2.8, -21.2, x + 0.15, 3, -18.8, "bois");
   }
   b.add({ k: "rail", x0: -36, x1: -14, z: -20 });
-  car(b, -38, -23.6, -36, -22.2, "#6a4a32");
+  carBoxes(b, -38, -23.6, -36, -22.2);
+  b.add({ k: "minecart", x0: -38, z0: -23.6, x1: -36, z1: -22.2, color: "#6a4a32" });
   gentleStairs(b, "x", -34, 1, -16.6, -14.6, 0, 4.5, "roche");
   boulders(b, -26, -16.2, 0.6, 0.8, 29, 4.5);
 
@@ -2336,10 +2396,12 @@ function carriereSide(b: Builder) {
     [-9, 9],
     [-5, 9],
   ] as const)
-    b.box(x - 0.15, 0, z - 0.15, x + 0.15, 3, z + 0.15, "metal");
-  b.box(-9.2, 3, 4.8, -4.8, 3.2, 9.2, "metal");
-  b.box(-8.4, 3.2, 6.2, -6, 5, 8.6, "metal");
-  gentleStairs(b, "z", 4.9, 1, -7, -5.6, 0, 3.2, "metal");
+    b.box(x - 0.15, 0, z - 0.15, x + 0.15, 3, z + 0.15, "decor");
+  b.box(-9.2, 3, 4.8, -4.8, 3.2, 9.2, "decor");
+  b.box(-8.4, 3.2, 6.2, -6, 5, 8.6, "decor");
+  b.add({ k: "crusher", x0: -9.2, z0: 4.8, x1: -4.8, z1: 9.2, y: 3.2, hx0: -8.4, hz0: 6.2, hx1: -6, hz1: 8.6, top: 5, open: -1 });
+  gentleStairs(b, "z", 4.9, 1, -7, -5.6, 0, 3.2, "decor");
+  b.add({ k: "steelstairs", axis: "z", end: 4.9, dir: 1, c0: -7, c1: -5.6, y0: 0, y1: 3.2 });
   b.add({ k: "conveyor", x0: -3.4, y0: 0.6, z0: 13, x1: -7.2, y1: 5.1, z1: 8.2 });
   boulders(b, -3, 13.4, 1.4, 1.6, 31);
   b.box(-31.6, 0, 3.2, -26.4, 1.96, 5.8, "decor");
