@@ -296,11 +296,38 @@ function EscarmoucheArt({ subject }: { subject: Extract<CardArt, { kind: "escarm
         </g>
       )}
       {subject === "pistolet" && (
-        <g transform="translate(-4 4)">
-          <path d="M-34 -16H34V-2H8L2 30H-16L-8 -2H-34Z" fill={metal} stroke="#16181b" strokeWidth="2.5" strokeLinejoin="round" />
-          <rect x="-34" y="-22" width="66" height="8" fill="#26292d" />
-          <path d="M-4 -2C-4 8 6 10 8 4" fill="none" stroke="#16181b" strokeWidth="2.5" />
-          <circle cx="-38" cy="-12" r="3" fill="#ffd28a" />
+        // De profil, le canon à droite : la culasse et ses rainures, la carcasse, le pontet et la détente, la crosse
+        // inclinée aux plaquettes de bois quadrillées, le talon du chargeur, le chien, la hausse et le guidon
+        <g transform="translate(-2 -2)">
+          <ellipse cx="-2" cy="50" rx="42" ry="4.5" fill="rgba(0,0,0,.25)" />
+          <path
+            d="M-43 -4H-14L-20 38Q-21 42 -25 42H-44Q-49 42 -48.5 37L-43 -4Z"
+            fill="#6b4a2c"
+            stroke="#16181b"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+          <path d="M-38 2H-19.5L-24 34H-42Z" fill="#4e3420" />
+          {[6, 12, 18, 24, 30].map((y) => (
+            <path key={y} d={`M${-41 + y * 0.12} ${y}L${-21 - y * 0.12} ${y - 5}`} stroke="#2d1d10" strokeWidth="1" opacity="0.7" />
+          ))}
+          <rect x="-48" y="40" width="26" height="5" rx="1.5" fill="#26292d" stroke="#16181b" strokeWidth="2" />
+          <path d="M14 -5V5Q14 15 4 15H-5Q-12 15 -12.5 7" fill="none" stroke="#26292d" strokeWidth="4" strokeLinecap="round" />
+          <path d="M1 -4Q-1 4 4 9" fill="none" stroke="#16181b" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M-44 -13H32V-6H14V-3H-44Z" fill="#2f3237" stroke="#16181b" strokeWidth="2.5" strokeLinejoin="round" />
+          <path d="M-44 -29H37L45 -23V-12H-44Z" fill={metal} stroke="#16181b" strokeWidth="2.5" strokeLinejoin="round" />
+          {[-38, -34, -30, -26].map((x) => (
+            <path key={x} d={`M${x} -26V-15`} stroke="#16181b" strokeWidth="1.6" />
+          ))}
+          <rect x="0" y="-26" width="15" height="6" rx="1" fill="#15171a" />
+          <path d="M-36 -27H33" stroke="#8a9098" strokeWidth="1.6" strokeLinecap="round" opacity="0.6" />
+          <rect x="-43" y="-33" width="6" height="4" fill="#26292d" />
+          <rect x="33" y="-32" width="4" height="3" fill="#26292d" />
+          <path d="M-44 -27L-50 -31L-49 -23Z" fill="#26292d" stroke="#16181b" strokeWidth="1.5" strokeLinejoin="round" />
+          <circle cx="45" cy="-17.5" r="2.2" fill="#0c0d0f" />
+          {[-8, 0, 8].map((dy, i) => (
+            <path key={i} d={`M50 ${-17.5 + dy * 0.3}l8 ${dy * 0.8}`} stroke="#ffd98a" strokeWidth="2" strokeLinecap="round" />
+          ))}
         </g>
       )}
       {subject === "pompe" && (
