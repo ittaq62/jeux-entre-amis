@@ -42,6 +42,64 @@ function fbm(noise: ReturnType<typeof makeNoise>, x: number, y: number, period: 
   return s / norm;
 }
 
+/**
+ * Un bruit de cellules qui boucle sur `period` cases : pour un point, la distance au germe le plus proche (f1), au
+ * suivant (f2), et le numéro de la cellule (de quoi dessiner des cailloux, des feuilles, des écailles).
+ */
+function makeCells(seed: number, period: number, stretch = 1) {
+  const gx = new Float32Array(period * period);
+  const gy = new Float32Array(period * period);
+  // Chaque cellule peut être allongée dans sa propre direction (des feuilles plutôt que des cailloux)
+  const ca = new Float32Array(period * period);
+  const sa = new Float32Array(period * period);
+  let h = seed * 2654435761;
+  const rnd = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822519) + 0x6d2b79f5;
+    h = Math.imul(h ^ (h >>> 13), 3266489917);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < period * period; i++) {
+    gx[i] = 0.12 + rnd() * 0.76;
+    gy[i] = 0.12 + rnd() * 0.76;
+    const a = rnd() * Math.PI;
+    ca[i] = Math.cos(a);
+    sa[i] = Math.sin(a);
+  }
+  const out = { f1: 0, f2: 0, id: 0 };
+  return (x: number, y: number) => {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    let f1 = 9;
+    let f2 = 9;
+    let id = 0;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const ix = (((cx + dx) % period) + period) % period;
+        const iy = (((cy + dy) % period) + period) % period;
+        const k = iy * period + ix;
+        const ex = cx + dx + gx[k]! - x;
+        const ey = cy + dy + gy[k]! - y;
+        const d = stretch === 1 ? Math.hypot(ex, ey) : Math.hypot(ex * ca[k]! + ey * sa[k]!, (ey * ca[k]! - ex * sa[k]!) * stretch);
+        if (d < f1) {
+          f2 = f1;
+          f1 = d;
+          id = k;
+        } else if (d < f2) f2 = d;
+      }
+    out.f1 = f1;
+    out.f2 = f2;
+    out.id = id;
+    return out;
+  };
+}
+
+/** Un nombre entre 0 et 1 tiré d'un entier (le ton d'un caillou, d'une feuille) */
+function hash01(i: number, salt: number): number {
+  let h = Math.imul(i ^ (salt * 0x9e3779b9), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
 export type Painter = (
   u: number,
   v: number,
@@ -149,12 +207,31 @@ export function sandTex(): SurfaceTex {
 
 /** Le gravier des allées : de petits cailloux clairs */
 export function gravelTex(): SurfaceTex {
-  return surface("gravel", 512, 1, 31, 5, (u, v, n) => {
-    const cells = n(u * 48, v * 48, 48, 1);
-    const pebble = Math.pow(clamp01((cells - 0.35) * 2.2), 0.6);
-    const tone = n(u * 90, v * 90, 90, 2);
-    const k = 0.62 + pebble * 0.3 + tone * 0.12;
-    return [226 * k, 214 * k, 190 * k, pebble];
+  // Des cailloux ronds serrés (2 cm environ), chacun son ton (blond, gris, blanc, un peu d'ocre), bombés, éclairés
+  // d'en haut, et l'ombre entre eux
+  const P = 36;
+  const cells = makeCells(31, P);
+  const tones: [number, number, number][] = [
+    [226, 214, 190],
+    [204, 198, 186],
+    [238, 232, 218],
+    [214, 190, 156],
+    [186, 178, 166],
+  ];
+  return surface("gravel2", 512, 0.7, 31, 3.2, (u, v, n) => {
+    const c = cells(u * P, v * P);
+    // (la cellule rendue est réutilisée à l'appel suivant : on garde ses valeurs)
+    const f1 = c.f1;
+    const gap = clamp01((c.f2 - c.f1) * 5);
+    const dome = Math.sqrt(clamp01(1 - f1 * 1.45));
+    const t = tones[Math.floor(hash01(c.id, 3) * tones.length)]!;
+    const shade = hash01(c.id, 7) * 0.16;
+    const grit = n(u * 200, v * 200, 200, 1);
+    // Plus clair du côté de la lumière (en haut à gauche du caillou)
+    const cs = cells(u * P - 0.08, v * P - 0.08);
+    const lit = clamp01(1 - cs.f1 * 1.45) - clamp01(1 - f1 * 1.45);
+    const k = (0.58 + dome * 0.32 + lit * 0.35 - shade + grit * 0.06) * (0.35 + 0.65 * Math.pow(gap, 0.6));
+    return [t[0] * k, t[1] * k, t[2] * k, dome * Math.pow(gap, 0.5)];
   });
 }
 
@@ -211,11 +288,44 @@ export function stoneTex(): SurfaceTex {
 
 /** Le feuillage serré du buis taillé */
 export function hedgeTex(): SurfaceTex {
-  return surface("hedge", 512, 0.8, 61, 6, (u, v, n) => {
-    const leaves = n(u * 64, v * 64, 64, 2);
-    const clumps = n(u * 10, v * 10, 10, 3);
-    const k = clamp01(0.45 + leaves * 0.5 + (clumps - 0.5) * 0.35);
-    return [mix(34, 92, k), mix(66, 140, k), mix(26, 52, k), leaves];
+  // Des petites feuilles serrées (deux couches de cellules) : chacune bombée, plus claire vers la lumière, des trous
+  // d'ombre entre elles ; des touffes plus claires ou plus sombres par-dessus
+  const A = 62;
+  const B = 43;
+  const front = makeCells(61, A, 1.7);
+  const back = makeCells(62, B, 1.5);
+  return surface("hedge2", 512, 0.8, 61, 4.5, (u, v, n) => {
+    const clumps = n(u * 6, v * 6, 6, 3) * 0.65 + n(u * 2, v * 2, 2, 2) * 0.35;
+    const f = front(u * A, v * A);
+    const fGap = clamp01((f.f2 - f.f1) * 4.5);
+    const fDome = clamp01(1 - f.f1 * 1.5);
+    const fId = f.id;
+    const b = back(u * B + 0.37, v * B + 0.61);
+    const bGap = clamp01((b.f2 - b.f1) * 4);
+    const bDome = clamp01(1 - b.f1 * 1.4);
+    // La feuille de devant si on est dedans, sinon celle de derrière (plus sombre), sinon le creux
+    const inFront = fDome * fGap > 0.18;
+    const dome = inFront ? fDome : bDome * 0.7;
+    const gap = inFront ? fGap : bGap * 0.8;
+    const lit = inFront ? clamp01(1 - front(u * A - 0.1, v * A - 0.12).f1 * 1.5) - fDome : 0;
+    const tone = hash01(inFront ? fId : b.id + 9999, 5);
+    let k = (inFront ? 0.62 : 0.4) + dome * 0.28 + lit * 0.5 + (tone - 0.5) * 0.18 + (clumps - 0.5) * 0.4;
+    k *= 0.5 + 0.5 * Math.pow(gap, 0.7);
+    k = clamp01(k);
+    const yellow = tone * 0.4 + clumps * 0.3;
+    return [mix(26, 100 + yellow * 30, k), mix(52, 146 + yellow * 12, k), mix(20, 50, k), (inFront ? 0.6 : 0.25) + dome * 0.4 * gap];
+  });
+}
+
+/** L'écorce : des sillons qui montent le long du tronc, des plaques plus claires entre eux */
+export function barkTex(): SurfaceTex {
+  return surface("bark", 256, 0.7, 91, 5, (u, v, n) => {
+    const wob = n(u * 4, v * 4, 4, 3);
+    const ridge = Math.abs(Math.sin((u * 7 + wob * 1.6) * Math.PI));
+    const plate = n(u * 16, v * 16, 16, 2);
+    const furrow = Math.pow(ridge, 0.45);
+    const k = 0.38 + furrow * 0.42 + plate * 0.2;
+    return [124 * k, 110 * k, 96 * k, furrow * 0.8 + plate * 0.2];
   });
 }
 

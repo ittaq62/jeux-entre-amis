@@ -2,7 +2,8 @@
 // (arbres, fleurs, buissons), le gazon et ses bandes de tonte, l'eau qui ondule.
 
 import * as THREE from "three";
-import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Course, Mat, MoverDef } from "../../../../shared/games/minigolf/course.ts";
 import type { SkyDef } from "../sky.ts";
 import type { ThemeKit } from "../holeMesh.ts";
@@ -172,6 +173,146 @@ export function leafyBall(detail = 2, bump = 0.12, seed = 1): THREE.BufferGeomet
   return g;
 }
 
+/** Une branche ou un tronc : un cylindre ouvert de `a` à `b` (rayons ra puis rb), ses uv en mètres */
+function limb(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg = 6): THREE.BufferGeometry {
+  const len = a.distanceTo(b) || 0.01;
+  const g = new THREE.CylinderGeometry(rb, ra, len, seg, 2, true);
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.PI * (ra + rb), uv.getY(i) * len);
+  g.translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+  g.translate(a.x, a.y, a.z);
+  return g;
+}
+
+export type TreeShape = "rond" | "haut" | "large";
+
+/**
+ * Un arbre feuillu d'environ `h` mètres : un tronc qui s'évase au pied et penche un peu, des maîtresses branches qui
+ * montent en s'écartant, et au bout de chacune une touffe de feuillage (des boules bosselées serrées, plus une au
+ * sommet et d'autres entre elles). « rond » : un tilleul ; « haut » : un peuplier, en colonne ; « large » : un arbre
+ * qui s'étale en parasol. Le bois et les feuilles à part (deux matières) ; les feuilles portent une couleur par
+ * sommet, plus sombre dessous et au cœur, plus claire au soleil (la matière doit avoir `vertexColors`).
+ */
+export function broadleafTree(
+  seed: number,
+  shape: TreeShape = "rond",
+  h = 5,
+): { wood: THREE.BufferGeometry; leaves: THREE.BufferGeometry } {
+  const rng = seeded(seed * 7919 + 13);
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const woods: THREE.BufferGeometry[] = [];
+  const r0 = h * 0.034;
+  const th = h * (shape === "haut" ? 0.28 : shape === "large" ? 0.36 : 0.4);
+  const lean = V((rng() - 0.5) * h * 0.06, 0, (rng() - 0.5) * h * 0.06);
+  const mid = V(lean.x * 0.35 + (rng() - 0.5) * 0.06, th * 0.5, lean.z * 0.35 + (rng() - 0.5) * 0.06);
+  const top = V(lean.x, th, lean.z);
+  woods.push(limb(V(0, -0.15, 0), mid, r0 * 1.12, r0 * 0.9, 8), limb(mid, top, r0 * 0.9, r0 * 0.72, 8));
+  // Le pied qui s'évase
+  woods.push(limb(V(0, -0.05, 0), V(lean.x * 0.05, h * 0.07, lean.z * 0.05), r0 * 1.9, r0 * 1.05, 8));
+  const clumps: { c: THREE.Vector3; r: number; sy: number; detail: number }[] = [];
+  const crown = V(top.x, h * (shape === "haut" ? 0.6 : shape === "large" ? 0.66 : 0.72), top.z);
+  const nb = shape === "haut" ? 4 : 4 + Math.floor(rng() * 2);
+  for (let i = 0; i < nb; i++) {
+    const az = (i / nb) * Math.PI * 2 + rng() * 0.9;
+    const el = shape === "haut" ? 1.2 + rng() * 0.2 : shape === "large" ? 0.32 + rng() * 0.3 : 0.62 + rng() * 0.35;
+    const L = h * (shape === "haut" ? 0.2 + rng() * 0.1 : shape === "large" ? 0.4 + rng() * 0.12 : 0.28 + rng() * 0.1);
+    const start = mid.clone().lerp(top, 0.7 + rng() * 0.3);
+    const end = start.clone().add(V(Math.cos(el) * Math.cos(az) * L, Math.sin(el) * L, Math.cos(el) * Math.sin(az) * L));
+    woods.push(limb(start, end, r0 * 0.5, r0 * 0.2, 5));
+    const R = h * (shape === "large" ? 0.19 : shape === "haut" ? 0.13 : 0.17) * (0.85 + rng() * 0.3);
+    clumps.push({ c: end.clone().add(V(0, R * 0.35, 0)), r: R, sy: shape === "large" ? 0.6 : 0.86, detail: 2 });
+    // Une touffe entre le bout de la branche et le cœur, pour fermer le houppier
+    const f = end
+      .clone()
+      .lerp(crown, 0.5)
+      .add(V(0, R * 0.25, 0));
+    clumps.push({ c: f, r: R * 0.82, sy: shape === "large" ? 0.6 : 0.85, detail: 1 });
+  }
+  if (shape === "haut") {
+    for (let k = 0; k < 4; k++)
+      clumps.push({
+        c: V(top.x + (rng() - 0.5) * 0.25, th + (h - th) * (0.18 + k * 0.22), top.z + (rng() - 0.5) * 0.25),
+        r: h * (0.15 - k * 0.018),
+        sy: 1.45,
+        detail: 2,
+      });
+  } else {
+    clumps.push({
+      c: crown.clone().add(V(0, h * 0.1, 0)),
+      r: h * (shape === "large" ? 0.2 : 0.21),
+      sy: shape === "large" ? 0.6 : 0.9,
+      detail: 2,
+    });
+  }
+  // Les feuilles : chaque touffe bosselée, sa couleur par sommet
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const k of clumps) {
+    y0 = Math.min(y0, k.c.y - k.r * k.sy);
+    y1 = Math.max(y1, k.c.y + k.r * k.sy);
+  }
+  const leafGeos = clumps.map((k, i) => {
+    const g = leafyBall(k.detail, 0.2, seed * 31 + i);
+    g.scale(k.r, k.r * k.sy, k.r);
+    g.translate(k.c.x, k.c.y, k.c.z);
+    const p = g.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(p.count * 3);
+    const tone = 0.92 + rng() * 0.16;
+    for (let j = 0; j < p.count; j++) {
+      const up = (p.getY(j) - k.c.y) / (k.r * k.sy);
+      const t = (p.getY(j) - y0) / Math.max(0.01, y1 - y0);
+      const out = Math.min(1, Math.hypot(p.getX(j) - crown.x, p.getZ(j) - crown.z) / (h * 0.35));
+      const v = (0.62 + 0.38 * (up * 0.5 + 0.5)) * (0.78 + 0.3 * t) * (0.86 + 0.18 * out) * tone;
+      col[j * 3] = v * (1 + 0.1 * t);
+      col[j * 3 + 1] = v;
+      col[j * 3 + 2] = v * (0.9 - 0.08 * t);
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    return g;
+  });
+  const leaves = mergeGeometries(leafGeos)!;
+  const wood = mergeGeometries(woods)!;
+  for (const g of [...leafGeos, ...woods]) g.dispose();
+  return { wood, leaves };
+}
+
+/**
+ * Un pavé aux arêtes arrondies (une haie taillée, une plate-bande), un peu bosselé en surface, ses uv en mètres selon
+ * le côté. `bump` : la hauteur des bosses.
+ */
+export function roundedSlab(w: number, h: number, d: number, radius: number, bump = 0, seed = 1): THREE.BufferGeometry {
+  const g0 = new RoundedBoxGeometry(w, h, d, 2, Math.min(radius, w / 2.1, h / 2.1, d / 2.1));
+  g0.deleteAttribute("uv");
+  const g = mergeVertices(g0);
+  g0.dispose();
+  g.computeVertexNormals();
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const n = g.attributes.normal as THREE.BufferAttribute;
+  if (bump > 0) {
+    const hash = (x: number, y: number, z: number) => {
+      const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + seed * 4.1) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    for (let i = 0; i < p.count; i++) {
+      const o = (hash(Math.round(p.getX(i) * 50), Math.round(p.getY(i) * 50), Math.round(p.getZ(i) * 50)) - 0.5) * bump * 2;
+      p.setXYZ(i, p.getX(i) + n.getX(i) * o, p.getY(i) + n.getY(i) * o, p.getZ(i) + n.getZ(i) * o);
+    }
+    g.computeVertexNormals();
+  }
+  const uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    const ax = Math.abs(n.getX(i));
+    const ay = Math.abs(n.getY(i));
+    const az = Math.abs(n.getZ(i));
+    const [a, b] = ay >= ax && ay >= az ? [p.getX(i), p.getZ(i)] : ax >= az ? [p.getZ(i), p.getY(i)] : [p.getX(i), p.getY(i)];
+    uv[i * 2] = a;
+    uv[i * 2 + 1] = b;
+  }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
 /** Le sol du décor : un grand disque d'herbe (ou de sable, de neige…) au niveau du sol hors parcours */
 export function groundDisc(mat: THREE.Material, y: number, radius = 160): THREE.Mesh {
   const g = new THREE.CircleGeometry(radius, 64);
@@ -276,7 +417,7 @@ export function plainKit(o: {
   felt: THREE.Material;
   ground: (mat: Mat, look?: string) => THREE.Material | null;
   side: THREE.Material;
-  rail: (look?: string) => { material: THREE.Material; extra: number; widen: number; round?: boolean };
+  rail: (look?: string) => { material: THREE.Material; extra: number; widen: number; round?: boolean; bevel?: number };
   wall: (look?: string) => THREE.Material;
   post: ThemeKit["post"];
   mover: (def: MoverDef, c: Course) => THREE.Object3D | null;

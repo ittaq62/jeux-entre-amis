@@ -12,22 +12,32 @@ function arcOpen(c: Pt, r: number, a0: number, a1: number): Pt[] {
   return arc(c[0], c[1], r, a0, a1).slice(0, -1);
 }
 
-// 1. L'allée d'honneur : tout droit, deux ifs taillés en cône et deux bosses douces
+// 1. L'allée d'honneur : le départ sur la terrasse, une rampe douce qui descend vers la pelouse ; elle s'élargit en
+// ovale autour de deux ifs taillés en cône, et le trou attend au bout de l'arrondi
 const allee = hole(
   "L'allée d'honneur",
   2,
   (b) => {
-    b.tile([[-0.9, 0], [0.9, 0], ...arc(0, -8.1, 0.9, 0, -Math.PI, 12).slice(0, -1), [-0.9, -8.1]] as Pt[], 0, "green", {
-      look: "buis",
-      bumps: [
-        { c: [0.3, -4], r: 0.7, a: 0.05 },
-        { c: [-0.35, -6.3], r: 0.6, a: 0.04 },
-      ],
-    });
-    b.post([0.36, -2.6], 0.15, 0.55, { look: "if" }).post([-0.4, -5.3], 0.15, 0.55, { look: "if" });
-    b.tee(0, -0.45, UP).cup(0, -8.2);
+    const TOP = 0.26;
+    b.tile(box(-0.9, -1.9, 0.9, 0), TOP, "green", { look: "buis" });
+    b.tile(box(-0.9, -3.5, 0.9, -1.9), ramp([0, -1.9], [0, -3.5], TOP, 0, "s"), "green", { look: "buis" });
+    // La pelouse : ses bords s'écartent en douceur puis se resserrent vers l'arrondi du fond
+    const side = (k: number) => {
+      const u = k / 10;
+      return [0.9 + 0.42 * Math.sin(Math.PI * u), -3.5 - 4.6 * u] as Pt;
+    };
+    const right = Array.from({ length: 10 }, (_, k) => side(k + 1));
+    const left = right.map(([x, z]) => [-x, z] as Pt).reverse();
+    b.tile(
+      [[-0.9, -3.5], [0.9, -3.5], ...right.slice(0, -1), ...arc(0, -8.1, 0.9, 0, -Math.PI, 12).slice(0, -1), ...left.slice(1)] as Pt[],
+      0,
+      "green",
+      { look: "buis", bumps: [{ c: [0.45, -5.9], r: 0.65, a: 0.04 }] },
+    );
+    b.post([0.42, -4.7], 0.15, 0.55, { look: "if" }).post([-0.48, -6.5], 0.15, 0.55, { look: "if" });
+    b.tee(0, -0.45, UP).cup(0, -8.25);
   },
-  { hint: "Pour se mettre en jambes : évite les ifs." },
+  { hint: "Pour se mettre en jambes : descends la rampe et évite les ifs." },
 );
 
 // 2. Le parterre : un coude autour d'un massif de fleurs, une fosse de gravier dans le virage
