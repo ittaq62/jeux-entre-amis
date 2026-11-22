@@ -144,6 +144,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de bowling",
   },
+  {
+    id: "billard",
+    name: "Billard",
+    desc: "Du billard en 3D, de 2 à 8, dans de belles salles : pleines et rayées, la bille 9, le Killer à plusieurs, ou trois billes sans poches. On vise, on recule la queue, on choisit son effet ; les beaux coups repassent au ralenti.",
+    keywords: "billard queue poche tapis vert carambole pool snooker killer bande",
+    players: [2, GAME_SEATS.billard.max],
+    quick: "Partie rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de billard",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

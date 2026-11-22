@@ -32,6 +32,7 @@ const GAMES: GameId[] = [
   "culbute",
   "minigolf",
   "bowling",
+  "billard",
 ];
 
 const TITLES: TourTitle[] = [

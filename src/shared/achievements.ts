@@ -464,6 +464,79 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Devin",
     description: "Marquer 10 points de pronostics dans une même partie.",
   },
+  // Billard
+  {
+    id: "billard-first-win",
+    game: "billard",
+    chip: "1re",
+    tone: "green",
+    title: "Maître du tapis",
+    description: "Gagner une partie de billard.",
+  },
+  {
+    id: "billard-regular",
+    game: "billard",
+    chip: "25",
+    tone: "blue",
+    title: "Pilier de salle",
+    description: "Jouer 25 parties de billard.",
+  },
+  {
+    id: "billard-run5",
+    game: "billard",
+    chip: "5",
+    tone: "red",
+    title: "La série",
+    description: "Rentrer cinq billes d'affilée sans rendre la main.",
+  },
+  {
+    id: "billard-break-run",
+    game: "billard",
+    chip: "C+F",
+    tone: "black",
+    title: "Casse et file",
+    description: "Gagner une manche depuis sa casse, sans laisser l'adversaire toucher la queue.",
+  },
+  {
+    id: "billard-nine-break",
+    game: "billard",
+    chip: "9",
+    tone: "ivory",
+    title: "La 9 à la casse",
+    description: "Rentrer la 9 sur la casse.",
+  },
+  {
+    id: "billard-bank",
+    game: "billard",
+    chip: "∠",
+    tone: "green",
+    title: "Par la bande",
+    description: "Rentrer une bille qui a d'abord touché une bande.",
+  },
+  {
+    id: "billard-three-rails",
+    game: "billard",
+    chip: "3",
+    tone: "red",
+    title: "Trois bandes",
+    description: "Réussir un carambolage après trois bandes ou plus.",
+  },
+  {
+    id: "billard-survivor",
+    game: "billard",
+    chip: "♥",
+    tone: "red",
+    title: "Le survivant",
+    description: "Gagner une partie de Killer.",
+  },
+  {
+    id: "billard-all",
+    game: "billard",
+    chip: "4",
+    tone: "blue",
+    title: "Touche-à-tout",
+    description: "Jouer aux quatre jeux du billard : pleines et rayées, la bille 9, le Killer et les trois billes.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -690,6 +763,32 @@ export function earnedBowlingAchievements(o: BowlingOutcome): string[] {
   add("bowling-200", o.stats.full > 200);
   add("bowling-perfect", o.stats.perfect >= 1);
   add("bowling-seer", o.stats.seer >= 10);
+  return out;
+}
+
+export interface BillardOutcome {
+  won: boolean;
+  played: number;
+  stats: { bestRun: number; breakRuns: number; nineBreak: number; banks: number; threeRails: number; killer: number };
+  /** Ses parties de chaque jeu, cumulées (celle-ci comprise) */
+  totals: Record<string, number>;
+}
+
+export function earnedBillardAchievements(o: BillardOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("billard-first-win", o.won);
+  add("billard-regular", o.played >= 25);
+  add("billard-run5", o.stats.bestRun >= 5);
+  add("billard-break-run", o.stats.breakRuns >= 1);
+  add("billard-nine-break", o.stats.nineBreak >= 1);
+  add("billard-bank", o.stats.banks >= 1);
+  add("billard-three-rails", o.stats.threeRails >= 1);
+  add("billard-survivor", o.won && o.stats.killer >= 1);
+  add(
+    "billard-all",
+    ["huit", "neuf", "killer", "carambole"].every((k) => (o.totals[k] ?? 0) >= 1),
+  );
   return out;
 }
 

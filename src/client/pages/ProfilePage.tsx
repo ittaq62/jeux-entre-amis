@@ -46,6 +46,7 @@ interface Profile {
   escarmouche?: GameStats;
   minigolf?: GameStats;
   bowling?: GameStats;
+  billard?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -136,6 +137,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const bowling = profile.bowling ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const bwt = bowling.totals as Record<string, number>;
   const showBowling = games.includes("bowling") || bowling.played > 0;
+  const billard = profile.billard ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const blt = billard.totals as Record<string, number>;
+  const showBillard = games.includes("billard") || billard.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
@@ -153,6 +157,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       "escarmouche",
       "minigolf",
       "bowling",
+      "billard",
       "tour",
     ] as TableGame[]
   ).filter(
@@ -176,9 +181,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                       ? showMinigolf
                       : g === "bowling"
                         ? showBowling
-                        : g === "bolides"
-                          ? showBolides
-                          : showTour),
+                        : g === "billard"
+                          ? showBillard
+                          : g === "bolides"
+                            ? showBolides
+                            : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -279,6 +286,14 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 <strong className="num">{bowling.points.toLocaleString("fr-FR")}</strong> points au bowling
                 <span className="profile-elo">
                   Elo <strong className="num">{bowling.elo}</strong>
+                </span>
+              </p>
+            )}
+            {showBillard && billard.played > 0 && (
+              <p className="profile-points">
+                <strong className="num">{billard.points.toLocaleString("fr-FR")}</strong> points au billard
+                <span className="profile-elo">
+                  Elo <strong className="num">{billard.elo}</strong>
                 </span>
               </p>
             )}
@@ -522,6 +537,27 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               </section>
             )}
 
+            {showBillard && (
+              <section className="carnet panel">
+                <h2>Le tapis vert</h2>
+                <p className="carnet-summary">
+                  {billard.played === 0
+                    ? "Aucune partie de billard pour l'instant."
+                    : `${billard.played} partie${billard.played > 1 ? "s" : ""}, ${billard.won} gagnée${billard.won > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Billes rentrées et points marqués" value={blt.pots} strong />
+                  <LedgerRow label="Coups joués" value={blt.shots} />
+                  <LedgerRow label="Manches gagnées sur la dernière bille" value={blt.racks} />
+                  <LedgerRow label="Plus longue série" value={blt.bestRun} />
+                  <LedgerRow label="Billes rentrées par la bande" value={blt.banks} />
+                  <LedgerRow label="Casses et files" value={blt.breakRuns} />
+                  <LedgerRow label="Carambolages à trois bandes" value={blt.threeRails} />
+                  <LedgerRow label="Fautes" value={blt.fouls} />
+                </dl>
+              </section>
+            )}
+
             {showTour && (
               <section className="carnet panel">
                 <h2>Les tournées</h2>
@@ -669,6 +705,14 @@ function recentLabel(g: Profile["recent"][number]): string {
   if (g.game === "escarmouche") return `Escarmouche, ${ESC_MODES[g.variant] ?? "combat"}`;
   if (g.game === "minigolf") return g.variant in COURSES ? `Minigolf, ${COURSES[g.variant as CourseId].name}` : "Minigolf";
   if (g.game === "bowling") return g.variant === "spares" ? "Bowling, défi des spares" : "Bowling";
+  if (g.game === "billard")
+    return g.variant === "neuf"
+      ? "Billard, la bille 9"
+      : g.variant === "killer"
+        ? "Billard, le Killer"
+        : g.variant === "carambole"
+          ? "Billard, trois billes"
+          : "Billard";
   if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
   return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
 }

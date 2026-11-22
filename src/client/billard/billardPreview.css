@@ -1,0 +1,80 @@
+/* L'illustration du billard sur l'accueil */
+.bl-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 60%, #2a6a44, #0c1a12 72%);
+}
+
+.bl-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 55%;
+  animation: bl-preview-drift 24s ease-in-out infinite alternate;
+}
+
+/* La lumière chaude de la lampe, qui respire */
+.bl-preview-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 55% 30% at 50% 18%, rgba(255, 214, 150, 0.22), transparent 70%);
+  mix-blend-mode: screen;
+  animation: bl-preview-glow 5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* Un reflet qui glisse lentement sur le vernis */
+.bl-preview-shine {
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 236, 200, 0.14) 50%, transparent 60%);
+  animation: bl-preview-shine 10s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes bl-preview-drift {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-0.8%, -1%);
+  }
+}
+
+@keyframes bl-preview-glow {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bl-preview-shine {
+  0% {
+    transform: translateX(-40%);
+  }
+  60%,
+  100% {
+    transform: translateX(40%);
+  }
+}
+
+.game-stage.is-paused .bl-preview img,
+.game-stage.is-paused .bl-preview-glow,
+.game-stage.is-paused .bl-preview-shine {
+  animation-play-state: paused;
+}
+
+.game-stage.is-still .bl-preview img,
+.game-stage.is-still .bl-preview-glow,
+.game-stage.is-still .bl-preview-shine {
+  animation: none;
+}
+
+.game-stage.is-still .bl-preview-shine {
+  opacity: 0;
+}

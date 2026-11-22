@@ -27,6 +27,13 @@ const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
   minigolf: { classique: "Neuf trous d'un parcours tiré au sort.", six: "Six trous d'un parcours tiré au sort." },
   // Une table de bowling joue dix frames (la tournée en joue trois)
   bowling: { classique: "Dix frames : strikes et spares comptés comme au vrai bowling." },
+  // Une table de billard joue les manches, vies et points de l'hôte (la tournée les raccourcit)
+  billard: {
+    huit: "Sa famille, puis la noire dans la poche annoncée.",
+    neuf: "Toujours la plus petite bille d'abord : qui rentre la 9 gagne la manche.",
+    killer: "Chacun ses vies : à chaque passage, il faut rentrer une bille.",
+    carambole: "La carambole : sa bille doit toucher les deux autres.",
+  },
 };
 
 /** Les réglages que fixe le tirage : ceux-là ne se choisissent plus à la main tant que les règles sont au hasard */

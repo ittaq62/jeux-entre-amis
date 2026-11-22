@@ -25,6 +25,7 @@ export const BOT_ELO = {
   escarmouche: { facile: 800, moyen: 1000, fort: 1200 },
   minigolf: { facile: 800, moyen: 1000, fort: 1200 },
   bowling: { facile: 800, moyen: 1000, fort: 1200 },
+  billard: { facile: 800, moyen: 1000, fort: 1200 },
 } as const;
 
 export function botElo(game: GameId, botLevel?: string): number {
@@ -38,6 +39,7 @@ export function botElo(game: GameId, botLevel?: string): number {
   if (game === "escarmouche") return BOT_ELO.escarmouche[botLevel as keyof typeof BOT_ELO.escarmouche] ?? BOT_ELO.escarmouche.moyen;
   if (game === "minigolf") return BOT_ELO.minigolf[botLevel as keyof typeof BOT_ELO.minigolf] ?? BOT_ELO.minigolf.moyen;
   if (game === "bowling") return BOT_ELO.bowling[botLevel as keyof typeof BOT_ELO.bowling] ?? BOT_ELO.bowling.moyen;
+  if (game === "billard") return BOT_ELO.billard[botLevel as keyof typeof BOT_ELO.billard] ?? BOT_ELO.billard.moyen;
   return BOT_ELO.uno;
 }
 

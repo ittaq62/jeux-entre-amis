@@ -69,6 +69,8 @@ export function GameTicket({
             <MinigolfArt />
           ) : game === "bowling" ? (
             <BowlingArt />
+          ) : game === "billard" ? (
+            <BillardArt />
           ) : (
             <NavalArt />
           )}
@@ -105,6 +107,24 @@ function BowlingArt() {
       <circle cx="42.5" cy="54" r="1" fill="#0b1430" />
       <circle cx="44" cy="56.5" r="1" fill="#0b1430" />
       <path d="M14 62C22 59 28 58 32 57" stroke="#fbf5e6" strokeWidth="1.2" strokeDasharray="2 3" opacity="0.7" fill="none" />
+    </>
+  );
+}
+
+/** La blanche qui file vers la noire, au bord d'une poche */
+function BillardArt() {
+  return (
+    <>
+      <path d="M6 64L22 34H78L94 64Z" fill="#1f7a4c" />
+      <path d="M6 64L22 34H78L94 64Z" fill="none" stroke="#5a2a14" strokeWidth="4" strokeLinejoin="round" />
+      <ellipse cx="80" cy="36" rx="5" ry="2.6" fill="#0c1a12" />
+      <path d="M22 60C32 54 44 50 56 46" stroke="#fbf5e6" strokeWidth="1.2" strokeDasharray="2 3" opacity="0.7" fill="none" />
+      <circle cx="64" cy="44" r="6.5" fill="#141414" />
+      <circle cx="64" cy="44" r="2.6" fill="#fbf5e6" />
+      <circle cx="40" cy="54" r="6.5" fill="#f6f2e6" />
+      <circle cx="37.6" cy="51.6" r="1.8" fill="#fff" />
+      <path d="M8 76L34 57" stroke="#c89a5a" strokeWidth="3" strokeLinecap="round" />
+      <path d="M33 58L35 56.5" stroke="#3a6fb8" strokeWidth="3" strokeLinecap="round" />
     </>
   );
 }

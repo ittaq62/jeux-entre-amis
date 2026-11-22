@@ -1185,7 +1185,13 @@ export class TourRoom extends DurableObject<Env> {
       // UNO, Mèche et Capitale : à toutes les tailles d'équipes égales (on y voit son coéquipier, la partie s'arrête
       // quand il ne reste qu'une équipe en jeu) ; ailleurs, seulement le 2 contre 2
       const anySize =
-        game === "uno" || game === "meche" || game === "capitale" || game === "culbute" || game === "minigolf" || game === "bowling";
+        game === "uno" ||
+        game === "meche" ||
+        game === "capitale" ||
+        game === "culbute" ||
+        game === "minigolf" ||
+        game === "bowling" ||
+        game === "billard";
       // Crampons se joue toujours en deux équipes, que l'ordinateur complète : celles de la tournée, quelle que soit leur taille
       const fair =
         game === "crampons"

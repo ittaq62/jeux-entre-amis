@@ -4354,6 +4354,10 @@ h3 .hint {
   --art: linear-gradient(165deg, #d9336f 0%, #3a1430 100%);
 }
 
+.game-ticket.is-billard {
+  --art: linear-gradient(165deg, #2f9a62 0%, #0f3a24 100%);
+}
+
 .game-ticket.is-escarmouche {
   --art: linear-gradient(165deg, #8a6a4a 0%, #2d2620 100%);
 }

@@ -31,8 +31,19 @@ describe("la recherche de jeux", () => {
   });
 
   it("on trouve par nombre de joueurs", () => {
-    expect(find("8")).toEqual(["tour", "uno", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf", "bowling"]);
-    expect(find("à 8 joueurs")).toEqual(["tour", "uno", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf", "bowling"]);
+    expect(find("8")).toEqual(["tour", "uno", "meche", "bolides", "crampons", "culbute", "escarmouche", "minigolf", "bowling", "billard"]);
+    expect(find("à 8 joueurs")).toEqual([
+      "tour",
+      "uno",
+      "meche",
+      "bolides",
+      "crampons",
+      "culbute",
+      "escarmouche",
+      "minigolf",
+      "bowling",
+      "billard",
+    ]);
     expect(find("6 personnes")).toEqual(everything);
     expect(find("1 joueur")).toEqual(["bricks", "minigolf", "bowling"]);
     expect(find("solo")).toEqual(["bricks"]);

@@ -1,0 +1,773 @@
+/* Billard : l'écran de partie, le tableau des scores, la réglette de force, le point de frappe, le choix de la queue */
+
+.bl-game {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #0b0806;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.bl-stage,
+.bl-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.bl-top {
+  position: absolute;
+  top: calc(10px + var(--safe-top, 0px));
+  left: calc(10px + var(--safe-left, 0px));
+  right: calc(10px + var(--safe-right, 0px));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.bl-top > * {
+  pointer-events: auto;
+}
+
+.bl-top-right {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.bl-icon-btn {
+  position: relative;
+  color: #fff;
+  background: rgba(10, 16, 12, 0.66);
+  border-radius: 12px;
+}
+
+.bl-icon-btn.is-on {
+  background: rgba(242, 199, 90, 0.92);
+  color: #2a1a06;
+}
+
+.bl-btn-label {
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+.bl-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger, #e5533d);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* Le tableau des scores, en haut */
+.bl-board {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.bl-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+  max-width: 240px;
+  padding: 7px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(16, 30, 22, 0.88), rgba(8, 16, 12, 0.84));
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(242, 199, 90, 0.14);
+  backdrop-filter: blur(6px);
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.bl-side.is-turn {
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 2px rgba(242, 199, 90, 0.85);
+  transform: translateY(1px);
+}
+
+.bl-side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bl-side-head strong {
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bl-racks,
+.bl-points {
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: rgba(242, 199, 90, 0.92);
+  color: #2a1a06;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.bl-points small {
+  font-weight: 600;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.bl-side-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 16px;
+}
+
+.bl-side-sub .hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.bl-team-names {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bl-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.bl-board.is-many {
+  gap: 6px;
+}
+
+.bl-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  background: rgba(10, 18, 14, 0.82);
+  font-size: 13px;
+  backdrop-filter: blur(6px);
+}
+
+.bl-chip.is-turn {
+  box-shadow: inset 0 0 0 2px rgba(242, 199, 90, 0.85);
+}
+
+.bl-chip.is-out {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.bl-chip-name {
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bl-hearts {
+  display: inline-flex;
+  gap: 1px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 13px;
+  letter-spacing: -1px;
+}
+
+.bl-hearts .is-on {
+  color: #ff5a6e;
+  text-shadow: 0 0 6px rgba(255, 90, 110, 0.5);
+}
+
+.bl-ball-dot,
+.bl-cloth-dot {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  box-shadow:
+    inset -2px -3px 5px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  vertical-align: middle;
+}
+
+/* À qui de jouer, et le temps */
+.bl-turn {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + var(--safe-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 999px;
+  background: rgba(10, 16, 12, 0.78);
+  backdrop-filter: blur(6px);
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.bl-turn.is-mine {
+  background: rgba(30, 90, 56, 0.9);
+}
+
+.bl-turn small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0.85;
+}
+
+.bl-clock {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+
+.bl-clock.is-late {
+  background: rgba(200, 40, 40, 0.92);
+  animation: bl-pulse 1s ease-in-out infinite;
+}
+
+@keyframes bl-pulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.bl-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(64px + var(--safe-bottom, 0px));
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 200px));
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: rgba(10, 16, 12, 0.6);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* La réglette de force : la queue qu'on tire vers soi */
+.bl-power {
+  position: absolute;
+  right: calc(18px + var(--safe-right, 0px));
+  top: 50%;
+  transform: translateY(-46%);
+  width: 58px;
+  height: min(52vh, 360px);
+  border-radius: 29px;
+  background: linear-gradient(180deg, rgba(10, 16, 12, 0.72), rgba(10, 16, 12, 0.85));
+  box-shadow:
+    inset 0 0 0 1px rgba(242, 199, 90, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.bl-power:active {
+  cursor: grabbing;
+}
+
+.bl-power-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  background: linear-gradient(180deg, rgba(120, 220, 140, 0.55), rgba(242, 199, 90, 0.7) 55%, rgba(230, 70, 50, 0.85));
+  border-radius: 29px 29px 0 0;
+}
+
+.bl-power-mark {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.bl-power-grip {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  height: 44px;
+  margin-top: 2px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #4a2a16, #22120a);
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.bl-power-grip span {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  bottom: 8px;
+  width: 10px;
+  transform: translateX(-50%);
+  border-radius: 5px;
+  background: repeating-linear-gradient(180deg, #1a1a1c 0 3px, #3a3a40 3px 5px);
+}
+
+.bl-power-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Le point de frappe */
+.bl-tip-picker {
+  position: absolute;
+  left: calc(16px + var(--safe-left, 0px));
+  bottom: calc(80px + var(--safe-bottom, 0px));
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #ffffff 0 8%, #f2eee2 40%, #c9c2b0 85%, #a8a090 100%);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.45),
+    inset -6px -8px 14px rgba(0, 0, 0, 0.22);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.bl-tip-cross {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 0.5px),
+      rgba(0, 0, 0, 0.16) calc(50% - 0.5px),
+      rgba(0, 0, 0, 0.16) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ),
+    linear-gradient(
+      0deg,
+      transparent calc(50% - 0.5px),
+      rgba(0, 0, 0, 0.16) calc(50% - 0.5px),
+      rgba(0, 0, 0, 0.16) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    );
+  border-radius: 50%;
+}
+
+.bl-tip-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #6aa6ff, #2a5ab8);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 2px 5px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.bl-tip-picker small {
+  position: absolute;
+  left: 50%;
+  bottom: -20px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  opacity: 0.85;
+  pointer-events: none;
+  text-shadow: 0 1px 3px #000;
+}
+
+.bl-react {
+  position: absolute;
+  left: calc(14px + var(--safe-left, 0px));
+  bottom: calc(16px + var(--safe-bottom, 0px));
+}
+
+.bl-slow {
+  position: absolute;
+  top: calc(80px + var(--safe-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  border-radius: 999px;
+  background: rgba(200, 40, 40, 0.85);
+  font-family: var(--font-title);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: bl-blink 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes bl-blink {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Les annonces */
+.bl-banner {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 30px;
+  border-radius: 22px;
+  background: rgba(10, 16, 12, 0.8);
+  text-align: center;
+  pointer-events: none;
+  animation: bl-banner 2.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.bl-banner strong {
+  font-family: var(--font-title);
+  font-size: clamp(28px, 6vw, 54px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.bl-banner small {
+  font-size: 15px;
+  opacity: 0.9;
+}
+
+.bl-banner.is-great {
+  background: radial-gradient(circle at 50% 40%, rgba(255, 220, 120, 0.96), rgba(200, 120, 30, 0.95));
+  color: #2a1606;
+  box-shadow: 0 0 80px rgba(255, 190, 90, 0.6);
+}
+
+.bl-banner.is-great strong {
+  font-size: clamp(38px, 9vw, 82px);
+  text-shadow: 0 3px 0 rgba(255, 255, 255, 0.45);
+}
+
+.bl-banner.is-good {
+  background: rgba(30, 110, 70, 0.92);
+}
+
+.bl-banner.is-bad {
+  background: rgba(150, 40, 30, 0.9);
+}
+
+@keyframes bl-banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20px) scale(0.6) rotate(-4deg);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.06) rotate(1deg);
+  }
+  20% {
+    transform: translate(-50%, 0) scale(1) rotate(0);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.96);
+  }
+}
+
+.bl-intro {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 26px;
+  border-radius: 18px;
+  background: rgba(10, 16, 12, 0.72);
+  text-align: center;
+  pointer-events: none;
+  animation: bl-fade 0.8s ease both;
+}
+
+.bl-intro strong {
+  font-family: var(--font-title);
+  font-size: clamp(26px, 5vw, 40px);
+}
+
+@keyframes bl-fade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+
+/* Le menu, l'aide */
+.bl-menu {
+  position: absolute;
+  top: calc(60px + var(--safe-top, 0px));
+  right: calc(10px + var(--safe-right, 0px));
+  display: flex;
+  flex-direction: column;
+  width: min(300px, 86vw);
+  max-height: calc(100dvh - 72px - var(--safe-top, 0px));
+  overflow-y: auto;
+  padding: 6px;
+  color: var(--text);
+}
+
+.bl-menu-stats {
+  padding: 4px 12px;
+}
+
+.bl-help-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.bl-help {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  color: var(--text);
+}
+
+.bl-help-text h3 {
+  margin: 12px 0 4px;
+  font-size: 16px;
+}
+
+.bl-help-text ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.bl-help-text li {
+  margin: 4px 0;
+}
+
+/* La fin de partie */
+.bl-final {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(6, 10, 8, 0.45);
+  overflow-y: auto;
+}
+
+.bl-final-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(620px, 100%);
+  padding: 18px;
+  color: var(--text);
+}
+
+.bl-final-card h1 {
+  margin: 0;
+  font-family: var(--font-title);
+}
+
+.bl-final-card .gameover-elo {
+  color: rgba(244, 236, 220, 0.72);
+}
+
+.bl-final-card .gameover-elo strong {
+  color: #f4ecdc;
+}
+
+.bl-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bl-ranking li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.05));
+}
+
+.bl-ranking li.is-first {
+  background: linear-gradient(90deg, rgba(242, 199, 90, 0.35), rgba(242, 199, 90, 0.08));
+}
+
+.bl-ranking li.is-me strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bl-rank {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.12);
+  font-weight: 800;
+}
+
+.bl-rank-name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.bl-rank-name small {
+  opacity: 0.75;
+}
+
+.bl-rank-score {
+  font-weight: 700;
+}
+
+.bl-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Le choix de la queue, au salon */
+.bl-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bl-picker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.bl-picker-balls {
+  display: flex;
+  gap: 4px;
+}
+
+.bl-cue-swatch {
+  display: block;
+  max-width: 100%;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.bl-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bl-choice {
+  gap: 6px;
+}
+
+.bl-choice.is-locked {
+  opacity: 0.6;
+}
+
+.bl-choice small {
+  opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+  .bl-btn-label {
+    display: none;
+  }
+
+  .bl-side {
+    min-width: 0;
+    padding: 5px 9px;
+  }
+
+  .bl-side-head strong {
+    font-size: 13px;
+  }
+
+  .bl-power {
+    width: 52px;
+    right: calc(10px + var(--safe-right, 0px));
+  }
+
+  .bl-tip-picker {
+    width: 76px;
+    height: 76px;
+    bottom: calc(76px + var(--safe-bottom, 0px));
+  }
+
+  .bl-tip {
+    max-width: calc(100vw - 170px);
+    bottom: calc(60px + var(--safe-bottom, 0px));
+    font-size: 12px;
+  }
+}
+
+@media (max-height: 520px) {
+  .bl-tip {
+    display: none;
+  }
+
+  .bl-power {
+    height: 64vh;
+  }
+}

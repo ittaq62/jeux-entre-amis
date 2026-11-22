@@ -69,7 +69,9 @@ export function LeaderboardPage() {
                       ? `Les bots comptent pour ${BOT_ELO.minigolf.facile} (Facile), ${BOT_ELO.minigolf.moyen} (Moyen) ou ${BOT_ELO.minigolf.fort} (Fort).`
                       : game === "bowling"
                         ? `Les bots comptent pour ${BOT_ELO.bowling.facile} (Facile), ${BOT_ELO.bowling.moyen} (Moyen) ou ${BOT_ELO.bowling.fort} (Fort).`
-                        : `Les bots comptent pour ${BOT_ELO.uno}.`;
+                        : game === "billard"
+                          ? `Les bots comptent pour ${BOT_ELO.billard.facile} (Facile), ${BOT_ELO.billard.moyen} (Moyen) ou ${BOT_ELO.billard.fort} (Fort).`
+                          : `Les bots comptent pour ${BOT_ELO.uno}.`;
 
   return (
     <div className="felt page">
