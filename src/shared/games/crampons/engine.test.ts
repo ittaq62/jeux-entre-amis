@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { BALL_R, groundSpeedFor, makeBall, rollTime, stepBall } from "./ball.ts";
 import type { TeamSetup } from "./clubs.ts";
 import { designateReceiver, pickReceiver } from "./kicks.ts";
-import { createMatch, pushAction, setInput, stepMatch } from "./match.ts";
+import { createMatch, foulCard, pushAction, setInput, stepMatch } from "./match.ts";
+import { stateKey } from "./view.ts";
 import { attackDir, CELEBRATION_RUN, type Match, type MatchEvent, type MatchSettings, type Team } from "./model.ts";
 import { DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W } from "./pitch.ts";
 
@@ -899,6 +900,47 @@ describe("les arrêts de jeu se préparent sous nos yeux", () => {
     expect(m.phase).toBe("play");
   });
 
+  it("une touche ou un six mètres ne part qu'une fois le tireur au ballon ; un humain a alors ses 8 s", () => {
+    for (const kind of ["throw", "goalkick"] as const) {
+      const m = createMatch(settings(), teams, [{ id: "moi", team: 0 }], 4);
+      toPlay(m);
+      const dir = attackDir(m, 0);
+      const foe = m.players.find((p) => p.team === 1 && p.role !== "GK")!;
+      // Le ballon sort, touché en dernier par l'adversaire : en touche, ou sur la ligne de but de l'humain
+      if (kind === "throw") setBall(m, 10, BALL_R, HALF_W - 0.5, 0, 0, 9, foe.i);
+      else setBall(m, -dir * (HALF_L - 0.5), BALL_R, 12, -dir * 9, 0, 0, foe.i);
+      if (kind === "goalkick") {
+        // Le gardien de l'humain est loin du point du six mètres : il doit y marcher
+        const gk = m.players.find((p) => p.team === 0 && p.role === "GK")!;
+        gk.x = -dir * (HALF_L - 2);
+        gk.z = -8;
+      }
+      play(m, (e) => e.some((x) => x.k === "restart"), 60);
+      const r = m.restart!;
+      expect(r.kind).toBe(kind);
+      expect(r.team).toBe(0);
+      const taker = m.players[r.taker]!;
+      expect(m.humans[0]!.active).toBe(taker.i);
+      const toSpot = () => Math.hypot(taker.x - r.x, taker.z - r.z);
+      expect(toSpot()).toBeGreaterThan(3);
+      let readyAt = -1;
+      let kickAt = -1;
+      for (let i = 0; i < Math.round(20 / DT) && m.phase === "restart"; i++) {
+        const ev = stepMatch(m);
+        if (m.restart?.ready && readyAt < 0) {
+          readyAt = m.t;
+          expect(toSpot(), `${kind} : prête alors que le tireur est encore loin`).toBeLessThan(1);
+        }
+        if (ev.some((e) => e.k === "kick" && e.p === taker.i)) {
+          kickAt = m.t;
+          break;
+        }
+      }
+      expect(readyAt).toBeGreaterThan(0);
+      expect(kickAt - readyAt, `${kind} : jouée par l'ordinateur avant les 8 s de l'humain`).toBeGreaterThan(7.5);
+    }
+  });
+
   it("au coup d'envoi, le tireur est au ballon dès le changement de plan", () => {
     const m = createMatch(settings(), teams, [], 8);
     const taker = m.players[m.restart!.taker]!;
@@ -1312,5 +1354,115 @@ describe("les bots et leur gardien", () => {
       const { to, gk } = firstDecision(seed, false);
       expect(to).not.toBe(gk.i);
     }
+  });
+});
+
+describe("les cartons", () => {
+  it("la règle : rouge au dernier défenseur, jaune au tacle par derrière, à l'action prometteuse cassée et au gardien", () => {
+    const never = () => 0.99;
+    expect(foulCard("dernier", false, never)).toBe("red");
+    expect(foulCard("derriere", false, never)).toBe("yellow");
+    expect(foulCard("gardien", false, never)).toBe("yellow");
+    expect(foulCard("charge", true, never)).toBe("yellow");
+    expect(foulCard("glisse", false, never)).toBe(null);
+    expect(foulCard("glisse", false, () => 0.1)).toBe("yellow");
+  });
+
+  it("un deuxième jaune renvoie la vue du match aussitôt (l'exclusion se voit sans attendre que le joueur soit sorti)", () => {
+    const m = createMatch(settings(), teams, [], 3);
+    toPlay(m);
+    const p = m.players.find((o) => o.team === 0 && o.role === "CB")!;
+    p.yellow = 1;
+    const before = stateKey(m);
+    p.yellow = 2;
+    p.off = true;
+    p.leaveUntil = m.t + 5;
+    expect(stateKey(m)).not.toBe(before);
+  });
+
+  /** L'humain arrive en glissant dans le dos d'un adversaire balle au pied, au milieu du terrain */
+  function slideFromBehind(seed: number) {
+    const m = createMatch(settings({ offside: false }), teams, [{ id: "moi", team: 0 }], seed);
+    toPlay(m);
+    const me = m.players[m.humans[0]!.active]!;
+    const foe = m.players.find((p) => p.team === 1 && p.role !== "GK")!;
+    const ahead = attackDir(m, 1);
+    for (const o of m.players) {
+      if (o === me || o === foe || o.role === "GK") continue;
+      o.x = o.team === 0 ? -ahead * 30 : ahead * 30;
+      o.z = -30 + o.i * 2.5;
+      o.vx = o.vz = 0;
+    }
+    foe.x = 0;
+    foe.z = 0;
+    foe.h = ahead > 0 ? 0 : Math.PI;
+    foe.vx = foe.vz = 0;
+    foe.thinkAt = m.t + 3;
+    foe.gotAt = m.t;
+    me.x = -ahead * 1.3;
+    me.z = 0.2;
+    me.h = foe.h;
+    Object.assign(m.ball, { x: foe.x + ahead * 0.6, y: BALL_R, z: 0, vx: 0, vy: 0, vz: 0 });
+    m.owner = foe.i;
+    m.lastTouch = foe.i;
+    m.pass = null;
+    pushAction(m, "moi", "slide", 1, ahead, 0);
+    const events: MatchEvent[] = [];
+    for (let i = 0; i < 60 && m.phase === "play"; i++) events.push(...stepMatch(m));
+    return events;
+  }
+
+  it("un tacle glissé par derrière qui fauche l'adversaire est toujours sanctionné d'un jaune", () => {
+    let fouls = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const events = slideFromBehind(seed);
+      const foul = events.find((e) => e.k === "foul");
+      if (!foul || foul.k !== "foul" || foul.how !== "derriere") continue;
+      fouls++;
+      expect(
+        events.some((e) => e.k === "card"),
+        `tacle par derrière sans carton (graine ${seed})`,
+      ).toBe(true);
+    }
+    expect(fouls).toBeGreaterThanOrEqual(4);
+  });
+
+  it("le gardien qui plonge dans les pieds et fauche l'attaquant : penalty, et un jaune qui ne l'exclut jamais", () => {
+    let fouls = 0;
+    for (let seed = 1; seed <= 60 && fouls < 3; seed++) {
+      const m = createMatch(settings({ offside: false }), teams, [], seed);
+      toPlay(m);
+      const dir = attackDir(m, 1);
+      const gk = m.players.find((p) => p.team === 0 && p.role === "GK")!;
+      const st = m.players.find((p) => p.team === 1 && p.role === "ST")!;
+      for (const o of m.players) {
+        if (o === gk || o === st || o.role === "GK") continue;
+        o.x = -dir * 20 + (o.i % 3);
+        o.z = -30 + o.i * 2.5;
+      }
+      // Déjà averti : un deuxième jaune ne l'exclurait pas
+      gk.yellow = 1;
+      gk.x = dir * (HALF_L - 4);
+      gk.z = 0;
+      st.x = dir * (HALF_L - 6);
+      st.z = 0.3;
+      st.h = dir > 0 ? 0 : Math.PI;
+      st.thinkAt = m.t + 3;
+      Object.assign(m.ball, { x: st.x + dir * 0.6, y: BALL_R, z: 0.3, vx: 0, vy: 0, vz: 0 });
+      m.owner = st.i;
+      m.lastTouch = st.i;
+      m.pass = null;
+      const events: MatchEvent[] = [];
+      for (let i = 0; i < 40 && m.phase === "play"; i++) events.push(...stepMatch(m));
+      const foul = events.find((e) => e.k === "foul");
+      if (!foul || foul.k !== "foul" || foul.how !== "gardien") continue;
+      fouls++;
+      expect(foul.penalty).toBe(true);
+      expect(m.restart?.kind).toBe("penalty");
+      expect(m.restart?.team).toBe(1);
+      expect(events.some((e) => e.k === "card" && e.p === gk.i && !e.red)).toBe(true);
+      expect(gk.off).toBe(false);
+    }
+    expect(fouls).toBeGreaterThanOrEqual(1);
   });
 });

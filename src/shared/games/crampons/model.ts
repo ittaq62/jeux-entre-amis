@@ -269,9 +269,9 @@ export const newTeamStats = (): TeamStats => ({
 
 /**
  * Ce qui a été sifflé : un tacle glissé qui a manqué le ballon, un tacle par derrière, une charge dans le dos (un tacle
- * debout, par derrière), ou le dernier défenseur qui arrête une occasion en faute
+ * debout, par derrière), le dernier défenseur qui arrête une occasion en faute, ou le gardien qui fauche l'attaquant
  */
-export type FoulKind = "glisse" | "derriere" | "charge" | "dernier";
+export type FoulKind = "glisse" | "derriere" | "charge" | "dernier" | "gardien";
 
 export type WhistleReason = "goal" | "out" | "foul" | "offside" | "half" | "end" | "kickoff";
 

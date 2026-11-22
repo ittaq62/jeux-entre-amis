@@ -71,6 +71,8 @@ const KEEPER_MIN_HOLD = 0.45;
 /** Après une faute, le jeu s'arrête vraiment : le joueur au sol, l'arbitre, le carton, avant que chacun se replace */
 const FOUL_PAUSE = 2.3;
 const CARD_PAUSE = 1.5;
+/** Le gardien qui plonge dans les pieds et manque le ballon fauche parfois l'attaquant */
+const KEEPER_FOUL = 0.3;
 /** Le joueur au sol après une faute y reste un moment */
 const FOULED_DOWN_S = 1.9;
 /** Le tireur d'une touche, d'un six mètres ou d'un coup franc va chercher le ballon à pied : au-delà, on change de plan */
@@ -1589,23 +1591,40 @@ function tackles(m: Match, ev: MatchEvent[]) {
   }
 }
 
+/**
+ * Le carton d'une faute : rouge pour le dernier défenseur qui arrête une occasion nette ; jaune, toujours, pour un tacle
+ * par derrière, une action prometteuse cassée (l'attaquant lancé, un seul défenseur de champ devant lui) et le gardien
+ * qui fauche l'attaquant ; une fois sur quatre pour un tacle glissé de face ou une charge. Avant, tout se jouait au
+ * hasard, même le tacle par derrière (un jaune sur trois) : le bandeau l'annonçait, le carton ne venait pas.
+ */
+export function foulCard(how: FoulKind, promising: boolean, roll: () => number): "red" | "yellow" | null {
+  if (how === "dernier") return "red";
+  if (how === "derriere" || how === "gardien" || promising) return "yellow";
+  return roll() < 0.25 ? "yellow" : null;
+}
+
 function commitFoul(m: Match, p: Player, victim: Player, slide: boolean, ev: MatchEvent[]) {
   const dir = attackDir(m, victim.team);
   const penalty = inBox(victim.x, victim.z, dir);
-  // Par derrière ou dernier défenseur : carton
   const behind = Math.cos(victim.h) * (p.x - victim.x) + Math.sin(victim.h) * (p.z - victim.z) < -0.4;
+  const keeper = p.role === "GK";
+  // Ceux qui restent entre l'attaquant et le but (le gardien compris)
   const defenders = m.players.filter((q) => q.team === p.team && !q.off && q.x * dir > victim.x * dir).length;
-  const lastMan = defenders <= 1 && victim.x * dir > 20 && Math.abs(victim.z) < 18;
-  const how: FoulKind = lastMan ? "dernier" : !slide ? "charge" : behind ? "derriere" : "glisse";
+  const lastMan = !keeper && defenders <= 1 && victim.x * dir > 20 && Math.abs(victim.z) < 18;
+  // Une action prometteuse : lancé vers le but, à moins de 32 m, un seul défenseur de champ devant lui (à 5 contre 5,
+  // où l'on n'est jamais nombreux derrière, plus personne)
+  const thin = m.settings.side >= 7 ? 2 : 1;
+  const towardGoal = Math.cos(victim.h) * dir > 0.3;
+  const promising = !lastMan && defenders <= thin && towardGoal && victim.x * dir > 20 && Math.abs(victim.z) < 22;
+  const how: FoulKind = keeper ? "gardien" : lastMan ? "dernier" : !slide ? "charge" : behind ? "derriere" : "glisse";
   m.stats[p.team].fouls++;
   ev.push({ k: "whistle", why: "foul" });
   ev.push({ k: "foul", p: p.i, on: victim.i, penalty, how });
   victim.act = "down";
   victim.actT = FOULED_DOWN_S;
   const cards = m.stats[p.team].yellow + m.stats[p.team].red;
-  const yellowChance = (slide ? 0.18 : 0.06) + (behind ? 0.2 : 0);
-  if (lastMan) card(m, p, true, ev);
-  else if (random(m) < yellowChance) card(m, p, false, ev);
+  const sanction = foulCard(how, promising, () => random(m));
+  if (sanction) card(m, p, sanction === "red", ev);
   // Le temps de voir l'action, le joueur au sol et, s'il y en a un, le carton
   const pause = FOUL_PAUSE + (m.stats[p.team].yellow + m.stats[p.team].red > cards ? CARD_PAUSE : 0);
   if (penalty) beginRestart(m, "penalty", victim.team, dir * (HALF_L - SPOT_L), 0, ev, pause + 0.4, true);
@@ -1620,9 +1639,10 @@ const minOnPitch = (m: Match) => Math.ceil(m.settings.side * 0.6);
 
 function card(m: Match, p: Player, red: boolean, ev: MatchEvent[]) {
   p.yellow += red ? 2 : 1;
-  // Une équipe déjà réduite au minimum ne perd plus personne : le carton reste jaune
+  // Une équipe déjà réduite au minimum ne perd plus personne, ni son gardien (personne pour le remplacer) : le carton
+  // reste jaune
   const onPitch = m.players.filter((q) => q.team === p.team && !q.off).length;
-  if (p.yellow >= 2 && onPitch <= minOnPitch(m)) p.yellow = 1;
+  if (p.yellow >= 2 && (onPitch <= minOnPitch(m) || p.role === "GK")) p.yellow = 1;
   const out = p.yellow >= 2;
   if (out) m.stats[p.team].red++;
   else m.stats[p.team].yellow++;
@@ -1702,7 +1722,7 @@ function defenders(m: Match) {
  * Un attaquant arrive tout près du gardien, balle au pied, dans la surface : le gardien se jette dans ses pieds. Il
  * arrive parfois sur le ballon (le porteur le perd, le gardien le ramasse) ; sinon l'attaquant l'a passé, et le but est vide.
  */
-function keeperSmother(m: Match) {
+function keeperSmother(m: Match, ev: MatchEvent[]) {
   if (m.owner < 0 || m.phase !== "play") return;
   const owner = m.players[m.owner]!;
   if (inKeeperHands(m, owner)) return;
@@ -1736,6 +1756,9 @@ function keeperSmother(m: Match) {
     b.vx = -dx * 1.2;
     b.vz = -dz * 1.2;
     b.vy = 0;
+  } else if (m.settings.fouls && random(m) < KEEPER_FOUL) {
+    // Il arrive trop tard et fauche l'attaquant : penalty, et un carton (voir foulCard)
+    commitFoul(m, gk, owner, true, ev);
   } else {
     // Il l'a passé : le crochet de l'attaquant, le gardien plonge à côté
     owner.burstUntil = m.t + BURST_S;
@@ -1989,9 +2012,12 @@ function stepInner(m: Match): MatchEvent[] {
 
   if (m.phase === "kickoff" || m.phase === "restart") {
     const r = m.restart!;
+    // Prête quand le tireur est au ballon (voir setUpRestart) : tant qu'il va le chercher, elle ne part pas, et le temps
+    // laissé à un humain ne compte pas encore. Avant, elle était prête dès la fin du délai : le ballon partait tout seul
+    // du point de remise, tireur encore à dix mètres
     if (!r.ready && m.t >= r.readyAt) {
-      r.ready = true;
       if (r.kind === "kickoff") {
+        r.ready = true;
         // Le tireur est déjà au centre (voir beginKickoff)
         const taker = m.players[r.taker]!;
         if (Math.hypot(taker.x, taker.z) > 0.3) stand(taker, 0, 0);
@@ -2049,7 +2075,8 @@ function stepInner(m: Match): MatchEvent[] {
   }
   carriers(m);
   defenders(m);
-  keeperSmother(m);
+  keeperSmother(m, ev);
+  if (m.phase !== "play") return ev;
   spotKeeper(m);
   for (const p of m.players) if (p.role === "GK" && !p.off && p.human === null && p.act !== "down") keeperReadsShot(m, p);
   stepPlayers(m, ev);

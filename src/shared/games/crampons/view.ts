@@ -199,6 +199,8 @@ export function stateKey(m: Match): string {
     m.restart?.team ?? "",
     m.restart?.ready ?? "",
     m.restart?.taker ?? "",
+    // Le nombre de jaunes, pas seulement de joueurs avertis : un deuxième jaune (l'exclusion) se voit tout de suite
+    m.players.reduce((n, p) => n + p.yellow, 0),
     m.players.filter((p) => p.yellow > 0 || p.off).length,
     m.players.filter((p) => p.off && !((p.leaveUntil ?? 0) > m.t)).length,
     m.humans.map((h) => h.id).join(","),

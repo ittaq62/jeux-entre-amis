@@ -239,7 +239,7 @@ export class Commentator {
         } else {
           // Le jeu s'arrête vraiment : le temps de dire ce qui a été sifflé (un tacle par derrière, une charge dans le
           // dos...), et souvent l'avis du consultant
-          if (chance(0.8)) this.say(this.parts([chance(0.75) ? `faute-${e.how ?? "glisse"}` : "faute"]), 1, "c");
+          if (chance(0.8)) this.say(this.parts([chance(0.75) && e.how !== "gardien" ? `faute-${e.how ?? "glisse"}` : "faute"]), 1, "c");
           if (chance(0.45)) this.later(this.parts(["faute-avis"]), 0, "k", 450, 4500);
         }
         return;

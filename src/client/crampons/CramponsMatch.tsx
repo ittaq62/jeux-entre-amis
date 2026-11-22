@@ -58,12 +58,14 @@ const FOUL_TITLE: Record<FoulKind, string> = {
   derriere: "Tacle par derrière",
   charge: "Charge dans le dos",
   dernier: "Dernier défenseur",
+  gardien: "Faute du gardien",
 };
 const FOUL_SAID: Record<FoulKind, string> = {
   glisse: "Tacle glissé",
   derriere: "Tacle par derrière",
   charge: "Charge dans le dos",
   dernier: "Faute",
+  gardien: "Faute du gardien",
 };
 
 const PERIODS: Record<number, string> = { 1: "1re mi-temps", 2: "2e mi-temps", 3: "Prolong.", 4: "Prolong.", 5: "Tirs au but" };
