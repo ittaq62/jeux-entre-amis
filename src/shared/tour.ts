@@ -814,13 +814,13 @@ const BRICKS_VARIANTS: Format<BricksSettings>[] = [
   },
 ];
 
+// Classique et Builder sont deux façons de jouer, pas une règle et sa variante : au hasard, une chance sur deux chacun
 const CAPITALE_VARIANTS: Format<CapitaleSettings>[] = [
   {
     id: "classique",
     name: "Classique",
     blurb: "Le plateau des villes et ses bâtiments spéciaux, en 20 minutes\u00a0: le plus riche gagne.",
     settings: {},
-    weight: 3,
   },
   {
     id: "builder",

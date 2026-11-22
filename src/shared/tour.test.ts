@@ -300,6 +300,24 @@ describe("règles des jeux", () => {
     expect(findVariant("capitale", "classique+depart-rapide+monopole")?.name).toBe("Classique, départ rapide, Monopole");
   });
 
+  it("Capitale au hasard : Builder et Classique sortent chacun une fois sur deux, et le Builder tiré se joue en Builder", () => {
+    // Tout au long d'une même tournée
+    const holder = { rng: 2024 };
+    const draws = Array.from({ length: 2000 }, () => drawVariant("capitale", () => random(holder)));
+    const builder = draws.filter((id) => id.split("+")[0] === "builder").length;
+    expect(builder / draws.length).toBeGreaterThan(0.45);
+    expect(builder / draws.length).toBeLessThan(0.55);
+    for (const id of draws) expect(variantSettings("capitale", id).builder === true, id).toBe(id.split("+")[0] === "builder");
+    // Le premier tirage de tournées toutes neuves, chacune avec sa graine
+    let first = 0;
+    for (let seed = 1; seed <= 2000; seed++) {
+      const own = { rng: Math.imul(seed, 2654435761) >>> 0 };
+      if (drawVariant("capitale", () => random(own)).startsWith("builder")) first++;
+    }
+    expect(first / 2000).toBeGreaterThan(0.45);
+    expect(first / 2000).toBeLessThan(0.55);
+  });
+
   it("garde les combinaisons jouables : formats et groupes", () => {
     // Bataille navale : pas d'arsenal sur la petite grille
     expect(findVariant("naval", "eclair+arsenal")).toBeNull();

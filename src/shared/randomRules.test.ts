@@ -74,6 +74,22 @@ describe("règles au hasard d'une table", () => {
     }
   });
 
+  it("à une table de Capitale, les tirages successifs tombent une fois sur deux sur le Builder, quoi qu'ait choisi l'hôte", () => {
+    const rnd = seeded(21);
+    let previous: string | null = null;
+    let builder = 0;
+    for (let k = 0; k < 2000; k++) {
+      previous = drawRules("capitale", rnd, previous);
+      const on = previous.split("+")[0] === "builder";
+      if (on) builder++;
+      // L'hôte avait choisi l'autre format au salon : c'est le tirage qui l'emporte
+      const host = { ...CAPITALE_DEFAULTS, builder: !on };
+      expect(applyDrawnRules("capitale", host, CAPITALE_DEFAULTS, previous).builder, previous).toBe(on);
+    }
+    expect(builder / 2000).toBeGreaterThan(0.45);
+    expect(builder / 2000).toBeLessThan(0.55);
+  });
+
   it("un nouveau tirage change de règles quand il y a le choix", () => {
     const rnd = seeded(3);
     let previous = drawRules("uno", rnd);
