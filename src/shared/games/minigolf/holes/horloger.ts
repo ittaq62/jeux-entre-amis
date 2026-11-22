@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, ellipse, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, lanePath, laneSides, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -70,18 +70,24 @@ const engrenages = hole(
   { hint: "Entre les deux roues, ou à cheval dessus : leur plateau tourne, leurs dents frappent." },
 );
 
-// 3. Les tapis roulants : un tapis qui aide, un qui emporte de côté, un qui ramène en arrière
+// 3. Les tapis roulants : du haut de l'estrade, une rampe mène au premier tapis (il aide) ; au coin arrondi, un tapis
+// emporte de côté ; au second coin, le dernier ramène en arrière ; le trou attend au fond de l'arrondi
 const tapis = hole(
   "Les tapis roulants",
   4,
   (b) => {
-    b.tile(box(-0.9, -3, 0.9, 0), 0, "wood", { look: "etabli" });
+    b.tile(
+      [...arc(-0.4, -0.5, 0.5, Math.PI, Math.PI / 2, 6), ...arc(0.4, -0.5, 0.5, Math.PI / 2, 0, 6), [0.9, -3], [-0.9, -3]],
+      ramp([0, -1.0], [0, -2.6], 0.22, 0, "s"),
+      "wood",
+      { look: "etabli" },
+    );
     b.tile(box(-0.9, -6.5, 0.9, -3), 0, "rubber", { look: "tapis", flow: { k: "belt", v: [0, -1.3] } });
-    b.tile(box(-0.9, -8.3, 0.9, -6.5), 0, "wood", { look: "etabli" });
+    b.tile([[-0.9, -6.5], [0.9, -6.5], [0.9, -8.3], ...arc(-0.4, -7.8, 0.5, -Math.PI / 2, -Math.PI, 6)], 0, "wood", { look: "etabli" });
     b.tile(box(0.9, -8.3, 3.7, -6.5), 0, "rubber", { look: "tapis", flow: { k: "belt", v: [1.3, 0] } });
-    b.tile(box(3.7, -8.3, 5.5, -6.5), 0, "wood", { look: "etabli" });
+    b.tile([[3.7, -6.5], ...arc(5.0, -7.0, 0.5, Math.PI / 2, 0, 6), [5.5, -8.3], [3.7, -8.3]], 0, "wood", { look: "etabli" });
     b.tile(box(3.7, -11.3, 5.5, -8.3), 0, "rubber", { look: "tapis", flow: { k: "belt", v: [0, 0.9] } });
-    b.tile(box(3.7, -13.1, 5.5, -11.3), 0, "wood", { look: "etabli" });
+    b.tile([[3.7, -11.3], [5.5, -11.3], ...arc(4.6, -12.2, 0.9, 0, -Math.PI, 16)], 0, "wood", { look: "etabli" });
     b.tee(0, -0.45, UP).cup(4.6, -12.3);
   },
   { hint: "Le dernier tapis ramène la balle : il faut le remonter d'un bon coup." },
@@ -171,13 +177,24 @@ const pendules = hole(
   { hint: "Passe quand la lentille est d'un côté : les deux pendules ne battent pas ensemble." },
 );
 
-// 5. Le coucou : la maison de l'horloge, sa porte qui se lève et retombe ; le trou est à l'intérieur
+// 5. Le coucou : l'allée de parquet mène à la maison de l'horloge ; sa porte se lève et retombe ; le trou est à
+// l'intérieur, dans la salle aux coins arrondis
 const coucou = hole(
   "Le coucou",
   3,
   (b) => {
-    b.tile(box(-1.0, -7, 1.0, 0), 0, "wood", { look: "parquet" });
-    b.tile(box(-1.7, -11.2, 1.7, -7), 0, "green", { look: "feutre" });
+    b.tile(
+      [...arc(-0.5, -0.5, 0.5, Math.PI, Math.PI / 2, 6), ...arc(0.5, -0.5, 0.5, Math.PI / 2, 0, 6), [1.0, -7], [-1.0, -7]],
+      0,
+      "wood",
+      { look: "parquet" },
+    );
+    b.tile(
+      [[-1.7, -7], [1.7, -7], ...arc(0.9, -10.4, 0.8, 0, -Math.PI / 2, 8), ...arc(-0.9, -10.4, 0.8, -Math.PI / 2, -Math.PI, 8)],
+      0,
+      "green",
+      { look: "feutre" },
+    );
     // La façade et sa porte, au milieu
     b.wall(
       [
@@ -250,16 +267,35 @@ const ressort = hole(
 );
 
 /** Un piston : une tige épaisse qui sort du bord de l'allée, et rentre */
-function piston(x: number, z: number, dir: number): Part[] {
-  return [{ k: "wall", a: [x - dir * 1.0, z], b: [x, z], y0: -1, y1: 0.2, t: 0.12 }];
+function piston(x: number, z: number, dir: number, y = 0): Part[] {
+  return [{ k: "wall", a: [x - dir * 1.0, z], b: [x, z], y0: -1, y1: y + 0.2, t: 0.12 }];
 }
 
-// 8. Les pistons : trois pistons sortent des deux bords, l'un après l'autre
+// 8. Les pistons : l'allée d'acier descend palier après palier ; sur chacun, un piston sort d'un bord, l'un après
+// l'autre ; le trou au fond de l'arrondi
 const pistons = hole(
   "Les pistons",
   3,
   (b) => {
-    b.tile(box(-1.0, -13, 1.0, 0), 0, "metal", { look: "acier" });
+    const lane = lanePath(
+      [
+        [0, 0],
+        [0, -6],
+        [0, -12],
+      ],
+      2.0,
+      [
+        [0, 0.36],
+        [4.6, 0.36],
+        [5.6, 0.24],
+        [7.6, 0.24],
+        [8.6, 0.12],
+        [10.6, 0.12],
+        [11.4, 0],
+      ],
+      { c: [0, -12], r: 1.0 },
+    );
+    b.tile(lane.ring, lane.h, "metal", { look: "acier" });
     for (const [z, side, a0] of [
       [-3.6, -1, 0],
       [-6.6, 1, 0.33],
@@ -267,7 +303,7 @@ const pistons = hole(
     ] as const) {
       b.mover({
         motion: { k: "slide", d: [-side * 1.25, 0, 0], period: 3.2, a0, shape: "piston" },
-        parts: piston(side * 1.0, z, -side),
+        parts: piston(side * 1.0, z, -side, lane.hAt(-z)),
         look: "piston",
         e: 0.5,
       });

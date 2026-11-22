@@ -3,6 +3,7 @@
 
 /** Un point vu de dessus : x vers la droite, z vers le bas de l'écran (l'axe des hauteurs est y) */
 export type Pt = readonly [number, number];
+import type { HeightSpec } from "./height.ts";
 /** Un point dans l'espace : x, y (la hauteur), z */
 export type P3 = readonly [number, number, number];
 
@@ -172,6 +173,55 @@ export function wavyEdge(x0: number, x1: number, z0: number, amp: number, phase:
     const s = m * m * (3 - 2 * m);
     return [x, z0 + amp * s * (Math.sin(x * 2.3 + phase) * 0.7 + Math.sin(x * 5.1 + phase * 2) * 0.3)] as Pt;
   });
+}
+
+/**
+ * Une allée qui suit une ligne lissée (passant par `ctrl`), de largeur w, et qui peut finir dans un rond (`end` : la
+ * ligne doit y arriver tout droit, ses bords tombent alors sur le cercle). Sa hauteur suit des repères (distance
+ * parcourue en mètres, hauteur), lissés entre eux et plats au-delà ; elle est prise sur la ligne même, si bien que
+ * l'allée ne penche jamais en travers. `at(s)` : le point de la ligne à s mètres du départ, la normale vers la gauche
+ * et la hauteur (pour y placer un obstacle).
+ */
+export function lanePath(ctrl: readonly Pt[], w: number, keys: readonly (readonly [number, number])[], end?: { c: Pt; r: number }) {
+  const line = smooth(ctrl, 0.25);
+  const { left, right } = laneSides(line, w);
+  const run = [0];
+  for (let i = 1; i < line.length; i++) run.push(run[i - 1]! + dist(line[i - 1]!, line[i]!));
+  const total = run[run.length - 1]!;
+  const hAt = (s: number): number => {
+    if (keys.length === 0) return 0;
+    if (s <= keys[0]![0]) return keys[0]![1];
+    for (let k = 1; k < keys.length; k++) {
+      const [s0, h0] = keys[k - 1]!;
+      const [s1, h1] = keys[k]!;
+      if (s <= s1) {
+        const t = clamp((s - s0) / (s1 - s0 || 1), 0, 1);
+        return h0 + (h1 - h0) * t * t * (3 - 2 * t);
+      }
+    }
+    return keys[keys.length - 1]![1];
+  };
+  let ring: Pt[];
+  if (end) {
+    const L = left[left.length - 1]!;
+    const R = right[right.length - 1]!;
+    const aL = Math.atan2(L[1] - end.c[1], L[0] - end.c[0]);
+    const aR = Math.atan2(R[1] - end.c[1], R[0] - end.c[0]);
+    const d = (((aR - aL) % TAU) + TAU) % TAU;
+    ring = [...left, ...arc(end.c[0], end.c[1], end.r, aL, aL + d, 40).slice(1, -1), ...[...right].reverse()];
+  } else ring = [...left, ...[...right].reverse()];
+  const hs = run.map(hAt);
+  const h: HeightSpec = end ? { k: "path", pts: [...line, end.c], hs: [...hs, hAt(total)] } : { k: "path", pts: line, hs };
+  const at = (s: number) => {
+    let i = run.findIndex((r) => r >= s);
+    if (i < 0) i = line.length - 1;
+    const a = line[Math.max(0, i - 1)]!;
+    const b = line[Math.min(line.length - 1, i + 1)]!;
+    const l = dist(a, b) || 1;
+    const n: Pt = [(b[1] - a[1]) / l, -(b[0] - a[0]) / l];
+    return { p: line[i]!, n, y: hAt(s) };
+  };
+  return { ring, h, line, total, hAt, at };
 }
 
 /** Les points d'un bord (voir `wavyEdge`) entre x = a et x = b */

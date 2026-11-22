@@ -4,7 +4,7 @@
 
 import { hole, radial, ramp, wave, type HoleBuilder } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, type Pt } from "../geom.ts";
+import { arc, box, circle, lanePath, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -122,12 +122,29 @@ const parabole = hole(
   { hint: "Tout descend vers le trou ; ses trois pieds tournent autour." },
 );
 
-// 6. Le sas : deux portes qui se lèvent l'une après l'autre ; on attend dans la chambre entre les deux
+// 6. Le sas : deux portes qui se lèvent l'une après l'autre ; entre elles, la chambre est un peu plus basse et la balle
+// y attend ; la passerelle finit en arrondi autour du trou
 const sas = hole(
   "Le sas",
   3,
   (b) => {
-    b.tile(box(-0.9, -12.2, 0.9, 0), 0, "metal", { look: "grille" });
+    const lane = lanePath(
+      [
+        [0, 0],
+        [0, -6],
+        [0, -11.3],
+      ],
+      1.8,
+      [
+        [0, 0],
+        [4.6, 0],
+        [5.0, -0.08],
+        [7.8, -0.08],
+        [8.2, 0],
+      ],
+      { c: [0, -11.3], r: 0.9 },
+    );
+    b.tile(lane.ring, lane.h, "metal", { look: "grille" });
     const door = (z: number): Part[] => [{ k: "wall", a: [-0.9, z], b: [0.9, z], y0: 0, y1: 0.55, t: 0.07 }];
     b.mover({ motion: { k: "slide", d: [0, 0.5, 0], period: 5.2, shape: "piston" }, parts: door(-4.4), look: "porte-sas", e: 0.4 });
     b.mover({
@@ -183,19 +200,32 @@ function dome(b: HoleBuilder, c: Pt, r: number) {
   b.block(circle(c[0], c[1], r, 32), 0.6, { look: "dome" });
 }
 
-// 9. La base : les dômes, l'antenne radar qui balaie, et un téléporteur qui ramène près du trou
+// 9. La base : la dalle aux coins arrondis a deux niveaux, le pont du départ et la cour basse, reliés par une large
+// rampe ; les dômes, l'antenne radar qui balaie, et un téléporteur qui ramène près du trou
 const base = hole(
   "La base",
   4,
   (b) => {
-    b.tile(box(-3.0, -13.2, 3.0, 0), 0, "metal", { look: "dalle-base" });
+    const DECK = 0.15;
+    const r = 1.2;
+    b.tile(
+      [
+        ...arc(-3.0 + r, -r, r, Math.PI, Math.PI / 2, 8),
+        ...arc(3.0 - r, -r, r, Math.PI / 2, 0, 8),
+        ...arc(3.0 - r, -13.2 + r, r, 0, -Math.PI / 2, 8),
+        ...arc(-3.0 + r, -13.2 + r, r, -Math.PI / 2, -Math.PI, 8),
+      ],
+      ramp([0, -5.8], [0, -7.0], DECK, 0, "s"),
+      "metal",
+      { look: "dalle-base" },
+    );
     dome(b, [-1.7, -4.6], 0.85);
     dome(b, [1.6, -7.4], 1.0);
     dome(b, [-1.4, -10.4], 0.8);
     const rc: Pt = [0.8, -3.0];
     const radar: Part[] = [
-      { k: "wall", a: [rc[0], rc[1]], b: [rc[0] + 1.4, rc[1]], y0: -1, y1: 0.16, t: 0.06 },
-      { k: "post", c: rc, r: 0.18, y0: -1, y1: 0.9 },
+      { k: "wall", a: [rc[0], rc[1]], b: [rc[0] + 1.4, rc[1]], y0: -1, y1: DECK + 0.16, t: 0.06 },
+      { k: "post", c: rc, r: 0.18, y0: -1, y1: DECK + 0.9 },
     ];
     b.mover({ motion: { k: "spin", c: rc, w: -0.9 }, parts: radar, look: "radar", e: 0.5 });
     b.portal([-2.4, -1.3], [2.1, -10.6], UP - 0.3, 0.2, "tele");

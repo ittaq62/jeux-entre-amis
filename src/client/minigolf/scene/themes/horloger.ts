@@ -461,7 +461,7 @@ export function horlogerTheme(): Theme {
         const len = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]);
         const dir = new THREE.Vector3(p.b[0] - p.a[0], 0, p.b[1] - p.a[1]).normalize();
         const ground = heightAt(c, p.b[0], p.b[1]);
-        const y = ground + p.y1 * 0.5 + 0.01;
+        const y = ground + (p.y1 - Math.max(0, ground)) * 0.5 + 0.01;
         // La tige est plus longue que sa partie qui frappe : elle reste dans son cylindre quand le piston sort
         const rod = new THREE.Mesh(new THREE.CylinderGeometry(p.t * 0.55, p.t * 0.55, len + 1.4, 16), steel);
         rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
@@ -1116,7 +1116,8 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: Life,
     for (const p of mv.parts) {
       if (p.k !== "wall") continue;
       const dir = new THREE.Vector3(p.b[0] - p.a[0], 0, p.b[1] - p.a[1]).normalize();
-      const y = heightAt(c, p.b[0], p.b[1]) + p.y1 * 0.5;
+      const ground = heightAt(c, p.b[0], p.b[1]);
+      const y = ground + (p.y1 - Math.max(0, ground)) * 0.5;
       const body = new THREE.Mesh(new THREE.CylinderGeometry(p.t * 1.6, p.t * 1.6, 1.4, 20), m.brass);
       body.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
       body.position.set(p.a[0] - dir.x * 0.4, y, p.a[1] - dir.z * 0.4);
@@ -1274,7 +1275,8 @@ function cuckoo(c: Course, g: THREE.Group, m: Mats, base: number, life: Life, at
     cone.position.set(at[0] + s * 1.35, 0.45, z + 0.3);
     house.add(chain, cone);
   }
-  house.position.y = base;
+  // (posée sur le sol à sa porte, qui peut être plus haut que zéro)
+  house.position.y = base + Math.max(0, heightAt(c, at[0], at[1] - 0.05));
   shadows(house);
   g.add(house);
   void c;

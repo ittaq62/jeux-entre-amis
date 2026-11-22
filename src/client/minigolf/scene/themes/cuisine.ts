@@ -981,7 +981,7 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: THREE
         bar.position.set(0, 0.008, k * 0.07);
         t.add(bar);
       }
-      t.position.set(d.at[0], 0, d.at[1]);
+      t.position.set(d.at[0], heightAt(c, d.at[0], d.at[1]), d.at[1]);
       g.add(t);
     }
   }
