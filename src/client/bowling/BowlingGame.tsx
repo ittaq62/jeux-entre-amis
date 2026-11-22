@@ -14,6 +14,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./BowlingHelp.tsx";
 import { BallSwatch } from "./LookPicker.tsx";
+import { strikeBurst } from "./strikeFx.ts";
 import { kmh, spinName } from "./gesture.ts";
 import { BowlingRuntime, type HudState, type Moment } from "./runtime.ts";
 import { FinalSheet, Sheet, type SheetPlayer } from "./Scoresheet.tsx";
@@ -100,6 +101,8 @@ export function BowlingGame({
       }),
     [v.players, room.seats],
   );
+  const playersRef = useRef(players);
+  playersRef.current = players;
   const playersKey = JSON.stringify(players.map((p) => [p.id, p.name, p.look, p.avatar]));
   const nameOf = (id: string) => (id === mySeat ? "Toi" : (players.find((p) => p.id === id)?.name ?? "?"));
   const say = (b: Omit<Banner, "key">) => setBanner({ ...b, key: ++bannerKey.current });
@@ -126,6 +129,8 @@ export function BowlingGame({
           const run = strike ? (p?.stats.run ?? 0) + 1 : 0;
           const b = verdict(m.rec, run, m.rec.id === mySeat, nameOf(m.rec.id));
           if (b) say(b);
+          // L'effet de strike du lanceur (son article de la boutique)
+          if (strike) strikeBurst(playersRef.current.find((x) => x.id === m.rec.id)?.look.fx ?? "confettis", m.rec.id === mySeat);
         }
       },
       onGesture: (g) => {

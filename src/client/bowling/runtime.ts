@@ -16,6 +16,7 @@ import { cleanThrow, DIR_MAX, MAX_STEPS, startThrow, X_MAX, type ThrowParams } f
 import { headCanvas } from "../bolides/scene/faces.ts";
 import { armAngle, release, type Refusal, type Release, type Sample } from "./gesture.ts";
 import { BallModel } from "./scene/ball.ts";
+import { BallTrail } from "./scene/trail.ts";
 import {
   approachPose,
   blend,
@@ -85,6 +86,8 @@ interface Bowler {
   info: PlayerInfo;
   model: BowlerModel;
   ball: BallModel;
+  /** La traînée de sa boule (un article de la boutique) */
+  trail: BallTrail;
   /** Sa place sur la banquette */
   seat: number;
   pos: THREE.Vector3;
@@ -195,21 +198,24 @@ export class BowlingRuntime {
       let b = this.bowlers.get(p.id);
       const key = JSON.stringify([p.avatar, p.look.left, p.look.color]);
       if (b && b.model.look && JSON.stringify([b.model.look.avatar, b.model.look.left, b.info.look.color]) !== key) {
-        this.scene.scene.remove(b.model.group, b.ball.group);
+        this.scene.scene.remove(b.model.group, b.ball.group, b.trail.points);
         b.model.dispose();
         b.ball.dispose();
+        b.trail.dispose();
         this.bowlers.delete(p.id);
         b = undefined;
       }
       if (!b) {
         const model = new BowlerModel({ avatar: p.avatar, left: p.look.left, accent: colorOf(p.look.color).hex });
         const ball = new BallModel(ballR, p.look);
-        this.scene.scene.add(model.group, ball.group);
+        const trail = new BallTrail(p.look.trail);
+        this.scene.scene.add(model.group, ball.group, trail.points);
         const pos = new THREE.Vector3();
         b = {
           info: p,
           model,
           ball,
+          trail,
           seat: i,
           pos,
           yaw: 0,
@@ -235,6 +241,12 @@ export class BowlingRuntime {
         }
         void head.then((c) => !this.disposed && model.setHead(c));
       } else {
+        if (b.info.look.trail !== p.look.trail) {
+          this.scene.scene.remove(b.trail.points);
+          b.trail.dispose();
+          b.trail = new BallTrail(p.look.trail);
+          this.scene.scene.add(b.trail.points);
+        }
         b.info = p;
         b.seat = i;
         b.ball.setLook(p.look);
@@ -361,6 +373,7 @@ export class BowlingRuntime {
     for (const b of this.bowlers.values()) {
       b.model.dispose();
       b.ball.dispose();
+      b.trail.dispose();
     }
     this.scene.dispose();
   }
@@ -607,7 +620,7 @@ export class BowlingRuntime {
       b.model.group.position.set(b.pos.x, b.pos.y + seatY, b.pos.z);
       b.model.group.rotation.y = b.yaw;
       b.model.apply(pose);
-      this.placeBall(b, now);
+      this.placeBall(b, now, dt);
       if (b.bubble) {
         b.bubble.position.set(b.pos.x, b.pos.y + seatY + 1.95, b.pos.z);
         const left = b.bubbleUntil - now;
@@ -687,9 +700,11 @@ export class BowlingRuntime {
   }
 
   /** La boule : dans la main du lanceur, sur la piste pendant le lancer, sur le retour de boules sinon */
-  private placeBall(b: Bowler, now: number) {
+  private placeBall(b: Bowler, now: number, dt: number) {
     const ball = b.ball;
     const r = this.replay;
+    const rolling = r && r.rec.id === b.info.id && now >= r.t0 && !r.world.ball.gone && r.world.ball.py < ball.r + 0.03;
+    b.trail.update(rolling ? this.tmp.set(r.world.ball.px, r.world.ball.py, r.world.ball.pz) : null, ball.r, dt);
     if (r && r.rec.id === b.info.id && now < r.t0) {
       ball.group.visible = true;
       b.model.ballInHand(ball.r, ball.group.position);

@@ -19,6 +19,18 @@ import { UNIFORMS, type UniformId } from "./games/escarmouche/uniforms.ts";
 import { EXTRAS, MUZZLES, WEAPON_IDS, WEAPONS, type ExtraId, type MuzzleId, type WeaponId } from "./games/escarmouche/weapons.ts";
 import { BOMBS, type BombId } from "./games/meche/bombs.ts";
 import { BALL_PATTERNS, patternItem, trailItem, TRAILS } from "./games/minigolf/looks.ts";
+import {
+  BALL_PATTERNS as BOWL_PATTERNS,
+  bowlDanceItem,
+  bowlFxItem,
+  bowlPatternItem,
+  bowlPinsItem,
+  bowlTrailItem,
+  DANCES as BOWL_DANCES,
+  PIN_SKINS as BOWL_PINS,
+  STRIKE_FX as BOWL_FX,
+  TRAILS as BOWL_TRAILS,
+} from "./games/bowling/looks.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
@@ -40,7 +52,12 @@ export type ShopKind =
   | "uniforme"
   | "accessoire"
   | "golfmotif"
-  | "golftrace";
+  | "golftrace"
+  | "bowlmotif"
+  | "bowltrace"
+  | "bowlfx"
+  | "bowldanse"
+  | "bowlquilles";
 
 export interface ShopItem {
   id: string;
@@ -115,6 +132,12 @@ export const SHOP_ITEMS: ShopItem[] = [
   // Minigolf : le motif de sa balle (sa couleur se choisit au salon, à tout le monde) et la traînée qu'elle laisse
   ...BALL_PATTERNS.map((p): ShopItem => ({ id: patternItem(p.id), kind: "golfmotif", ref: p.id, name: p.name, price: p.price })),
   ...TRAILS.map((t): ShopItem => ({ id: trailItem(t.id), kind: "golftrace", ref: t.id, name: t.name, price: t.price })),
+  // Bowling : le motif de sa boule, sa traînée, ce qui éclate sur un strike, sa danse de victoire, ses quilles
+  ...BOWL_PATTERNS.map((p): ShopItem => ({ id: bowlPatternItem(p.id), kind: "bowlmotif", ref: p.id, name: p.name, price: p.price })),
+  ...BOWL_TRAILS.map((t): ShopItem => ({ id: bowlTrailItem(t.id), kind: "bowltrace", ref: t.id, name: t.name, price: t.price })),
+  ...BOWL_FX.map((f): ShopItem => ({ id: bowlFxItem(f.id), kind: "bowlfx", ref: f.id, name: f.name, price: f.price })),
+  ...BOWL_DANCES.map((d): ShopItem => ({ id: bowlDanceItem(d.id), kind: "bowldanse", ref: d.id, name: d.name, price: d.price })),
+  ...BOWL_PINS.map((p): ShopItem => ({ id: bowlPinsItem(p.id), kind: "bowlquilles", ref: p.id, name: p.name, price: p.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

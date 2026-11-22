@@ -50,6 +50,11 @@ describe("la boutique", () => {
       "accessoire",
       "golfmotif",
       "golftrace",
+      "bowlmotif",
+      "bowltrace",
+      "bowlfx",
+      "bowldanse",
+      "bowlquilles",
     ] as const) {
       const items = SHOP_ITEMS.filter((i) => i.kind === kind);
       expect(items.some((i) => i.price === 0)).toBe(true);
@@ -104,6 +109,11 @@ describe("la boutique", () => {
       "accessoire",
       "golfmotif",
       "golftrace",
+      "bowlmotif",
+      "bowltrace",
+      "bowlfx",
+      "bowldanse",
+      "bowlquilles",
     ]);
     for (const item of SHOP_ITEMS.filter((i) => i.price > 0 && !later.has(i.kind))) expect(migration).toContain(`'${item.id}'`);
   });
