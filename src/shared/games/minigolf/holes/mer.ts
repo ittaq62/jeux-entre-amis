@@ -125,7 +125,19 @@ const cabines = hole(
   "Les cabines",
   3,
   (b) => {
-    b.tile(box(-1.8, -11, 1.8, 0), 0, "green", { look: "planche" });
+    // La piste, surélevée au-dessus du sable, ses coins arrondis
+    const r = 0.5;
+    b.tile(
+      [
+        ...arc(-1.8 + r, -r, r, Math.PI, Math.PI / 2, 6),
+        ...arc(1.8 - r, -r, r, Math.PI / 2, 0, 6),
+        ...arc(1.8 - r, -11 + r, r, 0, -Math.PI / 2, 6),
+        ...arc(-1.8 + r, -11 + r, r, -Math.PI / 2, -Math.PI, 6),
+      ],
+      0,
+      "green",
+      { look: "planche" },
+    );
     const hut = { look: "cabine", t: 0.05 } as const;
     b.block(box(-1.76, -3.3, 0.35, -2.5), 0.9, hut)
       .block(box(-0.35, -6.4, 1.76, -5.6), 0.9, hut)
@@ -133,7 +145,7 @@ const cabines = hole(
     b.mover({ motion: { k: "spin", c: [0.75, -4.4], w: 1.3 }, parts: parasol([0.75, -4.4], 0.62), look: "parasol" });
     b.tee(-0.9, -0.45, UP).cup(1.0, -10.2);
   },
-  { hint: "Entre les cabines, et gare au parasol." },
+  { hint: "Entre les cabines, et gare au parasol.", outY: -0.38 },
 );
 
 // 8. Le crabe : un tremplin au-dessus du chenal, ou le banc de sable à droite ; deux crabes sur la plage du trou

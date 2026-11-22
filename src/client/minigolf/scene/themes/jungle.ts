@@ -1037,6 +1037,8 @@ function jungleDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     if (p) ferns.add(p[0], base, p[1], 0.6 + rng() * 0.7, rng() * 6, fernCols[k % fernCols.length]!);
   }
   const bushes = new Scatter(leafyBall(2, 0.16, 9), dm.bush);
+  // (le buis est déjà sombre : des teintes plus claires que celles des couronnes)
+  const bushGreens = [0x6f9e52, 0x7fae58, 0x8ab860, 0x679a4e, 0x93b866];
   const flowers = new Scatter(new THREE.IcosahedronGeometry(1, 0), dm.flower, false);
   const petals = [0xe8402a, 0xf0a020, 0xe04a8a, 0xffd24a, 0xf26a3a];
   for (let k = 0; k < 40; k++) {
@@ -1052,7 +1054,7 @@ function jungleDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
         p[1] + (j === 0 ? 0 : Math.sin(a) * s * 0.8),
         [sj, sj * 0.8, sj],
         rng() * 6,
-        greens[(k + j * 2) % greens.length]!,
+        bushGreens[(k + j * 2) % bushGreens.length]!,
       );
     }
     if (k % 2 === 0)
@@ -1619,20 +1621,26 @@ function waterfall(c: Course, g: THREE.Group, m: Mats, base: number, life: Life,
   const z0 = at[1] - half;
   const z1 = at[1] + half;
   const sgn = at[0] >= 0 ? 1 : -1;
-  // L'eau peu profonde au-dessus du gué (sur la piste), qui file vers la chute
+  // L'eau peu profonde au-dessus du gué (sur la piste, à sa forme exacte), qui file vers la chute
   let fx0 = Infinity;
   let fx1 = -Infinity;
   for (const t of c.def.tiles) {
     if (t.look !== "gue") continue;
-    for (const p of t.rings[0]!) {
-      fx0 = Math.min(fx0, p[0]);
-      fx1 = Math.max(fx1, p[0]);
-    }
-  }
-  if (Number.isFinite(fx0)) {
-    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(fx1 - fx0, width), flowingWater(m.ford, life, 0.5 * sgn, 0));
-    sheet.rotation.x = -Math.PI / 2;
-    sheet.position.set((fx0 + fx1) / 2, 0.028, at[1]);
+    const ring = t.rings[0]!;
+    const xs = ring.map((p) => p[0]);
+    const zs = ring.map((p) => p[1]);
+    fx0 = Math.min(fx0, ...xs);
+    fx1 = Math.max(fx1, ...xs);
+    const fz0 = Math.min(...zs);
+    const fz1 = Math.max(...zs);
+    // La forme est tracée en (x, −z) : une fois couchée (rotation de −90° autour de x), elle regarde le ciel
+    const geo = new THREE.ShapeGeometry(new THREE.Shape(ring.map((p) => new THREE.Vector2(p[0], -p[1]))));
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const uv = geo.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - fx0) / (fx1 - fx0 || 1), (pos.getY(i) + fz1) / (fz1 - fz0 || 1));
+    geo.rotateX(-Math.PI / 2);
+    const sheet = new THREE.Mesh(geo, flowingWater(m.ford, life, 0.5 * sgn, 0));
+    sheet.position.y = 0.028;
     sheet.renderOrder = 2;
     g.add(sheet);
   }

@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, ellipse, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, edgeAt, edgeSpan, ellipse, laneSides, smooth, wavyEdge, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 /** La lave, un peu plus bas que la roche : la balle y tombe */
@@ -37,32 +37,80 @@ const sentier = hole(
   { hint: "La lave avale la balle : un coup de pénalité, et l'on rejoue d'où l'on était parti." },
 );
 
-// 2. La coulée : un fleuve de lave en travers ; un pont étroit tout droit, ou un pont plus large sur le côté
+// 2. La coulée : un fleuve de lave en travers, aux rives qui ondulent ; un pont étroit et bombé tout droit, ou un pont
+// plus large sur le côté
 const coulee = hole(
   "La coulée",
   3,
   (b) => {
-    b.tile(box(-1.4, -3.5, 1.4, 0), 0, "stone", { look: "basalte" });
-    b.tile(box(-1.4, -7.5, -0.2, -3.5), LAVA, "lava", { look: "lave" });
-    b.tile(box(-0.2, -7.5, 0.2, -3.5), 0, "stone", { look: "pont" });
-    b.tile(box(0.2, -7.5, 0.6, -3.5), LAVA, "lava", { look: "lave" });
-    b.tile(box(0.6, -7.5, 1.4, -3.5), 0, "stone", { look: "pont" });
-    b.tile(box(-1.4, -12, 1.4, -7.5), 0, "stone", { look: "basalte" });
+    const flat: [number, number][] = [
+      [-0.2, 0.2],
+      [0.6, 1.4],
+    ];
+    const up = wavyEdge(-1.4, 1.4, -3.5, 0.3, 1.1, flat);
+    const dn = wavyEdge(-1.4, 1.4, -7.5, 0.32, 2.7, flat);
+    b.tile([...arc(0, -1.0, 1.4, Math.PI, 0, 18), ...edgeSpan(up, -1.4, 1.4).reverse()], 0, "stone", { look: "basalte" });
+    b.tile([...edgeSpan(up, -1.4, -0.2), ...edgeSpan(dn, -1.4, -0.2).reverse()], LAVA, "lava", { look: "lave" });
+    b.tile([...edgeSpan(up, 0.2, 0.6), ...edgeSpan(dn, 0.2, 0.6).reverse()], LAVA, "lava", { look: "lave" });
+    // Les deux ponts, bombés au-dessus de la lave
+    const bridge = (x0: number, x1: number) => {
+      const cx = (x0 + x1) / 2;
+      const zu = edgeAt(up, x0);
+      const zd = edgeAt(dn, x0);
+      b.tile(
+        [...edgeSpan(up, x0, x1), ...edgeSpan(dn, x0, x1).reverse()],
+        {
+          k: "path",
+          pts: [
+            [cx, zu],
+            [cx, (zu + zd) / 2],
+            [cx, zd],
+          ],
+          hs: [0, 0.07, 0],
+          e: "s",
+        },
+        "stone",
+        { look: "pont" },
+      );
+    };
+    bridge(-0.2, 0.2);
+    bridge(0.6, 1.4);
+    b.tile([...edgeSpan(dn, -1.4, 1.4), ...arc(0, -10.6, 1.4, 0, -Math.PI, 18)], 0, "stone", { look: "basalte" });
     b.post([0.5, -9.4], 0.22, 0.4, { look: "roche" });
     b.tee(0, -0.45, UP).cup(-0.6, -11);
   },
   { hint: "Le pont du milieu est étroit ; celui de droite, plus large, fait faire un détour." },
 );
 
-// 3. Les geysers : un geyser lance la balle par-dessus la lave jusqu'à l'île ; à gauche, une passerelle de pierre
+// 3. Les geysers : un geyser lance la balle par-dessus la lave jusqu'à l'autre rive ; à gauche, une passerelle de
+// pierre ; les rives ondulent
 const geysers = hole(
   "Les geysers",
   3,
   (b) => {
-    b.tile(box(-1.2, -4.5, 1.2, 0), 0, "stone", { look: "basalte" });
-    b.tile(box(-1.2, -6.5, -0.6, -4.5), 0, "stone", { look: "pont" });
-    b.tile(box(-0.6, -6.5, 1.2, -4.5), LAVA, "lava", { look: "lave" });
-    b.tile(box(-1.2, -11.2, 1.2, -6.5), 0, "stone", { look: "basalte" });
+    const flat: [number, number][] = [[-1.2, -0.6]];
+    const up = wavyEdge(-1.2, 1.2, -4.5, 0.22, 0.6, flat);
+    const dn = wavyEdge(-1.2, 1.2, -6.5, 0.22, 2.2, flat);
+    b.tile([...arc(0, -0.9, 1.2, Math.PI, 0, 16), ...edgeSpan(up, -1.2, 1.2).reverse()], 0, "stone", { look: "basalte" });
+    const zu = edgeAt(up, -1.2);
+    const zd = edgeAt(dn, -1.2);
+    b.tile(
+      [...edgeSpan(up, -1.2, -0.6), ...edgeSpan(dn, -1.2, -0.6).reverse()],
+      {
+        k: "path",
+        pts: [
+          [-0.9, zu],
+          [-0.9, (zu + zd) / 2],
+          [-0.9, zd],
+        ],
+        hs: [0, 0.05, 0],
+        e: "s",
+      },
+      "stone",
+      { look: "pont" },
+    );
+    b.tile([...edgeSpan(up, -0.6, 1.2), ...edgeSpan(dn, -0.6, 1.2).reverse()], LAVA, "lava", { look: "lave" });
+    b.tile([...edgeSpan(dn, -1.2, 1.2), ...arc(0, -10.0, 1.2, 0, -Math.PI, 16)], 0, "stone", { look: "basalte" });
     b.pad([0.1, -3.7], 0.26, 3.6, { push: [0, -2.6], period: 3.2, on: 0.45, look: "geyser" });
     b.pad([-0.5, -8.4], 0.22, 2.4, { period: 2.6, on: 0.3, a0: 0.4, look: "geyser" });
     b.pad([0.6, -7.5], 0.22, 2.4, { period: 2.2, on: 0.3, a0: 0.7, look: "geyser" });

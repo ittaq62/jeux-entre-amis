@@ -5,7 +5,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { arc, box, circle, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, laneSides, smooth, wavyEdge, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -185,14 +185,24 @@ const pyramide = hole(
   { hint: "Une marche à chaque palier : vise le milieu des marches, assez fort." },
 );
 
-// 5. Le gué : la rivière traverse l'allée, son courant emporte la balle vers la chute ; sur l'autre rive, des racines
+// 5. Le gué : la rivière traverse l'allée entre deux berges qui ondulent, son courant emporte la balle vers la chute ;
+// sur l'autre rive, des racines
 const gue = hole(
   "Le gué",
   4,
   (b) => {
+    // Les berges ondulent, sauf là où elles rejoignent les allées et au bord de la chute
+    const up = wavyEdge(-2.6, 2.6, -3, 0.3, 0.9, [
+      [-1.0, 1.0],
+      [2.3, 2.6],
+    ]);
+    const dn = wavyEdge(-2.6, 2.6, -5, 0.3, 2.4, [
+      [-1.2, 1.2],
+      [2.3, 2.6],
+    ]);
     b.tile(box(-1.0, -3, 1.0, 0), 0, "green", { look: "mousse" });
     // Le gué : des galets sous une eau peu profonde qui coule vers la droite, jusqu'à la chute (sans bordure)
-    b.tile(box(-2.6, -5, 2.6, -3), 0, "stone", { look: "gue", flow: { k: "belt", v: [1.1, 0] } });
+    b.tile([...up, ...[...dn].reverse()], 0, "stone", { look: "gue", flow: { k: "belt", v: [1.1, 0] } });
     b.open(box(2.5, -5.1, 2.7, -2.9));
     b.tile(box(-1.2, -12, 1.2, -5), 0, "green", { look: "mousse" });
     b.wall(

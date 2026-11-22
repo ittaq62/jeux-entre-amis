@@ -4,7 +4,7 @@
 
 import { hole, radial, ramp, wave, type HoleBuilder } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { box, circle, type Pt } from "../geom.ts";
+import { arc, box, circle, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 
@@ -20,12 +20,16 @@ function laneIntoCircle(c: Pt, r: number, hw: number, top: number, n = 72): Pt[]
   return pts;
 }
 
-// 1. Le module d'arrivée : la passerelle de métal qui descend du module jusqu'au dôme, entre les caisses
+// 1. Le module d'arrivée : la passerelle de métal qui descend du module (du palier à sa porte, par une rampe) jusqu'au
+// dôme, entre les caisses
 const module_ = hole(
   "Le module d'arrivée",
   2,
   (b) => {
-    b.tile(box(-0.9, -9.4, 0.9, 0), 0, "metal", { look: "grille" });
+    // Le palier à la porte du module, la rampe qui descend, la passerelle jusqu'au dôme (arrondie au bout)
+    b.tile(box(-0.9, -1.0, 0.9, 0), 0.34, "metal", { look: "grille" });
+    b.tile(box(-0.9, -3.0, 0.9, -1.0), ramp([0, -1.0], [0, -3.0], 0.34, 0, "s"), "metal", { look: "grille" });
+    b.tile([[-0.9, -3.0], [0.9, -3.0], ...arc(0, -8.5, 0.9, 0, -Math.PI, 16)], 0, "metal", { look: "grille" });
     b.boxWall(-0.9, -4.7, -0.28, -4.05, 0.42, { look: "caisse" });
     b.boxWall(0.3, -6.9, 0.9, -6.25, 0.42, { look: "caisse" });
     b.deco("module", -3.4, -1.6);

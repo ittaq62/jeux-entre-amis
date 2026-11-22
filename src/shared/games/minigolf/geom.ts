@@ -152,6 +152,38 @@ export function arc(cx: number, cz: number, r: number, a0: number, a1: number, n
   return out;
 }
 
+/**
+ * Un bord de rivière (ou de coulée) qui ondule autour de z0, de x0 à x1, un point tous les `step` ; il reste droit au-dessus
+ * des intervalles `flat` (là où passent les ponts, où il rejoint une allée) et s'en écarte en douceur
+ */
+export function wavyEdge(x0: number, x1: number, z0: number, amp: number, phase: number, flat: [number, number][], step = 0.1): Pt[] {
+  const xs: number[] = [];
+  for (let k = 0; x0 + k * step <= x1 + 1e-9; k++) xs.push(Math.round((x0 + k * step) * 1000) / 1000);
+  for (const [a, b] of flat) for (const v of [a, b]) if (v >= x0 && v <= x1 && !xs.some((x) => Math.abs(x - v) < 1e-6)) xs.push(v);
+  if (!xs.some((x) => Math.abs(x - x1) < 1e-6)) xs.push(x1);
+  xs.sort((a, b) => a - b);
+  return xs.map((x) => {
+    let m = 1;
+    for (const [a, b] of flat) {
+      const d = x < a ? a - x : x > b ? x - b : 0;
+      m = Math.min(m, d / 0.3);
+    }
+    m = Math.min(1, m);
+    const s = m * m * (3 - 2 * m);
+    return [x, z0 + amp * s * (Math.sin(x * 2.3 + phase) * 0.7 + Math.sin(x * 5.1 + phase * 2) * 0.3)] as Pt;
+  });
+}
+
+/** Les points d'un bord (voir `wavyEdge`) entre x = a et x = b */
+export function edgeSpan(edge: readonly Pt[], a: number, b: number): Pt[] {
+  return edge.filter((p) => p[0] >= a - 1e-6 && p[0] <= b + 1e-6).map((p) => [p[0], p[1]] as Pt);
+}
+
+/** La hauteur z d'un bord au point x (qui doit en être un) */
+export function edgeAt(edge: readonly Pt[], x: number): number {
+  return edge.find((p) => Math.abs(p[0] - x) < 1e-6)![1];
+}
+
 /** Un morceau d'anneau (une allée courbe) entre les rayons r0 et r1, de l'angle a0 à a1 */
 export function ringSector(cx: number, cz: number, r0: number, r1: number, a0: number, a1: number, n?: number): Pt[] {
   const steps = n ?? Math.max(2, Math.ceil((Math.abs(a1 - a0) * r1) / 0.25));
