@@ -148,6 +148,22 @@ export class Post {
     const ao = new GTAOPass(scene, camera, size.x, size.y);
     ao.blendIntensity = 0.8;
     ao.updateGtaoMaterial({ radius: 0.85, distanceExponent: 1.6, thickness: 1.4, scale: 1.1, samples: 12 });
+    // Ce qui est transparent (les fumées, la poussière, les étiquettes, les éclaboussures) ne fait pas d'ombre de recoin :
+    // le passage des normales ne le dessine pas (sinon chaque volute devenait un carré sombre plaqué sur l'image)
+    const pass = ao as unknown as { _overrideVisibility: () => void; _visibilityCache: THREE.Object3D[] };
+    const hideLines = pass._overrideVisibility.bind(ao);
+    pass._overrideVisibility = () => {
+      hideLines();
+      scene.traverse((o) => {
+        if (!o.visible) return;
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        const see = (o as THREE.Sprite).isSprite || (m && !Array.isArray(m) && m.transparent && !m.depthWrite);
+        if (see) {
+          o.visible = false;
+          pass._visibilityCache.push(o);
+        }
+      });
+    };
     this.composer.addPass(ao);
     this.ao = ao;
     this.composer.addPass(new ViewmodelPass(vmScene, vmCam));
