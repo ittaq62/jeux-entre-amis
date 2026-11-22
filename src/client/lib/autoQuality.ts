@@ -134,8 +134,10 @@ export class AutoQuality {
     const after = mean(t.after);
     // Gardé : les secondes de l'essai sont la nouvelle référence ; défait : on reprend celle d'avant (le cran suivant
     // s'essaie sans attendre)
-    // Un gain d'au moins 10 % (et 3 images) : à 20 images par seconde, 3 de plus comptent autant que 5 à 45
-    if (after >= t.before + Math.max(3, t.before * 0.1) || after >= this.fast) {
+    // Un gain d'au moins 10 % (et 3 images) : à 20 images par seconde, 3 de plus comptent autant que 5 à 45. Ou
+    // l'appareil est redevenu fluide, s'il ne l'était pas avant : un ordinateur déjà fluide, pris de quelques à-coups
+    // (d'autres programmes, le ramasse-miettes), ne perd pas sa finesse pour rien
+    if (after >= t.before + Math.max(3, t.before * 0.1) || (after >= this.fast && t.before < this.fast)) {
       this.recent = [...t.after];
       return;
     }

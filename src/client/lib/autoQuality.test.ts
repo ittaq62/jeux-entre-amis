@@ -36,6 +36,14 @@ describe("la qualité automatique", () => {
     expect(d.q.on).toEqual([true, false, false]);
   });
 
+  it("ne sacrifie pas la finesse d'un ordinateur fluide qui a quelques à-coups (d'autres programmes, le ramasse-miettes)", () => {
+    // Près de 56 images par seconde, dont sept un peu lentes chaque seconde, quoi qu'on fasse
+    let n = 0;
+    const d = device(["pixels", "pixels", "ombres"], () => (n++ % 59 < 7 ? 27 : 1000 / 60));
+    d.run(120);
+    expect(d.q.level).toBe(0);
+  });
+
   it("défait un cran qui ne sert à rien et essaie le genre suivant (le processeur peine, pas la carte graphique)", () => {
     // Seules les ombres font gagner du temps
     const d = device(["pixels", "pixels", "ombres"], (on) => (on[2] ? 1000 / 58 : 1000 / 32));
