@@ -47,7 +47,8 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
           <p className="hint">
             Les coups suivent la direction : de côté, vers le haut, vers le bas, ou sans rien. En l'air, ce sont d'autres coups. Vers le bas
             en l'air, on tombe plus vite ; debout sur une planche, vers le bas, on passe au travers. Saut et Frapper en même temps : un
-            petit saut avec une attaque en l'air.
+            petit saut avec une attaque en l'air. Au bord, on s'arrête et on vacille : pour descendre, pousse de nouveau vers le vide (ou
+            saute). Le petit coup s'enchaîne trois fois au plus quand il touche : pour sortir quelqu'un, il faut le coup fort.
           </p>
           <p className="hint">
             La garde s'use et rétrécit ; levée au tout dernier moment, elle pare le coup (un tintement clair) et l'attaquant reste figé un
