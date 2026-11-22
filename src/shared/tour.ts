@@ -621,6 +621,13 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       settings: { glace: true } satisfies Partial<MinigolfConfig>,
       chance: 0.2,
     },
+    {
+      id: "bonus",
+      name: "bulles bonus",
+      blurb: "Trois bulles par trou : en traverser une donne un pouvoir pour le coup suivant.",
+      settings: { bonus: true } satisfies Partial<MinigolfConfig>,
+      chance: 0.25,
+    },
   ],
 };
 
