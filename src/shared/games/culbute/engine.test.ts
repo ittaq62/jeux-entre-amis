@@ -233,6 +233,35 @@ describe("Culbute : le combat", () => {
     expect(air.fighters[0]!.move).toBe("au");
   });
 
+  it("au bord du plateau : la course s'y arrête ; on ne descend qu'en poussant de nouveau vers le vide", () => {
+    const f = duel();
+    skipIntro(f);
+    const a = f.fighters[0]!;
+    a.x = 4;
+    f.fighters[1]!.x = -6;
+    // Toute une seconde de course vers la droite : arrêté au bord, toujours au sol
+    run(f, 60, [stick(1)]);
+    expect(a.ground).toBe(0);
+    expect(a.x).toBeCloseTo(7.5, 1);
+    // Lâché puis poussé de nouveau : il descend
+    run(f, 2);
+    run(f, 6, [stick(1)]);
+    expect(a.ground).toBe(-1);
+    expect(a.x).toBeGreaterThan(7.5);
+  });
+
+  it("lâcher le stick en pleine course : un arrêt net, pas une glissade dans le vide", () => {
+    const f = duel();
+    skipIntro(f);
+    const a = f.fighters[0]!;
+    a.x = 5.5;
+    f.fighters[1]!.x = -6;
+    run(f, 6, [(k) => (k < 3 ? { x: 1, y: 0, held: 0, pressed: 0 } : NO_INPUT)]);
+    expect(a.vx).toBe(0);
+    expect(a.ground).toBe(0);
+    expect(a.x).toBeLessThanOrEqual(7.5);
+  });
+
   it("en pleine course, Frapper vers l'avant : le coup en courant, qui garde son élan", () => {
     const f = duel();
     skipIntro(f);
@@ -556,7 +585,8 @@ describe("Culbute : le combat", () => {
     const v = f.fighters[1]!;
     v.lastBy = 0;
     v.lastAt = f.frame;
-    v.x = 30;
+    // Éjecté loin dehors (en l'air : debout, le bord le retiendrait)
+    Object.assign(v, { x: 30, y: 3, ground: -1, state: "air" });
     run(f, 2);
     expect(f.fighters[0]!.score).toBe(1);
     expect(v.score).toBe(-1);

@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
+import { ARENAS, blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
 import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
@@ -316,6 +316,7 @@ export class CulbuteScene {
       const m = this.fighters[i];
       if (!m) return;
       const f = this.entrance(raw, i, frame.frame);
+      m.teeter = teeterSide(f, frame.plats);
       m.update(dt, f, this.time);
       this.placeBlob(i, f, frame.plats);
       this.dust(i, f, dt);
@@ -545,48 +546,57 @@ export class CulbuteScene {
       this.sun.target.position.set(c.tx, c.ty, 0);
       return;
     }
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
+    // Toujours tout le grand plateau, ses bords et un peu de vide autour (on voit venir le bord), ses plateformes et
+    // un peu de ciel au-dessus ; le cadre ne s'élargit que pour garder à l'écran celui qui sort ou monte haut
+    const stage = ARENAS[this.arenaId].platforms;
+    const solid = stage.find((p) => p.kind === "solid")!;
+    const top = Math.max(...stage.map((p) => p.y + (p.move?.ay ?? 0)));
+    const sx0 = solid.x0 * this.scale - STAGE_MARGIN;
+    const sx1 = solid.x1 * this.scale + STAGE_MARGIN;
+    let minX = sx0;
+    let maxX = sx1;
+    let minY = solid.y - 2.2;
+    let maxY = top + 2.8;
+    let fx = 0;
+    let fy = 0;
+    let n = 0;
     for (const f of frame.fighters) {
       if (f.state === "dead" || f.state === "out") continue;
-      minX = Math.min(minX, f.x);
-      maxX = Math.max(maxX, f.x);
-      minY = Math.min(minY, f.y);
-      maxY = Math.max(maxY, f.y + 1.6);
+      minX = Math.min(minX, f.x - 2);
+      maxX = Math.max(maxX, f.x + 2);
+      minY = Math.min(minY, f.y - 1.4);
+      maxY = Math.max(maxY, f.y + 2.8);
+      fx += f.x;
+      fy += f.y;
+      n++;
     }
-    if (!Number.isFinite(minX)) {
-      minX = -6;
-      maxX = 6;
-      minY = 0;
-      maxY = 3;
-    }
-    // Le plateau reste un peu dans le cadre, même quand on se bat tout au bord
-    minX = Math.min(minX - 2.4, -3 * this.scale);
-    maxX = Math.max(maxX + 2.4, 3 * this.scale);
-    minY = Math.min(minY - 1.4, -1.0);
-    maxY = Math.max(maxY + 1.2, 3.2);
     const b = blastOf(this.arenaId, this.scale);
-    minX = Math.max(minX, b.left + 2);
-    maxX = Math.min(maxX, b.right - 2);
+    minX = Math.max(minX, b.left + 1);
+    maxX = Math.min(maxX, b.right - 1);
     minY = Math.max(minY, b.bottom + 1);
     maxY = Math.min(maxY, b.top);
     let cx = (minX + maxX) / 2;
     let cy = (minY + maxY) / 2;
+    // Le cadre glisse un peu vers les combattants (sans perdre les bords du plateau de vue)
+    if (n > 0) {
+      const room = Math.max(0, STAGE_MARGIN - 1.4);
+      cx += clampN((fx / n - cx) * 0.22, -room, room);
+      cy += clampN((fy / n + 0.8 - cy) * 0.12, -0.8, 0.8);
+    }
     const tan = Math.tan((this.camera.fov * Math.PI) / 360);
-    const halfW = Math.max(5.8, (maxX - minX) / 2);
-    const halfH = Math.max(3.4, (maxY - minY) / 2);
-    const dist = Math.min(52, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)));
-    const want = this.tmpA.set(cx, cy + dist * 0.09, dist);
-    let k = Math.min(1, dt * 3.2);
+    const halfW = (maxX - minX) / 2;
+    const halfH = (maxY - minY) / 2;
+    const dist = Math.min(60, Math.max(halfH / tan, halfW / (tan * this.camera.aspect)));
+    const want = this.tmpA.set(cx, cy + dist * 0.06, dist);
+    // On recule vite (personne ne sort du cadre), on revient doucement
+    let k = Math.min(1, dt * (dist > this.camPos.z ? 4 : 1.6));
     if (this.koCam) {
       this.koCam.age += dt;
       if (this.koCam.age < 0.5) {
         cx = this.koCam.x;
         cy = this.koCam.y;
-        want.set(cx + 0.4, cy + 0.5, 7.2);
-        k = Math.min(1, dt * 16);
+        want.set(cx + 0.4, cy + 0.5, 11);
+        k = Math.min(1, dt * 12);
       } else this.koCam = null;
     }
     this.camPos.lerp(want, k);
@@ -1040,3 +1050,19 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
     this.renderer.domElement.remove();
   }
 }
+
+/** Debout tout au bord d'une plateforme, le vide devant ou derrière : de quel côté (0 : pas au bord) */
+function teeterSide(f: RenderFrame["fighters"][number], plats: PlatformNow[]): number {
+  if (f.state !== "stand") return 0;
+  for (const p of plats) {
+    if (Math.abs(f.y - p.y) > 0.05) continue;
+    if (Math.abs(f.x - p.x0) < 0.06) return -1;
+    if (Math.abs(f.x - p.x1) < 0.06) return 1;
+  }
+  return 0;
+}
+
+/** Le vide qu'on voit de chaque côté du grand plateau */
+const STAGE_MARGIN = 3.2;
+
+const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));

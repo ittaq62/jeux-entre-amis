@@ -424,6 +424,8 @@ export class FighterModel {
   private vx = 0;
   private vy = 0;
   private landing = 0;
+  /** Arrêté tout au bord : de quel côté est le vide (0 : pas au bord) */
+  teeter = 0;
   private wasAir = false;
   private scale = 1;
   private disposables: { dispose: () => void }[] = [];
@@ -803,6 +805,33 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
       case "stand":
       case "respawn": {
         const speed = Math.abs(this.vx);
+        if (speed < 0.6 && this.teeter !== 0 && f.state === "stand") {
+          // Au bord : il vacille, les bras en moulinet (penché en arrière s'il regarde le vide, en avant s'il lui tourne le dos)
+          const w = Math.sin(time * 11);
+          const w2 = Math.sin(time * 11 + 1.7);
+          const facing = this.teeter === f.face;
+          return {
+            pose: with_(REST, {
+              lean: facing ? -0.14 + w * 0.05 : 0.2 + w * 0.04,
+              hands: [
+                [-0.38, 0.92 + w * 0.14, 0.12 + w2 * 0.2],
+                [0.38, 0.92 - w * 0.14, 0.12 - w2 * 0.2],
+              ],
+              feet: facing
+                ? [
+                    [-0.12, 0, -0.04],
+                    [0.12, 0.07 + Math.max(0, w) * 0.05, 0.18],
+                  ]
+                : [
+                    [-0.12, 0.06 + Math.max(0, w) * 0.05, -0.18],
+                    [0.12, 0, 0.04],
+                  ],
+              headTilt: w2 * 0.08,
+            }),
+            strike,
+            charging,
+          };
+        }
         if (speed < 0.6 || f.state === "respawn") {
           const breathe = Math.sin(time * 2.4) * 0.015;
           return { pose: with_(REST, { crouch: breathe + this.landing * 0.12 }), strike, charging };

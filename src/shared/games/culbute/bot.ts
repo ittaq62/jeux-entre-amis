@@ -98,7 +98,9 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
 function levelFor(level: BotLevel, style: HabitueId): LevelInfo {
   const L = LEVELS[level];
   if (level !== "facile") return L;
-  const light = (100 - STYLES[style].weight) / 20;
+  // Les légers réfléchissent un peu plus vite et attaquent plus ; Lucien aussi (ses coups partent de loin, mais plus
+  // tard : au niveau facile, il se faisait devancer)
+  const light = (100 - STYLES[style].weight) / 20 + (style === "lucien" ? 1 : 0);
   return { ...L, think: Math.round(L.think * (1 - 0.12 * light)), attack: Math.min(0.9, L.attack * (1 + 0.2 * light)) };
 }
 
@@ -191,6 +193,22 @@ function threat(me: Fighter, others: Fighter[]): Fighter | null {
 
 /** Le stick et les boutons de ce bot pour ce pas */
 export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
+  const inp = decide(f, slot, m, level);
+  const me = f.fighters[slot]!;
+  // Arrêté au bord d'une planche fine qu'il veut quitter : on ne descend qu'en poussant de nouveau le stick, il le
+  // relâche donc un instant (du grand plateau, il ne descend jamais en marchant)
+  if (me.state === "stand" && me.ground >= 0 && inp.x !== 0) {
+    const p = platformsAt(f.arena as ArenaId, f.scale, f.frame)[me.ground];
+    const side = Math.sign(inp.x);
+    const atEdge = p && (side < 0 ? me.x <= p.x0 + 0.02 : me.x >= p.x1 - 0.02);
+    if (p && atEdge && p.kind !== "solid" && me.px * side > 0.3) return { ...inp, x: 0 };
+    // (un coup, un saut ou une garde vers le vide gardent leur direction : ils ne font pas descendre)
+    if (p && atEdge && p.kind === "solid" && inp.pressed === 0) return { ...inp, x: 0 };
+  }
+  return inp;
+}
+
+function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   const me = f.fighters[slot]!;
   const L = levelFor(level, me.style);
   const out = (): Input => {
@@ -392,6 +410,12 @@ export function botInput(f: Fight, slot: number, m: BotMemory, level: BotLevel):
     if (!airborne(me) && nearEdge(me, st, toward)) m.x = 0;
     // Il court vers un bord : il y repensera vite (sinon il le passe avant d'avoir réfléchi)
     if (!airborne(me) && m.x !== 0 && (toward < 0 ? me.x - st.x0 : st.x1 - me.x) < 4.5) m.next = Math.min(m.next, f.frame + 2);
+    // Lent à réfléchir (niveau facile), il sera à portée avant sa prochaine idée : il y repense en arrivant (sinon il passe
+    // à côté, d'autant plus loin qu'il court vite)
+    if (L.think > 10 && !airborne(me) && m.x !== 0) {
+      const arrive = Math.floor((Math.max(0, adx - 1.2) / STYLES[me.style].run) * 60);
+      m.next = Math.min(m.next, f.frame + Math.max(1, arrive));
+    }
     return out();
   }
 

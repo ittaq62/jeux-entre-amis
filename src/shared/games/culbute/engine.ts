@@ -774,17 +774,21 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
   }
 }
 
+/** Au sol : la mise en vitesse, et le freinage quand on lâche le stick (un arrêt net, pas une glissade) */
+export const GROUND_ACC = 220;
+export const GROUND_STOP = 280;
+
 function groundMove(ft: Fighter, x: number, st: Style, sm: number) {
   if (Math.abs(x) > 0.2) {
     const run = Math.abs(x) >= 0.65;
     const target = (run ? st.run : st.walk) * sign(x) * sm;
     // Le départ en courant : un élan immédiat (ou un demi-tour sec), pas une lente mise en route
     if (run && (Math.abs(ft.vx) < st.run * 0.5 * sm || sign(ft.vx) !== sign(x))) ft.vx = target;
-    const acc = 120 * DT;
+    const acc = GROUND_ACC * DT;
     ft.vx += clamp(target - ft.vx, -acc, acc);
     ft.face = x < 0 ? -1 : 1;
   } else {
-    const fr = 85 * DT;
+    const fr = GROUND_STOP * DT;
     ft.vx = Math.abs(ft.vx) <= fr ? 0 : ft.vx - sign(ft.vx) * fr;
   }
 }
@@ -1019,7 +1023,12 @@ function land(f: Fight, ft: Fighter, pi: number, plats: PlatformNow[], fallSpeed
   }
 }
 
-function physics(f: Fight, ft: Fighter, plats: PlatformNow[], solo: boolean) {
+/** Le stick vient d'être poussé de ce côté (il n'y était pas à l'image d'avant) : on veut y aller */
+function freshPush(ft: Fighter, x: number, side: number): boolean {
+  return x * side > 0.5 && ft.px * side <= 0.3;
+}
+
+function physics(f: Fight, ft: Fighter, plats: PlatformNow[], solo: boolean, x: number) {
   const st = styleOf(ft);
   if (ft.state === "ledge" || ft.state === "dead" || ft.state === "out" || ft.state === "respawn" || ft.state === "held") return;
   const def = ft.state === "move" ? moveDef(ft.style, ft.move) : null;
@@ -1056,9 +1065,12 @@ function physics(f: Fight, ft: Fighter, plats: PlatformNow[], solo: boolean) {
 
   if (!isAirborne(ft)) {
     const p = plats[ft.ground];
-    // Pendant un coup au sol (sans élan), une garde, une roulade ou un atterrissage, on s'arrête au bord au lieu de glisser
-    // dans le vide (on ne tombe d'un bord qu'en y allant exprès)
+    // On s'arrête au bord au lieu de tomber : debout, on ne descend qu'en poussant de nouveau le stick vers le vide une
+    // fois arrivé au bord (courir jusqu'au bord ne suffit pas) ; pendant un coup au sol (sans élan), une garde, une
+    // roulade ou un atterrissage, toujours
+    const off = p ? (ft.x < p.x0 ? -1 : ft.x > p.x1 ? 1 : 0) : 0;
     const sticky =
+      (ft.state === "stand" && off !== 0 && !freshPush(ft, x, off)) ||
       (ft.state === "move" && !def?.push) ||
       ft.state === "shield" ||
       ft.state === "shieldstun" ||
@@ -2242,7 +2254,7 @@ export function updateFighter(f: Fight, ft: Fighter, inp: Input, plats: Platform
   if (ft.state !== "shield" && ft.shield < SHIELD_MAX && ft.state !== "dizzy") ft.shield = Math.min(SHIELD_MAX, ft.shield + SHIELD_REGEN);
   soloStep = solo;
   control(f, ft, inp, plats);
-  physics(f, ft, plats, solo);
+  physics(f, ft, plats, solo, inp.x);
   advanceMove(f, ft, inp, solo);
   ft.px = inp.x;
   ft.py = inp.y;
