@@ -535,7 +535,7 @@ export class BowlingRoom extends DurableObject<Env> {
         const m = d.match;
         if (!m || d.status !== "playing" || !this.allowMessage(`predict:${userId}`, 200)) return;
         const who = seat ? seat.id : `w:${userId}`;
-        const r = predict(m, who, msg.pick);
+        const r = predict(m, who, msg.pick, now);
         if (r) return error(r);
         return this.afterChange(now);
       }
@@ -852,7 +852,7 @@ export class BowlingRoom extends DurableObject<Env> {
         if (typeof r !== "string") changed = true;
       } else if (auto) {
         if (!this.botAt || this.botAt.n !== m.throws)
-          this.botAt = { n: m.throws, at: Math.max(now, m.phaseAt) + thinkTime(level, this.botRng) };
+          this.botAt = { n: m.throws, at: Math.max(now, m.phaseAt) + thinkTime(level, this.botRng, m.ball > 0) };
         else if (now >= this.botAt.at || late) {
           this.botAt = null;
           const r = throwBall(m, p.id, planThrow(m, level, left, this.botRng), now, seat?.kind !== "bot", WINDUP_MS);
@@ -881,10 +881,10 @@ export class BowlingRoom extends DurableObject<Env> {
         // Ils parient plutôt sur un beau lancer, parfois sur la cata
         const r = random(this.botRng);
         const pick: PredPick = choices.length === 2 ? (r < 0.6 ? "spare" : "rate") : r < 0.45 ? "strike" : r < 0.85 ? "reste" : "cata";
-        plan = { n: m.throws, at: now + 1200 + random(this.botRng) * 2500, pick };
+        plan = { n: m.throws, at: now + 700 + random(this.botRng) * 1800, pick };
         this.botPreds.set(s.id, plan);
       }
-      if (now >= plan.at && !predict(m, s.id, plan.pick)) changed = true;
+      if (now >= plan.at && !predict(m, s.id, plan.pick, now)) changed = true;
     }
     return changed;
   }

@@ -202,7 +202,9 @@ export function BowlingGame({
   const myTurn = v.phase === "aim" && thrower?.id === mySeat;
   const finished = room.status === "finished" || v.phase === "over";
   const left = Math.max(0, Math.ceil((v.deadline - now) / 1000));
-  const watchingPred = v.cfg.pronostics && v.phase === "aim" && thrower !== null && thrower.id !== mySeat;
+  // Pendant l'élan d'un bot, la boule n'est pas encore partie : on peut encore parier
+  const winding = v.phase === "roll" && v.last !== null && now < v.last.at;
+  const watchingPred = v.cfg.pronostics && (v.phase === "aim" || winding) && thrower !== null && thrower.id !== mySeat;
   const myPredKey = mySeat ?? `w:${room.you.userId}`;
   const myPred = v.preds[myPredKey];
   const lastPred = v.lastPreds[myPredKey];
@@ -260,7 +262,8 @@ export function BowlingGame({
       </header>
 
       {sheetOpen && !finished && (
-        <div className="bw-sheet-top">
+        // La feuille s'efface pendant que la boule roule (on regarde les quilles), et revient avec le résultat
+        <div className={`bw-sheet-top ${v.phase === "roll" && !winding ? "is-away" : ""}`}>
           <Sheet v={v} players={players} me={mySeat} compact />
         </div>
       )}

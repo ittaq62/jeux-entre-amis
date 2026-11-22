@@ -25,10 +25,13 @@ const SKILL: Record<BotLevel, Skill> = {
   facile: { spin: [0, 7], speed: [5.6, 8], dirErr: 0.0095, speedErr: 1, spinErr: 4, xErr: 0.05 },
 };
 
-/** Le temps qu'il prend avant de lancer (il se met en place, il vise) */
-export function thinkTime(level: BotLevel, rng: RngHolder): number {
-  const base = level === "fort" ? 2600 : level === "moyen" ? 3000 : 3400;
-  return base + random(rng) * 2200;
+/**
+ * Le temps qu'il prend avant son élan (il se met en place, il vise) : de quoi laisser la machine relever les quilles
+ * et ceux qui regardent parier, sans faire attendre la table. Pour la deuxième boule, il est déjà en place.
+ */
+export function thinkTime(level: BotLevel, rng: RngHolder, second = false): number {
+  const base = level === "fort" ? 1700 : level === "moyen" ? 1900 : 2200;
+  return (base + random(rng) * 1100) * (second ? 0.75 : 1);
 }
 
 function gauss(rng: RngHolder): number {

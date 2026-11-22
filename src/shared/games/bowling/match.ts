@@ -344,10 +344,14 @@ export function predChoices(m: Match): PredPick[] {
   return ["strike", "reste", "cata"];
 }
 
-/** Un pari : avant que la boule parte, une fois par lancer (on peut changer d'avis) */
-export function predict(m: Match, who: string, choice: PredPick): string | null {
+/**
+ * Un pari : avant que la boule parte, une fois par lancer (on peut changer d'avis). Pendant l'élan d'un bot, la boule
+ * n'est pas encore lâchée : on peut encore parier (`now` : l'heure du serveur).
+ */
+export function predict(m: Match, who: string, choice: PredPick, now = Infinity): string | null {
   if (!m.cfg.pronostics) return "Pas de pronostics à cette table.";
-  if (m.phase !== "aim" && m.phase !== "intro") return "La boule est déjà partie.";
+  const winding = m.phase === "roll" && m.last !== null && now < m.last.at;
+  if (m.phase !== "aim" && m.phase !== "intro" && !winding) return "La boule est déjà partie.";
   if (m.players[m.turn]?.id === who) return "On ne parie pas sur son propre lancer.";
   if (!predChoices(m).includes(choice)) return "Pari invalide.";
   m.preds[who] = choice;

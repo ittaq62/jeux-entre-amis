@@ -163,6 +163,14 @@
   transform: translateX(-50%);
   max-width: calc(100vw - 20px);
   pointer-events: none;
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+}
+
+.bw-sheet-top.is-away {
+  opacity: 0;
+  transform: translate(-50%, -10px);
 }
 
 .bw-sheet {
@@ -658,6 +666,15 @@
 .bw-final-card h1 {
   margin: 0;
   font-family: var(--font-title);
+}
+
+/* La ligne d'Elo commune aux fins de partie est faite pour un fond clair : ici, le panneau est sombre */
+.bw-final-card .gameover-elo {
+  color: rgba(244, 236, 220, 0.72);
+}
+
+.bw-final-card .gameover-elo strong {
+  color: #f4ecdc;
 }
 
 .bw-final-card .bw-sheet {

@@ -15,6 +15,7 @@ import {
   tickMatch,
   timedOut,
   totalOf,
+  WINDUP_MS,
   type BowlingConfig,
   type Match,
 } from "./match.ts";
@@ -167,6 +168,16 @@ describe("bowling : les pronostics", () => {
     expect(m.preds).toEqual({});
     throwBall(m, "b", GUTTER, m.phaseAt + 100);
     expect(predict(m, "a", "strike")).not.toBeNull();
+  });
+
+  it("pendant l'élan d'un bot, la boule n'est pas encore partie : on peut encore parier", () => {
+    const m = start({ frames: 3 }, ["a", "b"]);
+    const at = m.phaseAt + 500;
+    const rec = throwBall(m, "a", POCKET, at, false, WINDUP_MS);
+    if (typeof rec === "string") throw new Error(rec);
+    expect(predict(m, "b", "strike", at + 200)).toBeNull();
+    expect(predict(m, "b", "reste", rec.at + 10)).not.toBeNull();
+    expect(m.preds.b).toBe("strike");
   });
 
   it("pas de pronostics si la table n'en veut pas", () => {
