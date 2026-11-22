@@ -134,6 +134,8 @@ export class BowlingRuntime {
   private pending: { n: number; t: ThrowParams; at: number } | null = null;
   private aimKey = "";
   private aimAt = 0;
+  /** L'introduction attend le départ commun (pendant le chargement de chacun, la caméra reste sur son premier plan) */
+  private introHeld = false;
   /** La machine, à faire tourner au début du tour (les quilles tombées à balayer, celles à reposer) */
   private sweep: {
     at: number;
@@ -362,6 +364,16 @@ export class BowlingRuntime {
   setPaused(p: boolean) {
     this.paused = p;
     if (p) this.cancelSwing();
+  }
+
+  /** Tout préparer pendant l'écran de chargement (voir lib/prepare.ts) */
+  prepare(onProgress?: (share: number) => void) {
+    return this.scene.prepare(onProgress);
+  }
+
+  /** Retenir l'introduction de la salle sur son premier plan (jusqu'au départ commun) */
+  holdIntro(on: boolean) {
+    this.introHeld = on;
   }
 
   dispose() {
@@ -766,6 +778,7 @@ export class BowlingRuntime {
     const thrower = v.players[v.turn];
     const tb = thrower ? this.bowlers.get(thrower.id) : null;
     if (v.phase === "intro") {
+      if (this.introHeld) this.aimAt = now;
       // La salle : on arrive du fond, au-dessus de la banquette, vers l'élan
       const k = ease((now - this.aimAt) / 3800);
       pos.set(3.2 - 3 * k, 3.1 - 1.5 * k, 9.5 - 5.2 * k);

@@ -5,6 +5,7 @@ import { botLook, DEFAULT_LOOK, isBowlingLook, usableLook, type BowlingLook } fr
 import {
   createMatch,
   DEFAULT_CONFIG,
+  INTRO_MS,
   mergeConfig,
   nextEvent,
   predChoices,
@@ -38,6 +39,7 @@ import {
   type RoomStatus,
   type RoomSummary,
 } from "../shared/protocol.ts";
+import { forgetPlayer, gatePassed, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { random, randomSeed } from "../shared/rng.ts";
 import { variantSettings, type TourInit } from "../shared/tour.ts";
 import { applyDrawnRules, drawNotice, drawRules, hostDraw, hostPatch } from "../shared/randomRules.ts";
@@ -120,6 +122,8 @@ interface BowlingData {
   watchers?: string[];
   pickUntil?: number | null;
   ready?: string[];
+  /** La partie retenue le temps que chacun charge la salle (voir loadGate.ts) ; null : elle tourne */
+  gate?: LoadGate | null;
 }
 
 interface Attachment {
@@ -388,6 +392,8 @@ export class BowlingRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : les autres ne l'attendent plus
+      if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -572,6 +578,13 @@ export class BowlingRoom extends DurableObject<Env> {
         return this.broadcastRaw({ t: "emote", seatId: seat?.id ?? null, userId, emote: msg.emote });
       }
 
+      case "loaded": {
+        // Son jeu a fini de charger la salle : l'introduction part quand tout le monde l'a dit
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        settleGate(d.gate, now);
+        return this.afterChange(now);
+      }
+
       case "ready": {
         if (!this.announcing() || !seat || !this.allowMessage(`ready:${userId}`, 150)) return;
         d.ready = [...new Set([...(d.ready ?? []), userId])];
@@ -592,6 +605,7 @@ export class BowlingRoom extends DurableObject<Env> {
           if (d.status === "playing") {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
+            if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
             this.systemChat(`${seat.name} a quitté la partie, un bot lance à sa place.`);
           } else {
             d.seats = d.seats.filter((s) => s !== seat);
@@ -804,6 +818,14 @@ export class BowlingRoom extends DurableObject<Env> {
     this.botRng = { rng: seed ^ 0x5bd1e995 };
     this.botAt = null;
     this.botPreds.clear();
+    // La partie attend que chaque joueur présent ait chargé la salle ; l'introduction de la salle (4 s) part au départ
+    // commun et tient lieu de compte à rebours
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+      { countdown: 0 },
+    );
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
@@ -836,6 +858,23 @@ export class BowlingRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    // Le chargement de chacun : rien ne bouge avant le départ commun, où l'introduction part pour tout le monde
+    if (d.gate) {
+      if (settleGate(d.gate, now)) {
+        this.broadcast();
+        this.saveLive();
+      }
+      if (!gatePassed(d.gate, now)) return;
+      d.gate = null;
+      if (m.phase === "intro") {
+        m.phaseAt = now;
+        m.deadline = now + INTRO_MS;
+      }
+      this.broadcast();
+      this.saveLive();
+      await this.armAlarm();
+      return;
+    }
     let changed = tickMatch(m, now);
     if (m.phase === "over") return this.finishGame(now);
     const p = thrower(m);
@@ -1148,6 +1187,7 @@ export class BowlingRoom extends DurableObject<Env> {
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       bowling: match,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

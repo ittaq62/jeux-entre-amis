@@ -2,6 +2,7 @@
 // que les autres le voient se placer et prendre son élan), les paris.
 
 import type { AchievementUnlock, ChatMessage, EloResult, RoomStatus, SeatView, SpectatorView, Visibility } from "../../protocol.ts";
+import type { LoadGate } from "../../loadGate.ts";
 import type { BowlingLook } from "./looks.ts";
 import type { BowlingConfig, Match, PredPick } from "./match.ts";
 
@@ -35,6 +36,8 @@ export interface BowlingRoomView {
   you: { userId: string; seatId: string | null; isHost: boolean; isAdmin: boolean };
   teams: Record<string, 0 | 1>;
   bowling: BowlingView | null;
+  /** La partie retenue le temps que chacun charge la salle (voir loadGate.ts) ; null : elle tourne */
+  gate?: LoadGate | null;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
@@ -63,6 +66,8 @@ export type BowlingClientMessage =
     }
   /** Un lancer : le numéro du lancer attendu (pour ne pas lancer deux fois), puis la place, la direction, la vitesse, l'effet */
   | { t: "throw"; n: number; x: number; d: number; v: number; s: number }
+  /** Son jeu a fini de charger la salle (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | ({ t: "pose" } & BowlingPose)
   | { t: "predict"; pick: PredPick }
   | { t: "look"; look: BowlingLook }

@@ -12,6 +12,7 @@ import { RACK, type PinSpot } from "../../../shared/games/bowling/lane.ts";
 import { PIN_COM } from "../../../shared/games/bowling/physics.ts";
 import type { SalleId } from "../../../shared/games/bowling/salles.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { warmThree } from "../../lib/prepare.ts";
 import { buildLane, LANE_PITCH, type LaneMeshes } from "./laneMesh.ts";
 import { pinMesh, pinMaterial } from "./pins.ts";
 import { mergeStatic, type BenchSpot, type Salle } from "./salles/common.ts";
@@ -239,6 +240,14 @@ export class LaneScene {
     m.visible = !b.gone;
     m.position.set(b.px, b.py, b.pz);
     m.quaternion.set(b.qx, b.qy, b.qz, b.qw);
+  }
+
+  /**
+   * Tout préparer derrière l'écran de chargement (les textures, les shaders, quelques images avec les effets) : la salle
+   * ne saute plus à son apparition. Voir lib/prepare.ts.
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, { onProgress, render: () => this.render(0) });
   }
 
   render(dt: number) {

@@ -19,6 +19,11 @@ import { kmh, slantName, spinName } from "./gesture.ts";
 import { BowlingRuntime, type HudState, type Moment } from "./runtime.ts";
 import { FinalSheet, Sheet, type SheetPlayer } from "./Scoresheet.tsx";
 import * as sfx from "./sfx.ts";
+import { watchFirstSeconds } from "../lib/firstSeconds.ts";
+import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
+import { nextFrame } from "../lib/prepare.ts";
+import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
+import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
 import type { BowlingListeners } from "./useBowlingRoom.ts";
 
 interface Banner {
@@ -56,6 +61,9 @@ function verdict(rec: ThrowRecord, run: number, mine: boolean, name: string): Ba
   return { key: 0, text: n === 0 ? "Raté" : `${n} quille${n > 1 ? "s" : ""}`, sub: who ? name : undefined, tone: n >= 7 ? "good" : "info" };
 }
 
+/** L'écran de chargement aux couleurs de la piste */
+const LOADING_THEME: LoadingTheme = { from: "#3a2a5e", to: "#120c22", accent: "#ffb347" };
+
 export function BowlingGame({
   room,
   send,
@@ -92,6 +100,21 @@ export function BowlingGame({
   const shown = useRef(new Set<number>());
   const viewRef = useRef(v);
   viewRef.current = v;
+  // Le chargement de la salle (voir shared/loadGate.ts) : on dit « chargé » au serveur ; l'introduction part quand tout
+  // le monde l'a dit
+  const [prep, setPrep] = useState({ share: 0, done: false });
+  const serverOffset = serverNow() - Date.now();
+  const gateClock = useGateClock(room.gate, serverOffset);
+  const passedRef = useRef(gateClock.passed);
+  passedRef.current = gateClock.passed;
+  useLoadedSignal(room.gate, mySeat, prep.done, send);
+  const live = prep.done && gateClock.passed && room.status === "playing";
+  useEffect(() => {
+    runtime.current?.holdIntro(!gateClock.passed);
+  }, [gateClock.passed]);
+  useEffect(() => {
+    if (live) return watchFirstSeconds("Bowling");
+  }, [live]);
 
   const players: (SheetPlayer & { avatar: AvatarConfig })[] = useMemo(
     () =>
@@ -142,7 +165,19 @@ export function BowlingGame({
     runtime.current = rt;
     listeners.current.onPose = (id, p) => rt.pose(id, p);
     listeners.current.onEmote = (seatId, e) => rt.emote(seatId, e);
+    // La salle se prépare derrière l'écran de chargement, une fois les joueurs et la vue posés (deux images plus tard)
+    let stopped = false;
+    rt.holdIntro(!passedRef.current);
+    void (async () => {
+      await nextFrame();
+      await nextFrame();
+      if (stopped) return;
+      await rt.prepare((share) => !stopped && setPrep({ share, done: false }));
+    })()
+      .catch((err: unknown) => console.error("Salle impossible à préparer", err))
+      .then(() => !stopped && setPrep({ share: 1, done: true }));
     return () => {
+      stopped = true;
       listeners.current.onPose = undefined;
       listeners.current.onEmote = undefined;
       rt.dispose();
@@ -216,6 +251,21 @@ export function BowlingGame({
   return (
     <div className={`bw-game ${mySeat ? "" : "is-watching"}`}>
       <div ref={host} className="bw-stage" />
+      {room.status === "playing" && loadingShown(prep.done, gateClock) && (
+        <GameLoading
+          title="Bowling"
+          theme={LOADING_THEME}
+          share={prep.share}
+          done={prep.done}
+          gate={room.gate}
+          serverOffset={serverOffset}
+          players={room.seats
+            .filter((s) => s.kind === "human")
+            .map((s) => ({ id: s.id, name: s.name, avatar: s.avatar, userId: s.userId }))}
+          me={mySeat}
+        />
+      )}
+      <FirstSecondsPanel />
 
       <header className="bw-top">
         <div className="bw-frame-card">

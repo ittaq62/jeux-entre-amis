@@ -21,15 +21,27 @@ export interface LoadGate {
   until: number;
   /** La fin du compte à rebours : le départ (null tant qu'on attend) */
   goAt: number | null;
+  /**
+   * La durée du compte à rebours (LOAD_COUNTDOWN_MS si absente). 0 pour un jeu qui a déjà sa propre introduction ou son
+   * propre décompte (Culbute, Escarmouche, le Bowling) : elle part au départ commun et en tient lieu, sans deux décomptes
+   * de suite.
+   */
+  countdown?: number;
 }
 
 /** Ce que les joueurs voient du chargement (dans la vue de la salle) */
 export type LoadGateView = LoadGate;
 
 /** Un départ : on attend ces joueurs-là (un nouveau numéro, différent du départ précédent) */
-export function openGate(players: readonly string[], now: number, previous?: LoadGate | null): LoadGate {
+export function openGate(
+  players: readonly string[],
+  now: number,
+  previous?: LoadGate | null,
+  options: { countdown?: number } = {},
+): LoadGate {
   const id = Math.max(now, (previous?.id ?? 0) + 1);
   const gate: LoadGate = { id, waiting: [...new Set(players)], loaded: [], until: now + LOAD_MAX_MS, goAt: null };
+  if (options.countdown !== undefined) gate.countdown = options.countdown;
   settleGate(gate, now);
   return gate;
 }
@@ -61,7 +73,7 @@ export function stillLoading(gate: LoadGate | null | undefined): string[] {
 export function settleGate(gate: LoadGate | null | undefined, now: number): boolean {
   if (!gate || gate.goAt !== null) return false;
   if (stillLoading(gate).length > 0 && now < gate.until) return false;
-  gate.goAt = now + LOAD_COUNTDOWN_MS;
+  gate.goAt = now + (gate.countdown ?? LOAD_COUNTDOWN_MS);
   return true;
 }
 

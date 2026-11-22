@@ -61,6 +61,14 @@ describe("le chargement de tous avant le départ", () => {
     expect(markLoaded(second, "a", second.id)).toBe(false);
   });
 
+  it("un jeu qui a sa propre introduction part sans compte à rebours de plus", () => {
+    const g = openGate(["a"], 0, null, { countdown: 0 });
+    markLoaded(g, "a", g.id);
+    expect(settleGate(g, 700)).toBe(true);
+    expect(g.goAt).toBe(700);
+    expect(gatePassed(g, 700)).toBe(true);
+  });
+
   it("sans chargement en cours, rien n'est retenu", () => {
     expect(gatePassed(null, 0)).toBe(true);
     expect(gateWakeAt(null, 0)).toBeNull();

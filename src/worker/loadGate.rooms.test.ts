@@ -1,4 +1,4 @@
-// Le chargement de tous avant le départ (shared/loadGate.ts), dans de vraies salles (Crampons, Capitale) : le départ attend que chaque
+// Le chargement de tous avant le départ (shared/loadGate.ts), dans de vraies salles (Crampons, Capitale, Bowling) : le départ attend que chaque
 // joueur ait dit « chargé », au plus LOAD_MAX_MS, puis un court compte à rebours ; un joueur parti n'est plus attendu.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,8 @@ vi.mock("cloudflare:workers", () => ({
 
 import { LOAD_COUNTDOWN_MS, LOAD_MAX_MS, type LoadGate } from "../shared/loadGate.ts";
 import type { CapitaleState } from "../shared/games/capitale/engine.ts";
+import { INTRO_MS } from "../shared/games/bowling/match.ts";
+import { BowlingRoom } from "./bowlingRoom.ts";
 import { CapitaleRoom } from "./capitaleRoom.ts";
 import { CramponsRoom } from "./cramponsRoom.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket, type RoomLike } from "./roomHarness.ts";
@@ -223,5 +225,60 @@ describe("le premier coup attend le chargement de chacun (Capitale)", () => {
     const t = await capitaleTable();
     await t.bench.drop(t.host);
     expect(t.d().gate!.goAt).toBe(clock + LOAD_COUNTDOWN_MS);
+  });
+});
+
+describe("l'introduction de la salle attend le chargement de chacun (Bowling)", () => {
+  interface BwData {
+    status: string;
+    gate?: LoadGate | null;
+    match: { phase: string; phaseAt: number; deadline: number };
+    seats: { id: string; kind: string; userId: string | null }[];
+  }
+  type BwRoom = RoomLike & { init(o: unknown): Promise<boolean>; tick(): Promise<void>; stopLoop(): void };
+
+  async function lane() {
+    const state = new FakeState();
+    const r = new BowlingRoom(state as never, fakeEnv() as never) as unknown as BwRoom;
+    await state.ready;
+    await r.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(r, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "start" });
+    r.stopLoop();
+    const d = () => bench.data<BwData>();
+    const tick = async (ms: number) => {
+      clock += ms;
+      await r.tick();
+    };
+    return { r, bench, host, d, tick };
+  }
+
+  it("l'introduction ne court pas pendant le chargement, puis part pour tous au départ, sans décompte de plus", async () => {
+    const t = await lane();
+    expect(t.d().match.phase).toBe("intro");
+    expect(t.d().gate!.countdown).toBe(0);
+    await t.tick(10_000);
+    // Toujours l'introduction : elle n'a pas couru pendant l'attente
+    expect(t.d().match.phase).toBe("intro");
+    await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
+    expect(t.d().gate!.goAt).toBe(clock);
+    await t.tick(50);
+    expect(t.d().gate).toBeNull();
+    expect(t.d().match.phaseAt).toBe(clock);
+    expect(t.d().match.deadline).toBe(clock + INTRO_MS);
+    t.r.stopLoop();
+  });
+
+  it("au-delà du délai maximum, la partie part sans le retardataire", async () => {
+    const t = await lane();
+    await t.tick(LOAD_MAX_MS - 50);
+    expect(t.d().gate).not.toBeNull();
+    // Sans décompte de plus : le départ et l'introduction au même tic
+    await t.tick(50);
+    expect(t.d().gate).toBeNull();
+    expect(t.d().match.deadline).toBe(clock + INTRO_MS);
+    t.r.stopLoop();
   });
 });
