@@ -1,6 +1,7 @@
 // Ce que se disent la table de minigolf et les navigateurs : le salon, la partie, les coups.
 
 import type { AchievementUnlock, ChatMessage, EloResult, RoomStatus, SeatView, SpectatorView, Visibility } from "../../protocol.ts";
+import type { LoadGate } from "../../loadGate.ts";
 import type { BallLook } from "./looks.ts";
 import type { Match, MinigolfConfig } from "./match.ts";
 
@@ -36,6 +37,8 @@ export interface MinigolfRoomView {
   /** L'équipe de chaque siège */
   teams: Record<string, 0 | 1>;
   minigolf: MinigolfView | null;
+  /** La partie retenue le temps que chacun charge le parcours (voir loadGate.ts) ; null : elle tourne */
+  gate?: LoadGate | null;
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
@@ -72,6 +75,8 @@ export type MinigolfClientMessage =
   | { t: "leave" }
   /** Un bot jouait sa balle (il laissait passer ses tours) : il reprend la main */
   | { t: "takeBack" }
+  /** Son jeu a fini de charger le parcours (voir loadGate.ts) */
+  | { t: "loaded"; gate: number }
   | { t: "ready" }
   | { t: "close" };
 

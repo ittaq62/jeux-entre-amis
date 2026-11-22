@@ -6,6 +6,7 @@ import { botLook, DEFAULT_LOOK, isBallLook, usableLook, type BallLook } from "..
 import {
   ballsInPlay,
   createMatch,
+  startHole,
   currentRef,
   DEFAULT_CONFIG,
   mergeConfig,
@@ -64,6 +65,7 @@ import {
   type ArrivalIntent,
 } from "../shared/lateJoin.ts";
 import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
+import { forgetPlayer, gatePassed, markLoaded, openGate, settleGate, type LoadGate } from "../shared/loadGate.ts";
 import { ANNOUNCE_MS } from "../shared/announce.ts";
 
 // Les golfeurs du dimanche qui complètent la table
@@ -130,6 +132,8 @@ interface MinigolfData {
   watchers?: string[];
   pickUntil?: number | null;
   ready?: string[];
+  /** La partie retenue le temps que chacun charge le parcours (voir loadGate.ts) ; null : elle tourne */
+  gate?: LoadGate | null;
 }
 
 interface Attachment {
@@ -400,6 +404,8 @@ export class MinigolfRoom extends DurableObject<Env> {
     const seat = d.seats.find((s) => s.userId === att.userId);
     if (seat) {
       seat.disconnectedAt = now;
+      // Parti pendant le chargement : on ne l'attend plus
+      if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
       if (d.status === "playing") this.addTimer({ at: now + AWAY_AFTER_MS, kind: "away", seatId: seat.id });
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
@@ -529,6 +535,13 @@ export class MinigolfRoom extends DurableObject<Env> {
         return this.afterChange(now);
       }
 
+      case "loaded": {
+        // Son jeu a chargé le parcours : quand tout le monde l'a dit (ou au bout de l'attente), le départ commun
+        if (!seat || d.status !== "playing" || !markLoaded(d.gate, seat.id, msg.gate)) return;
+        settleGate(d.gate, now);
+        return this.afterChange(now);
+      }
+
       case "takeBack": {
         if (!seat || seat.autoplay !== "afk" || d.status !== "playing") return;
         this.takeBack(seat);
@@ -603,6 +616,7 @@ export class MinigolfRoom extends DurableObject<Env> {
           if (d.status === "playing") {
             seat.autoplay = "away";
             seat.disconnectedAt = now;
+            if (forgetPlayer(d.gate, seat.id)) settleGate(d.gate, now);
             this.systemChat(`${seat.name} a quitté la partie, un bot joue sa balle.`);
           } else {
             d.seats = d.seats.filter((s) => s !== seat);
@@ -820,6 +834,14 @@ export class MinigolfRoom extends DurableObject<Env> {
     this.botRng = { rng: seed ^ 0x5bd1e995 };
     this.botAt.clear();
     this.botPlan.clear();
+    // La partie attend que chaque joueur présent ait chargé le parcours ; le survol du premier trou part au départ
+    // commun et tient lieu de compte à rebours
+    d.gate = openGate(
+      d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).map((s) => s.id),
+      now,
+      d.gate,
+      { countdown: 0 },
+    );
     d.status = "playing";
     d.startedAt = now;
     d.recorded = false;
@@ -850,6 +872,20 @@ export class MinigolfRoom extends DurableObject<Env> {
       return;
     }
     const now = Date.now();
+    // Le chargement de chacun : rien ne bouge avant le départ commun, où le survol du premier trou part pour tout le monde
+    if (d.gate) {
+      if (settleGate(d.gate, now)) {
+        this.broadcast();
+        this.saveLive();
+      }
+      if (!gatePassed(d.gate, now)) return;
+      d.gate = null;
+      if (m.phase === "intro") startHole(m, m.hole, now);
+      this.broadcast();
+      this.saveLive();
+      await this.armAlarm();
+      return;
+    }
     const before = m.cfg.turns ? m.players.map((p) => p.shot) : null;
     let changed = tickMatch(m, now);
     if (before) this.noteMissed(m, before);
@@ -1169,6 +1205,7 @@ export class MinigolfRoom extends DurableObject<Env> {
       you: { userId, seatId: seat?.id ?? null, isHost: userId === d.hostId, isAdmin: Boolean(connected.get(userId)?.admin) },
       teams: Object.fromEntries(d.seats.map((s) => [s.id, s.team])),
       minigolf: match,
+      gate: d.status === "playing" ? (d.gate ?? null) : null,
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,

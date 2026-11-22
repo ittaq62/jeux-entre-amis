@@ -137,6 +137,8 @@ export class GolfRuntime {
   private keys = new Set<string>();
   private holeKey = "";
   private introFrom = 0;
+  /** Le survol du premier trou attend le départ commun (que chacun ait chargé le parcours) */
+  private introHeld = false;
   // Qui la caméra suit (chacun son tour : celui qui joue), et depuis quand ; le joueur dont c'était le tour
   private focus: string | null = null;
   private focusAt = 0;
@@ -422,6 +424,17 @@ export class GolfRuntime {
     if (on) this.cancelAim();
   }
 
+  /** Préparer la scène avant le départ (voir HoleScene.prepare) */
+  prepare(onProgress?: (share: number) => void) {
+    return this.scene.prepare(onProgress);
+  }
+
+  /** Retenir le survol du trou sur son premier plan (jusqu'au départ commun), puis le laisser partir de là */
+  holdIntro(on: boolean) {
+    if (this.introHeld && !on) this.introFrom = performance.now();
+    this.introHeld = on;
+  }
+
   /** Voir tout le trou d'en haut, ou revenir derrière sa balle */
   toggleOverview(on?: boolean) {
     this.overview = on ?? !this.overview;
@@ -624,6 +637,7 @@ export class GolfRuntime {
     const cz = (b.z0 + b.z1) / 2;
     const span = Math.max(b.x1 - b.x0, b.z1 - b.z0);
     let mode = this.camMode;
+    if (mode === "intro" && this.introHeld) this.introFrom = now;
     if (mode === "intro" && (this.view!.phase !== "intro" || now - this.introFrom > 3600))
       mode = this.camMode = this.overview ? "overview" : "aim";
     if (mode === "intro") {

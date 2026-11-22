@@ -13,6 +13,7 @@ import type { CourseId } from "../../../shared/games/minigolf/courses.ts";
 import { segClosest } from "../../../shared/games/minigolf/geom.ts";
 import type { BallLook } from "../../../shared/games/minigolf/looks.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { warmThree } from "../../lib/prepare.ts";
 import { BallModel } from "./ball.ts";
 import { buildHoleMeshes, type HoleMeshes } from "./holeMesh.ts";
 import { Sky } from "./sky.ts";
@@ -356,6 +357,14 @@ export class HoleScene {
       need = Math.max(need, Math.atan2(top - at.y, Math.max(0.05, r - w.t)));
     }
     return need;
+  }
+
+  /**
+   * Tout préparer avant le départ (derrière l'écran de chargement) : les textures envoyées à la carte graphique, les
+   * shaders compilés, quelques images de chauffe
+   */
+  prepare(onProgress?: (share: number) => void) {
+    return warmThree(this.renderer, this.scene, this.camera, { onProgress, render: () => this.render(0, 0) });
   }
 
   /** Jusqu'où une balle roulerait tout droit avant le premier mur (au plus `max`) */
