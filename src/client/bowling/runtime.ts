@@ -79,6 +79,8 @@ const SWEEP_MS = 1900;
 /** Le temps pour aller de la banquette à l'élan */
 const WALK_MS = 1300;
 /** Où le lanceur se tient avant son élan, et la longueur de son élan */
+/** La hauteur de la boule à saisir sur l'écran (de 0 en haut à 1 en bas ; bowling.css : .bw-grip) */
+const GRIP_Y = 0.6;
 const STANCE_Z = 1.95;
 const APPROACH_LEN = 1.55;
 
@@ -848,9 +850,10 @@ export class BowlingRuntime {
     const rect = this.scene.renderer.domElement.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+    // Sous la ligne du haut : la boule au milieu (le geste), les côtés pour se placer ; au-dessus, la visée
     let mode: "swing" | "move" | "aim" = "aim";
-    if (y > 0.5 && Math.abs(x - 0.5) < 0.2) mode = "swing";
-    else if (y > 0.5) mode = "move";
+    if (y > GRIP_Y - 0.2 && Math.abs(x - 0.5) < 0.2) mode = "swing";
+    else if (y > GRIP_Y - 0.2) mode = "move";
     this.drag = { mode, x: e.clientX, y: e.clientY, id: e.pointerId, x0: this.stanceX, d0: this.aimD };
     if (mode === "swing") {
       this.samples = [{ t: e.timeStamp, x: e.clientX, y: e.clientY }];

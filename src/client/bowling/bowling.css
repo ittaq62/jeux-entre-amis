@@ -66,7 +66,9 @@
 .bw-frame-text {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
   line-height: 1.2;
 }
 
@@ -88,6 +90,7 @@
 
 .bw-clock {
   display: grid;
+  flex: none;
   place-items: center;
   min-width: 34px;
   height: 34px;
@@ -359,10 +362,12 @@
 }
 
 /* Le geste : la boule à saisir, la jauge du bras */
+/* La boule à saisir : assez haut pour avoir de la place dessous (on recule le bras en descendant), loin du bord du bas
+   (sur un téléphone, c'est là que vivent les gestes du système) ; la zone du geste suit (runtime.ts : GRIP_Y) */
 .bw-grip {
   position: absolute;
   left: 50%;
-  bottom: calc(66px + var(--safe-bottom, 0px));
+  top: calc(60% - 46px);
   display: grid;
   place-items: center;
   width: 92px;
@@ -395,7 +400,7 @@
 .bw-swing {
   position: absolute;
   left: 50%;
-  bottom: 12%;
+  top: calc(60% - 60px);
   width: 6px;
   height: 120px;
   margin-left: -3px;
@@ -773,6 +778,16 @@
     display: none;
   }
 
+  /* Le cartouche du haut se serre : le gros numéro répète la frame, on le laisse aux grands écrans */
+  .bw-frame-card {
+    min-width: 0;
+    padding-left: 10px;
+  }
+
+  .bw-frame-num {
+    display: none;
+  }
+
   .bw-sheet-top {
     top: calc(60px + var(--safe-top, 0px));
   }
@@ -785,6 +800,24 @@
   .bw-tip {
     max-width: calc(100vw - 130px);
     font-size: 12.5px;
+  }
+}
+
+/* Un écran bas (un téléphone en paysage) : la boule à saisir et la feuille se font plus petites, pour laisser voir le
+   bout de la piste et garder de la place sous la boule */
+@media (max-height: 480px) {
+  .bw-grip {
+    transform: scale(0.74);
+  }
+
+  .bw-sheet-top {
+    top: calc(52px + var(--safe-top, 0px));
+    transform: translateX(-50%) scale(0.8);
+    transform-origin: top center;
+  }
+
+  .bw-sheet-top.is-away {
+    transform: translate(-50%, -10px) scale(0.8);
   }
 }
 
