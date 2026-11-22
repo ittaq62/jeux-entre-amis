@@ -4,7 +4,7 @@
 
 import { hole, ramp } from "../build.ts";
 import type { HoleDef, Part } from "../course.ts";
-import { box, circle, ellipse, laneSides, smooth, type Pt } from "../geom.ts";
+import { arc, box, circle, ellipse, laneSides, smooth, type Pt } from "../geom.ts";
 
 const UP = -Math.PI / 2;
 /** La lave, un peu plus bas que la roche : la balle y tombe */
@@ -87,29 +87,102 @@ const lac = hole(
   { hint: "Contourne le lac par la gauche ou par la droite ; une bande sur le bord peut aider." },
 );
 
-// 5. Les fumerolles : un sentier étroit qui serpente sur la lave ; des bouffées de vapeur poussent de côté
+// 5. Les fumerolles : une chaussée de basalte qui serpente au-dessus d'une coulée de lave au rivage déchiqueté ; elle
+// monte vers une crête, redescend au ras de la lave, remonte, et finit sur une île ronde ; des bouffées de vapeur
+// soufflent en travers depuis les fumerolles du rivage
 const fumerolles = hole(
   "Les fumerolles",
   4,
   (b) => {
-    const path = smooth(
+    const W = 1.5;
+    const hw = W / 2;
+    const C: Pt = [-0.3, -10.5];
+    const R = 0.95;
+    // La chaussée : elle arrive tout droit dans l'île (ses bords tombent pile sur le cercle)
+    const zIn = C[1] + Math.sqrt(R * R - hw * hw);
+    // (ses deux bouts tout droits : elle part bien d'équerre du replat, elle entre bien dans l'île)
+    const ctrl: Pt[] = [
+      [0, -0.9],
+      [0, -1.5],
+      [0, -2.4],
+      [0.8, -4.8],
+      [-0.72, -7.8],
+      [-0.32, -9.3],
+      [-0.3, -9.6],
+      [-0.3, zIn],
+    ];
+    const line = smooth(ctrl, 0.25);
+    const { left, right } = laneSides(line, W);
+    // La hauteur le long de la chaussée (sur sa ligne même, pour qu'elle ne penche jamais en travers) : elle monte
+    // au-dessus de la lave, y reste dans les deux virages, et redescend tout droit vers l'île
+    const run = [0];
+    for (let i = 1; i < line.length; i++) run.push(run[i - 1]! + Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]));
+    const total = run[run.length - 1]!;
+    const keys: [number, number][] = [
+      [0, 0],
+      [0.12, 0],
+      [0.38, 0.09],
+      [0.82, 0.09],
+      [0.96, 0.05],
+      [1, 0.05],
+    ];
+    const hAt = (u: number) => {
+      let k = 1;
+      while (k < keys.length - 1 && keys[k]![0] < u) k++;
+      const [u0, h0] = keys[k - 1]!;
+      const [u1, h1] = keys[k]!;
+      const t = Math.min(1, Math.max(0, (u - u0) / (u1 - u0 || 1)));
+      return h0 + (h1 - h0) * t * t * (3 - 2 * t);
+    };
+    const aL = Math.atan2(zIn - C[1], -hw);
+    const aR = Math.atan2(zIn - C[1], hw) + Math.PI * 2;
+    const island = arc(C[0], C[1], R, aL, aR, 40).slice(1, -1);
+    const causeway = [...left, ...island, ...[...right].reverse()];
+    b.tile(causeway, { k: "path", pts: [...line, C], hs: [...run.map((r) => hAt(r / total)), 0.05] }, "stone", {
+      look: "basalte",
+    });
+    // Le replat du départ, et le rivage de la coulée (déchiqueté, lissé)
+    b.tile(
       [
-        [0, 0],
-        [0, -2.4],
-        [0.8, -4.8],
-        [-0.7, -7.8],
-        [0, -10.6],
+        [-1.45, 0.3],
+        [1.45, 0.3],
+        [1.75, -0.9],
+        [hw, -0.9],
+        [-hw, -0.9],
+        [-1.7, -0.9],
       ],
-      0.25,
+      0,
+      "stone",
+      { look: "basalte" },
     );
-    const { left, right } = laneSides(path, 1.4);
-    b.tile([...left, ...[...right].reverse()], 0, "stone", { look: "basalte" });
-    b.tile([[-2.2, 0], ...left, ...[...right].reverse(), [2.2, 0], [2.2, -11.6], [-2.2, -11.6]], LAVA, "lava", { look: "lave" });
-    b.wind(box(-2.2, -4.4, 2.2, -3.4), [1.5, 0], { period: 3.0, on: 0.3, look: "vapeur" });
-    b.wind(box(-2.2, -8.6, 2.2, -7.6), [-1.5, 0], { period: 3.4, on: 0.3, look: "vapeur" });
-    b.tee(0, -0.45, UP).cup(0, -10.1);
+    const shore = smooth(
+      [
+        [1.75, -0.9],
+        [2.5, -2.6],
+        [2.95, -4.4],
+        [2.55, -6.1],
+        [1.75, -7.2],
+        [2.0, -8.8],
+        [2.15, -10.4],
+        [1.5, -11.65],
+        [0, -12.15],
+        [-1.55, -11.75],
+        [-2.2, -10.4],
+        [-2.65, -8.5],
+        [-2.55, -6.7],
+        [-1.75, -5.3],
+        [-1.5, -3.7],
+        [-1.95, -2.2],
+        [-1.7, -0.9],
+      ],
+      0.3,
+    );
+    b.tile([[-1.7, -0.9], ...causeway, [1.75, -0.9], ...shore.slice(1, -1)], LAVA, "lava", { look: "lave" });
+    b.wind(box(-1.75, -4.7, 2.0, -3.7), [1.5, 0], { period: 3.0, on: 0.3, look: "vapeur" });
+    b.wind(box(-2.0, -8.6, 2.05, -7.6), [-1.5, 0], { period: 3.4, on: 0.3, look: "vapeur" });
+    b.tee(0, -0.45, UP).cup(-0.25, -10.62);
   },
-  { hint: "La vapeur pousse de côté par bouffées : passe entre deux, ou vise un peu contre." },
+  { hint: "La vapeur pousse de côté par bouffées : passe entre deux, ou vise un peu contre. Gare à la crête." },
 );
 
 // 6. L'obsidienne : une dalle de verre noir qui descend et fait glisser la balle ; la cendre l'arrête en bas

@@ -5,7 +5,7 @@
 
 import * as THREE from "three";
 import { heightAt, type Course, type MoverDef } from "../../../../shared/games/minigolf/course.ts";
-import { sandTex, stoneTex, surface, type SurfaceTex } from "../textures.ts";
+import { hash01, makeCells, sandTex, stoneTex, surface, type SurfaceTex } from "../textures.ts";
 import { boxMeters, canvasTex, leafyBall, onCourse, plainKit, Scatter, shadows, surfaceMat, type Theme } from "./common.ts";
 
 let made: Theme | null = null;
@@ -43,20 +43,81 @@ function basaltTex(): SurfaceTex {
   });
 }
 
-/** La roche volcanique du décor : sombre, poreuse, quelques veines rouges éteintes */
+/**
+ * La roche volcanique du décor : des dalles de lave refroidie, fendues, chacune son ton ; des pores, du grain, et dans
+ * quelques fentes une lueur rouge éteinte
+ */
 function rockTex(): SurfaceTex {
-  return surface("volcan-roche", 512, 5, 173, 4, (u, v, n) => {
-    const big = n(u * 6, v * 6, 6, 4);
-    const pores = n(u * 120, v * 120, 120, 1) > 0.72 ? 1 : 0;
-    const vein = Math.abs(n(u * 9, v * 9, 9, 3) - 0.5) < 0.012 ? 1 : 0;
-    const k = 0.32 + big * 0.22 - pores * 0.1;
+  const P = 12;
+  const plates = makeCells(173, P);
+  const chips = makeCells(174, 40);
+  return surface("volcan-roche3", 512, 5, 173, 4, (u, v, n) => {
+    const c = plates(u * P, v * P);
+    const crack = clamp01((c.f2 - c.f1) * (6 + hash01(c.id, 5) * 6));
+    const tone = hash01(c.id, 11);
+    const ember = hash01(c.id, 13) > 0.88 ? Math.pow(1 - crack, 3) : 0;
+    const d = chips(u * 40, v * 40);
+    const fine = clamp01((d.f2 - d.f1) * 7);
+    const grain = n(u * 160, v * 160, 160, 2);
+    const swell = n(u * 4, v * 4, 4, 3);
+    const k = (0.27 + tone * 0.13 + grain * 0.12 + swell * 0.12) * (0.5 + 0.5 * Math.pow(crack, 0.5)) * (0.82 + 0.18 * fine);
     return [
-      clamp01(k + vein * 0.12) * 255 * 0.95,
-      clamp01(k + vein * 0.05) * 255 * 0.82,
+      clamp01(k + ember * 0.2) * 255 * 0.95,
+      clamp01(k + ember * 0.05) * 255 * 0.83,
       clamp01(k) * 255 * 0.78,
-      0.5 + big * 0.3 - pores * 0.3,
+      Math.pow(crack, 0.4) * (0.6 + swell * 0.3) + fine * 0.12 + grain * 0.12,
     ];
   });
+}
+
+/**
+ * Creuse les flancs d'un volcan tourné (LatheGeometry) de ravines qui descendent du sommet, et lui donne des uv à peu
+ * près en mètres (`around` : le tour, `up` : le flanc)
+ */
+function gullies<T extends THREE.BufferGeometry>(g: T, amp: number, around: number, up: number, seed: number): T {
+  const p = g.attributes.position as THREE.BufferAttribute;
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  let y1 = 0;
+  for (let i = 0; i < p.count; i++) y1 = Math.max(y1, p.getY(i));
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const z = p.getZ(i);
+    const y = p.getY(i) / (y1 || 1);
+    const a = Math.atan2(z, x);
+    const ridge = 0.5 + 0.5 * Math.sin(a * 11 + seed + Math.sin(a * 3 + seed * 2) * 1.8);
+    const fine = 0.5 + 0.5 * Math.sin(a * 29 + seed * 3 + Math.sin(a * 7) * 2);
+    const k = Math.sin(Math.min(1, y / 0.92) * Math.PI) * amp;
+    const s = 1 - k * (0.7 * ridge + 0.3 * fine);
+    p.setXYZ(i, x * s, p.getY(i), z * s);
+    uv.setXY(i, uv.getX(i) * around, uv.getY(i) * up);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Un volcan lointain : des flancs qui se creusent en montant, un rebord de cratère ; 1 de haut, 1,6 de rayon au pied */
+let farConeGeo: THREE.BufferGeometry | null = null;
+function farCone(): THREE.BufferGeometry {
+  farConeGeo ??= gullies(
+    new THREE.LatheGeometry(
+      [
+        [1.6, 0],
+        [1.2, 0.07],
+        [0.82, 0.26],
+        [0.5, 0.58],
+        [0.28, 0.9],
+        [0.22, 1.0],
+        [0.15, 0.97],
+        [0, 0.9],
+      ].map(([r, y]) => new THREE.Vector2(r!, y!)),
+      40,
+    ),
+    0.12,
+    50,
+    18,
+    1.3,
+  );
+  return farConeGeo;
 }
 
 /** La lave : une croûte sombre en plaques, et le feu qui luit entre elles */
@@ -311,7 +372,7 @@ interface Life {
     h: number;
   }[];
   plumes: { o: THREE.Object3D; period: number; on: number; a0: number; h: number }[];
-  jets: { o: THREE.Object3D; period: number; on: number; dir: number }[];
+  jets: { o: THREE.Object3D; puffs: THREE.Sprite[]; period: number; on: number; dir: number }[];
 }
 
 function volcanoLife(decor: THREE.Object3D, t: number) {
@@ -344,13 +405,20 @@ function volcanoLife(decor: THREE.Object3D, t: number) {
     p.o.scale.set(0.6 + k * 0.6, 0.05 + k * p.h, 0.6 + k * 0.6);
     p.o.visible = k > 0.02;
   }
-  // Les fumerolles : un jet de vapeur en travers, pendant les bouffées
+  // Les fumerolles : pendant les bouffées, des nuages de vapeur filent en travers depuis l'évent, gonflent et s'effacent
   for (const j of life.jets) {
     const ph = t / j.period;
     const f = ph - Math.floor(ph);
     const k = f <= j.on ? Math.sin((f / j.on) * Math.PI) : 0;
-    j.o.scale.set(0.2 + k, 0.4 + k * 0.6, 0.4 + k * 0.6);
     j.o.visible = k > 0.02;
+    if (!j.o.visible) continue;
+    j.puffs.forEach((s, i) => {
+      const q = (t * 1.6 + i / j.puffs.length) % 1;
+      s.position.set(j.dir * (0.1 + q * 4.2), 0.05 + q * 0.55 + Math.sin(i * 2.3) * 0.08, Math.sin(i * 4.1 + t) * 0.18 * q);
+      const sz = 0.3 + q * 1.3;
+      s.scale.set(sz, sz, 1);
+      s.material.opacity = k * Math.min(1, q * 6) * (1 - q) * 0.75;
+    });
   }
 }
 
@@ -404,8 +472,9 @@ function volcanoDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
       new THREE.Vector2(9, 52),
       new THREE.Vector2(0, 51),
     ],
-    48,
+    64,
   );
+  gullies(cone, 0.09, 260, 70, 0.4);
   const flank = m.rock.clone();
   flank.side = THREE.DoubleSide;
   const volcano = new THREE.Mesh(cone, flank);
@@ -444,14 +513,14 @@ function volcanoDecor(c: Course, rng: () => number, m: Mats): THREE.Group {
     g.add(p);
   }
   // Des cônes plus petits, tout autour, et leur fumée
-  const cones = new Scatter(new THREE.ConeGeometry(1, 1, 18, 1, true), m.rock, false);
+  const cones = new Scatter(farCone(), m.rock, false);
   for (let k = 0; k < 10; k++) {
     const a = rng() * Math.PI * 2;
     const d = 60 + rng() * 90;
     const x = cx + Math.cos(a) * d;
     const z = cz + Math.sin(a) * d;
     const h = 6 + rng() * 14;
-    cones.add(x, base + h / 2 - 0.5, z, [h * 1.4, h, h * 1.4], rng() * 6);
+    cones.add(x, base - 0.5, z, [h * 1.1, h, h * 1.1], rng() * 6);
   }
   const cm = cones.build();
   if (cm) g.add(cm);
@@ -651,24 +720,13 @@ function holeDecor(c: Course, g: THREE.Group, m: Mats, base: number, life: Life,
     vent.position.set(x, base + 0.25, z);
     vent.rotation.z = fromLeft ? -1.2 : 1.2;
     g.add(vent);
-    const jet = new THREE.Mesh(
-      new THREE.ConeGeometry(0.6, 4.2, 18, 1, true),
-      new THREE.MeshStandardMaterial({
-        color: 0xf0ece8,
-        transparent: true,
-        opacity: 0.32,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        roughness: 1,
-      }),
-    );
-    jet.geometry.translate(0, -2.1, 0);
     const holder = new THREE.Group();
-    holder.position.set(x, 0.35, z);
-    holder.rotation.z = fromLeft ? Math.PI / 2 : -Math.PI / 2;
-    holder.add(jet);
+    holder.position.set(x, 0.3, z);
+    const puffs = Array.from({ length: 12 }, () => puff(0xf2eeea));
+    holder.add(...puffs);
+    holder.visible = false;
     g.add(holder);
-    life.jets.push({ o: holder, period: w.period ?? 3, on: w.on ?? 0.5, dir: fromLeft ? 1 : -1 });
+    life.jets.push({ o: holder, puffs, period: w.period ?? 3, on: w.on ?? 0.5, dir: fromLeft ? 1 : -1 });
   }
 
   // Le tunnel de lave : un boyau de roche autour du tube, qui cache la balle le temps du passage

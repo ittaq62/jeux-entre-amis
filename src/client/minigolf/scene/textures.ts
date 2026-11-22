@@ -46,7 +46,7 @@ function fbm(noise: ReturnType<typeof makeNoise>, x: number, y: number, period: 
  * Un bruit de cellules qui boucle sur `period` cases : pour un point, la distance au germe le plus proche (f1), au
  * suivant (f2), et le numéro de la cellule (de quoi dessiner des cailloux, des feuilles, des écailles).
  */
-function makeCells(seed: number, period: number, stretch = 1) {
+export function makeCells(seed: number, period: number, stretch = 1) {
   const gx = new Float32Array(period * period);
   const gy = new Float32Array(period * period);
   // Chaque cellule peut être allongée dans sa propre direction (des feuilles plutôt que des cailloux)
@@ -94,7 +94,7 @@ function makeCells(seed: number, period: number, stretch = 1) {
 }
 
 /** Un nombre entre 0 et 1 tiré d'un entier (le ton d'un caillou, d'une feuille) */
-function hash01(i: number, salt: number): number {
+export function hash01(i: number, salt: number): number {
   let h = Math.imul(i ^ (salt * 0x9e3779b9), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
