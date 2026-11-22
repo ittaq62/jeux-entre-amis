@@ -36,7 +36,7 @@ export const ACTION_ROWS: { id: ActionId; label: string; note?: string }[] = [
   { id: "special", label: "Spécial", note: "haut + Spécial : remonter vers l'arène" },
   { id: "jump", label: "Sauter", note: "deux fois, une au sol et une en l'air" },
   { id: "shield", label: "Garde", note: "avec une direction : esquive ou roulade" },
-  { id: "grab", label: "Saisir", note: "aussi : Frapper pendant la garde ; puis une direction pour projeter" },
+  { id: "grab", label: "Saisir, ramasser", note: "ramasse l'objet à ses pieds, lance celui qu'on tient ; sinon saisit (puis une direction pour projeter)" },
   { id: "taunt", label: "Narguer", note: "pour rire, sans effet sur le combat (mais on reste à découvert)" },
 ];
 
@@ -51,7 +51,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "souris",
     name: "ZQSD et souris",
-    note: "Clic gauche pour frapper, F (ou le bouton avant de la souris) pour le coup fort, clic droit pour le spécial, Espace pour sauter, Maj pour la garde, E pour saisir",
+    note: "Clic gauche pour frapper, F (ou le bouton avant de la souris) pour le coup fort, clic droit pour le spécial, Espace pour sauter, Maj pour la garde, E pour saisir et ramasser",
     bindings: {
       ...MOVES_ZQSD,
       attack: ["Mouse0", "KeyJ"],
@@ -66,7 +66,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "fleches",
     name: "Flèches et clavier",
-    note: "La main droite sur les flèches, la gauche sur X (frapper), W (coup fort), C, Espace, V et B",
+    note: "La main droite sur les flèches, la gauche sur X (frapper), W (coup fort), C (spécial), Espace, V (garde) et B (saisir, ramasser)",
     bindings: {
       up: ["ArrowUp"],
       down: ["ArrowDown"],
@@ -84,7 +84,7 @@ export const PRESETS: { id: string; name: string; note: string; bindings: Bindin
   {
     id: "lettres",
     name: "ZQSD et lettres",
-    note: "Sans souris : J pour frapper, H pour le coup fort, K pour le spécial, Espace pour sauter, L pour la garde, U pour saisir",
+    note: "Sans souris : J pour frapper, H pour le coup fort, K pour le spécial, Espace pour sauter, L pour la garde, U pour saisir et ramasser",
     bindings: {
       ...MOVES_ZQSD,
       attack: ["KeyJ"],

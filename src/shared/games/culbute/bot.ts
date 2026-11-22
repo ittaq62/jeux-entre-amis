@@ -339,7 +339,7 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
       .find((i) => wantsCake || i.kind !== "gateau");
     const close = foes.some((o) => Math.abs(o.x - me.x) < 2.2 && Math.abs(o.y - me.y) < 1.5);
     if (it && !close && rnd(m) < 0.8) {
-      if (Math.abs(it.x - me.x) < 0.8) m.press = ATK;
+      if (Math.abs(it.x - me.x) < 0.8) m.press = GRB;
       else m.x = it.x < me.x ? -1 : 1;
       return out();
     }

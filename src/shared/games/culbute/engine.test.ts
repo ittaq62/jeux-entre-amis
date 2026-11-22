@@ -924,15 +924,49 @@ describe("Culbute : le combat", () => {
     expect(f.items.some((i) => i.ground)).toBe(true);
   });
 
-  it("une tarte ramassée se lance et touche", () => {
+  it("une tarte se ramasse avec Saisir, puis se lance (Frapper ou Saisir) et touche", () => {
+    for (const thrown of [ATK, GRB]) {
+      const f = duel("ginette", "marcel");
+      skipIntro(f);
+      faceToFace(f, 5);
+      f.items.push({ id: 999, kind: "tarte", x: f.fighters[0]!.x + 0.4, y: 0, vx: 0, vy: 0, ground: true, life: 600 });
+      const events = run(f, 80, [
+        (k) => (k === 0 ? { x: 0, y: 0, held: GRB, pressed: GRB } : k === 20 ? { x: 1, y: 0, held: thrown, pressed: thrown } : NO_INPUT),
+      ]);
+      expect(events.some((e) => e.k === "pick" && e.kind === "tarte")).toBe(true);
+      expect(events.some((e) => e.k === "throw" && e.kind === "tarte")).toBe(true);
+      expect(f.fighters[1]!.dmg).toBeGreaterThan(0);
+    }
+  });
+
+  it("Frapper à côté d'un objet frappe, sans le ramasser ; loin de tout objet, Saisir tend la main", () => {
     const f = duel("ginette", "marcel");
     skipIntro(f);
     faceToFace(f, 5);
-    f.items.push({ id: 999, kind: "tarte", x: f.fighters[0]!.x + 0.4, y: 0, vx: 0, vy: 0, ground: true, life: 600 });
-    const events = run(f, 80, [(k) => (k === 0 || k === 20 ? { x: 1, y: 0, held: ATK, pressed: ATK } : NO_INPUT)]);
+    const a = f.fighters[0]!;
+    f.items.push({ id: 999, kind: "tarte", x: a.x + 0.4, y: 0, vx: 0, vy: 0, ground: true, life: 600 });
+    const events = run(f, 1, [tap(ATK)]);
+    expect(events.some((e) => e.k === "pick")).toBe(false);
+    expect(a.move).toBe("n");
+    expect(a.item).toBeFalsy();
+    const g = duel("ginette", "marcel");
+    skipIntro(g);
+    faceToFace(g, 5);
+    run(g, 1, [tap(GRB)]);
+    expect(g.fighters[0]!.move).toBe("g:grab");
+  });
+
+  it("en l'air, Saisir attrape l'objet qui passe à portée de main", () => {
+    const f = duel("ginette", "marcel");
+    skipIntro(f);
+    faceToFace(f, 5);
+    const a = f.fighters[0]!;
+    run(f, 10, [tap(JMP)]);
+    expect(a.ground).toBe(-1);
+    f.items.push({ id: 999, kind: "tarte", x: a.x + 0.3, y: a.y + 0.6, vx: 0, vy: 0, ground: false, life: 600 });
+    const events = run(f, 1, [tap(GRB)]);
     expect(events.some((e) => e.k === "pick" && e.kind === "tarte")).toBe(true);
-    expect(events.some((e) => e.k === "throw" && e.kind === "tarte")).toBe(true);
-    expect(f.fighters[1]!.dmg).toBeGreaterThan(0);
+    expect(a.item).toBe("tarte");
   });
 
   it("chaque coup de chaque style est jouable du début à la fin sans bloquer", () => {

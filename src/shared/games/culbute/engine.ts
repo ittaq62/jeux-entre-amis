@@ -356,18 +356,9 @@ function onThin(plats: PlatformNow[], ft: Fighter) {
 // Ce que le joueur demande, selon ce qu'il est en train de faire
 // ---------------------------------------------------------------------------
 
-function groundAttack(f: Fight, ft: Fighter, x: number, y: number) {
+function groundAttack(ft: Fighter, x: number, y: number) {
   const dir = dirOf(x, y);
   if (dir === "s") ft.face = x < 0 ? -1 : 1;
-  // Un objet par terre, juste devant : on le ramasse plutôt que de frapper dans le vide
-  if (!ft.item && (dir === "n" || dir === "s")) {
-    const it = f.items.find((i) => i.ground && Math.abs(i.x - ft.x) < 0.95 && Math.abs(i.y - ft.y) < 0.8);
-    if (it) {
-      startMove(ft, "g:pickup");
-      pickUp(f, ft, it);
-      return;
-    }
-  }
   if (ft.item === "baguette" && (dir === "n" || dir === "s")) {
     startMove(ft, "g:bagS");
     return;
@@ -421,6 +412,39 @@ function airAttack(ft: Fighter, x: number, y: number) {
   startMove(ft, `a${dir}`);
 }
 
+/** L'objet à portée de main (par terre devant ses pieds, ou qui passe tout près en l'air), le plus proche */
+function itemInReach(f: Fight, ft: Fighter, reach: number): FieldItem | undefined {
+  let best: FieldItem | undefined;
+  for (const i of f.items) {
+    const d = Math.abs(i.x - ft.x);
+    if (d > reach || Math.abs(i.y - ft.y - (i.ground ? 0 : 0.6)) > 0.9) continue;
+    if (!best || d < Math.abs(best.x - ft.x)) best = i;
+  }
+  return best;
+}
+
+const throwKey = (x: number, y: number) => {
+  const dir = dirOf(x, y);
+  return dir === "u" ? "g:throwU" : dir === "d" ? "g:throwD" : "g:throwF";
+};
+
+/** Saisir, debout : l'objet par terre à ses pieds se ramasse ; un objet en main se lance (la baguette, elle, se pose
+ * pas : on saisit) ; sinon, la main tendue vers l'adversaire */
+function grabOrPick(f: Fight, ft: Fighter, x: number, y: number) {
+  const it = ft.item ? undefined : itemInReach(f, ft, 0.95);
+  if (it) {
+    startMove(ft, "g:pickup");
+    pickUp(f, ft, it);
+    return;
+  }
+  if (ft.item && ft.item !== "baguette") {
+    if (dirOf(x, y) === "s") ft.face = x < 0 ? -1 : 1;
+    startMove(ft, throwKey(x, y));
+    return;
+  }
+  startMove(ft, "g:grab");
+}
+
 /** Un spécial : celui de côté ne se fait qu'une fois par saut */
 function special(f: Fight, ft: Fighter, x: number, y: number): boolean {
   const dir = dirOf(x, y);
@@ -464,7 +488,7 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
     case "stand": {
       if (press & GRB) {
         consume(ft, GRB);
-        startMove(ft, "g:grab");
+        grabOrPick(f, ft, x, y);
         return;
       }
       if (press & SHD || inp.held & SHD) {
@@ -492,7 +516,7 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
       if (press & ATK) {
         consume(ft, ATK);
         if (dashing(ft, x, y, st, sm)) startMove(ft, "g:dash");
-        else groundAttack(f, ft, x, y);
+        else groundAttack(ft, x, y);
         return;
       }
       if (press & SPC) {
@@ -556,6 +580,13 @@ function control(f: Fight, ft: Fighter, inp: Input, plats: PlatformNow[]) {
         consume(ft, ATK | FRT);
         airAttack(ft, x, y);
         return;
+      }
+      if (press & GRB) {
+        consume(ft, GRB);
+        // En l'air, Saisir attrape l'objet à portée de main, ou lance celui qu'on tient
+        const it = itemInReach(f, ft, 1.1);
+        if (!ft.item && it) pickUp(f, ft, it);
+        else if (ft.item && ft.item !== "baguette") startMove(ft, throwKey(x, y));
       }
       if (press & SPC) {
         consume(ft, SPC);

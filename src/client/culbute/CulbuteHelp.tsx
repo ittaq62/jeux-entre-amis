@@ -14,7 +14,10 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
       what: `Sauter, deux fois${s.upJumps ? " (la touche Haut aussi ; Haut avec un coup : le coup vers le haut)" : ""}`,
     },
     { keys: bindingText(s, "shield"), what: "Garde (+ direction : esquive ; levée juste avant le coup : parade)" },
-    { keys: bindingText(s, "grab"), what: "Saisir (aussi : Frapper pendant la garde), puis une direction pour projeter" },
+    {
+      keys: bindingText(s, "grab"),
+      what: "Ramasser l'objet à ses pieds (ou attraper au vol), lancer celui qu'on tient ; sinon saisir (aussi : Frapper pendant la garde), puis une direction pour projeter",
+    },
     { keys: bindingText(s, "taunt"), what: "Narguer (pour rire)" },
   ];
   return (
@@ -46,8 +49,8 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
           </p>
           <p className="hint">
             À la manette : stick gauche, A pour sauter, X pour frapper, le stick droit pour le coup fort, B pour le spécial, la gâchette
-            haute droite pour saisir, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose n'importe où
-            pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial et Saut ; pose le pouce sur Frapper et Spécial
+            haute droite pour saisir et ramasser, une autre gâchette pour la garde, Retour pour narguer. Au doigt : le pouce gauche se pose n'importe où
+            pour diriger, à droite Frapper (garde le doigt dessus pour le coup fort), Spécial, Saut et Saisir (qui ramasse aussi les objets) ; pose le pouce sur Frapper et Spécial
             à la fois pour te protéger (avec une direction : une esquive).
           </p>
         </>
