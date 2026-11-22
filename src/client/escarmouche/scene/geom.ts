@@ -152,3 +152,190 @@ export function pushFace(b: Bucket, p: number[][], n: number[], uv: number[][], 
     b.col.push(...c[k]!);
   }
 }
+
+/**
+ * Une boîte aux arêtes chanfreinées : ses six faces, rentrées de `e`, douze biseaux à 45° le long des arêtes et huit
+ * petits coins. La lumière accroche ses bords : elle ne fait plus « cube ». Posée au sol (`grounded`), elle descend de
+ * `e` sous le sol, qui cache le biseau du bas (elle ne flotte pas sur une rainure).
+ */
+export function addChamferBox(
+  b: Bucket,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  tile: number,
+  tint: number,
+  e: number,
+  grounded: boolean,
+) {
+  if (grounded) y0 -= e;
+  const t = 1 / tile;
+  const c = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+  const h = [(x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2];
+  e = Math.min(e, h[0]! * 0.45, h[1]! * 0.45, h[2]! * 0.45);
+  const ao = (y: number) => tint * (y < 0.05 ? 0.72 : y < 1 ? 0.86 : 1);
+  /** Les coordonnées de toile, projetées depuis l'axe vers lequel la face regarde le plus (comme `addBox`) */
+  const uvOf = (p: number[], n: number[]): number[] => {
+    const ax = Math.abs(n[0]!);
+    const ay = Math.abs(n[1]!);
+    const az = Math.abs(n[2]!);
+    if (ay > Math.max(ax, az) + 0.01) return n[1]! > 0 ? [p[0]! * t, -p[2]! * t] : [p[0]! * t, p[2]! * t];
+    if (ax >= az) return [p[2]! * t * -Math.sign(n[0]!), p[1]! * t];
+    return [p[0]! * t * Math.sign(n[2]!), p[1]! * t];
+  };
+  const colOf = (p: number[], n: number[]): number[] => {
+    const v = n[1]! > 0.6 ? tint : n[1]! < -0.6 ? tint * 0.7 : ao(p[1]!);
+    return [v, v, v];
+  };
+  /** Un polygone (3 ou 4 sommets, en coordonnées locales), remis dans le bon sens pour sa normale */
+  const poly = (pts: number[][], n: number[]) => {
+    const len = Math.hypot(n[0]!, n[1]!, n[2]!);
+    const nn = [n[0]! / len, n[1]! / len, n[2]! / len];
+    let w = pts.map((p) => [p[0]! + c[0]!, p[1]! + c[1]!, p[2]! + c[2]!]);
+    const u = [w[1]![0]! - w[0]![0]!, w[1]![1]! - w[0]![1]!, w[1]![2]! - w[0]![2]!];
+    const v = [w[2]![0]! - w[0]![0]!, w[2]![1]! - w[0]![1]!, w[2]![2]! - w[0]![2]!];
+    const cr = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+    if (cr[0]! * nn[0]! + cr[1]! * nn[1]! + cr[2]! * nn[2]! < 0) w = w.reverse();
+    const order = w.length === 4 ? [0, 1, 2, 0, 2, 3] : [0, 1, 2];
+    for (const k of order) {
+      b.pos.push(...w[k]!);
+      b.nor.push(...nn);
+      b.uv.push(...uvOf(w[k]!, nn));
+      b.col.push(...colOf(w[k]!, nn));
+    }
+  };
+  /** Un point local, donné par axe (a, b, c) puis remis en (x, y, z) */
+  const at = (axes: [number, number, number], va: number, vb: number, vc: number) => {
+    const p = [0, 0, 0];
+    p[axes[0]] = va;
+    p[axes[1]] = vb;
+    p[axes[2]] = vc;
+    return p;
+  };
+  // Les six faces
+  for (let a = 0; a < 3; a++) {
+    const bAx = (a + 1) % 3;
+    const cAx = (a + 2) % 3;
+    const axes: [number, number, number] = [a, bAx, cAx];
+    for (const s of [1, -1]) {
+      if (grounded && a === 1 && s < 0) continue;
+      const fa = s * h[a]!;
+      const hb = h[bAx]! - e;
+      const hc = h[cAx]! - e;
+      const n = at(axes, s, 0, 0);
+      poly([at(axes, fa, -hb, -hc), at(axes, fa, hb, -hc), at(axes, fa, hb, hc), at(axes, fa, -hb, hc)], n);
+    }
+  }
+  // Les douze biseaux
+  for (let a = 0; a < 3; a++) {
+    const bAx = (a + 1) % 3;
+    const cAx = (a + 2) % 3;
+    const axes: [number, number, number] = [a, bAx, cAx];
+    for (const sa of [1, -1]) {
+      for (const sb of [1, -1]) {
+        const hc = h[cAx]! - e;
+        const n = at(axes, sa, sb, 0);
+        poly(
+          [
+            at(axes, sa * h[a]!, sb * (h[bAx]! - e), -hc),
+            at(axes, sa * h[a]!, sb * (h[bAx]! - e), hc),
+            at(axes, sa * (h[a]! - e), sb * h[bAx]!, hc),
+            at(axes, sa * (h[a]! - e), sb * h[bAx]!, -hc),
+          ],
+          n,
+        );
+      }
+    }
+  }
+  // Les huit coins
+  for (const sx of [1, -1]) {
+    for (const sy of [1, -1]) {
+      for (const sz of [1, -1]) {
+        poly(
+          [
+            [sx * h[0]!, sy * (h[1]! - e), sz * (h[2]! - e)],
+            [sx * (h[0]! - e), sy * h[1]!, sz * (h[2]! - e)],
+            [sx * (h[0]! - e), sy * (h[1]! - e), sz * h[2]!],
+          ],
+          [sx, sy, sz],
+        );
+      }
+    }
+  }
+}
+
+/** Un nombre entre 0 et 1, toujours le même pour un même point (pour bosseler une roche sans déchirer ses faces) */
+function hash3(x: number, y: number, z: number, seed: number): number {
+  const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 19.19) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/**
+ * Une roche qui remplit sa boîte : une sphère facettée poussée vers les faces de la boîte (pour ne pas laisser de coins
+ * vides là où l'on bute), bosselée au hasard, le dessous aplati sur le sol. Ses facettes sont plates (de la pierre
+ * taillée par le gel) ; celles qui regardent le ciel vont dans `top` (la neige), s'il y en a.
+ */
+export function addRock(
+  rock: Bucket,
+  top: Bucket | null,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  tile: number,
+  tint: number,
+  seed: number,
+  grounded: boolean,
+) {
+  const t = 1 / tile;
+  const c = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+  const h = [(x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2];
+  const ico = new THREE.IcosahedronGeometry(1, 2);
+  const pos = ico.getAttribute("position") as THREE.BufferAttribute;
+  const shape = (i: number): number[] => {
+    const v = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+    const m = Math.max(Math.abs(v[0]!), Math.abs(v[1]!), Math.abs(v[2]!));
+    const k = 0.62;
+    // Entre la sphère et le cube, puis des bosses (les mêmes pour un même sommet partagé)
+    const bump = 0.86 + hash3(Math.round(v[0]! * 100), Math.round(v[1]! * 100), Math.round(v[2]! * 100), seed) * 0.2;
+    const p = v.map((x) => (x * (1 - k) + (x / m) * k) * bump);
+    const out = [p[0]! * h[0]! + c[0]!, p[1]! * h[1]! + c[1]!, p[2]! * h[2]! + c[2]!];
+    // Le dessous s'aplatit sur ce qui le porte (un peu enfoncé dans le sol)
+    out[1] = Math.max(out[1]!, y0 - (grounded ? 0.06 : 0));
+    out[1] = Math.min(out[1]!, y1 + 0.05);
+    return out;
+  };
+  const ao = (y: number) => (y < y0 + 0.25 ? 0.8 : 1);
+  for (let f = 0; f < pos.count; f += 3) {
+    const a = shape(f);
+    const b = shape(f + 1);
+    const d = shape(f + 2);
+    const u = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!];
+    const v = [d[0]! - a[0]!, d[1]! - a[1]!, d[2]! - a[2]!];
+    const n = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+    const len = Math.hypot(n[0]!, n[1]!, n[2]!);
+    if (len < 1e-9) continue;
+    const nn = [n[0]! / len, n[1]! / len, n[2]! / len];
+    // Le dessous, à plat sur le sol, ne se voit pas
+    if (nn[1]! < -0.9 && a[1]! <= y0 + 0.01) continue;
+    const snow = top && nn[1]! > 0.62;
+    const into = snow ? top : rock;
+    const shade = tint * (0.86 + hash3(f, 3, 7, seed) * 0.2);
+    for (const p of [a, b, d]) {
+      into.pos.push(...p);
+      into.nor.push(...nn);
+      const ax = Math.abs(nn[0]!);
+      const ay = Math.abs(nn[1]!);
+      const az = Math.abs(nn[2]!);
+      into.uv.push(...(ay >= Math.max(ax, az) ? [p[0]! * t, -p[2]! * t] : ax >= az ? [p[2]! * t, p[1]! * t] : [p[0]! * t, p[1]! * t]));
+      const s = snow ? 1 : shade * ao(p[1]!);
+      into.col.push(s, s, s);
+    }
+  }
+  ico.dispose();
+}

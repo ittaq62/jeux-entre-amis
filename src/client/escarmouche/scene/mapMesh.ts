@@ -4,9 +4,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Decor, GameMap } from "../../../shared/games/escarmouche/maps.ts";
-import type { Mat } from "../../../shared/games/escarmouche/world.ts";
+import type { Box, Mat } from "../../../shared/games/escarmouche/world.ts";
 import { addContainer, addCrane, addHouse, addQuay, addWagon, instancedParts, type Ctx, type Paint } from "./architecture.ts";
-import { addBox, Bucket, pushFace, tintOf } from "./geom.ts";
+import { addBox, addChamferBox, addRock, Bucket, pushFace, tintOf } from "./geom.ts";
 import type { Quality } from "./quality.ts";
 import { boardTexture, clothTexture, corrugatedTexture, matTexture, normalFrom, normalTexture, TILE } from "./textures.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -213,6 +213,133 @@ export interface MapMesh {
   dispose(): void;
 }
 
+/** Les matières dont les blocs isolés et les poteaux prennent des arêtes chanfreinées */
+const CHAMFER = new Set<Mat>(["pierre", "crepi", "crepi2", "bois", "planche", "beton", "metal", "rouille"]);
+/** Les matières qui reçoivent de la neige sur le dessus, au col */
+const SNOWY = new Set<Mat>(["pierre", "crepi", "crepi2", "bois", "planche", "beton", "metal", "rouille", "tuile", "wagon", "wagon2"]);
+
+/** Deux boîtes qui se touchent par une face (pas seulement par une arête) */
+function touching(a: Box, b: Box): boolean {
+  const E = 0.02;
+  const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+  const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+  const oz = Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0);
+  if (ox < -E || oy < -E || oz < -E) return false;
+  return (ox > E ? 1 : 0) + (oy > E ? 1 : 0) + (oz > E ? 1 : 0) >= 2;
+}
+
+/** Un petit hasard toujours le même pour une même boîte */
+function seeded(seed: number) {
+  let v = (seed * 2654435761) >>> 0 || 1;
+  return () => {
+    v ^= v << 13;
+    v ^= v >>> 17;
+    v ^= v << 5;
+    return (v >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Ce qui casse les formes de boîte, sans rien changer aux collisions : un chaperon sur les murets, la neige sur ce qui
+ * est à plat au col, le sommet ébréché des murs en ruine (des pierres posées de travers).
+ */
+function addDetails(
+  gm: GameMap,
+  bucket: (m: Paint) => Bucket,
+  isGround: (b: Box) => boolean,
+  covered: (b: Box) => boolean,
+  rocks: Set<Box>,
+) {
+  const snow = gm.light === "neige";
+  gm.boxes.forEach((bx, i) => {
+    if (isGround(bx) || bx.m === "invisible" || covered(bx) || rocks.has(bx)) return;
+    const w = bx.x1 - bx.x0;
+    const h = bx.y1 - bx.y0;
+    const d = bx.z1 - bx.z0;
+    const tile = TILE[bx.m] ?? 3;
+    const rnd = seeded(i + 17);
+    const thin = Math.min(w, d);
+    const long = Math.max(w, d);
+    // Le muret : une pierre de chaperon qui déborde un peu
+    const muret =
+      bx.y0 <= 0.01 &&
+      h >= 0.5 &&
+      h <= 1.6 &&
+      thin <= 0.8 &&
+      long >= 1.5 &&
+      (bx.m === "pierre" || bx.m === "crepi" || bx.m === "crepi2" || bx.m === "beton");
+    if (muret)
+      addChamferBox(
+        bucket(bx.m),
+        bx.x0 - 0.05,
+        bx.y1 - 0.06,
+        bx.z0 - 0.05,
+        bx.x1 + 0.05,
+        bx.y1 + 0.05,
+        bx.z1 + 0.05,
+        tile,
+        tintOf(i) * 1.12,
+        0.025,
+        false,
+      );
+    const capTop = muret ? bx.y1 + 0.05 : bx.y1;
+    // Le mur en ruine du col : son sommet n'est pas droit, des pierres y restent posées, la neige par-dessus
+    if (snow && bx.m === "pierre" && h >= 1.6 && thin <= 1.2 && long >= 1.2) {
+      const alongX = w >= d;
+      for (let u = 0.12; u < long - 0.25;) {
+        const len = 0.25 + rnd() * 0.3;
+        if (rnd() > 0.4) {
+          const rise = 0.08 + rnd() * 0.18;
+          const inset = 0.02 + rnd() * 0.03;
+          const a0 = (alongX ? bx.x0 : bx.z0) + u;
+          const a1 = Math.min(a0 + len, (alongX ? bx.x1 : bx.z1) - 0.08);
+          const tone = tintOf(i) * (0.94 + rnd() * 0.1);
+          const top = bx.y1 + 0.04 + rise;
+          const [sx0, sz0, sx1, sz1] = alongX ? [a0, bx.z0 + inset, a1, bx.z1 - inset] : [bx.x0 + inset, a0, bx.x1 - inset, a1];
+          addChamferBox(bucket("pierre"), sx0, bx.y1 - 0.05, sz0, sx1, top, sz1, tile, tone, 0.03, false);
+          addChamferBox(
+            bucket("neige"),
+            sx0 - 0.015,
+            top - 0.02,
+            sz0 - 0.015,
+            sx1 + 0.015,
+            top + 0.045,
+            sz1 + 0.015,
+            TILE.neige ?? 3,
+            1,
+            0.025,
+            false,
+          );
+        }
+        u += len + 0.03;
+      }
+    }
+    // La neige : une couche arrondie sur tout ce qui est à plat et à découvert (rien au-dessus)
+    if (snow && SNOWY.has(bx.m) && h > 0.25) {
+      const above = gm.boxes.some(
+        (o) => o !== bx && o.y0 >= bx.y1 - 0.05 && o.y0 <= bx.y1 + 0.3 && o.x0 < bx.x1 && o.x1 > bx.x0 && o.z0 < bx.z1 && o.z1 > bx.z0,
+      );
+      if (!above) {
+        const o = muret ? 0.07 : 0.03;
+        const depth = 0.05 + Math.min(0.07, thin * 0.04);
+        addChamferBox(
+          bucket("neige"),
+          bx.x0 - o,
+          capTop - 0.03,
+          bx.z0 - o,
+          bx.x1 + o,
+          capTop + depth,
+          bx.z1 + o,
+          TILE.neige ?? 3,
+          1,
+          Math.min(0.045, depth * 0.6),
+          false,
+        );
+      }
+    }
+  });
+}
+
 /** La carte entière : boîtes, toits et décor */
 export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   const group = new THREE.Group();
@@ -227,8 +354,41 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
   };
   const bags: THREE.Box3[] = [];
   const bales: THREE.Box3[] = [];
+  const isGround = (b: Box) => b.y1 <= 0.001 && b.y0 < -0.5;
+  // Ce qui est sous un toit ou fait partie d'une maison : on n'y touche pas (les murs se raccordent entre eux)
+  const roofs = gm.decor.filter((d): d is Extract<Decor, { k: "house" | "roof" }> => d.k === "house" || d.k === "roof");
+  const covered = (b: Box) => {
+    const cx = (b.x0 + b.x1) / 2;
+    const cz = (b.z0 + b.z1) / 2;
+    return roofs.some((r) => cx > r.x0 - 0.4 && cx < r.x1 + 0.4 && cz > r.z0 - 0.4 && cz < r.z1 + 0.4);
+  };
+  // Les blocs posés seuls (qui ne touchent aucune autre boîte) et les poteaux : arêtes chanfreinées (sauf au téléphone)
+  const solids = gm.boxes.filter((b) => !isGround(b) && b.m !== "invisible");
+  const chamfered = (bx: Box) => {
+    if (q === "bas" || !CHAMFER.has(bx.m)) return false;
+    const w = bx.x1 - bx.x0;
+    const d = bx.z1 - bx.z0;
+    if (w <= 0.75 && d <= 0.75 && bx.y1 - bx.y0 >= 1.8) return true;
+    return !covered(bx) && !solids.some((o) => o !== bx && touching(o, bx));
+  };
+  // Les rochers du col (des blocs de pierre trapus, posés seuls) : une vraie roche facettée, la neige sur le dessus
+  const rocks = new Set<Box>(
+    gm.light !== "neige"
+      ? []
+      : solids.filter((b) => {
+          const w = b.x1 - b.x0;
+          const d = b.z1 - b.z0;
+          const h = b.y1 - b.y0;
+          if (b.m !== "pierre" || covered(b) || Math.min(w, d) < 0.9 || h > 2.6 || Math.max(w, d) / Math.min(w, d) > 2.4) return false;
+          return !solids.some((o) => o !== b && o.m !== "pierre" && touching(o, b));
+        }),
+  );
   gm.boxes.forEach((bx, i) => {
     if (bx.m === "invisible" || bx.m === "bidon" || bx.m === "conteneur" || bx.m === "caisse") return;
+    if (rocks.has(bx)) {
+      addRock(bucket("pierre"), bucket("neige"), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE.pierre ?? 3, tintOf(i), i, bx.y0 <= 0.001);
+      return;
+    }
     // Les congères : de la neige amoncelée, arrondie (pas un bloc)
     if (bx.m === "neige" && bx.y0 >= -0.01 && bx.y1 - bx.y0 < 1.4) {
       const w = bx.x1 - bx.x0;
@@ -268,8 +428,12 @@ export function buildMap(gm: GameMap, q: Quality, night = false): MapMesh {
       );
       return;
     }
-    addBox(bucket(bx.m), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE[bx.m] ?? 3, tintOf(i), bx.y0 <= 0.001);
+    if (chamfered(bx)) {
+      const e = Math.min(0.06, 0.12 * Math.min(bx.x1 - bx.x0, bx.y1 - bx.y0, bx.z1 - bx.z0));
+      addChamferBox(bucket(bx.m), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE[bx.m] ?? 3, tintOf(i), e, bx.y0 <= 0.001);
+    } else addBox(bucket(bx.m), bx.x0, bx.y0, bx.z0, bx.x1, bx.y1, bx.z1, TILE[bx.m] ?? 3, tintOf(i), bx.y0 <= 0.001);
   });
+  if (q !== "bas") addDetails(gm, bucket, isGround, covered, rocks);
   const parts = new Map<"wheel" | "buffer", THREE.Matrix4[]>([
     ["wheel", []],
     ["buffer", []],
