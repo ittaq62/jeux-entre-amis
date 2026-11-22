@@ -1,6 +1,8 @@
-// L'illustration du minigolf sur l'accueil : une image du jeu lui-même (le Jardin du château, rendu par sa 3D), et
-// par-dessus, ce qui vit : la balle qui roule vers le trou et y tombe, le drapeau qui flotte. Deux cadrages, comme
-// Culbute : large pour les tablettes et les téléphones, haut pour l'ordinateur (le navigateur ne charge que le sien).
+// L'illustration du minigolf sur l'accueil : une image du jeu lui-même, rendue par sa 3D (la page de travail
+// /dev/minigolf?affiche) — au Jardin du château, devant la fontaine, Marcel, l'Habitué de Culbute, casquette et gilet
+// tricoté, vient de frapper : la balle file vers le pont de bois, les jets d'eau, le drapeau et le château au fond. Par-
+// dessus, un reflet doré qui passe. Deux cadrages, comme Culbute : large pour les tablettes et les téléphones, haut pour
+// l'ordinateur (le navigateur ne charge que le sien).
 
 import "./minigolfPreview.css";
 

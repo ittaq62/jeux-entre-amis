@@ -1,6 +1,7 @@
 // Page de travail (seulement en développement) : une partie de minigolf jouée sur l'appareil, sans serveur, avec la même
 // logique que la table. /dev/minigolf?parcours=jardin&trou=3&bots=2&envers&bonus&motif=pois&trace=flammes&vite (vite : pas de
-// présentation du trou ; simultane : tout le monde en même temps plutôt que chacun son tour).
+// présentation du trou ; simultane : tout le monde en même temps plutôt que chacun son tour ; affiche : la scène de
+// l'affiche de l'accueil, au troisième trou du Jardin).
 // En console, `__mg` donne la partie (`m`), l'écran (`rt`) et un pas de la boucle de la table (`tick`).
 
 import { useEffect, useRef, useState } from "react";
@@ -77,6 +78,10 @@ export function DevMinigolf() {
       })),
     );
     rt.setView(structuredClone(m));
+    // L'affiche de l'accueil : un Habitué qui joue, à cadrer puis photographier
+    // (en développement, l'écran est monté deux fois : seulement sur celui qui reste)
+    let live = true;
+    if (q.has("affiche")) void import("./afficheGolfer.ts").then((x) => live && x.stageAffiche(rt, m));
     const botAt = new Map<string, number>();
     // Comme à la table : chacun son tour, le bot vise un moment avant de frapper
     const botPlan = new Map<string, { a: number; p: number; at: number }>();
@@ -122,6 +127,7 @@ export function DevMinigolf() {
     dev.tick = loop;
     const timer = setInterval(loop, 100);
     return () => {
+      live = false;
       clearInterval(timer);
       rt.dispose();
     };
