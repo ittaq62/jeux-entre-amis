@@ -71,6 +71,15 @@ export const STAND: Pose = {
   spin: 0,
 };
 
+/** Debout, les bras le long du corps (sans boule) */
+export const RELAX: Pose = {
+  ...STAND,
+  hands: [
+    [-0.3, 0.5, 0.06],
+    [0.3, 0.5, 0.06],
+  ],
+};
+
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const lv = (a: V3, b: V3, k: number): V3 => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
 export const ease = (k: number) => {

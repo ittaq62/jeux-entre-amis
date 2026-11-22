@@ -100,7 +100,7 @@ function Row({
               role="radio"
               aria-checked={value === t.id}
               disabled={!ok}
-              className={`bw-choice ${value === t.id ? "is-on" : ""} ${ok ? "" : "is-locked"}`}
+              className={`btn btn-sm bw-choice ${value === t.id ? "btn-primary" : ""} ${ok ? "" : "is-locked"}`}
               onClick={() => ok && onPick(t.id)}
               title={ok ? t.name : `${t.name} : ${t.price} points à la boutique`}
             >

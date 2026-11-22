@@ -13,6 +13,7 @@ import { EmotePicker } from "../game/ChatPanel.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./BowlingHelp.tsx";
+import { BallSwatch } from "./LookPicker.tsx";
 import { kmh, spinName } from "./gesture.ts";
 import { BowlingRuntime, type HudState, type Moment } from "./runtime.ts";
 import { FinalSheet, Sheet, type SheetPlayer } from "./Scoresheet.tsx";
@@ -203,6 +204,7 @@ export function BowlingGame({
   const standing = new Set(v.rack.map((p) => p.n));
   const throwerInfo = thrower ? players.find((p) => p.id === thrower.id) : null;
   const spares = v.cfg.mode === "spares";
+  const myLook = players.find((p) => p.id === mySeat)?.look ?? DEFAULT_LOOK;
 
   return (
     <div className={`bw-game ${mySeat ? "" : "is-watching"}`}>
@@ -278,6 +280,7 @@ export function BowlingGame({
         <>
           <div className="bw-grip" aria-hidden="true">
             <span className="bw-grip-ring" />
+            <BallSwatch look={myLook} size={70} />
           </div>
           <p className="bw-tip">
             {v.throws === 0 || readout === null

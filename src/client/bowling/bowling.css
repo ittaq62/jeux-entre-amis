@@ -354,7 +354,9 @@
 .bw-grip {
   position: absolute;
   left: 50%;
-  bottom: 18%;
+  bottom: calc(66px + var(--safe-bottom, 0px));
+  display: grid;
+  place-items: center;
   width: 92px;
   height: 92px;
   margin-left: -46px;
@@ -738,32 +740,15 @@
 }
 
 .bw-choice {
-  display: flex;
-  align-items: center;
   gap: 6px;
-  padding: 5px 10px 5px 6px;
-  border-radius: 12px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
-  background: var(--surface, #fff);
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.bw-choice.is-on {
-  border-color: var(--accent, #d9336f);
-  box-shadow: inset 0 0 0 1px var(--accent, #d9336f);
-  font-weight: 700;
 }
 
 .bw-choice.is-locked {
-  opacity: 0.55;
-  cursor: default;
+  opacity: 0.6;
 }
 
 .bw-choice small {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 @media (max-width: 640px) {

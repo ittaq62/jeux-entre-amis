@@ -16,7 +16,19 @@ import { cleanThrow, DIR_MAX, MAX_STEPS, startThrow, X_MAX, type ThrowParams } f
 import { headCanvas } from "../bolides/scene/faces.ts";
 import { armAngle, release, type Refusal, type Release, type Sample } from "./gesture.ts";
 import { BallModel } from "./scene/ball.ts";
-import { approachPose, blend, BowlerModel, ease, followPose, reactPose, sitPose, STAND, walkPose, type Pose } from "./scene/bowler.ts";
+import {
+  approachPose,
+  blend,
+  BowlerModel,
+  ease,
+  followPose,
+  reactPose,
+  RELAX,
+  sitPose,
+  STAND,
+  walkPose,
+  type Pose,
+} from "./scene/bowler.ts";
 import { LaneScene } from "./scene/LaneScene.ts";
 
 export interface PlayerInfo {
@@ -642,7 +654,7 @@ export class BowlingRuntime {
               : "";
         const t = (ms - this.endMs(r) + 150) / 1000;
         const settle = followPose(1);
-        return kind ? blend(settle, reactPose(kind, t), ease(t * 3)) : blend(settle, STAND, ease(t * 2));
+        return kind ? blend(settle, reactPose(kind, t), ease(t * 3)) : blend(settle, RELAX, ease(t * 2));
       }
       return followPose(Math.min(1, ms / 500));
     }
@@ -749,8 +761,8 @@ export class BowlingRuntime {
         // La réaction : face au lanceur, la banquette derrière lui
         const b = this.bowlers.get(r.rec.id);
         const p = b?.pos ?? this.tmp.set(0, 0, 0.4);
-        pos.set(p.x * 0.6 + 0.3, 1.55, p.z - 2.5);
-        look.set(p.x, 1.05, p.z + 0.6);
+        pos.set(p.x * 0.6 + 0.35, 1.7, p.z - 3.3);
+        look.set(p.x, 0.95, p.z + 0.8);
         speed = 2.2;
         shot = "react";
       } else if (r.slow && r.world.step >= r.slowFrom - 30 && r.world.step < r.slowFrom + SLOW_STEPS + 120) {
@@ -778,8 +790,8 @@ export class BowlingRuntime {
       const p = tb.pos;
       const side = tb.info.look.left ? -1 : 1;
       const swing = tb.info.id === this.o.me ? (this.drag?.mode === "swing" ? 1 : 0) : this.remote?.sw ? 1 : 0;
-      pos.set(p.x - 0.4 * side, 2.2 + swing * 0.05, p.z + 3.1 + swing * 0.2);
-      look.set(p.x * 0.4 + 0.12 * side, 0.2, -14.5);
+      pos.set(p.x - 0.3 * side, 2.75 + swing * 0.05, p.z + 3.7 + swing * 0.2);
+      look.set(p.x * 0.4 + 0.1 * side, 0.15, -14.5);
       speed = 3;
     }
     // Le ralenti et la réaction : on coupe net, comme à la télévision
