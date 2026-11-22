@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
+import { onTrack } from "./onTrack.ts";
 import { glowTexture } from "./villeTextures.ts";
 
 type Keep = <T extends { dispose: () => void }>(x: T) => T;
@@ -150,7 +151,8 @@ export function buildForet(ctx: ForetContext): Foret {
     // Des tranches de 2 m : un grand triangle qui passerait derrière la caméra serait mal dessiné
     const rows = Math.max(8, Math.round(len / 2));
     const log = new THREE.Group();
-    log.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + R - 2.4, (a.z + b.z) / 2);
+    // Son axe à 4 m au-dessus de la route : ses parois retombent derrière les murets (le bas est sous terre)
+    log.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 4, (a.z + b.z) / 2);
     log.quaternion.setFromUnitVectors(UP, axis);
     const outerTex = keep(barkTexture());
     outerTex.repeat.set(6, 2);
@@ -186,7 +188,8 @@ export function buildForet(ctx: ForetContext): Foret {
   // --- L'arbre géant planté au milieu de la route ---
   for (const isl of t.islands) {
     const c = pointAt(t, isl.s + isl.len / 2, isl.d);
-    const tree = new THREE.Group();
+    // L'arbre est un îlot : la conduite le connaît
+    const tree = onTrack(new THREE.Group(), "solid");
     tree.position.set(c.x, c.y, c.z);
     tree.rotation.y = Math.atan2(c.tx, c.tz);
     const H = 95;
@@ -204,9 +207,10 @@ export function buildForet(ctx: ForetContext): Foret {
     for (let k = 0; k < 8; k++) {
       const ang = (k / 8) * Math.PI * 2;
       roots.push(
-        new THREE.ConeGeometry(1.1, 5, 6)
+        // Elles restent au pied de l'arbre, sur l'îlot
+        new THREE.ConeGeometry(0.9, 2.4, 6)
           .rotateZ(Math.PI / 2 - 0.35)
-          .translate(isl.half * 0.7, 0.8, 0)
+          .translate(isl.half * 0.7, 0.5, 0)
           .rotateY(ang),
       );
     }
@@ -307,10 +311,15 @@ export function buildForet(ctx: ForetContext): Foret {
     const y = heightAt(p.x, p.z);
     const roll = r();
     if (roll < 0.72) ferns.push(at(p.x, y, p.z, r() * 6, 0.8 + r() * 0.9));
-    else if (roll < 0.92) rocks.push(at(p.x, y + 0.2, p.z, r() * 6, 1.2 + r() * 2.2, 0.8 + r() * 1.2, 1.4 + r() * 2));
-    else if (distAt(p.x, p.z) > t.wall + 6 && free(p.x, p.z, 5)) {
+    else if (roll < 0.92) {
+      const sx = 1.2 + r() * 2.2;
+      const sz = 1.4 + r() * 2;
+      // Un gros rocher plus loin : aucun ne déborde sur la piste
+      if (distAt(p.x, p.z) > t.wall + 0.8 + Math.max(sx, sz)) rocks.push(at(p.x, y + 0.2, p.z, r() * 6, sx, 0.8 + r() * 1.2, sz));
+    } else if (distAt(p.x, p.z) > t.wall + 6 && free(p.x, p.z, 5)) {
       take(p.x, p.z, 4);
-      logs.push(at(p.x, y + 0.7, p.z, r() * 6, 1, 1, 1));
+      // Couché le long du chemin
+      logs.push(at(p.x, y + 0.7, p.z, Math.atan2(-p.tz, p.tx), 1, 1, 1));
     }
   }
   const fern: THREE.BufferGeometry[] = [];
@@ -323,12 +332,15 @@ export function buildForet(ctx: ForetContext): Foret {
         .rotateY((k / 7) * Math.PI * 2),
     );
   add(
-    instanced(
-      keep(merge(fern)),
-      lam(0xffffff, { flatShading: true, side: THREE.DoubleSide }),
-      ferns,
-      false,
-      [0x3f7a34, 0x4a8a3a, 0x356a2e],
+    onTrack(
+      instanced(
+        keep(merge(fern)),
+        lam(0xffffff, { flatShading: true, side: THREE.DoubleSide }),
+        ferns,
+        false,
+        [0x3f7a34, 0x4a8a3a, 0x356a2e],
+      ),
+      "traversable",
     ),
   );
   add(instanced(keep(new THREE.DodecahedronGeometry(1, 0)), lam(0x6a7062, { flatShading: true }), rocks, shadows));
@@ -343,13 +355,13 @@ export function buildForet(ctx: ForetContext): Foret {
   for (let s = 6; s < L; s += 14 + r() * 10) {
     if (keepClear(s)) continue;
     const side = r() < 0.5 ? -1 : 1;
-    const base = pointAt(t, s, side * (t.wall + 1.2 + r() * 3));
-    if (distAt(base.x, base.z) < t.wall + 0.6) continue;
+    const base = pointAt(t, s, side * (t.wall + 2.4 + r() * 3));
+    if (distAt(base.x, base.z) < t.wall + 2) continue;
     const y0 = heightAt(base.x, base.z);
     const tint = shroomColors[Math.floor(r() * shroomColors.length)]!;
     for (let k = 0; k < 3 + Math.floor(r() * 4); k++) {
-      const x = base.x + (r() - 0.5) * 2.4;
-      const z = base.z + (r() - 0.5) * 2.4;
+      const x = base.x + (r() - 0.5) * 2;
+      const z = base.z + (r() - 0.5) * 2;
       const h = 0.6 + r() * 1.3;
       stems.push(at(x, y0, z, 0, 1, h, 1));
       caps.push(at(x, y0 + h, z, r() * 6, 0.6 + h * 0.35));
@@ -454,7 +466,8 @@ export function buildForet(ctx: ForetContext): Foret {
       const s = (k / (phone ? 5 : 10)) * L + 30;
       if (keepClear(s)) continue;
       const p = pointAt(t, s, (r() - 0.5) * 2 * (t.wall + 6));
-      const m = new THREE.Mesh(beam, mat);
+      // Un rayon de lumière : on passe au travers
+      const m = onTrack(new THREE.Mesh(beam, mat), "traversable");
       m.position.set(p.x, p.y + 52, p.z);
       m.rotation.z = 0.25 * fx;
       m.rotation.x = -0.2;

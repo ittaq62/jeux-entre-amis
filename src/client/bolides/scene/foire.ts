@@ -9,6 +9,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { pointAt, wrapS, type Track } from "../../../shared/games/bolides/track.ts";
 import { mergeDeep, mergeStatic } from "./merge.ts";
+import { onTrack } from "./onTrack.ts";
 import { Crowd } from "./scenery.ts";
 import {
   AWNING_KINDS,
@@ -355,7 +356,8 @@ function addCarousel(f: Fair) {
   for (const isl of t.islands) {
     const c = pointAt(t, isl.s + isl.len / 2, isl.d);
     const R = isl.half - 0.2;
-    const root = new THREE.Group();
+    // Le manège est un îlot : la conduite le connaît
+    const root = onTrack(new THREE.Group(), "solid");
     root.position.set(c.x, c.y + 0.06, c.z);
     group.add(root);
     const red = keep(new THREE.MeshStandardMaterial({ color: 0xb8262a, roughness: 0.45 }));
@@ -558,15 +560,13 @@ function addTent(f: Fair) {
     lambert(keep, 0xd2ac74, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }),
   );
   root.add(sawdust);
-  const edge = Math.asin(Math.min(1, (t.half + 1.3) / ringR));
-  for (const start of [edge, Math.PI + edge]) {
-    const curb = new THREE.Mesh(
-      keep(new THREE.CylinderGeometry(ringR, ringR, 0.5, 24, 1, true, start, Math.PI - 2 * edge)),
-      lambert(keep, 0xc8302b, { side: THREE.DoubleSide }),
-    );
-    curb.position.y = 0.2;
-    root.add(curb);
-  }
+  // Sa bordure est peinte à plat : on roule dessus
+  const curb = new THREE.Mesh(
+    keep(new THREE.RingGeometry(ringR - 0.35, ringR + 0.35, 72).rotateX(-Math.PI / 2)),
+    lambert(keep, 0xc8302b, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+  );
+  curb.position.y = 0.1;
+  root.add(onTrack(curb, "traversable"));
   // Les gradins, de part et d'autre de la route, tournés vers la piste ; du monde dessus
   const stands = new Faces();
   const wood = new THREE.Color(0x7a5a3a);
@@ -618,18 +618,20 @@ function addTent(f: Fair) {
   standMesh.receiveShadow = shadows;
   root.add(standMesh);
   // Les enseignes au-dessus des deux entrées, sur leurs poteaux
-  const cirque = marquee(f, "CIRQUE", "#7a1a16", "#ffe9a8", 20, 3.2);
+  // L'enseigne va d'un poteau à l'autre, et les poteaux sont plantés derrière les barrières
+  const postX = W + 0.6;
+  const cirque = marquee(f, "CIRQUE", "#7a1a16", "#ffe9a8", postX * 2 - 1.2, 3.2);
   for (const zs of [-1, 1]) {
     const sign = zs < 0 ? cirque : new THREE.Mesh(cirque.geometry, cirque.material);
     sign.position.set(0, 9.4, zs * (RT + 1.6));
     sign.rotation.y = zs > 0 ? 0 : Math.PI;
     root.add(sign);
-    const back = new THREE.Mesh(keep(new THREE.BoxGeometry(20.4, 3.5, 0.2)), red);
+    const back = new THREE.Mesh(keep(new THREE.BoxGeometry(postX * 2 - 0.8, 3.5, 0.2)), red);
     back.position.set(0, 9.4, zs * (RT + 1.45));
     root.add(back);
     for (const sx of [-1, 1]) {
       const post = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.28, 0.32, 11, 8)), gold);
-      post.position.set(sx * 10.6, 5.5, zs * (RT + 1.5));
+      post.position.set(sx * postX, 5.5, zs * (RT + 1.5));
       root.add(post);
     }
   }
@@ -662,7 +664,8 @@ function addTent(f: Fair) {
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const from = v3(sx * (W + 0.9), roofH(W + 0.9) - 1.2, sz * 1.2);
-      const mesh = new THREE.Mesh(beamGeo, beamMat);
+      // Un faisceau de lumière : on passe au travers
+      const mesh = onTrack(new THREE.Mesh(beamGeo, beamMat), "traversable");
       mesh.position.copy(from);
       root.add(mesh);
       spots.push({ mesh, from, k: spots.length });
@@ -693,7 +696,8 @@ function addHoop(f: Fair) {
     root.position.set(c.x, c.y, c.z);
     root.rotation.y = Math.atan2(c.tx, c.tz);
     group.add(root);
-    const Rh = t.half + 2.2;
+    // Ses côtés passent derrière les barrières : on vole au travers, jamais dans son anneau
+    const Rh = t.wall + 1.2;
     const cy = 2.4;
     const stripes = keep(tentTexture());
     stripes.repeat.set(10, 1);

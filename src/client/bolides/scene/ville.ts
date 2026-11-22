@@ -4,6 +4,7 @@
 // la ville tout autour jusqu'à l'horizon, la pluie et les éclairs.
 
 import * as THREE from "three";
+import { onTrack } from "./onTrack.ts";
 import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
 import {
   BAY,
@@ -825,11 +826,12 @@ function addSquare(ctx: VilleContext): (time: number) => void {
     const lawn = keep(new THREE.BufferGeometry());
     lawn.setAttribute("position", new THREE.Float32BufferAttribute(lawnPos, 3));
     lawn.computeVertexNormals();
-    group.add(new THREE.Mesh(lawn, keep(new THREE.MeshLambertMaterial({ color: 0x2f4a2a, side: THREE.DoubleSide }))));
+    // Tout le square est un îlot : la conduite le connaît
+    group.add(onTrack(new THREE.Mesh(lawn, keep(new THREE.MeshLambertMaterial({ color: 0x2f4a2a, side: THREE.DoubleSide }))), "solid"));
     const curb = keep(new THREE.BufferGeometry());
     curb.setAttribute("position", new THREE.Float32BufferAttribute(curbPos, 3));
     curb.computeVertexNormals();
-    group.add(new THREE.Mesh(curb, keep(new THREE.MeshLambertMaterial({ color: 0x8c9096, side: THREE.DoubleSide }))));
+    group.add(onTrack(new THREE.Mesh(curb, keep(new THREE.MeshLambertMaterial({ color: 0x8c9096, side: THREE.DoubleSide }))), "solid"));
     // Les arbres du square : un tronc, une couronne claire (des platanes)
     const trunk = keep(new THREE.CylinderGeometry(0.22, 0.32, 5, 7).translate(0, 2.5, 0));
     const crown = keep(new THREE.IcosahedronGeometry(2.8, 1).translate(0, 6.6, 0));
@@ -838,8 +840,10 @@ function addSquare(ctx: VilleContext): (time: number) => void {
       const p = at(along, 0, 0, 0.3);
       trees.push(place(p.x, p.y, p.z, along, 1, 0.9 + (along % 3) * 0.08, 1));
     }
-    group.add(instances(trunk, keep(new THREE.MeshLambertMaterial({ color: 0x5a4a3a })), trees, shadows));
-    group.add(instances(crown, keep(new THREE.MeshLambertMaterial({ color: 0x35532c, flatShading: true })), trees, shadows));
+    group.add(onTrack(instances(trunk, keep(new THREE.MeshLambertMaterial({ color: 0x5a4a3a })), trees, shadows), "solid"));
+    group.add(
+      onTrack(instances(crown, keep(new THREE.MeshLambertMaterial({ color: 0x35532c, flatShading: true })), trees, shadows), "solid"),
+    );
     // La fontaine, à la pointe du square, côté de ceux qui arrivent
     const f = at(Math.min(isl.half, isl.len / 2) + 0.3, 0, 0, 0);
     const fountain = new THREE.Group();
@@ -865,7 +869,7 @@ function addSquare(ctx: VilleContext): (time: number) => void {
     ];
     const jet = add(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 8), waterMat, 4.4);
     fountain.position.copy(f);
-    group.add(fountain);
+    group.add(onTrack(fountain, "solid"));
     updates.push((time) => {
       falls.forEach((m, i) => m.scale.set(1 + Math.sin(time * 5 + i) * 0.03, 1, 1 + Math.cos(time * 4.3 + i) * 0.03));
       jet.scale.y = 1 + Math.sin(time * 7) * 0.12;
@@ -1156,7 +1160,8 @@ function addDrawbridge(ctx: VilleContext) {
     ] as const) {
       const p = pointAt(t, s, 0);
       const frame = new THREE.Group();
-      const span = t.half + 2.2;
+      // Les tours derrière les parapets : on ne roule pas au travers
+      const span = t.wall + 0.8;
       for (const x of [-span, span]) {
         const leg = new THREE.Mesh(keep(new THREE.BoxGeometry(1.1, h, 1.1)), iron);
         leg.position.set(x, h / 2, 0);
@@ -1179,7 +1184,7 @@ function addDrawbridge(ctx: VilleContext) {
       frame.add(beam);
       // Les chaînes, du haut de la tour jusqu'au bord du tablier
       if (s === g.from) {
-        for (const x of [-span + 1, span - 1]) {
+        for (const x of [-span + 0.5, span - 0.5]) {
           const chain = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.06, h - 1.4, 5)), weight);
           chain.position.set(x, (h + 1.4) / 2, 0);
           frame.add(chain);
@@ -1211,6 +1216,14 @@ export function buildVille(ctx: VilleContext): Ville {
     if (ctx.tunnel[0] >= 0 && near((ctx.tunnel[0] + ctx.tunnel[1]) / 2, (ctx.tunnel[1] - ctx.tunnel[0]) / 2 + 1)) return true;
     if (near(ctx.bridge, 5)) return true;
     if (church >= 0 && side < 0 && near(church, 24)) return true;
+    // Les poteaux des arches et des panneaux, plantés juste derrière le parapet
+    const posts = [
+      0,
+      ...t.gaps.flatMap((g) => [g.from - 32, g.from - 44]),
+      ...t.movers.map((m) => m.s - (m.kind === "drop" ? 44 : 40)),
+      ...t.crossers.map((c) => c.s - 40),
+    ];
+    if (posts.some((x) => near(x, 3))) return true;
     return false;
   };
   const lots = [...streetLots(ctx, ways, keepClear), ...blockLots(ctx, ways, ctx.phone ? 50 : 90)];

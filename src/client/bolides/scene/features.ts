@@ -398,7 +398,7 @@ export class Crossers {
     const signMat = keep(new THREE.MeshLambertMaterial({ map: signTex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
     const postMat = keep(new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
     const postGeo = keep(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6));
-    const signGeo = keep(new THREE.PlaneGeometry(1.3, 1.3));
+    const signGeo = keep(new THREE.PlaneGeometry(1.2, 1.2));
     for (const crosser of t.crossers) {
       // Le passage peint en travers de la route
       const p = pointAt(t, crosser.s, 0);
@@ -408,10 +408,11 @@ export class Crossers {
       mark.rotation.x = -Math.PI / 2;
       mark.rotation.z = Math.atan2(p.tx, p.tz) + Math.PI;
       mark.position.set(p.x, p.y + 0.085, p.z);
+      mark.userData.onTrack = "traversable";
       this.group.add(mark);
       // Les panneaux, 40 m avant, des deux côtés, tournés vers ceux qui arrivent
       for (const side of [-1, 1]) {
-        const at = pointAt(t, crosser.s - 40, side * (t.half + 2.2));
+        const at = pointAt(t, crosser.s - 40, side * (t.wall + 0.7));
         const back = pointAt(t, crosser.s - 70, 0);
         const y = heightAt(at.x, at.z);
         const post = new THREE.Mesh(postGeo, postMat);
@@ -423,6 +424,7 @@ export class Crossers {
         this.group.add(board);
       }
       const { group, beacon } = vehicle(theme, keep, shadows);
+      group.userData.onTrack = "moving";
       this.group.add(group);
       this.items.push({ crosser, model: group, beacon, heading: 0 });
     }

@@ -2,6 +2,7 @@
 // touffes d'herbe et les fleurs du bord de la route, les ombres au sol, les traces de pneus, la mer du port.
 
 import * as THREE from "three";
+import { onTrack } from "./onTrack.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CURB, pointAt, trackBends, wrapAngle, type Theme, type Track } from "../../../shared/games/bolides/track.ts";
 
@@ -437,7 +438,7 @@ export function addGrass(group: THREE.Group, keep: Keep, t: Track, theme: Theme,
   const add = (list: THREE.Matrix4[], isFlower: boolean) => {
     if (list.length === 0) return;
     const mat = keep(new THREE.MeshLambertMaterial({ map: tuftTexture(theme, isFlower, keep), alphaTest: 0.45, side: THREE.DoubleSide }));
-    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    const mesh = onTrack(new THREE.InstancedMesh(geo, mat, list.length), "traversable");
     list.forEach((m, i) => mesh.setMatrixAt(i, m));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false;

@@ -21,6 +21,7 @@ import {
   type ZoneKind,
 } from "../../../shared/games/bolides/track.ts";
 import { mergeDeep } from "./merge.ts";
+import { onTrack, roadside } from "./onTrack.ts";
 import { HOOP_RADIUS } from "../../../shared/games/bolides/physics.ts";
 import * as TX from "./textures.ts";
 
@@ -575,6 +576,10 @@ export class TrackLife {
     this.buildSprings();
     this.buildZones();
     this.buildHoops();
+    // Ce qui tombe, roule ou marche : la course sait quand ça touche un kart
+    for (const it of this.drops) for (const o of [it.trolley, it.box, it.cable, it.warn, it.claw?.group]) if (o) onTrack(o, "moving");
+    for (const it of this.rolls) for (const p of it.parts) onTrack(p.group, "moving");
+    for (const it of this.sheep) for (const o of [it.white, it.dark]) onTrack(o, "moving");
   }
 
   /** Les anneaux à traverser en vol */
@@ -588,7 +593,8 @@ export class TrackLife {
       const ring = new THREE.Mesh(geo, mat);
       ring.position.set(p.x, p.y + h.h, p.z);
       ring.rotation.y = Math.atan2(p.tx, p.tz);
-      this.group.add(ring);
+      // On vole au travers
+      this.group.add(onTrack(ring, "traversable"));
       this.hoops.push(ring);
     }
   }
@@ -597,11 +603,12 @@ export class TrackLife {
   private addSigns(s: number, tex: THREE.CanvasTexture) {
     const { t, keep, heightAt } = this.ctx;
     const post = keep(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6));
-    const board = keep(new THREE.PlaneGeometry(1.5, 1.5));
+    const board = keep(new THREE.PlaneGeometry(1.3, 1.3));
     const postMat = keep(new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
     const boardMat = keep(new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
     for (const side of [-1, 1]) {
-      const at = pointAt(t, s, side * (t.half + 2.2));
+      // Derrière le muret : on le voit venir, on ne roule pas au travers
+      const at = pointAt(t, s, side * (t.wall + 0.7));
       const back = pointAt(t, s - 30, 0);
       const y = heightAt(at.x, at.z);
       const pole = new THREE.Mesh(post, postMat);
@@ -759,11 +766,16 @@ export class TrackLife {
       const arch = new THREE.Group();
       const postGeo = keep(new THREE.BoxGeometry(0.5, 6.2, 0.5));
       const dark = keep(new THREE.MeshLambertMaterial({ color: 0x2b2f36 }));
+      // Les poteaux derrière les murets, une traverse jusqu'à eux, la banderole au milieu
+      const span = roadside(t.wall);
       for (const side of [-1, 1]) {
         const post = new THREE.Mesh(postGeo, dark);
-        post.position.set(side * (t.half + 2), 3.1, 0);
+        post.position.set(side * span, 3.1, 0);
         arch.add(post);
       }
+      const crossbar = new THREE.Mesh(keep(new THREE.BoxGeometry(span * 2 + 0.5, 0.5, 0.3)), dark);
+      crossbar.position.y = 5.9;
+      arch.add(crossbar);
       const label = keep(
         new THREE.MeshLambertMaterial({
           map: keep(
@@ -1122,7 +1134,7 @@ export class TrackLife {
     const mark = new THREE.Mesh(keep(new THREE.PlaneGeometry(width, 3.8)), keep(new THREE.MeshLambertMaterial({ map })));
     mark.rotation.set(-Math.PI / 2, 0, h + Math.PI);
     mark.position.set(p.x, p.y + 0.085, p.z);
-    this.group.add(mark);
+    this.group.add(onTrack(mark, "traversable"));
     for (const side of [-1, 1]) {
       const at = pointAt(t, m.s, side * (t.wall + 0.1));
       const y = heightAt(at.x, at.z);
@@ -1138,7 +1150,9 @@ export class TrackLife {
           keep(new THREE.MeshLambertMaterial({ color: moundColor })),
         );
         mound.scale.set(1, 0.72, 1.3);
-        mound.position.set(at.x, y, at.z);
+        // Derrière le muret (qui s'ouvre devant lui) : on ne roule pas dedans
+        const heap = pointAt(t, m.s, side * (t.wall + 4.3));
+        mound.position.set(heap.x, heightAt(heap.x, heap.z), heap.z);
         mound.rotation.y = h;
         mound.castShadow = shadows;
         this.group.add(mound);
@@ -1679,7 +1693,7 @@ export class TrackLife {
       const plate = new THREE.Mesh(plateGeo, [side, top, side]);
       plate.position.y = 0.45;
       pad.add(plate);
-      this.group.add(pad);
+      this.group.add(onTrack(pad, "traversable"));
       this.springs.push({ top: plate, i });
     });
   }

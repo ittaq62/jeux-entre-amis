@@ -26,6 +26,7 @@ import {
   pineSnowGeometry,
   seaMaterial,
 } from "./nature.ts";
+import { onTrack, roadside } from "./onTrack.ts";
 import { MOODS, Sky, type Mood } from "./sky.ts";
 import { addFootbridge, addHalle, addSkyline, buildVille, waterBed, waterways, type Ville } from "./ville.ts";
 import { leafTexture } from "./villeTextures.ts";
@@ -472,11 +473,13 @@ export async function buildWorld(
   // À la fête, des barrières de fête à claire-voie
   const wallHeight = theme === "col" ? 1.1 : theme === "ville" ? 0.45 : fair ? 1.1 : garden ? 1.0 : 0.9;
   // Le muret s'ouvre là où un engin traverse depuis la rue d'en face (en ville, le trottoir est trop étroit pour l'attendre),
-  // et à la fête là où passent les ballons et les canards
   const wallCuts = [
     ...t.gaps,
     ...t.crossers.filter((c) => c.reach + 2.4 > t.wall).map((c) => ({ from: c.s - 6, to: c.s + 6, glide: false })),
-    ...(fair ? t.movers.filter((m) => m.kind === "roll").map((m) => ({ from: m.s - 4, to: m.s + 4, glide: false })) : []),
+    // et là où roule ou marche ce qui sort d'un talus ou du décor (pas d'une porte dans le muret)
+    ...t.movers
+      .filter((m) => m.kind === "roll" && m.thing !== "tonneau" && m.thing !== "mouton" && m.thing !== "poubelle")
+      .map((m) => ({ from: m.s - 4, to: m.s + 4, glide: false })),
   ];
   const capMat = keep(
     lambert(
@@ -547,16 +550,21 @@ export async function buildWorld(
     line.rotation.x = -Math.PI / 2;
     line.rotation.z = h + Math.PI;
     line.position.set(p.x, p.y + 0.08, p.z);
-    group.add(line);
+    group.add(onTrack(line, "traversable"));
     const arch = new THREE.Group();
     const postMat = keep(lambert(0x2b2f36));
     const postGeo = keep(new THREE.BoxGeometry(0.7, 6.4, 0.7));
+    // Les poteaux, derrière les murets : un kart ne peut pas passer au travers
+    const span = roadside(t.wall);
     for (const side of [-1, 1]) {
       const post = new THREE.Mesh(postGeo, postMat);
-      post.position.set(side * (t.half + 2), 3.2, 0);
+      post.position.set(side * span, 3.2, 0);
       post.castShadow = opts.shadows;
       arch.add(post);
     }
+    const crossbar = new THREE.Mesh(keep(new THREE.BoxGeometry(span * 2 + 0.7, 0.6, 0.4)), postMat);
+    crossbar.position.y = 6.1;
+    arch.add(crossbar);
     const banner = keep(TX.bannerTexture("BOLIDES", "#d8352a", "#fff6e2"));
     const bannerMat = keep(lambert(0xffffff, banner));
     const beam = new THREE.Mesh(keep(new THREE.BoxGeometry(t.def.width + 4.7, 1.5, 0.5)), [
@@ -597,7 +605,7 @@ export async function buildWorld(
     mesh.rotation.x = -Math.PI / 2;
     mesh.rotation.z = Math.atan2(p.tx, p.tz) + Math.PI;
     mesh.position.set(p.x, p.y + 0.09, p.z);
-    group.add(mesh);
+    group.add(onTrack(mesh, "traversable"));
   }
 
   // Les tremplins : une rampe en planches sur toute la largeur de la route, qui monte jusqu'au bord
@@ -607,7 +615,7 @@ export async function buildWorld(
     const glideTop = keep(lambert(0xffffff, keep(TX.rampTexture(true))));
     for (const lip of t.jumps) {
       // Le tremplin d'un grand vol se reconnaît à sa couleur
-      group.add(rampMesh(t, lip, t.gaps.some((g) => g.glide && g.from === lip) ? glideTop : top, sideMat, keep));
+      group.add(onTrack(rampMesh(t, lip, t.gaps.some((g) => g.glide && g.from === lip) ? glideTop : top, sideMat, keep), "traversable"));
     }
   }
 
@@ -950,7 +958,18 @@ export async function buildWorld(
   }
 
   // Le décor des biomes lointains, et ce qui les recouvre : la mer du lagon, la lave du volcan
-  const biomeCtx: BiomeContext = { group, t, keep, heightAt, shadows, phone: opts.phone, scatter, r, few };
+  const biomeCtx: BiomeContext = {
+    group,
+    t,
+    keep,
+    heightAt,
+    distAt: (x: number, z: number) => field.distAt(x, z),
+    shadows,
+    phone: opts.phone,
+    scatter,
+    r,
+    few,
+  };
   let biome: BiomeUpdate | null = null;
   if (theme === "dunes") biome = buildDunes(biomeCtx);
   else if (theme === "lagon") biome = buildLagon(biomeCtx);
@@ -1145,7 +1164,7 @@ function addHouses(
   group.add(instances(roof, keep(new THREE.MeshLambertMaterial({ color: roofColor, vertexColors: true })), roofs, shadows));
 }
 
-/** Les réverbères le long de la ligne droite du port */
+/** Les réverbères le long de la ligne droite du port, plantés derrière les murets, leur lanterne au-dessus du bord */
 function addLamps(group: THREE.Group, t: Track, keep: Keep, shadows: boolean) {
   const pole = keep(new THREE.CylinderGeometry(0.12, 0.16, 6, 6));
   const head = keep(new THREE.BoxGeometry(0.6, 0.3, 1.4));
@@ -1153,9 +1172,9 @@ function addLamps(group: THREE.Group, t: Track, keep: Keep, shadows: boolean) {
   const heads: THREE.Matrix4[] = [];
   for (let s = 10; s < 140; s += 22) {
     for (const side of [-1, 1]) {
-      const p = pointAt(t, s, side * (t.wall - 1));
+      const p = pointAt(t, s, side * roadside(t.wall));
       poles.push(place(p.x, 3, p.z));
-      const q = pointAt(t, s, side * (t.wall - 1.8));
+      const q = pointAt(t, s, side * (t.wall - 0.2));
       heads.push(place(q.x, 6, q.z, Math.atan2(p.tx, p.tz)));
     }
   }

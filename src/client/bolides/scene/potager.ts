@@ -6,6 +6,7 @@
 // Tout est posé par rapport au circuit : en miroir, le potager est retourné avec lui.
 
 import * as THREE from "three";
+import { onTrack } from "./onTrack.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
 import { mergeDeep } from "./merge.ts";
@@ -120,7 +121,8 @@ export function buildPotager(ctx: PotagerContext): Potager {
   // --- La citrouille au milieu de la route ---
   for (const isl of t.islands) {
     const c = pointAt(t, isl.s + isl.len / 2, isl.d);
-    const pumpkin = new THREE.Group();
+    // La citrouille est un îlot : la conduite la connaît
+    const pumpkin = onTrack(new THREE.Group(), "solid");
     pumpkin.position.set(c.x, c.y + 0.05, c.z);
     pumpkin.rotation.y = r() * 6;
     const body = new THREE.Mesh(
@@ -142,7 +144,8 @@ export function buildPotager(ctx: PotagerContext): Potager {
   // --- La serre, au-dessus de la route en haut de la butte ---
   {
     const [s1, s2] = GREENHOUSE;
-    const w = t.wall + 0.6;
+    // Assez large pour que les tomates poussent derrière la clôture, sous le verre
+    const w = t.wall + 4.6;
     const frameMat = lam(0xf4f4ee);
     const posts: THREE.Matrix4[] = [];
     const ribs: THREE.BufferGeometry[] = [];
@@ -216,13 +219,13 @@ export function buildPotager(ctx: PotagerContext): Potager {
     const trays: THREE.Matrix4[] = [];
     for (let s = s1 + 4; s < s2 - 2; s += 5) {
       for (const side of [-1, 1]) {
-        const p = pointAt(t, s, side * (t.half + 3.2));
+        const p = pointAt(t, s, side * (t.wall + 2.1));
         stakes.push(at(p.x, p.y, p.z, 0, 1, 7.5, 1));
         for (let k = 0; k < 3; k++) {
           foliage.push(at(p.x + (r() - 0.5) * 1.2, p.y + 2.2 + k * 2.1, p.z + (r() - 0.5) * 1.2, r() * 6, 1.1 + r() * 0.4));
           if (r() < 0.8) fruit.push(at(p.x + (r() - 0.5) * 1.8, p.y + 1.8 + k * 2.1, p.z + (r() - 0.5) * 1.8, 0, 0.45 + r() * 0.2));
         }
-        const q = pointAt(t, s + 2.5, side * (t.half + 4.6));
+        const q = pointAt(t, s + 2.5, side * (t.wall + 3.4));
         trays.push(at(q.x, q.y + 0.5, q.z, Math.atan2(q.tx, q.tz), 1.4, 1, 3.2));
       }
     }
@@ -327,7 +330,7 @@ export function buildPotager(ctx: PotagerContext): Potager {
       4,
     );
     flies.frustumCulled = false;
-    add(flies);
+    add(onTrack(flies, "moving"));
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     updates.push((time) => {
@@ -613,7 +616,12 @@ export function buildPotager(ctx: PotagerContext): Potager {
     const pos = new THREE.Vector3();
     for (const m of mats) {
       pos.setFromMatrixPosition(m);
-      for (let k = 0; k < 2; k++) leaves.push(at(pos.x + (r() - 0.5) * 9, pos.y + 0.4, pos.z + (r() - 0.5) * 9, r() * 6, 1 + r() * 0.5));
+      for (let k = 0; k < 2; k++) {
+        const lx = pos.x + (r() - 0.5) * 9;
+        const lz = pos.z + (r() - 0.5) * 9;
+        // Les feuilles restent du côté du potager
+        if (distAt(lx, lz) > t.wall + 4.5) leaves.push(at(lx, pos.y + 0.4, lz, r() * 6, 1 + r() * 0.5));
+      }
     }
     add(
       instanced(

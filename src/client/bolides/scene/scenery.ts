@@ -258,8 +258,8 @@ function addBridge(ctx: SceneryContext, theme: Theme, s: number, crowd: Crowd) {
   }
   if (theme === "vignes" || theme === "dunes") {
     // Une arche de pierre sous le tablier
-    const arch = new THREE.Mesh(keep(new THREE.TorusGeometry(t.wall + 1, 0.8, 6, 24, Math.PI)), mat);
-    arch.position.y = 6.4 - (t.wall + 1) * 0.35;
+    const arch = new THREE.Mesh(keep(new THREE.TorusGeometry(t.wall + 2.3, 0.8, 6, 24, Math.PI)), mat);
+    arch.position.y = 6.4 - (t.wall + 2.3) * 0.35;
     arch.scale.set(1, 0.35, 1);
     bridge.add(arch);
   }

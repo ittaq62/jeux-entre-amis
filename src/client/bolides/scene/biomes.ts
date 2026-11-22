@@ -3,8 +3,9 @@
 // noire, braises qui montent, cratère fumant, lampadaires).
 
 import * as THREE from "three";
+import { onTrack } from "./onTrack.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CURB, pointAt, type Track } from "../../../shared/games/bolides/track.ts";
+import { pointAt, type Track } from "../../../shared/games/bolides/track.ts";
 import { fbm } from "./nature.ts";
 import * as TX from "./textures.ts";
 
@@ -15,6 +16,8 @@ export interface BiomeContext {
   t: Track;
   keep: Keep;
   heightAt: (x: number, z: number) => number;
+  /** La distance au milieu de la route la plus proche */
+  distAt: (x: number, z: number) => number;
   shadows: boolean;
   phone: boolean;
   /** Des emplacements au hasard, à une distance de la route comprise entre min et max */
@@ -243,11 +246,15 @@ export function buildDunes(ctx: BiomeContext): BiomeUpdate {
   // Les grands blocs de roche, un peu partout au loin
   for (const [x, z] of scatter(Math.round(26 * few), t.wall + 26, 165)) {
     const w = 10 + r() * 18;
-    rocks.push(place(x, heightAt(x, z) - 1, z, r() * 6, w, 12 + r() * 24, w * (0.7 + r() * 0.5)));
+    const deep = w * (0.7 + r() * 0.5);
+    // Un bloc ne déborde jamais au-dessus de la piste
+    if (ctx.distAt(x, z) < t.wall + 2 + Math.max(w, deep) * 1.15) continue;
+    rocks.push(place(x, heightAt(x, z) - 1, z, r() * 6, w, 12 + r() * 24, deep));
   }
   group.add(instances(mesa, mat, rocks, shadows));
   // Les cactus, près de la route
-  for (const [x, z] of scatter(Math.round(120 * few), t.wall + 2, 95))
+  // (assez loin du muret pour que leurs bras ne dépassent pas au-dessus de la piste)
+  for (const [x, z] of scatter(Math.round(120 * few), t.wall + 5, 95))
     cacti.push(place(x, heightAt(x, z) - 0.2, z, r() * 6, 3 + r() * 3.5));
   group.add(instances(cactus, mat, cacti, shadows));
   // Les oasis : un bassin, et ses palmiers tout autour
@@ -256,7 +263,8 @@ export function buildDunes(ctx: BiomeContext): BiomeUpdate {
   const pond = keep(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2));
   const pondMat = keep(new THREE.MeshLambertMaterial({ map: waterTex, color: 0x9fe3e0 }));
   const bank = keep(new THREE.MeshLambertMaterial({ color: 0x7d9a4a }));
-  for (const [x, z] of scatter(Math.round(5 * Math.max(0.6, few)), t.wall + 16, 70)) {
+  // (assez loin de la route pour que ni l'herbe de leurs bords ni leurs palmiers ne la touchent)
+  for (const [x, z] of scatter(Math.round(5 * Math.max(0.6, few)), t.wall + 40, 95)) {
     const y = heightAt(x, z);
     const size = 9 + r() * 7;
     const grass = new THREE.Mesh(pond, bank);
@@ -271,6 +279,7 @@ export function buildDunes(ctx: BiomeContext): BiomeUpdate {
       const d = size * (1.05 + r() * 0.35);
       const px = x + Math.cos(a) * d;
       const pz = z + Math.sin(a) * d;
+      if (ctx.distAt(px, pz) < t.wall + 3) continue;
       palms.push(place(px, heightAt(px, pz) - 0.2, pz, r() * 6, 8 + r() * 5));
     }
   }
@@ -376,7 +385,7 @@ export function buildLagon(ctx: BiomeContext): BiomeUpdate {
   group.add(instances(hut, mat, huts, shadows));
   const umb = keep(umbrellaGeometry());
   const umbs: THREE.Matrix4[] = [];
-  for (const [x, z] of scatter(Math.round(46 * few), t.wall + 1.5, 26, dry)) umbs.push(place(x, heightAt(x, z), z, r() * 6, 3));
+  for (const [x, z] of scatter(Math.round(46 * few), t.wall + 4, 26, dry)) umbs.push(place(x, heightAt(x, z), z, r() * 6, 3));
   const umbMesh = instances(umb, keep(new THREE.MeshLambertMaterial({ vertexColors: true })), umbs, shadows);
   const c = new THREE.Color();
   const beach = [0xff5a4f, 0x2fb7d4, 0xffd23a, 0xff8ae2, 0x7fe08a];
@@ -401,12 +410,14 @@ export function buildLagon(ctx: BiomeContext): BiomeUpdate {
     }
     if (mid.y > water - 1) continue;
     for (const side of [-1, 1]) {
-      const d = t.half + CURB + 0.8 + r() * r() * 34;
+      // Derrière le muret : sous l'eau, on ne roule pas au travers des coraux
+      const size = 1.2 + r() * 2.2;
+      const d = t.wall + 0.8 + size * 1.3 + r() * r() * 30;
       const p = pointAt(t, s, side * d);
       const y = heightAt(p.x, p.z);
       if (y > water - 1) continue;
       const roll = r();
-      const m = place(p.x, y - 0.1, p.z, r() * 6, 1.2 + r() * 2.2);
+      const m = place(p.x, y - 0.1, p.z, r() * 6, size);
       if (roll < 0.34) blobs.push(m);
       else if (roll < 0.68) branches.push(m);
       else kelps.push(place(p.x, y - 0.1, p.z, r() * 3, 3.5, 5 + r() * 7, 3.5));
@@ -420,7 +431,13 @@ export function buildLagon(ctx: BiomeContext): BiomeUpdate {
   branches.forEach((_, i) => branchMesh.setColorAt(i, c.setHex(reef[(i * 3 + 1) % reef.length]!)));
   for (const m of [blobMesh, branchMesh]) if (m.instanceColor) m.instanceColor.needsUpdate = true;
   group.add(blobMesh, branchMesh);
-  group.add(instances(kelp, keep(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })), kelps, false));
+  // Les algues ondulent : on passe au travers, comme dans l'herbe
+  group.add(
+    onTrack(
+      instances(kelp, keep(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })), kelps, false),
+      "traversable",
+    ),
+  );
 
   // Une épave couchée sur le fond, près du point le plus bas
   {
@@ -482,6 +499,8 @@ export function buildLagon(ctx: BiomeContext): BiomeUpdate {
   const fishCount = phone ? 28 : 64;
   const fish = new THREE.InstancedMesh(fishGeo, keep(new THREE.MeshLambertMaterial({ vertexColors: true })), fishCount);
   fish.frustumCulled = false;
+  // Ils nagent : on passe au milieu du banc
+  onTrack(fish, "moving");
   const fishColors = [0xffb347, 0x5ad1ff, 0xff6b8a, 0xfff06b, 0xbfeaff];
   for (let i = 0; i < fishCount; i++) fish.setColorAt(i, c.setHex(fishColors[i % fishColors.length]!));
   if (fish.instanceColor) fish.instanceColor.needsUpdate = true;
@@ -553,6 +572,8 @@ export function buildVolcan(ctx: BiomeContext): BiomeUpdate {
   const rocks: THREE.Matrix4[] = [];
   for (const [x, z] of scatter(Math.round(150 * few), t.wall + 2, 160, (x, z) => heightAt(x, z) > -1)) {
     const s = 1.4 + r() * 4.5;
+    // Une grosse aiguille plus loin : aucune ne déborde sur la piste
+    if (ctx.distAt(x, z) < t.wall + 0.6 + s * 1.15) continue;
     rocks.push(place(x, heightAt(x, z) + s * 0.35, z, r() * 6, s, s * (0.9 + r() * 2.2), s * 1.1));
   }
   group.add(instances(rock, rockMat, rocks, shadows));
@@ -564,7 +585,8 @@ export function buildVolcan(ctx: BiomeContext): BiomeUpdate {
   for (let s = 6; s < t.length; s += 34) {
     if (t.gaps.some((g) => s > g.from - 10 && s < g.to + 10)) continue;
     const side = Math.round(s / 34) % 2 ? 1 : -1;
-    const p = pointAt(t, s, side * (t.wall - 0.8));
+    // Plantées derrière le muret
+    const p = pointAt(t, s, side * (t.wall + 0.9));
     poles.push(place(p.x, p.y + 2.75, p.z));
     heads.push(place(p.x, p.y + 5.7, p.z));
   }
