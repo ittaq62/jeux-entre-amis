@@ -7,12 +7,13 @@
 
 import { platformsAt, type ArenaId, type PlatformNow } from "../../shared/games/culbute/arenas.ts";
 import { createFight, INTRO_FRAMES, stepPredict } from "../../shared/games/culbute/engine.ts";
-import type { Fight, FightEvent, Input, ItemKind } from "../../shared/games/culbute/model.ts";
+import type { Fight, FightEvent, Hazard, Input, ItemKind } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage } from "../../shared/games/culbute/net.ts";
 import {
   FIGHTER_STRIDE,
   HELD_ITEMS,
   ITEM_STRIDE,
+  unpackHazard,
   SHOT_KINDS,
   SHOT_STRIDE,
   TRAP_STRIDE,
@@ -61,6 +62,8 @@ export interface RenderFrame {
   items: { id: number; kind: ItemKind; x: number; y: number; ground: boolean }[];
   traps: { id: number; x: number; y: number; owner: number }[];
   plats: PlatformNow[];
+  /** L'événement de l'arène en cours (annoncé ou en train de frapper), ou rien */
+  hazard: Hazard | null;
 }
 
 interface Snapshot {
@@ -69,6 +72,7 @@ interface Snapshot {
   j: number[];
   i: number[];
   r: number[];
+  z?: number[];
   t: number;
   ph: number;
 }
@@ -244,7 +248,7 @@ export class FightRuntime {
     this.minLag = this.minLag === null ? lag : Math.min(lag, this.minLag + 0.0012);
     const late = lag - this.minLag;
     this.jitter = Math.max(late, this.jitter * 0.99);
-    this.snaps.push({ f: tick.f, p: tick.p, j: tick.j, i: tick.i, r: tick.r, t: tick.tl, ph: tick.ph });
+    this.snaps.push({ f: tick.f, p: tick.p, j: tick.j, i: tick.i, r: tick.r, z: tick.z, t: tick.tl, ph: tick.ph });
     if (this.snaps.length > 40) this.snaps.shift();
     if (tick.e.length > 0) this.pending.push({ f: tick.f, events: tick.e });
     const stamp = this.mySlot >= 0 ? (tick.c[this.mySlot] ?? 0) : 0;
@@ -538,7 +542,7 @@ export class FightRuntime {
     // Ce qui vole, reçu en retard : poussé jusqu'au présent d'après sa vitesse (sinon il toucherait après coup)
     const ahead = world ? Math.max(0, Math.min(0.25, (now - at) / 60)) : 0;
     const flying = lerpList(shots(a), shots(b)).map((q) => (ahead > 0 ? { ...q, x: q.x + q.vx * ahead, y: q.y + q.vy * ahead } : q));
-    return { frame: now, fighters, shots: flying, items: lerpList(items(a), items(b)), traps, plats };
+    return { frame: now, fighters, shots: flying, items: lerpList(items(a), items(b)), traps, plats, hazard: unpackHazard(b.z) };
   }
 
   private loop = (now: number) => {

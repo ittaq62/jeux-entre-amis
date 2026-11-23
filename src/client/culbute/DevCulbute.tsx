@@ -25,6 +25,7 @@ function frameOf(f: Fight, me: number): RenderFrame {
     items: f.items.map((it) => ({ id: it.id, kind: it.kind, x: it.x, y: it.y, ground: it.ground })),
     traps: f.traps.map((t) => ({ id: t.id, x: t.x, y: t.y, owner: t.owner })),
     plats: platformsAt(f.arena as ArenaId, f.scale, f.frame),
+    hazard: f.hazard,
   };
 }
 

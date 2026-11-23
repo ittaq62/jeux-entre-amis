@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { AVATAR_BACKGROUNDS } from "../../shared/avatar.ts";
 import { avatarPalette, HABITUES, PALETTES } from "../../shared/games/culbute/fighters.ts";
-import type { FightEvent } from "../../shared/games/culbute/model.ts";
+import type { FightEvent, HazardKind } from "../../shared/games/culbute/model.ts";
 import type { CulbuteClientMessage, CulbuteRoomView } from "../../shared/games/culbute/net.ts";
 import { MODE_NAMES, type CulbuteConfig, type CulbuteView } from "../../shared/games/culbute/view.ts";
 import { TOUR_TEAM_COLORS } from "../../shared/tour.ts";
@@ -120,6 +120,8 @@ function soundOf(e: FightEvent, mine: number): { name: SoundName; volume?: numbe
       return { name: "capDiceHit", volume: 0.6 };
     case "grab":
       return null;
+    case "hazard":
+      return e.go && e.kind === "petards" ? { name: "mecheBoom", volume: 0.8 } : null;
     case "go":
       return { name: "brickGo" };
     case "end":
@@ -238,6 +240,23 @@ function TouchButton({
   );
 }
 
+/** L'événement de l'arène qui s'annonce : un mot en haut de l'écran */
+const HAZARD_TEXT: Record<HazardKind, string> = {
+  charrette: "Gare à la charrette !",
+  cloche: "La cloche va sonner !",
+  petards: "Feu d'artifice !",
+  cagettes: "Gare aux cagettes !",
+};
+
+function hazardSound(kind: HazardKind, go: boolean) {
+  if (kind === "charrette") {
+    if (!go) sfx.cart();
+  } else if (kind === "cloche") sfx.bell(go);
+  else if (kind === "petards") {
+    if (!go) sfx.fuse();
+  } else sfx.crate(go);
+}
+
 /** L'écran de chargement aux couleurs de la place du village, à la tombée du jour */
 const LOADING_THEME: LoadingTheme = { from: "#e9885a", to: "#3b2346", accent: "#ffd25a" };
 
@@ -268,6 +287,12 @@ export function CulbuteFight({
   const [help, setHelp] = useState(false);
   const [commands, setCommands] = useState(false);
   const [flash, setFlash] = useState(0);
+  const [hazard, setHazard] = useState<{ key: number; text: string } | null>(null);
+  useEffect(() => {
+    if (!hazard) return;
+    const t = window.setTimeout(() => setHazard(null), 1800);
+    return () => window.clearTimeout(t);
+  }, [hazard]);
   const music = useRef<FightMusic | null>(null);
   const [settings, setSettings] = useState<CulbuteSettings>(loadSettings);
   const settingsRef = useRef(settings);
@@ -306,7 +331,14 @@ export function CulbuteFight({
       send,
       onHud: setHud,
       onEvents: (events) => {
+        // La cloche repousse tout le monde : son « dong » suffit (pas un ressort par combattant)
+        const ringing = events.some((e) => e.k === "hazard" && e.go && e.kind === "cloche");
         for (const e of events) {
+          if (e.k === "hazard") {
+            hazardSound(e.kind, e.go);
+            if (!e.go) setHazard({ key: Date.now(), text: HAZARD_TEXT[e.kind] });
+          }
+          if (ringing && e.k === "hit" && e.kind === "push") continue;
           if (e.k === "hit" && e.kind === "hit") sfx.impact(e.power, e.ko);
           else if (e.k === "hit" && e.kind === "shield") sfx.shieldHit(Math.min(1, e.dmg / 20));
           else if (e.k === "hit" && e.kind === "parry") sfx.parry();
@@ -443,6 +475,11 @@ export function CulbuteFight({
       {hud?.countdown !== null && hud?.countdown !== undefined && (
         <div className={`cb-countdown ${hud.countdown === 0 ? "is-go" : ""}`} key={hud.countdown} aria-live="polite">
           {hud.countdown === 0 ? "Culbute !" : hud.countdown}
+        </div>
+      )}
+      {hazard && !finished && (
+        <div className="cb-hazard" key={hazard.key} role="status" aria-live="polite">
+          {hazard.text}
         </div>
       )}
       {hud?.phase === 2 && !finished && (

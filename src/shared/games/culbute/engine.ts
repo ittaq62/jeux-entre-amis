@@ -28,6 +28,8 @@ import {
   type FightSettings,
   type FState,
   type HabitueId,
+  type Hazard,
+  type HazardKind,
   type Input,
   type ItemKind,
   type Projectile,
@@ -157,6 +159,7 @@ export const DEFAULT_FIGHT_SETTINGS: FightSettings = {
   teams: false,
   friendlyFire: false,
   lune: false,
+  events: true,
 };
 
 export interface Entrant {
@@ -261,11 +264,14 @@ export function createFight(settings: FightSettings, arena: ArenaId, entrants: E
     traps: [],
     nextId: 1,
     itemAt: 0,
+    hazard: null,
+    hazardAt: Infinity,
     rng: seed >>> 0,
     winners: [],
     outCount: 0,
   };
   f.itemAt = INTRO_FRAMES + firstItemDelay(f);
+  if (f.settings.events !== false && ARENA_HAZARD[arena]) f.hazardAt = INTRO_FRAMES + HAZARD_FIRST + Math.floor(rand(f) * HAZARD_SPREAD);
   return f;
 }
 
@@ -1667,6 +1673,129 @@ function shoot(f: Fight, ft: Fighter, kind: string, def: MoveDef) {
 }
 
 // ---------------------------------------------------------------------------
+// La vie de l'arène : de temps en temps, un événement annoncé qui oblige à bouger
+// ---------------------------------------------------------------------------
+
+/** Celui de chaque arène */
+export const ARENA_HAZARD: Record<ArenaId, HazardKind> = { place: "charrette", clocher: "cloche", bal: "petards", marche: "cagettes" };
+/** Le premier, tant d'images après le départ (plus un peu de hasard), puis tant après la fin du précédent */
+const HAZARD_FIRST = 20 * 60;
+const HAZARD_SPREAD = 10 * 60;
+const HAZARD_NEXT = 22 * 60;
+/** Le temps de l'annonce, en images : on le voit, on l'entend venir */
+export const HAZARD_WARN: Record<HazardKind, number> = { charrette: 100, cloche: 75, petards: 80, cagettes: 80 };
+/** La charrette : sa vitesse (m/s), sa demi-longueur, sa hauteur ; elle part d'un peu en dehors du plateau */
+export const CART_SPEED = 10;
+export const CART_HALF = 0.95;
+export const CART_H = 1.3;
+const CART_OUT = 1.6;
+/** La cloche : où elle pend (au-dessus du toit), et la poussée de son coup, au plus près */
+export const BELL_AT = { x: 0, y: 2.2 };
+const BELL_PUSH = 22;
+/** Le rayon d'un pétard qui éclate, d'une cagette qui tombe */
+export const BOOM_R = 1.15;
+export const CRATE_R = 0.85;
+
+/** Où est la charrette à cette image (son milieu), et sur quel plateau elle roule */
+export function cartAt(h: Hazard, frame: number, plats: readonly PlatformNow[]): { x: number; y: number } {
+  const main = plats[0]!;
+  const start = h.dir > 0 ? main.x0 - CART_OUT : main.x1 + CART_OUT;
+  return { x: start + (h.dir * CART_SPEED * Math.max(0, frame - h.at)) / 60, y: main.y };
+}
+
+/** Les points d'impact des pétards ou des cagettes, sur leurs plateformes telles qu'elles sont à cette image */
+export function hazardSpots(h: Hazard, plats: readonly PlatformNow[]): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i + 1 < h.spots.length; i += 2) {
+    const p = plats[h.spots[i]!];
+    if (p) out.push({ x: p.x0 + h.spots[i + 1]!, y: p.y });
+  }
+  return out;
+}
+
+function startHazard(f: Fight, kind: HazardKind, plats: PlatformNow[]): Hazard {
+  const at = f.frame + HAZARD_WARN[kind];
+  const h: Hazard = { kind, from: f.frame, at, to: at + 20, dir: rand(f) < 0.5 ? 1 : -1, spots: [], hit: [] };
+  if (kind === "charrette") {
+    const main = plats[0]!;
+    h.to = at + Math.ceil(((main.x1 - main.x0 + 2 * CART_OUT) / CART_SPEED) * 60);
+  } else if (kind === "petards" || kind === "cagettes") {
+    // Des points éloignés les uns des autres : les pétards partout (sur les planches aussi), les cagettes sur le plancher
+    const n = kind === "petards" ? 3 + (f.fighters.length > 2 ? 1 : 0) : 3 + (f.fighters.length > 3 ? 1 : 0);
+    const where = kind === "petards" ? plats.map((_, i) => i) : [0];
+    for (let tries = 0; tries < 40 && h.spots.length < n * 2; tries++) {
+      const pi = where[Math.floor(rand(f) * where.length)]!;
+      const p = plats[pi]!;
+      const off = 0.6 + rand(f) * Math.max(0.1, p.x1 - p.x0 - 1.2);
+      const x = p.x0 + off;
+      if (hazardSpots(h, plats).some((s) => Math.abs(s.x - x) < 2.4 && Math.abs(s.y - p.y) < 1)) continue;
+      h.spots.push(pi, Math.round(off * 100) / 100);
+    }
+  }
+  return h;
+}
+
+/** Ce que l'arène lui jette : la garde n'y peut rien (il faut s'écarter), et personne n'est l'auteur du coup */
+function hazardHit(f: Fight, v: Fighter, x: number, y: number, dirX: number, dmg: number, ang: number, kb: number, kbg: number) {
+  if (!vulnerable(f, v)) return;
+  if (v.state === "shield" || v.state === "shieldstun") setState(v, "stand");
+  applyHit(f, { attacker: -1, x, y, dirX, dmg, ang, kb, kbg, pull: false, charge: 0, projectile: true }, v);
+}
+
+function updateHazard(f: Fight, plats: PlatformNow[]) {
+  const kind = ARENA_HAZARD[f.arena as ArenaId];
+  if (!kind || f.phase !== "fight") return;
+  let h = f.hazard;
+  if (!h) {
+    if (f.frame < f.hazardAt) return;
+    h = f.hazard = startHazard(f, kind, plats);
+    pending.push({ k: "hazard", kind, go: false });
+    return;
+  }
+  if (f.frame === h.at) pending.push({ k: "hazard", kind, go: true });
+  if (f.frame >= h.at && f.frame <= h.to) {
+    if (h.kind === "charrette") {
+      // Elle renverse ceux qui sont sur le plancher sur son passage (pas ceux qui sautent par-dessus, ni ceux des bancs)
+      const cart = cartAt(h, f.frame, plats);
+      for (const v of f.fighters) {
+        if (h.hit.includes(v.slot) || v.y > cart.y + CART_H || v.y < cart.y - 0.5) continue;
+        if (Math.abs(v.x - cart.x) > CART_HALF + styleOf(v).w / 2) continue;
+        if (!vulnerable(f, v)) continue;
+        h.hit.push(v.slot);
+        hazardHit(f, v, cart.x + h.dir * CART_HALF, cart.y + 0.7, h.dir, 9, 70, 7, 9);
+      }
+    } else if (f.frame === h.at) {
+      if (h.kind === "cloche") {
+        // Le coup de la cloche repousse tout le monde vers le bord, d'autant plus fort qu'on est près d'elle ; la garde tient
+        for (const v of f.fighters) {
+          if (!vulnerable(f, v) || v.state === "ledge") continue;
+          const side = v.x < BELL_AT.x ? -1 : 1;
+          const k = clamp(1 - Math.abs(v.x - BELL_AT.x) / 9, 0.35, 1);
+          const guard = v.state === "shield" || v.state === "shieldstun" ? 0.35 : 1;
+          v.kx += side * BELL_PUSH * k * guard;
+          if (isAirborne(v)) v.ky = Math.max(v.ky, 2);
+          pending.push({ k: "hit", a: -1, v: v.slot, dmg: 0, x: v.x, y: v.y + 1, power: 0.2 * k, kind: "push" });
+        }
+      } else {
+        const boom = h.kind === "petards";
+        for (const s of hazardSpots(h, plats)) {
+          for (const v of f.fighters) {
+            if (!circleHitsBox(s.x, s.y + 0.5, boom ? BOOM_R : CRATE_R, ...hurtbox(v))) continue;
+            const dir = v.x < s.x ? -1 : 1;
+            if (boom) hazardHit(f, v, s.x, s.y + 0.5, dir, 8, 80, 6, 9);
+            else hazardHit(f, v, s.x, s.y + 0.6, dir, 10, 50, 7, 8);
+          }
+        }
+      }
+    }
+  }
+  if (f.frame >= h.to) {
+    f.hazard = null;
+    f.hazardAt = f.frame + HAZARD_NEXT + Math.floor(rand(f) * HAZARD_SPREAD);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Les objets de l'arène
 // ---------------------------------------------------------------------------
 
@@ -1808,8 +1937,8 @@ const STOMP_AIR: HitDef = { from: 6, to: 8, x: 0, y: -0.05, r: 0.65, dmg: 12, an
 function applyHit(f: Fight, src: HitSource, v: Fighter) {
   const a = src.attacker >= 0 ? f.fighters[src.attacker] : undefined;
   const vdef = v.state === "move" ? moveDef(v.style, v.move) : null;
-  // Simone pare et rend le coup
-  if (vdef?.counter && v.mt >= vdef.counter[0] && v.mt <= vdef.counter[1]) {
+  // Simone pare et rend le coup (pas ce que l'arène lui jette)
+  if (src.attacker >= 0 && vdef?.counter && v.mt >= vdef.counter[0] && v.mt <= vdef.counter[1]) {
     v.intangUntil = f.frame + 24;
     v.mt = Math.max(v.mt, vdef.counter[1] + 1);
     pending.push({ k: "hit", a: v.slot, v: src.attacker, dmg: 0, x: v.x, y: v.y + 0.9, power: 0.6, kind: "counter" });
@@ -2488,6 +2617,7 @@ export function stepFight(f: Fight, inputs: Input[]): FightEvent[] {
     f.itemAt = f.frame + nextItemDelay(f);
   }
   updateItems(f, plats);
+  if (f.settings.events !== false) updateHazard(f, plats);
   checkBlast(f);
   updateDead(f);
   const fought = f.frame - INTRO_FRAMES;

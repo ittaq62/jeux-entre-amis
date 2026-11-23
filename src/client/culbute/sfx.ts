@@ -157,6 +157,90 @@ export function grab() {
   thump(ctx, dest, t0, 120, 80, vol * 0.3, 0.07);
 }
 
+/** La cloche du clocher : à l'annonce, un tintement léger ; à son coup, un grand « dong » qui résonne */
+export function bell(strike: boolean) {
+  const o = out();
+  if (!o) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  const base = strike ? 196 : 587;
+  const partials: readonly (readonly [number, number, number])[] = strike
+    ? [
+        [0.5, 0.55, 3.4],
+        [1, 1, 3],
+        [2, 0.55, 2.2],
+        [2.76, 0.45, 1.6],
+        [5.4, 0.22, 0.8],
+      ]
+    : [
+        [1, 1, 0.9],
+        [2.76, 0.35, 0.45],
+      ];
+  for (const [r, k, d] of partials) {
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(base * r, t0);
+    const g = ctx.createGain();
+    env(g, vol * (strike ? 0.32 : 0.1) * k, 0.004, d, t0);
+    osc.connect(g).connect(dest);
+    osc.start(t0);
+    osc.stop(t0 + d + 0.05);
+  }
+  if (strike) thump(ctx, dest, t0, 80, 55, vol * 0.45, 0.5);
+}
+
+/** La charrette qui arrive : les roues qui grondent sur les pavés en enflant, et les cahots */
+export function cart() {
+  const o = out();
+  if (!o) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  const src = ctx.createBufferSource();
+  src.buffer = noise(ctx);
+  src.loop = true;
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.value = 260;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol * 0.5, t0 + 1.6);
+  g.gain.exponentialRampToValueAtTime(vol * 0.35, t0 + 2.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 3.6);
+  src.connect(f).connect(g).connect(dest);
+  src.start(t0);
+  src.stop(t0 + 3.7);
+  // Les cahots : le bois qui claque, de plus en plus fort, puis qui s'éloigne
+  for (let i = 0; i < 22; i++) {
+    const t = t0 + 0.2 + i * 0.15 + Math.random() * 0.04;
+    const k = i < 11 ? (i + 1) / 11 : (22 - i) / 11;
+    slap(ctx, dest, t, 700 + Math.random() * 300, 3, vol * 0.18 * k, 0.05);
+  }
+}
+
+/** Les mèches des pétards qui grésillent avant d'éclater */
+export function fuse() {
+  const o = out();
+  if (!o) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  for (let i = 0; i < 12; i++) slap(ctx, dest, t0 + i * 0.11, 4200 + Math.random() * 1500, 2, vol * 0.08, 0.09, "highpass");
+}
+
+/** Les cagettes qui craquent là-haut, puis s'écrasent sur le pavé */
+export function crate(fall: boolean) {
+  const o = out();
+  if (!o) return;
+  const { ctx, dest, vol } = o;
+  const t0 = ctx.currentTime + 0.005;
+  if (!fall) {
+    for (let i = 0; i < 3; i++) slap(ctx, dest, t0 + i * 0.22, 520, 6, vol * 0.18, 0.12);
+    return;
+  }
+  thump(ctx, dest, t0, 150, 55, vol * 0.7, 0.25);
+  slap(ctx, dest, t0, 900, 1.2, vol * 0.5, 0.18);
+  slap(ctx, dest, t0 + 0.03, 2600, 1.5, vol * 0.25, 0.12);
+}
+
 /** Une parade : un « ting » clair qui scintille */
 export function parry() {
   const o = out();

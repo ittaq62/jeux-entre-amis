@@ -296,6 +296,23 @@ html:has(.cb-fight) body {
   animation-duration: 1.2s;
 }
 
+/* L'événement de l'arène qui s'annonce : un mot en haut de l'écran, le temps de le voir venir */
+.cb-hazard {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffe08a;
+  font-family: var(--font-title);
+  font-size: clamp(26px, 5vmin, 46px);
+  white-space: nowrap;
+  text-shadow:
+    0 3px 0 #b3261e,
+    0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: cb-pop 1.8s ease-out both;
+}
+
 /* La fin du combat : le mot reste le temps que la dernière sortie retombe */
 .cb-countdown.is-end {
   color: #ffe08a;

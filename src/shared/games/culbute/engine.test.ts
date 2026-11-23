@@ -442,6 +442,77 @@ describe("Culbute : le combat", () => {
     expect(whiff()).toBe(lags[0]);
   });
 
+  it("la vie de l'arène : la charrette renverse celui qui reste sur le plancher, pas celui qui est sur un banc", () => {
+    const f = duel();
+    skipIntro(f);
+    f.hazardAt = f.frame + 1;
+    run(f, 1);
+    const h = f.hazard!;
+    expect(h.kind).toBe("charrette");
+    const [a, b] = f.fighters;
+    a!.x = 1;
+    b!.x = -3.8;
+    b!.y = 3;
+    b!.ground = -1;
+    b!.state = "air";
+    run(f, 30);
+    expect(b!.ground).toBe(1);
+    const events = run(f, h.to - f.frame + 1);
+    expect(events.some((e) => e.k === "hazard" && e.go)).toBe(true);
+    expect(a!.dmg).toBeGreaterThan(0);
+    expect(b!.dmg).toBe(0);
+    expect(f.hazard).toBeNull();
+    expect(f.hazardAt).toBeGreaterThan(f.frame + 20 * 60);
+  });
+
+  it("la vie de l'arène : les pétards du bal n'éclatent que sur leurs marques, annoncées à l'avance", () => {
+    const f = createFight({ ...DEFAULT_FIGHT_SETTINGS, items: "aucun" }, "bal", entrants(["ginette", "marcel"]), 42);
+    skipIntro(f);
+    f.hazardAt = f.frame + 1;
+    run(f, 1);
+    const h = f.hazard!;
+    expect(h.kind).toBe("petards");
+    expect(h.at - f.frame).toBeGreaterThan(60);
+    const [a, b] = f.fighters;
+    const spot = { x: 0, y: 0 };
+    // Le premier sur une marque du plancher, l'autre loin de toutes
+    const onFloor: number[] = [];
+    for (let i = 0; i + 1 < h.spots.length; i += 2) if (h.spots[i] === 0) onFloor.push(h.spots[i + 1]!);
+    expect(onFloor.length).toBeGreaterThan(0);
+    spot.x = -6.8 + onFloor[0]!;
+    const free = [-6, -3, 0, 3, 6].find((x) => onFloor.every((o) => Math.abs(-6.8 + o - x) > 2.2))!;
+    a!.x = spot.x;
+    b!.x = free;
+    run(f, h.at - f.frame);
+    expect(a!.state).toBe("hurt");
+    expect(b!.dmg).toBe(0);
+  });
+
+  it("la vie de l'arène : la cloche repousse vers le bord, moins fort celui qui est en garde ; sans la règle, rien", () => {
+    const f = createFight({ ...DEFAULT_FIGHT_SETTINGS, items: "aucun" }, "clocher", entrants(["ginette", "ginette"]), 42);
+    skipIntro(f);
+    f.hazardAt = f.frame + 1;
+    run(f, 1);
+    const h = f.hazard!;
+    expect(h.kind).toBe("cloche");
+    const [a, b] = f.fighters;
+    a!.x = 1.5;
+    b!.x = -1.5;
+    run(f, h.at - f.frame - 8);
+    run(f, 8, [() => NO_INPUT, hold(SHD, 60)]);
+    run(f, 40, [() => NO_INPUT, () => ({ x: 0, y: 0, held: SHD, pressed: 0 })]);
+    expect(a!.x).toBeGreaterThan(2.5);
+    expect(-b!.x).toBeLessThan(a!.x - 0.5);
+    const quiet = createFight(
+      { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", events: false },
+      "clocher",
+      entrants(["ginette", "ginette"]),
+      42,
+    );
+    skipIntro(quiet);
+    expect(run(quiet, 3 * 60 * 60).some((e) => e.k === "hazard")).toBe(false);
+  });
+
   it("les objets à aller chercher : ils tombent surtout en hauteur, et les plus utiles seulement là-haut", () => {
     const f = duel("ginette", "marcel", { items: "beaucoup" });
     skipIntro(f);

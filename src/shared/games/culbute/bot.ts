@@ -3,7 +3,23 @@
 // Le niveau règle la vitesse de réaction, l'envie d'attaquer, la garde et la justesse.
 
 import { ARENAS, ledgesOf, platformsAt, type ArenaId, type PlatformNow } from "./arenas.ts";
-import { GRAB_FROM, gravityOf, hitCancelable, jumpOf, JUMPSQUAT, moveDef, PARRY_FRAMES, SHOTS } from "./engine.ts";
+import {
+  BOOM_R,
+  CART_H,
+  CART_HALF,
+  CART_SPEED,
+  cartAt,
+  CRATE_R,
+  GRAB_FROM,
+  gravityOf,
+  hazardSpots,
+  hitCancelable,
+  jumpOf,
+  JUMPSQUAT,
+  moveDef,
+  PARRY_FRAMES,
+  SHOTS,
+} from "./engine.ts";
 import { ATK, FRT, GRB, JMP, NAR, SHD, SPC, type Fight, type Fighter, type HabitueId, type Input } from "./model.ts";
 import { STYLES } from "./styles.ts";
 
@@ -180,6 +196,9 @@ export interface BotMemory {
   lassoSeen: number;
   /** Il va chercher l'objet qui l'attend en hauteur jusqu'à cette image */
   fetchUntil: number;
+  /** L'événement de l'arène (son image de coup) qu'il a décidé d'esquiver, ou pas ; il s'écarte jusqu'à cette image */
+  hazardSeen: number;
+  hazardDodge: boolean;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
   /** Le même coup qu'on vient de lui relancer de près, encore et encore (ça s'oublie vite) : un marteleur se repère */
@@ -219,6 +238,8 @@ export function newBotMemory(seed: number): BotMemory {
     shotSeen: -1,
     lassoSeen: -1,
     fetchUntil: 0,
+    hazardSeen: -1,
+    hazardDodge: false,
     seen: "",
   };
 }
@@ -389,6 +410,55 @@ function dodgeShot(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | n
   m.x = 0;
   m.y = 0;
   return { x: 0, y: 0, held: SHD, pressed: SHD };
+}
+
+/**
+ * La vie de l'arène : il voit venir l'événement (selon son niveau, il y pense ou non) et s'en écarte. La charrette : il
+ * saute quand elle arrive sur lui. La cloche : il s'éloigne du bord pendant qu'elle se balance, et lève la garde quand
+ * elle sonne. Les pétards et les cagettes : il sort des marques au sol. Rien à faire : null.
+ */
+function dodgeHazard(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input | null {
+  const h = f.hazard;
+  if (!h || f.frame > h.to || (me.state !== "stand" && me.state !== "air" && me.state !== "shield")) return null;
+  // (une seule décision par événement : il y pense, ou il l'oublie)
+  if (m.hazardSeen !== h.at) {
+    m.hazardSeen = h.at;
+    m.hazardDodge = rnd(m) < 0.25 + 0.7 * L.space;
+  }
+  if (!m.hazardDodge) return null;
+  const plats = platformsAt(f.arena as ArenaId, f.scale, f.frame);
+  const st = stage(f);
+  const center = me.x < (st.x0 + st.x1) / 2 ? 1 : -1;
+  if (h.kind === "charrette") {
+    if (airborne(me) || me.ground !== 0) return null;
+    const cart = cartAt(h, f.frame, plats);
+    // Le temps qu'elle arrive sur lui (elle ne roule qu'après l'annonce) ; il saute juste avant, assez haut
+    const gap = (me.x - cart.x) * h.dir - CART_HALF - 0.5;
+    const eta = Math.max(0, h.at - f.frame) + (gap / CART_SPEED) * 60;
+    if (gap < -CART_HALF * 2 || eta > JUMPSQUAT + 12 || me.y > cart.y + CART_H) return null;
+    m.jumpUntil = f.frame + JUMPSQUAT + 12;
+    m.holdUntil = 0;
+    return { x: 0, y: 0, held: JMP, pressed: JMP };
+  }
+  if (h.kind === "cloche") {
+    if (airborne(me)) return null;
+    // Au coup : la garde ; avant, il quitte les bords du toit
+    if (f.frame >= h.at - 4 && f.frame <= h.at) {
+      m.held = SHD;
+      m.holdUntil = h.at + 6;
+      return { x: 0, y: 0, held: SHD, pressed: me.state === "shield" ? 0 : SHD };
+    }
+    if (f.frame < h.at && (me.x < st.x0 + 2 || me.x > st.x1 - 2)) return { x: center, y: 0, held: 0, pressed: 0 };
+    return null;
+  }
+  if (airborne(me) || f.frame >= h.at) return null;
+  // Les pétards, les cagettes : hors de la marque, du côté le plus sûr
+  const r = (h.kind === "petards" ? BOOM_R : CRATE_R) + 0.6;
+  const s = hazardSpots(h, plats).find((q) => Math.abs(q.x - me.x) < r && Math.abs(q.y - me.y) < 1);
+  if (!s) return null;
+  let away = me.x < s.x ? -1 : 1;
+  if (nearEdge(me, st, away)) away = -away;
+  return { x: away, y: 0, held: 0, pressed: 0 };
 }
 
 /**
@@ -621,7 +691,7 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   }
   // Le jeu de distance, regardé à chaque image (sans attendre sa prochaine idée) : punir une fin de coup, s'écarter
   // d'un coup qui arrive, se protéger d'un tir
-  const dodge = dodgeShot(f, me, m, L);
+  const dodge = dodgeShot(f, me, m, L) ?? dodgeHazard(f, me, m, L);
   if (dodge) return dodge;
   const neutral = spacing(f, me, m, L);
   if (neutral) return neutral;

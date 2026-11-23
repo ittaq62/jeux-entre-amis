@@ -300,6 +300,8 @@ export type FightEvent =
   | { k: "break"; v: number }
   | { k: "trap"; v: number }
   | { k: "grab"; a: number; v: number }
+  /** L'événement de l'arène s'annonce, ou frappe (go) */
+  | { k: "hazard"; kind: HazardKind; go: boolean }
   | { k: "go" }
   | { k: "end" };
 
@@ -312,6 +314,28 @@ export interface FightSettings {
   friendlyFire: boolean;
   /** Sur la lune : la pesanteur fond, on saute plus haut et on retombe lentement */
   lune: boolean;
+  /** La vie de l'arène : de temps en temps, un événement annoncé qui oblige à bouger (la charrette, la cloche, les
+   * pétards, les cagettes) ; absent : oui */
+  events?: boolean;
+}
+
+/** Les événements de l'arène, un par arène : la charrette du marchand (la place), la cloche (le clocher), les pétards du
+ * feu d'artifice (le bal), les cagettes qui dégringolent des étals (le marché) */
+export type HazardKind = "charrette" | "cloche" | "petards" | "cagettes";
+export const HAZARD_KINDS: HazardKind[] = ["charrette", "cloche", "petards", "cagettes"];
+
+export interface Hazard {
+  kind: HazardKind;
+  /** L'image où il s'annonce, celle où il frappe, celle où il est passé */
+  from: number;
+  at: number;
+  to: number;
+  /** La charrette : son sens (1 : de gauche à droite) */
+  dir: number;
+  /** Les pétards et les cagettes : où ils tombent, par paires (la plateforme, l'écart depuis son bord gauche) */
+  spots: number[];
+  /** Ceux que la charrette a déjà renversés (leurs places) */
+  hit: number[];
 }
 
 export interface Fight {
@@ -332,6 +356,9 @@ export interface Fight {
   nextId: number;
   /** Le prochain objet tombera à cette image */
   itemAt: number;
+  /** L'événement de l'arène en cours (annoncé ou en train de frapper), et l'image du prochain */
+  hazard: Hazard | null;
+  hazardAt: number;
   rng: number;
   /** Ceux qui ont gagné (leurs places), une fois le combat fini */
   winners: number[];

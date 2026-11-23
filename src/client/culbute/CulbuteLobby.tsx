@@ -233,6 +233,16 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
                   <span className="hint">La pesanteur fond : on saute plus haut et on retombe lentement. Les combats durent en l'air.</span>
                 </span>
               </div>
+              <div className="rule-row" onClick={() => isHost && update({ events: s.events === false })}>
+                <Check label="La vie de l'arène" checked={s.events !== false} disabled={!isHost} onChange={() => {}} />
+                <span>
+                  <strong>La vie de l'arène</strong>
+                  <span className="hint">
+                    De temps en temps, un événement annoncé oblige à bouger : la charrette traverse la place, la cloche repousse tout le
+                    monde, les pétards du bal éclatent, les cagettes du marché dégringolent.
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
 

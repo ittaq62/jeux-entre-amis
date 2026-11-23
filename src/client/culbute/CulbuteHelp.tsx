@@ -66,6 +66,12 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
             tombent qu'en hauteur, sur les bancs, les auvents, les planches ou les toits : monte les chercher.
           </p>
           <p className="hint">
+            La vie de l'arène : de temps en temps, un événement s'annonce (un mot en haut de l'écran, un bruit) et oblige à bouger. Sur la
+            place, la charrette traverse le plancher : saute ou monte sur un banc. Au clocher, la cloche repousse tout le monde vers le bord
+            : écarte-toi du bord, lève ta garde quand elle sonne. Au bal, les pétards éclatent sur leurs marques ; au marché, les cagettes
+            tombent sur les leurs : sors-en. Réglable au salon.
+          </p>
+          <p className="hint">
             Un coup qui ne touche personne se paie : on reprend son équilibre un instant. Frapper dans le vide encore et encore sans bouger
             essouffle (de petites bouffées le montrent) : la reprise s'allonge à chaque fois, de quoi se faire punir. Quelques pas, un saut,
             un instant sans frapper ou un coup qui touche, et le souffle revient.

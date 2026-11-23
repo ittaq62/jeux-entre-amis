@@ -811,16 +811,10 @@ export function buildArena(id: ArenaId, scale: number, keep: Keep): ArenaScene {
         cloud(keep, cm, -40, -2, -55, 4.6, 11),
       );
       lives.push(flock(keep, 0x3a2a3a, 79, 5.5, -22, 6));
-      const bells: THREE.Object3D[] = [];
-      group.traverse((o) => {
-        if (o.userData.bell) bells.push(o);
-      });
+      // (la cloche, elle, se balance quand elle sonne pour de bon : voir la vie de l'arène, dans CulbuteScene)
       update = (time) => {
         minHand.rotation.z = -time * 0.25;
         hourHand.rotation.z = -time * 0.02 - 1.2;
-        // La cloche sonne de temps en temps : elle se balance, puis s'apaise
-        const since = time % 24;
-        for (const b of bells) b.rotation.z = since < 6 ? Math.sin(since * 4.2) * 0.32 * (1 - since / 6) : 0;
       };
       break;
     }

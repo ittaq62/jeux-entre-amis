@@ -16,6 +16,8 @@ import {
   type HabitueId,
   type Input,
   type ItemKind,
+  HAZARD_KINDS,
+  type Hazard,
 } from "./model.ts";
 import { GENERIC_KEYS, MOVE_SLOTS } from "./moves.ts";
 
@@ -43,6 +45,7 @@ export function mergeConfig(current: CulbuteConfig, patch: Partial<CulbuteConfig
   if (typeof patch.teams === "boolean") next.teams = patch.teams;
   if (typeof patch.friendlyFire === "boolean") next.friendlyFire = patch.friendlyFire;
   if (typeof patch.lune === "boolean") next.lune = patch.lune;
+  if (typeof patch.events === "boolean") next.events = patch.events;
   if (patch.arena === "hasard" || isArenaId(patch.arena)) next.arena = patch.arena;
   if (isBotLevel(patch.botLevel)) next.botLevel = patch.botLevel;
   return next;
@@ -161,6 +164,8 @@ export interface CulbuteTick {
   i: number[];
   /** Les pièges posés : id, x, y, poseur */
   r: number[];
+  /** L'événement de l'arène (voir packHazard), ou rien */
+  z?: number[];
   /** Le temps qui reste (au temps), en secondes */
   tl: number;
   /** La phase du combat : 0 introduction, 1 combat, 2 fini */
@@ -359,5 +364,29 @@ export function encodeTick(f: Fight, events: FightEvent[], acks: number[], stamp
   const r: number[] = [];
   for (const t of f.traps) r.push(t.id, r3(t.x), r3(t.y), t.owner);
   const ph = f.phase === "intro" ? 0 : f.phase === "fight" ? 1 : 2;
-  return { f: f.frame, k: acks, c: stamps, p, j, i, r, tl: Math.ceil(timeLeft(f)), ph, e: events };
+  return {
+    f: f.frame,
+    k: acks,
+    c: stamps,
+    p,
+    j,
+    i,
+    r,
+    ...(f.hazard ? { z: packHazard(f.hazard) } : {}),
+    tl: Math.ceil(timeLeft(f)),
+    ph,
+    e: events,
+  };
+}
+
+/** L'événement de l'arène, serré : sa sorte, ses images (annonce, coup, fin), son sens, puis ses points d'impact */
+export function packHazard(h: Hazard): number[] {
+  return [HAZARD_KINDS.indexOf(h.kind), h.from, h.at, h.to, h.dir, ...h.spots];
+}
+
+export function unpackHazard(z: readonly number[] | undefined): Hazard | null {
+  if (!z || z.length < 5) return null;
+  const kind = HAZARD_KINDS[z[0]!];
+  if (!kind) return null;
+  return { kind, from: z[1]!, at: z[2]!, to: z[3]!, dir: z[4]!, spots: z.slice(5), hit: [] };
 }

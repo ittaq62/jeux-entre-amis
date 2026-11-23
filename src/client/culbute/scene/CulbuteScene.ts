@@ -4,7 +4,16 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { ARENAS, blastOf, type ArenaId, type PlatformNow } from "../../../shared/games/culbute/arenas.ts";
-import { INTRO_FRAMES } from "../../../shared/games/culbute/engine.ts";
+import {
+  BELL_AT,
+  BOOM_R,
+  CART_HALF,
+  CART_SPEED as CART_SPEED_SHOWN,
+  cartAt,
+  CRATE_R,
+  hazardSpots,
+  INTRO_FRAMES,
+} from "../../../shared/games/culbute/engine.ts";
 import { F_PUFF } from "../../../shared/games/culbute/view.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
@@ -114,6 +123,15 @@ export class CulbuteScene {
   private dustAt: number[] = [];
   /** La dernière bouffée de celui qui est essoufflé */
   private breathAt: number[] = [];
+  /** La vie de l'arène : la charrette et ses roues, le panneau qui l'annonce, les marques au sol, les cagettes qui
+   * tombent, les fusées des pétards ; la cloche (et le temps depuis son dernier coup) */
+  private cart: { group: THREE.Group; wheels: THREE.Object3D[] } | null = null;
+  private warnSign: THREE.Sprite | null = null;
+  private marks: THREE.Mesh[] = [];
+  private drops: THREE.Mesh[] = [];
+  private bells: THREE.Object3D[] | null = null;
+  private bellSince = Infinity;
+  private fuseAt = 0;
   /** La charge de chacun : la dernière étincelle aspirée, et s'il a déjà jeté l'éclair de la charge pleine */
   private chargeAt: number[] = [];
   private chargeFull: boolean[] = [];
@@ -428,6 +446,7 @@ export class CulbuteScene {
     this.syncShots(frame, dt);
     this.syncItems(frame);
     this.syncTraps(frame);
+    this.syncHazard(frame, dt);
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const e = this.effects[i]!;
       e.age += dt;
@@ -973,6 +992,33 @@ export class CulbuteScene {
 
   effect(e: FightEvent, frame: RenderFrame) {
     switch (e.k) {
+      case "hazard": {
+        if (!e.go) break;
+        if (e.kind === "cloche") {
+          // Le coup de la cloche : une grande onde qui part d'elle, l'écran qui tremble
+          this.bellSince = 0;
+          this.wave(BELL_AT.x, BELL_AT.y, 10, 0xfff3c4, 0.7);
+          this.wave(BELL_AT.x, BELL_AT.y, 6, 0xffd27a, 0.5);
+          this.rays(BELL_AT.x, BELL_AT.y, 12, 2.4, 0xfff3c4, 0.35);
+          this.shake = Math.max(this.shake, 0.45);
+        } else if (frame.hazard && (e.kind === "petards" || e.kind === "cagettes")) {
+          const colors = [0xff5a5a, 0x5ab8ff, 0xffe066, 0x8cff7a];
+          hazardSpots(frame.hazard, frame.plats).forEach((s, i) => {
+            if (e.kind === "petards") {
+              const c = colors[i % colors.length]!;
+              this.flare(s.x, s.y + 0.6, 2.6, c, 0.4);
+              this.spark(s.x, s.y + 0.6, 0.9, c);
+              this.rays(s.x, s.y + 0.6, 10, 1.6, 0xffffff, 0.3);
+            } else {
+              // La cagette éclate : des éclats de bois et de la poussière
+              for (const dx of [-0.4, 0, 0.4]) this.puff(s.x + dx, s.y + 0.3, 0xc8a070, 0.3, 0.6);
+              this.spark(s.x, s.y + 0.5, 0.5, 0xd8b07a);
+            }
+          });
+          this.shake = Math.max(this.shake, e.kind === "petards" ? 0.5 : 0.35);
+        }
+        break;
+      }
       case "hit": {
         if (e.kind === "push") {
           this.puff(e.x, e.y, 0xe8f4ff, 0.3, 0.35);
@@ -1101,6 +1147,191 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
   }
 
   /** La poussière : à l'atterrissage, et de temps en temps sous les pieds de celui qui court */
+  /**
+   * La vie de l'arène, d'après l'événement en cours : la charrette (garée au bord pendant l'annonce, puis qui traverse,
+   * roues qui tournent) et le panneau qui clignote de son côté ; les marques au sol là où les pétards vont éclater ou
+   * les cagettes tomber (elles grossissent jusqu'au coup), les fusées qui grésillent, les cagettes qui dégringolent ; la
+   * cloche qui se balance de plus en plus, puis sonne et s'apaise.
+   */
+  private syncHazard(frame: RenderFrame, dt: number) {
+    const h = frame.hazard;
+    const t = frame.frame;
+    const warn = h ? Math.max(0, Math.min(1, (t - h.from) / Math.max(1, h.at - h.from))) : 0;
+    // La charrette
+    if (h?.kind === "charrette") {
+      const cart = (this.cart ??= this.buildCart());
+      const pos = cartAt(h, t, frame.plats);
+      cart.group.visible = true;
+      cart.group.position.set(pos.x, pos.y + (t < h.at ? Math.abs(Math.sin(t * 0.5)) * 0.03 : 0), 0);
+      cart.group.rotation.y = h.dir > 0 ? 0 : Math.PI;
+      const rolled = t > h.at ? (CART_SPEED_SHOWN * (t - h.at)) / 60 : 0;
+      for (const w of cart.wheels) w.rotation.z = -rolled / 0.36;
+      const sign = (this.warnSign ??= this.buildWarnSign());
+      const main = frame.plats[0]!;
+      sign.visible = t < h.at && Math.floor(t / 8) % 2 === 0;
+      sign.position.set(h.dir > 0 ? main.x0 + 0.6 : main.x1 - 0.6, main.y + 2.4, 0.4);
+    } else {
+      if (this.cart) this.cart.group.visible = false;
+      if (this.warnSign) this.warnSign.visible = false;
+    }
+    // Les marques au sol, les fusées et les cagettes
+    const spots = h && (h.kind === "petards" || h.kind === "cagettes") && t < h.at + 3 ? hazardSpots(h, frame.plats) : [];
+    while (this.marks.length < spots.length) this.marks.push(this.buildMark());
+    while (this.drops.length < spots.length) this.drops.push(this.buildDrop());
+    this.marks.forEach((m, i) => {
+      const s = spots[i];
+      m.visible = Boolean(s);
+      if (!s || !h) return;
+      const r = (h.kind === "petards" ? BOOM_R : CRATE_R) * (0.5 + 0.5 * warn);
+      m.position.set(s.x, s.y + 0.04, 0.45);
+      m.scale.set(r, r * 0.4, 1);
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(h.kind === "petards" ? 0xff6a3a : 0xffd23a);
+      mat.opacity = 0.35 + 0.4 * warn * (0.6 + 0.4 * Math.abs(Math.sin(t * 0.35)));
+    });
+    this.drops.forEach((d, i) => {
+      const s = spots[i];
+      d.visible = Boolean(s && h && t < h.at);
+      if (!s || !h || t >= h.at) return;
+      if (h.kind === "petards") {
+        // La fusée plantée, qui grésille
+        d.scale.set(0.16, 0.6, 0.16);
+        d.position.set(s.x, s.y + 0.3, 0.2);
+        (d.material as THREE.MeshStandardMaterial).color.setHex(0xd8382e);
+      } else {
+        // La cagette : elle tombe pendant la dernière demi-seconde, de haut
+        const fall = Math.max(0, h.at - t) / 30;
+        d.scale.set(0.9, 0.6, 0.7);
+        d.position.set(s.x, s.y + 0.3 + (fall < 1 ? fall * fall * 9 : 9), 0.2);
+        d.visible = fall < 1;
+        (d.material as THREE.MeshStandardMaterial).color.setHex(0xb98a4e);
+      }
+    });
+    if (h?.kind === "petards" && t < h.at && this.time - this.fuseAt > 0.08) {
+      this.fuseAt = this.time;
+      for (const s of spots) this.puff(s.x, s.y + 0.65, 0xffd080, 0.05, 0.25);
+    }
+    // La cloche
+    if (this.arenaId === "clocher") {
+      if (!this.bells) {
+        this.bells = [];
+        this.arena.group.traverse((o) => {
+          if (o.userData.bell) this.bells!.push(o);
+        });
+      }
+      this.bellSince += dt;
+      let swing = 0;
+      if (this.bellSince < 5) swing = Math.sin(this.bellSince * 4.2) * 0.4 * (1 - this.bellSince / 5);
+      else if (h?.kind === "cloche" && t < h.at) swing = Math.sin(this.time * 5) * 0.06 * warn;
+      for (const b of this.bells) b.rotation.z = swing;
+    }
+  }
+
+  private buildCart(): { group: THREE.Group; wheels: THREE.Object3D[] } {
+    const keep = this.keep;
+    const g = new THREE.Group();
+    const wood = keep(std(0x8a5a32, 0.85));
+    const dark = keep(std(0x5a3a20, 0.9));
+    const body = new THREE.Mesh(keep(new THREE.BoxGeometry(CART_HALF * 2, 0.5, 1.1)), wood);
+    body.position.y = 0.72;
+    body.castShadow = true;
+    g.add(body);
+    for (const z of [-0.56, 0.56]) {
+      const side = new THREE.Mesh(keep(new THREE.BoxGeometry(CART_HALF * 2, 0.32, 0.06)), dark);
+      side.position.set(0, 1.08, z);
+      g.add(side);
+    }
+    // Les brancards, vers l'avant
+    for (const z of [-0.35, 0.35]) {
+      const shaft = new THREE.Mesh(keep(new THREE.BoxGeometry(1.1, 0.07, 0.07)), dark);
+      shaft.position.set(CART_HALF + 0.5, 0.62, z);
+      g.add(shaft);
+    }
+    // Le chargement : des choux, des potirons, des pommes
+    const veg: [number, number, number, number, number][] = [
+      [-0.5, 1.12, -0.2, 0.22, 0x6fae4a],
+      [-0.1, 1.15, 0.15, 0.26, 0xe88a2a],
+      [0.35, 1.1, -0.15, 0.21, 0x6fae4a],
+      [0.55, 1.08, 0.25, 0.12, 0xd8382e],
+      [0.1, 1.06, -0.3, 0.12, 0xd8382e],
+    ];
+    for (const [x, y, z, r, c] of veg) {
+      const v = new THREE.Mesh(keep(new THREE.SphereGeometry(r, 12, 10)), keep(std(c, 0.6)));
+      v.position.set(x, y, z);
+      g.add(v);
+    }
+    const wheels: THREE.Object3D[] = [];
+    const wheelGeo = keep(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 16).rotateX(Math.PI / 2));
+    for (const [x, z] of [
+      [-0.55, 0.6],
+      [0.55, 0.6],
+      [-0.55, -0.6],
+      [0.55, -0.6],
+    ] as const) {
+      const w = new THREE.Mesh(wheelGeo, dark);
+      w.position.set(x, 0.36, z);
+      w.castShadow = true;
+      // Un rayon clair, qu'on voie tourner
+      const spoke = new THREE.Mesh(keep(new THREE.BoxGeometry(0.62, 0.06, 0.14)), wood);
+      w.add(spoke);
+      g.add(w);
+      wheels.push(w);
+    }
+    g.visible = false;
+    this.scene.add(g);
+    return { group: g, wheels };
+  }
+
+  /** Le panneau qui clignote du côté d'où vient la charrette : un triangle jaune et son point d'exclamation */
+  private buildWarnSign(): THREE.Sprite {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#ffd23a";
+    x.strokeStyle = "#b3261e";
+    x.lineWidth = 10;
+    x.beginPath();
+    x.moveTo(64, 10);
+    x.lineTo(120, 116);
+    x.lineTo(8, 116);
+    x.closePath();
+    x.fill();
+    x.stroke();
+    x.fillStyle = "#b3261e";
+    x.font = "bold 76px sans-serif";
+    x.textAlign = "center";
+    x.fillText("!", 64, 104);
+    const tex = this.keep(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(this.keep(new THREE.SpriteMaterial({ map: tex, transparent: true })));
+    sprite.scale.set(0.9, 0.9, 1);
+    sprite.visible = false;
+    this.scene.add(sprite);
+    return sprite;
+  }
+
+  /** Une marque au sol : un anneau aplati, vu de côté */
+  private buildMark(): THREE.Mesh {
+    const m = new THREE.Mesh(
+      this.keep(new THREE.RingGeometry(0.6, 1, 32)),
+      this.keep(
+        new THREE.MeshBasicMaterial({ color: 0xff6a3a, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }),
+      ),
+    );
+    m.visible = false;
+    this.scene.add(m);
+    return m;
+  }
+
+  /** Une fusée de pétard, ou une cagette (un pavé de bois, mis à l'échelle selon le cas) */
+  private buildDrop(): THREE.Mesh {
+    const m = new THREE.Mesh(this.keep(new THREE.BoxGeometry(1, 1, 1)), this.keep(std(0xb98a4e, 0.8)));
+    m.castShadow = true;
+    m.visible = false;
+    this.scene.add(m);
+    return m;
+  }
+
   /** Essoufflé (des coups dans le vide d'affilée) : de petites bouffées devant sa bouche pendant qu'il se reprend, chez
    * lui comme chez l'adversaire (c'est le moment de le punir) */
   private breath(i: number, f: RenderFrame["fighters"][number]) {
