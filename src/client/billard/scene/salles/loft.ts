@@ -118,7 +118,7 @@ export function loft(touch: boolean): Salle {
     hemi: ["#c8d0ff", "#2a2420", 0.5],
     env: 0.6,
     exposure: 1.0,
-    bloom: [0.55, 0.5, 0.88],
+    bloom: [0.45, 0.3, 1.1],
     grade: { warm: 0.01, sat: 1.06, vignette: 0.38 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(-3.8, 1.5, 3.0), look: new THREE.Vector3(2, 1.2, 3.8) },

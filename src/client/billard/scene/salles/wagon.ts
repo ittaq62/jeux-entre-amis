@@ -232,7 +232,7 @@ export function wagon(touch: boolean): Salle {
     hemi: ["#ffe2c4", "#2a1408", 0.4],
     env: 0.55,
     exposure: 1.0,
-    bloom: [0.45, 0.5, 0.9],
+    bloom: [0.45, 0.3, 1.1],
     grade: { warm: 0.05, sat: 1.05, vignette: 0.45 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(-4.9, 1.3, 0.0), look: new THREE.Vector3(1, 0.2, 0) },

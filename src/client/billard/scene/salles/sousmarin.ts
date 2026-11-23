@@ -214,27 +214,27 @@ export function sousmarin(touch: boolean): Salle {
     bubbles.push(b);
   }
 
-  // Deux banquettes rondes de cuir crème, une table basse avec un aquarium-bocal
+  // Deux banquettes rondes de cuir crème, en arc le long de la paroi, une table basse avec un aquarium-bocal
   const cream = phys(keep, { color: "#e8dcc4", roughness: 0.55, clearcoat: 0.4 });
   for (const a of [0.9, 3.9]) {
-    const seat = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.6, 3.6, 0.42, 40, 1, false, a - 0.35, 0.7)), cream);
-    seat.position.y = FLOOR + 0.21;
+    const seat = new THREE.Mesh(keep(arcBlock(3.3, 3.95, a - 0.35, a + 0.35, 0.42)), cream);
+    seat.position.y = FLOOR;
     root.add(seat);
-    const back = new THREE.Mesh(keep(new THREE.CylinderGeometry(4.1, 4.1, 0.9, 40, 1, true, a - 0.35, 0.7)), cream);
-    back.position.y = FLOOR + 0.45;
+    const back = new THREE.Mesh(keep(arcBlock(3.95, 4.13, a - 0.35, a + 0.35, 0.9)), cream);
+    back.position.y = FLOOR;
     root.add(back);
   }
   root.add(roundBlock(0.7, 0.05, 0.7, 0.02, brass, 3.0, FLOOR + 0.45, 0.6, keep));
 
-  const lamp = poolLamp(keep, { kind: "verre", height: 0.95, ceiling: ceil + 0.6, color: "#e8f4ff", intensity: 4.2, touch });
+  const lamp = poolLamp(keep, { kind: "verre", height: 0.95, ceiling: ceil + 0.6, color: "#fff4e8", intensity: 4.2, touch });
   root.add(lamp.group);
-  // La lumière bleue de la mer, qui entre par les baies
-  const seaLight = new THREE.HemisphereLight("#6ad0ff", "#0a2a3a", 0.4);
+  // La lumière bleue de la mer, qui entre par les baies (discrète : sur le tapis, elle le délaverait)
+  const seaLight = new THREE.HemisphereLight("#6ad0ff", "#0a2a3a", 0.25);
   root.add(seaLight);
-  const sun = new THREE.DirectionalLight("#9ae6ff", 0.6);
+  const sun = new THREE.DirectionalLight("#9ae6ff", 0.25);
   sun.position.set(2, 8, 1);
   root.add(sun);
-  const glowRing = new THREE.Mesh(keep(new THREE.TorusGeometry(RAD - 0.1, 0.02, 6, 64)), glow(keep, "#6ae0ff", 1.6));
+  const glowRing = new THREE.Mesh(keep(new THREE.TorusGeometry(RAD - 0.1, 0.02, 6, 64)), glow(keep, "#6ae0ff", 2.4));
   glowRing.rotation.x = Math.PI / 2;
   glowRing.position.y = FLOOR + 0.02;
   root.add(glowRing);
@@ -247,7 +247,7 @@ export function sousmarin(touch: boolean): Salle {
     hemi: ["#a8e8ff", "#1a3a40", 0.4],
     env: 0.65,
     exposure: 1.0,
-    bloom: [0.5, 0.55, 0.88],
+    bloom: [0.4, 0.3, 1.3],
     grade: { warm: -0.04, sat: 1.1, vignette: 0.4 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(3.4, 2.2, 2.8), look: new THREE.Vector3(-3, 2.4, -5) },
@@ -277,4 +277,25 @@ export function sousmarin(touch: boolean): Salle {
     },
     dispose,
   };
+}
+
+/** Un bloc en arc de cercle posé au sol (de r0 à r1 du centre de la salle, des angles a0 à a1), haut de h, aux arêtes adoucies */
+function arcBlock(r0: number, r1: number, a0: number, a1: number, h: number): THREE.BufferGeometry {
+  const s = new THREE.Shape();
+  s.absarc(0, 0, r1, a0, a1, false);
+  s.absarc(0, 0, r0, a1, a0, true);
+  s.closePath();
+  const b = 0.02;
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: h - 2 * b,
+    bevelEnabled: true,
+    bevelThickness: b,
+    bevelSize: b,
+    bevelSegments: 2,
+    curveSegments: 40,
+  });
+  // Le dessin est dans le plan du sol (x, z), l'épaisseur monte
+  g.rotateX(Math.PI / 2);
+  g.translate(0, h - b, 0);
+  return g;
 }

@@ -204,7 +204,7 @@ export function club(touch: boolean): Salle {
 
   // Des appliques entre les fenêtres
   for (const x of [-W / 2 - 1.1, 0, W / 2 + 1.1]) {
-    const sconce = new THREE.Mesh(keep(new THREE.SphereGeometry(0.06, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2)), glow(keep, "#ffcf8a", 1.8));
+    const sconce = new THREE.Mesh(keep(new THREE.SphereGeometry(0.06, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2)), glow(keep, "#ffcf8a", 2.1));
     sconce.position.set(x, FLOOR + 1.9, D - 0.06);
     sconce.rotation.x = Math.PI;
     sconce.userData.reflect = true;
@@ -226,7 +226,7 @@ export function club(touch: boolean): Salle {
     hemi: ["#ffe2c0", "#2a1408", 0.42],
     env: 0.55,
     exposure: 1.0,
-    bloom: [0.35, 0.45, 0.95],
+    bloom: [0.38, 0.3, 1.2],
     grade: { warm: 0.06, sat: 1.06, vignette: 0.42 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(-3.6, 1.2, -2.6), look: new THREE.Vector3(0, -0.2, 0) },

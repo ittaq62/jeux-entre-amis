@@ -179,7 +179,7 @@ export function bar(touch: boolean): Salle {
     hemi: ["#d8d0ff", "#2a1a20", 0.45],
     env: 0.6,
     exposure: 0.95,
-    bloom: [0.55, 0.5, 0.9],
+    bloom: [0.42, 0.3, 1.1],
     grade: { warm: 0.0, sat: 1.12, vignette: 0.45 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(2.6, 1.0, 2.6), look: new THREE.Vector3(-0.6, 0.6, -D) },

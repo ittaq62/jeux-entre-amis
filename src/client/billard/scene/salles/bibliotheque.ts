@@ -307,8 +307,9 @@ export function bibliotheque(touch: boolean): Salle {
   shade.position.set(-3.2, FLOOR + 1.12, -0.4);
   root.add(shade);
   root.add(block(0.02, 0.3, 0.02, brass, -3.2, FLOOR + 0.8, -0.4, keep));
-  const deskGlow = new THREE.PointLight("#ffe0a0", 0.8, 2.2, 1.6);
-  deskGlow.position.set(-3.2, FLOOR + 1.0, -0.4);
+  // Sous l'abat-jour (trop près du plateau, elle l'éblouissait)
+  const deskGlow = new THREE.PointLight("#ffe0a0", 0.35, 2.2, 1.6);
+  deskGlow.position.set(-3.2, FLOOR + 1.08, -0.4);
   root.add(deskGlow);
   // Des piles de livres sur le bureau
   const rnd = seeded(5);
@@ -341,7 +342,7 @@ export function bibliotheque(touch: boolean): Salle {
     hemi: ["#ffe6c8", "#2a1408", 0.4],
     env: 0.55,
     exposure: 1.0,
-    bloom: [0.4, 0.5, 0.9],
+    bloom: [0.42, 0.3, 1.1],
     grade: { warm: 0.07, sat: 1.04, vignette: 0.42 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(3.6, 1.6, 3.0), look: new THREE.Vector3(-2, 0.8, -D) },

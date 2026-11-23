@@ -375,7 +375,7 @@ export function lampions(a: THREE.Vector3, b: THREE.Vector3, sag: number, colors
   }
   g.add(new THREE.Mesh(keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.005, 4)), std(keep, "#222222", 0.8)));
   const geo = keep(new THREE.SphereGeometry(0.07, 12, 8));
-  const mats = colors.map((c) => glow(keep, c, 1.3));
+  const mats = colors.map((c) => glow(keep, c, 1.4));
   for (let i = 1; i < n; i++) {
     const u = i / n;
     const p = new THREE.Vector3().lerpVectors(a, b, u).add(new THREE.Vector3(0, -sag * 4 * u * (1 - u) - 0.08, 0));

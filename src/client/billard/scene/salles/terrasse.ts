@@ -189,7 +189,7 @@ export function terrasse(touch: boolean): Salle {
     hemi: ["#ffc8a0", "#3a2a30", 0.55],
     env: 0.7,
     exposure: 1.0,
-    bloom: [0.38, 0.5, 0.93],
+    bloom: [0.4, 0.3, 1.1],
     grade: { warm: 0.08, sat: 1.1, vignette: 0.32 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(0.5, 1.4, 3.2), look: new THREE.Vector3(0, 0.6, -40) },

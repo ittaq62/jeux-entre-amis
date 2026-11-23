@@ -202,7 +202,7 @@ export function serre(touch: boolean): Salle {
     hemi: ["#ffe0c0", "#2a2418", 0.4],
     env: 0.6,
     exposure: 1.0,
-    bloom: [0.45, 0.5, 0.9],
+    bloom: [0.45, 0.3, 1.1],
     grade: { warm: 0.06, sat: 1.08, vignette: 0.38 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(-4.0, 2.6, 2.8), look: new THREE.Vector3(3, 2.5, -3) },

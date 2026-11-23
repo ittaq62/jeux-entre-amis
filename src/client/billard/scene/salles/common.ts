@@ -29,7 +29,8 @@ export interface Salle {
   /** La force des reflets de la pièce sur le vernis */
   env: number;
   exposure: number;
-  /** Le halo : force, rayon, seuil */
+  /** Le halo : force, rayon, seuil. Un seuil au-dessus de 1 : le haut d'une bille sous la lampe monte vers 1,1 et ne doit
+   * pas luire ; seuls les ampoules, les néons (plus de 1,15) et les reflets vifs en font un */
   bloom: [number, number, number];
   grade: { warm: number; sat: number; vignette: number };
   /** Les projecteurs de la lampe (les ombres) */
@@ -146,7 +147,7 @@ export function panel(w: number, h: number, mat: THREE.Material, x: number, y: n
 export function neon(points: THREE.Vector3[], color: THREE.ColorRepresentation, keep: Keep, radius = 0.014, closed = false): THREE.Mesh {
   const curve = new THREE.CatmullRomCurve3(points, closed, "centripetal");
   const geo = keep(new THREE.TubeGeometry(curve, Math.max(8, points.length * 10), radius, 8, closed));
-  const mat = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2.4) }));
+  const mat = keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3) }));
   const m = new THREE.Mesh(geo, mat);
   m.userData.reflect = true;
   return m;
