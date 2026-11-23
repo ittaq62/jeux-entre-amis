@@ -997,6 +997,8 @@ export class CulbuteScene {
         }
         this.fighters[e.v]?.hit(e.power);
         this.spark(e.x, e.y, e.power, e.power > 0.55 ? 0xffa53a : 0xfff2a8);
+        // Un coup donné avec de l'élan : une gerbe de traits en plus, dans le sens du coup
+        if (e.elan) this.rays(e.x, e.y, 6, 0.9 + e.power * 0.8, 0xfff6d8, 0.2);
         this.countCombo(e.a, e.v, Boolean(e.chain), frame);
         if (e.power > 0.45) this.shake = Math.max(this.shake, 0.3 + e.power * 0.6);
         if (e.ko) {

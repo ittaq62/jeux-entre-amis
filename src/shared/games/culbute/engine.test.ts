@@ -4,6 +4,7 @@ import {
   createFight,
   DEFAULT_FIGHT_SETTINGS,
   DI_MAX,
+  HIGH_ITEMS,
   hitCancelable,
   INTRO_FRAMES,
   moveDef,
@@ -439,6 +440,35 @@ describe("Culbute : le combat", () => {
     run(f, 12, [stick(-1)]);
     run(f, 4);
     expect(whiff()).toBe(lags[0]);
+  });
+
+  it("les objets à aller chercher : ils tombent surtout en hauteur, et les plus utiles seulement là-haut", () => {
+    const f = duel("ginette", "marcel", { items: "beaucoup" });
+    skipIntro(f);
+    const drops = run(f, 4 * 60 * 60).filter((e) => e.k === "item");
+    expect(drops.length).toBeGreaterThan(20);
+    // Au-dessus d'un banc ou du kiosque, ils partent de plus haut que 6 m au-dessus du grand plateau
+    const up = drops.filter((e) => e.k === "item" && e.y > 6.5);
+    expect(up.length / drops.length).toBeGreaterThan(0.5);
+    for (const e of drops) if (e.k === "item" && HIGH_ITEMS.includes(e.kind)) expect(e.y).toBeGreaterThan(6.5);
+  });
+
+  it("l'élan paie : le même coup fort, lancé en courant, frappe plus fort que debout sans bouger", () => {
+    const hitWith = (running: boolean) => {
+      const f = duel();
+      skipIntro(f);
+      faceToFace(f, running ? 2.4 : 1.8);
+      const [a, v] = f.fighters;
+      if (running) a!.vx = STYLES.ginette.run;
+      const events = run(f, 40, [tap(FRT, 1, 0)]);
+      const hit = events.find((e) => e.k === "hit" && e.kind === "hit" && e.a === 0);
+      return { dmg: v!.dmg, elan: hit?.k === "hit" ? Boolean(hit.elan) : null };
+    };
+    const still = hitWith(false);
+    const moving = hitWith(true);
+    expect(still.elan).toBe(false);
+    expect(moving.elan).toBe(true);
+    expect(moving.dmg).toBeGreaterThan(still.dmg * 1.08);
   });
 
   it("dans le vide, le petit coup va jusqu'au bout : marteler ne fait pas un mur de petits coups", () => {

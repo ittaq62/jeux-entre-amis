@@ -221,3 +221,30 @@ describe("Culbute : marteler sans bouger ne suffit pas", () => {
     expect(fort).toBeLessThanOrEqual(2);
   });
 });
+
+describe("Culbute : les objets à aller chercher", () => {
+  it("une baguette posée sur un banc : le bot y monte et la prend", () => {
+    let got = 0;
+    for (const style of ["ginette", "marcel", "simone"] as HabitueId[]) {
+      const f = createFight(
+        { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", stocks: 3 },
+        "place",
+        [
+          { id: "b", team: 0, style },
+          { id: "x", team: 1, style: "lucien" },
+        ],
+        9,
+      );
+      while (f.phase === "intro") stepFight(f, []);
+      // Le bot sous le banc de gauche, l'autre loin à droite, qui ne fait rien
+      f.fighters[0]!.x = -1.5;
+      f.fighters[1]!.x = 6.5;
+      f.items.push({ id: 999, kind: "baguette", x: -3.8, y: 2.7, vx: 0, vy: 0, ground: true, life: 99999 });
+      const mem = newBotMemory(5);
+      const idle: Input = { x: 0, y: 0, held: 0, pressed: 0 };
+      for (let k = 0; k < 8 * 60 && !f.fighters[0]!.item; k++) stepFight(f, [botInput(f, 0, mem, "moyen"), idle]);
+      if (f.fighters[0]!.item === "baguette") got++;
+    }
+    expect(got).toBeGreaterThanOrEqual(2);
+  });
+});

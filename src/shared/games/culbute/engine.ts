@@ -239,6 +239,7 @@ function newFighter(slot: number, e: Entrant, settings: FightSettings, arena: Ar
     stale: [],
     puff: 0,
     walked: 0,
+    elan: 0,
   };
 }
 
@@ -343,7 +344,28 @@ function setState(ft: Fighter, state: FState) {
   }
 }
 
+/** L'élan : un coup parti en courant (l'attaque en courant comprise) ou en l'air en filant de côté frappe plus fort, et
+ * pousse plus loin, que le même coup donné sans bouger (debout, ou en sautant sur place, ou en retombant d'un coup reçu).
+ * Bouger paie ; rester planté, non */
+const ELAN_DMG = 0.12;
+const ELAN_KB = 0.08;
+/** (un lourd lancé cogne plus qu'un léger : le bonus suit la lenteur du style, de +8 % pour Huguette à +18 % pour Marcel ;
+ * sans cela les styles vifs, plus souvent lancés, prenaient le dessus) */
+const ELAN_REF_RUN = 12.5;
+export function elanBoost(ft: Fighter): { dmg: number; kb: number } {
+  if (!ft.elan) return { dmg: 1, kb: 1 };
+  const k = (ELAN_REF_RUN / styleOf(ft).run) ** 2;
+  return { dmg: 1 + ELAN_DMG * k, kb: 1 + ELAN_KB * k };
+}
+function hasElan(ft: Fighter, key: string): boolean {
+  if (key === "g:dash") return true;
+  if (key.startsWith("g:")) return false;
+  const st = styleOf(ft);
+  return Math.abs(ft.vx) >= (isAirborne(ft) ? st.air * 0.6 : st.run * 0.7);
+}
+
 function startMove(ft: Fighter, key: string) {
+  ft.elan = hasElan(ft, key) ? 1 : 0;
   ft.state = "move";
   ft.t = 0;
   ft.move = key;
@@ -1648,33 +1670,47 @@ function shoot(f: Fight, ft: Fighter, kind: string, def: MoveDef) {
 // Les objets de l'arène
 // ---------------------------------------------------------------------------
 
-const ITEM_WEIGHTS: Record<ItemKind, number> = { tarte: 3, petard: 2, pot: 2, baguette: 2, gateau: 2, cafe: 2 };
+/**
+ * Les objets à aller chercher : ils tombent surtout en hauteur (les bancs, le toit du kiosque, les auvents, les planches du
+ * bal), et les plus utiles (le gâteau qui soigne, la baguette, le pot, le café) seulement là-haut ; sur le grand plateau,
+ * rien que des tartes et des pétards. Il faut monter, et s'y disputer la place.
+ */
+export const HIGH_ITEMS: readonly ItemKind[] = ["gateau", "baguette", "pot", "cafe"];
+const HIGH_WEIGHTS: Record<ItemKind, number> = { tarte: 1, petard: 1, pot: 2, baguette: 3, gateau: 3, cafe: 2 };
+const LOW_WEIGHTS: Record<ItemKind, number> = { tarte: 3, petard: 2, pot: 0, baguette: 0, gateau: 0, cafe: 0 };
+/** La part des objets qui tombent en hauteur (quand l'arène a de quoi monter) */
+const HIGH_SHARE = 0.7;
 
 function firstItemDelay(f: Fight): number {
   if (f.settings.items === "aucun") return Infinity;
-  return f.settings.items === "beaucoup" ? 240 + Math.floor(rand(f) * 120) : 600 + Math.floor(rand(f) * 300);
+  return f.settings.items === "beaucoup" ? 240 + Math.floor(rand(f) * 120) : 360 + Math.floor(rand(f) * 180);
 }
 
 function nextItemDelay(f: Fight): number {
-  return f.settings.items === "beaucoup" ? 300 + Math.floor(rand(f) * 240) : 660 + Math.floor(rand(f) * 420);
+  return f.settings.items === "beaucoup" ? 240 + Math.floor(rand(f) * 180) : 480 + Math.floor(rand(f) * 240);
 }
 
 function spawnItem(f: Fight, plats: PlatformNow[]) {
-  const max = f.settings.items === "beaucoup" ? 5 : 2;
+  const max = f.settings.items === "beaucoup" ? 5 : 3;
   if (f.items.length >= max) return;
+  // Où il tombe : le plus souvent sur une plateforme en hauteur
+  const high = plats.filter((q) => q.kind !== "solid");
+  const up = high.length > 0 && rand(f) < HIGH_SHARE;
+  const among = up ? high : plats.filter((q) => q.kind === "solid");
+  const p = among[Math.floor(rand(f) * among.length)] ?? plats[0]!;
+  const weights = up || high.length === 0 ? HIGH_WEIGHTS : LOW_WEIGHTS;
   let total = 0;
-  for (const k of ITEM_KINDS) total += ITEM_WEIGHTS[k];
+  for (const k of ITEM_KINDS) total += weights[k];
   let r = rand(f) * total;
   let kind: ItemKind = "tarte";
   for (const k of ITEM_KINDS) {
-    r -= ITEM_WEIGHTS[k];
+    r -= weights[k];
     if (r < 0) {
       kind = k;
       break;
     }
   }
-  // Il tombe du ciel, au-dessus d'une plateforme
-  const p = plats[Math.floor(rand(f) * plats.length)]!;
+  // Il tombe du ciel, au-dessus de sa plateforme
   const x = p.x0 + 0.6 + rand(f) * Math.max(0.1, p.x1 - p.x0 - 1.2);
   const item: FieldItem = { id: f.nextId++, kind, x, y: p.y + 6, vx: 0, vy: 0, ground: false, life: ITEM_LIFE };
   f.items.push(item);
@@ -1752,6 +1788,8 @@ interface HitSource {
   finisher?: boolean;
   /** L'usure du coup (1 : frais) */
   stale?: number;
+  /** Donné avec de l'élan : il pousse plus loin d'autant (voir elanBoost) */
+  elan?: number;
 }
 
 function canHit(f: Fight, a: { slot: number; team: number }, v: Fighter): boolean {
@@ -1880,7 +1918,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     pending.push({ k: "hit", a: src.attacker, v: v.slot, dmg, x: src.x, y: src.y, power: 0.2, kind: "hit" });
     return;
   }
-  let speed = launchSpeed(src.kb, src.kbg, v.dmg, st.weight, src.charge) * staleKnock(src.stale ?? 1);
+  let speed = launchSpeed(src.kb, src.kbg, v.dmg, st.weight, src.charge) * staleKnock(src.stale ?? 1) * (src.elan ?? 1);
   let ang = src.ang;
   // Un coup vers le bas sur quelqu'un au sol le soulève
   if (ang < 0 && !isAirborne(v)) {
@@ -1927,6 +1965,7 @@ function launch(f: Fight, src: HitSource, v: Fighter) {
     kind: "hit",
     ...(ko ? { ko: true } : {}),
     ...(chained ? { chain: true } : {}),
+    ...((src.elan ?? 1) > 1 ? { elan: true } : {}),
   });
 }
 
@@ -2030,7 +2069,7 @@ function detectHits(f: Fight) {
           x: hx,
           y: hy,
           dirX,
-          dmg: Math.round(hit.dmg * fresh * 10) / 10,
+          dmg: Math.round(hit.dmg * fresh * elanBoost(a).dmg * 10) / 10,
           ang: finisher ? 38 : hit.ang,
           kb: finisher ? hit.kb * 3 + 6 : hit.kb,
           kbg: finisher ? hit.kbg * 1.5 : hit.kbg,
@@ -2039,6 +2078,7 @@ function detectHits(f: Fight) {
           projectile: false,
           finisher,
           stale: fresh,
+          elan: elanBoost(a).kb,
         },
         v,
       });
@@ -2538,7 +2578,7 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
     }
     if (!hit) continue;
     const fresh = staleFactor(a, a.move);
-    const baseDmg = Math.round(hit.dmg * fresh * 10) / 10;
+    const baseDmg = Math.round(hit.dmg * fresh * elanBoost(a).dmg * 10) / 10;
     const dmg = Math.round(baseDmg * (1 + CHARGE_BONUS * charge) * 10) / 10;
     const parried = v.state === "shield" && v.t <= PARRY_FRAMES;
     const shielded = !parried && (v.state === "shield" || v.state === "shieldstun");
@@ -2552,7 +2592,7 @@ export function predictHits(f: Fight, slot: number): PredictedHit[] {
       stop = Math.round(clamp(3 + baseDmg * 0.3, 3, 10));
       power = clamp(baseDmg / 20, 0, 1);
     } else {
-      const speed = launchSpeed(hit.kb, hit.kbg, v.dmg + dmg, styleOf(v).weight, charge) * staleKnock(fresh);
+      const speed = launchSpeed(hit.kb, hit.kbg, v.dmg + dmg, styleOf(v).weight, charge) * staleKnock(fresh) * elanBoost(a).kb;
       let ang = hit.ang;
       if (ang < 0 && !isAirborne(v)) ang = 40;
       const dirX = hit.both ? (v.x < a.x ? -1 : 1) : a.face;

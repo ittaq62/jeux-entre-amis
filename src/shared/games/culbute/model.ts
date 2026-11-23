@@ -190,6 +190,9 @@ export interface Fighter {
    * marcher, sauter, rouler, souffler un instant ou toucher quelqu'un le remet à zéro. Le chemin fait à pied depuis */
   puff: number;
   walked: number;
+  /** Le coup en cours est parti avec de l'élan (en courant, en l'air) : il frappe plus fort et pousse plus loin que le
+   * même coup donné sans bouger */
+  elan: number;
 }
 
 export interface FighterStats {
@@ -284,6 +287,8 @@ export type FightEvent =
       ko?: boolean;
       /** Il était encore étourdi par le coup d'avant du même attaquant : un enchaînement */
       chain?: boolean;
+      /** Un coup donné avec de l'élan (en courant, en l'air) : il frappe plus fort */
+      elan?: boolean;
     }
   | { k: "ko"; v: number; by: number; x: number; y: number; side: "left" | "right" | "top" | "bottom" }
   | { k: "back"; v: number }

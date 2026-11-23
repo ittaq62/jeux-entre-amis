@@ -178,6 +178,8 @@ export interface BotMemory {
    * du coup) qu'il a décidé de sauter, ou pas */
   shotSeen: number;
   lassoSeen: number;
+  /** Il va chercher l'objet qui l'attend en hauteur jusqu'à cette image */
+  fetchUntil: number;
   /** La sortie dont il a déjà profité pour narguer (l'image du coup) */
   taunted: number;
   /** Le même coup qu'on vient de lui relancer de près, encore et encore (ça s'oublie vite) : un marteleur se repère */
@@ -216,6 +218,7 @@ export function newBotMemory(seed: number): BotMemory {
     seenShot: -99,
     shotSeen: -1,
     lassoSeen: -1,
+    fetchUntil: 0,
     seen: "",
   };
 }
@@ -705,6 +708,13 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
       return out();
     }
   }
+  // Un objet utile en hauteur (seuls les meilleurs tombent là-haut) : il y monte, si personne ne le serre de près (une
+  // fois décidé, il s'y tient un moment, sans changer d'idée à chaque instant)
+  if (!me.item) {
+    const wanted = upItem(f, me, foes, f.frame < m.fetchUntil);
+    if (wanted && f.frame >= m.fetchUntil && rnd(m) < L.attack) m.fetchUntil = f.frame + 180;
+    if (wanted && f.frame < m.fetchUntil && climb(f, me, m, wanted)) return out();
+  }
   if (!me.item && !airborne(me)) {
     const wantsCake = me.dmg > 40;
     const it = f.items
@@ -712,7 +722,10 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
       .sort((a, b) => Math.abs(a.x - me.x) - Math.abs(b.x - me.x))
       .find((i) => wantsCake || i.kind !== "gateau");
     const close = foes.some((o) => Math.abs(o.x - me.x) < 2.2 && Math.abs(o.y - me.y) < 1.5);
-    if (it && !close && rnd(m) < 0.8) {
+    // (celui qu'il est monté chercher, il le prend sans hésiter, et sans le dépasser : il se reprend toutes les deux images)
+    const fetching = f.frame < m.fetchUntil;
+    if (it && !close && (fetching || rnd(m) < 0.8)) {
+      if (fetching) m.next = f.frame + 2;
       if (Math.abs(it.x - me.x) < 0.8) m.press = GRB;
       else m.x = it.x < me.x ? -1 : 1;
       return out();
@@ -1005,6 +1018,27 @@ function climb(f: Fight, me: Fighter, m: BotMemory, t: Fighter): boolean {
   // En l'air, il se reprend à chaque instant (le bon moment pour le second saut, l'endroit où se poser)
   m.next = f.frame + 1;
   return true;
+}
+
+/**
+ * L'objet utile qui l'attend sur une plateforme plus haute, pas trop loin, et que personne ne garde : de quoi y monter
+ * (une cible pour climb : la plateforme, l'endroit). Le gâteau seulement s'il a de quoi se soigner.
+ */
+function upItem(f: Fight, me: Fighter, foes: Fighter[], going: boolean): Fighter | null {
+  if (foes.some((o) => Math.abs(o.x - me.x) < 2.2 && Math.abs(o.y - me.y) < 1.5)) return null;
+  const plats = platformsAt(f.arena as ArenaId, f.scale, f.frame);
+  let best: { it: { x: number; y: number }; ground: number } | null = null;
+  for (const it of f.items) {
+    // (en chemin, en l'air, il peut être passé au-dessus : il s'y pose)
+    if (!it.ground || Math.abs(it.x - me.x) > 7 || (it.y < me.y + 0.6 && !(going && airborne(me)))) continue;
+    if (it.kind === "gateau" ? me.dmg < 40 : it.kind === "tarte" || it.kind === "petard") continue;
+    // Quelqu'un est déjà dessus
+    if (foes.some((o) => Math.abs(o.x - it.x) < 1.5 && Math.abs(o.y - it.y) < 0.6)) continue;
+    const ground = plats.findIndex((q) => it.x >= q.x0 && it.x <= q.x1 && Math.abs(q.y - it.y) < 0.1);
+    if (ground < 0) continue;
+    if (!best || Math.abs(it.x - me.x) < Math.abs(best.it.x - me.x)) best = { it, ground };
+  }
+  return best ? ({ x: best.it.x, y: best.it.y, ground: best.ground } as Fighter) : null;
 }
 
 /** La projection qui l'envoie vers le bord le plus proche (ou vers le haut, quand il a beaucoup de pourcents) */

@@ -297,6 +297,7 @@ const FULL_FIELDS = [
   "jabs",
   "puff",
   "walked",
+  "elan",
 ] as const satisfies readonly (keyof Fighter)[];
 
 export function packFull(ft: Fighter): number[] {

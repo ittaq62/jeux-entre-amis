@@ -61,6 +61,11 @@ export function HowToPlay({ compact = false, settings }: { compact?: boolean; se
             travers de ta trajectoire (vers le haut, vers l'arène) : tu iras un peu moins loin.
           </p>
           <p className="hint">
+            Bouger paie : un coup donné en courant, ou en filant de côté en l'air, frappe plus fort et pousse plus loin que le même coup
+            donné sans bouger (une gerbe de traits le montre). Les meilleurs objets (le gâteau qui soigne, la baguette, le pot, le café) ne
+            tombent qu'en hauteur, sur les bancs, les auvents, les planches ou les toits : monte les chercher.
+          </p>
+          <p className="hint">
             Un coup qui ne touche personne se paie : on reprend son équilibre un instant. Frapper dans le vide encore et encore sans bouger
             essouffle (de petites bouffées le montrent) : la reprise s'allonge à chaque fois, de quoi se faire punir. Quelques pas, un saut,
             un instant sans frapper ou un coup qui touche, et le souffle revient.
