@@ -789,9 +789,12 @@ export function lanterns(keep: Keep, a: THREE.Vector3, b: THREE.Vector3, sag: nu
   return g;
 }
 
-let haloCache: THREE.Texture | null = null;
+/** Le halo des lampions, un par arène construite (pas un seul pour toute la page : gardé d'une partie à l'autre, il
+ * retenait chaque moteur jeté qui l'avait dessiné, et la scène suivante ne le libérait pas) */
+const haloCache = new WeakMap<Keep, THREE.Texture>();
 export function haloTexture(keep: Keep): THREE.Texture {
-  if (haloCache && (haloCache.image as HTMLCanvasElement | undefined)) return haloCache;
+  const known = haloCache.get(keep);
+  if (known) return known;
   const t = canvasTex(keep, 64, 64, (g) => {
     const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     grd.addColorStop(0, "rgba(255,255,255,1)");
@@ -801,7 +804,7 @@ export function haloTexture(keep: Keep): THREE.Texture {
     g.fillRect(0, 0, 64, 64);
   });
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-  haloCache = t;
+  haloCache.set(keep, t);
   return t;
 }
 
