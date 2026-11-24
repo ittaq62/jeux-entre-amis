@@ -20,7 +20,7 @@ import {
 } from "../../shared/games/billard/match.ts";
 import type { BillardView } from "../../shared/games/billard/net.ts";
 import { isSalle } from "../../shared/games/billard/salles.ts";
-import { PowerBar, TipPicker } from "./BillardGame.tsx";
+import { FineAim, PowerBar, TipPicker } from "./BillardGame.tsx";
 import { BillardRuntime, type HudState } from "./runtime.ts";
 import { Board } from "./Scoreboard.tsx";
 import * as sfx from "./sfx.ts";
@@ -144,6 +144,7 @@ export function DevBillard() {
             b={hud.tip.b}
             onChange={(a, b) => (window as unknown as { __bl: { rt: BillardRuntime } }).__bl.rt.setTip(a, b)}
           />
+          {!hud.placing && <FineAim onTurn={(d) => (window as unknown as { __bl: { rt: BillardRuntime } }).__bl.rt.nudge(d)} />}
         </>
       )}
       <p className="bl-tip" style={{ bottom: 16 }}>

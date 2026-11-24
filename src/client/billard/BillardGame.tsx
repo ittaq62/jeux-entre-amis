@@ -316,6 +316,7 @@ export function BillardGame({
         <>
           <PowerBar pull={hud.pull} onPull={(k) => runtime.current?.setPull(k)} onRelease={() => runtime.current?.release()} />
           <TipPicker a={hud.tip.a} b={hud.tip.b} onChange={(a, b) => runtime.current?.setTip(a, b)} />
+          {!hud.placing && <FineAim onTurn={(d) => runtime.current?.nudge(d)} />}
           <p className="bl-tip">
             {hud.inHand
               ? "Bille en main : fais glisser la blanche, puis vise"
@@ -454,6 +455,47 @@ export function PowerBar({ pull, onPull, onRelease }: { pull: number; onPull: (k
         <span />
       </div>
       <span className="bl-power-label num">{value > 0.01 ? `${Math.round(value * 100)}` : "Force"}</span>
+    </div>
+  );
+}
+
+/**
+ * La molette de précision : glisser dessus tourne la visée dix fois plus finement qu'en glissant sur la table (au doigt,
+ * c'est elle qui ajuste un coup fin) ; ses crans défilent sous le doigt.
+ */
+export function FineAim({ onTurn }: { onTurn: (d: number) => void }) {
+  const drag = useRef<{ id: number; x: number } | null>(null);
+  const [off, setOff] = useState(0);
+  const down = (e: RPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    drag.current = { id: e.pointerId, x: e.clientX };
+  };
+  const move = (e: RPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    d.x = e.clientX;
+    if (!dx) return;
+    onTurn(-dx * 0.00045);
+    setOff((o) => o + dx);
+  };
+  const up = (e: RPointerEvent<HTMLDivElement>) => {
+    if (drag.current?.id === e.pointerId) drag.current = null;
+  };
+  return (
+    <div
+      className="bl-fine"
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerCancel={up}
+      role="slider"
+      aria-label="Viser finement"
+      aria-valuetext="Glisser pour ajuster la visée"
+    >
+      <div className="bl-fine-ridges" style={{ backgroundPositionX: `${off}px` }} />
+      <span className="bl-fine-notch" />
     </div>
   );
 }

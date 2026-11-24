@@ -359,6 +359,46 @@
   pointer-events: none;
 }
 
+/* La molette de précision : des crans qui défilent sous le doigt */
+.bl-fine {
+  position: absolute;
+  left: 50%;
+  bottom: calc(108px + var(--safe-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(260px, calc(100vw - 210px));
+  height: 36px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(10, 16, 12, 0.78), rgba(10, 16, 12, 0.9));
+  box-shadow:
+    inset 0 0 0 1px rgba(242, 199, 90, 0.25),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.bl-fine-ridges {
+  position: absolute;
+  inset: 7px 14px;
+  background: repeating-linear-gradient(90deg, rgba(242, 199, 90, 0.55) 0 2px, transparent 2px 9px);
+  /* Les crans s'effacent vers les bords, comme une molette qui tourne */
+  mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent);
+  pointer-events: none;
+}
+
+.bl-fine-notch {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #f2c75a;
+  box-shadow: 0 0 6px rgba(242, 199, 90, 0.6);
+  pointer-events: none;
+}
+
 /* Le point de frappe */
 .bl-tip-picker {
   position: absolute;
@@ -759,6 +799,11 @@
     max-width: calc(100vw - 170px);
     bottom: calc(60px + var(--safe-bottom, 0px));
     font-size: 12px;
+  }
+
+  .bl-fine {
+    width: calc(100vw - 206px);
+    bottom: calc(104px + var(--safe-bottom, 0px));
   }
 }
 

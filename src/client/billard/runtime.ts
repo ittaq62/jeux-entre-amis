@@ -318,6 +318,13 @@ export class BillardRuntime {
     this.pull = 0;
   }
 
+  /** Tourner la visée d'un rien (la molette de précision) */
+  nudge(d: number) {
+    if (!this.canShoot()) return;
+    this.angle += d;
+    if (!this.userCall) this.call = null;
+  }
+
   toggleView() {
     this.mode = this.mode === "queue" ? "dessus" : "queue";
     try {
