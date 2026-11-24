@@ -830,8 +830,9 @@ export class BowlingRuntime {
       const p = tb.pos;
       const side = tb.info.look.left ? -1 : 1;
       const swing = tb.info.id === this.o.me ? (this.drag?.mode === "swing" ? 1 : 0) : this.remote?.sw ? 1 : 0;
-      pos.set(p.x - 0.3 * side, 2.75 + swing * 0.05, p.z + 3.7 + swing * 0.2);
-      look.set(p.x * 0.4 + 0.1 * side, 0.15, -14.5);
+      // Du côté de la boule (le lanceur se tient à côté de sa ligne) : sa grosse tête ne cache plus la piste ni la visée
+      pos.set(p.x + 0.62 * side, 2.75 + swing * 0.05, p.z + 3.7 + swing * 0.2);
+      look.set((p.x + 0.27 * side) * 0.4, 0.15, -14.5);
       speed = 3;
     }
     // Le ralenti et la réaction : on coupe net, comme à la télévision
