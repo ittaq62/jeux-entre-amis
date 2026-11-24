@@ -5,9 +5,9 @@ import type { MeResponse } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { SoundSettings } from "../components/SoundSettings.tsx";
 import { Check, Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
-import { play } from "../lib/sound.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -98,16 +98,38 @@ export function AccountPage() {
 
         <section className="sheet panel">
           <h2>Profil</h2>
-          <label className="field">
-            <span className="field-label">Pseudo</span>
-            <input className="input" value={pseudo} maxLength={PSEUDO_MAX} onChange={(e) => setPseudo(e.target.value)} />
-          </label>
-          {error && <p className="error-text">{error}</p>}
-          {dirty && (
-            <button className="btn btn-primary" disabled={saving} onClick={() => void save()}>
-              {saving ? <span className="spinner" /> : "Enregistrer le pseudo"}
-            </button>
-          )}
+          {/* « Entrée » enregistre le pseudo */}
+          <form
+            className="account-pseudo"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (dirty && !saving) void save();
+            }}
+          >
+            <label className="field">
+              <span className="field-label">Pseudo</span>
+              <input
+                className="input"
+                value={pseudo}
+                maxLength={PSEUDO_MAX}
+                autoComplete="nickname"
+                onChange={(e) => {
+                  setPseudo(e.target.value);
+                  setError(null);
+                }}
+              />
+            </label>
+            {error && (
+              <p className="error-text" role="alert">
+                {error}
+              </p>
+            )}
+            {dirty && (
+              <button className="btn btn-primary" disabled={saving}>
+                {saving ? <span className="spinner" /> : "Enregistrer le pseudo"}
+              </button>
+            )}
+          </form>
           <div className="photo-row">
             <Avatar avatar={user.avatar} size={64} />
             <div className="stack-sm">
@@ -115,7 +137,7 @@ export function AccountPage() {
               <span className="hint">Son visage, sa coiffure, sa tenue, son fond… et ce qui se trouve à la boutique.</span>
               <span className="row-actions">
                 <Link href="/personnage?retour=/compte" className="btn btn-sm btn-primary">
-                  Personnaliser mon personnage
+                  Personnaliser
                 </Link>
               </span>
             </div>
@@ -158,22 +180,10 @@ export function AccountPage() {
 
         <section className="sheet panel">
           <h2>Son et confort</h2>
-          <PrefRow label="Effets sonores" desc="Bruits de cartes, UNO, victoire…">
-            <Check label="Effets sonores" checked={prefs.sound} onChange={(v) => prefs.set({ sound: v })} />
-          </PrefRow>
-          <PrefRow label="Volume" desc={`${Math.round(prefs.volume * 100)} %`}>
-            <input
-              type="range"
-              min={0.1}
-              max={1}
-              step={0.05}
-              value={prefs.volume}
-              onChange={(e) => prefs.set({ volume: Number(e.target.value) })}
-              onPointerUp={() => play("cardPlace")}
-              className="range"
-              aria-label="Volume"
-            />
-          </PrefRow>
+          {/* Le même réglage que sous le haut-parleur de l'en-tête et dans les menus de partie */}
+          <div className="account-sound">
+            <SoundSettings />
+          </div>
           <PrefRow label="Vibrations" desc="Sur les téléphones Android ; l'iPhone ne le permet pas.">
             <Check label="Vibrations" checked={prefs.haptics} onChange={(v) => prefs.set({ haptics: v })} />
           </PrefRow>
@@ -205,8 +215,8 @@ export function AccountPage() {
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Supprimer ton compte ?">
         <div className="stack">
           <p>
-            Ton profil, tes statistiques, tes succès et tes amis seront effacés définitivement. Tes anciens adversaires verront juste ton
-            pseudo dans leurs historiques.
+            Ton profil, tes statistiques, tes succès, tes amis, tes points, tes achats et ton album seront effacés définitivement. Tes
+            anciens adversaires verront juste ton pseudo dans leurs historiques.
           </p>
           <div className="row-actions">
             <button className="btn btn-danger" onClick={() => void deleteAccount()}>
@@ -222,14 +232,15 @@ export function AccountPage() {
   );
 }
 
+/** Une case et son explication : toute la ligne la coche (la case est un bouton, que son étiquette déclenche) */
 function PrefRow({ label, desc, children }: { label: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="pref-row">
+    <label className="pref-row">
       {children}
       <span>
         <strong>{label}</strong>
         <span className="hint">{desc}</span>
       </span>
-    </div>
+    </label>
   );
 }

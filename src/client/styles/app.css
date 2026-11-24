@@ -3565,6 +3565,17 @@ a.shop-item {
   gap: 16px;
 }
 
+/* Le texte à côté du portrait prend la place qui reste, sans pousser son bouton hors du cadre au téléphone */
+.photo-row > .stack-sm {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo-row .btn {
+  white-space: normal;
+  text-align: center;
+}
+
 /* Ce qu'on cherchait n'est pas là, ou la page a planté : une carte retournée, un titre, de quoi repartir */
 .not-found {
   display: grid;
@@ -3593,6 +3604,22 @@ a.shop-item {
   justify-content: center;
 }
 
+/* « Mon compte » : le pseudo et son bouton, espacés comme le reste du cadre */
+.account-pseudo {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* « Mon compte » : le réglage commun du son, au-dessus des autres cases */
+.account-sound {
+  padding-bottom: 14px;
+}
+
+.account-sound + .pref-row {
+  border-top: 1px solid var(--line-soft);
+}
+
 .sheet {
   padding: 24px 26px 26px;
   display: flex;
@@ -3602,6 +3629,13 @@ a.shop-item {
 
 .sheet h2 {
   font-size: 24px;
+}
+
+/* Au téléphone, le cadre laisse plus de place à ce qu'il contient */
+@media (max-width: 420px) {
+  .sheet {
+    padding: 20px 18px 22px;
+  }
 }
 
 .range {
