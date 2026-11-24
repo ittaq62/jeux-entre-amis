@@ -4,7 +4,7 @@ import { BALL_R, motionPeriod, poseAt, posePoint, strokeLimit, tileAt, type Cour
 import { COURSES, courseOf, readyCourses, type HoleRef } from "./courses.ts";
 import { inRing, inRingSlow, inRings } from "./geom.ts";
 import { pathHeightSlow, specHeight, stripHeightSlow, type HeightSpec } from "./height.ts";
-import { DEFAULT_PHYS, simulateShot, type PhysOpts } from "./physics.ts";
+import { DEFAULT_PHYS, MAX_SHOT_S, simulateShot, simulateWorld, STEPS_PER_S, type PhysOpts } from "./physics.ts";
 
 const refs: HoleRef[] = readyCourses().flatMap((c) => COURSES[c].holes.map((_, i) => ({ c, i, m: false })));
 
@@ -111,7 +111,57 @@ function moverCrossings(c: Course): string[] {
  */
 const MOVER_CROSSINGS_OK = new Set(["porte → wall:facade", "piston → rail:acier"]);
 
+/**
+ * Des balles poussées sur ce trou : une balle posée là où s'arrêtent quelques coups depuis le départ, puis frappée
+ * depuis le départ, droit dessus, à plusieurs forces. Renvoie ce qui cloche (rien si tout va bien)
+ */
+function pushProblems(ref: HoleRef): string[] {
+  const c = courseOf(ref);
+  const phys = physOf(ref);
+  const tee = { x: c.tee.x, y: c.tee.y, z: c.tee.z };
+  const bad: string[] = [];
+  const targets = [0.25, 0.4, 0.55]
+    .flatMap((p) => [-0.25, 0, 0.25].map((da) => simulateShot(c, tee, c.tee.aim + da, p, 0, phys)))
+    .filter((r) => r.outcome === "rest" && Math.hypot(r.x - tee.x, r.z - tee.z) > 0.5);
+  for (const t of targets) {
+    const a = Math.atan2(t.z - tee.z, t.x - tee.x);
+    for (const p of [0.3, 0.6, 0.95]) {
+      const w = simulateWorld(c, tee, a, p, 0, phys, [t], phys);
+      const again = simulateWorld(c, tee, a, p, 0, phys, [t], phys);
+      if (JSON.stringify(again) !== JSON.stringify(w)) bad.push("pas le même résultat deux fois");
+      const all = [w.shot, ...w.others];
+      for (const r of all) {
+        if (![r.x, r.y, r.z, r.end].every(Number.isFinite)) bad.push("une position qui n'est pas un nombre");
+        if (r.end > MAX_SHOT_S * STEPS_PER_S * 2) bad.push(`un coup qui ne finit pas (${r.end} pas)`);
+        if (r.outcome !== "rest") continue;
+        // Arrêtée : sur un sol jouable, et pas dans un mur
+        const tile = tileAt(c, r.x, r.z);
+        if (tile < 0 || c.tiles[tile]!.phys.hazard) bad.push(`arrêtée hors du parcours en (${r.x.toFixed(2)}, ${r.z.toFixed(2)})`);
+        for (const wl of c.walls) {
+          if (wl.kind === "cliff") continue;
+          const ex = wl.bx - wl.ax;
+          const ez = wl.bz - wl.az;
+          const s = Math.max(0, Math.min(1, ((r.x - wl.ax) * ex + (r.z - wl.az) * ez) / (ex * ex + ez * ez || 1)));
+          const d = Math.hypot(wl.ax + ex * s - r.x, wl.az + ez * s - r.z);
+          const top = wl.a1 + (wl.b1 - wl.a1) * s;
+          if (d < BALL_R + wl.t - 0.01 && r.y - BALL_R < top - 0.01)
+            bad.push(`arrêtée dans un mur ${wl.look ?? wl.kind} en (${r.x.toFixed(2)}, ${r.z.toFixed(2)})`);
+        }
+      }
+      // Deux balles arrêtées ne se chevauchent pas
+      const [b, o] = [w.shot, w.others[0]!];
+      if (b.outcome === "rest" && o.outcome === "rest" && Math.hypot(b.x - o.x, b.y - o.y, b.z - o.z) < 2 * BALL_R - 0.01)
+        bad.push(`deux balles l'une dans l'autre en (${b.x.toFixed(2)}, ${b.z.toFixed(2)})`);
+    }
+  }
+  return [...new Set(bad)];
+}
+
 describe("minigolf : les trous des parcours", () => {
+  it.each(refs.map((r) => [`${r.c} ${r.i + 1}`, r] as const))("%s : une balle poussée reste sur le parcours, hors des murs", (_, ref) => {
+    expect(pushProblems(ref)).toEqual([]);
+  });
+
   it.each(refs.map((r) => [`${r.c} ${r.i + 1}`, r] as const))(
     "%s : rien de ce qui bouge ne passe à travers une bordure ou un mur",
     (_, ref) => {
