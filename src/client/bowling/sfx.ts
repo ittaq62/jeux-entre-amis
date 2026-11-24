@@ -12,12 +12,34 @@ import type { Moment } from "./runtime.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 
+/**
+ * Les sons du bowling passent par un limiteur : quand la boule entre dans les quilles, des dizaines de chocs tombent
+ * en même temps, et leur somme dépassait le plafond de la sortie (des crêtes jusqu'à 2,2 : le son grésillait).
+ */
+let bus: { ctx: AudioContext; node: GainNode } | null = null;
+
+function busOf(ctx: AudioContext, master: GainNode): GainNode {
+  if (bus?.ctx === ctx) return bus.node;
+  const g = ctx.createGain();
+  g.gain.value = 0.8;
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -10;
+  lim.knee.value = 6;
+  lim.ratio.value = 16;
+  lim.attack.value = 0.002;
+  lim.release.value = 0.12;
+  g.connect(lim);
+  lim.connect(master);
+  bus = { ctx, node: g };
+  return g;
+}
+
 function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: number } | null {
   if (level <= 0) return null;
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: o.out, vol: level };
+  return { ctx: o.ctx, dest: busOf(o.ctx, o.out), vol: level };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
