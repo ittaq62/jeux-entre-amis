@@ -71,8 +71,8 @@ const KEEPER_MIN_HOLD = 0.45;
 /** Après une faute, le jeu s'arrête vraiment : le joueur au sol, l'arbitre, le carton, avant que chacun se replace */
 const FOUL_PAUSE = 2.3;
 const CARD_PAUSE = 1.5;
-/** Le gardien qui plonge dans les pieds et manque le ballon fauche parfois l'attaquant */
-const KEEPER_FOUL = 0.3;
+/** Le gardien qui plonge dans les pieds et manque le ballon fauche parfois l'attaquant (un penalty tous les trois ou quatre matchs) */
+const KEEPER_FOUL = 0.15;
 /** Le joueur au sol après une faute y reste un moment */
 const FOULED_DOWN_S = 1.9;
 /** Le tireur d'une touche, d'un six mètres ou d'un coup franc va chercher le ballon à pied : au-delà, on change de plan */
