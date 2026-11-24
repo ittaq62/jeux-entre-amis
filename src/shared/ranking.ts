@@ -40,3 +40,12 @@ export function rankingPoints(players: RankedPlayer[], me: RankedPlayer): number
   }
   return points;
 }
+
+/** La place de chaque ligne déjà triée : les ex aequo (mêmes valeurs selon `key`) partagent la même, la suivante saute */
+export function sharedRanks<T>(rows: readonly T[], key: (row: T) => string): number[] {
+  const ranks: number[] = [];
+  rows.forEach((row, i) => {
+    ranks.push(i > 0 && key(rows[i - 1]!) === key(row) ? ranks[i - 1]! : i + 1);
+  });
+  return ranks;
+}

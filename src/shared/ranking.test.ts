@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDraw, rankingPoints, wonGame, type RankedPlayer } from "./ranking.ts";
+import { isDraw, rankingPoints, sharedRanks, wonGame, type RankedPlayer } from "./ranking.ts";
 
 const table = (...kinds: ("h" | "b")[]): RankedPlayer[] => kinds.map((k, i) => ({ rank: i + 1, isBot: k === "b" }));
 
@@ -74,5 +74,17 @@ describe("victoire ou égalité", () => {
   it("les joueurs sans place ne font pas une égalité", () => {
     const players = [{ rank: 1 }, { rank: 1 }, { rank: 0 }];
     expect(isDraw(players)).toBe(true);
+  });
+});
+
+describe("les places du classement", () => {
+  it("deux joueurs aux mêmes chiffres partagent la même place, le suivant saute", () => {
+    const rows = [60, 60, 40, 30, 30, 30, 10];
+    expect(sharedRanks(rows, String)).toEqual([1, 1, 3, 4, 4, 4, 7]);
+  });
+
+  it("des chiffres différents donnent des places qui se suivent", () => {
+    expect(sharedRanks([5, 4, 3], String)).toEqual([1, 2, 3]);
+    expect(sharedRanks([], String)).toEqual([]);
   });
 });

@@ -23,30 +23,37 @@ interface Entry {
 }
 
 type Sort = "points" | "elo" | "sprint";
+/** Un jeu, la tournée, ou tous les jeux (leurs points additionnés) */
+type Board = TableGame | "all";
 
 export function LeaderboardPage() {
   const me = useSession((s) => s.user);
   const games = useSession((s) => s.games);
   const tourOn = useSession((s) => s.tour);
-  const choices: TableGame[] = tourOn ? [...games, "tour"] : games;
+  // « Tous les jeux » d'abord, dès qu'il y a plus d'un jeu à additionner
+  const choices: Board[] = [...(games.length > 1 ? (["all"] as const) : []), ...games, ...(tourOn ? (["tour"] as const) : [])];
   const [scope, setScope] = useState<"friends" | "all">("friends");
-  const [game, setGame] = useState<TableGame>("uno");
+  const [picked, setGame] = useState<Board | null>(null);
+  const game: Board = picked ?? (games.length > 1 ? "all" : "uno");
   const tour = game === "tour";
+  const overall = game === "all";
   const [sort, setSort] = useState<Sort>("points");
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setEntries(null);
+    setFailed(false);
     api
       .get<{ entries: Entry[] }>(`/leaderboard?scope=${scope}&game=${game}&sort=${sort}`)
       .then((r) => setEntries(r.entries))
-      .catch(() => setEntries([]));
+      .catch(() => setFailed(true));
   }, [scope, game, sort]);
 
-  // Les records du solo n'existent qu'à Briques
+  // Les records du solo n'existent qu'à Briques, et l'Elo se mesure jeu par jeu
   useEffect(() => {
-    if (sort === "sprint" && game !== "bricks") setSort("points");
-  }, [game, sort]);
+    if ((sort === "sprint" && game !== "bricks") || (sort === "elo" && overall)) setSort("points");
+  }, [game, sort, overall]);
 
   const bots =
     game === "naval"
@@ -90,14 +97,14 @@ export function LeaderboardPage() {
         </div>
         <div className="board-filters">
           {choices.length > 1 && (
-            <Options<TableGame>
+            <Options<Board>
               label="Jeu"
               value={game}
               onChange={setGame}
-              options={choices.map((g) => ({ value: g, label: TABLE_NAMES[g] }))}
+              options={choices.map((g) => ({ value: g, label: g === "all" ? "Tous les jeux" : TABLE_NAMES[g] }))}
             />
           )}
-          {!tour && (
+          {!tour && !overall && (
             <Options<Sort>
               label="Classer par"
               value={sort}
@@ -111,7 +118,13 @@ export function LeaderboardPage() {
           )}
         </div>
         <p className="hint" style={{ margin: 0, maxWidth: "62ch" }}>
-          {tour ? (
+          {overall ? (
+            <>
+              Les points de tous tes jeux additionnés : chaque joueur que tu termines devant te rapporte {RANKING_POINTS.human} points (
+              {RANKING_POINTS.bot} si c'est un bot), et la victoire en ajoute {RANKING_POINTS.win}. Ils ne baissent jamais. L'Elo, lui, se
+              regarde jeu par jeu.
+            </>
+          ) : tour ? (
             <>
               Les tournées gagnées d'abord, puis le total des points marqués en tournée (10 pour une victoire de jeu, 7 pour la 2e place…).
             </>
@@ -130,13 +143,19 @@ export function LeaderboardPage() {
           )}
         </p>
         <section className="board panel">
-          {entries === null ? (
+          {failed ? (
+            <p className="empty board-note">Le classement n'a pas pu se charger. Réessaie dans un instant.</p>
+          ) : entries === null ? (
             <p className="hint board-note">Chargement…</p>
           ) : entries.length === 0 ? (
             <p className="empty board-note">
-              {tour
-                ? "Personne n'a encore terminé de tournée. Lance la première depuis l'accueil."
-                : "Personne n'a encore terminé de partie. La première victoire ouvrira le tableau."}
+              {scope === "friends"
+                ? tour
+                  ? "Ni toi ni tes amis n'avez encore terminé de tournée."
+                  : "Ni toi ni tes amis n'avez encore terminé de partie ici. La première ouvrira le tableau."
+                : tour
+                  ? "Personne n'a encore terminé de tournée. Lance la première depuis l'accueil."
+                  : "Personne n'a encore terminé de partie. La première victoire ouvrira le tableau."}
             </p>
           ) : (
             <>
@@ -150,6 +169,11 @@ export function LeaderboardPage() {
                   </>
                 ) : sort === "sprint" ? (
                   <span className="board-stat board-score board-time is-main">Record</span>
+                ) : overall ? (
+                  <>
+                    <span className="board-stat board-extra">Victoires</span>
+                    <span className="board-stat board-score is-main">Points</span>
+                  </>
                 ) : (
                   <>
                     <span className="board-stat board-extra">Victoires</span>
@@ -160,7 +184,7 @@ export function LeaderboardPage() {
               </div>
               <ol className="rows" style={{ margin: 0 }}>
                 {entries.map((e) => (
-                  <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? "top" : ""}`}>
+                  <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top medal-${e.rank}` : ""}`}>
                     <span className="board-rank num">{e.rank}</span>
                     <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
                       <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
@@ -187,6 +211,17 @@ export function LeaderboardPage() {
                       >
                         <strong>{formatSprint(e.bestSprint ?? 0)}</strong>
                       </span>
+                    ) : overall ? (
+                      <>
+                        <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
+                          <strong>
+                            {e.won.toLocaleString("fr-FR")} / {e.played.toLocaleString("fr-FR")}
+                          </strong>
+                        </span>
+                        <span className="board-stat board-score is-main" aria-label={`${e.points} points`}>
+                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                        </span>
+                      </>
                     ) : (
                       <>
                         <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
@@ -208,6 +243,11 @@ export function LeaderboardPage() {
             </>
           )}
         </section>
+        {scope === "friends" && entries !== null && entries.every((e) => e.user.id === me?.id) && (
+          <p className="hint" style={{ margin: 0 }}>
+            Tes amis apparaîtront ici dès qu'ils auront joué. <Link href="/amis">Ajouter des amis</Link>
+          </p>
+        )}
       </main>
     </div>
   );

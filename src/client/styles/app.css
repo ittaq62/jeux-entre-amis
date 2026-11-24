@@ -3447,7 +3447,7 @@ a.shop-item {
   color: var(--text-faint);
 }
 
-/* Les trois premières places : une médaille d'or, d'argent et de bronze */
+/* Les trois premières places : une médaille d'or, d'argent et de bronze (les ex aequo ont la même) */
 .board-row.top .board-rank {
   display: grid;
   place-items: center;
@@ -3460,22 +3460,22 @@ a.shop-item {
     0 3px 8px -3px rgba(0, 0, 0, 0.7);
 }
 
-.board-row.top:nth-child(1) .board-rank {
+.board-row.medal-1 .board-rank {
   background: linear-gradient(180deg, #f5dc9c, #c9993f);
   color: var(--gold-ink);
 }
 
-.board-row.top:nth-child(2) .board-rank {
+.board-row.medal-2 .board-rank {
   background: linear-gradient(180deg, #f1f3f1, #a6b0ab);
   color: #1f2b26;
 }
 
-.board-row.top:nth-child(3) .board-rank {
+.board-row.medal-3 .board-rank {
   background: linear-gradient(180deg, #ecbb90, #a3653a);
   color: #2b1609;
 }
 
-.board-row.top:nth-child(1) .avatar {
+.board-row.medal-1 .avatar {
   box-shadow:
     0 0 0 2px var(--panel),
     0 0 0 3.5px var(--gold);

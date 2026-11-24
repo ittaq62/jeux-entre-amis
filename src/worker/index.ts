@@ -328,10 +328,13 @@ app.post("/streak/claim", withSession, withProfile, async (c) => {
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
-  const game = isTableGame(c.req.query("game")) ? (c.req.query("game") as TableGame) : "uno";
+  const asked = c.req.query("game");
+  // « all » : tous les jeux ouverts à ce joueur, leurs points additionnés
+  const game = asked === "all" ? "all" : isTableGame(asked) ? (asked as TableGame) : "uno";
   const sortParam = c.req.query("sort");
   const sort = sortParam === "elo" || sortParam === "sprint" ? sortParam : "points";
-  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game, sort) });
+  const games = game === "all" ? await visibleGames(c.env, c.get("user")) : [];
+  return c.json({ entries: await leaderboard(c.env.DB, scope, c.get("user").id, game, sort, games) });
 });
 
 app.get("/users/search", withSession, withProfile, async (c) => {

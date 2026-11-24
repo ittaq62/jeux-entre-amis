@@ -34,7 +34,7 @@ import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval
 import type { FriendEntry, GameId, Me, PublicUser, TableGame } from "../shared/protocol.ts";
 import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
-import { rankingPoints, wonGame } from "../shared/ranking.ts";
+import { rankingPoints, sharedRanks, wonGame } from "../shared/ranking.ts";
 import { usableWear } from "../shared/shop.ts";
 import type { UserRow } from "./auth.ts";
 import { albumSummary } from "./cards.ts";
@@ -1096,49 +1096,79 @@ export async function userProfile(db: D1Database, user: UserRow) {
   };
 }
 
+/** Une ligne du classement, avec ce qui la départage (deux lignes aux mêmes valeurs partagent la même place) */
+interface BoardRow {
+  id: string;
+  pseudo: string;
+  avatar: string;
+  photo_version: number;
+  is_admin: number;
+  played: number;
+  won: number;
+  points: number;
+  elo: number;
+  best_streak: number;
+  best_sprint: number | null;
+}
+
 export async function leaderboard(
   db: D1Database,
   scope: "all" | "friends",
   me: string,
-  game: TableGame,
+  game: TableGame | "all",
   sort: "points" | "elo" | "sprint" = "points",
+  /** Pour « Tous les jeux » : les jeux qui comptent (ceux ouverts au joueur qui regarde) */
+  games: readonly GameId[] = [],
 ) {
   const friendFilter =
     scope === "friends"
       ? `AND (s.user_id = ?1 OR s.user_id IN (SELECT CASE WHEN user_a = ?1 THEN user_b ELSE user_a END FROM friendships
            WHERE (user_a = ?1 OR user_b = ?1) AND status = 'accepted'))`
       : "";
-  const statement = db.prepare(
-    `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.elo, s.best_streak,
-            json_extract(s.totals, '$.bestSprint') AS best_sprint
-     FROM user_stats s JOIN users u ON u.id = s.user_id
-     WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL
-       AND ${sort === "sprint" ? "json_extract(s.totals, '$.bestSprint') IS NOT NULL" : "s.played > 0"} ${friendFilter}
-     ORDER BY ${
-       game === "tour"
-         ? "s.won DESC, s.points DESC"
-         : sort === "sprint"
-           ? "best_sprint ASC"
-           : sort === "elo"
-             ? "s.elo DESC, s.points DESC, s.won DESC"
-             : "s.points DESC, s.elo DESC, s.won DESC"
-     }, s.played ASC LIMIT 100`,
-  );
-  const { results } = await statement.bind(me, game).all<{
-    id: string;
-    pseudo: string;
-    avatar: string;
-    photo_version: number;
-    is_admin: number;
-    played: number;
-    won: number;
-    points: number;
-    elo: number;
-    best_streak: number;
-    best_sprint: number | null;
-  }>();
-  return results.map((r, i) => ({
-    rank: i + 1,
+  let rows: BoardRow[];
+  if (game === "all") {
+    // Tous les jeux : les points de chaque jeu additionnés (ils ne baissent jamais), sans la tournée, déjà comptée jeu par jeu
+    const list = games.filter((g) => /^[a-z]+$/.test(g));
+    if (list.length === 0) return [];
+    const statement = db.prepare(
+      `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, SUM(s.played) AS played, SUM(s.won) AS won,
+                SUM(s.points) AS points, 0 AS elo, 0 AS best_streak, NULL AS best_sprint
+         FROM user_stats s JOIN users u ON u.id = s.user_id
+         WHERE s.game IN (${list.map((g) => `'${g}'`).join(",")}) AND u.pseudo IS NOT NULL AND u.banned_at IS NULL ${friendFilter}
+         GROUP BY u.id HAVING SUM(s.played) > 0
+         ORDER BY points DESC, won DESC, played ASC LIMIT 100`,
+    );
+    // ?1 (le joueur qui regarde) ne sert qu'entre amis : D1 refuse un paramètre lié que la requête n'utilise pas
+    rows = (await (scope === "friends" ? statement.bind(me) : statement).all<BoardRow>()).results;
+  } else {
+    const statement = db.prepare(
+      `SELECT u.id, u.pseudo, u.avatar, u.photo_version, u.is_admin, s.played, s.won, s.points, s.elo, s.best_streak,
+              json_extract(s.totals, '$.bestSprint') AS best_sprint
+       FROM user_stats s JOIN users u ON u.id = s.user_id
+       WHERE s.game = ?2 AND u.pseudo IS NOT NULL AND u.banned_at IS NULL
+         AND ${sort === "sprint" ? "json_extract(s.totals, '$.bestSprint') IS NOT NULL" : "s.played > 0"} ${friendFilter}
+       ORDER BY ${
+         game === "tour"
+           ? "s.won DESC, s.points DESC"
+           : sort === "sprint"
+             ? "best_sprint ASC"
+             : sort === "elo"
+               ? "s.elo DESC, s.points DESC, s.won DESC"
+               : "s.points DESC, s.elo DESC, s.won DESC"
+       }, s.played ASC LIMIT 100`,
+    );
+    rows = (await statement.bind(me, game).all<BoardRow>()).results;
+  }
+  // Les ex aequo : exactement les mêmes chiffres dans ce qui sert à classer
+  const key = (r: BoardRow) =>
+    game === "tour" || game === "all"
+      ? `${r.won}:${r.points}:${r.played}`
+      : sort === "sprint"
+        ? `${r.best_sprint}`
+        : `${r.points}:${r.elo}:${r.won}:${r.played}`;
+  const ranks = sharedRanks(rows, key);
+  return rows.map((r, i) => ({
+    rank: ranks[i]!,
     user: toPublic(r),
     played: r.played,
     won: r.won,
