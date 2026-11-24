@@ -158,10 +158,14 @@ export function ropeEnd(r: Rope): number {
   return r.at + burnTime(r.left, r.speed, r.accel);
 }
 
-type Band = keyof typeof LETTRES;
+export type Band = keyof typeof LETTRES;
 
 const GROUPS = Object.fromEntries(Object.entries(LETTRES).map(([band, list]) => [band, list.split(" ")])) as Record<Band, string[]>;
-const KNOWN = new Set(Object.values(GROUPS).flat());
+/** La bande de chaque groupe de lettres (« tres » pour les plus faciles, jamais tirés) */
+const BAND_OF = new Map(Object.entries(GROUPS).flatMap(([band, list]) => list.map((g) => [g, band as Band] as const)));
+/** La difficulté d'un groupe de lettres (sa bande), ou null s'il n'est d'aucune (fin de mot au Marabout, par exemple) */
+export const letterBand = (letters: string): Band | null => BAND_OF.get(letters) ?? null;
+
 /** Les fins de mot qui embêtent le voisin, au Marabout */
 export const HARD_TAILS = new Set([...GROUPS.corse, ...GROUPS.dur].filter((g) => g.length === 2));
 
@@ -227,6 +231,8 @@ export interface MecheGame {
   /** À une table en équipes : on gagne ensemble, chacun prend la place de son équipe (`teamRanks`) */
   teamWin?: boolean;
   teamRanks?: Record<string, number> | null;
+  /** En équipes : le dernier de chaque équipe à avoir reçu la mèche, pour la donner à tour de rôle */
+  teamTurn?: Record<number, number>;
   /** Celui qui tient la mèche (ou qui la recevra à la prochaine) */
   holder: number;
   /** Les lettres à placer ; vides entre deux mèches */
@@ -313,21 +319,55 @@ export const holderOf = (g: MecheGame): MechePlayer => g.players[g.holder]!;
 export const isAlive = (p: MechePlayer) => p.lives > 0;
 const aliveCount = (g: MecheGame) => g.players.filter(isAlive).length;
 
-/** Le joueur suivant encore en jeu, dans le sens de la table */
+/**
+ * Le joueur suivant encore en jeu, dans le sens de la table. En équipes, la mèche va toujours à une autre équipe : à
+ * l'équipe du prochain adversaire encore en jeu, et chez elle à tour de rôle (un coéquipier éliminé ne la fait pas
+ * passer à son partenaire, et personne n'est oublié).
+ */
 function nextAlive(g: MecheGame, from: number): number {
-  for (let k = 1; k <= g.players.length; k++) {
-    const i = (from + k) % g.players.length;
-    if (isAlive(g.players[i]!)) return i;
+  const n = g.players.length;
+  let next = from;
+  for (let k = 1; k <= n; k++) {
+    const i = (from + k) % n;
+    if (isAlive(g.players[i]!)) {
+      next = i;
+      break;
+    }
   }
-  return from;
+  const teams = g.teams;
+  const mine = teams?.[g.players[from]!.id];
+  if (!teams || mine === undefined) return next;
+  // Celui qui la tenait est le dernier de son équipe à l'avoir eue
+  g.teamTurn ??= {};
+  g.teamTurn[mine] = from;
+  let team: number | undefined;
+  for (let k = 1; k <= n && team === undefined; k++) {
+    const p = g.players[(from + k) % n]!;
+    if (isAlive(p) && teams[p.id] !== undefined && teams[p.id] !== mine) team = teams[p.id];
+  }
+  if (team === undefined) return next;
+  const last = g.teamTurn[team] ?? from;
+  for (let k = 1; k <= n; k++) {
+    const i = (last + k) % n;
+    const p = g.players[i]!;
+    if (isAlive(p) && teams[p.id] === team) {
+      g.teamTurn[team] = i;
+      return i;
+    }
+  }
+  return next;
 }
 
 /** Les lettres de la prochaine main */
 function drawLetters(g: MecheGame): string {
-  // Au Marabout, la fin du mot d'avant, si elle laisse assez de mots possibles
+  // Au Marabout, la fin du mot d'avant, si elle laisse assez de mots possibles. Les fins les plus faciles (« es »,
+  // « on », « er »…, que le hasard ne tire jamais) passent à leurs trois dernières lettres : « maison » donne « son »
   if (g.settings.source === "marabout" && g.lastWord) {
-    const tail = g.lastWord.slice(-2);
-    if (KNOWN.has(tail)) return tail;
+    for (const size of [2, 3]) {
+      const tail = g.lastWord.slice(-size);
+      const band = tail.length === size ? BAND_OF.get(tail) : undefined;
+      if (band && band !== "tres") return tail;
+    }
   }
   const mix = STAGES[g.settings.difficulty][stageOf(g.fuse)]!;
   let roll = random(g);
@@ -423,7 +463,10 @@ function handOver(g: MecheGame, now: number, letters: string | null, rewarded: b
       r.left * ROPE_KEEP,
       burnt(speed, r.accel, MIN_TURN_MS * pace),
     );
-    g.rope = { ...r, at: now, left: Math.min(r.length, left), speed };
+    // Le temps promis au suivant passe avant la longueur de la corde : à grande vitesse, elle dépasse d'autant
+    const floor = burnt(speed, r.accel, MIN_TURN_MS * pace);
+    const kept = Math.max(Math.min(r.length, left), floor);
+    g.rope = { ...r, at: now, left: kept, length: Math.max(r.length, kept), speed };
     setBoom(g, ropeEnd(g.rope));
   } else {
     armTurn(g, now);

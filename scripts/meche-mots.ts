@@ -11,6 +11,7 @@
 //   src/shared/games/meche/lettres.ts les groupes de lettres à imposer, classés par difficulté
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { isRude, NOT_WORDS } from "../src/shared/games/meche/exclus.ts";
 import { normalizeWord } from "../src/shared/games/meche/words.ts";
 
 const SOURCE = "Lexique des formes fléchies du français, Grammalecte v7.7 (Olivier R., https://grammalecte.net)";
@@ -39,16 +40,7 @@ const HATE = new Set(
   niakoue niakoues bamboula bamboulas boukak boukaks feuj feujs rital ritals polak polaks meteque meteques`.split(/\s+/),
 );
 
-/** Valables si un joueur les tape, mais un bot ne les écrit pas tout seul à la table */
-const RUDE_EXACT = new Set(
-  "baise baises bite bites con cons conne connes cul culs gode godes pute putes viol viols violer violeur violeurs sexe sexes".split(" "),
-);
-const RUDE_PREFIX =
-  `bander bandant bordel branl chatte chiasse chier chieu connard connasse couill cunnil encul enfoir fellation foutr gigolo
-  inceste masturb merd nazi nichon niqu orgasm partouz pedoph penis porno prostitu putain salop sodom sperm suicid tarlouz vagin zob`.split(
-    /\s+/,
-  );
-const isRude = (w: string) => RUDE_EXACT.has(w) || RUDE_PREFIX.some((p) => w.startsWith(p));
+// Ce qu'un bot n'écrit pas tout seul, et ce qui n'est pas un mot : src/shared/games/meche/exclus.ts
 
 /** Ce que tape naturellement quelqu'un : noms, adjectifs, adverbes, infinitifs, participes et présent. Pas d'imparfait du subjonctif. */
 function isNatural(tags: string[]): boolean {
@@ -84,7 +76,7 @@ for (const line of lines.slice(start + 1)) {
   if (BANNED_TAGS.has(tags[0]!)) continue;
   const word = normalizeWord(form);
   // Sans voyelle, c'est un sigle ou une onomatopée (hlm, zzz…)
-  if (word.length < MIN_LETTERS || HATE.has(word) || !/[aeiouy]/.test(word)) continue;
+  if (word.length < MIN_LETTERS || HATE.has(word) || NOT_WORDS.has(word) || !/[aeiouy]/.test(word)) continue;
   all.add(word);
   if (isNatural(tags) && !form.includes("-") && !form.includes("’") && !isRude(word)) {
     const index = Number(parts[INDEX]);

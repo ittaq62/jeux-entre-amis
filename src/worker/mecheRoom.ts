@@ -1,3 +1,4 @@
+import { NOT_WORDS } from "../shared/games/meche/exclus.ts";
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { BOMB_BY_ID, DEFAULT_BOMB, isBombId, type BombId } from "../shared/games/meche/bombs.ts";
@@ -177,6 +178,8 @@ export class MecheRoom extends DurableObject<Env> {
   private lastMessageAt = new Map<string, number>();
   /** Le bot qui tape en ce moment : ses lettres à venir, annulées dès que la mèche change de main */
   private botTimers: ReturnType<typeof setTimeout>[] = [];
+  /** Une partie est en train de partir (le dictionnaire se charge) */
+  private starting = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -240,6 +243,16 @@ export class MecheRoom extends DurableObject<Env> {
           disconnectedAt: null,
         })),
       ];
+      // En équipes : chacun porte son équipe (on la voit à la table), et les coéquipiers s'assoient en alternance
+      const teams = opts.tour.teams;
+      if (teams) {
+        for (const s of d.seats) if (teams[s.id] !== undefined) s.team = teams[s.id];
+        const order = alternateTeams(
+          d.seats.map((s) => s.id),
+          teams,
+        );
+        d.seats.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      }
       d.settings.maxPlayers = Math.min(MECHE_MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
       d.settings.meche = { ...d.settings.meche, ...variantSettings("meche", opts.tour.variant) };
       d.settings.meche.botLevel = TOUR_BOT_LEVELS[opts.tour.botLevel]?.meche ?? d.settings.meche.botLevel;
@@ -772,7 +785,8 @@ export class MecheRoom extends DurableObject<Env> {
   }
 
   private async onWord(seat: Seat | null, msg: Extract<MecheClientMessage, { t: "word" }>) {
-    if (!seat || !this.allowMessage(`word:${seat.id}`, 120)) return;
+    // Un mot toutes les 300 ms au plus : personne ne tape plus vite, et chaque refus sonne chez tout le monde
+    if (!seat || !this.allowMessage(`word:${seat.id}`, 300)) return;
     // Le mot compte à l'heure où il est arrivé : si le dictionnaire doit d'abord être rechargé, ce n'est pas au joueur de payer l'attente
     const arrived = Date.now();
     let words: Dictionary;
@@ -790,7 +804,8 @@ export class MecheRoom extends DurableObject<Env> {
     const shown = cleanShown(msg.word);
     const word = normalizeWord(shown);
     if (word.length === 0) return;
-    const refusal = checkWord(g, word, (w) => words.has(w));
+    // La liste contient aussi des symboles et des formes élidées : ce ne sont pas des mots qu'on joue
+    const refusal = checkWord(g, word, (w) => words.has(w) && !NOT_WORDS.has(w));
     if (refusal) {
       holderOf(g).stats.refused += 1;
       return this.broadcastRaw({ t: "refused", id: seat.id, word: shown, reason: refusal, turn: g.turn });
@@ -879,6 +894,17 @@ export class MecheRoom extends DurableObject<Env> {
   }
 
   private async startGame(now: number, ws?: WebSocket) {
+    // Le dictionnaire se charge avant le départ : un second « Lancer » pendant l'attente ne lance pas une seconde partie
+    if (this.starting) return;
+    this.starting = true;
+    try {
+      return await this.startGameNow(now, ws);
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private async startGameNow(now: number, ws?: WebSocket) {
     const d = this.data!;
     // L'annonce (revanche ou tournée) est passée
     d.pickUntil = null;
@@ -902,8 +928,10 @@ export class MecheRoom extends DurableObject<Env> {
     } catch (err) {
       console.error(err);
       if (ws) this.send(ws, { t: "error", message: "Le dictionnaire ne répond pas : réessaie dans un instant." });
+      else this.systemChat("Le dictionnaire ne répond pas : la partie n'a pas pu partir, relancez-la dans un instant.");
       return this.afterChange([], now);
     }
+    if (!this.data || this.data.status === "playing") return;
     for (const seat of d.seats) {
       seat.autoplay = false;
       seat.disconnectedAt = null;
@@ -923,8 +951,12 @@ export class MecheRoom extends DurableObject<Env> {
       now,
       randomSeed(),
     );
-    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
-    d.game.teams = d.tour?.teams ?? tableTeams;
+    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu. En tournée, seulement si au moins deux
+    // équipes ont quelqu'un à la table : sinon (des absents), chacun joue pour soi, sans finir à la première explosion
+    const tourTeams = d.tour?.teams
+      ? Object.fromEntries(d.seats.filter((s) => d.tour!.teams![s.id] !== undefined).map((s) => [s.id, d.tour!.teams![s.id]!]))
+      : null;
+    d.game.teams = tourTeams && new Set(Object.values(tourTeams)).size >= 2 ? tourTeams : tableTeams;
     d.game.teamWin = tableTeams !== null;
     // La première bombe sur la table : celle de qui allumera la première mèche
     d.roundBomb = this.bombOf(holderOf(d.game).id);
@@ -1029,7 +1061,7 @@ export class MecheRoom extends DurableObject<Env> {
     }
     const d = this.data;
     const g = d?.game;
-    if (!d || !g || g.phase !== "lit" || g.turn !== turn) return;
+    if (!d || !g || g.phase !== "lit" || g.turn !== turn || !this.botStill(seat.id)) return;
     const plan = botPlan(g, this.botLevel(seat), vocab, d);
     if (plan.pass) {
       this.botTimers.push(setTimeout(() => void this.botPass(seat.id, turn), plan.thinkMs));
@@ -1045,9 +1077,15 @@ export class MecheRoom extends DurableObject<Env> {
     this.botTimers.push(setTimeout(() => void this.botWord(seat.id, word, shown, turn), at + plan.letterMs * 1.5));
   }
 
+  /** Le bot joue-t-il encore pour ce siège ? Un absent revenu pendant que le bot réfléchissait reprend la main */
+  private botStill(id: string): boolean {
+    const seat = this.seatById(id);
+    return Boolean(seat && (seat.kind === "bot" || seat.autoplay));
+  }
+
   private async botPass(id: string, turn: number) {
     const g = this.data?.game;
-    if (!g || g.phase !== "lit" || g.turn !== turn || holderOf(g).id !== id) return;
+    if (!g || g.phase !== "lit" || g.turn !== turn || holderOf(g).id !== id || !this.botStill(id)) return;
     const now = Date.now();
     if (now >= g.boomAt) return;
     const events = usePass(g, now);
@@ -1056,7 +1094,7 @@ export class MecheRoom extends DurableObject<Env> {
 
   private async botWord(id: string, word: string, shown: string, turn: number) {
     const g = this.data?.game;
-    if (!g || g.phase !== "lit" || g.turn !== turn || holderOf(g).id !== id) return;
+    if (!g || g.phase !== "lit" || g.turn !== turn || holderOf(g).id !== id || !this.botStill(id)) return;
     const now = Date.now();
     if (now >= g.boomAt) return;
     await this.afterMove(playWord(g, word, now, shown), now);

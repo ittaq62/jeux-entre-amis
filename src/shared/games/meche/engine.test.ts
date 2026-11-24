@@ -362,7 +362,12 @@ describe("le Marabout", () => {
   it("les lettres viennent de la fin du mot d'avant", () => {
     const g = lit({ source: "marabout" });
     playWord(g, "maison", NOW + START_MS + 500);
-    expect(g.letters).toBe("on");
+    // « on » est des plus faciles (jamais tiré au hasard) : ce sont les trois dernières lettres
+    expect(g.letters).toBe("son");
+    playWord(g, "chanson", NOW + START_MS + 900);
+    expect(g.letters).toBe("son");
+    playWord(g, "frigo", NOW + START_MS + 1300);
+    expect(g.letters).toBe("go");
   });
 
   it("tire au sort quand la fin du mot laisse trop peu de choix, ou après une explosion", () => {
