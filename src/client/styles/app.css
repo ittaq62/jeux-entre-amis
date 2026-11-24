@@ -2480,11 +2480,18 @@ a.shop-item {
 
 .seat-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
+  row-gap: 4px;
   padding: 10px 0;
   border-bottom: 1px solid var(--line-soft);
   min-height: 64px;
+}
+
+/* Le pseudo garde de quoi tenir : quand « + Ami » et « Exclure » ne laissent plus la place, ils passent dessous */
+.seat-row .row-text {
+  flex: 1 1 110px;
 }
 
 .seat-row:last-child {
@@ -2509,7 +2516,8 @@ a.shop-item {
 .seat-row .player-name-text {
   overflow: visible;
   white-space: normal;
-  overflow-wrap: anywhere;
+  /* Aux espaces seulement : un mot ne se coupe que s'il ne tient pas seul sur une ligne */
+  overflow-wrap: break-word;
 }
 
 .seat-actions {
@@ -2517,6 +2525,7 @@ a.shop-item {
   flex: none;
   align-items: center;
   gap: 14px;
+  margin-left: auto;
 }
 
 .seat-actions:empty {
@@ -3008,20 +3017,6 @@ a.shop-item {
   .lobby-body {
     padding-left: 16px;
     padding-right: 16px;
-  }
-
-  /* Pas la place pour tout sur une ligne : les boutons passent dessous, le pseudo garde la largeur */
-  .seat-row {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-
-  .seat-row .row-text {
-    flex: 1 1 80px;
-  }
-
-  .seat-actions {
-    margin-left: auto;
   }
 
   .ticket-code {
