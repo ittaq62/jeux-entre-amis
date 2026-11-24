@@ -24,8 +24,8 @@ const MODE_HINTS: Record<FightSettings["mode"], string> = {
 
 const ITEM_HINTS: Record<FightSettings["items"], string> = {
   aucun: "Rien ne tombe du ciel : seulement les combattants.",
-  peu: "De temps en temps : tarte à la crème, pétard, pot de fleurs, baguette, part de gâteau, petit café.",
-  beaucoup: "Ça pleut : il y a toujours quelque chose à ramasser.",
+  peu: "De temps en temps : tartes à la crème et pétards ; en hauteur, pot de fleurs, baguette, part de gâteau, petit café. Monte les chercher.",
+  beaucoup: "Ça pleut : il y a toujours quelque chose à ramasser, et les meilleurs en hauteur.",
 };
 
 const BOT_HINTS: Record<BotLevel, string> = {
