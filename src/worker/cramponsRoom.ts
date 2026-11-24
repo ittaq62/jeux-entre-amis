@@ -455,6 +455,8 @@ export class CramponsRoom extends DurableObject<Env> {
     if (this.connectedUsers(ws).size === 0) {
       this.addTimer({ at: now + (d.status === "playing" ? 20 : 10) * 60_000, kind: "cleanup" });
     }
+    // Un hôte sans place (il regardait) qui s'en va : la main passe à un joueur présent
+    this.ensureHost();
     void this.setPresence(att.userId, null).catch(() => {});
     await this.afterChange([], now, ws);
   }
@@ -509,7 +511,10 @@ export class CramponsRoom extends DurableObject<Env> {
   private rematchReady(): boolean {
     const d = this.data!;
     if (d.status !== "finished" || d.rematch.length === 0) return false;
-    return d.seats.filter((s) => this.isConnected(s.userId)).every((s) => d.rematch.includes(s.userId!));
+    // Au moins un joueur encore là : sans personne, le compte à rebours lancerait une partie de bots seuls, et celui qui
+    // revient trouverait sa table commencée sans lui
+    const here = d.seats.filter((s) => this.isConnected(s.userId));
+    return here.length > 0 && here.every((s) => d.rematch.includes(s.userId!));
   }
 
   /**
@@ -637,6 +642,7 @@ export class CramponsRoom extends DurableObject<Env> {
         if (seat || d.tour || !maySit(this.arrivalCase(userId, "play"))) return;
         if (!this.enterPitch(att.user)) return error("Le terrain est complet.");
         d.watchers = forgetWatcher(d.watchers, userId);
+        this.ensureHost();
         return this.afterChange([], now);
       }
 
@@ -725,6 +731,9 @@ export class CramponsRoom extends DurableObject<Env> {
         if (!target || target.userId === userId) return;
         d.seats = d.seats.filter((s) => s !== target);
         this.systemChat(`${target.name} a été retiré de la table.`);
+        // Celui qu'on attendait parti, la revanche part si tous les autres l'ont demandée
+        if (target.userId) d.rematch = d.rematch.filter((id) => id !== target.userId);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now);
       }
 
@@ -770,6 +779,9 @@ export class CramponsRoom extends DurableObject<Env> {
     }
     this.ensureHost();
     void this.setPresence(target, null).catch(() => {});
+    // Sa voix pour la revanche part avec lui ; tous les autres l'avaient peut-être demandée
+    d.rematch = d.rematch.filter((id) => id !== target);
+    if (this.rematchReady()) return this.openAnnounce(now);
     return this.afterChange([], now);
   }
 

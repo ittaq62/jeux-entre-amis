@@ -437,6 +437,8 @@ export class MecheRoom extends DurableObject<Env> {
     if (this.connectedUsers(ws).size === 0) {
       this.addTimer({ at: now + (d.status === "playing" ? 20 : 10) * 60_000, kind: "cleanup" });
     }
+    // Un hôte sans place (il regardait) qui s'en va : la main passe à un joueur présent
+    this.ensureHost();
     void this.setPresence(att.userId, null).catch(() => {});
     await this.afterChange([], now, ws);
   }
@@ -470,6 +472,9 @@ export class MecheRoom extends DurableObject<Env> {
   }
   /** Ce qui empêche une partie de partir avec les joueurs présents (pas assez de monde, équipes inégales), ou null */
   private startProblem(): string | null {
+    // Personne d'assis n'est là (parti pendant l'annonce de la revanche, coupure) : pas de partie de bots seuls
+    if (!this.data!.seats.some((s) => s.kind === "human" && this.isConnected(s.userId)))
+      return "Il faut au moins un joueur assis à la table.";
     const seats = this.data!.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     if (seats.length < MIN_PLAYERS) return "Il faut au moins deux joueurs : ajoute un bot !";
     return teamProblem(seats, this.teamCount());
@@ -492,7 +497,10 @@ export class MecheRoom extends DurableObject<Env> {
   private rematchReady(): boolean {
     const d = this.data!;
     if (d.status !== "finished" || d.rematch.length === 0) return false;
-    return d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId)).every((s) => d.rematch.includes(s.userId!));
+    // Au moins un joueur encore là : sans personne, le compte à rebours lancerait une partie de bots seuls, et celui qui
+    // revient trouverait sa table commencée sans lui
+    const here = d.seats.filter((s) => s.kind === "human" && this.isConnected(s.userId));
+    return here.length > 0 && here.every((s) => d.rematch.includes(s.userId!));
   }
 
   /**
@@ -609,6 +617,7 @@ export class MecheRoom extends DurableObject<Env> {
         if (!this.seatHuman(att.user)) return error("La table est complète.");
         d.watchers = forgetWatcher(d.watchers, userId);
         this.systemChat(`${att.user.pseudo} s'installe à la table.`);
+        this.ensureHost();
         return this.afterChange([], now);
       }
 
@@ -731,6 +740,9 @@ export class MecheRoom extends DurableObject<Env> {
         if (!target || target.userId === userId) return;
         d.seats = d.seats.filter((s) => s !== target);
         if (target.kind === "human") this.systemChat(`${target.name} a été retiré de la table.`);
+        // Celui qu'on attendait parti, la revanche part si tous les autres l'ont demandée
+        if (target.userId) d.rematch = d.rematch.filter((id) => id !== target.userId);
+        if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now);
       }
 
@@ -810,6 +822,9 @@ export class MecheRoom extends DurableObject<Env> {
     }
     this.ensureHost();
     void this.setPresence(target, null).catch(() => {});
+    // Sa voix pour la revanche part avec lui ; tous les autres l'avaient peut-être demandée
+    d.rematch = d.rematch.filter((id) => id !== target);
+    if (this.rematchReady()) return this.openAnnounce(now);
     return this.afterChange([], now);
   }
 
