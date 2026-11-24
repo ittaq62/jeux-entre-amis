@@ -915,9 +915,9 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   }
   if (airborne(me)) {
     const key = dy < -0.6 && adx < 1.2 ? "ad" : dy > 0.8 ? "au" : adx > 0.6 ? "as" : "an";
-    // Au-dessus du vide (ou tout au bord) : le coup en l'air seulement s'il pourra encore revenir à la fin (un coup vers
-    // le bas sur celui qui reste planté au bord l'emmenait sous le plateau)
-    if ((me.x < st.x0 + 0.6 || me.x > st.x1 - 0.6) && !aerialSafe(f, me, key)) return out();
+    // Le coup en l'air seulement s'il pourra encore revenir à la fin : au-dessus du vide, ou emporté au-delà du bord par
+    // sa lancée (un coup vers le bas sur celui qui reste au bord l'emmenait sous le plateau)
+    if (!aerialSafe(f, me, key)) return out();
     if (key === "ad") m.y = -1;
     else if (key === "au") m.y = 1;
     else if (key === "as") m.x = toward;
@@ -1017,13 +1017,21 @@ function rushesOff(me: Fighter, dir: number, st: { x0: number; x1: number }): bo
 function aerialSafe(f: Fight, me: Fighter, key: string): boolean {
   const st = STYLES[me.style];
   const g = st.gravity * gravityOf(f);
+  const ground = stage(f);
+  // (vers le bas, il pique : la chute rapide ; et il continue sur sa lancée, qui peut l'emporter au-delà du bord)
+  const fall = key === "ad" ? st.fastFall : st.fall;
+  const over = (x: number) => x > ground.x0 + 0.2 && x < ground.x1 - 0.2;
+  let x = me.x;
   let y = me.y;
   let vy = me.vy;
   for (let i = 0; i < (moveDef(me.style, key)?.frames ?? 30); i++) {
-    vy = Math.max(vy - g / 60, -st.fall);
+    vy = Math.max(vy - g / 60, -fall);
     y += vy / 60;
+    x += me.vx / 60;
+    // Il retombe sur le plateau avant la fin du coup : rien à craindre
+    if (y <= ground.y && over(x)) return true;
   }
-  return y + (me.jumps > 0 ? jumpReach(f, me).air : 0) > stage(f).y + 0.5;
+  return over(x) || y + (me.jumps > 0 ? jumpReach(f, me).air : 0) > ground.y + 0.5;
 }
 
 /** La hauteur que gagne un grand saut depuis le sol, et un saut en l'air pris au sommet (avec un peu de marge) */
@@ -1144,23 +1152,50 @@ function recover(f: Fight, me: Fighter, m: BotMemory, L: LevelInfo): Input {
   const below = me.y < l.y - 0.4;
   const falling = me.vy < 1;
   const far = Math.abs(towardX);
-  if (below && falling && me.jumps > 0 && (me.y < l.y - 1.2 || far > 3)) {
-    return press(m, JMP);
+  // Le saut en l'air d'abord : dès qu'il retombe sous le bord, qu'il est loin, ou qu'il tombe vite pas très haut. Il remet
+  // la chute à zéro ; gardé pour plus tard, il ne rattrape plus une chute lancée (Marcel se perdait ainsi)
+  if (below && falling && me.jumps > 0 && (me.y < l.y - 1.2 || far > 3)) return press(m, JMP);
+  // Loin du bord, pas en pleine chute : une ruée de côté rapproche, si elle le laisse assez haut pour remonter ensuite
+  // (la charge de Marcel dure longtemps : lancée trop bas, il finissait sous le plateau)
+  if (falling && far > 4 && !me.sideUsed && me.vy > -6 && sideRush(me.style) && heightAfter(f, me, "ps") > l.y - 0.3) {
+    if (rnd(m) < L.recover * 0.5) {
+      m.y = 0;
+      return press(m, SPC);
+    }
   }
-  // Plus de saut : le spécial vers le haut (Huguette lance sa laine dès qu'un rebord est à portée)
+  // Plus de saut : le spécial vers le haut, quand le rebord est à sa portée (ou qu'il ne peut plus attendre) ; d'ici là,
+  // il dérive vers l'arène (Huguette lance sa laine dès qu'un rebord est à portée)
   const grappleRange = me.style === "huguette" ? Math.hypot(far, l.y - me.y) < 4.8 : true;
-  const useUp = falling && me.jumps === 0 && (below || far > 2.5) && grappleRange;
+  // (le lasso de Huguette porte loin : sa portée suffit ; les autres, à moins de 3 m du bord, ou quand ils seraient sous
+  // le bord dans un quart de seconde, à leur vitesse de chute)
+  const inReach = me.style === "huguette" || far < 3 || me.y + me.vy * 0.25 < l.y - 0.3;
+  const useUp = falling && me.jumps === 0 && (below || far > 2.5) && grappleRange && inReach;
   if (useUp && rnd(m) < L.recover) {
     m.x = dir * 0.35;
     m.y = 1;
     return press(m, SPC);
   }
-  // Loin du bord, encore haut : le spécial de côté rapproche
-  if (falling && far > 4 && !me.sideUsed && me.y > l.y - 1 && rnd(m) < L.recover * 0.5 && me.style !== "huguette") {
-    m.y = 0;
-    return press(m, SPC);
-  }
   return { x: m.x, y: m.y, held: 0, pressed: 0 };
+}
+
+/** Sa hauteur à la fin de ce coup, s'il le lance maintenant (sa chute continue pendant le coup) */
+function heightAfter(f: Fight, me: Fighter, key: string): number {
+  const def = moveDef(me.style, key);
+  const st = STYLES[me.style];
+  const g = st.gravity * gravityOf(f) * (def?.gravity ?? 1);
+  let y = me.y;
+  let vy = me.vy;
+  for (let i = 0; i < (def?.frames ?? 30); i++) {
+    vy = Math.max(vy - g / 60, -st.fall);
+    y += vy / 60;
+  }
+  return y;
+}
+
+/** Son spécial de côté est une ruée qui le porte (pas un tir) : de quoi se rapprocher du bord */
+function sideRush(style: HabitueId): boolean {
+  const def = moveDef(style, "ps");
+  return Boolean(def && !def.shoot && (def.push ?? []).some((p) => (p.vx ?? 0) > 4));
 }
 
 function press(m: BotMemory, bits: number): Input {

@@ -248,3 +248,46 @@ describe("Culbute : les objets à aller chercher", () => {
     expect(got).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("Culbute : revenir sur l'arène", () => {
+  it("éjecté au loin, chaque style revient (bots forts) : le saut d'abord, la ruée seulement si elle laisse assez haut", () => {
+    for (const style of HABITUE_IDS) {
+      let back = 0;
+      let tries = 0;
+      for (const speed of [20, 26])
+        for (const ang of [10, 30, 50])
+          for (const side of [-1, 1]) {
+            const f = createFight(
+              { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", events: false },
+              "place",
+              [
+                { id: "a", team: 0, style },
+                { id: "b", team: 1, style: "lucien" },
+              ],
+              speed + ang,
+            );
+            while (f.phase === "intro") stepFight(f, []);
+            const me = f.fighters[0]!;
+            f.fighters[1]!.x = 0;
+            me.x = side * 7;
+            me.y = 0.5;
+            me.ground = -1;
+            me.state = "hurt";
+            me.stun = 20;
+            me.kx = Math.cos((ang * Math.PI) / 180) * speed * side;
+            me.ky = Math.sin((ang * Math.PI) / 180) * speed;
+            const mem = newBotMemory(speed * ang);
+            const idle: Input = { x: 0, y: 0, held: 0, pressed: 0 };
+            let ok = false;
+            for (let k = 0; k < 600 && !ok; k++) {
+              const ev = stepFight(f, [botInput(f, 0, mem, "fort"), idle]);
+              if (ev.some((e) => e.k === "ko")) break;
+              ok = me.ground >= 0 || f.fighters[0]!.state === "ledge";
+            }
+            tries++;
+            if (ok) back++;
+          }
+      expect(back, style).toBeGreaterThanOrEqual(tries - 1);
+    }
+  });
+});
