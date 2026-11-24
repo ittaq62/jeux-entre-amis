@@ -183,6 +183,11 @@ export function BallPicker({ room, send }: { room: MinigolfRoomView; send: (msg:
   const [local, setLocal] = useState<BallLook | null>(null);
   const current = local ?? seat?.look ?? DEFAULT_LOOK;
   const owns = (item: string, price: number) => price === 0 || has(item);
+  // Ce que la table a retenu fait foi (une couleur déjà prise devient la suivante de libre)
+  const kept = seat ? JSON.stringify(seat.look) : "";
+  useEffect(() => setLocal(null), [kept]);
+  // Une couleur par balle : celles des autres joueurs (un bot, lui, cède la sienne)
+  const takenBy = new Map(room.seats.filter((s) => s.kind === "human" && s.id !== seat?.id).map((s) => [s.look.color, s.name]));
 
   // Le skin choisi sur cet appareil, repris en arrivant à la table
   useEffect(() => {
@@ -214,19 +219,23 @@ export function BallPicker({ room, send }: { room: MinigolfRoomView; send: (msg:
       </div>
       <span className="field-label">Couleur</span>
       <div className="mg-colors" role="radiogroup" aria-label="Couleur">
-        {BALL_COLORS.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            role="radio"
-            aria-checked={current.color === c.id}
-            aria-label={c.name}
-            title={c.name}
-            className={`mg-color ${current.color === c.id ? "is-on" : ""}`}
-            style={{ "--c": c.hex } as CSSProperties}
-            onClick={() => choose({ color: c.id })}
-          />
-        ))}
+        {BALL_COLORS.map((c) => {
+          const owner = takenBy.get(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={current.color === c.id}
+              aria-label={owner ? `${c.name}, la balle de ${owner}` : c.name}
+              title={owner ? `${c.name} : la balle de ${owner}` : c.name}
+              className={`mg-color ${current.color === c.id ? "is-on" : ""} ${owner ? "is-taken" : ""}`}
+              style={{ "--c": c.hex } as CSSProperties}
+              disabled={Boolean(owner)}
+              onClick={() => choose({ color: c.id })}
+            />
+          );
+        })}
       </div>
       <span className="field-label">Motif</span>
       <div className="mg-patterns" role="radiogroup" aria-label="Motif">

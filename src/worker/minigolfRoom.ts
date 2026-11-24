@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { planShot, thinkTime, type BotLevel } from "../shared/games/minigolf/bot.ts";
 import { courseOf } from "../shared/games/minigolf/courses.ts";
-import { botLook, DEFAULT_LOOK, isBallLook, usableLook, type BallLook } from "../shared/games/minigolf/looks.ts";
+import { botLook, claimColor, DEFAULT_LOOK, isBallLook, usableLook, type BallLook } from "../shared/games/minigolf/looks.ts";
 import {
   ballsInPlay,
   createMatch,
@@ -225,6 +225,8 @@ export class MinigolfRoom extends DurableObject<Env> {
       };
     });
     d.seats = [...humans, ...bots];
+    // Une couleur par balle (chacun enverra la sienne en arrivant ; d'ici là, pas deux balles blanches)
+    for (const h of humans) claimColor(d.seats, h.id, h.look.color);
     if (tour.teams) for (const s of d.seats) s.team = tour.teams[s.userId ?? s.id] ?? 0;
     d.settings.minigolf = mergeConfig(d.settings.minigolf, {
       holes: 3,
@@ -361,12 +363,14 @@ export class MinigolfRoom extends DurableObject<Env> {
     seat.team = inTeam(0) <= inTeam(1) ? 0 : 1;
     if (d.seats.length < d.settings.maxPlayers) {
       d.seats.push(seat);
+      claimColor(d.seats, seat.id, seat.look.color);
       return seat;
     }
     for (let i = d.seats.length - 1; i >= 0; i--) {
       if (d.seats[i]!.kind === "bot") {
         seat.team = d.seats[i]!.team;
         d.seats[i] = seat;
+        claimColor(d.seats, seat.id, seat.look.color);
         return seat;
       }
     }
@@ -580,6 +584,8 @@ export class MinigolfRoom extends DurableObject<Env> {
         const live = this.data;
         if (live !== d || !live || live.status === "playing" || !live.seats.includes(seat)) return;
         seat.look = usableLook(msg.look, (item) => owned.has(item));
+        // Une couleur par balle : déjà à un autre joueur, il a la suivante de libre ; un bot lui cède la sienne
+        claimColor(live.seats, seat.id, seat.look.color);
         return this.afterChange(now);
       }
 

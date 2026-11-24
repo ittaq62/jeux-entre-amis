@@ -90,6 +90,34 @@ export function usableLook(look: BallLook, has: (item: string) => boolean): Ball
 }
 
 /** Une couleur pour chaque bot, différente de celles déjà prises */
+/** Un siège de la table, pour sa couleur */
+export interface ColorSeat {
+  id: string;
+  kind: "human" | "bot";
+  look: BallLook;
+}
+
+/**
+ * Une couleur par balle à la table : le siège `id` veut la couleur `want`. Si un autre joueur l'a déjà, il prend la
+ * suivante de libre dans la liste ; un bot qui l'avait en change (les bots n'y tiennent pas). Modifie les sièges
+ */
+export function claimColor(seats: ColorSeat[], id: string, want: string) {
+  const me = seats.find((s) => s.id === id);
+  if (!me) return;
+  const humans = new Set(seats.filter((s) => s.id !== id && s.kind === "human").map((s) => s.look.color));
+  const i = Math.max(
+    0,
+    BALL_COLORS.findIndex((c) => c.id === want),
+  );
+  const color = [...BALL_COLORS.slice(i), ...BALL_COLORS.slice(0, i)].find((c) => !humans.has(c.id))?.id ?? want;
+  me.look = { ...me.look, color };
+  seats.forEach((b, k) => {
+    if (b.kind !== "bot" || b.look.color !== color) return;
+    const taken = seats.filter((s) => s !== b).map((s) => s.look.color);
+    b.look = { ...b.look, color: botLook(taken, k * 7 + 3).color };
+  });
+}
+
 export function botLook(taken: string[], seed: number): BallLook {
   const free = BALL_COLORS.filter((c) => !taken.includes(c.id));
   const list = free.length > 0 ? free : BALL_COLORS;

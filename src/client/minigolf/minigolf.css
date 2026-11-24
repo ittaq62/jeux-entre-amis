@@ -688,6 +688,24 @@
   outline-offset: 2px;
 }
 
+/* La couleur d'un autre joueur : pâle et barrée */
+.mg-color.is-taken {
+  position: relative;
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mg-color.is-taken::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  transform: rotate(-45deg);
+}
+
 .mg-patterns {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
