@@ -214,8 +214,16 @@ export function botAction(
   s: CapitaleState,
   playerId: string,
   level: BotLevel,
-  /** Le bot d'un joueur absent ne propose pas d'échange, ne donne rien et ne pose pas de nuisance à sa place */
-  opts: { allowTrade?: boolean; allowGift?: boolean; allowAttack?: boolean } = {},
+  /**
+   * Le bot d'un joueur absent ne propose pas d'échange, ne donne rien et ne pose pas de nuisance à sa place.
+   * `refused` : une proposition déjà refusée par ce joueur, pour ce titre, à ce prix (elle n'est pas refaite telle quelle).
+   */
+  opts: {
+    allowTrade?: boolean;
+    allowGift?: boolean;
+    allowAttack?: boolean;
+    refused?: (to: string, square: number, cash: number) => boolean;
+  } = {},
 ): CapitaleAction | null {
   const p = playerOf(s, playerId);
   if (!p || p.bankrupt) return null;
@@ -268,6 +276,7 @@ export function botAction(
           allowTrade: opts.allowTrade ?? false,
           allowGift: opts.allowGift ?? false,
           allowAttack: opts.allowAttack ?? true,
+          ...(opts.refused ? { refused: opts.refused } : {}),
         }) ?? { type: "endTurn" }
       );
     default:
@@ -283,7 +292,12 @@ function manage(
   s: CapitaleState,
   playerId: string,
   level: BotLevel,
-  opts: { allowTrade: boolean; allowGift: boolean; allowAttack: boolean },
+  opts: {
+    allowTrade: boolean;
+    allowGift: boolean;
+    allowAttack: boolean;
+    refused?: (to: string, square: number, cash: number) => boolean;
+  },
 ): CapitaleAction | null {
   const p = playerOf(s, playerId)!;
   if (opts.allowGift) {
@@ -311,7 +325,7 @@ function manage(
   for (const i of ownedBy(s, playerId)) {
     if (s.deeds[i]!.mortgaged && p.cash - unmortgageCost(i) >= keep * 2) return { type: "unmortgage", square: i };
   }
-  if (opts.allowTrade && level !== "facile") return proposeTrade(s, playerId, level);
+  if (opts.allowTrade && level !== "facile") return proposeTrade(s, playerId, level, opts.refused);
   return null;
 }
 
@@ -545,8 +559,16 @@ export function botAnswer(s: CapitaleState, playerId: string, trade: Trade, leve
  * Une proposition pour compléter un groupe auquel il ne manque qu'une case, payée en argent (demandée pour rien à un
  * coéquipier quand les dons sont permis) ; au Monopole, d'abord le titre qui ferait gagner son camp
  */
-function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): CapitaleAction | null {
+function proposeTrade(
+  s: CapitaleState,
+  playerId: string,
+  level: BotLevel,
+  refused: (to: string, square: number, cash: number) => boolean = () => false,
+): CapitaleAction | null {
   if (s.trades.some((t) => t.from === playerId)) return null;
+  // Une offre que ce joueur vient de refuser n'est pas refaite à l'identique : on passe à la suivante
+  const fresh = (a: CapitaleAction | null): CapitaleAction | null =>
+    a?.type === "propose" && a.get.squares.some((i) => refused(a.to, i, a.give.cash)) ? null : a;
   const p = playerOf(s, playerId)!;
   const gifts = teamPlay(s) && teamRules(s).gifts;
   const ask = (target: number, boost: number): CapitaleAction | null => {
@@ -568,7 +590,7 @@ function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): Capi
       const owner = s.deeds[target]!.owner;
       if (!owner) continue;
       const price = SQUARES[target]!.price ?? 0;
-      const offer = allies(s, owner, playerId) ? ask(target, 1) : proposeFor(s, playerId, owner, target, Math.max(price * 2, 300));
+      const offer = fresh(allies(s, owner, playerId) ? ask(target, 1) : proposeFor(s, playerId, owner, target, Math.max(price * 2, 300)));
       if (offer) return offer;
     }
   }
@@ -576,7 +598,7 @@ function proposeTrade(s: CapitaleState, playerId: string, level: BotLevel): Capi
     const squares = GROUPS[g].squares;
     const missing = squares.filter((i) => s.deeds[i]!.owner !== playerId);
     if (missing.length !== 1) continue;
-    const offer = ask(missing[0]!, 1);
+    const offer = fresh(ask(missing[0]!, 1));
     if (offer) return offer;
   }
   return null;

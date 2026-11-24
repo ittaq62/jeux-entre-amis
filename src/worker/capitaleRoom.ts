@@ -81,6 +81,8 @@ const BOT_NAMES = ["Hubert", "Odile", "Bernard", "Colette", "Gérard", "Monique"
 const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const MAX_MISSED = 2;
+/** Une offre d'un bot refusée n'est pas refaite à l'identique avant ce nombre de manches */
+const BOT_REFUSAL_ROUNDS = 3;
 /** Enchère : le temps de la première offre, puis le chrono repart à chaque offre */
 const AUCTION_FIRST_MS = 12_000;
 const AUCTION_BID_MS = 6_000;
@@ -164,6 +166,12 @@ interface CapitaleData {
   helpKey?: string;
   /** Dernier tour où chaque bot a proposé un échange (un par tour au plus) */
   botTraded: Record<string, number>;
+  /**
+   * Les propositions des bots refusées (ou laissées sans réponse), par « bot>joueur:titre » : la manche, le prix offert et
+   * le nombre de refus. Le bot ne refait pas la même offre avant BOT_REFUSAL_ROUNDS manches, puis deux fois plus à chaque
+   * nouveau refus, sauf nettement plus chère.
+   */
+  botRefused?: Record<string, { round: number; cash: number; times?: number }>;
   rematch: string[];
   chat: ChatMessage[];
   chatSeq: number;
@@ -972,6 +980,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     d.actionSeq = 0;
     d.botKey = "";
     d.botTraded = {};
+    d.botRefused = {};
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     // Le premier coup attend que chaque joueur présent ait chargé le plateau (au plus quelques secondes) ; une partie en
     // temps limité commence au départ commun
@@ -1023,6 +1032,7 @@ export class CapitaleRoom extends DurableObject<Env> {
     const g = d.capitale;
     if (g && d.status === "playing") {
       if (events.length > 0 && !aside) d.animUntil = Math.max(d.animUntil ?? 0, now) + batchMs(events);
+      this.rememberRefusals(events);
       this.narrate(events);
       if (g.step === "over") {
         d.status = "finished";
@@ -1323,6 +1333,32 @@ export class CapitaleRoom extends DurableObject<Env> {
     }
   }
 
+  /** Retient les offres des bots refusées ou restées sans réponse, pour ne pas les refaire aussitôt à l'identique */
+  private rememberRefusals(events: CapitaleEvent[]) {
+    const d = this.data!;
+    const g = d.capitale;
+    if (!g) return;
+    for (const e of events) {
+      if (e.type !== "trade" || (e.status !== "rejected" && e.status !== "expired")) continue;
+      if (this.seatById(e.trade.from)?.kind !== "bot") continue;
+      d.botRefused ??= {};
+      for (const square of e.trade.get.squares) {
+        const key = `${e.trade.from}>${e.trade.to}:${square}`;
+        const times = (d.botRefused[key]?.times ?? 0) + 1;
+        d.botRefused[key] = { round: g.round, cash: e.trade.give.cash, times };
+      }
+    }
+  }
+
+  /** Ce joueur a-t-il refusé il y a peu la même offre de ce bot (même titre, pas nettement plus d'argent) ? */
+  private refusedLately(bot: string, to: string, square: number, cash: number): boolean {
+    const d = this.data!;
+    const r = d.botRefused?.[`${bot}>${to}:${square}`];
+    if (!r || !d.capitale) return false;
+    const wait = BOT_REFUSAL_ROUNDS * 2 ** Math.min(4, (r.times ?? 1) - 1);
+    return d.capitale.round - r.round < wait && cash < Math.max(r.cash * 1.25, r.cash + 50);
+  }
+
   private botLevel(seat: Seat): BotLevel {
     return seat.kind === "bot" ? this.data!.settings.capitale.botLevel : "moyen";
   }
@@ -1363,7 +1399,12 @@ export class CapitaleRoom extends DurableObject<Env> {
         const allowTrade = seat.kind === "bot" && d.botTraded[seat.id] !== g.turnId;
         // Le remplaçant d'un absent ne donne rien à sa place ; il se défend (raser, parc, obélisque) mais n'attaque personne
         const realBot = seat.kind === "bot";
-        const action = botAction(g, seat.id, this.botLevel(seat), { allowTrade, allowGift: realBot, allowAttack: realBot });
+        const action = botAction(g, seat.id, this.botLevel(seat), {
+          allowTrade,
+          allowGift: realBot,
+          allowAttack: realBot,
+          refused: (to, square, cash) => this.refusedLately(seat.id, to, square, cash),
+        });
         if (action?.type === "propose") d.botTraded[seat.id] = g.turnId;
         return this.apply(g, seat.id, action);
       }

@@ -165,6 +165,28 @@ describe("les bots au Monopole", () => {
     expect(offer).toMatchObject({ type: "propose", to: "a", get: { squares: [35] } });
     expect((offer as { give: { cash: number } }).give.cash).toBeGreaterThanOrEqual(400);
   });
+
+  it("ne refont pas telle quelle une offre que le joueur vient de refuser, et passent à la suivante", () => {
+    const s = game(null, { specials: false }, 3);
+    // Il manque à b une rue du quartier brun (à a) et une du quartier ciel (à c)
+    own(s, "b", 1, 6, 8);
+    own(s, "a", 3);
+    own(s, "c", 9);
+    // Déjà deux maisons sur chaque rue : sans le quartier, plus rien à améliorer
+    for (const i of [1, 6, 8]) s.deeds[i]!.level = 2;
+    manageStep(s, "b");
+    P(s, "b").cash = 3000;
+    expect(botAction(s, "b", "moyen", { allowTrade: true })).toMatchObject({ type: "propose", to: "a", get: { squares: [3] } });
+    // a vient de refuser : b demande l'autre rue à c
+    const refusedByA = (to: string, square: number) => to === "a" && square === 3;
+    expect(botAction(s, "b", "moyen", { allowTrade: true, refused: refusedByA })).toMatchObject({
+      type: "propose",
+      to: "c",
+      get: { squares: [9] },
+    });
+    // Tout a été refusé : plus de proposition ce tour-ci
+    expect(botAction(s, "b", "moyen", { allowTrade: true, refused: () => true })?.type).not.toBe("propose");
+  });
 });
 
 // ---------------------------------------------------------------------------
