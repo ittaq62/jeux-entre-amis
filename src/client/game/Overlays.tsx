@@ -11,6 +11,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { CrewMark } from "./Crews.tsx";
 import { EloLine } from "./EloLine.tsx";
+import { useSeatMemory } from "./seatMemory.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
 
@@ -128,6 +129,8 @@ export function GameOver({
 }) {
   const g = room.uno!;
   const me = room.you.seatId;
+  // Un joueur parti après la partie garde son nom sur la feuille
+  const seatAt = useSeatMemory(room.seats);
   // En équipes à une table, on gagne ensemble : chacun a la place de son équipe, et la liste suit ces places
   // (le premier sorti peut être d'une équipe battue, « jusqu'au dernier » ou aux points)
   const teamRanks = g.teamRanks ?? null;
@@ -137,9 +140,9 @@ export function GameOver({
   const won = teamRanks ? me !== null && teamRanks[me] === 1 : ranking[0] === me;
   const reduced = usePrefs((s) => s.reducedEffects);
   const r = g.lastRound;
-  const winner = seatOf(room, ranking[0] ?? "");
+  const winner = seatAt(ranking[0] ?? "");
   const winTeam = teamRanks && g.teams ? g.teams[ranking[0] ?? ""] : undefined;
-  const placed = ranking.map((id, i) => ({ id, rank: rankOf(id, i), isBot: seatOf(room, id)?.kind !== "human" }));
+  const placed = ranking.map((id, i) => ({ id, rank: rankOf(id, i), isBot: seatAt(id)?.kind !== "human" }));
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
 
@@ -184,7 +187,7 @@ export function GameOver({
 
         <ol className="score-lines">
           {ranking.map((id, i) => {
-            const seat = seatOf(room, id);
+            const seat = seatAt(id);
             const p = g.players.find((pl) => pl.id === id);
             const left = r?.hands[id] ?? [];
             return (

@@ -11,6 +11,7 @@ import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -35,7 +36,8 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
   const me = room.you.seatId;
   const won = me !== null && ranks[me] === 1;
   const reduced = usePrefs((s) => s.reducedEffects);
-  const seatOf = (id: string) => room.seats.find((s) => s.id === id);
+  // Un joueur parti après la partie garde son nom sur la feuille
+  const seatOf = useSeatMemory(room.seats);
   const winners = ranking.filter((id) => ranks[id] === 1);
   const winnerTeam = g.mode === "teams" ? g.players.find((p) => p.id === winners[0])?.team : null;
 

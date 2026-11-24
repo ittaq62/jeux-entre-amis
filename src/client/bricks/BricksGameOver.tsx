@@ -14,6 +14,7 @@ import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -38,7 +39,8 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
   const me = room.you.seatId;
   const won = me !== null && ranks[me] === 1 && g.mode !== "sprint";
   const reduced = usePrefs((s) => s.reducedEffects);
-  const seatOf = (id: string) => room.seats.find((s) => s.id === id);
+  // Un joueur parti après la partie garde son nom sur la feuille
+  const seatOf = useSeatMemory(room.seats);
   const voted = room.rematch.includes(room.you.userId);
   const sprint = g.mode === "sprint" ? g.players[0] : undefined;
   const [best, setBest] = useState<number | null>(null);

@@ -12,6 +12,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: MecheRoomView;
@@ -39,7 +40,8 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
   const me = room.you.seatId;
   const won = me !== null && ranks[me] === 1;
   const reduced = usePrefs((s) => s.reducedEffects);
-  const seatOf = (id: string) => room.seats.find((s) => s.id === id);
+  // Un joueur parti après la partie garde son nom sur la feuille
+  const seatOf = useSeatMemory(room.seats);
   const winner = ranking[0] ? seatOf(ranking[0]) : undefined;
 
   useEffect(() => {
