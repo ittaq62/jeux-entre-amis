@@ -280,13 +280,17 @@ function NavalHelp({ s, fleet, alone, teams }: { s: NavalSettings; fleet: string
 
       <h3>Tirer</h3>
       <ul>
-        <li>Vise une case chez l'adversaire : à l'eau, touché ou coulé. Un navire coulé se montre en entier. {SHOT_HINTS[s.shots]}</li>
+        <li>
+          Vise une case chez l'adversaire : à l'eau, touché ou coulé. Un navire coulé se montre en entier. {SHOT_HINTS[s.shots]}
+          {s.shots === "salvo" && teams ? " En 2 contre 2, on compte les navires de toute son équipe." : ""}
+        </li>
         {!alone && <li>{TARGET_HINTS[s.targeting ?? "free"]}</li>}
         {s.arsenal && (
           <li>
             Couler un navire rapporte une arme, dans l'ordre radar, torpille, barrage (trois en réserve au plus). Le <strong>radar</strong>{" "}
-            révèle une zone de 3×3 sans tirer, la <strong>torpille</strong> file sur une ligne ou une colonne jusqu'au premier navire, le{" "}
-            <strong>barrage</strong> tire cinq obus en croix. Une arme remplace ton tir et finit ton tour.
+            révèle une zone de 3×3 sans tirer, la <strong>torpille</strong> part du bord gauche (en ligne) ou du haut (en colonne) et frappe
+            le premier navire sur son chemin, le <strong>barrage</strong> tire cinq obus en croix. Une arme remplace ton tir et finit ton
+            tour.
           </li>
         )}
         {s.turnSeconds > 0 && <li>Tu as {time} pour chaque tir ; sinon, il part au hasard.</li>}

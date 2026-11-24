@@ -38,9 +38,15 @@ interface Props {
 
 const WEAPONS: Record<Weapon, { name: string; help: string }> = {
   radar: { name: "Radar", help: "Révèle ce qui se cache sous une zone de 3×3, sans tirer." },
-  torpedo: { name: "Torpille", help: "File sur une ligne ou une colonne et frappe le premier navire." },
+  torpedo: {
+    name: "Torpille",
+    help: "Part du bord gauche (en ligne) ou du haut (en colonne) et frappe le premier navire sur son chemin ; l'eau traversée se dévoile.",
+  },
   barrage: { name: "Barrage", help: "Cinq obus en croix d'un coup." },
 };
+
+/** Une vraie souris, qui survole : sinon (doigt, stylet) l'aperçu d'une arme demande un premier appui */
+const fineHover = () => window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 /** Cases touchées par une arme visée sur une case. */
 function weaponArea(weapon: Weapon, cell: number, size: number, dir: Dir): number[] {
@@ -335,7 +341,19 @@ function Battle({
 
   function fireAt(cell: number) {
     if (!canFire || !targetBoard || !target) return;
+    // Au doigt, pas de survol : un premier appui montre la zone de l'arme, un second sur la même case la lance
+    if (weapon && !fineHover() && armed !== cell) {
+      setArmed(cell);
+      play("click", { volume: 0.4 });
+      return;
+    }
+    setArmed(null);
     if (weapon) {
+      // Barrage ou torpille sur des cases toutes déjà visées : le serveur refuserait, on le dit tout de suite
+      if (weapon !== "radar" && weaponArea(weapon, cell, size, dir).every((c) => shotOn(targetBoard).has(c))) {
+        play("buzzer", { volume: 0.2 });
+        return;
+      }
       send({ t: "action", action: { type: "weapon", weapon, target: target.id, cell, dir } });
       setWeapon(null);
     } else {
@@ -348,7 +366,22 @@ function Battle({
     setSentFor(g.turnId);
   }
 
-  const preview = weapon && hover !== null && canFire ? { cells: weaponArea(weapon, hover, size, dir), ok: true } : null;
+  // Un tir refusé par le serveur (case déjà visée entre-temps, arme hors d'usage…) ne laisse pas le tour sans main :
+  // sans réponse qui change le tour, on peut retirer au bout de quelques secondes
+  useEffect(() => {
+    if (sentFor < 0 || sentFor !== g.turnId) return;
+    const t = setTimeout(() => setSentFor(-1), 2500);
+    return () => clearTimeout(t);
+  }, [sentFor, g.turnId]);
+
+  // La case visée par une arme au doigt, en attente du second appui (on l'oublie si l'arme ou le tour change)
+  const [armed, setArmed] = useState<number | null>(null);
+  useEffect(() => setArmed(null), [weapon, dir, g.turnId]);
+  const aimAt = hover ?? armed;
+  // En salve, une arme finit le tour : les tirs qui restaient sont perdus, autant le savoir avant
+  const weaponHelp = (k: Weapon) =>
+    g.settings.shots === "salvo" && g.shotsLeft > 1 ? `${WEAPONS[k].help} Elle finit ta salve.` : WEAPONS[k].help;
+  const preview = weapon && aimAt !== null && canFire ? { cells: weaponArea(weapon, aimAt, size, dir), ok: true } : null;
 
   // Ce qu'on lit au-dessus des plateaux
   let status: string;
@@ -374,6 +407,7 @@ function Battle({
         ? `À toi de tirer sur ${only}, la plus grosse flotte${shots} !`
         : `À toi de tirer${shots} : vise une des plus grosses flottes.`;
     else status = `À toi de tirer${shots} : choisis ta cible.`;
+    if (weapon && armed !== null) status = `${WEAPONS[weapon].name} : touche de nouveau la case pour la lancer.`;
   } else if (meP?.out)
     status =
       mate && !mate.out
@@ -408,12 +442,13 @@ function Battle({
 
   const statusBar = (
     <div className={`naval-status ${myTurn ? "is-turn" : ""} ${!myTurn && g.aim === me && me !== null ? "is-aimed" : ""}`}>
-      {myTurn && room.turnDeadline && (
+      {/* Le temps du tireur : à son tour, et pour les autres celui de qui tire */}
+      {g.phase === "battle" && room.turnDeadline && (
         <span className="naval-timer">
           <TimerRing size={30} deadline={room.turnDeadline} total={g.settings.turnSeconds} offset={serverOffset} />
         </span>
       )}
-      <span className="naval-status-text">{compact && weapon && showRadar ? WEAPONS[weapon].help : status}</span>
+      <span className="naval-status-text">{compact && weapon && showRadar && armed === null ? weaponHelp(weapon) : status}</span>
       {g.phase === "placement" && placementLeft !== null && <span className="placement-clock num">{formatClock(placementLeft)}</span>}
       {/* La bataille finie, il n'y a plus de barre à reprendre */}
       {mySeat?.autoplay && g.phase !== "gameOver" && (
@@ -472,6 +507,12 @@ function Battle({
                 {s && <AwayNote seat={s} serverOffset={serverOffset} compact />}
                 <FleetPips total={FLEETS[size].length} afloat={b.afloat} />
               </span>
+              {g.settings.arsenal && p.arsenalCount > 0 && !p.out && (
+                <span className="naval-target-arms" title={`${p.arsenalCount} arme${p.arsenalCount > 1 ? "s" : ""} en réserve`}>
+                  <Icon name="zap" size={12} />
+                  {p.arsenalCount}
+                </span>
+              )}
             </button>
           );
         })}
@@ -525,7 +566,7 @@ function Battle({
                   className={`weapon-btn ${weapon === k ? "is-active" : ""}`}
                   disabled={!canFire}
                   onClick={() => setWeapon(weapon === k ? null : k)}
-                  title={WEAPONS[k].help}
+                  title={weaponHelp(k)}
                 >
                   <WeaponIcon weapon={k} />
                   <span>{WEAPONS[k].name}</span>
@@ -545,7 +586,7 @@ function Battle({
                 <span>{dir === "h" ? "Ligne" : "Colonne"}</span>
               </button>
             )}
-            {weapon && !compact && <p className="hint weapon-help">{WEAPONS[weapon].help}</p>}
+            {weapon && !compact && <p className="hint weapon-help">{weaponHelp(weapon)}</p>}
           </>
         ))}
     </div>

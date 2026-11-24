@@ -447,7 +447,9 @@ function Fx({ item, n }: { item: FxItem; n: number }) {
       const from = path[0]!;
       const fx0 = cellX(n, from) * CELL + CELL / 2;
       const fy0 = cellY(n, from) * CELL + CELL / 2;
-      const horizontal = cellY(n, from) === cellY(n, item.cell);
+      // Le sens se lit sur le trajet ; une torpille qui touche dès sa première case part du bord où elle se trouve
+      const second = path[1];
+      const horizontal = second !== undefined ? cellY(n, from) === cellY(n, second) : !(cellY(n, from) === 0 && cellX(n, from) !== 0);
       const x0 = horizontal ? -2 : fx0;
       const y0 = horizontal ? fy0 : -2;
       return <line className="fx-torpedo" x1={x0} y1={y0} x2={x} y2={y} style={style} pathLength={1} />;

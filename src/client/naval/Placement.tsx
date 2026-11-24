@@ -88,12 +88,14 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
 
   function onPointer({ type, cell, event }: BoardPointer) {
     if (type === "down") {
+      // On attrape un navire par son dessin, ou par n'importe laquelle de ses cases (au doigt, la coque est fine)
       const hit = (event.target as Element).closest("[data-ship]");
-      if (!hit || cell === null) {
+      let index = hit ? Number(hit.getAttribute("data-ship")) : -1;
+      if (index < 0 && cell !== null) index = fleet.findIndex((p) => shipCells(size, p)?.includes(cell) ?? false);
+      if (index < 0 || cell === null) {
         setSelected(null);
         return;
       }
-      const index = Number(hit.getAttribute("data-ship"));
       setSelected(index);
       drag.current = { index, start: cell, origin: fleet[index]!, moved: false };
       return;
@@ -121,6 +123,22 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
       setGhost(null);
     }
   }
+
+  // Chaque flotte rangée part au serveur : si le chrono du placement tombe avant « Prêt au combat », c'est elle qui
+  // combat (et le coéquipier la voit), pas celle tirée au hasard au début
+  const sent = useRef(JSON.stringify(fleet));
+  useEffect(() => {
+    const text = JSON.stringify(fleet);
+    if (text === sent.current || !valid(fleet)) return;
+    const t = setTimeout(() => {
+      // « Prêt au combat » est parti entre-temps avec cette même flotte
+      if (sent.current === text) return;
+      sent.current = text;
+      send({ t: "action", action: { type: "place", ships: fleet } });
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fleet]);
 
   // Raccourci clavier : R pour tourner le navire choisi
   useEffect(() => {
@@ -195,7 +213,10 @@ export function PlacementBoard({ room, g, me, send, serverOffset, w, h, phone, s
       <button
         className="btn btn-primary"
         disabled={!valid(fleet)}
-        onClick={() => send({ t: "action", action: { type: "ready", ships: fleet } })}
+        onClick={() => {
+          sent.current = JSON.stringify(fleet);
+          send({ t: "action", action: { type: "ready", ships: fleet } });
+        }}
       >
         Prêt au combat
       </button>
