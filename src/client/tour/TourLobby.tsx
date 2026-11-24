@@ -25,6 +25,7 @@ import {
   type TourView,
 } from "../../shared/tour.ts";
 import { Check, Options } from "../components/ui.tsx";
+import { useSession } from "../stores/session.ts";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
 import { TeamsPanel } from "../game/TeamsPanel.tsx";
 import { TeamRules } from "../capitale/TeamRules.tsx";
@@ -98,6 +99,10 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
   const room = lobbyRoomOf(view);
   const isHost = view.you.isHost;
   const s = view.settings;
+  // Les jeux qu'on peut mettre au programme : ceux ouverts à ce compte (un jeu en bêta, seulement pour l'administrateur
+  // du site), plus ceux déjà cochés par un autre hôte
+  const mine = useSession((st) => st.games);
+  const pickable = TOUR_GAMES.filter((g) => mine.includes(g) || s.games.includes(g));
   const present = room.seats.filter((x) => x.connected);
   const count = present.length;
   const humans = present.filter((x) => x.kind === "human").length;
@@ -201,7 +206,7 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
           <div className="field">
             <span className="field-label">Au programme</span>
             <div className="tour-games">
-              {TOUR_GAMES.map((game) => {
+              {pickable.map((game) => {
                 const on = s.games.includes(game);
                 const room4 = fitsGame(game, Math.max(2, count));
                 return (
@@ -222,7 +227,8 @@ export function TourLobby({ view, send, unread, onOpenChat, onLeave }: Props) {
                           : `${GAME_SEATS[game].max} joueurs au plus : il sera passé`}
                       </span>
                     </span>
-                    <Check label={GAME_NAMES[game]} checked={on} disabled={!isHost} onChange={() => {}} />
+                    {/* La case, pour l'œil seulement : le bouton entier est la commande (un bouton dans un bouton n'est pas permis) */}
+                    <span className="check" aria-hidden="true" aria-checked={on} />
                   </button>
                 );
               })}
