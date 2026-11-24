@@ -10,8 +10,13 @@ interface AdminUserRow extends UserRow {
   points: number | null;
 }
 
-const USER_SELECT = `SELECT u.*, s.played, s.won, s.points
-  FROM users u LEFT JOIN user_stats s ON s.user_id = u.id AND s.game = 'uno'`;
+// Ses parties, victoires et points de tous les jeux (la fiche ne comptait que le UNO) ; la tournée a sa propre ligne, qui
+// recompterait des parties déjà comptées jeu par jeu
+const USER_SELECT = `SELECT u.*,
+    (SELECT SUM(played) FROM user_stats WHERE user_id = u.id AND game <> 'tour') AS played,
+    (SELECT SUM(won) FROM user_stats WHERE user_id = u.id AND game <> 'tour') AS won,
+    (SELECT SUM(points) FROM user_stats WHERE user_id = u.id AND game <> 'tour') AS points
+  FROM users u`;
 
 function toAdminUser(r: AdminUserRow, online: Set<string>): AdminUser {
   return {

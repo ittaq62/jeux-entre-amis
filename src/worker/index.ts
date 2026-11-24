@@ -694,6 +694,9 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
 app.delete("/admin/users/:id", withSession, withAdmin, async (c) => {
   const id = param(c, "id");
   if (id === c.get("user").id) return c.json({ error: "Pour supprimer ton propre compte, passe par la page Mon compte." }, 400);
+  // Comme pour la suspension : un autre administrateur perd d'abord son rôle, on ne le supprime pas d'un geste
+  const target = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
+  if (target && isAdmin(target)) return c.json({ error: "Retire-lui d'abord le rôle d'admin." }, 400);
   await cutOff(c, id, "Ce compte a été supprimé par l'administrateur du site.");
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM friendships WHERE user_a = ?1 OR user_b = ?1").bind(id),
