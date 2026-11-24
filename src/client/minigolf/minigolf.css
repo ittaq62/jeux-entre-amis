@@ -828,6 +828,16 @@
   .mg-turn-pre {
     display: none;
   }
+  /* Tous en même temps, l'horloge du trou descend aussi sous la barre (le nom du trou y gardait trois mots) ; centrée
+     sans translate, que son battement des dernières secondes (scale) ne la décale pas */
+  .mg-clock {
+    position: absolute;
+    top: 54px;
+    left: 0;
+    right: 0;
+    width: fit-content;
+    margin: 0 auto;
+  }
   .mg-gauge {
     right: calc(10px + var(--safe-right, 0px));
   }
