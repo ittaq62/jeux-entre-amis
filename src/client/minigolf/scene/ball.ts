@@ -320,6 +320,11 @@ export class BallModel {
     if (this.tag) this.tag.material.opacity = 1 - 0.65 * k;
   }
 
+  /** Qui regarde la partie (sans balle à lui) : celle que suit la caméra se voit pleine, les autres un peu transparentes */
+  followed(on: boolean) {
+    if (!this.mine) this.mat.opacity = on ? 1 : 0.62;
+  }
+
   /** Cachée (dans le trou, perdue) ou visible */
   show(on: boolean) {
     this.group.visible = on;

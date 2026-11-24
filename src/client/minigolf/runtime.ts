@@ -558,6 +558,7 @@ export class GolfRuntime {
   private placeBalls(tick: number) {
     const v = this.view!;
     const myAt = this.o.me ? this.ballPos(this.o.me) : null;
+    const followed = this.o.me ? null : this.focusId();
     for (const p of v.players) {
       const model = this.scene.ball(
         p.id,
@@ -596,7 +597,7 @@ export class GolfRuntime {
       if (myAt && p.id !== this.o.me) {
         const d = Math.hypot(pos.x - myAt.x, pos.y - myAt.y, pos.z - myAt.z);
         model.over(clamp((BALL_R * 4 - d) / (BALL_R * 2), 0, 1));
-      }
+      } else if (!this.o.me) model.followed(p.id === followed);
     }
     // La visée : la sienne quand il peut jouer (l'anneau l'invite à attraper sa balle) ; chacun son tour, celle de
     // celui qui joue
