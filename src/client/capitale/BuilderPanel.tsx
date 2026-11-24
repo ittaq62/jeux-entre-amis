@@ -147,7 +147,13 @@ export function BuilderPanel({ g, square, me, phone, act, cells, onPreview, onSw
 
   // L'aperçu sur la carte
   useEffect(() => {
-    const out: BuilderPreview = { cells: [], ghost: null, selected: null };
+    // Le quadrillage de la ville (et de ce qu'on peut annexer) : la carte au repos n'en a pas
+    const out: BuilderPreview = {
+      cells: [],
+      ghost: null,
+      selected: null,
+      grid: [...area, ...(tool.kind === "annex" ? annexable(s, square) : [])],
+    };
     if (plan && plan.x !== null && plan.z !== null) {
       const rect = footprint({ kind: plan.kind, x: plan.x, z: plan.z, rot: plan.rot });
       const ignore = tool.kind === "move" ? tool.id : null;

@@ -445,13 +445,16 @@ function drawGround(): HTMLCanvasElement {
   CELLS.forEach((cell, c) => {
     const x = cellX(c) * k;
     const y = cellZ(c) * k;
-    if (isWater(c)) ctx.fillStyle = mix(WATER, "#4f97c6", noise(c, 3) * 0.5);
+    if (isWater(c)) ctx.fillStyle = WATER;
     else if (cell.kind === "avenue") ctx.fillStyle = ASPHALT;
     else if (cell.kind === "city") ctx.fillStyle = mix(GROUPS[cell.group!].color, PAVING, 0.7);
     else if (cell.kind === "reserve") ctx.fillStyle = mix(GROUPS[cell.group!].color, PAVING, 0.86);
     else if (cell.kind === "lot") ctx.fillStyle = cell.square < 0 ? PAVING : "#d9d0bc";
-    else ctx.fillStyle = mix(GRASS, "#77a050", noise(c, 2));
-    ctx.fillRect(x, y, k + 0.5, k + 0.5);
+    else ctx.fillStyle = GRASS;
+    // Sur des pixels entiers, bord à bord : pas de couture claire entre deux cases de même couleur
+    const x0 = Math.round(x);
+    const y0 = Math.round(y);
+    ctx.fillRect(x0, y0, Math.round(x + k) - x0, Math.round(y + k) - y0);
     if (cell.kind === "park") {
       // Les squares : de l'herbe plus ou moins drue, et des fleurs çà et là
       for (let n = 0; n < 3; n++) {
@@ -469,21 +472,71 @@ function drawGround(): HTMLCanvasElement {
       }
     }
   });
-  // Le fleuve : des reflets, et les quais de pierre là où il touche la terre
+  // L'herbe (les squares et les bords) et l'eau : des taches douces posées n'importe où, pas case par case, pour que la
+  // carte se lise comme un plan et non comme un damier
+  const green = CELLS.flatMap((cell, c) => (cell.kind === "park" ? [c] : []));
+  const water = CELLS.flatMap((_, c) => (isWater(c) ? [c] : []));
+  /** Des taches rondes et floues, d'une teinte (« r, g, b ») et d'une opacité au centre, transparentes au bord */
+  const blobs = (cells: number[], salt: number, count: number, colors: [string, number][], size: [number, number]) => {
+    ctx.save();
+    cellsPath(ctx, cells, k);
+    ctx.clip();
+    for (let n = 0; n < count; n++) {
+      const home = cells[Math.floor(noise(n, salt) * cells.length)]!;
+      const x = (cellX(home) + noise(n, salt + 1) * 1.6 - 0.3) * k;
+      const y = (cellZ(home) + noise(n, salt + 2) * 1.6 - 0.3) * k;
+      const r = (size[0] + noise(n, salt + 3) * (size[1] - size[0])) * k;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const [rgb, alpha] = colors[n % colors.length]!;
+      g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
+      g.addColorStop(1, `rgba(${rgb}, 0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    ctx.restore();
+  };
+  blobs(
+    green,
+    7,
+    green.length * 2,
+    [
+      ["96, 140, 62", 0.35],
+      ["170, 200, 112", 0.3],
+      ["110, 150, 70", 0.25],
+    ],
+    [0.7, 1.8],
+  );
+  blobs(
+    water,
+    13,
+    water.length,
+    [
+      ["95, 160, 205", 0.35],
+      ["40, 105, 160", 0.3],
+    ],
+    [0.8, 2.2],
+  );
+  // Le fleuve : des reflets épars, et les quais de pierre là où il touche la terre
+  ctx.save();
+  cellsPath(ctx, water, k);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.lineWidth = k * 0.035;
+  for (let n = 0; n < water.length * 1.4; n++) {
+    const home = water[Math.floor(noise(n, 50) * water.length)]!;
+    const px = (cellX(home) + noise(n, 51)) * k;
+    const py = (cellZ(home) + noise(n, 52)) * k;
+    const len = k * (0.2 + noise(n, 53) * 0.3);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.quadraticCurveTo(px + len / 2, py - k * 0.05, px + len, py);
+    ctx.stroke();
+  }
+  ctx.restore();
   CELLS.forEach((_, c) => {
     if (!isWater(c)) return;
     const cx = cellX(c);
     const cz = cellZ(c);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
-    ctx.lineWidth = k * 0.035;
-    for (let n = 0; n < 2; n++) {
-      const px = cx * k + noise(c, 50 + n) * k * 0.6;
-      const py = cz * k + (0.25 + noise(c, 60 + n) * 0.5) * k;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.quadraticCurveTo(px + k * 0.15, py - k * 0.05, px + k * 0.32, py);
-      ctx.stroke();
-    }
     for (const s of SIDES) {
       const n = cellOf(cx + s.dx, cz + s.dz);
       if (n < 0 || isWater(n)) continue;
@@ -554,13 +607,7 @@ function drawGround(): HTMLCanvasElement {
     ctx.stroke();
     ctx.restore();
   }
-  // Le quadrillage, sur ce qui se bâtit ou s'annexe : on voit les cases
-  ctx.lineWidth = Math.max(1, k * 0.03);
-  CELLS.forEach((cell, c) => {
-    if (cell.kind !== "city" && cell.kind !== "reserve") return;
-    ctx.strokeStyle = cell.kind === "city" ? "rgba(70, 55, 35, 0.2)" : "rgba(70, 55, 35, 0.12)";
-    ctx.strokeRect(cellX(c) * k + 0.5, cellZ(c) * k + 0.5, k - 1, k - 1);
-  });
+  // Pas de quadrillage sur la carte au repos : il apparaît sur sa ville quand on y bâtit (l'aperçu, plus bas)
   // Les limites des parcelles : un trait blanc entre deux villes, un trait fin de couleur au bord de la réserve
   CELLS.forEach((cell, c) => {
     if (cell.kind !== "city") return;
@@ -683,6 +730,8 @@ export interface BuilderPreview {
   ghost: (Placed & { square: number; ok: boolean; color: string }) | null;
   /** Le bâtiment choisi (pour le déplacer, le tourner, le démolir) : un cadre autour */
   selected: Rect | null;
+  /** Les cases où l'on bâtit (la ville, et ce qu'on peut annexer) : leur quadrillage, absent de la carte au repos */
+  grid?: number[];
 }
 
 interface CityObj {
@@ -732,6 +781,8 @@ export class BuilderCity {
   private overlay: THREE.Mesh | null = null;
   private ghost: { key: string; obj: THREE.Group } | null = null;
   private selectFrame: THREE.Mesh | null = null;
+  /** Le quadrillage de la ville où l'on bâtit (la carte au repos n'en a pas) */
+  private gridLines: THREE.LineSegments | null = null;
   private ghostMats = new Map<string, THREE.Material>();
   private stationFlags = new Map<number, { key: string; obj: THREE.Object3D | null; fence: THREE.Object3D | null }>();
 
@@ -1301,6 +1352,38 @@ export class BuilderCity {
       this.selectFrame.geometry.dispose();
       (this.selectFrame.material as THREE.Material).dispose();
       this.selectFrame = null;
+    }
+    if (this.gridLines) {
+      this.root.remove(this.gridLines);
+      this.gridLines.geometry.dispose();
+      (this.gridLines.material as THREE.Material).dispose();
+      this.gridLines = null;
+    }
+    if (p?.grid && p.grid.length > 0) {
+      // Chaque côté de case une seule fois, juste au-dessus du sol
+      const seen = new Set<string>();
+      const pts: number[] = [];
+      const y = 0.0105;
+      const at = (x: number, z: number) => [x * CELL - CITY_HALF, y, z * CELL - CITY_HALF];
+      for (const c of p.grid) {
+        const x = cellX(c);
+        const z = cellZ(c);
+        for (const s of SIDES) {
+          const [x0, z0, x1, z1] = s.edge(x, z);
+          const key = `${x0},${z0},${x1},${z1}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          pts.push(...at(x0, z0), ...at(x1, z1));
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+      this.gridLines = new THREE.LineSegments(
+        geo,
+        new THREE.LineBasicMaterial({ color: "#46371f", transparent: true, opacity: 0.32, depthWrite: false }),
+      );
+      this.gridLines.renderOrder = 2;
+      this.root.add(this.gridLines);
     }
     if (p && p.cells.length > 0) {
       const geos: THREE.BufferGeometry[] = [];
