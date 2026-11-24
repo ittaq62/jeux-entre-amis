@@ -58,6 +58,7 @@ import {
 } from "./reports.ts";
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
+import { refuseSocket } from "./arrival.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
 export { GameRoom } from "./room.ts";
@@ -527,10 +528,18 @@ function upgradeTo(c: Ctx, stub: { fetch: (req: Request) => Promise<Response> })
   return stub.fetch(new Request(c.req.url, { headers }));
 }
 
+/** Ce qu'on dit à celui dont la table a disparu (vidée, fermée, effacée) pendant qu'il n'était pas là */
+const GONE_TABLE = "Cette table n'existe plus : elle s'est vidée ou a été fermée.";
+
 app.get("/rooms/:code/ws", withSession, withProfile, async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
-  return upgradeTo(c, await roomStub(c, code));
+  const res = await upgradeTo(c, await roomStub(c, code));
+  // La salle refuse (table disparue, compte exclu) : une simple erreur HTTP, le navigateur la prendrait pour une coupure
+  // et retenterait sans fin (« on se reconnecte… ») ; on la dit par la connexion même, qu'il ne cherche pas à rattraper
+  if (res.status === 404) return refuseSocket(GONE_TABLE);
+  if (res.status === 403 && !res.headers.get("Content-Type")?.includes("json")) return refuseSocket((await res.text()) || GONE_TABLE);
+  return res;
 });
 
 app.get("/hub/ws", withSession, withProfile, async (c) => upgradeTo(c, hub(c)));
