@@ -812,6 +812,11 @@
     display: none;
   }
 
+  /* En paysage au téléphone : juste au-dessus de la pastille du tour, pour laisser voir la table */
+  .bl-fine {
+    bottom: calc(62px + var(--safe-bottom, 0px));
+  }
+
   .bl-power {
     height: 64vh;
   }
