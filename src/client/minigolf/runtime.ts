@@ -324,14 +324,16 @@ export class GolfRuntime {
     const v = this.view!;
     if (v.cfg.turns) return this.activeId() ?? this.focus ?? v.players[v.order?.[0] ?? 0]?.id ?? null;
     if (this.o.me) return this.o.me;
-    // Il regarde une partie où tout le monde joue en même temps : la dernière balle partie
-    if (!this.isRolling(this.focus))
-      for (const p of v.players)
-        if (this.isRolling(p.id)) {
-          this.focus = p.id;
-          this.focusAt = performance.now();
-          break;
-        }
+    // Il regarde une partie où tout le monde joue en même temps : la dernière balle partie ; une fois celle-ci dans le
+    // trou et plus rien qui roule, un joueur qui n'a pas fini (la caméra restait sur le trou, les autres jouaient)
+    if (!this.isRolling(this.focus)) {
+      const focused = v.players.find((p) => p.id === this.focus);
+      const next = v.players.find((p) => this.isRolling(p.id)) ?? (focused && !focused.done ? null : v.players.find((p) => !p.done));
+      if (next && next.id !== this.focus) {
+        this.focus = next.id;
+        this.focusAt = performance.now();
+      }
+    }
     return this.focus ?? v.players[0]?.id ?? null;
   }
 
