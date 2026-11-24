@@ -921,8 +921,25 @@ export class GameRoom extends DurableObject<Env> {
       d.settings.uno,
       randomSeed(),
     );
-    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu
-    state.teams = d.tour?.teams ?? tableTeams;
+    // En équipes : la partie s'arrête quand il ne reste qu'une équipe en jeu. En tournée, les équipes ne tiennent que
+    // si les présents en font au moins deux de même taille : un absent au départ ferait jouer 1 contre 2 (ou finir
+    // aussitôt, une seule équipe en jeu). Sinon, cette table se joue chacun pour soi.
+    let tourTeams = d.tour?.teams ?? null;
+    if (tourTeams) {
+      const sizes = new Map<number, number>();
+      for (const s of d.seats) {
+        const t = tourTeams[s.id];
+        if (t !== undefined) sizes.set(t, (sizes.get(t) ?? 0) + 1);
+      }
+      const counts = [...sizes.values()];
+      const fair = counts.length >= 2 && counts.every((n) => n === counts[0]) && d.seats.every((s) => tourTeams![s.id] !== undefined);
+      if (!fair) {
+        tourTeams = null;
+        for (const s of d.seats) delete s.team;
+        this.systemChat("Il manque du monde pour jouer en équipes : cette table se joue chacun pour soi.");
+      }
+    }
+    state.teams = tourTeams ?? tableTeams;
     state.teamWin = tableTeams !== null;
     d.uno = state;
     d.status = "playing";
