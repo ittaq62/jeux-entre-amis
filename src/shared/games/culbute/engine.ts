@@ -2397,7 +2397,9 @@ function checkBlast(f: Fight) {
     const top = ft.y > b.top && ft.state === "hurt";
     const side = ft.x < b.left ? "left" : ft.x > b.right ? "right" : ft.y < b.bottom ? "bottom" : top ? "top" : null;
     if (!side) continue;
-    const credited = ft.lastBy >= 0 && ft.lastBy !== ft.slot && f.frame - ft.lastAt <= CREDIT_FRAMES ? ft.lastBy : -1;
+    // (sortir un coéquipier, avec le tir ami, ne compte pas : ni point, ni sortie, ni succès)
+    const ally = f.settings.teams && ft.lastBy >= 0 && f.fighters[ft.lastBy]?.team === ft.team;
+    const credited = ft.lastBy >= 0 && ft.lastBy !== ft.slot && !ally && f.frame - ft.lastAt <= CREDIT_FRAMES ? ft.lastBy : -1;
     pending.push({ k: "ko", v: ft.slot, by: credited, x: clamp(ft.x, b.left, b.right), y: clamp(ft.y, b.bottom, b.top), side });
     ft.stats.falls++;
     if (credited >= 0) {

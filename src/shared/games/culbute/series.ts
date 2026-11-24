@@ -72,7 +72,8 @@ export function recordStatsOf(f: Fight, ft: Fighter): CulbuteRecordStats {
     dealt: Math.round(ft.stats.dealt),
     taken: Math.round(ft.stats.taken),
     items: ft.stats.items,
-    lowKo: ft.stats.lowKo >= 999 ? 0 : Math.round(ft.stats.lowKo),
+    // (vers le bas, et au moins 1 : 0 veut dire « personne de sorti » ; une sortie à 49,6 % compte bien sous 50 %)
+    lowKo: ft.stats.lowKo >= 999 ? 0 : Math.max(1, Math.floor(ft.stats.lowKo)),
     stocksLeft: f.settings.mode === "temps" ? 0 : Math.max(0, ft.stocks),
     lostStock: ft.stats.falls > 0 ? 1 : 0,
     won: ft.rank === 1 ? 1 : 0,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ARENA_IDS } from "./arenas.ts";
 import { createFight, DEFAULT_FIGHT_SETTINGS } from "./engine.ts";
 import type { Fight } from "./model.ts";
-import { addRound, newSeries, roundPoints, seriesArena, seriesRanks } from "./series.ts";
+import { addRound, newSeries, recordStatsOf, roundPoints, seriesArena, seriesRanks } from "./series.ts";
 
 const seat = (id: string, team = 0) => ({ id, name: id.toUpperCase(), userId: id, bot: false, team });
 
@@ -91,5 +91,25 @@ describe("Culbute en tournée : plusieurs combats d'affilée", () => {
     expect(seriesArena({ arena: "bal" }, t, Math.random)).toBe("bal");
     expect(roundPoints(1)).toBe(10);
     expect(roundPoints(9)).toBe(1);
+  });
+});
+
+describe("Culbute : les statistiques d'un combat", () => {
+  it("la sortie la plus précoce : arrondie vers le bas, au moins 1 (0 veut dire personne de sorti)", () => {
+    const f = createFight(
+      { ...DEFAULT_FIGHT_SETTINGS },
+      "place",
+      [
+        { id: "a", team: 0, style: "ginette" },
+        { id: "b", team: 1, style: "marcel" },
+      ],
+      1,
+    );
+    const ft = f.fighters[0]!;
+    expect(recordStatsOf(f, ft).lowKo).toBe(0);
+    ft.stats.lowKo = 49.6;
+    expect(recordStatsOf(f, ft).lowKo).toBe(49);
+    ft.stats.lowKo = 0.3;
+    expect(recordStatsOf(f, ft).lowKo).toBe(1);
   });
 });

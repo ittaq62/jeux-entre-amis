@@ -442,6 +442,29 @@ describe("Culbute : le combat", () => {
     expect(whiff()).toBe(lags[0]);
   });
 
+  it("en équipes avec le tir ami, sortir un coéquipier ne compte pas comme une sortie (ni pour les succès)", () => {
+    const f = createFight(
+      { ...DEFAULT_FIGHT_SETTINGS, items: "aucun", teams: true, friendlyFire: true },
+      "place",
+      entrants(["ginette", "marcel", "simone"]),
+      42,
+    );
+    skipIntro(f);
+    const [a, foe, mate] = f.fighters;
+    expect(mate!.team).toBe(a!.team);
+    // Le coéquipier, frappé en dernier par A, sort ; puis l'adversaire, lui aussi frappé par A
+    for (const v of [mate!, foe!]) {
+      v.lastBy = a!.slot;
+      v.lastAt = f.frame;
+      v.x = -30;
+      v.y = 1;
+      v.ground = -1;
+      const ko = run(f, 1).find((e) => e.k === "ko" && e.v === v.slot);
+      expect(ko?.k === "ko" ? ko.by : null).toBe(v === mate ? -1 : a!.slot);
+    }
+    expect(a!.stats.kos).toBe(1);
+  });
+
   it("la vie de l'arène : la charrette renverse celui qui reste sur le plancher, pas celui qui est sur un banc", () => {
     const f = duel();
     skipIntro(f);
