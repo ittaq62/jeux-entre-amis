@@ -506,7 +506,14 @@ export function MecheTable({
   /** Envoie le mot écrit, s'il y en a un et que c'est à soi : tel qu'il est dans le champ, dernière lettre comprise, même tapée à l'instant */
   function sendTyped() {
     const word = input.current?.value || text;
-    if (mine && normalizeWord(word)) send({ t: "word", word, turn: g.turn });
+    if (!mine || !normalizeWord(word)) return;
+    // La frappe encore en attente partirait après le mot : refusé, il réapparaîtrait chez les autres comme en cours
+    const typed = lastTyped.current;
+    if (typed.timer) {
+      clearTimeout(typed.timer);
+      typed.timer = 0;
+    }
+    send({ t: "word", word, turn: g.turn });
   }
 
   function submit(e: FormEvent) {
@@ -669,7 +676,7 @@ export function MecheTable({
                       turn={g.turn}
                       rejected={rejected}
                       medal={medal}
-                      hint={phone && canType && !focused ? "Touche la table pour écrire" : tip}
+                      hint={phone && canType && mine && !focused ? "Touche la table pour écrire" : tip}
                       call={phone && canType && !focused}
                       sendHint={phone}
                     />

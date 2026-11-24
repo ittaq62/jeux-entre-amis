@@ -37,7 +37,7 @@ const MODES: { value: FuseChoice; label: string; short: string; rule: string }[]
   },
   {
     value: "chacun",
-    label: "Chacun la sienne",
+    label: "Chacun sa mèche",
     short: "Chacun sa mèche",
     rule: "Chacun a sa propre mèche, qui ne brûle que pendant son tour : le premier qui arrive au bout perd une allumette, puis tout le monde repart avec une mèche neuve.",
   },
@@ -288,7 +288,9 @@ function MecheHelp({ passes }: { passes: boolean }) {
           </li>
         )}
       </ul>
-      <p className="hint">Les accents ne comptent pas.</p>
+      <p className="hint">
+        Les accents ne comptent pas. Une allumette perdue ne se regagne pas : chaque mèche qui saute te rapproche de la sortie.
+      </p>
       <p className="hint meche-credit">
         Dictionnaire tiré du lexique{" "}
         <a href="https://grammalecte.net" target="_blank" rel="noreferrer">
