@@ -76,9 +76,28 @@ export function CueSwatch({ style, width = 160 }: { style: string; width?: numbe
   return <img className="bl-cue-swatch" src={url} width={width} height={Math.round((width * 24) / 512)} alt="" aria-hidden="true" />;
 }
 
+const ballUrls = new Map<string, string>();
+/**
+ * L'image d'une bille pour une vignette : réduite à la taille où on la montre (2,6 fois, pour les écrans fins) et
+ * encodée une seule fois ; la texture du jeu fait 512 × 256, l'encoder à chaque vignette coûtait cher à la boutique
+ */
+function ballImage(id: number, set: string, carom: boolean, size: number): string {
+  const h = Math.max(32, Math.min(128, Math.ceil(size * 2.6)));
+  const key = `${id}|${set}|${carom ? 1 : 0}|${h}`;
+  const hit = ballUrls.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = h * 2;
+  c.height = h;
+  c.getContext("2d")!.drawImage(ballCanvas(id, set, carom), 0, 0, c.width, c.height);
+  const url = c.toDataURL();
+  ballUrls.set(key, url);
+  return url;
+}
+
 /** Une bille dessinée (son image posée sur un disque ombré et verni) */
 export function BallDot({ id, set, size = 22, carom = false }: { id: number; set: string; size?: number; carom?: boolean }) {
-  const url = useMemo(() => ballCanvas(id, set, carom).toDataURL(), [id, set, carom]);
+  const url = useMemo(() => ballImage(id, set, carom, size), [id, set, carom, size]);
   return (
     <span
       className="bl-ball-dot"
