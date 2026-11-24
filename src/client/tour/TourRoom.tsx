@@ -76,6 +76,7 @@ export function TourRoom({ code }: { code: string }) {
       onContinue,
       progress: progressLabel(view, Date.now() + serverOffset),
       rules: lines.length > 0 ? lines : null,
+      teams: Boolean(view.settings.teams),
     };
   }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue]);
 

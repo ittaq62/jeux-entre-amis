@@ -63,8 +63,9 @@ export function TablePick({
   const meReady = ready.includes(room.you.userId);
   // Les règles de la partie, une par ligne : le format, puis chaque règle à part tirée ou votée
   const [rules, ...extras] = (bridge ? bridge.rules : drawnLines(game, drawn)) ?? [];
-  // Les équipes : celles que donne le jeu, ou celles de la tournée quand les places en ont
-  const names = teamName === null ? null : (teamName ?? (bridge && room.seats.some((s) => teamOf(s) !== undefined) ? tableTeamName : null));
+  // Les équipes : celles que donne le jeu, ou celles de la tournée quand elle se joue en équipes et que les places en ont
+  const names =
+    teamName === null ? null : (teamName ?? (bridge?.teams && room.seats.some((s) => teamOf(s) !== undefined) ? tableTeamName : null));
   const teams = names
     ? [...new Set(room.seats.map((s) => teamOf(s)).filter((t): t is number => t !== undefined))].sort((a, b) => a - b)
     : [];

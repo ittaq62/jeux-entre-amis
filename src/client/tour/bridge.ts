@@ -27,6 +27,11 @@ export interface TourBridge {
    */
   progress: string;
   rules: RuleLine[] | null;
+  /**
+   * La tournée se joue en équipes. Sans elles, l'annonce ne montre pas d'équipes, même quand le jeu range chaque place
+   * d'un côté (la bataille navale et les briques le font aussi chacun pour soi)
+   */
+  teams: boolean;
 }
 
 export const TourBridgeContext = createContext<TourBridge | null>(null);
