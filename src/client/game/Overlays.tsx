@@ -236,7 +236,14 @@ export function GameOver({
             </button>
           ) : me ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
-              {voted ? "Revanche demandée" : "Demander la revanche"}
+              {/* Assis après la partie, on ne demande pas de revanche : on demande à jouer la suivante */}
+              {g.players.some((p) => p.id === me)
+                ? voted
+                  ? "Revanche demandée"
+                  : "Demander la revanche"
+                : voted
+                  ? "Partie suivante demandée"
+                  : "Jouer la suivante"}
             </button>
           ) : null}
           <button className="btn" onClick={onInspect}>

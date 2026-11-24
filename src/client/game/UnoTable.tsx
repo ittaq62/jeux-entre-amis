@@ -375,7 +375,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             <span className="hint">
               {drawnName(room) ?? (g.settings.variant === "nomercy" ? "No Mercy" : "Classique")}
               {rules.earlyUno ? "" : " · sans UNO d'avance"}
-              {g.settings.endMode === "points" ? ` · manche ${g.round} · objectif ${g.settings.targetScore}` : ""}
+              {g.settings.endMode === "points"
+                ? ` · manche ${g.round} · objectif ${g.settings.targetScore}`
+                : g.settings.endMode === "ranking"
+                  ? " · jusqu'au dernier"
+                  : ""}
             </span>
           </div>
           {mySeat?.team !== undefined && (
