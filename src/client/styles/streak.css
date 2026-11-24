@@ -482,24 +482,28 @@
   color: var(--stamp);
 }
 
-/* Les affiches des jeux de la semaine, toutes sur une ligne au PC */
+/* Les affiches des jeux de la semaine, toutes sur une ligne au PC. --w est leur taille idéale : s'il y a trop de jeux
+   pour la ligne (douze, par exemple), elles rapetissent juste assez pour y tenir au lieu de sortir de la carte. */
 .habitue-games {
   --cols: var(--n);
   --w: 54px;
+  --gap: 7px;
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(var(--cols), var(--w));
-  gap: 7px;
+  grid-template-columns: repeat(var(--cols), max-content);
+  gap: var(--gap);
   margin: 0 0 10px;
   padding: 0;
   list-style: none;
 }
 
 .habitue-games li {
+  --fit-max: var(--w);
   display: flex;
 }
 
 .habitue-games .game-ticket.size-sm {
-  --w: inherit;
+  --w: min(var(--fit-max), calc((100cqw - (var(--cols) - 1) * var(--gap)) / var(--cols)));
   outline: 1px solid rgba(29, 27, 24, 0.18);
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.2),
@@ -780,7 +784,7 @@
 
   .habitue-games {
     --w: 44px;
-    gap: 6px;
+    --gap: 6px;
   }
 
   .habitue-games.is-two-rows {
