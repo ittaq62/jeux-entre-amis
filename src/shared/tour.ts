@@ -1415,7 +1415,7 @@ const TITLE_RULES: TitleRule[] = [
       const hits = sum(c, "naval", "hits");
       if (shots < 8) return null;
       const pct = Math.round((hits / shots) * 100);
-      return { value: pct, stat: `${pct} %`, unit: "de tirs au but" };
+      return { value: pct, stat: `${pct} %`, unit: "de tirs qui touchent" };
     },
   },
   {

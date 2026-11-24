@@ -39,7 +39,7 @@ const TITLES: TourTitle[] = [
   { id: "collector", label: "Le collectionneur", userId: "u1", name: "Gaston", detail: "", stat: "3", unit: "jeux gagnés" },
   { id: "plus-four", label: "Le roi du +4", userId: "u0", name: "Quentin", detail: "", stat: "+8", unit: "cartes données à piocher" },
   { id: "mason", label: "Le maçon", userId: "u2", name: "Ginette", detail: "", stat: "24", unit: "lignes complétées" },
-  { id: "admiral", label: "L'amiral", userId: "u3", name: "Marcel", detail: "", stat: "62 %", unit: "de tirs au but" },
+  { id: "admiral", label: "L'amiral", userId: "u3", name: "Marcel", detail: "", stat: "62 %", unit: "de tirs qui touchent" },
   { id: "brave", label: "Le courageux", userId: "u4", name: "Josiane", detail: "", stat: "2×", unit: "dernier, et toujours là" },
 ];
 
