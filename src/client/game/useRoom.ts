@@ -48,7 +48,9 @@ export function useRoom(code: string) {
       vibrate([30, 40, 30]);
     }
     if (prev?.status === "playing" && next.status === "finished" && g.ranking) {
-      play(g.ranking[0] === seat ? "win" : "lose");
+      // En équipes à une table, on gagne avec son équipe
+      const won = g.teamRanks ? g.teamRanks[seat] === 1 : g.ranking[0] === seat;
+      play(won ? "win" : "lose");
     }
   }, []);
 

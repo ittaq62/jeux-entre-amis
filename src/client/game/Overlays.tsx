@@ -70,7 +70,10 @@ export function RoundOver({ room, offset, onNext }: { room: RoomView; offset: nu
             );
           })}
         </ol>
-        <p className="hint score-goal">Premier à {g.settings.targetScore} points.</p>
+        {g.teams && <TeamTotals room={room} />}
+        <p className="hint score-goal">
+          {g.teams ? "Première équipe" : "Premier"} à {g.settings.targetScore} points.
+        </p>
         <div className="overlay-actions">
           {onNext && (
             <button className="btn btn-primary" onClick={onNext}>
@@ -81,6 +84,30 @@ export function RoundOver({ room, offset, onNext }: { room: RoomView; offset: nu
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+/** En équipes aux points : le total de chaque équipe, celui qui compte pour l'objectif */
+function TeamTotals({ room }: { room: RoomView }) {
+  const g = room.uno!;
+  const teams = g.teams!;
+  const totals = new Map<number, number>();
+  for (const p of g.players) {
+    const t = teams[p.id];
+    if (t !== undefined) totals.set(t, (totals.get(t) ?? 0) + p.score);
+  }
+  const mine = room.you.seatId !== null ? teams[room.you.seatId] : undefined;
+  return (
+    <ul className="team-totals">
+      {[...totals.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([team, total]) => (
+          <li key={team} className={team === mine ? "is-mine" : ""}>
+            <CrewMark team={team} size={13} /> {tableTeamName(team)}
+            <span className="score-points num">{total}</span>
+          </li>
+        ))}
+    </ul>
   );
 }
 
@@ -100,10 +127,12 @@ export function GameOver({
   onInspect: () => void;
 }) {
   const g = room.uno!;
-  const ranking = g.ranking ?? [];
   const me = room.you.seatId;
-  // En équipes à une table, on gagne ensemble : chacun a la place de son équipe
+  // En équipes à une table, on gagne ensemble : chacun a la place de son équipe, et la liste suit ces places
+  // (le premier sorti peut être d'une équipe battue, « jusqu'au dernier » ou aux points)
   const teamRanks = g.teamRanks ?? null;
+  const raw = g.ranking ?? [];
+  const ranking = teamRanks ? raw.slice().sort((a, b) => (teamRanks[a] ?? 99) - (teamRanks[b] ?? 99)) : raw;
   const rankOf = (id: string, i: number) => teamRanks?.[id] ?? i + 1;
   const won = teamRanks ? me !== null && teamRanks[me] === 1 : ranking[0] === me;
   const reduced = usePrefs((s) => s.reducedEffects);
@@ -185,6 +214,8 @@ export function GameOver({
             );
           })}
         </ol>
+
+        {g.teams && g.settings.endMode === "points" && <TeamTotals room={room} />}
 
         {inTour ? (
           <TourNextNote />

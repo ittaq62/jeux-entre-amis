@@ -124,6 +124,8 @@ interface Timer {
   turnId?: number;
   cardId?: number;
   emote?: string;
+  /** Dénonciation et UNO d'un bot : la fenêtre visée (son ouverture), pour ne pas frapper la suivante */
+  since?: number;
 }
 
 interface RoomData {
@@ -1024,13 +1026,13 @@ export class GameRoom extends DurableObject<Env> {
           const delay = botCatchDelay(d);
           if (delay !== null && (!best || delay < best.delay)) best = { seat: s, delay };
         }
-        if (best) this.addTimer({ at: w.since + best.delay, kind: "catch", seatId: best.seat.id, target: vulnerable.id });
+        if (best) this.addTimer({ at: w.since + best.delay, kind: "catch", seatId: best.seat.id, target: vulnerable.id, since: w.since });
         // Un bot crie UNO après avoir posé sa carte : sans UNO d'avance, c'est le moment normal (et le bot qui joue
         // à la place d'un absent le fait aussi) ; sinon, c'est qu'il avait oublié, et il se rattrape parfois
         const early = effectiveRules(g.settings).earlyUno;
         if (vulnerable.kind === "bot" || (vulnerable.autoplay && !early)) {
           const delay = botUnoDelay(g, d);
-          if (delay !== null) this.addTimer({ at: w.since + delay, kind: "botUno", seatId: vulnerable.id });
+          if (delay !== null) this.addTimer({ at: w.since + delay, kind: "botUno", seatId: vulnerable.id, since: w.since });
         }
       }
     }
@@ -1134,6 +1136,10 @@ export class GameRoom extends DurableObject<Env> {
         if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id || seat.autoplay) return null;
         seat.missed += 1;
         const events = this.playAll(g, seat.id, timeoutActions(g), now);
+        // La carte que le chrono vient de piocher se pose (ou se garde) tout de suite : un seul tour manqué, un seul chrono
+        if (g.phase === "playing" && g.players[g.turn]!.id === seat.id && g.drawnCardId !== null) {
+          events.push(...this.playAll(g, seat.id, timeoutActions(g), now));
+        }
         if (seat.missed >= MAX_MISSED_TURNS) {
           seat.autoplay = "afk";
           d.scheduledTurnId = -1;
@@ -1145,11 +1151,13 @@ export class GameRoom extends DurableObject<Env> {
         return g && tick(g, now) ? [] : null;
       case "catch": {
         if (!playing || !seat || !g.unoWindow || g.players[g.unoWindow.player]!.id !== t.target) return null;
+        if (t.since !== undefined && g.unoWindow.since !== t.since) return null;
         const res = applyAction(g, seat.id, { type: "catch", target: t.target! }, now);
         return res.ok ? res.events : null;
       }
       case "botUno": {
         if (!playing || !seat || !g.unoWindow || g.players[g.unoWindow.player]!.id !== seat.id) return null;
+        if (t.since !== undefined && g.unoWindow.since !== t.since) return null;
         if (!(seat.kind === "bot" || seat.autoplay)) return null;
         const res = applyAction(g, seat.id, { type: "uno" }, now);
         return res.ok ? res.events : null;
@@ -1246,7 +1254,8 @@ export class GameRoom extends DurableObject<Env> {
         // En équipes à une table, chacun prend la place de son équipe
         rank: g.teamRanks?.[p.id] ?? ranking.indexOf(p.id) + 1,
         score: p.score,
-        eliminated: p.eliminated,
+        // Aux points, une élimination par les 25 cartes compte même si elle date d'une manche d'avant
+        eliminated: p.eliminated || Boolean(p.everEliminated),
         team: g.teamRanks ? (g.teams?.[p.id] ?? null) : null,
         stats: p.stats,
       };

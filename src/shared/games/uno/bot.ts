@@ -49,7 +49,14 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners:
 
   if (playable.length === 0) return [{ type: "draw" }];
 
-  const choice = pickCard(s, p, playable, rng, partners);
+  // 7-0 : un 0 donne sa main au suivant et prend celle d'avant. Avec une main plus petite que celle qu'on recevrait,
+  // mieux vaut piocher (quand on en a le droit) que de faire cadeau de ses dernières cartes.
+  const rules = effectiveRules(s.settings);
+  const badZero = (c: Card) => rules.sevenZero && c.kind === "number" && c.value === 0 && me.hand.length > 1 && zeroLoss(s, p) > 0;
+  if (!rules.mustPlay && playable.every(badZero)) return [{ type: "draw" }];
+  const sensible = playable.filter((c) => !badZero(c));
+
+  const choice = pickCard(s, p, sensible.length > 0 ? sensible : playable, rng, partners);
   return withUno(s, p, playAction(s, p, choice, rng, partners), rng);
 }
 
@@ -83,6 +90,12 @@ function playAction(s: UnoState, p: number, card: Card, rng: RngHolder, partners
     if (target >= 0) action.target = s.players[target]!.id;
   }
   return [action];
+}
+
+/** Ce qu'un 0 coûte : les cartes reçues (la main de celui qui joue avant) moins celles qu'on garderait */
+function zeroLoss(s: UnoState, p: number): number {
+  const giver = s.players[nextIndex(s, p, 1, (s.direction * -1) as 1 | -1)]!;
+  return giver.hand.length - (s.players[p]!.hand.length - 1);
 }
 
 function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, partners: ReadonlySet<string>): Card {
@@ -126,13 +139,14 @@ function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, part
   return best;
 }
 
-/** Pour la roulette, on choisit la couleur la plus rare dans sa main… en esperant qu'elle sorte vite. */
+/**
+ * Pour la roulette, on annonce la couleur la plus rare dans sa main : c'est celle qui reste le plus dans la pioche,
+ * donc celle qui sort le plus vite. À égalité, on varie pour que le bot ne soit pas prévisible.
+ */
 function leastLikelyColor(hand: Card[], rng: RngHolder): Color {
   const counts: Record<Color, number> = { red: 0, yellow: 0, green: 0, blue: 0 };
   for (const c of hand) if (c.color) counts[c.color] += 1;
-  // Toutes les couleurs ont la meme frequence dans la pioche : n'importe laquelle se vaut,
-  // on varie pour que le bot ne soit pas previsible.
-  return COLORS.slice().sort((a, b) => counts[b] - counts[a] + (random(rng) - 0.5))[0]!;
+  return COLORS.slice().sort((a, b) => counts[a] - counts[b] + (random(rng) - 0.5))[0]!;
 }
 
 /** Un bot qui voit un joueur oublier son UNO le denonce-t-il, et apres combien de temps ? */

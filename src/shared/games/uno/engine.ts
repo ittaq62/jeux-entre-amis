@@ -115,6 +115,8 @@ export interface UnoPlayer {
   /** A fini sa main ou a ete elimine : ne joue plus cette manche */
   out: boolean;
   eliminated: boolean;
+  /** Éliminé par la règle des 25 cartes à une manche ou une autre de la partie (`eliminated` ne vaut que pour la manche) */
+  everEliminated?: boolean;
   score: number;
   declaredUno: boolean;
   stats: PlayerStats;
@@ -422,6 +424,7 @@ function checkMercy(s: UnoState, p: number, ev: UnoEvent[]) {
   if (player.out || player.hand.length < MERCY_LIMIT) return;
   player.out = true;
   player.eliminated = true;
+  player.everEliminated = true;
   s.eliminationOrder.push(p);
   // Ses cartes retournent sous la pioche
   s.drawPile = shuffle(s, player.hand.concat(s.drawPile));
@@ -631,6 +634,8 @@ export function applyAction(s: UnoState, playerId: string, action: UnoAction, no
         s.pendingDraw = 0;
         s.lastDrawValue = 0;
         player.stats.challengesWon += 1;
+        // Un bluff démasqué n'a fait piocher personne : son +4 ne compte pas dans les « + » donnés
+        accused.stats.plusGiven = Math.max(0, accused.stats.plusGiven - 4);
         ev.push({ type: "challenge", challenger: player.id, target: accused.id, success: true });
         drawCards(s, by, amount, "challenge", ev);
         s.turnId += 1;
@@ -858,7 +863,12 @@ function swapHands(s: UnoState, a: number, b: number, ev: UnoEvent[]) {
   [pa.hand, pb.hand] = [pb.hand, pa.hand];
   pa.stats.swaps += 1;
   ev.push({ type: "swap", a: pa.id, b: pb.id });
-  settleUnoAfterExchange(s);
+  // Seuls les deux échangés changent de main : un troisième qui a oublié son UNO reste dénonçable
+  if (s.unoWindow && (s.unoWindow.player === a || s.unoWindow.player === b)) s.unoWindow = null;
+  for (const pl of [pa, pb]) {
+    pl.declaredUno = pl.hand.length === 1;
+    pl.stats.maxHand = Math.max(pl.stats.maxHand, pl.hand.length);
+  }
 }
 
 function rotateHands(s: UnoState, ev: UnoEvent[]) {
@@ -870,6 +880,7 @@ function rotateHands(s: UnoState, ev: UnoEvent[]) {
     s.players[i]!.hand = hands[active.indexOf(giver)]!;
   });
   ev.push({ type: "rotate", direction: s.direction });
+  for (const i of active) s.players[i]!.stats.maxHand = Math.max(s.players[i]!.stats.maxHand, s.players[i]!.hand.length);
   settleUnoAfterExchange(s);
 }
 
@@ -897,6 +908,7 @@ function spinRoulette(s: UnoState, p: number, color: Color, ev: UnoEvent[]) {
   ev.push({ type: "roulette", victim: player.id, color, flipped });
   player.stats.drawn += flipped.length;
   player.stats.penaltyCards += flipped.length;
+  player.stats.biggestStackTaken = Math.max(player.stats.biggestStackTaken, flipped.length);
   player.stats.maxHand = Math.max(player.stats.maxHand, player.hand.length);
   player.declaredUno = false;
   checkMercy(s, p, ev);
@@ -933,7 +945,10 @@ function finishPlayer(s: UnoState, p: number, ev: UnoEvent[]) {
     s.pendingDraw = 0;
     s.lastDrawValue = 0;
     s.challenge = null;
-    drawCards(s, victim, amount, "finish", ev);
+    const taken = drawCards(s, victim, amount, "finish", ev).length;
+    const stats = s.players[victim]!.stats;
+    stats.penaltyCards += taken;
+    stats.biggestStackTaken = Math.max(stats.biggestStackTaken, taken);
   }
   endRound(s, p, ev);
 }
@@ -961,11 +976,14 @@ function endRound(s: UnoState, winner: number, ev: UnoEvent[]) {
   const winnerPlayer = winner >= 0 ? s.players[winner]! : null;
   let points = 0;
   const hands: Record<string, Card[]> = {};
+  // À une table en équipes, on marque les cartes des adversaires, pas celles de ses coéquipiers
+  const side = (pl: UnoPlayer) => (s.teamWin && winnerPlayer ? s.teams?.[pl.id] : undefined);
+  const ally = (pl: UnoPlayer) => pl === winnerPlayer || (side(pl) !== undefined && side(pl) === side(winnerPlayer!));
   for (const pl of s.players) {
     hands[pl.id] = pl.hand.slice();
-    if (pl !== winnerPlayer) points += pl.hand.reduce((sum, c) => sum + cardPoints(c), 0);
+    if (!ally(pl)) points += pl.hand.reduce((sum, c) => sum + cardPoints(c), 0);
   }
-  if (effectiveRules(s.settings).noMercy) points += MERCY_BONUS * s.eliminationOrder.length;
+  if (effectiveRules(s.settings).noMercy) points += MERCY_BONUS * s.eliminationOrder.filter((i) => !ally(s.players[i]!)).length;
   if (winnerPlayer) winnerPlayer.score += points;
   s.unoWindow = null;
   s.challenge = null;
@@ -1065,7 +1083,9 @@ function computeRanking(s: UnoState, winner: number): string[] {
     return eliminatedLast(finished.concat(rest)).map((i) => s.players[i]!.id);
   }
   if (mode === "points") {
-    return eliminatedLast(idx.sort((a, b) => s.players[b]!.score - s.players[a]!.score)).map((i) => s.players[i]!.id);
+    // Aux points, c'est le total de la partie qui classe : être éliminé à la dernière manche ne fait que départager
+    const out = (i: number) => (s.players[i]!.eliminated ? 1 : 0);
+    return idx.sort((a, b) => s.players[b]!.score - s.players[a]!.score || out(a) - out(b)).map((i) => s.players[i]!.id);
   }
   const others = idx.filter((i) => i !== winner).sort((a, b) => handPoints(s.players[a]!) - handPoints(s.players[b]!));
   return eliminatedLast((winner >= 0 ? [winner] : []).concat(others)).map((i) => s.players[i]!.id);
@@ -1079,7 +1099,7 @@ export function timeoutActions(s: UnoState): UnoAction[] {
   if (s.phase !== "playing") return [];
   const p = s.turn;
   const player = s.players[p]!;
-  if (s.roulette) return [{ type: "roulette", color: mostCommonColor(player.hand) }];
+  if (s.roulette) return [{ type: "roulette", color: rarestColor(player.hand) }];
   if (s.pendingDraw > 0) return [{ type: "draw" }];
   const mustPlay = effectiveRules(s.settings).mustPlay;
   if (s.hasDrawn && s.drawnCardId !== null) {
@@ -1098,6 +1118,18 @@ function autoPlay(hand: Card[], card: Card): UnoAction {
   const action: UnoAction = { type: "play", cardId: card.id };
   if (isWild(card) && card.kind !== "wildRoulette") action.color = mostCommonColor(hand.filter((c) => c.id !== card.id));
   return action;
+}
+
+/**
+ * La roulette : on retourne des cartes jusqu'à la couleur annoncée. Celle qu'on a le moins en main est celle qui reste
+ * le plus dans la pioche, donc celle qui sort le plus vite.
+ */
+export function rarestColor(hand: Card[], fallback: RngHolder | null = null): Color {
+  const counts: Record<Color, number> = { red: 0, yellow: 0, green: 0, blue: 0 };
+  for (const c of hand) if (c.color) counts[c.color] += 1;
+  let best: Color = fallback ? COLORS[randomInt(fallback, 4)]! : "red";
+  for (const color of COLORS) if (counts[color] < counts[best]) best = color;
+  return best;
 }
 
 export function mostCommonColor(hand: Card[], fallback: RngHolder | null = null): Color {

@@ -1283,6 +1283,33 @@ html:has(.bolides-root) body {
   margin: 0;
 }
 
+/* En équipes aux points : le total de chaque équipe, sous les joueurs */
+.team-totals {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  display: grid;
+  gap: 4px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.team-totals li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.team-totals li.is-mine {
+  color: var(--red);
+}
+
+.team-totals .score-points {
+  margin-left: auto;
+  font-size: 18px;
+}
+
 .gameover-head {
   display: flex;
   align-items: center;
