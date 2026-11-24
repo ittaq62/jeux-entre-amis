@@ -3,7 +3,7 @@
 // le module « cloudflare:workers » est remplacé par le fichier de test (vi.mock).
 
 import { vi } from "vitest";
-import type { PublicUser } from "../shared/protocol.ts";
+import { BETA_GAMES, type PublicUser } from "../shared/protocol.ts";
 import { randomInt } from "../shared/rng.ts";
 import { encodeHeaderJson } from "./util.ts";
 
@@ -123,8 +123,11 @@ export class FakeState {
   }
 }
 
-/** Les amitiés acceptées, dans les deux sens */
-export function fakeEnv(friends: [string, string][] = []) {
+/**
+ * Les amitiés acceptées, dans les deux sens. `open` : les jeux en bêta ouverts à tous par la page Admin (par défaut tous,
+ * pour qu'un hôte ordinaire puisse tout mettre au programme d'une tournée)
+ */
+export function fakeEnv(friends: [string, string][] = [], { open = [...BETA_GAMES] }: { open?: string[] } = {}) {
   const hub = {
     rooms: new Map<string, unknown>(),
     upsertRoom: async (summary: { code: string }) => void hub.rooms.set(summary.code, summary),
@@ -147,6 +150,7 @@ export function fakeEnv(friends: [string, string][] = []) {
             const ids = friends.flatMap(([a, b]) => (a === me ? [b] : b === me ? [a] : []));
             return { results: ids.map((id) => ({ id })) };
           }
+          if (sql.includes("FROM site_settings")) return { results: open.map((g) => ({ key: `${g}_public` })) };
           return { results: [] };
         },
         async first() {

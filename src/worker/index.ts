@@ -59,6 +59,7 @@ import {
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
+import { openGames } from "./betaGames.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
 export { GameRoom } from "./room.ts";
@@ -136,14 +137,6 @@ const isBeta = (game: TableGame) => (BETA_GAMES as readonly TableGame[]).include
 
 const isGame = (value: unknown): value is GameId => (ALL_GAMES as unknown[]).includes(value);
 const isTableGame = (value: unknown): value is TableGame => isGame(value) || value === "tour";
-
-/** Jeux (et tournée) en bêta que l'admin a ouverts à tous (réglage « <jeu>_public » à 1). */
-async function openGames(db: D1Database): Promise<Set<TableGame>> {
-  const { results } = await db
-    .prepare("SELECT key FROM site_settings WHERE substr(key, -7) = '_public' AND value = '1'")
-    .all<{ key: string }>();
-  return new Set(results.map((r) => r.key.slice(0, -"_public".length)).filter(isTableGame));
-}
 
 async function visibleGames(env: Env, user: UserRow): Promise<GameId[]> {
   const open = await openGames(env.DB);

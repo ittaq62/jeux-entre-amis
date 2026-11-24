@@ -51,6 +51,7 @@ import {
   teamScores,
   TOUR_BOT_NAMES,
   TOUR_GAMES,
+  tourCapacity,
   TOUR_GUEST_PREFIX,
   drawBolidesBots,
   TOUR_MAX_PLAYERS,
@@ -77,6 +78,7 @@ import type { RoomInit } from "./room.ts";
 import { ownedItems } from "./shop.ts";
 import { gameStub } from "./tourLink.ts";
 import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
+import { gameOpenTo, openGames } from "./betaGames.ts";
 import { recordTour } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -85,8 +87,18 @@ import { decodeHeaderJson } from "./util.ts";
 const RELEASE_MS = 60_000;
 /** L'hôte parti, un autre membre prend la main après ce délai */
 const HOST_HANDOVER_MS = 20_000;
-/** Une table qui ne donne jamais son résultat (panne) ne bloque pas la tournée au-delà */
-const STALE_TABLE_MS = 45 * 60_000;
+/**
+ * Une table qui joue sans jamais finir (panne) ne bloque pas la tournée au-delà. Large : une table fermée ou un résultat
+ * perdu se voient bien avant (WATCH_TABLE_MS), et une vraie partie peut durer (UNO aux points)
+ */
+const STALE_TABLE_MS = 2 * 60 * 60_000;
+/**
+ * Tant qu'un jeu se joue, la tournée regarde de temps en temps si sa table est toujours là : fermée (par l'administrateur,
+ * effacée), ou finie depuis un moment sans que son résultat soit arrivé, le jeu ne compte pas et la soirée continue
+ */
+const WATCH_TABLE_MS = 60_000;
+/** Le hub oublie une salle qui ne lui a rien dit depuis six heures : on le lui rappelle bien avant */
+const HUB_REFRESH_MS = 30 * 60_000;
 const CHAT_KEEP = 120;
 
 interface Member {
@@ -124,13 +136,15 @@ interface TourGame {
   variant: string;
 }
 
-type TimerKind = "launch" | "host" | "release" | "cleanup" | "stale";
+type TimerKind = "launch" | "host" | "release" | "cleanup" | "stale" | "watch";
 
 interface Timer {
   at: number;
   kind: TimerKind;
   userId?: string;
   code?: string;
+  /** « watch » : la table était déjà finie au regard précédent */
+  seen?: boolean;
 }
 
 interface TourData {
@@ -191,6 +205,7 @@ const BOLIDES_GUEST_NAMES = [
 export class TourRoom extends DurableObject<Env> {
   private data: TourData | null = null;
   private lastSummary = "";
+  private lastHubSync = 0;
   private lastPresence = new Map<string, string>();
   private lastMessageAt = new Map<string, number>();
   private launching = false;
@@ -315,23 +330,40 @@ export class TourRoom extends DurableObject<Env> {
     d.current = null;
     // Chacun garde la feuille de fin du jeu sous les yeux un moment : le résultat, « Signaler un problème »
     d.endHold = { code: report.code, until: now + GAME_END_HOLD_MS, done: [] };
-    d.timers = d.timers.filter((t) => t.kind !== "stale");
-    const best = d.settings.teams ? Math.max(...teamScores(d.members)) : Math.max(0, ...d.members.map((m) => m.points));
-    const played = d.games.filter((g) => !g.aborted && g.results).length;
-    if (d.finishAfterCurrent || tourOver(d.settings.end, { played, best, startedAt: d.startedAt ?? now, now })) {
-      await this.finishTour(now);
-      return;
-    }
-    // Chaque jeu une seule fois : quand ils sont tous passés, c'est la fin
-    if (d.settings.once && this.nextDraw() === null) {
-      this.systemChat("Tous les jeux du programme ont été joués !");
-      await this.finishTour(now);
-      return;
-    }
+    d.timers = d.timers.filter((t) => t.kind !== "stale" && t.kind !== "watch");
+    if (await this.finishIfOver(now)) return;
     d.status = "intermission";
     // L'entracte commence quand la feuille de fin s'efface
     this.drawNext(now, GAME_END_HOLD_MS + INTERMISSION_MS);
     await this.afterChange();
+  }
+
+  /**
+   * Un jeu vient de finir (ou de ne pas compter) : la tournée s'arrête-t-elle là ? L'hôte l'a demandé, la fin choisie est
+   * atteinte (nombre de jeux, score, durée), ou chaque jeu ne se joue qu'une fois et tous sont passés.
+   */
+  private async finishIfOver(now: number): Promise<boolean> {
+    const d = this.data!;
+    const best = d.settings.teams ? Math.max(...teamScores(d.members)) : Math.max(0, ...d.members.map((m) => m.points));
+    const played = d.games.filter((g) => !g.aborted && g.results).length;
+    if (d.finishAfterCurrent || tourOver(d.settings.end, { played, best, startedAt: d.startedAt ?? now, now })) {
+      await this.finishTour(now);
+      return true;
+    }
+    if (this.allPlayed()) {
+      this.systemChat("Tous les jeux du programme ont été joués !");
+      await this.finishTour(now);
+      return true;
+    }
+    return false;
+  }
+
+  /** Chaque jeu une seule fois, et tous les jeux du programme ont été joués jusqu'au bout */
+  private allPlayed(): boolean {
+    const d = this.data!;
+    if (!d.settings.once) return false;
+    const done = this.excluded();
+    return d.settings.games.every((g) => done.includes(g));
   }
 
   /** Tous les joueurs du jeu qui vient de finir ont appuyé sur « Continuer » : l'entracte (ou la fin) arrive tout de suite */
@@ -351,7 +383,16 @@ export class TourRoom extends DurableObject<Env> {
   async tableAborted(code: string): Promise<void> {
     const d = this.data;
     if (!d || !d.current || d.current.code !== code) return;
-    const now = Date.now();
+    await this.abortCurrent(Date.now(), null);
+  }
+
+  /**
+   * Le jeu en cours ne compte pas : sa table n'a pas pu commencer, ou elle a disparu, ou son résultat s'est perdu
+   * (`reason` le dit dans la discussion). La tournée continue : un autre jeu au sort, ou la fin si elle est atteinte.
+   */
+  private async abortCurrent(now: number, reason: string | null): Promise<void> {
+    const d = this.data!;
+    const code = d.current?.code;
     const game = d.games.find((g) => g.code === code);
     if (game) {
       game.aborted = true;
@@ -359,11 +400,14 @@ export class TourRoom extends DurableObject<Env> {
     }
     d.current = null;
     d.endHold = null;
-    d.timers = d.timers.filter((t) => t.kind !== "stale");
+    d.timers = d.timers.filter((t) => t.kind !== "stale" && t.kind !== "watch");
+    if (reason) this.systemChat(reason);
+    // « Arrêter après ce jeu », la durée écoulée : la tournée s'arrête là, sans en retirer un autre
+    if (await this.finishIfOver(now)) return;
     d.status = "intermission";
     // Deux tables de suite où personne n'est venu : on attend l'hôte plutôt que d'en recréer sans fin
     const lastTwo = d.games.slice(-2);
-    if (lastTwo.length === 2 && lastTwo.every((g) => g.aborted)) {
+    if (!reason && lastTwo.length === 2 && lastTwo.every((g) => g.aborted)) {
       this.systemChat("Personne n'est arrivé à la table : la tournée se met en pause.");
       this.drawNext(now, INTERMISSION_MS);
       if (d.next) {
@@ -374,7 +418,7 @@ export class TourRoom extends DurableObject<Env> {
       await this.afterChange();
       return;
     }
-    this.systemChat("Pas assez de joueurs arrivés à la table : ce jeu ne compte pas, on retire au sort.");
+    if (!reason) this.systemChat("Pas assez de joueurs arrivés à la table : ce jeu ne compte pas, on retire au sort.");
     this.drawNext(now, INTERMISSION_MS);
     await this.afterChange();
   }
@@ -548,7 +592,8 @@ export class TourRoom extends DurableObject<Env> {
     if (this.playerCount() >= d.settings.maxPlayers && !this.freeSeatFromBot()) return false;
     member.role = "player";
     member.waiting = d.status === "playing";
-    if (d.settings.teams) member.team = this.emptierTeam();
+    // Il retrouve son équipe s'il en avait une (ses points y sont) ; sinon, la moins remplie
+    if (d.settings.teams && member.team === null) member.team = this.emptierTeam();
     this.systemChat(`${member.name} joue la tournée.`);
     return true;
   }
@@ -606,6 +651,11 @@ export class TourRoom extends DurableObject<Env> {
       else this.systemChat(`${user.pseudo} rejoint la tournée : il jouera dès le prochain jeu.`);
     }
     this.ensureHost();
+    // L'hôte n'est pas là et rien ne prévoit de le remplacer (il est parti quand personne d'autre n'était connecté, ou la
+    // tournée a redémarré sans voir sa connexion se fermer) : la main passe bientôt à un présent
+    if (d.hostId !== user.id && !this.isConnected(d.hostId) && !d.timers.some((t) => t.kind === "host")) {
+      this.addTimer({ at: now + HOST_HANDOVER_MS, kind: "host", userId: d.hostId });
+    }
     this.send(ws, { t: "chat", messages: d.chat, reset: true });
     await this.afterChange();
     void this.hub.setUserRoom(user.id, this.presenceRoom()).catch(() => {});
@@ -715,8 +765,10 @@ export class TourRoom extends DurableObject<Env> {
 
       case "sit": {
         if (!member || member.role === "player" || d.status === "finished") return;
-        // Tournée lancée et fermée en cours de route : on la suit, on n'y entre plus
-        if (!maySit(this.arrivalCase(userId, "play"))) return error("La tournée n'accepte plus de joueurs en cours de route.");
+        // Tournée lancée et fermée en cours de route : on la suit, on n'y entre plus. Sauf qui l'a déjà jouée (il avait
+        // laissé sa place pour regarder un moment) : il la reprend, avec ses points
+        const played = (d.lines[userId]?.length ?? 0) > 0;
+        if (!played && !maySit(this.arrivalCase(userId, "play"))) return error("La tournée n'accepte plus de joueurs en cours de route.");
         if (!this.makePlayer(member)) return error("La tournée est complète.");
         return this.afterChange();
       }
@@ -724,7 +776,9 @@ export class TourRoom extends DurableObject<Env> {
       case "watch": {
         if (!member || member.role === "spectator" || d.status === "finished") return;
         member.role = "spectator";
-        member.team = null;
+        // Au salon, les équipes se refont ; une fois la tournée lancée, ses points restent à son équipe (et il la retrouve
+        // s'il rejoue)
+        if (d.status === "lobby") member.team = null;
         this.systemChat(`${member.name} regarde seulement.`);
         if (await this.checkReady(now)) return;
         return this.afterChange();
@@ -873,7 +927,12 @@ export class TourRoom extends DurableObject<Env> {
           return msg.lateJoin === undefined ? error("Les règles de la tournée sont fixées une fois lancée.") : undefined;
         const patch = msg.settings ?? {};
         if (Array.isArray(patch.games)) {
-          const games = TOUR_GAMES.filter((g) => patch.games!.includes(g));
+          // Un jeu encore en bêta n'entre au programme que par l'administrateur du site (ceux déjà cochés restent)
+          const open = await openGames(this.env.DB).catch(() => new Set<string>());
+          if (this.data !== d || d.status !== "lobby") return;
+          const games = TOUR_GAMES.filter(
+            (g) => patch.games!.includes(g) && (gameOpenTo(g, open, isAdmin) || d.settings.games.includes(g)),
+          );
           if (games.length > 0) d.settings.games = games;
         }
         const end = patch.end === undefined ? null : sanitizeEnd(patch.end);
@@ -1020,6 +1079,16 @@ export class TourRoom extends DurableObject<Env> {
   }
 
   private async close(reason: string) {
+    const d = this.data!;
+    // La table du jeu en cours ferme avec la tournée : sans ça, ses bots jouaient pour des joueurs renvoyés et la partie
+    // s'enregistrait. (La tournée l'oublie d'abord : la table qui se ferme ne la prévient pas d'un jeu « avorté ».)
+    const current = d.current;
+    d.current = null;
+    if (current)
+      await gameStub(this.env, current.game, current.code)
+        .adminClose()
+        .catch(() => {});
+    if (!this.data) return;
     const connected = [...this.connectedUsers().keys()];
     for (const ws of this.ctx.getWebSockets()) {
       this.send(ws, { t: "closed", reason });
@@ -1051,6 +1120,12 @@ export class TourRoom extends DurableObject<Env> {
     return d.settings.once ? d.games.filter((g) => !g.aborted && g.results).map((g) => g.game) : [];
   }
 
+  /** Le plus de joueurs qu'accueille un des jeux encore à jouer */
+  private capacityLeft(): number {
+    const done = this.excluded();
+    return tourCapacity(this.data!.settings.games.filter((g) => !done.includes(g)));
+  }
+
   /** Le jeu que donnerait le tirage maintenant, ou rien s'il ne reste aucun jeu possible */
   private nextDraw(players = this.activePlayers().length): GameId | null {
     const d = this.data!;
@@ -1075,8 +1150,9 @@ export class TourRoom extends DurableObject<Env> {
 
   private async startTour(now: number) {
     const d = this.data!;
-    // Ceux qui ne sont pas là au départ restent dans la liste, mais en spectateurs
-    for (const m of d.members) if (m.role === "player" && !this.present(m)) m.role = "spectator";
+    // Ceux qui ne sont pas là au départ (un téléphone qui se reconnecte, un onglet rechargé) restent joueurs : le tirage
+    // et les tables ne prennent que les présents, ils jouent dès leur retour. En spectateurs, la porte fermée en cours de
+    // route les aurait laissés dehors toute la soirée.
     d.status = "intermission";
     d.startedAt = now;
     this.systemChat(`La tournée commence : ${d.settings.games.map((g) => GAME_NAMES[g]).join(", ")} au programme !`);
@@ -1094,7 +1170,9 @@ export class TourRoom extends DurableObject<Env> {
     const d = this.data!;
     d.timers = d.timers.filter((t) => t.kind !== "launch");
     const players = this.activePlayers().length;
-    const game = this.nextDraw(players);
+    // Plus de monde que n'en accueille aucun des jeux qui restent (un ami arrivé en cours de route) : on tire quand même,
+    // les derniers à avoir joué regardent ce jeu-ci et jouent le suivant (voir launch) ; avant, la tournée s'arrêtait
+    const game = this.nextDraw(players) ?? (players > this.capacityLeft() ? this.nextDraw(this.capacityLeft()) : null);
     if (!game) {
       d.next = null;
       d.notice = `Aucun des jeux ${this.excluded().length > 0 ? "qui restent" : "cochés"} n'accueille ${players} joueurs : la tournée est en pause.`;
@@ -1123,9 +1201,11 @@ export class TourRoom extends DurableObject<Env> {
       d.timers = d.timers.filter((t) => t.kind !== "launch");
       // Un nouveau jeu : la feuille de fin du précédent n'a plus lieu d'être
       d.endHold = null;
-      // Les joueurs d'abord, les bots ensuite : s'il y a trop de monde pour le jeu, ce sont les bots qui attendent
+      // Les joueurs d'abord, les bots ensuite : s'il y a trop de monde pour le jeu, ce sont les bots qui attendent. Et parmi
+      // eux, ceux qui ont regardé le jeu précédent (ou sont arrivés pendant) passent devant
       const active = this.activePlayers();
-      let players = [...active.filter((m) => m.kind === "human"), ...active.filter((m) => m.kind === "bot")];
+      const waitedFirst = (list: Member[]) => [...list.filter((m) => m.waiting), ...list.filter((m) => !m.waiting)];
+      let players = [...waitedFirst(active.filter((m) => m.kind === "human")), ...waitedFirst(active.filter((m) => m.kind === "bot"))];
       if (players.length < TOUR_MIN_PLAYERS || !players.some((m) => m.kind === "human")) {
         d.next.at = null;
         d.ready = [];
@@ -1249,6 +1329,7 @@ export class TourRoom extends DurableObject<Env> {
       d.status = "playing";
       for (const m of players) m.waiting = false;
       this.addTimer({ at: now + STALE_TABLE_MS, kind: "stale", code });
+      this.addTimer({ at: now + WATCH_TABLE_MS, kind: "watch", code });
       const rulesName = findVariant(game, variant)?.name;
       this.systemChat(
         d.settings.rules === "base" || !rulesName
@@ -1376,6 +1457,8 @@ export class TourRoom extends DurableObject<Env> {
     else {
       await this.persist();
       await this.armAlarm();
+      // Pendant un long jeu, rien ne change au salon : le hub doit quand même se souvenir de la tournée
+      await this.syncHub();
     }
   }
 
@@ -1396,11 +1479,36 @@ export class TourRoom extends DurableObject<Env> {
         const m = t.userId ? this.member(t.userId) : undefined;
         if (!m || d.status !== "lobby" || this.isConnected(m.userId)) return false;
         d.members = d.members.filter((x) => x !== m);
+        // C'était l'hôte : sans lui, personne ne pourrait lancer la tournée
+        if (m.userId === d.hostId) this.ensureHost(true);
         return true;
       }
       case "stale": {
         if (!d.current || d.current.code !== t.code) return false;
-        await this.tableAborted(t.code);
+        await this.abortCurrent(now, "La table de ce jeu ne répond plus : il ne compte pas, la tournée continue.");
+        return false;
+      }
+      case "watch": {
+        if (!d.current || d.current.code !== t.code) return false;
+        const { game, code } = d.current;
+        const table = await gameStub(this.env, game, code)
+          .summary()
+          .catch(() => undefined);
+        // Le jeu a pu finir (ou la tournée se fermer) pendant qu'on regardait
+        if (this.data !== d || d.current?.code !== code) return false;
+        if (table === null) {
+          await this.abortCurrent(now, `La table de ${GAME_NAMES[game]} a été fermée : ce jeu ne compte pas, la tournée continue.`);
+          return false;
+        }
+        // Finie depuis un regard déjà, et toujours pas de résultat : il s'est perdu en route
+        if (table?.status === "finished" && t.seen) {
+          await this.abortCurrent(
+            now,
+            `Le résultat de ${GAME_NAMES[game]} s'est perdu en route : ce jeu ne compte pas, la tournée continue.`,
+          );
+          return false;
+        }
+        this.addTimer({ at: now + WATCH_TABLE_MS, kind: "watch", code, seen: table?.status === "finished" });
         return false;
       }
       case "cleanup":
@@ -1584,8 +1692,10 @@ export class TourRoom extends DurableObject<Env> {
     if (!d) return;
     const summary = this.buildSummary();
     const json = JSON.stringify(summary);
-    if (json !== this.lastSummary) {
+    const now = Date.now();
+    if (json !== this.lastSummary || now - this.lastHubSync > HUB_REFRESH_MS) {
       this.lastSummary = json;
+      this.lastHubSync = now;
       await this.hub.upsertRoom(summary).catch((err) => console.error("Hub injoignable", err));
     }
     const presence = JSON.stringify(this.presenceRoom());

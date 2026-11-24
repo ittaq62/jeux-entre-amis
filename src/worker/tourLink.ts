@@ -38,11 +38,28 @@ export function gameStub(env: Env, game: GameId, code: string) {
   return env.ROOMS.get(env.ROOMS.idFromName(code));
 }
 
+/**
+ * Un appel à la tournée qui ne doit pas se perdre (le résultat d'un jeu) : retenté trois fois (1 s, 3 s, 9 s) si elle ne
+ * répond pas (redémarrage, mise en ligne). La tournée, elle, regarde aussi sa table de temps en temps.
+ */
+async function insist(what: string, call: () => Promise<unknown>) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await call();
+      return;
+    } catch (err) {
+      if (attempt >= 3) {
+        console.error(`${what} : tournée injoignable`, err);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1000 * 3 ** attempt));
+    }
+  }
+}
+
 /** Prévient la tournée de la fin de la partie, sans jamais bloquer la table si elle ne répond pas */
 export function reportToTour(env: Env, tourCode: string, report: TableReport) {
-  return tourStub(env, tourCode)
-    .tableFinished(report)
-    .catch((err: unknown) => console.error("Tournée injoignable", err));
+  return insist("Résultat", () => tourStub(env, tourCode).tableFinished(report));
 }
 
 /** Les messages de la table (un bot qui prend la place d'un absent, le vainqueur…) vont aussi au chat de la tournée */
@@ -54,7 +71,5 @@ export function tourChat(env: Env, tourCode: string, tableCode: string, text: st
 
 /** Pas assez de joueurs arrivés à la table : la tournée reprend la main */
 export function abortToTour(env: Env, tourCode: string, tableCode: string) {
-  return tourStub(env, tourCode)
-    .tableAborted(tableCode)
-    .catch((err: unknown) => console.error("Tournée injoignable", err));
+  return insist("Table abandonnée", () => tourStub(env, tourCode).tableAborted(tableCode));
 }
