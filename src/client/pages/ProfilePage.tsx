@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { COURSES, type CourseId } from "../../shared/games/minigolf/courses.ts";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
@@ -18,6 +17,7 @@ import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { formatSprint } from "../lib/countdown.ts";
 import { toast } from "../lib/toast.ts";
+import { tableLabel } from "../lib/variantLabel.ts";
 import { useHub } from "../stores/hub.ts";
 import { NotFound } from "./NotFoundPage.tsx";
 import { useSession } from "../stores/session.ts";
@@ -221,6 +221,25 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   // Les succès gagnés d'abord, du plus récent au plus ancien, puis ceux qui restent à décrocher
   const won = shelfList.filter((a) => owned.has(a.id)).sort((x, y) => owned.get(y.id)! - owned.get(x.id)!);
   const toWin = shelfList.filter((a) => !owned.has(a.id));
+  // Les points au classement de chaque jeu joué, UNO d'abord, dans l'ordre des fiches de l'accueil
+  const crampons = profile.crampons ?? { played: 0, won: 0, points: 0, elo: 1000, streak: 0, bestStreak: 0, totals: {} };
+  const culbute = profile.culbute ?? { played: 0, won: 0, points: 0, elo: 1000, streak: 0, bestStreak: 0, totals: {} };
+  const pointLines = (
+    [
+      { game: "uno", label: "à UNO", stats, shown: true },
+      { game: "naval", label: "en bataille navale", stats: naval, shown: showNaval },
+      { game: "bricks", label: "à Briques", stats: bricks, shown: showBricks },
+      { game: "capitale", label: "à Capitale", stats: capitale, shown: showCapitale },
+      { game: "meche", label: "à Mèche", stats: meche, shown: showMeche },
+      { game: "bolides", label: "à Bolides", stats: bolides, shown: showBolides },
+      { game: "crampons", label: "à Crampons", stats: crampons, shown: showCrampons },
+      { game: "culbute", label: "à Culbute", stats: culbute, shown: showCulbute },
+      { game: "escarmouche", label: "à Escarmouche", stats: escarmouche, shown: showEscarmouche },
+      { game: "minigolf", label: "au minigolf", stats: minigolf, shown: showMinigolf },
+      { game: "bowling", label: "au bowling", stats: bowling, shown: showBowling },
+      { game: "billard", label: "au billard", stats: billard, shown: showBillard },
+    ] satisfies { game: GameId; label: string; stats: Pick<GameStats, "played" | "points" | "elo">; shown: boolean }[]
+  ).filter((line) => line.shown && line.stats.played > 0);
   const nt = naval.totals;
   const accuracy = (nt.shots ?? 0) > 0 ? Math.round(((nt.hits ?? 0) / nt.shots!) * 100) : 0;
 
@@ -248,92 +267,15 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               À la table depuis {since}
               {stats.streak >= 2 && <>, {stats.streak} victoires d'affilée en ce moment</>}.
             </p>
-            {stats.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{stats.points.toLocaleString("fr-FR")}</strong> points au classement
-                {((showNaval && naval.played > 0) ||
-                  (showBricks && bricks.played > 0) ||
-                  (showCapitale && capitale.played > 0) ||
-                  (showMeche && meche.played > 0) ||
-                  (showBolides && bolides.played > 0)) &&
-                  " de UNO"}
+            {pointLines.map((line) => (
+              <p key={line.game} className="profile-points">
+                <strong className="num">{line.stats.points.toLocaleString("fr-FR")}</strong> points{" "}
+                {pointLines.length === 1 && line.game === "uno" ? "au classement" : line.label}
                 <span className="profile-elo">
-                  Elo <strong className="num">{stats.elo}</strong>
+                  Elo <strong className="num">{line.stats.elo}</strong>
                 </span>
               </p>
-            )}
-            {showNaval && naval.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{naval.points.toLocaleString("fr-FR")}</strong> points en bataille navale
-                <span className="profile-elo">
-                  Elo <strong className="num">{naval.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showBricks && bricks.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{bricks.points.toLocaleString("fr-FR")}</strong> points à Briques
-                <span className="profile-elo">
-                  Elo <strong className="num">{bricks.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showCapitale && capitale.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{capitale.points.toLocaleString("fr-FR")}</strong> points à Capitale
-                <span className="profile-elo">
-                  Elo <strong className="num">{capitale.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showMeche && meche.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{meche.points.toLocaleString("fr-FR")}</strong> points à Mèche
-                <span className="profile-elo">
-                  Elo <strong className="num">{meche.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showBolides && bolides.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{bolides.points.toLocaleString("fr-FR")}</strong> points à Bolides
-                <span className="profile-elo">
-                  Elo <strong className="num">{bolides.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showMinigolf && minigolf.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{minigolf.points.toLocaleString("fr-FR")}</strong> points au minigolf
-                <span className="profile-elo">
-                  Elo <strong className="num">{minigolf.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showBowling && bowling.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{bowling.points.toLocaleString("fr-FR")}</strong> points au bowling
-                <span className="profile-elo">
-                  Elo <strong className="num">{bowling.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showBillard && billard.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{billard.points.toLocaleString("fr-FR")}</strong> points au billard
-                <span className="profile-elo">
-                  Elo <strong className="num">{billard.elo}</strong>
-                </span>
-              </p>
-            )}
-            {showEscarmouche && escarmouche.played > 0 && (
-              <p className="profile-points">
-                <strong className="num">{escarmouche.points.toLocaleString("fr-FR")}</strong> points à Escarmouche
-                <span className="profile-elo">
-                  Elo <strong className="num">{escarmouche.elo}</strong>
-                </span>
-              </p>
-            )}
+            ))}
           </div>
           <div className="row-actions">
             {profile.friendship === "self" && (
@@ -694,7 +636,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <span className="history-rank num">{g.rank}</span>
                   <span className="row-text">
                     <strong>
-                      {g.rank === 1 ? "Victoire" : `${g.rank}e sur ${g.players}`}, {recentLabel(g)}
+                      {g.rank === 1 ? "Victoire" : `${g.rank}e sur ${g.players}`}, {tableLabel(g.game, g.variant)}
                     </strong>
                     <span className="hint">{g.table.map((p) => `${p.name}${p.bot ? " (bot)" : ""}`).join(", ")}</span>
                   </span>
@@ -713,38 +655,6 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 }
 
 const dayMonth = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-
-const NAVAL_MODES: Record<string, string> = { duel: "en duel", melee: "en mêlée", teams: "en équipes" };
-const ESC_MODES: Record<string, string> = {
-  solo: "chacun pour soi",
-  equipes: "en équipes",
-  zone: "zone à tenir",
-  drapeau: "capture du drapeau",
-};
-
-function recentLabel(g: Profile["recent"][number]): string {
-  if (g.game === "naval") return `bataille navale ${NAVAL_MODES[g.variant] ?? ""}`.trim();
-  if (g.game === "bricks") return `Briques ${NAVAL_MODES[g.variant] ?? ""}`.trim();
-  if (g.game === "capitale") return g.variant === "bankrupt" ? "Capitale jusqu'à la faillite" : "Capitale en partie rapide";
-  if (g.game === "meche")
-    return g.variant === "rallonge" ? "Mèche à rallonge" : g.variant === "chacun" ? "Mèche, chacun la sienne" : "Mèche";
-  if (g.game === "crampons") return `Crampons, ${g.variant} contre ${g.variant}`;
-  if (g.game === "culbute")
-    return g.variant === "temps" ? "Culbute au temps" : g.variant === "subite" ? "Culbute en mort subite" : "Culbute aux vies";
-  if (g.game === "escarmouche") return `Escarmouche, ${ESC_MODES[g.variant] ?? "combat"}`;
-  if (g.game === "minigolf") return g.variant in COURSES ? `Minigolf, ${COURSES[g.variant as CourseId].name}` : "Minigolf";
-  if (g.game === "bowling") return g.variant === "spares" ? "Bowling, défi des spares" : "Bowling";
-  if (g.game === "billard")
-    return g.variant === "neuf"
-      ? "Billard, la bille 9"
-      : g.variant === "killer"
-        ? "Billard, le Killer"
-        : g.variant === "carambole"
-          ? "Billard, trois billes"
-          : "Billard";
-  if (g.game === "bolides") return g.variant in TRACKS ? `Bolides, ${TRACKS[g.variant as keyof typeof TRACKS].name}` : "Bolides";
-  return `UNO ${g.variant === "nomercy" ? "No Mercy" : "classique"}`;
-}
 
 /** Points rapportés par une partie de l'historique, avec le barème du classement. */
 function gamePoints(g: Profile["recent"][number]): number {
