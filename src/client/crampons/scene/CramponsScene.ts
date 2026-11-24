@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { clamp, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
 import type { BallId } from "../../../shared/games/crampons/boutique.ts";
 import { ballCanvas, ballMaterial } from "./balls.ts";
@@ -693,6 +694,8 @@ export class CramponsScene {
     };
     this.scene.traverse(free);
     this.hud.traverse(free);
-    this.renderer.dispose();
+    // Quand on quitte le match (la toile a quitté la page), son contexte est rendu tout de suite. Une revanche reprend la
+    // même toile, encore affichée : elle garde le sien
+    releaseRenderer(this.renderer);
   }
 }

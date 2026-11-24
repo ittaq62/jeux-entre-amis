@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import type { AvatarConfig } from "../../../shared/avatar.ts";
 import { seededAvatar } from "../../../shared/avatar.ts";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
@@ -1204,6 +1205,9 @@ export class EscScene {
   }
 
   dispose() {
+    // D'abord tout ce qui est encore dans la scène, soldats compris : leurs matières partagées d'une partie à l'autre
+    // (le contour, les tenues) lâchent ainsi ce moteur, qui sinon resterait retenu par elles avec son contexte
+    for (const root of [this.scene, this.vmScene]) disposeTree(root);
     for (const i of [...this.soldiers.keys()]) this.removeSoldier(i);
     this.map.dispose();
     this.distant.dispose();
@@ -1216,11 +1220,11 @@ export class EscScene {
     this.post?.dispose();
     this.skyMat.dispose();
     this.env.dispose();
-    // Tout le reste (caisses, bidons, dépôts, drapeaux, effets, l'arme en main, les textures gardées par les modules) :
-    // le prochain moteur reprend le même canvas, donc le même contexte, où ce qui n'est pas libéré resterait orphelin.
-    // Une matière ou une texture partagée, libérée ici, est simplement renvoyée à la carte graphique à sa prochaine image.
-    for (const root of [this.scene, this.vmScene]) disposeTree(root);
-    this.renderer.dispose();
+    // Tout le reste (caisses, bidons, dépôts, drapeaux, effets, l'arme en main, les textures gardées par les modules) a
+    // été libéré plus haut : le prochain moteur reprend le même canvas, donc le même contexte, où ce qui n'est pas libéré
+    // resterait orphelin. Une matière ou une texture partagée, libérée ici, est simplement renvoyée à la carte graphique à
+    // sa prochaine image. Si l'on quitte la partie (la toile n'est plus dans la page), le contexte est rendu.
+    releaseRenderer(this.renderer);
   }
 }
 

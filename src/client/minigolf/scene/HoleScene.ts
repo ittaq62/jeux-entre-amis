@@ -14,6 +14,7 @@ import { segClosest } from "../../../shared/games/minigolf/geom.ts";
 import type { BallLook } from "../../../shared/games/minigolf/looks.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { BallModel } from "./ball.ts";
 import { buildHoleMeshes, type HoleMeshes } from "./holeMesh.ts";
 import { Sky } from "./sky.ts";
@@ -513,8 +514,9 @@ export class HoleScene {
     this.sky?.dispose();
     this.envMap?.dispose();
     this.composer?.dispose();
-    this.renderer.dispose();
+    // La toile retirée, son contexte est rendu tout de suite (sans attendre le ramasse-miettes)
     this.renderer.domElement.remove();
+    releaseRenderer(this.renderer);
   }
 }
 

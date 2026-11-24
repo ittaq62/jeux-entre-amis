@@ -3,6 +3,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { SQUARES, type DeckId, type SpecialKind } from "../../../shared/games/capitale/board.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { play } from "../../lib/sound.ts";
 import type { TokenId } from "../../../shared/games/capitale/tokens.ts";
 import * as B from "./buildings.ts";
@@ -2113,8 +2114,9 @@ export class CapitaleScene {
     });
     this.boardTex.dispose();
     this.scene.environment?.dispose();
-    this.renderer.dispose();
+    // La toile retirée, son contexte est rendu tout de suite, textures comprises (sans attendre le ramasse-miettes)
     el.remove();
+    releaseRenderer(this.renderer);
   }
 }
 

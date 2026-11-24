@@ -13,6 +13,7 @@ import { PIN_COM } from "../../../shared/games/bowling/physics.ts";
 import type { SalleId } from "../../../shared/games/bowling/salles.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { buildLane, LANE_PITCH, type LaneMeshes } from "./laneMesh.ts";
 import { pinMesh, pinMaterial } from "./pins.ts";
 import { mergeStatic, type BenchSpot, type Salle } from "./salles/common.ts";
@@ -272,8 +273,9 @@ export class LaneScene {
     this.salle?.dispose();
     this.composer?.dispose();
     this.envMap?.dispose();
-    this.renderer.dispose();
+    // La toile retirée, son contexte est rendu tout de suite (sans attendre le ramasse-miettes)
     this.renderer.domElement.remove();
+    releaseRenderer(this.renderer);
   }
 }
 

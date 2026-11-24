@@ -2,6 +2,7 @@
 // Elle ne décide de rien : on lui dit où sont les karts et ce qui vient d'arriver, elle le dessine.
 
 import * as THREE from "three";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -1376,7 +1377,8 @@ export class RaceScene {
     for (const d of this.featureKeep) d.dispose();
     for (const p of this.puffs) p.sprite.material.dispose();
     for (const s of this.spare) s.material.dispose();
-    this.renderer.dispose();
+    // La toile retirée, son contexte est rendu tout de suite (sans attendre le ramasse-miettes)
     this.renderer.domElement.remove();
+    releaseRenderer(this.renderer);
   }
 }
