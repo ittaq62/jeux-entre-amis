@@ -26,11 +26,11 @@ export function HowToPlay({ compact = false }: { compact?: boolean }) {
               <kbd>Clic droit · deux doigts</kbd>
               <span>Tourner la vue (deux doigts écartés ou pincés : zoomer)</span>
             </li>
-            <li>
+            <li className="is-keyboard">
               <kbd>Molette</kbd>
               <span>Zoomer</span>
             </li>
-            <li>
+            <li className="is-keyboard">
               <kbd>← → ↑ ↓</kbd>
               <span>Tourner la vue au clavier (avec Maj : tout doucement)</span>
             </li>

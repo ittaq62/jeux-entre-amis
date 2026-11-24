@@ -752,9 +752,21 @@
   font-size: 13px;
 }
 
+/* Au doigt seulement (ni souris ni clavier), la molette et les flèches ne servent à rien */
+@media (hover: none) and (pointer: coarse) {
+  .mg-keys li.is-keyboard {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .mg-btn-label {
     display: none;
+  }
+  /* Les commandes de l'aide l'une sous l'autre : à deux colonnes, l'explication n'avait que quelques mots par ligne */
+  .mg-keys li {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
   .mg-players {
     top: auto;
