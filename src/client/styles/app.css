@@ -506,9 +506,10 @@ a.shop-item {
   min-height: 34px;
 }
 
+/* Une image garde sa forme : 64 px pour un pion carré, une longue queue de billard reste longue */
 .shop-look img {
-  width: 64px;
-  height: 64px;
+  max-width: 100%;
+  height: auto;
 }
 
 .shop-swatch,
@@ -568,8 +569,8 @@ a.shop-item {
 }
 
 .buy-preview img {
-  width: 128px;
-  height: 128px;
+  max-width: 100%;
+  height: auto;
 }
 
 /* Crampons : un joueur du club, ou la célébration, en 3D */
