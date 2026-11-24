@@ -95,6 +95,11 @@ export interface BricksSnapshot {
   round: number;
   board: PlayerBoard;
   koUntil: number | null;
+  /**
+   * Le départ de la manche : il voyage avec le plateau, pour qu'une nouvelle manche (ou « Recommencer » en solo) ne
+   * reparte pas sur l'heure de la précédente quand le plateau arrive avant la vue de la table
+   */
+  startAt?: number;
 }
 
 /** Ce qui s'anime chez tout le monde */

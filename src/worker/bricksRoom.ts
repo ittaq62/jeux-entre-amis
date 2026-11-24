@@ -1451,7 +1451,9 @@ export class BricksRoom extends DurableObject<Env> {
 
     switch (t.kind) {
       case "start":
-        if (!current || m.round.phase !== "countdown") return false;
+        // Une première pose arrivée avant cette alarme a déjà fait passer la manche en jeu, sans rien diffuser : on
+        // diffuse quand même, sinon les écrans restaient au compte à rebours (pièces des autres ignorées, chrono à zéro)
+        if (!current || m.round.phase === "over") return false;
         m.round.phase = "playing";
         return true;
       case "roundEnd":
@@ -1746,7 +1748,7 @@ export class BricksRoom extends DurableObject<Env> {
     const now = Date.now();
     if (!force && now - (this.lastResync.get(id) ?? 0) < 400) return;
     this.lastResync.set(id, now);
-    const snapshot = { id, round: m.round.index, board: structuredClone(p.board), koUntil: p.koUntil };
+    const snapshot = { id, round: m.round.index, board: structuredClone(p.board), koUntil: p.koUntil, startAt: m.round.startAt };
     for (const ws of this.ctx.getWebSockets(seat.userId)) this.send(ws, { t: "self", snapshot });
   }
 

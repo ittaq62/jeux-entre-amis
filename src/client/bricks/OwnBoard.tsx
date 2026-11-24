@@ -186,7 +186,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
 
   function makeGame(s: BricksSnapshot) {
     const cur = roomRef.current.bricks!;
-    game.current = new LocalGame(s, cur.settings, cur.round.startAt, send, onLocal, { das, arr });
+    game.current = new LocalGame(s, cur.settings, s.startAt ?? cur.round.startAt, send, onLocal, { das, arr });
   }
 
   // Le serveur parle de notre plateau
@@ -195,7 +195,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       if (!game.current || game.current.round !== s.round) makeGame(s);
       else game.current.reset(s);
       const gm = game.current!;
-      gm.startAt = roomRef.current.bricks?.round.startAt ?? gm.startAt;
+      gm.startAt = s.startAt ?? roomRef.current.bricks?.round.startAt ?? gm.startAt;
       if (s.koUntil && s.koUntil > serverNow()) setKoUntil(s.koUntil);
       else setKoBy(null);
     };
@@ -249,13 +249,15 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       const cur = roomRef.current.bricks;
       const playing = cur?.round.phase === "playing" || (cur?.round.phase === "countdown" && now >= cur.round.startAt);
       const relayedNow = relayedRef.current;
-      if (gm && playing && !relayedNow) gm.tick(dt, now);
+      // Éliminé (même après avoir rechargé la page), ou le chrono de la manche écoulé : on ne joue plus dans le vide
+      const out = !meRef.current.alive || (cur?.round.endAt != null && now >= cur.round.endAt);
+      if (gm && playing && !relayedNow && !out) gm.tick(dt, now);
       effects.current.step(dt, cell);
       if (renderer && gm) {
         const over = cur?.round.phase === "over";
         const paused = now < gm.pausedUntil;
         // Pendant un K.O., en fin de manche ou quand un bot joue pour nous, aucune pièce ne tombe à l'écran
-        const piece = over || paused || relayedNow ? null : gm.piece;
+        const piece = over || paused || relayedNow || out ? null : gm.piece;
         const ghost = piece && useControls.getState().ghost ? gm.ghost : null;
         // Un bot joue pour nous : on montre le plateau tel que le serveur le voit
         let grid = gm.board.grid;
@@ -325,7 +327,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       e.preventDefault();
       if (e.repeat) return;
       unlockAudio();
-      if (!relayedRef.current) game.current?.press(action, serverNow());
+      if (!relayedRef.current && meRef.current.alive) game.current?.press(action, serverNow());
     };
     const up = (e: KeyboardEvent) => {
       const action = actionFor(e.code, keys);
@@ -368,7 +370,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
     return (y - first.y) / Math.max(1, t - first.t);
   }
   function act(action: InputAction) {
-    if (relayedRef.current) return;
+    if (relayedRef.current || !meRef.current.alive) return;
     game.current?.press(action, serverNow());
     if (action !== "soft") game.current?.release(action);
   }
