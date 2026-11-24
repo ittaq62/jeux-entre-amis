@@ -24,6 +24,7 @@ import { useBoxSize, useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -86,6 +87,8 @@ function stackFleets(width: number, height: number, withMate: boolean) {
 export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.naval!;
+  // Les sièges de la partie, pour la feuille de fin si quelqu'un quitte la table entre-temps
+  useSeatMemory(room.seats);
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
   const { w, h } = useViewport();

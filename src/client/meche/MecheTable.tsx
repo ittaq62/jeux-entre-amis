@@ -26,6 +26,7 @@ import { useTyping, type EventBatch, type RefusedWord } from "./useMecheRoom.ts"
 import { screenSize } from "../lib/viewport.ts";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: MecheRoomView;
@@ -254,6 +255,8 @@ export function MecheTable({
 }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.meche!;
+  // Les sièges de la partie, pour la feuille de fin si quelqu'un quitte la table entre-temps
+  useSeatMemory(room.seats);
   const { w, h, top } = useVisibleArea();
   const phone = w < 760;
   const short = phone && h < 520;

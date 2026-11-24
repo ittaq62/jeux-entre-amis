@@ -30,6 +30,7 @@ import { crewColor } from "./Crews.tsx";
 import { DrawnRulesNote, drawnName } from "./RandomRules.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { useSeatMemory } from "./seatMemory.ts";
 
 interface TableProps {
   room: RoomView;
@@ -51,6 +52,8 @@ const SEAT_BOX = { compact: { w: 76, h: 108 }, wide: { w: 100, h: 126 } } as con
 export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat, onShowLobby, onLeave }: TableProps) {
   const inTour = useTourBridge() !== null;
   const g = room.uno!;
+  // Les sièges de la partie, pour la feuille de fin si quelqu'un quitte la table entre-temps
+  useSeatMemory(room.seats);
   const me = room.you.seatId;
   const mySeat = room.seats.find((s) => s.id === me) ?? null;
   const myIndex = me ? g.players.findIndex((p) => p.id === me) : -1;

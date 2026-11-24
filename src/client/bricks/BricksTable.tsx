@@ -24,6 +24,7 @@ import { useViewport } from "../lib/viewport.ts";
 import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 import { MenuSound, SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
   room: BricksRoomView;
@@ -72,6 +73,8 @@ export function BricksTable({
 }: Props) {
   const inTour = useTourBridge() !== null;
   const g = room.bricks!;
+  // Les sièges de la partie, pour la feuille de fin si quelqu'un quitte la table entre-temps
+  useSeatMemory(room.seats);
   const { w, h } = useViewport();
   // Les boutons à l'écran dès qu'on joue au doigt sur un écran bas, même large : un téléphone couché n'a pas de clavier,
   // et une tablette non plus (seulement le doigt, sans survol : pas de souris ni de clavier branchés)
