@@ -35,6 +35,11 @@ describe("le catalogue", () => {
     }
   });
 
+  it("deux cartes ne portent pas le même nom (« Le Pétard rejoint ton album » doit dire laquelle)", () => {
+    const names = CARDS.map((c) => c.name.toLowerCase());
+    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
+  });
+
   it("chaque rareté existe, chaque famille a des cartes", () => {
     for (const r of RARITIES) expect(CARDS.some((c) => c.rarity === r)).toBe(true);
     for (const f of FAMILIES) expect(CARDS.some((c) => c.family === f.id)).toBe(true);
