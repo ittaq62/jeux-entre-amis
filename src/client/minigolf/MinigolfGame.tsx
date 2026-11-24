@@ -252,10 +252,11 @@ export function MinigolfGame({
     if (v.phase === "intro" && gateClock.passed) say(`Trou ${v.hole + 1}`, "info", `${def.name} · par ${def.par}`);
   }, [v.hole, v.phase, gateClock.passed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Chacun son tour : à lui de jouer (seul sur le parcours, on ne le lui répète pas)
+  // Chacun son tour : à lui de jouer (seul sur le parcours, on ne le lui répète pas ; un bot qui joue sa balle pendant
+  // son absence, non plus : le panneau « Je reprends la main » le dit)
   const turnKey = active ? `${v.hole}:${active.id}:${active.cur}` : "";
   useEffect(() => {
-    if (!myTurn || v.turnShot || v.players.length < 2) return;
+    if (!myTurn || v.turnShot || v.players.length < 2 || mySeatView?.autoplayReason) return;
     sfx.yourTurn(0.9);
     say("À toi de jouer", "great", me && me.cur > 0 ? `Coup ${me.cur + 1}` : undefined);
   }, [turnKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -421,7 +422,7 @@ export function MinigolfGame({
 
       {hud?.power !== null && hud?.power !== undefined && <PowerGauge power={hud.power} last={hud.lastPower} />}
 
-      {seated && hud?.canShoot && hud.power === null && v.phase === "play" && me && me.cur === 0 && (
+      {seated && hud?.canShoot && hud.power === null && v.phase === "play" && me && me.cur === 0 && !mySeatView?.autoplayReason && (
         <p className="mg-tip">Tourne la vue pour viser, puis attrape ta balle et tire-la vers toi</p>
       )}
 

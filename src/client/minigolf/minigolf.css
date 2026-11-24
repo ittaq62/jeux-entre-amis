@@ -248,13 +248,6 @@
   opacity: 0.85;
 }
 
-/* Sur un écran étroit, la rangée du bas est prise (les joueurs, les coups) : le pouvoir passe au-dessus */
-@media (max-width: 600px) {
-  .mg-bonus {
-    bottom: calc(96px + var(--safe-bottom, 0px));
-  }
-}
-
 /* La jauge de force : haute, sur le côté (le doigt qui tire la balle ne la cache pas), ses quarts marqués, le repère du
    coup d'avant */
 .mg-gauge {
@@ -791,10 +784,42 @@
   .mg-gauge {
     right: calc(10px + var(--safe-right, 0px));
   }
+  /* La rangée du bas est prise (les joueurs à gauche, les coups à droite) : le conseil du premier coup et le pouvoir
+     gagné passent au-dessus des coups, à droite, sans toucher la liste des joueurs (jamais les deux à la fois : un
+     pouvoir ne se garde pas d'un trou à l'autre) */
+  .mg-tip,
+  .mg-bonus {
+    left: auto;
+    right: calc(16px + var(--safe-right, 0px));
+    bottom: calc(90px + var(--safe-bottom, 0px));
+    transform: none;
+    max-width: calc(100vw - 190px - var(--safe-left, 0px) - var(--safe-right, 0px));
+  }
+  .mg-tip {
+    padding: 7px 12px;
+    font-size: 13px;
+    white-space: normal;
+    text-align: right;
+  }
+  .mg-bonus {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    border-radius: 14px;
+  }
+  /* Le bot qui joue la balle d'un absent : en haut, sous le tour, plutôt que sur la liste des joueurs */
   .mg-relay {
+    top: calc(112px + var(--safe-top, 0px));
+    bottom: auto;
     white-space: normal;
     width: max-content;
     max-width: 90vw;
+  }
+}
+
+/* Un écran couché (un téléphone en paysage) : la balle est aux deux tiers de la hauteur, le panneau passe dessous */
+@media (max-height: 500px) and (min-width: 641px) {
+  .mg-relay {
+    bottom: calc(14px + var(--safe-bottom, 0px));
   }
 }
 
