@@ -417,7 +417,9 @@ function StrategyPick({ meId, phone, send }: { meId: string; phone: boolean; sen
 /** Chrono de la manche, marée montante, score de la série */
 function RoundHud({ room, serverOffset, meId }: { room: BricksRoomView; serverOffset: number; meId: string | null }) {
   const g = room.bricks!;
-  const me = useBoards((s) => (meId ? s.players[meId] : undefined));
+  // Un spectateur d'un solo 40 lignes suit le seul joueur (sans lui, le compteur restait à 0/40)
+  const shownId = meId ?? (g.mode === "sprint" ? (g.players[0]?.id ?? null) : null);
+  const me = useBoards((s) => (shownId ? s.players[shownId] : undefined));
   const [now, setNow] = useState(() => Date.now() + serverOffset);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() + serverOffset), 200);
