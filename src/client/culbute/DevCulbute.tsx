@@ -1,6 +1,7 @@
 // Une page réservée au développement : un combat de Culbute entre bots, dans le navigateur, sans serveur, pour regarder
 // l'arène, les combattants et les effets de près. Réglages dans l'adresse : ?arene=bal&n=4&lune=1&joue=1 (on joue le
-// premier au clavier et à la souris), ?vitrine=1 (les six Habitués alignés, immobiles).
+// premier au clavier et à la souris), ?vitrine=1 (les six Habitués alignés, immobiles), ?objets=aucun|beaucoup,
+// ?evenements=0 (sans la vie de l'arène ; pour en déclencher un : __cbDev.fight.hazardAt = __cbDev.fight.frame + 1).
 
 import { useEffect, useRef, useState } from "react";
 import { AVATAR_BACKGROUNDS } from "../../shared/avatar.ts";
@@ -52,6 +53,7 @@ export function DevCulbute() {
         ...DEFAULT_FIGHT_SETTINGS,
         items: q.get("objets") === "aucun" ? "aucun" : q.get("objets") === "beaucoup" ? "beaucoup" : "peu",
         lune: q.get("lune") === "1",
+        events: q.get("evenements") !== "0",
       },
       arena,
       styles.map((style, i) => ({ id: `f${i}`, team: i % 2, style })),
