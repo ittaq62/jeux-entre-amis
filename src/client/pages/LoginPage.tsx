@@ -46,6 +46,12 @@ export function LoginPage() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  // Le champ du code reprend la main dès qu'il attend des chiffres : à l'arrivée sur l'étape, et après un code refusé (le
+  // champ était désactivé pendant la vérification, il ne pouvait pas garder le focus ; au téléphone, le clavier se refermait)
+  useEffect(() => {
+    if (step === "code" && !busy && code === "") codeRef.current?.focus();
+  }, [step, busy, code]);
+
   async function sendCode(e?: FormEvent) {
     e?.preventDefault();
     unlockAudio();
@@ -62,7 +68,6 @@ export function LoginPage() {
       setStep("code");
       setCode("");
       setCooldown(45);
-      setTimeout(() => codeRef.current?.focus(), 60);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Une erreur est survenue.");
     } finally {
@@ -81,7 +86,6 @@ export function LoginPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Une erreur est survenue.");
       setCode("");
-      codeRef.current?.focus();
     } finally {
       setBusy(false);
     }
@@ -131,7 +135,11 @@ export function LoginPage() {
                   autoFocus
                 />
               </label>
-              {error && <p className="error-text">{error}</p>}
+              {error && (
+                <p className="error-text" role="alert">
+                  {error}
+                </p>
+              )}
               <button className="btn btn-primary btn-lg btn-block" disabled={busy || !email.includes("@")}>
                 {busy ? <span className="spinner" /> : "Recevoir mon code"}
               </button>
@@ -164,7 +172,11 @@ export function LoginPage() {
                   Développement : code <strong>{devCode}</strong>, touche pour l'utiliser
                 </button>
               )}
-              {error && <p className="error-text">{error}</p>}
+              {error && (
+                <p className="error-text" role="alert">
+                  {error}
+                </p>
+              )}
               <button className="btn btn-primary btn-lg btn-block" disabled={busy || code.length !== 6}>
                 {busy ? <span className="spinner" /> : "Me connecter"}
               </button>

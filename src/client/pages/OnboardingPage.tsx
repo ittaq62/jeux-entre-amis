@@ -44,7 +44,7 @@ export function OnboardingPage() {
             <h2>
               <span className="script-word">Bienvenue</span> à table
             </h2>
-            <p className="hint">Choisis ton pseudo et compose ton portrait. Tout se change plus tard.</p>
+            <p className="hint">Choisis ton pseudo et compose ton personnage. Tout se change plus tard.</p>
           </div>
           <label className="field">
             <span className="field-label">Pseudo</span>
@@ -58,7 +58,11 @@ export function OnboardingPage() {
             />
           </label>
           <AvatarEditor value={avatar} onChange={setAvatar} />
-          {error && <p className="error-text">{error}</p>}
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
           <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
             {busy ? <span className="spinner" /> : "M'asseoir à la table"}
           </button>
