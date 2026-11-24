@@ -4,6 +4,7 @@
 // En console, `__bl` donne la partie (`m`) et l'écran (`rt`).
 
 import { useEffect, useRef, useState } from "react";
+import { seededAvatar } from "../../shared/avatar.ts";
 import { planShot, thinkTime } from "../../shared/games/billard/bot.ts";
 import {
   createMatch,
@@ -78,13 +79,23 @@ export function DevBillard() {
       },
     });
     rt.setPlayers(
-      seats.map((s, i) => ({ id: s.id, name: NAMES[i] ?? s.id, cue: i === 0 ? (q.get("queue") ?? "noyer") : "erable", fx: "confettis" })),
+      seats.map((s, i) => ({
+        id: s.id,
+        name: NAMES[i] ?? s.id,
+        cue: i === 0 ? (q.get("queue") ?? "noyer") : "erable",
+        fx: "confettis",
+        avatar: seededAvatar(`${NAMES[i] ?? s.id}-dev`),
+        accent: ["#2c2c30", "#5c2420", "#1a3a6a", "#2a5a2a"][i % 4]!,
+      })),
     );
     rt.holdIntro(false);
-    (window as unknown as { __bl: unknown }).__bl = { m, rt };
+    // Pour les essais à la main : window.__bl.ctl.paused fige la partie (les bots ne jouent plus)
+    const ctl = { paused: false };
+    (window as unknown as { __bl: unknown }).__bl = { m, rt, ctl };
     push();
     rt.setView(structuredClone(m));
     const timer = setInterval(() => {
+      if (ctl.paused) return;
       now = Date.now();
       let changed = tickMatch(m, now);
       if (m.phase === "aim") {

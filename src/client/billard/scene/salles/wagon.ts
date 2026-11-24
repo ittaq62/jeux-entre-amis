@@ -236,6 +236,7 @@ export function wagon(touch: boolean): Salle {
     grade: { warm: 0.05, sat: 1.05, vignette: 0.45 },
     lamps: lamp.lamps,
     intro: { from: new THREE.Vector3(-4.9, 1.3, 0.0), look: new THREE.Vector3(1, 0.2, 0) },
+    camBox: [4.6, 1.4],
     spots: [
       { x: -4.4, y: FLOOR + 0.48, z: 0.9, yaw: Math.PI / 2 + 0.3, sit: true },
       { x: -4.4, y: FLOOR + 0.48, z: -0.9, yaw: Math.PI / 2 - 0.3, sit: true },

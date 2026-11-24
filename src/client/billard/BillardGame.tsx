@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as RPointerEvent } from "react";
+import type { AvatarConfig } from "../../shared/avatar.ts";
 import { VARIANT_NAMES, legalTargets, type ShotRecord } from "../../shared/games/billard/match.ts";
 import type { BillardClientMessage, BillardRoomView } from "../../shared/games/billard/net.ts";
 import { SALLES } from "../../shared/games/billard/salles.ts";
@@ -16,6 +17,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./BillardHelp.tsx";
 import { formatLabel } from "./BillardLobby.tsx";
 import { BallDot } from "./LookPicker.tsx";
+import { CUE_STYLES } from "./scene/textures.ts";
 import { BillardRuntime, type HudState, type Moment } from "./runtime.ts";
 import { Board, FinalSheet, sideName, type BoardPlayer } from "./Scoreboard.tsx";
 import { shotBurst } from "./shotFx.ts";
@@ -95,11 +97,20 @@ export function BillardGame({
     if (live) return watchFirstSeconds("Billard");
   }, [live]);
 
-  const players: (BoardPlayer & { cue: string; fx: string })[] = useMemo(
+  const players: (BoardPlayer & { cue: string; fx: string; avatar?: AvatarConfig; accent?: string })[] = useMemo(
     () =>
       v.players.map((p) => {
         const seat = room.seats.find((s) => s.id === p.id);
-        return { id: p.id, name: seat?.name ?? "?", cue: seat?.look.cue ?? "erable", fx: seat?.look.fx ?? "confettis" };
+        const cue = seat?.look.cue ?? "erable";
+        return {
+          id: p.id,
+          name: seat?.name ?? "?",
+          cue,
+          fx: seat?.look.fx ?? "confettis",
+          avatar: seat?.avatar,
+          // Le nœud papillon, de la couleur de la poignée de sa queue
+          accent: (CUE_STYLES[cue] ?? CUE_STYLES.erable!).wrap,
+        };
       }),
     [v.players, room.seats],
   );

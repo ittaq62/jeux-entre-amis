@@ -252,7 +252,10 @@ export class TableScene {
         if (o.name === "lampe") o.traverse((c) => (c as THREE.Mesh).isMesh && this.lampMeshes!.push(c));
       });
     }
-    const above = this.camera.position.y > 0.82;
+    // La caméra au-dessus de la table (la vue de dessus, la queue vue d'en haut) : les abat-jour la cacheraient ;
+    // de plus loin, ils restent dans l'image
+    const c = this.camera.position;
+    const above = c.y > 0.82 && Math.abs(c.x) < 1.6 && Math.abs(c.z) < 1.2;
     for (const m of this.lampMeshes) m.visible = !above;
   }
 

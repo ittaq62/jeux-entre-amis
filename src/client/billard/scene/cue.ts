@@ -76,6 +76,12 @@ export class CueStick {
     this.mesh.position.copy(tip);
   }
 
+  /** La queue dans n'importe quel sens : sa pointe en `tip`, le talon vers `back` (unitaire) — tenue à la main */
+  poseAxis(tip: THREE.Vector3, back: THREE.Vector3) {
+    this.mesh.quaternion.setFromUnitVectors(this.up, back);
+    this.mesh.position.copy(tip);
+  }
+
   setEnv(env: THREE.Texture) {
     this.mat.envMap = env;
     this.mat.needsUpdate = true;

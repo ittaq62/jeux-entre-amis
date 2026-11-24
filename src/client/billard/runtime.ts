@@ -4,6 +4,7 @@
 // la blanche pour viser, s'élève pour suivre le coup, descend au ras du tapis pour le ralenti.
 
 import * as THREE from "three";
+import type { AvatarConfig } from "../../shared/avatar.ts";
 import { castAim } from "../../shared/games/billard/aim.ts";
 import {
   cueOf,
@@ -20,6 +21,7 @@ import { DT, HZ, type PhysEvent, type World } from "../../shared/games/billard/p
 import { maxSpeed, playbackRate, startShot, type BallSpot, type Rig, type ShotParams } from "../../shared/games/billard/shot.ts";
 import { AimLines } from "./scene/aimLines.ts";
 import { CUE_TILT } from "./scene/cue.ts";
+import { TablePeople, type CueAt } from "./scene/people.ts";
 import { TableScene, TOUCH } from "./scene/TableScene.ts";
 
 export interface PlayerInfo {
@@ -27,6 +29,10 @@ export interface PlayerInfo {
   name: string;
   cue: string;
   fx: string;
+  /** Son personnage (sans lui, pas de joueur autour de la table) */
+  avatar?: AvatarConfig;
+  /** La couleur de son nœud papillon */
+  accent?: string;
 }
 
 export type ViewMode = "queue" | "dessus";
@@ -143,12 +149,18 @@ export class BillardRuntime {
   private hudKey = "";
   private cueAnim: { strikeAt: number; from: number; dirX: number; dirY: number; cx: number; cy: number; a: number; b: number } | null =
     null;
+  /** Les joueurs autour de la table */
+  private people: TablePeople;
+  /** La queue à la table telle qu'on la montre, et là où elle sera (pendant qu'il y va) */
+  private tableCue: CueAt | null = null;
+  private aimCue: CueAt | null = null;
 
   constructor(
     host: HTMLElement,
     private o: RuntimeOptions,
   ) {
     this.scene = new TableScene(host);
+    this.people = new TablePeople(this.scene.scene);
     const el = this.scene.renderer.domElement;
     el.style.touchAction = "none";
     el.addEventListener("pointerdown", this.onDown);
@@ -173,6 +185,9 @@ export class BillardRuntime {
 
   setPlayers(list: PlayerInfo[]) {
     this.players = new Map(list.map((p) => [p.id, p]));
+    this.people.setPeople(
+      list.flatMap((p) => (p.avatar ? [{ id: p.id, avatar: p.avatar, cue: p.cue, accent: p.accent ?? "#7a1a22" }] : [])),
+    );
   }
 
   setView(v: BillardView) {
@@ -187,6 +202,7 @@ export class BillardRuntime {
           ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
           : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     this.scene.setup(v.salle, rig.table, v.dress, ids);
+    this.people.setTable(rig.table, this.scene.salle?.spots ?? []);
     if (!this.lines) {
       const t = rig.table;
       this.lines = new AimLines(t.R, t.pockets, t.kind === "poches" ? { x0: -t.lx, x1: t.head, y: t.ly } : null);
@@ -329,6 +345,7 @@ export class BillardRuntime {
     el.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("keydown", this.onKey);
     this.lines?.dispose();
+    this.people.dispose();
     this.scene.dispose();
   }
 
@@ -513,7 +530,7 @@ export class BillardRuntime {
         r.stageAt = t;
         this.o.onRoll?.(0);
         // Le serveur a jugé le coup : on le montre (pour mon coup, quand sa réponse est arrivée)
-        if (!r.local) this.o.onMoment?.({ k: "result", rec: r.rec });
+        if (!r.local) this.result(r.rec);
       }
       return;
     }
@@ -595,8 +612,14 @@ export class BillardRuntime {
     for (const p of r.rec.pocketed)
       if (!this.netOf.has(p.id) && this.view?.cfg.variant !== "carambole" && p.id !== 0) this.toNet(p.id, p.pocket, false);
     for (const p of r.rec.pocketed) if (p.id === 0 || this.view?.cfg.variant === "carambole") set.hide(p.id);
-    if (r.stage === "end") this.o.onMoment?.({ k: "result", rec: r.rec });
+    if (r.stage === "end") this.result(r.rec);
     if (this.view && this.view.phase !== "shot") this.showBalls();
+  }
+
+  /** Le coup est jugé : l'écran l'annonce, les joueurs réagissent */
+  private result(rec: ShotRecord) {
+    this.o.onMoment?.({ k: "result", rec });
+    this.people.react(rec.id, rec.outcome.tone, now());
   }
 
   /** Le volume d'un choc selon sa distance à la caméra */
@@ -747,6 +770,7 @@ export class BillardRuntime {
     this.updateAim();
     this.updateCue(t);
     this.updateCamera(dt, t);
+    this.updatePeople(t, dt);
     this.scene.render(dt);
     this.pushHud(false);
   };
@@ -834,13 +858,19 @@ export class BillardRuntime {
     }
   }
 
-  /** La queue : derrière la blanche pendant la visée, puis le coup sec, puis elle s'efface */
+  /**
+   * La queue de la table : derrière la blanche pendant la visée, puis le coup sec ; ensuite elle repart dans la main
+   * du joueur, qui se relève avec (sans personnage, elle se retire et s'efface). Celle d'un autre n'y est qu'une fois
+   * qu'il est arrivé à la table.
+   */
   private updateCue(t: number) {
     const v = this.view!;
     const sc = this.scene;
     const cueStick = sc.cue;
     const R = this.rig!.table.R;
     const shooter = this.players.get(v.shooter);
+    this.tableCue = null;
+    this.aimCue = null;
     let dirX = 0,
       dirY = 0,
       cx = 0,
@@ -848,10 +878,11 @@ export class BillardRuntime {
       back = 0,
       a = 0,
       b = 0;
+    let hide = false;
     const anim = this.cueAnim;
     if (anim) {
-      const style = this.players.get(this.replay?.rec.id ?? v.shooter)?.cue ?? "erable";
-      cueStick.setStyle(style);
+      const owner = this.replay?.rec.id ?? v.shooter;
+      cueStick.setStyle(this.players.get(owner)?.cue ?? "erable");
       const rec = this.replay?.rec;
       let pullK = anim.from;
       let ang = Math.atan2(anim.dirY, anim.dirX);
@@ -867,11 +898,11 @@ export class BillardRuntime {
         back = R * 0.6 + pullK * PULL_MAX;
       } else {
         const since = t - anim.strikeAt;
-        // Le coup sec : la queue avance en 70 ms, accompagne, puis se retire et disparaît
+        // Le coup sec : la queue avance en 70 ms et accompagne ; puis le joueur la reprend (ou elle se retire)
         if (since < 0.07) back = R * 0.6 + pullK * PULL_MAX * (1 - since / 0.07) * (1 - since / 0.07);
         else if (since < 0.2) back = -Math.min(0.05, (since - 0.07) * 0.5);
         else back = -0.05 + (since - 0.2) * 0.6;
-        if (since > 0.9) {
+        if ((since > 0.25 && this.people.has(owner)) || since > 0.9) {
           cueStick.visible = false;
           return;
         }
@@ -905,11 +936,12 @@ export class BillardRuntime {
       back = R * 0.6 + k * PULL_MAX + idle;
       a = mine ? this.tip.a : (this.remote?.a ?? 0);
       b = mine ? this.tip.b : (this.remote?.b ?? 0);
+      // Celui qui joue n'est pas encore à la table : sa queue est encore dans sa main
+      if (!mine && this.people.has(v.shooter) && !this.people.ready(v.shooter)) hide = true;
     } else {
       cueStick.visible = false;
       return;
     }
-    cueStick.visible = true;
     // La pointe : derrière la blanche, face au point de frappe (à droite : le côté droit de la direction)
     const rx = dirY,
       ry = -dirX;
@@ -917,7 +949,61 @@ export class BillardRuntime {
     const px = cx - dirX * (R + back) + rx * a * off;
     const py = cy - dirY * (R + back) + ry * a * off;
     const h = R + b * off + Math.tan(CUE_TILT) * back;
-    sc.cue.pose(new THREE.Vector3(px, h, -py), dirX, -dirY);
+    const c = Math.cos(CUE_TILT),
+      s = Math.sin(CUE_TILT);
+    const at: CueAt = {
+      tip: new THREE.Vector3(px, h, -py),
+      back: new THREE.Vector3(-dirX * c, s, dirY * c),
+      drawn: back - R * 0.6,
+    };
+    this.aimCue = at;
+    if (hide) {
+      cueStick.visible = false;
+      return;
+    }
+    this.tableCue = at;
+    cueStick.visible = true;
+    sc.cue.pose(at.tip, dirX, -dirY);
+  }
+
+  /** Les joueurs autour de la table : qui joue, où est sa queue, ce que tout le monde regarde */
+  private updatePeople(t: number, dt: number) {
+    const v = this.view!;
+    const r = this.replay;
+    const shooter = r ? r.rec.id : v.phase === "aim" ? v.shooter : null;
+    const anim = this.cueAnim;
+    const sinceStrike = r && anim && t >= anim.strikeAt ? t - anim.strikeAt : null;
+    const look = this.tmp;
+    const w = r ? (r.stage === "slow" && r.slowWorld ? r.slowWorld : r.world) : null;
+    let n = 0;
+    look.set(0, 0, 0);
+    if (w && sinceStrike !== null) {
+      for (const b of w.balls) {
+        if (!b.on || b.vx * b.vx + b.vy * b.vy < 0.0004) continue;
+        look.x += b.x;
+        look.z -= b.y;
+        n++;
+      }
+    }
+    if (n) look.multiplyScalar(1 / n);
+    else {
+      const cue = (w ? w.balls.filter((b) => b.on).map((b) => ({ id: b.id, x: b.x, y: b.y })) : this.ballsNow()).find(
+        (b) => b.id === (r ? r.rec.cue : this.myCue()),
+      );
+      if (cue) look.set(cue.x, 0, -cue.y);
+    }
+    look.y = this.rig!.table.R;
+    this.people.update({
+      t,
+      dt,
+      shooter,
+      cue: this.tableCue,
+      aim: this.aimCue,
+      sinceStrike,
+      look: look.clone(),
+      camera: this.scene.camera.position,
+      mine: shooter !== null && shooter === this.o.me,
+    });
   }
 
   private updateCamera(dt: number, t: number) {
@@ -975,8 +1061,9 @@ export class BillardRuntime {
           cym = n ? sy / n : c0.y;
         // Derrière celui qui joue, sous les abat-jour, et assez loin pour voir le coup entier
         const d = Math.atan2(r.rec.shot.dy, r.rec.shot.dx);
-        const bx = Math.max(-3.2, Math.min(3.2, c0.x - Math.cos(d) * 1.25)),
-          by = Math.max(-2.4, Math.min(2.4, c0.y - Math.sin(d) * 1.25));
+        const [bxMax, byMax] = salle?.camBox ?? [3.2, 2.4];
+        const bx = Math.max(-bxMax, Math.min(bxMax, c0.x - Math.cos(d) * 1.25)),
+          by = Math.max(-byMax, Math.min(byMax, c0.y - Math.sin(d) * 1.25));
         pos.set(bx, 0.78, -by);
         look.set((c0.x + cxm) / 2, 0, -(c0.y + cym) / 2);
         rate = 1.4;
@@ -987,14 +1074,17 @@ export class BillardRuntime {
       look.set(0, -0.1, 0);
       rate = 1.2;
     } else if (r && r.stage === "windup") {
-      const p = this.aimPose(cue, Math.atan2(r.rec.shot.dy, r.rec.shot.dx), portrait);
+      const ang = Math.atan2(r.rec.shot.dy, r.rec.shot.dx);
+      const p = (r.rec.id !== this.o.me && this.watchPose(r.rec.id, cue, ang, portrait)) || this.aimPose(cue, ang, portrait);
       pos = p.pos;
       look = p.look;
       if (this.mode === "dessus") top();
     } else {
-      // La visée (la mienne, ou celle de celui qui joue)
+      // La visée : la mienne, de ses yeux ; celle d'un autre, par-dessus son épaule (une fois qu'il est à la table)
       const mine = v.shooter === this.o.me;
-      const p = this.aimPose(cue, mine ? this.angle : this.remoteAngle, portrait);
+      const ang = mine ? this.angle : this.remoteAngle;
+      const p =
+        (!mine && this.people.ready(v.shooter) && this.watchPose(v.shooter, cue, ang, portrait)) || this.aimPose(cue, ang, portrait);
       pos = p.pos;
       look = p.look;
       if (this.mode === "dessus" || (mine && this.drag?.kind === "place")) top();
@@ -1010,6 +1100,36 @@ export class BillardRuntime {
     this.camLook.lerp(look, k);
     cam.position.copy(this.camPos);
     cam.lookAt(this.camLook);
+  }
+
+  /**
+   * La visée d'un autre, vue de derrière et de côté, en hauteur : on le voit penché sur sa queue, la blanche et la
+   * bille visée devant lui. La première place qui reste dans la salle et pas collée à sa tête, en tournant autour de
+   * la blanche depuis derrière-à-droite.
+   */
+  private watchPose(id: string, cue: { x: number; y: number }, angle: number, portrait: boolean) {
+    const head = this.people.headOf(id);
+    if (!head) return null;
+    const [mx, mz] = this.scene.salle?.camBox ?? [3.2, 2.4];
+    const dist = portrait ? 1.85 : 1.65,
+      h = portrait ? 1.45 : 1.3;
+    const pos = new THREE.Vector3();
+    const ball = new THREE.Vector3(cue.x, 0.03, -cue.y);
+    const seg = new THREE.Line3();
+    const near = new THREE.Vector3();
+    for (const deg of [70, -70, 95, -95, 50, -50, 125, -125]) {
+      const a = angle + Math.PI + (deg * Math.PI) / 180;
+      pos.set(cue.x + Math.cos(a) * dist, h, -(cue.y + Math.sin(a) * dist));
+      if (Math.abs(pos.x) > mx || Math.abs(pos.z) > mz) continue;
+      if (pos.distanceTo(head) < 1.25) continue;
+      // Sa tête ne doit pas cacher la blanche
+      seg.set(pos, ball).closestPointToPoint(head, true, near);
+      if (near.distanceTo(head) < 0.5) continue;
+      const ahead = portrait ? 0.3 : 0.45;
+      const look = new THREE.Vector3(cue.x + Math.cos(angle) * ahead, -0.08, -(cue.y + Math.sin(angle) * ahead));
+      return { pos, look };
+    }
+    return null;
   }
 
   /** La caméra de visée : derrière la blanche, dans l'axe de la queue, un peu au-dessus */

@@ -39,6 +39,8 @@ export interface Salle {
   intro: { from: THREE.Vector3; look: THREE.Vector3 };
   /** Où se tiennent ceux qui attendent leur tour */
   spots: Spot[];
+  /** Jusqu'où la caméra peut aller du centre (x, z) sans passer les murs ; par défaut 3,2 × 2,4 */
+  camBox?: [number, number];
   /** Le son de la salle (voir sfx.ts) */
   ambience: string;
   /** Ce qui bouge dans la salle (le feu, la pluie, le paysage…) */
