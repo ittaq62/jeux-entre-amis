@@ -205,6 +205,8 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       play("brickWarn");
     };
     if (lastSnapshot.current) onSelf(lastSnapshot.current);
+    // De retour du salon en pleine manche, le dernier état gardé date peut-être du début : on redemande le vrai
+    if (room.status === "playing" && room.bricks?.round.phase === "playing") send({ t: "resync" });
     return () => {
       listeners.current.self = undefined;
       listeners.current.garbage = undefined;
@@ -316,6 +318,8 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Une fenêtre ouverte par-dessus (touches et réglages…) garde le clavier pour elle
+      if (document.querySelector(".modal-backdrop")) return;
       const action = actionFor(e.code, keys);
       if (!action) return;
       e.preventDefault();
@@ -327,11 +331,18 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
       const action = actionFor(e.code, keys);
       if (action) game.current?.release(action);
     };
+    // Clavier perdu (autre fenêtre, onglet caché) : les relâchements n'arriveront pas, on lâche tout
+    const lost = () => game.current?.releaseAll();
+    const hidden = () => document.visibilityState === "hidden" && lost();
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", lost);
+    document.addEventListener("visibilitychange", hidden);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", lost);
+      document.removeEventListener("visibilitychange", hidden);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys]);

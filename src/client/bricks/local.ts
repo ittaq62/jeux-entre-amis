@@ -71,6 +71,9 @@ export class LocalGame {
   private progress = 0;
   private dir: -1 | 0 | 1 = 0;
   private dirSince = 0;
+  /** Les flèches tenues : lâcher l'une repart dans le sens de l'autre si elle est encore tenue */
+  private heldDirs = new Set<"left" | "right">();
+  private lastNow = 0;
   private arrAcc = 0;
   private softDrop = false;
   /** Plateau après chaque pose, pour comparer avec ce que renvoie le serveur */
@@ -190,6 +193,7 @@ export class LocalGame {
       case "left":
       case "right": {
         const d = action === "left" ? -1 : 1;
+        this.heldDirs.add(action);
         this.dir = d;
         this.dirSince = now;
         this.arrAcc = 0;
@@ -240,12 +244,29 @@ export class LocalGame {
   }
 
   release(action: InputAction) {
-    if ((action === "left" && this.dir === -1) || (action === "right" && this.dir === 1)) this.dir = 0;
+    if (action === "left" || action === "right") {
+      this.heldDirs.delete(action);
+      if ((action === "left" && this.dir === -1) || (action === "right" && this.dir === 1)) {
+        const other = action === "left" ? "right" : "left";
+        // L'autre flèche est encore tenue : la pièce repart de son côté (après le délai de répétition)
+        this.dir = this.heldDirs.has(other) ? (other === "left" ? -1 : 1) : 0;
+        this.dirSince = this.lastNow;
+        this.arrAcc = 0;
+      }
+    }
     if (action === "soft") this.softDrop = false;
+  }
+
+  /** Tout lâcher : la fenêtre a perdu le clavier (autre fenêtre, onglet caché), les relâchements n'arriveront jamais */
+  releaseAll() {
+    this.heldDirs.clear();
+    this.dir = 0;
+    this.softDrop = false;
   }
 
   /** Avance le temps : répétition des déplacements, gravité, verrou. */
   tick(dt: number, now: number) {
+    this.lastNow = now;
     if (!this.canPlay(now) || !this.piece) {
       this.fall = 0;
       return;

@@ -73,8 +73,10 @@ export function BricksTable({
   const inTour = useTourBridge() !== null;
   const g = room.bricks!;
   const { w, h } = useViewport();
-  // Les boutons à l'écran dès qu'on joue au doigt sur un écran bas, même large : un téléphone couché n'a pas de clavier
-  const phone = w < 760 || (h < 560 && window.matchMedia("(pointer: coarse)").matches);
+  // Les boutons à l'écran dès qu'on joue au doigt sur un écran bas, même large : un téléphone couché n'a pas de clavier,
+  // et une tablette non plus (seulement le doigt, sans survol : pas de souris ni de clavier branchés)
+  const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  const phone = w < 760 || (h < 560 && window.matchMedia("(pointer: coarse)").matches) || touchOnly;
   const flat = phone && w > h && h < 560;
   const tightPad = phone && h < 640;
   const sound = usePrefs((s) => s.sound);

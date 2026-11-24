@@ -18,7 +18,9 @@ export const DEFAULT_KEYS: Record<InputAction, string[]> = {
   soft: ["ArrowDown"],
   hard: ["Space"],
   cw: ["ArrowUp", "KeyX"],
-  ccw: ["KeyZ", "ControlLeft"],
+  // Pas de Ctrl : sur un clavier AZERTY, la touche de Z est le W, et Ctrl puis W ferme l'onglet ; sur Mac, Ctrl et les
+  // flèches changent de bureau
+  ccw: ["KeyZ"],
   flip: ["KeyA"],
   hold: ["KeyC", "ShiftLeft"],
 };
@@ -39,7 +41,10 @@ const DEFAULTS = { keys: DEFAULT_KEYS, das: 133, arr: 10, ghost: true, music: tr
 
 function load(): Partial<typeof DEFAULTS> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<typeof DEFAULTS>;
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<typeof DEFAULTS>;
+    // Les anciens réglages par défaut tournaient aussi avec Ctrl : on le retire s'il n'a pas été choisi exprès
+    if (saved.keys?.ccw?.join() === "KeyZ,ControlLeft") saved.keys = { ...saved.keys, ccw: ["KeyZ"] };
+    return saved;
   } catch {
     return {};
   }
