@@ -555,6 +555,7 @@ export class GolfRuntime {
 
   private placeBalls(tick: number) {
     const v = this.view!;
+    const myAt = this.o.me ? this.ballPos(this.o.me) : null;
     for (const p of v.players) {
       const model = this.scene.ball(
         p.id,
@@ -589,6 +590,11 @@ export class GolfRuntime {
       if (!b || b.mode !== "in") model.sink(0);
       model.show(visible);
       model.set(pos.x, pos.y, pos.z, this.scene.groundAt(pos.x, pos.z));
+      // Sur la sienne, celle d'un autre s'efface (de deux à quatre rayons, elle reprend sa place)
+      if (myAt && p.id !== this.o.me) {
+        const d = Math.hypot(pos.x - myAt.x, pos.y - myAt.y, pos.z - myAt.z);
+        model.over(clamp((BALL_R * 4 - d) / (BALL_R * 2), 0, 1));
+      }
     }
     // La visée : la sienne quand il peut jouer (l'anneau l'invite à attraper sa balle) ; chacun son tour, celle de
     // celui qui joue
@@ -935,5 +941,3 @@ function wrap(a: number): number {
 function keyOf(e: KeyboardEvent): string {
   return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }
-
-void BALL_R;

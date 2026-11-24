@@ -310,6 +310,16 @@ export class BallModel {
     (this.shadow.material as THREE.MeshBasicMaterial).opacity = (this.mine ? 0.55 : 0.35) / (1 + up * 6);
   }
 
+  /**
+   * La balle d'un autre posée sur la sienne (tous en même temps, elles se traversent ; au départ, toutes sont au même
+   * endroit) : `k` de 0 (loin) à 1 (l'une dans l'autre), elle s'efface presque, son nom aussi, pour ne pas cacher la sienne
+   */
+  over(k: number) {
+    if (this.mine) return;
+    this.mat.opacity = 0.62 - 0.5 * k;
+    if (this.tag) this.tag.material.opacity = 1 - 0.65 * k;
+  }
+
   /** Cachée (dans le trou, perdue) ou visible */
   show(on: boolean) {
     this.group.visible = on;
