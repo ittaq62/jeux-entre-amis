@@ -21,6 +21,7 @@ import { GameOver, RoundOver } from "./Overlays.tsx";
 import { PartnerBar } from "./PartnerBar.tsx";
 import { ColorPicker, TargetPicker } from "./Pickers.tsx";
 import { Seat, TimerRing } from "./Seat.tsx";
+import { whyNot } from "./unoHints.ts";
 import type { EmoteBubble } from "./useRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
@@ -130,6 +131,9 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   const myTurn = g.phase === "playing" && me !== null && g.turn === me && !mySeat?.autoplay;
   const playable = useMemo(() => new Set(g.playable), [g.playable]);
+  // Interception : hors de son tour, le serveur met dans « playable » les cartes identiques à celle du dessus
+  const canJump =
+    rules.jumpIn && g.phase === "playing" && me !== null && !myTurn && !mySeat?.autoplay && !myPlayer?.out && playable.size > 0;
   const hand = useMemo(() => sortHand(g.hand), [g.hand]);
   const isRouletteVictim = myTurn && g.rouletteVictim === me;
 
@@ -180,20 +184,51 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   function onCardClick(card: Card) {
     unlockAudio();
-    if (!myTurn) return;
+    if (!myTurn && !canJump) return;
     if (!playable.has(card.id)) {
       play("click", { volume: 0.4 });
+      if (myTurn) showWhy(whyNot(card, g, rules));
       return;
     }
     if (isWild(card) && card.kind !== "wildRoulette") return setColorFor(card);
-    if (card.kind === "number" && card.value === 7 && rules.sevenZero && ordered.filter((p) => !p.out).length > 1)
-      return setTargetFor(card);
-    act({
-      type: "play",
-      cardId: card.id,
-      ...(card.kind === "number" && card.value === 7 && rules.sevenZero ? { target: ordered.find((p) => !p.out)?.id } : {}),
-    });
+    // Un 7 posé en dernière carte n'échange rien : la main est vide
+    const swaps = card.kind === "number" && card.value === 7 && rules.sevenZero && g.hand.length > 1;
+    if (swaps && ordered.filter((p) => !p.out).length > 1) return setTargetFor(card);
+    play_({ type: "play", cardId: card.id, ...(swaps ? { target: ordered.find((p) => !p.out)?.id } : {}) });
   }
+
+  /** Poser une carte : si c'est l'avant-dernière, le bouton UNO s'allume tout de suite, sans attendre les animations */
+  function play_(action: Extract<UnoAction, { type: "play" }>) {
+    if (g.hand.length === 2 && !myPlayer?.declaredUno) setUnoArmed(g.turnId);
+    act(action);
+  }
+
+  // La raison d'un refus, le temps de la lire
+  const [why, setWhy] = useState<string | null>(null);
+  const whyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showWhy(text: string | null) {
+    if (!text) return;
+    setWhy(text);
+    if (whyTimer.current) clearTimeout(whyTimer.current);
+    whyTimer.current = setTimeout(() => setWhy(null), 2600);
+  }
+  useEffect(() => () => void (whyTimer.current && clearTimeout(whyTimer.current)), []);
+  useEffect(() => setWhy(null), [g.turnId]);
+
+  // Le choix d'une couleur ou d'un joueur se referme si la main passe (chrono écoulé, carte interceptée…)
+  useEffect(() => {
+    if (myTurn || canJump) return;
+    setColorFor(null);
+    setTargetFor(null);
+  }, [myTurn, canJump]);
+
+  // UNO armé : la carte vient de partir, la vue (après les animations) n'a pas encore une seule carte en main.
+  // Il s'éteint dès que la main n'a plus deux cartes ou que la vue change sans que la carte soit partie (refus).
+  const [unoArmed, setUnoArmed] = useState<number | null>(null);
+  useEffect(() => {
+    if (unoArmed !== null && (g.hand.length !== 2 || g.turnId !== unoArmed)) setUnoArmed(null);
+  }, [unoArmed, g.hand.length, g.turnId]);
+  const canUno = g.canUno || (unoArmed !== null && g.phase === "playing");
 
   const canDraw = myTurn && !g.rouletteVictim && !g.hasDrawn && !(rules.mustPlay && g.playable.length > 0 && g.pendingDraw === 0);
 
@@ -216,7 +251,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "u" || e.key === "U") {
-        if (g.canUno) act({ type: "uno" });
+        if (canUno) act({ type: "uno" });
       } else if ((e.key === "d" || e.key === "D" || e.key === " ") && canDraw) {
         e.preventDefault();
         act({ type: "draw" });
@@ -237,14 +272,18 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   if (g.phase !== "playing") status = "";
   else if (!me) status = `Tu regardes la partie · au tour de ${current?.name ?? "…"}${currentAway}`;
   else if (mySeat?.autoplay) status = "Un bot joue à ta place";
+  else if (vulnerable === me && g.canUno) status = "Une seule carte : crie UNO avant qu'on te dénonce !";
+  else if (why) status = why;
+  else if (canJump) status = "Interception ! Tu as la même carte : pose-la avant les autres";
   else if (!myTurn)
     status = g.rouletteVictim ? `${current?.name} fait tourner la roulette…` : `Au tour de ${current?.name ?? "…"}${currentAway}`;
   else if (isRouletteVictim) status = "Roulette ! Choisis la couleur à chercher";
-  else if (g.canChallenge) status = `+${g.pendingDraw} sur toi ! Contester le bluff, cumuler ou encaisser ?`;
+  else if (g.canChallenge) status = `+${g.pendingDraw} sur toi ! Contester le bluff${g.canStack ? ", cumuler" : ""} ou encaisser ?`;
   else if (g.pendingDraw > 0)
     status = g.canStack ? `+${g.pendingDraw} ! Cumule une carte « + » ou encaisse` : `Tu encaisses +${g.pendingDraw}…`;
   else if (g.drawnCardId !== null) status = rules.mustPlay ? "Pose la carte piochée" : "Carte piochée jouable : la poser ou la garder ?";
   else if (g.playable.length === 0) status = "Aucune carte jouable : pioche !";
+  else if (rules.mustPlay) status = "À toi ! Sans pitié : tu as une carte qui va, pose-la";
   else status = "À toi de jouer !";
 
   const timerTotal = g.settings.turnSeconds;
@@ -281,21 +320,24 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   );
 
   // Pas de UNO d'avance : avec deux cartes, le bouton reste éteint et dit quand il servira
-  const unoLater = !rules.earlyUno && myTurn && g.hand.length === 2 && !myPlayer?.declaredUno && !g.canUno;
+  const unoLater = !rules.earlyUno && myTurn && g.hand.length === 2 && !myPlayer?.declaredUno && !canUno;
   const unoHelp = rules.earlyUno
     ? "Crier UNO"
     : "Crier UNO : pas de UNO d'avance, seulement une fois ta carte posée, avec ta dernière carte";
   const unoSide = (
     <div className="my-side my-side-right">
       <motion.button
-        className={`uno-btn ${g.canUno ? "is-ready" : ""} ${vulnerable === me ? "is-urgent" : ""}`}
-        disabled={!g.canUno}
-        onClick={() => act({ type: "uno" })}
+        className={`uno-btn ${canUno ? "is-ready" : ""} ${vulnerable === me || unoArmed !== null ? "is-urgent" : ""}`}
+        disabled={!canUno}
+        onClick={() => {
+          act({ type: "uno" });
+          setUnoArmed(null);
+        }}
         whileTap={{ scale: 0.88 }}
         aria-label={unoHelp}
         title={rules.earlyUno ? undefined : "Pas de UNO d'avance : crie-le une fois ta carte posée"}
       >
-        <Chip label="UNO" tone="red" size={compact ? 52 : 60} muted={!g.canUno} />
+        <Chip label="UNO" tone="red" size={compact ? 52 : 60} muted={!canUno} />
       </motion.button>
       <AnimatePresence>
         {unoLater && (
@@ -470,7 +512,11 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
                   </button>
                 )}
                 {myTurn && g.canChallenge && (
-                  <button className="btn btn-danger btn-sm" onClick={() => act({ type: "challenge" })}>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => act({ type: "challenge" })}
+                    title="Si le +4 était un bluff (son auteur avait la couleur demandée), c'est lui qui pioche 4. Sinon, tu pioches 6."
+                  >
                     Contester
                   </button>
                 )}
@@ -497,10 +543,10 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
               <Hand
                 cards={hand}
                 playable={playable}
-                myTurn={myTurn}
+                myTurn={myTurn || canJump}
                 cardWidth={handW}
                 onPlay={onCardClick}
-                highlight={myTurn ? g.drawnCardId : null}
+                highlight={myTurn ? g.drawnCardId : canJump ? (g.playable[0] ?? null) : null}
                 maxRows={portrait ? 3 : h < 500 ? 1 : 2}
               />
               {!compact && unoSide}
@@ -515,7 +561,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           title="Choisis une couleur"
           onCancel={() => setColorFor(null)}
           onPick={(color: Color) => {
-            if (colorFor) act({ type: "play", cardId: colorFor.id, color });
+            if (colorFor) play_({ type: "play", cardId: colorFor.id, color });
             setColorFor(null);
           }}
         />
@@ -531,7 +577,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
           me={me}
           onCancel={() => setTargetFor(null)}
           onPick={(id) => {
-            if (targetFor) act({ type: "play", cardId: targetFor.id, target: id });
+            if (targetFor) play_({ type: "play", cardId: targetFor.id, target: id });
             setTargetFor(null);
           }}
         />
