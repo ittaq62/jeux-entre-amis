@@ -91,8 +91,10 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     adapt: 0.3,
   },
   moyen: {
-    think: 8,
-    attack: 0.6,
+    // (un peu plus lent à réagir et moins pressé d'attaquer qu'avant : depuis qu'il ne se jette plus dans le vide, il
+    // gagnait trop souvent contre un joueur ordinaire ; contre celui qui reste planté à marteler, rien ne change)
+    think: 12,
+    attack: 0.5,
     guard: 0.15,
     charge: 0.4,
     recover: 0.95,
@@ -104,7 +106,7 @@ const LEVELS: Record<BotLevel, LevelInfo> = {
     mash: 0.2,
     wary: 0.14,
     taunt: 0.45,
-    combo: 0.45,
+    combo: 0.3,
     aerial: 0.18,
     punish: 0.7,
     reflex: 0.5,
@@ -782,7 +784,7 @@ function decide(f: Fight, slot: number, m: BotMemory, level: BotLevel): Input {
   // fois décidé, il s'y tient un moment, sans changer d'idée à chaque instant)
   if (!me.item) {
     const wanted = upItem(f, me, foes, f.frame < m.fetchUntil);
-    if (wanted && f.frame >= m.fetchUntil && rnd(m) < L.attack) m.fetchUntil = f.frame + 180;
+    if (wanted && f.frame >= m.fetchUntil && rnd(m) < 0.3 + 0.3 * L.space) m.fetchUntil = f.frame + 180;
     if (wanted && f.frame < m.fetchUntil && climb(f, me, m, wanted)) return out();
   }
   if (!me.item && !airborne(me)) {

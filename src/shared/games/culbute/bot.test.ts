@@ -242,7 +242,7 @@ describe("Culbute : les objets à aller chercher", () => {
       f.items.push({ id: 999, kind: "baguette", x: -3.8, y: 2.7, vx: 0, vy: 0, ground: true, life: 99999 });
       const mem = newBotMemory(5);
       const idle: Input = { x: 0, y: 0, held: 0, pressed: 0 };
-      for (let k = 0; k < 8 * 60 && !f.fighters[0]!.item; k++) stepFight(f, [botInput(f, 0, mem, "moyen"), idle]);
+      for (let k = 0; k < 15 * 60 && !f.fighters[0]!.item; k++) stepFight(f, [botInput(f, 0, mem, "moyen"), idle]);
       if (f.fighters[0]!.item === "baguette") got++;
     }
     expect(got).toBeGreaterThanOrEqual(2);
