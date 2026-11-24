@@ -608,18 +608,27 @@ export function CramponsMatch({
   // Le ballon est à lui (au pied, dans les mains de son gardien, ou pour une remise en jeu) : les boutons servent à le jouer
   const withBall = hud.hasBall || Boolean(taking);
   const [restartLeft, setRestartLeft] = useState<number | null>(null);
-  const takingKey = taking ? `${restart?.kind}-${restart?.taker}` : keeperHold ? `gk-${hud.active}` : "";
+  // Le serveur laisse 8 s à partir du moment où la remise est prête : sa vue arrive à cet instant-là, et le décompte part
+  // de là. Avant, il partait quand l'écran s'apercevait que c'était à lui (après l'aide ou la présentation) : il
+  // affichait encore 4 s quand l'ordinateur jouait à sa place
+  const readyKey = restart?.ready && view.phase !== "play" ? `${restart.kind}-${restart.taker}` : "";
+  const readySince = useMemo(() => (readyKey ? performance.now() : 0), [readyKey]);
+  const takingKey = taking ? readyKey : keeperHold ? `gk-${hud.active}` : "";
+  const keeperSince = useMemo(() => (takingKey.startsWith("gk-") ? performance.now() : 0), [takingKey]);
+  const since = takingKey.startsWith("gk-") ? keeperSince : readySince;
+  // La barre qui se vide part du même instant
+  const barDelay = useMemo(() => (takingKey ? (performance.now() - since) / 1000 : 0), [takingKey, since]);
   useEffect(() => {
     if (!takingKey) {
       setRestartLeft(null);
       return;
     }
     const wait = takingKey.startsWith("gk-") ? HUMAN_KEEPER_WAIT : HUMAN_RESTART_WAIT;
-    const start = performance.now();
-    setRestartLeft(wait);
-    const id = setInterval(() => setRestartLeft(Math.max(0, Math.ceil(wait - (performance.now() - start) / 1000))), 200);
+    const tick = () => setRestartLeft(Math.max(0, Math.ceil(wait - (performance.now() - since) / 1000)));
+    tick();
+    const id = setInterval(tick, 200);
     return () => clearInterval(id);
-  }, [takingKey]);
+  }, [takingKey, since]);
   const left = view.teams[0];
   const right = view.teams[1];
   const shootout = shown.shootout;
@@ -646,7 +655,8 @@ export function CramponsMatch({
           me={seatId}
         />
       )}
-      {room.status === "playing" && prepared && <GateCountdown countdown={gateClock.countdown} accent={LOADING_THEME.accent} />}
+      {/* Le compte à rebours du départ, sauf par-dessus l'aide (qui le dit elle-même quand c'est à lui de jouer) */}
+      {room.status === "playing" && prepared && !help && <GateCountdown countdown={gateClock.countdown} accent={LOADING_THEME.accent} />}
       <FirstSecondsPanel />
       <canvas ref={canvas} className={`cr-canvas ${settings.aim === "curseur" && !touch ? "is-aim" : ""} ${ready ? "is-ready" : ""}`} />
       {/* Au doigt, pendant la présentation, le gros plan ou le ralenti : toucher l'écran n'importe où les passe */}
@@ -776,7 +786,11 @@ export function CramponsMatch({
                 {restartLeft}
               </span>
             )}
-            <i key={takingKey} className="cr-prompt-bar" style={{ animationDuration: `${HUMAN_RESTART_WAIT}s` }} />
+            <i
+              key={takingKey}
+              className="cr-prompt-bar"
+              style={{ animationDuration: `${HUMAN_RESTART_WAIT}s`, animationDelay: `-${barDelay}s` }}
+            />
           </div>
         ) : (
           // Qui la joue ; tant qu'il va chercher le ballon, elle ne part pas
@@ -883,7 +897,17 @@ export function CramponsMatch({
             closeHelp();
             setPanel(true);
           }}
-          rules={<DrawnRulesNote room={room} />}
+          rules={
+            <>
+              {/* L'aide ouverte, le match ne l'attend pas : à lui de jouer, et le temps qu'il lui reste */}
+              {taking && restart && restartLeft !== null && (
+                <p className="cr-howto-turn" role="status">
+                  À toi de {RESTART_ACTION[restart.kind].toLowerCase()} : sinon l'ordinateur le fait dans {restartLeft} s.
+                </p>
+              )}
+              <DrawnRulesNote room={room} />
+            </>
+          }
         />
       )}
       {panel && <SettingsPanel touch={touch} settings={settings} onChange={setSettings} onClose={() => setPanel(false)} />}

@@ -918,6 +918,17 @@ kbd {
   font-style: normal;
 }
 
+/* Dans l'aide ouverte pendant le match : à lui de jouer la remise en jeu */
+.cr-howto-turn {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 224, 102, 0.14);
+  color: #ffe066;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* Le tableau de fin */
 .cr-over {
   position: absolute;
