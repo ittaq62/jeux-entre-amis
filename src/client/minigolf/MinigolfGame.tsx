@@ -33,6 +33,11 @@ function knockKind(kind: string, look?: string): string {
 /** L'écran de chargement aux couleurs du minigolf : un gazon du soir, le jaune du drapeau */
 const LOADING_THEME: LoadingTheme = { from: "#2f6b3a", to: "#0e2214", accent: "#f2c94c" };
 
+/** « de » devant un prénom, élidé devant une voyelle : au tour d'Odette, au tour de Gaston */
+function deName(name: string) {
+  return /^[aeiouyhàâäéèêëîïôöùûüœæ]/i.test(name) ? "d'" : "de ";
+}
+
 interface Banner {
   key: number;
   text: string;
@@ -349,7 +354,7 @@ export function MinigolfGame({
                 "À toi"
               ) : (
                 <>
-                  <span className="mg-turn-pre">Au tour de </span>
+                  <span className="mg-turn-pre">Au tour {deName(players.find((x) => x.id === active.id)?.name ?? "")}</span>
                   {players.find((x) => x.id === active.id)?.name ?? "?"}
                 </>
               )}

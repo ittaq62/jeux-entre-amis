@@ -987,7 +987,10 @@ export class MinigolfRoom extends DurableObject<Env> {
     const tot = totals(m);
     const best = Math.min(...tot);
     if (names.length === 1) this.systemChat(`${names[0]} gagne la partie en ${best} coups !`);
-    else if (names.length > 1) this.systemChat(`Victoire de ${names.join(", ")} en ${best} coups !`);
+    else if (names.length > 1) {
+      const list = `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}`;
+      this.systemChat(`Égalité en tête : ${list} finissent la partie en ${best} coups !`);
+    }
     if (d.settings.randomRules && !d.tour) {
       d.settings.randomRules = drawRules("minigolf", Math.random, d.settings.randomRules);
       this.systemChat(drawNotice("minigolf", d.settings.randomRules, "next"));
