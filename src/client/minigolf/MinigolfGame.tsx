@@ -375,7 +375,7 @@ export function MinigolfGame({
             <Icon name="eye" size={18} />
             <span className="mg-btn-label">Vue du trou</span>
           </button>
-          <SoundButton className="btn btn-sm btn-ghost mg-icon-btn" />
+          <SoundButton className="btn btn-sm btn-ghost mg-icon-btn mg-sound-btn" />
           <button className="btn btn-sm btn-ghost mg-icon-btn" onClick={onOpenChat} aria-label="Discussion">
             <Icon name="chat" size={18} />
             {unread > 0 && <span className="mg-unread">{unread}</span>}

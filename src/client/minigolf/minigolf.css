@@ -771,6 +771,21 @@
   .mg-hole-text small {
     display: none;
   }
+  /* Le nom du trou sur deux lignes (« Les marches de la pyramide » ne tenait pas) ; le son reste dans le menu */
+  .mg-hole-card {
+    padding-right: 10px;
+  }
+  .mg-hole-text strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 14px;
+    white-space: normal;
+  }
+  .mg-sound-btn {
+    display: none;
+  }
   .mg-turn {
     position: absolute;
     top: 54px;
