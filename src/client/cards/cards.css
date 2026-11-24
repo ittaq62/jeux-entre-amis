@@ -1159,12 +1159,67 @@ html:has(.zoom-screen) body {
   font-size: 13.5px;
 }
 
-/* Sur téléphone : huit familles sur trois lignes, pas quatre */
-@media (max-width: 420px) {
+/* Sur téléphone : les treize familles sur une seule ligne qui défile, plutôt que cinq lignes avant la première carte */
+@media (max-width: 600px) {
+  .album-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+
+  .album-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* La dernière famille peut sortir du fondu */
+  .album-strip::after {
+    content: "";
+    flex: 0 0 20px;
+  }
+
+  .album-strip button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
   .album-families button {
     padding: 3px 6px;
     font-size: 13px;
   }
+}
+
+/* Revendre ses doubles : ce qui part, rareté par rareté */
+.sell-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sell-sheet p {
+  margin: 0;
+}
+
+.sell-lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sell-lines li {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.sell-lines .sell-what {
+  flex: 1;
+}
+
+.sell-lines .num {
+  color: var(--gold-light);
 }
 
 .profile-album {
