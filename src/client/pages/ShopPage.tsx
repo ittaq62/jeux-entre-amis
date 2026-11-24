@@ -11,9 +11,10 @@ import { CLUB_BY_ID, FORMATION_NAMES } from "../../shared/games/crampons/clubs.t
 import { bombInfo, type BombId } from "../../shared/games/meche/bombs.ts";
 import type { SkinId as NavalSkinId } from "../../shared/games/naval/skins.ts";
 import type { BackId } from "../../shared/games/uno/backs.ts";
-import type { GameId } from "../../shared/protocol.ts";
+import { GAME_NAMES, type GameId } from "../../shared/protocol.ts";
 import { SHOP_ITEMS, type ShopItem, type ShopKind } from "../../shared/shop.ts";
 import { VehiclePreview } from "../bolides/Garage.tsx";
+import { AtlasArt } from "../cards/TradingCard.tsx";
 import { KART_COLORS } from "../bolides/scene/kart.ts";
 import { PAWN_COLORS } from "../capitale/boardUi.ts";
 import { tokenThumbnails } from "../capitale/scene/tokens.ts";
@@ -33,51 +34,52 @@ import { BuyModal } from "../shop/BuyModal.tsx";
 import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
 import { useSession } from "../stores/session.ts";
 import { useMyItems } from "../stores/shop.ts";
+import "../shop/shop.css";
 
 /** L'aperçu d'Escarmouche en trois dimensions, chargé seulement quand on ouvre un article */
 const EscPreview3D = lazy(() => import("../escarmouche/EscPreview3D.tsx"));
 
-const SECTIONS: { kind: ShopKind; game: GameId; title: string; note: string }[] = [
-  { kind: "uno", game: "uno", title: "UNO", note: "Le dos de tes cartes" },
-  { kind: "naval", game: "naval", title: "Bataille navale", note: "Les thèmes de ta flotte" },
-  { kind: "token", game: "capitale", title: "Capitale", note: "Tes pions" },
-  { kind: "vehicle", game: "bolides", title: "Bolides", note: "Tes véhicules, chacun sa conduite" },
-  { kind: "kart", game: "bolides", title: "Bolides", note: "Tes skins" },
+/** Les points à la française : 1 500 et non 1500 */
+const fr = (n: number) => n.toLocaleString("fr-FR");
+
+const SECTIONS: { kind: ShopKind; game: GameId; note: string }[] = [
+  { kind: "uno", game: "uno", note: "Le dos de tes cartes" },
+  { kind: "naval", game: "naval", note: "Les thèmes de ta flotte" },
+  { kind: "token", game: "capitale", note: "Tes pions" },
+  { kind: "vehicle", game: "bolides", note: "Tes véhicules, chacun sa conduite" },
+  { kind: "kart", game: "bolides", note: "Tes skins" },
   {
     kind: "club",
     game: "crampons",
-    title: "Crampons",
     note: "Les clubs de légende, à choisir au salon : touche-en un pour voir son maillot",
   },
-  { kind: "ballon", game: "crampons", title: "Crampons", note: "Ton ballon, que toi seul vois" },
-  { kind: "fete", game: "crampons", title: "Crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
-  { kind: "bombe", game: "meche", title: "Mèche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
-  { kind: "tenue", game: "culbute", title: "Culbute", note: "Les tenues des Habitués, à choisir au salon avant le combat" },
+  { kind: "ballon", game: "crampons", note: "Ton ballon, que toi seul vois" },
+  { kind: "fete", game: "crampons", note: "La célébration de tes buts : touche-en une pour la voir" },
+  { kind: "bombe", game: "meche", note: "Ce qui saute au bout de ta mèche : touche-en une pour la voir jusqu'au bout" },
+  { kind: "tenue", game: "culbute", note: "Les tenues des Habitués, à choisir au salon avant le combat" },
   {
     kind: "arme",
     game: "escarmouche",
-    title: "Escarmouche",
     note: "Des armes de plus, chacune sa façon de se battre : à choisir au salon",
   },
-  { kind: "uniforme", game: "escarmouche", title: "Escarmouche", note: "Les tenues de ton soldat : ta tête reste la tienne" },
+  { kind: "uniforme", game: "escarmouche", note: "Les tenues de ton soldat : ta tête reste la tienne" },
   {
     kind: "accessoire",
     game: "escarmouche",
-    title: "Escarmouche",
     note: "Les accessoires de ton arme principale : chacun a son prix à payer",
   },
-  { kind: "camo", game: "escarmouche", title: "Escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
-  { kind: "golfmotif", game: "minigolf", title: "Minigolf", note: "Le motif de ta balle (sa couleur, tu la choisis au salon)" },
-  { kind: "golftrace", game: "minigolf", title: "Minigolf", note: "La traînée que ta balle laisse derrière elle" },
-  { kind: "bowlmotif", game: "bowling", title: "Bowling", note: "Le motif de ta boule (sa couleur, tu la choisis au salon)" },
-  { kind: "bowltrace", game: "bowling", title: "Bowling", note: "La traînée que ta boule laisse sur la piste" },
-  { kind: "bowlfx", game: "bowling", title: "Bowling", note: "Ce qui éclate à l'écran quand tu fais un strike" },
-  { kind: "bowldanse", game: "bowling", title: "Bowling", note: "La danse de ton personnage après un strike ou un spare" },
-  { kind: "bowlquilles", game: "bowling", title: "Bowling", note: "Les quilles que tu fais tomber, quand c'est toi qui lances" },
-  { kind: "bilqueue", game: "billard", title: "Billard", note: "Ta queue : les autres la voient quand c'est toi qui joues" },
-  { kind: "biltapis", game: "billard", title: "Billard", note: "Le tapis de la table que tu ouvres" },
-  { kind: "bilbilles", game: "billard", title: "Billard", note: "Le jeu de billes de la table que tu ouvres" },
-  { kind: "bileffet", game: "billard", title: "Billard", note: "Ce qui éclate à l'écran sur tes beaux coups" },
+  { kind: "camo", game: "escarmouche", note: "Le camouflage de tes armes, que les autres voient dans tes mains" },
+  { kind: "golfmotif", game: "minigolf", note: "Le motif de ta balle (sa couleur, tu la choisis au salon)" },
+  { kind: "golftrace", game: "minigolf", note: "La traînée que ta balle laisse derrière elle" },
+  { kind: "bowlmotif", game: "bowling", note: "Le motif de ta boule (sa couleur, tu la choisis au salon)" },
+  { kind: "bowltrace", game: "bowling", note: "La traînée que ta boule laisse sur la piste" },
+  { kind: "bowlfx", game: "bowling", note: "Ce qui éclate à l'écran quand tu fais un strike" },
+  { kind: "bowldanse", game: "bowling", note: "La danse de ton personnage après un strike ou un spare" },
+  { kind: "bowlquilles", game: "bowling", note: "Les quilles que tu fais tomber, quand c'est toi qui lances" },
+  { kind: "bilqueue", game: "billard", note: "Ta queue : les autres la voient quand c'est toi qui joues" },
+  { kind: "biltapis", game: "billard", note: "Le tapis de la table que tu ouvres" },
+  { kind: "bilbilles", game: "billard", note: "Le jeu de billes de la table que tu ouvres" },
+  { kind: "bileffet", game: "billard", note: "Ce qui éclate à l'écran sur tes beaux coups" },
 ];
 
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
@@ -86,9 +88,13 @@ export function ShopPage() {
   const games = useSession((s) => s.games);
   const { balance, has } = useMyItems();
   const [buying, setBuying] = useState<ShopItem | null>(null);
+  // Un seul rayon à la fois si on veut : la boutique entière fait une dizaine d'écrans
+  const [only, setOnly] = useState<"tout" | "perso" | GameId>("tout");
   const defs = `shop${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const hasCapitale = games.includes("capitale");
   const thumbs = useMemo(() => (hasCapitale ? tokenThumbnails(PAWN_COLORS[0]!) : null), [hasCapitale]);
+  // Les jeux qui ont un rayon, dans l'ordre de la boutique
+  const shopGames = SECTIONS.map((s) => s.game).filter((g, i, all) => all.indexOf(g) === i && games.includes(g));
 
   const look = (item: ShopItem): ReactNode => {
     if (item.kind === "naval") return <NavalSkinPreview skin={item.ref as NavalSkinId} defs={defs} />;
@@ -101,6 +107,13 @@ export function ShopPage() {
       const src = thumbs?.[item.ref as TokenId];
       return src ? <img src={src} alt="" width={64} height={64} draggable={false} /> : null;
     }
+    // Les véhicules : leur photo de l'album
+    if (item.kind === "vehicle")
+      return (
+        <span className="shop-vehicle">
+          <AtlasArt artKey={`vehicle:${item.ref}`} width={76} />
+        </span>
+      );
     if (item.kind === "kart") {
       const [a, b] = KART_SKINS[item.ref as KartSkinId].swatch;
       return <span className="shop-swatch" style={{ "--a": a, "--b": b } as CSSProperties} />;
@@ -150,6 +163,10 @@ export function ShopPage() {
       );
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
+    if (item.kind === "token") {
+      const src = thumbs?.[item.ref as TokenId];
+      return src ? <img src={src} alt="" width={128} height={128} draggable={false} /> : null;
+    }
     if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={140} />;
     if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={110} />;
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} big />;
@@ -208,7 +225,7 @@ export function ShopPage() {
           <Icon name="coin" size={34} />
           <div>
             <p className="shop-balance-line">
-              <strong className="num">{balance}</strong> point{balance > 1 ? "s" : ""} à dépenser
+              <strong className="num">{fr(balance)}</strong> point{balance > 1 ? "s" : ""} à dépenser
             </p>
             <p className="hint">
               Chaque partie bien placée t'en rapporte. Prends ce que tu veux, dans l'ordre que tu veux : dépenser ne change rien à ton
@@ -219,42 +236,66 @@ export function ShopPage() {
 
         <NavalSkinDefs id={defs} />
 
-        <PersoShop balance={balance} has={has} onBuy={setBuying} />
+        {shopGames.length > 0 && (
+          <div className="options shop-filter" role="radiogroup" aria-label="Rayons de la boutique">
+            {(["tout", "perso", ...shopGames] as const).map((g) => (
+              <button key={g} type="button" role="radio" aria-checked={only === g} aria-pressed={only === g} onClick={() => setOnly(g)}>
+                {g === "tout" ? "Tout" : g === "perso" ? "Ton personnage" : GAME_NAMES[g]}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {SECTIONS.filter((s) => games.includes(s.game)).map((section) => (
-          <section key={section.kind} className="shop-section">
-            <h2>
-              {section.title} <small className="hint">{section.note}</small>
-            </h2>
-            <div className="shop-grid">
-              {SHOP_ITEMS.filter((i) => i.kind === section.kind && i.price > 0).map((item) => {
-                const mine = has(item.id);
+        {(only === "tout" || only === "perso") && <PersoShop balance={balance} has={has} onBuy={setBuying} />}
+
+        {shopGames
+          .filter((g) => only === "tout" || only === g)
+          .map((game) => (
+            <div key={game} className="shop-game">
+              <h2 className="shop-game-title">{GAME_NAMES[game]}</h2>
+              {SECTIONS.filter((s) => s.game === game).map((section) => {
+                const items = SHOP_ITEMS.filter((i) => i.kind === section.kind && i.price > 0);
+                const got = items.filter((i) => has(i.id)).length;
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`shop-item ${mine ? "is-mine" : ""} ${!mine && item.price > balance ? "is-dear" : ""}`}
-                    disabled={mine}
-                    onClick={() => setBuying(item)}
-                  >
-                    {look(item) && <span className="shop-look">{look(item)}</span>}
-                    <span className="shop-name">{item.name}</span>
-                    {blurb(item) && <span className="shop-blurb">{blurb(item)}</span>}
-                    {mine ? (
-                      <span className="shop-mine">
-                        <Icon name="check" size={14} /> À toi
-                      </span>
-                    ) : (
-                      <span className="shop-price num">
-                        <Icon name="coin" size={14} /> {item.price}
-                      </span>
-                    )}
-                  </button>
+                  <section key={section.kind} className="shop-section">
+                    <h3>
+                      {section.note}{" "}
+                      <small className={`shop-count num ${got === items.length ? "is-full" : ""}`}>
+                        {got === items.length ? "tout est à toi" : `${got} / ${items.length} à toi`}
+                      </small>
+                    </h3>
+                    <div className="shop-grid">
+                      {items.map((item) => {
+                        const mine = has(item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`shop-item ${mine ? "is-mine" : ""} ${!mine && item.price > balance ? "is-dear" : ""}`}
+                            disabled={mine}
+                            onClick={() => setBuying(item)}
+                          >
+                            {look(item) && <span className="shop-look">{look(item)}</span>}
+                            <span className="shop-name">{item.name}</span>
+                            {blurb(item) && <span className="shop-blurb">{blurb(item)}</span>}
+                            {mine ? (
+                              <span className="shop-mine">
+                                <Icon name="check" size={14} /> À toi
+                              </span>
+                            ) : (
+                              <span className="shop-price num">
+                                <Icon name="coin" size={14} /> {fr(item.price)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
                 );
               })}
             </div>
-          </section>
-        ))}
+          ))}
       </main>
       <BuyModal item={buying} preview={buying ? bigPreview(buying) : undefined} onClose={() => setBuying(null)} />
     </div>

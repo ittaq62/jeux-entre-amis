@@ -6,7 +6,7 @@ import { ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useShop } from "../stores/shop.ts";
 
-const points = (n: number) => `${n} point${n > 1 ? "s" : ""}`;
+const points = (n: number) => `${n.toLocaleString("fr-FR")} point${n > 1 ? "s" : ""}`;
 
 /** Acheter un article : ce qu'il coûte, ce qu'il reste, et une seule confirmation. */
 export function BuyModal({

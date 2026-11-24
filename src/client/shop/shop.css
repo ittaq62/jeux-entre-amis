@@ -1,0 +1,68 @@
+/* La boutique : un rayon à la fois si on veut, un titre par jeu, ce qu'on a déjà dans chaque rayon */
+
+.shop-filter {
+  margin: 0;
+}
+
+.shop-game {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.shop-game-title {
+  margin: 0;
+  font-size: 21px;
+}
+
+.shop-section h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-body, inherit);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shop-count {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.shop-count.is-full {
+  color: var(--ok);
+}
+
+/* Les véhicules de Bolides : leur photo de l'album */
+.shop-vehicle {
+  display: block;
+  width: 76px;
+}
+
+/* Au téléphone : les rayons sur une ligne qui défile */
+@media (max-width: 600px) {
+  .shop-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+
+  .shop-filter::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shop-filter::after {
+    content: "";
+    flex: 0 0 20px;
+  }
+
+  .shop-filter button {
+    flex: 0 0 auto;
+  }
+}
