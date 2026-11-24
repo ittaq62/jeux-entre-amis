@@ -184,7 +184,10 @@ export function LeaderboardPage() {
               </div>
               <ol className="rows" style={{ margin: 0 }}>
                 {entries.map((e) => (
-                  <li key={e.user.id} className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top medal-${e.rank}` : ""}`}>
+                  <li
+                    key={e.user.id}
+                    className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top medal-${e.rank}` : ""}`}
+                  >
                     <span className="board-rank num">{e.rank}</span>
                     <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
                       <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
