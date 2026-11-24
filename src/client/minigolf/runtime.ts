@@ -161,7 +161,7 @@ export class GolfRuntime {
     el.addEventListener("pointerdown", this.onDown);
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
-    window.addEventListener("pointercancel", this.onUp);
+    window.addEventListener("pointercancel", this.onCancel);
     el.addEventListener("wheel", this.onWheel, { passive: false });
     el.addEventListener("contextmenu", (e) => e.preventDefault());
     window.addEventListener("keydown", this.onKey);
@@ -822,6 +822,15 @@ export class GolfRuntime {
   };
 
   /**
+   * Le système reprend le geste en cours (un appel, un glissé depuis le bord de l'écran, là où l'on tire sa balle) : la
+   * balle ne part pas, à la force du moment ; la caméra lâche aussi
+   */
+  private onCancel = (e: PointerEvent) => {
+    if (this.pull?.id === e.pointerId) this.cancelAim();
+    this.onUp(e);
+  };
+
+  /**
    * La force d'après le recul (vers le bas de l'écran, c'est-à-dire vers soi) ; la direction s'affine par l'écart sur
    * le côté, comme un élastique : tiré vers la droite, la balle part un peu plus à gauche. Maj : plus finement encore
    */
@@ -904,7 +913,7 @@ export class GolfRuntime {
     el.removeEventListener("pointerdown", this.onDown);
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
-    window.removeEventListener("pointercancel", this.onUp);
+    window.removeEventListener("pointercancel", this.onCancel);
     el.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onKeyUp);
