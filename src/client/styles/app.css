@@ -2966,6 +2966,41 @@ a.shop-item {
   }
 }
 
+/* Téléphone couché : l'en-tête et la barre du départ tiennent chacun sur une ligne basse, pour laisser au salon la
+   hauteur de l'écran (ils en prenaient 153 px sur 375) */
+@media (max-height: 460px) and (orientation: landscape) {
+  .lobby .page-top {
+    min-height: 46px;
+    padding-top: calc(4px + var(--safe-top));
+    padding-bottom: 4px;
+  }
+
+  .lobby-footer {
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding-top: 6px;
+    padding-bottom: calc(6px + var(--safe-bottom));
+  }
+
+  .lobby-summary {
+    width: auto;
+    max-width: 36ch;
+    justify-content: flex-start;
+    font-size: 12.5px;
+  }
+
+  .lobby-footer .lobby-start {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+
+  .lobby-start .hint,
+  .lobby-start .ready-text {
+    font-size: 13px;
+  }
+}
+
 @media (max-width: 640px) {
   .lobby-body {
     padding-top: 14px;
