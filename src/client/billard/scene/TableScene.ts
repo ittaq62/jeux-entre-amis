@@ -13,6 +13,7 @@ import type { SalleId } from "../../../shared/games/billard/salles.ts";
 import type { Table } from "../../../shared/games/billard/table.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
+import { releaseRenderer } from "../../lib/releaseGl.ts";
 import { BallSet } from "./balls.ts";
 import { CueStick } from "./cue.ts";
 import { mergeStatic, type Salle } from "./salles/common.ts";
@@ -281,8 +282,9 @@ export class TableScene {
     this.composer?.dispose();
     this.envMap?.dispose();
     this.ballEnv?.dispose();
-    this.renderer.dispose();
+    // La toile quitte la page d'abord : le contexte WebGL est alors rendu tout de suite à la carte graphique
     this.renderer.domElement.remove();
+    releaseRenderer(this.renderer);
   }
 }
 
