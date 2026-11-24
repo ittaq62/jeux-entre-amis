@@ -134,9 +134,30 @@ export function newBotMemory(h: RngHolder): BotMemory {
 export interface Rival {
   id: string;
   kart: Kart;
+  /** Arrivé : il roule encore, mais ni la tarte ni la fusée ne le visent plus */
+  finish?: number | null;
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+/** Ce qui traverse est regardé un peu avant et un peu après son passage prévu (le temps de croiser sa ligne) */
+const PASSING = [-0.25, -0.12, 0, 0.12, 0.25];
+
+/**
+ * La place libre la plus proche de `lane`, entre -edge et edge, hors des places prises (null : la route est barrée).
+ * Une place libre est le bord d'une place prise, ou le bord de la route.
+ */
+export function freeLaneAmong(lane: number, blocked: [number, number][], edge: number): number | null {
+  const taken = (x: number) => blocked.some(([a, b]) => x > a && x < b);
+  const want = clamp(lane, -edge, edge);
+  if (!taken(want)) return lane;
+  let best: number | null = null;
+  for (const x of [-edge, edge, ...blocked.flat()]) {
+    if (x < -edge || x > edge || taken(x)) continue;
+    if (best === null || Math.abs(x - want) < Math.abs(best - want)) best = x;
+  }
+  return best;
+}
 
 /** Ce que fait le bot à cet instant : son volant, ses pédales, et s'il se sert de son objet */
 export function botDrive(
@@ -198,43 +219,41 @@ export function botDrive(
     const ahead = deltaS(t, k.s, at.s);
     if (ahead > 2 && ahead < 32 && Math.abs(at.d - lane) < 3.2) lane = at.d + (at.d > lane ? -3.6 : 3.6);
   }
-  // Un engin qui traverse devant : il vise le côté où l'engin ne sera pas quand il passera
+  // Ce qui traverse devant lui (un engin, ce qui tombe, une file de bêtes ou de tonneaux) : toutes les places prises
+  // au moment où il passera, ensemble, et il prend la place libre la plus proche. Esquivés un à un, il se jetait sur
+  // le suivant de la file. S'il n'y en a aucune (la file barre la route), il lève le pied, le temps qu'elle passe.
+  const blocked: [number, number][] = [];
+  let crossingAhead = Infinity;
+  const block = (ahead: number, d: number, margin: number) => {
+    blocked.push([d - margin, d + margin]);
+    crossingAhead = Math.min(crossingAhead, ahead);
+  };
   for (const c of t.crossers) {
     const ahead = deltaS(t, k.s, c.s);
     if (ahead < 1 || ahead > 50) continue;
-    const pos = crosserAt(c, now / 1000 + ahead / Math.max(8, k.v));
-    const margin = CROSSER_HALF + CROSSER_RADIUS + KART_RADIUS + 0.9;
-    const lo = pos.d - margin;
-    const hi = pos.d + margin;
-    if (lane > lo && lane < hi) {
-      // Le côté le plus proche, s'il reste de la route ; sinon l'autre
-      const left = lo > -half + 1.6;
-      const right = hi < half - 1.6;
-      lane = left && (!right || lane - lo < hi - lane) ? lo : right ? hi : lane;
-    }
+    const when = now / 1000 + ahead / Math.max(8, k.v);
+    for (const dt of PASSING) block(ahead, crosserAt(c, when + dt).d, CROSSER_HALF + CROSSER_RADIUS + KART_RADIUS + 0.9);
   }
-  // Ce qui tombe ou dévale devant lui : même prudence
   for (const m of t.movers) {
     const ahead = deltaS(t, k.s, m.s);
     if (ahead < 1 || ahead > 50) continue;
     const when = now / 1000 + ahead / Math.max(8, k.v);
-    const dodge = (d: number, r: number) => {
-      const margin = r + KART_RADIUS + 0.9;
-      if (lane > d - margin && lane < d + margin) {
-        const left = d - margin > -half + 1.6;
-        const right = d + margin < half - 1.6;
-        lane = left && (!right || lane - (d - margin) < d + margin - lane) ? d - margin : right ? d + margin : lane;
-      }
-    };
     if (m.kind === "drop") {
       const st = dropAt(m, t.half, when);
-      if (st.phase !== "none") dodge(st.d, DROP_RADIUS);
+      if (st.phase !== "none") block(ahead, st.d, DROP_RADIUS + KART_RADIUS + 0.9);
     } else {
-      for (let i = 0; i < m.count; i++) {
-        const d = rollAt(m, i, when);
-        if (d !== null) dodge(d, m.radius);
-      }
+      for (let i = 0; i < m.count; i++)
+        for (const dt of PASSING) {
+          const d = rollAt(m, i, when + dt);
+          if (d !== null) block(ahead, d, m.radius + KART_RADIUS + 0.9);
+        }
     }
+  }
+  let wait = false;
+  if (blocked.length > 0) {
+    const free = freeLaneAmong(lane, blocked, half - 2.6);
+    if (free === null) wait = crossingAhead < 24;
+    else lane = free;
   }
   // La boue : il passe à côté
   for (const z of t.zones) {
@@ -326,7 +345,7 @@ export function botDrive(
   if (k.vy !== 0 && !k.trick && style.drift > 0) drift = !k.held;
   // Un virage trop serré pris trop vite : le bot facile freine un peu
   const brake = level === "facile" && Math.abs(err) > 0.85 && k.v > 13;
-  const input: Input = { steer, gas: !brake, brake, drift };
+  const input: Input = { steer, gas: !brake && !wait, brake, drift };
 
   return { input, ...botWantsItem(t, k, item, rivals, hazards, level, mem, now, h) };
 }
@@ -373,8 +392,10 @@ export function botWantsItem(
   else if (item === "petard" || item === "bowling" || item === "bombe") use = thrown;
   else if (item === "klaxon") use = (near && aim) || patience;
   // La fusée : tout de suite (elle va seule chercher le premier) ; l'arc-en-ciel : quand il y a du monde devant ou à côté
-  else if (item === "fusee" || item === "orage") use = true;
-  else if (item === "tarte") use = rivals.some((r) => Math.abs(r.kart.dist - k.dist) < 70);
+  // (seulement s'il reste quelqu'un en course à viser : sinon la course refuse, et il réessaierait sans fin)
+  else if (item === "fusee") use = rivals.some((r) => r.finish == null);
+  else if (item === "orage") use = true;
+  else if (item === "tarte") use = rivals.some((r) => r.finish == null && Math.abs(r.kart.dist - k.dist) < 70);
   else if (item === "geant") use = ((ahead || near) && aim) || patience;
   // Le ressort : pour sauter par-dessus une flaque devant lui, ou quand il en a assez de le garder
   else if (item === "ressort")

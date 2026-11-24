@@ -687,7 +687,7 @@ export class RaceRuntime {
         // Les objets automatiques : ils partent au bon moment, comme pour un bot
         let flip = pad.flip;
         if (prefs.bolidesAutoItem && !auto && !rollingMain && me.finish === null && me.item) {
-          const rivals = v.racers.flatMap((r, i) => (i === this.mine ? [] : [{ id: r.id, kart: this.shown[i]! }]));
+          const rivals = v.racers.flatMap((r, i) => (i === this.mine ? [] : [{ id: r.id, kart: this.shown[i]!, finish: r.finish }]));
           const wish = botWantsItem(this.track, d.kart, me.item, rivals, v.hazards, "fort", this.autopilot, now, this.autoRng);
           if (wish.use) {
             pad.item = true;
