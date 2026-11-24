@@ -428,7 +428,13 @@ export function dropped(grid: Grid, a: Active): Active {
   return cur;
 }
 
-/** Rotation avec coups de pied : 1 sens horaire, -1 anti-horaire, 2 demi-tour. Renvoie aussi le n° du coup de pied. */
+/** Les coups de pied d'un demi-tour sont numérotés à partir d'ici, pour ne pas les confondre avec ceux d'un quart de tour */
+export const HALF_TURN_KICK = 10;
+
+/**
+ * Rotation avec coups de pied : 1 sens horaire, -1 anti-horaire, 2 demi-tour. Renvoie aussi le n° du coup de pied
+ * (à partir de HALF_TURN_KICK pour un demi-tour).
+ */
 export function rotated(grid: Grid, a: Active, dir: 1 | -1 | 2): { piece: Active; kick: number } | null {
   if (a.type === "O") return null;
   const to = ((((a.rot + dir) % 4) + 4) % 4) as Rot;
@@ -436,7 +442,7 @@ export function rotated(grid: Grid, a: Active, dir: 1 | -1 | 2): { piece: Active
   for (let k = 0; k < kicks.length; k++) {
     const [kx, ky] = kicks[k]!;
     const next = { type: a.type, rot: to, x: a.x + kx, y: a.y - ky };
-    if (fits(grid, next)) return { piece: next, kick: k };
+    if (fits(grid, next)) return { piece: next, kick: dir === 2 ? HALF_TURN_KICK + k : k };
   }
   return null;
 }
@@ -567,6 +573,7 @@ export function tSpin(grid: Grid, a: Active, lastRotation: boolean, kick: number
     [3, 0],
   ][a.rot]!;
   if (corners[front[0]!] && corners[front[1]!]) return "full";
+  // Le dernier coup de pied d'un quart de tour (le « TST ») fait un T-spin complet ; pas le simple décalage d'un demi-tour
   return kick === 4 ? "full" : "mini";
 }
 
@@ -641,6 +648,8 @@ export interface GarbageChunk {
   /** Trou différent à chaque ligne (règle « en vrac ») : un trou par ligne */
   holes?: number[];
   from: string | null;
+  /** Quand la salle l'a envoyée : passé un délai, elle monte même sans accusé de réception de l'écran */
+  at?: number;
 }
 
 export interface PlayerBoard {

@@ -7,10 +7,13 @@ import {
   emptyGrid,
   fits,
   garbageHoles,
+  gravityMs,
   gridToString,
+  HALF_TURN_KICK,
   newBoard,
   PIECES,
   place,
+  ROWS,
   spawn,
   SPRINT_LINES,
   stackHeight,
@@ -73,6 +76,8 @@ const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 /** Sans pose depuis ce temps en pleine manche, un bot prend le relais */
 const AFK_MS = 20_000;
+/** Le temps laissé à un écran pour confirmer des lignes grises reçues : passé ce délai, elles montent quand même */
+const ACK_GRACE_MS = 4_000;
 const COUNTDOWN_MS = 3600;
 const INTERMISSION_MS = 6000;
 // Le temps de lire « K.O. ! Ta pile repart à zéro » avant que les pièces reprennent
@@ -119,6 +124,8 @@ interface BrickPlayer {
   lastGarbage: { id: string; at: number } | null;
   lastPlacedAt: number;
   sprintTime: number | null;
+  /** Un bot a posé au moins une pièce à la place de ce joueur pendant la manche (son temps de 40 lignes ne compte pas) */
+  assisted?: boolean;
   stats: BricksStats;
   /** Tirage des trous des lignes grises que ce joueur reçoit */
   holes: number;
@@ -609,8 +616,8 @@ export class BricksRoom extends DurableObject<Env> {
       }
 
       case "strategy": {
-        const p = seat && d.match ? this.player(seat.id) : undefined;
-        if (!p) return;
+        const p = seat && d.match && d.status === "playing" ? this.player(seat.id) : undefined;
+        if (!p || !this.allowMessage(`strategy:${userId}`, 150)) return;
         if (msg.strategy === "random" || msg.strategy === "attackers" || msg.strategy === "danger" || msg.strategy === "manual") {
           p.strategy = msg.strategy;
         }
@@ -620,7 +627,7 @@ export class BricksRoom extends DurableObject<Env> {
       }
 
       case "resync":
-        if (seat) this.sendSnapshot(seat.id, false);
+        if (seat && d.match && this.allowMessage(`resync:${userId}`, 400)) this.sendSnapshot(seat.id, false);
         return;
 
       case "blocked": {
@@ -1018,6 +1025,7 @@ export class BricksRoom extends DurableObject<Env> {
       p.lastGarbage = null;
       p.lastPlacedAt = startAt;
       p.sprintTime = null;
+      p.assisted = false;
       if (p.strategy === "manual") p.target = null;
     }
     d.timers = d.timers.filter((t) => !["start", "roundEnd", "nextRound", "tide", "tick"].includes(t.kind));
@@ -1056,7 +1064,10 @@ export class BricksRoom extends DurableObject<Env> {
       this.sendSnapshot(seat.id, false);
       return false;
     }
-    const ack = Number.isInteger(msg.ack) ? msg.ack : 0;
+    // Les lignes grises envoyées depuis un moment comptent comme vues : un écran qui ne les confirmerait jamais
+    // (trafiqué) ne s'en débarrasse pas ainsi
+    const overdue = p.board.pending.reduce((n, g) => (g.at !== undefined && now - g.at > ACK_GRACE_MS ? Math.max(n, g.id) : n), 0);
+    const ack = Math.max(Number.isInteger(msg.ack) ? msg.ack : 0, overdue);
     const res = place(p.board, placement, ack, { hold: m.settings.hold, strict: true });
     if (!res.ok) {
       this.sendSnapshot(seat.id, false);
@@ -1152,7 +1163,7 @@ export class BricksRoom extends DurableObject<Env> {
     const holder = { rng: target.holes };
     const holes = garbageHoles(holder, lines, m.settings.messy);
     target.holes = holder.rng;
-    const chunk = { id: ++m.garbageSeq, lines, ...holes, from };
+    const chunk = { id: ++m.garbageSeq, lines, ...holes, from, at: Date.now() };
     target.board.pending.push(chunk);
     const seat = this.seatById(target.id);
     if (seat?.userId) for (const ws of this.ctx.getWebSockets(seat.userId)) this.send(ws, { t: "garbage", chunk });
@@ -1212,10 +1223,13 @@ export class BricksRoom extends DurableObject<Env> {
     if (m.settings.win === "survival") {
       const sideOf = (o: BrickPlayer) => (o.team !== null ? `t${o.team}` : o.id);
       const alive = m.players.filter((o) => o.alive);
-      if (new Set(alive.map(sideOf)).size <= 1)
+      const sides = new Set(alive.map(sideOf));
+      // En équipes, la manche est à tout le camp du dernier debout, coéquipiers tombés compris : on partage ses
+      // victoires, et la série se gagne ensemble
+      if (sides.size <= 1)
         this.endRound(
           now,
-          alive.map((o) => o.id),
+          m.players.filter((o) => sides.has(sideOf(o))).map((o) => o.id),
         );
     }
   }
@@ -1345,6 +1359,7 @@ export class BricksRoom extends DurableObject<Env> {
     if (m.round.phase === "countdown") return this.startBot(id, m.round.startAt - now + 200);
     if (m.round.phase !== "playing") return;
     if (p.koUntil && now < p.koUntil) return this.startBot(id, p.koUntil - now + 200);
+    if (seat.kind === "human") p.assisted = true;
     const level = this.botLevel(seat);
     const placement = botPlacement(p.board, level, m.settings.hold, m);
     const res = place(p.board, placement, Number.MAX_SAFE_INTEGER, { hold: m.settings.hold, strict: false });
@@ -1463,10 +1478,13 @@ export class BricksRoom extends DurableObject<Env> {
         this.ensurePlaying(now);
         let changed = false;
         if (m.round.phase === "playing") {
+          // Une pièce qu'on laisse tomber toute seule met tout ce temps à se poser : ce n'est pas une absence
+          const fallMs = ROWS * gravityMs(now - m.round.startAt, m.settings.speedUp) + 4_000;
+          const afkMs = Math.max(AFK_MS, fallMs);
           for (const p of m.players) {
             const s = this.seatById(p.id);
             if (!s || !p.alive) continue;
-            if (s.kind === "human" && !s.autoplay && !(p.koUntil && p.koUntil > now) && now - p.lastPlacedAt > AFK_MS) {
+            if (s.kind === "human" && !s.autoplay && !(p.koUntil && p.koUntil > now) && now - p.lastPlacedAt > afkMs) {
               s.autoplay = "afk";
               this.systemChat(`${s.name} ne joue plus : un bot prend le relais.`);
               changed = true;
@@ -1532,7 +1550,8 @@ export class BricksRoom extends DurableObject<Env> {
         const p = m.players[0]!;
         const seat = this.seatById(p.id);
         if (!seat?.userId) return;
-        const { unlocked } = await recordSprint(this.env.DB, seat.userId, p.sprintTime, p.stats);
+        // Un temps fait en partie par le bot du relais n'entre ni au classement ni dans les records
+        const { unlocked } = await recordSprint(this.env.DB, seat.userId, p.assisted ? null : p.sprintTime, p.stats);
         const ids = unlocked[seat.userId];
         if (ids?.length) this.broadcastRaw({ t: "achievements", unlocks: [{ userId: seat.userId, ids }] });
         return;
@@ -1819,7 +1838,8 @@ function sanitizeActive(raw: unknown): Active | null {
 function sanitizePlacement(raw: unknown): Placement | null {
   const a = sanitizeActive(raw);
   const o = (raw ?? {}) as Record<string, unknown>;
-  const kick = int(o.kick, 0, 5);
+  // 0 à 4 pour un quart de tour, HALF_TURN_KICK et la suite pour un demi-tour
+  const kick = int(o.kick, 0, HALF_TURN_KICK + 6);
   if (!a || kick === null) return null;
   return { ...a, hold: o.hold === true, lastRotation: o.lastRotation === true, kick };
 }
