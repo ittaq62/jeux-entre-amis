@@ -308,6 +308,22 @@ export function CulbuteFight({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [touch, setTouch] = useState(() => window.matchMedia?.("(pointer: coarse)").matches ?? false);
+  // Au doigt, téléphone tenu droit : un mot pour conseiller de le tourner (on le ferme d'un toucher, pour de bon)
+  const [rotateHint, setRotateHint] = useState(() => {
+    try {
+      return localStorage.getItem("cbRotateHint") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const closeRotateHint = () => {
+    setRotateHint(false);
+    try {
+      localStorage.setItem("cbRotateHint", "0");
+    } catch {
+      // le navigateur refuse : le mot reviendra à la prochaine partie
+    }
+  };
   const bridge = useTourBridge();
   const view = room.culbute!;
   const fightKey = `${view.arena}:${view.fighters.map((f) => `${f.id}-${f.style}`).join(",")}`;
@@ -550,6 +566,11 @@ export function CulbuteFight({
         </div>
       )}
 
+      {seated && touch && rotateHint && !finished && (
+        <button className="cb-rotate" onClick={closeRotateHint}>
+          On voit mieux en largeur : tourne ton téléphone <span aria-hidden="true">×</span>
+        </button>
+      )}
       {seated && touch && !finished && (
         <div className="cb-touch">
           <Stick runtime={runtime} />

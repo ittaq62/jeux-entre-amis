@@ -37,6 +37,8 @@ interface Effect {
 const TOUCH = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 const UP = new THREE.Vector3(0, 1, 0);
 const WHITE = new THREE.Color(0xffffff);
+/** Sur un écran en hauteur, la largeur de l'arène qu'on garde au moins à l'écran autour des combattants, en mètres */
+const PORTRAIT_SPAN = 8;
 
 /** La bulle d'un combattant hors du cadre : un rond à sa couleur, cerclé de blanc, avec une pointe vers le haut */
 function bubbleTexture(color: string): THREE.CanvasTexture {
@@ -681,6 +683,23 @@ export class CulbuteScene {
     maxX = Math.min(maxX, b.right - 1);
     minY = Math.max(minY, b.bottom + 1);
     maxY = Math.min(maxY, b.top);
+    // Un écran en hauteur (un téléphone tenu droit) : tout le plateau en largeur rendait les combattants minuscules,
+    // perdus entre le ciel et le vide. On cadre autour d'eux (au moins 8 m), en glissant le long du plateau
+    if (this.camera.aspect < 0.9 && n > 0) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const f of frame.fighters) {
+        if (f.state === "dead" || f.state === "out") continue;
+        lo = Math.min(lo, f.x - 2.5);
+        hi = Math.max(hi, f.x + 2.5);
+      }
+      const need = Math.max(PORTRAIT_SPAN, hi - lo);
+      if (need < maxX - minX) {
+        const mid = clampN((lo + hi) / 2, minX + need / 2, maxX - need / 2);
+        minX = mid - need / 2;
+        maxX = mid + need / 2;
+      }
+    }
     let cx = (minX + maxX) / 2;
     let cy = (minY + maxY) / 2;
     // Le cadre glisse un peu vers les combattants (sans perdre les bords du plateau de vue)
@@ -1336,9 +1355,10 @@ void main() { float a = pow(vUv.y, 1.6) * (0.35 + 0.65 * pow(sin(vUv.x * 3.14159
    * lui comme chez l'adversaire (c'est le moment de le punir) */
   private breath(i: number, f: RenderFrame["fighters"][number]) {
     if ((f.flags & F_PUFF) === 0 || f.state !== "land") return;
-    if (this.time - (this.breathAt[i] ?? 0) < 0.2) return;
+    if (this.time - (this.breathAt[i] ?? 0) < 0.16) return;
     this.breathAt[i] = this.time;
-    this.puff(f.x + f.face * 0.3, f.y + 1.35, 0xffffff, 0.11, 0.5);
+    // (assez grosses et bleutées pour se voir de loin, sur un visage clair)
+    this.puff(f.x + f.face * 0.35, f.y + 1.3, 0xd6ecff, 0.22, 0.6);
   }
 
   private dust(i: number, f: RenderFrame["fighters"][number], dt: number) {
