@@ -1,15 +1,23 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { TABLE_NAMES } from "../../shared/protocol.ts";
 import { INVITE_TTL_MS, useHub } from "../stores/hub.ts";
 import { GameTicket } from "../tour/TourParts.tsx";
 import { Avatar } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
+import { ConfirmButton } from "./ui.tsx";
 
 /** Les invitations reçues : elles attendent une réponse en haut de l'écran, où qu'on soit sur le site. */
 export function InviteCards() {
   const invites = useHub((s) => s.invites);
   const answer = useHub((s) => s.answerInvite);
+  const [location] = useLocation();
+  /** On est à une autre table que celle de l'invitation (un salon, une partie, une tournée) */
+  const elsewhere = (code: string) => {
+    const here = /^\/salon\/([A-Za-z]{4})/.exec(location)?.[1]?.toUpperCase();
+    return Boolean(here && here !== code.toUpperCase());
+  };
 
   // Dans un autre onglet, le titre de la page la signale
   useEffect(() => {
@@ -51,9 +59,16 @@ export function InviteCards() {
             )}
           </div>
           <div className="invite-card-actions">
-            <button className="btn btn-primary btn-sm" onClick={() => answer(inv, true)}>
-              Rejoindre
-            </button>
+            {elsewhere(inv.code) ? (
+              // Déjà à une autre table (peut-être en pleine partie) : un clic de trop la ferait quitter, sa place à un bot
+              <ConfirmButton className="btn btn-primary btn-sm" confirm="Quitter ta table ?" onConfirm={() => answer(inv, true)}>
+                Rejoindre
+              </ConfirmButton>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={() => answer(inv, true)}>
+                Rejoindre
+              </button>
+            )}
             <button className="btn btn-ghost btn-sm" onClick={() => answer(inv, false)}>
               Pas maintenant
             </button>
