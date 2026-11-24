@@ -4,6 +4,11 @@ import type { GameId, Me, MeResponse, TableGame } from "../../shared/protocol.ts
 
 interface SessionState {
   loaded: boolean;
+  /**
+   * La dernière vérification de la session n'a pas abouti (réseau coupé, serveur qui redémarre) : on ne sait pas si on
+   * est connecté. Ce n'est pas une déconnexion : l'appli réessaie au lieu d'envoyer vers la page de connexion.
+   */
+  unreachable: boolean;
   user: Me | null;
   pending: { email: string } | null;
   /** Jeux visibles dans les menus de ce compte */
@@ -19,6 +24,7 @@ interface SessionState {
 
 export const useSession = create<SessionState>((set) => ({
   loaded: false,
+  unreachable: false,
   user: null,
   pending: null,
   games: ["uno"],
@@ -29,6 +35,7 @@ export const useSession = create<SessionState>((set) => ({
       const res = await api.get<MeResponse>("/me");
       set({
         loaded: true,
+        unreachable: false,
         user: res.user,
         pending: res.pending,
         games: res.games ?? ["uno"],
@@ -36,11 +43,13 @@ export const useSession = create<SessionState>((set) => ({
         beta: res.beta ?? [],
       });
     } catch {
-      set({ loaded: true, user: null, pending: null });
+      // Ce qu'on savait déjà reste (un compte déjà chargé n'est pas déconnecté par une coupure)
+      set({ loaded: true, unreachable: true });
     }
   },
   apply: (res) =>
     set((s) => ({
+      unreachable: false,
       user: res.user,
       pending: res.pending,
       loaded: true,

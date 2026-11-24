@@ -19,6 +19,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { formatSprint } from "../lib/countdown.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
+import { NotFound } from "./NotFoundPage.tsx";
 import { useSession } from "../stores/session.ts";
 
 interface GameStats {
@@ -67,7 +68,7 @@ interface Profile {
 
 export function ProfilePage({ pseudo }: { pseudo: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
   const refreshFriends = useHub((s) => s.refreshFriends);
   const games = useSession((s) => s.games);
   const tourOn = useSession((s) => s.tour);
@@ -76,11 +77,20 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const load = () =>
     api
       .get<Profile>(`/profile/${encodeURIComponent(pseudo)}`)
-      .then(setProfile)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Profil introuvable."));
+      .then((p) => {
+        setProfile(p);
+        setError(null);
+      })
+      .catch((err) =>
+        setError({
+          message: err instanceof ApiError ? err.message : "Vérifie ta connexion, puis réessaie.",
+          notFound: err instanceof ApiError && err.status === 404,
+        }),
+      );
 
   useEffect(() => {
     setProfile(null);
+    setError(null);
     void load();
   }, [pseudo]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -88,7 +98,26 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
     return (
       <div className="felt page">
         <AppHeader />
-        <p className="empty center-text">{error}</p>
+        <main className="not-found">
+          <NotFound
+            title={error.notFound ? "Ce joueur n'est pas à la table" : "Le profil n'a pas pu s'ouvrir"}
+            text={
+              error.notFound
+                ? `Personne ne s'appelle « ${pseudo} ». Il a peut-être changé de pseudo : cherche-le parmi les joueurs.`
+                : error.message
+            }
+          >
+            {error.notFound ? (
+              <Link href="/amis" className="btn">
+                Chercher un joueur
+              </Link>
+            ) : (
+              <button className="btn" onClick={() => void load()}>
+                Réessayer
+              </button>
+            )}
+          </NotFound>
+        </main>
       </div>
     );
   if (!profile) return <Loading />;

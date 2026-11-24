@@ -9,6 +9,7 @@ import "./styles/base.css";
 import "./styles/app.css";
 import "./styles/game.css";
 import { App } from "./App.tsx";
+import { listenForStaleChunks } from "./components/ErrorScreen.tsx";
 
 // « ?perf » dans l'adresse (n'importe quelle page) : le panneau des premières secondes des parties, retenu sur cet
 // appareil jusqu'à « ?perf=0 » (voir lib/firstSeconds.ts). Lu ici : la page d'une table retire vite ses paramètres
@@ -20,6 +21,9 @@ if (perf !== null) {
     // Pas de stockage : pas de panneau
   }
 }
+
+// Après une mise à jour du site, un morceau chargé à la demande peut ne plus exister : la page se recharge
+listenForStaleChunks();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

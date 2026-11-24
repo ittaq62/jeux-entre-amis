@@ -3565,6 +3565,34 @@ a.shop-item {
   gap: 16px;
 }
 
+/* Ce qu'on cherchait n'est pas là, ou la page a planté : une carte retournée, un titre, de quoi repartir */
+.not-found {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 180px);
+  padding: 32px 16px 0;
+}
+
+.error-screen {
+  align-items: center;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.error-screen h1 {
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.error-screen .hint {
+  margin: -6px 0 0;
+  font-size: 15px;
+}
+
+.error-screen-actions {
+  justify-content: center;
+}
+
 .sheet {
   padding: 24px 26px 26px;
   display: flex;

@@ -15,6 +15,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { Loading } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { GameTicket } from "../tour/TourParts.tsx";
+import { NotFound } from "./NotFoundPage.tsx";
 
 interface Sheet {
   id: string;
@@ -45,14 +46,24 @@ export function TourSheetPage({ id }: { id: string }) {
     api
       .get<{ tour: Sheet }>(`/tours/${encodeURIComponent(id)}`)
       .then((r) => setSheet(r.tour))
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Tournée introuvable."));
+      .catch((err) =>
+        setError(
+          err instanceof ApiError && err.status === 404
+            ? "Le lien est peut-être incomplet, ou cette tournée ne s'est jamais terminée."
+            : err instanceof ApiError
+              ? err.message
+              : "Vérifie ta connexion, puis recharge la page.",
+        ),
+      );
   }, [id]);
 
   if (error)
     return (
       <div className="felt page">
         <AppHeader />
-        <p className="empty center-text">{error}</p>
+        <main className="not-found">
+          <NotFound title="Cette tournée est introuvable" text={error} />
+        </main>
       </div>
     );
   if (!sheet) return <Loading />;

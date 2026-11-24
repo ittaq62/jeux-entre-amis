@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Redirect, Route, Switch, useLocation, useSearch } from "wouter";
 import { CardDefs } from "./components/Card.tsx";
+import { ErrorBoundary, Unreachable } from "./components/ErrorScreen.tsx";
 import { InviteCards } from "./components/InviteCards.tsx";
 import { ReportHost } from "./components/ReportButton.tsx";
 import { Loading, Toasts } from "./components/ui.tsx";
@@ -46,7 +47,7 @@ const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) =>
 const PUBLIC = ["/connexion", "/confidentialite"];
 
 export function App() {
-  const { loaded, user, pending, load } = useSession();
+  const { loaded, user, pending, load, unreachable } = useSession();
   const [location, navigate] = useLocation();
   const search = useSearch();
 
@@ -75,6 +76,8 @@ export function App() {
 
   const isPublic = PUBLIC.includes(location) || (import.meta.env.DEV && location.startsWith("/dev/"));
   const here = location + (search ? `?${search}` : "");
+  // Le site n'a pas répondu : on ne sait pas si on est connecté, ce n'est pas une raison d'envoyer vers la connexion
+  if (unreachable && !user && !pending && !isPublic) return <Unreachable retry={load} />;
   if (!user && !pending && !isPublic) return <Redirect to={`/connexion?suite=${encodeURIComponent(here)}`} replace />;
   if (pending && location !== "/bienvenue" && !isPublic) return <Redirect to={`/bienvenue?suite=${encodeURIComponent(here)}`} replace />;
   if (user && (location === "/connexion" || location === "/bienvenue")) {
@@ -85,39 +88,42 @@ export function App() {
   return (
     <>
       <CardDefs />
-      <Suspense fallback={<Loading />}>
-        <Switch>
-          <Route path="/connexion" component={LoginPage} />
-          <Route path="/bienvenue" component={OnboardingPage} />
-          <Route path="/confidentialite" component={PrivacyPage} />
-          <Route path="/" component={HomePage} />
-          <Route path="/salon/:code">{(params) => <RoomPage key={params.code} code={params.code} />}</Route>
-          <Route path="/joueur/:pseudo">{(params) => <ProfilePage pseudo={decodeURIComponent(params.pseudo)} />}</Route>
-          <Route path="/tournee/:id">{(params) => <TourSheetPage id={params.id} />}</Route>
-          <Route path="/classement" component={LeaderboardPage} />
-          <Route path="/boutique" component={ShopPage} />
-          <Route path="/album" component={AlbumPage} />
-          <Route path="/amis" component={FriendsPage} />
-          <Route path="/compte" component={AccountPage} />
-          <Route path="/personnage" component={CharacterPage} />
-          <Route path="/admin" component={AdminPage} />
-          {import.meta.env.DEV && <Route path="/dev/galerie" component={DevGallery} />}
-          {import.meta.env.DEV && <Route path="/dev/garage" component={DevGarage} />}
-          {import.meta.env.DEV && <Route path="/dev/objets" component={DevItems} />}
-          {import.meta.env.DEV && <Route path="/dev/cartes" component={DevCards} />}
-          {import.meta.env.DEV && <Route path="/dev/crampons" component={DevMatch} />}
-          {import.meta.env.DEV && <Route path="/dev/poses" component={DevPoses} />}
-          {import.meta.env.DEV && <Route path="/dev/affiche" component={DevAffiche} />}
-          {import.meta.env.DEV && <Route path="/dev/tournee" component={DevTour} />}
-          {import.meta.env.DEV && <Route path="/dev/bombes" component={DevBombs} />}
-          {import.meta.env.DEV && <Route path="/dev/escarmouche" component={DevEscarmouche} />}
-          {import.meta.env.DEV && <Route path="/dev/culbute" component={DevCulbute} />}
-          {import.meta.env.DEV && <Route path="/dev/minigolf" component={DevMinigolf} />}
-          {import.meta.env.DEV && <Route path="/dev/billard" component={DevBillard} />}
-          {import.meta.env.DEV && <Route path="/dev/personnage" component={DevWardrobe} />}
-          <Route component={NotFoundPage} />
-        </Switch>
-      </Suspense>
+      {/* Une page qui plante (ou un morceau périmé après une mise à jour) ne laisse plus un écran vide */}
+      <ErrorBoundary resetKey={location}>
+        <Suspense fallback={<Loading />}>
+          <Switch>
+            <Route path="/connexion" component={LoginPage} />
+            <Route path="/bienvenue" component={OnboardingPage} />
+            <Route path="/confidentialite" component={PrivacyPage} />
+            <Route path="/" component={HomePage} />
+            <Route path="/salon/:code">{(params) => <RoomPage key={params.code} code={params.code} />}</Route>
+            <Route path="/joueur/:pseudo">{(params) => <ProfilePage pseudo={decodeURIComponent(params.pseudo)} />}</Route>
+            <Route path="/tournee/:id">{(params) => <TourSheetPage id={params.id} />}</Route>
+            <Route path="/classement" component={LeaderboardPage} />
+            <Route path="/boutique" component={ShopPage} />
+            <Route path="/album" component={AlbumPage} />
+            <Route path="/amis" component={FriendsPage} />
+            <Route path="/compte" component={AccountPage} />
+            <Route path="/personnage" component={CharacterPage} />
+            <Route path="/admin" component={AdminPage} />
+            {import.meta.env.DEV && <Route path="/dev/galerie" component={DevGallery} />}
+            {import.meta.env.DEV && <Route path="/dev/garage" component={DevGarage} />}
+            {import.meta.env.DEV && <Route path="/dev/objets" component={DevItems} />}
+            {import.meta.env.DEV && <Route path="/dev/cartes" component={DevCards} />}
+            {import.meta.env.DEV && <Route path="/dev/crampons" component={DevMatch} />}
+            {import.meta.env.DEV && <Route path="/dev/poses" component={DevPoses} />}
+            {import.meta.env.DEV && <Route path="/dev/affiche" component={DevAffiche} />}
+            {import.meta.env.DEV && <Route path="/dev/tournee" component={DevTour} />}
+            {import.meta.env.DEV && <Route path="/dev/bombes" component={DevBombs} />}
+            {import.meta.env.DEV && <Route path="/dev/escarmouche" component={DevEscarmouche} />}
+            {import.meta.env.DEV && <Route path="/dev/culbute" component={DevCulbute} />}
+            {import.meta.env.DEV && <Route path="/dev/minigolf" component={DevMinigolf} />}
+            {import.meta.env.DEV && <Route path="/dev/billard" component={DevBillard} />}
+            {import.meta.env.DEV && <Route path="/dev/personnage" component={DevWardrobe} />}
+            <Route component={NotFoundPage} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
       <Toasts>{user && <InviteCards />}</Toasts>
       {user && <ReportHost />}
     </>
