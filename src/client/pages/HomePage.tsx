@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "wouter";
-import { isRoomCode, ROOM_CODE_LENGTH } from "../../shared/app.ts";
+import { ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import { GAME_NAMES, type GameId, type RoomSummary, type TableGame, type Visibility } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
@@ -27,6 +27,7 @@ import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { tableHref } from "../lib/arrival.ts";
 import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
+import { readRoomCode, roomCodeProblem } from "../lib/roomCode.ts";
 import { tableLabel, variantName } from "../lib/variantLabel.ts";
 import { toast } from "../lib/toast.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -128,7 +129,8 @@ export function HomePage() {
 
   // Le code mène à la bonne table quel que soit le jeu : la salle sait à quoi on y joue
   async function join(value: string) {
-    if (!isRoomCode(value)) return toast({ tone: "danger", title: "Un code de table fait 4 lettres." });
+    const problem = roomCodeProblem(value);
+    if (problem) return toast({ tone: "danger", title: problem });
     setBusy("join");
     try {
       await api.get(`/rooms/${value}`);
@@ -498,14 +500,8 @@ function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (co
           id={id}
           className="input join-input"
           value={code}
-          onChange={(e) =>
-            setCode(
-              e.target.value
-                .toUpperCase()
-                .replace(/[^A-Z]/g, "")
-                .slice(0, ROOM_CODE_LENGTH),
-            )
-          }
+          // Un lien ou un message collé donne son code (« …/salon/ABCD », « Rejoins ma table, code ABCD »)
+          onChange={(e) => setCode(readRoomCode(e.target.value))}
           placeholder="ABCD"
           autoCapitalize="characters"
           autoComplete="off"
