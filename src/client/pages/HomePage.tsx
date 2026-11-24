@@ -27,6 +27,7 @@ import { TourPreview } from "../tour/TourPreview.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { tableHref } from "../lib/arrival.ts";
 import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
+import { tableLabel, variantName } from "../lib/variantLabel.ts";
 import { toast } from "../lib/toast.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useHub } from "../stores/hub.ts";
@@ -518,26 +519,6 @@ function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (co
   );
 }
 
-const NAVAL_MODES: Record<string, string> = {
-  duel: "duel",
-  melee: "mêlée",
-  teams: "en équipes",
-  sprint: "solo 40 lignes",
-  commune: "mèche classique",
-  rallonge: "mèche à rallonge",
-  chacun: "chacun sa mèche",
-  port: "au Port",
-  vignes: "aux Vignes",
-  col: "au Col",
-  hasard: "circuit au hasard",
-  "5": "5 contre 5",
-  "7": "7 contre 7",
-  "11": "11 contre 11",
-  vies: "aux vies",
-  temps: "au temps",
-  subite: "mort subite",
-};
-
 function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame: boolean; friendNames: Set<string> }) {
   const seats = room.humans + room.bots;
   // Fermée en cours de route, elle ne se regarde que si l'un de ses joueurs est un ami (le serveur décide aussi)
@@ -573,21 +554,16 @@ function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame:
       </li>
     );
   }
-  const variant =
-    room.game === "meche" && room.variant === "hasard"
-      ? "mode au hasard"
-      : room.game !== "uno"
-        ? (NAVAL_MODES[room.variant] ?? room.variant)
-        : room.variant === "nomercy"
-          ? "No Mercy"
-          : "classique";
+  const game = room.game as GameId;
+  // « Bolides, Le Volcan » ; quand UNO est le seul jeu, sa variante suffit (« classique »)
+  const what = showGame ? tableLabel(game, room.variant) : (variantName(game, room.variant) ?? GAME_NAMES[game]);
   return (
     <li className="row">
       <span className="room-code">{room.code}</span>
       <span className="row-text">
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>
         <span className="hint">
-          {showGame ? `${GAME_NAMES[room.game as GameId]} ${variant}` : variant}, {seats} sur {room.maxPlayers}
+          {what}, {seats} sur {room.maxPlayers}
           {room.status === "playing" ? ", partie en cours" : ""} · {lateJoinTag(room.lateJoin)}
           <span className="seat-dots" aria-hidden="true">
             {Array.from({ length: room.maxPlayers }, (_, i) => (
