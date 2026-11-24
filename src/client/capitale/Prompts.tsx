@@ -237,8 +237,18 @@ const DISASTER_CHIPS: Record<DisasterKind, string> = {
   cession: "Un titre cédé",
 };
 
-/** Ce que fait une carte, en quelques mots, pour la pastille sous son texte */
-function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move" } {
+/** En Builder, une catastrophe abat un bâtiment (jamais le monument) */
+const BUILDER_DISASTER_CHIPS: Partial<Record<DisasterKind, string>> = {
+  seisme: "−1 bâtiment",
+  incendie: "−1 bâtiment",
+  tempete: "−1 bâtiment chacun",
+  crue: "Un quartier −1 bâtiment",
+  peril: "Chez un adversaire −1 bâtiment",
+};
+
+/** Ce que fait une carte, en quelques mots, pour la pastille sous son texte (en Builder, des bâtiments et non des niveaux) */
+function effectChip(e: CardEffect, builder: boolean): { text: string; tone: "good" | "bad" | "move" } {
+  const per = builder ? "par tranche" : "par niveau";
   switch (e.kind) {
     case "money":
       return e.amount > 0 ? { text: `+${money(e.amount)}`, tone: "good" } : { text: `−${money(-e.amount)}`, tone: "bad" };
@@ -253,9 +263,9 @@ function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move
     case "jailFree":
       return { text: "Sortie de prison gardée", tone: "good" };
     case "repairs":
-      return { text: `${money(e.level)} par niveau`, tone: "bad" };
+      return { text: `${money(e.level)} ${per}`, tone: "bad" };
     case "grant":
-      return { text: `+${money(e.level)} par niveau`, tone: "good" };
+      return { text: `+${money(e.level)} ${per}`, tone: "good" };
     case "eachPlayer":
       return e.amount > 0 ? { text: `+${money(e.amount)} de chacun`, tone: "good" } : { text: `${money(-e.amount)} à chacun`, tone: "bad" };
     case "perTitle":
@@ -267,7 +277,7 @@ function effectChip(e: CardEffect): { text: string; tone: "good" | "bad" | "move
     case "bestRent":
       return { text: `Un loyer, ${money(e.max)} au plus`, tone: "good" };
     case "disaster":
-      return { text: DISASTER_CHIPS[e.disaster], tone: "bad" };
+      return { text: (builder && BUILDER_DISASTER_CHIPS[e.disaster]) || DISASTER_CHIPS[e.disaster], tone: "bad" };
   }
 }
 
@@ -293,6 +303,7 @@ export function CardShow({
   mine,
   onClose,
   still = false,
+  builder = false,
 }: {
   card: { deck: DeckId; card: number; read: number };
   seat: SeatView | undefined;
@@ -300,10 +311,13 @@ export function CardShow({
   onClose: () => void;
   /** Posée telle quelle, sans animation (la planche de contrôle) */
   still?: boolean;
+  /** Une partie de Builder : la carte parle de bâtiments, pas de niveaux */
+  builder?: boolean;
 }) {
-  const c = DECKS[card.deck][card.card];
-  if (!c) return null;
-  const chip = effectChip(c.effect);
+  const card0 = DECKS[card.deck][card.card];
+  if (!card0) return null;
+  const c = { ...card0, text: (builder && card0.builder) || card0.text };
+  const chip = effectChip(c.effect, builder);
   const tone = cardTone(c.effect);
   // Un texte long : la carte se resserre (médaillon plus petit, lettre plus fine) pour que tout tienne dans son cadre
   const length = c.text.length > 95 ? "is-long" : c.text.length > 70 ? "is-mid" : "";

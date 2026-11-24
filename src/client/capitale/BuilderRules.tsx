@@ -1,4 +1,4 @@
-import { SQUARES } from "../../shared/games/capitale/board.ts";
+import { SQUARES, upgradeCost } from "../../shared/games/capitale/board.ts";
 import { annexCost, BUILD_ORDER, buildCost, BUILDS, NUISANCE_MALUS, PARC_BONUS } from "../../shared/games/capitale/builder.ts";
 import { baseSize, maxAnnex } from "../../shared/games/capitale/builderMap.ts";
 import { fr } from "../../shared/typo.ts";
@@ -19,6 +19,8 @@ function priceRange(kind: (typeof BUILD_ORDER)[number]): string {
 export function BuilderRules({ specials, monopoly }: { specials: boolean; monopoly: boolean }) {
   const kinds = BUILD_ORDER.filter((k) => specials || !BUILDS[k].special);
   const annex = CITIES.map(annexCost);
+  // Une tranche bâtie : le prix d'un niveau du quartier en Classique, de la moins chère à la plus chère des villes
+  const tranche = CITIES.map(upgradeCost);
   return (
     <>
       <details className="cap-special-rules">
@@ -63,7 +65,9 @@ export function BuilderRules({ specials, monopoly }: { specials: boolean; monopo
             Une ville bâtie ne s'échange pas et ne s'hypothèque pas&nbsp;; son terrain annexé la suit. Tant qu'une tour ou un monument est
             debout dans un quartier, aucune ville de ce quartier ne s'échange. Le rachat paie les bâtiments et le terrain, et le monument
             protège sa ville&nbsp;; l'expropriation paie le terrain annexé au prix payé. Une catastrophe abat un bâtiment, jamais le
-            monument.
+            monument. Les cartes de travaux et de primes comptent vos bâtiments par tranches bâties&nbsp;: une tranche pour chaque{" "}
+            {Math.min(...tranche)} à {Math.max(...tranche)}&nbsp;₣ dépensés selon le quartier (le prix d'un niveau en Classique), le
+            monument compté à part.
             {monopoly && " Au Monopole, seuls les titres comptent."}
           </li>
         </ul>

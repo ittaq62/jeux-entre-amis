@@ -707,7 +707,16 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {card && <CardShow key={card.key} card={card} seat={seat(card.player)} mine={card.player === me} onClose={() => setCard(null)} />}
+        {card && (
+          <CardShow
+            key={card.key}
+            card={card}
+            seat={seat(card.player)}
+            mine={card.player === me}
+            builder={builder}
+            onClose={() => setCard(null)}
+          />
+        )}
       </AnimatePresence>
       {facts && tip && !phone && <SquareTip facts={facts} x={tip.x} y={tip.y} />}
 

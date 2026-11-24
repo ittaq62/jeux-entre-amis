@@ -16,6 +16,7 @@ describe("la typographie française à l'affichage", () => {
   });
 
   it("aucune carte de Capitale ne garde une espace ordinaire avant « : » une fois affichée", () => {
-    for (const card of [...DECKS.hasard, ...DECKS.courrier]) expect(fr(card.text)).not.toMatch(/ [:;!?]/);
+    for (const card of [...DECKS.hasard, ...DECKS.courrier])
+      for (const text of [card.text, card.builder ?? ""]) expect(fr(text)).not.toMatch(/ [:;!?]/);
   });
 });

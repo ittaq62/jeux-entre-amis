@@ -47,6 +47,8 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
   /** « Berthe achète » ou « Tu achètes » */
   const say = (id: string, third: string, second: string) => (isMe(id) ? `Tu ${second}` : `${name(id)} ${third}`);
   const sq = (i: number | undefined) => (i !== undefined ? SQUARES[i]!.name : "");
+  /** « de Paris », « d'Aurillac » */
+  const ofSq = (i: number) => (/^[aeiouyhéèêàâîïôû]/i.test(sq(i)) ? `d'${sq(i)}` : `de ${sq(i)}`);
   /** « de Berthe », « d'Odile » */
   const of = (id: string) => (isMe(id) ? "à toi" : /^[aeiouyhéèêàâîïôû]/i.test(name(id)) ? `d'${name(id)}` : `de ${name(id)}`);
   switch (e.type) {
@@ -104,7 +106,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     case "auctionEnd":
       return e.winner
         ? { text: `${say(e.winner, "remporte", "remportes")} ${sq(e.square)} pour ${money(e.amount)}`, tone: "big", who: e.winner }
-        : { text: `Personne ne veut de ${sq(e.square)}`, tone: "info", who: null };
+        : { text: `Personne ne veut ${ofSq(e.square)}`, tone: "info", who: null };
     case "upgrade":
       return {
         text:
@@ -128,7 +130,7 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
       return { text: `${say(e.player, "construit", "construis")} ${info.one} à ${sq(e.square)}`, tone: "big", who: e.player };
     }
     case "sell":
-      return { text: `${say(e.player, "revend", "revends")} un niveau de ${sq(e.square)}`, tone: "info", who: e.player };
+      return { text: `${say(e.player, "revend", "revends")} un niveau ${ofSq(e.square)}`, tone: "info", who: e.player };
     case "build": {
       // Builder : le monument, une nuisance, et ce que bâtissent les autres (le sien, on le voit pousser)
       const info = BUILDS[e.building.kind];
@@ -149,29 +151,29 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     }
     case "annex":
       return {
-        text: `${say(e.player, "repousse", "repousses")} la frontière de ${sq(e.square)} d'une case (${money(e.price)})`,
+        text: `${say(e.player, "repousse", "repousses")} la frontière ${ofSq(e.square)} d'une case (${money(e.price)})`,
         tone: "info",
         who: e.player,
       };
     case "demolish":
       return e.how === "auto" || !isMe(e.player)
         ? null
-        : { text: `Tu démolis ${BUILDS[e.building.kind].the} de ${sq(e.square)}`, tone: "info", who: e.player };
+        : { text: `Tu démolis ${BUILDS[e.building.kind].the} ${ofSq(e.square)}`, tone: "info", who: e.player };
     case "raze":
       return e.how === "auto"
         ? null
         : {
             text:
               e.how === "pay"
-                ? `${say(e.player, "fait", "fais")} raser ${SPECIALS[e.kind].the} de ${sq(e.square)}`
-                : `${say(e.player, "revend", "revends")} ${SPECIALS[e.kind].the} de ${sq(e.square)}`,
+                ? `${say(e.player, "fait", "fais")} raser ${SPECIALS[e.kind].the} ${ofSq(e.square)}`
+                : `${say(e.player, "revend", "revends")} ${SPECIALS[e.kind].the} ${ofSq(e.square)}`,
             tone: "info",
             who: e.player,
           };
     case "mortgage":
       return { text: `${say(e.player, "hypothèque", "hypothèques")} ${sq(e.square)}`, tone: "info", who: e.player };
     case "unmortgage":
-      return { text: `${say(e.player, "lève", "lèves")} l'hypothèque de ${sq(e.square)}`, tone: "info", who: e.player };
+      return { text: `${say(e.player, "lève", "lèves")} l'hypothèque ${ofSq(e.square)}`, tone: "info", who: e.player };
     case "jail":
       return { text: `${say(e.player, "va", "vas")} en prison\u00a0!`, tone: "bad", who: e.player };
     case "leaveJail": {
@@ -272,9 +274,14 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
             }
           : { text: `${what}\u00a0: rien à céder, ouf\u00a0!`, tone: "info", who: e.player };
       if (e.hits.length === 0) return { text: `${what}\u00a0: plus de peur que de mal, rien n'est touché`, tone: "info", who: e.player };
-      const list = e.hits.map((h) => `${sq(h.square)}${isMe(h.owner) ? " (à toi)" : ""}`).join(", ");
+      const mine = (h: { owner: string }) => (isMe(h.owner) ? " (à toi)" : "");
+      const many = e.hits.length > 1;
+      // Builder : le bâtiment qui tombe, ville par ville
+      const text = e.hits.every((h) => h.building)
+        ? `${what}\u00a0: ${e.hits.map((h) => `${BUILDS[h.building!.kind].the} ${ofSq(h.square)}${mine(h)}`).join(", ")} ${many ? "s'effondrent" : "s'effondre"}`
+        : `${what}\u00a0: ${e.hits.map((h) => `${sq(h.square)}${mine(h)}`).join(", ")} ${many ? "perdent" : "perd"} un niveau`;
       return {
-        text: `${what}\u00a0: ${list} ${e.hits.length > 1 ? "perdent" : "perd"} un niveau`,
+        text,
         tone: e.hits.some((h) => isMe(h.owner)) ? "bad" : "big",
         who: e.player,
       };

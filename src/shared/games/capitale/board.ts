@@ -323,6 +323,8 @@ export type CardEffect =
 
 export interface Card {
   text: string;
+  /** En Builder, où il n'y a pas de niveaux : le même effet, dit avec les bâtiments de la carte */
+  builder?: string;
   effect: CardEffect;
 }
 
@@ -350,7 +352,11 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Libéré de prison ! Gardez cette carte jusqu'à ce que vous en ayez besoin.", effect: { kind: "jailFree" } },
     { text: "Vous avez oublié vos clés : reculez de 3 cases.", effect: { kind: "moveBy", steps: -3 } },
     { text: "Contrôle de police : allez en prison, sans passer par Départ.", effect: { kind: "jail" } },
-    { text: "Travaux dans vos logements : 25 par niveau et 100 par monument.", effect: { kind: "repairs", level: 25, tower: 100 } },
+    {
+      text: "Travaux dans vos logements : 25 par niveau et 100 par monument.",
+      builder: "Travaux dans vos villes : 25 par tranche bâtie et 100 par monument.",
+      effect: { kind: "repairs", level: 25, tower: 100 },
+    },
     { text: "Excès de vitesse : amende de 15.", effect: { kind: "money", amount: -15 } },
     { text: "Prenez le TGV Atlantique. Si vous passez par Départ, touchez 200.", effect: { kind: "moveTo", square: 5 } },
     { text: "Vous voilà élu maire : offrez 50 à chaque joueur.", effect: { kind: "eachPlayer", amount: -50 } },
@@ -382,18 +388,29 @@ export const DECKS: Record<DeckId, Card[]> = {
       text: "Journées du patrimoine : la banque vous verse le loyer de votre ville la plus rentable (300 au plus).",
       effect: { kind: "bestRent", max: 300 },
     },
-    { text: "Séisme ! Votre ville la plus haute perd un niveau.", effect: { kind: "disaster", disaster: "seisme" } },
-    { text: "Incendie ! Un niveau de l'une de vos villes, au hasard, part en fumée.", effect: { kind: "disaster", disaster: "incendie" } },
+    {
+      text: "Séisme ! Votre ville la plus haute perd un niveau.",
+      builder: "Séisme ! Dans votre ville au plus gros loyer, le bâtiment le plus cher s'effondre.",
+      effect: { kind: "disaster", disaster: "seisme" },
+    },
+    {
+      text: "Incendie ! Un niveau de l'une de vos villes, au hasard, part en fumée.",
+      builder: "Incendie ! Un bâtiment de l'une de vos villes, au hasard, part en fumée.",
+      effect: { kind: "disaster", disaster: "incendie" },
+    },
     {
       text: "Tempête sur le pays : la ville la plus haute de chaque joueur perd un niveau.",
+      builder: "Tempête sur le pays : dans la ville au plus gros loyer de chaque joueur, le bâtiment le plus cher tombe.",
       effect: { kind: "disaster", disaster: "tempete" },
     },
     {
       text: "La rivière déborde : toutes les villes d'un quartier tiré au sort perdent un niveau.",
+      builder: "La rivière déborde : dans chaque ville bâtie d'un quartier tiré au sort, le bâtiment le plus cher est emporté.",
       effect: { kind: "disaster", disaster: "crue" },
     },
     {
       text: "Arrêté de péril : la ville adverse au plus gros loyer perd un niveau (un monument, classé, est épargné).",
+      builder: "Arrêté de péril : dans la ville adverse au plus gros loyer, le bâtiment le plus cher est abattu (le monument est classé).",
       effect: { kind: "disaster", disaster: "peril" },
     },
   ],
@@ -410,7 +427,11 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Facture d'hôpital : payez 100.", effect: { kind: "money", amount: -100 } },
     { text: "Frais de scolarité : payez 50.", effect: { kind: "money", amount: -50 } },
     { text: "Vous conseillez un voisin pour sa déco : recevez 25.", effect: { kind: "money", amount: 25 } },
-    { text: "Ravalement de façade : 40 par niveau et 115 par monument.", effect: { kind: "repairs", level: 40, tower: 115 } },
+    {
+      text: "Ravalement de façade : 40 par niveau et 115 par monument.",
+      builder: "Ravalement de façade : 40 par tranche bâtie et 115 par monument.",
+      effect: { kind: "repairs", level: 40, tower: 115 },
+    },
     { text: "Deuxième prix au concours de pétanque : recevez 10.", effect: { kind: "money", amount: 10 } },
     { text: "Héritage d'une tante éloignée : recevez 100.", effect: { kind: "money", amount: 100 } },
     { text: "La fête du village a bien marché : recevez 100.", effect: { kind: "money", amount: 100 } },
@@ -431,9 +452,14 @@ export const DECKS: Record<DeckId, Card[]> = {
     { text: "Pendaison de crémaillère : chaque joueur vous offre 20.", effect: { kind: "eachPlayer", amount: 20 } },
     { text: "Remboursement de la mutuelle : recevez 40.", effect: { kind: "money", amount: 40 } },
     { text: "Votre potiron fait sensation au comice agricole : recevez 15.", effect: { kind: "money", amount: 15 } },
-    { text: "Prime à la rénovation : 20 par niveau et 50 par monument.", effect: { kind: "grant", level: 20, tower: 50 } },
+    {
+      text: "Prime à la rénovation : 20 par niveau et 50 par monument.",
+      builder: "Prime à la rénovation : 20 par tranche bâtie et 50 par monument.",
+      effect: { kind: "grant", level: 20, tower: 50 },
+    },
     {
       text: "Des termites dans la charpente : un niveau de l'une de vos villes, au hasard, s'effondre.",
+      builder: "Des termites dans la charpente : un bâtiment de l'une de vos villes, au hasard, s'effondre.",
       effect: { kind: "disaster", disaster: "incendie" },
     },
     {

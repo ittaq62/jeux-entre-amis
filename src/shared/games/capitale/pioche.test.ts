@@ -123,6 +123,14 @@ describe("la pioche", () => {
 });
 
 describe("les nouvelles cartes", () => {
+  it("une carte qui parle de niveaux a son texte pour le Builder, qui n'en a pas", () => {
+    for (const card of [...DECKS.hasard, ...DECKS.courrier]) {
+      if (!/niveau/.test(card.text)) continue;
+      expect(card.builder, card.text).toBeDefined();
+      expect(card.builder).not.toMatch(/niveau/);
+    }
+  });
+
   it("taxe foncière : tant par titre ; prime à la rénovation : tant par niveau et par monument", () => {
     const s = game();
     own(s, "a", 1, 3, 5, 12);

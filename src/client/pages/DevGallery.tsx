@@ -60,6 +60,26 @@ export function DevGallery() {
           )),
         )}
       </div>
+      <h2 style={{ margin: "28px 0 16px" }}>Capitale Builder : les cartes dites avec les bâtiments</h2>
+      <div className="dev-cap-cards dev-cap-builder" style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+        {(["hasard", "courrier"] as DeckId[]).flatMap((deck) =>
+          DECKS[deck].flatMap((c, i) =>
+            c.builder
+              ? [
+                  <CardShow
+                    key={`b-${deck}-${i}`}
+                    card={{ deck, card: i, read: cardReadMs(deck, i) }}
+                    seat={undefined}
+                    mine={i % 2 === 0}
+                    onClose={() => {}}
+                    still
+                    builder
+                  />,
+                ]
+              : [],
+          ),
+        )}
+      </div>
     </div>
   );
 }
