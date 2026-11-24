@@ -464,6 +464,8 @@ app.post("/rooms/quick", withSession, withProfile, async (c) => {
   if (!game) return c.json({ error: "Ce jeu n'est pas encore ouvert." }, 403);
   const existing = await hub(c).quickMatch(game);
   if (existing) return c.json({ code: existing, created: false });
+  // Comme pour les autres tables : chaque partie rapide sans table à rejoindre en ouvre une, publique
+  if (!(await rateLimit(c.env.DB, `room:${c.get("user").id}`, 40, 3600_000))) return c.json({ error: "Trop de salons créés." }, 429);
   return c.json({ code: await createRoom(c, "public", true, game), created: true });
 });
 
