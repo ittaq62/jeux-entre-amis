@@ -36,7 +36,7 @@ interface Knowledge {
   touching: boolean;
 }
 
-function knowledge(s: NavalState, bot: NavalPlayer, target: NavalPlayer): Knowledge {
+function knowledge(s: NavalState, bot: NavalPlayer, target: NavalPlayer, wreckSense = true): Knowledge {
   const b = target.board;
   const size = b.size;
   const cells = new Uint8Array(size * size);
@@ -49,6 +49,10 @@ function knowledge(s: NavalState, bot: NavalPlayer, target: NavalPlayer): Knowle
     const scanner = s.players[playerIndex(s, sc.by)];
     if (sc.target !== target.id || !scanner || !allies(bot, scanner)) continue;
     for (const c of sc.cells) if (cells[c] === UNKNOWN) cells[c] = sc.found.includes(c) ? ECHO : EMPTY;
+  }
+  // Sans navires collés, l'eau tout autour d'une épave est forcément vide : on n'y tire pas (sauf le mousse, qui n'y pense pas)
+  if (wreckSense && !s.settings.touching) {
+    for (const c of sunkCells) for (const n of neighbours(size, c)) if (cells[n] === UNKNOWN) cells[n] = EMPTY;
   }
   const sunkKinds = b.ships.filter((sh) => sh.sunk).map((sh) => sh.kind);
   const remaining = [...FLEETS[b.size]];
@@ -232,7 +236,7 @@ export function botAction(s: NavalState, botId: string, level: BotLevel): NavalA
   if (!bot || s.phase !== "battle") return null;
   const target = allowedTargets(s, bot.id).find((p) => p.id === s.aim) ?? chooseTarget(s, bot, level);
   if (!target) return null;
-  const k = knowledge(s, bot, target);
+  const k = knowledge(s, bot, target, level !== "mousse");
   const hunting = huntAround(k);
 
   if (level === "mousse") {

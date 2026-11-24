@@ -456,6 +456,9 @@ export class NavalRoom extends DurableObject<Env> {
     const seats = d.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     if (seats.length < MIN_PLAYERS) return "Il faut au moins deux joueurs : ajoute un bot !";
     const port = seats.filter((s) => s.team === 0).length;
+    // En 2 contre 2, un marin déconnecté (encore affiché au salon quelques secondes) ne fait pas basculer en mêlée
+    if (d.settings.naval.teams && !d.tour && seats.length !== 4)
+      return `Le 2 contre 2 se joue à quatre : il ${seats.length === 3 ? "manque un marin" : `y a ${seats.length} marins`}.`;
     if (d.settings.naval.teams && seats.length === 4 && port !== 2)
       return `Il faut deux marins de chaque côté : c'est ${port} contre ${seats.length - port} pour l'instant.`;
     return null;
@@ -706,6 +709,8 @@ export class NavalRoom extends DurableObject<Env> {
             d.settings.maxPlayers = Math.max(max, d.seats.length);
           }
         }
+        // Le 2 contre 2 ne se joue qu'à quatre places : le salon décoche la case ailleurs, la partie aussi
+        if (!d.tour && d.settings.maxPlayers !== 4) d.settings.naval.teams = false;
         return this.afterChange([], now);
       }
 
@@ -753,6 +758,10 @@ export class NavalRoom extends DurableObject<Env> {
           const problem = this.startProblem();
           if (problem) return this.send(ws, { t: "error", message: problem });
           return this.openAnnounce(now);
+        }
+        if (!d.tour) {
+          const problem = this.startProblem();
+          if (problem) return this.send(ws, { t: "error", message: problem });
         }
         return this.startGame(now, ws);
       }
@@ -895,6 +904,12 @@ export class NavalRoom extends DurableObject<Env> {
     if (!d) return;
     let finished = false;
     const g = d.naval;
+    // Un joueur parti ou absent pendant le placement : sa flotte (la dernière rangée) est prête, personne ne l'attend
+    if (g && d.status === "playing" && g.phase === "placement") {
+      for (const s of d.seats) {
+        if (s.autoplay && !g.players.find((p) => p.id === s.id)?.ready) events = [...events, ...forceReady(g, s.id)];
+      }
+    }
     if (g && d.status === "playing") {
       if (g.phase !== "placement") {
         d.placementDeadline = null;

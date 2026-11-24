@@ -121,13 +121,19 @@ export function viewFor(s: NavalState, viewerId: string | null): NavalView {
   };
 }
 
-/** Les événements tels qu'un joueur peut les voir : le résultat d'un radar reste dans le camp du tireur. */
+/**
+ * Les événements tels qu'un joueur peut les voir : le résultat d'un radar reste dans le camp du tireur, et l'arme
+ * gagnée aussi (les autres n'en voient que le nombre, dans la vue).
+ */
 export function eventsFor(s: NavalState, events: NavalEvent[], viewerId: string | null): NavalEvent[] {
   const viewer = viewerId ? s.players[playerIndex(s, viewerId)] : undefined;
-  return events.map((e) => {
-    if (e.type !== "scan") return e;
-    const by = s.players[playerIndex(s, e.by)];
-    const visible = viewer && by && allies(viewer, by);
-    return visible ? e : { ...e, found: null };
+  const ours = (id: string) => {
+    const p = s.players[playerIndex(s, id)];
+    return Boolean(viewer && p && allies(viewer, p));
+  };
+  return events.flatMap((e): NavalEvent[] => {
+    if (e.type === "weapon") return ours(e.player) ? [e] : [];
+    if (e.type !== "scan") return [e];
+    return [ours(e.by) ? e : { ...e, found: null }];
   });
 }
