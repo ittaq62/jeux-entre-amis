@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { COURSES, holeDef } from "../../shared/games/minigolf/courses.ts";
 import { colorOf, type BallLook } from "../../shared/games/minigolf/looks.ts";
 import { totals } from "../../shared/games/minigolf/match.ts";
@@ -70,6 +70,15 @@ export function Scorecard({
           : "Égalité !"
     : `Après le trou ${v.hole + 1}`;
   const course = COURSES[v.holes[0]!.c];
+  // Sur un écran étroit, le tableau défile entre les noms et le total, qui restent : il montre le trou qui vient de se jouer
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const w = wrap.current;
+    const cur = w?.querySelector<HTMLElement>("th.is-current");
+    if (!w || !cur) return;
+    const total = w.querySelector<HTMLElement>("th.mg-total-col")?.offsetWidth ?? 0;
+    w.scrollLeft = Math.max(0, cur.offsetLeft + cur.offsetWidth + total + 8 - w.clientWidth);
+  }, [v.hole, final]);
 
   return (
     <div className={`mg-scores ${final ? "is-final" : ""}`}>
@@ -80,7 +89,7 @@ export function Scorecard({
           {countdown !== null && ` · trou suivant dans ${countdown} s`}
         </p>
         {final && <EloLine result={room.results?.[room.you.userId]} />}
-        <div className="mg-table-wrap">
+        <div className="mg-table-wrap" ref={wrap}>
           <table className="mg-table">
             <thead>
               <tr>
@@ -90,14 +99,14 @@ export function Scorecard({
                     {h + 1}
                   </th>
                 ))}
-                <th>Total</th>
+                <th className="mg-total-col">Total</th>
               </tr>
               <tr className="mg-par-row">
                 <th className="mg-name-col">Par</th>
                 {pars.map((p, h) => (
                   <td key={h}>{p}</td>
                 ))}
-                <td>{parSoFar}</td>
+                <td className="mg-total-col">{parSoFar}</td>
               </tr>
             </thead>
             <tbody>
@@ -119,7 +128,7 @@ export function Scorecard({
                         {s ?? ""}
                       </td>
                     ))}
-                    <td className="num mg-total">
+                    <td className="num mg-total mg-total-col">
                       {v.cfg.teams ? tot[i] : t}
                       <small>{diff === 0 ? "=" : diff > 0 ? `+${diff}` : diff}</small>
                     </td>

@@ -557,14 +557,23 @@
   z-index: 1;
 }
 
+/* Le total reste à droite pendant que les trous défilent (comme les noms à gauche) */
+.mg-table .mg-total-col {
+  position: sticky;
+  right: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
 .mg-table th.is-current {
   background: var(--gold-tint);
   border-radius: 6px;
 }
 
+/* Pâle par la couleur, pas par l'opacité : les cases du nom et du total, fixes, laisseraient voir les trous défiler dessous */
 .mg-par-row td,
 .mg-par-row th {
-  opacity: 0.6;
+  color: color-mix(in srgb, currentColor 60%, transparent);
   font-size: 12px;
 }
 
@@ -762,6 +771,17 @@
 @media (max-width: 640px) {
   .mg-btn-label {
     display: none;
+  }
+  /* La carte des scores : des cases plus serrées (neuf trous tiennent presque sans défiler) */
+  .mg-scores-card {
+    padding: 16px 14px;
+  }
+  .mg-table {
+    font-size: 13px;
+  }
+  .mg-table th,
+  .mg-table td {
+    padding: 5px 4px;
   }
   /* Les commandes de l'aide l'une sous l'autre : à deux colonnes, l'explication n'avait que quelques mots par ligne */
   .mg-keys li {
