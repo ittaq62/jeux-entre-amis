@@ -18,12 +18,14 @@ export interface AchievementDef {
   tone: ChipTone;
   title: string;
   description: string;
+  /** Un compteur de parties terminées à ce jeu (ou de tournées) : le succès tombe à ce nombre, et le profil montre où on en est */
+  goal?: number;
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "first-win", chip: "1re", tone: "red", title: "Première victoire", description: "Gagner une partie de UNO." },
-  { id: "regular", chip: "25", tone: "blue", title: "Pilier de comptoir", description: "Jouer 25 parties de UNO." },
-  { id: "veteran", chip: "100", tone: "blue", title: "Increvable", description: "Jouer 100 parties de UNO." },
+  { id: "regular", goal: 25, chip: "25", tone: "blue", title: "Pilier de comptoir", description: "Jouer 25 parties de UNO." },
+  { id: "veteran", goal: 100, chip: "100", tone: "blue", title: "Increvable", description: "Jouer 100 parties de UNO." },
   { id: "streak-3", chip: "×3", tone: "red", title: "En feu", description: "Gagner 3 parties de UNO d'affilée." },
   { id: "merciless", chip: "+20", tone: "red", title: "Sans pitié", description: "Faire piocher 20 cartes ou plus en une partie." },
   { id: "hoarder", chip: "15", tone: "green", title: "Collectionneur", description: "Avoir 15 cartes en main en même temps." },
@@ -43,7 +45,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 
   // Bataille navale
   { id: "naval-first-win", game: "naval", chip: "1re", tone: "blue", title: "Amiral en herbe", description: "Gagner une bataille navale." },
-  { id: "naval-regular", game: "naval", chip: "25", tone: "green", title: "Loup de mer", description: "Jouer 25 batailles navales." },
+  {
+    id: "naval-regular",
+    goal: 25,
+    game: "naval",
+    chip: "25",
+    tone: "green",
+    title: "Loup de mer",
+    description: "Jouer 25 batailles navales.",
+  },
   { id: "naval-streak", game: "naval", chip: "×5", tone: "red", title: "Tireur d'élite", description: "Toucher 5 fois de suite." },
   {
     id: "naval-flawless",
@@ -92,6 +102,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "bricks-first-win", game: "bricks", chip: "1re", tone: "red", title: "Premier mur", description: "Gagner une partie de Briques." },
   {
     id: "bricks-regular",
+    goal: 25,
     game: "bricks",
     chip: "25",
     tone: "blue",
@@ -153,6 +164,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "capitale-regular",
+    goal: 25,
     game: "capitale",
     chip: "25",
     tone: "blue",
@@ -228,6 +240,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "crampons-regular",
+    goal: 25,
     game: "crampons",
     chip: "25",
     tone: "blue",
@@ -269,6 +282,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "escarmouche-regular",
+    goal: 25,
     game: "escarmouche",
     chip: "25",
     tone: "blue",
@@ -334,6 +348,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "culbute-regular",
+    goal: 25,
     game: "culbute",
     chip: "25",
     tone: "blue",
@@ -375,6 +390,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "minigolf-regular",
+    goal: 25,
     game: "minigolf",
     chip: "25",
     tone: "blue",
@@ -416,6 +432,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "bowling-regular",
+    goal: 25,
     game: "bowling",
     chip: "25",
     tone: "blue",
@@ -481,6 +498,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "billard-regular",
+    goal: 25,
     game: "billard",
     chip: "25",
     tone: "blue",
@@ -554,6 +572,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "bolides-regular",
+    goal: 25,
     game: "bolides",
     chip: "25",
     tone: "blue",
@@ -602,7 +621,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   // Mèche
   { id: "meche-first-win", game: "meche", chip: "1re", tone: "red", title: "Artificier", description: "Gagner une partie de Mèche." },
-  { id: "meche-regular", game: "meche", chip: "25", tone: "blue", title: "Sent la poudre", description: "Jouer 25 parties de Mèche." },
+  {
+    id: "meche-regular",
+    goal: 25,
+    game: "meche",
+    chip: "25",
+    tone: "blue",
+    title: "Sent la poudre",
+    description: "Jouer 25 parties de Mèche.",
+  },
   {
     id: "meche-flawless",
     game: "meche",
@@ -686,10 +713,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Salle comble",
     description: "Terminer une tournée à 6 joueurs ou plus.",
   },
-  { id: "tour-regular", game: "tour", chip: "10", tone: "blue", title: "Saltimbanque", description: "Terminer 10 tournées." },
+  { id: "tour-regular", goal: 10, game: "tour", chip: "10", tone: "blue", title: "Saltimbanque", description: "Terminer 10 tournées." },
 ];
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
+
+/** Le nombre de parties qu'il faut pour un succès à compteur */
+function goalOf(id: string): number {
+  return ACHIEVEMENT_BY_ID.get(id)?.goal ?? Infinity;
+}
 
 export interface CapitaleOutcome {
   won: boolean;
@@ -708,7 +740,7 @@ export function earnedCramponsAchievements(o: CramponsOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("crampons-first-win", o.won);
-  add("crampons-regular", o.played >= 25);
+  add("crampons-regular", o.played >= goalOf("crampons-regular"));
   add("crampons-clean", o.won && o.stats.conceded === 0);
   add("crampons-hat-trick", o.stats.myGoals >= 3);
   add("crampons-rout", o.won && o.stats.goals - o.stats.conceded >= 5);
@@ -727,7 +759,7 @@ export function earnedEscarmoucheAchievements(o: EscarmoucheOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("escarmouche-first-win", o.won);
-  add("escarmouche-regular", o.played >= 25);
+  add("escarmouche-regular", o.played >= goalOf("escarmouche-regular"));
   add("escarmouche-ace", o.stats.kills >= 10);
   add("escarmouche-sharp", o.stats.headshots >= 5);
   add("escarmouche-streak", o.stats.best >= 5);
@@ -747,7 +779,7 @@ export function earnedMinigolfAchievements(o: MinigolfOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("minigolf-first-win", o.won);
-  add("minigolf-regular", o.played >= 25);
+  add("minigolf-regular", o.played >= goalOf("minigolf-regular"));
   add("minigolf-ace", o.stats.aces >= 1);
   add("minigolf-under", o.stats.holes >= 9 && o.stats.toPar < 0);
   add("minigolf-dry", o.stats.holes >= 9 && o.stats.lost === 0);
@@ -764,7 +796,7 @@ export function earnedBowlingAchievements(o: BowlingOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("bowling-first-win", o.won);
-  add("bowling-regular", o.played >= 25);
+  add("bowling-regular", o.played >= goalOf("bowling-regular"));
   add("bowling-strike", o.stats.strikes >= 1);
   add("bowling-turkey", o.stats.bestRun >= 3);
   add("bowling-split", o.stats.splitsMade >= 1);
@@ -786,7 +818,7 @@ export function earnedBillardAchievements(o: BillardOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("billard-first-win", o.won);
-  add("billard-regular", o.played >= 25);
+  add("billard-regular", o.played >= goalOf("billard-regular"));
   add("billard-run5", o.stats.bestRun >= 5);
   add("billard-break-run", o.stats.breakRuns >= 1);
   add("billard-nine-break", o.stats.nineBreak >= 1);
@@ -812,7 +844,7 @@ export function earnedCulbuteAchievements(o: CulbuteOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, on: boolean) => on && out.push(id);
   add("culbute-first-win", o.won);
-  add("culbute-regular", o.played >= 25);
+  add("culbute-regular", o.played >= goalOf("culbute-regular"));
   add("culbute-flawless", o.won && o.mode === "vies" && o.stocks >= 3 && o.stats.lostStock === 0);
   add("culbute-early", o.stats.kos > 0 && o.stats.lowKo > 0 && o.stats.lowKo < 50);
   add("culbute-triple", o.stats.kos >= 3);
@@ -832,7 +864,7 @@ export function earnedBolidesAchievements(o: BolidesOutcome): string[] {
   const add = (id: string, on: boolean) => on && out.push(id);
   const s = o.stats;
   add("bolides-first-win", o.won);
-  add("bolides-regular", o.played >= 25);
+  add("bolides-regular", o.played >= goalOf("bolides-regular"));
   add("bolides-clean", o.won && o.items && s.hitsTaken === 0);
   add("bolides-sniper", s.hitsGiven >= 3);
   add("bolides-drifter", s.turbos >= 15);
@@ -854,7 +886,7 @@ export function earnedMecheAchievements(o: MecheOutcome): string[] {
   const add = (id: string, on: boolean) => on && out.push(id);
   const s = o.stats;
   add("meche-first-win", o.won);
-  add("meche-regular", o.played >= 25);
+  add("meche-regular", o.played >= goalOf("meche-regular"));
   add("meche-flawless", o.won && o.lives >= 3 && s.booms === 0);
   add("meche-close", o.won && o.lives >= 3 && s.livesLeft === 1);
   add("meche-long", s.longest >= 15);
@@ -869,7 +901,7 @@ export function earnedCapitaleAchievements(o: CapitaleOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, cond: boolean) => cond && out.push(id);
   add("capitale-first-win", o.won);
-  add("capitale-regular", o.played >= 25);
+  add("capitale-regular", o.played >= goalOf("capitale-regular"));
   add("capitale-hotel", s.hotels >= 1);
   add("capitale-builder", s.houses >= 10);
   add("capitale-landlord", s.monopolies >= 3);
@@ -904,7 +936,7 @@ export function earnedTourAchievements(o: TourOutcome): string[] {
   add("tour-underdog", o.won && o.wins === 0 && o.games > 0);
   add("tour-titled", o.titles > 0);
   add("tour-full", o.players >= 6);
-  add("tour-regular", o.played >= 10);
+  add("tour-regular", o.played >= goalOf("tour-regular"));
   return out;
 }
 
@@ -924,8 +956,8 @@ export function earnedAchievements(o: GameOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, cond: boolean) => cond && out.push(id);
   add("first-win", o.won);
-  add("regular", o.played >= 25);
-  add("veteran", o.played >= 100);
+  add("regular", o.played >= goalOf("regular"));
+  add("veteran", o.played >= goalOf("veteran"));
   add("streak-3", o.streak >= 3);
   add("merciless", s.plusGiven >= 20);
   add("hoarder", s.maxHand >= 15);
@@ -960,7 +992,7 @@ export function earnedNavalAchievements(o: NavalOutcome): string[] {
   const out: string[] = [];
   const add = (id: string, cond: boolean) => cond && out.push(id);
   add("naval-first-win", o.won);
-  add("naval-regular", o.played >= 25);
+  add("naval-regular", o.played >= goalOf("naval-regular"));
   add("naval-streak", s.bestStreak >= 5);
   add("naval-flawless", o.won && s.lost === 0);
   add("naval-close", o.won && o.afloat === 1);
@@ -987,7 +1019,7 @@ export function earnedBricksAchievements(o: BricksOutcome): string[] {
   const add = (id: string, cond: boolean) => cond && out.push(id);
   if (o.mode !== "sprint") {
     add("bricks-first-win", o.won);
-    add("bricks-regular", o.played >= 25);
+    add("bricks-regular", o.played >= goalOf("bricks-regular"));
     add("bricks-ko", s.kos >= 3);
     add("bricks-melee", o.won && o.mode === "melee");
     add("bricks-team", o.won && o.mode === "teams");

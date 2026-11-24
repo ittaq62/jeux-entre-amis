@@ -1038,6 +1038,17 @@
   font-weight: 600;
 }
 
+/* Le profil : où en est un succès à compteur (« 12 / 25 parties »), avec la même barre que l'album */
+.achievement-progress {
+  max-width: 220px;
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.achievement-progress .album-bar {
+  height: 6px;
+}
+
 .album-bar {
   flex: 1;
   height: 9px;

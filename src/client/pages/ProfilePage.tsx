@@ -221,9 +221,29 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   // Les succès gagnés d'abord, du plus récent au plus ancien, puis ceux qui restent à décrocher
   const won = shelfList.filter((a) => owned.has(a.id)).sort((x, y) => owned.get(y.id)! - owned.get(x.id)!);
   const toWin = shelfList.filter((a) => !owned.has(a.id));
+  // Tous les jeux visibles ici : le total de la vitrine
+  const allShelves = ACHIEVEMENTS.filter((a) => shelfGames.includes(a.game ?? "uno"));
+  const allOwned = allShelves.filter((a) => owned.has(a.id)).length;
   // Les points au classement de chaque jeu joué, UNO d'abord, dans l'ordre des fiches de l'accueil
   const crampons = profile.crampons ?? { played: 0, won: 0, points: 0, elo: 1000, streak: 0, bestStreak: 0, totals: {} };
   const culbute = profile.culbute ?? { played: 0, won: 0, points: 0, elo: 1000, streak: 0, bestStreak: 0, totals: {} };
+  // Les parties terminées de chaque jeu (et les tournées) : où en sont les succès à compteur
+  const playedOn = (g: TableGame): number =>
+    ({
+      uno: stats,
+      naval,
+      bricks,
+      capitale,
+      meche,
+      bolides,
+      crampons,
+      culbute,
+      escarmouche,
+      minigolf,
+      bowling,
+      billard,
+      tour,
+    })[g].played;
   const pointLines = (
     [
       { game: "uno", label: "à UNO", stats, shown: true },
@@ -554,6 +574,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               Succès{" "}
               <span className="hint num">
                 {shelfList.filter((a) => owned.has(a.id)).length} sur {shelfList.length}
+                {shelfGames.length > 1 && ` · ${allOwned} sur ${allShelves.length} en tout`}
               </span>
             </h2>
             {shelfGames.length > 1 && (
@@ -590,6 +611,17 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                       <span className="achievement-text">
                         <strong>{a.title}</strong>
                         <span>{a.description}</span>
+                        {a.goal !== undefined && (
+                          <span className="album-progress achievement-progress" aria-label={`${playedOn(shelfGame)} sur ${a.goal}`}>
+                            <span className="album-bar">
+                              <i style={{ width: `${Math.min(100, (playedOn(shelfGame) / a.goal) * 100)}%` }} />
+                            </span>
+                            {/* Le compte y est déjà (succès venu après) : il tombe à la fin de la prochaine partie */}
+                            <span className="num">
+                              {playedOn(shelfGame) >= a.goal ? "à la prochaine partie" : `${playedOn(shelfGame)} / ${a.goal}`}
+                            </span>
+                          </span>
+                        )}
                       </span>
                     </li>
                   ))}
@@ -654,7 +686,13 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   );
 }
 
-const dayMonth = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+/** « 2 octobre », et « 2 octobre 2025 » pour une autre année */
+const dayMonth = (ts: number) =>
+  new Date(ts).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    ...(new Date(ts).getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
+  });
 
 /** Points rapportés par une partie de l'historique, avec le barème du classement. */
 function gamePoints(g: Profile["recent"][number]): number {
