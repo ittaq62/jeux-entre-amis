@@ -66,6 +66,12 @@ export function Scorecard({
     (room.seats.length < room.settings.maxPlayers || room.seats.some((s) => s.kind === "bot"));
   const asked = room.rematch.includes(room.you.userId);
   const winners = ranks ? order.filter((i) => ranks[i] === 1) : [];
+  // À égalité en tête : qui (toi d'abord), plutôt qu'un « Égalité ! » qui ne dit pas si l'on en est
+  const tied = winners
+    .map((i) => v.players[i]!.id)
+    .sort((a, b) => Number(b === room.you.seatId) - Number(a === room.you.seatId))
+    .map((id) => (id === room.you.seatId ? "Toi" : (players.find((p) => p.id === id)?.name ?? "?")));
+  const tiedTitle = tied.length <= 3 ? `${tied.slice(0, -1).join(", ")} et ${tied[tied.length - 1]} à égalité !` : "Égalité en tête !";
   const title = final
     ? winners.length === 0
       ? "Partie finie"
@@ -75,7 +81,7 @@ export function Scorecard({
           ? v.players[winners[0]!]!.id === room.you.seatId
             ? "Tu gagnes !"
             : `${players.find((p) => p.id === v.players[winners[0]!]!.id)?.name ?? "?"} gagne !`
-          : "Égalité !"
+          : tiedTitle
     : `Après le trou ${v.hole + 1}`;
   const course = COURSES[v.holes[0]!.c];
   // Sur un écran étroit, le tableau défile entre les noms et le total, qui restent : il montre le trou qui vient de se jouer
@@ -94,7 +100,7 @@ export function Scorecard({
         <h1>{title}</h1>
         <p className="hint" style={{ margin: 0 }}>
           {v.holes.length} trous · {v.cfg.course === "melange" ? "mélange de parcours" : course.name}
-          {countdown !== null && ` · trou suivant dans ${countdown} s`}
+          {countdown !== null && (v.hole + 1 < v.holes.length ? ` · trou suivant dans ${countdown} s` : ` · résultats dans ${countdown} s`)}
         </p>
         {final && <EloLine result={room.results?.[room.you.userId]} />}
         <div className="mg-table-wrap" ref={wrap}>
