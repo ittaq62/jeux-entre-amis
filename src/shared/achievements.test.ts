@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ACHIEVEMENTS, earnedTourAchievements, type TourOutcome } from "./achievements.ts";
+import {
+  ACHIEVEMENTS,
+  earnedEscarmoucheAchievements,
+  earnedTourAchievements,
+  type EscarmoucheOutcome,
+  type TourOutcome,
+} from "./achievements.ts";
 
 const tour = (o: Partial<TourOutcome>): TourOutcome => ({
   won: true,
@@ -26,9 +32,32 @@ describe("succès de tournée", () => {
   });
 });
 
+const skirmish = (o: Partial<EscarmoucheOutcome>, stats: Partial<EscarmoucheOutcome["stats"]> = {}): EscarmoucheOutcome => ({
+  won: false,
+  played: 1,
+  mode: "drapeau",
+  ...o,
+  stats: { kills: 0, deaths: 1, headshots: 0, best: 0, knives: 0, captures: 0, ...stats },
+});
+
+describe("succès d'Escarmouche", () => {
+  it("porte-drapeau : un drapeau rapporté en capture du drapeau", () => {
+    expect(earnedEscarmoucheAchievements(skirmish({}, { captures: 1 }))).toContain("escarmouche-flag");
+  });
+
+  it("prendre des points en Conquête ne rapporte pas de drapeau", () => {
+    expect(earnedEscarmoucheAchievements(skirmish({ mode: "conquete" }, { captures: 3 }))).not.toContain("escarmouche-flag");
+  });
+});
+
 describe("la liste des succès", () => {
   it("chaque id est unique", () => {
     const ids = ACHIEVEMENTS.map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("chaque titre est unique : deux succès ne portent pas le même nom", () => {
+    const titles = ACHIEVEMENTS.map((a) => a.title);
+    expect(titles.filter((t, i) => titles.indexOf(t) !== i)).toEqual([]);
   });
 });

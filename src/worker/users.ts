@@ -671,7 +671,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
     } else if (rec.game === "escarmouche") {
       const stats = p.stats as EscarmoucheRecordStats;
       totals = mergeEscarmoucheTotals(prev?.totals ?? null, stats);
-      earnedIds = earnedEscarmoucheAchievements({ won, played, stats });
+      earnedIds = earnedEscarmoucheAchievements({ won, played, mode: rec.mode, stats });
     } else if (rec.game === "bolides") {
       const stats = p.stats as BolidesRecordStats;
       totals = mergeBolidesTotals(prev?.totals ?? null, stats, rec.mode, rec.settings.laps);

@@ -22,9 +22,9 @@ export interface AchievementDef {
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "first-win", chip: "1re", tone: "red", title: "Première victoire", description: "Gagner une partie de UNO." },
-  { id: "regular", chip: "25", tone: "blue", title: "Pilier de comptoir", description: "Jouer 25 parties." },
-  { id: "veteran", chip: "100", tone: "blue", title: "Increvable", description: "Jouer 100 parties." },
-  { id: "streak-3", chip: "×3", tone: "red", title: "En feu", description: "Gagner 3 parties d'affilée." },
+  { id: "regular", chip: "25", tone: "blue", title: "Pilier de comptoir", description: "Jouer 25 parties de UNO." },
+  { id: "veteran", chip: "100", tone: "blue", title: "Increvable", description: "Jouer 100 parties de UNO." },
+  { id: "streak-3", chip: "×3", tone: "red", title: "En feu", description: "Gagner 3 parties de UNO d'affilée." },
   { id: "merciless", chip: "+20", tone: "red", title: "Sans pitié", description: "Faire piocher 20 cartes ou plus en une partie." },
   { id: "hoarder", chip: "15", tone: "green", title: "Collectionneur", description: "Avoir 15 cartes en main en même temps." },
   { id: "phoenix", chip: "12", tone: "green", title: "Phénix", description: "Gagner après avoir eu 12 cartes ou plus en main." },
@@ -83,7 +83,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     game: "naval",
     chip: "3",
     tone: "black",
-    title: "Artificier",
+    title: "Tout l'arsenal",
     description: "Utiliser 3 armes spéciales en une partie.",
   },
   { id: "naval-sunk", game: "naval", chip: "×", tone: "black", title: "Par le fond", description: "Voir toute sa flotte coulée." },
@@ -96,7 +96,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "25",
     tone: "blue",
     title: "Compagnon bâtisseur",
-    description: "Jouer 25 parties de Briques.",
+    description: "Jouer 25 parties de Briques à plusieurs (le solo à part).",
   },
   {
     id: "bricks-tetra",
@@ -107,7 +107,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: "Faire quatre lignes d'une seule pièce.",
   },
   { id: "bricks-tspin", game: "bricks", chip: "T", tone: "red", title: "Coup tordu", description: "Réussir un T-spin." },
-  { id: "bricks-combo", game: "bricks", chip: "×6", tone: "red", title: "Enchaîneur", description: "Faire des lignes 6 poses de suite." },
+  {
+    id: "bricks-combo",
+    game: "bricks",
+    chip: "×6",
+    tone: "red",
+    title: "Enchaîneur",
+    description: "Faire des lignes à 6 poses d'affilée.",
+  },
   { id: "bricks-clean", game: "bricks", chip: "0", tone: "ivory", title: "Table rase", description: "Vider entièrement son plateau." },
   {
     id: "bricks-ko",
@@ -115,7 +122,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "K.O.",
     tone: "black",
     title: "Démolisseur",
-    description: "Mettre 3 adversaires K.O. dans une même partie.",
+    description: "Faire 3 K.O. dans une même partie.",
   },
   {
     id: "bricks-melee",
@@ -166,7 +173,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "10",
     tone: "green",
     title: "Promoteur",
-    description: "Bâtir 10 étages dans une même partie.",
+    description: "Bâtir 10 fois dans une même partie (niveaux ou bâtiments).",
   },
   {
     id: "capitale-landlord",
@@ -174,7 +181,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "3",
     tone: "ivory",
     title: "Seigneur des terres",
-    description: "Réunir 3 groupes de couleur dans une même partie.",
+    description: "Posséder 3 groupes de couleur en même temps.",
   },
   {
     id: "capitale-trader",
@@ -210,14 +217,13 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   { id: "capitale-ruin", game: "capitale", chip: "0", tone: "black", title: "Sur la paille", description: "Faire faillite." },
 
-  // Tournée
   // Crampons
   {
     id: "crampons-first-win",
     game: "crampons",
     chip: "1re",
     tone: "red",
-    title: "Première victoire",
+    title: "Premier trophée",
     description: "Gagner un match de Crampons.",
   },
   {
@@ -239,10 +245,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "crampons-hat-trick",
     game: "crampons",
-    chip: "x3",
+    chip: "×3",
     tone: "red",
     title: "Coup du chapeau",
-    description: "Marquer trois buts dans un match avec le joueur que tu diriges.",
+    description: "Marquer soi-même trois buts dans un match.",
   },
   {
     id: "crampons-rout",
@@ -282,7 +288,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     game: "escarmouche",
     chip: "×5",
     tone: "black",
-    title: "Œil de lynx",
+    title: "Pleine tête",
     description: "Cinq éliminations d'une balle à la tête dans une même partie.",
   },
   {
@@ -307,7 +313,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "1",
     tone: "green",
     title: "Porte-drapeau",
-    description: "Rapporter le drapeau adverse chez soi.",
+    description: "Rapporter le drapeau adverse chez soi, en capture du drapeau.",
   },
   {
     id: "escarmouche-untouchable",
@@ -353,10 +359,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "culbute-triple",
     game: "culbute",
-    chip: "x3",
+    chip: "×3",
     tone: "red",
     title: "Jeu de quilles",
-    description: "Sortir trois adversaires ou plus dans un même combat.",
+    description: "Sortir des adversaires trois fois ou plus dans un même combat.",
   },
   // Minigolf
   {
@@ -454,7 +460,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "300",
     tone: "black",
     title: "La partie parfaite",
-    description: "Faire 300 : douze strikes de suite, sans en rater un.",
+    description: "Faire 300 : douze strikes de suite.",
   },
   {
     id: "bowling-seer",
@@ -487,7 +493,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "5",
     tone: "red",
     title: "La série",
-    description: "Rentrer cinq billes d'affilée sans rendre la main.",
+    description: "Rentrer cinq billes d'affilée sans rendre la main (à la carambole : cinq carambolages).",
   },
   {
     id: "billard-break-run",
@@ -559,7 +565,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     game: "bolides",
     chip: "0",
     tone: "green",
-    title: "Sans une égratignure",
+    title: "Carrosserie intacte",
     description: "Gagner une course avec objets sans jamais être touché.",
   },
   {
@@ -568,7 +574,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     chip: "3",
     tone: "red",
     title: "Fine gâchette",
-    description: "Toucher 3 karts ou plus dans une même course.",
+    description: "Toucher des karts 3 fois ou plus dans une même course.",
   },
   {
     id: "bolides-drifter",
@@ -711,6 +717,8 @@ export function earnedCramponsAchievements(o: CramponsOutcome): string[] {
 
 export interface EscarmoucheOutcome {
   won: boolean;
+  /** Le mode joué : le drapeau ne se rapporte qu'en capture du drapeau (en Conquête, « captures » compte les points pris) */
+  mode: string;
   played: number;
   stats: { kills: number; deaths: number; headshots: number; best: number; knives: number; captures: number };
 }
@@ -724,7 +732,7 @@ export function earnedEscarmoucheAchievements(o: EscarmoucheOutcome): string[] {
   add("escarmouche-sharp", o.stats.headshots >= 5);
   add("escarmouche-streak", o.stats.best >= 5);
   add("escarmouche-knife", o.stats.knives >= 1);
-  add("escarmouche-flag", o.stats.captures >= 1);
+  add("escarmouche-flag", o.mode === "drapeau" && o.stats.captures >= 1);
   add("escarmouche-untouchable", o.won && o.stats.deaths === 0);
   return out;
 }
