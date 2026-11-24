@@ -3604,6 +3604,15 @@ a.shop-item {
   justify-content: center;
 }
 
+/* Amis : la croix qui retire un ami, un peu à l'écart des boutons de sa table */
+.friend-remove {
+  margin-left: 4px;
+}
+
+.invite-site .row-actions {
+  margin-top: 12px;
+}
+
 /* « Mon compte » : le pseudo et son bouton, espacés comme le reste du cadre */
 .account-pseudo {
   display: flex;

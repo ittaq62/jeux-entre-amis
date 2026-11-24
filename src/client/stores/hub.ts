@@ -103,18 +103,24 @@ export const useHub = create<HubState>((set, get) => ({
             set({ lobby: msg.rooms });
             break;
           case "friendsChanged": {
-            const before = get().friends.filter((f) => f.status === "incoming").length;
+            const before = new Map(get().friends.map((f) => [f.user.id, f.status]));
             void get()
               .refreshFriends()
               .then(() => {
-                const incoming = get().friends.filter((f) => f.status === "incoming");
-                if (incoming.length > before) {
-                  const last = incoming[incoming.length - 1]!;
+                const now = get().friends;
+                // Une nouvelle demande reçue, et une demande envoyée qui vient d'être acceptée
+                const asked = now.find((f) => f.status === "incoming" && !before.has(f.user.id));
+                const yes = now.find((f) => f.status === "accepted" && before.get(f.user.id) === "outgoing");
+                if (asked) {
                   play("pop");
                   toast({
-                    title: `${last.user.pseudo} veut devenir ton ami`,
+                    title: `${asked.user.pseudo} veut devenir ton ami`,
                     action: { label: "Voir", run: () => navigateTo("/amis") },
                   });
+                }
+                if (yes) {
+                  play("pop");
+                  toast({ tone: "gold", title: `${yes.user.pseudo} a accepté ta demande d'ami` });
                 }
               });
             break;
