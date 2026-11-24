@@ -23,6 +23,8 @@ class Ribbon {
   readonly mesh: THREE.Mesh;
   private pos: Float32Array;
   private uv: Float32Array;
+  /** Plus épais vu de loin : la largeur à l'écran reste lisible */
+  scale = 1;
   constructor(
     private width: number,
     readonly mat: THREE.MeshBasicMaterial,
@@ -48,8 +50,9 @@ class Ribbon {
       return;
     }
     this.mesh.visible = true;
-    const nx = (-dy / l) * (this.width / 2),
-      ny = (dx / l) * (this.width / 2);
+    const w = (this.width * this.scale) / 2;
+    const nx = (-dy / l) * w,
+      ny = (dx / l) * w;
     const p = this.pos;
     // (x, y) de la physique → (x, Y, −y)
     p.set([ax + nx, Y, -(ay + ny), ax - nx, Y, -(ay - ny), bx + nx, Y, -(by + ny), bx - nx, Y, -(by - ny)]);
@@ -123,6 +126,11 @@ export class AimLines {
     }
     this.group.add(this.toGhost.mesh, this.objPath.mesh, this.cuePath.mesh, this.bounce.mesh, this.ghost, this.zone);
     this.hide();
+  }
+
+  /** L'épaisseur des traits selon la distance de la caméra (1 : de près) */
+  setScale(k: number) {
+    for (const r of [this.toGhost, this.objPath, this.cuePath, this.bounce]) r.scale = k;
   }
 
   hide() {

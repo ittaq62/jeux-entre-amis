@@ -193,6 +193,21 @@ export function stopRoll() {
   }
 }
 
+/** Une nouvelle manche : les billes qu'on rassemble roulent et se cognent dans le triangle, puis le triangle qu'on lève */
+export function rack() {
+  const o = out();
+  if (!o) return;
+  const { ctx, dest } = o;
+  const t0 = ctx.currentTime + 0.05;
+  for (let i = 0; i < 16; i++) {
+    const t = t0 + Math.pow(i / 16, 0.8) * 1.3 + Math.random() * 0.04;
+    clack(ctx, dest, t, 0.6 + Math.random() * 0.9, 0.45 + Math.random() * 0.25);
+  }
+  // Le cadre de bois du triangle qu'on pose, puis qu'on lève
+  thud(ctx, dest, t0 + 1.45, 1.2, 0.5);
+  tone(ctx, dest, t0 + 1.9, "triangle", 520, 470, 0.05, 0.002, 0.05);
+}
+
 /** Des applaudissements (un beau coup, la manche gagnée) */
 export function applause(strength: number, seconds = 2) {
   const o = out();

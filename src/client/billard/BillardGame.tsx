@@ -136,6 +136,7 @@ export function BillardGame({
         if (m.k === "strike") sfx.strike(m.p, m.mine);
         else if (m.k === "slow") setSlow(m.on);
         else if (m.k === "result") onResult(m.rec);
+        else if (m.k === "rack") sfx.rack();
       },
     });
     runtime.current = rt;

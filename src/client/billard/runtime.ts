@@ -57,7 +57,12 @@ export interface HudState {
 }
 
 /** Un moment d'un coup, pour le son et l'écran */
-export type Moment = { k: "strike"; id: string; p: number; mine: boolean } | { k: "result"; rec: ShotRecord } | { k: "slow"; on: boolean };
+export type Moment =
+  | { k: "strike"; id: string; p: number; mine: boolean }
+  | { k: "result"; rec: ShotRecord }
+  | { k: "slow"; on: boolean }
+  /** Une nouvelle manche : on remplit le triangle */
+  | { k: "rack" };
 
 export interface RuntimeOptions {
   me: string | null;
@@ -209,6 +214,7 @@ export class BillardRuntime {
       this.scene.overlay.add(this.lines.group);
     }
     if (v.rackNo !== this.rackNo) {
+      if (this.rackNo >= 0 && v.rackNo > this.rackNo) this.o.onMoment?.({ k: "rack" });
       this.rackNo = v.rackNo;
       this.netCount.clear();
       this.netOf.clear();
@@ -807,6 +813,8 @@ export class BillardRuntime {
     const t = this.rig!.table;
     const dx = Math.cos(angle),
       dy = Math.sin(angle);
+    // Vus de loin (de dessus, de côté), les traits s'épaississent pour rester lisibles
+    lines.setScale(Math.max(1, Math.min(3.2, this.scene.camera.position.distanceTo(this.tmp.set(cue.x, 0, -cue.y)) / 0.85)));
     const hit = castAim(t, balls, cue.id, cue.x, cue.y, dx, dy);
     const targets = legalTargets({ ...v, rng: 0 });
     const legal = hit.ball < 0 ? true : targets.includes(hit.ball);
