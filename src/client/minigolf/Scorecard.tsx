@@ -56,6 +56,14 @@ export function Scorecard({
   const ranks = v.ranks ?? null;
   const order = v.players.map((_, i) => i).sort((a, b) => (ranks ? ranks[a]! - ranks[b]! : tot[a]! - tot[b]!));
   const seated = room.you.seatId !== null;
+  // Il regardait : une place libre (ou celle d'un bot, qui la lui cède) pour la partie suivante, d'un clic, avant que la
+  // revanche ne parte sans lui
+  const canSit =
+    final &&
+    !seated &&
+    !inTour &&
+    room.status === "finished" &&
+    (room.seats.length < room.settings.maxPlayers || room.seats.some((s) => s.kind === "bot"));
   const asked = room.rematch.includes(room.you.userId);
   const winners = ranks ? order.filter((i) => ranks[i] === 1) : [];
   const title = final
@@ -145,11 +153,18 @@ export function Scorecard({
             ) : (
               !seated && (
                 <p className="hint" style={{ margin: 0 }}>
-                  Tu regardes cette partie : reste pour jouer la suivante.
+                  {canSit
+                    ? "Tu regardais cette partie : prends une place pour jouer la suivante."
+                    : "Tu regardes cette partie ; la table est complète pour l'instant."}
                 </p>
               )
             )}
             <div className="mg-scores-actions">
+              {canSit && (
+                <button className="btn btn-primary" onClick={() => send({ t: "sit" })}>
+                  Prendre une place
+                </button>
+              )}
               {!inTour && seated && (
                 <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
                   {asked ? "En attente des autres" : "Revanche"}
