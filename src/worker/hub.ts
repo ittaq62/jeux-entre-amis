@@ -159,10 +159,10 @@ export class Hub extends DurableObject<Env> {
     await this.ctx.storage.put("rooms", Object.fromEntries(this.rooms));
   }
 
+  /** Les tables publiques en cours ou à remplir. Pas celles sans personne (l'hôte reparti du salon, des bots seuls) */
   private publicRooms(): RoomSummary[] {
     return [...this.rooms.values()]
       .map((r) => r.summary)
-      // Une table sans personne (l'hôte reparti du salon, des bots seuls) n'attend plus personne : on ne la montre pas
       .filter((r) => r.visibility === "public" && r.status !== "finished" && r.humans > 0)
       .sort((a, b) => (a.status === b.status ? b.createdAt - a.createdAt : a.status === "lobby" ? -1 : 1))
       .slice(0, 50);
