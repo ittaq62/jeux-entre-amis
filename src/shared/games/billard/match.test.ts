@@ -93,6 +93,19 @@ describe("les règles du billard", () => {
     expect(ok.points).toBe(1);
     expect(ok.highlight?.kind).toBe("carambolage");
   });
+
+  it("par la bande : compté même quand le ralenti montre autre chose (la noire qui gagne), pas sur une faute", () => {
+    const end = huit({ group: "pleines", before: balls([0, 8, 9, 10]), call: 4 });
+    const win = judge(end, [ev("bille", 0, 8), ev("bande", 8, 1, 20), ev("poche", 8, 4, 30)]);
+    expect(win.rack).toBe("won");
+    expect(win.highlight?.kind).toBe("victoire");
+    expect(win.banked).toBe(true);
+    const plain = huit({ group: "pleines" });
+    expect(judge(plain, [ev("bille", 0, 1), ev("bande", 1, 2, 20), ev("poche", 1, 3, 30)]).banked).toBe(true);
+    expect(judge(plain, [ev("bille", 0, 1), ev("poche", 1, 3, 30)]).banked).toBeUndefined();
+    const scratch = [ev("bille", 0, 1), ev("bande", 1, 2, 20), ev("poche", 1, 3, 30), ev("poche", 0, 0, 40)];
+    expect(judge(plain, scratch).banked).toBeUndefined();
+  });
 });
 
 /** Une partie entière entre bots ; renvoie la partie finie */

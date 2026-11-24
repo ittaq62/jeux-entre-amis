@@ -129,6 +129,8 @@ export interface Outcome {
   points?: number;
   /** Le nombre de billes rentrées qui comptent pour le joueur (pour les stats) */
   scored: number;
+  /** Une bille est entrée après une bande, sur un coup sans faute (le succès « Par la bande ») */
+  banked?: boolean;
   /** Un beau coup, à revoir au ralenti : le pas du moment clé, et où sur la table */
   highlight?: { s: number; x: number; y: number; kind: "victoire" | "serie" | "bande" | "carambolage" | "noire" };
 }
@@ -160,10 +162,17 @@ const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""}`;
 
 export function judge(st: RulesState, events: readonly PhysEvent[]): Outcome {
   const f = factsOf(st.cue, events);
-  if (st.variant === "huit") return judgeHuit(st, f, events);
-  if (st.variant === "neuf") return judgeNeuf(st, f, events);
-  if (st.variant === "killer") return judgeKiller(st, f, events);
-  return judgeCarom(st, f, events);
+  const o =
+    st.variant === "huit"
+      ? judgeHuit(st, f, events)
+      : st.variant === "neuf"
+        ? judgeNeuf(st, f, events)
+        : st.variant === "killer"
+          ? judgeKiller(st, f, events)
+          : judgeCarom(st, f, events);
+  // Par la bande : compté à part du ralenti (qui peut en montrer un autre : la série, la victoire, la noire)
+  if (st.variant !== "carambole" && f.banked.length > 0 && !o.foul) o.banked = true;
+  return o;
 }
 
 /** Le coup a été « joli » : plusieurs billes, ou une par la bande */

@@ -529,7 +529,7 @@ function resolve(m: Match, now: number) {
   st.shots++;
   if (o.foul) st.fouls++;
   st.pots += o.scored;
-  st.banks += rec.outcome.highlight?.kind === "bande" ? 1 : 0;
+  st.banks += o.banked ? 1 : 0;
   if (o.keep) {
     m.run += Math.max(1, o.scored);
     if (m.run > st.bestRun) st.bestRun = m.run;
