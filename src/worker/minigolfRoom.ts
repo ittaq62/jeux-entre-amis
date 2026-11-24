@@ -97,6 +97,8 @@ interface Seat {
   look: BallLook;
 }
 
+/** En tournée, au-delà de tant de joueurs, la table joue tous en même temps (chacun son tour serait trop long) */
+const TOUR_TURNS_MAX = 4;
 /** Chacun son tour : deux tours passés de suite sans tirer, et un bot joue sa balle (il reprend la main quand il veut) */
 const MAX_MISSED_TURNS = 2;
 /** Chacun son tour : le bot vise un moment avant de frapper, pour qu'on le voie faire */
@@ -839,6 +841,10 @@ export class MinigolfRoom extends DurableObject<Env> {
       );
     }
     const cfg = { ...DEFAULT_CONFIG, ...d.settings.minigolf };
+    // En tournée, une grande table joue tous en même temps : chacun son tour, un trou y durerait quatre ou cinq minutes
+    // (une demi-minute par joueur et par coup), et la tournée attendrait cette table
+    const together = Boolean(d.tour) && cfg.turns && d.seats.length > TOUR_TURNS_MAX;
+    if (together) cfg.turns = false;
     const seed = randomSeed();
     d.match = createMatch(
       cfg,
@@ -864,6 +870,7 @@ export class MinigolfRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat(`${d.match.holes.length} trous : bonne partie !`);
+    if (together) this.systemChat(`À ${d.seats.length} joueurs, on joue tous en même temps : les balles se traversent.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("minigolf", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange(now);
