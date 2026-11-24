@@ -83,7 +83,8 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
             />
             {s.variant === "nomercy" && (
               <p className="hint" style={{ margin: 0 }}>
-                +6, +10, roulette, défausse totale. Le cumul est obligatoire et on est éliminé à 25 cartes.
+                +6, +10, roulette, défausse totale. Le cumul est toujours permis, on doit poser quand on peut, et on est éliminé à 25
+                cartes.
               </p>
             )}
           </div>
@@ -181,34 +182,91 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
           />
         )
       }
-      help={<UnoHelp noMercy={rules.noMercy} />}
+      help={<UnoHelp settings={s} />}
     />
   );
 }
 
-/** Comment jouer au UNO : le but, ce qu'on pose, les cartes spéciales et le « UNO ! » */
-function UnoHelp({ noMercy }: { noMercy: boolean }) {
+/** Comment jouer au UNO : le but, ce qu'on pose, les cartes spéciales et le « UNO ! », selon les règles de la table */
+function UnoHelp({ settings }: { settings: UnoSettings }) {
+  const rules = effectiveRules(settings);
+  const goal =
+    settings.endMode === "ranking"
+      ? "vider sa main le plus tôt possible : on joue jusqu'à ce qu'il ne reste qu'un joueur, chacun prend la place de sa sortie."
+      : settings.endMode === "points"
+        ? `vider sa main en premier à chaque manche : on marque les cartes restées chez les autres, la partie se gagne à ${settings.targetScore} points.`
+        : "être le premier à poser toutes ses cartes.";
   return (
     <div className="lobby-help">
       <h2>Comment jouer</h2>
       <p>
-        <strong>Le but :</strong> être le premier à poser toutes ses cartes.
+        <strong>Le but :</strong> {goal}
       </p>
       <ul>
         <li>À ton tour, pose une carte de la même couleur, ou du même chiffre ou symbole que celle du dessus.</li>
-        <li>Les jokers se posent sur tout : tu choisis la nouvelle couleur.</li>
-        <li>Rien à poser : tu pioches une carte (et tu la poses si elle va).</li>
+        {rules.noMercy ? (
+          <>
+            <li>
+              Les jokers se posent sur tout : tu choisis la nouvelle couleur. <strong>Roulette</strong> : le suivant annonce une couleur et
+              retourne des cartes jusqu'à la trouver, toutes pour lui.
+            </li>
+            <li>
+              Tu ne pioches que si rien ne va, et jusqu'à trouver une carte qui va : <strong>tu dois la poser</strong>. Une carte jouable en
+              main se pose, on ne pioche pas à la place.
+            </li>
+            <li>
+              <strong>+2, +4, +6, +10</strong> : le suivant pioche et passe son tour, sauf s'il renvoie une carte « + » au moins aussi forte
+              ; le dernier ramasse tout. <strong>Passe pour tous</strong> : tu rejoues. <strong>Défausse tout</strong> : toutes tes cartes
+              de sa couleur partent avec elle.
+            </li>
+            <li>Un 7 échange ta main avec celle de ton choix, un 0 fait tourner toutes les mains.</li>
+            <li>
+              À <strong>25 cartes</strong> en main, tu es éliminé.
+            </li>
+          </>
+        ) : (
+          <>
+            <li>Les jokers se posent sur tout : tu choisis la nouvelle couleur.</li>
+            <li>
+              Rien à poser : tu pioches {rules.drawUntilPlayable ? "jusqu'à trouver une carte qui va" : "une carte"}, et tu la poses si elle
+              va (ou tu la gardes).
+            </li>
+            <li>
+              <strong>+2</strong> et <strong>+4</strong> : le suivant pioche et passe son tour
+              {rules.stacking ? ", sauf s'il renvoie un +2 sur un +2, ou un +4 sur l'un ou l'autre ; le dernier ramasse tout" : ""}.{" "}
+              <strong>Inversion</strong> : le sens change. <strong>Passe</strong> : le suivant passe son tour.
+            </li>
+            <li>
+              Le <strong>joker +4</strong> ne se pose que sans carte de la couleur demandée. Celui qui le reçoit peut{" "}
+              <strong>contester</strong> : si c'était un bluff, l'auteur pioche 4 à sa place ; sinon, il en pioche 6.
+            </li>
+            {rules.sevenZero && <li>Un 7 échange ta main avec celle de ton choix, un 0 fait tourner toutes les mains.</li>}
+          </>
+        )}
+        {rules.jumpIn && (
+          <li>
+            <strong>Interception</strong> : la carte exactement identique à celle du dessus se pose même hors de ton tour, et le jeu repart
+            de toi.
+          </li>
+        )}
         <li>
-          <strong>+2</strong> et <strong>+4</strong> : le suivant pioche et passe son tour. <strong>Inversion</strong> : le sens change.{" "}
-          <strong>Passe</strong> : le suivant passe son tour.
+          {rules.earlyUno ? (
+            <>
+              Quand il te reste une carte, appuie sur <strong>UNO !</strong> (tu peux aussi le faire juste avant de poser ton avant-dernière
+              carte).
+            </>
+          ) : (
+            <>
+              Ta carte posée, s'il ne t'en reste qu'une, appuie vite sur <strong>UNO !</strong> (pas avant : pas de UNO d'avance).
+            </>
+          )}{" "}
+          Sinon, un autre peut te prendre la main dans le sac : tu pioches 2 cartes.
         </li>
-        <li>
-          Quand il te reste une carte, appuie sur <strong>UNO !</strong> Sinon, un autre peut te prendre la main dans le sac : tu pioches 2
-          cartes.
-        </li>
-        {noMercy && <li>No Mercy : +6, +10, roulette des couleurs et défausse totale ; à 25 cartes en main, on est éliminé.</li>}
       </ul>
-      <p className="hint">Les règles en plus (cumul, 7-0, interception…) se lisent dans l'onglet Règles, sous « Plus de règles ».</p>
+      <p className="hint">
+        Au clavier : <kbd>U</kbd> crie UNO, <kbd>D</kbd> ou <kbd>Espace</kbd> pioche, <kbd>P</kbd> garde la carte piochée. Une carte grisée
+        dit pourquoi quand on la touche.
+      </p>
     </div>
   );
 }
