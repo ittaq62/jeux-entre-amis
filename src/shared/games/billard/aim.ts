@@ -47,7 +47,9 @@ export function castAim(t: Table, balls: readonly BallSpot[], cue: number, x: nu
   const tx = lim(-t.lx + R, t.lx - R, x, dx),
     ty = lim(-t.ly + R, t.ly - R, y, dy);
   const wall = Math.max(0, Math.min(tx, ty));
-  if (hit < 0 || wall < best) {
+  // Dans l'embouchure d'une poche, pas de bande : une bille qui pend au bord du trou se touche
+  const ballFirst = hit >= 0 && (best <= wall || (best - wall < 3 * R && nearMouth(t, x + dx * best, y + dy * best)));
+  if (!ballFirst) {
     const gx = x + dx * wall,
       gy = y + dy * wall;
     // Le rebond sans effet : on renverse la composante qui touche la bande
@@ -76,6 +78,16 @@ export function castAim(t: Table, balls: readonly BallSpot[], cue: number, x: nu
     ty2 = 0;
   }
   return { dist: best, gx, gy, ball: hit, ox, oy, tx: tx2, ty: ty2, full };
+}
+
+/** Ce point (le centre de la blanche) est-il dans l'embouchure d'une poche, là où la bande s'interrompt ? */
+function nearMouth(t: Table, x: number, y: number): boolean {
+  for (const p of t.pockets) {
+    const along = (x - p.ox) * p.nx + (y - p.oy) * p.ny;
+    const across = Math.abs(-(x - p.ox) * p.ny + (y - p.oy) * p.nx);
+    if (along > -2.5 * t.R && across < p.mouth / 2) return true;
+  }
+  return false;
 }
 
 /** Rien sur le chemin d'une bille de (ax, ay) à (bx, by), à part celles qu'on ignore */

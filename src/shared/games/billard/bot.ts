@@ -10,6 +10,7 @@
 import { random, type RngHolder } from "../../rng.ts";
 import { castAim, pathClear, pocketAim, pocketOpen } from "./aim.ts";
 import { canPlace, cueOf, legalTargets, mustCall, rigFor, type BotLevel, type Match, type ShotInput } from "./match.ts";
+import type { Table } from "./table.ts";
 import { DT, World } from "./physics.ts";
 import { judge, type Outcome } from "./rules.ts";
 import { powerFor, rigOf, simulateShot, startShot, type BallSpot, type Rig, type ShotParams } from "./shot.ts";
@@ -46,6 +47,21 @@ function gauss(rng: RngHolder): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
+/**
+ * Où viser cette poche pour cette bille, et combien elle est ouverte ; une bille qui pend déjà dans l'embouchure (arrêtée
+ * au bord du trou) se pousse droit dedans.
+ */
+export function potAim(t: Table, i: number, x: number, y: number): { x: number; y: number; open: number; hanging: boolean } | null {
+  const p = t.pockets[i]!;
+  const along = (x - p.ox) * p.nx + (y - p.oy) * p.ny;
+  const across = Math.abs(-(x - p.ox) * p.ny + (y - p.oy) * p.nx);
+  if (along > -t.R * 0.6 && across < p.mouth / 2) return { x: x + p.nx * 0.08, y: y + p.ny * 0.08, open: 1, hanging: true };
+  const open = pocketOpen(t, i, x, y);
+  if (open <= 0) return null;
+  const a = pocketAim(t, i);
+  return { x: a.x, y: a.y, open, hanging: false };
+}
+
 interface Candidate {
   target: number;
   pocket: number;
@@ -73,9 +89,9 @@ export function potCandidates(
     const b = balls.find((q) => q.id === id);
     if (!b) continue;
     for (let i = 0; i < t.pockets.length; i++) {
-      const open = pocketOpen(t, i, b.x, b.y);
-      if (open <= 0) continue;
-      const a = pocketAim(t, i);
+      const a = potAim(t, i, b.x, b.y);
+      if (!a) continue;
+      const open = a.open;
       let ux = a.x - b.x,
         uy = a.y - b.y;
       const d2 = Math.sqrt(ux * ux + uy * uy);
@@ -84,8 +100,8 @@ export function potCandidates(
       uy /= d2;
       const gx = b.x - ux * 2 * R,
         gy = b.y - uy * 2 * R;
-      // La blanche ne doit pas sortir du tapis pour atteindre la fantôme
-      if (Math.abs(gx) > t.lx - R || Math.abs(gy) > t.ly - R) continue;
+      // La blanche ne doit pas sortir du tapis pour atteindre la fantôme (sauf dans l'embouchure, ouverte)
+      if (!a.hanging && (Math.abs(gx) > t.lx - R || Math.abs(gy) > t.ly - R)) continue;
       let vx = gx - cx,
         vy = gy - cy;
       const d1 = Math.sqrt(vx * vx + vy * vy);
@@ -174,9 +190,14 @@ export function planShot(m: Match, level: BotLevel, rng: RngHolder): ShotInput {
   let best: Tried | null = null;
   for (const cd of cands) {
     const base = powerFor(rig.kind, cd.speed);
+    // Le débutant tape un peu fort plutôt que trop doux (raté, la bille va quand même à la bande), et sait juste
+    // retenir la blanche pour qu'elle ne suive pas dans le trou
     const variants: [number, number][] =
       level === "facile"
-        ? [[1, 0]]
+        ? [
+            [1.3, 0],
+            [1.15, -0.35],
+          ]
         : [
             [1, 0],
             [1.15, 0.35],
@@ -224,8 +245,8 @@ function choosePlace(m: Match, rig: Rig, balls: BallSpot[], cue: number, targets
     const b = balls.find((q) => q.id === id);
     if (!b) continue;
     for (let i = 0; i < t.pockets.length; i++) {
-      if (pocketOpen(t, i, b.x, b.y) <= 0) continue;
-      const a = pocketAim(t, i);
+      const a = potAim(t, i, b.x, b.y);
+      if (!a) continue;
       let ux = a.x - b.x,
         uy = a.y - b.y;
       const l = Math.sqrt(ux * ux + uy * uy) || 1;
@@ -283,6 +304,44 @@ function planSafety(m: Match, rig: Rig, balls: BallSpot[], cue: number, targets:
         const left = cueEnd ? (potCandidates(rig, sim.balls, cue, cueEnd.x, cueEnd.y, others)[0]?.score ?? 0) : 1;
         const value = (o.keep ? 3 : 0.5) - left * 4 + random(rng) * 0.05;
         if (!best || value > best.value) best = { shot, call: null, value, ok: o.keep };
+      }
+    }
+  }
+  if (best) return best;
+  // Rien de direct (la bonne bille cachée derrière une autre) : par une bande, en visant son reflet derrière chaque
+  // bande, comme le ferait un joueur
+  const xl = t.lx - t.R,
+    yl = t.ly - t.R;
+  for (const id of targets) {
+    const b = balls.find((q) => q.id === id);
+    if (!b) continue;
+    const mirrors: [number, number][] = [
+      [b.x, 2 * yl - b.y],
+      [b.x, -2 * yl - b.y],
+      [2 * xl - b.x, b.y],
+      [-2 * xl - b.x, b.y],
+    ];
+    for (const [mx, my] of mirrors) {
+      let dx = mx - c.x,
+        dy = my - c.y;
+      const l = Math.sqrt(dx * dx + dy * dy) || 1;
+      dx /= l;
+      dy /= l;
+      for (const off of [0, -0.35, 0.35]) {
+        const ax = dx - dy * off * 0.04,
+          ay = dy + dx * off * 0.04;
+        for (const pw of [0.5, 0.65]) {
+          const shot: ShotParams = { dx: ax, dy: ay, p: pw, a: 0, b: 0 };
+          const sim = simulateShot(rig, balls, cue, shot);
+          const side = m.sides[m.turn]!;
+          const o = judge(
+            { variant: m.cfg.variant, breakShot: false, cue, before: balls, group: side.group, call: null, bandes: m.cfg.bandes },
+            sim.events,
+          );
+          if (o.foul || o.rack === "lost") continue;
+          const value = (o.keep ? 2.5 : 0.3) + random(rng) * 0.05;
+          if (!best || value > best.value) best = { shot, call: null, value, ok: o.keep };
+        }
       }
     }
   }

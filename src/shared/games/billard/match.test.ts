@@ -169,3 +169,35 @@ describe("des parties entre bots", () => {
     expect(legalTargets(m)).toEqual([8]);
   });
 });
+
+describe("une bille qui pend au bord d'un trou", () => {
+  it("les bots la poussent dedans (avant, ils la croyaient derrière la bande et tiraient à côté sans fin)", () => {
+    const m = createMatch(
+      mergeConfig(DEFAULT_CONFIG, { variant: "neuf" }),
+      [
+        { id: "p0", team: 0 },
+        { id: "p1", team: 1 },
+      ],
+      1024,
+      0,
+    );
+    // La position de la partie de bots qui ne finissait pas : la 5 arrêtée dans la gueule de la poche du milieu
+    m.phase = "aim";
+    m.breakShot = false;
+    m.inHand = "partout";
+    m.balls = [
+      { id: 0, x: -0.5, y: -0.351 },
+      { id: 5, x: -0.005, y: -0.59 },
+      { id: 6, x: 0.257, y: 0.138 },
+      { id: 9, x: 0.668, y: -0.002 },
+    ];
+    expect(legalTargets(m)).toEqual([5]);
+    for (const level of ["facile", "moyen", "fort"] as BotLevel[]) {
+      const copy = structuredClone(m);
+      const r = takeShot(copy, copy.shooter, planShot(copy, level, { rng: 7 }), 0);
+      if (typeof r === "string") throw new Error(r);
+      expect(r.outcome.foul).toBeNull();
+      expect(r.pocketed.map((p) => p.id)).toContain(5);
+    }
+  });
+});
