@@ -240,6 +240,16 @@ function TouchButton({
   );
 }
 
+/** En développement : un chargement ralenti d'autant (voir l'effet qui prépare l'arène) */
+const SLOW_LOAD = import.meta.env.DEV ? slowLoad() : 0;
+function slowLoad(): number {
+  try {
+    return Math.max(0, Number(localStorage.getItem("cbSlowLoad")) || 0);
+  } catch {
+    return 0;
+  }
+}
+
 /** L'événement de l'arène qui s'annonce : un mot en haut de l'écran */
 const HAZARD_TEXT: Record<HazardKind, string> = {
   charrette: "Gare à la charrette !",
@@ -363,6 +373,8 @@ export function CulbuteFight({
       await nextFrame();
       if (stopped) return;
       await rt.prepare((share) => !stopped && setPrep({ share, done: false }));
+      // En développement, un appareil lent pour voir les autres l'attendre (localStorage.cbSlowLoad = "8000", en ms)
+      if (SLOW_LOAD > 0) await new Promise((r) => window.setTimeout(r, SLOW_LOAD));
     })()
       .catch((err: unknown) => console.error("Arène impossible à préparer", err))
       .then(() => !stopped && setPrep({ share: 1, done: true }));

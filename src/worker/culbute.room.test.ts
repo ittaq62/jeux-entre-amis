@@ -267,6 +267,42 @@ describe("Culbute : le combat attend le chargement de chacun", () => {
     expect(u.inside.data.gate!.goAt).toBe(clock);
   });
 
+  it("deux joueurs, l'un lent à charger : l'autre l'attend (et voit qu'il charge), puis le combat part pour les deux", async () => {
+    const state = new FakeState();
+    const room = new CulbuteRoom(state as never, fakeEnv() as never);
+    const inside = room as unknown as Gated;
+    rooms.push(inside);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    const guest = (await bench.arrive(user("invite"))).ws;
+    await bench.send(host, { t: "start" });
+    inside.stopLoop();
+    const tick = async (ms: number) => {
+      clock += ms;
+      await inside.tick();
+      inside.stopLoop();
+    };
+    const seatOf = (id: string) => inside.data.seats.find((s) => s.userId === id)!.id;
+    expect([...inside.data.gate!.waiting].sort()).toEqual([seatOf("hote"), seatOf("invite")].sort());
+    // L'hôte est prêt tout de suite ; l'invité, huit secondes plus tard
+    await bench.send(host, { t: "loaded", gate: inside.data.gate!.id });
+    await tick(4000);
+    await tick(4000);
+    expect(inside.data.fight!.frame).toBe(0);
+    expect(inside.data.gate!.goAt).toBeNull();
+    // Ce que l'hôte voit : lui a chargé, l'invité non
+    const seen = host.view<{ gate: LoadGate }>().gate;
+    expect(seen.loaded).toEqual([seatOf("hote")]);
+    await bench.send(guest, { t: "loaded", gate: inside.data.gate!.id });
+    expect(inside.data.gate!.goAt).toBe(clock);
+    await tick(50);
+    expect(inside.data.gate).toBeNull();
+    await tick(100);
+    expect(inside.data.fight!.frame).toBeGreaterThan(0);
+  });
+
   it("à la revanche, un nouveau chargement (un « chargé » du combat d'avant ne compte pas)", async () => {
     const t = await gated();
     const first = t.inside.data.gate!.id;
