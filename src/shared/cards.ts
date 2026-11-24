@@ -1339,6 +1339,19 @@ export interface AlbumResponse {
   /** Les cartes possédées et leur nombre d'exemplaires */
   owned: Record<string, number>;
   packs: number;
+  /** Dans combien de paquets, au plus tard, tombera une carte épique (ou mieux), et une légendaire */
+  pity?: { epic: number; legend: number };
+}
+
+/**
+ * Les garanties en cours, en paquets : 1 veut dire que le prochain paquet en contient une.
+ * C'est seulement l'affichage des garanties de drawPack, qui ne changent pas.
+ */
+export function pityLeft(progress: PackProgress): { epic: number; legend: number } {
+  return {
+    epic: Math.max(1, PITY_EPIC - progress.sinceEpic),
+    legend: Math.max(1, PITY_LEGEND - progress.sinceLegend),
+  };
 }
 
 export interface PackResponse extends AlbumResponse {

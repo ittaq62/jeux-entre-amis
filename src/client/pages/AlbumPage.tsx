@@ -24,12 +24,14 @@ const GAP = 8;
 const MAX_WIDTH = 1060;
 
 const points = (n: number) => `${n.toLocaleString("fr-FR")} point${n > 1 ? "s" : ""}`;
+const inPacks = (n: number) => (n <= 1 ? "dès le prochain paquet" : `d'ici ${n} paquets`);
 
 export function AlbumPage() {
   const { owned, balance, loaded } = useMyAlbum();
   const openPack = useAlbum((s) => s.openPack);
   const sell = useAlbum((s) => s.sell);
   const craft = useAlbum((s) => s.craft);
+  const pity = useAlbum((s) => s.pity);
   const { w, h } = useViewport();
   const [family, setFamily] = useState<CardFamily | "toutes">("toutes");
   const [view, setView] = useState<"toutes" | "manquantes" | "doubles">("toutes");
@@ -127,6 +129,12 @@ export function AlbumPage() {
               </span>
             ))}
           </div>
+          {pity && (
+            <p className="hint album-pity">
+              Au plus tard, une carte épique (ou mieux) {inPacks(pity.epic)} et une légendaire {inPacks(pity.legend)} : une que tu n'as pas
+              encore, s'il t'en manque.
+            </p>
+          )}
           <div className="album-families album-strip options" role="radiogroup" aria-label="Famille">
             <button type="button" aria-pressed={family === "toutes"} onClick={() => setFamily("toutes")}>
               Toutes

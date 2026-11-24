@@ -8,6 +8,8 @@ interface AlbumState {
   loaded: boolean;
   owned: Record<string, number>;
   packs: number;
+  /** Dans combien de paquets, au plus tard, une épique et une légendaire */
+  pity: { epic: number; legend: number } | null;
   load: () => Promise<void>;
   /** Ces actions lèvent une erreur si le serveur refuse */
   openPack: () => Promise<PackResponse>;
@@ -17,13 +19,14 @@ interface AlbumState {
 
 const set2 = (r: AlbumResponse) => {
   useShop.setState({ balance: r.balance });
-  return { loaded: true, owned: r.owned, packs: r.packs };
+  return { loaded: true, owned: r.owned, packs: r.packs, pity: r.pity ?? null };
 };
 
 export const useAlbum = create<AlbumState>((set) => ({
   loaded: false,
   owned: {},
   packs: 0,
+  pity: null,
   load: async () => {
     try {
       set(set2(await api.get<AlbumResponse>("/cards")));

@@ -9,6 +9,7 @@ import {
   PACK_SLOTS,
   PITY_EPIC,
   PITY_LEGEND,
+  pityLeft,
   RARITIES,
   RARITY,
   type Rarity,
@@ -145,5 +146,41 @@ describe("les paquets", () => {
       for (const c of drawPack(fresh, new Set(), rand).cards) seen[rarityOf(c)] = (seen[rarityOf(c)] ?? 0) + 1;
     expect(seen.commune! / packs).toBeCloseTo(2.22, 1);
     expect(seen.legendaire! / packs).toBeCloseTo(0.04, 1);
+  });
+});
+
+describe("les garanties affichées dans l'album", () => {
+  // Un tirage qui ne donne jamais de lui-même mieux que la rareté la plus basse de chaque case
+  const stingy = () => 0;
+
+  it("annoncent le paquet exact où tombe la carte épique garantie", () => {
+    let progress = { sinceEpic: 0, sinceLegend: 0 };
+    const announced = pityLeft(progress).epic;
+    let packs = 0;
+    for (;;) {
+      packs++;
+      const { cards, next } = drawPack(progress, new Set(), stingy);
+      progress = next;
+      if (cards.some((id) => rarityOf(id) === "epique" || rarityOf(id) === "legendaire")) break;
+    }
+    expect(packs).toBe(announced);
+    expect(announced).toBe(PITY_EPIC);
+  });
+
+  it("annoncent le paquet exact où tombe la légendaire garantie", () => {
+    let progress = { sinceEpic: 0, sinceLegend: 0 };
+    const announced = pityLeft(progress).legend;
+    let packs = 0;
+    for (;;) {
+      packs++;
+      const { cards, next } = drawPack(progress, new Set(), stingy);
+      progress = next;
+      if (cards.some((id) => rarityOf(id) === "legendaire")) break;
+    }
+    expect(packs).toBe(announced);
+  });
+
+  it("disent « le prochain paquet » quand la garantie tombe tout de suite", () => {
+    expect(pityLeft({ sinceEpic: PITY_EPIC - 1, sinceLegend: PITY_LEGEND - 1 })).toEqual({ epic: 1, legend: 1 });
   });
 });

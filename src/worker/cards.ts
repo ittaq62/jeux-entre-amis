@@ -6,6 +6,7 @@ import {
   CARDS,
   drawPack,
   FAMILIES,
+  pityLeft,
   familyBonus,
   PACK_PRICE,
   RARITY,
@@ -34,11 +35,13 @@ async function readAlbum(db: D1Database, userId: string): Promise<{ album: Album
   ]);
   const row = prog!.results[0] as unknown as { packs: number; since_epic: number; since_legend: number } | undefined;
   const owned: Record<string, number> = {};
-  for (const c of cards!.results as unknown as { card: string; count: number }[]) owned[c.card] = c.count;
+  // Une carte retirée du catalogue ne s'affiche plus nulle part : on ne la compte pas
+  for (const c of cards!.results as unknown as { card: string; count: number }[]) if (CARD_BY_ID.has(c.card)) owned[c.card] = c.count;
   const packs = row?.packs ?? 0;
+  const progress = { packs, sinceEpic: row?.since_epic ?? 0, sinceLegend: row?.since_legend ?? 0 };
   return {
-    album: { balance: Math.max(0, (bal!.results[0] as unknown as { balance: number }).balance), owned, packs },
-    progress: { packs, sinceEpic: row?.since_epic ?? 0, sinceLegend: row?.since_legend ?? 0 },
+    album: { balance: Math.max(0, (bal!.results[0] as unknown as { balance: number }).balance), owned, packs, pity: pityLeft(progress) },
+    progress,
   };
 }
 

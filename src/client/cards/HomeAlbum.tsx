@@ -25,7 +25,8 @@ export function HomeAlbum() {
   const openPack = useAlbum((s) => s.openPack);
   const [pack, setPack] = useState<PackResponse | null>(null);
   const [busy, setBusy] = useState(false);
-  const ids = Object.keys(owned);
+  // Une carte que ce site ne connaît pas encore (le serveur a été mis à jour pendant que la page était ouverte) est ignorée
+  const ids = Object.keys(owned).filter((id) => CARD_BY_ID.has(id));
   const best = ids.sort((a, b) => RARITIES.indexOf(CARD_BY_ID.get(b)!.rarity) - RARITIES.indexOf(CARD_BY_ID.get(a)!.rarity)).slice(0, 3);
   const short = PACK_PRICE - balance;
 
