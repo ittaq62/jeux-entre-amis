@@ -34,7 +34,7 @@ import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval
 import type { FriendEntry, GameId, Me, PublicUser, TableGame } from "../shared/protocol.ts";
 import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
-import { rankingPoints } from "../shared/ranking.ts";
+import { rankingPoints, wonGame } from "../shared/ranking.ts";
 import { usableWear } from "../shared/shop.ts";
 import type { UserRow } from "./auth.ts";
 import { albumSummary } from "./cards.ts";
@@ -612,7 +612,8 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
   const unlocked: Record<string, string[]> = {};
   for (const p of humans) {
     const prev = byUser.get(p.userId!);
-    const won = p.rank === 1;
+    // Une égalité générale (tout le monde premier) n'est la victoire de personne
+    const won = wonGame(rec.players, p);
     const played = (prev?.played ?? 0) + 1;
     const streak = won ? (prev?.streak ?? 0) + 1 : 0;
     let totals: object;
@@ -838,7 +839,8 @@ export async function recordTour(db: D1Database, rec: TourRecord): Promise<{ unl
   const unlocked: Record<string, string[]> = {};
   for (const p of humans) {
     const prev = byUser.get(p.userId);
-    const won = p.rank === 1;
+    // Deux équipes à égalité : la tournée n'est gagnée par personne
+    const won = wonGame(rec.players, p);
     const played = (prev?.played ?? 0) + 1;
     const streak = won ? (prev?.streak ?? 0) + 1 : 0;
     let totals: Record<string, number> = {};
@@ -874,6 +876,7 @@ export async function recordTour(db: D1Database, rec: TourRecord): Promise<{ unl
       won,
       players: rec.players.length,
       games: p.lines.length,
+      tourGames: rec.games.length,
       wins: p.wins,
       titles: p.titles.length,
       played,

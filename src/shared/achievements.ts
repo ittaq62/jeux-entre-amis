@@ -880,6 +880,8 @@ export interface TourOutcome {
   /** Jeux joués par ce joueur, et ceux qu'il a gagnés */
   games: number;
   wins: number;
+  /** Jeux de la tournée (un retardataire en a joué moins) */
+  tourGames: number;
   titles: number;
   /** Tournées terminées, celle-ci comprise */
   played: number;
@@ -890,7 +892,7 @@ export function earnedTourAchievements(o: TourOutcome): string[] {
   const add = (id: string, cond: boolean) => cond && out.push(id);
   add("tour-first", true);
   add("tour-win", o.won);
-  add("tour-sweep", o.won && o.games >= 3 && o.wins === o.games);
+  add("tour-sweep", o.won && o.tourGames >= 3 && o.wins === o.tourGames);
   add("tour-underdog", o.won && o.wins === 0 && o.games > 0);
   add("tour-titled", o.titles > 0);
   add("tour-full", o.players >= 6);
