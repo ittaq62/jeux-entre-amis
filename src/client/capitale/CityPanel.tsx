@@ -247,8 +247,8 @@ function BuilderCityPanel({
       </div>
       <p className="cap-pop-text">
         Territoire de <b className="num">{area}</b> cases
-        {annexedOf(deed).length > 0 && ` (dont ${annexedOf(deed).length} annexées, ${maxAnnex(index)} au plus)`}, {used} bâties. Terrain nu
-        &nbsp;: {money(detail.bare)}
+        {annexedOf(deed).length > 0 && ` (dont ${annexedOf(deed).length} annexées, ${maxAnnex(index)} au plus)`}, {used} bâties. Terrain{" "}
+        nu&nbsp;: {money(detail.bare)}
         {detail.full ? ", quartier complet\u00a0: tout est doublé." : "."}
       </p>
       {counts.length > 0 ? (
