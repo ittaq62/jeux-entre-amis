@@ -6,7 +6,7 @@ import { getMap, type MapId } from "./maps.ts";
 import { CONQUEST, isTeamMode, matchWorld, worldOf, type FlagState, type Match } from "./match.ts";
 import type { BotLevel } from "./rules.ts";
 import { B, eyeOf, heightOf, MAX_PITCH, RADIUS, wrapAngle, type Cmd } from "./soldier.ts";
-import { WEAPONS, type PrimaryId } from "./weapons.ts";
+import { WEAPONS, type PrimaryId, type WeaponId } from "./weapons.ts";
 import type { World } from "./world.ts";
 
 // ---------------------------------------------------------------------------
@@ -741,7 +741,14 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     mx += dx * Math.cos(yaw) - dz * Math.sin(yaw);
     mz += -dx * Math.sin(yaw) - dz * Math.cos(yaw);
   };
-  const ideal = w.id === "pompe" ? 6 : w.id === "pm" ? 12 : w.id === "precision" ? 30 : 20;
+  // La bonne distance de son arme ; les fusils de chasse ne tirent pas au-delà de leur portée (les plombs s'y perdent)
+  const shotgun = (id: WeaponId) => id === "pompe" || id === "double";
+  // L'arme de poing sortie en attendant d'être assez près pour son fusil de chasse : il se bat comme avec son fusil
+  // (il s'approche), sinon il restait à vingt mètres, le pistolet à la main
+  const fightAs: WeaponId = s.slot === 1 && shotgun(s.primary) && s.mag[0] + s.res[0] > 0 ? s.primary : w.id;
+  const ideal = shotgun(fightAs) ? 6 : fightAs === "pm" ? 12 : fightAs === "mitraillette" ? 10 : fightAs === "precision" ? 30 : 20;
+  const reachOf = (id: WeaponId) => (shotgun(id) ? WEAPONS[id].range[1] : 90);
+  const shortArm = shotgun(fightAs);
   // Au drapeau, on ne s'arrête pas pour se battre : le porteur file chez lui, les autres avancent en tirant
   const push = job === "porteur" ? 1 : job === "attaque" || job === "escorte" || job === "reprise" ? FLAG_PUSH[level] : 0;
   if (visible) {
@@ -753,7 +760,14 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     if (w.id !== "precision" || dist < 12) mx += mem.strafe * (job === "porteur" ? 0.35 : 0.8);
     const far = dist > ideal * 1.4 ? 0.8 : 0;
     const advance = Math.max(push, far);
-    if (advance > 0 && (mvx !== 0 || mvz !== 0)) toLocal(mvx * advance, mvz * advance);
+    // Le fusil de chasse en main et l'adversaire trop loin : il va droit sur lui (il le voit, la voie est libre) plutôt
+    // que de rester planté à découvert. Pas quand il y a un objectif : son chemin l'y mène, il le garde
+    if (far > 0 && shortArm && (m.mode === "solo" || m.mode === "equipes") && target) {
+      const dx = target.s.x - s.x;
+      const dz = target.s.z - s.z;
+      const l = Math.hypot(dx, dz) || 1;
+      toLocal((dx / l) * far, (dz / l) * far);
+    } else if (advance > 0 && (mvx !== 0 || mvz !== 0)) toLocal(mvx * advance, mvz * advance);
   } else if (mvx !== 0 || mvz !== 0) {
     toLocal(mvx, mvz);
   }
@@ -778,7 +792,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   // Des rafales courtes, puis une pause : il ne vide pas son chargeur d'un trait
   const period = 1.3;
   const burst = ((t + i * 0.37) % period) / period < P.duty;
-  if (visible && onTarget && burst && t >= mem.fireAt && mag > 0 && dist < (w.id === "pompe" ? 22 : 90)) {
+  if (visible && onTarget && burst && t >= mem.fireAt && mag > 0 && dist < reachOf(w.id)) {
     if (w.auto) b |= B.fire;
     else {
       mem.fireToggle = !mem.fireToggle;
@@ -792,6 +806,16 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
   if (mag === 0 && s.res[s.slot] > 0 && s.reloadEnd === 0) b |= B.reload;
   else if (!visible && mag < w.mag * 0.4 && s.res[s.slot] > 0 && s.reloadEnd === 0) b |= B.reload;
   if (mag === 0 && s.res[s.slot] === 0) b |= s.slot === 0 ? B.slot2 : B.slot1;
+  // Un fusil de chasse et l'adversaire hors de portée : il sort son arme de poing ; il reprend son fusil quand
+  // l'adversaire est tout près (là où les plombs portent), ou quand il ne voit plus personne
+  else if (s.slot === 0 && visible && shotgun(s.primary) && dist > reachOf(s.primary) * 0.8 && s.mag[1] + s.res[1] > 0) b |= B.slot2;
+  else if (
+    s.slot === 1 &&
+    shotgun(s.primary) &&
+    s.mag[0] + s.res[0] > 0 &&
+    (visible ? dist < WEAPONS[s.primary].range[0] * 1.5 : t - mem.seenAt > 1.2)
+  )
+    b |= B.slot1;
   if (visible && dist < 1.6 && rand(mem) < 0.05) b |= B.melee;
   cmd.b = b;
   return cmd;
