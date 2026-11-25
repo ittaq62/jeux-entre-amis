@@ -184,12 +184,17 @@ describe("le premier coup attend le chargement de chacun (Capitale)", () => {
         .map((x) => x.at),
     );
     expect(firstBefore).toBeGreaterThanOrEqual(gateEnd);
-    // Un coup trop tôt est ignoré
+    // Un coup trop tôt est ignoré. Les dés sont fixés (pas de double : un double ferait relancer, et l'étape reviendrait à
+    // « lancer » une fois sur six) : un lancer accepté se voit à ses dés
     const g = t.d().capitale;
     g.turn = g.players.findIndex((p) => p.id === t.me);
     g.step = "roll";
+    g.dice = null;
+    g.rigged = [[2, 3]];
     await t.bench.send(t.host, { t: "action", action: { type: "roll" } });
     expect(t.d().capitale.step).toBe("roll");
+    expect(t.d().capitale.dice).toBeNull();
+    expect(t.d().capitale.rigged).toEqual([[2, 3]]);
     // Chargé : le départ dans 3 s, les bots et le chrono s'y recalent
     await t.bench.send(t.host, { t: "loaded", gate: t.d().gate!.id });
     const goAt = t.d().gate!.goAt!;
@@ -201,10 +206,11 @@ describe("le premier coup attend le chargement de chacun (Capitale)", () => {
         .map((x) => x.at),
     );
     expect(next).toBeGreaterThanOrEqual(goAt);
-    // Après le départ, le coup passe
+    // Après le départ, le coup passe : les dés fixés sont lancés
     clock = goAt + 200;
     await t.bench.send(t.host, { t: "action", action: { type: "roll" } });
-    expect(t.d().capitale.step).not.toBe("roll");
+    expect(t.d().capitale.dice).toEqual([2, 3]);
+    expect(t.d().capitale.rigged).toEqual([]);
   });
 
   it("une partie en temps limité commence au départ commun", async () => {
