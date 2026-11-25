@@ -162,8 +162,13 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
                 </span>
                 <span className="cap-log-stats">
                   <span className="num">{p.bankrupt ? "faillite" : money(p.stats.netWorth)}</span>
+                  {/* Au téléphone, les loyers et les titres passent l'un sous l'autre (voir capitale.css) */}
                   <span className="hint">
-                    {money(p.stats.rentEarned)} de loyers · {titles} titre{titles > 1 ? "s" : ""}
+                    <span>{money(p.stats.rentEarned)} de loyers</span>
+                    <span className="cap-log-sep"> · </span>
+                    <span>
+                      {titles}&nbsp;titre{titles > 1 ? "s" : ""}
+                    </span>
                   </span>
                 </span>
               </li>

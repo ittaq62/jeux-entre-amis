@@ -622,6 +622,25 @@
   font-size: 18px;
 }
 
+/* Au téléphone : le détail sous le montant, loyers puis titres, pour que le nom (et « toi ») garde sa place */
+@media (max-width: 480px) {
+  .cap-log .cap-log-stats {
+    flex: 0 1 auto;
+    max-width: 46%;
+  }
+
+  .cap-log .cap-log-stats .hint {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 13px;
+  }
+
+  .cap-log-sep {
+    display: none;
+  }
+}
+
 /* Quand la place manque, l'échange se resserre : les deux côtés face à face, les boutons toujours en vue */
 @media (max-height: 800px), (max-width: 600px) {
   .cap-trade {
