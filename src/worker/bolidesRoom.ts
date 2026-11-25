@@ -299,11 +299,12 @@ export class BolidesRoom extends DurableObject<Env> {
       if (seat.autoplay === "away") {
         seat.autoplay = false;
         if (d.status === "playing") this.systemChat(`${seat.name} est de retour.`);
-        // Il reprend le volant là où le bot l'a laissé
+        // Il reprend le volant là où le bot l'a laissé (son jeu l'y remet : d'ici là, on garde cette place)
         const r = d.race ? racerOf(d.race, seat.id) : undefined;
         if (r) {
           r.bot = false;
           r.seen = now;
+          r.handback = now;
         }
       }
       if (d.status !== "playing") {
@@ -548,7 +549,7 @@ export class BolidesRoom extends DurableObject<Env> {
 
       case "use": {
         const race = d.race;
-        if (!seat || !race || d.status !== "playing" || !this.allowMessage(`use:${userId}`, 150)) return;
+        if (!seat || !race || d.status !== "playing" || !this.allowMessage(`use:${userId}`, 80)) return;
         const r = racerOf(race, seat.id);
         if (!r || r.bot) return;
         const events = useItem(race, seat.id, now, msg.flip === true);

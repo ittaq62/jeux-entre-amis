@@ -2421,3 +2421,115 @@ describe("les bots et ce qui traverse", () => {
     }
   });
 });
+
+describe("ce que la course croit d'un joueur", () => {
+  /** Une course lancée, avec un joueur « a » et un bot « b » */
+  function started() {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port", laps: 3 }, 0, 1);
+    worldTick(race, race.goAt);
+    return { race, t: getTrack("port"), me: racerOf(race, "a")!, bot: racerOf(race, "b")! };
+  }
+  /** Le kart du joueur posé plus loin sur la route, à cette distance parcourue */
+  const at = (race: Race, s: number, dist: number, extra: Partial<Kart> = {}) => {
+    const t = getTrack("port");
+    const p = pointAt(t, wrapS(t, s), 0);
+    return { ...racerOf(race, "a")!.kart, x: p.x, z: p.z, s: wrapS(t, s), dist, ...extra };
+  };
+
+  it("en envoyant sa position bien plus souvent, on n'avance pas plus vite qu'un kart", () => {
+    const { race, me } = started();
+    let now = race.goAt;
+    // 6 m tous les 25 ms : 240 m/s annoncés pendant 10 s
+    for (let i = 0; i < 400; i++) {
+      now += 25;
+      reportKart(race, "a", at(race, me.kart.dist + 6, me.kart.dist + 6), now);
+    }
+    // (ce qu'un kart parcourt au mieux, plus la petite marge qui se recharge : il en annonçait cinq fois plus)
+    expect(me.kart.dist).toBeLessThan((TOP_SPEED * 1.6 + 4) * 10 + 12);
+    expect(me.laps).toBe(0);
+  });
+
+  it("un joueur honnête dont les envois arrivent par à-coups n'est jamais retenu", () => {
+    const { race, me } = started();
+    let now = race.goAt;
+    let truth = me.kart.dist;
+    // 27 m/s, un envoi toutes les 50 ms, mais ils arrivent deux par deux (95 ms, puis 5 ms)
+    for (let i = 0; i < 300; i++) {
+      now += i % 2 === 0 ? 95 : 5;
+      truth += 27 * 0.05;
+      reportKart(race, "a", at(race, truth, truth), now);
+      expect(truth - me.kart.dist).toBeLessThan(2);
+    }
+  });
+
+  it("porté par le drone : intouchable le temps d'un dépannage, pas au-delà ; et pas d'objet tant qu'il est porté", () => {
+    const { race, me, bot } = started();
+    let now = race.goAt + 1000;
+    me.item = "petard";
+    me.uses = 1;
+    const carried = () => at(race, 40, 40, { rescue: 0.2 });
+    const klaxon = () => {
+      bot.kart = { ...me.kart, x: me.kart.x + 2 };
+      bot.item = "klaxon";
+      bot.uses = 1;
+      me.safeUntil = 0;
+      return useItem(race, "b", now).some((e) => e.type === "hit" && e.id === "a");
+    };
+    reportKart(race, "a", carried(), now);
+    now += 1000;
+    reportKart(race, "a", carried(), now);
+    expect(klaxon()).toBe(false);
+    expect(useItem(race, "a", now)).toEqual([]);
+    expect(me.item).toBe("petard");
+    // Il se dit porté depuis cinq secondes : on ne le croit plus
+    for (let i = 0; i < 8; i++) {
+      now += 500;
+      reportKart(race, "a", carried(), now);
+    }
+    expect(klaxon()).toBe(true);
+  });
+
+  it("des compteurs mal formés ne cassent pas ses chiffres de fin de course", () => {
+    const { race, me } = started();
+    reportKart(race, "a", at(race, 5, 5), race.goAt + 100, { turbos: 1, walls: undefined as unknown as number });
+    reportKart(race, "a", at(race, 8, 8), race.goAt + 200, { turbos: Number.NaN, walls: 1 });
+    expect(me.stats.turbos).toBe(1);
+    expect(me.stats.walls).toBe(1);
+  });
+
+  it("arrivé, il n'a plus d'objet, pas même en réserve (une fusée gardée bloquerait celles des autres)", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port", laps: 2 }, 0, 1);
+    const t = getTrack("port");
+    worldTick(race, race.goAt);
+    const me = racerOf(race, "a")!;
+    me.item = "turbo";
+    me.uses = 1;
+    me.item2 = "fusee";
+    me.uses2 = 1;
+    let now = race.goAt;
+    while (me.finish === null && now < race.goAt + 200_000) {
+      now += 800;
+      reportKart(race, "a", at(race, me.kart.s + 20, me.kart.dist + 20), now);
+    }
+    expect(me.finish).not.toBeNull();
+    expect([me.item, me.item2]).toEqual([null, null]);
+    void t;
+  });
+
+  it("de retour après une coupure, il repart de là où le bot l'a laissé, pas de là où il avait coupé", () => {
+    const { race, me } = started();
+    let now = race.goAt + 60_000;
+    // Le bot l'a amené à 900 m ; son jeu, lui, le croit encore à 300 m
+    me.kart = at(race, 900, 900);
+    me.seen = now;
+    me.handback = now;
+    now += 50;
+    reportKart(race, "a", at(race, 300, 300), now);
+    expect(me.kart.dist).toBe(900);
+    // Son jeu a repris la place du bot : on le suit de nouveau
+    now += 50;
+    reportKart(race, "a", at(race, 901, 901), now);
+    expect(me.kart.dist).toBeCloseTo(901);
+    expect(me.handback).toBeUndefined();
+  });
+});

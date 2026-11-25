@@ -129,6 +129,13 @@ const STALL_MS = 3500;
 export const BOTS_GRACE_MS = 3500;
 /** Au-delà, la course s'arrête quoi qu'il arrive (par tour) */
 const LAP_LIMIT_MS = 150_000;
+/** Ce qu'on accorde à un joueur au-delà de ce qu'un kart peut parcourir (son appareil et le serveur ne voient pas tout pareil) */
+const SLACK_MAX = 12;
+const SLACK_PER_S = 4;
+/** Une chute puis un dépannage durent moins que ça : au-delà, celui qui se dit porté par le drone ne l'est plus */
+const CARRIED_MAX_MS = 4000;
+/** Le temps laissé au jeu d'un joueur qui revient pour reprendre la place où le bot a laissé son kart */
+const HANDBACK_MS = 5000;
 
 export interface RacerStats {
   boxes: number;
@@ -186,6 +193,15 @@ export interface Racer {
   vehicle: VehicleId;
   skin: SkinId;
   stats: RacerStats;
+  /**
+   * Un joueur : la marge (en mètres) qu'on lui accorde au-delà de ce qu'un kart peut parcourir. Elle se recharge avec
+   * le temps, pas à chaque envoi : sinon, en envoyant plus souvent, on avançait plus vite que n'importe quel kart.
+   */
+  slack?: number;
+  /** Un joueur : depuis quand il se dit porté par le drone ou en train de tomber (au-delà d'un dépannage, on ne le croit plus) */
+  carriedSince?: number;
+  /** Un joueur qui reprend son volant au bot : l'heure, tant que son jeu n'a pas repris la place où le bot l'a laissé */
+  handback?: number;
 }
 
 export interface Race {
@@ -405,8 +421,11 @@ function progress(race: Race, r: Racer, now: number, events: BolidesEvent[]) {
     const place = race.racers.filter((o) => o.finish !== null).length;
     events.push({ type: "finish", id: r.id, place, ms: r.finish });
     race.endAt ??= now + FINISH_GRACE_MS;
+    // Arrivé, il n'a plus d'objets : une fusée gardée en réserve empêcherait les autres d'en tirer une
     r.item = null;
     r.uses = 0;
+    r.item2 = null;
+    r.uses2 = 0;
   }
 }
 
@@ -468,24 +487,47 @@ export function reportKart(
     r.seen = now;
     return events;
   }
-  const elapsed = Math.max(0.05, (now - r.seen) / 1000);
-  const reach = TOP_SPEED * CLASS_SPEED[race.settings.speed] * 1.6 * elapsed + 4;
   const before = r.kart;
-  const dist = Math.max(before.dist - reach, Math.min(before.dist + reach, k.dist));
+  // Il revient (un bot conduisait pour lui) : tant que son jeu le montre encore là où il était avant, on garde la place
+  // où le bot l'a laissé ; le jeu, qui la reçoit avec les positions, l'y remet
+  if (r.handback !== undefined) {
+    if (now - r.handback < HANDBACK_MS && Math.hypot(k.x - before.x, k.z - before.z) > 25) {
+      r.seen = now;
+      return events;
+    }
+    r.handback = undefined;
+  }
+  const elapsed = Math.max(0, (now - r.seen) / 1000);
+  const fair = TOP_SPEED * CLASS_SPEED[race.settings.speed] * 1.6 * elapsed;
+  // Au-delà de ce qu'un kart peut parcourir, une petite marge, qui se recharge avec le temps (et de ce qu'il n'a pas
+  // parcouru : deux envois arrivés presque ensemble après un long silence ne le retardent pas)
+  const gain = k.dist - before.dist;
+  const slack = Math.min(SLACK_MAX, (r.slack ?? SLACK_MAX) + SLACK_PER_S * elapsed);
+  const extra = Math.max(0, Math.min(slack, gain - fair));
+  r.slack = Math.min(SLACK_MAX, slack - extra + Math.max(0, fair - Math.max(0, gain)));
+  const dist = Math.max(before.dist - fair - 4, Math.min(before.dist + fair + extra, k.dist));
   // Où il est le long de la route : ça ne voyage pas, on le retrouve d'après sa position. Sans cela, le serveur le
   // croirait toute la course sur la grille : ses objets partiraient de la ligne de départ, et un bot qui reprendrait
   // son volant ferait un bond
   const t = trackOf(race);
   const here = locate(t, k.x, k.z, before.i);
   r.kart = { ...k, dist, i: here.i, s: here.s };
+  // Porté par le drone, ou en train de tomber : intouchable, mais pas plus longtemps qu'une chute et un dépannage
+  if (k.rescue > 0 || k.fall > 0) {
+    r.carriedSince ??= now;
+    if (now - r.carriedSince > CARRIED_MAX_MS) {
+      r.kart.rescue = 0;
+      r.kart.fall = 0;
+    }
+  } else r.carriedSince = undefined;
   // Le dernier endroit où il roulait normalement : c'est là que le drone le ramènerait si un bot conduisait pour lui
   if (Math.abs(k.d) <= t.half && k.air === 0 && k.spin === 0 && k.v > 6 && k.fall === 0 && k.rescue === 0) r.kart.goodS = here.s;
   r.seen = now;
   // L'heure de cette position, telle que le joueur l'a notée (jamais dans le futur, ni trop loin dans le passé)
   r.stateAt = at !== undefined && Number.isFinite(at) ? Math.max(now - 400, Math.min(now, at)) : now;
   if (counts && r.finish === null) {
-    r.stats.turbos = Math.max(r.stats.turbos, Math.min(r.stats.turbos + 2, Math.floor(counts.turbos)));
-    r.stats.walls = Math.max(r.stats.walls, Math.min(r.stats.walls + 2, Math.floor(counts.walls)));
+    if (Number.isFinite(counts.turbos)) r.stats.turbos = Math.max(r.stats.turbos, Math.min(r.stats.turbos + 2, Math.floor(counts.turbos)));
+    if (Number.isFinite(counts.walls)) r.stats.walls = Math.max(r.stats.walls, Math.min(r.stats.walls + 2, Math.floor(counts.walls)));
   }
   pickups(race, r, before.x, before.z, now, events);
   progress(race, r, now, events);
@@ -620,7 +662,9 @@ function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: n
 export function useItem(race: Race, id: string, now: number, flip = false): BolidesEvent[] {
   const r = racerOf(race, id);
   const events: BolidesEvent[] = [];
-  if (!r || !r.item || race.phase !== "racing" || r.finish !== null || r.kart.spin > 0) return events;
+  // (ni en tête-à-queue, ni en tombant, ni porté par le drone)
+  if (!r || !r.item || race.phase !== "racing" || r.finish !== null || r.kart.spin > 0 || r.kart.fall > 0 || r.kart.rescue > 0)
+    return events;
   const kind = r.item;
   const t = trackOf(race);
   const k = r.kart;

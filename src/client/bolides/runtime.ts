@@ -164,6 +164,8 @@ export class RaceRuntime {
   private frame = 0;
   private last = performance.now();
   private sentAt = 0;
+  /** Les dernières positions envoyées : le serveur montre son kart près de l'une d'elles, sauf si un bot a conduit pour lui */
+  private sent: { x: number; z: number }[] = [];
   private hudAt = 0;
   private beep: number | null = null;
   /** Le bip d'alerte d'une fusée qui arrive : la prochaine fois qu'il sonne */
@@ -308,18 +310,25 @@ export class RaceRuntime {
     const me = this.mine >= 0 ? view.racers[this.mine] : undefined;
     // Son kart revient entre ses mains (au départ, ou de retour après une coupure) : on repart de la dernière position connue
     if (me && !me.bot && !this.driver) {
-      const k = decodeKart(view.karts[this.mine]!);
-      if (k) {
-        const at = locate(this.track, k.x, k.z);
-        const stats = VEHICLES[me.vehicle ?? "kart"].stats;
-        this.driver = new LocalDriver(
-          this.track,
-          { ...k, i: at.i, s: at.s, d: at.d, y: at.y },
-          CLASS_SPEED[view.settings.speed] * stats.top,
-          stats,
-        );
-      }
+      // (les positions reçues sont plus fraîches que la table, qui peut dater d'un tour quand rien ne se passe)
+      const k = this.ticks.at(-1)?.karts[this.mine] ?? decodeKart(view.karts[this.mine]!);
+      if (k) this.takeWheel(k);
     } else if (me?.bot && this.driver) this.driver = null;
+  }
+
+  /** Son kart, à cette place : au départ, ou de retour après une coupure, là où le bot l'a laissé */
+  private takeWheel(k: Kart) {
+    const me = this.view.racers[this.mine];
+    if (!me) return;
+    const at = locate(this.track, k.x, k.z);
+    const stats = VEHICLES[me.vehicle ?? "kart"].stats;
+    this.driver = new LocalDriver(
+      this.track,
+      { ...k, i: at.i, s: at.s, d: at.d, y: at.y },
+      CLASS_SPEED[this.view.settings.speed] * stats.top,
+      stats,
+    );
+    this.sent = [];
   }
 
   /** Les positions de tous les karts, reçues du serveur */
@@ -333,6 +342,13 @@ export class RaceRuntime {
     else this.offsetTarget = Math.max(est, this.offsetTarget - 2);
     this.ticks.push({ now, karts: karts.map((n) => decodeKart(n)), at: karts.map((_, i) => now - (ages?.[i] ?? 0)) });
     if (this.ticks.length > 30) this.ticks.shift();
+    // Le serveur le montre loin de son kart et de tout ce qu'il a envoyé : un bot a conduit pour lui pendant une coupure
+    // (revenu sans recharger la page), ou son kart vient d'être refait d'après une table ancienne (retour du salon en
+    // pleine course). Il reprend le volant là où le serveur le voit.
+    const there = this.ticks.at(-1)!.karts[this.mine];
+    const here = this.driver?.kart;
+    const far = (x: number, z: number) => !there || Math.hypot(there.x - x, there.z - z) > 25;
+    if (there && here && far(here.x, here.z) && this.sent.every((p) => far(p.x, p.z))) this.takeWheel(there);
   }
 
   /** Ce qui vient d'arriver dans la course */
@@ -718,7 +734,16 @@ export class RaceRuntime {
           this.nudge++;
           if (!me.item) play("click", { volume: 0.3 });
         }
-        if (pad.item && me.item && me.finish === null && d.kart.spin === 0 && clock >= this.useReadyAt) {
+        // (pas en tombant, ni porté par le drone : la course le refuserait)
+        if (
+          pad.item &&
+          me.item &&
+          me.finish === null &&
+          d.kart.spin === 0 &&
+          d.kart.fall === 0 &&
+          d.kart.rescue === 0 &&
+          clock >= this.useReadyAt
+        ) {
           this.useReadyAt = clock + 220;
           if (me.item === "turbo" || me.item === "turbo3") {
             d.boost(TURBO_TIME);
@@ -758,6 +783,8 @@ export class RaceRuntime {
       this.steers[this.mine] = pad.steer;
       if (t - this.sentAt >= SEND_MS) {
         this.sentAt = t;
+        this.sent.push({ x: d.kart.x, z: d.kart.z });
+        if (this.sent.length > 40) this.sent.shift();
         this.opts.send({ t: "kart", k: encodeKart(d.kart), n: [this.turbos, this.walls], at: Math.round(now) });
       }
     }
