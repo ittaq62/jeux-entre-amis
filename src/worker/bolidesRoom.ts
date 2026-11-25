@@ -74,6 +74,8 @@ const BOT_NAMES = ["Gaston", "Jacqueline", "Marcel", "Odette", "Raymond", "Simon
 // Délai laissé à un joueur déconnecté pour revenir avant qu'un bot conduise à sa place
 const AWAY_AFTER_MS = 8000;
 const SEAT_RELEASE_MS = 25_000;
+/** Au départ, un joueur dont la connexion vient de tomber garde sa place (un bot conduit pour lui jusqu'à son retour) */
+const BLINK_MS = 15_000;
 /** Pendant la partie, l'alarme de garde ne dort jamais plus longtemps */
 const WATCHDOG_MS = 60_000;
 const CHAT_KEEP = 80;
@@ -811,17 +813,27 @@ export class BolidesRoom extends DurableObject<Env> {
     d.pickUntil = null;
     d.ready = [];
     d.timers = d.timers.filter((t) => t.kind !== "tourStart");
-    d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId));
+    // Un joueur dont la connexion vient de tomber (l'écran d'un téléphone qui se met en veille pendant l'annonce, le
+    // réseau qui saute au départ) garde sa place, tant qu'un autre joueur est là : un bot conduit pour lui jusqu'à son
+    // retour. Avant, il revenait à une course partie sans lui, parfois sans même pouvoir la regarder.
+    const someoneHere = d.seats.some((x) => x.kind === "human" && this.isConnected(x.userId));
+    const blinked = (x: Seat) => someoneHere && x.kind === "human" && x.disconnectedAt !== null && now - x.disconnectedAt < BLINK_MS;
+    d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId) || blinked(x));
     this.ensureHost();
     if (d.seats.length < MIN_PLAYERS) {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux pilotes : ajoute un bot !" });
       return this.afterChange([], now);
     }
+    const away = new Set(d.seats.filter((x) => x.kind === "human" && !this.isConnected(x.userId)).map((x) => x.id));
     for (const seat of d.seats) {
+      if (away.has(seat.id)) {
+        seat.autoplay = "away";
+        continue;
+      }
       seat.autoplay = false;
       seat.disconnectedAt = null;
     }
-    const bots = new Set(d.seats.filter((s) => s.kind === "bot").map((s) => s.id));
+    const bots = new Set(d.seats.filter((s) => s.kind === "bot" || away.has(s.id)).map((s) => s.id));
     // Règles au hasard : celles tirées pour cette course (le même tirage pour tout un Grand Prix)
     if (d.settings.randomRules && !d.tour) {
       d.settings.bolides = applyDrawnRules(
@@ -870,6 +882,8 @@ export class BolidesRoom extends DurableObject<Env> {
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat("En piste !");
+    for (const id of away)
+      this.systemChat(`${this.seatById(id)?.name ?? "?"} s'est déconnecté : un bot prend le volant en attendant son retour.`);
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("bolides", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange([], now);
