@@ -657,6 +657,23 @@ html:has(.cb-fight) body {
   gap: 5px;
 }
 
+/* Téléphone tenu droit : trop étroit pour les cartes entre les boutons du haut (dès trois combattants, elles passaient
+   sous la discussion), elles se mettent juste dessous ; le conseil de tourner l'écran et l'annonce de l'arène, plus bas */
+@media (orientation: portrait) {
+  .cb-fight.is-touch .cb-hud {
+    top: calc(56px + var(--safe-top));
+    max-width: calc(100vw - 24px);
+  }
+
+  .cb-fight.is-touch .cb-rotate {
+    top: calc(env(safe-area-inset-top, 0px) + 92px);
+  }
+
+  .cb-fight.is-touch .cb-hazard {
+    top: 24%;
+  }
+}
+
 .cb-fight.is-touch .cb-card-hud {
   min-width: 0;
   gap: 4px;
