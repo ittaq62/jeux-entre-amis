@@ -12,7 +12,7 @@ const c = (kind: CardKind, color: Color | null = null, value?: number): Card => 
   ...(value !== undefined ? { value } : {}),
 });
 
-const rate = (level: UnoBotLevel, f: (h: { rng: number }) => unknown) => {
+const rate = (f: (h: { rng: number }) => unknown) => {
   let n = 0;
   for (let k = 0; k < 2000; k++) if (f({ rng: k * 7919 + 17 }) !== null) n++;
   return n / 2000;
@@ -20,23 +20,21 @@ const rate = (level: UnoBotLevel, f: (h: { rng: number }) => unknown) => {
 
 describe("UNO, les niveaux des bots", () => {
   it("dénoncer un oubli : rarement et lentement en facile, presque toujours et vite en fort", () => {
-    const facile = rate("facile", (h) => botCatchDelay(h, "facile"));
-    const moyen = rate("moyen", (h) => botCatchDelay(h, "moyen"));
-    const fort = rate("fort", (h) => botCatchDelay(h, "fort"));
+    const facile = rate((h) => botCatchDelay(h, "facile"));
+    const moyen = rate((h) => botCatchDelay(h, "moyen"));
+    const fort = rate((h) => botCatchDelay(h, "fort"));
     expect(facile).toBeLessThan(moyen);
     expect(moyen).toBeLessThan(fort);
     expect(fort).toBeGreaterThan(0.85);
     const delays = Array.from({ length: 200 }, (_, k) => botCatchDelay({ rng: k + 1 }, "fort")).filter((d) => d !== null) as number[];
     expect(Math.max(...delays)).toBeLessThan(2000);
     // Sans niveau (parties plus anciennes) : le moyen
-    expect(rate("moyen", (h) => botCatchDelay(h))).toBeCloseTo(moyen, 5);
+    expect(rate((h) => botCatchDelay(h))).toBeCloseTo(moyen, 5);
   });
 
   it("crier UNO après un oubli : le fort se rattrape bien plus souvent que le facile", () => {
     const { state } = createGame(["a", "b"], { ...DEFAULT_SETTINGS }, 1);
-    expect(rate("fort", (h) => botUnoDelay(state, h, "fort"))).toBeGreaterThan(
-      rate("facile", (h) => botUnoDelay(state, h, "facile")) + 0.3,
-    );
+    expect(rate((h) => botUnoDelay(state, h, "fort"))).toBeGreaterThan(rate((h) => botUnoDelay(state, h, "facile")) + 0.3);
   });
 
   it("le facile pose souvent une carte au hasard ; le moyen joue toujours sa couleur la plus fournie", () => {
