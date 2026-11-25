@@ -6,9 +6,11 @@ import { clamp, DT, GOAL_H, GOAL_HALF, HALF_L, HALF_W, lerp, onPitch } from "./p
 
 /**
  * La précision des tireurs de l'ordinateur, selon le niveau choisi (un humain vise lui-même, et ses coéquipiers jouent
- * au niveau « confirmé ») : un débutant tire plus souvent à côté ou sur le gardien
+ * au niveau « confirmé ») : un débutant tire plus souvent à côté ou sur le gardien. Entre bots, à 11 contre 11 au
+ * niveau « confirmé », près de 6 tirs sur 10 cadrés (avant, 8 sur 10 : presque tout finissait dans les gants du gardien,
+ * et l'on ne voyait guère de six mètres ni de poteaux)
  */
-const AI_AIM = [2.15, 1.7, 1.35, 1.15];
+const AI_AIM = [5.4, 4.25, 3.4, 2.9];
 /** Jusqu'où l'ordinateur ose viser loin du gardien (fraction du demi-but), selon le niveau : un débutant tire sur lui */
 const AI_WIDTH: [number, number][] = [
   [0.15, 0.45],
