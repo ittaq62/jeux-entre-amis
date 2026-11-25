@@ -21,7 +21,7 @@ import {
 } from "../../shared/games/billard/looks.ts";
 import type { BillardClientMessage, BillardRoomView } from "../../shared/games/billard/net.ts";
 import { useMyItems } from "../stores/shop.ts";
-import { ballCanvas, cueTexture } from "./scene/textures.ts";
+import { cueCanvas, drawBall } from "./scene/textures.ts";
 
 const STORE = "billard-skin";
 
@@ -43,20 +43,23 @@ function saveLook(l: BillardLook) {
 }
 
 const cueCache = new Map<string, string>();
-/** La queue dessinée à plat, la pointe à droite */
+/**
+ * La queue dessinée à plat, la pointe à droite. Son habit est dessiné directement à la taille de la vignette (24 × 512) :
+ * la texture du jeu (128 × 2048, veinée pixel par pixel) coûtait près d'une seconde de processeur à la boutique au téléphone
+ */
 export function cueImage(style: string): string {
   const hit = cueCache.get(style);
   if (hit) return hit;
-  const src = cueTexture(style).image as HTMLCanvasElement;
+  const src = cueCanvas(style, 24, 512);
   const c = document.createElement("canvas");
   c.width = 512;
   c.height = 24;
   const g = c.getContext("2d")!;
-  // Le fût s'affine vers la pointe : on dessine la texture couchée, puis on taille la forme
+  // Le fût s'affine vers la pointe : on dessine l'habit couché, puis on taille la forme
   g.save();
   g.translate(512, 0);
   g.rotate(Math.PI / 2);
-  g.drawImage(src, 0, 0, src.width, src.height, 0, 0, 24, 512);
+  g.drawImage(src, 0, 0);
   g.restore();
   g.globalCompositeOperation = "destination-in";
   g.beginPath();
@@ -78,19 +81,16 @@ export function CueSwatch({ style, width = 160 }: { style: string; width?: numbe
 
 const ballUrls = new Map<string, string>();
 /**
- * L'image d'une bille pour une vignette : réduite à la taille où on la montre (2,6 fois, pour les écrans fins) et
- * encodée une seule fois ; la texture du jeu fait 512 × 256, l'encoder à chaque vignette coûtait cher à la boutique
+ * L'image d'une bille pour une vignette : dessinée directement à la taille où on la montre (2,6 fois, pour les écrans
+ * fins) et encodée une seule fois ; la texture du jeu (512 × 256, veinée pixel par pixel pour le bois, le marbre et les
+ * planètes) puis réduite coûtait plusieurs secondes de processeur à la boutique au téléphone
  */
 function ballImage(id: number, set: string, carom: boolean, size: number): string {
   const h = Math.max(32, Math.min(128, Math.ceil(size * 2.6)));
   const key = `${id}|${set}|${carom ? 1 : 0}|${h}`;
   const hit = ballUrls.get(key);
   if (hit) return hit;
-  const c = document.createElement("canvas");
-  c.width = h * 2;
-  c.height = h;
-  c.getContext("2d")!.drawImage(ballCanvas(id, set, carom), 0, 0, c.width, c.height);
-  const url = c.toDataURL();
+  const url = drawBall(id, set, carom, h * 2).toDataURL();
   ballUrls.set(key, url);
   return url;
 }

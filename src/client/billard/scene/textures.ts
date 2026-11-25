@@ -279,8 +279,18 @@ export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasEl
   const key = `${id}:${set}:${carom}`;
   const hit = ballCache.get(key);
   if (hit) return hit;
-  const W = 512,
-    H = 256;
+  const c = drawBall(id, set, carom, 512);
+  ballCache.set(key, c);
+  return c;
+}
+
+/**
+ * La même bille sur `W` de large (la moitié en hauteur), sans la garder : tout y est mesuré en fractions de l'image du
+ * jeu (512), le bruit compris, pour qu'une vignette dessinée directement à sa taille soit la bille du jeu en petit
+ */
+export function drawBall(id: number, set: string, carom: boolean, W: number): HTMLCanvasElement {
+  const H = Math.round(W / 2),
+    s = W / 512;
   const [c, g] = canvas(W, H);
   const colors = SET_COLORS[set] ?? BALL_COLORS;
   const ivory = set === "bois" ? "#e8d2a8" : set === "neon" ? "#f8f8ff" : "#f6f2e6";
@@ -307,11 +317,11 @@ export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasEl
       [0.5, 0.92],
     ] as [number, number][]) {
       g.beginPath();
-      g.ellipse(u * W, v * H, 5 / Math.max(0.2, Math.sin(v * Math.PI)), 5, 0, 0, Math.PI * 2);
+      g.ellipse(u * W, v * H, (5 * s) / Math.max(0.2, Math.sin(v * Math.PI)), 5 * s, 0, 0, Math.PI * 2);
       g.fill();
       if (u === 0) {
         g.beginPath();
-        g.ellipse(W, v * H, 5, 5, 0, 0, Math.PI * 2);
+        g.ellipse(W, v * H, 5 * s, 5 * s, 0, 0, Math.PI * 2);
         g.fill();
       }
     }
@@ -332,8 +342,8 @@ export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasEl
         for (let x = 0; x < W; x++) {
           const k =
             set === "bois"
-              ? 0.85 + 0.2 * Math.sin((y / H) * 60 + fbm(n, x / 64, y / 32, 3) * 9)
-              : 0.8 + 0.35 * Math.pow(Math.abs(Math.sin(fbm(n, x / 48, y / 48, 4) * 14)), 6);
+              ? 0.85 + 0.2 * Math.sin((y / H) * 60 + fbm(n, x / (64 * s), y / (32 * s), 3) * 9)
+              : 0.8 + 0.35 * Math.pow(Math.abs(Math.sin(fbm(n, x / (48 * s), y / (48 * s), 4) * 14)), 6);
           const i = (y * W + x) * 4;
           img.data[i] = img.data[i]! * k;
           img.data[i + 1] = img.data[i + 1]! * k;
@@ -347,7 +357,7 @@ export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasEl
       const img = g.getImageData(0, 0, W, H);
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
-          const k = 0.78 + 0.4 * fbm(n, x / 40, (y / 40) * (id % 2 ? 4 : 1), 4);
+          const k = 0.78 + 0.4 * fbm(n, x / (40 * s), (y / (40 * s)) * (id % 2 ? 4 : 1), 4);
           const i = (y * W + x) * 4;
           img.data[i] = img.data[i]! * k;
           img.data[i + 1] = img.data[i + 1]! * k;
@@ -361,17 +371,16 @@ export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasEl
         cy = H / 2;
       g.fillStyle = ivory;
       g.beginPath();
-      g.ellipse(cx, cy, 34, 34, 0, 0, Math.PI * 2);
+      g.ellipse(cx, cy, 34 * s, 34 * s, 0, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = id === 8 && set === "neon" ? "#ff2bd6" : "#16161a";
-      g.font = `bold ${id > 9 ? 34 : 40}px "Libre Franklin Variable", Arial, sans-serif`;
+      g.font = `bold ${(id > 9 ? 34 : 40) * s}px "Libre Franklin Variable", Arial, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(String(id), cx, cy + 2);
-      if (id === 6 || id === 9) g.fillRect(cx - 10, cy + 21, 20, 3);
+      g.fillText(String(id), cx, cy + 2 * s);
+      if (id === 6 || id === 9) g.fillRect(cx - 10 * s, cy + 21 * s, 20 * s, 3 * s);
     }
   }
-  ballCache.set(key, c);
   return c;
 }
 
@@ -414,9 +423,19 @@ export const CUE_STYLES: Record<string, CueStyle> = {
 export const CUE_PARTS = { tip: 0.008, ferrule: 0.025, joint: 0.52, forearm: 0.7, wrapEnd: 0.88, sleeve: 0.985 };
 
 export function cueTexture(style: string): THREE.CanvasTexture {
+  const t = tex(cueCanvas(style, 128, 2048));
+  t.anisotropy = 4;
+  return t;
+}
+
+/**
+ * L'habit de la queue sur `W` (le tour) × `H` (la longueur) : tout y est mesuré en fractions de la texture du jeu
+ * (128 × 2048), le bruit compris, pour qu'une vignette dessinée directement à sa taille soit la queue du jeu en petit
+ */
+export function cueCanvas(style: string, W: number, H: number): HTMLCanvasElement {
   const st = CUE_STYLES[style] ?? CUE_STYLES.erable!;
-  const W = 128,
-    H = 2048;
+  const sx = W / 128,
+    sy = H / 2048;
   const [c, g] = canvas(W, H);
   const P = CUE_PARTS;
   const y = (v: number) => v * H;
@@ -437,13 +456,13 @@ export function cueTexture(style: string): THREE.CanvasTexture {
       let col: number[];
       if (v < P.ferrule) continue;
       if (st.carbon) {
-        const weave = ((Math.floor(px / 8) + Math.floor(py / 8)) % 2) * 0.25 + 0.75;
+        const weave = ((Math.floor(px / (8 * sx)) + Math.floor(py / (8 * sy))) % 2) * 0.25 + 0.75;
         col = (v < P.joint ? shaft : butt).map((ch) => ch * weave + 18 * (1 - weave));
       } else if (v < P.joint) {
-        const k = 0.92 + (fbm(n, px / 32, py / 220, 3) - 0.5) * 0.18;
+        const k = 0.92 + (fbm(n, px / (32 * sx), py / (220 * sy), 3) - 0.5) * 0.18;
         col = shaft.map((ch) => ch * k);
       } else {
-        const k = 0.85 + (fbm(n, px / 24, py / 80, 4) - 0.5) * 0.45;
+        const k = 0.85 + (fbm(n, px / (24 * sx), py / (80 * sy), 4) - 0.5) * 0.45;
         col = butt.map((ch) => ch * k);
       }
       img.data[i] = col[0]!;
@@ -456,10 +475,10 @@ export function cueTexture(style: string): THREE.CanvasTexture {
   g.putImageData(img, 0, 0, 0, y(P.ferrule), W, H);
   // Le joint : une bague claire et deux filets
   g.fillStyle = st.rings;
-  g.fillRect(0, y(P.joint) - 10, W, 20);
+  g.fillRect(0, y(P.joint) - 10 * sy, W, 20 * sy);
   g.fillStyle = "#101010";
-  g.fillRect(0, y(P.joint) + 10, W, 3);
-  g.fillRect(0, y(P.joint) - 13, W, 3);
+  g.fillRect(0, y(P.joint) + 10 * sy, W, 3 * sy);
+  g.fillRect(0, y(P.joint) - 13 * sy, W, 3 * sy);
   // Les pointes de l'avant-talon : des triangles qui montent depuis la poignée
   if (st.points) {
     g.fillStyle = st.points;
@@ -476,12 +495,16 @@ export function cueTexture(style: string): THREE.CanvasTexture {
   // Les filets autour de la poignée
   g.fillStyle = st.rings;
   for (const v of [P.forearm, P.wrapEnd]) {
-    g.fillRect(0, y(v) - 4, W, 8);
+    g.fillRect(0, y(v) - 4 * sy, W, 8 * sy);
   }
   // La poignée : un fil enroulé
   const wrap = hexRgb(st.wrap);
-  for (let py = Math.round(y(P.forearm) + 4); py < y(P.wrapEnd) - 4; py++) {
-    const k = 0.75 + 0.25 * Math.abs(Math.sin(py * 0.9));
+  // (en petit, chaque ligne prend la moyenne des tours de fil qu'elle couvre)
+  const sub = Math.max(1, Math.ceil(1 / sy));
+  for (let py = Math.round(y(P.forearm) + 4 * sy); py < y(P.wrapEnd) - 4 * sy; py++) {
+    let k = 0;
+    for (let j = 0; j < sub; j++) k += 0.75 + 0.25 * Math.abs(Math.sin(((py + j / sub) / sy) * 0.9));
+    k /= sub;
     g.fillStyle = rgb(wrap.map((ch) => ch * k + 12 * (1 - k)));
     g.fillRect(0, py, W, 1);
   }
@@ -491,10 +514,8 @@ export function cueTexture(style: string): THREE.CanvasTexture {
   if (st.glow) {
     // Deux fines lignes lumineuses le long du fût
     g.fillStyle = st.glow;
-    g.fillRect(W * 0.2, y(P.ferrule + 0.01), 4, y(P.joint - P.ferrule - 0.02));
-    g.fillRect(W * 0.7, y(P.ferrule + 0.01), 4, y(P.joint - P.ferrule - 0.02));
+    g.fillRect(W * 0.2, y(P.ferrule + 0.01), 4 * sx, y(P.joint - P.ferrule - 0.02));
+    g.fillRect(W * 0.7, y(P.ferrule + 0.01), 4 * sx, y(P.joint - P.ferrule - 0.02));
   }
-  const t = tex(c);
-  t.anisotropy = 4;
-  return t;
+  return c;
 }
