@@ -215,8 +215,17 @@ describe("Escarmouche : entre bots, la capture du drapeau se joue vraiment, à c
   it.each(["facile", "moyen", "fort"] as BotLevel[])(
     "%s : ils prennent le drapeau, le portent, l'escortent, défendent et reprennent le leur",
     (level) => {
-      // Quatre parties : sur une ou deux, les prises tiennent du hasard (de 0 à 7 selon la graine au Hameau)
-      const games = [ctfGame("hameau", level, 1), ctfGame("port", level, 2), ctfGame("gare", level, 3), ctfGame("desert", level, 4)];
+      // Six parties : sur une ou deux, les prises tiennent du hasard (de 0 à 7 selon la graine au Hameau ; sur quatre
+      // parties seulement, un bot fort pouvait n'avoir rendu son drapeau dans aucune, alors qu'il le rend une fois sur
+      // deux ou presque sur 160 parties)
+      const games = [
+        ctfGame("hameau", level, 1),
+        ctfGame("port", level, 2),
+        ctfGame("gare", level, 3),
+        ctfGame("desert", level, 4),
+        ctfGame("usine", level, 5),
+        ctfGame("vignoble", level, 6),
+      ];
       const sum = (k: "takes" | "returns") => games.reduce((a, g) => a + g[k], 0);
       const time = (j: FlagJob) => games.reduce((a, g) => a + (g.jobs[j] ?? 0), 0);
       expect(sum("takes")).toBeGreaterThanOrEqual(2);

@@ -484,6 +484,33 @@ function enemy(m: Match, a: number, b: number) {
 }
 
 /** La commande d'un bot pour ce pas */
+/** Les écarts essayés quand le bout d'un muret barre la route (radians, du plus petit au plus grand) */
+const STEER = [0.4, -0.4, 0.8, -0.8, 1.2, -1.2];
+
+/** Le corps entier, poussé de (dx, dz) par pas plus courts que sa largeur : rien ne passe entre deux, pas même un poteau */
+function bodyPasses(world: World, x: number, y: number, z: number, dx: number, dz: number) {
+  const n = Math.ceil(Math.hypot(dx, dz) / 0.25);
+  for (let k = 1; k <= n; k++) if (!bodyFits(world, x + (dx * k) / n, y, z + (dz * k) / n)) return false;
+  return true;
+}
+
+/**
+ * La voie est-elle libre pour tout le corps, pas seulement pour un trait au milieu ? Un trait qui frôle le bout d'un
+ * muret passe, l'épaule non : le bot poussait droit contre la tranche sans plus glisser (au Col, à la sortie des bases)
+ */
+function bodyClear(world: World, x: number, y: number, z: number, tx: number, ty: number, tz: number) {
+  if (!world.clear(x, y + 0.5, z, tx, ty + 0.5, tz) || !world.clear(x, y + 1.5, z, tx, ty + 1.5, tz)) return false;
+  const dx = tx - x;
+  const dz = tz - z;
+  const l = Math.hypot(dx, dz);
+  if (l < 1e-3) return true;
+  const ox = (-dz / l) * RADIUS;
+  const oz = (dx / l) * RADIUS;
+  return (
+    world.clear(x + ox, y + 0.5, z + oz, tx + ox, ty + 0.5, tz + oz) && world.clear(x - ox, y + 0.5, z - oz, tx - ox, ty + 0.5, tz - oz)
+  );
+}
+
 export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel, now: number): Cmd {
   mem.level = level;
   const f = m.fighters[i]!;
@@ -616,11 +643,7 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     let k = 0;
     for (let q = Math.min(4, mem.path.length - 1); q > 0; q--) {
       const n = mem.path[q]!;
-      if (
-        Math.abs(nav.py[n]! - s.y) < 0.2 &&
-        world.clear(s.x, s.y + 0.5, s.z, nav.px[n]!, nav.py[n]! + 0.5, nav.pz[n]!) &&
-        world.clear(s.x, s.y + 1.5, s.z, nav.px[n]!, nav.py[n]! + 1.5, nav.pz[n]!)
-      ) {
+      if (Math.abs(nav.py[n]! - s.y) < 0.2 && bodyClear(world, s.x, s.y, s.z, nav.px[n]!, nav.py[n]!, nav.pz[n]!)) {
         k = q;
         break;
       }
@@ -632,6 +655,21 @@ export function botCommand(m: Match, i: number, mem: BotMemory, level: BotLevel,
     if (l > 1e-3) {
       mvx /= l;
       mvz /= l;
+      // Le bout d'un muret ou un poteau droit devant, que l'épaule accroche : il s'en écarte de biais au lieu de pousser
+      // contre (les murs ne font glisser que ce qui les aborde de biais)
+      if (k === 0 && !bodyPasses(world, s.x, s.y, s.z, mvx * 0.8, mvz * 0.8)) {
+        for (const a of STEER) {
+          const c = Math.cos(a);
+          const sn = Math.sin(a);
+          const rx = mvx * c - mvz * sn;
+          const rz = mvx * sn + mvz * c;
+          if (bodyPasses(world, s.x, s.y, s.z, rx * 0.8, rz * 0.8)) {
+            mvx = rx;
+            mvz = rz;
+            break;
+          }
+        }
+      }
     }
   } else if (mem.goal) {
     mem.goalUntil = Math.min(mem.goalUntil, t + 0.5);

@@ -2386,7 +2386,14 @@ function conveyorAt(b: Builder, x0: number, y0: number, z0: number, x1: number, 
     const top = y0 + (y1 - y0) * t1 + 0.05;
     b.box(Math.min(ax, bx) - 0.3, 0, Math.min(az, bz) - 0.3, Math.max(ax, bx) + 0.3, top, Math.max(az, bz) + 0.3, "decor");
   }
-  for (const [x, h, z] of conveyorLegs(x0, y0, z0, x1, y1, z1)) b.box(x - 0.06, 0, z - 0.06, x + 0.06, h, z + 0.06, "decor");
+  // Les deux pieds d'un support, d'un seul bloc : trop proches pour qu'on passe entre eux, ils laissaient entre eux un
+  // recoin où un bot s'enfonçait sans pouvoir en ressortir
+  const legs = conveyorLegs(x0, y0, z0, x1, y1, z1);
+  for (let k = 0; k + 1 < legs.length; k += 2) {
+    const [ax, h, az] = legs[k]!;
+    const [bx, , bz] = legs[k + 1]!;
+    b.box(Math.min(ax, bx) - 0.06, 0, Math.min(az, bz) - 0.06, Math.max(ax, bx) + 0.06, h, Math.max(az, bz) + 0.06, "decor");
+  }
   b.add({ k: "conveyor", x0, y0, z0, x1, y1, z1 });
 }
 
