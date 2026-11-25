@@ -1013,6 +1013,37 @@ a.shop-item {
   color: var(--text-faint);
 }
 
+/* Téléphone couché : l'éventail de cartes s'efface et le titre se serre, pour que le formulaire tienne avec le clavier */
+@media (max-height: 520px) and (orientation: landscape) {
+  .login {
+    padding-top: 14px;
+  }
+
+  .login-decor {
+    display: none;
+  }
+
+  .login-box {
+    gap: 12px;
+  }
+
+  .login-brand {
+    gap: 2px;
+  }
+
+  .login-brand .logo-name {
+    font-size: 30px;
+  }
+
+  .login-tagline {
+    font-size: 22px;
+  }
+
+  .login-panel {
+    padding: 18px 22px;
+  }
+}
+
 .dev-code {
   border: 1px dashed rgba(226, 189, 110, 0.5);
   background: var(--gold-tint);
