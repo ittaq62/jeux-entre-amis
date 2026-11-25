@@ -26,7 +26,7 @@ function laneIntoCircle(c: Pt, r: number, hw: number, top: number, n = 72): Pt[]
 // de lave à éviter, des plaques de cendre qui freinent
 const sentier = hole(
   "Le sentier de cendre",
-  2,
+  3,
   (b) => {
     // Les bords du sentier s'évasent et se resserrent (jamais vers l'intérieur : les mares restent à leur place)
     const zs: number[] = [];

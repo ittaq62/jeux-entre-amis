@@ -155,7 +155,7 @@ const telesiege = hole(
 // 6. Les sapins : un slalom dans la forêt, des congères à éviter
 const sapins = hole(
   "Les sapins",
-  4,
+  3,
   (b) => {
     const g = b.tile(
       [

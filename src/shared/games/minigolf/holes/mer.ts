@@ -217,7 +217,7 @@ const crabe = hole(
 // 9. La baie : une grande crique, des bouées qui renvoient fort, une bouteille à la mer qui mène tout près du trou
 const baie = hole(
   "La baie",
-  4,
+  3,
   (b) => {
     const outline: Pt[] = [
       [-1, 0],
