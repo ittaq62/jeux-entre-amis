@@ -170,8 +170,11 @@ function parts(links: number[][]): { part: Int32Array; main: number } {
   return { part, main: sizes.indexOf(Math.max(0, ...sizes)) };
 }
 
-/** Un peu moins que la demi-largeur d'un soldat : on frôle un mur sans s'y coincer */
-const BODY = RADIUS - 0.01;
+/**
+ * La demi-largeur d'un soldat, un rien plus large : un chemin qui frôlait la tranche d'un muret à un rayon pile passait
+ * pour libre, mais le soldat s'y arrêtait (au bout des sacs de sable devant une base, à la Gare)
+ */
+const BODY = RADIUS + 0.005;
 /** De combien on s'écarte au plus de la ligne droite entre deux cases (une porte qu'on prend un peu de biais) */
 const SIDE_STEPS = [0, 0.08, -0.08, 0.16, -0.16];
 
