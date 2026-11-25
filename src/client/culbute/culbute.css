@@ -929,6 +929,24 @@ html:has(.cb-fight) body {
   font-size: clamp(26px, 5vw, 38px);
 }
 
+/* La ligne d'Elo (commune) est faite pour une carte claire : ici, sur la carte sombre, en clair et au milieu */
+.cb-over-card .gameover-elo {
+  justify-content: center;
+  color: rgba(244, 236, 220, 0.72);
+}
+
+.cb-over-card .gameover-elo strong {
+  color: #f4ecdc;
+}
+
+.cb-over-card .elo-delta.is-up {
+  color: #7fd69c;
+}
+
+.cb-over-card .elo-delta.is-down {
+  color: #ff8f80;
+}
+
 .cb-victory {
   max-height: 210px;
   margin: -6px -6px 0;
