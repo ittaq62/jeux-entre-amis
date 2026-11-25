@@ -676,9 +676,10 @@ function hit(race: Race, victim: Racer, by: string | null, kind: HitKind, now: n
 export function useItem(race: Race, id: string, now: number, flip = false): BolidesEvent[] {
   const r = racerOf(race, id);
   const events: BolidesEvent[] = [];
-  // (ni en tête-à-queue, ni en tombant, ni porté par le drone)
-  if (!r || !r.item || race.phase !== "racing" || r.finish !== null || r.kart.spin > 0 || r.kart.fall > 0 || r.kart.rescue > 0)
-    return events;
+  // (ni en tombant, ni porté par le drone ; ni en tête-à-queue, pour un bot : le jeu d'un joueur le vérifie déjà, et la
+  // course, qui voit sa position avec un temps de retard, refuserait un turbo qu'il a déjà pris en sortant du tête-à-queue)
+  if (!r || !r.item || race.phase !== "racing" || r.finish !== null || r.kart.fall > 0 || r.kart.rescue > 0) return events;
+  if (r.bot && r.kart.spin > 0) return events;
   const kind = r.item;
   const t = trackOf(race);
   const k = r.kart;

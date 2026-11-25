@@ -2533,3 +2533,22 @@ describe("ce que la course croit d'un joueur", () => {
     expect(me.handback).toBeUndefined();
   });
 });
+
+describe("un objet lancé en sortant d'un tête-à-queue", () => {
+  it("chez un joueur, la course le compte même si sa dernière position montrait encore le tête-à-queue", () => {
+    const race = newRace(["a", "b"], new Set(["b"]), { ...DEFAULT_SETTINGS, track: "port" }, 0, 1);
+    worldTick(race, race.goAt);
+    const me = racerOf(race, "a")!;
+    me.item = "turbo";
+    me.uses = 1;
+    me.kart = { ...me.kart, spin: 0.05 };
+    expect(useItem(race, "a", race.goAt + 1000).map((e) => e.type)).toContain("use");
+    expect(me.item).toBeNull();
+    // Un bot, lui, attend la fin de son tête-à-queue
+    const bot = racerOf(race, "b")!;
+    bot.item = "turbo";
+    bot.uses = 1;
+    bot.kart = { ...bot.kart, spin: 0.5 };
+    expect(useItem(race, "b", race.goAt + 1000)).toEqual([]);
+  });
+});
