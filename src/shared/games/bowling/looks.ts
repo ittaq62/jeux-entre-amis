@@ -154,6 +154,14 @@ export function usableLook(look: BowlingLook, has: (item: string) => boolean): B
 }
 
 /** Le skin d'un bot : une couleur que personne n'a, un motif offert, une danse ; un sur six est gaucher */
+/**
+ * La boule de départ d'un joueur qui n'a encore rien choisi : la première couleur libre à la table (tout le monde
+ * partait en cerise, et à une table d'amis toutes les boules et toutes les pastilles de la feuille se ressemblaient)
+ */
+export function freeColor(taken: readonly string[]): string {
+  return BALL_COLORS.find((c) => !taken.includes(c.id))?.id ?? DEFAULT_LOOK.color;
+}
+
 export function botLook(taken: string[], seed: number): BowlingLook {
   const free = BALL_COLORS.filter((c) => !taken.includes(c.id));
   const list = free.length > 0 ? free : BALL_COLORS;

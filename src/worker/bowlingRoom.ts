@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { planThrow, thinkTime } from "../shared/games/bowling/bot.ts";
-import { botLook, DEFAULT_LOOK, isBowlingLook, usableLook, type BowlingLook } from "../shared/games/bowling/looks.ts";
+import { botLook, DEFAULT_LOOK, freeColor, isBowlingLook, usableLook, type BowlingLook } from "../shared/games/bowling/looks.ts";
 import {
   createMatch,
   DEFAULT_CONFIG,
@@ -194,8 +194,12 @@ export class BowlingRoom extends DurableObject<Env> {
   /** Table d'une tournée : tout le monde est déjà assis, les bots aussi ; les équipes de la tournée s'il y en a */
   private seatTour(tour: TourInit, now: number) {
     const d = this.data!;
-    const humans: Seat[] = tour.players.map((u) => ({ ...this.newHumanSeat(u), disconnectedAt: now }));
     const taken: string[] = [];
+    const humans: Seat[] = tour.players.map((u) => {
+      const s = { ...this.newHumanSeat(u, taken), disconnectedAt: now };
+      taken.push(s.look.color);
+      return s;
+    });
     const bots: Seat[] = tour.bots.map((b, i) => {
       const look = botLook(taken, i * 7 + 3);
       taken.push(look.color);
@@ -323,7 +327,7 @@ export class BowlingRoom extends DurableObject<Env> {
     void this.setPresence(user.id, this.presenceRoom()).catch(() => {});
   }
 
-  private newHumanSeat(user: PublicUser): Seat {
+  private newHumanSeat(user: PublicUser, taken: readonly string[] = this.data?.seats.map((s) => s.look.color) ?? []): Seat {
     return {
       id: user.id,
       kind: "human",
@@ -335,8 +339,9 @@ export class BowlingRoom extends DurableObject<Env> {
       autoplay: false,
       disconnectedAt: null,
       team: 0,
-      // La boule de départ tant qu'il n'a rien choisi (l'appareil envoie aussitôt son skin)
-      look: { ...DEFAULT_LOOK },
+      // La boule de départ tant qu'il n'a rien choisi (l'appareil envoie aussitôt son skin s'il en a un) : une couleur
+      // libre à la table
+      look: { ...DEFAULT_LOOK, color: freeColor(taken) },
     };
   }
 
