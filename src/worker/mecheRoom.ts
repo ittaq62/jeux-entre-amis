@@ -1035,8 +1035,10 @@ export class MecheRoom extends DurableObject<Env> {
     this.botTimers = [];
   }
 
+  /** Le niveau d'un bot de la table ; celui qui joue pour un absent reste moyen, jamais plus fort que les bots de la table */
   private botLevel(seat: Seat): BotLevel {
-    return seat.kind === "bot" ? this.data!.game!.settings.botLevel : "moyen";
+    const table = this.data!.game!.settings.botLevel;
+    return seat.kind === "bot" || table === "facile" ? table : "moyen";
   }
 
   /** Si la mèche est chez un bot (ou un absent relayé), il réfléchit puis tape lettre par lettre */
