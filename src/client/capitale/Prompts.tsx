@@ -25,6 +25,7 @@ import { Band, Pop } from "./CityPanel.tsx";
 import { Note } from "./Money.tsx";
 import { squareFacts } from "./SquareInfo.tsx";
 import { fr } from "../../shared/typo.ts";
+import { isMate } from "./teamsUi.tsx";
 
 // Les décisions, une à la fois, en grand au milieu : acheter, enchérir, payer une dette. Et la carte tirée.
 
@@ -161,6 +162,8 @@ export function AuctionPrompt({
   const a = g.auction!;
   const canBid = Boolean(me && g.bidders.includes(me) && a.high?.player !== me);
   const bid = (inc: number) => (a.high?.amount ?? 0) + inc;
+  // En équipes : surenchérir sur son coéquipier ne fait que payer la banque plus cher (les bots ne le font jamais)
+  const mateLeads = Boolean(a.high && a.high.player !== me && isMate(g, a.high.player, me));
   return (
     <Pop>
       <Band g={g} index={a.square} name={name} />
@@ -168,6 +171,7 @@ export function AuctionPrompt({
       <div className="cap-auction-high">
         <span>{a.high ? (a.high.player === me ? "Tu mènes avec" : `${name(a.high.player)} offre`) : "Personne n'a encore misé"}</span>
         <b className="num">{a.high ? money(a.high.amount) : "—"}</b>
+        {mateLeads && canBid && <em className="cap-auction-mate">ton équipe&nbsp;: inutile de surenchérir</em>}
       </div>
       {left !== null && (
         <span className="cap-timebar" style={{ ["--left" as string]: Math.max(0, Math.min(1, left / 12)) }}>

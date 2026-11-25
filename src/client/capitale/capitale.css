@@ -2389,6 +2389,18 @@
   line-height: 1;
 }
 
+/* Un coéquipier mène l'enchère */
+.cap-auction-high .cap-auction-mate {
+  margin-top: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e8f4ec;
+  color: #2f7a4b;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .cap-timebar {
   position: relative;
   display: block;
