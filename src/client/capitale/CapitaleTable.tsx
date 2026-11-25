@@ -351,6 +351,22 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
   const onTakeBack = mySeat?.autoplay ? () => send({ t: "takeBack" }) : undefined;
   const turnPlayer = g.players[g.turn];
 
+  // Une décision qui m'attend (acheter, racheter, enchérir) passe devant une fiche de ville ou « Mes villes » restées
+  // ouvertes : sinon elle s'affichait dessous, cachée, et l'on ne voyait que « À toi de choisir »
+  const decision =
+    g.step === "over" || !me || onTakeBack
+      ? null
+      : g.auction
+        ? `enchère:${g.auction.square}:${g.turnId}`
+        : myTurn && (g.step === "buy" || g.step === "buyout")
+          ? `${g.step}:${g.turnId}`
+          : null;
+  useEffect(() => {
+    if (!decision) return;
+    setCity(null);
+    setCitiesOpen(false);
+  }, [decision]);
+
   // L'étiquette de chaque case : son prix si elle est libre, sinon son loyer à la couleur du propriétaire
   const shownState = useMemo(() => asState({ ...g, deeds }), [g, deeds]);
   const teams = inTeams(g);
