@@ -583,6 +583,16 @@ export class BowlingRuntime {
     return spots[b.seat % Math.max(1, spots.length)]?.yaw ?? 0;
   }
 
+  /**
+   * De combien la caméra de visée s'écarte du lanceur, du côté de sa boule : sur un écran large, assez pour que sa grosse
+   * tête laisse voir la piste ; sur un téléphone en hauteur (champ étroit), moins, pour qu'il reste dans l'image et qu'on
+   * voie son bras suivre le geste
+   */
+  private aimSide(): number {
+    const a = this.scene.camera.aspect;
+    return Math.min(0.95, Math.max(0.45, 0.45 + (a - 0.45) * 0.91));
+  }
+
   /** Où se tient le lanceur sur l'élan (sa boule dans l'axe de son lâcher) */
   private laneSpot(b: Bowler, x: number, out: THREE.Vector3): THREE.Vector3 {
     const side = b.info.look.left ? -1 : 1;
@@ -808,7 +818,7 @@ export class BowlingRuntime {
         // La boule vient de partir : on reste derrière le lanceur (la caméra ne passe pas à travers lui)
         const p = tb.pos;
         const side = tb.info.look.left ? -1 : 1;
-        pos.set(p.x - 0.3 * side, 2.75, p.z + 3.7);
+        pos.set(p.x + this.aimSide() * side, 2.75, p.z + 3.7);
         look.set(bx * 0.5, 0.15, -14.5);
         speed = 3;
         shot = "aim";
@@ -831,7 +841,7 @@ export class BowlingRuntime {
       const side = tb.info.look.left ? -1 : 1;
       const swing = tb.info.id === this.o.me ? (this.drag?.mode === "swing" ? 1 : 0) : this.remote?.sw ? 1 : 0;
       // Du côté de la boule (le lanceur se tient à côté de sa ligne) : sa grosse tête ne cache plus la piste ni la visée
-      pos.set(p.x + 0.62 * side, 2.75 + swing * 0.05, p.z + 3.7 + swing * 0.2);
+      pos.set(p.x + this.aimSide() * side, 2.75 + swing * 0.05, p.z + 3.7 + swing * 0.2);
       look.set((p.x + 0.27 * side) * 0.4, 0.15, -14.5);
       speed = 3;
     }
