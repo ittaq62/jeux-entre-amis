@@ -211,6 +211,7 @@ export function ConfirmButton({
   disabled?: boolean;
 }) {
   const [armed, setArmed] = useState(false);
+  const armedAt = useRef(0);
   useEffect(() => {
     if (!armed) return;
     const t = setTimeout(() => setArmed(false), 3500);
@@ -222,7 +223,12 @@ export function ConfirmButton({
       className={`${className} ${armed ? "is-armed" : ""}`}
       disabled={disabled}
       onClick={() => {
-        if (!armed) return setArmed(true);
+        if (!armed) {
+          armedAt.current = Date.now();
+          return setArmed(true);
+        }
+        // Un double-clic n'est pas une confirmation : le second clic doit venir après avoir lu la question
+        if (Date.now() - armedAt.current < 450) return;
         setArmed(false);
         onConfirm();
       }}
