@@ -932,6 +932,9 @@ html:has(.cb-fight) body {
 
 .cb-over-card {
   display: grid;
+  /* Chaque ligne à sa taille, et la carte défile : quand elle manquait de hauteur (téléphone en largeur, quatre
+     combattants sur un portable), la ligne du vainqueur, sans hauteur à elle, s'écrasait et le titre passait dessus */
+  grid-auto-rows: max-content;
   gap: 10px;
   width: min(560px, 96vw);
   max-height: 92vh;
@@ -972,6 +975,13 @@ html:has(.cb-fight) body {
     radial-gradient(ellipse at 50% 30%, rgba(255, 224, 138, 0.35), rgba(0, 0, 0, 0) 65%),
     linear-gradient(180deg, rgba(255, 236, 196, 0.12), rgba(0, 0, 0, 0));
   overflow: hidden;
+}
+
+/* Écran bas (téléphone en largeur) : le vainqueur plus petit, pour voir le classement sans défiler */
+@media (max-height: 520px) {
+  .cb-victory {
+    max-height: 120px;
+  }
 }
 
 .cb-ranking {
