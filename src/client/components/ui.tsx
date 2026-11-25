@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { APP_NAME } from "../../shared/app.ts";
@@ -48,10 +48,43 @@ export function Modal({
 }) {
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // Au clavier : la fenêtre prend la main à l'ouverture (son bouton `autoFocus` s'il en a un, sinon elle-même), Tab tourne
+  // dans la fenêtre au lieu de repartir dans la page derrière, et la fermeture rend la main à ce qui l'avait ouverte
+  const dialog = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  // Lu pendant le rendu d'ouverture : le bouton `autoFocus` de la fenêtre prend la main avant les effets
+  if (open && !wasOpen.current) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  wasOpen.current = open;
+  useEffect(() => {
+    if (!open) return;
+    const box = dialog.current;
+    if (box && !box.contains(document.activeElement)) box.focus({ preventScroll: true });
+    return () => {
+      const back = opener.current;
+      if (back?.isConnected) back.focus({ preventScroll: true });
+    };
+  }, [open]);
+  const trapTab = (e: KeyboardEvent<HTMLDivElement>) => {
+    const box = dialog.current;
+    if (e.key !== "Tab" || !box) return;
+    const stops = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+    if (stops.length === 0) return;
+    const first = stops[0]!;
+    const last = stops[stops.length - 1]!;
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === box)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -64,10 +97,13 @@ export function Modal({
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
+            ref={dialog}
             className={`modal panel ${wide ? "modal-wide" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label={title}
+            tabIndex={-1}
+            onKeyDown={trapTab}
             initial={{ y: 12, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 8, opacity: 0 }}
@@ -87,6 +123,10 @@ export function Modal({
     document.body,
   );
 }
+
+/** Ce qui prend le focus au clavier dans une fenêtre */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Les messages passagers en haut de l'écran ; `children` passe devant (les invitations reçues) */
 export function Toasts({ children }: { children?: ReactNode }) {

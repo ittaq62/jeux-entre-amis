@@ -802,6 +802,10 @@ a.shop-item {
   background: rgba(3, 10, 7, 0.72);
 }
 
+.modal:focus {
+  outline: none;
+}
+
 .modal {
   width: 100%;
   max-width: 460px;
