@@ -503,6 +503,11 @@
   gap: 8px;
 }
 
+/* Le titre de l'offre, clair sur le panneau sombre (la table claire le teintait de sa couleur de texte, sombre) */
+.cap-offer-head strong {
+  color: var(--text);
+}
+
 .cap-offer-body {
   margin: 0;
   font-size: 14px;

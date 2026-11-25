@@ -67,7 +67,9 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
         // Entre coéquipiers, le loyer réduit de l'équipe
         if (isMate(g, from, to))
           return {
-            text: `${say(from, "paie", "paies")} ${money(e.amount)} à ${isMe(to) ? "toi" : name(to)}, tarif d'équipe (${sq(e.square)})`,
+            text: isMe(to)
+              ? `${name(from)} te paie ${money(e.amount)}, tarif d'équipe (${sq(e.square)})`
+              : `${say(from, "paie", "paies")} ${money(e.amount)} à ${name(to)}, tarif d'équipe (${sq(e.square)})`,
             tone: "info",
             who: from,
           };
@@ -197,14 +199,16 @@ export function describe(e: CapitaleEvent, { g, name }: Ctx): Omit<Line, "id"> |
     }
     case "debt":
       return {
-        text: `${say(e.player, "doit", "dois")} trouver ${money(e.amount)}\u00a0: vendre ou hypothéquer`,
+        text: `${say(e.player, "doit", "dois")} trouver ${money(e.amount)}\u00a0: ${g.settings.builder ? "démolir ou hypothéquer" : "vendre ou hypothéquer"}`,
         tone: isMe(e.player) ? "bad" : "info",
         who: e.player,
       };
     case "trade":
       if (e.status === "proposed")
         return {
-          text: `${say(e.trade.from, "propose", "proposes")} un échange à ${isMe(e.trade.to) ? "toi" : name(e.trade.to)}`,
+          text: isMe(e.trade.to)
+            ? `${name(e.trade.from)} te propose un échange`
+            : `${say(e.trade.from, "propose", "proposes")} un échange à ${name(e.trade.to)}`,
           tone: "info",
           who: e.trade.from,
         };
