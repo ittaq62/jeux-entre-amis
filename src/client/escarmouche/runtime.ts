@@ -772,9 +772,21 @@ export class BattleRuntime {
         return;
       }
       case "reload": {
+        // Un autre recharge : les mêmes bruits que les siens, en plusieurs temps, là où il est (et plus rien s'il
+        // s'arrête, s'il change d'arme ou s'il tombe)
         if (e.i === this.me) return;
         const f = this.fighterAt(e.i);
-        if (f) this.sound.play("reload", { at: { x: f.x, y: f.y + 1.2, z: f.z }, volume: 0.5 });
+        if (!f) return;
+        const weapon = f.weapon;
+        for (const [k, name] of RELOAD_PLANS[reloadKind(weapon)].sounds)
+          setTimeout(
+            () => {
+              const g = this.fighterAt(e.i);
+              if (!this.running || !g || g.weapon !== weapon || (g.bits & PF.reload) === 0) return;
+              this.sound.play(name, { at: { x: g.x, y: g.y + 1.2, z: g.z }, volume: (RELOAD_VOLUME[name] ?? 0.55) * 0.85, gap: 60 });
+            },
+            k * WEAPONS[weapon].reload * 1000,
+          );
         return;
       }
       case "flag": {

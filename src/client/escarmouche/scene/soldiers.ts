@@ -8,7 +8,8 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { AVATAR_BACKGROUNDS, AVATAR_HAIR_COLORS, AVATAR_SKINS, type AvatarConfig } from "../../../shared/avatar.ts";
 import type { CamoId } from "../../../shared/games/escarmouche/camos.ts";
 import { UNIFORM_BY_ID, type UniformId, type UniformInfo } from "../../../shared/games/escarmouche/uniforms.ts";
-import type { WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
+import { WEAPONS, type WeaponId } from "../../../shared/games/escarmouche/weapons.ts";
+import { gunAnchors, handAt, poseGunParts, RELOAD_PLANS, reloadKind } from "../reload.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import { fuse } from "./fuse.ts";
@@ -334,6 +335,12 @@ export class SoldierModel {
   private head = new THREE.Group();
   private aim = new THREE.Group();
   private arms = new THREE.Group();
+  /** Le bras gauche, qui pivote à l'épaule pour recharger ; l'épaule et la main au repos (dans le repère de la visée) */
+  private leftArm: THREE.Group | null = null;
+  private leftShoulder = new THREE.Vector3();
+  private leftHand = new THREE.Vector3();
+  /** Où il en est de son rechargement (de 0 à 1), 0 s'il ne recharge pas */
+  private reloadT = 0;
   private legs: { thigh: THREE.Group; shin: THREE.Group }[] = [];
   private gun: Gun | null = null;
   private gunKey = "";
@@ -538,8 +545,11 @@ export class SoldierModel {
   private poseArms(gun: Gun) {
     for (const c of [...this.arms.children]) {
       this.arms.remove(c);
-      if (c instanceof THREE.Mesh) c.geometry.dispose();
+      c.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.geometry.dispose();
+      });
     }
+    const leftArm = new THREE.Group();
     const m = this.mats;
     const seg = this.low ? 6 : 8;
     const at = gun.group.position;
@@ -549,24 +559,34 @@ export class SoldierModel {
       shoulder: new THREE.Vector3(-0.235, 0.0, -0.02),
       hand: gun.pistol ? new THREE.Vector3(at.x - 0.03, at.y - 0.04, at.z + 0.0) : new THREE.Vector3(at.x, at.y + 0.02, at.z + front),
     };
-    for (const [arm, bend] of [
-      [right, new THREE.Vector3(1, -1.2, 0.3)],
-      [left, new THREE.Vector3(-1, -1.4, 0.2)],
+    for (const [arm, bend, to] of [
+      [right, new THREE.Vector3(1, -1.2, 0.3), this.arms],
+      [left, new THREE.Vector3(-1, -1.4, 0.2), leftArm],
     ] as const) {
       // La main ne peut pas aller plus loin que le bras
       const reach = 0.58;
       const d = arm.hand.clone().sub(arm.shoulder);
       if (d.length() > reach) arm.hand.copy(arm.shoulder).addScaledVector(d.normalize(), reach);
       const e = elbow(arm.shoulder, arm.hand, 0.3, bend);
-      segment(arm.shoulder, e, 0.07, m.coat, this.arms, seg);
-      segment(e, arm.hand, 0.059, m.coat, this.arms, seg);
+      segment(arm.shoulder, e, 0.07, m.coat, to, seg);
+      segment(e, arm.hand, 0.059, m.coat, to, seg);
       // Le brassard du camp, en haut du bras
       const band = new THREE.Vector3().lerpVectors(arm.shoulder, e, 0.35);
-      segment(band.clone().lerp(arm.shoulder, 0.12), band.clone().lerp(e, 0.12), 0.075, this.bandMat, this.arms, seg);
-      const hand = rbox(0.085, 0.09, 0.1, 0.03, m.glove, this.arms, arm.hand.x, arm.hand.y, arm.hand.z);
+      segment(band.clone().lerp(arm.shoulder, 0.12), band.clone().lerp(e, 0.12), 0.075, this.bandMat, to, seg);
+      const hand = rbox(0.085, 0.09, 0.1, 0.03, m.glove, to, arm.hand.x, arm.hand.y, arm.hand.z);
       hand.rotation.x = 0.3;
     }
     fuse(this.arms);
+    // Le bras gauche à part, son repère à l'épaule : il pivote pour aller au chargeur, à la ceinture, à la culasse
+    fuse(leftArm);
+    leftArm.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.translate(-left.shoulder.x, -left.shoulder.y, -left.shoulder.z);
+    });
+    leftArm.position.copy(left.shoulder);
+    this.arms.add(leftArm);
+    this.leftArm = leftArm;
+    this.leftShoulder.copy(left.shoulder);
+    this.leftHand.copy(left.hand);
     this.arms.traverse((o) => {
       if (o instanceof THREE.Mesh) o.castShadow = true;
     });
@@ -618,6 +638,13 @@ export class SoldierModel {
     this.root.position.set(p.x, p.y, p.z);
     this.root.rotation.set(0, p.yaw, 0);
     if (!p.alive) {
+      // Tombé en rechargeant : le bras et l'arme reviennent au repos
+      if (this.reloadT > 0 && this.gun && this.leftArm) {
+        this.reloadT = 0;
+        this.leftArm.quaternion.identity();
+        this.leftArm.scale.setScalar(1);
+        poseGunParts(this.gun, null, -1, this.leftHand, this.leftHand);
+      }
       this.fallDown(p, dt);
       this.flag.visible = false;
       this.alive = false;
@@ -685,7 +712,10 @@ export class SoldierModel {
     const lean = p.sprint ? 0.25 : crouch * 0.12;
     this.spine.rotation.x = -lean;
     this.spine.rotation.y = Math.sin(this.phase) * 0.07 * run;
-    const lower = p.sprint ? -0.65 : p.reload ? -0.35 : 0;
+    // Le rechargement : où il en est, au rythme de son arme
+    this.reloadT = p.reload ? Math.min(1, this.reloadT + dt / WEAPONS[p.weapon].reload) : 0;
+    const tilt = p.reload ? Math.min(1, this.reloadT / 0.12) * Math.min(1, (1 - this.reloadT) / 0.1 + 0.2) : 0;
+    const lower = p.sprint ? -0.65 : -0.3 * tilt;
     this.kick = Math.max(0, this.kick - dt * 8);
     this.aim.rotation.x = p.pitch * 0.9 + lower + this.kick * 0.08;
     this.head.rotation.x = p.pitch * 0.4 + lean * 0.5;
@@ -702,8 +732,9 @@ export class SoldierModel {
       this.head.rotation.z = 0;
     }
     if (this.gun) {
-      this.gun.group.rotation.z = p.reload ? 0.6 : 0;
+      this.gun.group.rotation.z = 0.5 * tilt;
       this.gun.group.position.z = (this.gun.pistol ? -0.36 : -0.3) + this.kick * 0.05;
+      this.poseReload(p);
       this.gun.muzzle.getWorldPosition(this.muzzle);
     }
     // Le drapeau dans le dos, qui flotte
@@ -714,6 +745,37 @@ export class SoldierModel {
     }
     // Celui qui vient d'arriver clignote un peu : il ne craint rien pendant ce temps-là
     this.root.visible = !p.shield || Math.floor(performance.now() / 120) % 3 !== 0;
+  }
+
+  /**
+   * Le geste du rechargement, vu de dehors : la même table qu'en première personne. Le bras gauche pivote à l'épaule
+   * vers le chargeur, la ceinture, la culasse ; le chargeur sort, tombe, revient ; la culasse, la pompe, les canons
+   */
+  private poseReload(p: SoldierPose) {
+    const gun = this.gun;
+    const arm = this.leftArm;
+    if (!gun || !arm) return;
+    if (!p.reload || this.reloadT <= 0) {
+      arm.quaternion.identity();
+      arm.scale.setScalar(1);
+      poseGunParts(gun, null, -1, this.leftHand, this.leftHand);
+      if (gun.pump) gun.pump.position.z = gun.pumpRest;
+      return;
+    }
+    gun.group.updateMatrix();
+    const toGun = gun.group.matrix.clone().invert();
+    const rest = this.leftHand.clone().applyMatrix4(toGun);
+    const pouch = new THREE.Vector3(-0.24, -0.46, 0.06).applyMatrix4(toGun);
+    const plan = RELOAD_PLANS[reloadKind(p.weapon)];
+    const hand = handAt(plan, this.reloadT, gunAnchors(gun, rest, pouch));
+    const pump = poseGunParts(gun, plan, this.reloadT, hand, rest);
+    if (gun.pump) gun.pump.position.z = gun.pumpRest + pump;
+    // Le bras pivote à l'épaule pour que la main aille là où elle doit ; le chargeur, la ceinture sont plus près de
+    // l'épaule que la main au repos : le bras se replie d'autant (sans coude à plier, il raccourcit un peu)
+    const to = hand.applyMatrix4(gun.group.matrix).sub(this.leftShoulder);
+    const from = this.leftHand.clone().sub(this.leftShoulder);
+    arm.scale.setScalar(Math.min(1.05, Math.max(0.72, to.length() / Math.max(0.01, from.length()))));
+    arm.quaternion.setFromUnitVectors(from.normalize(), to.normalize());
   }
 
   /**

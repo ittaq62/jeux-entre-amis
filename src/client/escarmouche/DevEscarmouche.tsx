@@ -1,14 +1,14 @@
 // Une page réservée au développement (/dev/escarmouche) : une carte d'Escarmouche vue depuis des points fixes, avec des
 // soldats posés, l'arme en main et des effets qui partent tout seuls, sans serveur ni bots. Elle sert à comparer le rendu
 // avant et après un changement, aux mêmes endroits. ?carte=hameau|gare &vue=0..n &arme=fa &tel (qualité du téléphone)
-// &soldat (gros plan sur un soldat), &loin (les soldats à 25, 40 et 60 m).
+// &soldat (gros plan sur un soldat), &loin (les soldats à 25, 40 et 60 m), &recharges (ils rechargent en boucle).
 
 import { useEffect, useRef, useState } from "react";
 import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
 import type { CamoId } from "../../shared/games/escarmouche/camos.ts";
 import { isUniformId, type UniformId } from "../../shared/games/escarmouche/uniforms.ts";
 import { getMap, isMapId, type MapId } from "../../shared/games/escarmouche/maps.ts";
-import { isExtraId, isMuzzleId, WEAPON_IDS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { isExtraId, isMuzzleId, WEAPON_IDS, WEAPONS, type WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import { useSession } from "../stores/session.ts";
 import { EscScene } from "./scene/EscScene.ts";
 import { TEAM_KITS } from "./scene/soldiers.ts";
@@ -190,6 +190,8 @@ export function DevEscarmouche() {
       t += dt;
       spots.forEach((p, i) => {
         const w = world(p);
+        const held: WeaponId = i === 1 ? "pm" : i === 2 && closeUp ? "pistolet" : weapon;
+        const rl = WEAPONS[held].reload;
         scene.updateSoldier(
           i,
           {
@@ -205,10 +207,11 @@ export function DevEscarmouche() {
             ground: true,
             sprint: false,
             ads: i === 0,
-            reload: false,
+            // ?recharges : les soldats rechargent en boucle (le geste vu de dehors)
+            reload: params.has("recharges") && t % (rl + 0.8) < rl,
             // ?mort : ils tombent et se relèvent en boucle ; ?mort=fixe : ils restent à terre
             alive: !params.has("mort") || (params.get("mort") !== "fixe" && t % 4 < 1),
-            weapon: i === 1 ? "pm" : i === 2 && closeUp ? "pistolet" : weapon,
+            weapon: held,
             carrying: -1,
             shield: false,
             fall: [

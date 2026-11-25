@@ -4,8 +4,10 @@
 // et claque ; et les bruits, aux mêmes instants. Une seule table pour l'image et le son, en fraction du rechargement
 // (de 1,5 à 4,4 s selon l'arme).
 
+import * as THREE from "three";
 import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
 import type { EscSoundName } from "./escSound.ts";
+import type { Gun } from "./scene/guns.ts";
 
 export type ReloadKind = "mag" | "pistol" | "pump" | "double" | "revolver";
 
@@ -220,3 +222,108 @@ export function reloadKind(w: WeaponId): ReloadKind {
 
 /** Le volume de chaque bruit du rechargement (le froissement de la poche et les douilles, plus discrets) */
 export const RELOAD_VOLUME: Partial<Record<EscSoundName, number>> = { pouch: 0.35, brass: 0.3, "mag-tap": 0.45 };
+
+/** Où la main gauche attrape le chargeur (dans le repère de l'arme) */
+export function magGrip(gun: Gun): THREE.Vector3 {
+  if (!gun.mag) return new THREE.Vector3();
+  return gun.magRest.clone().add(gun.pistol ? new THREE.Vector3(-0.022, -0.095, 0.015) : new THREE.Vector3(-0.036, -0.085, 0));
+}
+
+/** De combien la main tire la culasse, ou la glissière d'un pistolet */
+export function boltPull(gun: Gun): number {
+  return gun.pistol ? 0.035 : 0.06;
+}
+
+/**
+ * Chaque endroit où va la main gauche, sur cette arme, dans le repère de l'arme : `rest`, sa place au repos ; `pouch`,
+ * la ceinture (hors de vue en première personne, à la hanche vue de dehors)
+ */
+export function gunAnchors(gun: Gun, rest: THREE.Vector3, pouch: THREE.Vector3): Record<Anchor, () => THREE.Vector3> {
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const magAt = gun.mag ? magGrip(gun) : rest.clone();
+  const pull = boltPull(gun);
+  return {
+    rest: () => rest.clone(),
+    pouch: () => pouch.clone(),
+    mag: () => magAt.clone(),
+    magDown: () => magAt.clone().add(V(0, -0.06, 0)),
+    magUp: () => magAt.clone().add(V(0, 0.016, 0)),
+    below: () => magAt.clone().add(V(-0.025, -0.13, 0.05)),
+    bolt: () => gun.boltAt.clone(),
+    boltBack: () => gun.boltAt.clone().add(V(0, 0, pull)),
+    boltOut: () => gun.boltAt.clone().add(V(-0.07, -0.03, 0.07)),
+    port: () => V(-0.012, -0.006, -0.08),
+    portBelow: () => V(-0.03, -0.1, -0.05),
+    portIn: () => V(-0.012, 0.01, -0.095),
+    pumpBack: () => rest.clone().add(V(0, 0, 0.09)),
+    hinge: () => V(-0.03, 0.02, -0.22),
+    hingeUp: () => V(-0.03, 0.07, -0.22),
+    chamber: () => V(-0.012, 0.1, -0.09),
+    chamberBelow: () => V(-0.05, -0.02, -0.03),
+    chamberIn: () => V(-0.012, 0.08, -0.09),
+    cyl: () => V(-0.045, 0.06, -0.05),
+    cylPush: () => V(-0.045, 0.06, -0.03),
+    cylBelow: () => V(-0.075, -0.05, 0.0),
+    cylFlick: () => V(-0.01, 0.08, -0.05),
+  };
+}
+
+/** La main gauche à ce moment du geste : d'un endroit au suivant, en douceur */
+export function handAt(plan: ReloadPlan, t: number, anchors: Record<Anchor, () => THREE.Vector3>): THREE.Vector3 {
+  const keys = plan.hand;
+  let k = 0;
+  while (k + 1 < keys.length - 1 && t >= keys[k + 1]![0]) k++;
+  const [t0, a0] = keys[k]!;
+  const [t1, a1] = keys[Math.min(k + 1, keys.length - 1)]!;
+  const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1;
+  return anchors[a0]().lerp(anchors[a1](), u * u * (3 - 2 * u));
+}
+
+/**
+ * Les pièces de l'arme pendant le geste (la main gauche en `hand`, dans le repère de l'arme) : le chargeur arraché,
+ * qui tombe, revient dans la main et s'enfonce ; la culasse tirée puis relâchée ; la pompe ; les canons ou le barillet.
+ * Rend le recul de la pompe (le reste est posé directement). `t` négatif : tout revient au repos.
+ */
+export function poseGunParts(gun: Gun, plan: ReloadPlan | null, t: number, hand: THREE.Vector3, rest: THREE.Vector3): number {
+  if (!plan || t < 0) {
+    if (gun.mag) {
+      gun.mag.position.copy(gun.magRest);
+      gun.mag.rotation.x = 0;
+      gun.mag.visible = true;
+    }
+    if (gun.hinge) gun.hinge.rotation[gun.hingeAxis] = 0;
+    if (gun.slide) gun.slide.position.z = gun.slideRest;
+    return 0;
+  }
+  const magAt = magGrip(gun);
+  const pull = boltPull(gun);
+  if (gun.mag && plan.mag) {
+    const m = plan.mag;
+    gun.mag.visible = t < m.gone || t >= m.back;
+    gun.mag.rotation.x = 0;
+    if (t >= m.grab && t < m.drop) gun.mag.position.copy(gun.magRest).add(hand).sub(magAt);
+    else if (t >= m.drop && t < m.gone) {
+      const f = (t - m.drop) / (m.gone - m.drop);
+      gun.mag.position.copy(gun.magRest).add(new THREE.Vector3(-0.01 * f, -0.06 - f * f * 0.6, 0.06 * f));
+      gun.mag.rotation.x = f * 0.9;
+    } else if (t >= m.back && t < m.seat) {
+      gun.mag.position.copy(gun.magRest).add(hand).sub(magAt);
+      gun.mag.rotation.x = 0.3 * (1 - Math.min(1, (t - m.back) / (m.seat - m.back)));
+    } else gun.mag.position.copy(gun.magRest);
+  }
+  if (gun.slide) {
+    let back = 0;
+    if (plan.bolt && t >= plan.bolt.grab && t < plan.bolt.release) back = Math.min(1, Math.max(0, (hand.z - gun.boltAt.z) / pull));
+    gun.slide.position.z = gun.slideRest + back * pull;
+  }
+  if (gun.hinge) {
+    const ease = (a: number, b: number) => {
+      const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
+      return x * x * (3 - 2 * x);
+    };
+    const open = ease(0.1, 0.24) - ease(0.76, 0.84);
+    gun.hinge.rotation[gun.hingeAxis] = gun.hingeAxis === "x" ? -open * 0.55 : open * 1.3;
+  }
+  if (plan.pump && t >= plan.pump.from && t <= plan.pump.to) return Math.min(0.09, Math.max(0, hand.z - rest.z));
+  return 0;
+}
