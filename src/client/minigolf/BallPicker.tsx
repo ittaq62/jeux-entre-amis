@@ -34,12 +34,36 @@ function saveLook(l: BallLook) {
   }
 }
 
+/**
+ * Les vignettes déjà faites, par couleur, motif et finesse : le salon et la boutique en montrent des dizaines, et
+ * chacune encodait sinon toute la carte de la balle (512×256) en image à chaque affichage
+ */
+const swatches = new Map<string, string>();
+
+function swatchUrl(look: BallLook, size: number): string {
+  // La vignette montre la moitié de la carte sur `size` points : au plus deux pixels par point, sans dépasser la carte
+  const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  const width = Math.min(512, Math.max(64, Math.ceil((2 * size * dpr) / 64) * 64));
+  const key = `${look.color}|${look.pattern}|${width}`;
+  let url = swatches.get(key);
+  if (!url) {
+    const img = patternTex(look).image as HTMLCanvasElement;
+    const c = document.createElement("canvas");
+    c.width = width;
+    c.height = width / 2;
+    const g = c.getContext("2d")!;
+    // Réduite proprement (sans moiré sur les motifs fins, comme la mosaïque disco)
+    g.imageSmoothingQuality = "high";
+    g.drawImage(img, 0, 0, c.width, c.height);
+    url = c.toDataURL();
+    swatches.set(key, url);
+  }
+  return url;
+}
+
 /** Une balle dessinée (sa carte de couleur posée sur un disque ombré) */
 export function BallSwatch({ look, size = 56 }: { look: BallLook; size?: number }) {
-  const url = useMemo(() => {
-    const img = patternTex(look).image as HTMLCanvasElement;
-    return img.toDataURL();
-  }, [look]);
+  const url = useMemo(() => swatchUrl(look, size), [look.color, look.pattern, size]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     // Son style tient tout seul : l'aperçu sert aussi à la boutique, où la feuille du minigolf n'est pas chargée
     <span
