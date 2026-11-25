@@ -931,6 +931,10 @@ function gare(): GameMap {
   b.box(-8, 3.6, -1.8, 8, 3.8, 1.8, "metal");
   b.box(-4.5, 0.4, -0.3, -2.5, 0.9, 0.3, "bois");
   b.box(2.5, 0.4, -0.3, 4.5, 0.9, 0.3, "bois");
+  // Deux wagons couverts le long du quai, un de chaque côté : ils cachent le milieu des drapeaux A et C, d'où l'on
+  // abattait en diagonale qui entrait dans le cercle
+  boxcar(b, 2.5, 12.5, -6);
+  boxcar(b, -12.5, -2.5, 6);
   b.box(-1.5, 5, -20.4, 1.5, 5.3, 20.4, "metal");
   b.box(-1.5, 5.3, -20.4, -1.35, 6.4, 20.4, "metal");
   b.box(1.35, 5.3, -20.4, 1.5, 6.4, 20.4, "metal");
@@ -1075,7 +1079,7 @@ function port(): GameMap {
   const b = new Builder();
   b.box(-48, -1, -30, 48, 0, 30, "beton");
   fence(b, -48, -30, 48, 30);
-  // Le grand portique au milieu : quatre pieds, deux poutres, ses rails ; deux caisses dans la zone
+  // Le grand portique au milieu : quatre pieds, deux poutres, ses rails ; deux conteneurs dans la zone
   for (const [x, z] of [
     [-7, -5],
     [7, -5],
@@ -1088,8 +1092,11 @@ function port(): GameMap {
   b.add({ k: "crane", x: 0, z: 0, w: 14, d: 10, h: 16 });
   b.add({ k: "rail", x0: -26, x1: 26, z: -5 });
   b.add({ k: "rail", x0: -26, x1: 26, z: 5 });
-  b.crate(-3, 2.5);
-  b.crate(3, -2.5);
+  // Deux conteneurs garés sous le portique, décalés de part et d'autre du drapeau : ils coupent la vue d'un bout du quai
+  // à l'autre. Sans eux (il n'y avait là que deux caisses), à armes égales, celui qui entrait dans le cercle du milieu
+  // tombait aussitôt, et le drapeau B restait neutre
+  b.container(-3.66, 0, "z", ORANGE);
+  b.container(1.22, -6.06, "z", GREEN);
   // La mer au nord, au pied du mur du quai
   b.add({ k: "water", x0: -300, z0: 30, x1: 300, z1: 320, y: -1.3 });
   b.add({ k: "quay", x0: -48, x1: 48, z: 30, y0: -2.5, y1: 0 });
