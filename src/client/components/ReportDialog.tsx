@@ -26,6 +26,13 @@ const PROMPTS: Record<ReportKind | "", string> = {
   idea: "Ce qui rendrait le jeu meilleur…",
 };
 
+/** Ouverte depuis une page du site (le menu du compte), hors d'une partie */
+const SITE_PROMPTS: Record<ReportKind | "", string> = {
+  ...PROMPTS,
+  problem: "Ce qui t'a gêné sur le site…",
+  idea: "Ce qui rendrait le site meilleur…",
+};
+
 /** Ce que le navigateur dit de l'appareil, au moment d'ouvrir la fenêtre */
 function readDevice(): ReportDevice {
   const nav = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
@@ -42,7 +49,7 @@ function whereLine(context: ReportContext): string {
   return [what, context.code && `table ${context.code}`, context.tour && `tournée ${context.tour}`].filter(Boolean).join(", ");
 }
 
-/** La fenêtre « Signaler un problème », ouverte depuis l'écran de fin d'une partie ou d'une tournée. */
+/** La fenêtre « Signaler un problème », ouverte depuis une partie, sa fin, une tournée, ou le menu du compte. */
 export function ReportDialog() {
   const context = useReport((s) => s.context);
   const close = useReport((s) => s.close);
@@ -82,7 +89,10 @@ export function ReportDialog() {
     <Modal open={context !== null} onClose={close} title={sent ? "Merci !" : "Signaler un problème"}>
       {sent ? (
         <div className="report-thanks">
-          <p>Ton signalement est bien arrivé. L'administrateur du site le lira, et s'en servira pour corriger ou améliorer le jeu.</p>
+          <p>
+            Ton signalement est bien arrivé. L'administrateur du site le lira, et s'en servira pour corriger ou améliorer{" "}
+            {context?.game ? "le jeu" : "le site"}.
+          </p>
           <button className="btn btn-primary" onClick={close} autoFocus>
             Fermer
           </button>
@@ -101,7 +111,7 @@ export function ReportDialog() {
                 rows={5}
                 disabled={busy}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={PROMPTS[kind]}
+                placeholder={(context.game ? PROMPTS : SITE_PROMPTS)[kind]}
               />
             </label>
             <p className="report-joined">

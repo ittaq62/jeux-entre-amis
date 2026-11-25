@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useHub } from "../stores/hub.ts";
 import { useSession } from "../stores/session.ts";
 import { useShop } from "../stores/shop.ts";
-import { Avatar } from "./Avatar.tsx";
+import { AccountMenu } from "./AccountMenu.tsx";
 import { Icon } from "./Icon.tsx";
 import { SoundButton } from "./SoundSettings.tsx";
 import { Logo } from "./ui.tsx";
@@ -57,9 +57,8 @@ export function AppHeader() {
         </Link>
         {/* Le son de tous les jeux : coupé ou non, et les volumes (général, effets, musique et ambiance) */}
         <SoundButton className="nav-sound" />
-        <Link href={`/joueur/${encodeURIComponent(user.pseudo)}`} className="nav-avatar" aria-label="Mon profil">
-          <Avatar avatar={user.avatar} userId={user.id} photo={user.photo} size={34} />
-        </Link>
+        {/* L'avatar ouvre le menu du compte : profil, personnage, album, réglages, signaler, se déconnecter */}
+        <AccountMenu />
       </nav>
     </header>
   );
