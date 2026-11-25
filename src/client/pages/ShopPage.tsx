@@ -236,7 +236,8 @@ export function ShopPage() {
 
         <NavalSkinDefs id={defs} />
 
-        {shopGames.length > 0 && (
+        {/* Un seul jeu ouvert : la page est courte, pas besoin de choisir */}
+        {shopGames.length > 1 && (
           <div className="options shop-filter" role="radiogroup" aria-label="Rayons de la boutique">
             {(["tout", "perso", ...shopGames] as const).map((g) => (
               <button key={g} type="button" role="radio" aria-checked={only === g} aria-pressed={only === g} onClick={() => setOnly(g)}>
