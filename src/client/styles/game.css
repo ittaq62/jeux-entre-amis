@@ -581,6 +581,17 @@ html:has(.bolides-root) body {
   transition: border-color 0.3s;
 }
 
+/* Qui regarde : une simple barre d'état, à la place de la main */
+.my-zone.is-watching {
+  border-top-color: var(--line);
+  background: rgba(3, 12, 8, 0.45);
+  padding-bottom: calc(8px + var(--safe-bottom));
+}
+
+.my-zone.is-watching .my-status-text {
+  color: var(--text-soft);
+}
+
 .my-zone.is-turn {
   border-top-color: rgba(226, 189, 110, 0.35);
   background: linear-gradient(0deg, rgba(226, 189, 110, 0.14), transparent);

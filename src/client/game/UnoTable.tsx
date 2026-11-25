@@ -273,7 +273,7 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
 
   let status: string;
   if (g.phase !== "playing") status = "";
-  else if (!me) status = `Tu regardes la partie · au tour de ${current?.name ?? "…"}${currentAway}`;
+  else if (!me || !myPlayer) status = `Tu regardes la partie · au tour de ${current?.name ?? "…"}${currentAway}`;
   else if (mySeat?.autoplay) status = "Un bot joue à ta place";
   else if (vulnerable === me && g.canUno) status = "Une seule carte : crie UNO avant qu'on te dénonce !";
   else if (why) status = why;
@@ -488,6 +488,27 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
             <Center game={g} pileWidth={pileW} canDraw={canDraw} onDraw={() => act({ type: "draw" })} />
           </div>
         </div>
+
+        {/* Qui regarde (ou s'est assis pour la partie suivante) : la ligne d'état seule, sans main ni boutons */}
+        {!myPlayer && g.phase === "playing" && (
+          <div className="my-zone is-watching">
+            <div className="my-bar">
+              <div className="my-status">
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={status}
+                    className="my-status-text"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                  >
+                    {status}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        )}
 
         {me && myPlayer && (
           <div className={`my-zone ${myTurn ? "is-turn" : ""}`}>
