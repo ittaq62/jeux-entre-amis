@@ -45,9 +45,28 @@ function saveLook(l: BowlingLook) {
   }
 }
 
+/**
+ * Les vignettes déjà dessinées, par couleur, motif et finesse : la boutique et le salon en montrent des dizaines, et
+ * chacune demande sinon tout le motif de la boule, pixel par pixel, puis son image (au téléphone, plusieurs secondes)
+ */
+const swatches = new Map<string, string>();
+
+function swatchUrl(look: Pick<BowlingLook, "color" | "pattern">, size: number): string {
+  // La vignette montre la moitié du motif sur `size` points : assez de pixels pour l'écran, sans dépasser la boule en jeu
+  const dpr = typeof window === "undefined" ? 1 : Math.min(3, window.devicePixelRatio || 1);
+  const width = Math.min(512, Math.max(64, Math.ceil((2 * size * dpr) / 64) * 64));
+  const key = `${look.color}|${look.pattern}|${width}`;
+  let url = swatches.get(key);
+  if (!url) {
+    url = ballCanvas(look, width).toDataURL();
+    swatches.set(key, url);
+  }
+  return url;
+}
+
 /** Une boule dessinée (son motif posé sur un disque ombré et verni) */
 export function BallSwatch({ look, size = 56 }: { look: Pick<BowlingLook, "color" | "pattern">; size?: number }) {
-  const url = useMemo(() => ballCanvas(look).toDataURL(), [look.color, look.pattern]); // eslint-disable-line react-hooks/exhaustive-deps
+  const url = useMemo(() => swatchUrl(look, size), [look.color, look.pattern, size]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <span
       className="bw-swatch"

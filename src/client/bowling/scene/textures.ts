@@ -240,8 +240,8 @@ export function approachMarks(length: number): THREE.CanvasTexture {
 // Les boules
 // ---------------------------------------------------------------------------
 
-const BALL_W = 512,
-  BALL_H = 256;
+/** La largeur du motif d'une boule en jeu (il est deux fois plus large que haut) */
+const BALL_W = 512;
 
 const hexRgb = (h: string): [number, number, number] => {
   const n = parseInt(h.slice(1), 16);
@@ -249,13 +249,19 @@ const hexRgb = (h: string): [number, number, number] => {
 };
 const mix = (a: number[], b: number[], k: number) => a.map((v, i) => v + (b[i]! - v) * k);
 
-/** Le dessin d'une boule, déplié comme une carte du monde (sa couleur, son motif) */
-export function ballCanvas(look: Pick<BowlingLook, "color" | "pattern">): HTMLCanvasElement {
+/**
+ * Le dessin d'une boule, déplié comme une carte du monde (sa couleur, son motif). `width` : sa finesse (512 pour la boule
+ * en jeu ; moins pour une vignette, qui montre la même image : tout est calculé sur la sphère, pas au pixel)
+ */
+export function ballCanvas(look: Pick<BowlingLook, "color" | "pattern">, width = BALL_W): HTMLCanvasElement {
+  const W = width,
+    H = Math.round(width / 2),
+    k = W / BALL_W;
   const col = colorOf(look.color);
   const A = hexRgb(col.hex),
     B = hexRgb(col.accent);
-  const [c, g] = canvas(BALL_W, BALL_H);
-  const img = g.createImageData(BALL_W, BALL_H);
+  const [c, g] = canvas(W, H);
+  const img = g.createImageData(W, H);
   const n1 = valueNoise(11 + look.color.length * 7, 64);
   const n2 = valueNoise(29, 64);
   const r = seeded(look.color.length * 131 + look.pattern.length);
@@ -265,11 +271,11 @@ export function ballCanvas(look: Pick<BowlingLook, "color" | "pattern">): HTMLCa
     img.data[i + 2] = Math.max(0, Math.min(255, rgb[2]!));
     img.data[i + 3] = 255;
   };
-  for (let y = 0; y < BALL_H; y++) {
-    const lat = (y / BALL_H) * Math.PI;
-    for (let x = 0; x < BALL_W; x++) {
-      const i = (y * BALL_W + x) * 4;
-      const u = x / BALL_W;
+  for (let y = 0; y < H; y++) {
+    const lat = (y / H) * Math.PI;
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const u = x / W;
       // Coordonnées sur la sphère (pour un bruit sans couture)
       const sx = Math.cos(u * Math.PI * 2) * Math.sin(lat),
         sz = Math.sin(u * Math.PI * 2) * Math.sin(lat),
@@ -292,7 +298,7 @@ export function ballCanvas(look: Pick<BowlingLook, "color" | "pattern">): HTMLCa
         }
         case "damier": {
           const cu = Math.floor(u * 12),
-            cv = Math.floor((y / BALL_H) * 6);
+            cv = Math.floor((y / H) * 6);
           rgb = (cu + cv) % 2 ? A : B;
           break;
         }
@@ -359,23 +365,25 @@ export function ballCanvas(look: Pick<BowlingLook, "color" | "pattern">): HTMLCa
   }
   g.putImageData(img, 0, 0);
   if (look.pattern === "galaxie") {
-    for (let i = 0; i < 260; i++) {
+    // Autant d'étoiles pour la même surface de ciel, quelle que soit la finesse
+    const stars = Math.max(40, Math.round(260 * k * k));
+    for (let i = 0; i < stars; i++) {
       g.fillStyle = `rgba(255,255,255,${0.4 + r() * 0.6})`;
-      g.fillRect(r() * BALL_W, r() * BALL_H, r() < 0.1 ? 2 : 1, r() < 0.1 ? 2 : 1);
+      g.fillRect(r() * W, r() * H, r() < 0.1 ? 2 : 1, r() < 0.1 ? 2 : 1);
     }
   }
   if (look.pattern === "billard") {
     // Le rond blanc et son numéro, de chaque côté
-    for (const cx of [BALL_W * 0.25, BALL_W * 0.75]) {
+    for (const cx of [W * 0.25, W * 0.75]) {
       g.fillStyle = "#f6f2e6";
       g.beginPath();
-      g.ellipse(cx, BALL_H / 2, 34, 30, 0, 0, Math.PI * 2);
+      g.ellipse(cx, H / 2, 34 * k, 30 * k, 0, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = "#151515";
-      g.font = "bold 40px sans-serif";
+      g.font = `bold ${Math.round(40 * k)}px sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText("8", cx, BALL_H / 2 + 2);
+      g.fillText("8", cx, H / 2 + 2 * k);
     }
   }
   return c;
