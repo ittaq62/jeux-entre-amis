@@ -34,7 +34,7 @@ import type { NavalMode, NavalSettings, NavalStats } from "../shared/games/naval
 import type { FriendEntry, GameId, Me, PublicUser, TableGame } from "../shared/protocol.ts";
 import type { TourGameLine, TourGameResult, TourSettings } from "../shared/tour.ts";
 import type { PlayerStats, UnoSettings } from "../shared/games/uno/engine.ts";
-import { rankingPoints, sharedRanks, wonGame } from "../shared/ranking.ts";
+import { gameCredit, sharedRanks, wonGame } from "../shared/ranking.ts";
 import { usableWear } from "../shared/shop.ts";
 import type { UserRow } from "./auth.ts";
 import { albumSummary } from "./cards.ts";
@@ -612,8 +612,10 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
   const unlocked: Record<string, string[]> = {};
   for (const p of humans) {
     const prev = byUser.get(p.userId!);
-    // Une égalité générale (tout le monde premier) n'est la victoire de personne
-    const won = wonGame(rec.players, p);
+    // Une égalité générale (tout le monde premier) n'est la victoire de personne ; un joueur parti ne touche rien de ce que
+    // le bot a gagné pour lui (il garde ses pertes d'Elo)
+    const credit = gameCredit(rec.players, p, deltas[p.userId!] ?? 0);
+    const won = credit.won;
     const played = (prev?.played ?? 0) + 1;
     const streak = won ? (prev?.streak ?? 0) + 1 : 0;
     let totals: object;
@@ -681,7 +683,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       totals = mergeNavalTotals(prev?.totals ?? null, stats);
       earnedIds = earnedNavalAchievements({ won, mode: rec.mode, afloat: stats.afloat, out: p.eliminated, stats, played });
     }
-    const delta = deltas[p.userId!] ?? 0;
+    const delta = credit.eloDelta;
     elo[p.userId!] = { elo: ratingOf(p) + delta, delta };
     statements.push(
       db
@@ -694,7 +696,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
           p.userId,
           played,
           (prev?.won ?? 0) + (won ? 1 : 0),
-          (prev?.points ?? 0) + rankingPoints(rec.players, p),
+          (prev?.points ?? 0) + credit.points,
           streak,
           Math.max(prev?.best_streak ?? 0, streak),
           JSON.stringify(totals),
@@ -703,7 +705,7 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
           elo[p.userId!]!.elo,
         ),
     );
-    const earned = earnedIds.filter((id) => !owned.has(`${p.userId}:${id}`));
+    const earned = credit.achievements ? earnedIds.filter((id) => !owned.has(`${p.userId}:${id}`)) : [];
     if (earned.length > 0) {
       unlocked[p.userId!] = earned;
       for (const id of earned) {

@@ -49,3 +49,17 @@ export function sharedRanks<T>(rows: readonly T[], key: (row: T) => string): num
   });
   return ranks;
 }
+
+/**
+ * Ce qu'une partie rapporte à un joueur. Un joueur parti avant la fin (un bot finissait pour lui) ne touche rien de ce que
+ * le bot a gagné à sa place : ni victoire, ni points, ni succès, et sa série de victoires retombe. Il garde les pertes
+ * d'Elo, pour qu'on ne fuie pas une défaite, mais pas les gains. La partie compte quand même comme jouée.
+ */
+export function gameCredit(
+  players: RankedPlayer[],
+  me: RankedPlayer & { absent?: boolean },
+  eloDelta: number,
+): { won: boolean; points: number; eloDelta: number; achievements: boolean } {
+  if (me.absent) return { won: false, points: 0, eloDelta: Math.min(0, eloDelta), achievements: false };
+  return { won: wonGame(players, me), points: rankingPoints(players, me), eloDelta, achievements: true };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDraw, rankingPoints, sharedRanks, wonGame, type RankedPlayer } from "./ranking.ts";
+import { gameCredit, isDraw, rankingPoints, sharedRanks, wonGame, type RankedPlayer } from "./ranking.ts";
 
 const table = (...kinds: ("h" | "b")[]): RankedPlayer[] => kinds.map((k, i) => ({ rank: i + 1, isBot: k === "b" }));
 
@@ -86,5 +86,28 @@ describe("les places du classement", () => {
   it("des chiffres différents donnent des places qui se suivent", () => {
     expect(sharedRanks([5, 4, 3], String)).toEqual([1, 2, 3]);
     expect(sharedRanks([], String)).toEqual([]);
+  });
+});
+
+describe("ce que rapporte une partie", () => {
+  const table: (RankedPlayer & { absent?: boolean })[] = [
+    { rank: 1, isBot: false, absent: true },
+    { rank: 2, isBot: false },
+    { rank: 3, isBot: true },
+  ];
+
+  it("un joueur resté à la table touche sa victoire, ses points, son Elo et ses succès", () => {
+    const present = { ...table[0]!, absent: false };
+    const players = [present, table[1]!, table[2]!];
+    expect(gameCredit(players, present, 18)).toEqual({ won: true, points: 30 + 10 + 5, eloDelta: 18, achievements: true });
+  });
+
+  it("un joueur parti ne touche rien de ce que le bot a gagné pour lui", () => {
+    expect(gameCredit(table, table[0]!, 18)).toEqual({ won: false, points: 0, eloDelta: 0, achievements: false });
+  });
+
+  it("mais il garde ses pertes d'Elo : partir ne fait pas fuir une défaite", () => {
+    const last = { rank: 3, isBot: false, absent: true };
+    expect(gameCredit([table[1]!, table[2]!, last], last, -21).eloDelta).toBe(-21);
   });
 });
