@@ -80,6 +80,11 @@
   color: var(--gold-light);
 }
 
+/* « Départ dans 18 s » : l'espace seule, à 18 px devant un chiffre de 26 px d'une autre police, ne se voyait presque pas */
+.tour-countdown .countdown-num {
+  margin-left: 0.2em;
+}
+
 .tour-notice {
   color: var(--gold-light);
   font-size: 15px !important;
