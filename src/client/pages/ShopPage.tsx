@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { SKINS as KART_SKINS, VEHICLES, type SkinId as KartSkinId, type VehicleId } from "../../shared/games/bolides/garage.ts";
 import type { TokenId } from "../../shared/games/capitale/tokens.ts";
@@ -82,6 +82,37 @@ const SECTIONS: { kind: ShopKind; game: GameId; note: string }[] = [
   { kind: "bileffet", game: "billard", note: "Ce qui éclate à l'écran sur tes beaux coups" },
 ];
 
+/**
+ * Une vignette ne se dessine qu'à l'approche de l'écran : celles du billard et du bowling se peignent en JavaScript,
+ * et la boutique entière en compte plus de deux cents. La case garde sa taille en attendant (shop.css).
+ */
+function NearLook({ render }: { render: () => ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    const el = ref.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), {
+      rootMargin: "300px 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  return (
+    <span ref={ref} className="shop-look is-lazy">
+      {near ? render() : null}
+    </span>
+  );
+}
+
+/** Le pion de Capitale : il demande ses images (une scène 3D les photographie) au moment où il s'affiche */
+function TokenThumb({ src, size, onNeed }: { src: string | undefined; size: number; onNeed: () => void }) {
+  useEffect(() => {
+    if (!src) onNeed();
+  }, [src, onNeed]);
+  return src ? <img src={src} alt="" width={size} height={size} draggable={false} /> : null;
+}
+
 /** Tout ce qui s'achète avec ses points, dans l'ordre qu'on veut */
 export function ShopPage() {
   const user = useSession((s) => s.user);
@@ -92,7 +123,10 @@ export function ShopPage() {
   const [only, setOnly] = useState<"tout" | "perso" | GameId>("tout");
   const defs = `shop${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const hasCapitale = games.includes("capitale");
-  const thumbs = useMemo(() => (hasCapitale ? tokenThumbnails(PAWN_COLORS[0]!) : null), [hasCapitale]);
+  // Les photos des pions coûtent une scène 3D : seulement quand un pion s'affiche
+  const [wantThumbs, setWantThumbs] = useState(false);
+  const needThumbs = useMemo(() => () => setWantThumbs(true), []);
+  const thumbs = useMemo(() => (hasCapitale && wantThumbs ? tokenThumbnails(PAWN_COLORS[0]!) : null), [hasCapitale, wantThumbs]);
   // Les jeux qui ont un rayon, dans l'ordre de la boutique
   const shopGames = SECTIONS.map((s) => s.game).filter((g, i, all) => all.indexOf(g) === i && games.includes(g));
 
@@ -103,10 +137,7 @@ export function ShopPage() {
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} />;
     if (item.kind.startsWith("bil")) return <BillardShopLook kind={item.kind} id={item.ref} />;
     if (item.kind === "uno") return <CardBack width={46} skin={item.ref as BackId} />;
-    if (item.kind === "token") {
-      const src = thumbs?.[item.ref as TokenId];
-      return src ? <img src={src} alt="" width={64} height={64} draggable={false} /> : null;
-    }
+    if (item.kind === "token") return <TokenThumb src={thumbs?.[item.ref as TokenId]} size={64} onNeed={needThumbs} />;
     // Les véhicules : leur photo de l'album
     if (item.kind === "vehicle")
       return (
@@ -163,10 +194,7 @@ export function ShopPage() {
       );
     }
     if (item.kind === "uno") return <CardBack width={120} skin={item.ref as BackId} />;
-    if (item.kind === "token") {
-      const src = thumbs?.[item.ref as TokenId];
-      return src ? <img src={src} alt="" width={128} height={128} draggable={false} /> : null;
-    }
+    if (item.kind === "token") return <TokenThumb src={thumbs?.[item.ref as TokenId]} size={128} onNeed={needThumbs} />;
     if (item.kind === "golfmotif") return <BallSwatch look={{ color: "bleue", pattern: item.ref, trail: "fil" }} size={140} />;
     if (item.kind === "golftrace") return <TrailSwatch trail={item.ref} size={110} />;
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} big />;
@@ -276,7 +304,7 @@ export function ShopPage() {
                             disabled={mine}
                             onClick={() => setBuying(item)}
                           >
-                            {look(item) && <span className="shop-look">{look(item)}</span>}
+                            <NearLook render={() => look(item)} />
                             <span className="shop-name">{item.name}</span>
                             {blurb(item) && <span className="shop-blurb">{blurb(item)}</span>}
                             {mine ? (

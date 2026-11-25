@@ -37,6 +37,18 @@
   color: var(--ok);
 }
 
+/* Une vignette pas encore dessinée garde la place d'une vignette : sans hauteur, toutes les cases vides seraient
+   « près de l'écran » en même temps et tout se dessinerait d'un coup */
+.shop-look.is-lazy {
+  min-height: 64px;
+}
+
+/* Les jeux plus bas dans la page ne se mettent en page qu'à leur approche */
+.shop-game {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 700px;
+}
+
 /* Les véhicules de Bolides : leur photo de l'album */
 .shop-vehicle {
   display: block;
