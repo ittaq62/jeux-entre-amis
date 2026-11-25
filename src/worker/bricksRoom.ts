@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
-import { BOT_PACE, botPlacement } from "../shared/games/bricks/bot.ts";
+import { BOT_PACE, botPlacement, rushOf } from "../shared/games/bricks/bot.ts";
 import {
   COLS,
   DEFAULT_SETTINGS,
@@ -1361,7 +1361,9 @@ export class BricksRoom extends DurableObject<Env> {
     if (p.koUntil && now < p.koUntil) return this.startBot(id, p.koUntil - now + 200);
     if (seat.kind === "human") p.assisted = true;
     const level = this.botLevel(seat);
-    const placement = botPlacement(p.board, level, m.settings.hold, m);
+    // Une chute très rapide presse le bot comme un joueur : il rate davantage ses poses
+    const rush = rushOf(ROWS * gravityMs(now - m.round.startAt, m.settings.speedUp));
+    const placement = botPlacement(p.board, level, m.settings.hold, m, rush);
     const res = place(p.board, placement, Number.MAX_SAFE_INTEGER, { hold: m.settings.hold, strict: false });
     let structural: boolean;
     if (res.ok) structural = this.afterPlacement(p, res, now);

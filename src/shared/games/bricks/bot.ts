@@ -152,8 +152,21 @@ function evaluate(board: PlayerBoard, piece: Active, kicks: Set<number> | undefi
 }
 
 /** La pose que joue un bot pour la pièce en cours. */
-export function botPlacement(board: PlayerBoard, level: BotLevel, holdAllowed: boolean, rng: RngHolder): Placement {
+/** Sous une chute très rapide, la part de poses ratées en plus (comme un joueur pressé) selon le niveau */
+const RUSH_BLUNDER: Record<BotLevel, number> = { apprenti: 0.45, confirme: 0.3, expert: 0.18 };
+
+/**
+ * À quel point la chute presse : 0 tant qu'une pièce met plus de 3 s à tomber toute seule, 1 quand elle tombe en moins
+ * d'une seconde. Un joueur se trompe davantage quand ça va vite ; le bot aussi, sinon une longue manche accélérée
+ * (dernier debout) tournait à son avantage.
+ */
+export function rushOf(fallMs: number): number {
+  return Math.max(0, Math.min(1, (3000 - fallMs) / 2200));
+}
+
+export function botPlacement(board: PlayerBoard, level: BotLevel, holdAllowed: boolean, rng: RngHolder, rush = 0): Placement {
   const w = WEIGHTS[level];
+  const blunder = w.blunder + rush * RUSH_BLUNDER[level];
   const candidates: Candidate[] = [];
   for (const { piece, byRotation } of landings(board.grid, board.current))
     candidates.push(evaluate(board, piece, byRotation, false, w, rng));
@@ -168,6 +181,6 @@ export function botPlacement(board: PlayerBoard, level: BotLevel, holdAllowed: b
     // Plus aucune place : la pièce tombe là où elle apparaît, c'est le K.O.
     return { type: board.current, x: 3, y: board.current === "I" ? 1 : 2, rot: 0, hold: false, lastRotation: false, kick: 0 };
   }
-  if (w.blunder > 0 && random(rng) < w.blunder) return candidates[Math.min(candidates.length - 1, Math.floor(random(rng) * 6))]!.placement;
+  if (blunder > 0 && random(rng) < blunder) return candidates[Math.min(candidates.length - 1, Math.floor(random(rng) * 6))]!.placement;
   return candidates[0]!.placement;
 }
