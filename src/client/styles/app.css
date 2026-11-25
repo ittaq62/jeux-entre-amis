@@ -462,6 +462,25 @@ button.nav-avatar[aria-expanded="true"] {
   background: var(--line-soft);
 }
 
+/* Le menu du compte et le réglage du son tiennent dans l'écran, même un téléphone couché (375 px de haut) */
+.account-pop,
+.sound-pop {
+  max-height: calc(100dvh - 72px - var(--safe-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-height: 480px) {
+  .account-pop-who {
+    display: none;
+  }
+
+  .account-pop .menu-item {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
 .page-title {
   font-size: 20px;
 }
