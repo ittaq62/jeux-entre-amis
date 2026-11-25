@@ -7,26 +7,94 @@ import {
   nextIndex,
   playerIndex,
   type UnoAction,
+  type UnoBotLevel,
   type UnoState,
 } from "./engine.ts";
 import { random, type RngHolder } from "../../rng.ts";
+
+/** Ce qui distingue les niveaux : l'attention (UNO, dénonciation), le flair (contestation) et le calcul */
+interface UnoBotStyle {
+  /** La chance de poser une carte qui va, au hasard, sans réfléchir */
+  careless: number;
+  /** La chance de crier UNO avant de poser son avant-dernière carte (UNO d'avance permis) */
+  unoEarly: number;
+  /** Sans UNO d'avance, la chance de le crier une fois la carte posée */
+  unoAfter: number;
+  /** Avec UNO d'avance, la chance de se rattraper après un oubli */
+  unoAfterLate: number;
+  /** La chance de dénoncer un oubli, et dans quel délai */
+  catchChance: number;
+  catchDelay: [number, number];
+  /** Le flair pour contester un +4 */
+  suspicion: number;
+  /** Le suivant est en danger à partir de ce nombre de cartes */
+  dangerAt: number;
+  /** Garde ses cartes « + » et « passe » pour se défendre, tant que personne n'est près de finir */
+  keepsDefence: boolean;
+}
+
+export const UNO_BOT_STYLE: Record<UnoBotLevel, UnoBotStyle> = {
+  facile: {
+    careless: 0.6,
+    unoEarly: 0.7,
+    unoAfter: 0.72,
+    unoAfterLate: 0.35,
+    catchChance: 0.35,
+    catchDelay: [1800, 3600],
+    suspicion: 0.6,
+    dangerAt: 1,
+    keepsDefence: false,
+  },
+  moyen: {
+    careless: 0,
+    unoEarly: 0.88,
+    unoAfter: 0.88,
+    unoAfterLate: 0.5,
+    catchChance: 0.7,
+    catchDelay: [1100, 2800],
+    suspicion: 1,
+    dangerAt: 2,
+    keepsDefence: false,
+  },
+  fort: {
+    careless: 0,
+    unoEarly: 0.98,
+    unoAfter: 0.97,
+    unoAfterLate: 0.8,
+    catchChance: 0.92,
+    catchDelay: [750, 1900],
+    suspicion: 1.3,
+    dangerAt: 3,
+    keepsDefence: true,
+  },
+};
+
+const styleOf = (level: UnoBotLevel | undefined): UnoBotStyle => UNO_BOT_STYLE[level ?? "moyen"] ?? UNO_BOT_STYLE.moyen;
 
 /**
  * Choisit les actions d'un bot pour son tour (ou pour un joueur absent).
  * Le bot ne voit que sa main et le nombre de cartes des autres, comme un humain. En équipe (`partners` : les
  * ids de ses coéquipiers), il évite de frapper son partenaire et ne lui prend pas sa main.
  */
-export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners: ReadonlySet<string> = new Set()): UnoAction[] {
+export function botTurn(
+  s: UnoState,
+  playerId: string,
+  rng: RngHolder,
+  partners: ReadonlySet<string> = new Set(),
+  level: UnoBotLevel = "moyen",
+): UnoAction[] {
   const p = playerIndex(s, playerId);
   if (p < 0 || s.phase !== "playing" || s.turn !== p) return [];
   const me = s.players[p]!;
+  const style = styleOf(level);
+  const withUno = (s: UnoState, p: number, actions: UnoAction[], rng: RngHolder) => withUnoCall(s, p, actions, rng, style);
 
   if (s.roulette) return [{ type: "roulette", color: leastLikelyColor(me.hand, rng) }];
 
   if (s.challenge) {
     const accused = s.players[s.challenge.by]!;
     // Plus l'accuse a de cartes, plus il est probable qu'il avait la couleur
-    const suspicion = accused.hand.length >= 6 ? 0.45 : accused.hand.length >= 3 ? 0.25 : 0.1;
+    const suspicion = (accused.hand.length >= 6 ? 0.45 : accused.hand.length >= 3 ? 0.25 : 0.1) * style.suspicion;
     const stack = me.hand.filter((c) => canPlayCard(s, p, c));
     if (stack.length > 0) return withUno(s, p, playAction(s, p, stack[0]!, rng, partners), rng);
     return random(rng) < suspicion ? [{ type: "challenge" }] : [{ type: "draw" }];
@@ -56,7 +124,9 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners:
   if (!rules.mustPlay && playable.every(badZero)) return [{ type: "draw" }];
   const sensible = playable.filter((c) => !badZero(c));
 
-  const choice = pickCard(s, p, sensible.length > 0 ? sensible : playable, rng, partners);
+  const pool = sensible.length > 0 ? sensible : playable;
+  // Le bot facile pose souvent la première carte qui va, sans calcul
+  const choice = random(rng) < style.careless ? pool[Math.floor(random(rng) * pool.length)]! : pickCard(s, p, pool, rng, partners, style);
   return withUno(s, p, playAction(s, p, choice, rng, partners), rng);
 }
 
@@ -64,11 +134,11 @@ export function botTurn(s: UnoState, playerId: string, rng: RngHolder, partners:
  * Avant de poser son avant-derniere carte, le bot crie UNO… la plupart du temps. Sans UNO d'avance, il attend d'avoir
  * posé sa carte : c'est la salle qui le fait crier un peu après (voir `botUnoDelay`).
  */
-function withUno(s: UnoState, p: number, actions: UnoAction[], rng: RngHolder): UnoAction[] {
+function withUnoCall(s: UnoState, p: number, actions: UnoAction[], rng: RngHolder, style: UnoBotStyle): UnoAction[] {
   if (!effectiveRules(s.settings).earlyUno) return actions;
   const me = s.players[p]!;
   const willHaveOne = me.hand.length === 2;
-  if (willHaveOne && !me.declaredUno && random(rng) < 0.88) return [{ type: "uno" }, ...actions];
+  if (willHaveOne && !me.declaredUno && random(rng) < style.unoEarly) return [{ type: "uno" }, ...actions];
   return actions;
 }
 
@@ -98,12 +168,14 @@ function zeroLoss(s: UnoState, p: number): number {
   return giver.hand.length - (s.players[p]!.hand.length - 1);
 }
 
-function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, partners: ReadonlySet<string>): Card {
+function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, partners: ReadonlySet<string>, style: UnoBotStyle): Card {
   const me = s.players[p]!;
   const next = s.players[nextIndex(s, p, 1)]!;
   // Le suivant est son partenaire : on ne lui fait ni piocher ni passer son tour
   const friend = partners.has(next.id);
-  const danger = !friend && next.hand.length <= 2;
+  const danger = !friend && next.hand.length <= style.dangerAt;
+  // Personne n'est près de finir : le bot fort garde ses cartes « + » et « passe » pour répondre plus tard
+  const calm = !s.players.some((pl, i) => i !== p && !pl.out && !partners.has(pl.id) && pl.hand.length <= style.dangerAt);
   const colorCounts = new Map<string, number>();
   for (const c of me.hand) if (c.color) colorCounts.set(c.color, (colorCounts.get(c.color) ?? 0) + 1);
 
@@ -120,7 +192,7 @@ function pickCard(s: UnoState, p: number, playable: Card[], rng: RngHolder, part
       if (hasColor) score -= 30; // bluff rare
     }
     if (isDrawCard(card) || card.kind === "skip") {
-      score += friend ? -28 : danger ? 25 : 4;
+      score += friend ? -28 : danger ? 25 : style.keepsDefence && calm && me.hand.length > 3 ? -9 : 4;
     } else if (card.kind === "skipAll") {
       score += danger ? 25 : 4;
     }
@@ -150,9 +222,10 @@ function leastLikelyColor(hand: Card[], rng: RngHolder): Color {
 }
 
 /** Un bot qui voit un joueur oublier son UNO le denonce-t-il, et apres combien de temps ? */
-export function botCatchDelay(rng: RngHolder): number | null {
-  if (random(rng) > 0.7) return null;
-  return 1100 + Math.floor(random(rng) * 1700);
+export function botCatchDelay(rng: RngHolder, level?: UnoBotLevel): number | null {
+  const { catchChance, catchDelay } = styleOf(level);
+  if (random(rng) > catchChance) return null;
+  return catchDelay[0] + Math.floor(random(rng) * (catchDelay[1] - catchDelay[0]));
 }
 
 /**
@@ -160,9 +233,10 @@ export function botCatchDelay(rng: RngHolder): number | null {
  * Sans UNO d'avance, c'est le moment normal de le crier : presque toujours, assez vite, mais un humain rapide peut le
  * prendre de vitesse. Sinon, c'est un oubli : il se rattrape une fois sur deux, plus tard.
  */
-export function botUnoDelay(s: UnoState, rng: RngHolder): number | null {
-  if (!effectiveRules(s.settings).earlyUno) return random(rng) < 0.88 ? 600 + Math.floor(random(rng) * 1000) : null;
-  return random(rng) < 0.5 ? 900 + Math.floor(random(rng) * 1600) : null;
+export function botUnoDelay(s: UnoState, rng: RngHolder, level?: UnoBotLevel): number | null {
+  const style = styleOf(level);
+  if (!effectiveRules(s.settings).earlyUno) return random(rng) < style.unoAfter ? 600 + Math.floor(random(rng) * 1000) : null;
+  return random(rng) < style.unoAfterLate ? 900 + Math.floor(random(rng) * 1600) : null;
 }
 
 /** Delai de reflexion d'un bot, pour un rythme naturel. */

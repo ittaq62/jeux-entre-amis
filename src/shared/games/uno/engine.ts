@@ -8,6 +8,9 @@ import { randomInt, shuffle, type RngHolder } from "../../rng.ts";
 // ---------------------------------------------------------------------------
 
 export type UnoVariant = "classic" | "nomercy";
+/** Le niveau des bots de la table (absent : moyen) */
+export type UnoBotLevel = "facile" | "moyen" | "fort";
+export const UNO_BOT_LEVELS: UnoBotLevel[] = ["facile", "moyen", "fort"];
 export type EndMode = "first" | "ranking" | "points";
 
 export interface UnoSettings {
@@ -32,6 +35,8 @@ export interface UnoSettings {
   targetScore: number;
   /** Secondes par tour, 0 = sans chrono (gere par le salon) */
   turnSeconds: number;
+  /** Le niveau des bots de la table ; absent des parties plus anciennes (moyen) */
+  botLevel?: UnoBotLevel;
 }
 
 export const DEFAULT_SETTINGS: UnoSettings = {

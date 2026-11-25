@@ -1,5 +1,5 @@
 import { tableTeamName } from "../../shared/games/teams.ts";
-import { DEFAULT_SETTINGS, effectiveRules, type EndMode, type UnoSettings } from "../../shared/games/uno/engine.ts";
+import { DEFAULT_SETTINGS, effectiveRules, type EndMode, type UnoBotLevel, type UnoSettings } from "../../shared/games/uno/engine.ts";
 import { MAX_PLAYERS, type RoomClientMessage, type RoomView } from "../../shared/protocol.ts";
 import { applyDrawnRules } from "../../shared/randomRules.ts";
 import { Check, Options } from "../components/ui.tsx";
@@ -29,6 +29,12 @@ const HOUSE_RULES: { key: "stacking" | "drawUntilPlayable" | "sevenZero" | "jump
     desc: "On crie UNO avec sa dernière carte seule en main, juste après avoir posé l'avant-dernière : plus avec deux cartes. Classique comme No Mercy.",
   },
 ];
+
+const BOT_HINTS: Record<UnoBotLevel, string> = {
+  facile: "Ils posent souvent la première carte qui va, oublient UNO et dénoncent rarement.",
+  moyen: "Ils jouent leur couleur, gardent leurs jokers pour la fin et crient UNO presque toujours.",
+  fort: "Ils gardent leurs « + » pour se défendre, voient venir qui va finir et dénoncent vite.",
+};
 
 /** Les règles que No Mercy impose ; les autres restent au choix */
 const MERCY_FREE = new Set(["jumpIn", "noEarlyUno"]);
@@ -172,6 +178,26 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
               </p>
             )}
           </div>
+
+          {!room.tour && (
+            <div className="field">
+              <span className="field-label">Niveau des bots</span>
+              <Options<UnoBotLevel>
+                label="Niveau des bots"
+                value={s.botLevel ?? "moyen"}
+                disabled={!isHost}
+                onChange={(botLevel) => update({ botLevel })}
+                options={[
+                  { value: "facile", label: "Facile" },
+                  { value: "moyen", label: "Moyen" },
+                  { value: "fort", label: "Fort" },
+                ]}
+              />
+              <p className="hint" style={{ margin: 0 }}>
+                {BOT_HINTS[s.botLevel ?? "moyen"]}
+              </p>
+            </div>
+          )}
 
           <TableSize room={room} send={send} max={MAX_PLAYERS} />
         </>

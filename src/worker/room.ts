@@ -12,8 +12,10 @@ import {
   tick,
   timeoutActions,
   topCard,
+  UNO_BOT_LEVELS,
   UNO_GRACE_MS,
   type UnoAction,
+  type UnoBotLevel,
   type UnoEvent,
   type UnoSettings,
   type UnoState,
@@ -92,6 +94,8 @@ const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const NEXT_ROUND_MS = 12_000;
 const MAX_MISSED_TURNS = 2;
+/** Les niveaux de la tournée, en bots de UNO */
+const TOUR_UNO_BOTS: Record<string, UnoBotLevel> = { easy: "facile", normal: "moyen", hard: "fort" };
 /** Sans limite de temps : un joueur resté là sans jouer aussi longtemps à son tour ne bloque plus la table */
 const IDLE_MS = 3 * 60_000;
 const CHAT_KEEP = 80;
@@ -281,6 +285,8 @@ export class GameRoom extends DurableObject<Env> {
       d.settings.maxPlayers = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, d.seats.length));
       // Les règles choisies par la tournée (variante, « pas de UNO d'avance » compris s'il a été tiré ou voté)
       d.settings.uno = { ...d.settings.uno, ...tourUnoSettings(opts.tour) };
+      // Le niveau des bots choisi pour la tournée
+      d.settings.uno.botLevel = TOUR_UNO_BOTS[opts.tour.botLevel] ?? "moyen";
       d.hostId = d.seats[0]?.userId ?? opts.host.id;
       d.timers.push({ at: now + TOUR_JOIN_MS, kind: "tourStart" });
     }
@@ -1057,7 +1063,7 @@ export class GameRoom extends DurableObject<Env> {
           // On ne dénonce pas son coéquipier
           if (s.team !== undefined && s.team === vulnerable.team) continue;
           if (g.players.find((p) => p.id === s.id)?.out) continue;
-          const delay = botCatchDelay(d);
+          const delay = botCatchDelay(d, this.botLevel(s));
           if (delay !== null && (!best || delay < best.delay)) best = { seat: s, delay };
         }
         if (best) this.addTimer({ at: w.since + best.delay, kind: "catch", seatId: best.seat.id, target: vulnerable.id, since: w.since });
@@ -1065,7 +1071,7 @@ export class GameRoom extends DurableObject<Env> {
         // à la place d'un absent le fait aussi) ; sinon, c'est qu'il avait oublié, et il se rattrape parfois
         const early = effectiveRules(g.settings).earlyUno;
         if (vulnerable.kind === "bot" || (vulnerable.autoplay && !early)) {
-          const delay = botUnoDelay(g, d);
+          const delay = botUnoDelay(g, d, this.botLevel(vulnerable));
           if (delay !== null) this.addTimer({ at: w.since + delay, kind: "botUno", seatId: vulnerable.id, since: w.since });
         }
       }
@@ -1164,7 +1170,7 @@ export class GameRoom extends DurableObject<Env> {
       case "bot": {
         if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id) return null;
         if (!(seat.kind === "bot" || seat.autoplay)) return null;
-        return this.playAll(g, seat.id, botTurn(g, seat.id, d, new Set(this.partnersOf(seat))), now);
+        return this.playAll(g, seat.id, botTurn(g, seat.id, d, new Set(this.partnersOf(seat)), this.botLevel(seat)), now);
       }
       case "timeout": {
         if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id || seat.autoplay) return null;
@@ -1360,6 +1366,11 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   /** Les coéquipiers d'un joueur (vide hors équipes) */
+  /** Le niveau d'un bot de la table ; celui qui joue pour un absent reste moyen */
+  private botLevel(seat: Seat): UnoBotLevel {
+    return seat.kind === "bot" ? (this.data!.settings.uno.botLevel ?? "moyen") : "moyen";
+  }
+
   private partnersOf(seat: Seat | undefined): string[] {
     if (!seat || seat.team === undefined) return [];
     return this.data!.seats.filter((o) => o !== seat && o.team === seat.team).map((o) => o.id);
@@ -1541,5 +1552,6 @@ function mergeSettings(current: UnoSettings, patch: Partial<UnoSettings>): UnoSe
     next.targetScore = patch.targetScore;
   }
   if (typeof patch.turnSeconds === "number" && [0, 15, 30, 60].includes(patch.turnSeconds)) next.turnSeconds = patch.turnSeconds;
+  if (UNO_BOT_LEVELS.includes(patch.botLevel as UnoBotLevel)) next.botLevel = patch.botLevel;
   return next;
 }
