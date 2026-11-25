@@ -42,6 +42,16 @@ export function drawnKeys(game: GameId): string[] {
 }
 
 /**
+ * Une explication qui suit « Nom de la règle : » dans la même phrase : sans majuscule, comme on l'écrit après un
+ * deux-points. Un sigle (« UNO d'avance… ») garde ses capitales.
+ */
+export function afterColon(text: string): string {
+  const [first, second] = text;
+  if (!first || (second && second !== second.toLowerCase())) return text;
+  return first.toLowerCase() + text.slice(1);
+}
+
+/**
  * Les règles tirées pour une table, une par ligne (le format, puis chaque règle à part), avec les mots d'une table ;
  * vide si l'id est inconnu
  */

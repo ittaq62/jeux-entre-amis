@@ -1,5 +1,5 @@
 import type { GameId, LobbyRoom } from "../../shared/protocol.ts";
-import { drawnKeys, drawnLines, drawnShort } from "../../shared/randomRules.ts";
+import { afterColon, drawnKeys, drawnLines, drawnShort } from "../../shared/randomRules.ts";
 import type { RuleLine } from "../../shared/tour.ts";
 import { Options } from "../components/ui.tsx";
 import "../styles/tableRules.css";
@@ -92,7 +92,7 @@ function DrawnExtras({ lines }: { lines: RuleLine[] }) {
     <ul className="drawn-extras">
       {lines.map((l) => (
         <li key={l.id} className={l.kind === "off" ? "is-off" : ""}>
-          <strong>{l.name}</strong>&nbsp;: {l.blurb}
+          <strong>{l.name}</strong>&nbsp;: {afterColon(l.blurb)}
         </li>
       ))}
     </ul>

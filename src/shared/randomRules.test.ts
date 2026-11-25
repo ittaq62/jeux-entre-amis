@@ -15,6 +15,7 @@ import {
   applyDrawnRules,
   cleanDraw,
   drawnKeys,
+  afterColon,
   drawnLines,
   drawNotice,
   drawnRules,
@@ -209,5 +210,16 @@ describe("règles au hasard d'une table", () => {
     expect(drawnLines("uno", "classique").map((l) => l.kind)).toEqual(["base", "off"]);
     expect(drawnShort("uno", "classique")).toBe("Classique");
     expect(drawnShort("uno", "triche")).toBeNull();
+  });
+});
+
+describe("afterColon : l'explication après « Nom de la règle : »", () => {
+  it("prend une minuscule, sauf un sigle ou un texte vide", () => {
+    expect(afterColon("Taxes et amendes vont au pot commun.")).toBe("taxes et amendes vont au pot commun.");
+    expect(afterColon("Égalité : on rejoue.")).toBe("égalité : on rejoue.");
+    expect(afterColon("UNO d'avance interdit.")).toBe("UNO d'avance interdit.");
+    expect(afterColon("déjà en minuscule")).toBe("déjà en minuscule");
+    expect(afterColon("")).toBe("");
+    expect(afterColon("A")).toBe("a");
   });
 });

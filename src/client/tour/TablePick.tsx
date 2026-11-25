@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { ANNOUNCE_MS } from "../../shared/announce.ts";
 import { tableTeamName } from "../../shared/games/teams.ts";
 import { GAME_NAMES, type GameId, type SeatView } from "../../shared/protocol.ts";
-import { drawnLines } from "../../shared/randomRules.ts";
+import { afterColon, drawnLines } from "../../shared/randomRules.ts";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useCountdown } from "../lib/countdown.ts";
@@ -132,7 +132,7 @@ export function TablePick({
                 <ul className="table-pick-rule-list">
                   {extras.map((r) => (
                     <li key={r.id} className={r.kind === "off" ? "is-off" : ""}>
-                      <strong>{r.name}</strong>&nbsp;: {r.blurb}
+                      <strong>{r.name}</strong>&nbsp;: {afterColon(r.blurb)}
                     </li>
                   ))}
                 </ul>
