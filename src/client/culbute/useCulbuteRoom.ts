@@ -19,6 +19,9 @@ export interface FightListeners {
   onRoom?: (room: CulbuteRoomView, events: FightEvent[]) => void;
 }
 
+/** De combien l'écart d'horloge retenu s'oublie, en ms par ms (20 ms par seconde) */
+const OFFSET_FORGET = 0.02;
+
 /** Connexion à une table de Culbute : le salon, le combat, le chat. */
 export function useCulbuteRoom(code: string) {
   const me = useSession((s) => s.user);
@@ -27,18 +30,33 @@ export function useCulbuteRoom(code: string) {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [fatal, setFatal] = useState<string | null>(null);
   const [serverOffset, setServerOffset] = useState(0);
+  const offsetRef = useRef<{ off: number; at: number } | null>(null);
   const socket = useRef<LiveSocket<CulbuteServerMessage, CulbuteClientMessage> | null>(null);
   const viewRef = useRef<CulbuteRoomView | null>(null);
   const listeners = useRef<FightListeners>({});
 
-  const onRoom = useCallback((next: CulbuteRoomView, events: FightEvent[]) => {
-    const prev = viewRef.current;
-    viewRef.current = next;
-    listeners.current.onRoom?.(next, events);
-    setView(next);
-    setServerOffset(next.serverNow - Date.now());
-    announceSeatChanges(prev, next, next.you.userId);
+  // L'écart d'horloge avec le serveur : le plus grand vu récemment, celui du message le moins retardé en route (il
+  // s'oublie doucement). Le dernier seul ne suffisait pas : traité en retard, sur l'appareil lent qui finit de charger,
+  // il laissait l'écran de chargement quelques secondes par-dessus le compte à rebours du combat.
+  const sampleClock = useCallback((serverNow: number) => {
+    const at = Date.now();
+    const last = offsetRef.current;
+    const off = last ? Math.max(serverNow - at, last.off - (at - last.at) * OFFSET_FORGET) : serverNow - at;
+    offsetRef.current = { off, at };
+    setServerOffset((prev) => (Math.abs(prev - off) >= 10 ? off : prev));
   }, []);
+
+  const onRoom = useCallback(
+    (next: CulbuteRoomView, events: FightEvent[]) => {
+      const prev = viewRef.current;
+      viewRef.current = next;
+      listeners.current.onRoom?.(next, events);
+      setView(next);
+      sampleClock(next.serverNow);
+      announceSeatChanges(prev, next, next.you.userId);
+    },
+    [sampleClock],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +77,7 @@ export function useCulbuteRoom(code: string) {
                 onRoom(msg.room, msg.events);
                 break;
               case "tick":
+                sampleClock(msg.now);
                 listeners.current.onTick?.(msg.now, msg);
                 break;
               case "chat":
@@ -117,7 +136,7 @@ export function useCulbuteRoom(code: string) {
       socket.current?.close();
       socket.current = null;
     };
-  }, [code, onRoom]);
+  }, [code, onRoom, sampleClock]);
 
   const send = useCallback((msg: CulbuteClientMessage) => socket.current?.send(msg), []);
   return { view, status, chat, fatal, send, serverOffset, me, listeners };
