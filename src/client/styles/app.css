@@ -1579,6 +1579,43 @@ a.shop-item {
   margin-bottom: 0;
 }
 
+/* Les amis en ligne, sous le bonjour */
+.home-online {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  margin: -8px 0 20px;
+}
+
+.home-online p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+}
+
+.home-online-faces {
+  display: flex;
+  flex: none;
+  padding-left: 8px;
+}
+
+.home-online-faces .avatar-wrap {
+  margin-left: -8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.home-online-faces .presence-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.home-list h2:focus {
+  outline: none;
+}
+
 .home-search {
   position: relative;
   flex: 0 1 380px;

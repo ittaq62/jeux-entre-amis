@@ -2,7 +2,15 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { Link, useLocation } from "wouter";
 import { ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
-import { GAME_NAMES, type GameId, type RoomSummary, type TableGame, type Visibility } from "../../shared/protocol.ts";
+import {
+  GAME_NAMES,
+  type FriendEntry,
+  type GameId,
+  type PresenceRoom,
+  type RoomSummary,
+  type TableGame,
+  type Visibility,
+} from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
@@ -175,6 +183,9 @@ export function HomePage() {
             : ""}
         </p>
 
+        {/* Qui est là ce soir : la liste des amis est tout en bas, après les fiches des jeux */}
+        {!searching && <FriendsOnline friends={sortedFriends} online={online} />}
+
         {/* Masqués plutôt que retirés : ce qu'on efface réapparaît aussitôt, sans rejouer les animations */}
         <div hidden={!albumShown}>
           <HomeAlbum />
@@ -220,8 +231,8 @@ export function HomePage() {
               )}
             </section>
 
-            <section className="home-list">
-              <h2>
+            <section className="home-list" id="tes-amis">
+              <h2 tabIndex={-1}>
                 Tes amis{" "}
                 <Link href="/amis" className="heading-link">
                   gérer
@@ -298,6 +309,49 @@ export function HomePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/**
+ * Les amis en ligne, sous le bonjour : leurs visages, qui joue, et « Les voir » qui descend à la liste (avec ses boutons
+ * Rejoindre et Regarder). Rien quand personne n'est en ligne.
+ */
+function FriendsOnline({ friends, online }: { friends: FriendEntry[]; online: Record<string, PresenceRoom | null> }) {
+  const here = friends.filter((f) => f.user.id in online);
+  if (here.length === 0) return null;
+  const playing = here.filter((f) => online[f.user.id]);
+  const first = here[0]!;
+  const others = here.length - 1;
+  const text =
+    others === 0
+      ? playing.length > 0
+        ? `${first.user.pseudo} est à une table`
+        : `${first.user.pseudo} est en ligne`
+      : `${first.user.pseudo} et ${others === 1 ? "un autre ami sont" : `${others} autres amis sont`} en ligne` +
+        (playing.length > 0 ? `, ${playing.length === here.length ? "tous" : playing.length} à une table` : "");
+  return (
+    <section className="home-online panel" aria-label="Amis en ligne">
+      <span className="home-online-faces" aria-hidden="true">
+        {here.slice(0, 5).map((f) => (
+          <span key={f.user.id} className="avatar-wrap">
+            <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={30} />
+            <span className={`dot presence-dot ${online[f.user.id] ? "dot-playing" : "dot-online"}`} />
+          </span>
+        ))}
+      </span>
+      <p>{text}</p>
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={() => {
+          const list = document.getElementById("tes-amis");
+          list?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+          list?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+        }}
+      >
+        {here.length > 1 ? "Les voir" : "Voir"}
+      </button>
+    </section>
   );
 }
 
