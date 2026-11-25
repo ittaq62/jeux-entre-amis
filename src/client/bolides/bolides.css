@@ -1290,6 +1290,27 @@
   height: 98px;
 }
 
+/* Le nom du circuit au départ : sous la petite carte (debout), ou entre elle et le classement (couché) */
+.is-phone .hud-intro {
+  top: calc(236px + var(--safe-top, 0px));
+}
+
+@media (max-height: 480px) {
+  .is-phone .hud-intro {
+    top: calc(56px + var(--safe-top, 0px));
+    width: min(calc(100vw - 280px), 560px);
+  }
+
+  .is-phone .hud-intro strong {
+    font-size: 48px;
+  }
+
+  .is-phone .hud-keys {
+    margin-top: 6px;
+    font-size: 13px;
+  }
+}
+
 .is-phone .hud-lights span {
   width: 34px;
   height: 34px;
