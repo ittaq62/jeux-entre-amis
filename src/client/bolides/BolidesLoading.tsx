@@ -81,7 +81,8 @@ export function BolidesLoading({ room, share, done, failed, phone, me, serverOff
 
   let status: string;
   if (failed) status = "Impossible d'afficher la course sur cet appareil.";
-  else if (!done) status = holding ? "Préparation du circuit…" : "Retour en piste…";
+  // La course est partie sans lui (il revient, ou son appareil a chargé plus lentement que les autres)
+  else if (!done) status = holding ? "Préparation du circuit…" : "La course a commencé, on t'y amène…";
   else if (waiting.length === 0) status = "C'est parti !";
   else if (waiting.length <= 2) status = `On attend ${waiting.map((w) => w.seat.name).join(" et ")}…`;
   else status = `On attend ${waiting.length} pilotes…`;
