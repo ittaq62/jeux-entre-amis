@@ -1400,16 +1400,36 @@
 
 .bolides-track {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
 }
 
+/* Les dix circuits en deux rangées de cinq */
 .bolides-track-maps {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, 58px);
   gap: 6px;
-  flex: 1 1 100%;
-  min-width: 0;
+  flex: none;
+}
+
+.bolides-track-pick {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.bolides-track-pick:hover:not(:disabled),
+.bolides-track-pick:focus-visible {
+  transform: scale(1.08);
+}
+
+.bolides-track-pick:disabled {
+  cursor: default;
 }
 
 .track-map {

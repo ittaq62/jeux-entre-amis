@@ -117,8 +117,19 @@ export function BolidesLobby({ room, send, ...rest }: Props) {
               ) : (
                 <>
                   <div className="bolides-track-maps">
+                    {/* Chaque petit tracé choisit son circuit */}
                     {TRACK_IDS.map((id) => (
-                      <TrackMap key={id} id={id} className="is-small" />
+                      <button
+                        key={id}
+                        type="button"
+                        className="bolides-track-pick"
+                        title={TRACKS[id].name}
+                        aria-label={TRACKS[id].name}
+                        disabled={!isHost}
+                        onClick={() => update({ track: id })}
+                      >
+                        <TrackMap id={id} className="is-small" />
+                      </button>
                     ))}
                   </div>
                   <p className="hint" style={{ margin: 0 }}>
@@ -248,7 +259,13 @@ function BolidesHelp() {
       <p className="hint">
         Tiens Dérapage sans tourner puis lâche : ton kart bondit par-dessus les obstacles. Sur un tremplin bleu, le deltaplane s'ouvre :
         tourne pour viser les anneaux, freine pour plonger. Reste juste derrière un kart : son aspiration finit par te lancer. Tu peux
-        garder deux objets, et le sol te montre où part celui que tu tiens. Dans le menu de la course, les objets peuvent partir tout seuls.
+        garder deux objets, et le sol te montre où part celui que tu tiens.
+      </p>
+      <p className="hint">
+        Sur la route, gare à ce qui traverse (un engin, une file de bêtes, ce qui tombe d'une grue ou d'un arbre) : le croiser, c'est le
+        tête-à-queue. Un îlot au milieu se contourne d'un côté ou de l'autre ; la boue, le sable, les algues ou les feuilles freinent, le
+        verglas et les flaques font glisser, un trampoline fait sauter. Tombé à l'eau ou coincé, un drone te repose sur la piste (ou appuie
+        sur <kbd>R</kbd>). Dans le menu de la course, les objets peuvent partir tout seuls, et la conduite assistée te ramène vers la route.
       </p>
       <details className="bolides-items">
         <summary>Les objets, un par un</summary>
