@@ -134,6 +134,8 @@ interface TourGame {
   players: string[];
   results: TourGameResult[] | null;
   aborted: boolean;
+  /** L'hôte l'a passé : il ne compte pas, et ne revient pas au tirage suivant (ni du tout, chaque jeu une seule fois) */
+  skipped?: boolean;
   /** Les règles jouées (id de variante) */
   variant: string;
 }
@@ -1034,6 +1036,8 @@ export class TourRoom extends DurableObject<Env> {
         // instant « fermée par l'administrateur »)
         if (d.status !== "playing" || !d.current) return;
         const { game, code } = d.current;
+        const played = d.games.find((g) => g.code === code);
+        if (played) played.skipped = true;
         this.addTimer({ at: now + SKIPPED_TABLE_CLOSE_MS, kind: "closeTable", code, game });
         const name = member?.name ?? att.user.pseudo;
         return this.abortCurrent(now, `${name} passe ${GAME_NAMES[game]} : ce jeu ne compte pas, la tournée continue.`);
@@ -1132,7 +1136,7 @@ export class TourRoom extends DurableObject<Env> {
   /** Jeux joués jusqu'au bout, à écarter du tirage quand chaque jeu ne se joue qu'une fois */
   private excluded(): GameId[] {
     const d = this.data!;
-    return d.settings.once ? d.games.filter((g) => !g.aborted && g.results).map((g) => g.game) : [];
+    return d.settings.once ? d.games.filter((g) => (!g.aborted && g.results) || g.skipped).map((g) => g.game) : [];
   }
 
   /** Le plus de joueurs qu'accueille un des jeux encore à jouer */
@@ -1176,7 +1180,8 @@ export class TourRoom extends DurableObject<Env> {
   }
 
   private previousGame(): GameId | null {
-    const played = this.data!.games.filter((g) => !g.aborted);
+    // Un jeu passé par l'hôte compte comme le précédent : il ne ressort pas aussitôt
+    const played = this.data!.games.filter((g) => !g.aborted || g.skipped);
     return played.at(-1)?.game ?? null;
   }
 

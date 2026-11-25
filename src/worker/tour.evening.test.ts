@@ -208,8 +208,9 @@ describe("tournée : une soirée qui ne reste pas coincée", () => {
     await bench.send(host, { t: "skip" });
     expect(view().status).toBe("intermission");
     expect(view().games[0]!.aborted).toBe(true);
-    expect(view().next).not.toBeNull();
-    expect(chat().some((t) => t.startsWith("Hote passe UNO") && t.includes("ne compte pas"))).toBe(true);
+    // Le jeu passé ne ressort pas aussitôt au tirage
+    expect(view().next!.game).not.toBe(view().games[0]!.game);
+    expect(chat().some((t) => t.startsWith("Hote passe ") && t.includes("ne compte pas"))).toBe(true);
     // La table n'est pas fermée tout de suite : les écrans repassent d'abord à l'entracte
     expect(table.adminClose).not.toHaveBeenCalled();
     await later(5_000);
