@@ -72,3 +72,25 @@ describe("Bataille navale, la salle", () => {
     expect(d().naval?.phase).toBe("battle");
   });
 });
+
+describe("Bataille navale sans limite de temps", () => {
+  it("un joueur resté là sans tirer trois minutes à son tour laisse la barre à un bot", async () => {
+    vi.useFakeTimers();
+    let now = 1_800_000_000_000;
+    vi.setSystemTime(now);
+    const { room, bench, host, d } = await table();
+    await bench.send(host, { t: "settings", settings: { turnSeconds: 0 } });
+    const ami = (await bench.arrive(user("ami"))).ws;
+    await bench.send(host, { t: "start" });
+    await bench.send(host, { t: "action", action: { type: "ready" } });
+    await bench.send(ami, { t: "action", action: { type: "ready" } });
+    const g = d().naval!;
+    expect(g.phase).toBe("battle");
+    const shooter = d().seats.find((s) => s.id === g.players[g.turn]!.id)!;
+    now += 3 * 60_000 + 1000;
+    vi.setSystemTime(now);
+    await (room as unknown as { alarm(): Promise<void> }).alarm();
+    expect((shooter as unknown as { autoplay: unknown }).autoplay).toBe("afk");
+    vi.useRealTimers();
+  });
+});

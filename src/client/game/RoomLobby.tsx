@@ -166,6 +166,11 @@ export function RoomLobby({ room, send, ...rest }: LobbyProps) {
                 { value: 0, label: "Illimité" },
               ]}
             />
+            {s.turnSeconds === 0 && (
+              <p className="hint" style={{ margin: 0 }}>
+                Pas de chrono ; au bout de 3 minutes sans jouer, un bot prend le relais (on reprend la main d'un clic).
+              </p>
+            )}
           </div>
 
           <TableSize room={room} send={send} max={MAX_PLAYERS} />

@@ -71,6 +71,8 @@ const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const PLACEMENT_MS = 90_000;
 const MAX_MISSED_TURNS = 2;
+/** Sans limite de temps : un joueur resté là sans tirer aussi longtemps à son tour ne bloque plus la table */
+const IDLE_MS = 3 * 60_000;
 const CHAT_KEEP = 80;
 
 interface Seat {
@@ -96,7 +98,7 @@ function emptierTeam(seats: Seat[]): 0 | 1 {
   return port <= seats.length - port ? 0 : 1;
 }
 
-type TimerKind = "bot" | "timeout" | "placement" | "away" | "seatCleanup" | "cleanup" | "emote" | "tourStart";
+type TimerKind = "bot" | "timeout" | "idle" | "placement" | "away" | "seatCleanup" | "cleanup" | "emote" | "tourStart";
 
 interface Timer {
   at: number;
@@ -947,15 +949,16 @@ export class NavalRoom extends DurableObject<Env> {
   private schedule(now: number) {
     const d = this.data!;
     const g = d.naval;
-    d.timers = d.timers.filter((t) => (t.kind !== "bot" && t.kind !== "timeout") || (g !== null && t.turnId === g.turnId));
+    const turnTimer = (t: Timer) => t.kind === "bot" || t.kind === "timeout" || t.kind === "idle";
+    d.timers = d.timers.filter((t) => !turnTimer(t) || (g !== null && t.turnId === g.turnId));
     if (!g || d.status !== "playing" || g.phase !== "battle") {
       d.turnDeadline = null;
-      d.timers = d.timers.filter((t) => t.kind !== "bot" && t.kind !== "timeout");
+      d.timers = d.timers.filter((t) => !turnTimer(t));
       return;
     }
     if (d.scheduledTurnId === g.turnId) return;
     d.scheduledTurnId = g.turnId;
-    d.timers = d.timers.filter((t) => t.kind !== "bot" && t.kind !== "timeout");
+    d.timers = d.timers.filter((t) => !turnTimer(t));
     d.turnDeadline = null;
     const current = this.seatById(g.players[g.turn]!.id)!;
     if (current.kind === "bot" || current.autoplay) {
@@ -966,6 +969,8 @@ export class NavalRoom extends DurableObject<Env> {
     } else if (d.settings.naval.turnSeconds > 0) {
       d.turnDeadline = now + d.settings.naval.turnSeconds * 1000;
       this.addTimer({ at: d.turnDeadline + 400, kind: "timeout", seatId: current.id, turnId: g.turnId });
+    } else {
+      this.addTimer({ at: now + IDLE_MS, kind: "idle", seatId: current.id, turnId: g.turnId });
     }
   }
 
@@ -1073,6 +1078,14 @@ export class NavalRoom extends DurableObject<Env> {
           this.systemChat(`${seat.name} semble absent : un bot prend la barre.`);
         }
         return events;
+      }
+      case "idle": {
+        // Sans limite de temps, mais pas sans fin : un bot prend la barre (le joueur la reprend quand il veut)
+        if (!battle || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id || seat.autoplay) return null;
+        seat.autoplay = "afk";
+        d.scheduledTurnId = -1;
+        this.systemChat(`${seat.name} ne tire plus depuis ${IDLE_MS / 60_000} minutes : un bot prend la barre.`);
+        return [];
       }
       case "placement": {
         if (!g || d.status !== "playing" || g.phase !== "placement") return null;

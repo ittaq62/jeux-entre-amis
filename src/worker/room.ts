@@ -92,6 +92,8 @@ const AWAY_AFTER_MS = 10_000;
 const SEAT_RELEASE_MS = 25_000;
 const NEXT_ROUND_MS = 12_000;
 const MAX_MISSED_TURNS = 2;
+/** Sans limite de temps : un joueur resté là sans jouer aussi longtemps à son tour ne bloque plus la table */
+const IDLE_MS = 3 * 60_000;
 const CHAT_KEEP = 80;
 
 interface Seat {
@@ -114,7 +116,19 @@ interface Seat {
 }
 
 type TimerKind =
-  "bot" | "timeout" | "tick" | "catch" | "botUno" | "jumpIn" | "nextRound" | "away" | "seatCleanup" | "cleanup" | "emote" | "tourStart";
+  | "bot"
+  | "timeout"
+  | "idle"
+  | "tick"
+  | "catch"
+  | "botUno"
+  | "jumpIn"
+  | "nextRound"
+  | "away"
+  | "seatCleanup"
+  | "cleanup"
+  | "emote"
+  | "tourStart";
 
 interface Timer {
   at: number;
@@ -1006,16 +1020,17 @@ export class GameRoom extends DurableObject<Env> {
   private schedule(now: number, events: UnoEvent[]) {
     const d = this.data!;
     const g = d.uno;
-    d.timers = d.timers.filter((t) => (t.kind !== "bot" && t.kind !== "timeout") || (g !== null && t.turnId === g.turnId));
+    const turnTimer = (t: Timer) => t.kind === "bot" || t.kind === "timeout" || t.kind === "idle";
+    d.timers = d.timers.filter((t) => !turnTimer(t) || (g !== null && t.turnId === g.turnId));
     if (!g || d.status !== "playing" || g.phase !== "playing") {
       d.turnDeadline = null;
-      d.timers = d.timers.filter((t) => !["bot", "timeout", "catch", "botUno", "jumpIn", "tick"].includes(t.kind));
+      d.timers = d.timers.filter((t) => !["bot", "timeout", "idle", "catch", "botUno", "jumpIn", "tick"].includes(t.kind));
       return;
     }
     const current = this.seatById(g.players[g.turn]!.id)!;
     if (d.scheduledTurnId !== g.turnId) {
       d.scheduledTurnId = g.turnId;
-      d.timers = d.timers.filter((t) => t.kind !== "bot" && t.kind !== "timeout");
+      d.timers = d.timers.filter((t) => !turnTimer(t));
       d.turnDeadline = null;
       if (current.kind === "bot" || current.autoplay) {
         const delay = botThinkDelay(g, d) * (current.kind === "bot" ? 1 : 0.6);
@@ -1023,6 +1038,8 @@ export class GameRoom extends DurableObject<Env> {
       } else if (d.settings.uno.turnSeconds > 0) {
         d.turnDeadline = now + d.settings.uno.turnSeconds * 1000;
         this.addTimer({ at: d.turnDeadline + 400, kind: "timeout", seatId: current.id, turnId: g.turnId });
+      } else {
+        this.addTimer({ at: now + IDLE_MS, kind: "idle", seatId: current.id, turnId: g.turnId });
       }
     }
 
@@ -1163,6 +1180,14 @@ export class GameRoom extends DurableObject<Env> {
           this.systemChat(`${seat.name} semble absent : un bot joue à sa place.`);
         }
         return events;
+      }
+      case "idle": {
+        // Sans limite de temps, mais pas sans fin : un bot prend le relais (le joueur reprend la main quand il veut)
+        if (!playing || !seat || g.turnId !== t.turnId || g.players[g.turn]!.id !== seat.id || seat.autoplay) return null;
+        seat.autoplay = "afk";
+        d.scheduledTurnId = -1;
+        this.systemChat(`${seat.name} ne joue plus depuis ${IDLE_MS / 60_000} minutes : un bot joue à sa place.`);
+        return [];
       }
       case "tick":
         return g && tick(g, now) ? [] : null;

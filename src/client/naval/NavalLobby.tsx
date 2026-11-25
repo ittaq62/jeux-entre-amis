@@ -232,6 +232,11 @@ export function NavalLobby({ room, send, ...rest }: Props) {
                 { value: 0, label: "Illimité" },
               ]}
             />
+            {s.turnSeconds === 0 && (
+              <p className="hint" style={{ margin: 0 }}>
+                Pas de chrono ; au bout de 3 minutes sans tirer, un bot prend la barre (on la reprend d'un clic).
+              </p>
+            )}
           </div>
 
           <TableSize room={room} send={send} max={NAVAL_MAX_PLAYERS} />

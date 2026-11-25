@@ -113,3 +113,29 @@ describe("UNO, la dénonciation d'un bot", () => {
     expect(g.players[meIndex]!.hand).toHaveLength(3);
   });
 });
+
+describe("UNO sans limite de temps", () => {
+  it("un joueur resté là sans jouer trois minutes à son tour laisse la main à un bot, pas avant", async () => {
+    const state = new FakeState();
+    const room = new GameRoom(state as never, fakeEnv() as never);
+    await state.ready;
+    await room.init({ code: "ABCD", host: user("hote"), visibility: "private", quick: false });
+    const bench = new Bench(room, state);
+    const host = (await bench.arrive(user("hote"))).ws;
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "settings", settings: { turnSeconds: 0 } });
+    await bench.send(host, { t: "start" });
+    const d = bench.data<Data>();
+    const me = d.seats.find((s) => s.kind === "human")!;
+    const meIndex = d.uno.players.findIndex((p) => p.id === me.id);
+    await auTourDe(room, d, meIndex, [n("blue", 1), n("blue", 2)], [n("green", 3)]);
+    now += 2 * 60_000;
+    vi.setSystemTime(now);
+    await room.alarm();
+    expect(me.autoplay).toBe(false);
+    now += 61_000;
+    vi.setSystemTime(now);
+    await room.alarm();
+    expect(me.autoplay).toBe("afk");
+  });
+});
