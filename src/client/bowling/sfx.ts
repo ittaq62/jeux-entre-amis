@@ -20,8 +20,10 @@ let bus: { ctx: AudioContext; node: GainNode } | null = null;
 
 function busOf(ctx: AudioContext, master: GainNode): GainNode {
   if (bus?.ctx === ctx) return bus.node;
+  // Le compresseur remonte de lui-même les sons faibles (environ 1,7 fois) : on baisse d'autant l'entrée, pour que le
+  // grondement de la boule et l'ambiance gardent leur niveau d'avant ; un fracas de 2,2 en ressort vers 0,8
   const g = ctx.createGain();
-  g.gain.value = 0.8;
+  g.gain.value = 0.6;
   const lim = ctx.createDynamicsCompressor();
   lim.threshold.value = -10;
   lim.knee.value = 6;
