@@ -113,10 +113,11 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
             {earned !== null &&
               (earned > 0 ? (
                 <p className="gameover-points">
-                  <strong className="num">+{earned}</strong> points au classement
+                  {/* Sous le portrait du gagnant : on dit que ces points sont les siens à soi */}
+                  Pour toi&nbsp;: <strong className="num">+{earned}</strong> points au classement
                 </p>
               ) : (
-                <p className="gameover-points">Pas de point au classement cette fois.</p>
+                <p className="gameover-points">Pour toi&nbsp;: pas de point au classement cette fois.</p>
               ))}
             <EloLine result={room.results?.[room.you.userId]} />
           </div>
