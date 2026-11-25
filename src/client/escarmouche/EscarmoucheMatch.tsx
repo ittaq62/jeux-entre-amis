@@ -384,6 +384,8 @@ function GameOver({
   const inTour = Boolean(useTourBridge());
   const seated = room.you.seatId !== null;
   const asked = room.rematch.includes(room.you.userId);
+  // Assis après le combat : on ne demande pas la revanche d'un combat qu'on n'a pas joué, on demande à jouer le suivant
+  const fought = v.fighters.some((f) => f.id === room.you.seatId);
   const myResult = room.results?.[room.you.userId];
   const name = (i: number) => room.seats.find((s) => s.id === v.fighters[i]?.id)?.name ?? "?";
   const title = teams
@@ -451,7 +453,7 @@ function GameOver({
         <div className="esc-over-actions">
           {!inTour && seated && (
             <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
-              {asked ? "En attente des autres" : "Revanche"}
+              {asked ? "En attente des autres" : fought ? "Revanche" : "Jouer le suivant"}
             </button>
           )}
           {!inTour && (
