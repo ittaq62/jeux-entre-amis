@@ -13,6 +13,7 @@ import {
   driveBots,
   holdForLoading,
   LAP_CHOICES,
+  cupStandings,
   loadingOver,
   markLoaded,
   newRace,
@@ -652,6 +653,7 @@ export class BolidesRoom extends DurableObject<Env> {
         if (d.status === "playing") return msg.lateJoin === undefined ? error("On ne change pas les règles en pleine course.") : undefined;
         // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
         const current = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+        const rulesBefore = JSON.stringify([current, d.settings.randomRules ?? null]);
         const drawn = d.tour ? null : hostDraw("bolides", d.settings.randomRules, current, DEFAULT_SETTINGS, msg.randomRules, Math.random);
         if (drawn) {
           d.settings.randomRules = drawn.draw;
@@ -659,8 +661,9 @@ export class BolidesRoom extends DurableObject<Env> {
           this.systemChat(drawn.notice);
         }
         d.settings.bolides = mergeSettings(d.settings.bolides, hostPatch("bolides", d.settings.randomRules, msg.settings));
-        // De nouvelles règles : le prochain départ recommence un Grand Prix
-        d.cup = null;
+        // De nouvelles règles : le prochain départ recommence un Grand Prix (une place de plus, la table ouverte ou fermée,
+        // ne changent rien à la course : le Grand Prix continue)
+        if (JSON.stringify([{ ...DEFAULT_SETTINGS, ...d.settings.bolides }, d.settings.randomRules ?? null]) !== rulesBefore) d.cup = null;
         if (msg.visibility === "public" || msg.visibility === "private") d.settings.visibility = msg.visibility;
         if (typeof msg.maxPlayers === "number") {
           const max = Math.round(msg.maxPlayers);
@@ -943,7 +946,7 @@ export class BolidesRoom extends DurableObject<Env> {
         cup.points[id] = (cup.points[id] ?? 0) + won;
       }
       if (cup.index + 1 >= cup.tracks.length) {
-        const best = Object.entries(cup.points).sort((a, b) => b[1] - a[1])[0];
+        const best = cupStandings(cup.points, cup.last, (id) => Boolean(this.seatById(id)))[0];
         if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte le Grand Prix !`);
       }
     }

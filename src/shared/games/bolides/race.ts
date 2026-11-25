@@ -112,6 +112,20 @@ export function cupPoints(rank: number): number {
   return CUP_POINTS[rank - 1] ?? 0;
 }
 
+/**
+ * Le classement d'un Grand Prix, parmi ceux qui sont encore à la table (un pilote parti, ou un bot qui a cédé sa place,
+ * ne le gagne pas) ; à égalité de points, le mieux placé à la dernière course passe devant.
+ */
+export function cupStandings(
+  points: Record<string, number>,
+  last: Record<string, number>,
+  present: (id: string) => boolean,
+): [string, number][] {
+  return Object.entries(points)
+    .filter(([id]) => present(id))
+    .sort((a, b) => b[1] - a[1] || (last[b[0]] ?? 0) - (last[a[0]] ?? 0));
+}
+
 /** Après un coup, on est intouchable un petit moment (le temps de repartir) */
 export const SAFE_MS = 2400;
 export const LAP_CHOICES = [2, 3, 5] as const;

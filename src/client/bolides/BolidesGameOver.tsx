@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect } from "react";
+import { cupStandings } from "../../shared/games/bolides/race.ts";
 import { raceTitles } from "../../shared/games/bolides/titles.ts";
 import { TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesRoomView } from "../../shared/protocol.ts";
@@ -43,7 +44,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
   const racerOf = (id: string) => g.racers.find((r) => r.id === id);
   const winner = ranking[0] ? seatOf(ranking[0]) : undefined;
 
-  const cupWon = room.cup?.over === true && Object.entries(room.cup.points).sort((a, b) => b[1] - a[1])[0]?.[0] === me;
+  const cupWon = room.cup?.over === true && cupStandings(room.cup.points, room.cup.last, (id) => Boolean(seatOf(id)))[0]?.[0] === me;
   useEffect(() => {
     if (!(won || cupWon) || reduced) return;
     const t = setTimeout(() => {
@@ -58,11 +59,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
   const earned = mine ? rankingPoints(placed, mine) : null;
   const voted = room.rematch.includes(room.you.userId);
   const cup = room.cup;
-  const cupOrder = cup
-    ? Object.entries(cup.points)
-        .filter(([id]) => seatOf(id))
-        .sort((a, b) => b[1] - a[1])
-    : [];
+  const cupOrder = cup ? cupStandings(cup.points, cup.last, (id) => Boolean(seatOf(id))) : [];
   const cupWinner = cup?.over && cupOrder[0] ? seatOf(cupOrder[0][0]) : undefined;
   const title = cupWinner
     ? cupWinner.id === me

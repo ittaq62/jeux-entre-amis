@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
+import { cupStandings } from "../../shared/games/bolides/race.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -68,7 +69,7 @@ function podiumTitle(room: BolidesRoomView): string {
   const g = room.bolides!;
   const me = room.you.seatId;
   const cup = room.cup?.over ? room.cup : null;
-  const first = cup ? Object.entries(cup.points).sort((a, b) => b[1] - a[1])[0]?.[0] : g.ranking?.[0];
+  const first = cup ? cupStandings(cup.points, cup.last, (id) => room.seats.some((s) => s.id === id))[0]?.[0] : g.ranking?.[0];
   const name = room.seats.find((s) => s.id === first)?.name ?? "?";
   if (first === me) return cup ? "Tu remportes le Grand Prix !" : "Victoire !";
   return `${name} ${cup ? "remporte le Grand Prix" : "gagne la course"} !`;
@@ -189,9 +190,7 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
     // La cérémonie du Grand Prix suit le classement général, celle d'une course l'arrivée
     const cupOver = room.cup?.over === true;
     const order = cupOver
-      ? Object.entries(room.cup!.points)
-          .sort((a, b) => b[1] - a[1])
-          .map(([id]) => id)
+      ? cupStandings(room.cup!.points, room.cup!.last, (id) => room.seats.some((s) => s.id === id)).map(([id]) => id)
       : g.ranking;
     canSkip.current = performance.now() + PODIUM_FADE_MS + 900;
     const start = window.setTimeout(() => runtime.current?.startPodium(order), PODIUM_FADE_MS);
