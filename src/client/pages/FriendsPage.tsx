@@ -5,7 +5,7 @@ import type { FriendEntry, PublicUser } from "../../shared/protocol.ts";
 import { AppHeader } from "../components/AppHeader.tsx";
 import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
-import { TableLinks } from "../components/TableLinks.tsx";
+import { presenceText, TableLinks } from "../components/TableLinks.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Modal } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -218,7 +218,7 @@ export function FriendsPage() {
                         <strong>
                           <PlayerName name={f.user.pseudo} admin={f.user.admin} />
                         </strong>
-                        <span className="hint">{!isOnline ? "hors ligne" : room ? `à la table ${room.code}` : "en ligne"}</span>
+                        <span className="hint">{isOnline ? presenceText(room, true) : "hors ligne"}</span>
                       </span>
                     </Link>
                     <span className="row-actions">

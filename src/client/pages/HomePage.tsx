@@ -18,7 +18,7 @@ import { CardBack, CardFace, COLOR_HEX } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { StreakChip } from "../components/StreakChip.tsx";
 import { Modal } from "../components/ui.tsx";
-import { lateJoinTag, TableLinks } from "../components/TableLinks.tsx";
+import { lateJoinTag, presenceText, TableLinks } from "../components/TableLinks.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
 import { CapitalePreview } from "../capitale/CapitalePreview.tsx";
@@ -258,15 +258,7 @@ export function HomePage() {
                             <strong>
                               <PlayerName name={f.user.pseudo} admin={f.user.admin} />
                             </strong>
-                            <span className="hint">
-                              {!isOnline
-                                ? "hors ligne"
-                                : room
-                                  ? room.status === "playing"
-                                    ? "en pleine partie"
-                                    : "à une table"
-                                  : "en ligne"}
-                            </span>
+                            <span className="hint">{isOnline ? presenceText(room) : "hors ligne"}</span>
                           </span>
                         </Link>
                         {room && (
@@ -320,15 +312,18 @@ function FriendsOnline({ friends, online }: { friends: FriendEntry[]; online: Re
   const here = friends.filter((f) => f.user.id in online);
   if (here.length === 0) return null;
   const playing = here.filter((f) => online[f.user.id]);
+  // « 1 à une table et 2 en tournée »
+  const inTour = playing.filter((f) => online[f.user.id]?.game === "tour").length;
+  const atTable = playing.length - inTour;
+  const busy = [atTable > 0 ? `${atTable} à une table` : "", inTour > 0 ? `${inTour} en tournée` : ""].filter(Boolean).join(" et ");
   const first = here[0]!;
   const others = here.length - 1;
   const text =
     others === 0
       ? playing.length > 0
-        ? `${first.user.pseudo} est à une table`
+        ? `${first.user.pseudo} est ${presenceText(online[first.user.id])}`
         : `${first.user.pseudo} est en ligne`
-      : `${first.user.pseudo} et ${others === 1 ? "un autre ami sont" : `${others} autres amis sont`} en ligne` +
-        (playing.length > 0 ? `, ${playing.length === here.length ? "tous" : playing.length} à une table` : "");
+      : `${first.user.pseudo} et ${others === 1 ? "un autre ami sont" : `${others} autres amis sont`} en ligne` + (busy ? `, ${busy}` : "");
   return (
     <section className="home-online panel" aria-label="Amis en ligne">
       <span className="home-online-faces" aria-hidden="true">

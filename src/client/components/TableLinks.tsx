@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { JOINS_STARTED } from "../../shared/lateJoin.ts";
-import type { RoomStatus, TableGame } from "../../shared/protocol.ts";
+import type { PresenceRoom, RoomStatus, TableGame } from "../../shared/protocol.ts";
 import { tableHref } from "../lib/arrival.ts";
 
 /**
@@ -55,4 +55,15 @@ export function TableLinks({
 /** Ce que dit une carte de table du réglage « Rejoindre en cours de route » */
 export function lateJoinTag(lateJoin: boolean | undefined): string {
   return lateJoin === false ? "fermée en cours de route" : "ouverte en cours de route";
+}
+
+/**
+ * Où est un ami en ligne : « en ligne », « à une table », « en pleine partie », « en tournée ». Avec `withCode`, le code
+ * de la table ou de la tournée suit (« à la table ABCD »).
+ */
+export function presenceText(room: PresenceRoom | null | undefined, withCode = false): string {
+  if (!room) return "en ligne";
+  if (room.game === "tour") return withCode ? `en tournée, ${room.code}` : "en tournée";
+  if (room.status === "playing") return withCode ? `en pleine partie, table ${room.code}` : "en pleine partie";
+  return withCode ? `à la table ${room.code}` : "à une table";
 }
