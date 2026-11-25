@@ -52,8 +52,9 @@ function saveLook(l: BowlingLook) {
 const swatches = new Map<string, string>();
 
 function swatchUrl(look: Pick<BowlingLook, "color" | "pattern">, size: number): string {
-  // La vignette montre la moitié du motif sur `size` points : assez de pixels pour l'écran, sans dépasser la boule en jeu
-  const dpr = typeof window === "undefined" ? 1 : Math.min(3, window.devicePixelRatio || 1);
+  // La vignette montre la moitié du motif sur `size` points : assez de pixels pour l'écran (au-delà de deux pixels par
+  // point, sur une si petite boule, l'œil ne voit plus la différence), sans dépasser la boule en jeu
+  const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
   const width = Math.min(512, Math.max(64, Math.ceil((2 * size * dpr) / 64) * 64));
   const key = `${look.color}|${look.pattern}|${width}`;
   let url = swatches.get(key);
