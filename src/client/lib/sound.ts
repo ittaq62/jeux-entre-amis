@@ -556,6 +556,34 @@ const buffers = new Map<string, AudioBuffer | null>();
 const loading = new Map<string, Promise<AudioBuffer | null>>();
 const lastPlayed = new Map<SoundName, number>();
 
+/**
+ * Une longue musique en boucle (plus de 20 s) pèse ses 40 Mo une fois décodée (en flottants, en stéréo) : sur un
+ * téléphone, on ne la garde pas jusqu'au rechargement de la page. Une minute après son arrêt (ou après son chargement si
+ * elle ne part pas, la musique coupée dans les réglages), on l'oublie. Une revanche ou une manche de tournée lancée d'ici
+ * là la retrouve telle quelle, sans trou ; plus tard, elle revient du cache du navigateur et repart en fondu.
+ */
+const LONG_LOOP_S = 20;
+export const FORGET_LOOP_MS = 60_000;
+const MUSIC_FILES = new Set([...MUSIC_LOOPS].flatMap((name) => FILES[name]));
+const forgetting = new Map<string, ReturnType<typeof setTimeout>>();
+
+function forgetLater(file: string) {
+  const buf = buffers.get(file);
+  if (!MUSIC_FILES.has(file) || !buf || buf.duration < LONG_LOOP_S) return;
+  const old = forgetting.get(file);
+  if (old !== undefined) clearTimeout(old);
+  forgetting.set(
+    file,
+    setTimeout(() => {
+      forgetting.delete(file);
+      // Elle joue (ou on l'attend) : on la garde, son arrêt la remettra à oublier
+      if ((loop && loop.source.buffer === buf) || (wanted && FILES[wanted][0] === file)) return;
+      buffers.delete(file);
+      loading.delete(file);
+    }, FORGET_LOOP_MS),
+  );
+}
+
 function context(): AudioContext | null {
   if (ctx) return ctx;
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -577,6 +605,7 @@ async function load(file: string): Promise<AudioBuffer | null> {
     .catch(() => null)
     .then((buf) => {
       buffers.set(file, buf);
+      forgetLater(file);
       return buf;
     });
   loading.set(file, p);
@@ -649,12 +678,13 @@ usePrefs.subscribe((p, prev) => {
 export function stopLoop(only?: SoundName) {
   if (!only || wanted === only) wanted = null;
   if (!loop || !ctx || (only && loop.name !== only)) return;
-  const { source, gain } = loop;
+  const { name, source, gain } = loop;
   loop = null;
   gain.gain.cancelScheduledValues(ctx.currentTime);
   gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
   source.stop(ctx.currentTime + 0.65);
+  forgetLater(FILES[name][0]!);
 }
 
 export function play(name: SoundName, opts: { volume?: number; rate?: number; delay?: number } = {}) {
