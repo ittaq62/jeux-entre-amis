@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bounceBetween, COIN_LOSS, COIN_MAX, drawItem, hazardPos, ITEM_KINDS, PETARD_MS, sweptHit, type ItemKind } from "./items.ts";
-import { botDrive, newBotMemory, type BotLevel } from "./bot.ts";
+import { botDrive, botWantsItem, freeLaneAmong, newBotMemory, type BotLevel } from "./bot.ts";
 import {
   assistSteer,
   beginRescue,
@@ -10,6 +10,7 @@ import {
   DRIFT_LEVELS,
   DT,
   driftLevel,
+  KART_RADIUS,
   newKart,
   NO_INPUT,
   RAMP_LEN,
@@ -2324,5 +2325,99 @@ describe("la Forêt", () => {
     }
     expect(t.hoops).toHaveLength(3);
     for (const h of t.hoops) expect(deltaS(t, gap.from, h.s)).toBeLessThan(70);
+  });
+});
+
+describe("les bots et ce qui traverse", () => {
+  it("la place libre la plus proche, hors de toutes les places prises ; aucune si la route est barrée", () => {
+    expect(freeLaneAmong(1, [[-3, -1]], 6)).toBe(1);
+    // Deux bêtes côte à côte : il ne se jette pas dans la seconde en évitant la première
+    expect(
+      freeLaneAmong(
+        0,
+        [
+          [-2, 2],
+          [1.5, 5.5],
+        ],
+        6,
+      ),
+    ).toBe(-2);
+    expect(
+      freeLaneAmong(
+        4,
+        [
+          [-2, 2],
+          [1.5, 5.5],
+        ],
+        6,
+      ),
+    ).toBe(5.5);
+    expect(
+      freeLaneAmong(
+        0,
+        [
+          [-7, 1],
+          [0.5, 7],
+        ],
+        6,
+      ),
+    ).toBeNull();
+  });
+
+  it("une file de bêtes qui traverse : un bot seul la touche rarement, quel que soit le moment où il arrive", () => {
+    const flocks = [
+      ["lagon", "crabe"],
+      ["foire", "canard"],
+      ["foret", "herisson"],
+      ["potager", "coccinelle"],
+      ["lagon", "meduse"],
+      ["ville", "parapluie"],
+      ["dunes", "virevoltant"],
+    ] as const;
+    let touched = 0;
+    let runs = 0;
+    for (const [id, thing] of flocks) {
+      const t = getTrack(id);
+      const m = t.movers.find((x) => x.kind === "roll" && x.thing === thing)!;
+      if (m.kind !== "roll") throw new Error(thing);
+      for (const level of ["fort", "moyen"] as const) {
+        for (let j = 0; j < 24; j++) {
+          const k = kartAt(id, m.s - 90);
+          k.v = 24;
+          const mem = newBotMemory({ rng: 3 + j });
+          const h = { rng: 17 + j };
+          let now = (j / 24) * m.period * 1000;
+          let hit = false;
+          for (let i = 0; i < 60 * 8 && deltaS(t, m.s, k.s) < 8; i++) {
+            now += DT * 1000;
+            step(k, botDrive(t, k, null, [], [], level, mem, now, h).input, t, { top: 1, time: now / 1000 });
+            for (let q = 0; q < m.count; q++) {
+              const d = rollAt(m, q, now / 1000);
+              if (d === null) continue;
+              const c = pointAt(t, m.s, d);
+              if (Math.hypot(k.x - c.x, k.z - c.z) < m.radius + KART_RADIUS + 0.05) hit = true;
+            }
+          }
+          runs++;
+          if (hit) touched++;
+        }
+      }
+    }
+    // En esquivant les bêtes une à une, il en touchait une fois sur cinq (68 sur 336)
+    expect(touched / runs).toBeLessThan(0.14);
+  });
+
+  it("ni tarte ni fusée quand il ne reste à viser que des pilotes arrivés", () => {
+    const t = getTrack("port");
+    const k = kartAt("port", 200);
+    const near = kartAt("port", 230);
+    const mem = newBotMemory({ rng: 1 });
+    const h = { rng: 2 };
+    const arrived = [{ id: "a", kart: near, finish: 90_000 }];
+    const racing = [{ id: "a", kart: near, finish: null }];
+    for (const item of ["tarte", "fusee"] as const) {
+      expect(botWantsItem(t, k, item, arrived, [], "fort", mem, 10_000, h).use, item).toBe(false);
+      expect(botWantsItem(t, k, item, racing, [], "fort", mem, 10_000, h).use, item).toBe(true);
+    }
   });
 });
