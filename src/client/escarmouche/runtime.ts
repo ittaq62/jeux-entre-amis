@@ -331,7 +331,31 @@ export class BattleRuntime {
       night: Boolean(v.settings.night),
     });
     const levers = this.scene.quality === "haut" ? QUALITY_LEVERS_HIGH : QUALITY_LEVERS;
-    this.quality = new AutoQuality({ levers, apply: (on) => this.tuneQuality(levers, on) });
+    // On repart des crans trouvés à la partie d'avant sur cet appareil (à cette qualité) : au téléphone, la qualité
+    // automatique ne passe plus les vingt premières secondes à les reprendre un à un. Fluide dix secondes, elle remonte
+    // d'un cran comme d'habitude
+    const memo = `esc-crans:${this.scene.quality}`;
+    this.quality = new AutoQuality({
+      levers,
+      apply: (on) => {
+        this.tuneQuality(levers, on);
+        try {
+          localStorage.setItem(memo, on.map((x) => (x ? "1" : "0")).join(""));
+        } catch {
+          // Pas de stockage (navigation privée) : on refera les essais la prochaine fois
+        }
+      },
+    });
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(memo);
+    } catch {
+      saved = null;
+    }
+    if (saved && saved.length === levers.length && saved.includes("1")) {
+      [...saved].forEach((c, i) => (this.quality.on[i] = c === "1"));
+      this.tuneQuality(levers, this.quality.on);
+    }
     this.controls.attach(o.canvas);
     this.applyPrefs();
     this.setRoom(o.room);
