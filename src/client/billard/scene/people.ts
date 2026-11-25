@@ -221,9 +221,10 @@ function seatedPose(crouch: number, t: number, seed: number, cheer: number): Pos
     lean: -0.06,
     twist: 0,
     roll: 0,
+    // La queue droite à côté de lui, la main sur l'accoudoir (entre les genoux, elle lui barrait le visage), l'autre sur le genou
     hands: [
-      [-0.04, hy + 0.2, 0.27],
-      [0.04, hy + 0.3, 0.27],
+      [-0.27, hy + 0.24, 0.16],
+      [0.1, hy + 0.15, 0.27],
     ],
     feet: [
       [-0.14, 0, 0.3],
@@ -250,6 +251,8 @@ export class TablePeople {
   private people = new Map<string, Person>();
   private heads = new Map<string, Promise<HTMLCanvasElement>>();
   private spots: Spot[] = [];
+  /** Les mêmes places, tournées pour un personnage */
+  private places: Spot[] = [];
   private table: Table | null = null;
   private disposed = false;
   private chalkGeo = new THREE.BoxGeometry(0.022, 0.022, 0.022);
@@ -261,6 +264,8 @@ export class TablePeople {
     this.table = t;
     if (spots !== this.spots) {
       this.spots = spots;
+      // Une place de salle est tournée comme son meuble (devant : +z) ; un personnage a son devant en −z
+      this.places = spots.map((s) => ({ ...s, yaw: s.yaw + Math.PI }));
       // Une autre salle : chacun à sa nouvelle place, tout de suite
       for (const p of this.people.values()) {
         this.homeOf(p, p.pos);
@@ -311,7 +316,8 @@ export class TablePeople {
           cueBack: new THREE.Vector3(0, -1, 0),
           after: null,
           react: null,
-          chalkAt: 6 + i * 3.7,
+          // Compté depuis sa première image (l'horloge est celle de la page : tous frottaient leur craie ensemble)
+          chalkAt: NaN,
           chalkUntil: 0,
         };
         this.people.set(info.id, p);
@@ -386,12 +392,12 @@ export class TablePeople {
   // -------------------------------------------------------------------------
 
   private homeSpot(p: Person): Spot {
-    const n = this.spots.length;
+    const n = this.places.length;
     if (n === 0) {
       const a = p.index * 1.3;
       return { x: Math.cos(a) * 2.6, y: FLOOR, z: Math.sin(a) * 2, yaw: Math.atan2(Math.cos(a), Math.sin(a)), sit: false };
     }
-    const s = this.spots[p.index % n]!;
+    const s = this.places[p.index % n]!;
     const round = Math.floor(p.index / n);
     if (round === 0) return s;
     // Plus de joueurs que de places : à côté de la place, debout
@@ -635,6 +641,7 @@ export class TablePeople {
       pose = seatedPose(crouch, t, p.seed, react?.kind === "bravo" ? 1 : 0);
     } else {
       // Debout : à sa place, ou relevé après son coup
+      if (Number.isNaN(p.chalkAt)) p.chalkAt = t + 6 + p.index * 3.7;
       const chalking = !isShooter && p.goal === "home" && !react && t < p.chalkUntil;
       if (!isShooter && p.goal === "home" && t > p.chalkAt) {
         p.chalkAt = t + 9 + ((p.seed * 13 + Math.floor(t)) % 7);
@@ -706,7 +713,7 @@ export class TablePeople {
     const rx = Math.cos(yaw),
       rz = -Math.sin(yaw);
     if (chalking) return out.set(-rx * 0.34 + fx * 0.1, 1, -rz * 0.34 + fz * 0.1).normalize();
-    if (sitting) return out.set(fx * 0.04, 1, fz * 0.04).normalize();
+    if (sitting) return out.set(rx * 0.1 + fx * 0.03, 1, rz * 0.1 + fz * 0.03).normalize();
     return out.set(rx * 0.07 + fx * 0.05, 1, rz * 0.07 + fz * 0.05).normalize();
   }
 

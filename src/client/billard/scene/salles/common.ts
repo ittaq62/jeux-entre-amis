@@ -12,7 +12,7 @@ export interface Spot {
   x: number;
   y: number;
   z: number;
-  /** Vers où il regarde (angle autour de la verticale ; 0 : vers −z) */
+  /** Vers où il regarde, comme on tourne un meuble de la salle (angle autour de la verticale ; 0 : vers +z) */
   yaw: number;
   sit: boolean;
 }
