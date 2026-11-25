@@ -12,6 +12,7 @@ import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useSession } from "../stores/session.ts";
+import { LAST_EMAIL } from "./LoginPage.tsx";
 
 /** Redimensionne une image en carre 256 px (WebP) avant l'envoi. */
 async function toSquareWebp(file: File): Promise<Blob> {
@@ -80,6 +81,12 @@ export function AccountPage() {
 
   async function deleteAccount() {
     await api.del("/me");
+    // L'adresse proposée à la connexion part avec le compte
+    try {
+      localStorage.removeItem(LAST_EMAIL);
+    } catch {
+      // Pas de stockage : rien à oublier
+    }
     disconnectHub();
     useSession.setState({ user: null, pending: null });
     navigate("/connexion");

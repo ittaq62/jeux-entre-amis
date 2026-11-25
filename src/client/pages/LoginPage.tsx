@@ -18,7 +18,8 @@ const DECOR: Card[] = [
   { id: 5, kind: "draw2", color: "green" },
 ];
 
-const LAST_EMAIL = "tablee:last-email";
+/** La dernière adresse tapée, proposée à la prochaine connexion (oubliée quand on supprime son compte) */
+export const LAST_EMAIL = "tablee:last-email";
 
 export function LoginPage() {
   const [, navigate] = useLocation();
