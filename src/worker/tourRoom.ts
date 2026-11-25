@@ -97,6 +97,8 @@ const STALE_TABLE_MS = 2 * 60 * 60_000;
  * effacée), ou finie depuis un moment sans que son résultat soit arrivé, le jeu ne compte pas et la soirée continue
  */
 const WATCH_TABLE_MS = 60_000;
+/** Un jeu passé par l'hôte : sa table ferme quand tout le monde est revenu à l'entracte */
+const SKIPPED_TABLE_CLOSE_MS = 4000;
 /** Le hub oublie une salle qui ne lui a rien dit depuis six heures : on le lui rappelle bien avant */
 const HUB_REFRESH_MS = 30 * 60_000;
 const CHAT_KEEP = 120;
@@ -136,7 +138,7 @@ interface TourGame {
   variant: string;
 }
 
-type TimerKind = "launch" | "host" | "release" | "cleanup" | "stale" | "watch";
+type TimerKind = "launch" | "host" | "release" | "cleanup" | "stale" | "watch" | "closeTable";
 
 interface Timer {
   at: number;
@@ -145,6 +147,8 @@ interface Timer {
   code?: string;
   /** « watch » : la table était déjà finie au regard précédent */
   seen?: boolean;
+  /** « closeTable » : le jeu de la table à fermer */
+  game?: GameId;
 }
 
 interface TourData {
@@ -1024,6 +1028,17 @@ export class TourRoom extends DurableObject<Env> {
         return this.finishTour(now);
       }
 
+      case "skip": {
+        // Passer le jeu en cours (une partie qui traîne, un jeu qui ne plaît pas) : il ne compte pas, la tournée enchaîne.
+        // Sa table ferme un peu plus tard, quand tous les écrans sont revenus à l'entracte (sinon elle s'afficherait un
+        // instant « fermée par l'administrateur »)
+        if (d.status !== "playing" || !d.current) return;
+        const { game, code } = d.current;
+        this.addTimer({ at: now + SKIPPED_TABLE_CLOSE_MS, kind: "closeTable", code, game });
+        const name = member?.name ?? att.user.pseudo;
+        return this.abortCurrent(now, `${name} passe ${GAME_NAMES[game]} : ce jeu ne compte pas, la tournée continue.`);
+      }
+
       case "again": {
         if (d.status !== "finished") return;
         // Une nouvelle tournée avec la même bande et les mêmes règles
@@ -1488,6 +1503,12 @@ export class TourRoom extends DurableObject<Env> {
         await this.abortCurrent(now, "La table de ce jeu ne répond plus : il ne compte pas, la tournée continue.");
         return false;
       }
+      case "closeTable":
+        if (t.game && t.code)
+          await gameStub(this.env, t.game, t.code)
+            .adminClose()
+            .catch(() => {});
+        return false;
       case "watch": {
         if (!d.current || d.current.code !== t.code) return false;
         const { game, code } = d.current;

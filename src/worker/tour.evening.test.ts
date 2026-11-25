@@ -196,6 +196,40 @@ describe("tournée : une soirée qui ne reste pas coincée", () => {
     expect(back.team).toBe(team);
   });
 
+  it("l'hôte passe le jeu en cours : il ne compte pas, la tournée enchaîne, la table ferme quand tous sont revenus", async () => {
+    const { bench, host, view, later, chat, table } = await tour();
+    const ana = (await bench.arrive(user("ana"))).ws;
+    await bench.send(host, { t: "settings", settings: { games: ["uno", "naval"] } });
+    await bench.send(host, { t: "start" });
+    await bench.send(host, { t: "launch" });
+    // Un autre que l'hôte ne peut pas
+    await bench.send(ana, { t: "skip" });
+    expect(view().status).toBe("playing");
+    await bench.send(host, { t: "skip" });
+    expect(view().status).toBe("intermission");
+    expect(view().games[0]!.aborted).toBe(true);
+    expect(view().next).not.toBeNull();
+    expect(chat().some((t) => t.startsWith("Hote passe UNO") && t.includes("ne compte pas"))).toBe(true);
+    // La table n'est pas fermée tout de suite : les écrans repassent d'abord à l'entracte
+    expect(table.adminClose).not.toHaveBeenCalled();
+    await later(5_000);
+    expect(table.adminClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("l'hôte demande d'arrêter après ce jeu, puis se ravise", async () => {
+    const { bench, host, view, finish } = await tour();
+    await bench.arrive(user("ana"));
+    await bench.send(host, { t: "settings", settings: { games: ["uno"] } });
+    await bench.send(host, { t: "start" });
+    await bench.send(host, { t: "launch" });
+    await bench.send(host, { t: "finish" });
+    expect(view().finishAfterCurrent).toBe(true);
+    await bench.send(host, { t: "finish" });
+    expect(view().finishAfterCurrent).toBe(false);
+    await finish(["ana", "hote"]);
+    expect(view().status).toBe("intermission");
+  });
+
   it("l'administrateur ferme la tournée pendant un jeu : la table du jeu ferme aussi", async () => {
     const { bench, room, host, table } = await tour();
     await bench.arrive(user("ana"));

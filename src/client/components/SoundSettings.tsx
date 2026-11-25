@@ -4,6 +4,7 @@ import { play } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { Icon } from "./Icon.tsx";
 import { Check } from "./ui.tsx";
+import { TourHostMenu } from "../tour/TourHostMenu.tsx";
 
 /**
  * Le son de tous les jeux, gardé sur l'appareil : coupé ou non, le volume général, les effets, la musique et l'ambiance.
@@ -133,13 +134,15 @@ export function SoundButton({ className = "btn btn-ghost btn-icon", children }: 
 
 /**
  * La ligne « Son » des menus de partie : elle déplie le réglage commun sur place (et les réglages propres au jeu dessous),
- * sans quitter le menu.
+ * sans quitter le menu. C'est la ligne que tous les menus de partie partagent : dans une tournée, les commandes de l'hôte
+ * (arrêter après ce jeu, passer ce jeu) s'affichent juste avant elle.
  */
 export function MenuSound({ children }: { children?: ReactNode }) {
   const sound = usePrefs((p) => p.sound);
   const [open, setOpen] = useState(false);
   return (
     <>
+      <TourHostMenu />
       <button type="button" className="menu-item" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Icon name={sound ? "volume" : "mute"} size={18} /> Son
         <Icon name={open ? "chevronUp" : "chevronDown"} size={16} className="menu-item-end" />

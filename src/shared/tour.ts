@@ -1578,6 +1578,8 @@ export type TourClientMessage =
   | { t: "continue" }
   /** Hôte : finir la tournée (à l'entracte), ou après le jeu en cours */
   | { t: "finish" }
+  /** Hôte, pendant un jeu : le passer (il ne compte pas), la tournée enchaîne sur le suivant */
+  | { t: "skip" }
   /** Hôte, une fois la tournée finie : en relancer une avec la même bande */
   | { t: "again" }
   /** Ses skins, choisis sur son appareil : la tournée les confie à chaque table où il joue */

@@ -32,6 +32,11 @@ export interface TourBridge {
    * d'un côté (la bataille navale et les briques le font aussi chacun pour soi)
    */
   teams: boolean;
+  /**
+   * Seulement pour l'hôte, pendant un jeu : arrêter la tournée après ce jeu (ou se raviser), et passer ce jeu (il ne compte
+   * pas, la tournée enchaîne). Null pour les autres.
+   */
+  host: { finishAfterCurrent: boolean; toggleFinish: () => void; skip: () => void } | null;
 }
 
 export const TourBridgeContext = createContext<TourBridge | null>(null);

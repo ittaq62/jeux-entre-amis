@@ -77,8 +77,16 @@ export function TourRoom({ code }: { code: string }) {
       progress: progressLabel(view, Date.now() + serverOffset),
       rules: lines.length > 0 ? lines : null,
       teams: Boolean(view.settings.teams),
+      host:
+        view.you.isHost && view.status === "playing" && view.current?.code === shown.code
+          ? {
+              finishAfterCurrent: view.finishAfterCurrent,
+              toggleFinish: () => send({ t: "finish" }),
+              skip: () => send({ t: "skip" }),
+            }
+          : null,
     };
-  }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue]);
+  }, [code, chat, sendChat, leave, view, shown, serverOffset, onContinue, send]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Reconnexion à la tournée…" : "Arrivée à la tournée…"} />;
