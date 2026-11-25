@@ -94,6 +94,7 @@ export function useBricksRoom(code: string) {
     setView(null);
     viewRef.current = null;
     useLive.getState().clear();
+    let cut = false;
     api
       .get(`/rooms/${code}`)
       .then(() => {
@@ -101,7 +102,17 @@ export function useBricksRoom(code: string) {
         socket.current = new LiveSocket<BricksServerMessage, BricksClientMessage>(`/rooms/${code}/ws`, {
           fatalCodes: [4003, 4004, SOCKET_REPLACED],
           firstQuery: arrivalQuery(code),
-          onStatus: setStatus,
+          onStatus: (st) => {
+            setStatus(st);
+            // De retour après une coupure : les poses gardées pendant la coupure partent juste après l'instantané
+            // d'arrivée, qui ne les compte pas encore. Une fois passées, on redemande le plateau, pour que l'écran ne
+            // reste pas sur un état d'avant elles (pièces qui disparaissent puis reviennent)
+            if (st === "reconnecting") cut = true;
+            else if (st === "open" && cut) {
+              cut = false;
+              setTimeout(() => socket.current?.send({ t: "resync" }), 700);
+            }
+          },
           onMessage: (msg) => {
             switch (msg.t) {
               case "room":
