@@ -19,6 +19,7 @@ import {
 import type { BillardAim, BillardView } from "../../shared/games/billard/net.ts";
 import { DT, HZ, type PhysEvent, type World } from "../../shared/games/billard/physics.ts";
 import { maxSpeed, playbackRate, startShot, type BallSpot, type Rig, type ShotParams } from "../../shared/games/billard/shot.ts";
+import { buzz, HitStop, Shake } from "../lib/feel.ts";
 import { AimLines } from "./scene/aimLines.ts";
 import { CUE_TILT } from "./scene/cue.ts";
 import { TablePeople, type CueAt } from "./scene/people.ts";
@@ -151,6 +152,11 @@ export class BillardRuntime {
   private ray = new THREE.Raycaster();
   private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private tmp = new THREE.Vector3();
+  /** Les sensations : la caméra qui tremble à la casse, l'action figée un instant, le téléphone qui vibre */
+  private shake = new Shake(0.022);
+  private shakeOff = new THREE.Vector3();
+  private stop = new HitStop();
+  private broke = new WeakSet<Replay>();
   private hudKey = "";
   private cueAnim: { strikeAt: number; from: number; dirX: number; dirY: number; cx: number; cy: number; a: number; b: number } | null =
     null;
@@ -519,6 +525,11 @@ export class BillardRuntime {
       this.o.onMoment?.({ k: "strike", id: r.rec.id, p: r.rec.shot.p, mine: r.rec.id === this.o.me });
     }
     if (r.stage === "roll") {
+      // Arrêt sur impact (la casse) : l'horloge du coup attend avec lui, sans rien rattraper ensuite
+      if (this.stop.frozen(t * 1000)) {
+        r.t0 += dt;
+        return;
+      }
       // Un onglet resté en arrière-plan (ou un appareil qui rame) prend du retard : au-delà d'une demi-seconde, on
       // rattrape l'horloge d'un coup, sans les sons
       const lag = t - r.t0 - r.played - dt;
@@ -598,12 +609,32 @@ export class BillardRuntime {
     const set = this.scene.balls!;
     for (; r.seen < w.events.length; r.seen++) {
       const e = w.events[r.seen]!;
-      if (sound) this.o.onPhys?.(e, this.volumeAt(e.x, e.y));
+      if (sound) {
+        this.o.onPhys?.(e, this.volumeAt(e.x, e.y));
+        this.feel(r, e);
+      }
       if (e.k === "poche") {
         if (this.view?.cfg.variant === "carambole") set.hide(e.a);
         else this.toNet(e.a, e.b, true);
       } else if (e.k === "sortie") set.hide(e.a);
     }
+  }
+
+  /**
+   * Ce qu'un choc fait sentir : la casse secoue la caméra et fige l'action un instant (pour tout le monde) ; sous le doigt
+   * de celui qui joue, la casse, une bille qui tombe, une bande prise fort
+   */
+  private feel(r: Replay, e: PhysEvent) {
+    const mine = r.rec.id === this.o.me;
+    const cue = r.rec.cue;
+    if (e.k === "bille" && r.rec.breakShot && !this.broke.has(r) && (e.a === cue || e.b === cue)) {
+      this.broke.add(r);
+      this.shake.add(0.35 + 0.4 * Math.min(1, e.v / 5));
+      this.stop.hit(70);
+      if (mine) buzz("fort");
+    } else if (e.k === "bille" && e.v > 3.5) this.shake.add(0.12);
+    else if (e.k === "poche" && mine) buzz("impact");
+    else if (e.k === "bande" && e.v > 2.5 && mine) buzz("tic");
   }
 
   /** Où la bille ira dans ce filet (sans la compter deux fois) */
@@ -633,6 +664,11 @@ export class BillardRuntime {
   private result(rec: ShotRecord) {
     this.o.onMoment?.({ k: "result", rec });
     this.people.react(rec.id, rec.outcome.tone, now());
+    if (rec.id === this.o.me) {
+      const o = rec.outcome;
+      if (o.foul || o.tone === "bad") buzz("echec");
+      else if (o.rack === "won" || o.tone === "great") buzz("reussite");
+    }
   }
 
   /** Le volume d'un choc selon sa distance à la caméra */
@@ -784,7 +820,11 @@ export class BillardRuntime {
     this.updateCue(t);
     this.updateCamera(dt, t);
     this.updatePeople(t, dt);
+    // La secousse se pose sur la caméra le temps de l'image seulement (la caméra garde sa course)
+    const shaking = this.shake.offset(t, this.shakeOff);
+    if (shaking) this.scene.camera.position.add(this.shakeOff);
     this.scene.render(dt);
+    if (shaking) this.scene.camera.position.sub(this.shakeOff);
     this.pushHud(false);
   };
 

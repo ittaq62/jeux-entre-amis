@@ -195,6 +195,10 @@
   text-overflow: ellipsis;
 }
 
+/* Un chiffre du tableau qui saute quand il change (lib/feel.ts) */
+.bl-pop {
+  display: inline-block;
+}
 .bl-hearts {
   display: inline-flex;
   gap: 1px;

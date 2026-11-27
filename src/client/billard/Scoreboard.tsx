@@ -5,8 +5,10 @@ import { VARIANT_NAMES, groupLeft, totals, type BillardPlayer } from "../../shar
 import type { BillardClientMessage, BillardRoomView, BillardView } from "../../shared/games/billard/net.ts";
 import { groupOf } from "../../shared/games/billard/rules.ts";
 import { TOUR_TEAMS } from "../../shared/tour.ts";
+import type { ReactNode } from "react";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
+import { usePop } from "../lib/feel.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
 import { formatLabel } from "./BillardLobby.tsx";
@@ -26,6 +28,16 @@ export function sideName(v: BillardView, players: BoardPlayer[], me: string | nu
   if (!s) return "?";
   if (v.cfg.teams) return TOUR_TEAMS[(v.players.find((p) => p.side === side)?.team ?? 0) as 0 | 1] ?? "?";
   return nameOf(players, me, s.ids[0]!);
+}
+
+/** Un chiffre du tableau qui saute quand il change (une manche, un point, une vie) */
+function Pop({ value, className = "", children }: { value: unknown; className?: string; children: ReactNode }) {
+  const ref = usePop<HTMLSpanElement>(value);
+  return (
+    <span ref={ref} className={`bl-pop ${className}`}>
+      {children}
+    </span>
+  );
 }
 
 function Hearts({ n, max }: { n: number; max: number }) {
@@ -56,13 +68,17 @@ export function Board({ v, players, me }: { v: BillardView; players: BoardPlayer
           <div key={p.id} className={`bl-chip ${p.id === v.shooter ? "is-turn" : ""} ${p.out ? "is-out" : ""}`}>
             <span className="bl-chip-name">{nameOf(players, me, p.id)}</span>
             {variant === "killer" ? (
-              <Hearts n={Math.max(0, p.lives)} max={v.cfg.lives} />
+              <Pop value={p.lives}>
+                <Hearts n={Math.max(0, p.lives)} max={v.cfg.lives} />
+              </Pop>
             ) : variant === "carambole" ? (
               <span className="num">
-                <BallDot id={p.ball === 1 ? 1 : 0} set="classiques" carom size={12} /> {p.points}
+                <BallDot id={p.ball === 1 ? 1 : 0} set="classiques" carom size={12} /> <Pop value={p.points}>{p.points}</Pop>
               </span>
             ) : (
-              <span className="num">{v.sides[p.side]?.racks ?? 0}</span>
+              <Pop value={v.sides[p.side]?.racks ?? 0} className="num">
+                {v.sides[p.side]?.racks ?? 0}
+              </Pop>
             )}
           </div>
         ))}
@@ -82,12 +98,12 @@ export function Board({ v, players, me }: { v: BillardView; players: BoardPlayer
               <strong>{sideName(v, players, me, i)}</strong>
               {v.cfg.races > 1 && !carom && (
                 <span className="bl-racks num" aria-label={`${s.racks} manche${s.racks > 1 ? "s" : ""}`}>
-                  {s.racks}
+                  <Pop value={s.racks}>{s.racks}</Pop>
                 </span>
               )}
               {carom && (
                 <span className="bl-points num">
-                  {team.reduce((a, p) => a + p.points, 0)}
+                  <Pop value={team.reduce((a, p) => a + p.points, 0)}>{team.reduce((a, p) => a + p.points, 0)}</Pop>
                   <small>/{v.cfg.points}</small>
                 </span>
               )}
