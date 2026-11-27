@@ -1,0 +1,32 @@
+/* La vitrine des succès du profil : un succès des trois derniers jours porte « Nouveau » et son jeton brille une fois ;
+   les succès arrivent l'un après l'autre (.rise, le mouvement commun du site). */
+
+.achievement-new {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f5dc9c, #c9993f);
+  color: var(--gold-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+@keyframes achievement-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 207, 90, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(255, 207, 90, 0.75));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.reduce-motion) .achievement.is-fresh > :first-child {
+    animation: achievement-glow 1.6s var(--ease-out) 0.4s 2;
+  }
+}

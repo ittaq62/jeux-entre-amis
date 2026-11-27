@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "wouter";
 import { ACHIEVEMENTS } from "../../shared/achievements.ts";
 import { TRACK_IDS, TRACKS } from "../../shared/games/bolides/track.ts";
@@ -14,6 +14,7 @@ import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { StreakCarnet } from "../components/StreakCarnet.tsx";
 import { Stars } from "../stars/Stars.tsx";
+import "./profileShelf.css";
 import { STAR_GAME_BY_ID } from "../../shared/starMaps.ts";
 import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
@@ -618,13 +619,20 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
             )}
             {won.length > 0 && (
               <ul className="achievement-grid">
-                {won.map((a) => (
-                  <li key={a.id} className="achievement is-owned">
+                {won.map((a, i) => (
+                  <li
+                    key={a.id}
+                    className={`achievement is-owned rise ${Date.now() - owned.get(a.id)! < FRESH_MS ? "is-fresh" : ""}`}
+                    style={{ "--i": i } as CSSProperties}
+                  >
                     <Chip label={a.chip} tone={a.tone} size={46} title={a.title} />
                     <span className="achievement-text">
                       <strong>{a.title}</strong>
                       <span>{a.description}</span>
-                      <span className="achievement-date">Obtenu le {dayMonth(owned.get(a.id)!)}</span>
+                      <span className="achievement-date">
+                        {Date.now() - owned.get(a.id)! < FRESH_MS && <b className="achievement-new">Nouveau</b>}
+                        Obtenu le {dayMonth(owned.get(a.id)!)}
+                      </span>
                     </span>
                   </li>
                 ))}
@@ -634,8 +642,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               <>
                 <h3 className="achievement-group">{won.length > 0 ? "À décrocher" : "Tous à décrocher"}</h3>
                 <ul className="achievement-grid">
-                  {toWin.map((a) => (
-                    <li key={a.id} className="achievement">
+                  {toWin.map((a, i) => (
+                    <li key={a.id} className="achievement rise" style={{ "--i": won.length + i } as CSSProperties}>
                       <span className="chip-slot" aria-hidden="true">
                         <span>{a.chip}</span>
                       </span>
@@ -719,6 +727,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
     </div>
   );
 }
+
+/** Un succès des trois derniers jours porte « Nouveau » */
+const FRESH_MS = 3 * 24 * 3600 * 1000;
 
 /** « 2 octobre », et « 2 octobre 2025 » pour une autre année */
 const dayMonth = (ts: number) =>
