@@ -98,20 +98,20 @@ def bricks_lock(rng):
 
 def bricks_clear(rng):
     # Une ligne effacée : trois lames qui montent vite, et un souffle qui l'emporte
-    x = N.phrase(rng, N.MARIMBA, ["E6", "G6", "C7"], [0.035, 0.035], [0.55, 0.6, 0.7], 0.6, hardness=6000, jitter=0.004)
-    x = place(rng, [(x, 0), (swish(rng, 0.3, (800, 2500), (2500, 8000)) * 0.18, 0.02)], 0.65)
+    x = N.phrase(rng, N.MARIMBA, ["E6", "G6", "C7"], [0.035, 0.035], [0.55, 0.6, 0.7], 0.45, hardness=6000, jitter=0.004, damp=0.4)
+    x = place(rng, [(x, 0), (swish(rng, 0.22, (800, 2500), (2500, 8000)) * 0.18, 0.02)], 0.45)
     return room(rng, x, rt60=0.4, wet=0.16, size=0.9)
 
 
 def bricks_quad(rng):
     # Quatre lignes d'un coup : un accord de vibraphone joué en arpège, et des tintements
-    x = N.phrase(rng, N.VIBES, ["C5", "E5", "G5", "C6", "E6"], [0.03, 0.03, 0.03, 0.03], [0.6, 0.65, 0.7, 0.8, 0.9], 1.2, hardness=5500, jitter=0.005)
-    s = N.phrase(rng, N.GLOCK, ["C7", "G7"], [0.06], [0.25, 0.3], 0.8, hardness=9000)
-    return room(rng, place(rng, [(x, 0), (s, 0.16), (swish(rng, 0.4, (600, 2000), (2000, 7000)) * 0.15, 0)], 1.3), rt60=0.6, wet=0.2, size=1.1)
+    x = N.phrase(rng, N.VIBES, ["C5", "E5", "G5", "C6", "E6"], [0.03, 0.03, 0.03, 0.03], [0.6, 0.65, 0.7, 0.8, 0.9], 0.7, hardness=5500, jitter=0.005, damp=0.3)
+    s = N.phrase(rng, N.GLOCK, ["C7", "G7"], [0.06], [0.25, 0.3], 0.5, hardness=9000, damp=0.4)
+    return room(rng, place(rng, [(x, 0), (s, 0.16), (swish(rng, 0.3, (600, 2000), (2000, 7000)) * 0.15, 0)], 0.75), rt60=0.4, wet=0.18, size=1.0)
 
 
 def bricks_combo(rng):
-    return room(rng, N.phrase(rng, N.GLOCK, ["A6"], [], [0.6], 0.35, hardness=8000), rt60=0.3, wet=0.14, size=0.7)
+    return room(rng, N.phrase(rng, N.GLOCK, ["A6"], [], [0.6], 0.25, hardness=8000, damp=0.3), rt60=0.2, wet=0.12, size=0.6)
 
 
 def bricks_spin(rng):
@@ -159,8 +159,8 @@ def bricks_count(rng):
 
 def bricks_go(rng):
     # Partez : une cloche claire, qui sonne
-    x = place(rng, [(struck(rng, HANDBELL, N.note_hz("C6"), 1.0, 2.2, 7000), 0), (tap(rng, CLAVES, 2000, 0.2, 8000, 0.6, 0.4), 0)], 2.2)
-    return room(rng, x, rt60=0.6, wet=0.18, size=1.0)
+    x = place(rng, [(struck(rng, HANDBELL, N.note_hz("C6"), 1.0, 1.1, 7000, damp=0.45), 0), (tap(rng, CLAVES, 2000, 0.2, 8000, 0.6, 0.4), 0)], 1.1)
+    return room(rng, x, rt60=0.45, wet=0.16, size=1.0)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -169,25 +169,26 @@ def bricks_go(rng):
 
 def uno_uno(rng):
     # « UNO ! » : deux coups de cloche à main, vifs, et un tambourin
-    b1 = struck(rng, HANDBELL, N.note_hz("E6"), 0.9, 2.0, 7000)
-    b2 = struck(rng, HANDBELL, N.note_hz("A6"), 1.0, 2.2, 7000)
+    b1 = struck(rng, HANDBELL, N.note_hz("E6"), 0.9, 1.0, 7000, damp=0.35)
+    b2 = struck(rng, HANDBELL, N.note_hz("A6"), 1.0, 1.0, 7000, damp=0.4)
     jingle = sum(place(rng, [(struck(rng, dict(ratios=[1, 1.5, 2.3], decays=[0.12, 0.08, 0.05], amps=[1, 0.6, 0.3]), rng.uniform(5000, 8000), 0.2, 0.25, 9000), 0)], 0.25) for _ in range(5))
-    x = place(rng, [(b1, 0), (b2, 0.13), (jingle * 0.6, 0.13)], 2.4)
+    x = place(rng, [(b1, 0), (b2, 0.09), (jingle * 0.6, 0.09)], 1.1)
     return room(rng, x, rt60=0.6, wet=0.2, size=1.1)
 
 
 def uno_reverse(rng):
     # Sens inverse : une carte qui part d'un côté, puis revient de l'autre, et claque sur la pile
-    x = place(rng, [(swish(rng, 0.14, (700, 2500), (2500, 7000), 1) * 0.8, 0), (swish(rng, 0.14, (700, 2500), (2500, 7000), -1) * 0.8, 0.12), (paper(rng, 0.05, (1200, 6000)), 0.25)], 0.32)
+    x = place(rng, [(swish(rng, 0.12, (700, 2500), (2500, 7000), 1) * 0.8, 0), (swish(rng, 0.12, (700, 2500), (2500, 7000), -1) * 0.8, 0.1), (paper(rng, 0.05, (1200, 6000)), 0.21)], 0.3)
     return room(rng, x, rt60=0.2, wet=0.1, size=0.6)
 
 
 def uno_caught(rng):
-    # Pris sans avoir dit UNO : un « bonk » de tom, qui retombe
-    t = t_axis(0.5)
-    tom = modal(rng, 110, MEMBRANE["ratios"], MEMBRANE["decays"], MEMBRANE["amps"], 0.5, detune=0.01)
-    tom *= 1 + 0.0 * t
-    x = place(rng, [(tom, 0), (mallet(rng, 0.004, 2000, 0.4), 0)], 0.5)
+    # Pris sans avoir dit UNO (vexant, pas grave) : deux coups de tom qui descendent, « bonk-bonk »
+    def hit(f, v):
+        tom = modal(rng, f, MEMBRANE["ratios"], MEMBRANE["decays"], MEMBRANE["amps"], 0.35, detune=0.01)
+        return place(rng, [(tom * v, 0), (mallet(rng, 0.004, 2200, 0.35 * v), 0)], 0.35)
+
+    x = place(rng, [(hit(rng.uniform(150, 160), 0.85), 0), (hit(rng.uniform(108, 116), 1.0), rng.uniform(0.11, 0.13))], 0.5)
     return room(rng, x, rt60=0.35, wet=0.14, size=0.9)
 
 
@@ -200,7 +201,7 @@ def uno_eliminated(rng):
 
 def uno_your_turn(rng):
     # À toi : deux lames de vibraphone, douces (ding-dong)
-    x = N.phrase(rng, N.VIBES, ["E6", "C6"], [0.16], [0.55, 0.6], 2.0, hardness=4000, jitter=0.006)
+    x = N.phrase(rng, N.VIBES, ["E6", "C6"], [0.16], [0.55, 0.6], 1.4, hardness=4000, jitter=0.006, damp=0.6)
     return room(rng, x, rt60=0.55, wet=0.2, size=1.0)
 
 
@@ -210,27 +211,28 @@ def uno_your_turn(rng):
 
 def naval_sonar(rng):
     # Le sonar : un « ping » qui se perd dans l'eau (une longue réverbération sombre) et son écho qui revient
-    dur = 2.4
+    dur = 1.4
     t = t_axis(dur)
     f = 1180 * (1 + 0.003 * np.sin(2 * np.pi * 5 * t))
-    ping = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.5)
+    ping = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.3)
     ping[: int(0.004 * SR)] *= np.linspace(0, 1, int(0.004 * SR))
     ping += 0.25 * np.sin(2 * np.pi * np.cumsum(f * 2.01) / SR) * np.exp(-t / 0.08) * np.minimum(1, t / 0.004)
-    d = int(0.7 * SR)
+    d = int(0.5 * SR)
     echo = np.zeros_like(ping)
     echo[d:] = ping[: len(ping) - d] * 0.18
     water = butter(N.pink(rng, len(t)), "low", 900) * 0.02
     x = N.fade_out(ping + echo + water, 300)
-    return room(rng, x, rt60=1.8, wet=0.35, size=2.0, damp=1600)
+    return room(rng, x, rt60=0.9, wet=0.3, size=2.0, damp=1600)
 
 
 def naval_bubbles(rng):
     # Des bulles qui remontent : chacune sa taille (sa note), à leur rythme, sur le bruit de l'eau
     dur = 2.9
     layers = []
-    for _ in range(rng.integers(26, 36)):
-        f0 = rng.uniform(280, 1300)
-        layers.append((bubble(rng, f0, rng.uniform(0.006, 0.02)) * rng.uniform(0.2, 0.9), rng.uniform(0, dur - 0.2) ** 1.1))
+    for _ in range(rng.integers(45, 60)):
+        # De grosses bulles surtout (des « bloups » graves, comme l'ancien son), quelques petites plus aiguës
+        f0 = rng.uniform(150, 700) if rng.random() < 0.75 else rng.uniform(700, 1300)
+        layers.append((bubble(rng, f0, rng.uniform(0.012, 0.03)) * rng.uniform(0.5, 0.9), rng.uniform(0, dur - 0.2) ** 1.1))
     water = butter(N.pink(rng, int(dur * SR)), "low", 700) * 0.04
     # Les bulles sous l'eau n'ont pas d'aigus secs
     x = butter(place(rng, layers, dur), "low", 4500) + water * np.linspace(1, 0.3, int(dur * SR))
@@ -266,31 +268,38 @@ def cap_turn(rng):
 
 
 def cap_jump(rng):
-    # Un pion qui fait un grand saut : il fend l'air, puis retombe
-    x = place(rng, [(swish(rng, 0.14, (500, 1500), (1500, 4000)) * 0.4, 0), (tap(rng, PIECE, rng.uniform(900, 1200), 0.12, 6000, 0.9), 0.12), (thud(rng, 180, 0.2, 0.3, 1500) * 0.5, 0.12)], 0.3)
+    # Un pion qui retombe d'un grand saut (le son part à l'atterrissage) : un seul choc, plus appuyé qu'un pas
+    x = place(rng, [(tap(rng, PIECE, rng.uniform(850, 1100), 0.14, 6000, 1.0), 0), (thud(rng, rng.uniform(150, 190), 0.25, 0.45, 1800) * 0.7, 0)], 0.3)
     return room(rng, x, rt60=0.22, wet=0.12, size=0.6)
 
 
 def cap_build(rng):
-    # Une maison posée : un petit bloc de bois sur le plateau
-    x = place(rng, [(tap(rng, N.WOODBLOCK, rng.uniform(600, 800), 0.15, 5000, 0.9), 0), (thud(rng, 200, 0.2, 0.3, 1800) * 0.4, 0)], 0.2)
-    return room(rng, x, rt60=0.22, wet=0.12, size=0.6)
+    # Un bâtiment qui sort de terre (0,55 s) : de petits blocs de bois qui s'empilent, de plus en plus haut, et se calent
+    layers = []
+    at = 0.0
+    f = rng.uniform(520, 600)
+    for k in range(3):
+        layers.append((tap(rng, N.WOODBLOCK, f * (1 + 0.12 * k), 0.12, 5000, rng.uniform(0.55, 0.75)), at))
+        at += rng.uniform(0.11, 0.15)
+    layers.append((place(rng, [(tap(rng, N.WOODBLOCK, f * 1.3, 0.15, 5000, 0.9), 0), (thud(rng, 200, 0.2, 0.3, 1800) * 0.4, 0)], 0.2), at))
+    return room(rng, place(rng, layers, at + 0.22), rt60=0.22, wet=0.12, size=0.6)
 
 
 def cap_build_big(rng):
     # Un grand bâtiment : plusieurs blocs qu'on empile, le dernier plus lourd
     layers = []
     at = 0.0
-    for k in range(4):
-        layers.append((tap(rng, N.WOODBLOCK, rng.uniform(500, 800), 0.15, 5000, rng.uniform(0.6, 0.9)), at))
-        at += rng.uniform(0.09, 0.14)
+    # Assez de blocs pour un monument qui monte en 1,1 s (et, ralenti, des étages qui tombent)
+    for k in range(6):
+        layers.append((tap(rng, N.WOODBLOCK, rng.uniform(450, 780), 0.15, 5000, rng.uniform(0.6, 0.9)), at))
+        at += rng.uniform(0.11, 0.16)
     layers.append((thud(rng, 120, 0.4, 0.7, 2500), at))
     return room(rng, place(rng, layers, at + 0.45), rt60=0.3, wet=0.14, size=0.8)
 
 
 def cap_auction(rng):
     # L'enchère s'ouvre : une cloche de comptoir
-    x = place(rng, [(struck(rng, HANDBELL, N.note_hz("A5"), 0.9, 2.2, 8000), 0)], 2.2)
+    x = place(rng, [(struck(rng, HANDBELL, N.note_hz("A5"), 0.9, 1.4, 8000, damp=0.6), 0)], 1.4)
     return room(rng, x, rt60=0.5, wet=0.18, size=0.9)
 
 
@@ -307,6 +316,15 @@ def cap_buy(rng):
         coin = modal(rng, rng.uniform(3500, 6500), [1, 1.43, 2.2, 2.9], [0.12, 0.08, 0.05, 0.03], [1, 0.6, 0.35, 0.2], 0.2, detune=0.01)
         layers.append((coin * rng.uniform(0.15, 0.35), rng.uniform(0.08, 0.35)))
     return room(rng, place(rng, layers, 0.9), rt60=0.3, wet=0.14, size=0.7)
+
+
+def cap_gavel(rng):
+    # Adjugé : le maillet de bois dur frappe deux fois son socle, un léger puis un franc (toc-toc)
+    def knock(v):
+        return place(rng, [(tap(rng, N.KNOCK, rng.uniform(260, 300), 0.25, 6000, v, 0.9), 0), (thud(rng, rng.uniform(140, 170), 0.25, 0.6, 3000) * 0.6 * v, 0)], 0.25)
+
+    x = place(rng, [(knock(0.6), 0), (knock(1.0), rng.uniform(0.085, 0.1))], 0.36)
+    return room(rng, x, rt60=0.35, wet=0.16, size=1.0)
 
 
 def cap_bankrupt(rng):
@@ -334,7 +352,7 @@ def whistle(rng, dur, f0=None):
 
 
 def foot_whistle(rng):
-    return room(rng, whistle(rng, rng.uniform(0.36, 0.42)), rt60=0.9, wet=0.18, size=2.0, damp=4000)
+    return room(rng, whistle(rng, rng.uniform(0.33, 0.38)), rt60=0.6, wet=0.14, size=2.0, damp=4000)
 
 
 def foot_whistle_end(rng):
@@ -394,22 +412,65 @@ GAMES = {
         "cap-deal": (cap_deal, ["cap-deal.mp3"]),
         "cap-buy": (cap_buy, ["cap-buy.mp3"]),
         "cap-bankrupt": (cap_bankrupt, ["cap-bankrupt.mp3"]),
+        "cap-gavel": (cap_gavel, ["cap-gavel.mp3"]),
     },
     "crampons": {
-        "foot-whistle": (foot_whistle, ["foot-whistle.mp3"]),
+        "foot-whistle": (foot_whistle, ["foot-whistle.mp3", "foot-whistle-2.mp3", "foot-whistle-3.mp3"]),
         "foot-whistle-end": (foot_whistle_end, ["foot-whistle-end.mp3"]),
-        "foot-post": (foot_post, ["foot-post.mp3"]),
+        "foot-post": (foot_post, ["foot-post.mp3", "foot-post-2.mp3"]),
     },
+}
+
+
+# Les durées maximales (s), pour rester proche des anciennes : les animations sont calées dessus
+MAX_DUR = {
+    "bricks-move": 0.05,
+    "bricks-rotate": 0.06,
+    "bricks-drop": 0.35,
+    "bricks-lock": 0.16,
+    "bricks-clear": 0.4,
+    "bricks-quad": 0.6,
+    "bricks-combo": 0.22,
+    "bricks-spin": 0.4,
+    "bricks-hold": 0.16,
+    "bricks-attack": 0.26,
+    "bricks-garbage": 0.22,
+    "bricks-warn": 0.2,
+    "bricks-ko": 0.6,
+    "bricks-count": 0.25,
+    "bricks-go": 0.9,
+    "uno": 0.95,
+    "reverse": 0.32,
+    "caught": 0.5,
+    "eliminated": 1.8,
+    "your-turn": 1.35,
+    "naval-sonar": 1.4,
+    "naval-bubbles": 3.0,
+    "naval-torpedo": 1.9,
+    "cap-hop": 0.12,
+    "cap-turn": 0.2,
+    "cap-jump": 0.3,
+    "cap-build": 0.6,
+    "cap-build-big": 1.2,
+    "cap-auction": 1.3,
+    "cap-deal": 0.65,
+    "cap-buy": 0.9,
+    "cap-bankrupt": 0.9,
+    "cap-gavel": 0.4,
+    "foot-whistle": 0.5,
+    "foot-whistle-end": 1.8,
+    "foot-post": 1.2,
 }
 
 
 def build(name, make, files, ref_dir):
     first = os.path.join(ref_dir, files[0])
-    target = N.active_rms(N.decode(first)) if os.path.exists(first) else 0.1
+    # Le volume de l'ancien son, tel qu'on l'entend (ses 50 ms les plus fortes)
+    target = N.short_loud(N.decode(first)) if os.path.exists(first) else 0.1
     for k, f in enumerate(files):
         rng = np.random.default_rng(sum(map(ord, name)) * 1000 + k)
-        x = N.trim(make(rng), -50)
-        x = x * (target / (N.active_rms(x) + 1e-12))
+        x = N.trim(make(rng), -50, MAX_DUR.get(name))
+        x = x * (target / (N.short_loud(x) + 1e-12))
         x = N.limit(x)
         x = N.floor_noise(rng, x)
         N.write_mp3(x, os.path.join(N.OUT, f))

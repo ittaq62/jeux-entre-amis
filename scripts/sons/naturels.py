@@ -121,7 +121,7 @@ def floor_noise(rng, x, level_db=-72.0):
     return x + p
 
 
-def limit(x, ceiling=0.89, max_drive=1.25):
+def limit(x, ceiling=0.89, max_drive=2.0):
     """Des crêtes au-dessus du plafond : un peu de saturation douce au plus (elle arrondit les chocs, mais déformerait
     une note tenue), et pour le reste on baisse le tout"""
     peak = np.max(np.abs(x))
@@ -146,13 +146,17 @@ def fade_out(x, ms=30):
     return x
 
 
-def trim(x, thresh_db=-60.0):
-    """Coupe la fin quand tout est retombé sous le seuil (relatif à la crête)"""
+def trim(x, thresh_db=-60.0, max_dur=None):
+    """Coupe le silence du début (le son part à l'instant de l'événement) et la fin quand tout est retombé sous le seuil
+    (relatif à la crête) ; au plus `max_dur` secondes, avec un fondu"""
     env = np.abs(x)
     peak = env.max() + 1e-12
     above = np.where(env > peak * 10 ** (thresh_db / 20))[0]
+    start = max(0, (above[0] if len(above) else 0) - int(0.0005 * SR))
     end = min(len(x), (above[-1] if len(above) else len(x)) + int(0.03 * SR))
-    return fade_out(x[:end], 25)
+    if max_dur:
+        end = min(end, start + int(max_dur * SR))
+    return fade_out(x[start:end], min(25, max(4, (end - start) / SR * 1000 * 0.3)))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -177,20 +181,22 @@ def note_hz(name):
     return 440.0 * 2 ** ((n + (octave - 4) * 12) / 12)
 
 
-def struck(rng, inst, f0, vel=1.0, dur=1.5, hardness=4000.0):
-    """Une lame frappée : le bruit du maillet, puis les modes ; plus fort = plus brillant"""
-    body = modal(rng, f0, inst["ratios"], inst["decays"], [a * (vel ** (1 + i * 0.6)) for i, a in enumerate(inst["amps"])], dur)
+def struck(rng, inst, f0, vel=1.0, dur=1.5, hardness=4000.0, damp=1.0):
+    """Une lame frappée : le bruit du maillet, puis les modes ; plus fort = plus brillant. `damp` < 1 : une lame plus
+    amortie (elle sonne moins longtemps)"""
+    decays = [d * damp for d in inst["decays"]]
+    body = modal(rng, f0, inst["ratios"], decays, [a * (vel ** (1 + i * 0.6)) for i, a in enumerate(inst["amps"])], dur)
     hit = mallet(rng, 0.004, hardness * (0.6 + 0.6 * vel), 0.25 * vel)
     return place(rng, [(body * vel, 0.0), (hit, 0.0)], dur)
 
 
-def phrase(rng, inst, notes, gaps, vels, dur, hardness=4000.0, jitter=0.008):
+def phrase(rng, inst, notes, gaps, vels, dur, hardness=4000.0, jitter=0.008, damp=1.0):
     """Quelques notes jouées à la main : un peu en avance ou en retard, jamais deux fois la même force"""
     layers = []
     at = 0.0
     for k, (n, v) in enumerate(zip(notes, vels)):
         v = v * rng.uniform(0.88, 1.08)
-        layers.append((struck(rng, inst, note_hz(n), v, min(2.5, dur - at), hardness), at + rng.uniform(-jitter, jitter) * (k > 0)))
+        layers.append((struck(rng, inst, note_hz(n), v, min(2.5, dur - at), hardness, damp), at + rng.uniform(-jitter, jitter) * (k > 0)))
         if k < len(gaps):
             at += gaps[k]
     return place(rng, layers, dur)
@@ -345,6 +351,13 @@ def active_rms(x):
     return float(np.sqrt(np.mean(r[keep] ** 2))) if keep.any() else float(r.max())
 
 
+def short_loud(x, ms=50):
+    """La force perçue d'un son bref : le niveau des `ms` millisecondes les plus fortes"""
+    w = int(SR * ms / 1000)
+    frames = np.lib.stride_tricks.sliding_window_view(np.pad(x, (0, w)), w)[::441]
+    return float(np.sqrt((frames**2).mean(axis=1)).max())
+
+
 def write_mp3(x, path):
     raw = x.astype(np.float32).tobytes()
     subprocess.run(
@@ -357,12 +370,13 @@ def write_mp3(x, path):
 def build(name, reference_dir):
     make, files, ref = SOUNDS[name]
     ref_path = os.path.join(reference_dir, ref)
-    target = active_rms(decode(ref_path)) if os.path.exists(ref_path) else 0.12
+    # Le volume de l'ancien son, tel qu'on l'entend (ses 50 ms les plus fortes)
+    target = short_loud(decode(ref_path)) if os.path.exists(ref_path) else 0.12
     for k, f in enumerate(files):
         rng = np.random.default_rng(sum(map(ord, name)) * 1000 + k)
         x = make(rng)
         x = trim(x)
-        x = x * (target / (active_rms(x) + 1e-12))
+        x = x * (target / (short_loud(x) + 1e-12))
         # Des crêtes trop hautes : on les arrondit (saturation douce, comme une prise de son compressée) au lieu de baisser
         # tout le son, qui paraîtrait plus faible que l'ancien
         x = limit(x)
