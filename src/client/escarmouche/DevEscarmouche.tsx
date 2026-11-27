@@ -1,7 +1,8 @@
 // Une page réservée au développement (/dev/escarmouche) : une carte d'Escarmouche vue depuis des points fixes, avec des
 // soldats posés, l'arme en main et des effets qui partent tout seuls, sans serveur ni bots. Elle sert à comparer le rendu
 // avant et après un changement, aux mêmes endroits. ?carte=hameau|gare &vue=0..n &arme=fa &tel (qualité du téléphone)
-// &soldat (gros plan sur un soldat), &loin (les soldats à 25, 40 et 60 m), &recharges (ils rechargent en boucle).
+// &soldat (gros plan sur un soldat), &loin (les soldats à 25, 40 et 60 m), &recharges (ils rechargent en boucle),
+// &marques (« Symboles de couleur »), &dos, &profil (les soldats de dos, de profil).
 
 import { useEffect, useRef, useState } from "react";
 import { seededAvatar, type AvatarConfig } from "../../shared/avatar.ts";
@@ -164,7 +165,8 @@ export function DevEscarmouche() {
     spots.forEach((p, i) => {
       scene.ensureSoldier(
         i,
-        { avatar: avatars[i]!, tenue: tenues[i]!, band: TEAM_KITS[p.team as 0 | 1].band, camo, gear },
+        // &marques : « Symboles de couleur » (la forme de l'équipe sur le brassard, le foulard, le casque)
+        { avatar: avatars[i]!, tenue: tenues[i]!, band: TEAM_KITS[p.team as 0 | 1].band, camo, gear, marks: params.has("marques") },
         i === 0 ? (user?.pseudo ?? "Soldat") : `Bot ${i}`,
         p.team ? "#3f7fd8" : "#d4453c",
       );
@@ -201,7 +203,8 @@ export function DevEscarmouche() {
             x: w.x,
             y: closeUp ? 0 : 0,
             z: w.z,
-            yaw: p.yaw,
+            // &dos, &profil : les soldats tournés (pour voir leur dos, leur flanc)
+            yaw: p.yaw + (params.has("dos") ? Math.PI : params.has("profil") ? Math.PI / 2 : 0),
             pitch: 0,
             speed: i === 1 && !closeUp ? 4.5 : 0,
             crouch: i === 2 && !closeUp,

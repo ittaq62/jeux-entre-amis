@@ -50,6 +50,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
 import { RELOAD_PLANS, RELOAD_VOLUME, reloadKind } from "./reload.ts";
+import { marked } from "./teamMark.ts";
 import { EscScene, TEAM_HEX } from "./scene/EscScene.ts";
 import type { Surface } from "./scene/effects.ts";
 import { drawCompass, Radar, type RadarDot } from "./radar.ts";
@@ -236,6 +237,7 @@ export class BattleRuntime {
   /** La secousse de la caméra (explosions proches, gros coups reçus), commune aux jeux : douce, et coupée par « Effets réduits » */
   private shake = new Shake(0.07, 2.2);
   private shakeOff = new THREE.Vector3();
+  private unmarks: () => void = () => {};
   /** Le coup de crosse : la vue recule d'un ou deux centimètres à chaque tir, et revient */
   private punch = 0;
   /** Quand il a tiré la dernière fois (pour ne faire vibrer qu'au premier coup d'une rafale) */
@@ -364,6 +366,10 @@ export class BattleRuntime {
       this.tuneQuality(levers, this.quality.on);
     }
     this.controls.attach(o.canvas);
+    // « Symboles de couleur » change en cours de partie : les soldats et leur nom suivent
+    this.unmarks = usePrefs.subscribe((s, prev) => {
+      if (s.colorblind !== prev.colorblind) this.setRoom(this.room);
+    });
     this.applyPrefs();
     this.setRoom(o.room);
     window.addEventListener("resize", this.fit);
@@ -409,6 +415,7 @@ export class BattleRuntime {
     cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.fit);
     this.controls.dispose();
+    this.unmarks();
     this.scene.dispose();
     this.sound.dispose();
   }
@@ -426,6 +433,7 @@ export class BattleRuntime {
     const seatId = room.you.seatId;
     this.me = seatId ? v.fighters.findIndex((f) => f.id === seatId) : -1;
     const teams = isTeamMode(v.mode);
+    const marks = usePrefs.getState().colorblind;
     v.fighters.forEach((f, i) => {
       if (i === this.me) {
         this.scene.removeSoldier(i);
@@ -442,15 +450,22 @@ export class BattleRuntime {
         band: kit.band,
         camo: arsenal?.camo ?? "usine",
         gear: { muzzle: arsenal?.muzzle ?? "aucun", extra: arsenal?.extra ?? "aucun" },
+        marks: teams && marks,
       };
       const color = teams ? TEAM_HEX[f.team === 1 ? 1 : 0] : kit.band;
-      this.scene.ensureSoldier(i, look, seat?.name ?? "Soldat", color);
+      this.scene.ensureSoldier(i, look, marked(seat?.name ?? "Soldat", teams ? f.team : null, marks), color);
     });
   }
 
   private nameOf(i: number): string {
     const id = this.room.escarmouche?.fighters[i]?.id;
     return this.room.seats.find((s) => s.id === id)?.name ?? "Soldat";
+  }
+
+  /** Son nom, précédé de la forme de son équipe si « Symboles de couleur » est actif (le fil des éliminations) */
+  private markedName(i: number): string {
+    const v = this.room.escarmouche;
+    return marked(this.nameOf(i), v && isTeamMode(v.mode) ? this.teamOf(i) : null, usePrefs.getState().colorblind);
   }
 
   private teamOf(i: number): number {
@@ -662,9 +677,9 @@ export class BattleRuntime {
         }
         const line: FeedLine = {
           id: ++this.feedSeq,
-          killer: e.a >= 0 && e.a !== e.v ? this.nameOf(e.a) : null,
+          killer: e.a >= 0 && e.a !== e.v ? this.markedName(e.a) : null,
           killerColor: e.a >= 0 ? this.colorOf(e.a) : "#fff",
-          victim: this.nameOf(e.v),
+          victim: this.markedName(e.v),
           victimColor: this.colorOf(e.v),
           weapon: e.w,
           head: e.h,
@@ -1269,7 +1284,13 @@ export class BattleRuntime {
       const fallen = ally && !alive;
       if (fallen && s?.alive && Math.hypot(f.x - s.x, f.z - s.z) < 1.8 && Math.abs(f.y - s.y) < 1.2) nearFallen = this.nameOf(i);
       if (alive && (ally || marked || nowMs - (this.radarPing.get(i) ?? -1e9) < 2500))
-        this.radarDots.push({ x: f.x, z: f.z, yaw: f.yaw, kind: ally ? "ally" : "enemy" });
+        this.radarDots.push({
+          x: f.x,
+          z: f.z,
+          yaw: f.yaw,
+          kind: ally ? "ally" : "enemy",
+          team: isTeamMode(v.mode) ? this.teamOf(i) : undefined,
+        });
       this.scene.updateSoldier(
         i,
         {
@@ -1334,6 +1355,7 @@ export class BattleRuntime {
     const hurtK =
       this.me >= 0 && s?.alive ? Math.max(0, 1 - (nowMs - this.hurtAt) / 650) * 0.55 + Math.max(0, (40 - this.hp) / 40) * 0.45 : 0;
     this.scene.setHurt(hurtK);
+    this.scene.setMarks(prefs.colorblind && isTeamMode(v.mode));
     this.scene.render(dt);
     if (this.radarCanvas) {
       const cam = this.scene.camera.position;
@@ -1343,7 +1365,9 @@ export class BattleRuntime {
         { x: cam.x, z: cam.z, yaw: this.yaw },
         this.radarDots,
         [
-          ...(flags ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1] })) : []),
+          ...(flags
+            ? [0, 1].map((k) => ({ x: flags[k * 5 + 2]! / 100, z: flags[k * 5 + 4]! / 100, color: TEAM_HEX[k as 0 | 1], team: k }))
+            : []),
           ...this.pingDots.map((p) => ({ x: p.x, z: p.z, color: "#ffd23a" })),
         ],
         v.mode === "zone" ? { ...this.gm.zone, color: zoneOwner >= 0 ? TEAM_HEX[zoneOwner === 1 ? 1 : 0] : "rgba(240,236,220,.8)" } : null,
@@ -1365,9 +1389,11 @@ export class BattleRuntime {
                   z: p.z,
                   letter: POINT_NAMES[k] ?? "?",
                   color: owner >= 0 ? TEAM_HEX[owner === 1 ? 1 : 0] : "rgba(240,236,220,.9)",
+                  team: owner >= 0 ? owner : undefined,
                 };
               })
             : [],
+        prefs.colorblind,
       );
     }
     if (this.compassCanvas) drawCompass(this.compassCanvas, this.yaw);

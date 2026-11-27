@@ -16,6 +16,7 @@ import { gunAnchors, handAt, poseGunParts, RELOAD_PLANS, reloadKind } from "../r
 import { buildCrates, buildMap, setWetness, type MapMesh } from "./mapMesh.ts";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { fuse } from "./fuse.ts";
+import { markTexture } from "../teamMark.ts";
 import { DEPOT_NAMES, POINT_NAMES } from "../../../shared/games/escarmouche/match.ts";
 import {
   nameSprite,
@@ -116,6 +117,10 @@ export class EscScene {
   private shellNext = 0;
   private grenades: THREE.Mesh[] = [];
   private flags: { group: THREE.Group; cloth: THREE.Mesh; stand: THREE.Mesh }[] = [];
+  /** « Symboles de couleur » : la forme de l'équipe sur l'étoffe des drapeaux */
+  private marks = false;
+  /** Ce que montre l'étoffe de chaque drapeau de la conquête (pour ne changer sa matière qu'au besoin) */
+  private pointLook: string[] = [];
   private zone: { ring: THREE.Mesh; wall: THREE.Mesh } | null = null;
   private points: { cloth: THREE.Mesh; ring: THREE.Mesh; letter: THREE.Sprite; at: THREE.Vector3 }[] = [];
   private basePixelRatio: number;
@@ -722,6 +727,18 @@ export class EscScene {
    * celle vers qui il penche ; le cercle au sol et la lettre (vue à travers les murs) sont aux couleurs de qui le tient,
    * et clignotent tant qu'il n'est pas tenu bien en main.
    */
+  /** « Symboles de couleur » allumé ou éteint : la forme de l'équipe sur l'étoffe des drapeaux du mode drapeau */
+  setMarks(on: boolean) {
+    if (on === this.marks) return;
+    this.marks = on;
+    this.flags.forEach((f, t) => {
+      const m = f.cloth.material as THREE.MeshStandardMaterial;
+      m.map = on ? markTexture(t, TEAM_HEX[t as 0 | 1]) : null;
+      m.color.set(on ? "#ffffff" : TEAM_HEX[t as 0 | 1]);
+      m.needsUpdate = true;
+    });
+  }
+
   setPoints(at: readonly { x: number; y: number; z: number }[], state: readonly number[] | null, r: number) {
     if (!state) return;
     if (this.points.length === 0) {
@@ -764,7 +781,16 @@ export class EscScene {
       const owner = state[k * 2] ?? -1;
       const v = (state[k * 2 + 1] ?? 0) / 100;
       const lean = v < -0.01 ? 0 : v > 0.01 ? 1 : -1;
-      (pt.cloth.material as THREE.MeshStandardMaterial).color.set(lean >= 0 ? TEAM_HEX[lean as 0 | 1] : "#f2efe6");
+      // L'étoffe aux couleurs de qui le prend ; avec « Symboles de couleur », sa forme dessus
+      const look = `${lean}:${this.marks && lean >= 0 ? 1 : 0}`;
+      if (this.pointLook[k] !== look) {
+        this.pointLook[k] = look;
+        const m = pt.cloth.material as THREE.MeshStandardMaterial;
+        const withMark = this.marks && lean >= 0;
+        if (Boolean(m.map) !== withMark) m.needsUpdate = true;
+        m.map = withMark ? markTexture(lean, TEAM_HEX[lean as 0 | 1]) : null;
+        m.color.set(withMark ? "#ffffff" : lean >= 0 ? TEAM_HEX[lean as 0 | 1] : "#f2efe6");
+      }
       pt.cloth.position.y = 0.75 + 3.0 * Math.abs(v);
       const pos = pt.cloth.geometry.attributes.position as THREE.BufferAttribute;
       for (let n = 0; n < pos.count; n++) {

@@ -38,6 +38,8 @@ export interface SoldierLook {
   camo: CamoId;
   /** Les accessoires de son arme principale */
   gear?: Gear;
+  /** « Symboles de couleur » : la forme de son équipe sur son brassard, son foulard, le bandeau de son casque */
+  marks?: boolean;
 }
 
 export interface SoldierPose {
@@ -357,6 +359,9 @@ export class SoldierModel {
   private disposables: { dispose: () => void }[] = [];
   private mats: UniformMats;
   private bandMat: THREE.MeshStandardMaterial;
+  /** « Symboles de couleur » : son équipe (0, 1), -1 sans écusson ; la matière claire de l'écusson et son liseré */
+  private markTeam = -1;
+  private patchMats: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial] | null = null;
   private camo: CamoId;
   private gear: Gear = NO_GEAR;
   private low: boolean;
@@ -386,6 +391,12 @@ export class SoldierModel {
     const m = uniformMats(u, look.avatar, keep);
     this.mats = m;
     this.bandMat = std(keep, look.band, 0.7);
+    // « Symboles de couleur » : un écusson à la forme de son camp sur chaque bras et dans le dos
+    const team = TEAM_KITS.findIndex((k) => k.band === look.band);
+    if (look.marks && (team === 0 || team === 1)) {
+      this.markTeam = team;
+      this.patchMats = [std(keep, "#f4efe2", 0.8), std(keep, "#15130f", 0.9)];
+    }
     const seg = low ? 6 : 10;
 
     this.root.add(this.hips);
@@ -460,6 +471,12 @@ export class SoldierModel {
         antenna.position.set(0.1, 0.62, 0.24);
         this.spine.add(antenna);
       }
+    }
+    // L'écusson du dos (on le voit de derrière) : sur le sac s'il en porte un, sinon sur le gilet ou la veste
+    if (this.markTeam >= 0) {
+      const pack = u.id !== "parade" && u.id !== "perso";
+      const back = pack ? new THREE.Vector3(0, 0.37, 0.287) : new THREE.Vector3(0, 0.34, u.vest ? 0.178 : 0.165);
+      this.patch(this.spine, back, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), 0.065);
     }
     // Dans sa propre tenue : la capuche, la cape, le collier de fleurs, le nœud du smoking, l'armure… de son personnage
     if (u.id === "perso") {
@@ -541,6 +558,35 @@ export class SoldierModel {
     });
   }
 
+  /**
+   * Un écusson à la forme de son équipe (« Symboles de couleur ») : clair, sur un liseré sombre qui le détache de
+   * n'importe quelle étoffe ; posé en `at`, tourné vers `normal`, sa pointe vers `up`
+   */
+  private patch(parent: THREE.Object3D, at: THREE.Vector3, normal: THREE.Vector3, up: THREE.Vector3, r: number) {
+    if (!this.patchMats) return;
+    const right = new THREE.Vector3().crossVectors(up, normal).normalize();
+    const top = new THREE.Vector3().crossVectors(normal, right).normalize();
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, top, normal));
+    const shape = (k: number) => {
+      if (this.markTeam === 0) return new THREE.CircleGeometry(r * 0.82 * k, 18);
+      const s = new THREE.Shape();
+      s.moveTo(0, r * k);
+      s.lineTo(r * 0.95 * k, -r * 0.72 * k);
+      s.lineTo(-r * 0.95 * k, -r * 0.72 * k);
+      s.closePath();
+      return new THREE.ShapeGeometry(s);
+    };
+    for (const [k, mat, lift] of [
+      [1.32, this.patchMats[1], 0.001],
+      [1, this.patchMats[0], 0.003],
+    ] as const) {
+      const m = new THREE.Mesh(shape(k), mat);
+      m.quaternion.copy(q);
+      m.position.copy(at).addScaledVector(normal, lift);
+      parent.add(m);
+    }
+  }
+
   /** Les bras, posés sur l'arme : la main droite à la poignée, la gauche sous le garde-main (ou sur la poignée) */
   private poseArms(gun: Gun) {
     for (const c of [...this.arms.children]) {
@@ -573,6 +619,13 @@ export class SoldierModel {
       // Le brassard du camp, en haut du bras
       const band = new THREE.Vector3().lerpVectors(arm.shoulder, e, 0.35);
       segment(band.clone().lerp(arm.shoulder, 0.12), band.clone().lerp(e, 0.12), 0.075, this.bandMat, to, seg);
+      // L'écusson du camp, sur le dehors du brassard, pointe vers l'épaule
+      if (this.markTeam >= 0) {
+        const axis = arm.shoulder.clone().sub(e).normalize();
+        const side = new THREE.Vector3(arm === right ? 1 : -1, 0, 0);
+        const out = side.addScaledVector(axis, -side.dot(axis)).normalize();
+        this.patch(to, band.clone().addScaledVector(out, 0.079), out, axis, 0.034);
+      }
       const hand = rbox(0.085, 0.09, 0.1, 0.03, m.glove, to, arm.hand.x, arm.hand.y, arm.hand.z);
       hand.rotation.x = 0.3;
     }
@@ -864,7 +917,7 @@ export class SoldierModel {
 
 /** Ce qui fait qu'un soldat doit être refait : son personnage, sa tenue, sa couleur */
 export function soldierKey(look: SoldierLook): string {
-  return `${look.tenue}|${look.band}|${JSON.stringify(look.avatar)}`;
+  return `${look.tenue}|${look.band}|${look.marks ? 1 : 0}|${JSON.stringify(look.avatar)}`;
 }
 
 /** Le nom d'un soldat au-dessus de sa tête */

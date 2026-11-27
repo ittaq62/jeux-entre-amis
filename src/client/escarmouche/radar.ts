@@ -2,6 +2,7 @@
 // tourne avec soi (devant, c'est en haut) : les bâtiments, ses alliés, les ennemis qui viennent de tirer, les drapeaux
 // et la zone. La boussole donne le cap, le nord vers -z.
 
+import { markPath } from "./teamMark.ts";
 import type { GameMap } from "../../shared/games/escarmouche/maps.ts";
 
 export interface RadarDot {
@@ -9,6 +10,8 @@ export interface RadarDot {
   z: number;
   yaw: number;
   kind: "ally" | "enemy";
+  /** Son équipe, pour la forme quand « Symboles de couleur » est actif (absente en chacun pour soi) */
+  team?: number;
 }
 
 /** Combien de mètres du centre au bord du radar */
@@ -45,9 +48,11 @@ export class Radar {
     c: HTMLCanvasElement,
     me: { x: number; z: number; yaw: number } | null,
     dots: RadarDot[],
-    flags: { x: number; z: number; color: string }[],
+    flags: { x: number; z: number; color: string; team?: number }[],
     zone: { x: number; z: number; r: number; color: string } | null,
-    points: { x: number; z: number; letter: string; color: string }[] = [],
+    points: { x: number; z: number; letter: string; color: string; team?: number }[] = [],
+    /** « Symboles de couleur » : la forme de l'équipe en plus de sa couleur */
+    marks = false,
   ) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const size = c.clientWidth || 150;
@@ -110,6 +115,15 @@ export class Radar {
         g.textAlign = "center";
         g.textBaseline = "middle";
         g.fillText(p.letter, px, py + 0.5);
+        // À qui il est : sa forme, en haut à droite du rond
+        if (marks && (p.team === 0 || p.team === 1)) {
+          markPath(g, p.team, px + 7, py - 6, 3.6);
+          g.fillStyle = p.color;
+          g.fill();
+          g.lineWidth = 1;
+          g.strokeStyle = "rgba(0,0,0,.7)";
+          g.stroke();
+        }
       }
       for (const f of flags) {
         const [fx, fy] = toScreen(f.x, f.z);
@@ -120,6 +134,10 @@ export class Radar {
         g.lineTo(fx + 7, fy - 4.5);
         g.lineTo(fx + 1, fy - 2);
         g.fill();
+        if (marks && (f.team === 0 || f.team === 1)) {
+          markPath(g, f.team, fx, fy + 6, 3.4);
+          g.fill();
+        }
       }
       for (const d of dots) {
         const [dx, dy] = toScreen(d.x, d.z);
@@ -130,13 +148,26 @@ export class Radar {
         g.fillStyle = d.kind === "ally" ? "#7fb6ff" : "#ff4b3a";
         g.strokeStyle = "rgba(0,0,0,.6)";
         g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(0, -5);
-        g.lineTo(3.6, 3.5);
-        g.lineTo(-3.6, 3.5);
-        g.closePath();
-        g.fill();
-        g.stroke();
+        if (marks && (d.team === 0 || d.team === 1)) {
+          // La forme de son équipe, et un trait vers où il regarde
+          markPath(g, d.team, 0, 0.5, 4.4);
+          g.fill();
+          g.stroke();
+          g.beginPath();
+          g.moveTo(0, -3);
+          g.lineTo(0, -7.5);
+          g.strokeStyle = g.fillStyle;
+          g.lineWidth = 1.6;
+          g.stroke();
+        } else {
+          g.beginPath();
+          g.moveTo(0, -5);
+          g.lineTo(3.6, 3.5);
+          g.lineTo(-3.6, 3.5);
+          g.closePath();
+          g.fill();
+          g.stroke();
+        }
         g.restore();
       }
       // Les anneaux de distance, et soi au centre

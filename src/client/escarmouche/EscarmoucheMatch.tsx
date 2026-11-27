@@ -10,6 +10,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { SoundSettings } from "../components/SoundSettings.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
+import { marked, TEAM_MARK } from "./teamMark.ts";
 import { QUALITY_NAMES, type QualityPref } from "./scene/quality.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
@@ -232,6 +233,7 @@ function TouchPad({ rt, hud }: { rt: MutableRefObject<BattleRuntime | null>; hud
 function Board({ room, hud }: { room: EscarmoucheRoomView; hud: HudState }) {
   const v = room.escarmouche!;
   const teams = isTeamMode(v.mode);
+  const marks = usePrefs((p) => p.colorblind);
   const groups = teams ? [0, 1].map((t) => hud.board.filter((r) => r.team === t)) : [hud.board];
   return (
     <div className="esc-board panel">
@@ -242,7 +244,7 @@ function Board({ room, hud }: { room: EscarmoucheRoomView; hud: HudState }) {
         <table key={g} className={teams ? `is-team-${g}` : ""}>
           {teams && (
             <caption style={{ color: TEAM_HEX[g as 0 | 1] }}>
-              {TEAM_NAMES[g as 0 | 1]} · {hud.teamScores[g]}
+              {marked(TEAM_NAMES[g as 0 | 1], g, marks)} · {hud.teamScores[g]}
             </caption>
           )}
           <thead>
@@ -283,6 +285,7 @@ function Board({ room, hud }: { room: EscarmoucheRoomView; hud: HudState }) {
 function Podium({ room, order }: { room: EscarmoucheRoomView; order: number[] }) {
   const v = room.escarmouche!;
   const teams = isTeamMode(v.mode);
+  const marks = usePrefs((p) => p.colorblind);
   const stats = v.stats;
   if (!stats || order.length === 0) return null;
   const score = (i: number) => (teams ? (stats[i]?.points ?? 0) : (stats[i]?.kills ?? 0));
@@ -344,7 +347,7 @@ function Podium({ room, order }: { room: EscarmoucheRoomView; order: number[] })
                 />
               </Suspense>
               <span className="esc-podium-name" style={teams ? { color: TEAM_HEX[f.team === 1 ? 1 : 0] } : undefined}>
-                {name(i)}
+                {marked(name(i), teams ? f.team : null, marks)}
               </span>
               <span className="esc-podium-step">
                 <b>{rank}</b>
@@ -382,6 +385,7 @@ function GameOver({
 }) {
   const v = room.escarmouche!;
   const teams = isTeamMode(v.mode);
+  const marks = usePrefs((p) => p.colorblind);
   const inTour = Boolean(useTourBridge());
   const seated = room.you.seatId !== null;
   const asked = room.rematch.includes(room.you.userId);
@@ -431,7 +435,7 @@ function GameOver({
               return (
                 <tr key={i} className={v.fighters[i]!.id === room.you.seatId ? "is-me" : ""}>
                   <td className="num">{v.ranks?.[i] ?? "–"}</td>
-                  <td style={teams ? { color: TEAM_HEX[team === 1 ? 1 : 0] } : undefined}>{name(i)}</td>
+                  <td style={teams ? { color: TEAM_HEX[team === 1 ? 1 : 0] } : undefined}>{marked(name(i), teams ? team : null, marks)}</td>
                   <td className="num">{s?.kills ?? 0}</td>
                   <td className="num">{s?.deaths ?? 0}</td>
                   <td className="num">{s?.headshots ?? 0}</td>
@@ -542,6 +546,7 @@ export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, 
   const mapKey = runtimeKey(room);
   // Changer la qualité refait l'image tout de suite (la partie, elle, continue)
   const quality = usePrefs((p) => p.escQuality);
+  const marks = usePrefs((p) => p.colorblind);
   const roomRef = useRef(room);
   roomRef.current = room;
   // Le chargement de la carte (voir shared/loadGate.ts) : on dit « chargé » au serveur ; le compte à rebours du combat
@@ -667,9 +672,15 @@ export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, 
           <div className="esc-top">
             {teams ? (
               <div className="esc-teams">
-                <span className={`esc-tscore is-a ${h.myTeam === 0 ? "is-mine" : ""}`}>{h.teamScores[0]}</span>
+                <span className={`esc-tscore is-a ${h.myTeam === 0 ? "is-mine" : ""}`}>
+                  {marks && <span aria-hidden>{TEAM_MARK[0]} </span>}
+                  {h.teamScores[0]}
+                </span>
                 <span className="esc-clock num">{clock(h.timeLeft)}</span>
-                <span className={`esc-tscore is-b ${h.myTeam === 1 ? "is-mine" : ""}`}>{h.teamScores[1]}</span>
+                <span className={`esc-tscore is-b ${h.myTeam === 1 ? "is-mine" : ""}`}>
+                  {h.teamScores[1]}
+                  {marks && <span aria-hidden> {TEAM_MARK[1]}</span>}
+                </span>
               </div>
             ) : (
               <div className="esc-teams">
@@ -689,7 +700,10 @@ export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, 
                     className={`esc-cq-pt ${h.cq!.inside === k ? "is-here" : ""} ${p.owner >= 0 && Math.abs(p.v) < 0.98 ? "is-shaky" : ""}`}
                     style={{ borderColor: p.owner >= 0 ? TEAM_HEX[p.owner as 0 | 1] : "rgba(242,239,230,.7)" }}
                   >
-                    <b style={{ color: p.owner >= 0 ? TEAM_HEX[p.owner as 0 | 1] : "#f2efe6" }}>{POINT_NAMES[k]}</b>
+                    <b style={{ color: p.owner >= 0 ? TEAM_HEX[p.owner as 0 | 1] : "#f2efe6" }}>
+                      {POINT_NAMES[k]}
+                      {marks && p.owner >= 0 ? TEAM_MARK[p.owner as 0 | 1] : ""}
+                    </b>
                     <i style={{ width: `${Math.round(Math.abs(p.v) * 100)}%`, background: p.v < 0 ? TEAM_HEX[0] : TEAM_HEX[1] }} />
                   </span>
                 ))}
@@ -716,7 +730,7 @@ export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, 
                   (h.zone.contested
                     ? " · zone disputée"
                     : h.zone.owner >= 0
-                      ? ` · zone aux ${TEAM_NAMES[h.zone.owner as 0 | 1]}`
+                      ? ` · zone aux ${marked(TEAM_NAMES[h.zone.owner as 0 | 1], h.zone.owner, marks)}`
                       : " · zone libre")}
               </div>
             )}
@@ -728,7 +742,7 @@ export function EscarmoucheMatch({ room, send, listeners, serverOffset, unread, 
                     className={`esc-flag is-${f.at === 0 ? "home" : f.at === 1 ? "taken" : "down"}`}
                     style={{ color: TEAM_HEX[t as 0 | 1] }}
                   >
-                    ⚑ {f.at === 0 ? "chez lui" : f.at === 1 ? "pris" : "tombé"}
+                    ⚑{marks ? TEAM_MARK[t as 0 | 1] : ""} {f.at === 0 ? "chez lui" : f.at === 1 ? "pris" : "tombé"}
                   </span>
                 ))}
               </div>
