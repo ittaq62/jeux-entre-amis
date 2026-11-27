@@ -11,7 +11,7 @@ import { BALL_R, type Course } from "../../shared/games/minigolf/course.ts";
 import { courseOf, type HoleRef } from "../../shared/games/minigolf/courses.ts";
 import { bonusCourse, bonusSpots } from "../../shared/games/minigolf/bonus.ts";
 import type { BallLook } from "../../shared/games/minigolf/looks.ts";
-import { physOf, type GolfShot, type MinigolfConfig } from "../../shared/games/minigolf/match.ts";
+import { INTRO_MS, physOf, type GolfShot, type MinigolfConfig } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfView } from "../../shared/games/minigolf/net.ts";
 import {
   moving,
@@ -646,18 +646,35 @@ export class GolfRuntime {
     const cz = (b.z0 + b.z1) / 2;
     const span = Math.max(b.x1 - b.x0, b.z1 - b.z0);
     let mode = this.camMode;
+    // L'aventure, en arrivant sur un parcours : un survol du parcours avant celui du trou (le temps de plus du serveur)
+    const cine = this.view!.phase === "intro" ? Math.max(0, this.view!.holeStart - this.view!.phaseAt - INTRO_MS) : 0;
     if (mode === "intro" && this.introHeld) this.introFrom = now;
-    if (mode === "intro" && (this.view!.phase !== "intro" || now - this.introFrom > 3600))
+    if (mode === "intro" && (this.view!.phase !== "intro" || now - this.introFrom > 3600 + cine))
       mode = this.camMode = this.overview ? "overview" : "aim";
     if (mode === "intro") {
-      // Le survol : du trou vers le départ
-      const k = Math.min(1, (now - this.introFrom) / 3400);
-      const e = k * k * (3 - 2 * k);
+      const t = now - this.introFrom;
       const cup = c.cups[0]!;
       const from = new THREE.Vector3(cup.x - Math.cos(c.tee.aim) * 1.5, cup.rim + 2.2, cup.z - Math.sin(c.tee.aim) * 1.5);
-      const behind = this.behind(focus, c.tee.aim, this.pitch, this.dist);
-      wantPos.lerpVectors(from.clone().add(new THREE.Vector3(0, span * 0.35, 0)), behind.pos, e);
-      wantLook.lerpVectors(new THREE.Vector3(cup.x, cup.rim, cup.z), behind.look, e);
+      const top = from.clone().add(new THREE.Vector3(0, span * 0.35, 0));
+      if (t < cine) {
+        // Le survol du parcours : la caméra tourne haut autour du trou en descendant, puis rejoint le début du survol
+        // du trou (au-dessus de la coupe)
+        const k = t / cine;
+        const a = c.tee.aim + Math.PI * (0.4 + 1.1 * k);
+        const r = span * (0.95 - 0.3 * k) + 2;
+        const orbit = new THREE.Vector3(cx + Math.cos(a) * r, cup.rim + span * (0.7 - 0.2 * k) + 3, cz + Math.sin(a) * r);
+        const j = Math.max(0, (k - 0.72) / 0.28);
+        const blend = j * j * (3 - 2 * j);
+        wantPos.lerpVectors(orbit, top, blend);
+        wantLook.lerpVectors(new THREE.Vector3(cx, cup.rim, cz), new THREE.Vector3(cup.x, cup.rim, cup.z), blend);
+      } else {
+        // Le survol : du trou vers le départ
+        const k = Math.min(1, (t - cine) / 3400);
+        const e = k * k * (3 - 2 * k);
+        const behind = this.behind(focus, c.tee.aim, this.pitch, this.dist);
+        wantPos.lerpVectors(top, behind.pos, e);
+        wantLook.lerpVectors(new THREE.Vector3(cup.x, cup.rim, cup.z), behind.look, e);
+      }
       this.camPos.copy(wantPos);
       this.camLook.copy(wantLook);
       this.camReady = true;

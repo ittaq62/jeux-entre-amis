@@ -45,6 +45,8 @@ export function DevMinigolf() {
       bonus: q.has("bonus"),
       turns: !q.has("simultane"),
     });
+    // L'aventure : le survol du parcours au premier trou (&aventure)
+    if (q.has("aventure")) cfg.adventure = true;
     const seats = [{ id: "moi", team: 0 as const }, ...Array.from({ length: bots }, (_, i) => ({ id: `bot-${i + 1}`, team: 0 as const }))];
     const m = createMatch(cfg, seats, 7, Date.now());
     if (trou > 0) startHole(m, trou, Date.now());

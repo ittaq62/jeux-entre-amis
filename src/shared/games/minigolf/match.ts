@@ -33,6 +33,11 @@ export interface MinigolfConfig {
   botLevel: BotLevel;
   /** Chacun son tour (vrai, par défaut) ; faux : tout le monde joue en même temps */
   turns: boolean;
+  /**
+   * L'aventure en solo (voir stars.ts) : un parcours entier, ses défis, son survol à l'arrivée. Seule la salle le met
+   * (mergeConfig ne le prend pas des réglages)
+   */
+  adventure?: boolean;
 }
 
 export const DEFAULT_CONFIG: MinigolfConfig = {
@@ -61,6 +66,8 @@ export function mergeConfig(current: MinigolfConfig, patch: Partial<MinigolfConf
 
 /** La présentation du trou, le temps que le survol se fasse */
 export const INTRO_MS = 3500;
+/** L'aventure : en arrivant sur un parcours, le premier trou se présente plus longuement (le survol du parcours) */
+export const CINE_MS = 8500;
 /** Le tableau des scores entre deux trous */
 export const SCORES_MS = 9000;
 /** Quand la moitié a fini : le temps laissé aux autres */
@@ -292,7 +299,7 @@ export function startHole(m: Match, index: number, now: number) {
   m.hole = index;
   m.phase = "intro";
   m.phaseAt = now;
-  m.holeStart = now + INTRO_MS;
+  m.holeStart = now + (m.cfg.adventure && index === 0 ? CINE_MS : INTRO_MS);
   // Chacun son tour : pas de temps pour le trou entier (chaque coup a le sien), juste une limite de sûreté
   m.deadline = m.holeStart + (m.cfg.turns ? 3_600_000 : holeDuration(m));
   m.hurry = false;

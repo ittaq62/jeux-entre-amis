@@ -407,6 +407,64 @@
   }
 }
 
+/* L'aventure, en arrivant sur un parcours : son nom sur le survol, en bas comme un titre de film, puis il s'efface */
+.mg-cine {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14% + var(--safe-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 12, 10, 0.25), rgba(8, 12, 10, 0.78));
+  color: #fff;
+  text-align: center;
+  pointer-events: none;
+  animation: mg-cine var(--cine, 5s) ease both;
+}
+
+.mg-cine-step {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold-light, #f2d98a);
+}
+
+.mg-cine strong {
+  font-family: var(--font-title);
+  font-size: clamp(30px, 7vw, 46px);
+  line-height: 1.05;
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.55);
+}
+
+.mg-cine p {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 15px;
+  opacity: 0.9;
+}
+
+@keyframes mg-cine {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  14%,
+  82% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+
 .mg-banner {
   position: absolute;
   top: 28%;

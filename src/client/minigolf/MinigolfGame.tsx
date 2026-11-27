@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { BONUS_INFO } from "../../shared/games/minigolf/bonus.ts";
 import { strokeLimit } from "../../shared/games/minigolf/course.ts";
-import { COURSES, holeDef } from "../../shared/games/minigolf/courses.ts";
+import { COURSE_IDS, COURSES, holeDef } from "../../shared/games/minigolf/courses.ts";
 import { colorOf, DEFAULT_LOOK } from "../../shared/games/minigolf/looks.ts";
-import { SCORES_MS } from "../../shared/games/minigolf/match.ts";
+import { INTRO_MS, SCORES_MS } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfClientMessage, MinigolfRoomView } from "../../shared/games/minigolf/net.ts";
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
@@ -252,9 +252,14 @@ export function MinigolfGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gotKey]);
 
-  // Le trou qui commence (le premier : au départ commun, une fois le chargement passé)
+  // L'aventure, en arrivant sur un parcours : son survol (le temps de plus que la salle donne au premier trou)
+  const cineMs = v.phase === "intro" ? Math.max(0, v.holeStart - v.phaseAt - INTRO_MS) : 0;
+  const cine = cineMs > 0 && gateClock.passed;
+  // Le trou qui commence (le premier : au départ commun, une fois le chargement passé ; après le survol du parcours)
   useEffect(() => {
-    if (v.phase === "intro" && gateClock.passed) say(`Trou ${v.hole + 1}`, "info", `${def.name} · par ${def.par}`);
+    if (v.phase !== "intro" || !gateClock.passed) return;
+    const t = setTimeout(() => say(`Trou ${v.hole + 1}`, "info", `${def.name} · par ${def.par}`), cineMs);
+    return () => clearTimeout(t);
   }, [v.hole, v.phase, gateClock.passed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Chacun son tour : à lui de jouer (seul sur le parcours, on ne le lui répète pas ; un bot qui joue sa balle pendant
@@ -310,6 +315,15 @@ export function MinigolfGame({
   return (
     <div className={`mg-game ${seated ? "" : "is-watching"}`}>
       <div ref={host} className="mg-stage" />
+      {cine && (
+        <div className="mg-cine" style={{ "--cine": `${cineMs}ms` } as CSSProperties} aria-live="polite">
+          <span className="mg-cine-step">
+            Parcours {COURSE_IDS.indexOf(ref.c) + 1} sur {COURSE_IDS.length}
+          </span>
+          <strong>{COURSES[ref.c].name}</strong>
+          <p>{COURSES[ref.c].blurb}</p>
+        </div>
+      )}
       {room.status === "playing" && loadingShown(prep.done, gateClock) && (
         <GameLoading
           title="Minigolf"
