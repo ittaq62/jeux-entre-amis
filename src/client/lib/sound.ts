@@ -728,6 +728,9 @@ export function play(name: SoundName, opts: { volume?: number; rate?: number; de
 
 export function vibrate(pattern: number | number[]) {
   if (!usePrefs.getState().haptics) return;
+  // Avant le premier geste du joueur, le navigateur refuse (et le dit dans la console) : on n'essaie pas
+  const ua = typeof navigator !== "undefined" ? (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation : undefined;
+  if (ua && !ua.hasBeenActive) return;
   try {
     navigator.vibrate?.(pattern);
   } catch {
