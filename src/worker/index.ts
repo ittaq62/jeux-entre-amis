@@ -60,6 +60,7 @@ import { starsOf } from "./stars.ts";
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
+import { publicTable } from "../shared/publicTable.ts";
 import { openGames } from "./betaGames.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -531,6 +532,22 @@ app.get("/rooms/:code", withSession, async (c) => {
   const refused = await stub.refusal(toPublic(c.get("user")));
   if (refused) return c.json({ error: refused }, 403);
   return c.json({ room: summary });
+});
+
+/**
+ * Ce qu'on dit d'une table sans être connecté : le jeu, l'hôte, la place qu'il reste (page de connexion ouverte par un
+ * lien d'invitation, aperçu d'un lien). Limité par adresse : on ne parcourt pas les codes pour trouver des tables.
+ */
+app.get("/rooms/:code/public", async (c) => {
+  const code = param(c, "code").toUpperCase();
+  if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
+  if (!(await rateLimit(c.env.DB, `public:${clientIp(c.req.raw)}`, 120, 3600_000))) {
+    return c.json({ error: "Trop de demandes depuis ta connexion. Réessaie plus tard." }, 429);
+  }
+  const summary = await (await roomStub(c, code)).summary();
+  if (!summary) return c.json({ error: "Cette table n'existe plus." }, 404);
+  c.header("Cache-Control", "no-store");
+  return c.json({ room: publicTable(summary) });
 });
 
 function upgradeTo(c: Ctx, stub: { fetch: (req: Request) => Promise<Response> }) {
