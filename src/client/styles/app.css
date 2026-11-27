@@ -341,7 +341,8 @@
   color: var(--gold);
 }
 
-.nav-link.is-active::after {
+/* Le trait doré sous un lien : plein sur la page où l'on est, il se déploie à moitié au survol */
+.nav-link::after {
   content: "";
   position: absolute;
   left: 10px;
@@ -350,6 +351,21 @@
   height: 2px;
   border-radius: 1px;
   background: var(--gold);
+  transform: scaleX(0);
+  opacity: 0;
+  transition:
+    transform var(--dur-med) var(--ease-out),
+    opacity var(--dur-med);
+}
+
+.nav-link:hover::after {
+  transform: scaleX(0.5);
+  opacity: 0.5;
+}
+
+.nav-link.is-active::after {
+  transform: scaleX(1);
+  opacity: 1;
 }
 
 .nav-count {
@@ -445,6 +461,9 @@ button.nav-avatar[aria-expanded="true"] {
 .account-pop .menu-item {
   color: var(--text);
   text-decoration: none;
+  transition:
+    background-color var(--dur-fast),
+    color var(--dur-fast);
 }
 
 .account-pop .menu-item:focus-visible {
@@ -1749,6 +1768,17 @@ a.shop-item {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   align-items: stretch;
   overflow: hidden;
+  transition: box-shadow var(--dur-med) var(--ease-out);
+}
+
+/* À la souris, la fiche qu'on regarde prend un liseré doré */
+@media (hover: hover) {
+  .home-game:hover {
+    box-shadow:
+      var(--shadow-panel),
+      0 0 0 1px rgba(226, 189, 110, 0.28),
+      0 18px 36px -22px rgba(0, 0, 0, 0.9);
+  }
 }
 
 .game-stage {
