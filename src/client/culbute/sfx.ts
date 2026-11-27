@@ -4,34 +4,29 @@
 // ritournelle de celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
 
 import { audioOut, effectsLevel } from "../lib/sound.ts";
-import { roomOut, strike, type Body } from "../lib/sfxKit.ts";
+import { limiterOut, roomOut, strike, type Body } from "../lib/sfxKit.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 let lastAt = 0;
 
 /**
- * Les bruits de Culbute passent par leur limiteur (comme ceux du bowling) : à une sortie, le coup qui éjecte et la
- * détonation tombent ensemble, et leur somme dépassait le plafond de la sortie (rendu hors ligne, au volume par défaut :
- * des crêtes à +6 dBFS, plus de 250 échantillons écrêtés, ça grésillait ; quatre coups forts à la suite aussi). Les coups
- * légers et moyens gardent leur niveau ; ce qui dépassait est ramené sous le plafond.
+ * Où vont les bruits de Culbute : l'arène (une réverbération très courte, le combat est rapide), puis le limiteur commun,
+ * dernier maillon avant la sortie générale (le volume des réglages y passe toujours). Le limiteur : à une sortie, le
+ * coup qui éjecte et la détonation tombent ensemble, et leur somme dépassait le plafond (rendu hors ligne, au volume par
+ * défaut : des crêtes à +6 dBFS, ça grésillait ; quatre coups forts à la suite aussi). Les coups légers et moyens gardent
+ * leur niveau ; ce qui dépassait est ramené sous le plafond.
  */
-let bus: { ctx: AudioContext; node: GainNode } | null = null;
+function chain(ctx: AudioContext, master: GainNode): GainNode {
+  return roomOut(ctx, limiterOut(ctx, master), { rt60: 0.3, wet: 0.1 }) as GainNode;
+}
 
-function busOf(ctx: AudioContext, master: GainNode): GainNode {
-  if (bus?.ctx === ctx) return bus.node;
-  // Le compresseur remonte de lui-même les sons faibles (environ 1,7 fois) : on baisse d'autant l'entrée
-  const g = ctx.createGain();
-  g.gain.value = 0.6;
-  const lim = ctx.createDynamicsCompressor();
-  lim.threshold.value = -10;
-  lim.knee.value = 6;
-  lim.ratio.value = 16;
-  lim.attack.value = 0.002;
-  lim.release.value = 0.12;
-  g.connect(lim);
-  lim.connect(master);
-  bus = { ctx, node: g };
-  return g;
+/**
+ * À l'ouverture du combat : l'arène et le limiteur se créent tout de suite. Neuf, le compresseur de Chrome atténue d'une
+ * dizaine de dB ses cent premières millisecondes : créé au premier coup, il en étouffait le son.
+ */
+export function prepareSfx() {
+  const o = audioOut();
+  if (o) chain(o.ctx, o.out);
 }
 
 function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
@@ -41,10 +36,7 @@ function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  // L'arène : une réverbération très courte (le combat est rapide), qui entre dans le limiteur, dernier maillon avant la
-  // sortie générale (le volume des réglages y passe toujours). Accrochée au limiteur de Culbute et non à la sortie
-  // générale : le billard y accroche la sienne, et le premier des deux jeux ouverts imposait sa salle à l'autre.
-  return { ctx: o.ctx, dest: roomOut(o.ctx, busOf(o.ctx, o.out), { rt60: 0.3, wet: 0.1 }) as GainNode, vol };
+  return { ctx: o.ctx, dest: chain(o.ctx, o.out), vol };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
@@ -78,8 +70,12 @@ function thump(ctx: AudioContext, dest: AudioNode, t0: number, f0: number, f1: n
   strike(ctx, dest, t0, body, Math.sqrt(f0 * f1), { gain: peak * 0.85, velocity: 0.85, hardness: 1600, click: 0.35 });
 }
 
-/** La garde qui pare : une petite lame de métal (les mêmes rapports que l'ancien tintement), claire et distincte */
-const GUARD: Body = { ratios: [1, 1.5, 2.22], decays: [0.07, 0.05, 0.03], amps: [1, 0.6, 0.35] };
+/**
+ * La garde qui pare : une petite lame de métal (les mêmes rapports que l'ancien tintement), claire et distincte. Elle
+ * s'éteint aussi vite que l'ancien tintement (environ 140 ms) : plus longue, une rafale de coups sur la garde se
+ * brouillait en un seul bourdonnement.
+ */
+const GUARD: Body = { ratios: [1, 1.5, 2.22], decays: [0.032, 0.025, 0.018], amps: [1, 0.6, 0.35] };
 
 /** Un claquement : un souffle de bruit filtré */
 function slap(
@@ -151,9 +147,12 @@ export function shieldHit(power: number) {
   const { ctx, dest, vol } = o;
   const t0 = ctx.currentTime + 0.005;
   const v = vol * (0.35 + power * 0.3);
+  // Un coup plus fort sonne un peu plus clair ; la force, elle, suit celle de l'ancien tintement à 0,4 dB près, coups
+  // légers compris (rendu hors ligne ; ils étaient 3 à 4 dB plus bas)
+  const vel = 0.8 + Math.max(0, Math.min(1, power)) * 0.2;
   strike(ctx, dest, t0, GUARD, 1180 * (0.97 + Math.random() * 0.06), {
-    gain: v * 0.42,
-    velocity: 0.6 + power * 0.4,
+    gain: (v * 0.5) / vel,
+    velocity: vel,
     hardness: 7000,
     click: 0.3,
   });
@@ -182,14 +181,17 @@ export function grab() {
   thump(ctx, dest, t0, 120, 80, vol * 0.3, 0.07);
 }
 
-/** La cloche du clocher : à l'annonce, un tintement léger ; à son coup, un grand « dong » qui résonne */
-export function bell(strike: boolean) {
+/**
+ * La cloche du clocher : à l'annonce, un tintement léger ; à son coup (`ring`), un grand « dong » qui résonne. (Le
+ * paramètre ne s'appelle plus « strike » : il masquait la fonction de la boîte à sons du même nom.)
+ */
+export function bell(ring: boolean) {
   const o = out();
   if (!o) return;
   const { ctx, dest, vol } = o;
   const t0 = ctx.currentTime + 0.005;
-  const base = strike ? 196 : 587;
-  const partials: readonly (readonly [number, number, number])[] = strike
+  const base = ring ? 196 : 587;
+  const partials: readonly (readonly [number, number, number])[] = ring
     ? [
         [0.5, 0.55, 3.4],
         [1, 1, 3],
@@ -206,12 +208,12 @@ export function bell(strike: boolean) {
     osc.type = "sine";
     osc.frequency.setValueAtTime(base * r, t0);
     const g = ctx.createGain();
-    env(g, vol * (strike ? 0.32 : 0.1) * k, 0.004, d, t0);
+    env(g, vol * (ring ? 0.32 : 0.1) * k, 0.004, d, t0);
     osc.connect(g).connect(dest);
     osc.start(t0);
     osc.stop(t0 + d + 0.05);
   }
-  if (strike) thump(ctx, dest, t0, 80, 55, vol * 0.45, 0.5);
+  if (ring) thump(ctx, dest, t0, 80, 55, vol * 0.45, 0.5);
 }
 
 /** La charrette qui arrive : les roues qui grondent sur les pavés en enflant, et les cahots */

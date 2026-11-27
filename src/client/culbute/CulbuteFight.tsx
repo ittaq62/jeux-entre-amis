@@ -346,6 +346,7 @@ export function CulbuteFight({
 
   useEffect(() => {
     preloadSounds(SOUNDS);
+    sfx.prepareSfx();
   }, []);
 
   // Une boucle de combat par écran : elle survit aux mises à jour du salon, et repart à la revanche
