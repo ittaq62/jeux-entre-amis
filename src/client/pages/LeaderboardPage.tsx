@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "wouter";
 import { TABLE_NAMES, type PublicUser, type TableGame } from "../../shared/protocol.ts";
 import { BOT_ELO, ELO_START } from "../../shared/elo.ts";
@@ -10,6 +10,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Options } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { useSession } from "../stores/session.ts";
+import "./leaderboard.css";
 
 interface Entry {
   rank: number;
@@ -54,6 +55,18 @@ export function LeaderboardPage() {
   useEffect(() => {
     if ((sort === "sprint" && game !== "bricks") || (sort === "elo" && overall)) setSort("points");
   }, [game, sort, overall]);
+
+  // Le podium : les trois premiers en grand, la liste reprend au quatrième
+  const podium = entries !== null && entries.length >= 3 && !failed;
+  const listed = entries ? (podium ? entries.slice(3) : entries) : [];
+  const mainStat = (e: Entry): string =>
+    tour
+      ? `${e.won} gagnée${e.won > 1 ? "s" : ""}`
+      : sort === "sprint"
+        ? formatSprint(e.bestSprint ?? 0)
+        : sort === "elo" && !overall
+          ? `Elo ${e.elo}`
+          : `${e.points.toLocaleString("fr-FR")} pts`;
 
   const bots =
     game === "naval"
@@ -159,90 +172,124 @@ export function LeaderboardPage() {
             </p>
           ) : (
             <>
-              <div className="board-head" aria-hidden="true">
-                <span className="board-head-who">Joueur</span>
-                {tour ? (
-                  <>
-                    <span className="board-stat board-extra">Tournées</span>
-                    <span className="board-stat board-score is-main">Gagnées</span>
-                    <span className="board-stat board-score">Points</span>
-                  </>
-                ) : sort === "sprint" ? (
-                  <span className="board-stat board-score board-time is-main">Record</span>
-                ) : overall ? (
-                  <>
-                    <span className="board-stat board-extra">Victoires</span>
-                    <span className="board-stat board-score is-main">Points</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="board-stat board-extra">Victoires</span>
-                    <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`}>Elo</span>
-                    <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`}>Points</span>
-                  </>
-                )}
-              </div>
-              <ol className="rows" style={{ margin: 0 }}>
-                {entries.map((e) => (
-                  <li
-                    key={e.user.id}
-                    className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top medal-${e.rank}` : ""}`}
-                  >
-                    <span className="board-rank num">{e.rank}</span>
-                    <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
-                      <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
-                      <strong>
-                        <PlayerName name={e.user.pseudo} admin={e.user.admin} />
-                      </strong>
-                    </Link>
+              {podium && (
+                <ol className="podium" aria-label="Les trois premiers">
+                  {/* Le deuxième à gauche, le premier au milieu, le troisième à droite */}
+                  {[1, 0, 2].map((k) => {
+                    const e = entries[k]!;
+                    return (
+                      <li
+                        key={e.user.id}
+                        className={`podium-step medal-${Math.min(e.rank, 3)} ${e.user.id === me?.id ? "is-me" : ""} rise`}
+                        style={{ "--i": k } as CSSProperties}
+                      >
+                        <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="podium-who">
+                          <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={k === 0 ? 64 : 52} />
+                          <strong>
+                            <PlayerName name={e.user.pseudo} admin={e.user.admin} />
+                          </strong>
+                        </Link>
+                        <span className="podium-stat num">{mainStat(e)}</span>
+                        <span className="podium-block num" aria-label={`${e.rank}e place`}>
+                          {e.rank}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              {listed.length > 0 && (
+                <>
+                  <div className="board-head" aria-hidden="true">
+                    <span className="board-head-who">Joueur</span>
                     {tour ? (
                       <>
-                        <span className="board-stat board-extra" aria-label={`${e.played} tournées terminées`}>
-                          <strong>{e.played}</strong>
-                        </span>
-                        <span className="board-stat board-score is-main" aria-label={`${e.won} tournées gagnées`}>
-                          <strong>{e.won}</strong>
-                        </span>
-                        <span className="board-stat board-score" aria-label={`${e.points} points de tournée`}>
-                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
-                        </span>
+                        <span className="board-stat board-extra">Tournées</span>
+                        <span className="board-stat board-score is-main">Gagnées</span>
+                        <span className="board-stat board-score">Points</span>
                       </>
                     ) : sort === "sprint" ? (
-                      <span
-                        className="board-stat board-score board-time is-main"
-                        aria-label={`Record en ${formatSprint(e.bestSprint ?? 0)}`}
-                      >
-                        <strong>{formatSprint(e.bestSprint ?? 0)}</strong>
-                      </span>
+                      <span className="board-stat board-score board-time is-main">Record</span>
                     ) : overall ? (
                       <>
-                        <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
-                          <strong>
-                            {e.won.toLocaleString("fr-FR")} / {e.played.toLocaleString("fr-FR")}
-                          </strong>
-                        </span>
-                        <span className="board-stat board-score is-main" aria-label={`${e.points} points`}>
-                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
-                        </span>
+                        <span className="board-stat board-extra">Victoires</span>
+                        <span className="board-stat board-score is-main">Points</span>
                       </>
                     ) : (
                       <>
-                        <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
-                          <strong>
-                            {e.won} / {e.played}
-                          </strong>
-                        </span>
-                        <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`} aria-label={`Elo ${e.elo}`}>
-                          <strong>{e.elo}</strong>
-                        </span>
-                        <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`} aria-label={`${e.points} points`}>
-                          <strong>{e.points.toLocaleString("fr-FR")}</strong>
-                        </span>
+                        <span className="board-stat board-extra">Victoires</span>
+                        <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`}>Elo</span>
+                        <span className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`}>Points</span>
                       </>
                     )}
-                  </li>
-                ))}
-              </ol>
+                  </div>
+                  <ol className="rows" style={{ margin: 0 }} start={podium ? 4 : 1}>
+                    {listed.map((e, i) => (
+                      <li
+                        key={e.user.id}
+                        className={`board-row ${e.user.id === me?.id ? "is-me" : ""} ${e.rank <= 3 ? `top medal-${e.rank}` : ""} rise`}
+                        style={{ "--i": i + (podium ? 3 : 0) } as CSSProperties}
+                      >
+                        <span className="board-rank num">{e.rank}</span>
+                        <Link href={`/joueur/${encodeURIComponent(e.user.pseudo)}`} className="board-who">
+                          <Avatar avatar={e.user.avatar} userId={e.user.id} photo={e.user.photo} size={34} />
+                          <strong>
+                            <PlayerName name={e.user.pseudo} admin={e.user.admin} />
+                          </strong>
+                        </Link>
+                        {tour ? (
+                          <>
+                            <span className="board-stat board-extra" aria-label={`${e.played} tournées terminées`}>
+                              <strong>{e.played}</strong>
+                            </span>
+                            <span className="board-stat board-score is-main" aria-label={`${e.won} tournées gagnées`}>
+                              <strong>{e.won}</strong>
+                            </span>
+                            <span className="board-stat board-score" aria-label={`${e.points} points de tournée`}>
+                              <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                            </span>
+                          </>
+                        ) : sort === "sprint" ? (
+                          <span
+                            className="board-stat board-score board-time is-main"
+                            aria-label={`Record en ${formatSprint(e.bestSprint ?? 0)}`}
+                          >
+                            <strong>{formatSprint(e.bestSprint ?? 0)}</strong>
+                          </span>
+                        ) : overall ? (
+                          <>
+                            <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
+                              <strong>
+                                {e.won.toLocaleString("fr-FR")} / {e.played.toLocaleString("fr-FR")}
+                              </strong>
+                            </span>
+                            <span className="board-stat board-score is-main" aria-label={`${e.points} points`}>
+                              <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="board-stat board-extra" aria-label={`${e.won} victoires sur ${e.played} parties`}>
+                              <strong>
+                                {e.won} / {e.played}
+                              </strong>
+                            </span>
+                            <span className={`board-stat board-score ${sort === "elo" ? "is-main" : ""}`} aria-label={`Elo ${e.elo}`}>
+                              <strong>{e.elo}</strong>
+                            </span>
+                            <span
+                              className={`board-stat board-score ${sort === "points" ? "is-main" : ""}`}
+                              aria-label={`${e.points} points`}
+                            >
+                              <strong>{e.points.toLocaleString("fr-FR")}</strong>
+                            </span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
             </>
           )}
         </section>
