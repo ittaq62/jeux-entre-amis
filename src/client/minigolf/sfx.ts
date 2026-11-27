@@ -4,6 +4,7 @@
 // parcours (les oiseaux et le vent du jardin…). Tout passe par le réglage du son du site.
 
 import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
+import { roomOut, strike } from "../lib/sfxKit.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 
@@ -12,7 +13,8 @@ function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: 
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: o.out, vol: level };
+  // En plein air : presque pas de réverbération, juste ce qu'il faut pour que les chocs ne sonnent pas « dans le vide »
+  return { ctx: o.ctx, dest: roomOut(o.ctx, o.out, { rt60: 0.25, wet: 0.06 }) as GainNode, vol: level };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
@@ -86,14 +88,45 @@ function spaced(key: string, gap: number): boolean {
   return true;
 }
 
+/** Les modes de quelques matières (rapports à la fondamentale) */
+const BALL = [1, 1.62, 2.4];
+const WOOD = [1, 1.58, 2.71];
+const PLASTIC = [1, 1.47, 2.09];
+const METAL = [1, 2.76, 5.4];
+const MARIMBA = [1, 3.93, 9.2];
+const GLOCK = [1, 2.71, 5.15];
+
+/**
+ * Un choc d'objet, à la place d'une note qui glissait : ses modes (`ratios`) s'éteignent dans le même temps (`decay`)
+ * et à la même force (`peak`) que l'ancienne note, avec le bruit du contact (plus aigu si `hardness` est grand)
+ */
+function hit(
+  ctx: AudioContext,
+  dest: AudioNode,
+  t: number,
+  f: number,
+  peak: number,
+  decay: number,
+  ratios: readonly number[],
+  hardness = 5000,
+) {
+  strike(ctx, dest, t, { ratios, decays: [decay / 7, decay / 10, decay / 14], amps: [1, 0.5, 0.3] }, f * (0.97 + Math.random() * 0.06), {
+    gain: peak * 0.85,
+    velocity: 0.85,
+    hardness,
+    click: 0.3,
+  });
+}
+
 /** Le coup de putter : un « toc » net, plus sec et plus fort quand on frappe fort */
 export function putt(power: number, vol = 1) {
   const o = out();
   if (!o) return;
   const t = o.ctx.currentTime + 0.005;
   const v = o.vol * vol * (0.35 + power * 0.65);
-  tone(o.ctx, o.dest, t, "sine", 1900 + power * 900, 900, v * 0.5, 0.001, 0.05);
-  tone(o.ctx, o.dest, t, "triangle", 420 + power * 180, 160, v * 0.55, 0.002, 0.11);
+  // La balle qui claque, et la tête de métal du putter qui sonne un peu
+  hit(o.ctx, o.dest, t, 1500 + power * 600, v * 0.5, 0.05, BALL, 9000);
+  hit(o.ctx, o.dest, t, 260 + power * 120, v * 0.55, 0.11, METAL, 4000);
   burst(o.ctx, o.dest, t, "bandpass", 3200, 1.2, v * 0.35, 0.001, 0.03);
 }
 
@@ -107,15 +140,14 @@ export function knock(kind: string, speed: number, vol = 1) {
   switch (kind) {
     case "hedge":
       burst(o.ctx, o.dest, t, "lowpass", 900, 0.7, v * 0.7, 0.002, 0.09);
-      tone(o.ctx, o.dest, t, "sine", 180, 120, v * 0.4, 0.002, 0.08);
+      hit(o.ctx, o.dest, t, 150, v * 0.4, 0.08, WOOD, 1500);
       break;
     case "stone":
-      tone(o.ctx, o.dest, t, "triangle", 1500, 1100, v * 0.45, 0.001, 0.05);
+      hit(o.ctx, o.dest, t, 1300, v * 0.45, 0.05, BALL, 8000);
       burst(o.ctx, o.dest, t, "highpass", 2500, 0.8, v * 0.4, 0.001, 0.04);
       break;
     case "metal":
-      tone(o.ctx, o.dest, t, "sine", 2300, 2200, v * 0.35, 0.001, 0.4);
-      tone(o.ctx, o.dest, t, "sine", 3450, 3400, v * 0.18, 0.001, 0.28);
+      hit(o.ctx, o.dest, t, 2250, v * 0.35, 0.4, [1, 1.52], 9000);
       break;
     case "bumper":
       tone(o.ctx, o.dest, t, "square", 520, 880, v * 0.25, 0.002, 0.12);
@@ -123,7 +155,7 @@ export function knock(kind: string, speed: number, vol = 1) {
       break;
     default:
       // Le bois des bordures
-      tone(o.ctx, o.dest, t, "triangle", 620, 420, v * 0.55, 0.001, 0.08);
+      hit(o.ctx, o.dest, t, 510, v * 0.55, 0.08, WOOD, 3000);
       burst(o.ctx, o.dest, t, "bandpass", 1400, 2, v * 0.4, 0.001, 0.05);
   }
 }
@@ -137,10 +169,10 @@ export function land(mat: string, speed: number, vol = 1) {
   const v = o.vol * vol * Math.min(1, speed / 5);
   if (mat === "sand" || mat === "snow") burst(o.ctx, o.dest, t, "lowpass", 700, 0.5, v * 0.8, 0.003, 0.22);
   else if (mat === "wood" || mat === "metal" || mat === "stone") {
-    tone(o.ctx, o.dest, t, "triangle", 300, 200, v * 0.6, 0.002, 0.1);
+    hit(o.ctx, o.dest, t, 245, v * 0.6, 0.1, WOOD, 2500);
     burst(o.ctx, o.dest, t, "bandpass", 1200, 1.5, v * 0.35, 0.001, 0.06);
   } else {
-    tone(o.ctx, o.dest, t, "sine", 140, 90, v * 0.7, 0.003, 0.12);
+    hit(o.ctx, o.dest, t, 112, v * 0.7, 0.12, WOOD, 1500);
     burst(o.ctx, o.dest, t, "lowpass", 600, 0.6, v * 0.3, 0.002, 0.08);
   }
 }
@@ -151,11 +183,12 @@ export function cupDrop(vol = 1, cheer = false) {
   if (!o) return;
   const t = o.ctx.currentTime + 0.01;
   const v = o.vol * vol;
-  tone(o.ctx, o.dest, t, "triangle", 260, 180, v * 0.75, 0.002, 0.14);
-  tone(o.ctx, o.dest, t, "sine", 1100, 1000, v * 0.3, 0.001, 0.1);
+  // Le gobelet : le fond de plastique qui encaisse, le bord de métal qui tinte
+  hit(o.ctx, o.dest, t, 216, v * 0.75, 0.14, PLASTIC, 3000);
+  hit(o.ctx, o.dest, t, 1050, v * 0.3, 0.1, METAL, 8000);
   for (let k = 0; k < 6; k++) {
     const tk = t + 0.12 + k * (0.07 - k * 0.006);
-    tone(o.ctx, o.dest, tk, "triangle", 900 - k * 40, 700, v * (0.28 - k * 0.04), 0.001, 0.04);
+    hit(o.ctx, o.dest, tk, 800 - k * 40, v * (0.28 - k * 0.04), 0.04, BALL, 8000);
   }
   if (cheer) applause(0.9);
 }
@@ -165,8 +198,8 @@ export function lip(vol = 1) {
   const o = out();
   if (!o) return;
   const t = o.ctx.currentTime + 0.003;
-  tone(o.ctx, o.dest, t, "sine", 1700, 1500, o.vol * vol * 0.35, 0.001, 0.12);
-  tone(o.ctx, o.dest, t + 0.05, "sine", 1400, 1300, o.vol * vol * 0.2, 0.001, 0.1);
+  hit(o.ctx, o.dest, t, 1600, o.vol * vol * 0.35, 0.12, METAL, 9000);
+  hit(o.ctx, o.dest, t + 0.05, 1350, o.vol * vol * 0.2, 0.1, METAL, 9000);
 }
 
 /** Le plouf, et les bulles */
@@ -215,7 +248,7 @@ export function sparkle(vol = 1) {
   const o = out();
   if (!o) return;
   const t = o.ctx.currentTime + 0.003;
-  for (let k = 0; k < 4; k++) tone(o.ctx, o.dest, t + k * 0.06, "sine", 1600 + k * 400, 1700 + k * 420, o.vol * vol * 0.2, 0.002, 0.15);
+  for (let k = 0; k < 4; k++) hit(o.ctx, o.dest, t + k * 0.06, 1650 + k * 410, o.vol * vol * 0.2, 0.15, GLOCK, 9000);
 }
 
 /** Deux balles qui se heurtent : un « clac » sec, plus fort quand le choc est fort */
@@ -224,7 +257,7 @@ export function clack(speed: number, vol = 1) {
   if (!o || !spaced("clack", 40)) return;
   const t = o.ctx.currentTime + 0.003;
   const v = o.vol * vol * Math.min(1, 0.25 + speed * 0.3);
-  tone(o.ctx, o.dest, t, "triangle", 2600, 2100, v * 0.42, 0.001, 0.05);
+  hit(o.ctx, o.dest, t, 2350, v * 0.42, 0.05, BALL, 10000);
   burst(o.ctx, o.dest, t, "bandpass", 3200, 2.5, v * 0.3, 0.001, 0.03);
 }
 
@@ -234,7 +267,7 @@ export function yourTurn(vol = 1) {
   if (!o) return;
   const t = o.ctx.currentTime + 0.01;
   const v = o.vol * vol;
-  tone(o.ctx, o.dest, t, "triangle", 660, 650, v * 0.32, 0.004, 0.32);
+  hit(o.ctx, o.dest, t, 660, v * 0.32, 0.32, MARIMBA, 4000);
   tone(o.ctx, o.dest, t + 0.13, "triangle", 990, 980, v * 0.3, 0.004, 0.45);
   tone(o.ctx, o.dest, t + 0.13, "sine", 1980, 1970, v * 0.08, 0.004, 0.3);
 }
