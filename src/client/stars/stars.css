@@ -1,0 +1,133 @@
+/* Les étoiles, communes à tous les jeux : dorées quand elles sont gagnées, en creux sinon. Une étoile qui vient d'être
+   gagnée s'allume en sautant, l'une après l'autre ; avec « Effets réduits » (is-still) ou prefers-reduced-motion, elles
+   sont là tout de suite. */
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--star) * 0.08);
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.star {
+  width: var(--star);
+  height: var(--star);
+  overflow: visible;
+}
+
+.star path {
+  fill: rgba(0, 0, 0, 0.28);
+  stroke: rgba(244, 236, 218, 0.32);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.star.is-on path {
+  fill: #ffcf5a;
+  stroke: #b8860b;
+  filter: drop-shadow(0 0 calc(var(--star) * 0.12) rgba(255, 207, 90, 0.55));
+}
+
+.star.is-new {
+  animation: star-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(0.25s + var(--k, 0) * 0.32s);
+}
+
+@keyframes star-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(-40deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.25) rotate(6deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+.stars.is-still .star {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star.is-new {
+    animation: none;
+  }
+}
+
+/* Le total d'un jeu, à côté de son nom */
+.star-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gold-light);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* Les trois seuils d'une carte */
+.star-goals ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.star-goals li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.star-goals li:not(.is-on) .star.is-on path {
+  fill: rgba(255, 207, 90, 0.4);
+  filter: none;
+}
+
+.star-goals li.is-on {
+  color: var(--gold-light);
+}
+
+.star-best {
+  margin: 4px 0 0;
+}
+
+/* L'encart de fin de partie */
+.star-result {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.star-result p {
+  margin: 0;
+}
+
+.star-result.is-new .star-result-text strong {
+  color: var(--gold-light);
+}
+
+/* Le profil : les étoiles de chaque jeu */
+.profile-stars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-stars li {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}

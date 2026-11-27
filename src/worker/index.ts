@@ -56,6 +56,7 @@ import {
   REPORT_BODY_MAX,
   setReportStatus,
 } from "./reports.ts";
+import { starsOf } from "./stars.ts";
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
@@ -309,7 +310,11 @@ app.get("/profile/:pseudo", withSession, async (c) => {
     console.error("Série illisible", err);
     return null;
   });
-  return c.json({ ...profile, friendship, streak });
+  // Ses étoiles, jeu par jeu (le total seulement) : rien si la base n'a pas encore la table
+  const stars = Object.fromEntries(
+    Object.entries((await starsOf(c.env.DB, user.id)).games).map(([g, s]) => [g, { total: s.total, max: s.max }]),
+  );
+  return c.json({ ...profile, friendship, streak, stars });
 });
 
 // ---------------------------------------------------------------------------
@@ -325,6 +330,12 @@ app.post("/streak/claim", withSession, withProfile, async (c) => {
   if (!(await rateLimit(c.env.DB, `streak:${user.id}`, STREAK_CLAIMS_PER_HOUR, 3600_000))) return c.json({ error: "Doucement !" }, 429);
   return c.json(await claimStreak(c.env.DB, user.id, Date.now(), await visibleGames(c.env, user)));
 });
+
+// ---------------------------------------------------------------------------
+// Les étoiles : seulement lues ici ; les salles les accordent (stars.ts)
+// ---------------------------------------------------------------------------
+
+app.get("/stars", withSession, withProfile, async (c) => c.json(await starsOf(c.env.DB, c.get("user").id)));
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";
@@ -665,6 +676,12 @@ app.post("/admin/users/:id", withSession, withAdmin, async (c) => {
           db.prepare("DELETE FROM play_days WHERE user_id = ?").bind(id),
         ])
         .catch((err: unknown) => console.error("Série non effacée", err));
+      // Ses étoiles aussi (à part de même : la table vient de la migration 0012)
+      await db
+        .prepare("DELETE FROM user_stars WHERE user_id = ?")
+        .bind(id)
+        .run()
+        .catch((err: unknown) => console.error("Étoiles non effacées", err));
       break;
     }
     case "setAdmin":

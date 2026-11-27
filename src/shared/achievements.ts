@@ -6,6 +6,8 @@ import type { MecheStats } from "./games/meche/engine.ts";
 import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
 import type { TableGame } from "./protocol.ts";
+import { STAR_GAMES } from "./starMaps.ts";
+import { MAX_STARS, type StarGame } from "./stars.ts";
 
 export type ChipTone = "red" | "blue" | "green" | "black" | "ivory";
 
@@ -18,8 +20,10 @@ export interface AchievementDef {
   tone: ChipTone;
   title: string;
   description: string;
-  /** Un compteur de parties terminées à ce jeu (ou de tournées) : le succès tombe à ce nombre, et le profil montre où on en est */
+  /** Un compteur : le succès tombe à ce nombre, et le profil montre où on en est */
   goal?: number;
+  /** Ce que compte `goal` : les parties terminées à ce jeu (ou les tournées), par défaut, ou ses étoiles */
+  counts?: "played" | "stars";
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -714,7 +718,64 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: "Terminer une tournée à 6 joueurs ou plus.",
   },
   { id: "tour-regular", goal: 10, game: "tour", chip: "10", tone: "blue", title: "Saltimbanque", description: "Terminer 10 tournées." },
+
+  // Les étoiles : trois succès pour chaque jeu qui en a (starMaps.ts)
+  ...STAR_GAMES.flatMap(starAchievementsOf),
 ];
+
+/** Les succès d'étoiles d'un jeu : une carte à trois étoiles, la moitié des étoiles, toutes */
+export function starAchievementsOf(g: StarGame): AchievementDef[] {
+  const game = g.game as TableGame;
+  const max = g.maps.length * MAX_STARS;
+  return [
+    {
+      id: `${g.game}-etoiles-3`,
+      game,
+      chip: "★★★",
+      tone: "ivory",
+      title: `${g.name} : trois étoiles`,
+      description: "Décrocher les trois étoiles d'une carte.",
+    },
+    {
+      id: `${g.game}-etoiles-moitie`,
+      game,
+      chip: "½",
+      tone: "blue",
+      title: `${g.name} : à mi-chemin`,
+      description: `Gagner ${Math.ceil(max / 2)} étoiles sur ${max}.`,
+      goal: Math.ceil(max / 2),
+      counts: "stars",
+    },
+    {
+      id: `${g.game}-etoiles-toutes`,
+      game,
+      chip: "★",
+      tone: "red",
+      title: `${g.name} : toutes les étoiles`,
+      description: `Gagner les ${max} étoiles du jeu.`,
+      goal: max,
+      counts: "stars",
+    },
+  ];
+}
+
+/** Les succès d'étoiles qu'un joueur a, d'après les étoiles de chaque carte de ce jeu (carte → étoiles) */
+export function earnedStarAchievements(game: string, maps: Readonly<Record<string, number>>): string[] {
+  const g = STAR_GAMES.find((x) => x.game === game);
+  return g ? starAchievementsEarned(g, maps) : [];
+}
+
+/** Pareil, pour un jeu donné (les tests en fabriquent un) */
+export function starAchievementsEarned(g: StarGame, maps: Readonly<Record<string, number>>): string[] {
+  const known = g.maps.map((m) => Math.min(MAX_STARS, Math.max(0, maps[m.id] ?? 0)));
+  const total = known.reduce((n, s) => n + s, 0);
+  const max = g.maps.length * MAX_STARS;
+  const out: string[] = [];
+  if (known.some((s) => s >= MAX_STARS)) out.push(`${g.game}-etoiles-3`);
+  if (max > 0 && total >= Math.ceil(max / 2)) out.push(`${g.game}-etoiles-moitie`);
+  if (max > 0 && total >= max) out.push(`${g.game}-etoiles-toutes`);
+  return out;
+}
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
 

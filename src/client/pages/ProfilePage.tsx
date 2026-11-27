@@ -13,6 +13,8 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { StreakCarnet } from "../components/StreakCarnet.tsx";
+import { Stars } from "../stars/Stars.tsx";
+import { STAR_GAME_BY_ID } from "../../shared/starMaps.ts";
 import { Loading, Options, timeAgo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { formatSprint } from "../lib/countdown.ts";
@@ -53,6 +55,8 @@ interface Profile {
   album: { count: number; best: string[] };
   /** Absente si le serveur n'a pas pu la lire */
   streak?: StreakStatus | null;
+  /** Les étoiles de chaque jeu qui en a */
+  stars?: Record<string, { total: number; max: number }>;
   achievements: { id: string; at: number }[];
   recent: {
     id: string;
@@ -244,6 +248,10 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       billard,
       tour,
     })[g].played;
+  // Les jeux à étoiles ouverts ici (ou où ce joueur en a déjà)
+  const starGames = Object.entries(profile.stars ?? {}).filter(
+    ([g, st]) => st.max > 0 && ((games as string[]).includes(g) || st.total > 0),
+  );
   const pointLines = (
     [
       { game: "uno", label: "à UNO", stats, shown: true },
@@ -326,6 +334,29 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
         <div className="profile-grid">
           <div className="profile-col">
             {profile.streak && <StreakCarnet streak={profile.streak} self={profile.friendship === "self"} />}
+            {starGames.length > 0 && (
+              <section className="carnet panel">
+                <h2>Les étoiles</h2>
+                <ul className="profile-stars">
+                  {starGames.map(([g, s]) => (
+                    <li key={g}>
+                      <span>{STAR_GAME_BY_ID.get(g)?.name ?? TABLE_NAMES[g as TableGame] ?? g}</span>
+                      <span className="album-progress">
+                        <span className="album-bar">
+                          <i style={{ width: `${(s.total / s.max) * 100}%` }} />
+                        </span>
+                        <span className="star-total">
+                          <Stars value={1} size={14} label="Étoiles" />
+                          <span className="num">
+                            {s.total} / {s.max}
+                          </span>
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {profile.album.count > 0 && (
               <section className="carnet panel">
                 <h2>L'album</h2>
@@ -611,17 +642,20 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                       <span className="achievement-text">
                         <strong>{a.title}</strong>
                         <span>{a.description}</span>
-                        {a.goal !== undefined && (
-                          <span className="album-progress achievement-progress" aria-label={`${playedOn(shelfGame)} sur ${a.goal}`}>
-                            <span className="album-bar">
-                              <i style={{ width: `${Math.min(100, (playedOn(shelfGame) / a.goal) * 100)}%` }} />
-                            </span>
-                            {/* Le compte y est déjà (succès venu après) : il tombe à la fin de la prochaine partie */}
-                            <span className="num">
-                              {playedOn(shelfGame) >= a.goal ? "à la prochaine partie" : `${playedOn(shelfGame)} / ${a.goal}`}
-                            </span>
-                          </span>
-                        )}
+                        {a.goal !== undefined &&
+                          (() => {
+                            // Les parties jouées à ce jeu, ou ses étoiles
+                            const count = a.counts === "stars" ? (profile.stars?.[shelfGame]?.total ?? 0) : playedOn(shelfGame);
+                            return (
+                              <span className="album-progress achievement-progress" aria-label={`${count} sur ${a.goal}`}>
+                                <span className="album-bar">
+                                  <i style={{ width: `${Math.min(100, (count / a.goal) * 100)}%` }} />
+                                </span>
+                                {/* Le compte y est déjà (succès venu après) : il tombe à la fin de la prochaine partie */}
+                                <span className="num">{count >= a.goal ? "à la prochaine partie" : `${count} / ${a.goal}`}</span>
+                              </span>
+                            );
+                          })()}
                       </span>
                     </li>
                   ))}
