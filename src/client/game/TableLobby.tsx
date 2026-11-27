@@ -250,8 +250,10 @@ export function TableLobby({
           ))}
         </div>
 
+        {/* Changer d'onglet fait apparaître son contenu en douceur (sauf « Effets réduits ») */}
         <section
-          className="rules-sheet panel lobby-panel"
+          key={shown}
+          className="rules-sheet panel lobby-panel rise"
           role="tabpanel"
           id={`lobby-panel-${shown}`}
           aria-labelledby={`lobby-tab-${shown}`}
