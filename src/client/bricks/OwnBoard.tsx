@@ -6,7 +6,7 @@ import type { BricksClientMessage, BricksRoomView } from "../../shared/protocol.
 import { play, unlockAudio, vibrate } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { actionFor, useControls } from "./controls.ts";
-import { BoardRenderer, boardSize, drawPiece, Effects, SKY_ROWS } from "./draw.ts";
+import { BoardRenderer, boardSize, drawPiece, Effects, SKY_ROWS, symbolsVersion } from "./draw.ts";
 import { LocalGame, type InputAction, type LocalEvent } from "./local.ts";
 import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 
@@ -269,7 +269,7 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
         const fall = piece ? Math.round(gm.fall * 24) / 24 : 0;
         // Éliminé : sa pile reste visible mais s'efface, la manche continue sans nous
         const dim = !playing || paused || relayedNow || !meRef.current.alive;
-        const frameKey = `${piece ? `${piece.type}${piece.x},${piece.y},${piece.rot},${fall}` : "-"}|${ghost ? ghost.y : "-"}|${dim}`;
+        const frameKey = `${piece ? `${piece.type}${piece.x},${piece.y},${piece.rot},${fall}` : "-"}|${ghost ? ghost.y : "-"}|${dim}|${symbolsVersion}`;
         // Rien n'a bougé et aucun effet en cours : on ne redessine pas
         if (frameKey !== lastFrame || grid !== drawnGrid || effects.current.busy) {
           renderer.render({ grid, piece, ghost, cell, dpr, effects: effects.current, dim, fall });
@@ -277,12 +277,12 @@ export const OwnBoard = forwardRef<OwnBoardHandle, Props>(function OwnBoard(
           drawnGrid = grid;
         }
         // Réserve et aperçus, redessinés seulement quand ils changent
-        const hk = `${gm.shownHold}:${gm.held}`;
+        const hk = `${gm.shownHold}:${gm.held}:${symbolsVersion}`;
         if (hk !== holdKey && holdCanvas.current) {
           holdKey = hk;
           drawPiece(holdCanvas.current.getContext("2d")!, gm.shownHold, side, dpr, gm.held);
         }
-        const nk = gm.queue.slice(0, previews).join("");
+        const nk = gm.queue.slice(0, previews).join("") + symbolsVersion;
         if (nk !== nextKey) {
           nextKey = nk;
           gm.queue.slice(0, previews).forEach((type, i) => {

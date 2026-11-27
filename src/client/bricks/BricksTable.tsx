@@ -17,7 +17,7 @@ import { KeysModal } from "./KeysModal.tsx";
 import { MiniBoard, miniEffects } from "./MiniBoard.tsx";
 import { OwnBoard, type OwnBoardHandle } from "./OwnBoard.tsx";
 import { BRICK_TEAMS } from "./BricksLobby.tsx";
-import { SHOWN_ROWS } from "./draw.ts";
+import { setBrickSymbols, SHOWN_ROWS } from "./draw.ts";
 import { useBoards, type BricksListeners } from "./useBricksRoom.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { useViewport } from "../lib/viewport.ts";
@@ -83,6 +83,9 @@ export function BricksTable({
   const flat = phone && w > h && h < 560;
   const tightPad = phone && h < 640;
   const sound = usePrefs((s) => s.sound);
+  // « Symboles de couleur » : chaque type de pièce porte un motif, dessiné avec la brique
+  const colorblind = usePrefs((s) => s.colorblind);
+  setBrickSymbols(colorblind);
   const music = useControls((s) => s.music);
   const [menuOpen, setMenuOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -221,6 +224,13 @@ export function BricksTable({
                     <Icon name="users" size={18} /> Voir le salon et les règles
                   </button>
                 )}
+                <button
+                  className="menu-item"
+                  onClick={() => usePrefs.getState().set({ colorblind: !colorblind })}
+                  aria-pressed={colorblind}
+                >
+                  <Icon name="eye" size={18} /> {colorblind ? "Retirer les symboles des pièces" : "Symboles sur les pièces"}
+                </button>
                 <MenuSound>
                   <SoundToggle label="Musique de Briques" checked={music} onChange={(v) => useControls.getState().set({ music: v })} />
                 </MenuSound>

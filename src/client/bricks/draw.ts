@@ -22,6 +22,75 @@ const FIRST_ROW = HIDDEN - SKY_ROWS;
 
 const sprites = new Map<string, HTMLCanvasElement>();
 
+/**
+ * « Symboles de couleur » : chaque type de pièce porte aussi un motif, pour la reconnaître sans la couleur. Le réglage
+ * change le dessin de toutes les briques : `symbolsVersion` le dit aux plateaux, qui redessinent leur pile.
+ */
+let symbols = false;
+export let symbolsVersion = 0;
+export function setBrickSymbols(on: boolean) {
+  if (on === symbols) return;
+  symbols = on;
+  symbolsVersion += 1;
+}
+
+/** Le motif d'un type de pièce (1 à 7 : I O T S Z J L), en blanc cassé sur la laque */
+export const SYMBOL_OF: Record<number, string> = { 1: "trait", 2: "carré", 3: "triangle", 4: "rond", 5: "croix", 6: "barre", 7: "losange" };
+
+function drawSymbol(g: CanvasRenderingContext2D, color: number, size: number) {
+  const kind = SYMBOL_OF[color];
+  if (!kind) return;
+  const c = size / 2;
+  const s = size * 0.2;
+  g.save();
+  g.strokeStyle = "rgba(255, 250, 235, 0.9)";
+  g.fillStyle = "rgba(255, 250, 235, 0.9)";
+  g.lineWidth = Math.max(1.2, size * 0.09);
+  g.lineCap = "round";
+  g.lineJoin = "round";
+  // Une ombre fine, pour qu'il se lise aussi sur la laque claire (le carré, presque blanc)
+  g.shadowColor = "rgba(0, 0, 0, 0.55)";
+  g.shadowBlur = size * 0.06;
+  g.beginPath();
+  switch (kind) {
+    case "trait":
+      g.moveTo(c - s, c);
+      g.lineTo(c + s, c);
+      break;
+    case "barre":
+      g.moveTo(c, c - s);
+      g.lineTo(c, c + s);
+      break;
+    case "carré":
+      g.rect(c - s * 0.8, c - s * 0.8, s * 1.6, s * 1.6);
+      break;
+    case "triangle":
+      g.moveTo(c, c - s);
+      g.lineTo(c + s, c + s * 0.8);
+      g.lineTo(c - s, c + s * 0.8);
+      g.closePath();
+      break;
+    case "rond":
+      g.arc(c, c, s * 0.85, 0, Math.PI * 2);
+      break;
+    case "croix":
+      g.moveTo(c - s * 0.8, c - s * 0.8);
+      g.lineTo(c + s * 0.8, c + s * 0.8);
+      g.moveTo(c + s * 0.8, c - s * 0.8);
+      g.lineTo(c - s * 0.8, c + s * 0.8);
+      break;
+    case "losange":
+      g.moveTo(c, c - s);
+      g.lineTo(c + s, c);
+      g.lineTo(c, c + s);
+      g.lineTo(c - s, c);
+      g.closePath();
+      break;
+  }
+  g.stroke();
+  g.restore();
+}
+
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   g.beginPath();
   g.moveTo(x + r, y);
@@ -34,7 +103,7 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 /** Une brique laquée : dégradé, arête sombre, liseré clair et un reflet comme sur un vernis. */
 export function sprite(color: number, cell: number, dpr: number): HTMLCanvasElement {
-  const key = `${color}:${cell}:${dpr}`;
+  const key = `${color}:${cell}:${dpr}:${symbols ? 1 : 0}`;
   const cached = sprites.get(key);
   if (cached) return cached;
   const size = Math.round(cell * dpr);
@@ -87,6 +156,7 @@ export function sprite(color: number, cell: number, dpr: number): HTMLCanvasElem
   g.strokeStyle = "rgba(0,0,0,0.45)";
   g.lineWidth = Math.max(1, size * 0.03);
   g.stroke();
+  if (symbols && color !== 8) drawSymbol(g, color, size);
   sprites.set(key, c);
   return c;
 }
@@ -214,6 +284,7 @@ export class BoardRenderer {
   private layer = document.createElement("canvas");
   private layerKey: unknown = undefined;
   private layerRise = -1;
+  private layerSymbols = -1;
   private beam: CanvasGradient | null = null;
 
   constructor(
@@ -275,10 +346,11 @@ export class BoardRenderer {
     const fx = o.effects;
     const rise = fx ? Math.round(fx.rise * 16) / 16 : 0;
     const key = o.gridKey ?? o.grid;
-    if (key !== this.layerKey || rise !== this.layerRise) {
+    if (key !== this.layerKey || rise !== this.layerRise || this.layerSymbols !== symbolsVersion) {
       this.buildLayer(o.grid, rise);
       this.layerKey = key;
       this.layerRise = rise;
+      this.layerSymbols = symbolsVersion;
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.layer.width, this.layer.height);
