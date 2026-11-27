@@ -26,7 +26,24 @@ import {
   type BolidesSettings,
   type Race,
 } from "../shared/games/bolides/race.ts";
-import { TRACK_IDS, type BaseTrackId } from "../shared/games/bolides/track.ts";
+import { mirrorOf, TRACK_IDS, type BaseTrackId } from "../shared/games/bolides/track.ts";
+import {
+  CUP_IDS,
+  CUPS,
+  EMPTY_PROGRESS,
+  RIVAL_NAME,
+  chronoKey,
+  cupKey,
+  cupOpen,
+  cupStars,
+  type BolidesProgress,
+  type BolidesSoloView,
+  type CampaignCup,
+  type CupId,
+  type SoloOutcome,
+} from "../shared/games/bolides/campaign.ts";
+import { chronoStars, ghostRun, ghostTargets } from "../shared/games/bolides/ghost.ts";
+import { progressStore } from "./bolidesProgress.ts";
 import { bolidesView, decodeKart, encodeKart } from "../shared/games/bolides/view.ts";
 import {
   BOLIDES_MAX_PLAYERS,
@@ -51,6 +68,7 @@ import type { RoomInit } from "./room.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
+import { emptyTableDelay, LEFT_EMPTY_MS, nextHost } from "./tableLife.ts";
 import { decodeHeaderJson } from "./util.ts";
 import {
   CLOSED_TABLE,
@@ -95,6 +113,9 @@ interface Seat {
   /** Son véhicule et son skin */
   vehicle?: VehicleId;
   skin?: SkinId;
+  /** Un bot du championnat (retiré en revenant à la course libre), et Mistral, le rival */
+  campaign?: boolean;
+  rival?: boolean;
 }
 
 type TimerKind = "away" | "seatCleanup" | "cleanup" | "tourStart";
@@ -124,7 +145,9 @@ interface BolidesData {
   recorded: boolean;
   results?: EloResults | null;
   /** Le Grand Prix en cours : ses circuits, la course où on en est, et les points de chacun */
-  cup?: { tracks: BaseTrackId[]; index: number; points: Record<string, number>; last: Record<string, number> } | null;
+  cup?: { tracks: BaseTrackId[]; index: number; points: Record<string, number>; last: Record<string, number>; campaign?: CupId } | null;
+  /** Ce que le joueur vient de gagner en solo (une coupe du championnat, un contre-la-montre), jusqu'au prochain départ */
+  solo?: SoloOutcome | null;
   /** Table d'une tournée : la tournée l'a créée et attend son résultat */
   tour?: TourInit | null;
   /** Ceux qui regardent la table (venus pour regarder, ou arrivés pendant une partie) : jamais assis sans le demander */
@@ -152,6 +175,9 @@ export class BolidesRoom extends DurableObject<Env> {
   private loop: ReturnType<typeof setInterval> | null = null;
   /** Des changements à enregistrer au prochain tic (on n'écrit pas à chaque position reçue) */
   private dirty = false;
+  /** Ce que chacun a gagné en solo, lu une fois à son arrivée */
+  private progress = new Map<string, BolidesProgress>();
+  private progressLoading = new Set<string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -406,7 +432,7 @@ export class BolidesRoom extends DurableObject<Env> {
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
     if (this.connectedUsers(ws).size === 0) {
-      this.addTimer({ at: now + (d.status === "playing" ? 20 : 10) * 60_000, kind: "cleanup" });
+      this.addTimer({ at: now + emptyTableDelay(d.status), kind: "cleanup" });
     }
     // Un hôte sans place (il regardait) qui s'en va : la main passe à un joueur présent
     this.ensureHost();
@@ -446,8 +472,144 @@ export class BolidesRoom extends DurableObject<Env> {
     // Personne d'assis n'est là (parti pendant l'annonce de la revanche, coupure) : pas de partie de bots seuls
     if (!this.data!.seats.some((s) => s.kind === "human" && this.isConnected(s.userId)))
       return "Il faut au moins un joueur assis à la table.";
+    const solo = this.soloProblem();
+    if (solo !== undefined) return solo;
     const seats = this.data!.seats.filter((s) => s.kind === "bot" || this.isConnected(s.userId));
     return seats.length < MIN_PLAYERS ? "Il faut au moins deux pilotes : ajoute un bot !" : null;
+  }
+
+  /** Le mode de jeu de la table (en tournée, toujours la course libre) */
+  private mode() {
+    const d = this.data!;
+    return d.tour ? "course" : { ...DEFAULT_SETTINGS, ...d.settings.bolides }.mode;
+  }
+
+  /** En solo : ce qui empêche de partir (null : rien), ou undefined en course libre */
+  private soloProblem(): string | null | undefined {
+    const d = this.data!;
+    const mode = this.mode();
+    if (mode === "course") return undefined;
+    const s = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+    if (d.seats.filter((x) => x.kind === "human").length > 1)
+      return mode === "chrono"
+        ? "Le contre-la-montre se court seul : les autres peuvent regarder."
+        : "Le championnat se court seul : les autres peuvent regarder, ou passez en course libre.";
+    if (mode === "chrono" && s.track === "hasard") return "Choisis un circuit pour le contre-la-montre.";
+    if (mode === "championnat" && !cupOpen(this.progress.get(d.hostId) ?? EMPTY_PROGRESS, s.campaign))
+      return "Cette coupe n'est pas encore ouverte : finis la précédente sur le podium.";
+    return null;
+  }
+
+  /** Le championnat et le contre-la-montre : pas en tournée, pas de règles au hasard, une coupe ouverte ; les bots du championnat partent quand on revient à la course libre */
+  private soloRules() {
+    const d = this.data!;
+    const s = d.settings.bolides;
+    if (d.tour) {
+      s.mode = "course";
+      return;
+    }
+    if (s.mode !== "course") d.settings.randomRules = null;
+    if (s.mode === "championnat") {
+      const p = this.progress.get(d.hostId) ?? EMPTY_PROGRESS;
+      if (!cupOpen(p, s.campaign)) s.campaign = [...CUP_IDS].reverse().find((id) => cupOpen(p, id)) ?? "galet";
+    } else d.seats = d.seats.filter((x) => !x.campaign);
+  }
+
+  /** Le championnat : le joueur, Mistral, puis des bots jusqu'à la taille de la grille de la coupe */
+  private campaignSeats(def: CampaignCup) {
+    const d = this.data!;
+    const humans = d.seats.filter((x) => x.kind === "human");
+    const bots: Seat[] = [];
+    const add = (name: string, rival: boolean) =>
+      bots.push({
+        id: `bot-${++d.botCounter}`,
+        kind: "bot",
+        userId: null,
+        name,
+        avatar: seededAvatar(rival ? "Mistral, le champion" : `${name}-${d.code}`),
+        photo: 0,
+        autoplay: false,
+        disconnectedAt: null,
+        campaign: true,
+        ...(rival ? { rival: true, vehicle: "bolide" as const, skin: "flammes" as const } : botGarage(`${name}-${d.code}`)),
+      });
+    add(RIVAL_NAME, true);
+    for (const name of BOT_NAMES) {
+      if (humans.length + bots.length >= def.grid) break;
+      if (!humans.some((h) => h.name === name)) add(name, false);
+    }
+    d.seats = [...humans, ...bots];
+  }
+
+  /** Sa progression en solo : lue une fois, puis gardée (la table la renvoie à tous quand elle arrive) */
+  private progressFor(userId: string): BolidesProgress | null {
+    const known = this.progress.get(userId);
+    if (known) return known;
+    if (!this.progressLoading.has(userId)) {
+      this.progressLoading.add(userId);
+      void progressStore()
+        .load(userId)
+        .then((p) => {
+          this.progress.set(userId, p);
+          if (this.data) this.broadcast([]);
+        })
+        .catch(() => {})
+        .finally(() => this.progressLoading.delete(userId));
+    }
+    return null;
+  }
+
+  private soloView(userId: string): BolidesSoloView {
+    const d = this.data!;
+    const s = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+    const track = this.mode() === "chrono" && s.track !== "hasard" ? (s.mirror ? mirrorOf(s.track) : s.track) : null;
+    return { progress: this.progressFor(userId), targets: track ? ghostTargets(track, 3) : null, outcome: d.solo ?? null };
+  }
+
+  /** La fin d'une coupe du championnat ou d'un contre-la-montre : la salle compte elle-même les étoiles */
+  private async soloResult() {
+    const d = this.data!;
+    const race = d.race;
+    const human = d.seats.find((x) => x.kind === "human" && x.userId);
+    if (!race || !human?.userId || d.tour) return;
+    const store = progressStore();
+    const s = race.settings;
+    if (s.mode === "championnat" && d.cup?.campaign && d.cup.index + 1 >= d.cup.tracks.length) {
+      const id = d.cup.campaign;
+      const def = CUPS[id];
+      const order = cupStandings(d.cup.points, d.cup.last, (x) => Boolean(this.seatById(x)));
+      const rank = order.findIndex(([x]) => x === human.id) + 1 || order.length;
+      const stars = cupStars(rank);
+      const before = (await store.load(human.userId)).stars[cupKey(id)] ?? 0;
+      this.progress.set(human.userId, await store.award(human.userId, cupKey(id), stars));
+      const unlocked = before === 0 && stars > 0 ? (CUP_IDS.find((c) => CUPS[c].after === id) ?? null) : null;
+      d.solo = { kind: "coupe", cup: id, rank, stars, before, unlocked };
+      this.systemChat(
+        stars > 0
+          ? `${human.name} finit la ${def.name} ${rank === 1 ? "en tête" : `à la ${rank}e place`} : ${stars} étoile${stars > 1 ? "s" : ""}.`
+          : `${human.name} finit la ${def.name} à la ${rank}e place, hors du podium.`,
+      );
+      if (unlocked) this.systemChat(`La ${CUPS[unlocked].name} est ouverte !`);
+    } else if (s.mode === "chrono") {
+      const r = racerOf(race, human.id);
+      if (!r || r.finish === null) return;
+      const key = chronoKey(race.track);
+      const before = await store.load(human.userId);
+      // Un tour bien plus rapide que le meilleur du fantôme d'or : impossible, le temps n'est pas retenu
+      const fastest = Math.min(...ghostRun(race.track, "or", s.laps).laps);
+      const refused = r.stats.bestLap > 0 && r.stats.bestLap < fastest * 0.85;
+      const stars = refused ? 0 : chronoStars(race.track, r.finish, s.laps);
+      if (!refused) this.progress.set(human.userId, await store.award(human.userId, key, stars, r.finish));
+      d.solo = {
+        kind: "chrono",
+        track: race.track,
+        ms: r.finish,
+        stars,
+        before: before.stars[key] ?? 0,
+        previous: before.best[key] ?? null,
+        ...(refused ? { refused: true } : {}),
+      };
+    }
   }
 
   /** L'annonce de la revanche est finie (compte à rebours, ou tous prêts) : la course part, ou la table dit pourquoi */
@@ -487,18 +649,16 @@ export class BolidesRoom extends DurableObject<Env> {
     }
   }
 
-  private ensureHost() {
+  /**
+   * L'hôte n'est plus là (sans place, ou `absent` : parti, remplacé par un bot) : la main passe à un joueur présent
+   * (voir tableLife.ts)
+   */
+  private ensureHost(absent?: string) {
     const d = this.data!;
-    if (d.seats.find((s) => s.userId === d.hostId)) return;
-    const connected = this.connectedUsers();
-    if (d.seats.length === 0 && connected.has(d.hostId)) return;
-    const next = d.seats.find((s) => s.kind === "human" && this.isConnected(s.userId)) ?? d.seats.find((s) => s.kind === "human");
-    const fallback = next?.userId ?? connected.keys().next().value;
-    if (fallback && fallback !== d.hostId) {
-      d.hostId = fallback;
-      const name = next?.name ?? connected.get(fallback)?.pseudo ?? "Quelqu'un";
-      this.systemChat(`${name} prend la main sur la table.`);
-    }
+    const next = nextHost(d.seats, d.hostId, this.connectedUsers(), absent);
+    if (!next) return;
+    d.hostId = next.id;
+    this.systemChat(`${next.name} prend la main sur la table.`);
   }
 
   // -------------------------------------------------------------------------
@@ -623,8 +783,11 @@ export class BolidesRoom extends DurableObject<Env> {
             // déjà fermée
           }
         }
-        this.ensureHost();
+        // L'hôte qui s'en va passe la main tout de suite, même en pleine partie (sa place gardée pour un bot ne la retient plus)
+        this.ensureHost(userId);
         void this.setPresence(userId, null).catch(() => {});
+        // Plus personne : la table ferme presque aussitôt, au lieu de laisser ses bots jouer seuls
+        if (this.connectedUsers().size === 0) this.addTimer({ at: now + LEFT_EMPTY_MS, kind: "cleanup" });
         if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now, ws);
       }
@@ -656,13 +819,17 @@ export class BolidesRoom extends DurableObject<Env> {
         // Règles au hasard : le serveur tire (ou retire) les règles, l'hôte ne règle plus à la main ce qu'elles décident
         const current = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
         const rulesBefore = JSON.stringify([current, d.settings.randomRules ?? null]);
-        const drawn = d.tour ? null : hostDraw("bolides", d.settings.randomRules, current, DEFAULT_SETTINGS, msg.randomRules, Math.random);
+        // (en solo, pas de règles au hasard : le championnat et le contre-la-montre ont les leurs)
+        const solo = (msg.settings?.mode ?? current.mode) !== "course";
+        const askRandom = solo ? (d.settings.randomRules ? false : undefined) : msg.randomRules;
+        const drawn = d.tour ? null : hostDraw("bolides", d.settings.randomRules, current, DEFAULT_SETTINGS, askRandom, Math.random);
         if (drawn) {
           d.settings.randomRules = drawn.draw;
           d.settings.bolides = drawn.settings;
           this.systemChat(drawn.notice);
         }
         d.settings.bolides = mergeSettings(d.settings.bolides, hostPatch("bolides", d.settings.randomRules, msg.settings));
+        this.soloRules();
         // De nouvelles règles : le prochain départ recommence un Grand Prix (une place de plus, la table ouverte ou fermée,
         // ne changent rien à la course : le Grand Prix continue)
         if (JSON.stringify([{ ...DEFAULT_SETTINGS, ...d.settings.bolides }, d.settings.randomRules ?? null]) !== rulesBefore) d.cup = null;
@@ -809,6 +976,11 @@ export class BolidesRoom extends DurableObject<Env> {
 
   private async startGame(now: number, ws?: WebSocket) {
     const d = this.data!;
+    const soloProblem = this.soloProblem();
+    if (soloProblem) {
+      if (ws) this.send(ws, { t: "error", message: soloProblem });
+      return this.afterChange([], now);
+    }
     // L'annonce (revanche ou tournée) est passée
     d.pickUntil = null;
     d.ready = [];
@@ -820,7 +992,18 @@ export class BolidesRoom extends DurableObject<Env> {
     const blinked = (x: Seat) => someoneHere && x.kind === "human" && x.disconnectedAt !== null && now - x.disconnectedAt < BLINK_MS;
     d.seats = d.seats.filter((x) => x.kind === "bot" || this.isConnected(x.userId) || blinked(x));
     this.ensureHost();
-    if (d.seats.length < MIN_PLAYERS) {
+    const mode = this.mode();
+    const pre = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
+    // Le championnat : une nouvelle coupe refait la grille (Mistral et les bots de la coupe), la course suivante la garde
+    const cupGoesOn =
+      mode === "championnat" &&
+      d.cup?.campaign === pre.campaign &&
+      d.status === "finished" &&
+      d.cup.index + 1 < d.cup.tracks.length &&
+      d.seats.some((x) => x.rival);
+    if (mode === "championnat" && !cupGoesOn) this.campaignSeats(CUPS[pre.campaign]);
+    if (mode === "chrono") d.seats = d.seats.filter((x) => x.kind === "human");
+    if (d.seats.length < (mode === "chrono" ? 1 : MIN_PLAYERS)) {
       if (ws) this.send(ws, { t: "error", message: "Il faut au moins deux pilotes : ajoute un bot !" });
       return this.afterChange([], now);
     }
@@ -844,7 +1027,24 @@ export class BolidesRoom extends DurableObject<Env> {
       );
     }
     const settings = { ...DEFAULT_SETTINGS, ...d.settings.bolides };
-    if (settings.cup && !d.tour) {
+    if (mode === "championnat") {
+      // Les règles de la coupe : ses circuits, ses bots, avec les objets, à vitesse normale
+      const def = CUPS[settings.campaign];
+      Object.assign(settings, { items: true, laps: def.laps, botLevel: def.bots, mirror: def.mirror, speed: "normal" as const, cup: true });
+      if (cupGoesOn && d.cup) {
+        d.cup.index += 1;
+        d.cup.last = {};
+      } else {
+        d.cup = { tracks: [...def.tracks], index: 0, points: {}, last: {}, campaign: def.id };
+        d.solo = null;
+      }
+      settings.track = d.cup.tracks[d.cup.index]!;
+    } else if (mode === "chrono") {
+      // Seul, sans objets, trois tours à vitesse normale, contre les fantômes
+      Object.assign(settings, { items: false, laps: 3, speed: "normal" as const, cup: false });
+      d.cup = null;
+      d.solo = null;
+    } else if (settings.cup && !d.tour) {
       // La course suivante du Grand Prix, ou un nouveau Grand Prix (quatre circuits tirés au sort)
       if (d.cup && d.status === "finished" && d.cup.index + 1 < d.cup.tracks.length) {
         d.cup.index += 1;
@@ -866,9 +1066,10 @@ export class BolidesRoom extends DurableObject<Env> {
       now,
       randomSeed(),
     );
-    // Chacun part avec le véhicule et le skin qu'il a choisis
+    // Chacun part avec le véhicule et le skin qu'il a choisis (Mistral roule un cran au-dessus des autres bots)
     for (const r of d.race.racers) {
       const seat = this.seatById(r.id);
+      if (seat?.rival && mode === "championnat") r.level = CUPS[settings.campaign].rival;
       const bot = seat?.kind === "bot" && !seat.vehicle ? botGarage(`${seat.name}-${d.code}`) : null;
       r.vehicle = seat?.vehicle ?? bot?.vehicle ?? "kart";
       r.skin = seat?.skin ?? bot?.skin ?? "usine";
@@ -964,6 +1165,8 @@ export class BolidesRoom extends DurableObject<Env> {
         if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte le Grand Prix !`);
       }
     }
+    // En solo, la salle compte elle-même les étoiles gagnées
+    await this.soloResult().catch(() => {});
     // Règles au hasard : on tire tout de suite celles de la course suivante (d'un Grand Prix fini), pour que chacun les lise avant
     const cupGoesOn = Boolean(cup && cup.index + 1 < cup.tracks.length);
     if (d.settings.randomRules && !d.tour && !cupGoesOn) {
@@ -1049,6 +1252,8 @@ export class BolidesRoom extends DurableObject<Env> {
         const r = d.race ? racerOf(d.race, seat.id) : undefined;
         if (r) r.bot = true;
         this.systemChat(`${seat.name} s'est déconnecté : un bot prend le volant en attendant son retour.`);
+        // L'hôte coupé le temps qu'un bot le remplace : la main passe à un joueur présent
+        if (seat.userId === d.hostId) this.ensureHost(seat.userId);
         return true;
       }
       case "seatCleanup": {
@@ -1088,6 +1293,8 @@ export class BolidesRoom extends DurableObject<Env> {
   private async recordResults(now: number) {
     const d = this.data!;
     const race = d.race!;
+    // Un contre-la-montre se court seul : ni victoire, ni classement, ni Elo (ses étoiles sont comptées à part)
+    if (race.settings.mode === "chrono" && !d.tour) return;
     try {
       const players = race.racers.map((r, i) => {
         const seat = this.seatById(r.id);
@@ -1211,6 +1418,7 @@ export class BolidesRoom extends DurableObject<Env> {
       garage: {
         choices: Object.fromEntries(d.seats.map((s) => [s.id, { vehicle: s.vehicle ?? "kart", skin: s.skin ?? "usine" }])),
       },
+      solo: this.soloView(userId),
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,
@@ -1306,5 +1514,7 @@ function mergeSettings(current: BolidesSettings, patch: Partial<BolidesSettings>
   if (patch.botLevel === "facile" || patch.botLevel === "moyen" || patch.botLevel === "fort") next.botLevel = patch.botLevel as BotLevel;
   if (typeof patch.cup === "boolean") next.cup = patch.cup;
   if (typeof patch.mirror === "boolean") next.mirror = patch.mirror;
+  if (patch.mode === "course" || patch.mode === "championnat" || patch.mode === "chrono") next.mode = patch.mode;
+  if ((CUP_IDS as readonly string[]).includes(patch.campaign as string)) next.campaign = patch.campaign!;
   return next;
 }

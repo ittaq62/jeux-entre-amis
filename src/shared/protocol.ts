@@ -1,6 +1,7 @@
 import type { AvatarConfig } from "./avatar.ts";
 import type { LoadGate } from "./loadGate.ts";
 import type { SkinId as KartSkinId, VehicleId } from "./games/bolides/garage.ts";
+import type { BolidesSoloView } from "./games/bolides/campaign.ts";
 import type { BolidesEvent, BolidesSettings } from "./games/bolides/race.ts";
 import type { BolidesView, KartNet } from "./games/bolides/view.ts";
 import type { MatchEvent } from "./games/crampons/model.ts";
@@ -707,6 +708,8 @@ export interface BolidesRoomView {
   ready?: string[];
   /** Le véhicule et le skin de chaque pilote assis */
   garage: { choices: Record<string, { vehicle: VehicleId; skin: KartSkinId }> };
+  /** Le championnat et le contre-la-montre : sa progression, les fantômes, ce qu'il vient de gagner */
+  solo?: BolidesSoloView | null;
 }
 
 export type BolidesClientMessage =

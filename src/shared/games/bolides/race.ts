@@ -5,6 +5,7 @@
 
 import { random } from "../../rng.ts";
 import { VEHICLES, type SkinId, type VehicleId } from "./garage.ts";
+import type { CupId } from "./campaign.ts";
 import { BOT_STYLE, botDrive, newBotMemory, type BotLevel, type BotMemory } from "./bot.ts";
 import {
   AIMANT_MS,
@@ -91,7 +92,16 @@ export interface BolidesSettings {
   cup: boolean;
   /** Les circuits à l'envers, gauche et droite échangées */
   mirror: boolean;
+  /**
+   * La course libre (entre amis, avec des bots si on veut), le championnat (seul, une coupe contre les bots) ou le
+   * contre-la-montre (seul, sans objets, contre les fantômes)
+   */
+  mode: RaceMode;
+  /** La coupe du championnat choisie */
+  campaign: CupId;
 }
+
+export type RaceMode = "course" | "championnat" | "chrono";
 
 export const DEFAULT_SETTINGS: BolidesSettings = {
   track: "hasard",
@@ -101,6 +111,8 @@ export const DEFAULT_SETTINGS: BolidesSettings = {
   botLevel: "moyen",
   cup: false,
   mirror: false,
+  mode: "course",
+  campaign: "galet",
 };
 
 /** Un Grand Prix : le nombre de courses, et les points de chaque place */
@@ -216,6 +228,8 @@ export interface Racer {
   carriedSince?: number;
   /** Un joueur qui reprend son volant au bot : l'heure, tant que son jeu n'a pas repris la place où le bot l'a laissé */
   handback?: number;
+  /** Un bot qui ne roule pas au niveau des autres (Mistral, le rival du championnat) */
+  level?: BotLevel;
 }
 
 export interface Race {
@@ -412,7 +426,7 @@ function drawFor(race: Race, r: Racer, now: number): ItemKind {
       continue;
     if (kind === "orage" && now - (race.stormAt ?? -1e9) < 25_000) continue;
     // Plus les bots sont faciles, moins ils ont droit aux objets qui font le plus mal
-    if (r.bot && (kind === "fusee" || kind === "orage") && random(race) >= BOT_STYLE[race.settings.botLevel].mean) continue;
+    if (r.bot && (kind === "fusee" || kind === "orage") && random(race) >= BOT_STYLE[r.level ?? race.settings.botLevel].mean) continue;
     return kind;
   }
   return "turbo";
@@ -550,7 +564,7 @@ export function reportKart(
 
 /** La vitesse d'un bot, retenue s'il prend le large devant les joueurs (selon son niveau), poussée s'il traîne loin derrière */
 function botTop(race: Race, r: Racer): number {
-  const level = BOT_STYLE[race.settings.botLevel];
+  const level = BOT_STYLE[r.level ?? race.settings.botLevel];
   let top = CLASS_SPEED[race.settings.speed] * level.top;
   const humans = race.racers.filter((o) => !o.bot && o.finish === null);
   if (humans.length > 0) {
@@ -589,7 +603,7 @@ export function driveBots(race: Race, now: number, memory: Map<string, BotMemory
         continue;
       }
       const rivals = race.racers.filter((o) => o !== r);
-      const plan = botDrive(t, r.kart, r.item, rivals, race.hazards, race.settings.botLevel, mem, at, race, race.coins);
+      const plan = botDrive(t, r.kart, r.item, rivals, race.hazards, r.level ?? race.settings.botLevel, mem, at, race, race.coins);
       const x0 = r.kart.x;
       const z0 = r.kart.z;
       const kev: KartEvent[] = [];
