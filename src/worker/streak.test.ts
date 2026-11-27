@@ -8,7 +8,7 @@ const { claimStreak, recordPlayDays, streakStatus } = await import("./streak.ts"
 const { sha256Hex } = await import("./util.ts");
 const { default: worker } = await import("./index.ts");
 const { LOGIN_LADDER, MIN_GAME_MS } = await import("../shared/streak.ts");
-import type { StreakClaimResponse } from "../shared/streak.ts";
+import { WEEK_POINTS_PER_GAME, type StreakClaimResponse } from "../shared/streak.ts";
 
 type Row = Record<string, unknown>;
 
@@ -201,7 +201,10 @@ const ALL = [
   "minigolf",
   "bowling",
   "billard",
+  "cour",
 ] as const;
+/** Le défi de la semaine : dix points par jeu du site */
+const BONUS = WEEK_POINTS_PER_GAME * ALL.length;
 /** Tous les jeux sauf Culbute, joué en dernier */
 const ALL_BUT_LAST = ALL.filter((g) => g !== "culbute");
 
@@ -396,7 +399,7 @@ describe("les jours de jeu et le défi de la semaine", () => {
     expect(db.streaks.get("u_tard")).toMatchObject({ play_streak: 1, play_best: 2 });
   });
 
-  it("chacun des jeux joué dans la semaine : 120 points, une seule fois", async () => {
+  it("chacun des jeux joué dans la semaine : dix points par jeu, une seule fois", async () => {
     const token = await signIn("u_tous", "Tous", true);
     for (const [i, game] of ALL_BUT_LAST.entries()) await played("u_tous", game, noon("2026-11-09") + i * 3600_000);
     setNow(noon("2026-11-10"));
@@ -406,16 +409,16 @@ describe("les jours de jeu et le défi de la semaine", () => {
       start: "2026-11-09",
       games: [...ALL],
       played: ALL_BUT_LAST,
-      bonus: 120,
+      bonus: BONUS,
       paid: false,
     });
     // Le dernier jeu, et retour à l'accueil le même jour : le défi est versé tout de suite, sans attendre demain
     await played("u_tous", "culbute", noon("2026-11-10") + 3600_000);
     setNow(noon("2026-11-10") + 2 * 3600_000);
     const done = await Promise.all([claim(token), claim(token)]);
-    expect(done.flatMap((r) => r.gained.weeks)).toEqual([{ start: "2026-11-09", bonus: 120, current: true }]);
+    expect(done.flatMap((r) => r.gained.weeks)).toEqual([{ start: "2026-11-09", bonus: BONUS, current: true }]);
     expect(done[0]!.status.week.paid).toBe(true);
-    expect(db.ledgerOf("u_tous").find((l) => l.reason === "tous-les-jeux:2026-11-09")?.delta).toBe(120);
+    expect(db.ledgerOf("u_tous").find((l) => l.reason === "tous-les-jeux:2026-11-09")?.delta).toBe(BONUS);
     // Rejouer à tout dans la même semaine ne repaie pas
     for (const game of ALL) await played("u_tous", game, noon("2026-11-12"));
     setNow(noon("2026-11-12"));
@@ -427,7 +430,7 @@ describe("les jours de jeu et le défi de la semaine", () => {
     for (const game of ALL) await played("u_dimanche", game, Date.parse("2026-11-15T21:00:00Z"));
     setNow(noon("2026-11-16"));
     const monday = await claim(token);
-    expect(monday.gained.weeks).toEqual([{ start: "2026-11-09", bonus: 120, current: false }]);
+    expect(monday.gained.weeks).toEqual([{ start: "2026-11-09", bonus: BONUS, current: false }]);
     expect(monday.status.week).toMatchObject({ start: "2026-11-16", played: [], paid: false });
     // Plus tard, rien de plus pour cette semaine-là
     setNow(noon("2026-11-24"));

@@ -10,6 +10,7 @@ import type { CulbuteConfig } from "./games/culbute/view.ts";
 import type { MinigolfConfig } from "./games/minigolf/match.ts";
 import type { BowlingConfig } from "./games/bowling/match.ts";
 import type { BillardConfig } from "./games/billard/match.ts";
+import type { CourConfig } from "./games/cour/config.ts";
 import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
@@ -32,6 +33,7 @@ export const TOUR_GAMES: GameId[] = [
   "minigolf",
   "bowling",
   "billard",
+  "cour",
 ];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
@@ -47,7 +49,8 @@ const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
     g !== "escarmouche" &&
     g !== "minigolf" &&
     g !== "bowling" &&
-    g !== "billard",
+    g !== "billard" &&
+    g !== "cour",
 );
 
 /** Nombre de joueurs qu'accueille chaque jeu */
@@ -63,6 +66,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   minigolf: { min: 2, max: 8 },
   bowling: { min: 2, max: 8 },
   billard: { min: 2, max: 8 },
+  cour: { min: 2, max: 8 },
   escarmouche: { min: 2, max: 8 },
 };
 
@@ -673,6 +677,22 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       chance: 0.2,
     },
   ],
+  cour: [
+    {
+      id: "eclair",
+      name: "épreuves éclair",
+      blurb: "Tous les chronos raccourcis : on court, on découpe et on saute plus vite.",
+      settings: { eclair: true } satisfies Partial<CourConfig>,
+      chance: 0.3,
+    },
+    {
+      id: "foule",
+      name: "la grande foule",
+      blurb: "Quarante candidats au départ.",
+      settings: { candidates: 40 } satisfies Partial<CourConfig>,
+      chance: 0.25,
+    },
+  ],
   billard: [
     {
       id: "larges",
@@ -1023,6 +1043,42 @@ const BILLARD_VARIANTS: Format<BillardConfig>[] = [
   },
 ];
 
+const COUR_VARIANTS: Format<CourConfig>[] = [
+  // En tournée, une table de La Cour des Grands joue un petit grand jeu (trois épreuves et la finale, seize candidats) ou
+  // une épreuve seule ; à une table, le grand jeu a la longueur choisie par l'hôte
+  {
+    id: "grand-jeu",
+    name: "Le grand jeu",
+    blurb: "Trois épreuves tirées au sort, puis la finale des polochons entre les deux derniers.",
+    settings: {},
+    weight: 3,
+  },
+  {
+    id: "soleil",
+    name: "1, 2, 3, Tournesol !",
+    blurb: "Une épreuve : avancer quand le tournesol chante, se figer quand il regarde.",
+    settings: { only: "soleil" },
+  },
+  {
+    id: "chaises",
+    name: "Les Chaises musicales",
+    blurb: "Une épreuve : s'asseoir dès que la musique s'arrête, jusqu'au dernier tour.",
+    settings: { only: "chaises" },
+  },
+  {
+    id: "marelle",
+    name: "La Marelle",
+    blurb: "Une épreuve : retenir les cases qui s'allument et les sauter dans l'ordre.",
+    settings: { only: "marelle" },
+  },
+  {
+    id: "nenuphars",
+    name: "Les Nénuphars",
+    blurb: "Une épreuve : traverser l'étang en devinant le bon nénuphar.",
+    settings: { only: "nenuphars" },
+  },
+];
+
 const VARIANTS: Record<GameId, Format<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -1036,6 +1092,7 @@ const VARIANTS: Record<GameId, Format<object>[]> = {
   minigolf: MINIGOLF_VARIANTS,
   bowling: BOWLING_VARIANTS,
   billard: BILLARD_VARIANTS,
+  cour: COUR_VARIANTS,
 };
 
 /** Les formats d'un jeu (ils s'excluent), sans leurs réglages */
@@ -1089,6 +1146,7 @@ export function variantSettings(game: "culbute", id: string | null | undefined):
 export function variantSettings(game: "minigolf", id: string | null | undefined): Partial<MinigolfConfig>;
 export function variantSettings(game: "bowling", id: string | null | undefined): Partial<BowlingConfig>;
 export function variantSettings(game: "billard", id: string | null | undefined): Partial<BillardConfig>;
+export function variantSettings(game: "cour", id: string | null | undefined): Partial<CourConfig>;
 export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);

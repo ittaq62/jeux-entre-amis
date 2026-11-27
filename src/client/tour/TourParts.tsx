@@ -71,6 +71,8 @@ export function GameTicket({
             <BowlingArt />
           ) : game === "billard" ? (
             <BillardArt />
+          ) : game === "cour" ? (
+            <CourArt />
           ) : (
             <NavalArt />
           )}
@@ -78,6 +80,35 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Le Tournesol géant de La Cour des Grands, et une boule de peinture qui part */
+function CourArt() {
+  return (
+    <g>
+      <path d="M40 78C40 66 42 58 40 48" stroke="#4f9a3a" strokeWidth="3.5" fill="none" />
+      <path d="M41 64C48 60 54 62 56 66C50 68 45 67 41 64Z" fill="#5aa845" />
+      {Array.from({ length: 14 }, (_, k) => (
+        <ellipse
+          key={k}
+          cx="40"
+          cy="22"
+          rx="4"
+          ry="11"
+          fill={k % 2 ? "#ffd23f" : "#f6b21a"}
+          transform={`rotate(${(k * 360) / 14} 40 34)`}
+        />
+      ))}
+      <circle cx="40" cy="34" r="10" fill="#5a3417" />
+      <circle cx="36.5" cy="32" r="2.2" fill="#fff" />
+      <circle cx="43.5" cy="32" r="2.2" fill="#fff" />
+      <circle cx="36.8" cy="32.4" r="1" fill="#1d140c" />
+      <circle cx="43.8" cy="32.4" r="1" fill="#1d140c" />
+      <path d="M36.5 37.5Q40 40.5 43.5 37.5" stroke="#1d140c" strokeWidth="1.2" fill="none" />
+      <circle cx="62" cy="54" r="4.5" fill="#ff3f86" />
+      <circle cx="68" cy="60" r="2" fill="#ff3f86" />
+    </g>
   );
 }
 

@@ -565,6 +565,48 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Touche-à-tout",
     description: "Jouer aux quatre jeux du billard : pleines et rayées, la bille 9, le Killer et les trois billes.",
   },
+  // La Cour des Grands
+  {
+    id: "cour-first-win",
+    game: "cour",
+    chip: "1er",
+    tone: "red",
+    title: "La Cloche d'or",
+    description: "Gagner une partie de La Cour des Grands.",
+  },
+  {
+    id: "cour-regular",
+    goal: 25,
+    game: "cour",
+    chip: "25",
+    tone: "blue",
+    title: "Pilier de la cour",
+    description: "Jouer 25 parties de La Cour des Grands.",
+  },
+  {
+    id: "cour-finalist",
+    game: "cour",
+    chip: "2",
+    tone: "ivory",
+    title: "Sur la poutre",
+    description: "Arriver en finale des polochons, sur la poutre au-dessus du bassin.",
+  },
+  {
+    id: "cour-saved",
+    game: "cour",
+    chip: "!",
+    tone: "green",
+    title: "Miraculé",
+    description: "Être repêché après une épreuve où presque tout le monde est tombé.",
+  },
+  {
+    id: "cour-all",
+    game: "cour",
+    chip: "8",
+    tone: "black",
+    title: "Toute la récré",
+    description: "Jouer les huit épreuves de La Cour des Grands (sans compter la finale).",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -925,6 +967,27 @@ export function earnedBillardAchievements(o: BillardOutcome): string[] {
   add(
     "billard-all",
     ["huit", "neuf", "killer", "carambole"].every((k) => (o.totals[k] ?? 0) >= 1),
+  );
+  return out;
+}
+
+export interface CourOutcome {
+  won: boolean;
+  played: number;
+  stats: { finalist: number; saved: number };
+  totals: Record<string, number>;
+}
+
+export function earnedCourAchievements(o: CourOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("cour-first-win", o.won);
+  add("cour-regular", o.played >= goalOf("cour-regular"));
+  add("cour-finalist", o.stats.finalist >= 1);
+  add("cour-saved", o.stats.saved >= 1);
+  add(
+    "cour-all",
+    ["soleil", "biscuit", "corde", "nenuphars", "chaises", "billes", "marelle", "epervier"].every((k) => (o.totals[k] ?? 0) >= 1),
   );
   return out;
 }

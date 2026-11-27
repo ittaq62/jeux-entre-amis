@@ -18,6 +18,7 @@ import { CulbuteRoom } from "./culbuteRoom.ts";
 import { MinigolfRoom } from "./minigolfRoom.ts";
 import { BowlingRoom } from "./bowlingRoom.ts";
 import { BillardRoom } from "./billardRoom.ts";
+import { CourRoom } from "./courRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -42,6 +43,7 @@ const ROOMS: { name: string; Room: RoomClass }[] = [
   { name: "minigolf", Room: MinigolfRoom as unknown as RoomClass },
   { name: "bowling", Room: BowlingRoom as unknown as RoomClass },
   { name: "billard", Room: BillardRoom as unknown as RoomClass },
+  { name: "cour", Room: CourRoom as unknown as RoomClass },
   { name: "tournée", Room: TourRoom as unknown as RoomClass },
 ];
 
@@ -66,6 +68,7 @@ describe.each([
   { name: "minigolf", Room: MinigolfRoom as unknown as RoomClass },
   { name: "bowling", Room: BowlingRoom as unknown as RoomClass },
   { name: "billard", Room: BillardRoom as unknown as RoomClass },
+  { name: "cour", Room: CourRoom as unknown as RoomClass },
 ])("$name", ({ Room }) => {
   it("changer d'équipe en rafale au salon : pas une écriture par message", async () => {
     const state = new FakeState();

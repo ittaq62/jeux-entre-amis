@@ -154,6 +154,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de billard",
   },
+  {
+    id: "cour",
+    name: "La Cour des Grands",
+    desc: "Le grand jeu d'épreuves de la cour de récré, en 3D : jusqu'à 40 candidats (vous, et des bots pour la foule), 1, 2, 3 Tournesol, le biscuit à découper, la corde, les nénuphars, les chaises musicales, les billes, la marelle, l'épervier, et la finale aux polochons. On est éliminé à la peinture, à la mousse ou dans la piscine à balles. Et une campagne à jouer seul.",
+    keywords: "épreuves survie élimination récré tournesol biscuit corde chaises musicales marelle épervier polochon jeu télévisé",
+    players: [1, GAME_SEATS.cour.max],
+    quick: "Partie rapide",
+    open: "Ouvrir une table",
+    modal: "Ouvrir une table de La Cour des Grands",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

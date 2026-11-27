@@ -10,6 +10,7 @@ import {
   earnedMinigolfAchievements,
   earnedBowlingAchievements,
   earnedBillardAchievements,
+  earnedCourAchievements,
   earnedEscarmoucheAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
@@ -26,6 +27,8 @@ import type { BowlingConfig } from "../shared/games/bowling/match.ts";
 import type { BowlingRecordStats } from "../shared/games/bowling/net.ts";
 import type { BillardConfig } from "../shared/games/billard/match.ts";
 import type { BillardRecordStats } from "../shared/games/billard/net.ts";
+import type { CourConfig } from "../shared/games/cour/config.ts";
+import type { CourRecordStats } from "../shared/games/cour/net.ts";
 import type { EscarmoucheSettings, Mode as EscarmoucheMode } from "../shared/games/escarmouche/rules.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
@@ -286,6 +289,7 @@ export interface GameRecordPlayer {
     | MinigolfRecordStats
     | BowlingRecordStats
     | BillardRecordStats
+    | CourRecordStats
     | EscarmoucheRecordStats;
 }
 
@@ -347,6 +351,7 @@ export type GameRecord = {
   | { game: "minigolf"; settings: MinigolfConfig; mode: string }
   | { game: "bowling"; settings: BowlingConfig; mode: string }
   | { game: "billard"; settings: BillardConfig; mode: string }
+  | { game: "cour"; settings: CourConfig; mode: string }
   | { game: "escarmouche"; settings: EscarmoucheSettings; mode: EscarmoucheMode }
 );
 
@@ -495,6 +500,18 @@ function mergeBowlingTotals(raw: string | null, stats: BowlingRecordStats): Reco
     totals.pins10 = (totals.pins10 ?? 0) + stats.full;
   }
   totals.bestRun = Math.max(totals.bestRun ?? 0, stats.bestRun);
+  return totals;
+}
+
+/** Cumul des stats de La Cour des Grands : tout s'additionne (les épreuves jouées comprises) */
+function mergeCourTotals(raw: string | null, stats: CourRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const [key, value] of Object.entries(stats)) if (typeof value === "number") totals[key] = (totals[key] ?? 0) + value;
   return totals;
 }
 
@@ -691,6 +708,11 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const merged = mergeBillardTotals(prev?.totals ?? null, stats);
       totals = merged;
       earnedIds = earnedBillardAchievements({ won, played, stats, totals: merged });
+    } else if (rec.game === "cour") {
+      const stats = p.stats as CourRecordStats;
+      const merged = mergeCourTotals(prev?.totals ?? null, stats);
+      totals = merged;
+      earnedIds = earnedCourAchievements({ won, played, stats, totals: merged });
     } else if (rec.game === "escarmouche") {
       const stats = p.stats as EscarmoucheRecordStats;
       totals = mergeEscarmoucheTotals(prev?.totals ?? null, stats);
@@ -1070,6 +1092,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const minigolf = statRows.results.find((r) => r.game === "minigolf");
   const bowling = statRows.results.find((r) => r.game === "bowling");
   const billard = statRows.results.find((r) => r.game === "billard");
+  const cour = statRows.results.find((r) => r.game === "cour");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -1092,6 +1115,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     minigolf: { ...statsSummary(minigolf), totals: totalsOf(minigolf) },
     bowling: { ...statsSummary(bowling), totals: totalsOf(bowling) },
     billard: { ...statsSummary(billard), totals: totalsOf(billard) },
+    cour: { ...statsSummary(cour), totals: totalsOf(cour) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

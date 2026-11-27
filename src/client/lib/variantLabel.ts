@@ -53,6 +53,23 @@ function trackName(id: string): string | null {
   return name ? (mirror ? `${name} (miroir)` : name) : null;
 }
 
+/** La Cour des Grands : la longueur du grand jeu, l'épreuve seule, ou la campagne */
+const COUR_NAMES: Record<string, string> = {
+  courte: "le grand jeu court",
+  normale: "le grand jeu",
+  longue: "toutes les épreuves",
+  campagne: "la campagne",
+  soleil: "1, 2, 3, Tournesol !",
+  biscuit: "le Sablé",
+  corde: "le tir à la corde",
+  nenuphars: "les Nénuphars",
+  chaises: "les chaises musicales",
+  billes: "les billes",
+  marelle: "la marelle",
+  epervier: "l'épervier",
+  polochons: "la finale des polochons",
+};
+
 /** La variante seule (« classique », « en duel », « Le Volcan »…), ou null si elle n'a pas de nom à montrer */
 export function variantName(game: GameId, variant: string): string | null {
   switch (game) {
@@ -88,6 +105,8 @@ export function variantName(game: GameId, variant: string): string | null {
       return variant === "spares" ? "défi des spares" : null;
     case "billard":
       return BILLARD_NAMES[variant] ?? null;
+    case "cour":
+      return COUR_NAMES[variant] ?? null;
   }
 }
 

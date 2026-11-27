@@ -4928,6 +4928,10 @@ h3 .hint {
   --art: linear-gradient(165deg, #2f9a62 0%, #0f3a24 100%);
 }
 
+.game-ticket.is-cour {
+  --art: linear-gradient(165deg, #f2b632 0%, #d9344d 100%);
+}
+
 .game-ticket.is-escarmouche {
   --art: linear-gradient(165deg, #8a6a4a 0%, #2d2620 100%);
 }

@@ -52,6 +52,7 @@ interface Profile {
   minigolf?: GameStats;
   bowling?: GameStats;
   billard?: GameStats;
+  cour?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -181,6 +182,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const billard = profile.billard ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const blt = billard.totals as Record<string, number>;
   const showBillard = games.includes("billard") || billard.played > 0;
+  const cour = profile.cour ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const showCour = games.includes("cour") || cour.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
@@ -199,6 +202,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       "minigolf",
       "bowling",
       "billard",
+      "cour",
       "tour",
     ] as TableGame[]
   ).filter(
@@ -224,9 +228,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                         ? showBowling
                         : g === "billard"
                           ? showBillard
-                          : g === "bolides"
-                            ? showBolides
-                            : showTour),
+                          : g === "cour"
+                            ? showCour
+                            : g === "bolides"
+                              ? showBolides
+                              : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -254,6 +260,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       minigolf,
       bowling,
       billard,
+      cour,
       tour,
     })[g].played;
   // Les jeux à étoiles ouverts ici (ou où ce joueur en a déjà)
@@ -274,6 +281,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       { game: "minigolf", label: "au minigolf", stats: minigolf, shown: showMinigolf },
       { game: "bowling", label: "au bowling", stats: bowling, shown: showBowling },
       { game: "billard", label: "au billard", stats: billard, shown: showBillard },
+      { game: "cour", label: "à La Cour des Grands", stats: cour, shown: showCour },
     ] satisfies { game: GameId; label: string; stats: Pick<GameStats, "played" | "points" | "elo">; shown: boolean }[]
   ).filter((line) => line.shown && line.stats.played > 0);
   // Au-delà de quatre jeux, la liste se replie sur les trois qui rapportent le plus : au téléphone, une douzaine de lignes
@@ -595,6 +603,22 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <LedgerRow label="Casses et files" value={blt.breakRuns} />
                   <LedgerRow label="Carambolages à trois bandes" value={blt.threeRails} />
                   <LedgerRow label="Fautes" value={blt.fouls} />
+                </dl>
+              </section>
+            )}
+
+            {showCour && (
+              <section className="carnet panel">
+                <h2>La Cour des Grands</h2>
+                <p className="carnet-summary">
+                  {cour.played === 0
+                    ? "Aucun grand jeu pour l'instant."
+                    : `${cour.played} grand${cour.played > 1 ? "s" : ""} jeu${cour.played > 1 ? "x" : ""}, ${cour.won} Cloche${cour.won > 1 ? "s" : ""} d'or.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Épreuves passées" value={(cour.totals as Record<string, number>).survived} strong />
+                  <LedgerRow label="Finales jouées" value={(cour.totals as Record<string, number>).finalist} />
+                  <LedgerRow label="Repêchages" value={(cour.totals as Record<string, number>).saved} />
                 </dl>
               </section>
             )}

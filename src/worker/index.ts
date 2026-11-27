@@ -80,6 +80,7 @@ export { CulbuteRoom } from "./culbuteRoom.ts";
 export { MinigolfRoom } from "./minigolfRoom.ts";
 export { BowlingRoom } from "./bowlingRoom.ts";
 export { BillardRoom } from "./billardRoom.ts";
+export { CourRoom } from "./courRoom.ts";
 export { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 export { TourRoom } from "./tourRoom.ts";
 export { Hub } from "./hub.ts";
@@ -139,6 +140,7 @@ const ALL_GAMES: GameId[] = [
   "minigolf",
   "bowling",
   "billard",
+  "cour",
 ];
 const isBeta = (game: TableGame) => (BETA_GAMES as readonly TableGame[]).includes(game);
 

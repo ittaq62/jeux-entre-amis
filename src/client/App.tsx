@@ -48,6 +48,8 @@ const DevEscarmouche = lazy(() => import("./escarmouche/DevEscarmouche.tsx").the
 const DevCulbute = lazy(() => import("./culbute/DevCulbute.tsx").then((m) => ({ default: m.DevCulbute })));
 const DevMinigolf = lazy(() => import("./minigolf/DevMinigolf.tsx").then((m) => ({ default: m.DevMinigolf })));
 const DevBillard = lazy(() => import("./billard/DevBillard.tsx").then((m) => ({ default: m.DevBillard })));
+const DevCour = lazy(() => import("./cour/DevCour.tsx").then((m) => ({ default: m.DevCour })));
+const CourCampaign = lazy(() => import("./cour/CampaignPage.tsx").then((m) => ({ default: m.CampaignPage })));
 const TourSheetPage = lazy(() => import("./pages/TourSheetPage.tsx").then((m) => ({ default: m.TourSheetPage })));
 
 const PUBLIC = ["/connexion", "/confidentialite"];
@@ -126,6 +128,7 @@ export function App() {
             <Route path="/classement" component={LeaderboardPage} />
             <Route path="/boutique" component={ShopPage} />
             <Route path="/album" component={AlbumPage} />
+            <Route path="/cour/campagne" component={CourCampaign} />
             <Route path="/amis" component={FriendsPage} />
             <Route path="/compte" component={AccountPage} />
             <Route path="/personnage" component={CharacterPage} />
@@ -143,6 +146,7 @@ export function App() {
             {import.meta.env.DEV && <Route path="/dev/culbute" component={DevCulbute} />}
             {import.meta.env.DEV && <Route path="/dev/minigolf" component={DevMinigolf} />}
             {import.meta.env.DEV && <Route path="/dev/billard" component={DevBillard} />}
+            {import.meta.env.DEV && <Route path="/dev/cour" component={DevCour} />}
             {import.meta.env.DEV && <Route path="/dev/personnage" component={DevWardrobe} />}
             <Route component={NotFoundPage} />
           </Switch>

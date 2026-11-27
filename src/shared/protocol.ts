@@ -41,7 +41,8 @@ export type GameId =
   | "culbute"
   | "minigolf"
   | "bowling"
-  | "billard";
+  | "billard"
+  | "cour";
 
 /** Ce qui se joue à un code : un jeu, ou une tournée qui enchaîne les jeux */
 export type TableGame = GameId | "tour";
@@ -59,6 +60,7 @@ export const GAME_NAMES: Record<GameId, string> = {
   minigolf: "Minigolf",
   bowling: "Bowling",
   billard: "Billard",
+  cour: "La Cour des Grands",
 };
 export const TABLE_NAMES: Record<TableGame, string> = { ...GAME_NAMES, tour: "La Tournée" };
 
@@ -76,6 +78,7 @@ export const BETA_GAMES = [
   "minigolf",
   "bowling",
   "billard",
+  "cour",
 ] as const satisfies readonly TableGame[];
 
 // ---------------------------------------------------------------------------

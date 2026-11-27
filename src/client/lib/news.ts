@@ -28,6 +28,12 @@ export const NEWS: NewsItem[] = [
     text: "Bolides, contre-la-montre : ton record devient un fantôme à battre.",
     game: "bolides",
   },
+  {
+    id: "2026-11-27-cour",
+    date: "2026-11-27",
+    text: "La Cour des Grands : neuf épreuves de cour de récré, jusqu'à 40 candidats, et une campagne en solo.",
+    game: "cour",
+  },
   { id: "2026-11-27-apparences", date: "2026-11-27", text: "Tes skins choisis te suivent d'un appareil à l'autre." },
   {
     id: "2026-11-25-menu",
@@ -44,6 +50,7 @@ export const NEW_GAMES: Partial<Record<TableGame, string>> = {
   minigolf: "2026-11-21",
   bowling: "2026-11-22",
   billard: "2026-11-23",
+  cour: "2026-11-27",
 };
 
 const DAY = 86_400_000;

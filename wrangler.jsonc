@@ -23,6 +23,7 @@
       { "name": "MINIGOLF", "class_name": "MinigolfRoom" },
       { "name": "BOWLING", "class_name": "BowlingRoom" },
       { "name": "BILLARD", "class_name": "BillardRoom" },
+      { "name": "COUR", "class_name": "CourRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" },
     ],
@@ -41,6 +42,7 @@
     { "tag": "v11", "new_sqlite_classes": ["MinigolfRoom"] },
     { "tag": "v12", "new_sqlite_classes": ["BowlingRoom"] },
     { "tag": "v13", "new_sqlite_classes": ["BillardRoom"] },
+    { "tag": "v14", "new_sqlite_classes": ["CourRoom"] },
   ],
   "d1_databases": [
     {

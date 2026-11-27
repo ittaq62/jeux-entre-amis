@@ -27,6 +27,8 @@ const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
   minigolf: { classique: "Neuf trous d'un parcours tiré au sort.", six: "Six trous d'un parcours tiré au sort." },
   // Une table de bowling joue dix frames (la tournée en joue trois)
   bowling: { classique: "Dix frames : strikes et spares comptés comme au vrai bowling." },
+  // Une table de La Cour des Grands joue le grand jeu de la longueur choisie par l'hôte (la tournée en joue un court)
+  cour: { "grand-jeu": "Les épreuves tirées au sort, puis la finale des polochons entre les deux derniers." },
   // Une table de billard joue les manches, vies et points de l'hôte (la tournée les raccourcit)
   billard: {
     huit: "Sa famille, puis la noire dans la poche annoncée.",
