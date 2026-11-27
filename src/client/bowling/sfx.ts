@@ -8,6 +8,7 @@
 import type { PhysEvent } from "../../shared/games/bowling/physics.ts";
 import type { ThrowRecord } from "../../shared/games/bowling/match.ts";
 import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
+import { BELL, DRUM, MARIMBA, METAL_BAR, roomOut, strike, type Body } from "../lib/sfxKit.ts";
 import type { Moment } from "./runtime.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
@@ -41,7 +42,8 @@ function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: 
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: busOf(o.ctx, o.out), vol: level };
+  // La salle (une réverbération courte) entre dans le limiteur, qui reste le dernier maillon avant la sortie
+  return { ctx: o.ctx, dest: roomOut(o.ctx, busOf(o.ctx, o.out), { rt60: 0.55, wet: 0.14 }) as GainNode, vol: level };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
@@ -110,12 +112,17 @@ function burst(
 let windowAt = 0;
 let windowCount = 0;
 
+/** Une quille : de l'érable laqué, creux, qui sonne un peu (plusieurs modes qui s'éteignent chacun à leur rythme) */
+const PIN: Body = { ratios: [1, 1.71, 2.62, 3.9], decays: [0.09, 0.055, 0.032, 0.02], amps: [1, 0.6, 0.35, 0.2] };
+/** Les planches de la piste et le plateau : du bois épais, grave, vite amorti */
+const LANE: Body = { ratios: [1, 1.58, 2.31, 3.1], decays: [0.16, 0.09, 0.05, 0.03], amps: [1, 0.55, 0.3, 0.18] };
+
 /** Le « toc » d'une quille : du bois laqué, creux, qui sonne un peu */
 function pinTock(ctx: AudioContext, dest: AudioNode, t: number, v: number, pitch: number) {
   const k = Math.min(1, v / 5);
   burst(ctx, dest, t, "bandpass", 2400 * pitch, 2.2, 0.5 * k, 0.001, 0.035);
-  tone(ctx, dest, t, "sine", 1180 * pitch, 980 * pitch, 0.22 * k, 0.001, 0.09);
-  tone(ctx, dest, t, "triangle", 620 * pitch, 520 * pitch, 0.18 * k, 0.001, 0.12);
+  // Un effleurement reste un petit toc sourd, un plein choc sonne clair (la vitesse règle aussi la brillance)
+  strike(ctx, dest, t, PIN, 610 * pitch, { gain: 0.1 * k, velocity: 0.35 + 0.65 * k, hardness: 6000, click: 0.5 });
   burst(ctx, dest, t, "lowpass", 900, 0.7, 0.25 * k, 0.001, 0.06);
 }
 
@@ -136,7 +143,7 @@ export function phys(e: PhysEvent, volume: number) {
     case "drop": {
       // La boule qui tombe sur le bois
       const k = Math.min(1, 0.4 + e.v * 0.5) * vol;
-      tone(ctx, dest, t, "sine", 95, 48, 0.75 * k, 0.003, 0.28);
+      strike(ctx, dest, t, LANE, 88 + Math.random() * 10, { gain: 0.54 * k, velocity: 0.8, hardness: 900, click: 0.2 });
       burst(ctx, dest, t, "lowpass", 420, 0.8, 0.5 * k, 0.002, 0.12);
       break;
     }
@@ -145,7 +152,7 @@ export function phys(e: PhysEvent, volume: number) {
       const k = Math.min(1, e.v / 6) * vol;
       burst(ctx, dest, t, "highpass", 1800, 0.6, 0.6 * k, 0.001, 0.07);
       burst(ctx, dest, t, "lowpass", 700, 0.7, 0.8 * k, 0.001, 0.16);
-      tone(ctx, dest, t, "sine", 160, 70, 0.6 * k, 0.002, 0.2);
+      strike(ctx, dest, t, DRUM, 120 + Math.random() * 12, { gain: 0.3 * k, velocity: 0.9, hardness: 1500, click: 0.3 });
       pinTock(ctx, dest, t, e.v, 0.95 + Math.random() * 0.1);
       break;
     }
@@ -156,19 +163,24 @@ export function phys(e: PhysEvent, volume: number) {
       // Une quille qui tombe sur le plateau
       const k = Math.min(1, e.v / 4) * vol;
       burst(ctx, dest, t, "bandpass", 520 + Math.random() * 200, 1.4, 0.45 * k, 0.001, 0.09);
-      tone(ctx, dest, t, "sine", 240 + Math.random() * 60, 150, 0.3 * k, 0.002, 0.1);
+      strike(ctx, dest, t, LANE, 230 + Math.random() * 60, {
+        gain: 0.23 * k,
+        velocity: 0.4 + 0.6 * Math.min(1, e.v / 4),
+        hardness: 2500,
+        click: 0.2,
+      });
       break;
     }
     case "wall": {
       const k = Math.min(1, e.v / 4) * vol;
       burst(ctx, dest, t, "bandpass", 300, 1, 0.5 * k, 0.001, 0.12);
-      tone(ctx, dest, t, "sine", 130, 90, 0.35 * k, 0.002, 0.18);
+      strike(ctx, dest, t, LANE, 125 + Math.random() * 15, { gain: 0.27 * k, velocity: 0.7, hardness: 1800, click: 0.25 });
       break;
     }
     case "gutter": {
       // La boule tombe dans la rigole : un choc creux, métallique
       const k = Math.min(1, 0.5 + e.v * 0.4) * vol;
-      tone(ctx, dest, t, "triangle", 210, 160, 0.4 * k, 0.002, 0.35);
+      strike(ctx, dest, t, METAL_BAR, 200 + Math.random() * 20, { gain: 0.27 * k, velocity: 0.7, hardness: 3000, click: 0.25 });
       burst(ctx, dest, t, "bandpass", 1300, 3, 0.25 * k, 0.001, 0.2);
       break;
     }
@@ -254,9 +266,10 @@ function fanfare(big: boolean) {
   const { ctx, dest } = o;
   const notes = big ? [523.25, 659.25, 783.99, 1046.5] : [659.25, 987.77];
   notes.forEach((f, i) => {
-    const t = ctx.currentTime + 0.05 + i * (big ? 0.09 : 0.11);
-    tone(ctx, dest, t, "triangle", f, f, 0.22, 0.01, big && i === notes.length - 1 ? 0.6 : 0.22);
-    tone(ctx, dest, t, "sine", f * 2, f * 2, 0.06, 0.01, 0.25);
+    // Jouées à la main : un peu en avance ou en retard, jamais deux fois la même force
+    const t = ctx.currentTime + 0.05 + i * (big ? 0.09 : 0.11) + (Math.random() - 0.5) * 0.012;
+    const last = big && i === notes.length - 1;
+    strike(ctx, dest, t, last ? BELL : MARIMBA, f, { gain: last ? 0.14 : 0.2, velocity: 0.75 + Math.random() * 0.2, hardness: 5000 });
   });
 }
 
