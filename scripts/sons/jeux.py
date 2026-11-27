@@ -539,6 +539,198 @@ def bolides_turbo(rng):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Mèche : les bombes (la mèche qui brûle sur la table, en boucle sans couture ; puis la fin chez qui la tient)
+
+LOOP_S = 2.4
+
+
+def seamless(x, fade=0.25):
+    """Une boucle sans couture : la fin (fondue) se pose sur le début, la longueur finale est LOOP_S"""
+    n = int(LOOP_S * SR)
+    f = int(fade * SR)
+    x = np.asarray(x)[: n + f]
+    if len(x) < n + f:
+        x = np.pad(x, (0, n + f - len(x)))
+    out = x[:n].copy()
+    w = np.sin(np.linspace(0, np.pi / 2, f)) ** 2
+    out[:f] = x[:f] * w + x[n : n + f] * (1 - w)
+    return out
+
+
+def crackle(rng, dur, rate=40, hi=(2500, 9000), amp=0.5):
+    """Des crépitements : de minuscules claquements au hasard (une mèche, des étincelles)"""
+    layers = []
+    for _ in range(int(dur * rate)):
+        layers.append((butter(mallet(rng, 0.0012, 12000, rng.uniform(0.2, 1.0) * amp), "band", hi), rng.uniform(0, dur)))
+    return place(rng, layers, dur)
+
+
+def hiss(rng, dur, band=(2000, 8000), wobble=0.25):
+    """Un sifflement de mèche ou de gaz, dont la force ondule un peu"""
+    t = t_axis(dur)
+    return butter(noise(rng, len(t)), "band", band) * (1 + wobble * np.sin(2 * np.pi * rng.uniform(1.5, 3.5) * t + rng.uniform(0, 6)))
+
+
+def buzz(rng, dur, f0, wander=0.04):
+    """Une abeille : un bourdonnement (les ailes, riches en harmoniques), dont la hauteur et la force vagabondent"""
+    t = t_axis(dur)
+    f = f0 * (1 + wander * np.sin(2 * np.pi * rng.uniform(0.3, 0.9) * t + rng.uniform(0, 6)) + 0.01 * rng.standard_normal(len(t)).cumsum() / np.sqrt(len(t)))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    wings = signal_saw(ph)
+    # Les ailes : surtout sous 3 kHz (un filtre plus raide que d'habitude, sinon le bourdonnement devient un grésillement)
+    wings = butter(butter(wings, "low", 2800, order=4), "high", f0 * 0.8)
+    return wings * (0.6 + 0.4 * np.sin(2 * np.pi * rng.uniform(0.5, 1.5) * t + rng.uniform(0, 6)) ** 2)
+
+
+def signal_saw(ph):
+    return 2 * ((ph / (2 * np.pi)) % 1.0) - 1
+
+
+def meche_ballon_fuse(rng):
+    # Le ballon qui gonfle avec la mèche : la mèche qui siffle, et le caoutchouc qui grince de temps en temps
+    d = LOOP_S + 0.25
+    layers = [(hiss(rng, d, (2500, 8000)) * 0.25, 0), (crackle(rng, d, 25), 0)]
+    for k in range(3):
+        t0 = rng.uniform(0.1, d - 0.4)
+        tt = t_axis(0.25)
+        f = rng.uniform(500, 800) * (1 + 0.15 * tt / 0.25)
+        sq = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * tt / 0.25) * 0.25
+        layers.append((butter(sq + 0.3 * noise(rng, len(tt)) * np.sin(np.pi * tt / 0.25) * 0.1, "band", (400, 3000)), t0))
+    return seamless(place(rng, layers, d))
+
+
+def meche_ballon_boom(rng):
+    # Le ballon éclate : un claquement sec très large, et les lambeaux de caoutchouc qui claquent
+    n = int(0.03 * SR)
+    pop = butter(noise(rng, n) * np.exp(-np.arange(n) / (0.004 * SR)), "high", 400)
+    layers = [(pop * 1.5, 0), (thud(rng, 120, 0.15, 0.4, 3000) * 0.4, 0)]
+    for _ in range(3):
+        layers.append((butter(mallet(rng, 0.003, 6000, 0.4), "band", (800, 5000)), rng.uniform(0.02, 0.12)))
+    return room(rng, place(rng, layers, 0.6), rt60=0.6, wet=0.2, size=1.2)
+
+
+def meche_neige_fuse(rng):
+    # La boule de neige qui grossit : un givre qui crisse doucement, et un souffle froid
+    d = LOOP_S + 0.25
+    grains = crackle(rng, d, 60, (3000, 9000), 0.25)
+    wind = hiss(rng, d, (300, 1500), 0.4) * 0.15
+    return seamless(grains + wind)
+
+
+def meche_neige_boom(rng):
+    # Les paquets de neige : un choc mou et crissant, puis la neige qui retombe
+    n = int(0.25 * SR)
+    crunch = butter(noise(rng, n) * np.exp(-np.arange(n) / (0.05 * SR)) * (0.5 + 0.5 * (rng.random(n) > 0.6)), "band", (600, 6000))
+    layers = [(crunch, 0), (thud(rng, 110, 0.3, 0.5, 1500) * 0.6, 0)]
+    for _ in range(4):
+        n2 = int(0.12 * SR)
+        layers.append((butter(noise(rng, n2) * np.exp(-np.arange(n2) / (0.03 * SR)), "band", (1000, 6000)) * rng.uniform(0.2, 0.4), rng.uniform(0.15, 0.9)))
+    return room(rng, place(rng, layers, 1.3), rt60=0.4, wet=0.14, size=1.0)
+
+
+def meche_gateau_fuse(rng):
+    # Les bougies qui fondent : de petites flammes qui soufflent, et la cire qui grésille
+    d = LOOP_S + 0.25
+    t = t_axis(d)
+    flame = butter(noise(rng, len(t)), "low", 500) * (0.6 + 0.4 * np.sin(2 * np.pi * 7 * t + rng.uniform(0, 6)) ** 2) * 0.5
+    return seamless(flame + crackle(rng, d, 18, (2000, 7000), 0.4))
+
+
+def meche_gateau_boom(rng):
+    # Le gâteau en pleine figure (SPLATCH) : un paquet de crème qui s'écrase, et l'assiette qui tinte
+    n = int(0.35 * SR)
+    wet = butter(noise(rng, n) * np.exp(-np.arange(n) / (0.06 * SR)), "low", 2200)
+    layers = [(wet, 0), (thud(rng, 130, 0.25, 0.4, 900) * 0.6, 0)]
+    for _ in range(5):
+        layers.append((bubble(rng, rng.uniform(180, 450), 0.012) * 0.3, rng.uniform(0.03, 0.25)))
+    plate = modal(rng, 1900, [1, 2.3, 3.9], [0.3, 0.15, 0.08], [1, 0.4, 0.2], 0.6) * 0.15
+    layers.append((plate, 0.05))
+    return room(rng, place(rng, layers, 1.1), rt60=0.35, wet=0.12, size=0.9)
+
+
+def meche_reveil_fuse(rng):
+    # L'aiguille du réveil qui tourne : un tic-tac mécanique, régulier (huit par tour de boucle)
+    d = LOOP_S + 0.25
+    layers = []
+    for k in range(9):
+        f = 3200 if k % 2 == 0 else 2700
+        layers.append((tap(rng, N.WOODBLOCK, f, 0.05, 9000, 0.8, 0.6) * 0.6, k * LOOP_S / 8))
+    # Le mécanisme qui tourne doucement entre les tics (plus de silence absolu)
+    whir = hiss(rng, d, (400, 3000), 0.1) * 0.012
+    return seamless(place(rng, layers, d) + whir, fade=0.02)
+
+
+def meche_reveil_boom(rng):
+    # Le réveil sonne (DRIIING) : le petit marteau qui frappe très vite deux cloches de métal
+    dur = 1.7
+    layers = []
+    rate = 22.0
+    for k in range(int(1.4 * rate)):
+        bell = HANDBELL if k % 2 == 0 else dict(HANDBELL, ratios=[r * 1.06 for r in HANDBELL["ratios"]])
+        layers.append((struck(rng, bell, 2600, rng.uniform(0.5, 0.7), 0.3, 9000, damp=0.12) * 0.5, k / rate))
+    return room(rng, place(rng, layers, dur), rt60=0.4, wet=0.14, size=0.9)
+
+
+def meche_ruche_fuse(rng):
+    # Les abeilles qui sortent une à une : quelques bourdonnements qui vagabondent
+    d = LOOP_S + 0.25
+    x = sum(buzz(rng, d, rng.uniform(190, 260)) * rng.uniform(0.15, 0.3) for _ in range(3))
+    return seamless(x)
+
+
+def meche_ruche_boom(rng):
+    # L'essaim autour de lui (BZZZ) : beaucoup d'abeilles, qui enflent puis s'éloignent
+    dur = 2.0
+    t = t_axis(dur)
+    x = sum(buzz(rng, dur, rng.uniform(170, 300), 0.06) * rng.uniform(0.1, 0.25) for _ in range(10))
+    return room(rng, x * np.minimum(1, t / 0.4) * np.minimum(1, (dur - t) / 0.6), rt60=0.4, wet=0.15, size=1.0)
+
+
+def meche_fusee_fuse(rng):
+    # Le feu d'artifice qui crache des étincelles : un grésillement vif, plein de crépitements
+    d = LOOP_S + 0.25
+    return seamless(hiss(rng, d, (3000, 10000), 0.3) * 0.3 + crackle(rng, d, 80, (2500, 10000), 0.6))
+
+
+def meche_fusee_boom(rng):
+    # BADABOUM : la fusée qui monte en sifflant, l'explosion, puis les gerbes qui crépitent
+    dur = 2.3
+    t = t_axis(0.5)
+    whistle_up = np.sin(2 * np.pi * np.cumsum(900 + 1800 * t / 0.5) / SR) * np.sin(np.pi * t / 0.5) * 0.15
+    layers = [(swish(rng, 0.5, (800, 3000), (3000, 9000)) * 0.4, 0), (whistle_up, 0)]
+    layers.append((N.make_big_hit(rng) * 0.9, 0.5))
+    layers.append((crackle(rng, 1.4, 60, (2000, 9000), 0.5), 0.75))
+    return room(rng, place(rng, layers, dur), rt60=0.8, wet=0.2, size=1.6)
+
+
+def meche_gaz_fuse(rng):
+    # Le gaz qui monte : une fuite qui siffle, et des bulles dans la nappe
+    d = LOOP_S + 0.25
+    layers = [(hiss(rng, d, (1500, 6000), 0.15) * 0.4, 0)]
+    for _ in range(8):
+        layers.append((bubble(rng, rng.uniform(150, 400), 0.02) * 0.2, rng.uniform(0, d - 0.1)))
+    return seamless(place(rng, layers, d))
+
+
+def cough(rng):
+    """Une toux : un souffle bref, coloré par la gorge (deux résonances), qui s'éteint"""
+    n = int(0.22 * SR)
+    t = np.arange(n) / SR
+    env = np.minimum(1, t / 0.008) * np.exp(-t / 0.06)
+    src = noise(rng, n) * env
+    f1, f2 = rng.uniform(500, 650), rng.uniform(1200, 1500)
+    return butter(src, "band", (f1 * 0.7, f1 * 1.3)) + butter(src, "band", (f2 * 0.8, f2 * 1.2)) * 0.6 + butter(src, "low", 300) * 0.4
+
+
+def meche_gaz_boom(rng):
+    # Le nuage vert qui l'engloutit : une bouffée de gaz, puis « kof, kof »
+    layers = [(hiss(rng, 1.2, (500, 5000), 0.2) * np.sin(np.pi * t_axis(1.2) / 1.2) * 0.5, 0)]
+    layers.append((cough(rng) * 0.8, 0.9))
+    layers.append((cough(rng), 1.25))
+    return room(rng, place(rng, layers, 1.8), rt60=0.35, wet=0.12, size=0.8)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 
 GAMES = {
     "briques": {
@@ -602,6 +794,22 @@ GAMES = {
         "bolides-thunder": (bolides_thunder, ["bolides-thunder.mp3"]),
         "bolides-trick": (bolides_trick, ["bolides-trick.mp3"]),
         "bolides-turbo": (bolides_turbo, ["bolides-turbo.mp3"]),
+    },
+    "meche": {
+        "meche-ballon-fuse": (meche_ballon_fuse, ["meche-ballon-fuse.wav"]),
+        "meche-ballon-boom": (meche_ballon_boom, ["meche-ballon-boom.mp3"]),
+        "meche-neige-fuse": (meche_neige_fuse, ["meche-neige-fuse.wav"]),
+        "meche-neige-boom": (meche_neige_boom, ["meche-neige-boom.mp3"]),
+        "meche-gateau-fuse": (meche_gateau_fuse, ["meche-gateau-fuse.wav"]),
+        "meche-gateau-boom": (meche_gateau_boom, ["meche-gateau-boom.mp3"]),
+        "meche-reveil-fuse": (meche_reveil_fuse, ["meche-reveil-fuse.wav"]),
+        "meche-reveil-boom": (meche_reveil_boom, ["meche-reveil-boom.mp3"]),
+        "meche-ruche-fuse": (meche_ruche_fuse, ["meche-ruche-fuse.wav"]),
+        "meche-ruche-boom": (meche_ruche_boom, ["meche-ruche-boom.mp3"]),
+        "meche-fusee-fuse": (meche_fusee_fuse, ["meche-fusee-fuse.wav"]),
+        "meche-fusee-boom": (meche_fusee_boom, ["meche-fusee-boom.mp3"]),
+        "meche-gaz-fuse": (meche_gaz_fuse, ["meche-gaz-fuse.wav"]),
+        "meche-gaz-boom": (meche_gaz_boom, ["meche-gaz-boom.mp3"]),
     },
     "crampons": {
         "foot-whistle": (foot_whistle, ["foot-whistle.mp3", "foot-whistle-2.mp3", "foot-whistle-3.mp3"]),
@@ -677,11 +885,17 @@ def build(name, make, files, ref_dir):
     target = N.short_loud(N.decode(first)) if os.path.exists(first) else 0.1
     for k, f in enumerate(files):
         rng = np.random.default_rng(sum(map(ord, name)) * 1000 + k)
-        x = N.trim(make(rng), -50, MAX_DUR.get(name))
+        loop = f.endswith(".wav")
+        x = make(rng) if loop else N.trim(make(rng), -50, MAX_DUR.get(name))
         x = x * (target / (N.short_loud(x) + 1e-12))
         x = N.limit(x)
-        x = N.floor_noise(rng, x)
-        N.write_mp3(x, os.path.join(N.OUT, f))
+        if not loop:
+            x = N.floor_noise(rng, x)
+            N.write_mp3(x, os.path.join(N.OUT, f))
+        else:
+            floor = N.pink(rng, int((LOOP_S + 0.25) * SR))
+            floor = seamless(floor / (np.std(floor) + 1e-9) * 10 ** (-72 / 20))
+            N.write_wav(x + floor, os.path.join(N.OUT, f))
         print(f"{f:<24} {len(x) / SR:5.2f} s")
 
 

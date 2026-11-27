@@ -358,6 +358,16 @@ def short_loud(x, ms=50):
     return float(np.sqrt((frames**2).mean(axis=1)).max())
 
 
+def write_wav(x, path):
+    """Une boucle : en WAV (le mp3 ajoute un blanc au début, qui s'entendrait à chaque tour)"""
+    raw = x.astype(np.float32).tobytes()
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-c:a", "pcm_s16le", path],
+        input=raw,
+        check=True,
+    )
+
+
 def write_mp3(x, path):
     raw = x.astype(np.float32).tobytes()
     subprocess.run(
