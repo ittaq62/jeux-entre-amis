@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { warmThree } from "../../lib/prepare.ts";
 import { releaseRenderer } from "../../lib/releaseGl.ts";
+import { reducedFeel, Shake } from "../../lib/feel.ts";
 import { clamp, HALF_L, HALF_W } from "../../../shared/games/crampons/pitch.ts";
 import type { BallId } from "../../../shared/games/crampons/boutique.ts";
 import { ballCanvas, ballMaterial } from "./balls.ts";
@@ -62,6 +63,8 @@ export type Shot =
  */
 const tmpProj = new THREE.Vector3();
 const tmpVec = new THREE.Vector3();
+const tremor = new THREE.Vector3();
+const steadyQuat = new THREE.Quaternion();
 export const SCORER_CAM_DIST = 11;
 const SCORER_FOV = 19;
 const SCORER_FOV_PORTRAIT = 30;
@@ -107,6 +110,11 @@ export class CramponsScene {
   /** Au-delà, la finesse ne se voit plus à cette distance, mais la carte graphique la paie très cher */
   private maxPixels = 2.3e6;
   private shake = 0;
+  /**
+   * La secousse d'un but, en angle (le gros plan du buteur est à 11 m, la tribune à 55 : un déplacement ne se verrait pas
+   * pareil) : au plus 0,6°, et un but n'en donne qu'un tiers, quelques pixels qui retombent en un tiers de seconde
+   */
+  private goalTremor = new Shake(0.01, 1.6);
   private baseFov = 26;
   private mateArrow: THREE.Mesh;
   /** Son joueur hors de l'image : une flèche au bord de l'écran pointe vers lui (dessinée par-dessus la scène) */
@@ -311,11 +319,16 @@ export class CramponsScene {
     this.renderer.setSize(this.width, this.height, false);
   }
 
-  /** Une grosse frappe : un peu de poussière, un éclat, et la caméra qui encaisse le choc */
+  /** Une grosse frappe : un peu de poussière, un éclat, et la caméra qui encaisse le choc (pas avec « Effets réduits ») */
   impact(x: number, z: number, power: number) {
     this.fx.puff(x, z, 7, 0.6 + power);
     this.fx.flash(x, z, power);
-    this.shake = Math.max(this.shake, 0.35 + power * 0.65);
+    if (!reducedFeel()) this.shake = Math.max(this.shake, 0.35 + power * 0.65);
+  }
+
+  /** Un but : la caméra tremble un court instant, discrètement (rien avec « Effets réduits ») */
+  goalShake() {
+    this.goalTremor.add(0.55);
   }
 
   /** « Symboles de couleur » : la forme de chaque équipe sur les maillots */
@@ -522,7 +535,16 @@ export class CramponsScene {
       this.sun.target.position.set(tx, 0, tz);
       this.sun.position.set(tx + this.sunOffset.x, this.sunOffset.y, tz + this.sunOffset.z);
     }
+    // La secousse d'un but : autour du seul rendu, la caméra garde sa course
+    const shaking = this.goalTremor.offset(this.time, tremor);
+    if (shaking) {
+      steadyQuat.copy(this.camera.quaternion);
+      this.camera.rotateY(tremor.x);
+      this.camera.rotateX(tremor.y);
+      this.camera.rotateZ(tremor.z * 0.3);
+    }
     this.renderer.render(this.scene, this.camera);
+    if (shaking) this.camera.quaternion.copy(steadyQuat);
     // Son joueur sorti de l'image : la flèche du bord pointe vers lui
     this.edgeArrow.visible = false;
     if (p && shown && !this.shot) {

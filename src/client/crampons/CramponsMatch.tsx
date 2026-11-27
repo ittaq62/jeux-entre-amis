@@ -12,6 +12,7 @@ import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds, soundsLoaded } from "../lib/sound.ts";
+import { buzz } from "../lib/feel.ts";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { atMost } from "../lib/prepare.ts";
@@ -459,6 +460,10 @@ export function CramponsMatch({
     const v0 = viewRef.current;
     const welcome =
       v0.phase === "kickoff" && v0.period === 1 && v0.score[0] + v0.score[1] === 0 ? setTimeout(() => commentator.welcome(), 700) : null;
+    // Un coup de pied du joueur lui-même : son tir vibre
+    const madeKick = (kind: string) => {
+      if (kind === "shot" || kind === "finesse" || kind === "chip") buzz("impact");
+    };
     const onEvents = (events: MatchEvent[]) => {
       for (const e of events) {
         commentator.event(e);
@@ -489,6 +494,17 @@ export function CramponsMatch({
           play("footKick", { rate: 1.5 });
         }
         if (e.k === "tackle") runtime.current?.dust(e.p, 0.9);
+        // Le téléphone vibre sous le doigt de celui qui joue seulement, jamais pour un spectateur : son but, sa parade,
+        // le tacle ou la faute qu'il subit (son tir vibre au moment d'appuyer, plus bas)
+        const rtm = runtime.current;
+        if (seatId !== null && rtm) {
+          // Une remise en jeu ou une reprise de volée : le coup n'a pas été joué d'avance, il arrive avec le serveur
+          if (e.k === "kick" && rtm.isMine(e.p) && rtm.kickedWithin(1500)) madeKick(e.kind);
+          else if (e.k === "goal" && e.human === seatId) buzz(e.own ? "echec" : "reussite");
+          else if (e.k === "save" && rtm.isMine(e.p)) buzz("impact");
+          else if (e.k === "tackle" && e.won && rtm.tackledMe(e.p)) buzz("impact");
+          else if (e.k === "foul" && rtm.isMine(e.on)) buzz("fort");
+        }
         if (e.k === "goal") {
           runtime.current?.goal(e.scorer, e.team, e.own ? null : celebrationFor(roomRef.current, e.team, e.human ?? null));
           show({ tone: "goal", title: e.own ? "Contre son camp !" : "BUT !", sub: nameOf(e.scorer) }, 3400);
@@ -530,8 +546,11 @@ export function CramponsMatch({
           setHud(h);
           setCinema(runtime.current?.inCinema ?? null);
         },
-        onLocalKick: (kind) =>
-          play(kind === "shot" || kind === "finesse" || kind === "chip" ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 }),
+        onLocalKick: (kind) => {
+          const shot = kind === "shot" || kind === "finesse" || kind === "chip";
+          play(shot ? "footShot" : "footKick", { rate: 0.94 + Math.random() * 0.14 });
+          madeKick(kind);
+        },
         onEvents,
         onShownView: setShown,
         onCrowd: (dt, mood) => stadium.update(dt, mood),

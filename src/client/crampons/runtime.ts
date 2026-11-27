@@ -210,6 +210,8 @@ export class MatchRuntime {
   private shownBall = { x: 0, y: 0.2, z: 0 };
   private lastOwner = -2;
   private ownerChangedAt = 0;
+  /** Le dernier de mes joueurs qui a eu le ballon au pied, et quand (pour sentir le tacle qui me le prend) */
+  private myCarry: { p: number; at: number } | null = null;
   // Le film des dernières secondes, pour revoir un but au ralenti
   private film: { t: number; p: Float32Array; b: Float32Array; acts: Act[] }[] = [];
   private cinema: "intro" | "scorer" | "replay" | null = null;
@@ -394,6 +396,7 @@ export class MatchRuntime {
     this.scene.shakeNet(end);
     const kit = this.view.teams[team as 0 | 1].kit;
     this.scene.celebrate(end, [kit.shirt, kit.sleeves, kit.shorts, "#ffffff", "#f8d866"]);
+    this.scene.goalShake();
     this.goalEnd = end;
     this.goalScorer = scorer;
     this.goalSeen = false;
@@ -598,6 +601,29 @@ export class MatchRuntime {
 
   setCamera(mode: "tele" | "large" | "pres") {
     this.scene.mode = mode;
+  }
+
+  /** Ce joueur est sous mon doigt : celui que je dirige, ou celui qui avait le ballon à mon pied il y a un instant */
+  isMine(p: number): boolean {
+    if (p < 0) return false;
+    if (p === this.myActive()) return true;
+    const c = this.myCarry;
+    return c !== null && c.p === p && performance.now() - c.at < 600;
+  }
+
+  /** Ce tacle gagné vient de me prendre le ballon : un adversaire, tout contre celui qui l'avait à mon pied à l'instant */
+  tackledMe(p: number): boolean {
+    const c = this.myCarry;
+    if (!c || performance.now() - c.at > 600) return false;
+    const me = this.frameViews[c.p];
+    const foe = this.frameViews[p];
+    if (!me || !foe || me.team === foe.team) return false;
+    return Math.hypot(me.x - foe.x, me.z - foe.z) < 2.6;
+  }
+
+  /** J'ai appuyé pour frapper il y a moins de `ms` : le coup de pied que le serveur annonce est bien le mien */
+  kickedWithin(ms: number): boolean {
+    return performance.now() - this.kickedAt < ms;
   }
 
   /** « Symboles de couleur » : la forme de chaque équipe sur les maillots */
@@ -1355,6 +1381,7 @@ export class MatchRuntime {
     s.z += (ball.z - s.z) * k;
     s.y += (ball.y - s.y) * Math.max(k, 0.6);
     this.lastOwner = owner;
+    if (active >= 0 && owner === active) this.myCarry = { p: active, at: performance.now() };
     // Le receveur de sa prochaine passe : dès que le serveur lui a donné le ballon (l'image a un temps de retard), et
     // pendant qu'une passe arrive sur lui, pour la remise en une touche
     const mine = active >= 0 && (owner === active || this.snaps.at(-1)?.o === active || this.receiving);
