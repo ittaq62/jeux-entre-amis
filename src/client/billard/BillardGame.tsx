@@ -9,12 +9,14 @@ import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { EmotePicker } from "../game/ChatPanel.tsx";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
+import { coachDone } from "../lib/coach.tsx";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { nextFrame } from "../lib/prepare.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { HowToPlay } from "./BillardHelp.tsx";
+import { BillardCoach } from "./coach.tsx";
 import { formatLabel } from "./BillardLobby.tsx";
 import { BallDot } from "./LookPicker.tsx";
 import { CUE_STYLES } from "./scene/textures.ts";
@@ -71,6 +73,7 @@ export function BillardGame({
   const runtime = useRef<BillardRuntime | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [menu, setMenu] = useState(false);
+  const gameRoot = useRef<HTMLDivElement>(null);
   const colorblind = usePrefs((s) => s.colorblind);
   const [help, setHelp] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
@@ -168,6 +171,8 @@ export function BillardGame({
     shown.current.add(rec.n);
     const o = rec.outcome;
     const mine = rec.id === mySeat;
+    // Une première bille rentrée (un premier point) sans faute : la main du coach ne reviendra plus
+    if (mine && !o.foul && o.scored > 0) coachDone("billard");
     say({ text: o.text, sub: o.sub ?? (mine ? undefined : nameOf(rec.id)), tone: o.tone });
     if (o.tone === "great") {
       sfx.applause(o.rack === "won" ? 1 : 0.6, o.rack === "won" ? 2.4 : 1.6);
@@ -255,7 +260,7 @@ export function BillardGame({
   })();
 
   return (
-    <div className={`bl-game ${mySeat ? "" : "is-watching"}`}>
+    <div ref={gameRoot} className={`bl-game ${mySeat ? "" : "is-watching"}`}>
       <div ref={host} className="bl-stage" />
       {room.status === "playing" && loadingShown(prep.done, gateClock) && (
         <GameLoading
@@ -314,6 +319,11 @@ export function BillardGame({
         </div>
       )}
 
+      <BillardCoach
+        root={gameRoot}
+        active={Boolean(myTurn && hud?.canShoot && !hud.placing && !hud.mustCall && !finished && !menu && !help)}
+        turn={v.shots}
+      />
       {myTurn && hud?.canShoot && (
         <>
           <PowerBar pull={hud.pull} onPull={(k) => runtime.current?.setPull(k)} onRelease={() => runtime.current?.release()} />

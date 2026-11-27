@@ -21,6 +21,7 @@ import {
 import type { BillardView } from "../../shared/games/billard/net.ts";
 import { isSalle } from "../../shared/games/billard/salles.ts";
 import { FineAim, PowerBar, TipPicker } from "./BillardGame.tsx";
+import { BillardCoach } from "./coach.tsx";
 import { BillardRuntime, type HudState } from "./runtime.ts";
 import { Board } from "./Scoreboard.tsx";
 import * as sfx from "./sfx.ts";
@@ -30,6 +31,7 @@ const NAMES = ["Toi", "Dédé", "Lulu", "Jojo", "Nénette", "Totor", "Mimile", "
 
 export function DevBillard() {
   const host = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [view, setView] = useState<BillardView | null>(null);
   const [text, setText] = useState("");
@@ -125,7 +127,8 @@ export function DevBillard() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="bl-game">
+    <div ref={root} className="bl-game">
+      <BillardCoach root={root} active={Boolean(hud?.canShoot && !hud.placing && !hud.mustCall)} turn={view?.shots ?? 0} />
       <div ref={host} className="bl-stage" />
       {view && (
         <header className="bl-top">
