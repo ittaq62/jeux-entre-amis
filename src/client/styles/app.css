@@ -1025,6 +1025,32 @@ a.shop-item {
   font-size: 14px;
 }
 
+/* Arrivé par un lien d'invitation : qui attend, à quel jeu, et la place qu'il reste, au-dessus du formulaire */
+.login-invite {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(226, 189, 110, 0.35);
+}
+
+.login-invite-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.login-invite-text strong {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.login-invite-text span {
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
 /* Sous la lampe, au centre du feutre : un gris plus clair et un corps plus grand, pour rester lisible */
 .login-foot {
   text-align: center;
@@ -4149,6 +4175,33 @@ h3 .hint {
 
 .admin-section .empty {
   margin: 0;
+}
+
+/* À quoi on joue : huit petites barres par jeu, une par semaine, la plus récente à droite */
+.admin-play .row {
+  gap: 16px;
+}
+
+.admin-play-weeks {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 96px;
+  height: 34px;
+}
+
+.admin-play-weeks i {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--gold);
+  opacity: 0.85;
+}
+
+.admin-play-weeks i:last-child {
+  opacity: 1;
+  background: var(--gold-light);
 }
 
 .admin-lead {

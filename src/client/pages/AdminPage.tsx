@@ -22,6 +22,7 @@ import { tableHref } from "../lib/arrival.ts";
 import { toast } from "../lib/toast.ts";
 import { useSession } from "../stores/session.ts";
 import { AdminReports } from "./AdminReports.tsx";
+import { PLAY_WEEKS, type AdminPlay } from "../../shared/adminPlay.ts";
 
 const failed = (err: unknown) => toast({ tone: "danger", title: err instanceof ApiError ? err.message : "Ça n'a pas marché." });
 
@@ -180,6 +181,8 @@ export function AdminPage() {
                 </ul>
               )}
             </section>
+
+            <PlaySection />
 
             <section className="panel admin-section">
               <h2>Dernières parties</h2>
@@ -369,6 +372,56 @@ function RoomLine({ room, onClosed }: { room: AdminRoom; onClosed: () => void })
         </ConfirmButton>
       </span>
     </li>
+  );
+}
+
+/** Une durée en mots courts : « 45 s », « 7 min », « 1 h 30 » */
+function shortDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** À quoi on joue : les parties terminées des huit dernières semaines, jeu par jeu, la plus récente semaine à droite */
+function PlaySection() {
+  const [play, setPlay] = useState<AdminPlay | null>(null);
+  useEffect(() => {
+    const load = () => api.get<AdminPlay>("/admin/play").then(setPlay).catch(failed);
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!play) return null;
+  const peak = Math.max(1, ...play.games.flatMap((g) => g.weeks));
+  return (
+    <section className="panel admin-section">
+      <h2>À quoi on joue</h2>
+      <p className="hint">Parties terminées sur {PLAY_WEEKS} semaines, la plus récente à droite.</p>
+      {play.games.length === 0 ? (
+        <p className="empty">Aucune partie terminée sur cette période.</p>
+      ) : (
+        <ul className="rows admin-play">
+          {play.games.map((g) => (
+            <li key={g.game} className="row">
+              <span className="row-text">
+                <strong>{TABLE_NAMES[g.game]}</strong>
+                <span className="hint">
+                  {g.total} partie{g.total > 1 ? "s" : ""} · {shortDuration(g.avgSeconds)} en moyenne ·{" "}
+                  {g.avgPlayers.toLocaleString("fr-FR")} joueur{g.avgPlayers >= 2 ? "s" : ""} dont{" "}
+                  {g.avgHumans.toLocaleString("fr-FR")} humain{g.avgHumans >= 2 ? "s" : ""}
+                </span>
+              </span>
+              <span className="admin-play-weeks" role="img" aria-label={`Par semaine : ${g.weeks.join(", ")}`}>
+                {g.weeks.map((n, i) => (
+                  <i key={i} style={{ height: `${Math.max(n > 0 ? 8 : 2, (n / peak) * 100)}%` }} title={`${n}`} />
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
