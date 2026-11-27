@@ -769,6 +769,14 @@ export function starAchievementsOf(g: StarGame): AchievementDef[] {
         goal: n,
         counts: "stars",
       })),
+    ...(g.feats ?? []).map((feat): AchievementDef => ({
+      id: feat.id,
+      game,
+      chip: feat.chip ?? "★",
+      tone: "ivory",
+      title: feat.title,
+      description: feat.description,
+    })),
     ...(g.groups ?? []).map((group): AchievementDef => ({
       id: `${g.game}-etoiles-groupe-${group.id}`,
       game,
@@ -801,6 +809,7 @@ export function starAchievementsEarned(g: StarGame, maps: Readonly<Record<string
     const s = groupStars(group, byMap);
     if (s.max > 0 && s.total >= s.max) out.push(`${g.game}-etoiles-groupe-${group.id}`);
   }
+  for (const feat of g.feats ?? []) if (feat.maps.length > 0 && feat.maps.every((id) => (byMap[id] ?? 0) >= feat.stars)) out.push(feat.id);
   return out;
 }
 

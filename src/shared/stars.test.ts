@@ -143,3 +143,30 @@ describe("les groupes de cartes et les paliers", () => {
     expect(groupStars(golf.groups![1]!, {})).toEqual({ total: 0, max: 3 });
   });
 });
+
+describe("les exploits déclarés par un jeu", () => {
+  const rule: StarRule = { better: "lower", goals: [3, 2, 1], unit: "points" };
+  const kart: StarGame = {
+    game: "bolides",
+    name: "Bolides",
+    maps: ["coupe:a", "coupe:b", "chrono:x"].map((id) => ({ id, name: id, rule })),
+    feats: [
+      {
+        id: "bolides-champion",
+        title: "Champion des Bolides",
+        description: "Finir les coupes sur le podium.",
+        maps: ["coupe:a", "coupe:b"],
+        stars: 1,
+      },
+    ],
+  };
+
+  it("un exploit a son succès, sous son propre id", () => {
+    expect(starAchievementsOf(kart).find((d) => d.id === "bolides-champion")?.title).toBe("Champion des Bolides");
+  });
+
+  it("il tombe quand chacune de ses cartes a assez d'étoiles", () => {
+    expect(starAchievementsEarned(kart, { "coupe:a": 3 })).not.toContain("bolides-champion");
+    expect(starAchievementsEarned(kart, { "coupe:a": 1, "coupe:b": 1 })).toContain("bolides-champion");
+  });
+});

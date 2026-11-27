@@ -35,6 +35,20 @@ export interface StarGroup {
   maps: readonly string[];
 }
 
+/**
+ * Un exploit propre à un jeu, qui se lit sur ses étoiles : chacune de ces cartes a au moins `stars` étoiles
+ * (« Champion des Bolides » : les quatre coupes avec au moins une étoile). Son id doit être unique sur tout le site.
+ */
+export interface StarFeat {
+  id: string;
+  title: string;
+  description: string;
+  /** L'inscription du jeton ; ★ par défaut */
+  chip?: string;
+  maps: readonly string[];
+  stars: number;
+}
+
 export interface StarGame {
   /** L'identifiant du jeu (GameId) */
   game: string;
@@ -44,6 +58,8 @@ export interface StarGame {
   groups?: readonly StarGroup[];
   /** Facultatif : des paliers d'étoiles du jeu entier, chacun avec son succès (« Bolides : 30 étoiles ») */
   milestones?: readonly number[];
+  /** Facultatif : des exploits propres au jeu, lus sur ses étoiles */
+  feats?: readonly StarFeat[];
 }
 
 /** Les étoiles d'un groupe de cartes, d'après celles de chaque carte */

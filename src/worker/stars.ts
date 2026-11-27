@@ -122,7 +122,8 @@ export async function awardStarsMany(
 async function rewardStarAchievements(db: D1Database, userId: string, game: string, now: number): Promise<string[]> {
   const [rows, owned] = await db.batch<{ map?: string; stars?: number; achievement?: string }>([
     db.prepare("SELECT map, stars FROM user_stars WHERE user_id = ? AND game = ?").bind(userId, game),
-    db.prepare("SELECT achievement FROM achievements WHERE user_id = ? AND achievement LIKE ?").bind(userId, `${game}-etoiles-%`),
+    // Tous ses succès : les exploits d'un jeu ont leur propre id, pas seulement « <jeu>-etoiles-… »
+    db.prepare("SELECT achievement FROM achievements WHERE user_id = ?").bind(userId),
   ]);
   const maps: Record<string, number> = {};
   for (const r of rows!.results) maps[r.map!] = r.stars!;
