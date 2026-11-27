@@ -32,7 +32,15 @@ import {
 } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent, type HitKind } from "../../shared/games/bolides/race.ts";
 import { VEHICLES, type SkinId } from "../../shared/games/bolides/garage.ts";
-import { GHOST_MEDALS, GHOST_NAMES, ghostAt, ghostRun, type GhostMedal, type GhostRun } from "../../shared/games/bolides/ghost.ts";
+import {
+  GHOST_EVERY_MS,
+  GHOST_MEDALS,
+  GHOST_NAMES,
+  ghostAt,
+  ghostRun,
+  type GhostMedal,
+  type GhostRun,
+} from "../../shared/games/bolides/ghost.ts";
 import { seededAvatar } from "../../shared/avatar.ts";
 import { getTrack, gridSlot, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
@@ -167,7 +175,10 @@ export class RaceRuntime {
   private last = performance.now();
   private sentAt = 0;
   /** Contre-la-montre : les fantômes de bronze, d'argent et d'or, rejoués d'après leur course simulée */
-  private ghosts: { run: GhostRun; kart: Kart }[] = [];
+  private ghosts: { run: GhostRun; kart: Kart; name: string; color: string; skin: SkinId; own?: boolean }[] = [];
+  /** Contre-la-montre : son propre tracé, noté depuis le feu vert, pour son fantôme s'il bat son record */
+  private myPath: number[] = [];
+  private pathAt = 0;
   /** Contre-la-montre : le temps de chacun de ses tours, pour l'écart avec le fantôme d'or */
   private myLaps: number[] = [];
   /** Les dernières positions envoyées : le serveur montre son kart près de l'une d'elles, sauf si un bot a conduit pour lui */
@@ -246,25 +257,39 @@ export class RaceRuntime {
     // Contre-la-montre : la même course que celle d'où la salle tire les temps à battre, refaite ici
     if (view.settings.mode === "chrono") {
       const slot = gridSlot(this.track, 0);
+      const skins: Record<GhostMedal, SkinId> = { bronze: "flammes", argent: "chrome", or: "or" };
+      const colors: Record<GhostMedal, string> = { bronze: "#c9874a", argent: "#cfd6dd", or: "#ffd24a" };
       this.ghosts = GHOST_MEDALS.map((m) => ({
         run: ghostRun(view.track, m, view.settings.laps),
         kart: newKart(this.track, slot.x, slot.z, slot.h),
+        name: GHOST_NAMES[m],
+        color: colors[m],
+        skin: skins[m],
       }));
+      // Et son record, gardé dans ce navigateur
+      const own = loadOwnGhost(view.track);
+      if (own)
+        this.ghosts.push({
+          run: own,
+          kart: newKart(this.track, slot.x, slot.z, slot.h),
+          name: "Ton record",
+          color: "#9ff0c0",
+          skin: "neon",
+          own: true,
+        });
     }
   }
 
   /** L'allure des fantômes : un kart aux couleurs de sa médaille */
   private ghostLooks(): KartLook[] {
-    const skins: Record<GhostMedal, SkinId> = { bronze: "flammes", argent: "chrome", or: "or" };
-    const colors: Record<GhostMedal, string> = { bronze: "#c9874a", argent: "#cfd6dd", or: "#ffd24a" };
-    return this.ghosts.map(({ run }) => ({
-      color: colors[run.medal],
-      name: GHOST_NAMES[run.medal],
+    return this.ghosts.map((g) => ({
+      color: g.color,
+      name: g.name,
       face: null,
-      avatar: seededAvatar(GHOST_NAMES[run.medal]),
+      avatar: seededAvatar(g.name),
       head: null,
       vehicle: "kart",
-      skin: skins[run.medal],
+      skin: g.skin,
       me: false,
     }));
   }
@@ -524,7 +549,7 @@ export class RaceRuntime {
             if (left === 1) this.announce("Dernier tour !");
             play(left === 1 ? "tourChip" : "capTurn");
             // Contre-la-montre : le temps du tour, et l'écart avec le fantôme d'or au même endroit
-            const gold = this.ghosts.find((g) => g.run.medal === "or")?.run;
+            const gold = this.ghosts.find((g) => !g.own && g.run.medal === "or")?.run;
             if (gold) {
               this.myLaps.push(e.ms);
               const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -539,6 +564,8 @@ export class RaceRuntime {
           if (e.id === meId) {
             // (seul au contre-la-montre : son temps, pas une victoire)
             this.announce(this.ghosts.length > 0 ? clock(e.ms) : e.place === 1 ? "Victoire !" : `Arrivé ${placeLabel(e.place)} !`);
+            // Contre-la-montre : un nouveau record devient son fantôme pour la prochaine fois
+            if (this.ghosts.length > 0) saveOwnGhost(this.view.track, e.ms, this.myPath);
             play(e.place === 1 ? "tourTrophyMine" : "tourApplause");
           }
           break;
@@ -841,6 +868,13 @@ export class RaceRuntime {
       }
       this.shown[this.mine] = d.view();
       this.steers[this.mine] = pad.steer;
+      // Contre-la-montre : son tracé, au même pas que celui des fantômes
+      if (this.ghosts.length > 0 && me.finish === null && v.phase === "racing" && now >= v.goAt) {
+        while (now - v.goAt >= this.pathAt) {
+          this.myPath.push(d.kart.x, d.kart.z, d.kart.h, d.kart.y + d.kart.air);
+          this.pathAt += GHOST_EVERY_MS;
+        }
+      }
       if (t - this.sentAt >= SEND_MS) {
         this.sentAt = t;
         this.sent.push({ x: d.kart.x, z: d.kart.z });
@@ -1212,4 +1246,34 @@ export function placeLabel(place: number): string {
 function clock(ms: number): string {
   const s = (ms % 60_000) / 1000;
   return `${Math.floor(ms / 60_000)}:${s.toFixed(1).padStart(4, "0")}`;
+}
+
+const ownGhostKey = (track: string) => `bolides-fantome:${track}`;
+
+/** Son record au contre-la-montre sur ce circuit, gardé dans ce navigateur (null : aucun) */
+function loadOwnGhost(track: string): GhostRun | null {
+  try {
+    const raw = localStorage.getItem(ownGhostKey(track));
+    if (!raw) return null;
+    const { total, path } = JSON.parse(raw) as { total: number; path: string };
+    const bytes = Uint8Array.from(atob(path), (c) => c.charCodeAt(0));
+    if (!Number.isFinite(total) || bytes.length % 16 !== 0) return null;
+    return { medal: "or", laps: [], total, path: new Float32Array(bytes.buffer) };
+  } catch {
+    return null;
+  }
+}
+
+/** Garde son tracé s'il bat son record sur ce circuit */
+function saveOwnGhost(track: string, total: number, samples: number[]) {
+  try {
+    const old = loadOwnGhost(track);
+    if ((old && old.total <= total) || samples.length < 8) return;
+    const bytes = new Uint8Array(Float32Array.from(samples).buffer);
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    localStorage.setItem(ownGhostKey(track), JSON.stringify({ total, path: btoa(s) }));
+  } catch {
+    // Pas de place, ou pas de stockage : pas de fantôme, c'est tout
+  }
 }
