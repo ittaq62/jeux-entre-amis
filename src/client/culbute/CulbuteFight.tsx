@@ -18,6 +18,8 @@ import { nextFrame } from "../lib/prepare.ts";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { coachDone } from "../lib/coach.tsx";
+import { COACH_ID, CulbuteCoach } from "./coach.tsx";
 import { teamMark } from "./teamMarks.ts";
 import { loadSettings, saveSettings, type CulbuteSettings } from "./bindings.ts";
 import { CommandsPanel } from "./CommandsPanel.tsx";
@@ -314,6 +316,10 @@ export function CulbuteFight({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [touch, setTouch] = useState(() => window.matchMedia?.("(pointer: coarse)").matches ?? false);
+  // (lu par les événements du combat : son premier coup qui touche, au doigt, renvoie la main du coach)
+  const touchRef = useRef(touch);
+  touchRef.current = touch;
+  const fightRoot = useRef<HTMLDivElement>(null);
   // Au doigt, téléphone tenu droit : un mot pour conseiller de le tourner (on le ferme d'un toucher, pour de bon)
   const [rotateHint, setRotateHint] = useState(() => {
     try {
@@ -383,6 +389,7 @@ export function CulbuteFight({
           // Le téléphone vibre sous le doigt de celui qui joue, aux moments rares seulement : sa sortie, celle qu'il
           // provoque, un coup fort qu'il donne ou qu'il reçoit (jamais pour les coups des autres, ni pour un spectateur)
           if (mySlot >= 0) {
+            if (e.k === "hit" && e.kind === "hit" && e.a === mySlot && touchRef.current) coachDone(COACH_ID);
             if (e.k === "ko" && e.v === mySlot) buzz("echec");
             else if (e.k === "ko" && e.by === mySlot) buzz("fort");
             else if (e.k === "hit" && e.kind === "hit" && e.power > 0.6 && (e.a === mySlot || e.v === mySlot)) buzz("impact");
@@ -476,7 +483,7 @@ export function CulbuteFight({
   const seated = mySlot >= 0;
 
   return (
-    <div className={`cb-fight ${touch && seated ? "is-touch" : ""}`}>
+    <div ref={fightRoot} className={`cb-fight ${touch && seated ? "is-touch" : ""}`}>
       <div ref={host} className="cb-stage" />
       {flash > 0 && <div className="cb-flash" key={flash} aria-hidden="true" />}
       {room.status === "playing" && loadingShown(prep.done, gateClock) && (
@@ -494,6 +501,12 @@ export function CulbuteFight({
         />
       )}
       <FirstSecondsPanel />
+      {/* Ses premiers combats au doigt : la main du coach mime les gestes sur les commandes, tant qu'il est en jeu */}
+      <CulbuteCoach
+        root={fightRoot}
+        active={seated && touch && live && !finished && Boolean(hud?.fighters.some((f) => f.slot === mySlot && !f.out))}
+        turn={room.gate?.id ?? fightKey}
+      />
 
       <header className="cb-top">
         <div className="cb-top-left">
