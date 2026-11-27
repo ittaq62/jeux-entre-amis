@@ -28,4 +28,10 @@ export default defineConfig(({ command }) => ({
     // Accessible depuis un telephone sur le meme wifi
     host: true,
   },
+  optimizeDeps: {
+    // En dev, toutes les pages et tous les jeux sont parcourus dès le démarrage : les dépendances
+    // sont pré-assemblées une fois pour toutes, au lieu de l'être à nouveau en pleine séance
+    // (pages noires, « Outdated Optimize Dep ») quand un jeu chargé à la demande en importe une nouvelle
+    entries: ["index.html", "src/client/**/*.tsx"],
+  },
 }));
