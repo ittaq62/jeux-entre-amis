@@ -3,21 +3,32 @@
 // « toc » sourd de caoutchouc, chaque bille qui tombe son « tchonk » dans le cuir puis roule et cogne les autres au fond
 // du filet ; la queue qui frappe, le grondement léger des billes qui roulent ; les applaudissements d'un beau coup ; et
 // l'ambiance de la salle (le feu qui crépite, la pluie, le train, la mer…). Tout passe par le réglage du son du site.
+// Les chocs sont des corps frappés (sfxKit : plusieurs modes qui s'éteignent chacun à leur rythme, et le bruit du choc),
+// joués dans la petite pièce commune du site, et chacun varie un peu.
 
 import type { PhysEvent } from "../../shared/games/billard/physics.ts";
+import { HARD_BALL, MARIMBA, METAL_BAR, roomOut, strike as hit, vary, WOOD, type Body } from "../lib/sfxKit.ts";
 import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 
-function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: number } | null {
+/**
+ * Une bille de résine : ses modes propres sonnent à peine (le « clac » est surtout le choc lui-même, très bref), d'où des
+ * modes plus courts que ceux de la boule dure commune
+ */
+const BILLE: Body = { ...HARD_BALL, decays: [0.009, 0.006, 0.004] };
+/** Du bois sous du caoutchouc, du feutre ou du cuir (la bande, la poche, le procédé) : il sonne, mais s'éteint vite */
+const AMORTI: Body = { ...WOOD, decays: WOOD.decays.map((d) => d * 0.35) };
+
+function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; room: AudioNode; vol: number } | null {
   if (level <= 0) return null;
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: o.out, vol: level };
+  return { ctx: o.ctx, dest: o.out, room: roomOut(o.ctx, o.out), vol: level };
 }
 
-function noise(ctx: AudioContext): AudioBuffer {
+function noise(ctx: BaseAudioContext): AudioBuffer {
   if (noiseBuffer && noiseBuffer.sampleRate === ctx.sampleRate) return noiseBuffer;
   const len = Math.floor(ctx.sampleRate * 2);
   const b = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -34,7 +45,7 @@ function env(g: GainNode, peak: number, attack: number, decay: number, t0: numbe
 }
 
 function tone(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   t0: number,
   type: OscillatorType,
@@ -56,7 +67,7 @@ function tone(
 }
 
 function burst(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   t0: number,
   filter: BiquadFilterType,
@@ -83,45 +94,45 @@ function burst(
 let windowAt = 0;
 let windowCount = 0;
 
-/** Le « clac » de deux billes : de la résine dure, un son bref, presque métallique, avec un peu de corps */
-function clack(ctx: AudioContext, dest: AudioNode, t: number, v: number, vol: number) {
+/** Le « clac » de deux billes : de la résine dure, un choc sec et très bref, plus vif et un peu plus haut quand il est fort */
+function clack(ctx: BaseAudioContext, dest: AudioNode, t: number, v: number, vol: number) {
   const k = Math.min(1, Math.pow(v / 3.5, 0.7)) * vol;
-  const pitch = 0.94 + Math.random() * 0.12 + Math.min(0.15, v * 0.02);
-  burst(ctx, dest, t, "bandpass", 3600 * pitch, 3.5, 0.55 * k, 0.0008, 0.018);
-  tone(ctx, dest, t, "sine", 2650 * pitch, 2500 * pitch, 0.32 * k, 0.0006, 0.045);
-  tone(ctx, dest, t, "triangle", 1320 * pitch, 1240 * pitch, 0.16 * k, 0.0006, 0.03);
-  burst(ctx, dest, t, "highpass", 6000, 0.7, 0.12 * k, 0.0005, 0.008);
+  const f0 = vary(2500, 0.05) * (1 + Math.min(0.12, v * 0.02));
+  hit(ctx, dest, t, BILLE, f0, { gain: 0.42 * k, velocity: 0.55 + 0.45 * Math.min(1, v / 3), hardness: 9000, click: 0.8 });
 }
 
-/** Le « toc » d'une bande : du caoutchouc sous le feutre, et le bois du cadre qui résonne à peine */
-function thud(ctx: AudioContext, dest: AudioNode, t: number, v: number, vol: number) {
+/** Le « toc » d'une bande : du caoutchouc sous le feutre (mou, grave), et le bois du cadre qui résonne à peine */
+function thud(ctx: BaseAudioContext, dest: AudioNode, t: number, v: number, vol: number) {
   const k = Math.min(1, Math.pow(v / 3, 0.8)) * vol;
-  tone(ctx, dest, t, "sine", 190, 120, 0.5 * k, 0.002, 0.09);
-  burst(ctx, dest, t, "lowpass", 700, 0.8, 0.28 * k, 0.001, 0.05);
-  tone(ctx, dest, t, "triangle", 420, 380, 0.06 * k, 0.001, 0.06);
+  hit(ctx, dest, t, AMORTI, vary(165, 0.08), { gain: 0.4 * k, velocity: 0.5 + 0.5 * Math.min(1, v / 3), hardness: 900, click: 0.7 });
+  hit(ctx, dest, t + 0.002, WOOD, vary(430, 0.06), { gain: 0.05 * k, hardness: 2500, click: 0.1 });
 }
 
 /** Une bille qui tombe : le cuir de la poche, puis elle roule et cogne les autres au fond du filet */
-function pocketDrop(ctx: AudioContext, dest: AudioNode, t: number, v: number, vol: number) {
+function pocketDrop(ctx: BaseAudioContext, dest: AudioNode, t: number, v: number, vol: number) {
   const k = Math.min(1, 0.45 + v / 4) * vol;
-  tone(ctx, dest, t, "sine", 260, 150, 0.5 * k, 0.002, 0.12);
-  burst(ctx, dest, t, "lowpass", 900, 0.9, 0.3 * k, 0.001, 0.08);
+  hit(ctx, dest, t, AMORTI, vary(210, 0.1), { gain: 0.5 * k, velocity: 0.7, hardness: 700, click: 0.9 });
   // Elle roule dans le filet, et touche celles qui y sont déjà
   const n = 2 + Math.floor(Math.random() * 3);
   for (let i = 0; i < n; i++) {
     const tt = t + 0.18 + i * (0.07 + Math.random() * 0.05);
     const kk = k * (0.5 - i * 0.1);
-    tone(ctx, dest, tt, "sine", 2200 + Math.random() * 500, 2100, 0.12 * kk, 0.0006, 0.03);
-    burst(ctx, dest, tt, "bandpass", 3000, 3, 0.12 * kk, 0.0008, 0.015);
+    hit(ctx, dest, tt, BILLE, vary(2300, 0.06), { gain: 0.2 * kk, velocity: 0.6, hardness: 7000, click: 0.6 });
   }
   burst(ctx, dest, t + 0.12, "lowpass", 300, 1, 0.12 * k, 0.05, 0.35);
+}
+
+/** Une bille sortie de la table : elle tombe sur le plancher et rebondit une fois */
+function floorDrop(ctx: BaseAudioContext, dest: AudioNode, t: number, vol: number) {
+  hit(ctx, dest, t, WOOD, vary(120, 0.1), { gain: 0.4 * vol, hardness: 2500, click: 0.6 });
+  hit(ctx, dest, t + vary(0.32, 0.1), WOOD, vary(125, 0.1), { gain: 0.18 * vol, hardness: 2000, click: 0.4 });
 }
 
 /** Un choc de la physique */
 export function phys(e: PhysEvent, volume: number) {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const now = ctx.currentTime;
   if (now - windowAt > 0.05) {
     windowAt = now;
@@ -136,19 +147,19 @@ export function phys(e: PhysEvent, volume: number) {
     if (e.v < 0.04) return;
     thud(ctx, dest, t, e.v, volume);
   } else if (e.k === "poche") pocketDrop(ctx, dest, t, e.v, volume);
-  else tone(ctx, dest, t, "sine", 120, 60, 0.4 * volume, 0.002, 0.2);
+  else floorDrop(ctx, dest, t, volume);
 }
 
-/** La queue frappe la blanche : le procédé de cuir sur la résine, sec, plus fort quand on tape fort */
+/** La queue frappe la blanche : le procédé de cuir sur la résine (un « toc » sec), le bois de la queue derrière */
 export function strike(power: number, mine: boolean) {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const t = ctx.currentTime;
   const k = (0.35 + power * 0.65) * (mine ? 1 : 0.7);
-  tone(ctx, dest, t, "triangle", 980, 820, 0.35 * k, 0.0008, 0.04);
-  burst(ctx, dest, t, "bandpass", 2200, 1.8, 0.4 * k, 0.0008, 0.02);
-  if (power > 0.6) tone(ctx, dest, t, "sine", 320, 220, 0.25 * k, 0.001, 0.06);
+  hit(ctx, dest, t, BILLE, vary(2100, 0.05), { gain: 0.15 * k, velocity: 0.5 + 0.4 * power, hardness: 4000, click: 0.9 });
+  hit(ctx, dest, t, AMORTI, vary(880, 0.05), { gain: 0.15 * k, velocity: 0.6 + 0.4 * power, hardness: 3000, click: 0.3 });
+  if (power > 0.6) hit(ctx, dest, t, AMORTI, vary(260, 0.06), { gain: 0.4 * k * (power - 0.4), hardness: 1500, click: 0.2 });
 }
 
 /** Le grondement léger des billes qui roulent sur le feutre */
@@ -197,7 +208,7 @@ export function stopRoll() {
 export function rack() {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const t0 = ctx.currentTime + 0.05;
   for (let i = 0; i < 16; i++) {
     const t = t0 + Math.pow(i / 16, 0.8) * 1.3 + Math.random() * 0.04;
@@ -205,14 +216,14 @@ export function rack() {
   }
   // Le cadre de bois du triangle qu'on pose, puis qu'on lève
   thud(ctx, dest, t0 + 1.45, 1.2, 0.5);
-  tone(ctx, dest, t0 + 1.9, "triangle", 520, 470, 0.05, 0.002, 0.05);
+  hit(ctx, dest, t0 + 1.9, WOOD, vary(520, 0.04), { gain: 0.08, hardness: 3000, click: 0.3 });
 }
 
 /** Des applaudissements (un beau coup, la manche gagnée) */
 export function applause(strength: number, seconds = 2) {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const n = Math.round(36 * seconds * strength);
   for (let i = 0; i < n; i++) {
     const t = ctx.currentTime + Math.random() * seconds * (0.6 + Math.random() * 0.4);
@@ -225,7 +236,7 @@ export function applause(strength: number, seconds = 2) {
 export function groan() {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const f = ctx.createBiquadFilter();
   f.type = "lowpass";
   f.frequency.value = 800;
@@ -234,21 +245,21 @@ export function groan() {
   burst(ctx, f, ctx.currentTime + 0.05, "bandpass", 500, 1, 0.1, 0.1, 0.5);
 }
 
-/** La petite sonnerie du tour qui arrive, et le tic des dernières secondes */
+/** La petite sonnerie du tour qui arrive (deux lames de bois), et le tic des dernières secondes */
 export function yourTurn() {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
+  const { ctx, room: dest } = o;
   const t = ctx.currentTime;
-  tone(ctx, dest, t, "sine", 880, 880, 0.12, 0.005, 0.18);
-  tone(ctx, dest, t + 0.12, "sine", 1318.5, 1318.5, 0.12, 0.005, 0.3);
+  hit(ctx, dest, t, MARIMBA, 880, { gain: 0.2, hardness: 3000, click: 0.15 });
+  hit(ctx, dest, t + 0.12, MARIMBA, 1318.5, { gain: 0.18, hardness: 3000, click: 0.15 });
 }
 
 export function tick() {
   const o = out();
   if (!o) return;
-  const { ctx, dest } = o;
-  tone(ctx, dest, ctx.currentTime, "square", 1800, 1800, 0.03, 0.001, 0.03);
+  const { ctx, room: dest } = o;
+  hit(ctx, dest, ctx.currentTime, WOOD, vary(1600, 0.03), { gain: 0.07, hardness: 7000, click: 0.6 });
 }
 
 // ---------------------------------------------------------------------------
@@ -366,8 +377,8 @@ export class Ambience {
       case "train":
         // Le passage des roues sur un joint de rail : ta-dam, ta-dam
         for (const d of [0, 0.11, 0.42, 0.53]) {
-          tone(ctx, g, t + d, "sine", 90, 60, 0.22, 0.002, 0.12);
-          burst(ctx, g, t + d, "bandpass", 900, 2, 0.06, 0.001, 0.04);
+          hit(ctx, g, t + d, WOOD, vary(75, 0.05), { gain: 0.3, hardness: 1200, click: 0.4 });
+          hit(ctx, g, t + d, METAL_BAR, vary(330, 0.04), { gain: 0.025, hardness: 5000, click: 0.3 });
         }
         break;
       case "mer":
@@ -395,7 +406,7 @@ export class Ambience {
         break;
       }
       case "horloge":
-        tone(ctx, g, t, "square", 2400, 2400, 0.02, 0.001, 0.02);
+        hit(ctx, g, t, WOOD, vary(2000, 0.02), { gain: 0.03, hardness: 8000, click: 0.6 });
         break;
       default:
         burst(ctx, g, t, "bandpass", 600, 1, 0.05, 0.2, 0.6);
