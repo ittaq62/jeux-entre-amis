@@ -11,6 +11,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { BALL_R, heightAt, tileAt, tileHeight, type Course } from "../../../shared/games/minigolf/course.ts";
 import type { CourseId } from "../../../shared/games/minigolf/courses.ts";
 import { segClosest } from "../../../shared/games/minigolf/geom.ts";
+import { Shake } from "../../lib/feel.ts";
 import type { BallLook } from "../../../shared/games/minigolf/looks.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
@@ -463,6 +464,10 @@ export class HoleScene {
     b.gone = animate ? this.clock : this.clock - 1;
   }
 
+  /** Une petite secousse de la caméra (sa balle dans le trou) ; « Effets réduits » la coupe (feel.ts) */
+  readonly shake = new Shake(0.035);
+  private shakeOff = new THREE.Vector3();
+
   render(t: number, dt: number) {
     this.quality.tick(performance.now());
     this.clock += dt;
@@ -491,10 +496,14 @@ export class HoleScene {
     }
     this.sky?.update(t);
     if (this.sky) this.sky.mesh.position.copy(this.camera.position);
+    // La secousse, juste autour du dessin : la caméra garde sa course
+    const shaking = this.shake.offset(performance.now() / 1000, this.shakeOff);
+    if (shaking) this.camera.position.add(this.shakeOff);
     if (this.effects) {
       if (!this.composer) this.makeComposer();
       this.composer!.render(dt);
     } else this.renderer.render(this.scene, this.camera);
+    if (shaking) this.camera.position.sub(this.shakeOff);
   }
 
   /** Les drapeaux, pour les lever quand une balle approche */

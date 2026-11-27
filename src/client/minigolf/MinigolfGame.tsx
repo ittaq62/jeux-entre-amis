@@ -9,6 +9,8 @@ import { challengeDone, challengeOf } from "../../shared/games/minigolf/stars.ts
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
+import { Coach, coachDone, coachShowing } from "../lib/coach.tsx";
+import { buzz, usePop } from "../lib/feel.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
@@ -16,6 +18,7 @@ import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoadin
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { nextFrame } from "../lib/prepare.ts";
+import { MINIGOLF_COACH } from "./coach.ts";
 import { HowToPlay } from "./MinigolfHelp.tsx";
 import { GolfRuntime, MIN_PULL, type HudState, type RuntimeEvent } from "./runtime.ts";
 import { Scorecard, scoreName } from "./Scorecard.tsx";
@@ -122,19 +125,31 @@ export function MinigolfGame({
       onShoot: (h, a, p, at) => send({ t: "shot", h, a, p, at }),
       onAim: (a, p) => send({ t: "aim", a, p }),
       onHud: setHud,
-      onShot: (_id, mine, power) => sfx.putt(power, mine ? 1 : 0.35),
+      onShot: (_id, mine, power) => {
+        sfx.putt(power, mine ? 1 : 0.35);
+        // Sous son doigt : le coup se sent (plus fort à pleine force)
+        if (mine) buzz(power > 0.85 ? "fort" : "impact");
+      },
       onEvent: (e: RuntimeEvent) => {
         const vol = e.mine ? 1 : Math.max(0.15, 0.6 - e.dist * 0.04);
         const ev = e.e;
         switch (ev.k) {
           case "wall":
             sfx.knock(knockKind(ev.kind, ev.look), ev.v, vol);
+            if (e.mine && ev.v > 3) buzz("tic");
             break;
           case "land":
             sfx.land(ev.mat, ev.v, vol);
             break;
           case "cup":
             sfx.cupDrop(vol);
+            // Sa balle dans le trou : le téléphone le dit, la caméra tressaille
+            if (e.mine) {
+              buzz("reussite");
+              rt.scene.shake.add(0.35);
+              // Sa première balle dans le trou : la main du coach ne reviendra plus
+              coachDone("minigolf");
+            }
             break;
           case "lip":
             sfx.lip(vol);
@@ -142,6 +157,7 @@ export function MinigolfGame({
           case "lost":
             if (ev.why === "out") sfx.outOfBounds(vol);
             else sfx.splash(vol, ev.why === "lava");
+            if (e.mine) buzz("echec");
             if (e.mine)
               say(
                 ev.why === "out" ? "Hors limites !" : ev.why === "lava" ? "Dans la lave !" : "Dans l'eau !",
@@ -228,6 +244,13 @@ export function MinigolfGame({
     : null;
   const challengeOk = Boolean(challenge && myResult && challengeDone(challenge, myResult));
   const later = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // La main du coach (lib/coach.tsx) : quand il peut jouer, pendant ses premiers tours
+  const coachActive = Boolean(
+    room.you.seatId !== null && hud?.canShoot && hud.power === null && v.phase === "play" && me && !me.done && !mySeatView?.autoplayReason,
+  );
+  const coaching = coachShowing("minigolf", coachActive);
+  // Le compte des coups saute quand il change (feel.ts ; « Effets réduits » le coupe)
+  const strokesPop = usePop<HTMLSpanElement>(me?.cur ?? 0);
 
   // Ce qui arrive à sa balle : dans le trou (et en combien), plus de coups
   useEffect(() => {
@@ -451,7 +474,9 @@ export function MinigolfGame({
 
       {me && v.phase === "play" && !me.done && (
         <div className="mg-strokes" aria-live="polite">
-          <span className="num">{me.cur}</span>
+          <span ref={strokesPop} className="num" style={{ display: "inline-block" }}>
+            {me.cur}
+          </span>
           <small>
             coup{me.cur > 1 ? "s" : ""} sur {limit}
           </small>
@@ -470,7 +495,15 @@ export function MinigolfGame({
 
       {hud?.power !== null && hud?.power !== undefined && <PowerGauge power={hud.power} last={hud.lastPower} />}
 
-      {seated && hud?.canShoot && hud.power === null && v.phase === "play" && me && me.cur === 0 && !mySeatView?.autoplayReason && (
+      {/* La main du coach, pendant les premiers tours ; sa bulle remplace alors le conseil écrit */}
+      <Coach
+        id="minigolf"
+        active={coachActive}
+        steps={MINIGOLF_COACH}
+        turn={`${room.code}:${v.hole}:${me?.cur ?? 0}`}
+        bubble={{ top: "calc(112px + var(--safe-top, 0px))" }}
+      />
+      {coachActive && !coaching && me?.cur === 0 && (
         <p className="mg-tip">Tourne la vue pour viser, puis attrape ta balle et tire-la vers toi</p>
       )}
 
