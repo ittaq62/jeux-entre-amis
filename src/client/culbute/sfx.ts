@@ -9,6 +9,31 @@ import { roomOut, strike, type Body } from "../lib/sfxKit.ts";
 let noiseBuffer: AudioBuffer | null = null;
 let lastAt = 0;
 
+/**
+ * Les bruits de Culbute passent par leur limiteur (comme ceux du bowling) : à une sortie, le coup qui éjecte et la
+ * détonation tombent ensemble, et leur somme dépassait le plafond de la sortie (rendu hors ligne, au volume par défaut :
+ * des crêtes à +6 dBFS, plus de 250 échantillons écrêtés, ça grésillait ; quatre coups forts à la suite aussi). Les coups
+ * légers et moyens gardent leur niveau ; ce qui dépassait est ramené sous le plafond.
+ */
+let bus: { ctx: AudioContext; node: GainNode } | null = null;
+
+function busOf(ctx: AudioContext, master: GainNode): GainNode {
+  if (bus?.ctx === ctx) return bus.node;
+  // Le compresseur remonte de lui-même les sons faibles (environ 1,7 fois) : on baisse d'autant l'entrée
+  const g = ctx.createGain();
+  g.gain.value = 0.6;
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -10;
+  lim.knee.value = 6;
+  lim.ratio.value = 16;
+  lim.attack.value = 0.002;
+  lim.release.value = 0.12;
+  g.connect(lim);
+  lim.connect(master);
+  bus = { ctx, node: g };
+  return g;
+}
+
 function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
   // Le réglage du son du site : général × effets (0 quand le son est coupé)
   const vol = effectsLevel();
@@ -16,8 +41,10 @@ function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  // L'arène : une réverbération très courte (le combat est rapide), le volume des réglages passe toujours par o.out
-  return { ctx: o.ctx, dest: roomOut(o.ctx, o.out, { rt60: 0.3, wet: 0.1 }) as GainNode, vol };
+  // L'arène : une réverbération très courte (le combat est rapide), qui entre dans le limiteur, dernier maillon avant la
+  // sortie générale (le volume des réglages y passe toujours). Accrochée au limiteur de Culbute et non à la sortie
+  // générale : le billard y accroche la sienne, et le premier des deux jeux ouverts imposait sa salle à l'autre.
+  return { ctx: o.ctx, dest: roomOut(o.ctx, busOf(o.ctx, o.out), { rt60: 0.3, wet: 0.1 }) as GainNode, vol };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
