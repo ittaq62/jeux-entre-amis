@@ -14,6 +14,7 @@ import {
   earnedNavalAchievements,
   earnedTourAchievements,
 } from "../shared/achievements.ts";
+import type { VersusRow } from "../shared/headToHead.ts";
 import type { CapitaleSettings, CapitaleStats, EndMode } from "../shared/games/capitale/engine.ts";
 import type { FuseMode, MecheSettings, MecheStats } from "../shared/games/meche/engine.ts";
 import type { BolidesSettings, RacerStats } from "../shared/games/bolides/race.ts";
@@ -82,6 +83,26 @@ export function toMe(row: UserRow): Me {
 }
 
 export const isAdmin = (row: Pick<UserRow, "is_admin">) => row.is_admin === 1;
+
+/**
+ * Les parties jouées à la même table par deux comptes, de la plus récente à la plus ancienne (200 au plus), avec la place
+ * de chacun : de quoi faire leur face-à-face (shared/headToHead.ts).
+ */
+export async function versusRows(db: D1Database, me: string, other: string): Promise<VersusRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT g.game AS game, g.ended_at AS endedAt, a.rank AS mine, b.rank AS theirs
+         FROM game_players a
+         JOIN game_players b ON b.game_id = a.game_id
+         JOIN games g ON g.id = a.game_id
+        WHERE a.user_id = ?1 AND b.user_id = ?2
+        ORDER BY g.ended_at DESC
+        LIMIT 200`,
+    )
+    .bind(me, other)
+    .all<VersusRow>();
+  return results;
+}
 
 export async function findUserByPseudo(db: D1Database, pseudo: string): Promise<UserRow | null> {
   return db.prepare("SELECT * FROM users WHERE pseudo = ? COLLATE NOCASE").bind(pseudo).first<UserRow>();

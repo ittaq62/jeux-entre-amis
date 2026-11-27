@@ -13,6 +13,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { Chip } from "../components/Chip.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { StreakCarnet } from "../components/StreakCarnet.tsx";
+import { VersusCard } from "../components/VersusCard.tsx";
 import { Stars } from "../stars/Stars.tsx";
 import "./profileShelf.css";
 import { STAR_GAME_BY_ID } from "../../shared/starMaps.ts";
@@ -350,6 +351,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
 
         <div className="profile-grid">
           <div className="profile-col">
+            {profile.friendship !== "self" && <VersusCard pseudo={user.pseudo} />}
             {profile.streak && <StreakCarnet streak={profile.streak} self={profile.friendship === "self"} />}
             {starGames.length > 0 && (
               <section className="carnet panel">

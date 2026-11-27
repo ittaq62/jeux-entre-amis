@@ -3550,6 +3550,33 @@ a.shop-item {
   color: var(--text);
 }
 
+/* « Face-à-face » sur le profil d'un autre joueur : le score entre vous deux, en grand */
+.versus-score {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 4px 0 0;
+  color: var(--text-soft);
+}
+
+.versus-score strong {
+  font-family: var(--font-card);
+  font-weight: 800;
+  font-size: 38px;
+  line-height: 1;
+  color: var(--gold);
+  margin-right: 4px;
+}
+
+.versus-dash {
+  font-size: 26px;
+  color: var(--text-faint);
+}
+
+.versus-last {
+  margin: 10px 0 0;
+}
+
 /* « et 5 autres jeux » : déplie les points de tous les jeux */
 .profile-points-more {
   display: block;

@@ -33,6 +33,7 @@ import {
 import {
   acceptFriend,
   findUserByPseudo,
+  versusRows,
   isAdmin,
   leaderboard,
   listFriends,
@@ -62,6 +63,7 @@ import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
 import { publicTable, type PublicTable } from "../shared/publicTable.ts";
+import { headToHead } from "../shared/headToHead.ts";
 import { sharedTableCode, shareTags, withShareTags } from "./share.ts";
 import { eveningFor } from "./evening.ts";
 import { openGames } from "./betaGames.ts";
@@ -562,6 +564,14 @@ app.get("/rooms/:code", withSession, async (c) => {
  * Ce qu'on dit d'une table sans être connecté : le jeu, l'hôte, la place qu'il reste (page de connexion ouverte par un
  * lien d'invitation, aperçu d'un lien). Limité par adresse : on ne parcourt pas les codes pour trouver des tables.
  */
+/** Le face-à-face avec un autre joueur : les parties jouées à la même table, qui a fini devant l'autre */
+app.get("/versus/:pseudo", withSession, withProfile, async (c) => {
+  const other = await findUserByPseudo(c.env.DB, param(c, "pseudo"));
+  const me = c.get("user");
+  if (!other || !other.pseudo || other.id === me.id) return c.json({ error: "Joueur introuvable." }, 404);
+  return c.json({ versus: headToHead(await versusRows(c.env.DB, me.id, other.id)) });
+});
+
 app.get("/rooms/:code/public", async (c) => {
   const code = param(c, "code").toUpperCase();
   if (!isRoomCode(code)) return c.json({ error: "Code invalide." }, 400);
