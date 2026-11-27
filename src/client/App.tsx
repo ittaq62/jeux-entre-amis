@@ -75,6 +75,12 @@ export function App() {
     document.documentElement.classList.toggle("reduce-motion", reduced);
   }, [reduced]);
 
+  // « Texte plus grand » : les textes de base (et ceux des jeux qui s'y branchent) suivent --text-scale
+  const textScale = usePrefs((s) => s.textScale);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--text-scale", String(textScale));
+  }, [textScale]);
+
   useEffect(() => {
     if (user) useHub.getState().connect();
     else useHub.getState().disconnect();

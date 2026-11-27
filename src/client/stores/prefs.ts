@@ -22,6 +22,8 @@ interface Prefs {
   haptics: boolean;
   colorblind: boolean;
   reducedEffects: boolean;
+  /** « Texte plus grand » : 1 (normal), 1.15 ou 1.3, posé en --text-scale sur la page */
+  textScale: number;
   /** Musique d'entracte de la tournée */
   tourMusic: boolean;
   /** Capitale : la caméra s'approche des dés, suit le pion qui avance ; l'astuce pour bouger la vue a été vue */
@@ -88,6 +90,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   haptics: true,
   colorblind: false,
   reducedEffects: false,
+  textScale: 1,
   tourMusic: true,
   capDiceZoom: false,
   capFollow: false,

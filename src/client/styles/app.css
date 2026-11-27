@@ -141,7 +141,7 @@
 
 .empty {
   color: var(--text-soft);
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale, 1));
   margin: 14px 0 0;
   max-width: 46ch;
 }
@@ -4048,6 +4048,21 @@ a.shop-item {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* « Mon compte » : la taille du texte, sous le son */
+.account-text-size {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.account-text-size > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* « Mon compte » : le réglage commun du son, au-dessus des autres cases */

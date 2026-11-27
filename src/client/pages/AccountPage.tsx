@@ -6,7 +6,7 @@ import { AppHeader } from "../components/AppHeader.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { SoundSettings } from "../components/SoundSettings.tsx";
-import { Check, Modal } from "../components/ui.tsx";
+import { Check, Modal, Options } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -190,6 +190,22 @@ export function AccountPage() {
           {/* Le même réglage que sous le haut-parleur de l'en-tête et dans les menus de partie */}
           <div className="account-sound">
             <SoundSettings />
+          </div>
+          <div className="account-text-size">
+            <span>
+              <strong>Taille du texte</strong>
+              <span className="hint">Pour lire plus à l'aise, sur cet appareil.</span>
+            </span>
+            <Options
+              label="Taille du texte"
+              value={prefs.textScale}
+              options={[
+                { value: 1, label: "Normale" },
+                { value: 1.15, label: "Grande" },
+                { value: 1.3, label: "Très grande" },
+              ]}
+              onChange={(v) => prefs.set({ textScale: v })}
+            />
           </div>
           <PrefRow label="Vibrations" desc="Sur les téléphones Android ; l'iPhone ne le permet pas.">
             <Check label="Vibrations" checked={prefs.haptics} onChange={(v) => prefs.set({ haptics: v })} />
