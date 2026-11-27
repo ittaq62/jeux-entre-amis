@@ -371,6 +371,174 @@ def foot_post(rng):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Bolides (des karts, en dessin animé : des bruitages appuyés, mais faits de vrais objets)
+
+COIN = dict(ratios=[1, 1.43, 2.2, 2.9], decays=[0.18, 0.12, 0.07, 0.04], amps=[1, 0.6, 0.35, 0.2])
+SPRING = dict(ratios=[1, 2.1, 3.3], decays=[0.35, 0.18, 0.08], amps=[1, 0.4, 0.15])
+
+
+def slide_whistle(rng, dur, f_from, f_to):
+    """Un sifflet à coulisse : une note qui glisse, son vibrato et le souffle"""
+    t = t_axis(dur)
+    pos = t / dur
+    f = f_from * (f_to / f_from) ** pos * (1 + 0.012 * np.sin(2 * np.pi * rng.uniform(5, 6.5) * t))
+    tone = np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.12 * np.sin(2 * np.pi * np.cumsum(2 * f) / SR)
+    breath = butter(noise(rng, len(t)), "band", (1200, 6000)) * 0.015
+    env = np.minimum(1, t / 0.03) * np.minimum(1, (dur - t) / 0.08)
+    return (tone + breath) * env
+
+
+def boing(rng, f0, dur):
+    """Un ressort de butée qu'on pince : une note qui ondule fort puis se calme"""
+    t = t_axis(dur)
+    wob = 1 + 0.18 * np.exp(-t / 0.12) * np.sin(2 * np.pi * rng.uniform(11, 14) * t)
+    f = f0 * wob
+    y = np.zeros_like(t)
+    for r, d, a in zip(SPRING["ratios"], SPRING["decays"], SPRING["amps"]):
+        y += a * np.exp(-t / d) * np.sin(2 * np.pi * np.cumsum(f * r) / SR)
+    return place(rng, [(y, 0), (mallet(rng, 0.004, 4000, 0.3), 0)], dur)
+
+
+def bolides_box(rng):
+    # Une boîte à objets attrapée : un carton qui claque et un tintement de verre (attaque nette, brève)
+    x = place(rng, [(tap(rng, PIECE, rng.uniform(500, 650), 0.12, 7000, 0.8, 0.8), 0), (struck(rng, N.GLOCK, rng.uniform(1900, 2100), 0.6, 0.35, 9000, damp=0.35), 0.005)], 0.4)
+    return room(rng, x, rt60=0.25, wet=0.1, size=0.7)
+
+
+def bolides_coin(rng):
+    # Une pièce ramassée : deux pièces qui tintent l'une après l'autre (attaque nette, brève)
+    c1 = modal(rng, rng.uniform(2300, 2500), COIN["ratios"], COIN["decays"], COIN["amps"], 0.35, detune=0.006)
+    c2 = modal(rng, rng.uniform(3300, 3600), COIN["ratios"], COIN["decays"], COIN["amps"], 0.35, detune=0.006)
+    x = place(rng, [(c1 * 0.8, 0), (mallet(rng, 0.002, 9000, 0.3), 0), (c2, 0.06), (mallet(rng, 0.002, 9000, 0.3), 0.06)], 0.45)
+    return room(rng, x, rt60=0.25, wet=0.1, size=0.6)
+
+
+def bolides_bump(rng):
+    # Deux karts qui se cognent : les pneus qui rebondissent, la coque en plastique
+    x = place(rng, [(thud(rng, rng.uniform(95, 120), 0.25, 0.7, 2200), 0), (tap(rng, PIECE, rng.uniform(380, 460), 0.1, 5000, 0.7), 0)], 0.25)
+    return room(rng, x, rt60=0.2, wet=0.1, size=0.7)
+
+
+def bolides_charge(rng):
+    # La charge du dérapage : un souffle qui monte, et des étincelles qui crépitent
+    layers = [(swish(rng, 0.2, (600, 2000), (2000, 7000)) * 0.8, 0)]
+    for _ in range(6):
+        layers.append((butter(mallet(rng, 0.0015, 12000, 0.5), "high", 4000), rng.uniform(0.02, 0.18)))
+    return room(rng, place(rng, layers, 0.24), rt60=0.2, wet=0.08, size=0.6)
+
+
+def bolides_clang(rng):
+    # Un choc contre du métal : une tôle, un poteau, qui sonne longtemps
+    x = place(rng, [(thud(rng, 120, 0.3, 0.8, 3000), 0), (modal(rng, rng.uniform(160, 190), TUBE["ratios"], TUBE["decays"], TUBE["amps"], 1.0, detune=0.01) * 0.8, 0)], 1.0)
+    return room(rng, x, rt60=0.6, wet=0.14, size=1.2)
+
+
+def bolides_dive(rng):
+    # Le kart qui plonge : il fend l'air en descendant, puis l'eau
+    n = int(0.25 * SR)
+    splash = butter(noise(rng, n) * np.exp(-np.arange(n) / (0.07 * SR)), "band", (500, 5000))
+    x = place(rng, [(swish(rng, 0.3, (1500, 5000), (400, 1500)) * 0.6, 0), (splash, 0.28), (bubble(rng, 300, 0.03) * 0.4, 0.3)], 0.6)
+    return room(rng, x, rt60=0.4, wet=0.14, size=1.0)
+
+
+def bolides_fall(rng):
+    # Une chute dans le vide (dessin animé) : le sifflet à coulisse qui descend, puis l'écrasement à l'arrivée
+    crash = [(thud(rng, 70, 0.5, 1.2, 3500), 0.85)]
+    for _ in range(6):
+        crash.append((tap(rng, PIECE, rng.uniform(400, 900), 0.12, 6000, rng.uniform(0.3, 0.6)), 0.86 + rng.uniform(0, 0.25)))
+    x = place(rng, [(slide_whistle(rng, 0.85, rng.uniform(1500, 1700), rng.uniform(380, 450)), 0)] + crash, 1.5)
+    return room(rng, x, rt60=0.5, wet=0.15, size=1.2)
+
+
+def bolides_grow(rng):
+    # La potion géante : le sifflet à coulisse qui monte, et un tintement à la fin
+    x = place(rng, [(slide_whistle(rng, 0.9, 300, 1100), 0), (struck(rng, N.GLOCK, 2200, 0.4, 0.4, 8000, damp=0.4), 0.85)], 1.1)
+    return room(rng, x, rt60=0.5, wet=0.15, size=1.1)
+
+
+def bolides_hoop(rng):
+    # Un anneau traversé en deltaplane : deux notes de glockenspiel, vives
+    return room(rng, N.phrase(rng, N.GLOCK, ["E6", "B6"], [0.06], [0.6, 0.7], 0.45, hardness=8000, damp=0.4), rt60=0.35, wet=0.14, size=0.9)
+
+
+def bolides_jump(rng):
+    # Le saut : un ressort de butée pincé (boing)
+    return room(rng, boing(rng, rng.uniform(310, 360), 0.42), rt60=0.25, wet=0.1, size=0.8)
+
+
+def bolides_spring(rng):
+    # Le ressort (l'objet) : un plus grand boing, plus long
+    return room(rng, boing(rng, rng.uniform(230, 260), 0.55), rt60=0.25, wet=0.1, size=0.8)
+
+
+def bolides_land(rng):
+    # La réception : les pneus qui touchent le sol, la suspension qui encaisse
+    x = place(rng, [(thud(rng, rng.uniform(80, 100), 0.3, 0.9, 1800), 0), (tap(rng, PIECE, 300, 0.08, 3000, 0.4), 0.01)], 0.32)
+    return room(rng, x, rt60=0.2, wet=0.1, size=0.8)
+
+
+def bolides_magnet(rng):
+    # L'aimant : un bourdonnement électrique qui enfle, et le clic du métal attiré
+    t = t_axis(0.65)
+    hum = butter(np.sign(np.sin(2 * np.pi * 120 * t)) * 0.5 + 0.5 * np.sin(2 * np.pi * 240 * t), "band", (150, 2000))
+    hum *= np.sin(np.pi * t / 0.65) ** 0.7
+    x = place(rng, [(hum * 0.5, 0), (modal(rng, 2600, COIN["ratios"], COIN["decays"], COIN["amps"], 0.2) * 0.4, 0.55)], 0.75)
+    return room(rng, x, rt60=0.3, wet=0.12, size=0.8)
+
+
+def bolides_rescue(rng):
+    # Le drone qui vient reposer le kart : ses hélices qui ronronnent en approchant, puis s'éloignent
+    t = t_axis(1.5)
+    blades = butter(noise(rng, len(t)), "band", (300, 2500)) * (0.6 + 0.4 * np.sin(2 * np.pi * 95 * t))
+    whine = np.sin(2 * np.pi * np.cumsum(560 + 40 * np.sin(2 * np.pi * 0.7 * t)) / SR) * 0.15
+    x = (blades + whine) * np.sin(np.pi * t / 1.5) ** 1.5
+    return room(rng, x, rt60=0.4, wet=0.14, size=1.2)
+
+
+def bolides_splat(rng):
+    # La tarte à la crème : un paquet mou et mouillé qui s'écrase
+    n = int(0.3 * SR)
+    wet = butter(noise(rng, n) * np.exp(-np.arange(n) / (0.05 * SR)), "low", 2500)
+    layers = [(wet, 0), (thud(rng, 140, 0.2, 0.3, 900) * 0.6, 0)]
+    for _ in range(4):
+        layers.append((bubble(rng, rng.uniform(200, 500), 0.01) * 0.3, rng.uniform(0.03, 0.2)))
+    return room(rng, place(rng, layers, 0.4), rt60=0.2, wet=0.08, size=0.6)
+
+
+def bolides_strike(rng):
+    # La boule de bowling : elle fauche des quilles de bois
+    layers = [(thud(rng, 120, 0.4, 1.0, 3000), 0)]
+    for _ in range(rng.integers(7, 11)):
+        layers.append((tap(rng, N.WOODBLOCK, rng.uniform(500, 900), 0.15, 6000, rng.uniform(0.4, 0.9)), rng.uniform(0.0, 0.35)))
+    return room(rng, place(rng, layers, 0.8), rt60=0.4, wet=0.14, size=1.0)
+
+
+def bolides_thunder(rng):
+    # L'orage : le claquement de la foudre, puis le grondement qui roule
+    dur = 1.6
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    crack = butter(noise(rng, int(0.08 * SR)) * np.exp(-np.arange(int(0.08 * SR)) / (0.015 * SR)), "high", 1500)
+    rumble = butter(noise(rng, n), "low", 160) * (np.exp(-t / 0.6) * (1 + 0.5 * np.sin(2 * np.pi * 1.7 * t + 1)))
+    x = place(rng, [(crack * 0.7, 0), (rumble * 3.0, 0.02)], dur)
+    return room(rng, x, rt60=1.2, wet=0.25, size=2.0, damp=2500)
+
+
+def bolides_trick(rng):
+    # Une figure en l'air : un tour qui fend l'air, et un tintement de réussite
+    x = place(rng, [(swish(rng, 0.35, (500, 1800), (1800, 6000)) * 0.7, 0), (N.phrase(rng, N.GLOCK, ["G6", "D7"], [0.05], [0.4, 0.5], 0.3, hardness=8000, damp=0.4), 0.3)], 0.6)
+    return room(rng, x, rt60=0.3, wet=0.12, size=0.8)
+
+
+def bolides_turbo(rng):
+    # Le turbo : le pot qui pétarade, puis le souffle qui pousse
+    layers = [(swish(rng, 0.6, (300, 1200), (1200, 4000)) * 0.9, 0.03)]
+    for k in range(3):
+        layers.append((thud(rng, rng.uniform(70, 90), 0.12, 1.0, 1500) * 0.6, k * rng.uniform(0.03, 0.05)))
+    return room(rng, place(rng, layers, 0.7), rt60=0.3, wet=0.1, size=0.9)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 
 GAMES = {
     "briques": {
@@ -413,6 +581,27 @@ GAMES = {
         "cap-buy": (cap_buy, ["cap-buy.mp3"]),
         "cap-bankrupt": (cap_bankrupt, ["cap-bankrupt.mp3"]),
         "cap-gavel": (cap_gavel, ["cap-gavel.mp3"]),
+    },
+    "bolides": {
+        "bolides-box": (bolides_box, ["bolides-box.mp3"]),
+        "bolides-coin": (bolides_coin, ["bolides-coin.mp3"]),
+        "bolides-bump": (bolides_bump, ["bolides-bump.mp3"]),
+        "bolides-charge": (bolides_charge, ["bolides-charge.mp3"]),
+        "bolides-clang": (bolides_clang, ["bolides-clang.mp3"]),
+        "bolides-dive": (bolides_dive, ["bolides-dive.mp3"]),
+        "bolides-fall": (bolides_fall, ["bolides-fall.mp3"]),
+        "bolides-grow": (bolides_grow, ["bolides-grow.mp3"]),
+        "bolides-hoop": (bolides_hoop, ["bolides-hoop.mp3"]),
+        "bolides-jump": (bolides_jump, ["bolides-jump.mp3"]),
+        "bolides-spring": (bolides_spring, ["bolides-spring.mp3"]),
+        "bolides-land": (bolides_land, ["bolides-land.mp3"]),
+        "bolides-magnet": (bolides_magnet, ["bolides-magnet.mp3"]),
+        "bolides-rescue": (bolides_rescue, ["bolides-rescue.mp3"]),
+        "bolides-splat": (bolides_splat, ["bolides-splat.mp3"]),
+        "bolides-strike": (bolides_strike, ["bolides-strike.mp3"]),
+        "bolides-thunder": (bolides_thunder, ["bolides-thunder.mp3"]),
+        "bolides-trick": (bolides_trick, ["bolides-trick.mp3"]),
+        "bolides-turbo": (bolides_turbo, ["bolides-turbo.mp3"]),
     },
     "crampons": {
         "foot-whistle": (foot_whistle, ["foot-whistle.mp3", "foot-whistle-2.mp3", "foot-whistle-3.mp3"]),
@@ -458,6 +647,25 @@ MAX_DUR = {
     "cap-bankrupt": 0.9,
     "cap-gavel": 0.4,
     "foot-whistle": 0.5,
+    "bolides-box": 0.4,
+    "bolides-coin": 0.45,
+    "bolides-bump": 0.25,
+    "bolides-charge": 0.24,
+    "bolides-clang": 1.1,
+    "bolides-dive": 0.6,
+    "bolides-fall": 1.5,
+    "bolides-grow": 1.05,
+    "bolides-hoop": 0.45,
+    "bolides-jump": 0.42,
+    "bolides-spring": 0.55,
+    "bolides-land": 0.32,
+    "bolides-magnet": 0.75,
+    "bolides-rescue": 1.6,
+    "bolides-splat": 0.42,
+    "bolides-strike": 0.8,
+    "bolides-thunder": 1.6,
+    "bolides-trick": 0.6,
+    "bolides-turbo": 0.75,
     "foot-whistle-end": 1.8,
     "foot-post": 1.2,
 }
