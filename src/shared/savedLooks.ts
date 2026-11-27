@@ -4,6 +4,7 @@
 //
 // « p:<champ> » : un choix des préférences de l'appareil (src/client/stores/prefs.ts), un identifiant d'article.
 // « s:<clé> »   : le choix qu'un jeu garde lui-même dans le navigateur (localStorage), un petit objet JSON.
+// « f:<nom> »   : un drapeau qu'on lève une fois pour toutes (« coach-bowling » : l'aide du bowling a été vue), "1".
 
 /** Les choix d'apparence des préférences de l'appareil */
 export const PREF_LOOK_KEYS = [
@@ -38,12 +39,18 @@ export const SAVED_LOOKS_MAX = 4096;
 
 const ID = /^[a-z0-9][a-z0-9_:-]{0,47}$/i;
 
+/** Le nom d'un drapeau : court, en minuscules */
+export const FLAG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+const isFlagKey = (key: string) => key.startsWith("f:") && FLAG.test(key.slice(2));
+
 const prefKeys = new Set<string>(PREF_LOOK_KEYS.map((k) => `p:${k}`));
 const storeKeys = new Set<string>(STORE_LOOK_KEYS.map((k) => `s:${k}`));
 
 /** Une valeur acceptable pour cette clé, ou undefined */
 function cleanValue(key: string, value: unknown): string | Record<string, unknown> | undefined {
   if (prefKeys.has(key)) return typeof value === "string" && ID.test(value) ? value : undefined;
+  if (isFlagKey(key)) return value === true ? "1" : value === "1" ? "1" : undefined;
   if (storeKeys.has(key)) {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
     try {
@@ -74,9 +81,10 @@ export function patchSavedLooks(base: SavedLooks, patch: unknown): SavedLooks | 
   const p = patch !== null && typeof patch === "object" && !Array.isArray(patch) ? (patch as Record<string, unknown>) : {};
   const out: SavedLooks = { ...base };
   for (const [key, value] of Object.entries(p)) {
-    if (!prefKeys.has(key) && !storeKeys.has(key)) continue;
+    if (!prefKeys.has(key) && !storeKeys.has(key) && !isFlagKey(key)) continue;
     if (value === null) {
-      delete out[key];
+      // Un drapeau levé ne se baisse jamais : un appareil qui ne le connaît pas encore ne peut pas l'effacer
+      if (!isFlagKey(key)) delete out[key];
       continue;
     }
     const clean = cleanValue(key, value);

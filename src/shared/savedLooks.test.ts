@@ -28,4 +28,11 @@ describe("les apparences gardées sur le compte", () => {
     expect(out === null || JSON.stringify(out).length <= SAVED_LOOKS_MAX).toBe(true);
     expect(patchSavedLooks({}, { "s:billard-skin": { x: "a".repeat(2000) } })).toEqual({});
   });
+
+  it("un drapeau se lève une fois pour toutes : il ne se baisse pas", () => {
+    const up = patchSavedLooks({}, { "f:coach-bowling": true, "f:Pas Bon": true, "f:x": "oui" });
+    expect(up).toEqual({ "f:coach-bowling": "1" });
+    expect(patchSavedLooks(up!, { "f:coach-bowling": null })).toEqual({ "f:coach-bowling": "1" });
+    expect(cleanSavedLooks({ "f:coach-billard": "1" })).toEqual({ "f:coach-billard": "1" });
+  });
 });

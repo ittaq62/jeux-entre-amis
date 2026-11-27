@@ -11,6 +11,40 @@ import { useSession } from "./session.ts";
 
 /** Le compte dont les choix sont sur cet appareil : on n'envoie pas à un compte les choix d'un autre */
 const OWNER = "tablee:looks-owner";
+/** Les drapeaux levés sur cet appareil (une aide vue une fois pour toutes…) */
+const FLAGS = "tablee:flags";
+
+function readFlags(): Record<string, true> {
+  try {
+    const o = JSON.parse(localStorage.getItem(FLAGS) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(o).filter(([, v]) => v === true)) as Record<string, true>;
+  } catch {
+    return {};
+  }
+}
+
+function writeFlags(flags: Record<string, true>) {
+  try {
+    localStorage.setItem(FLAGS, JSON.stringify(flags));
+  } catch {
+    // stockage indisponible
+  }
+}
+
+/**
+ * Un drapeau du compte, levé une fois pour toutes (par exemple « coach-bowling » : l'aide du bowling a été vue).
+ * Lu sur l'appareil, qui reçoit ceux du compte au chargement : vrai sur un appareil dès qu'il l'a été sur un autre.
+ */
+export function hasFlag(name: string): boolean {
+  return readFlags()[name] === true;
+}
+
+/** Lève un drapeau : tout de suite sur l'appareil, et sur le compte dès que possible */
+export function raiseFlag(name: string) {
+  if (hasFlag(name)) return;
+  writeFlags({ ...readFlags(), [name]: true });
+  void push();
+}
 
 let userId: string | null = null;
 /** Ce que le compte a, d'après le dernier échange */
@@ -36,6 +70,7 @@ export function deviceSavedLooks(): SavedLooks {
       // illisible : ignoré
     }
   }
+  for (const name of Object.keys(readFlags())) out[`f:${name}`] = "1";
   return cleanSavedLooks(out);
 }
 
@@ -57,6 +92,31 @@ function writeDevice(looks: SavedLooks) {
       }
     }
   }
+  // Un drapeau ne se baisse jamais : ceux du compte s'ajoutent à ceux de l'appareil
+  const flags = readFlags();
+  let more = false;
+  for (const k of Object.keys(looks))
+    if (k.startsWith("f:") && !flags[k.slice(2)]) {
+      flags[k.slice(2)] = true;
+      more = true;
+    }
+  if (more) writeFlags(flags);
+}
+
+/** Efface de l'appareil les choix que le compte n'a pas ; les drapeaux ne restent que s'ils sont à ce même compte */
+function clearDeviceBut(account: SavedLooks, sameAccount: boolean) {
+  const patch: Record<string, null> = {};
+  for (const k of PREF_LOOK_KEYS) if (!(`p:${k}` in account) && usePrefs.getState()[k] !== null) patch[k] = null;
+  if (Object.keys(patch).length > 0) usePrefs.getState().set(patch as Parameters<ReturnType<typeof usePrefs.getState>["set"]>[0]);
+  for (const k of STORE_LOOK_KEYS) {
+    if (`s:${k}` in account) continue;
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      // stockage indisponible
+    }
+  }
+  if (!sameAccount) writeFlags({});
 }
 
 /** Ce qui change de `from` à `to` : les valeurs nouvelles, et null pour ce qui a disparu */
@@ -107,28 +167,31 @@ async function start(id: string) {
     return;
   }
   if (userId !== id) return;
-  const device = deviceSavedLooks();
   let owner: string | null = null;
   try {
     owner = localStorage.getItem(OWNER);
   } catch {
     // stockage indisponible
   }
-  // Le compte l'emporte ; ce que l'appareil est seul à connaître part sur le compte, s'il ne vient pas d'un autre compte
-  const onlyHere: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(device)) if (!(k in account)) onlyHere[k] = v;
-  synced = { ...device, ...account };
-  writeDevice(account);
+  if (owner === null) {
+    // Le tout premier passage sur cet appareil : le compte l'emporte, et ce que l'appareil était seul à connaître part sur
+    // le compte (les choix d'avant ne se perdent pas)
+    synced = account;
+    writeDevice(account);
+  } else {
+    // L'appareil a déjà suivi un compte : celui-ci fait foi, effacements compris (un choix remis par défaut ailleurs ne
+    // revient pas d'ici). Seuls les drapeaux de ce même compte levés ici montent, puisqu'ils ne redescendent jamais.
+    clearDeviceBut(account, owner === id);
+    writeDevice(account);
+    synced = account;
+  }
   try {
     localStorage.setItem(OWNER, id);
   } catch {
     // stockage indisponible
   }
   ready = true;
-  if ((owner === null || owner === id) && Object.keys(onlyHere).length > 0) {
-    synced = account;
-    void push();
-  }
+  if (looksDiff(synced, deviceSavedLooks())) void push();
   unsubscribePrefs = usePrefs.subscribe(() => void push());
   timer = setInterval(() => void push(), 15_000);
 }
