@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PublicTable } from "../../shared/publicTable.ts";
+import type { PublicTable } from "./publicTable.ts";
 import { invitedCode, inviteDetails, inviteTitle } from "./invite.ts";
 
 const table = (over: Partial<PublicTable> = {}): PublicTable => ({

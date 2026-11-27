@@ -61,7 +61,8 @@ import { starsOf } from "./stars.ts";
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
-import { publicTable } from "../shared/publicTable.ts";
+import { publicTable, type PublicTable } from "../shared/publicTable.ts";
+import { sharedTableCode, shareTags, withShareTags } from "./share.ts";
 import { eveningFor } from "./evening.ts";
 import { openGames } from "./betaGames.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
@@ -818,8 +819,42 @@ app.onError((err, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  // ctx facultatif : les tests appellent le Worker sans contexte d'exécution
+  async fetch(req: Request, env: Env, ctx?: ExecutionContext) {
+    const url = new URL(req.url);
+    // Une table ou une tournée partagée : la page du site, avec l'aperçu du lien (wrangler.jsonc : run_worker_first)
+    if (req.method === "GET" && (url.pathname.startsWith("/salon/") || url.pathname.startsWith("/tournee/"))) {
+      return sharedPage(req, env, ctx);
+    }
+    return app.fetch(req, env, ctx);
+  },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * La page du site pour une adresse partagée, avec les balises de son aperçu. Le résumé public de la table passe par la
+ * même route que la page de connexion (et la même limite par adresse) ; sans lui, l'aperçu parle du site.
+ */
+async function sharedPage(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+  const url = new URL(req.url);
+  // Sans les en-têtes de la demande : pas de 304, la page part toujours avec les balises de cette table
+  const page = await env.ASSETS.fetch(new Request(new URL("/", url)));
+  if (!page.ok || !(page.headers.get("Content-Type") ?? "").includes("text/html")) return page;
+  const code = sharedTableCode(url.pathname);
+  let table: PublicTable | null = null;
+  if (code) {
+    try {
+      const res = await app.fetch(new Request(new URL(`/api/rooms/${code}/public`, url), { headers: req.headers }), env, ctx);
+      if (res.ok) table = ((await res.json()) as { room: PublicTable }).room;
+    } catch {
+      // Le site, sans la table
+    }
+  }
+  const shared = withShareTags(page, shareTags(url.pathname, url.origin, table));
+  const headers = new Headers(shared.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.delete("ETag");
+  return new Response(shared.body, { status: shared.status, headers });
+}
 
 function param(c: Ctx, name: string): string {
   return c.req.param(name) ?? "";

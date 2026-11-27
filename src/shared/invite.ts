@@ -1,5 +1,5 @@
-import { TABLE_NAMES } from "../../shared/protocol.ts";
-import type { PublicTable } from "../../shared/publicTable.ts";
+import { TABLE_NAMES } from "./protocol.ts";
+import type { PublicTable } from "./publicTable.ts";
 
 /** Le code d'une table dans l'adresse où mène la connexion (« /salon/ABCD?jouer »), ou null */
 export function invitedCode(next: string): string | null {

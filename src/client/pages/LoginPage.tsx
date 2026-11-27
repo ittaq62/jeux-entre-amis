@@ -9,7 +9,7 @@ import { CardFace } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
-import { invitedCode, inviteDetails, inviteTitle } from "../lib/invite.ts";
+import { invitedCode, inviteDetails, inviteTitle } from "../../shared/invite.ts";
 import { GameTicket } from "../tour/TourParts.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { useSession } from "../stores/session.ts";
