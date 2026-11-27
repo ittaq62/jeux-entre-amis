@@ -64,7 +64,7 @@ const FIRST_PLAY = 0.8;
 
 // Le coin de décor de chaque fiche, et son titre quand il est dessiné. Ses textes sont dans HOME_GAMES : un nouveau jeu, c'est une
 // entrée ici et une là-bas.
-const LOOK: Record<TableGame, { stage: string; art: () => ReactNode; title?: () => ReactNode }> = {
+export const LOOK: Record<TableGame, { stage: string; art: () => ReactNode; title?: () => ReactNode }> = {
   tour: { stage: "is-stage", art: () => <TourPreview /> },
   uno: { stage: "", art: () => <TableScatter /> },
   naval: { stage: "is-sea", art: () => <NavalPreview px={290} /> },
