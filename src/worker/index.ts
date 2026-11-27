@@ -56,6 +56,7 @@ import {
   REPORT_BODY_MAX,
   setReportStatus,
 } from "./reports.ts";
+import { savedLooks, saveLooks } from "./looks.ts";
 import { starsOf } from "./stars.ts";
 import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
@@ -341,6 +342,20 @@ app.get("/stars", withSession, withProfile, async (c) => {
   // ?game=minigolf : seulement ce jeu
   const game = c.req.query("game");
   return c.json(game ? { games: game in all.games ? { [game]: all.games[game] } : {} } : all);
+});
+
+// ---------------------------------------------------------------------------
+// Les apparences choisies (kart, dos de cartes, pion…), gardées sur le compte pour chaque appareil
+// ---------------------------------------------------------------------------
+
+app.get("/looks", withSession, withProfile, async (c) => c.json({ looks: await savedLooks(c.env.DB, c.get("user").id) }));
+
+app.post("/looks", withSession, withProfile, async (c) => {
+  const user = c.get("user");
+  if (!(await rateLimit(c.env.DB, `looks:${user.id}`, 240, 3600_000))) return c.json({ error: "Doucement !" }, 429);
+  const body = await c.req.json<{ patch?: unknown }>().catch(() => ({ patch: undefined }));
+  const res = await saveLooks(c.env.DB, user.id, body.patch);
+  return "error" in res ? c.json({ error: res.error }, 400) : c.json({ looks: res });
 });
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {

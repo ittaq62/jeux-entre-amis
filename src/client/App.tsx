@@ -13,6 +13,10 @@ import { OnboardingPage } from "./pages/OnboardingPage.tsx";
 import { setHubNavigator, useHub } from "./stores/hub.ts";
 import { usePrefs } from "./stores/prefs.ts";
 import { useSession } from "./stores/session.ts";
+import { startLookSync } from "./stores/lookSync.ts";
+
+// Les apparences choisies suivent le compte d'un appareil à l'autre
+startLookSync();
 
 // Les autres pages sont chargees a la demande pour un premier affichage rapide sur mobile
 const RoomPage = lazy(() => import("./pages/RoomPage.tsx").then((m) => ({ default: m.RoomPage })));
