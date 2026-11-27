@@ -28,7 +28,7 @@ import type { BowlingListeners } from "./useBowlingRoom.ts";
 import { Coach, coachDone, coachShowing } from "../lib/coach.tsx";
 import { BOWLING_COACH, bowlingHaptics } from "./coach.ts";
 
-interface Banner {
+export interface Banner {
   key: number;
   text: string;
   sub?: string;
@@ -44,7 +44,7 @@ const PRED_LABEL: Record<PredPick, string> = {
 };
 
 /** Ce qu'on annonce après un lancer */
-function verdict(rec: ThrowRecord, run: number, mine: boolean, name: string): Banner | null {
+export function verdict(rec: ThrowRecord, run: number, mine: boolean, name: string): Banner | null {
   const left = rec.standing.map((p) => p.n);
   const cleared = rec.down.length === rec.rack.length;
   const full = rec.rack.length === 10;

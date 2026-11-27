@@ -3,7 +3,7 @@
 // encore, se placer et viser.
 
 import type { CoachStep } from "../lib/coach.tsx";
-import { vibrate } from "../lib/sound.ts";
+import { buzz } from "../lib/feel.ts";
 import type { Moment } from "./runtime.ts";
 
 const GRIP = { x: 0.5, y: 0.6 };
@@ -44,12 +44,16 @@ export const BOWLING_COACH: readonly CoachStep[] = [
   },
 ];
 
-/** De courtes vibrations sur son propre lancer : la boule dans les quilles, un strike, la rigole */
+/**
+ * De courtes vibrations sur son propre lancer (Android, réglage « Vibrations », avec la boîte commune lib/feel.ts) : la
+ * boule qui entre dans les quilles (plus fort sur un strike), puis une petite réussite pour le strike, un échec pour la
+ * rigole
+ */
 export function bowlingHaptics(m: Moment, me: string | null) {
   if (!me) return;
-  if (m.k === "impact" && m.id === me) vibrate(m.strike ? 45 : 25);
+  if (m.k === "impact" && m.id === me) buzz(m.strike ? "fort" : "impact");
   else if (m.k === "result" && m.rec.id === me) {
-    if (m.rec.rack.length === 10 && m.rec.down.length === 10) vibrate([40, 60, 110]);
-    else if (m.rec.gutter && m.rec.down.length === 0) vibrate([90, 50, 90]);
+    if (m.rec.rack.length === 10 && m.rec.down.length === 10) buzz("reussite");
+    else if (m.rec.gutter && m.rec.down.length === 0) buzz("echec");
   }
 }

@@ -5,9 +5,11 @@
 //
 // Pour un jeu : décrire les étapes (où la main appuie, glisse et lâche, en fractions de l'écran du jeu), poser
 // <Coach id="…" active={c'est à lui et il peut jouer} steps={…} /> dans l'écran de jeu, et appeler coachDone(id) à la
-// première réussite. Ce qui a été vu est gardé sur l'appareil, et sur le compte dès qu'on branche setCoachStore.
+// première réussite. Ce qui a été vu est gardé sur le compte (un drapeau « coach-<id> », src/client/stores/lookSync.ts),
+// et suit donc d'un appareil à l'autre.
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { hasFlag, raiseFlag } from "../stores/lookSync.ts";
 
 /** Un point du geste : où est le doigt (0..1 sur la largeur et la hauteur de l'écran du jeu), à quel moment (ms) */
 export interface CoachPoint {
@@ -28,52 +30,16 @@ export interface CoachStep {
 export const COACH_MAX_TURNS = 3;
 const PAUSE = 700;
 
-export interface CoachStore {
-  seen(): string[];
-  mark(id: string): void;
-}
-
-const SEEN_KEY = "coach:vu";
+/** Le drapeau du compte qui dit que la main a fini son travail pour ce jeu (« coach-bowling ») */
+const flagOf = (id: string) => `coach-${id}`;
 const turnsKey = (id: string) => `coach:tours:${id}`;
 
-const device: CoachStore = {
-  seen: () => {
-    try {
-      const v = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]") as unknown;
-      return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-    } catch {
-      return [];
-    }
-  },
-  mark: (id) => {
-    try {
-      const s = new Set(device.seen());
-      s.add(id);
-      localStorage.setItem(SEEN_KEY, JSON.stringify([...s]));
-    } catch {
-      // Pas de stockage (navigation privée) : le coach reviendra, tant pis
-    }
-  },
-};
-
-let store: CoachStore = device;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((f) => f());
 
-/** Où garder aussi ce qui a été vu (le compte) ; l'appareil le garde toujours */
-export function setCoachStore(account: CoachStore) {
-  store = {
-    seen: () => [...new Set([...device.seen(), ...account.seen()])],
-    mark: (id) => {
-      device.mark(id);
-      account.mark(id);
-    },
-  };
-  notify();
-}
-
+/** La main a-t-elle fini son travail pour ce jeu (sur cet appareil ou, une fois reçu, sur un autre du même compte) */
 export function coachSeen(id: string): boolean {
-  return store.seen().includes(id);
+  return hasFlag(flagOf(id));
 }
 
 /** La main va-t-elle se montrer à ce tour (le jeu peut alors cacher son aide écrite, que la bulle remplace) */
@@ -81,10 +47,10 @@ export function coachShowing(id: string, active: boolean): boolean {
   return active && !coachSeen(id) && readTurns(id) <= COACH_MAX_TURNS;
 }
 
-/** La première réussite : la main ne reviendra plus */
+/** La première réussite : la main ne reviendra plus, ni ici ni sur les autres appareils du compte */
 export function coachDone(id: string) {
   if (coachSeen(id)) return;
-  store.mark(id);
+  raiseFlag(flagOf(id));
   notify();
 }
 
@@ -211,8 +177,14 @@ export function Coach({
     const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     const t0 = performance.now();
     let raf = 0;
+    let checked = t0;
     const frame = () => {
       const now = performance.now();
+      // Les drapeaux du compte arrivent peu après le chargement : vue sur un autre appareil, la main s'en va
+      if (now - checked > 1000) {
+        checked = now;
+        if (coachSeen(id)) return notify();
+      }
       const h = hand.current,
         r = ring.current,
         b = bubble.current;
@@ -248,7 +220,7 @@ export function Coach({
       cancelAnimationFrame(raf);
       window.removeEventListener("pointerdown", busy, true);
     };
-  }, [show, steps]);
+  }, [show, steps, id]);
 
   if (!show) return null;
   const layer: CSSProperties = { position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6, overflow: "hidden" };
