@@ -69,7 +69,7 @@ export function DevCour() {
       listeners.current.onMatch?.(matchView(sim.m, clock.current));
       setTick((x) => (x + 1) % 1_000_000);
     }, 50);
-    (window as unknown as Record<string, unknown>).__cour = sim;
+    (window as unknown as Record<string, unknown>).__cour = { ...sim, now: () => clock.current };
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
