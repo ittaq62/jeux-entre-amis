@@ -75,8 +75,8 @@ def modal(rng, f0, ratios, decays, amps, dur, detune=0.004, excite=None):
     # Une attaque qui n'est pas instantanée (quelques dixièmes de milliseconde)
     att = int(SR * rng.uniform(0.0004, 0.0012))
     y[:att] *= np.linspace(0, 1, att)
-    # Jamais coupé net en fin de tampon (un déclic) : un fondu sur les 20 dernières millisecondes
-    return fade_out(y, 20)
+    # Jamais coupé net en fin de tampon : la main qui amortit la lame sur le dernier quart (au moins 20 ms)
+    return fade_out(y, max(20, len(y) / SR * 1000 * 0.25))
 
 
 def room(rng, x, rt60=0.35, wet=0.14, size=1.0, damp=5000.0):
@@ -119,6 +119,24 @@ def floor_noise(rng, x, level_db=-72.0):
     p = pink(rng, len(x))
     p = p / (np.std(p) + 1e-9) * 10 ** (level_db / 20)
     return x + p
+
+
+def limit(x, ceiling=0.89, max_drive=1.25):
+    """Des crêtes au-dessus du plafond : un peu de saturation douce au plus (elle arrondit les chocs, mais déformerait
+    une note tenue), et pour le reste on baisse le tout"""
+    peak = np.max(np.abs(x))
+    if peak <= ceiling:
+        return x
+    # Une note (un spectre de quelques raies, pas un bruit de choc) ne se sature pas du tout : on la baisse
+    i = int(np.argmax(np.abs(x)))
+    seg = x[max(0, i - 2048): i + 2048]
+    spec = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))) ** 2 + 1e-12
+    band = spec[8 : len(spec) // 2]
+    if np.exp(np.mean(np.log(band))) / np.mean(band) < 0.05:
+        return x * (ceiling / peak)
+    if peak > ceiling * max_drive:
+        x = x * (ceiling * max_drive / peak)
+    return ceiling * np.tanh(x / ceiling)
 
 
 def fade_out(x, ms=30):
@@ -347,8 +365,7 @@ def build(name, reference_dir):
         x = x * (target / (active_rms(x) + 1e-12))
         # Des crêtes trop hautes : on les arrondit (saturation douce, comme une prise de son compressée) au lieu de baisser
         # tout le son, qui paraîtrait plus faible que l'ancien
-        if np.max(np.abs(x)) > 0.89:
-            x = 0.89 * np.tanh(x / 0.89)
+        x = limit(x)
         # Le fond de la pièce, au même niveau pour tous (après la mise au volume, qui le remonterait sinon)
         x = floor_noise(rng, x)
         write_mp3(x, os.path.join(OUT, f))
