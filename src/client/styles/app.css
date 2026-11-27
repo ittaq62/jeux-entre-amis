@@ -2565,10 +2565,20 @@ a.shop-item {
   font-weight: 700;
   font-size: 15px;
   cursor: pointer;
+  transition:
+    color var(--dur-fast),
+    border-color var(--dur-fast),
+    background-color var(--dur-fast),
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .lobby-tab:hover {
   color: var(--text);
+  border-color: rgba(226, 189, 110, 0.3);
+}
+
+.lobby-tab:active {
+  transform: scale(0.97);
 }
 
 .lobby-tab.is-active {
@@ -2737,6 +2747,14 @@ a.shop-item {
 
 .seat-row:last-child {
   border-bottom: 0;
+}
+
+/* Un joueur qui s'assoit (ou un bot qu'on ajoute) arrive en douceur ; « Plus de règles » se déplie de même */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.reduce-motion) .seat-list > .seat-row,
+  :root:not(.reduce-motion) .lobby-more-body {
+    animation: rise-in var(--dur-med) var(--ease-out) backwards;
+  }
 }
 
 .seat-row > .avatar {

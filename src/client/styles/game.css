@@ -79,14 +79,23 @@ html:has(.bolides-root) body {
   background: transparent;
   text-align: left;
   padding: 11px 12px;
-  border-radius: 2px;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
   color: var(--text);
+  transition:
+    background-color var(--dur-fast),
+    color var(--dur-fast);
 }
 
+/* Une touche dorée au survol, comme les lignes des listes du site */
 .menu-item:hover {
-  background: rgba(244, 236, 218, 0.06);
+  background: rgba(226, 189, 110, 0.08);
+}
+
+.menu-item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
 }
 
 .menu-item.is-danger {
@@ -1247,6 +1256,33 @@ html:has(.bolides-root) body {
   padding: 8px 0;
   border-bottom: 1px solid var(--paper-line);
   min-height: 46px;
+}
+
+/* La feuille de fin s'écrit ligne par ligne, du premier au dernier (animations de base.css) */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.reduce-motion) .score-lines > li {
+    animation: rise-in var(--dur-med) var(--ease-out) backwards;
+  }
+
+  :root:not(.reduce-motion) .score-lines > li:nth-child(2) {
+    animation-delay: 60ms;
+  }
+
+  :root:not(.reduce-motion) .score-lines > li:nth-child(3) {
+    animation-delay: 120ms;
+  }
+
+  :root:not(.reduce-motion) .score-lines > li:nth-child(4) {
+    animation-delay: 180ms;
+  }
+
+  :root:not(.reduce-motion) .score-lines > li:nth-child(5) {
+    animation-delay: 240ms;
+  }
+
+  :root:not(.reduce-motion) .score-lines > li:nth-child(n + 6) {
+    animation-delay: 300ms;
+  }
 }
 
 .score-rank {
