@@ -1010,8 +1010,10 @@ export function simulateWorld(
   o: PhysOpts,
   others: readonly { x: number; y: number; z: number }[],
   plain: PhysOpts,
+  /** Les évènements de la balle frappée, quand elle est seule sur le parcours (les défis de l'aventure) */
+  emit?: Emit,
 ): WorldResult {
-  if (others.length === 0) return { shot: simulateShot(c, from, angle, power, tick, o), others: [] };
+  if (others.length === 0) return { shot: simulateShot(c, from, angle, power, tick, o, emit), others: [] };
   const balls = worldBalls(c, from, others);
   strike(c, balls[0]!, angle, power, o.mods);
   const opts = balls.map((_, i) => (i === 0 ? o : plain));

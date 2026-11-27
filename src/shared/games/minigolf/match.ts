@@ -141,6 +141,16 @@ export interface GolfPlayer {
   picked: number;
   /** Le pouvoir gardé pour son prochain coup */
   power: BonusKind | null;
+  /**
+   * Sur chaque trou : ses balles perdues, et si le coup qui l'a mise dans le trou a touché une bande (seul sur le
+   * parcours) ; pour les défis de l'aventure. Absent d'une partie commencée avant
+   */
+  feats?: HoleFeats[];
+}
+
+export interface HoleFeats {
+  lost: number;
+  bank: boolean;
 }
 
 export type Phase = "intro" | "play" | "scores" | "over";
@@ -225,6 +235,7 @@ export function createMatch(cfg: MinigolfConfig, seats: { id: string; team: 0 | 
       stats: { strokes: 0, holes: 0, aces: 0, under: 0, lost: 0, best: 99 },
       picked: 0,
       power: null,
+      feats: holes.map(() => ({ lost: 0, bank: false })),
     })),
     ranks: null,
     rng: holder.rng,
@@ -335,6 +346,7 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
   const mods = powerOf(m, p);
   if (m.cfg.bonus) p.power = null;
   const others = ballsInPlay(m, p.id);
+  let walls = 0;
   const world = simulateWorld(
     m.cfg.bonus ? bonusCourse(ref) : c,
     from,
@@ -344,11 +356,17 @@ export function shoot(m: Match, id: string, angle: number, power: number, at: nu
     physOf(m.cfg, ref, mods),
     others.map((q) => ({ x: q.ball[0], y: q.ball[1], z: q.ball[2] })),
     physOf(m.cfg, ref),
+    (e) => {
+      if (e.k === "wall") walls++;
+    },
   );
   const r = world.shot;
   p.cur += r.outcome === "lost" ? 2 : 1;
   if (r.outcome === "lost") p.stats.lost++;
   else p.ball = [r.x, r.y, r.z];
+  const feat = (p.feats ??= m.holes.map(() => ({ lost: 0, bank: false })))[m.hole];
+  if (feat && r.outcome === "lost") feat.lost++;
+  if (feat && r.outcome === "in") feat.bank = walls > 0;
   // Les balles poussées : là où elles s'arrêtent ; dans le trou, leur joueur a fini (sans coup de plus) ; perdues, elles
   // reviennent d'où elles étaient, sans pénalité (ce n'est pas leur faute)
   const hits: GolfHit[] = [];

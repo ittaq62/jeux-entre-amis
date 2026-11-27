@@ -231,6 +231,8 @@ describe("minigolf : la partie", () => {
     expect(typeof s === "object" && s.out).toBe("lost");
     expect(p.cur).toBe(2);
     expect(p.ball).toEqual(start);
+    // Le trou retient la balle perdue (pour le défi « au par sans tomber dans l'eau »)
+    expect(p.feats![2]).toEqual({ lost: 1, bank: false });
   });
 
   it("en équipes, la meilleure balle de l'équipe compte", () => {
