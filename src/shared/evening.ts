@@ -44,6 +44,8 @@ export function atGame(name: string): string {
   if (name === "La Tournée") return "à la tournée";
   // Les noms propres des jeux du site, sans article
   if (/^(Capitale|Mèche|Culbute|Escarmouche|Bolides|Crampons)$/.test(name)) return `à ${name}`;
+  // Un titre qui porte déjà son article féminin : « à La Cour des Grands »
+  if (name.startsWith("La ")) return `à ${name}`;
   return `au ${name}`;
 }
 

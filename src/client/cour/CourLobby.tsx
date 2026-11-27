@@ -17,6 +17,7 @@ import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { TableLobby } from "../game/TableLobby.tsx";
 import { HowToPlay } from "./CourHelp.tsx";
 import { LookPicker } from "./LookPicker.tsx";
+import { SeasonPanel } from "./SeasonPanel.tsx";
 
 const LEVEL_HINTS: Record<BotLevel, string> = {
   facile: "Les bots réagissent lentement et se trompent souvent.",
@@ -63,6 +64,7 @@ export function CourLobby({ room, send, ...rest }: Props) {
         return look ? `Maillot ${JERSEY_BY_ID.get(look.jersey)?.name.toLowerCase() ?? ""}` : null;
       }}
       summary={summary}
+      aside={isHost && !room.tour ? <SeasonPanel room={room} send={send} /> : undefined}
       look={room.you.seatId ? <LookPicker room={room} send={send} /> : undefined}
       help={<HowToPlay />}
       rules={

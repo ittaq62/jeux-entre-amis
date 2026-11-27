@@ -961,6 +961,87 @@
   background: linear-gradient(135deg, #b7841a, #ffe9a0 45%, #f3c64a 55%, #9c6c10);
 }
 
+/* La saison en solo, dans le salon (pour l'hôte) */
+.cg-season {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cg-season-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cg-season-head h2 {
+  margin: 0;
+}
+
+.cg-season-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-season-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border-left: 4px solid var(--ep);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.cg-season-row.is-locked {
+  grid-template-columns: 28px 1fr auto;
+  opacity: 0.55;
+}
+
+.cg-season-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ep);
+  color: #fff;
+  font-weight: 900;
+}
+
+.cg-season-row.is-locked .cg-season-num {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: inherit;
+}
+
+.cg-season-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cg-season-name strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cg-season-later {
+  margin: 0;
+  padding: 0 10px;
+}
+
+.cg-season-link {
+  align-self: flex-start;
+  font-weight: 700;
+}
+
 /* La page de la campagne */
 .cg-campaign-main {
   width: min(760px, calc(100% - 24px));
