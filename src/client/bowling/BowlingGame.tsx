@@ -170,6 +170,8 @@ export function BowlingGame({
       },
     });
     runtime.current = rt;
+    // La salle et le limiteur du son se créent tout de suite (voir sfx.prepareSfx)
+    sfx.prepareSfx();
     listeners.current.onPose = (id, p) => rt.pose(id, p);
     listeners.current.onEmote = (seatId, e) => rt.emote(seatId, e);
     // La salle se prépare derrière l'écran de chargement, une fois les joueurs et la vue posés (deux images plus tard)

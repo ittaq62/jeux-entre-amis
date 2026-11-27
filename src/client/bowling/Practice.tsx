@@ -118,6 +118,7 @@ export function Practice({
       },
     });
     rt.setPlayers([{ id: ME, name, avatar, look }]);
+    sfx.prepareSfx();
     show();
     let stopped = false;
     void rt

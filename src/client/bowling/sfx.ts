@@ -8,33 +8,28 @@
 import type { PhysEvent } from "../../shared/games/bowling/physics.ts";
 import type { ThrowRecord } from "../../shared/games/bowling/match.ts";
 import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
-import { BELL, DRUM, MARIMBA, METAL_BAR, roomOut, strike, type Body } from "../lib/sfxKit.ts";
+import { BELL, DRUM, limiterOut, MARIMBA, METAL_BAR, roomOut, strike, type Body } from "../lib/sfxKit.ts";
 import type { Moment } from "./runtime.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 
 /**
- * Les sons du bowling passent par un limiteur : quand la boule entre dans les quilles, des dizaines de chocs tombent
- * en même temps, et leur somme dépassait le plafond de la sortie (des crêtes jusqu'à 2,2 : le son grésillait).
+ * Où vont les sons du bowling : la salle (une réverbération courte), puis le limiteur commun (lib/sfxKit.ts), dernier
+ * maillon avant la sortie. Quand la boule entre dans les quilles, des dizaines de chocs tombent en même temps, et leur
+ * somme dépassait le plafond de la sortie (des crêtes jusqu'à 2,2 : le son grésillait) ; le limiteur baisse son entrée
+ * (0,6) d'autant qu'il remonte de lui-même les sons faibles, pour que le grondement et l'ambiance gardent leur niveau.
  */
-let bus: { ctx: AudioContext; node: GainNode } | null = null;
+function chain(ctx: AudioContext, master: GainNode): GainNode {
+  return roomOut(ctx, limiterOut(ctx, master, { input: 0.6 }), { rt60: 0.55, wet: 0.14 }) as GainNode;
+}
 
-function busOf(ctx: AudioContext, master: GainNode): GainNode {
-  if (bus?.ctx === ctx) return bus.node;
-  // Le compresseur remonte de lui-même les sons faibles (environ 1,7 fois) : on baisse d'autant l'entrée, pour que le
-  // grondement de la boule et l'ambiance gardent leur niveau d'avant ; un fracas de 2,2 en ressort vers 0,8
-  const g = ctx.createGain();
-  g.gain.value = 0.6;
-  const lim = ctx.createDynamicsCompressor();
-  lim.threshold.value = -10;
-  lim.knee.value = 6;
-  lim.ratio.value = 16;
-  lim.attack.value = 0.002;
-  lim.release.value = 0.12;
-  g.connect(lim);
-  lim.connect(master);
-  bus = { ctx, node: g };
-  return g;
+/**
+ * À l'ouverture de la piste : la salle et le limiteur se créent tout de suite. Neuf, le compresseur de Chrome atténue
+ * d'une dizaine de dB ses cent premières millisecondes : créé au premier choc, il étouffait le premier son du jeu.
+ */
+export function prepareSfx() {
+  const o = audioOut();
+  if (o) chain(o.ctx, o.out);
 }
 
 function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: number } | null {
@@ -42,8 +37,7 @@ function out(level = effectsLevel()): { ctx: AudioContext; dest: GainNode; vol: 
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  // La salle (une réverbération courte) entre dans le limiteur, qui reste le dernier maillon avant la sortie
-  return { ctx: o.ctx, dest: roomOut(o.ctx, busOf(o.ctx, o.out), { rt60: 0.55, wet: 0.14 }) as GainNode, vol: level };
+  return { ctx: o.ctx, dest: chain(o.ctx, o.out), vol: level };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
