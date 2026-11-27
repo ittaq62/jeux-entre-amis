@@ -29,6 +29,13 @@ const TABLE_BLURBS: Partial<Record<GameId, Record<string, string>>> = {
   bowling: { classique: "Dix frames : strikes et spares comptés comme au vrai bowling." },
   // Une table de La Cour des Grands joue le grand jeu de la longueur choisie par l'hôte (la tournée en joue un court)
   cour: { "grand-jeu": "Les épreuves tirées au sort, puis la finale des polochons entre les deux derniers." },
+  // Une table de Toque ! tirée au sort : le service en brigade au bistrot, ou un duel dans une autre cuisine
+  toque: {
+    bistrot: "Le service en brigade au bistrot de Mémé : salades et soupes à l'oignon.",
+    creperie: "Deux cuisines face à face sur le bateau qui tangue.",
+    pizzeria: "Deux cuisines face à face sur les toits, dans le vent.",
+    brasserie: "Deux cuisines face à face un jour de marché.",
+  },
   // Une table de billard joue les manches, vies et points de l'hôte (la tournée les raccourcit)
   billard: {
     huit: "Sa famille, puis la noire dans la poche annoncée.",

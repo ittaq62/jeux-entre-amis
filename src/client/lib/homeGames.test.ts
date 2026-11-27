@@ -57,8 +57,9 @@ describe("la recherche de jeux", () => {
       "billard",
       "cour",
     ]);
-    expect(find("6 personnes")).toEqual(everything);
-    expect(find("1 joueur")).toEqual(["bricks", "minigolf", "bowling", "cour"]);
+    // Toque ! se joue à 4 au plus
+    expect(find("6 personnes")).toEqual(everything.filter((g) => g !== "toque"));
+    expect(find("1 joueur")).toEqual(["bricks", "minigolf", "bowling", "cour", "toque"]);
     expect(find("solo")).toEqual(["bricks"]);
     expect(find("9")).toEqual([]);
   });

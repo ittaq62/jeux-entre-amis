@@ -27,7 +27,14 @@ export const PREF_LOOK_KEYS = [
 export type PrefLookKey = (typeof PREF_LOOK_KEYS)[number];
 
 /** Les choix que les jeux gardent eux-mêmes dans le navigateur, sous ces clés */
-export const STORE_LOOK_KEYS = ["billard-skin", "bowling-skin", "minigolf-balle", "culbute-combattant", "cour-maillot"] as const;
+export const STORE_LOOK_KEYS = [
+  "billard-skin",
+  "bowling-skin",
+  "minigolf-balle",
+  "culbute-combattant",
+  "cour-maillot",
+  "toque-tenue",
+] as const;
 
 export type StoreLookKey = (typeof STORE_LOOK_KEYS)[number];
 

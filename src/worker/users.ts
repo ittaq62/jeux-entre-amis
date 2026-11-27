@@ -11,6 +11,7 @@ import {
   earnedBowlingAchievements,
   earnedBillardAchievements,
   earnedCourAchievements,
+  earnedToqueAchievements,
   earnedEscarmoucheAchievements,
   earnedNavalAchievements,
   earnedTourAchievements,
@@ -29,6 +30,7 @@ import type { BillardConfig } from "../shared/games/billard/match.ts";
 import type { BillardRecordStats } from "../shared/games/billard/net.ts";
 import type { CourConfig } from "../shared/games/cour/config.ts";
 import type { CourRecordStats } from "../shared/games/cour/net.ts";
+import type { ToqueConfig, ToqueRecordStats } from "../shared/games/toque/net.ts";
 import type { EscarmoucheSettings, Mode as EscarmoucheMode } from "../shared/games/escarmouche/rules.ts";
 import type { TrackId } from "../shared/games/bolides/track.ts";
 import type { BricksMode, BricksSettings } from "../shared/games/bricks/engine.ts";
@@ -290,6 +292,7 @@ export interface GameRecordPlayer {
     | BowlingRecordStats
     | BillardRecordStats
     | CourRecordStats
+    | ToqueRecordStats
     | EscarmoucheRecordStats;
 }
 
@@ -352,6 +355,8 @@ export type GameRecord = {
   | { game: "bowling"; settings: BowlingConfig; mode: string }
   | { game: "billard"; settings: BillardConfig; mode: string }
   | { game: "cour"; settings: CourConfig; mode: string }
+  /** Toque ! : en brigade (sans adversaire), `coopStars` (les étoiles du service) fait les points et la victoire */
+  | { game: "toque"; settings: ToqueConfig; mode: string; coopStars?: number }
   | { game: "escarmouche"; settings: EscarmoucheSettings; mode: EscarmoucheMode }
 );
 
@@ -500,6 +505,25 @@ function mergeBowlingTotals(raw: string | null, stats: BowlingRecordStats): Reco
     totals.pins10 = (totals.pins10 ?? 0) + stats.full;
   }
   totals.bestRun = Math.max(totals.bestRun ?? 0, stats.bestRun);
+  return totals;
+}
+
+/** Cumul des stats de Toque ! : tout s'additionne (services, plats, feux, assiettes…), sauf le plus long enchaînement */
+function mergeToqueTotals(raw: string | null, stats: ToqueRecordStats): Record<string, number> {
+  let totals: Record<string, number> = {};
+  try {
+    totals = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    totals = {};
+  }
+  for (const [key, value] of Object.entries(stats)) {
+    if (typeof value !== "number" || key === "best" || key === "score" || key === "stars") continue;
+    totals[key] = (totals[key] ?? 0) + value;
+  }
+  totals.best = Math.max(totals.best ?? 0, stats.best);
+  totals.bestScore = Math.max(totals.bestScore ?? 0, stats.score);
+  totals.stars = (totals.stars ?? 0) + stats.stars;
+  if (stats.kitchen) totals[`k_${stats.kitchen}`] = (totals[`k_${stats.kitchen}`] ?? 0) + 1;
   return totals;
 }
 
@@ -652,7 +676,14 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
     const prev = byUser.get(p.userId!);
     // Une égalité générale (tout le monde premier) n'est la victoire de personne ; un joueur parti ne touche rien de ce que
     // le bot a gagné pour lui (il garde ses pertes d'Elo)
-    const credit = gameCredit(rec.players, p, deltas[p.userId!] ?? 0);
+    let credit = gameCredit(rec.players, p, deltas[p.userId!] ?? 0);
+    // Toque ! en brigade : pas d'adversaire ; les étoiles du service font les points (dix par étoile) et la « victoire »
+    if (rec.game === "toque" && rec.coopStars !== undefined) {
+      const stars = Math.max(0, Math.min(3, Math.round(rec.coopStars)));
+      credit = p.absent
+        ? { won: false, points: 0, eloDelta: 0, achievements: false }
+        : { won: stars >= 1, points: stars * 10, eloDelta: 0, achievements: true };
+    }
     const won = credit.won;
     const played = (prev?.played ?? 0) + 1;
     const streak = won ? (prev?.streak ?? 0) + 1 : 0;
@@ -708,6 +739,11 @@ export async function recordGame(db: D1Database, rec: GameRecord): Promise<{ unl
       const merged = mergeBillardTotals(prev?.totals ?? null, stats);
       totals = merged;
       earnedIds = earnedBillardAchievements({ won, played, stats, totals: merged });
+    } else if (rec.game === "toque") {
+      const stats = p.stats as ToqueRecordStats;
+      const merged = mergeToqueTotals(prev?.totals ?? null, stats);
+      totals = merged;
+      earnedIds = earnedToqueAchievements({ won, played, duel: rec.mode === "duel", stats, totals: merged });
     } else if (rec.game === "cour") {
       const stats = p.stats as CourRecordStats;
       const merged = mergeCourTotals(prev?.totals ?? null, stats);
@@ -1093,6 +1129,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
   const bowling = statRows.results.find((r) => r.game === "bowling");
   const billard = statRows.results.find((r) => r.game === "billard");
   const cour = statRows.results.find((r) => r.game === "cour");
+  const toque = statRows.results.find((r) => r.game === "toque");
   const totalsOf = (row: StatsRow | undefined): Record<string, number> => {
     try {
       return row ? (JSON.parse(row.totals) as Record<string, number>) : {};
@@ -1116,6 +1153,7 @@ export async function userProfile(db: D1Database, user: UserRow) {
     bowling: { ...statsSummary(bowling), totals: totalsOf(bowling) },
     billard: { ...statsSummary(billard), totals: totalsOf(billard) },
     cour: { ...statsSummary(cour), totals: totalsOf(cour) },
+    toque: { ...statsSummary(toque), totals: totalsOf(toque) },
     tour: { ...statsSummary(tour), totals: totalsOf(tour) },
     tours: tours.results.map((t) => ({
       id: t.id,

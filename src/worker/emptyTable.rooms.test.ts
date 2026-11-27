@@ -22,6 +22,7 @@ import { MinigolfRoom } from "./minigolfRoom.ts";
 import { BowlingRoom } from "./bowlingRoom.ts";
 import { BillardRoom } from "./billardRoom.ts";
 import { CourRoom } from "./courRoom.ts";
+import { ToqueRoom } from "./toqueRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -47,6 +48,7 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "bowling", Room: BowlingRoom as unknown as RoomClass, bots: true },
   { game: "billard", Room: BillardRoom as unknown as RoomClass, bots: true },
   { game: "cour", Room: CourRoom as unknown as RoomClass, bots: false },
+  { game: "toque", Room: ToqueRoom as unknown as RoomClass, bots: true },
 ];
 
 const open: { stopLoop?: () => void }[] = [];

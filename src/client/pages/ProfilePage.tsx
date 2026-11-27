@@ -53,6 +53,7 @@ interface Profile {
   bowling?: GameStats;
   billard?: GameStats;
   cour?: GameStats;
+  toque?: GameStats;
   tour: GameStats;
   tours: { id: string; endedAt: number; players: number; games: number; rank: number; points: number; wins: number }[];
   album: { count: number; best: string[] };
@@ -184,6 +185,9 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const showBillard = games.includes("billard") || billard.played > 0;
   const cour = profile.cour ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
   const showCour = games.includes("cour") || cour.played > 0;
+  const toque = profile.toque ?? { played: 0, won: 0, points: 0, elo: 1000, totals: {} };
+  const tqt = toque.totals as Record<string, number>;
+  const showToque = games.includes("toque") || toque.played > 0;
   const tour = profile.tour;
   const tt = tour.totals;
   // La tournée aussi : visible si elle est ouverte à ce compte, ou si ce joueur en a déjà fini une
@@ -203,6 +207,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       "bowling",
       "billard",
       "cour",
+      "toque",
       "tour",
     ] as TableGame[]
   ).filter(
@@ -230,9 +235,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                           ? showBillard
                           : g === "cour"
                             ? showCour
-                            : g === "bolides"
-                              ? showBolides
-                              : showTour),
+                            : g === "toque"
+                              ? showToque
+                              : g === "bolides"
+                                ? showBolides
+                                : showTour),
   );
   const shelfGame = shelfGames.includes(shelf) ? shelf : "uno";
   const shelfList = ACHIEVEMENTS.filter((a) => (a.game ?? "uno") === shelfGame);
@@ -261,6 +268,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       bowling,
       billard,
       cour,
+      toque,
       tour,
     })[g].played;
   // Les jeux à étoiles ouverts ici (ou où ce joueur en a déjà)
@@ -282,6 +290,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       { game: "bowling", label: "au bowling", stats: bowling, shown: showBowling },
       { game: "billard", label: "au billard", stats: billard, shown: showBillard },
       { game: "cour", label: "à La Cour des Grands", stats: cour, shown: showCour },
+      { game: "toque", label: "à Toque !", stats: toque, shown: showToque },
     ] satisfies { game: GameId; label: string; stats: Pick<GameStats, "played" | "points" | "elo">; shown: boolean }[]
   ).filter((line) => line.shown && line.stats.played > 0);
   // Au-delà de quatre jeux, la liste se replie sur les trois qui rapportent le plus : au téléphone, une douzaine de lignes
@@ -619,6 +628,26 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                   <LedgerRow label="Épreuves passées" value={(cour.totals as Record<string, number>).survived} strong />
                   <LedgerRow label="Finales jouées" value={(cour.totals as Record<string, number>).finalist} />
                   <LedgerRow label="Repêchages" value={(cour.totals as Record<string, number>).saved} />
+                </dl>
+              </section>
+            )}
+
+            {showToque && (
+              <section className="carnet panel">
+                <h2>Toque !</h2>
+                <p className="carnet-summary">
+                  {toque.played === 0
+                    ? "Aucun service pour l'instant."
+                    : `${toque.played} service${toque.played > 1 ? "s" : ""}, ${tqt.stars ?? 0} étoile${(tqt.stars ?? 0) > 1 ? "s" : ""} gagnée${(tqt.stars ?? 0) > 1 ? "s" : ""}.`}
+                </p>
+                <dl className="ledger">
+                  <LedgerRow label="Plats servis" value={tqt.served} strong />
+                  <LedgerRow label="Meilleur service" value={tqt.bestScore} />
+                  <LedgerRow label="Plus long enchaînement" value={tqt.best} />
+                  <LedgerRow label="Ingrédients coupés" value={tqt.chopped} />
+                  <LedgerRow label="Assiettes lavées" value={tqt.washed} />
+                  <LedgerRow label="Feux éteints" value={tqt.fires} />
+                  <LedgerRow label="Duels gagnés" value={tqt.duelWon} />
                 </dl>
               </section>
             )}

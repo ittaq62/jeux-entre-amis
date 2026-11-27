@@ -11,6 +11,7 @@ import type { MinigolfConfig } from "./games/minigolf/match.ts";
 import type { BowlingConfig } from "./games/bowling/match.ts";
 import type { BillardConfig } from "./games/billard/match.ts";
 import type { CourConfig } from "./games/cour/config.ts";
+import type { ToqueConfig } from "./games/toque/net.ts";
 import type { BotLevel as EscarmoucheBotLevel, EscarmoucheSettings } from "./games/escarmouche/rules.ts";
 import type { BotLevel as NavalBotLevel, NavalSettings } from "./games/naval/engine.ts";
 import type { BotLevel as CapitaleBotLevel, CapitaleSettings, TeamRent } from "./games/capitale/engine.ts";
@@ -34,6 +35,7 @@ export const TOUR_GAMES: GameId[] = [
   "bowling",
   "billard",
   "cour",
+  "toque",
 ];
 /**
  * Capitale dure 20 minutes dans une tournée, Mèche, Bolides et Crampons se découvrent encore :
@@ -50,7 +52,8 @@ const DEFAULT_TOUR_GAMES: GameId[] = TOUR_GAMES.filter(
     g !== "minigolf" &&
     g !== "bowling" &&
     g !== "billard" &&
-    g !== "cour",
+    g !== "cour" &&
+    g !== "toque",
 );
 
 /** Nombre de joueurs qu'accueille chaque jeu */
@@ -67,6 +70,7 @@ export const GAME_SEATS: Record<GameId, { min: number; max: number }> = {
   bowling: { min: 2, max: 8 },
   billard: { min: 2, max: 8 },
   cour: { min: 2, max: 8 },
+  toque: { min: 2, max: 4 },
   escarmouche: { min: 2, max: 8 },
 };
 
@@ -677,6 +681,15 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
       chance: 0.2,
     },
   ],
+  toque: [
+    {
+      id: "rush",
+      name: "coup de feu",
+      blurb: "Les commandes tombent plus vite, et attendent moins longtemps.",
+      settings: { rush: true } satisfies Partial<ToqueConfig>,
+      chance: 0.3,
+    },
+  ],
   cour: [
     {
       id: "eclair",
@@ -724,7 +737,7 @@ const MODIFIERS: Partial<Record<GameId, Modifier[]>> = {
  * Combien de règles à part au plus, en plus du format (les règles qu'on annonce toujours, comme « pas de UNO
  * d'avance », n'en font pas partie) : de quoi changer la partie sans la rendre méconnaissable
  */
-const MAX_EXTRAS: Partial<Record<GameId, number>> = { capitale: 3, crampons: 1 };
+const MAX_EXTRAS: Partial<Record<GameId, number>> = { capitale: 3, crampons: 1, toque: 1 };
 const DEFAULT_MAX_EXTRAS = 2;
 
 /** Le plus de règles à part qu'un tirage cumule pour ce jeu */
@@ -1079,6 +1092,39 @@ const COUR_VARIANTS: Format<CourConfig>[] = [
   },
 ];
 
+// En tournée, Toque ! se joue l'un contre l'autre : deux cuisines face à face, les mêmes commandes, dans une des
+// premières cuisines de la route (celles que tout le monde peut prendre en main tout de suite)
+// En tournée, une table de Toque ! est toujours un duel (deux brigades face à face, la salle s'en charge) : le format choisit
+// la cuisine. Le premier ne change rien : à une table tirée au sort, c'est le service en brigade au bistrot.
+const TOQUE_VARIANTS: Format<ToqueConfig>[] = [
+  {
+    id: "bistrot",
+    name: "Au bistrot",
+    blurb: "Deux cuisines face à face au bistrot de Mémé : salades et soupes à l'oignon, le meilleur score gagne.",
+    settings: {},
+    weight: 3,
+  },
+  {
+    id: "creperie",
+    name: "Duel à la crêperie",
+    blurb: "Deux cuisines face à face sur le bateau qui tangue : crêpes au sucre et complètes.",
+    settings: { mode: "duel", kitchen: "creperie" },
+    weight: 2,
+  },
+  {
+    id: "pizzeria",
+    name: "Duel sur les toits",
+    blurb: "Deux pizzerias face à face sur les toits, dans le vent.",
+    settings: { mode: "duel", kitchen: "pizzeria" },
+  },
+  {
+    id: "brasserie",
+    name: "Duel au marché",
+    blurb: "Deux brasseries face à face, les charrettes en travers : steak-frites et croque.",
+    settings: { mode: "duel", kitchen: "brasserie" },
+  },
+];
+
 const VARIANTS: Record<GameId, Format<object>[]> = {
   uno: UNO_VARIANTS,
   naval: NAVAL_VARIANTS,
@@ -1093,6 +1139,7 @@ const VARIANTS: Record<GameId, Format<object>[]> = {
   bowling: BOWLING_VARIANTS,
   billard: BILLARD_VARIANTS,
   cour: COUR_VARIANTS,
+  toque: TOQUE_VARIANTS,
 };
 
 /** Les formats d'un jeu (ils s'excluent), sans leurs réglages */
@@ -1147,6 +1194,7 @@ export function variantSettings(game: "minigolf", id: string | null | undefined)
 export function variantSettings(game: "bowling", id: string | null | undefined): Partial<BowlingConfig>;
 export function variantSettings(game: "billard", id: string | null | undefined): Partial<BillardConfig>;
 export function variantSettings(game: "cour", id: string | null | undefined): Partial<CourConfig>;
+export function variantSettings(game: "toque", id: string | null | undefined): Partial<ToqueConfig>;
 export function variantSettings(game: "escarmouche", id: string | null | undefined): Partial<EscarmoucheSettings>;
 export function variantSettings(game: GameId, id: string | null | undefined): object {
   const { base, extra } = splitVariant(game, id);

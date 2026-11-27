@@ -20,6 +20,7 @@ import { MinigolfRoom } from "./minigolfRoom.ts";
 import { BowlingRoom } from "./bowlingRoom.ts";
 import { BillardRoom } from "./billardRoom.ts";
 import { CourRoom } from "./courRoom.ts";
+import { ToqueRoom } from "./toqueRoom.ts";
 import { EscarmoucheRoom } from "./escarmoucheRoom.ts";
 import { MecheRoom } from "./mecheRoom.ts";
 import { NavalRoom } from "./navalRoom.ts";
@@ -48,6 +49,7 @@ const GAMES: { game: string; Room: RoomClass; bots: boolean }[] = [
   { game: "bowling", Room: BowlingRoom as unknown as RoomClass, bots: true },
   { game: "billard", Room: BillardRoom as unknown as RoomClass, bots: true },
   { game: "cour", Room: CourRoom as unknown as RoomClass, bots: false },
+  { game: "toque", Room: ToqueRoom as unknown as RoomClass, bots: true },
 ];
 
 /** Les tables où la revanche passe par l'écran d'annonce avant de partir */
@@ -65,6 +67,7 @@ const announced = (game: string) =>
     "bowling",
     "billard",
     "cour",
+    "toque",
   ].includes(game);
 
 const open: { stopLoop?: () => void }[] = [];

@@ -73,6 +73,8 @@ export function GameTicket({
             <BillardArt />
           ) : game === "cour" ? (
             <CourArt />
+          ) : game === "toque" ? (
+            <ToqueArt />
           ) : (
             <NavalArt />
           )}
@@ -80,6 +82,32 @@ export function GameTicket({
       </span>
       <span className="ticket-name">{GAME_NAMES[game]}</span>
     </span>
+  );
+}
+
+/** Toque ! : une marmite qui fume sur sa flamme, et la toque du chef posée à côté */
+function ToqueArt() {
+  return (
+    <g>
+      <path d="M30 66h40" stroke="#3a2a1e" strokeWidth="3" strokeLinecap="round" />
+      <path d="M44 66c0-5 3-6 6-10 3 4 6 5 6 10z" fill="#ff8a2a" />
+      <path d="M47 66c0-3 2-4 3-6 1 2 3 3 3 6z" fill="#ffd35a" />
+      <path d="M30 40h40l-3 18c-1 3-3 4-6 4H39c-3 0-5-1-6-4z" fill="#b8bec6" stroke="#5a6068" strokeWidth="1.5" />
+      <rect x="27" y="36" width="46" height="6" rx="3" fill="#d6dbe0" stroke="#5a6068" strokeWidth="1.5" />
+      <path d="M24 44h6M70 44h6" stroke="#5a6068" strokeWidth="3" strokeLinecap="round" />
+      <path
+        d="M40 30c-3-4 3-6 0-11M50 31c-3-5 3-7 0-13M60 30c-3-4 3-6 0-11"
+        stroke="#fff"
+        strokeWidth="2.4"
+        fill="none"
+        strokeLinecap="round"
+        opacity="0.85"
+      />
+      <g transform="translate(78 50)">
+        <rect x="-7" y="2" width="14" height="6" rx="1" fill="#f7f5ef" stroke="#8a8478" strokeWidth="1" />
+        <path d="M-7 3c-6-1-6-10 0-10 0-5 7-6 7-2 1-4 8-3 7 2 6 0 6 9 0 10z" fill="#f7f5ef" stroke="#8a8478" strokeWidth="1" />
+      </g>
+    </g>
   );
 }
 

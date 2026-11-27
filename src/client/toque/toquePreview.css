@@ -1,0 +1,101 @@
+/* L'illustration de Toque ! sur l'accueil */
+.tq-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 60%, #c7743c, #2a140a 72%);
+}
+
+.tq-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+  animation: tq-preview-drift 26s ease-in-out infinite alternate;
+}
+
+/* La lumière chaude des fourneaux, qui vacille un peu */
+.tq-preview-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 50% 34% at 46% 58%, rgba(255, 176, 92, 0.22), transparent 70%);
+  mix-blend-mode: screen;
+  animation: tq-preview-glow 3.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* La vapeur qui monte des marmites */
+.tq-preview-steam {
+  position: absolute;
+  bottom: 38%;
+  width: 18%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 250, 240, 0.32), transparent 66%);
+  filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  animation: tq-preview-steam 6s ease-out infinite;
+}
+
+.tq-preview-steam.is-a {
+  left: 30%;
+}
+
+.tq-preview-steam.is-b {
+  left: 44%;
+  animation-delay: 2s;
+}
+
+.tq-preview-steam.is-c {
+  left: 58%;
+  animation-delay: 4s;
+}
+
+@keyframes tq-preview-drift {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-0.8%, -1%);
+  }
+}
+
+@keyframes tq-preview-glow {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tq-preview-steam {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-120%) scale(1.5);
+  }
+}
+
+.reduce-motion .tq-preview img,
+.reduce-motion .tq-preview-glow,
+.reduce-motion .tq-preview-steam {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-preview img,
+  .tq-preview-glow,
+  .tq-preview-steam {
+    animation: none;
+  }
+}

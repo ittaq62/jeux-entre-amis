@@ -61,6 +61,9 @@ describe("la boutique", () => {
       "bileffet",
       "courmaillot",
       "coursalut",
+      "tqtablier",
+      "tqtoque",
+      "tqcouteau",
     ] as const) {
       const items = SHOP_ITEMS.filter((i) => i.kind === kind);
       expect(items.some((i) => i.price === 0)).toBe(true);
@@ -126,6 +129,9 @@ describe("la boutique", () => {
       "bileffet",
       "courmaillot",
       "coursalut",
+      "tqtablier",
+      "tqtoque",
+      "tqcouteau",
     ]);
     for (const item of SHOP_ITEMS.filter((i) => i.price > 0 && !later.has(i.kind))) expect(migration).toContain(`'${item.id}'`);
   });

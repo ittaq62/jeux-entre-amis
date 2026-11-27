@@ -31,6 +31,7 @@ import { MinigolfPreview } from "../minigolf/MinigolfPreview.tsx";
 import { BowlingPreview } from "../bowling/BowlingPreview.tsx";
 import { BillardPreview } from "../billard/BillardPreview.tsx";
 import { CourPreview } from "../cour/CourPreview.tsx";
+import { ToquePreview } from "../toque/ToquePreview.tsx";
 import { EscarmouchePreview, EscarmoucheTitle } from "../escarmouche/EscarmouchePreview.tsx";
 import { HomeAlbum } from "../cards/HomeAlbum.tsx";
 import { TourPreview } from "../tour/TourPreview.tsx";
@@ -86,6 +87,7 @@ export const LOOK: Record<TableGame, { stage: string; art: () => ReactNode; titl
   bowling: { stage: "is-alley", art: () => <BowlingPreview /> },
   billard: { stage: "is-felt", art: () => <BillardPreview /> },
   cour: { stage: "is-cour", art: () => <CourPreview /> },
+  toque: { stage: "is-toque", art: () => <ToquePreview /> },
 };
 
 function greeting() {

@@ -202,6 +202,7 @@ const ALL = [
   "bowling",
   "billard",
   "cour",
+  "toque",
 ] as const;
 /** Le défi de la semaine : dix points par jeu du site */
 const BONUS = WEEK_POINTS_PER_GAME * ALL.length;

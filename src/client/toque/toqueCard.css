@@ -1,0 +1,9 @@
+/* La famille « La Brigade » dans l'album : le carrelage de la cuisine, la lumière chaude des fourneaux */
+.fam-toque .tc-art {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 30%, rgba(255, 214, 150, 0.45), transparent 72%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%) 0 0 / 22px 22px,
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%) 11px 11px / 22px
+      22px,
+    linear-gradient(180deg, #e9a25a 0, #8a4a26 62%, #5a2e1e 100%);
+}

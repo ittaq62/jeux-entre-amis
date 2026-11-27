@@ -47,6 +47,21 @@ export const KNIVES: ShopThing[] = [
   { id: "or", name: "Couteau en or", price: 500 },
 ];
 
+/** La couleur de fond de chaque tablier (le dessin de son motif vient par-dessus) */
+export const APRON_COLORS: Record<string, string> = {
+  blanc: "#f4f1ea",
+  bistrot: "#24344f",
+  vichy: "#d23b3b",
+  mariniere: "#2b4c8c",
+  jean: "#3f5f8a",
+  noir: "#1d1d22",
+  fleuri: "#f0d9e4",
+  provence: "#f2c84b",
+  tricolore: "#f4f1ea",
+  cuir: "#7a4a2a",
+  dore: "#d8b04a",
+};
+
 export interface ToqueLook {
   apron: string;
   toque: string;

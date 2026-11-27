@@ -164,6 +164,16 @@ export const HOME_GAMES: HomeGame[] = [
     open: "Ouvrir une table",
     modal: "Ouvrir une table de La Cour des Grands",
   },
+  {
+    id: "toque",
+    name: "Toque !",
+    desc: "Une cuisine en équipe, en 3D, de 1 à 4 : on coupe, on cuit, on dresse et on sert avant que la commande expire, pendant que la marmite déborde et que le feu prend. Neuf cuisines sur la route de la roulotte de Mémé, chacune avec ses trois étoiles à gagner, ou deux équipes face à face.",
+    keywords: "cuisine cuisinier chef recette restaurant marmite plat commande coop coopératif équipe service",
+    players: [1, GAME_SEATS.toque.max],
+    quick: "Partie rapide",
+    open: "Ouvrir une cuisine",
+    modal: "Ouvrir une cuisine de Toque !",
+  },
 ];
 
 /** Le bandeau de l'album reste affiché quand c'est lui qu'on cherche */

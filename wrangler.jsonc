@@ -24,6 +24,7 @@
       { "name": "BOWLING", "class_name": "BowlingRoom" },
       { "name": "BILLARD", "class_name": "BillardRoom" },
       { "name": "COUR", "class_name": "CourRoom" },
+      { "name": "TOQUE", "class_name": "ToqueRoom" },
       { "name": "TOURS", "class_name": "TourRoom" },
       { "name": "HUB", "class_name": "Hub" },
     ],
@@ -43,6 +44,7 @@
     { "tag": "v12", "new_sqlite_classes": ["BowlingRoom"] },
     { "tag": "v13", "new_sqlite_classes": ["BillardRoom"] },
     { "tag": "v14", "new_sqlite_classes": ["CourRoom"] },
+    { "tag": "v15", "new_sqlite_classes": ["ToqueRoom"] },
   ],
   "d1_databases": [
     {

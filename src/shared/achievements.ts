@@ -607,6 +607,82 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Toute la récré",
     description: "Jouer les huit épreuves de La Cour des Grands (sans compter la finale).",
   },
+  // Toque !
+  {
+    id: "toque-first-star",
+    game: "toque",
+    chip: "1",
+    tone: "ivory",
+    title: "Première étoile",
+    description: "Décrocher au moins une étoile à la fin d'un service, en brigade.",
+  },
+  {
+    id: "toque-regular",
+    goal: 25,
+    game: "toque",
+    chip: "25",
+    tone: "blue",
+    title: "Pilier des fourneaux",
+    description: "Jouer 25 services de Toque !",
+  },
+  {
+    id: "toque-serie",
+    game: "toque",
+    chip: "×4",
+    tone: "red",
+    title: "À la chaîne",
+    description: "Servir huit commandes d'affilée dans l'ordre, sans en rater une.",
+  },
+  {
+    id: "toque-sans-faute",
+    game: "toque",
+    chip: "0",
+    tone: "green",
+    title: "Sans faute",
+    description: "Finir un service sans aucune commande ratée (au moins quatre servies).",
+  },
+  {
+    id: "toque-pompier",
+    goal: 10,
+    game: "toque",
+    chip: "10",
+    tone: "red",
+    title: "Pompier de service",
+    description: "Éteindre dix feux en tout.",
+  },
+  {
+    id: "toque-plongeur",
+    goal: 50,
+    game: "toque",
+    chip: "50",
+    tone: "ivory",
+    title: "Roi de la plonge",
+    description: "Laver cinquante assiettes en tout.",
+  },
+  {
+    id: "toque-voltige",
+    game: "toque",
+    chip: "↗",
+    tone: "blue",
+    title: "Voltige",
+    description: "Rattraper au vol un ingrédient lancé par un autre chef.",
+  },
+  {
+    id: "toque-duel",
+    game: "toque",
+    chip: "1er",
+    tone: "black",
+    title: "Meilleure brigade",
+    description: "Gagner un service l'un contre l'autre.",
+  },
+  {
+    id: "toque-banquet",
+    game: "toque",
+    chip: "M",
+    tone: "ivory",
+    title: "Le banquet de Mémé",
+    description: "Décrocher une étoile au banquet de la fête du village, au bout de la route.",
+  },
   // Bolides
   {
     id: "bolides-first-win",
@@ -968,6 +1044,29 @@ export function earnedBillardAchievements(o: BillardOutcome): string[] {
     "billard-all",
     ["huit", "neuf", "killer", "carambole"].every((k) => (o.totals[k] ?? 0) >= 1),
   );
+  return out;
+}
+
+export interface ToqueOutcome {
+  won: boolean;
+  played: number;
+  duel: boolean;
+  stats: { stars: number; best: number; perfect: number; caught: number; duelWon: number; kitchen: string };
+  totals: Record<string, number>;
+}
+
+export function earnedToqueAchievements(o: ToqueOutcome): string[] {
+  const out: string[] = [];
+  const add = (id: string, on: boolean) => on && out.push(id);
+  add("toque-first-star", !o.duel && o.stats.stars >= 1);
+  add("toque-regular", o.played >= goalOf("toque-regular"));
+  add("toque-serie", o.stats.best >= 8);
+  add("toque-sans-faute", o.stats.perfect >= 1);
+  add("toque-pompier", (o.totals.fires ?? 0) >= goalOf("toque-pompier"));
+  add("toque-plongeur", (o.totals.washed ?? 0) >= goalOf("toque-plongeur"));
+  add("toque-voltige", o.stats.caught >= 1);
+  add("toque-duel", o.duel && o.stats.duelWon >= 1);
+  add("toque-banquet", !o.duel && o.stats.kitchen === "banquet" && o.stats.stars >= 1);
   return out;
 }
 

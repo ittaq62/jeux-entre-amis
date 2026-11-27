@@ -47,6 +47,14 @@ import {
   JERSEYS as COUR_JERSEYS,
   jerseyItem as courJerseyItem,
 } from "./games/cour/looks.ts";
+import {
+  APRONS as TQ_APRONS,
+  KNIVES as TQ_KNIVES,
+  TOQUES as TQ_TOQUES,
+  tqApronItem,
+  tqKnifeItem,
+  tqToqueItem,
+} from "./games/toque/looks.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
@@ -79,7 +87,10 @@ export type ShopKind =
   | "bilbilles"
   | "bileffet"
   | "courmaillot"
-  | "coursalut";
+  | "coursalut"
+  | "tqtablier"
+  | "tqtoque"
+  | "tqcouteau";
 
 export interface ShopItem {
   id: string;
@@ -168,6 +179,10 @@ export const SHOP_ITEMS: ShopItem[] = [
   // La Cour des Grands : son maillot de candidat, et l'éclat qui salue chaque épreuve passée
   ...COUR_JERSEYS.map((j): ShopItem => ({ id: courJerseyItem(j.id), kind: "courmaillot", ref: j.id, name: j.name, price: j.price })),
   ...COUR_CHEERS.map((c): ShopItem => ({ id: courCheerItem(c.id), kind: "coursalut", ref: c.id, name: c.name, price: c.price })),
+  // Toque ! : le tablier, la toque et le couteau de son chef
+  ...TQ_APRONS.map((a): ShopItem => ({ id: tqApronItem(a.id), kind: "tqtablier", ref: a.id, name: a.name, price: a.price })),
+  ...TQ_TOQUES.map((t): ShopItem => ({ id: tqToqueItem(t.id), kind: "tqtoque", ref: t.id, name: t.name, price: t.price })),
+  ...TQ_KNIVES.map((k): ShopItem => ({ id: tqKnifeItem(k.id), kind: "tqcouteau", ref: k.id, name: k.name, price: k.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

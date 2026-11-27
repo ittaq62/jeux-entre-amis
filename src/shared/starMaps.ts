@@ -8,9 +8,10 @@
 import { BOLIDES_STARS } from "./games/bolides/stars.ts";
 import { COUR_STARS } from "./games/cour/stars.ts";
 import { MINIGOLF_STARS } from "./games/minigolf/starCourses.ts";
+import { TOQUE_STARS } from "./games/toque/stars.ts";
 import type { StarGame, StarMap } from "./stars.ts";
 
-export const STAR_GAMES: readonly StarGame[] = [MINIGOLF_STARS, BOLIDES_STARS, COUR_STARS];
+export const STAR_GAMES: readonly StarGame[] = [MINIGOLF_STARS, BOLIDES_STARS, TOQUE_STARS, COUR_STARS];
 
 export const STAR_GAME_BY_ID = new Map(STAR_GAMES.map((g) => [g.game, g]));
 

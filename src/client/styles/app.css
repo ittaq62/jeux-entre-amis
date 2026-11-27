@@ -4932,6 +4932,10 @@ h3 .hint {
   --art: linear-gradient(165deg, #f2b632 0%, #d9344d 100%);
 }
 
+.game-ticket.is-toque {
+  --art: linear-gradient(165deg, #e9a25a 0%, #5a2e1e 100%);
+}
+
 .game-ticket.is-escarmouche {
   --art: linear-gradient(165deg, #8a6a4a 0%, #2d2620 100%);
 }

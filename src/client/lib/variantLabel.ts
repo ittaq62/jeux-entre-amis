@@ -70,6 +70,20 @@ const COUR_NAMES: Record<string, string> = {
   polochons: "la finale des polochons",
 };
 
+/** Toque ! : la cuisine (ou le duel) */
+const TOQUE_NAMES: Record<string, string> = {
+  bistrot: "le bistrot de Mémé",
+  creperie: "la crêperie du port",
+  cantine: "la cantine de l'école",
+  pizzeria: "la pizzeria sur les toits",
+  brasserie: "la brasserie du marché",
+  chalet: "le chalet sous la neige",
+  train: "le train de nuit",
+  guinguette: "la guinguette",
+  banquet: "le banquet de la fête",
+  duel: "l'un contre l'autre",
+};
+
 /** La variante seule (« classique », « en duel », « Le Volcan »…), ou null si elle n'a pas de nom à montrer */
 export function variantName(game: GameId, variant: string): string | null {
   switch (game) {
@@ -107,6 +121,8 @@ export function variantName(game: GameId, variant: string): string | null {
       return BILLARD_NAMES[variant] ?? null;
     case "cour":
       return COUR_NAMES[variant] ?? null;
+    case "toque":
+      return TOQUE_NAMES[variant] ?? null;
   }
 }
 

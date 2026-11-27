@@ -1,0 +1,1335 @@
+/* Toque ! : l'écran du service (les bons de commande, l'horloge, la caisse), les commandes au doigt, la feuille de fin,
+   les cinématiques de la roulotte, la carte de la route au salon, la tenue du chef */
+
+.tq-game {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #120c08;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  --tq-accent: #ffd479;
+  --tq-paper: #fbf5e6;
+  --tq-ink: #2a1e14;
+}
+
+.tq-stage,
+.tq-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Le haut de l'écran : les bons à gauche, l'horloge et la caisse à droite */
+.tq-top {
+  position: absolute;
+  top: calc(8px + var(--safe-top, 0px));
+  left: calc(8px + var(--safe-left, 0px));
+  right: calc(8px + var(--safe-right, 0px));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.tq-top > * {
+  pointer-events: auto;
+}
+
+.tq-orders {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+/* Un bon de commande : le papier qui pend, le plat dessiné, le temps qui file */
+.tq-ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 84px;
+  flex: none;
+  padding: 6px 6px 7px;
+  border-radius: 4px 4px 9px 9px;
+  background: var(--tq-paper);
+  color: var(--tq-ink);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.15),
+    0 8px 16px -8px rgba(0, 0, 0, 0.7);
+  transform-origin: 50% 0;
+  animation: tq-ticket-in 0.42s var(--ease-out) both;
+}
+
+/* La pince qui tient le bon */
+.tq-ticket::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 26px;
+  height: 8px;
+  margin-left: -13px;
+  border-radius: 3px;
+  background: linear-gradient(#c9ccd2, #8e939b);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
+
+.tq-ticket.is-oldest {
+  outline: 2px solid var(--tq-accent);
+  outline-offset: 1px;
+}
+
+.tq-ticket.is-late {
+  animation:
+    tq-ticket-in 0.42s var(--ease-out) both,
+    tq-ticket-shake 0.9s ease-in-out infinite;
+}
+
+.tq-ticket-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tq-ticket-time {
+  display: block;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(42, 30, 20, 0.14);
+}
+
+.tq-ticket-time > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition:
+    width 0.25s linear,
+    background-color 0.4s;
+}
+
+@keyframes tq-ticket-in {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) rotate(-6deg);
+  }
+  70% {
+    transform: translateY(2px) rotate(2deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tq-ticket-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-3deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+
+/* Un plat : l'assiette, et ce qu'il y a dessus */
+.tq-dish {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+.tq-dish > svg {
+  position: absolute;
+  inset: 0;
+}
+
+.tq-dish-parts {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  max-width: 86%;
+  margin-top: 6%;
+  line-height: 0;
+}
+
+.tq-dish-parts .tq-icon {
+  margin: -2px;
+}
+
+.tq-icon {
+  flex: none;
+  overflow: visible;
+}
+
+.tq-top-right {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  max-width: 46vw;
+}
+
+/* L'horloge de la cuisine */
+.tq-clock {
+  min-width: 70px;
+  padding: 6px 12px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(20, 14, 10, 0.72);
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.8);
+}
+
+/* La caisse : le score, l'enchaînement, l'autre brigade */
+.tq-score {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  background: rgba(20, 14, 10, 0.72);
+  font-size: calc(18px * var(--text-scale, 1));
+  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.8);
+}
+
+.tq-coin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff2b8, #f2c24a 45%, #b0801e);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.tq-mult {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--tq-accent);
+  color: var(--tq-ink);
+  font-size: 13px;
+  font-weight: 800;
+  animation: tq-pop 0.35s var(--ease-out);
+}
+
+.tq-versus {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+/* Les étoiles déjà gagnées pendant le service, et le score de la suivante */
+.tq-goal {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 14, 10, 0.72);
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.tq-goal .is-on {
+  color: #f6c33a;
+  text-shadow: 0 0 8px rgba(246, 195, 58, 0.6);
+  animation: tq-pop 0.45s var(--ease-out);
+}
+
+.tq-goal small {
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.tq-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.tq-icon-btn {
+  position: relative;
+  color: #fff;
+  background: rgba(20, 14, 10, 0.66);
+  border-radius: 12px;
+}
+
+.tq-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger, #e5533d);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+@keyframes tq-pop {
+  from {
+    transform: scale(1.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Les grandes annonces : le nom de la cuisine, « Prêts ? », « En cuisine ! », « C'est l'heure ! » */
+.tq-banner {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  padding: 10px 28px;
+  border-radius: 16px;
+  background: rgba(20, 14, 10, 0.7);
+  font-family: var(--font-title);
+  font-size: clamp(30px, 7vw, 64px);
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  color: #fff8e8;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: tq-banner 0.9s var(--ease-out) both;
+}
+
+.tq-banner.is-end {
+  color: var(--tq-accent);
+}
+
+@keyframes tq-banner {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Ce qui arrive : la vague, la rafale, la charrette, le sifflet du train */
+.tq-hazard {
+  position: absolute;
+  top: calc(120px + var(--safe-top, 0px));
+  left: 50%;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: #f2c24a;
+  color: #2a1a06;
+  font-weight: 800;
+  font-size: calc(15px * var(--text-scale, 1));
+  white-space: nowrap;
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.8);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: tq-hazard 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes tq-hazard {
+  from {
+    transform: translateX(-50%) scale(1);
+  }
+  to {
+    transform: translateX(-50%) scale(1.07);
+  }
+}
+
+/* Les points d'un plat servi, qui montent du passe */
+.tq-float {
+  position: absolute;
+  font-family: var(--font-title);
+  font-size: 26px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #fff2b8;
+  text-shadow:
+    0 2px 0 #7a4a10,
+    0 0 12px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: tq-float 1.6s var(--ease-out) forwards;
+}
+
+.tq-float.is-loss {
+  color: #ff9a8a;
+  text-shadow: 0 2px 0 #6a1a10;
+}
+
+@keyframes tq-float {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -260%) scale(1);
+  }
+}
+
+/* Les commandes au doigt : le pouce gauche court, la main droite prend, utilise, s'élance */
+.tq-touch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tq-stick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  height: 62%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.tq-stick-hint {
+  position: absolute;
+  left: calc(24px + var(--safe-left, 0px));
+  bottom: calc(28px + var(--safe-bottom, 0px));
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(20, 14, 10, 0.45);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+}
+
+.tq-stick-base,
+.tq-stick-knob {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.tq-stick-base {
+  width: 120px;
+  height: 120px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(20, 14, 10, 0.25);
+}
+
+.tq-stick-knob {
+  width: 56px;
+  height: 56px;
+  background: radial-gradient(circle at 35% 30%, #fff, #e8e2d4);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.tq-touch-buttons {
+  position: absolute;
+  right: calc(14px + var(--safe-right, 0px));
+  bottom: calc(16px + var(--safe-bottom, 0px));
+  display: grid;
+  grid-template-columns: 76px 92px;
+  grid-template-rows: 76px 92px;
+  grid-template-areas:
+    "dash use"
+    "swap grab";
+  gap: 10px;
+  pointer-events: none;
+}
+
+.tq-touch-btn {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  background: rgba(20, 14, 10, 0.5);
+  color: #fff;
+  font: 700 12px/1.1 var(--font-text);
+  text-align: center;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s;
+}
+
+.tq-touch-btn:active {
+  transform: scale(0.92);
+}
+
+.tq-touch-btn.is-grab {
+  grid-area: grab;
+  background: rgba(63, 160, 92, 0.75);
+  font-size: 13px;
+}
+
+.tq-touch-btn.is-use {
+  grid-area: use;
+  background: rgba(63, 127, 216, 0.75);
+}
+
+.tq-touch-btn.is-dash {
+  grid-area: dash;
+  align-self: end;
+  justify-self: end;
+  width: 64px;
+  height: 64px;
+}
+
+.tq-touch-btn.is-swap {
+  grid-area: swap;
+  align-self: end;
+  justify-self: end;
+  width: 64px;
+  height: 64px;
+  background: rgba(184, 138, 223, 0.7);
+}
+
+/* Au doigt, le haut de l'écran se fait plus petit */
+.tq-game.is-touch .tq-ticket {
+  width: 70px;
+}
+
+/* Le menu, l'aide */
+.tq-menu {
+  position: absolute;
+  top: calc(60px + var(--safe-top, 0px));
+  right: calc(10px + var(--safe-right, 0px));
+  display: flex;
+  flex-direction: column;
+  width: min(300px, 86vw);
+  max-height: calc(100dvh - 72px - var(--safe-top, 0px));
+  overflow-y: auto;
+  padding: 6px;
+  color: var(--text);
+}
+
+.tq-menu-stats {
+  padding: 4px 12px;
+}
+
+.tq-help-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.tq-help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  color: var(--text);
+  user-select: text;
+}
+
+.tq-help h2 {
+  margin: 0;
+  font-family: var(--font-title);
+}
+
+.tq-help > .btn {
+  align-self: flex-end;
+}
+
+.tq-howto p {
+  margin: 0 0 6px;
+}
+
+.tq-howto h3 {
+  margin: 12px 0 4px;
+  font-size: 16px;
+}
+
+.tq-howto ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tq-howto li {
+  margin: 4px 0;
+}
+
+.tq-howto .tq-howto-menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.tq-howto-menu li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-row);
+  background: var(--panel-sunken);
+}
+
+.tq-howto-menu li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tq-howto-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.tq-loading-kitchen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  text-align: center;
+}
+
+.tq-loading-kitchen strong {
+  font-family: var(--font-title);
+  font-size: 22px;
+}
+
+.tq-loading-kitchen span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+/* La feuille de fin */
+.tq-over {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(12, 8, 6, 0.5);
+  overflow-y: auto;
+  user-select: text;
+}
+
+.tq-over-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: min(620px, 100%);
+  margin: auto 0;
+  padding: 18px;
+  color: var(--text);
+}
+
+.tq-over-card h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  text-align: center;
+}
+
+.tq-over-kitchen {
+  margin: 0;
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.tq-over-stars {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.tq-over-stars p {
+  margin: 0;
+}
+
+.tq-over-bonus {
+  color: var(--gold-light);
+  font-weight: 700;
+}
+
+.tq-over-score {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 18px;
+}
+
+.tq-over-points {
+  font-size: 18px;
+}
+
+.tq-over-points strong {
+  font-family: var(--font-title);
+  font-size: 40px;
+}
+
+.tq-over-goals {
+  color: var(--text-soft);
+}
+
+.tq-over-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 110px;
+  padding: 8px 14px;
+  border-radius: var(--radius-row);
+  background: var(--panel-sunken);
+}
+
+.tq-over-team strong {
+  font-family: var(--font-title);
+  font-size: 36px;
+}
+
+.tq-over-team.is-win {
+  background: linear-gradient(180deg, rgba(242, 199, 90, 0.35), rgba(242, 199, 90, 0.08));
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.tq-over-vs {
+  color: var(--text-faint);
+}
+
+.tq-over-ledger {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 0;
+}
+
+.tq-over-ledger div {
+  padding: 6px 4px;
+  border-radius: var(--radius-row);
+  background: var(--panel-sunken);
+  text-align: center;
+}
+
+.tq-over-ledger dt {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.tq-over-ledger dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.tq-over-chefs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tq-over-chefs li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-row);
+  background: var(--panel-raised);
+}
+
+.tq-over-chefs li.is-me {
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.tq-over-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.tq-over-name small {
+  color: var(--text-soft);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.tq-over-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 10px;
+  margin-left: auto;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.tq-over-stats strong {
+  color: var(--text);
+}
+
+.tq-over-next {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-row);
+  background: var(--gold-tint);
+  color: var(--gold-light);
+  text-align: center;
+}
+
+.tq-over-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tq-over-card .gameover-elo {
+  color: rgba(244, 236, 220, 0.72);
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .tq-over-ledger {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tq-over-chefs li {
+    flex-wrap: wrap;
+  }
+
+  .tq-over-stats {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 46px;
+  }
+}
+
+/* Les cinématiques de la roulotte : la scène, deux bandes noires, la bulle qui s'écrit */
+.tq-cine {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  background: #0c0806;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  animation: tq-fade 0.5s ease-out;
+}
+
+body > .tq-cine {
+  z-index: 300;
+}
+
+.tq-cine-stage,
+.tq-cine-stage canvas,
+.tq-cine-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tq-cine-bars::before,
+.tq-cine-bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9vh;
+  background: #000;
+  animation: tq-bars 0.8s var(--ease-out) both;
+}
+
+.tq-cine-bars::before {
+  top: 0;
+}
+
+.tq-cine-bars::after {
+  bottom: 0;
+}
+
+.tq-cine-title {
+  position: absolute;
+  top: calc(9vh + 14px);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--font-title);
+  font-size: clamp(22px, 4vw, 34px);
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  transform: translateX(-50%);
+  animation: tq-fade 1.2s ease-out both;
+}
+
+.tq-cine-title small {
+  font-family: var(--font-text);
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.tq-cine-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9vh + 18px + var(--safe-bottom, 0px));
+  width: min(640px, calc(100% - 32px));
+  min-height: 92px;
+  padding: 12px 18px 14px;
+  border-radius: 18px;
+  background: var(--tq-paper, #fbf5e6);
+  color: var(--tq-ink, #2a1e14);
+  box-shadow: 0 16px 30px -12px rgba(0, 0, 0, 0.8);
+  transform: translateX(-50%);
+}
+
+.tq-cine-bubble::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 30%;
+  border: 10px solid transparent;
+  border-top: 0;
+  border-bottom-color: var(--tq-paper, #fbf5e6);
+}
+
+.tq-cine-bubble.is-brigade::after {
+  left: 66%;
+}
+
+.tq-cine-bubble.is-voice {
+  background: rgba(20, 14, 10, 0.78);
+  color: #fff8e8;
+  font-style: italic;
+}
+
+.tq-cine-bubble.is-voice::after {
+  display: none;
+}
+
+.tq-cine-bubble strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #a8441c;
+  font-family: var(--font-title);
+  font-size: 15px;
+}
+
+.tq-cine-bubble p {
+  margin: 0;
+  font-size: calc(17px * var(--text-scale, 1));
+  line-height: 1.4;
+}
+
+.tq-cine-role {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  color: rgba(42, 30, 20, 0.6);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.tq-cine-skip {
+  position: absolute;
+  top: calc(9vh + 12px);
+  right: calc(14px + var(--safe-right, 0px));
+}
+
+@keyframes tq-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tq-bars {
+  from {
+    height: 0;
+  }
+  to {
+    height: 9vh;
+  }
+}
+
+/* La carte de la route, au salon */
+.tq-lobby-map {
+  gap: 8px;
+}
+
+.tq-map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.tq-map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 10px 20px -14px rgba(0, 0, 0, 0.85);
+  user-select: none;
+}
+
+.tq-stop {
+  cursor: pointer;
+  outline: none;
+}
+
+.tq-stop > circle:not(.tq-stop-halo) {
+  transition: transform 0.15s var(--ease-out);
+}
+
+.tq-stop:hover > circle:not(.tq-stop-halo),
+.tq-stop:focus-visible > circle:not(.tq-stop-halo) {
+  transform: scale(1.12);
+}
+
+.tq-stop.is-locked {
+  opacity: 0.78;
+}
+
+.tq-stop-halo {
+  animation: tq-halo 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tq-stop-num {
+  fill: #fff8e8;
+  stroke: #5a3a26;
+  stroke-width: 3px;
+  paint-order: stroke;
+  font: 700 15px var(--font-text);
+}
+
+.tq-map-total {
+  fill: #fff8e8;
+  stroke: #2a4a6a;
+  stroke-width: 4px;
+  paint-order: stroke;
+  font: 700 26px var(--font-title);
+}
+
+.tq-roulotte {
+  pointer-events: none;
+}
+
+.tq-roulotte-bob {
+  animation: tq-bob 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes tq-halo {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes tq-bob {
+  from {
+    transform: translateY(0) rotate(-2deg);
+  }
+  to {
+    transform: translateY(-3px) rotate(2deg);
+  }
+}
+
+.tq-map-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.tq-map-card header {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tq-map-card h3 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 19px;
+}
+
+.tq-map-card header .hint {
+  margin: 0;
+}
+
+.tq-map-num {
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tq-map-stars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tq-map-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tq-map-menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.tq-map-lock {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.tq-map-card.is-locked h3 {
+  color: var(--text-soft);
+}
+
+.tq-story-again {
+  align-self: flex-start;
+}
+
+@media (max-width: 720px) {
+  .tq-map {
+    grid-template-columns: 1fr;
+  }
+
+  .tq-map-menu {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+}
+
+/* La tenue du chef */
+.tq-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tq-picker-head {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-row);
+  background: radial-gradient(ellipse at 50% 80%, rgba(255, 212, 121, 0.16), transparent 70%), var(--panel-sunken);
+}
+
+.tq-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tq-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tq-choice small {
+  color: var(--text-faint);
+}
+
+.tq-choice.is-locked {
+  opacity: 0.55;
+}
+
+.tq-swatch {
+  flex: none;
+}
+
+/* Effets réduits : rien ne bouge pour rien */
+.reduce-motion .tq-ticket,
+.reduce-motion .tq-ticket.is-late,
+.reduce-motion .tq-hazard,
+.reduce-motion .tq-stop-halo,
+.reduce-motion .tq-roulotte-bob,
+.reduce-motion .tq-banner,
+.reduce-motion .tq-mult,
+.reduce-motion .tq-goal .is-on {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-ticket,
+  .tq-ticket.is-late,
+  .tq-hazard,
+  .tq-stop-halo,
+  .tq-roulotte-bob,
+  .tq-banner,
+  .tq-mult,
+  .tq-goal .is-on {
+    animation: none;
+  }
+}
+
+/* Au téléphone tenu droit : des bons plus petits, l'horloge et la caisse serrées */
+@media (max-width: 560px) {
+  .tq-ticket {
+    width: 62px;
+    padding: 5px 4px 6px;
+  }
+
+  .tq-game.is-touch .tq-ticket {
+    width: 62px;
+  }
+
+  .tq-ticket-name {
+    display: none;
+  }
+
+  .tq-top-right {
+    max-width: 52vw;
+  }
+
+  .tq-clock {
+    min-width: 58px;
+    padding: 4px 8px;
+    font-size: calc(17px * var(--text-scale, 1));
+  }
+
+  .tq-score {
+    font-size: calc(16px * var(--text-scale, 1));
+  }
+
+  .tq-hazard {
+    top: calc(150px + var(--safe-top, 0px));
+    white-space: normal;
+    max-width: 86vw;
+    text-align: center;
+  }
+}
+
+/* Couché, peu de hauteur : on garde le bas pour les pouces */
+@media (max-height: 460px) {
+  .tq-ticket {
+    width: 60px;
+    padding: 4px;
+  }
+
+  .tq-ticket-name {
+    display: none;
+  }
+
+  .tq-touch-buttons {
+    grid-template-columns: 64px 78px;
+    grid-template-rows: 64px 78px;
+    gap: 8px;
+  }
+
+  .tq-touch-btn.is-dash,
+  .tq-touch-btn.is-swap {
+    width: 56px;
+    height: 56px;
+  }
+
+  .tq-hazard {
+    top: calc(84px + var(--safe-top, 0px));
+  }
+}
+
+/* Les vignettes de la boutique : sur un carrelage de cuisine */
+.tq-shop-look {
+  display: inline-grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    radial-gradient(circle at 50% 40%, #3a2a1e, #1e140c);
+  background-size:
+    16px 16px,
+    16px 16px,
+    100% 100%;
+  background-position:
+    0 0,
+    8px 8px,
+    0 0;
+}
+
+.tq-shop-look.is-big {
+  width: 150px;
+  height: 150px;
+  border-radius: 18px;
+  background-size:
+    30px 30px,
+    30px 30px,
+    100% 100%;
+  background-position:
+    0 0,
+    15px 15px,
+    0 0;
+}

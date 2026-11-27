@@ -31,6 +31,7 @@ const MinigolfRoom = lazy(() => import("../minigolf/MinigolfRoom.tsx").then((m) 
 const BowlingRoom = lazy(() => import("../bowling/BowlingRoom.tsx").then((m) => ({ default: m.BowlingRoom })));
 const BillardRoom = lazy(() => import("../billard/BillardRoom.tsx").then((m) => ({ default: m.BillardRoom })));
 const CourRoom = lazy(() => import("../cour/CourRoom.tsx").then((m) => ({ default: m.CourRoom })));
+const ToqueRoom = lazy(() => import("../toque/ToqueRoom.tsx").then((m) => ({ default: m.ToqueRoom })));
 const TourRoom = lazy(() => import("../tour/TourRoom.tsx").then((m) => ({ default: m.TourRoom })));
 
 /** Une table : on demande d'abord à quel jeu elle appartient, puis on ouvre le bon jeu. */
@@ -83,7 +84,8 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
     game === "minigolf" ||
     game === "bowling" ||
     game === "billard" ||
-    game === "cour"
+    game === "cour" ||
+    game === "toque"
   ) {
     return (
       <Suspense fallback={<Loading label="Arrivée à la table…" />}>
@@ -109,6 +111,8 @@ export function GameRoom({ game, code }: { game: TableGame; code: string }) {
           <BillardRoom code={code} />
         ) : game === "cour" ? (
           <CourRoom code={code} />
+        ) : game === "toque" ? (
+          <ToqueRoom code={code} />
         ) : (
           <BolidesRoom code={code} />
         )}

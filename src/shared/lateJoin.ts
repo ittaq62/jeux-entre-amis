@@ -33,6 +33,7 @@ export const JOINS_STARTED: Record<TableGame, boolean> = {
   bowling: false,
   billard: false,
   cour: false,
+  toque: false,
   escarmouche: true,
   uno: false,
   naval: false,

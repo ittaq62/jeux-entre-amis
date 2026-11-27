@@ -240,6 +240,8 @@ export interface World {
   rng: number;
   /** Charrettes : celles qui ont déjà bousculé ce chef (pour ne pas le cogner à chaque pas) */
   hits: number[];
+  /** Coup de feu : les commandes tombent plus vite et attendent moins */
+  rush?: boolean;
 }
 
 export type ToqueEvent =
@@ -319,7 +321,13 @@ export function starsOf(kitchen: KitchenId, chefs: number, score: number): numbe
   return score >= t[2] ? 3 : score >= t[1] ? 2 : score >= t[0] ? 1 : 0;
 }
 
-export function createWorld(kitchen: KitchenId, duel: boolean, owners: readonly OwnerSetup[], seed: number): World {
+export function createWorld(
+  kitchen: KitchenId,
+  duel: boolean,
+  owners: readonly OwnerSetup[],
+  seed: number,
+  opts: { rush?: boolean } = {},
+): World {
   const k = buildKitchen(kitchen, duel);
   const def = k.def;
   const teams = duel ? 2 : 1;
@@ -344,6 +352,7 @@ export function createWorld(kitchen: KitchenId, duel: boolean, owners: readonly 
     nextId: 1,
     rng: seed >>> 0 || 1,
     hits: [],
+    ...(opts.rush ? { rush: true } : {}),
   };
   for (let t = 0; t < teams; t++) {
     world.teams.push({
@@ -1565,14 +1574,14 @@ function orders(ctx: Ctx) {
     }
     const r = pickRecipe(t, w.kitchen);
     const at = w.frame;
-    t.orders.push({ id: w.nextId++, r, at, until: at + Math.round(RECIPES[r].time * FPS) });
+    t.orders.push({ id: w.nextId++, r, at, until: at + Math.round(RECIPES[r].time * (w.rush ? 0.85 : 1) * FPS) });
     ctx.ev.push({ k: "order", team, r });
     // La première commande, puis la deuxième vite ; ensuite au rythme de la cuisine
     const first = t.orders.length === 1 && t.served + t.failed === 0;
     const holder = { rng: t.rng };
     const g = def.gap[0] + (def.gap[1] - def.gap[0]) * random(holder);
     t.rng = holder.rng;
-    t.next = at + Math.round((first ? 5 : g * gapFactor(t.chefs)) * FPS);
+    t.next = at + Math.round((first ? 5 : g * gapFactor(t.chefs) * (w.rush ? 0.72 : 1)) * FPS);
   });
 }
 

@@ -12,6 +12,12 @@ export interface NewsItem {
 
 export const NEWS: NewsItem[] = [
   {
+    id: "2026-11-28-toque",
+    date: "2026-11-28",
+    text: "Toque ! : la cuisine en équipe, de 1 à 4, neuf cuisines sur la route de la roulotte et leurs étoiles.",
+    game: "toque",
+  },
+  {
     id: "2026-11-27-partage",
     date: "2026-11-27",
     text: "Un lien de table envoyé dans une messagerie montre le jeu, qui t'attend et les places libres.",
@@ -51,6 +57,7 @@ export const NEW_GAMES: Partial<Record<TableGame, string>> = {
   bowling: "2026-11-22",
   billard: "2026-11-23",
   cour: "2026-11-27",
+  toque: "2026-11-28",
 };
 
 const DAY = 86_400_000;

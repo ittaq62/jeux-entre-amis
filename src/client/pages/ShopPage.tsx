@@ -30,6 +30,7 @@ import { BallSwatch, TrailSwatch } from "../minigolf/BallPicker.tsx";
 import { BowlingShopLook } from "../bowling/ShopLooks.tsx";
 import { BillardShopLook } from "../billard/ShopLooks.tsx";
 import { CourShopLook } from "../cour/ShopLooks.tsx";
+import { ToqueShopLook } from "../toque/ShopLooks.tsx";
 import { NavalSkinDefs, NavalSkinPreview } from "../naval/SkinPicker.tsx";
 import { BuyModal } from "../shop/BuyModal.tsx";
 import { PersoPreview, PersoShop } from "../shop/PersoShop.tsx";
@@ -83,6 +84,9 @@ const SECTIONS: { kind: ShopKind; game: GameId; note: string }[] = [
   { kind: "bileffet", game: "billard", note: "Ce qui éclate à l'écran sur tes beaux coups" },
   { kind: "courmaillot", game: "cour", note: "Ton maillot de candidat dans La Cour des Grands" },
   { kind: "coursalut", game: "cour", note: "Ce qui éclate autour de toi quand tu passes une épreuve" },
+  { kind: "tqtablier", game: "toque", note: "Le tablier de ton chef dans Toque !" },
+  { kind: "tqtoque", game: "toque", note: "Ce que ton chef porte sur la tête" },
+  { kind: "tqcouteau", game: "toque", note: "Le couteau de ton chef, qu'on voit quand il coupe" },
 ];
 
 /**
@@ -140,6 +144,7 @@ export function ShopPage() {
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} />;
     if (item.kind.startsWith("bil")) return <BillardShopLook kind={item.kind} id={item.ref} />;
     if (item.kind.startsWith("cour")) return <CourShopLook kind={item.kind} id={item.ref} />;
+    if (item.kind.startsWith("tq")) return <ToqueShopLook kind={item.kind} id={item.ref} />;
     if (item.kind === "uno") return <CardBack width={46} skin={item.ref as BackId} />;
     if (item.kind === "token") return <TokenThumb src={thumbs?.[item.ref as TokenId]} size={64} onNeed={needThumbs} />;
     // Les véhicules : leur photo de l'album
@@ -204,6 +209,7 @@ export function ShopPage() {
     if (item.kind.startsWith("bowl")) return <BowlingShopLook kind={item.kind} id={item.ref} big />;
     if (item.kind.startsWith("bil")) return <BillardShopLook kind={item.kind} id={item.ref} big />;
     if (item.kind.startsWith("cour")) return <CourShopLook kind={item.kind} id={item.ref} big />;
+    if (item.kind.startsWith("tq")) return <ToqueShopLook kind={item.kind} id={item.ref} big />;
     if (item.kind === "tenue") return <TenueStage item={item} />;
     if (isCramponsKind(item.kind)) return <CramponsLook item={item} big />;
     // La bombe sur une petite table, jusqu'à sa fin sur ton avatar (avec le son, ouverte d'un geste)

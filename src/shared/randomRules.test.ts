@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG as MINIGOLF_DEFAULTS } from "./games/minigolf/match.ts";
 import { DEFAULT_CONFIG as BOWLING_DEFAULTS } from "./games/bowling/match.ts";
 import { DEFAULT_CONFIG as BILLARD_DEFAULTS } from "./games/billard/match.ts";
 import { DEFAULT_CONFIG as COUR_DEFAULTS } from "./games/cour/config.ts";
+import { DEFAULT_CONFIG as TOQUE_DEFAULTS } from "./games/toque/net.ts";
 import { DEFAULT_CONFIG } from "./games/crampons/view.ts";
 import { DEFAULT_SETTINGS as BOLIDES_DEFAULTS } from "./games/bolides/race.ts";
 import { DEFAULT_SETTINGS as BRICKS_DEFAULTS } from "./games/bricks/engine.ts";
@@ -44,6 +45,7 @@ const DEFAULTS: Record<GameId, object> = {
   bowling: BOWLING_DEFAULTS,
   billard: BILLARD_DEFAULTS,
   cour: COUR_DEFAULTS,
+  toque: TOQUE_DEFAULTS,
 };
 
 const seeded = (seed: number) => {

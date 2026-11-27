@@ -40,7 +40,8 @@ export type CardFamily =
   | "minigolf"
   | "bowling"
   | "billard"
-  | "cour";
+  | "cour"
+  | "toque";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -57,6 +58,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "bowling", name: "La Piste", note: "Strike, spare, et la rigole" },
   { id: "billard", name: "La Bande", note: "Sept pleines, sept rayées, et la noire" },
   { id: "cour", name: "La Récré", note: "Un, deux, trois… Tournesol !" },
+  { id: "toque", name: "La Brigade", note: "Oui, chef !" },
 ];
 
 export type CardArt =
@@ -90,6 +92,10 @@ export type CardArt =
       kind: "cour";
       subject:
         "tournesol" | "sable" | "corde" | "bille" | "nenuphar" | "chaise" | "marelle" | "carillon" | "epervier" | "polochon" | "cloche";
+    }
+  | {
+      kind: "toque";
+      subject: "marmite" | "planche" | "assiettes" | "bon" | "poele" | "extincteur" | "crepe" | "roulotte" | "passe" | "meme" | "toque";
     };
 
 export interface CardDef {
@@ -1344,6 +1350,96 @@ export const CARDS: CardDef[] = [
     name: "La Cloche d'or",
     quote: "Quarante candidats sont entrés dans la cour. Un seul la soulève.",
     art: { kind: "cour", subject: "cloche" },
+  },
+
+  // La Brigade (Toque !, arrivée après La Cour des Grands : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "toque-marmite",
+    family: "toque",
+    rarity: "commune",
+    name: "La Marmite",
+    quote: "Trois oignons, un peu de patience, et surtout ne pas l'oublier sur le feu.",
+    art: { kind: "toque", subject: "marmite" },
+  },
+  {
+    id: "toque-planche",
+    family: "toque",
+    rarity: "commune",
+    name: "La Planche à découper",
+    quote: "Tac, tac, tac. La tomate n'a rien vu venir.",
+    art: { kind: "toque", subject: "planche" },
+  },
+  {
+    id: "toque-assiettes",
+    family: "toque",
+    rarity: "commune",
+    name: "La Pile d'assiettes",
+    quote: "Propres à l'aller, sales au retour. L'évier attend.",
+    art: { kind: "toque", subject: "assiettes" },
+  },
+  {
+    id: "toque-bon",
+    family: "toque",
+    rarity: "commune",
+    name: "Le Bon de commande",
+    quote: "Une soupe à l'oignon, table quatre ! Il clignote déjà.",
+    art: { kind: "toque", subject: "bon" },
+  },
+  {
+    id: "toque-poele",
+    family: "toque",
+    rarity: "peu-commune",
+    name: "La Poêle",
+    quote: "Le steak grésille. Trois secondes de trop, et c'est du charbon.",
+    art: { kind: "toque", subject: "poele" },
+  },
+  {
+    id: "toque-extincteur",
+    family: "toque",
+    rarity: "peu-commune",
+    name: "L'Extincteur",
+    quote: "Il ne sert jamais. Sauf ce soir. Deux fois.",
+    art: { kind: "toque", subject: "extincteur" },
+  },
+  {
+    id: "toque-crepe",
+    family: "toque",
+    rarity: "peu-commune",
+    name: "La Crêpe qui saute",
+    quote: "Sur le bateau, elle retombe toujours dans la poêle. Presque toujours.",
+    art: { kind: "toque", subject: "crepe" },
+  },
+  {
+    id: "toque-roulotte",
+    family: "toque",
+    rarity: "rare",
+    name: "La Roulotte",
+    quote: "Rouge et jaune, la cheminée qui fume : la cuisine de Mémé arrive au village.",
+    art: { kind: "toque", subject: "roulotte" },
+  },
+  {
+    id: "toque-passe",
+    family: "toque",
+    rarity: "rare",
+    name: "Le Passe",
+    quote: "L'assiette posée, un coup de clochette : service !",
+    art: { kind: "toque", subject: "passe" },
+  },
+  {
+    id: "toque-meme",
+    family: "toque",
+    rarity: "epique",
+    name: "Mémé Jeanne",
+    quote: "Son carnet tient dans une poche. Ses recettes, dans tout le pays.",
+    art: { kind: "toque", subject: "meme" },
+  },
+  {
+    id: "toque-doree",
+    family: "toque",
+    rarity: "legendaire",
+    name: "La Toque dorée",
+    quote: "Trois étoiles dans chaque cuisine, et Mémé qui goûte en souriant.",
+    art: { kind: "toque", subject: "toque" },
   },
 ];
 

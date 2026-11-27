@@ -21,9 +21,11 @@ export interface ToqueConfig {
   /** Seul à la table : un commis l'aide, ou il passe d'un chef à l'autre */
   solo: "commis" | "deux";
   botLevel: BotLevel;
+  /** Coup de feu : les commandes tombent plus vite et attendent moins */
+  rush: boolean;
 }
 
-export const DEFAULT_CONFIG: ToqueConfig = { mode: "service", kitchen: "bistrot", solo: "commis", botLevel: "moyen" };
+export const DEFAULT_CONFIG: ToqueConfig = { mode: "service", kitchen: "bistrot", solo: "commis", botLevel: "moyen", rush: false };
 
 export const MODE_NAMES: Record<ToqueMode, string> = { service: "En brigade", duel: "L'un contre l'autre" };
 
@@ -34,6 +36,7 @@ export function mergeConfig(current: ToqueConfig, patch: Partial<ToqueConfig>): 
   if (isKitchenId(patch.kitchen)) next.kitchen = patch.kitchen;
   if (patch.solo === "commis" || patch.solo === "deux") next.solo = patch.solo;
   if (isBotLevel(patch.botLevel)) next.botLevel = patch.botLevel;
+  if (typeof patch.rush === "boolean") next.rush = patch.rush;
   return next;
 }
 

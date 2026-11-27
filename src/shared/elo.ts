@@ -27,6 +27,7 @@ export const BOT_ELO = {
   bowling: { facile: 800, moyen: 1000, fort: 1200 },
   billard: { facile: 800, moyen: 1000, fort: 1200 },
   cour: { facile: 800, moyen: 1000, fort: 1200 },
+  toque: { facile: 800, moyen: 1000, fort: 1200 },
 } as const;
 
 export function botElo(game: GameId, botLevel?: string): number {
@@ -42,6 +43,7 @@ export function botElo(game: GameId, botLevel?: string): number {
   if (game === "bowling") return BOT_ELO.bowling[botLevel as keyof typeof BOT_ELO.bowling] ?? BOT_ELO.bowling.moyen;
   if (game === "billard") return BOT_ELO.billard[botLevel as keyof typeof BOT_ELO.billard] ?? BOT_ELO.billard.moyen;
   if (game === "cour") return BOT_ELO.cour[botLevel as keyof typeof BOT_ELO.cour] ?? BOT_ELO.cour.moyen;
+  if (game === "toque") return BOT_ELO.toque[botLevel as keyof typeof BOT_ELO.toque] ?? BOT_ELO.toque.moyen;
   return BOT_ELO.uno;
 }
 
