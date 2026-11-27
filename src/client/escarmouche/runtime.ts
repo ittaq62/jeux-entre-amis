@@ -45,6 +45,7 @@ import { WEAPONS, type PrimaryId, type SecondaryId, type WeaponDef, type WeaponI
 import type { Mat, World } from "../../shared/games/escarmouche/world.ts";
 import type { EscarmoucheClientMessage, EscarmoucheRoomView } from "../../shared/protocol.ts";
 import { AutoQuality } from "../lib/autoQuality.ts";
+import { buzz, reducedFeel, Shake } from "../lib/feel.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { EscControls, type Scheme } from "./controls.ts";
 import { EscSound } from "./escSound.ts";
@@ -232,7 +233,13 @@ export class BattleRuntime {
   private lastAlive = false;
   private deathAt = 0;
   private deathPos = new THREE.Vector3();
-  private shake = 0;
+  /** La secousse de la caméra (explosions proches, gros coups reçus), commune aux jeux : douce, et coupée par « Effets réduits » */
+  private shake = new Shake(0.07, 2.2);
+  private shakeOff = new THREE.Vector3();
+  /** Le coup de crosse : la vue recule d'un ou deux centimètres à chaque tir, et revient */
+  private punch = 0;
+  /** Quand il a tiré la dernière fois (pour ne faire vibrer qu'au premier coup d'une rafale) */
+  private lastShotAt = 0;
   private spec = -1;
 
   // Ce qu'on montre
@@ -633,7 +640,9 @@ export class BattleRuntime {
               { id: ++this.feedSeq, angle: wrapAngle(ang - this.yaw), at: performance.now() },
             ];
           }
-          if (e.p === 0 || e.d > 40) this.shake = Math.max(this.shake, 0.4);
+          const heavy = e.p === 0 || e.d > 40;
+          if (heavy) this.shake.add(0.45);
+          buzz(heavy ? "fort" : "impact");
         }
         return;
       }
@@ -674,6 +683,7 @@ export class BattleRuntime {
             pop.at = now;
           }
           this.sound.play("kill", { volume: 0.55 });
+          buzz("reussite");
           this.say(`Tu as éliminé ${this.nameOf(e.v)}${e.h ? " d'une balle à la tête" : ""}`, "good");
           this.award(`${this.nameOf(e.v)} éliminé`, POINTS.kill);
           if (e.h) this.award("Tir à la tête");
@@ -697,6 +707,7 @@ export class BattleRuntime {
         } else if (e.as === this.me && e.v !== this.me) this.award(`Aide contre ${this.nameOf(e.v)}`, POINTS.assist);
         if (e.a === this.me && e.v !== this.me) this.streak++;
         if (e.v === this.me) {
+          buzz("echec");
           this.killer =
             e.a >= 0 && e.a !== e.v ? { name: this.nameOf(e.a), weapon: e.w, head: e.h, hp: this.fighterAt(e.a)?.hp ?? null } : null;
           this.nemesis = e.a >= 0 && e.a !== e.v ? e.a : -1;
@@ -724,7 +735,7 @@ export class BattleRuntime {
         this.sound.play("boom", { at, volume: e.w === "obus" ? 1.2 : 1 });
         const d = at.distanceTo(this.scene.camera.position);
         const reach = e.w === "obus" ? 20 : 14;
-        if (d < reach) this.shake = Math.max(this.shake, 1.3 * (1 - d / reach));
+        if (d < reach) this.shake.add(1.3 * (1 - d / reach));
         if (d < 6) this.suppress = Math.min(1, this.suppress + 0.6);
         return;
       }
@@ -1064,7 +1075,7 @@ export class BattleRuntime {
     this.raise = Math.min(1, this.raise + dt * 2.6);
     this.adsAmount += ((s?.ads ? 1 : 0) - this.adsAmount) * Math.min(1, dt * 14);
     this.err.multiplyScalar(Math.exp(-dt * 14));
-    this.shake = Math.max(0, this.shake - dt * 2.5);
+    this.punch *= Math.exp(-dt * 16);
 
     // La caméra : à ses yeux, ou celle d'un autre soldat pour qui regarde
     const baseFov = prefs.escFov;
@@ -1095,16 +1106,20 @@ export class BattleRuntime {
       this.eyeOff = this.eyeOff === 0 ? eyeWant : this.eyeOff + (eyeWant - this.eyeOff) * Math.min(1, dt * 15);
       this.landDip = Math.max(0, this.landDip - dt * 0.9);
       const bobAmp = s.ground ? Math.min(1, speed / 5) * (s.sprint ? 0.022 : 0.012) : 0;
-      const shakeX = (Math.random() - 0.5) * this.shake * 0.05;
-      const shakeY = (Math.random() - 0.5) * this.shake * 0.05;
+      // La secousse (un décalage doux, et un rien de rotation) et le coup de crosse (la vue recule le long du regard)
+      const off = this.shake.offset(performance.now() / 1000, this.shakeOff) ? this.shakeOff : null;
+      const shakeX = off ? off.x * 0.3 : 0;
+      const shakeY = off ? off.y * 0.3 : 0;
+      const back = reducedFeel() ? 0 : this.punch * 0.022;
       this.scene.setView(
-        s.x + this.err.x,
+        s.x + this.err.x + (off?.x ?? 0) + Math.sin(this.yaw) * back,
         s.y +
           this.eyeOff -
           this.landDip * Math.sin(Math.min(1, this.landDip / 0.16) * Math.PI * 0.5) +
           this.err.y +
-          Math.sin(this.bob * 2) * bobAmp * 0.6,
-        s.z + this.err.z,
+          Math.sin(this.bob * 2) * bobAmp * 0.6 +
+          (off?.y ?? 0),
+        s.z + this.err.z + (off?.z ?? 0) + Math.cos(this.yaw) * back,
         this.yaw + this.kickYaw + this.aimYaw + shakeX,
         this.pitch + this.kickPitch + this.aimPitch + shakeY,
         fov,
@@ -1532,6 +1547,12 @@ export class BattleRuntime {
       this.kickPitch += k;
       this.kickYaw += (Math.random() - 0.5) * k * 0.5;
       this.vmKick = 1;
+      this.punch = Math.min(1, this.punch + Math.min(0.9, w.kick / 5));
+      // Sous le doigt : un tic au coup par coup, un choc pour les armes lourdes ; une rafale ne vibre qu'au premier coup
+      const nowMs = performance.now();
+      const heavy = shot.weapon === "pompe" || shot.weapon === "double" || shot.weapon === "precision" || shot.weapon === "revolver";
+      if (!w.auto || nowMs - this.lastShotAt > 250) buzz(heavy ? "impact" : "tic");
+      this.lastShotAt = nowMs;
     }
     if (out.reloaded) this.reloadSounds(weaponOf(s));
     if (out.swapped) {
