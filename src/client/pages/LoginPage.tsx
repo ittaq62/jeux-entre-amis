@@ -4,9 +4,13 @@ import { useLocation, useSearch } from "wouter";
 import { APP_TAGLINE } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import type { MeResponse } from "../../shared/protocol.ts";
+import type { PublicTable } from "../../shared/publicTable.ts";
 import { CardFace } from "../components/Card.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { Logo } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
+import { invitedCode, inviteDetails, inviteTitle } from "../lib/invite.ts";
+import { GameTicket } from "../tour/TourParts.tsx";
 import { unlockAudio } from "../lib/sound.ts";
 import { useSession } from "../stores/session.ts";
 
@@ -26,6 +30,7 @@ export function LoginPage() {
   const search = useSearch();
   const next = new URLSearchParams(search).get("suite") ?? "/";
   const apply = useSession((s) => s.apply);
+  const invited = useInvitation(next);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState(() => {
     try {
@@ -115,11 +120,14 @@ export function LoginPage() {
           <p className="login-tagline">{APP_TAGLINE}</p>
         </div>
 
+        {/* Arrivé par un lien d'invitation : qui attend, à quel jeu, et la place qu'il reste */}
+        {invited && <InviteNote table={invited} />}
+
         <div className="panel login-panel">
           {step === "email" ? (
             <form key="email" onSubmit={sendCode} className="stack rise">
               <div>
-                <h2>Connexion</h2>
+                <h2>{invited ? "Connecte-toi pour t'asseoir" : "Connexion"}</h2>
                 <p className="hint">Pas de mot de passe : tu reçois un code par email.</p>
               </div>
               <label className="field">
@@ -240,5 +248,50 @@ function CodeInput({
         ))}
       </div>
     </label>
+  );
+}
+
+/**
+ * La table où mène la connexion, quand on arrive par un lien d'invitation (« /salon/ABCD ») : son résumé public, ou
+ * null (pas d'invitation, table disparue, réseau coupé : la page reste une connexion ordinaire).
+ */
+function useInvitation(next: string): PublicTable | null {
+  const code = invitedCode(next);
+  const [table, setTable] = useState<PublicTable | null>(null);
+  useEffect(() => {
+    if (!code) return;
+    let alive = true;
+    api
+      .get<{ room: PublicTable }>(`/rooms/${code}/public`)
+      .then((r) => alive && setTable(r.room))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  return code ? table : null;
+}
+
+function InviteNote({ table }: { table: PublicTable }) {
+  return (
+    <motion.div
+      className="login-invite panel"
+      role="status"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {table.game === "tour" ? (
+        <span className="invite-card-tour" aria-hidden="true">
+          <Icon name="trophy" size={22} />
+        </span>
+      ) : (
+        <GameTicket game={table.game} size="sm" />
+      )}
+      <span className="login-invite-text">
+        <strong>{inviteTitle(table)}</strong>
+        <span>{inviteDetails(table)}</span>
+      </span>
+    </motion.div>
   );
 }
