@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { HALF_L, HALF_W } from "../../shared/games/crampons/pitch.ts";
 import { keyLabel, type ActionId, type Bindings, type TouchPad } from "./bindings.ts";
 import type { Scheme } from "./controls.ts";
+import { traceTeamShape } from "./teamMarks.tsx";
 
 interface Hint {
   keys: string[];
@@ -73,7 +74,20 @@ export function KeyHints({ scheme, defending, bindings }: { scheme: Scheme; defe
 }
 
 /** Le mini-terrain : tout le monde d'un seul coup d'œil */
-export function Radar({ data, ballX, ballZ, colors }: { data: number[]; ballX: number; ballZ: number; colors: [string, string] }) {
+export function Radar({
+  data,
+  ballX,
+  ballZ,
+  colors,
+  marks = false,
+}: {
+  data: number[];
+  ballX: number;
+  ballZ: number;
+  colors: [string, string];
+  /** « Symboles de couleur » : l'équipe de droite en triangles */
+  marks?: boolean;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -102,8 +116,12 @@ export function Radar({ data, ballX, ballZ, colors }: { data: number[]; ballX: n
       const code = data[i + 2]!;
       const me = code >= 2;
       g.fillStyle = colors[code % 2]!;
-      g.beginPath();
-      g.arc(X(data[i]!), Z(data[i + 1]!), me ? 6 : 4, 0, Math.PI * 2);
+      const r = me ? 6 : 4;
+      if (marks) traceTeamShape(g, code % 2, X(data[i]!), Z(data[i + 1]!), code % 2 === 1 ? r * 1.25 : r);
+      else {
+        g.beginPath();
+        g.arc(X(data[i]!), Z(data[i + 1]!), r, 0, Math.PI * 2);
+      }
       g.fill();
       g.lineWidth = me ? 2.5 : 1;
       g.strokeStyle = me ? "#ffe066" : "rgba(0,0,0,0.6)";
@@ -113,7 +131,7 @@ export function Radar({ data, ballX, ballZ, colors }: { data: number[]; ballX: n
     g.beginPath();
     g.arc(X(ballX), Z(ballZ), 3.4, 0, Math.PI * 2);
     g.fill();
-  }, [data, ballX, ballZ, colors]);
+  }, [data, ballX, ballZ, colors, marks]);
   return <canvas ref={ref} className="cr-radar" width={260} height={168} aria-hidden="true" />;
 }
 

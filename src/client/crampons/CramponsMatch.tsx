@@ -30,6 +30,7 @@ import { SettingsPanel } from "./CramponsSettings.tsx";
 import { Commentator } from "./commentary.ts";
 import { MatchRuntime, type HudState } from "./runtime.ts";
 import { StadiumSound } from "./stadiumSound.ts";
+import { inkOn, TEAM_SHAPE_NAMES, TeamMark } from "./teamMarks.tsx";
 import type { MatchListeners } from "./useCramponsRoom.ts";
 import { DrawnRulesNote } from "../game/RandomRules.tsx";
 
@@ -91,12 +92,13 @@ function celebrationFor(room: CramponsRoomView, team: number, human: string | nu
  * Les cartons d'une équipe, sous sa ligne du tableau : un petit carton à côté du numéro de chacun ; l'exclu, carton
  * rouge et numéro barré. Le nom de chacun pour les lecteurs d'écran, et au survol.
  */
-function BugCards({ team, view }: { team: 0 | 1; view: CramponsView }) {
+function BugCards({ team, view, marks }: { team: 0 | 1; view: CramponsView; marks: boolean }) {
   const list = view.cards.filter((c) => view.players[c.i]?.team === team);
   if (list.length === 0) return null;
   const said = list.map((c) => `${view.players[c.i]?.name ?? ""}, ${c.off ? "carton rouge, exclu" : "carton jaune"}`).join(" ; ");
   return (
     <div className="cr-bug-cards" aria-label={`Cartons de ${view.teams[team].name} : ${said}`}>
+      {marks && <TeamMark team={team} size={9} className="cr-bug-cards-mark" />}
       {list.map((c) => (
         <span key={c.i} className={c.off ? "is-out" : ""} title={view.players[c.i]?.name}>
           <i className={c.off ? "is-red" : "is-yellow"} aria-hidden="true" />
@@ -354,6 +356,8 @@ export function CramponsMatch({
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtime = useRef<MatchRuntime | null>(null);
   const reduced = usePrefs((s) => s.reducedEffects);
+  // « Symboles de couleur » : chaque équipe a sa forme (rond, triangle), sur les maillots et au tableau
+  const marks = usePrefs((s) => s.colorblind);
   const inTour = Boolean(useTourBridge());
   const [hud, setHud] = useState<HudState>({
     clock: 0,
@@ -569,6 +573,11 @@ export function CramponsMatch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchKey, seatId]);
 
+  // Les formes des équipes sur les maillots suivent le réglage, même changé en plein match
+  useEffect(() => {
+    runtime.current?.setMarks(marks);
+  }, [marks, matchKey, seatId]);
+
   const counting = gateClock.countdown !== null;
   useEffect(() => {
     runtime.current?.holdIntro(!gateClock.passed && !counting);
@@ -676,18 +685,24 @@ export function CramponsMatch({
       <div className="cr-topleft">
         <div className={`cr-bug ${cinema === "intro" ? "is-hidden" : ""}`} role="status">
           <div className="cr-bug-teams">
-            <div className="cr-bug-team">
-              <i style={{ background: left.kit.shirt }} />
-              <b>{left.short}</b>
+            <div className={`cr-bug-team ${marks ? "has-mark" : ""}`}>
+              <i style={{ background: left.kit.shirt, color: inkOn(left.kit.shirt) }}>{marks && <TeamMark team={0} size={9} />}</i>
+              <b>
+                {left.short}
+                {marks && <span className="visually-hidden">, {TEAM_SHAPE_NAMES[0]}</span>}
+              </b>
               <strong className="num">{score[0]}</strong>
             </div>
-            <BugCards team={0} view={view} />
-            <div className="cr-bug-team">
-              <i style={{ background: right.kit.shirt }} />
-              <b>{right.short}</b>
+            <BugCards team={0} view={view} marks={marks} />
+            <div className={`cr-bug-team ${marks ? "has-mark" : ""}`}>
+              <i style={{ background: right.kit.shirt, color: inkOn(right.kit.shirt) }}>{marks && <TeamMark team={1} size={9} />}</i>
+              <b>
+                {right.short}
+                {marks && <span className="visually-hidden">, {TEAM_SHAPE_NAMES[1]}</span>}
+              </b>
               <strong className="num">{score[1]}</strong>
             </div>
-            <BugCards team={1} view={view} />
+            <BugCards team={1} view={view} marks={marks} />
           </div>
           <div className="cr-bug-clock num">
             {view.period === 5 ? "T.A.B." : formatClock(hud.clock)}
@@ -840,7 +855,7 @@ export function CramponsMatch({
       {seatId !== null && !over && !touch && !cinema && (
         <KeyHints scheme={hud.scheme} defending={hud.defending} bindings={settings.bindings} />
       )}
-      {!over && !cinema && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} />}
+      {!over && !cinema && <Radar data={hud.radar} ballX={hud.ballX} ballZ={hud.ballZ} colors={radarColors} marks={marks} />}
 
       {touch && seatId !== null && !over && (
         <div className={`cr-pad is-${settings.touchPad} ${cinema ? "is-cinema" : ""}`} data-ball={withBall ? "" : undefined}>

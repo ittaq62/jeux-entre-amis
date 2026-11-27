@@ -318,6 +318,11 @@ export class CramponsScene {
     this.shake = Math.max(this.shake, 0.35 + power * 0.65);
   }
 
+  /** « Symboles de couleur » : la forme de chaque équipe sur les maillots */
+  setMarks(on: boolean) {
+    this.crowd.setMarks(on);
+  }
+
   setShadows(on: boolean) {
     if (!this.shadows) return;
     this.sun.castShadow = on;

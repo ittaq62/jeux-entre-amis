@@ -600,6 +600,11 @@ export class MatchRuntime {
     this.scene.mode = mode;
   }
 
+  /** « Symboles de couleur » : la forme de chaque équipe sur les maillots */
+  setMarks(on: boolean) {
+    this.scene.setMarks(on);
+  }
+
   /** Ce coup de pied du joueur a déjà été entendu et vu au moment d'appuyer : le serveur ne fait que le confirmer */
   isLocalKick(p: number): boolean {
     const k = this.localKick;

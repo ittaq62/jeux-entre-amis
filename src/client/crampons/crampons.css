@@ -118,6 +118,21 @@ html:has(.cr-root) body {
   height: 100%;
 }
 
+/* « Symboles de couleur » : la forme de l'équipe dans sa bande de couleur, et devant ses cartons */
+.cr-bug-team.has-mark {
+  grid-template-columns: 15px 54px 32px;
+}
+
+.cr-bug-team.has-mark i {
+  display: grid;
+  place-items: center;
+}
+
+.cr-bug-cards-mark {
+  align-self: center;
+  opacity: 0.75;
+}
+
 .cr-bug-team b {
   padding-left: 10px;
   font-size: 15px;
@@ -767,6 +782,10 @@ kbd {
 
   .cr-bug-team {
     grid-template-columns: 7px 44px 30px;
+  }
+
+  .cr-bug-team.has-mark {
+    grid-template-columns: 13px 44px 30px;
   }
 
   .cr-bug-team b {

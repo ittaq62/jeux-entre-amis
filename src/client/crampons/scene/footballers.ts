@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Act, Team } from "../../../shared/games/crampons/model.ts";
 import { clamp, wrapAngle } from "../../../shared/games/crampons/pitch.ts";
+import { traceTeamShape } from "../teamMarks.tsx";
 
 export interface Kit {
   shirt: string;
@@ -921,11 +922,22 @@ function isLight(hex: string): boolean {
 const TILE_COLS = 6;
 const TILE_ROWS = 4;
 
-/** Une planche de maillots : un carreau par joueur, avec sa couleur, ses bandes et son numéro dans le dos */
-function shirtAtlas(kits: Kit[], shirts: number[]): THREE.CanvasTexture {
+/**
+ * Une planche de maillots : un carreau par joueur, avec sa couleur, ses bandes et son numéro dans le dos. `teams`
+ * (réglage « Symboles de couleur ») : la forme de son équipe dans le dos, au-dessus du numéro, et à la place de l'écusson
+ */
+function shirtAtlas(kits: Kit[], shirts: number[], teams: number[] | null): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  drawShirts(c, kits, shirts, teams);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function drawShirts(c: HTMLCanvasElement, kits: Kit[], shirts: number[], teams: number[] | null) {
   const tw = 170;
   const th = 128;
-  const c = document.createElement("canvas");
   c.width = tw * TILE_COLS;
   c.height = th * TILE_ROWS;
   const g = c.getContext("2d")!;
@@ -956,7 +968,9 @@ function shirtAtlas(kits: Kit[], shirts: number[]): THREE.CanvasTexture {
     // Le haut des épaules, dans la couleur des manches
     g.fillStyle = k.sleeves === k.shirt ? "rgba(255,255,255,0.22)" : k.sleeves;
     g.fillRect(x, y, tw, th * 0.11);
-    // Dans le dos, un numéro bordé : il reste lisible sur n'importe quel motif
+    // Dans le dos, un numéro bordé : il reste lisible sur n'importe quel motif (un peu plus bas sous la forme de l'équipe)
+    const team = teams?.[i];
+    const numberY = y + th * (team === undefined ? 0.47 : 0.53);
     const dark = isLight(k.shirt);
     g.font = `900 ${th * 0.46}px 'Arial Black', Arial, sans-serif`;
     g.textAlign = "center";
@@ -964,19 +978,27 @@ function shirtAtlas(kits: Kit[], shirts: number[]): THREE.CanvasTexture {
     g.lineJoin = "round";
     g.lineWidth = 8;
     g.strokeStyle = dark ? "#ffffff" : "#16202c";
-    g.strokeText(String(shirts[i] ?? i + 1), x + tw / 2, y + th * 0.47);
+    g.strokeText(String(shirts[i] ?? i + 1), x + tw / 2, numberY);
     g.fillStyle = dark ? "#16202c" : "#ffffff";
-    g.fillText(String(shirts[i] ?? i + 1), x + tw / 2, y + th * 0.47);
+    g.fillText(String(shirts[i] ?? i + 1), x + tw / 2, numberY);
     // L'écusson sur le cœur, et un petit numéro sur la poitrine
     g.fillStyle = isLight(k.shirt) ? "#16202c" : "#ffffff";
-    g.beginPath();
-    g.arc(x + tw * 0.085, y + th * 0.34, th * 0.052, 0, Math.PI * 2);
-    g.fill();
+    if (team === undefined) {
+      g.beginPath();
+      g.arc(x + tw * 0.085, y + th * 0.34, th * 0.052, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      // La forme de l'équipe, sur le cœur et en haut du dos, bordée comme le numéro
+      traceTeamShape(g, team, x + tw * 0.085, y + th * 0.34, th * 0.065);
+      g.fill();
+      traceTeamShape(g, team, x + tw / 2, y + th * 0.2, th * 0.068);
+      g.lineWidth = 6;
+      g.strokeStyle = dark ? "#ffffff" : "#16202c";
+      g.stroke();
+      g.fillStyle = dark ? "#16202c" : "#ffffff";
+      g.fill();
+    }
   });
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
 }
 
 interface FaceTraits {
@@ -1270,6 +1292,9 @@ export class Footballers {
   private hair: (THREE.InstancedMesh | null)[] = [];
   private shadows: THREE.InstancedMesh | null = null;
   private atlas: THREE.CanvasTexture;
+  private atlasKits: Kit[];
+  private atlasShirts: number[];
+  private marks = false;
   private faces: THREE.CanvasTexture;
   private faceTiles: THREE.InstancedBufferAttribute;
   private blob: THREE.Texture | null = null;
@@ -1405,7 +1430,9 @@ export class Footballers {
       22,
     );
     const kitOf = keeperFlags.map((k, i) => (k ? gkKits[i < count / 2 ? 0 : 1] : kits[i < count / 2 ? 0 : 1]));
-    this.atlas = shirtAtlas(kitOf, shirts);
+    this.atlasKits = kitOf;
+    this.atlasShirts = shirts;
+    this.atlas = shirtAtlas(kitOf, shirts, null);
     const shirtTiles = new Float32Array(count * 2);
     for (let i = 0; i < count; i++) {
       shirtTiles[i * 2] = (i % TILE_COLS) / TILE_COLS;
@@ -1782,6 +1809,16 @@ export class Footballers {
       }
     }
     for (const m of this.meshes) m.instanceMatrix.needsUpdate = true;
+  }
+
+  /** « Symboles de couleur » allumé ou éteint : les maillots portent (ou plus) la forme de leur équipe */
+  setMarks(on: boolean) {
+    if (on === this.marks) return;
+    this.marks = on;
+    const half = this.atlasKits.length / 2;
+    const teams = on ? this.atlasKits.map((_, i) => (i < half ? 0 : 1)) : null;
+    drawShirts(this.atlas.image as HTMLCanvasElement, this.atlasKits, this.atlasShirts, teams);
+    this.atlas.needsUpdate = true;
   }
 
   dispose() {
