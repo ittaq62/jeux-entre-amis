@@ -11,6 +11,7 @@ import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { OnboardingPage } from "./pages/OnboardingPage.tsx";
 import { setHubNavigator, useHub } from "./stores/hub.ts";
+import { usePrefs } from "./stores/prefs.ts";
 import { useSession } from "./stores/session.ts";
 
 // Les autres pages sont chargees a la demande pour un premier affichage rapide sur mobile
@@ -56,6 +57,12 @@ export function App() {
   }, [load]);
 
   useEffect(() => setHubNavigator(navigate), [navigate]);
+
+  // « Effets réduits » coupe aussi les apparitions des pages et des listes (styles/base.css)
+  const reduced = usePrefs((s) => s.reducedEffects);
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reduced);
+  }, [reduced]);
 
   useEffect(() => {
     if (user) useHub.getState().connect();
