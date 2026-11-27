@@ -128,7 +128,7 @@ export function DevBillard() {
 
   return (
     <div ref={root} className="bl-game">
-      <BillardCoach root={root} active={Boolean(hud?.canShoot && !hud.placing && !hud.mustCall)} turn={view?.shots ?? 0} />
+      <BillardCoach root={root} active={Boolean(hud?.canShoot && !hud.placing && !hud.mustCall)} turn={`dev:${view?.shots ?? 0}`} />
       <div ref={host} className="bl-stage" />
       {view && (
         <header className="bl-top">

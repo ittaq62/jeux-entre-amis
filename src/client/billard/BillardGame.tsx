@@ -9,7 +9,7 @@ import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { EmotePicker } from "../game/ChatPanel.tsx";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
-import { coachDone } from "../lib/coach.tsx";
+import { coachDone, coachShowing } from "../lib/coach.tsx";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { nextFrame } from "../lib/prepare.ts";
@@ -243,6 +243,8 @@ export function BillardGame({
   const now = serverNow();
   const myTurn = v.phase === "aim" && v.shooter === mySeat;
   const finished = room.status === "finished" || v.phase === "over";
+  const coachActive = Boolean(myTurn && hud?.canShoot && !hud.placing && !hud.mustCall && !finished && !menu && !help);
+  const coaching = coachShowing("billard", coachActive);
   const left = Math.max(0, Math.ceil((v.deadline - now) / 1000));
   const lastTick = useRef(-1);
   useEffect(() => {
@@ -319,27 +321,26 @@ export function BillardGame({
         </div>
       )}
 
-      <BillardCoach
-        root={gameRoot}
-        active={Boolean(myTurn && hud?.canShoot && !hud.placing && !hud.mustCall && !finished && !menu && !help)}
-        turn={v.shots}
-      />
+      <BillardCoach root={gameRoot} active={coachActive} turn={`${room.code}:${v.shots}`} />
       {myTurn && hud?.canShoot && (
         <>
           <PowerBar pull={hud.pull} onPull={(k) => runtime.current?.setPull(k)} onRelease={() => runtime.current?.release()} />
           <TipPicker a={hud.tip.a} b={hud.tip.b} onChange={(a, b) => runtime.current?.setTip(a, b)} />
           {!hud.placing && <FineAim onTurn={(d) => runtime.current?.nudge(d)} />}
-          <p className="bl-tip">
-            {hud.inHand
-              ? "Bille en main : fais glisser la blanche, puis vise"
-              : hud.mustCall
-                ? hud.call !== null
-                  ? `Noire annoncée : ${pocketName(hud.call)} · touche une poche pour changer`
-                  : "Annonce la poche de la noire : touche-la sur la table"
-                : v.shots === 0 || v.breakShot
-                  ? "Glisse pour viser, tire la queue vers toi à droite, lâche pour frapper"
-                  : "Glisse pour viser · tire la queue à droite, lâche pour frapper"}
-          </p>
+          {/* La bulle du coach dit la même chose, en montrant : l'aide écrite se tait pendant ce temps */}
+          {!coaching && (
+            <p className="bl-tip">
+              {hud.inHand
+                ? "Bille en main : fais glisser la blanche, puis vise"
+                : hud.mustCall
+                  ? hud.call !== null
+                    ? `Noire annoncée : ${pocketName(hud.call)} · touche une poche pour changer`
+                    : "Annonce la poche de la noire : touche-la sur la table"
+                  : v.shots === 0 || v.breakShot
+                    ? "Glisse pour viser, tire la queue vers toi à droite, lâche pour frapper"
+                    : "Glisse pour viser · tire la queue à droite, lâche pour frapper"}
+            </p>
+          )}
         </>
       )}
 

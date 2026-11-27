@@ -57,7 +57,16 @@ export function billardSteps(root: DOMRect, power: DOMRect | null, fine: DOMRect
 }
 
 /** La main fantôme du billard : pendant ses premiers tours, quand c'est à lui de jouer et qu'il peut frapper */
-export function BillardCoach({ root, active, turn }: { root: RefObject<HTMLElement | null>; active: boolean; turn: number }) {
+export function BillardCoach({
+  root,
+  active,
+  turn,
+}: {
+  root: RefObject<HTMLElement | null>;
+  active: boolean;
+  /** Ce qui distingue un tour du suivant (la table et le numéro du coup) : un tour ne compte qu'une fois */
+  turn: string;
+}) {
   const [steps, setSteps] = useState<CoachStep[]>([]);
   useEffect(() => {
     if (!active) return;
@@ -70,7 +79,9 @@ export function BillardCoach({ root, active, turn }: { root: RefObject<HTMLEleme
       const fine = el.querySelector(".bl-fine")?.getBoundingClientRect() ?? null;
       setSteps(billardSteps(r, power, fine));
     };
-    // Les commandes viennent d'apparaître : on les mesure à l'image suivante, puis à chaque changement de taille
+    // Les commandes viennent d'apparaître (elles sont déjà dans la page) : on les mesure tout de suite, encore à l'image
+    // suivante (leur place finale), puis à chaque changement de taille
+    measure();
     const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
     return () => {
