@@ -6,6 +6,7 @@
 import { audioOut, effectsLevel, musicLevel } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import type { WeaponId } from "../../shared/games/escarmouche/weapons.ts";
+import { SHOT_VARIANTS, SHOTS, shotSamples, type ShotSpec } from "./shotSynth.ts";
 
 export type EscSoundName =
   | `shot-${WeaponId}`
@@ -55,31 +56,6 @@ export type EscSoundName =
   | "shot-quiet"
   | "crate"
   | "beep";
-
-interface ShotSpec {
-  thump: number;
-  thumpDecay: number;
-  noiseDecay: number;
-  cut: number;
-  tail: number;
-  crack: number;
-  gain: number;
-}
-
-const SHOTS: Record<WeaponId, ShotSpec> = {
-  fa: { thump: 85, thumpDecay: 0.07, noiseDecay: 0.05, cut: 5200, tail: 0.45, crack: 0.5, gain: 0.9 },
-  pm: { thump: 120, thumpDecay: 0.05, noiseDecay: 0.035, cut: 6200, tail: 0.3, crack: 0.4, gain: 0.75 },
-  pompe: { thump: 55, thumpDecay: 0.13, noiseDecay: 0.1, cut: 3200, tail: 0.75, crack: 0.3, gain: 1 },
-  precision: { thump: 70, thumpDecay: 0.1, noiseDecay: 0.06, cut: 7000, tail: 1.1, crack: 0.9, gain: 1 },
-  pistolet: { thump: 140, thumpDecay: 0.05, noiseDecay: 0.04, cut: 5600, tail: 0.32, crack: 0.45, gain: 0.7 },
-  carabine: { thump: 75, thumpDecay: 0.09, noiseDecay: 0.055, cut: 6400, tail: 0.8, crack: 0.75, gain: 0.95 },
-  fm: { thump: 80, thumpDecay: 0.08, noiseDecay: 0.06, cut: 4600, tail: 0.5, crack: 0.45, gain: 0.95 },
-  mitraillette: { thump: 135, thumpDecay: 0.04, noiseDecay: 0.03, cut: 6800, tail: 0.25, crack: 0.35, gain: 0.7 },
-  rafale: { thump: 90, thumpDecay: 0.065, noiseDecay: 0.045, cut: 5600, tail: 0.42, crack: 0.55, gain: 0.85 },
-  double: { thump: 50, thumpDecay: 0.15, noiseDecay: 0.11, cut: 3000, tail: 0.85, crack: 0.3, gain: 1 },
-  revolver: { thump: 95, thumpDecay: 0.09, noiseDecay: 0.06, cut: 4800, tail: 0.6, crack: 0.6, gain: 0.9 },
-  pa: { thump: 150, thumpDecay: 0.04, noiseDecay: 0.03, cut: 6000, tail: 0.25, crack: 0.4, gain: 0.65 },
-};
 
 /** Ce que chaque son envoie dans l'écho (0 : rien, un clic d'interface par exemple) */
 const WET: Partial<Record<string, number>> = {
@@ -193,6 +169,8 @@ export class EscSound {
   private ctx: AudioContext | null;
   private out: GainNode | null;
   private buffers = new Map<EscSoundName, AudioBuffer>();
+  /** Les sons qui ont plusieurs versions (les détonations) : une au hasard à chaque fois */
+  private variants = new Map<EscSoundName, AudioBuffer[]>();
   private last = new Map<string, number>();
   /** L'écho : une réverbération faite d'un bruit qui s'éteint, où chaque son envoie un peu de lui-même */
   private verb: ConvolverNode | null = null;
@@ -611,27 +589,12 @@ export class EscSound {
     return buf;
   }
 
-  private shot(spec: ShotSpec, far: boolean) {
-    return this.make(spec.tail + 0.15, (d, sr) => {
-      const n = noiseGen(far ? 77 : 13);
-      const k = lowpassK(far ? 900 : spec.cut, sr);
-      const kTail = lowpassK(far ? 500 : 1400, sr);
-      let lp = 0;
-      let lpTail = 0;
-      for (let i = 0; i < d.length; i++) {
-        const t = i / sr;
-        const w = n();
-        lp += k * (w - lp);
-        lpTail += kTail * (w - lpTail);
-        const body = lp * Math.exp(-t / spec.noiseDecay);
-        const crack = far ? 0 : w * spec.crack * Math.exp(-t / 0.004);
-        const f = spec.thump * (1 + 1.5 * Math.exp(-t / 0.02));
-        const thump = Math.sin(2 * Math.PI * f * t) * Math.exp(-t / spec.thumpDecay) * (far ? 0.6 : 1.1);
-        // La queue : l'écho entre les murs, qui s'éteint
-        const tail = lpTail * 0.35 * Math.exp(-t / (spec.tail * 0.35)) * Math.min(1, t / 0.02);
-        d[i] = (body + crack + thump + tail) * spec.gain;
-      }
-    });
+  /** Une détonation (voir shotSynth.ts), au niveau de son arme */
+  private shot(spec: ShotSpec, far: boolean, variant: number) {
+    const buf = this.make(spec.tail + (far ? 0.5 : 0.22), (d, sr) => d.set(shotSamples(spec, far, variant, sr).subarray(0, d.length)));
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = d[i]! * spec.gain;
+    return buf;
   }
 
   private click(len: number, freq: number, seed: number) {
@@ -662,8 +625,15 @@ export class EscSound {
 
   private build(ctx: AudioContext) {
     void ctx;
-    for (const [id, spec] of Object.entries(SHOTS) as [WeaponId, ShotSpec][]) this.buffers.set(`shot-${id}`, this.shot(spec, false));
-    this.buffers.set("far", this.shot(SHOTS.fa, true));
+    // Chaque arme a plusieurs façons de tirer : on en prend une au hasard à chaque coup
+    for (const [id, spec] of Object.entries(SHOTS) as [WeaponId, ShotSpec][]) {
+      const all = Array.from({ length: SHOT_VARIANTS }, (_, v) => this.shot(spec, false, v));
+      this.variants.set(`shot-${id}`, all);
+      this.buffers.set(`shot-${id}`, all[0]!);
+    }
+    const far = [0, 1].map((v) => this.shot(SHOTS.fa, true, v));
+    this.variants.set("far", far);
+    this.buffers.set("far", far[0]!);
     // Le rechargement : le chargeur qui sort, celui qui entre, la culasse
     this.buffers.set(
       "reload",
@@ -938,12 +908,14 @@ export class EscSound {
       this.make(0.22, (d, sr) => {
         const n = noiseGen(616);
         let lp = 0;
+        let lo = 0;
         for (let i = 0; i < d.length; i++) {
           const t = i / sr;
           lp += lowpassK(1300, sr) * (n() - lp);
-          const thump = Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t / 0.025);
+          // Le grave du coup étouffé : du bruit filtré bas, pas une note
+          lo += lowpassK(260, sr) * (lp - lo);
           const click = n() * 0.35 * Math.exp(-Math.abs(t - 0.03) / 0.004);
-          d[i] = (lp * Math.exp(-t / 0.04) + thump * 0.6 + click) * 0.8;
+          d[i] = (lp * Math.exp(-t / 0.04) + lo * 4 * Math.exp(-t / 0.03) * Math.min(1, t / 0.001) + click) * 0.8;
         }
       }),
     );
@@ -1109,7 +1081,8 @@ export class EscSound {
     const vol = effectsLevel();
     const ctx = this.ctx;
     if (vol <= 0 || !ctx || !this.out) return;
-    const buf = this.buffers.get(name);
+    const all = this.variants.get(name);
+    const buf = all ? all[Math.floor(Math.random() * all.length)] : this.buffers.get(name);
     if (!buf) return;
     // Pas deux fois le même son en même temps (au même endroit)
     const key = `${name}:${opts.at ? `${Math.round(opts.at.x)},${Math.round(opts.at.z)}` : "me"}`;
