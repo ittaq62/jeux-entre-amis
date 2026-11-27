@@ -1,5 +1,8 @@
 import { useEffect, useRef, type CSSProperties } from "react";
+import { strokeLimit } from "../../shared/games/minigolf/course.ts";
 import { COURSES, holeDef } from "../../shared/games/minigolf/courses.ts";
+import { courseOpen, STAR_COURSES } from "../../shared/games/minigolf/starCourses.ts";
+import { challengeDone, challengeOf } from "../../shared/games/minigolf/stars.ts";
 import { colorOf, type BallLook } from "../../shared/games/minigolf/looks.ts";
 import { totals } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfClientMessage, MinigolfRoomView } from "../../shared/games/minigolf/net.ts";
@@ -8,6 +11,9 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { Stars } from "../stars/Stars.tsx";
+import { useGameStars, useStarsStore } from "../stores/stars.ts";
+import { HoleStarStrip } from "./Adventure.tsx";
 
 /** Le nom d'un score sur un trou */
 export function scoreName(strokes: number, par: number): { text: string; tone: "great" | "good" | "info" | "bad" } {
@@ -72,18 +78,45 @@ export function Scorecard({
     .sort((a, b) => Number(b === room.you.seatId) - Number(a === room.you.seatId))
     .map((id) => (id === room.you.seatId ? "Toi" : (players.find((p) => p.id === id)?.name ?? "?")));
   const tiedTitle = tied.length <= 3 ? `${tied.slice(0, -1).join(", ")} et ${tied[tied.length - 1]} à égalité !` : "Égalité en tête !";
-  const title = final
-    ? winners.length === 0
-      ? "Partie finie"
-      : v.cfg.teams
-        ? `Victoire des ${TOUR_TEAMS[v.players[winners[0]!]!.team]} !`
-        : winners.length === 1
-          ? v.players[winners[0]!]!.id === room.you.seatId
-            ? "Tu gagnes !"
-            : `${players.find((p) => p.id === v.players[winners[0]!]!.id)?.name ?? "?"} gagne !`
-          : tiedTitle
-    : `Après le trou ${v.hole + 1}`;
   const course = COURSES[v.holes[0]!.c];
+  // Les étoiles des trous gagnées à la fin (la salle les a comptées) : notées tout de suite pour les menus
+  const myStars = final ? room.stars?.[room.you.userId] : undefined;
+  useEffect(() => {
+    if (myStars) for (const r of myStars.results) useStarsStore.getState().apply(r);
+  }, [myStars]);
+  const freshStars = myStars ? myStars.results.reduce((n, r) => n + Math.max(0, r.stars - r.previous), 0) : 0;
+  const oneCourse = v.holes.every((h) => h.c === v.holes[0]!.c) ? v.holes[0]!.c : null;
+  // L'aventure : les défis de chaque trou, le parcours suivant s'il vient de s'ouvrir
+  const adventure = Boolean(v.cfg.adventure);
+  const me = v.players.find((p) => p.id === room.you.seatId);
+  const challenges = adventure
+    ? v.holes.map((ref, h) => {
+        const ch = challengeOf(ref.c, ref.i);
+        const strokes = me?.scores[h];
+        const par = pars[h]!;
+        const feat = me?.feats?.[h];
+        const ok = strokes != null && challengeDone(ch, { strokes, par, lost: feat?.lost ?? 0, bank: feat?.bank ?? false });
+        return { ch, ok, played: strokes != null && strokes <= strokeLimit(par) };
+      })
+    : [];
+  const stars = useGameStars("minigolf");
+  const k = STAR_COURSES.findIndex((c) => c.id === course.id);
+  const next = k >= 0 && k + 1 < STAR_COURSES.length ? STAR_COURSES[k + 1]! : null;
+  const nextOpen = next ? courseOpen(stars, next.id) : false;
+  const myTotal = me ? me.scores.reduce<number>((n, x) => n + (x ?? 0), 0) : 0;
+  const title = final
+    ? adventure
+      ? `${course.name} : ${myTotal} coups`
+      : winners.length === 0
+        ? "Partie finie"
+        : v.cfg.teams
+          ? `Victoire des ${TOUR_TEAMS[v.players[winners[0]!]!.team]} !`
+          : winners.length === 1
+            ? v.players[winners[0]!]!.id === room.you.seatId
+              ? "Tu gagnes !"
+              : `${players.find((p) => p.id === v.players[winners[0]!]!.id)?.name ?? "?"} gagne !`
+            : tiedTitle
+    : `Après le trou ${v.hole + 1}`;
   // Sur un écran étroit, le tableau défile entre les noms et le total, qui restent : il montre le trou qui vient de se jouer
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -102,7 +135,23 @@ export function Scorecard({
           {v.holes.length} trous · {v.cfg.course === "melange" ? "mélange de parcours" : course.name}
           {countdown !== null && (v.hole + 1 < v.holes.length ? ` · trou suivant dans ${countdown} s` : ` · résultats dans ${countdown} s`)}
         </p>
-        {final && <EloLine result={room.results?.[room.you.userId]} />}
+        {final && !adventure && <EloLine result={room.results?.[room.you.userId]} />}
+        {myStars && (
+          <div className={`mg-stars-won ${freshStars > 0 ? "is-new" : ""}`}>
+            <Stars value={Math.min(3, Math.max(1, freshStars))} size={22} fresh={Math.min(3, freshStars)} />
+            <p style={{ margin: 0 }}>
+              {freshStars > 0 ? (
+                <>
+                  <strong>{freshStars === 1 ? "Une nouvelle étoile" : `${freshStars} nouvelles étoiles`}</strong>{" "}
+                  <span className="num">+{myStars.points} points</span>
+                </>
+              ) : (
+                "Pas de nouvelle étoile cette fois : fais mieux que ton record sur un trou."
+              )}
+            </p>
+            {oneCourse && <HoleStarStrip course={oneCourse} />}
+          </div>
+        )}
         <div className="mg-table-wrap" ref={wrap}>
           <table className="mg-table">
             <thead>
@@ -149,6 +198,19 @@ export function Scorecard({
                   </tr>
                 );
               })}
+              {adventure && (
+                <tr className="mg-challenge-row">
+                  <th className="mg-name-col">Défis</th>
+                  {challenges.map((c, h) => (
+                    <td key={h} className={c.ok ? "is-ok" : ""} title={c.ch.text}>
+                      {c.ok ? "✓" : c.played ? "·" : ""}
+                    </td>
+                  ))}
+                  <td className="num mg-total-col">
+                    {challenges.filter((c) => c.ok).length}/{challenges.length}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -171,7 +233,20 @@ export function Scorecard({
                   Prendre une place
                 </button>
               )}
-              {!inTour && seated && (
+              {adventure && room.you.isHost && next && nextOpen && (
+                <button className="btn btn-primary" onClick={() => send({ t: "adventure", course: next.id })}>
+                  Parcours suivant : {next.name}
+                </button>
+              )}
+              {adventure && room.you.isHost && (
+                <button
+                  className={`btn ${next && nextOpen ? "" : "btn-primary"}`}
+                  onClick={() => send({ t: "adventure", course: course.id })}
+                >
+                  Rejouer ce parcours
+                </button>
+              )}
+              {!inTour && seated && !adventure && (
                 <button className="btn btn-primary" disabled={asked} onClick={() => send({ t: "rematch" })}>
                   {asked ? "En attente des autres" : "Revanche"}
                 </button>

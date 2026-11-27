@@ -5,6 +5,7 @@ import { COURSE_IDS, COURSES, holeDef } from "../../shared/games/minigolf/course
 import { colorOf, DEFAULT_LOOK } from "../../shared/games/minigolf/looks.ts";
 import { INTRO_MS, SCORES_MS } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfClientMessage, MinigolfRoomView } from "../../shared/games/minigolf/net.ts";
+import { challengeDone, challengeOf } from "../../shared/games/minigolf/stars.ts";
 import { Icon } from "../components/Icon.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
@@ -219,6 +220,15 @@ export function MinigolfGame({
     return () => clearInterval(id);
   }, []);
 
+  // L'aventure : le défi du trou, et ce qu'il a fait sur ce trou une fois fini
+  const challenge = v.cfg.adventure ? challengeOf(ref.c, ref.i) : null;
+  const feat = me?.feats?.[v.hole];
+  const myResult = me?.done
+    ? { strokes: me.scores[v.hole] ?? strokeLimit(def.par) + 1, par: def.par, lost: feat?.lost ?? 0, bank: feat?.bank ?? false }
+    : null;
+  const challengeOk = Boolean(challenge && myResult && challengeDone(challenge, myResult));
+  const later = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   // Ce qui arrive à sa balle : dans le trou (et en combien), plus de coups
   useEffect(() => {
     if (!me) return;
@@ -233,8 +243,17 @@ export function MinigolfGame({
         say(text, tone, s === 1 ? undefined : `${s} coups`);
         if (s === 1) sfx.applause(0.9);
       } else say("Trou terminé", "info", `${s} coups`);
+      // L'aventure : le défi du trou, juste après
+      if (challenge && myResult && challengeDone(challenge, myResult))
+        later.current = setTimeout(() => {
+          say("Défi réussi !", "great", challenge.text);
+          sfx.applause(0.6);
+        }, 1700);
     }, wait);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(later.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.hole, me?.done, me?.scores[v.hole]]);
 
@@ -356,7 +375,17 @@ export function MinigolfGame({
             {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
           </div>
         )}
-        {v.phase === "play" && active && (
+        {challenge && v.phase !== "scores" && v.phase !== "over" && (
+          <div className={`mg-challenge ${challengeOk ? "is-done" : ""}`} aria-live="polite">
+            <Icon name="trophy" size={16} />
+            <span className="mg-challenge-text">
+              <span className="mg-turn-pre">Défi : </span>
+              {challenge.text}
+            </span>
+            {challengeOk && <Icon name="check" size={16} />}
+          </div>
+        )}
+        {v.phase === "play" && active && !v.cfg.adventure && (
           <div
             className={`mg-turn ${myTurn ? "is-me" : ""} ${turnLeft !== null && turnLeft <= 5 ? "is-late" : ""}`}
             style={{ "--c": colorOf(players.find((x) => x.id === active.id)?.look.color ?? "blanche").hex } as CSSProperties}

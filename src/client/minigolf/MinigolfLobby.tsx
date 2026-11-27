@@ -8,6 +8,7 @@ import { colorOf } from "../../shared/games/minigolf/looks.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { AdventurePanel, HoleStarStrip } from "./Adventure.tsx";
 import { BallPicker } from "./BallPicker.tsx";
 import { HowToPlay } from "./MinigolfHelp.tsx";
 
@@ -90,20 +91,24 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
       }}
       summary={summary}
       aside={
-        room.you.seatId && s.teams ? (
-          <section className="lobby-section panel field">
-            <span className="field-label">Ton équipe</span>
-            <Options<0 | 1>
-              label="Ton équipe"
-              value={mine ?? 0}
-              onChange={(team) => send({ t: "team", team })}
-              options={[
-                { value: 0, label: TOUR_TEAMS[0] },
-                { value: 1, label: TOUR_TEAMS[1] },
-              ]}
-            />
-          </section>
-        ) : null
+        <>
+          {room.you.seatId && s.teams && (
+            <section className="lobby-section panel field">
+              <span className="field-label">Ton équipe</span>
+              <Options<0 | 1>
+                label="Ton équipe"
+                value={mine ?? 0}
+                onChange={(team) => send({ t: "team", team })}
+                options={[
+                  { value: 0, label: TOUR_TEAMS[0] },
+                  { value: 1, label: TOUR_TEAMS[1] },
+                ]}
+              />
+            </section>
+          )}
+          {/* L'aventure, en solo : pour l'hôte d'une table hors tournée */}
+          {room.you.isHost && !room.tour && <AdventurePanel room={room} send={send} />}
+        </>
       }
       rules={
         <>
@@ -128,6 +133,13 @@ export function MinigolfLobby({ room, send, ...rest }: Props) {
                 : s.course === "melange"
                   ? "Des trous pris dans tous les parcours."
                   : COURSES[s.course].blurb}
+            </p>
+            {/* Les étoiles du parcours choisi, trou par trou */}
+            {s.course !== "hasard" && s.course !== "melange" && <HoleStarStrip course={s.course} />}
+            <p className="hint" style={{ margin: 0 }}>
+              {s.bonus || s.lune || s.glace
+                ? "Avec les bulles bonus, la lune ou la glace, les trous ne donnent pas d'étoiles."
+                : "Chaque trou donne ses étoiles : une fini, deux au par, trois sous le par."}
             </p>
           </div>
 

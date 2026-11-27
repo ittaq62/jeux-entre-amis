@@ -276,8 +276,12 @@ export function holeDuration(m: Match): number {
   return Math.round(holeTime(holeDef(currentRef(m))) * PACE_FACTOR[m.cfg.pace] * 1000);
 }
 
+/** L'aventure, seul : tout le temps de viser (une limite de sûreté seulement, qu'un coup manqué ne coûte rien de bête) */
+export const ADVENTURE_TURN_MS = 10 * 60_000;
+
 /** Chacun son tour : le temps pour un coup, selon le rythme choisi */
 export function turnDuration(m: Match): number {
+  if (m.cfg.adventure) return ADVENTURE_TURN_MS;
   return Math.round(TURN_MS * PACE_FACTOR[m.cfg.pace]);
 }
 

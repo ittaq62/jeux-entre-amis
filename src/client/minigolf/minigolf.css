@@ -335,6 +335,45 @@
   min-width: 0;
 }
 
+/* L'aventure : le défi du trou, à la place du tour (seul, c'est toujours à lui) ; doré une fois réussi */
+.mg-challenge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 7px 12px;
+  border-radius: 14px;
+  background: rgba(10, 16, 12, 0.72);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gold-light, #f2d98a) 55%, transparent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 0;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
+}
+
+.mg-challenge svg {
+  flex: none;
+  color: var(--gold-light, #f2d98a);
+}
+
+.mg-challenge-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mg-challenge.is-done {
+  background: linear-gradient(160deg, #f6e7b4, #d9b45a);
+  color: #2b2410;
+}
+
+.mg-challenge.is-done svg {
+  color: #2b2410;
+}
+
 .mg-turn.is-me {
   background: linear-gradient(180deg, rgba(40, 92, 48, 0.92), rgba(22, 60, 30, 0.9));
 }
@@ -685,6 +724,12 @@
   font-weight: 800;
 }
 
+/* L'aventure : la ligne des défis, un ✓ doré pour chaque défi réussi */
+.mg-challenge-row td.is-ok {
+  color: var(--gold-light, #f2d98a);
+  font-weight: 800;
+}
+
 .mg-total small {
   margin-left: 4px;
   opacity: 0.6;
@@ -696,6 +741,122 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* L'aventure, au salon : les huit parcours, leurs étoiles, le suivant qui s'ouvre */
+.mg-adventure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mg-adv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mg-adv-head h2 {
+  margin: 0;
+}
+
+.mg-adv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mg-adv-course {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.mg-adv-course.is-locked {
+  opacity: 0.55;
+}
+
+.mg-adv-later {
+  padding: 2px 10px;
+}
+
+.mg-adv-num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #f6e7b4, #d9b45a);
+  color: #2b2410;
+  font-family: var(--font-title);
+  font-size: 15px;
+}
+
+.mg-adv-course.is-locked .mg-adv-num {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: inherit;
+}
+
+.mg-adv-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mg-adv-name strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Les étoiles d'un parcours, trou par trou (le choix du parcours, la carte de fin) */
+.mg-hole-stars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.mg-hole-star {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 30px;
+  padding: 3px 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-size: 11px;
+  opacity: 0.95;
+}
+
+.mg-hole-stars-total {
+  margin-left: 6px;
+  font-weight: 800;
+}
+
+/* La carte de fin : les étoiles gagnées pendant la partie */
+.mg-stars-won {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--gold-light, #f2d98a) 10%, transparent);
+  text-align: center;
+}
+
+.mg-stars-won:not(.is-new) .stars {
+  opacity: 0.45;
 }
 
 /* La balle à choisir (onglet Skin) */
@@ -894,7 +1055,8 @@
   .mg-sound-btn {
     display: none;
   }
-  .mg-turn {
+  .mg-turn,
+  .mg-challenge {
     position: absolute;
     top: 54px;
     left: 50%;

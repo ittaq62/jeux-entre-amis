@@ -2,6 +2,8 @@
 
 import type { AchievementUnlock, ChatMessage, EloResult, RoomStatus, SeatView, SpectatorView, Visibility } from "../../protocol.ts";
 import type { LoadGate } from "../../loadGate.ts";
+import type { StarAwardResult } from "../../stars.ts";
+import type { CourseId } from "./courses.ts";
 import type { BallLook } from "./looks.ts";
 import type { Match, MinigolfConfig } from "./match.ts";
 
@@ -25,6 +27,12 @@ export interface MinigolfSeatView extends SeatView {
 /** La partie telle que la voient les joueurs (le hasard des bots reste au serveur) */
 export type MinigolfView = Omit<Match, "rng">;
 
+/** Les étoiles d'une partie pour un joueur : chaque trou joué (sa carte), les points des nouvelles */
+export interface MinigolfStarAward {
+  results: StarAwardResult[];
+  points: number;
+}
+
 export interface MinigolfRoomView {
   code: string;
   game: "minigolf";
@@ -42,6 +50,8 @@ export interface MinigolfRoomView {
   serverNow: number;
   rematch: string[];
   results?: Record<string, EloResult> | null;
+  /** Les étoiles des trous de la partie, à la fin, par joueur (userId) : ce que chaque trou vaut maintenant ; voir starCourses.ts */
+  stars?: Record<string, MinigolfStarAward> | null;
   quick: boolean;
   tour?: string | null;
   /** L'annonce avant la partie (tournée ou revanche), jusqu'à cette heure ; ceux qui sont prêts */
@@ -68,6 +78,8 @@ export type MinigolfClientMessage =
   | { t: "removeSeat"; seatId: string }
   | { t: "kick"; userId: string }
   | { t: "start" }
+  /** L'aventure en solo : l'hôte, seul à la table, part sur un parcours ouvert (voir starCourses.ts) */
+  | { t: "adventure"; course: CourseId }
   | { t: "chat"; text: string }
   | { t: "emote"; emote: string }
   | { t: "rematch" }

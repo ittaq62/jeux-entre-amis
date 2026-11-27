@@ -1,7 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { seededAvatar, type AvatarConfig } from "../shared/avatar.ts";
 import { planShot, thinkTime, type BotLevel } from "../shared/games/minigolf/bot.ts";
-import { courseOf } from "../shared/games/minigolf/courses.ts";
+import { courseOf, isCourseId, type CourseId } from "../shared/games/minigolf/courses.ts";
+import { courseOpen } from "../shared/games/minigolf/starCourses.ts";
+import { starItems } from "../shared/games/minigolf/stars.ts";
+import { awardStarsMany, starsOf } from "./stars.ts";
 import { botLook, claimColor, DEFAULT_LOOK, isBallLook, usableLook, type BallLook } from "../shared/games/minigolf/looks.ts";
 import {
   ballsInPlay,
@@ -25,6 +28,7 @@ import { STEPS_PER_S } from "../shared/games/minigolf/physics.ts";
 import {
   MINIGOLF_MAX_PLAYERS,
   type MinigolfClientMessage,
+  type MinigolfStarAward,
   type MinigolfRecordStats,
   type MinigolfRoomSettings,
   type MinigolfRoomView,
@@ -131,6 +135,10 @@ interface MinigolfData {
   kicked: string[];
   recorded: boolean;
   results?: Record<string, { elo: number; delta: number }> | null;
+  /** Les trous où un bot a joué la balle d'un joueur (il était parti) : pas d'étoiles pour ce joueur */
+  helped?: Record<string, number[]>;
+  /** Les étoiles des trous de la partie, à la fin, par joueur (userId) */
+  stars?: Record<string, MinigolfStarAward> | null;
   tour?: TourInit | null;
   watchers?: string[];
   pickUntil?: number | null;
@@ -743,6 +751,19 @@ export class MinigolfRoom extends DurableObject<Env> {
         return this.kickUser(msg.userId, now);
       }
 
+      case "adventure": {
+        // L'aventure se joue seul : l'hôte, sur un parcours ouvert (une étoile au précédent) ; les bots s'en vont
+        if (d.tour || d.status === "playing" || !isCourseId(msg.course)) return;
+        if (d.seats.some((s) => s.kind === "human" && s.userId !== userId))
+          return error("L'aventure se joue seul : d'autres joueurs sont assis à la table.");
+        const mine = (await starsOf(this.env.DB, userId)).games.minigolf;
+        if (!courseOpen(mine, msg.course)) return error("Ce parcours s'ouvre quand chaque trou du parcours d'avant a une étoile.");
+        // Le temps de lire ses étoiles, la table a pu changer (une autre partie partie, la table fermée)
+        if (this.data !== d || (d.status as string) === "playing") return;
+        d.seats = d.seats.filter((s) => s.userId === userId);
+        return this.startGame(now, ws, msg.course);
+      }
+
       case "start": {
         if (d.status === "playing") return;
         // Après une partie, « Rejouer » passe par l'annonce, comme la revanche ; ce qui l'empêche se dit tout de suite
@@ -825,7 +846,7 @@ export class MinigolfRoom extends DurableObject<Env> {
     return this.startGame(now);
   }
 
-  private async startGame(now: number, ws?: WebSocket) {
+  private async startGame(now: number, ws?: WebSocket, adventure?: CourseId) {
     const d = this.data!;
     d.pickUntil = null;
     d.ready = [];
@@ -848,7 +869,10 @@ export class MinigolfRoom extends DurableObject<Env> {
         d.settings.randomRules,
       );
     }
-    const cfg = { ...DEFAULT_CONFIG, ...d.settings.minigolf };
+    // L'aventure : un parcours entier aux règles du parcours, sans toucher aux réglages de la table
+    const cfg = adventure
+      ? { ...DEFAULT_CONFIG, pace: d.settings.minigolf.pace ?? DEFAULT_CONFIG.pace, course: adventure, holes: 9, adventure: true }
+      : { ...DEFAULT_CONFIG, ...d.settings.minigolf };
     // En tournée, une grande table joue tous en même temps : chacun son tour, un trou y durerait quatre ou cinq minutes
     // (une demi-minute par joueur et par coup), et la tournée attendrait cette table
     const together = Boolean(d.tour) && cfg.turns && d.seats.length > TOUR_TURNS_MAX;
@@ -875,6 +899,8 @@ export class MinigolfRoom extends DurableObject<Env> {
     d.startedAt = now;
     d.recorded = false;
     d.results = null;
+    d.helped = {};
+    d.stars = null;
     d.rematch = [];
     d.timers = d.timers.filter((t) => t.kind === "cleanup" || t.kind === "seatCleanup");
     this.systemChat(`${d.match.holes.length} trous : bonne partie !`);
@@ -882,6 +908,14 @@ export class MinigolfRoom extends DurableObject<Env> {
     if (d.settings.randomRules && !d.tour) this.systemChat(drawNotice("minigolf", d.settings.randomRules, "start"));
     this.startLoop();
     return this.afterChange(now);
+  }
+
+  /** Un bot vient de jouer la balle d'un joueur (parti) sur ce trou : ce joueur n'aura pas d'étoiles pour la partie */
+  private noteHelped(seat: Seat | undefined, hole: number) {
+    const d = this.data!;
+    if (seat?.kind !== "human") return;
+    const list = ((d.helped ??= {})[seat.id] ??= []);
+    if (!list.includes(hole)) list.push(hole);
   }
 
   private startLoop() {
@@ -939,7 +973,10 @@ export class MinigolfRoom extends DurableObject<Env> {
           if (nowTick(m, now) < planned.at) continue;
           this.botPlan.delete(p.id);
           const r = shoot(m, p.id, planned.a, planned.p, planned.at, now);
-          if (typeof r !== "string") changed = true;
+          if (typeof r !== "string") {
+            this.noteHelped(seat, m.hole);
+            changed = true;
+          }
           continue;
         }
       }
@@ -972,7 +1009,10 @@ export class MinigolfRoom extends DurableObject<Env> {
         continue;
       }
       const r = shoot(m, p.id, plan.a, plan.p, t, Date.now());
-      if (typeof r !== "string") changed = true;
+      if (typeof r !== "string") {
+        this.noteHelped(seat, m.hole);
+        changed = true;
+      }
     }
     if (changed) {
       this.broadcast();
@@ -1175,6 +1215,39 @@ export class MinigolfRoom extends DurableObject<Env> {
     } catch (err) {
       console.error("Enregistrement de la partie de minigolf impossible", err);
     }
+    await this.awardCourseStars(m);
+  }
+
+  /**
+   * Les étoiles des trous (starCourses.ts) : chaque trou joué aux règles du parcours, pour chaque joueur encore là à la
+   * fin, sauf ceux où un bot a joué sa balle ; ses coups sur le trou. À part de l'enregistrement de la partie : l'un
+   * peut manquer sans l'autre
+   */
+  private async awardCourseStars(m: Match) {
+    const d = this.data;
+    if (!d) return;
+    const stars: Record<string, MinigolfStarAward> = {};
+    const unlocks: { userId: string; ids: string[] }[] = [];
+    try {
+      for (const p of m.players) {
+        const seat = d.seats.find((s) => s.id === p.id);
+        if (seat?.kind !== "human" || !seat.userId || seat.autoplay) continue;
+        const items = starItems(m.cfg, m.holes, p.scores, d.helped?.[p.id]);
+        if (items.length === 0) continue;
+        const r = await awardStarsMany(this.env.DB, seat.userId, "minigolf", items);
+        if (r.results.length === 0) continue;
+        stars[seat.userId] = { results: r.results, points: r.points };
+        if (r.unlocked.length > 0) unlocks.push({ userId: seat.userId, ids: r.unlocked });
+      }
+    } catch (err) {
+      console.error("Étoiles du minigolf non accordées", err);
+    }
+    if (unlocks.length > 0) this.broadcastRaw({ t: "achievements", unlocks });
+    if (this.data === d && Object.keys(stars).length > 0) {
+      d.stars = stars;
+      await this.persist();
+      this.broadcast();
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1244,6 +1317,7 @@ export class MinigolfRoom extends DurableObject<Env> {
       serverNow: Date.now(),
       rematch: d.rematch,
       results: d.results ?? null,
+      stars: d.stars ?? null,
       quick: d.quick,
       tour: d.tour?.code ?? null,
       pickUntil: d.pickUntil ?? null,
