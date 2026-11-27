@@ -130,7 +130,8 @@ export function AlbumPage() {
             ))}
           </div>
           {pity && (
-            <p className="hint album-pity">
+            <p className="album-pity">
+              <Icon name="trophy" size={15} />
               Au plus tard, une carte épique (ou mieux) {inPacks(pity.epic)} et une légendaire {inPacks(pity.legend)} : une que tu n'as pas
               encore, s'il t'en manque.
             </p>
@@ -166,17 +167,32 @@ export function AlbumPage() {
             const got = cards.filter((c) => owned[c.id]).length;
             if (!cards.some(keep)) return null;
             return (
-              <section key={f.id} className="album-family">
+              <section key={f.id} className={`album-family ${got === cards.length ? "is-complete" : ""}`}>
                 <h2>
                   {f.name}{" "}
-                  <small className="hint num">
-                    {got} / {cards.length}
-                    {got === cards.length ? ", complète !" : `, +${familyBonus(f.id)} points à la clé`}
-                  </small>
+                  {got === cards.length ? (
+                    <span className="family-done">Complète</span>
+                  ) : (
+                    <small className="hint">+{familyBonus(f.id)} points à la clé</small>
+                  )}
+                  <span className="family-progress album-progress" aria-label={`${got} cartes sur ${cards.length}`}>
+                    <span className="album-bar">
+                      <i style={{ width: `${(got / cards.length) * 100}%` }} />
+                    </span>
+                    <span className="num">
+                      {got} / {cards.length}
+                    </span>
+                  </span>
                 </h2>
                 <div className="album-grid" style={{ "--gap": `${GAP}px` } as CSSProperties}>
-                  {cards.filter(keep).map((c) => (
-                    <button key={c.id} className="album-cell" onClick={() => setZoom(c)} aria-label={c.name}>
+                  {cards.filter(keep).map((c, i) => (
+                    <button
+                      key={c.id}
+                      className="album-cell rise"
+                      style={{ "--i": i } as CSSProperties}
+                      onClick={() => setZoom(c)}
+                      aria-label={c.name}
+                    >
                       <TradingCard card={c} width={cardW} missing={!owned[c.id]} still />
                       {(owned[c.id] ?? 0) > 1 && <span className="album-count num">×{owned[c.id]}</span>}
                     </button>

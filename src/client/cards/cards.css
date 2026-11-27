@@ -1312,3 +1312,66 @@ html:has(.zoom-screen) body {
   justify-content: center;
   gap: 8px;
 }
+
+/* L'album, plus lisible : la ligne des garanties en pastille, chaque famille avec sa barre, les cartes qui arrivent
+   l'une après l'autre (.rise, le mouvement commun du site) et se soulèvent au survol */
+.album-pity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(226, 189, 110, 0.28);
+  border-radius: 999px;
+  background: var(--gold-tint);
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.album-pity svg {
+  flex: none;
+  color: var(--gold-light);
+}
+
+.album-family .family-progress {
+  flex: 1 1 140px;
+  max-width: 220px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.album-family .family-progress .album-bar {
+  height: 6px;
+}
+
+.family-done {
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f5dc9c, #c9993f);
+  color: var(--gold-ink);
+  font-family: var(--font-body, inherit);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.album-cell {
+  border-radius: 10px;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .album-cell:hover {
+    transform: translateY(-3px);
+    filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.45));
+  }
+}
+
+.album-cell:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
