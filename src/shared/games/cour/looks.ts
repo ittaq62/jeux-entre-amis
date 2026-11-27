@@ -70,6 +70,8 @@ export function usableLook(look: CourLook, owns: (item: string) => boolean): Cou
 /** Le maillot d'un bot de la foule : souvent le portrait, parfois un motif */
 export function botLook(seed: number): CourLook {
   const r = (seed * 2654435761) >>> 0;
-  const jersey = r % 5 < 3 ? "portrait" : JERSEYS[1 + (r % (JERSEYS.length - 2))]!.id;
+  // Trois sur cinq aux couleurs de leur portrait, les autres dans un maillot de la boutique (sauf l'or) : le choix
+  // prend d'autres bits du mélange, sinon il retombe toujours sur les deux mêmes maillots
+  const jersey = r % 5 < 3 ? "portrait" : JERSEYS[1 + ((r >>> 8) % (JERSEYS.length - 2))]!.id;
   return { jersey, cheer: "confettis" };
 }

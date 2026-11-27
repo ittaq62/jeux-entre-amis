@@ -112,7 +112,7 @@ export class SoleilStage implements Stage {
   private splats: Splat[] = [];
   private ballGeo: THREE.SphereGeometry;
   private ballMat: THREE.MeshStandardMaterial;
-  private headYaw = Math.PI;
+  private headYaw = Math.PI * 2;
   /** Ma course prédite */
   private my = { z: 0, v: 0, run: false, set: false };
   private stands: [number, number, number][] = [];
@@ -164,12 +164,13 @@ export class SoleilStage implements Stage {
         0.25 * (r + 1),
         SOLEIL_LEN / 2,
       );
-    // La tige du tournesol, ses feuilles, le pot de terre
+    // La tige du tournesol, ses feuilles, le pot de terre. Elle s'attache derrière la tête (côté +z), pas en son milieu :
+    // sinon elle ressort à travers le visage quand il regarde les candidats.
     const stemCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, 0, FLOWER_Z),
       new THREE.Vector3(0.3, 3, FLOWER_Z + 0.4),
-      new THREE.Vector3(-0.2, 6, FLOWER_Z + 0.3),
-      new THREE.Vector3(0, HEAD_Y - 0.6, FLOWER_Z),
+      new THREE.Vector3(-0.2, 6.2, FLOWER_Z + 0.6),
+      new THREE.Vector3(0, HEAD_Y - 1, FLOWER_Z + 0.68),
     ]);
     b.add(new THREE.TubeGeometry(stemCurve, 24, 0.42, 10), "#4f9a3a");
     for (const [y, s, rot] of [
@@ -246,16 +247,17 @@ export class SoleilStage implements Stage {
   frame(ev: EpView, m: MatchView, now: number, dt: number): Map<string, ActorTarget> {
     const v = ev as SoleilView;
     const out = new Map<string, ActorTarget>();
-    // La tête du tournesol : dos tourné pendant le chant, de face quand il regarde
+    // La tête du tournesol : dos tourné pendant le chant (visage vers le fond, +z), de face quand il regarde (visage
+    // vers les candidats, −z). Le visage est du côté +z de la tête : un angle de π le tourne vers l'allée.
     const facing = v.head === "regarde" || (v.head === "tourne" && now - v.headAt > 250);
     const want =
       v.head === "dos"
-        ? Math.PI
+        ? Math.PI * 2
         : v.head === "retourne"
-          ? Math.PI * 0.5 + Math.PI * Math.min(1, (now - v.headAt) / 450) * 0.5
+          ? Math.PI * 1.5 + Math.PI * Math.min(1, (now - v.headAt) / 450) * 0.5
           : facing
-            ? 0
-            : Math.PI * (1 - Math.min(1, (now - v.headAt) / 500));
+            ? Math.PI
+            : Math.PI * (2 - Math.min(1, (now - v.headAt) / 500));
     this.headYaw += (want - this.headYaw) * Math.min(1, dt * 14);
     const sway = v.head === "dos" ? Math.sin(now / 260) * 0.08 : 0;
     this.head.rotation.set(0.12 + (v.head === "regarde" ? -0.12 : 0), this.headYaw + sway, sway * 0.5);

@@ -47,6 +47,17 @@ export interface RuntimeOptions {
   fixed?: boolean;
 }
 
+/** Les événements où un candidat passe l'épreuve (ou une manche) */
+const PASSED = new Set(["arrive", "detache", "ciel", "assis", "traverse"]);
+/** L'éclat de chaque salut de la boutique : le genre d'éclats, et leur force */
+const CHEER_BURST: Record<string, [string, number]> = {
+  confettis: ["confettis", 1],
+  bulles: ["mousse", 0.6],
+  feuilles: ["plumes", 0.8],
+  paillettes: ["or", 1],
+  feu: ["confettis", 1.8],
+};
+
 export class CourRuntime {
   readonly world: World;
   private actors = new Map<string, Actor>();
@@ -410,6 +421,14 @@ export class CourRuntime {
           this.bursts.burst(kind, a.x, a.y + 1, a.z, { count: 36 });
         }
         if (f.id === this.o.me) sfx.eliminatedMe();
+      } else if (PASSED.has(f.k) && f.id) {
+        // Il passe l'épreuve : l'éclat qu'il a choisi (la boutique) jaillit autour de lui
+        const a = this.actors.get(f.id);
+        const cheer = this.roster.find((r) => r.id === f.id)?.look.cheer ?? "confettis";
+        if (a && (a.info.userId || Math.random() < 0.35)) {
+          const [kind, power] = CHEER_BURST[cheer] ?? ["confettis", 1];
+          this.bursts.burst(kind, a.x, a.y + 1.6, a.z, { count: a.info.userId ? 40 : 18, power });
+        }
       } else if (f.k === "go") {
         this.host.ring(now);
         sfx.bell();
