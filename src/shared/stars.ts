@@ -26,11 +26,41 @@ export interface StarMap {
   rule: StarRule;
 }
 
+/** Des cartes qui vont ensemble (un parcours de neuf trous, les coupes, un thème) : un succès pour toutes leurs étoiles */
+export interface StarGroup {
+  /** Unique dans son jeu : il fait partie de l'identifiant du succès */
+  id: string;
+  /** « Le Volcan » : le succès s'appelle « Minigolf, le Volcan : toutes les étoiles » */
+  name: string;
+  maps: readonly string[];
+}
+
 export interface StarGame {
   /** L'identifiant du jeu (GameId) */
   game: string;
   name: string;
   maps: readonly StarMap[];
+  /** Facultatif : des groupes de cartes, chacun avec son succès « toutes les étoiles » */
+  groups?: readonly StarGroup[];
+  /** Facultatif : des paliers d'étoiles du jeu entier, chacun avec son succès (« Bolides : 30 étoiles ») */
+  milestones?: readonly number[];
+}
+
+/** Les étoiles d'un groupe de cartes, d'après celles de chaque carte */
+export function groupStars(
+  group: StarGroup,
+  maps: Readonly<Record<string, { stars: number } | number | undefined>>,
+): {
+  total: number;
+  max: number;
+} {
+  let total = 0;
+  for (const id of group.maps) {
+    const m = maps[id];
+    const n = typeof m === "number" ? m : (m?.stars ?? 0);
+    total += Math.max(0, Math.min(MAX_STARS, n));
+  }
+  return { total, max: group.maps.length * MAX_STARS };
 }
 
 /** Ce que vaut un résultat sur cette carte : 0 à 3 étoiles */

@@ -96,6 +96,28 @@ export async function awardStars(db: D1Database, award: StarAward): Promise<Star
   }
 }
 
+/**
+ * Plusieurs cartes d'un coup pour un même joueur (les neuf trous d'un parcours, par exemple) : les résultats de celles
+ * qui ont des étoiles, dans l'ordre, et la liste de tous les succès débloqués.
+ */
+export async function awardStarsMany(
+  db: D1Database,
+  userId: string,
+  game: string,
+  items: readonly { map: string; value?: number; stars?: number }[],
+): Promise<{ results: StarAwardResult[]; points: number; unlocked: string[] }> {
+  const results: StarAwardResult[] = [];
+  for (const item of items) {
+    const r = await awardStars(db, { userId, game, ...item });
+    if (r) results.push(r);
+  }
+  return {
+    results,
+    points: results.reduce((n, r) => n + r.points, 0),
+    unlocked: results.flatMap((r) => r.unlocked),
+  };
+}
+
 /** Les succès d'étoiles que ce joueur vient d'atteindre dans ce jeu */
 async function rewardStarAchievements(db: D1Database, userId: string, game: string, now: number): Promise<string[]> {
   const [rows, owned] = await db.batch<{ map?: string; stars?: number; achievement?: string }>([

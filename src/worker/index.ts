@@ -335,7 +335,12 @@ app.post("/streak/claim", withSession, withProfile, async (c) => {
 // Les étoiles : seulement lues ici ; les salles les accordent (stars.ts)
 // ---------------------------------------------------------------------------
 
-app.get("/stars", withSession, withProfile, async (c) => c.json(await starsOf(c.env.DB, c.get("user").id)));
+app.get("/stars", withSession, withProfile, async (c) => {
+  const all = await starsOf(c.env.DB, c.get("user").id);
+  // ?game=minigolf : seulement ce jeu
+  const game = c.req.query("game");
+  return c.json(game ? { games: game in all.games ? { [game]: all.games[game] } : {} } : all);
+});
 
 app.get("/leaderboard", withSession, withProfile, async (c) => {
   const scope = c.req.query("scope") === "friends" ? "friends" : "all";

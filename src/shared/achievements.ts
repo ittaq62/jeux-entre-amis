@@ -7,7 +7,7 @@ import type { NavalMode, NavalStats } from "./games/naval/engine.ts";
 import type { PlayerStats } from "./games/uno/engine.ts";
 import type { TableGame } from "./protocol.ts";
 import { STAR_GAMES } from "./starMaps.ts";
-import { MAX_STARS, type StarGame } from "./stars.ts";
+import { groupStars, MAX_STARS, type StarGame } from "./stars.ts";
 
 export type ChipTone = "red" | "blue" | "green" | "black" | "ivory";
 
@@ -756,6 +756,27 @@ export function starAchievementsOf(g: StarGame): AchievementDef[] {
       goal: max,
       counts: "stars",
     },
+    // Les paliers du jeu entier, puis toutes les étoiles de chaque groupe de cartes
+    ...(g.milestones ?? [])
+      .filter((n) => n > 0 && n < max)
+      .map((n): AchievementDef => ({
+        id: `${g.game}-etoiles-${n}`,
+        game,
+        chip: String(n),
+        tone: "green",
+        title: `${g.name} : ${n} étoiles`,
+        description: `Gagner ${n} étoiles.`,
+        goal: n,
+        counts: "stars",
+      })),
+    ...(g.groups ?? []).map((group): AchievementDef => ({
+      id: `${g.game}-etoiles-groupe-${group.id}`,
+      game,
+      chip: "★",
+      tone: "black",
+      title: `${g.name}, ${group.name.charAt(0).toLowerCase()}${group.name.slice(1)} : toutes les étoiles`,
+      description: `Gagner les ${group.maps.length * MAX_STARS} étoiles de « ${group.name} ».`,
+    })),
   ];
 }
 
@@ -774,6 +795,12 @@ export function starAchievementsEarned(g: StarGame, maps: Readonly<Record<string
   if (known.some((s) => s >= MAX_STARS)) out.push(`${g.game}-etoiles-3`);
   if (max > 0 && total >= Math.ceil(max / 2)) out.push(`${g.game}-etoiles-moitie`);
   if (max > 0 && total >= max) out.push(`${g.game}-etoiles-toutes`);
+  for (const n of g.milestones ?? []) if (n > 0 && n < max && total >= n) out.push(`${g.game}-etoiles-${n}`);
+  const byMap = Object.fromEntries(g.maps.map((m, i) => [m.id, known[i]!]));
+  for (const group of g.groups ?? []) {
+    const s = groupStars(group, byMap);
+    if (s.max > 0 && s.total >= s.max) out.push(`${g.game}-etoiles-groupe-${group.id}`);
+  }
   return out;
 }
 

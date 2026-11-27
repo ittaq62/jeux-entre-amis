@@ -30,3 +30,20 @@
     animation: achievement-glow 1.6s var(--ease-out) 0.4s 2;
   }
 }
+
+/* Au téléphone, les boutons de son propre profil (« Mon personnage », « Modifier mon profil ») côte à côte, de même
+   largeur, plutôt qu'empilés avec deux largeurs différentes */
+@media (max-width: 600px) {
+  .profile-head .row-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .profile-head .row-actions > .btn {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+}

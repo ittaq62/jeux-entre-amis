@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACHIEVEMENTS, starAchievementsEarned, starAchievementsOf } from "./achievements.ts";
 import { STAR_GAMES } from "./starMaps.ts";
-import { formatStarValue, MAX_STARS, nextStar, starsFor, validRule, type StarGame, type StarRule } from "./stars.ts";
+import { formatStarValue, groupStars, MAX_STARS, nextStar, starsFor, validRule, type StarGame, type StarRule } from "./stars.ts";
 
 const chrono: StarRule = { better: "lower", goals: [90_000, 75_000, 65_000], unit: "time" };
 const score: StarRule = { better: "higher", goals: [500, 900, 1200], unit: "points" };
@@ -100,5 +100,46 @@ describe("les succès d'étoiles", () => {
 
   it("une carte inconnue ou un nombre absurde ne comptent pas", () => {
     expect(starAchievementsEarned(golf, { z: 3, a: 9 })).toEqual(["minigolf-etoiles-3", "minigolf-etoiles-moitie"]);
+  });
+});
+
+describe("les groupes de cartes et les paliers", () => {
+  const rule: StarRule = { better: "lower", goals: [9, 3, 2], unit: "strokes" };
+  const golf: StarGame = {
+    game: "minigolf",
+    name: "Minigolf",
+    maps: ["v1", "v2", "j1"].map((id) => ({ id, name: id, rule })),
+    groups: [
+      { id: "volcan", name: "Le Volcan", maps: ["v1", "v2"] },
+      { id: "jardin", name: "Le Jardin", maps: ["j1"] },
+    ],
+    milestones: [4, 9],
+  };
+
+  it("chaque groupe a son succès, chaque palier aussi (sauf celui qui vaut « toutes les étoiles »)", () => {
+    const ids = starAchievementsOf(golf).map((d) => d.id);
+    expect(ids).toContain("minigolf-etoiles-groupe-volcan");
+    expect(ids).toContain("minigolf-etoiles-groupe-jardin");
+    expect(ids).toContain("minigolf-etoiles-4");
+    expect(ids).not.toContain("minigolf-etoiles-9");
+    const titles = starAchievementsOf(golf).map((d) => d.title);
+    expect(titles).toContain("Minigolf, le Volcan : toutes les étoiles");
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it("le succès d'un groupe tombe quand toutes ses cartes ont trois étoiles", () => {
+    expect(starAchievementsEarned(golf, { v1: 3, v2: 2 })).not.toContain("minigolf-etoiles-groupe-volcan");
+    expect(starAchievementsEarned(golf, { v1: 3, v2: 3 })).toContain("minigolf-etoiles-groupe-volcan");
+    expect(starAchievementsEarned(golf, { v1: 3, v2: 3 })).not.toContain("minigolf-etoiles-groupe-jardin");
+  });
+
+  it("un palier tombe au bon total", () => {
+    expect(starAchievementsEarned(golf, { v1: 2, j1: 1 })).not.toContain("minigolf-etoiles-4");
+    expect(starAchievementsEarned(golf, { v1: 2, j1: 2 })).toContain("minigolf-etoiles-4");
+  });
+
+  it("les étoiles d'un groupe, d'après celles des cartes", () => {
+    expect(groupStars(golf.groups![0]!, { v1: { stars: 3 }, v2: 1 })).toEqual({ total: 4, max: 6 });
+    expect(groupStars(golf.groups![1]!, {})).toEqual({ total: 0, max: 3 });
   });
 });
