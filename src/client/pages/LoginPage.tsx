@@ -117,7 +117,7 @@ export function LoginPage() {
 
         <div className="panel login-panel">
           {step === "email" ? (
-            <form onSubmit={sendCode} className="stack">
+            <form key="email" onSubmit={sendCode} className="stack rise">
               <div>
                 <h2>Connexion</h2>
                 <p className="hint">Pas de mot de passe : tu reçois un code par email.</p>
@@ -147,7 +147,8 @@ export function LoginPage() {
             </form>
           ) : (
             <form
-              className="stack"
+              key="code"
+              className="stack rise"
               onSubmit={(e) => {
                 e.preventDefault();
                 void verify(code);

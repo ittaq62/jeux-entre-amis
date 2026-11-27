@@ -7,7 +7,7 @@ import { PlayerName } from "../components/AdminBadge.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { presenceText, TableLinks } from "../components/TableLinks.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { Modal } from "../components/ui.tsx";
+import { Modal, SkeletonRows } from "../components/ui.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { useHub } from "../stores/hub.ts";
@@ -21,6 +21,7 @@ export function FriendsPage() {
   const friends = useHub((s) => s.friends);
   const online = useHub((s) => s.online);
   const refresh = useHub((s) => s.refreshFriends);
+  const loaded = useHub((s) => s.friendsLoaded);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PublicUser[]>([]);
   // La recherche à laquelle `results` répond : tant qu'elle n'a pas répondu, on ne dit pas « personne »
@@ -196,7 +197,9 @@ export function FriendsPage() {
           <h2>
             Mes amis <span className="hint num">{accepted.length}</span>
           </h2>
-          {accepted.length === 0 ? (
+          {!loaded ? (
+            <SkeletonRows label="Chargement de tes amis" />
+          ) : accepted.length === 0 ? (
             <p className="empty">
               {outgoing.length > 0
                 ? "Ta demande attend sa réponse : dès qu'elle est acceptée, ton ami apparaît ici, avec sa table quand il joue."

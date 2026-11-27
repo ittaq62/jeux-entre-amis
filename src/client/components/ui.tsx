@@ -303,6 +303,23 @@ export function Loading({ label = "Chargement…" }: { label?: string }) {
   );
 }
 
+/** Des lignes fantômes, le temps qu'une liste arrive (au lieu d'un « rien » qui clignote avant la vraie liste) */
+export function SkeletonRows({ count = 2, label = "Chargement…" }: { count?: number; label?: string }) {
+  return (
+    <ul className="rows skeleton-rows" aria-busy="true" aria-label={label}>
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i} className="row skeleton-row" aria-hidden="true">
+          <span className="skeleton skeleton-avatar" />
+          <span className="skeleton-lines">
+            <span className="skeleton skeleton-line" />
+            <span className="skeleton skeleton-line is-short" />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function timeAgo(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
   if (s < 60) return "à l'instant";

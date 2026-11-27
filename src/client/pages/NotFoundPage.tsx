@@ -9,7 +9,7 @@ import { CardBack } from "../components/Card.tsx";
  */
 export function NotFound({ title, text, children }: { title: string; text?: string; children?: ReactNode }) {
   return (
-    <div className="stack center-text error-screen">
+    <div className="stack center-text error-screen rise">
       <CardBack width={90} />
       <h1>{title}</h1>
       {text && <p className="hint">{text}</p>}

@@ -17,7 +17,7 @@ import { Avatar } from "../components/Avatar.tsx";
 import { CardBack, CardFace, COLOR_HEX } from "../components/Card.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { StreakChip } from "../components/StreakChip.tsx";
-import { Modal } from "../components/ui.tsx";
+import { Modal, SkeletonRows } from "../components/ui.tsx";
 import { lateJoinTag, presenceText, TableLinks } from "../components/TableLinks.tsx";
 import { NavalPreview } from "../naval/NavalPreview.tsx";
 import { BricksPreview } from "../bricks/BricksPreview.tsx";
@@ -93,6 +93,7 @@ export function HomePage() {
   const lobby = useHub((s) => s.lobby);
   const watchLobby = useHub((s) => s.watchLobby);
   const friends = useHub((s) => s.friends);
+  const friendsLoaded = useHub((s) => s.friendsLoaded);
   const online = useHub((s) => s.online);
   const games = useSession((s) => s.games);
   const beta = useSession((s) => s.beta);
@@ -241,7 +242,9 @@ export function HomePage() {
                   gérer
                 </Link>
               </h2>
-              {sortedFriends.length === 0 ? (
+              {!friendsLoaded ? (
+                <SkeletonRows label="Chargement de tes amis" />
+              ) : sortedFriends.length === 0 ? (
                 <p className="empty">
                   Pas encore d'amis ici. <Link href="/amis">Cherche leur pseudo</Link> pour les voir en ligne et les inviter.
                 </p>
