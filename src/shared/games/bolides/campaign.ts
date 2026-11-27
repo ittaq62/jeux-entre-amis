@@ -227,3 +227,12 @@ export interface BolidesSoloView {
   targets: { bronze: number; argent: number; or: number } | null;
   outcome: SoloOutcome | null;
 }
+
+/** Le nom d'une suite de courses à points : la coupe du championnat, ou le Grand Prix (« le Grand Prix », « la Coupe Galet ») */
+export function seriesName(settings: { mode?: string; campaign?: CupId }): { name: string; the: string } {
+  if (settings.mode === "championnat" && settings.campaign) {
+    const name = CUPS[settings.campaign].name;
+    return { name, the: `la ${name}` };
+  }
+  return { name: "Grand Prix", the: "le Grand Prix" };
+}

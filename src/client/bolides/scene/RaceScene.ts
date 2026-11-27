@@ -31,6 +31,9 @@ export interface SceneOptions {
 }
 
 /** Ce qu'il faut dessiner à cette image */
+/** La transparence des fantômes du contre-la-montre */
+const GHOST_ALPHA = 0.38;
+
 export interface Frame {
   karts: ({ kart: Kart } & KartExtras)[];
   /** Le kart suivi par la caméra (-1 : aucun, la caméra survole la ligne de départ) */
@@ -51,6 +54,8 @@ export interface Frame {
   draft?: number;
   /** Regarder derrière soi */
   lookBack?: boolean;
+  /** Les fantômes du contre-la-montre (null : arrivé, il disparaît) */
+  ghosts?: (({ kart: Kart } & KartExtras) | null)[];
 }
 
 interface Puff {
@@ -102,6 +107,8 @@ export class RaceScene {
   private world: World | null = null;
   private track: Track | null = null;
   private karts: KartModel[] = [];
+  /** Les fantômes du contre-la-montre : des karts transparents, sans étiquette, que rien ne touche */
+  private ghosts: KartModel[] = [];
   /** Les caisses-mystère : une seule forme répétée ; leur place, et leur taille (elles rétrécissent quand on les prend) */
   private crates: THREE.InstancedMesh | null = null;
   private cratePos: THREE.Vector3[] = [];
@@ -267,7 +274,7 @@ export class RaceScene {
    * Le circuit et les karts (dans l'ordre des pilotes de la course), par morceaux : l'écran de chargement continue de
    * vivre pendant ce temps. `progress` : où on en est, de 0 à 1.
    */
-  async build(track: Track, looks: KartLook[], progress: (share: number) => void) {
+  async build(track: Track, looks: KartLook[], progress: (share: number) => void, ghostLooks: KartLook[] = []) {
     const step = async (share: number) => {
       progress(share);
       await breathe();
@@ -308,6 +315,14 @@ export class RaceScene {
     await step(0.61);
     this.karts = looks.map((look) => {
       const m = new KartModel({ ...look, night: Boolean(mood.stars || mood.night) }, this.shadows, this.items);
+      this.scene.add(m.group);
+      return m;
+    });
+    this.ghosts = ghostLooks.map((look) => {
+      const m = new KartModel({ ...look, night: Boolean(mood.stars || mood.night) }, false, null);
+      m.showTag(false);
+      m.showHeld(false);
+      m.fade(GHOST_ALPHA);
       this.scene.add(m.group);
       return m;
     });
@@ -1015,6 +1030,12 @@ export class RaceScene {
     this.time += f.dt;
     this.adaptResolution(f.dt);
     f.karts.forEach((k, i) => this.karts[i]?.update(k.kart, f.dt, k, this.time));
+    f.ghosts?.forEach((k, i) => {
+      const m = this.ghosts[i];
+      if (!m) return;
+      if (k) m.update(k.kart, f.dt, k, this.time);
+      m.fade(k ? GHOST_ALPHA : 0);
+    });
     this.fx?.update(f.dt, f.serverNow, f.karts, this.camPos);
     this.coins?.update(this.time, f.dt);
     this.crossers?.update(f.serverNow / 1000);
@@ -1364,6 +1385,7 @@ export class RaceScene {
     this.disposed = true;
     this.resize.disconnect();
     for (const k of this.karts) k.dispose();
+    for (const k of this.ghosts) k.dispose();
     this.world?.dispose();
     this.crateMat?.map?.dispose();
     this.crateMat?.dispose();

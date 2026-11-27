@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
 import { useEffect } from "react";
+import { seriesName } from "../../shared/games/bolides/campaign.ts";
 import { cupStandings } from "../../shared/games/bolides/race.ts";
 import { raceTitles } from "../../shared/games/bolides/titles.ts";
 import { TRACKS } from "../../shared/games/bolides/track.ts";
@@ -58,13 +59,14 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
   const mine = placed.find((p) => p.id === me && !p.isBot);
   const earned = mine ? rankingPoints(placed, mine) : null;
   const voted = room.rematch.includes(room.you.userId);
+  const mode = room.tour ? "course" : g.settings.mode;
   const cup = room.cup;
   const cupOrder = cup ? cupStandings(cup.points, cup.last, (id) => Boolean(seatOf(id))) : [];
   const cupWinner = cup?.over && cupOrder[0] ? seatOf(cupOrder[0][0]) : undefined;
   const title = cupWinner
     ? cupWinner.id === me
-      ? "Tu remportes le Grand Prix !"
-      : `${cupWinner.name} remporte le Grand Prix.`
+      ? `Tu remportes ${seriesName(g.settings).the} !`
+      : `${cupWinner.name} remporte ${seriesName(g.settings).the}.`
     : won
       ? "Victoire !"
       : `${winner?.name ?? "?"} remporte la course.`;
@@ -131,7 +133,8 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
         {cup && (
           <section className="bolides-cup">
             <h3>
-              Grand Prix <span className="hint num">{cup.over ? "terminé" : `course ${cup.index + 1}/${cup.tracks.length}`}</span>
+              {seriesName(g.settings).name}{" "}
+              <span className="hint num">{cup.over ? "terminé" : `course ${cup.index + 1}/${cup.tracks.length}`}</span>
             </h3>
             <ol>
               {cupOrder.map(([id, pts], i) => (
@@ -151,7 +154,15 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch}>
-              {cup ? (cup.over ? "Nouveau Grand Prix" : "Course suivante") : "Rejouer"}
+              {mode === "chrono"
+                ? "Retenter"
+                : cup
+                  ? cup.over
+                    ? mode === "championnat"
+                      ? "Rejouer la coupe"
+                      : "Nouveau Grand Prix"
+                    : "Course suivante"
+                  : "Rejouer"}
             </button>
           ) : me ? (
             <button className="btn btn-primary btn-lg" onClick={onRematch} disabled={voted}>
@@ -163,7 +174,13 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
           </button>
           {!inTour && (
             <button className="btn" onClick={onLobby}>
-              {room.you.isHost ? "Changer les règles" : "Voir le salon"}
+              {!room.you.isHost
+                ? "Voir le salon"
+                : mode === "championnat"
+                  ? "Choisir une coupe"
+                  : mode === "chrono"
+                    ? "Changer de circuit"
+                    : "Changer les règles"}
             </button>
           )}
           {!inTour && (

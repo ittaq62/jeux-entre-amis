@@ -31,8 +31,10 @@ import {
   type KartEvent,
 } from "../../shared/games/bolides/physics.ts";
 import { COUNTDOWN_MS, INTRO_MS, type BolidesEvent, type HitKind } from "../../shared/games/bolides/race.ts";
-import { VEHICLES } from "../../shared/games/bolides/garage.ts";
-import { getTrack, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
+import { VEHICLES, type SkinId } from "../../shared/games/bolides/garage.ts";
+import { GHOST_MEDALS, GHOST_NAMES, ghostAt, ghostRun, type GhostMedal, type GhostRun } from "../../shared/games/bolides/ghost.ts";
+import { seededAvatar } from "../../shared/avatar.ts";
+import { getTrack, gridSlot, locate, pointAt, solidGround, wrapAngle, wrapS, type Track } from "../../shared/games/bolides/track.ts";
 import { decodeKart, encodeKart, type BolidesView, type KartNet } from "../../shared/games/bolides/view.ts";
 import type { BolidesClientMessage } from "../../shared/protocol.ts";
 import { BOLIDES_SOUNDS, play, soundsLoaded, vibrate, type SoundName } from "../lib/sound.ts";
@@ -164,6 +166,10 @@ export class RaceRuntime {
   private frame = 0;
   private last = performance.now();
   private sentAt = 0;
+  /** Contre-la-montre : les fantômes de bronze, d'argent et d'or, rejoués d'après leur course simulée */
+  private ghosts: { run: GhostRun; kart: Kart }[] = [];
+  /** Contre-la-montre : le temps de chacun de ses tours, pour l'écart avec le fantôme d'or */
+  private myLaps: number[] = [];
   /** Les dernières positions envoyées : le serveur montre son kart près de l'une d'elles, sauf si un bot a conduit pour lui */
   private sent: { x: number; z: number }[] = [];
   private hudAt = 0;
@@ -237,6 +243,46 @@ export class RaceRuntime {
     this.steers = this.shown.map(() => 0);
     this.controls = new Controls(() => this.mine >= 0);
     this.controls.autoGas = opts.phone;
+    // Contre-la-montre : la même course que celle d'où la salle tire les temps à battre, refaite ici
+    if (view.settings.mode === "chrono") {
+      const slot = gridSlot(this.track, 0);
+      this.ghosts = GHOST_MEDALS.map((m) => ({
+        run: ghostRun(view.track, m, view.settings.laps),
+        kart: newKart(this.track, slot.x, slot.z, slot.h),
+      }));
+    }
+  }
+
+  /** L'allure des fantômes : un kart aux couleurs de sa médaille */
+  private ghostLooks(): KartLook[] {
+    const skins: Record<GhostMedal, SkinId> = { bronze: "flammes", argent: "chrome", or: "or" };
+    const colors: Record<GhostMedal, string> = { bronze: "#c9874a", argent: "#cfd6dd", or: "#ffd24a" };
+    return this.ghosts.map(({ run }) => ({
+      color: colors[run.medal],
+      name: GHOST_NAMES[run.medal],
+      face: null,
+      avatar: seededAvatar(GHOST_NAMES[run.medal]),
+      head: null,
+      vehicle: "kart",
+      skin: skins[run.medal],
+      me: false,
+    }));
+  }
+
+  /** Où en est chaque fantôme, `ms` après le feu vert (null : arrivé) */
+  private ghostFrames(ms: number, dt: number) {
+    return this.ghosts.map(({ run, kart }) => {
+      const p = ghostAt(run, Math.max(0, ms));
+      if (!p) return null;
+      // Sa vitesse, d'après le chemin fait depuis l'image d'avant (pour ses roues)
+      if (dt > 0) kart.v = Math.min(45, Math.hypot(p.x - kart.x, p.z - kart.z) / dt);
+      kart.x = p.x;
+      kart.z = p.z;
+      kart.h = p.h;
+      kart.y = p.y;
+      kart.air = 0;
+      return { kart, steer: 0, shield: false, done: false };
+    });
   }
 
   /** Tout préparer sans geler l'écran de chargement (le circuit, les karts, les sons), puis lancer la boucle. `progress` : de 0 à 1 */
@@ -254,10 +300,15 @@ export class RaceRuntime {
       heard = true;
       report();
     });
-    await this.scene.build(this.track, this.looks, (share) => {
-      built = share;
-      report();
-    });
+    await this.scene.build(
+      this.track,
+      this.looks,
+      (share) => {
+        built = share;
+        report();
+      },
+      this.ghostLooks(),
+    );
     await sounds;
     if (this.disposed) return;
     this.takeView(this.view, this.serverOffset);
@@ -472,13 +523,22 @@ export class RaceRuntime {
             const left = this.view.settings.laps - e.lap;
             if (left === 1) this.announce("Dernier tour !");
             play(left === 1 ? "tourChip" : "capTurn");
+            // Contre-la-montre : le temps du tour, et l'écart avec le fantôme d'or au même endroit
+            const gold = this.ghosts.find((g) => g.run.medal === "or")?.run;
+            if (gold) {
+              this.myLaps.push(e.ms);
+              const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+              const gap = (sum(this.myLaps) - sum(gold.laps.slice(0, this.myLaps.length))) / 1000;
+              this.tell(`Tour ${e.lap} en ${clock(e.ms)} · fantôme d'or ${gap <= 0 ? "−" : "+"}${Math.abs(gap).toFixed(1)} s`, true);
+            }
           }
           break;
         case "finish": {
           const at = this.kartOf(e.id);
           if (at) this.scene.confetti(at.x, at.y, at.z);
           if (e.id === meId) {
-            this.announce(e.place === 1 ? "Victoire !" : `Arrivé ${placeLabel(e.place)} !`);
+            // (seul au contre-la-montre : son temps, pas une victoire)
+            this.announce(this.ghosts.length > 0 ? clock(e.ms) : e.place === 1 ? "Victoire !" : `Arrivé ${placeLabel(e.place)} !`);
             play(e.place === 1 ? "tourTrophyMine" : "tourApplause");
           }
           break;
@@ -961,6 +1021,7 @@ export class RaceRuntime {
       aim: this.aimNow(rolling),
       draft: Math.max(0, this.driver?.kart.draft ?? 0),
       lookBack: pad.look && !intro && this.mine >= 0,
+      ghosts: this.ghosts.length > 0 && !podium ? this.ghostFrames(now - v.goAt, dt) : undefined,
     });
     if (t - this.hudAt > 100) {
       this.hudAt = t;
@@ -1145,4 +1206,10 @@ export class RaceRuntime {
 
 export function placeLabel(place: number): string {
   return place === 1 ? "1er" : `${place}e`;
+}
+
+/** Un temps de course : 2:14.5 */
+function clock(ms: number): string {
+  const s = (ms % 60_000) / 1000;
+  return `${Math.floor(ms / 60_000)}:${s.toFixed(1).padStart(4, "0")}`;
 }

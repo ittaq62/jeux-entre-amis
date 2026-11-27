@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject, type Point
 import { seededAvatar } from "../../shared/avatar.ts";
 import { ITEM_NAMES, ITEM_TIPS } from "../../shared/games/bolides/items.ts";
 import { cupStandings } from "../../shared/games/bolides/race.ts";
+import { seriesName } from "../../shared/games/bolides/campaign.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesClientMessage, BolidesRoomView } from "../../shared/protocol.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -15,6 +16,7 @@ import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { BolidesGameOver } from "./BolidesGameOver.tsx";
+import { SoloScene } from "./solo/SoloScene.tsx";
 import { BolidesLoading } from "./BolidesLoading.tsx";
 import { ITEM_FAMILY, ItemIcon, ItemReel } from "./ItemIcon.tsx";
 import { OilSplats } from "./OilSplat.tsx";
@@ -71,8 +73,9 @@ function podiumTitle(room: BolidesRoomView): string {
   const cup = room.cup?.over ? room.cup : null;
   const first = cup ? cupStandings(cup.points, cup.last, (id) => room.seats.some((s) => s.id === id))[0]?.[0] : g.ranking?.[0];
   const name = room.seats.find((s) => s.id === first)?.name ?? "?";
-  if (first === me) return cup ? "Tu remportes le Grand Prix !" : "Victoire !";
-  return `${name} ${cup ? "remporte le Grand Prix" : "gagne la course"} !`;
+  const series = seriesName(g.settings).the;
+  if (first === me) return cup ? `Tu remportes ${series} !` : "Victoire !";
+  return `${name} ${cup ? `remporte ${series}` : "gagne la course"} !`;
 }
 
 /** La course : la scène 3D, l'affichage tête haute, les boutons sur téléphone, et les résultats à la fin. */
@@ -84,6 +87,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
   const [hud, setHud] = useState<Hud | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
+  // La scène de fin en solo (une coupe, un contre-la-montre) : vue une fois par course
+  const [soloSeen, setSoloSeen] = useState<number | null>(null);
   // Les résultats attendent la fin de la cérémonie (sauf si on arrive alors que la course est déjà finie)
   const [sheetReady, setSheetReady] = useState(() => g.ranking != null);
   const canSkip = useRef(0);
@@ -183,7 +188,8 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
     }
     // Arrivé alors que tout était fini (page rechargée) : pas de cérémonie. Dans une tournée non plus, elle a la sienne
     if (sheetReady) return;
-    if (inTour) {
+    // Au contre-la-montre, seul : pas de podium, la scène de fin dit tout
+    if (inTour || g.settings.mode === "chrono") {
       setSheetReady(true);
       return;
     }
@@ -720,7 +726,10 @@ export function BolidesRace({ room, send, listeners, serverOffset, unread, onOpe
         </div>
       )}
 
-      {g.ranking && sheetReady && !resultsHidden && (
+      {g.ranking && sheetReady && room.solo?.outcome && soloSeen !== g.createdAt && (
+        <SoloScene outcome={room.solo.outcome} targets={room.solo.targets} onDone={() => setSoloSeen(g.createdAt)} />
+      )}
+      {g.ranking && sheetReady && !resultsHidden && (!room.solo?.outcome || soloSeen === g.createdAt) && (
         <BolidesGameOver
           room={room}
           onRematch={() => send(room.you.isHost ? { t: "start" } : { t: "rematch" })}

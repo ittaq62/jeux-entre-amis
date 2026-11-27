@@ -1,0 +1,539 @@
+/* Bolides en solo : les étoiles, le choix du mode, les coupes, la grille des circuits, les temps à battre, et les scènes */
+
+.bol-stars {
+  display: inline-flex;
+  gap: 1px;
+  vertical-align: -2px;
+}
+
+.bol-stars svg path {
+  fill: rgba(244, 236, 218, 0.14);
+  stroke: rgba(244, 236, 218, 0.28);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.bol-stars svg.is-on path {
+  fill: #ffd24a;
+  stroke: #8a5a10;
+}
+
+.bol-stars.is-one svg:not(:first-child) {
+  display: none;
+}
+
+/* Le choix du mode : trois grandes plaques */
+.bol-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bol-mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 74px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  color: var(--text-faint);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast),
+    border-color var(--dur-fast),
+    color var(--dur-fast);
+}
+
+.bol-mode strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.bol-mode small {
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.bol-mode-stars {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd24a;
+}
+
+.bol-mode:hover:not(:disabled):not(.is-on) {
+  background: rgba(244, 236, 218, 0.05);
+}
+
+.bol-mode.is-on,
+.bol-cup.is-on,
+.bol-track.is-on {
+  background: linear-gradient(180deg, rgba(226, 189, 110, 0.3), rgba(226, 189, 110, 0.14));
+  border-color: rgba(226, 189, 110, 0.75);
+  color: #fbe7b8;
+}
+
+/* Les coupes */
+.bol-cups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bol-cup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-left: 5px solid var(--cup);
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bol-cup-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bol-cup-name {
+  display: flex;
+  flex-direction: column;
+}
+
+.bol-cup-name strong {
+  font-size: 15.5px;
+}
+
+.bol-cup-name small {
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.bol-cup-maps {
+  display: flex;
+  gap: 4px;
+}
+
+.track-map.is-tiny {
+  width: 40px;
+  height: 40px;
+}
+
+.bol-cup-foot {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 20px;
+}
+
+.bol-cup-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.bol-cup.is-locked {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.bol-cup.is-locked .bol-cup-badge,
+.bol-cup.is-locked .track-map {
+  filter: grayscale(1) brightness(0.7);
+}
+
+/* La grille des circuits */
+.bol-tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.bol-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 6px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--panel-sunken);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.bol-track strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.bol-track small {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.bol-track:hover:not(:disabled):not(.is-on) {
+  background: rgba(244, 236, 218, 0.05);
+}
+
+.bol-track-dice {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  border: 2px dashed rgba(242, 201, 76, 0.6);
+  color: #f2c94c;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+/* Les temps à battre */
+.bol-targets {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bol-targets li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--panel-sunken);
+  font-size: 14px;
+}
+
+.bol-targets li.is-beaten strong {
+  color: #ffd24a;
+}
+
+.bol-targets li.is-best {
+  color: #bff0c9;
+}
+
+@media (max-width: 560px) {
+  .bol-modes {
+    grid-template-columns: 1fr;
+  }
+
+  .bol-mode {
+    min-height: 0;
+  }
+
+  .bol-cups {
+    grid-template-columns: 1fr;
+  }
+
+  .bol-tracks {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  }
+}
+
+/* Les scènes : la présentation d'une coupe, la fin d'une coupe ou d'un contre-la-montre */
+.bol-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: calc(56px + var(--safe-top, 0px)) 16px calc(40px + var(--safe-bottom, 0px));
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 20%, #1d3a2c 0%, #0b1712 62%, #050b08 100%);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bol-scene-glow {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(40% 32% at 50% 30%, color-mix(in srgb, var(--cup, #f2c94c) 38%, transparent), transparent 70%);
+  pointer-events: none;
+  animation: bol-glow 6s ease-in-out infinite alternate;
+}
+
+@keyframes bol-glow {
+  from {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.bol-scene-skip {
+  position: absolute;
+  top: calc(12px + var(--safe-top, 0px));
+  right: 12px;
+}
+
+.bol-scene-title {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bol-scene-title h2 {
+  margin: 0;
+  font-family: var(--font-card);
+  font-size: clamp(38px, 8vw, 66px);
+  font-weight: 900;
+  line-height: 1;
+  color: #fff4dc;
+  -webkit-text-stroke: 2px #2a1c11;
+}
+
+.bol-scene-title p {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 16px;
+}
+
+.bol-scene-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cup, #f2c94c);
+}
+
+.bol-scene-tracks {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+}
+
+.bol-scene-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 116px;
+}
+
+.bol-scene-track small {
+  color: var(--cup, #f2c94c);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bol-scene-track strong {
+  font-size: 15px;
+}
+
+.bol-speech {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(640px, 100%);
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(244, 236, 218, 0.96);
+  color: #2a1c11;
+  text-align: left;
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.7);
+}
+
+.bol-speech.is-mistral {
+  flex-direction: row-reverse;
+  background: #2a1c11;
+  color: #fbe7b8;
+  border: 2px solid #ff7a1a;
+}
+
+.bol-speech > svg,
+.bol-speech > img {
+  flex: none;
+  border-radius: 50%;
+}
+
+.bol-speech-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bol-speech-name {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.bol-speech-name small {
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.bol-speech p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.bol-speech-rest {
+  visibility: hidden;
+}
+
+.bol-scene-hint {
+  position: absolute;
+  bottom: calc(14px + var(--safe-bottom, 0px));
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+/* La fin : les étoiles qui s'allument, le rang, le temps */
+.bol-scene-stars {
+  display: flex;
+  gap: 12px;
+}
+
+.bol-bigstar path {
+  fill: rgba(244, 236, 218, 0.1);
+  stroke: rgba(244, 236, 218, 0.35);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+
+.bol-bigstar.is-on path {
+  fill: #ffd24a;
+  stroke: #8a5a10;
+  filter: drop-shadow(0 0 10px rgba(255, 210, 74, 0.7));
+}
+
+.bol-scene-big {
+  margin: 0;
+  font-family: var(--font-card);
+  font-size: clamp(34px, 7vw, 56px);
+  font-weight: 900;
+  line-height: 1;
+  color: #fff4dc;
+  -webkit-text-stroke: 1.5px #2a1c11;
+}
+
+.bol-scene-sub {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 16px;
+}
+
+.bol-scene-unlock {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  border: 2px solid var(--unlock, #f2c94c);
+  background: rgba(0, 0, 0, 0.35);
+  text-align: left;
+}
+
+.bol-scene-unlock strong {
+  display: block;
+  font-size: 18px;
+}
+
+.bol-scene-unlock small {
+  color: var(--unlock, #f2c94c);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bol-scene-ghosts {
+  display: grid;
+  gap: 6px;
+  width: min(420px, 100%);
+}
+
+.bol-scene-ghosts li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  list-style: none;
+  font-size: 15px;
+}
+
+.bol-scene-ghosts li.is-beaten {
+  color: #ffd24a;
+}
+
+.bol-scene .btn-primary {
+  position: relative;
+}
+
+@media (max-height: 520px) {
+  .bol-scene {
+    gap: 10px;
+    padding-top: calc(40px + var(--safe-top, 0px));
+  }
+
+  .bol-scene-track {
+    width: 92px;
+  }
+
+  .bol-scene-track .track-map {
+    width: 64px;
+    height: 64px;
+  }
+
+  .bol-speech p {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bol-scene-glow {
+    animation: none;
+  }
+}
+
+.bol-scene-reward {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #ffd24a;
+  font-size: 15px;
+}
+
+.bol-scene-reward strong {
+  font-size: 20px;
+}

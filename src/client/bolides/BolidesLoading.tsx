@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { seriesName } from "../../shared/games/bolides/campaign.ts";
 import { getTrack, TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesRoomView } from "../../shared/protocol.ts";
 import { Avatar } from "../components/Avatar.tsx";
@@ -88,7 +89,7 @@ export function BolidesLoading({ room, share, done, failed, phone, me, serverOff
   else status = `On attend ${waiting.length} pilotes…`;
 
   const kicker = [
-    room.cup ? `Grand Prix, course ${room.cup.index + 1} sur ${room.cup.tracks.length}` : null,
+    room.cup ? `${seriesName(g.settings).name}, course ${room.cup.index + 1} sur ${room.cup.tracks.length}` : null,
     `${g.settings.laps} tours`,
     g.settings.items ? null : "sans objets",
   ]

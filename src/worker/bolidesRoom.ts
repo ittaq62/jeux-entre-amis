@@ -37,6 +37,7 @@ import {
   cupKey,
   cupOpen,
   cupStars,
+  seriesName,
   type BolidesProgress,
   type BolidesSoloView,
   type CampaignCup,
@@ -1178,7 +1179,7 @@ export class BolidesRoom extends DurableObject<Env> {
       }
       if (cup.index + 1 >= cup.tracks.length) {
         const best = cupStandings(cup.points, cup.last, (id) => Boolean(this.seatById(id)))[0];
-        if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte le Grand Prix !`);
+        if (best) this.systemChat(`${this.seatById(best[0])?.name ?? "?"} remporte ${seriesName(d.race?.settings ?? {}).the} !`);
       }
     }
     // En solo, la salle compte elle-même les étoiles gagnées

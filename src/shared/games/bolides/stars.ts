@@ -78,5 +78,5 @@ export const BOLIDES_STARS: StarGame = {
     { id: "chrono", name: "le contre-la-montre", maps: TRACK_IDS.map((id) => chronoKey(id)) },
     { id: "miroir", name: "le contre-la-montre en miroir", maps: TRACK_IDS.map((id) => chronoKey(`${id}-miroir`)) },
   ],
-  milestones: [10, 30],
+  milestones: [10, 30, 60],
 };
