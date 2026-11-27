@@ -8,6 +8,9 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { usePrefs } from "../stores/prefs.ts";
 import { GameTicket, playedGames, rulesName, Standings, standingsOf, TeamDuel, TourTop } from "./TourParts.tsx";
 import { TourTrophies } from "./TourTrophies.tsx";
+import { shareTourCard } from "./tourCard.ts";
+import { Icon } from "../components/Icon.tsx";
+import { toast } from "../lib/toast.ts";
 
 interface Props {
   view: TourView;
@@ -16,6 +19,28 @@ interface Props {
   unread: number;
   onOpenChat: () => void;
   onLeave: () => void;
+}
+
+/** Le résultat de la tournée en image, pour le groupe de discussion des amis : partagé, ou enregistré */
+function ShareCardButton({ view }: { view: TourView }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn btn-lg"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        shareTourCard(view)
+          .then((how) => {
+            if (how === "saved") toast({ title: "Image enregistrée", body: "Le résultat de la tournée est dans tes téléchargements." });
+          })
+          .catch(() => toast({ tone: "danger", title: "L'image n'a pas pu se faire." }))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <Icon name="share" size={18} /> Partager le résultat
+    </button>
+  );
 }
 
 /** La fin de la tournée : le podium, les titres, et le récapitulatif jeu par jeu. */
@@ -177,6 +202,7 @@ export function TourFinale({ view, send, serverOffset, unread, onOpenChat, onLea
           <button className="btn btn-lg" onClick={onLeave}>
             Retour à l'accueil
           </button>
+          <ShareCardButton view={view} />
           {report}
         </div>
         {/* Au téléphone, les deux boutons prennent la largeur : « Signaler un problème » passe sous la note */}
