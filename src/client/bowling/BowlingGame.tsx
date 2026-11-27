@@ -25,7 +25,7 @@ import { nextFrame } from "../lib/prepare.ts";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
 import type { BowlingListeners } from "./useBowlingRoom.ts";
-import { Coach, coachDone } from "../lib/coach.tsx";
+import { Coach, coachDone, coachShowing } from "../lib/coach.tsx";
 import { BOWLING_COACH, bowlingHaptics } from "./coach.ts";
 
 interface Banner {
@@ -243,6 +243,9 @@ export function BowlingGame({
   const thrower = v.players[v.turn] ?? null;
   const myTurn = v.phase === "aim" && thrower?.id === mySeat;
   const finished = room.status === "finished" || v.phase === "over";
+  // La main du coach, pendant les premiers tours ; sa bulle remplace alors l'aide écrite
+  const coachActive = Boolean(myTurn && hud?.canThrow && !hud.swinging && !finished);
+  const coaching = coachShowing("bowling", coachActive);
   const left = Math.max(0, Math.ceil((v.deadline - now) / 1000));
   // Pendant l'élan d'un bot, la boule n'est pas encore partie : on peut encore parier
   const winding = v.phase === "roll" && v.last !== null && now < v.last.at;
@@ -342,18 +345,26 @@ export function BowlingGame({
       )}
 
       {/* La main fantôme qui mime le geste, pendant les premiers tours */}
-      <Coach id="bowling" active={Boolean(myTurn && hud?.canThrow && !hud.swinging && !finished)} steps={BOWLING_COACH} />
+      <Coach
+        id="bowling"
+        active={coachActive}
+        steps={BOWLING_COACH}
+        turn={`${room.code}:${v.throws}`}
+        bubble={{ bottom: "calc(14px + var(--safe-bottom, 0px))" }}
+      />
       {myTurn && hud?.canThrow && !hud.swinging && (
         <>
           <div className="bw-grip" aria-hidden="true">
             <span className="bw-grip-ring" />
             <BallSwatch look={myLook} size={70} />
           </div>
-          <p className="bw-tip">
-            {v.throws === 0 || readout === null
-              ? "Appuie sur la boule, recule, pousse vers l'avant et lâche · glisse en bas pour te placer, en haut pour viser"
-              : readout}
-          </p>
+          {!coaching && (
+            <p className="bw-tip">
+              {v.throws === 0 || readout === null
+                ? "Appuie sur la boule, recule, pousse vers l'avant et lâche · glisse en bas pour te placer, en haut pour viser"
+                : readout}
+            </p>
+          )}
         </>
       )}
       {myTurn && hud?.swinging && (

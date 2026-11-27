@@ -76,6 +76,11 @@ export function coachSeen(id: string): boolean {
   return store.seen().includes(id);
 }
 
+/** La main va-t-elle se montrer à ce tour (le jeu peut alors cacher son aide écrite, que la bulle remplace) */
+export function coachShowing(id: string, active: boolean): boolean {
+  return active && !coachSeen(id) && readTurns(id) <= COACH_MAX_TURNS;
+}
+
 /** La première réussite : la main ne reviendra plus */
 export function coachDone(id: string) {
   if (coachSeen(id)) return;
@@ -91,10 +96,20 @@ function readTurns(id: string): number {
   }
 }
 
-function bumpTurns(id: string): number {
+/** Ce tour a-t-il déjà été compté (une page rechargée au même lancer ne le recompte pas) */
+function countedTurn(id: string, turn: string | number): boolean {
+  try {
+    return localStorage.getItem(`${turnsKey(id)}:dernier`) === String(turn);
+  } catch {
+    return false;
+  }
+}
+
+function bumpTurns(id: string, turn?: string | number): number {
   const n = readTurns(id) + 1;
   try {
     localStorage.setItem(turnsKey(id), String(n));
+    if (turn !== undefined) localStorage.setItem(`${turnsKey(id)}:dernier`, String(turn));
   } catch {
     // idem
   }
@@ -144,10 +159,28 @@ const HAND = (
  * La main fantôme. `active` : c'est au joueur et il peut jouer (elle ne compte un tour que lorsqu'il commence) ;
  * `steps` : le geste, étape par étape.
  */
-export function Coach({ id, active, steps }: { id: string; active: boolean; steps: readonly CoachStep[] }) {
+export function Coach({
+  id,
+  active,
+  steps,
+  bubble: place = { top: "calc(12% + 52px)" },
+  turn,
+}: {
+  id: string;
+  active: boolean;
+  steps: readonly CoachStep[];
+  /**
+   * Ce qui distingue un tour du suivant (le numéro du lancer) : un tour ne compte qu'une fois, même si le joueur
+   * appuie, rate son geste ou recharge la page. Sans lui, chaque retour de `active` compte un tour.
+   */
+  turn?: string | number;
+  /** Où poser la bulle (par défaut en haut, sous les boutons) */
+  bubble?: { top?: string; bottom?: string };
+}) {
   const [, rerender] = useState(0);
-  const [turn, setTurn] = useState(() => readTurns(id));
+  const [count, setCount] = useState(() => readTurns(id));
   const was = useRef(false);
+  const lastTurn = useRef<string | number | undefined>(undefined);
   const busyUntil = useRef(0);
   const hand = useRef<HTMLDivElement>(null);
   const ring = useRef<HTMLDivElement>(null);
@@ -160,11 +193,15 @@ export function Coach({ id, active, steps }: { id: string; active: boolean; step
   }, []);
 
   useEffect(() => {
-    if (active && !was.current && !coachSeen(id)) setTurn(bumpTurns(id));
+    if (active && !coachSeen(id)) {
+      const fresh = turn === undefined ? !was.current : turn !== lastTurn.current && !countedTurn(id, turn);
+      if (fresh) setCount(bumpTurns(id, turn));
+      if (turn !== undefined) lastTurn.current = turn;
+    }
     was.current = active;
-  }, [active, id]);
+  }, [active, id, turn]);
 
-  const show = active && !coachSeen(id) && turn <= COACH_MAX_TURNS && steps.length > 0;
+  const show = active && !coachSeen(id) && count <= COACH_MAX_TURNS && steps.length > 0;
 
   useEffect(() => {
     if (!show) return;
@@ -245,7 +282,7 @@ export function Coach({ id, active, steps }: { id: string; active: boolean; step
         style={{
           position: "absolute",
           left: "50%",
-          top: "calc(12% + 52px)",
+          ...place,
           transform: "translateX(-50%)",
           maxWidth: "min(420px, calc(100vw - 32px))",
           padding: "8px 14px",
