@@ -38,6 +38,7 @@ import type { EventBatch } from "./useCapitaleRoom.ts";
 import { MonopolyPanel, TeamBar, TeamHelp } from "./TeamParts.tsx";
 import { inTeams, sidesOf, teamIn } from "./teamsUi.tsx";
 import { useViewport } from "../lib/viewport.ts";
+import { useYourTurnAlert } from "../lib/yourTurn.ts";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
@@ -366,6 +367,15 @@ export function CapitaleTable({ room, batch, send, emotes, serverOffset, unread,
     setCity(null);
     setCitiesOpen(false);
   }, [decision]);
+
+  // « À toi ! » sur l'onglet caché (titre, pastille, son au retour) : son tour, une enchère où l'on peut miser, une
+  // offre d'échange qui attend sa réponse. Rien pendant que le bot en relais joue à sa place.
+  const mustAct =
+    g.step !== "over" &&
+    !onTakeBack &&
+    me !== null &&
+    (myTurn || Boolean(g.auction && g.bidders.includes(me) && g.auction.high?.player !== me) || g.trades.some((t) => t.to === me));
+  useYourTurnAlert(mustAct);
 
   // L'étiquette de chaque case : son prix si elle est libre, sinon son loyer à la couleur du propriétaire
   const shownState = useMemo(() => asState({ ...g, deeds }), [g, deeds]);
