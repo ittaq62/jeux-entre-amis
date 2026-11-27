@@ -86,6 +86,8 @@ export function BricksTable({
   // « Symboles de couleur » : chaque type de pièce porte un motif, dessiné avec la brique
   const colorblind = usePrefs((s) => s.colorblind);
   setBrickSymbols(colorblind);
+  // « Taille du texte » (Mon compte) : au téléphone, les étiquettes qui grandissent élargissent les côtés du plateau
+  const textScale = usePrefs((s) => s.textScale);
   const music = useControls((s) => s.music);
   const [menuOpen, setMenuOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -154,15 +156,20 @@ export function BricksTable({
   // Téléphone couché : le plateau sur toute la hauteur, les boutons de chaque côté, sous les pouces
   // (Autour du plateau : la réserve, les suivantes et leurs écarts, puis les boutons de chaque côté)
   const flatCell = clamp(Math.floor(Math.min((h - 10) / SHOWN_ROWS, (w - 532) / 10)), 8, 30);
-  const flatSide = Math.floor((w - 16 - (10 * flatCell + 168)) / 2);
+  // (Les suivantes, à droite, s'élargissent plus que la réserve quand le texte grandit : le côté laisse cet écart)
+  const flatSide = Math.floor((w - 16 - (10 * flatCell + 168 + Math.round(60 * (textScale - 1)))) / 2);
   // Les plateaux des autres passent sur deux rangées plutôt que de mordre sur le sien
   const flatCols = clamp(Math.floor(flatSide / FLAT_RIVAL_W), 1, Math.max(1, rivals.length));
   const flatRows = Math.ceil(rivals.length / flatCols);
   const flatRival = clamp(Math.floor((h - 190 - flatRows * 16) / Math.max(1, flatRows) / SHOWN_ROWS), 2, 5);
+  // Téléphone debout : la réserve à gauche et les suivantes à droite prennent la largeur de leurs étiquettes (« Réserve »
+  // et « Envoyées », 4 et 5 fois les 11 px de base, plus leurs marges et les écarts) ; le plateau leur laisse cette
+  // place, pour que rien ne sorte de l'écran quand le texte est plus grand
+  const phoneSides = 40 + 99 * textScale;
   const cell = flat
     ? flatCell
     : phone
-      ? clamp(Math.floor(Math.min((phoneRoom - phoneRivalsH) / SHOWN_ROWS, (w - 36) / 15.4)), 8, 30)
+      ? clamp(Math.floor(Math.min((phoneRoom - phoneRivalsH) / SHOWN_ROWS, (w - 36) / 15.4, (w - 12 - phoneSides) / 10)), 8, 30)
       : clamp(Math.floor((h - 150) / SHOWN_ROWS), 10, 34);
   const rivalCell = flat
     ? flatRival
@@ -183,7 +190,11 @@ export function BricksTable({
   const relayed = Boolean(mySeat?.autoplay);
 
   return (
-    <div className={`table-root felt bricks-root ${flat ? "is-flat" : ""}`}>
+    <div
+      className={`table-root felt bricks-root ${flat ? "is-flat" : ""}`}
+      // Couché : la place à gauche du plateau, pour les autres, le choix des attaques et la série sous le chrono
+      style={flat ? { ["--flat-side" as string]: `${flatSide}px` } : undefined}
+    >
       <header className="table-top">
         <button className="btn btn-ghost btn-icon" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <Icon name="menu" />
@@ -266,7 +277,6 @@ export function BricksTable({
 
       <main
         className={`bricks-stage ${phone ? "is-phone" : ""} ${flat ? "is-flat" : ""} ${me ? "" : "is-spectating"} rivals-${rivals.length}`}
-        style={flat ? { ["--flat-side" as string]: `${flatSide}px` } : undefined}
       >
         {me ? (
           <>

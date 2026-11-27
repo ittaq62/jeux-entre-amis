@@ -214,13 +214,19 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
                   {seat?.name}
                   {seat?.admin && <AdminBadge />}
                 </span>
+                {/* Chaque morceau d'un seul tenant : quand le texte est grand, la ligne passe à la suivante après la virgule
+                    plutôt que de couper le nom */}
                 <span className="bricks-log-stats">
                   <span>
-                    {g.settings.series > 1 ? `${p.roundWins} manche${p.roundWins > 1 ? "s" : ""}, ` : ""}
-                    {st?.kos ?? 0} K.O.
+                    {g.settings.series > 1 && (
+                      <>
+                        <span>{`${p.roundWins} manche${p.roundWins > 1 ? "s" : ""},`}</span>{" "}
+                      </>
+                    )}
+                    <span>{st?.kos ?? 0} K.O.</span>
                   </span>
                   <span className="hint">
-                    {st?.sent ?? 0} envoyées, {st?.lines ?? 0} lignes
+                    <span>{st?.sent ?? 0} envoyées,</span> <span>{st?.lines ?? 0} lignes</span>
                   </span>
                 </span>
               </li>
