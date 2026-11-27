@@ -1101,3 +1101,25 @@
     animation-delay: 0s !important;
   }
 }
+
+/* La vignette d'un éclat de fin d'épreuve, à la boutique */
+.cg-cheer {
+  position: relative;
+  display: inline-block;
+  border-radius: 50%;
+  background: radial-gradient(circle, #2f4a8a, #182a55);
+}
+
+.cg-cheer i {
+  position: absolute;
+  margin: -3% 0 0 -5%;
+}
+
+.cg-cheer b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #ffd84a;
+  font-size: 140%;
+}

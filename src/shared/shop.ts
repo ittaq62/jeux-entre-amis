@@ -41,6 +41,12 @@ import {
   CUES as BIL_CUES,
   SHOT_FX as BIL_FX,
 } from "./games/billard/looks.ts";
+import {
+  CHEERS as COUR_CHEERS,
+  cheerItem as courCheerItem,
+  JERSEYS as COUR_JERSEYS,
+  jerseyItem as courJerseyItem,
+} from "./games/cour/looks.ts";
 import { SKINS as NAVAL_SKINS, type SkinId as NavalSkinId } from "./games/naval/skins.ts";
 import { BACKS, type BackId } from "./games/uno/backs.ts";
 import { WEAR, WEAR_SLOTS, WEAR_BY_ID, type AvatarWear, type WearInfo } from "./wardrobe.ts";
@@ -71,7 +77,9 @@ export type ShopKind =
   | "bilqueue"
   | "biltapis"
   | "bilbilles"
-  | "bileffet";
+  | "bileffet"
+  | "courmaillot"
+  | "coursalut";
 
 export interface ShopItem {
   id: string;
@@ -157,6 +165,9 @@ export const SHOP_ITEMS: ShopItem[] = [
   ...BIL_CLOTHS.map((c): ShopItem => ({ id: bilClothItem(c.id), kind: "biltapis", ref: c.id, name: c.name, price: c.price })),
   ...BIL_SETS.map((b): ShopItem => ({ id: bilSetItem(b.id), kind: "bilbilles", ref: b.id, name: b.name, price: b.price })),
   ...BIL_FX.map((f): ShopItem => ({ id: bilFxItem(f.id), kind: "bileffet", ref: f.id, name: f.name, price: f.price })),
+  // La Cour des Grands : son maillot de candidat, et l'éclat qui salue chaque épreuve passée
+  ...COUR_JERSEYS.map((j): ShopItem => ({ id: courJerseyItem(j.id), kind: "courmaillot", ref: j.id, name: j.name, price: j.price })),
+  ...COUR_CHEERS.map((c): ShopItem => ({ id: courCheerItem(c.id), kind: "coursalut", ref: c.id, name: c.name, price: c.price })),
 ];
 
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));

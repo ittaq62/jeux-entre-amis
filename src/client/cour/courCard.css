@@ -1,0 +1,6 @@
+/* La famille « La Récré » dans l'album : la cour au soleil d'été, le ciel bleu et la pelouse */
+.fam-cour .tc-art {
+  background:
+    radial-gradient(ellipse 60% 35% at 30% 8%, rgba(255, 230, 170, 0.55), transparent 70%),
+    linear-gradient(180deg, #5b9fe0 0, #ffd9a8 58%, #7dbb4f 58%, #4f8f3a 100%);
+}

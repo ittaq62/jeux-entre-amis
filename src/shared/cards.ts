@@ -39,7 +39,8 @@ export type CardFamily =
   | "culbute"
   | "minigolf"
   | "bowling"
-  | "billard";
+  | "billard"
+  | "cour";
 
 export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "habitues", name: "Les Habitués", note: "Ceux qui ne quittent jamais la table" },
@@ -55,6 +56,7 @@ export const FAMILIES: { id: CardFamily; name: string; note: string }[] = [
   { id: "minigolf", name: "Le Minigolf", note: "Par trois, et ça finit à sept" },
   { id: "bowling", name: "La Piste", note: "Strike, spare, et la rigole" },
   { id: "billard", name: "La Bande", note: "Sept pleines, sept rayées, et la noire" },
+  { id: "cour", name: "La Récré", note: "Un, deux, trois… Tournesol !" },
 ];
 
 export type CardArt =
@@ -83,6 +85,11 @@ export type CardArt =
   | {
       kind: "billard";
       subject: "queue" | "craie" | "triangle" | "blanche" | "poche" | "lampe" | "rateau" | "noire" | "neuf" | "bandes" | "casse";
+    }
+  | {
+      kind: "cour";
+      subject:
+        "tournesol" | "sable" | "corde" | "bille" | "nenuphar" | "chaise" | "marelle" | "carillon" | "epervier" | "polochon" | "cloche";
     };
 
 export interface CardDef {
@@ -1247,6 +1254,96 @@ export const CARDS: CardDef[] = [
     name: "Casse et file",
     quote: "Il casse, il rentre tout, il range sa queue. L'autre n'a pas joué.",
     art: { kind: "billard", subject: "casse" },
+  },
+
+  // La Récré (La Cour des Grands, arrivée après le billard : à la fin, pour ne renuméroter aucune carte)
+  {
+    id: "cour-tournesol",
+    family: "cour",
+    rarity: "commune",
+    name: "Le Grand Tournesol",
+    quote: "Il chante le dos tourné. Il regarde. Tu ne bouges plus.",
+    art: { kind: "cour", subject: "tournesol" },
+  },
+  {
+    id: "cour-sable",
+    family: "cour",
+    rarity: "commune",
+    name: "Le Sablé",
+    quote: "Un cœur gravé, une aiguille, et des mains qui tremblent.",
+    art: { kind: "cour", subject: "sable" },
+  },
+  {
+    id: "cour-corde",
+    family: "cour",
+    rarity: "commune",
+    name: "La Corde",
+    quote: "Ho… hisse ! Et l'autre équipe file dans la mousse.",
+    art: { kind: "cour", subject: "corde" },
+  },
+  {
+    id: "cour-bille",
+    family: "cour",
+    rarity: "commune",
+    name: "La Bille de verre",
+    quote: "Elle roule, elle hésite au bord du pot… et elle tombe.",
+    art: { kind: "cour", subject: "bille" },
+  },
+  {
+    id: "cour-nenuphar",
+    family: "cour",
+    rarity: "peu-commune",
+    name: "Le Nénuphar",
+    quote: "Un sur deux tient bon. L'autre fait plouf.",
+    art: { kind: "cour", subject: "nenuphar" },
+  },
+  {
+    id: "cour-chaise",
+    family: "cour",
+    rarity: "peu-commune",
+    name: "La Chaise musicale",
+    quote: "Quand la musique s'arrête, elle est à toi. Ou pas.",
+    art: { kind: "cour", subject: "chaise" },
+  },
+  {
+    id: "cour-marelle",
+    family: "cour",
+    rarity: "peu-commune",
+    name: "La Marelle",
+    quote: "Une, deux, trois cases… et le Ciel, si tu t'en souviens.",
+    art: { kind: "cour", subject: "marelle" },
+  },
+  {
+    id: "cour-carillon",
+    family: "cour",
+    rarity: "rare",
+    name: "Carillon",
+    quote: "Ding ! La cloche sonne, l'épreuve commence.",
+    art: { kind: "cour", subject: "carillon" },
+  },
+  {
+    id: "cour-epervier",
+    family: "cour",
+    rarity: "rare",
+    name: "L'Épervier",
+    quote: "Il plane au milieu de la cour. Il a faim de candidats.",
+    art: { kind: "cour", subject: "epervier" },
+  },
+  {
+    id: "cour-polochon",
+    family: "cour",
+    rarity: "epique",
+    name: "Le Polochon",
+    quote: "Une poutre, un bassin de mousse, et plus d'amis du tout.",
+    art: { kind: "cour", subject: "polochon" },
+  },
+  {
+    id: "cour-cloche",
+    family: "cour",
+    rarity: "legendaire",
+    name: "La Cloche d'or",
+    quote: "Quarante candidats sont entrés dans la cour. Un seul la soulève.",
+    art: { kind: "cour", subject: "cloche" },
   },
 ];
 
