@@ -14,6 +14,7 @@ import { useTourBridge } from "../tour/bridge.ts";
 import { money } from "./boardUi.ts";
 import { teamColor, teamIn, TeamMark } from "./teamsUi.tsx";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 
 interface Props {
   room: CapitaleRoomView;
@@ -176,6 +177,7 @@ export function CapitaleGameOver({ room, onRematch, onLobby, onLeave, onInspect 
           })}
         </ol>
 
+        <EveningLine game="capitale" />
         {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (

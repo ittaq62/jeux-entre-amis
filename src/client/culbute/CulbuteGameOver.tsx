@@ -6,6 +6,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { FighterStageView } from "./FighterStageView.tsx";
 import type { FighterLook } from "./scene/CulbuteScene.ts";
 import { overTitle } from "./overTitle.ts";
@@ -94,6 +95,7 @@ export function CulbuteGameOver({
             })}
           </ol>
         )}
+        <EveningLine game="culbute" />
         {inTour ? (
           // La feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué
           <TourNextNote />

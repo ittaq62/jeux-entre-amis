@@ -12,6 +12,7 @@ import { usePrefs } from "../stores/prefs.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
@@ -119,6 +120,7 @@ export function MecheGameOver({ room, onRematch, onLobby, onLeave, onInspect, wa
           })}
         </ol>
 
+        <EveningLine game="meche" />
         {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (

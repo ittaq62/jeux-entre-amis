@@ -14,6 +14,7 @@ import { BRICK_TEAMS } from "./BricksLobby.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
@@ -153,6 +154,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
               </div>
             </dl>
           )}
+          <EveningLine game="bricks" />
           {actions}
           {report}
         </motion.div>
@@ -225,6 +227,7 @@ export function BricksGameOver({ room, onRematch, onLobby, onLeave, onInspect }:
             );
           })}
         </ol>
+        <EveningLine game="bricks" />
         {actions}
         {report}
       </motion.div>

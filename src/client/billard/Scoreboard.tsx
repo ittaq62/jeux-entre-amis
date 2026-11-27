@@ -11,6 +11,7 @@ import { EloLine } from "../game/EloLine.tsx";
 import { usePop } from "../lib/feel.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { formatLabel } from "./BillardLobby.tsx";
 import { BallDot } from "./LookPicker.tsx";
 
@@ -225,6 +226,7 @@ export function FinalSheet({
             </li>
           ))}
         </ol>
+        <EveningLine game="billard" />
         {inTour ? (
           <TourNextNote />
         ) : (

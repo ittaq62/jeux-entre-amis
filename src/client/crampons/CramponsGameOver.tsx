@@ -5,6 +5,7 @@ import type { CramponsClientMessage, CramponsRoomView } from "../../shared/proto
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 
 const ROWS: [string, (s: TeamStats, total: TeamStats) => string][] = [
   ["Tirs", (s) => String(s.shots)],
@@ -80,6 +81,7 @@ export function CramponsGameOver({
             ))}
           </tbody>
         </table>
+        <EveningLine game="crampons" />
         {inTour ? (
           <TourNextNote />
         ) : (

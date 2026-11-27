@@ -11,6 +11,7 @@ import { TEAM_NAMES } from "./NavalLobby.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { useSeatMemory } from "../game/seatMemory.ts";
 
 interface Props {
@@ -115,6 +116,7 @@ export function NavalGameOver({ room, onRematch, onLobby, onLeave, onInspect }: 
           })}
         </ol>
 
+        <EveningLine game="naval" />
         {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (

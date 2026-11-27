@@ -1,0 +1,16 @@
+/* La ligne de la soirée, sous le résultat d'une partie : discrète, dorée, en italique comme une remarque glissée */
+.evening-line {
+  margin: 4px auto 0;
+  max-width: 42ch;
+  text-align: center;
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--gold-light);
+}
+
+.evening-line::before {
+  content: "✦ ";
+  font-style: normal;
+  color: var(--gold);
+}

@@ -12,6 +12,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 
 export interface SheetPlayer {
   id: string;
@@ -193,6 +194,7 @@ export function FinalSheet({
         <EloLine result={room.results?.[room.you.userId]} />
         <Sheet v={v} players={players} me={room.you.seatId} />
         {v.cfg.pronostics && <Seers v={v} players={players} room={room} />}
+        <EveningLine game="bowling" />
         {inTour ? (
           <TourNextNote />
         ) : (

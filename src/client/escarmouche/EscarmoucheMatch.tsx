@@ -14,6 +14,7 @@ import { QUALITY_NAMES, type QualityPref } from "./scene/quality.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { TEAM_NAMES } from "./EscarmoucheLobby.tsx";
 import { BattleRuntime, type HudState } from "./runtime.ts";
 import { TEAM_HEX } from "./scene/EscScene.ts";
@@ -440,6 +441,7 @@ function GameOver({
             })}
           </tbody>
         </table>
+        <EveningLine game="escarmouche" />
         {inTour ? (
           // La feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué
           <TourNextNote />

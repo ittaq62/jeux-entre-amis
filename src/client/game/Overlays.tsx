@@ -14,6 +14,7 @@ import { EloLine } from "./EloLine.tsx";
 import { useSeatMemory } from "./seatMemory.ts";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 
 function seatOf(room: RoomView, id: string): SeatView | undefined {
   return room.seats.find((s) => s.id === id);
@@ -220,6 +221,7 @@ export function GameOver({
 
         {g.teams && g.settings.endMode === "points" && <TeamTotals room={room} />}
 
+        <EveningLine game="uno" />
         {inTour ? (
           <TourNextNote />
         ) : (

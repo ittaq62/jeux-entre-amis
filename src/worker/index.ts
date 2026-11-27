@@ -62,6 +62,7 @@ import { claimStreak, streakStatus } from "./streak.ts";
 import { gameStub, tourStub } from "./tourLink.ts";
 import { refuseSocket } from "./arrival.ts";
 import { publicTable } from "../shared/publicTable.ts";
+import { eveningFor } from "./evening.ts";
 import { openGames } from "./betaGames.ts";
 import { clientIp, encodeHeaderJson, sameOrigin } from "./util.ts";
 
@@ -336,6 +337,13 @@ app.post("/streak/claim", withSession, withProfile, async (c) => {
 // ---------------------------------------------------------------------------
 // Les étoiles : seulement lues ici ; les salles les accordent (stars.ts)
 // ---------------------------------------------------------------------------
+
+/** Le sel de la soirée : la ligne du joueur pour la partie de ce jeu qu'il vient de finir, ou null (voir evening.ts) */
+app.get("/evening", withSession, withProfile, async (c) => {
+  const game = c.req.query("game");
+  if (!isTableGame(game)) return c.json({ error: "Jeu inconnu." }, 400);
+  return c.json({ line: await eveningFor(c.env.DB, c.get("user").id, game) });
+});
 
 app.get("/stars", withSession, withProfile, async (c) => {
   const all = await starsOf(c.env.DB, c.get("user").id);
