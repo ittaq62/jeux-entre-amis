@@ -72,18 +72,23 @@ export function roomImpulse(sampleRate: number, rt60 = 0.35, rand: () => number 
   return out;
 }
 
-const rooms = new WeakMap<AudioNode, AudioNode>();
+const rooms = new WeakMap<AudioNode, Map<string, AudioNode>>();
 
 /**
  * La sortie « dans une petite pièce » : le son direct, plus un peu de réverbération (`wet`), vers `dest`. Une seule par
- * sortie (la même pièce pour tous les sons du jeu, et un seul convolueur à calculer).
+ * sortie et par réglage (la même pièce pour tous les sons d'un jeu, un seul convolueur à calculer ; deux jeux qui
+ * sortent au même endroit avec des salles différentes gardent chacun la leur).
  */
 export function roomOut(ctx: BaseAudioContext, dest: AudioNode, opts: { rt60?: number; wet?: number } = {}): AudioNode {
-  const known = rooms.get(dest);
+  const rt60 = opts.rt60 ?? 0.35;
+  const key = `${rt60}|${opts.wet ?? 0.18}`;
+  let byKey = rooms.get(dest);
+  if (!byKey) rooms.set(dest, (byKey = new Map()));
+  const known = byKey.get(key);
   if (known) return known;
   const input = ctx.createGain();
   const conv = ctx.createConvolver();
-  const ir = roomImpulse(ctx.sampleRate, opts.rt60 ?? 0.35);
+  const ir = roomImpulse(ctx.sampleRate, rt60);
   const buf = ctx.createBuffer(2, ir[0]!.length, ctx.sampleRate);
   buf.copyToChannel(ir[0]! as Float32Array<ArrayBuffer>, 0);
   buf.copyToChannel(ir[1]! as Float32Array<ArrayBuffer>, 1);
@@ -92,8 +97,32 @@ export function roomOut(ctx: BaseAudioContext, dest: AudioNode, opts: { rt60?: n
   wet.gain.value = opts.wet ?? 0.18;
   input.connect(dest);
   input.connect(conv).connect(wet).connect(dest);
-  rooms.set(dest, input);
+  byKey.set(key, input);
   return input;
+}
+
+const limiters = new WeakMap<AudioNode, AudioNode>();
+
+/**
+ * Un limiteur devant `dest` : quand des dizaines de chocs tombent ensemble (un strike, quatre combattants), leur somme
+ * ne dépasse plus le plafond de la sortie (sinon le son grésille). `input` baisse l'entrée d'autant que le compresseur
+ * remonte de lui-même les sons faibles. À créer tôt (au chargement du jeu) : Chrome atténue d'une dizaine de dB les
+ * cent premières millisecondes d'un compresseur neuf, et le premier son du jeu sortirait plus bas.
+ */
+export function limiterOut(ctx: BaseAudioContext, dest: AudioNode, opts: { input?: number } = {}): AudioNode {
+  const known = limiters.get(dest);
+  if (known) return known;
+  const g = ctx.createGain();
+  g.gain.value = opts.input ?? 0.6;
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -10;
+  lim.knee.value = 6;
+  lim.ratio.value = 16;
+  lim.attack.value = 0.002;
+  lim.release.value = 0.12;
+  g.connect(lim).connect(dest);
+  limiters.set(dest, g);
+  return g;
 }
 
 /** Le bruit du choc : une rafale très brève de bruit, filtrée selon la dureté (Hz : plus c'est dur, plus c'est aigu) */
