@@ -13,6 +13,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { SoundButton, SoundToggle } from "../components/SoundSettings.tsx";
 import { CRAMPONS_SOUNDS, play, preloadSounds, soundsLoaded } from "../lib/sound.ts";
 import { buzz } from "../lib/feel.ts";
+import { coachDone } from "../lib/coach.tsx";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { atMost } from "../lib/prepare.ts";
@@ -32,6 +33,7 @@ import { Commentator } from "./commentary.ts";
 import { MatchRuntime, type HudState } from "./runtime.ts";
 import { StadiumSound } from "./stadiumSound.ts";
 import { inkOn, TEAM_SHAPE_NAMES, TeamMark } from "./teamMarks.tsx";
+import { COACH_ID, CramponsCoach } from "./coach.tsx";
 import type { MatchListeners } from "./useCramponsRoom.ts";
 import { DrawnRulesNote } from "../game/RandomRules.tsx";
 
@@ -359,6 +361,9 @@ export function CramponsMatch({
   const reduced = usePrefs((s) => s.reducedEffects);
   // « Symboles de couleur » : chaque équipe a sa forme (rond, triangle), sur les maillots et au tableau
   const marks = usePrefs((s) => s.colorblind);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Le coach au doigt s'en va pour de bon quand on a fait, au doigt, une passe et un tir
+  const learned = useRef({ pass: false, shot: false });
   const inTour = Boolean(useTourBridge());
   const [hud, setHud] = useState<HudState>({
     clock: 0,
@@ -460,9 +465,14 @@ export function CramponsMatch({
     const v0 = viewRef.current;
     const welcome =
       v0.phase === "kickoff" && v0.period === 1 && v0.score[0] + v0.score[1] === 0 ? setTimeout(() => commentator.welcome(), 700) : null;
-    // Un coup de pied du joueur lui-même : son tir vibre
+    // Un coup de pied du joueur lui-même : son tir vibre, et le coach note ce qu'il sait faire
     const madeKick = (kind: string) => {
-      if (kind === "shot" || kind === "finesse" || kind === "chip") buzz("impact");
+      const shot = kind === "shot" || kind === "finesse" || kind === "chip";
+      if (shot) buzz("impact");
+      if (!touch) return;
+      if (shot) learned.current.shot = true;
+      else if (kind === "pass" || kind === "through" || kind === "lob" || kind === "cross") learned.current.pass = true;
+      if (learned.current.pass && learned.current.shot) coachDone(COACH_ID);
     };
     const onEvents = (events: MatchEvent[]) => {
       for (const e of events) {
@@ -668,7 +678,7 @@ export function CramponsMatch({
   const keyOf = (shot: boolean) => (screenKeys ? (shot ? "Tir" : "Passe") : mainKey(hud.scheme, settings.bindings, shot));
   const key = keyOf(restart?.kind === "penalty");
   return (
-    <div className="cr-root" style={{ "--cr-cards-h": `${cardsHeight(view)}px` } as CSSProperties}>
+    <div ref={rootRef} className="cr-root" style={{ "--cr-cards-h": `${cardsHeight(view)}px` } as CSSProperties}>
       {room.status === "playing" && loadingShown(prepared, gateClock) && (
         <GameLoading
           title="Crampons"
@@ -919,6 +929,29 @@ export function CramponsMatch({
             )}
           </div>
         </div>
+      )}
+
+      {/* La main du coach, balle au pied, pendant les premiers matchs au doigt ; pas au penalty (tout y tire), ni au
+          gardien (ses boutons relancent et dégagent) */}
+      {touch && seatId !== null && (
+        <CramponsCoach
+          root={rootRef}
+          turn={room.gate?.id ?? matchKey}
+          touchPad={settings.touchPad}
+          active={
+            room.status === "playing" &&
+            !over &&
+            !cinema &&
+            !help &&
+            !panel &&
+            gateClock.passed &&
+            withBall &&
+            !keeperHold &&
+            !shootout &&
+            !(taking && restart?.kind === "penalty") &&
+            view.players[hud.active]?.role !== "GK"
+          }
+        />
       )}
 
       {help && (
