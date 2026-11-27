@@ -7,16 +7,19 @@
 import { random, randomInt } from "../../../rng.ts";
 import { between, clamp, OUT, PLAYING, pressure, SAFE, skill, type EpCtx } from "./common.ts";
 
-/** Les cases de la marelle (la dernière, le Ciel), en mètres depuis le pied de la marelle */
+/**
+ * Les cases de la marelle (la dernière, le Ciel), en mètres depuis le pied de la marelle. Le joueur regarde vers +z :
+ * sa gauche est le côté +x, d'où le 4 et le 7 à +x (à gauche, comme sur une vraie marelle)
+ */
 export const MARELLE_CASES: readonly [number, number][] = [
   [0, 0],
   [0, 0.95],
   [0, 1.9],
-  [-0.48, 2.85],
   [0.48, 2.85],
+  [-0.48, 2.85],
   [0, 3.8],
-  [-0.48, 4.75],
   [0.48, 4.75],
+  [-0.48, 4.75],
   [0, 5.7],
   [0, 6.75],
 ];

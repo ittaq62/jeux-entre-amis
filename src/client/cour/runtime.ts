@@ -265,7 +265,8 @@ export class CourRuntime {
           targets = stage.frame(m.ep, m, now, dt);
           cam = m.phase === "results" ? this.resultsCamera(m, now, k, stage) : stage.camera(m.ep, m, now);
         } else cam = shot(0, 12, 26, 0, 2, 0);
-        this.host.fly(cam.look.x - 6, 9, cam.look.z + 2, cam.look.x, cam.look.z);
+        // Pendant le jeu, Carillon se tient à l'écart, haut et sur le côté, pour ne rien cacher
+        this.host.fly(cam.look.x - 16, 12, cam.look.z + 8, cam.look.x, cam.look.z);
         break;
       }
       case "ff": {

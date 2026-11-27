@@ -180,6 +180,8 @@
   border-radius: 18px;
   background: rgba(20, 30, 60, 0.55);
   backdrop-filter: blur(6px);
+  opacity: 0;
+  animation: cg-in 0.5s 1s ease-out forwards;
 }
 
 .cg-cine.is-reveal ul {

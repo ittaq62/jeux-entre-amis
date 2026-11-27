@@ -13,7 +13,8 @@ import { path, shot, type PointerInfo, type Shot, type Stage, type StageCtx } fr
 const COLS = 4;
 const GAP_X = 3.4;
 const GAP_Z = 5.2;
-const MARBLE_SCALE = 1;
+// Les billes se voient un peu plus grosses qu'elles ne sont (leurs chocs restent ceux de vraies billes)
+const MARBLE_SCALE = 1.7;
 const COLORS: [string, string] = ["#e0303e", "#2f6fd1"];
 
 /** Où est un duel (le coin de son carré), et la ligne de lancer */
@@ -60,6 +61,7 @@ export class BillesStage implements Stage {
     this.marbles.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(20 * 7 * 3), 3);
     this.marbles.count = 0;
     this.marbles.castShadow = true;
+    this.marbles.frustumCulled = false;
     this.root.add(this.marbles);
     // La flèche de visée
     this.aim = new THREE.Group();
@@ -167,6 +169,8 @@ export class BillesStage implements Stage {
         const throwing = d.winner < 0 && (d.turn === 0 ? d.a : d.b) === i && now >= d.ready - 400;
         const justThrew = anim && anim.owners[anim.count - 1] === side && elapsed < 0.5;
         const st = v.st[i]!;
+        // Mon tour : vu de mes yeux, mon candidat ne se montre pas (il boucherait la vue)
+        if (i === this.myIdx && this.isMyTurn(v, now)) continue;
         const x = o.x + pit.x + (throwing || justThrew ? startX(side) * 1.4 : (side === 0 ? -1 : 1) * (PIT.w + 0.6));
         const z = o.z + pit.z + (throwing || justThrew ? -0.55 : 0.4);
         out.set(id, {
@@ -222,7 +226,7 @@ export class BillesStage implements Stage {
   }
 
   private place(k: number, x: number, z: number, o: 0 | 1, pot: boolean) {
-    this.m4.makeTranslation(x - this.root.position.x, pot ? 0.04 : 0.06 + MARBLE_R, z - this.root.position.z);
+    this.m4.makeTranslation(x - this.root.position.x, pot ? 0.04 : 0.06 + MARBLE_R * MARBLE_SCALE, z - this.root.position.z);
     this.marbles.setMatrixAt(k, this.m4);
     this.marbles.setColorAt(k, this.col.set(COLORS[o]));
   }
@@ -285,11 +289,15 @@ export class BillesStage implements Stage {
   camera(ev: EpView | null, m: MatchView, now: number): Shot {
     const v = ev as BillesView | null;
     void m;
-    void now;
     const o = this.root.position;
     if (v && this.myDuel >= 0) {
       const pit = pitAt(this.myDuel);
-      return shot(o.x + pit.x, 1.9, o.z + pit.z - 2.1, o.x + pit.x, 0, o.z + pit.z + 1.6, 50, { ease: 1.2 });
+      const d = v.duels[this.myDuel]!;
+      const side = d.a === this.myIdx ? 0 : 1;
+      // À mon tour, à hauteur d'yeux derrière ma bille ; sinon un peu en retrait, de trois quarts
+      if (this.isMyTurn(v, now))
+        return shot(o.x + pit.x + startX(side), 1.15, o.z + pit.z - 1.1, o.x + pit.x, 0, o.z + pit.z + 2.2, 52, { ease: 1.6 });
+      return shot(o.x + pit.x + 1.6, 2.6, o.z + pit.z - 2.4, o.x + pit.x, 0, o.z + pit.z + 1.4, 50, { ease: 1.2 });
     }
     const rows = Math.ceil((v?.duels.length ?? 8) / COLS);
     return shot(o.x - 9, 9, o.z - 6, o.x, 0, o.z + (rows * GAP_Z) / 2, 50, { ease: 0.6 });

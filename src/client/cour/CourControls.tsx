@@ -257,7 +257,7 @@ function NenupharsControls({ s, stage, nameOf }: { s: H; stage: NenupharsStage; 
     );
   return (
     <div className="cg-status">
-      {s.leader ? `${nameOf(s.leader)} devine…` : "…"} {num(s.ahead) > 0 ? `· encore ${num(s.ahead)} avant toi` : ""}
+      {s.leader ? `${nameOf(s.leader)} devine…` : "Au suivant…"} {num(s.ahead) > 0 ? `· encore ${num(s.ahead)} avant toi` : ""}
     </div>
   );
 }

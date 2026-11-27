@@ -40,7 +40,7 @@ export class NenupharsStage implements Stage {
         fragmentShader: `uniform float time; varying vec2 vUv; varying vec3 vPos;
           void main(){
             float w = sin(vPos.x * 2.1 + time * 1.3) * 0.5 + sin(vPos.z * 1.7 - time) * 0.5 + sin((vPos.x - vPos.z) * 4.0 + time * 2.0) * 0.25;
-            vec3 deep = vec3(0.08, 0.32, 0.30), light = vec3(0.32, 0.6, 0.52);
+            vec3 deep = vec3(0.03, 0.15, 0.16), light = vec3(0.1, 0.32, 0.3);
             vec3 c = mix(deep, light, 0.5 + w * 0.18);
             float edge = smoothstep(0.0, 0.08, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
             c = mix(vec3(0.42, 0.55, 0.32), c, edge);

@@ -84,6 +84,8 @@ export class MarelleStage implements Stage {
     this.cells.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 10 * 3), 3);
     this.cells.count = 0;
     this.cells.receiveShadow = true;
+    // Les cases changent de nombre : three.js ne doit pas les écarter d'après une enveloppe calculée trop tôt (vide)
+    this.cells.frustumCulled = false;
     this.root.add(this.cells);
     // Les contours et les numéros à la craie : une même toile posée sur chaque marelle
     this.labels = new THREE.InstancedMesh(
@@ -92,6 +94,7 @@ export class MarelleStage implements Stage {
       n,
     );
     this.labels.count = 0;
+    this.labels.frustumCulled = false;
     this.root.add(this.labels);
     this.root.position.set(0, 0, 2);
     ctx.world.stage.add(this.root);

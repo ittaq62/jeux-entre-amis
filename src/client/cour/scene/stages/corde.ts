@@ -113,7 +113,7 @@ export class CordeStage implements Stage {
           const fx = side * Math.max(1, EDGE - 1.2 - j * 0.6);
           out.set(id, {
             x: fx,
-            y: age < 0.6 ? DECK_Y * (1 - age / 0.6) + 0.2 : 0.25,
+            y: age < 0.6 ? DECK_Y * (1 - age / 0.6) - 0.1 : -0.4,
             z: ((j % 4) - 1.5) * 1.3,
             face: side > 0 ? -Math.PI / 2 : Math.PI / 2,
             act: age < 0.6 ? "plunge" : "flail",

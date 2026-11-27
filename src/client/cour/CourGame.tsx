@@ -94,6 +94,8 @@ export function CourGame({
       onHud: setHud,
     });
     runtime.current = rt;
+    // Pour les essais (page de travail, console)
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__courRt = rt;
     rt.setMatch(m);
     listeners.current.onMatch = (mv: MatchView) => rt.setMatch(mv);
     let stopped = false;
