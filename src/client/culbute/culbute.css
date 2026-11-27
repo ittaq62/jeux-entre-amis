@@ -1136,3 +1136,13 @@ html:has(.cb-fight) body {
     display: none;
   }
 }
+
+/* « Effets réduits » dans le compte : comme le réglage du système (l'éclair blanc d'une sortie ne passe plus) */
+.reduce-motion .cb-countdown,
+.reduce-motion .cb-dmg {
+  animation: none;
+}
+
+.reduce-motion .cb-flash {
+  display: none;
+}

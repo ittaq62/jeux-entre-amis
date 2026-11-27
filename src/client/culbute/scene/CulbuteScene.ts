@@ -18,6 +18,7 @@ import { F_PUFF } from "../../../shared/games/culbute/view.ts";
 import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.ts";
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
+import { reducedFeel } from "../../lib/feel.ts";
 import { warmThree } from "../../lib/prepare.ts";
 import { AIM_CENTER } from "../controls.ts";
 import type { RenderFrame } from "../runtime.ts";
@@ -727,7 +728,8 @@ export class CulbuteScene {
     this.camPos.lerp(want, k);
     this.camLook.lerp(this.tmpB.set(cx, cy, 0), k);
     this.shake = Math.max(0, this.shake - dt * 2.2);
-    const s = this.shake * this.shake * 0.5;
+    // « Effets réduits » (le compte, ou le réglage du système) : la caméra ne tremble pas
+    const s = this.shake > 0 && !reducedFeel() ? this.shake * this.shake * 0.5 : 0;
     this.camera.position.set(this.camPos.x + (Math.random() - 0.5) * s, this.camPos.y + (Math.random() - 0.5) * s, this.camPos.z);
     this.camera.lookAt(this.camLook);
     const d = this.arena.light.dir;

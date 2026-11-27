@@ -11,6 +11,7 @@ import { ReportButton } from "../components/ReportButton.tsx";
 import { MenuSound, SoundToggle } from "../components/SoundSettings.tsx";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
+import { buzz } from "../lib/feel.ts";
 import { watchFirstSeconds } from "../lib/firstSeconds.ts";
 import { useGateClock, useLoadedSignal } from "../lib/loadGate.ts";
 import { nextFrame } from "../lib/prepare.ts";
@@ -372,6 +373,13 @@ export function CulbuteFight({
           else if (e.k === "grab") sfx.grab();
           const s = soundOf(e, mySlot);
           if (s) play(s.name, { volume: s.volume ?? 0.8 });
+          // Le téléphone vibre sous le doigt de celui qui joue, aux moments rares seulement : sa sortie, celle qu'il
+          // provoque, un coup fort qu'il donne ou qu'il reçoit (jamais pour les coups des autres, ni pour un spectateur)
+          if (mySlot >= 0) {
+            if (e.k === "ko" && e.v === mySlot) buzz("echec");
+            else if (e.k === "ko" && e.by === mySlot) buzz("fort");
+            else if (e.k === "hit" && e.kind === "hit" && e.power > 0.6 && (e.a === mySlot || e.v === mySlot)) buzz("impact");
+          }
           // Le coup qui fait sortir : un éclair blanc sur tout l'écran
           if (e.k === "hit" && e.ko) setFlash((n) => n + 1);
         }
