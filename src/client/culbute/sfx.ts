@@ -4,6 +4,7 @@
 // ritournelle de celui qui nargue. Ils passent par la sortie générale du site (le réglage du son les coupe comme les autres).
 
 import { audioOut, effectsLevel } from "../lib/sound.ts";
+import { roomOut, strike, type Body } from "../lib/sfxKit.ts";
 
 let noiseBuffer: AudioBuffer | null = null;
 let lastAt = 0;
@@ -15,7 +16,8 @@ function out(): { ctx: AudioContext; dest: GainNode; vol: number } | null {
   const o = audioOut();
   if (!o) return null;
   if (o.ctx.state === "suspended") void o.ctx.resume();
-  return { ctx: o.ctx, dest: o.out, vol };
+  // L'arène : une réverbération très courte (le combat est rapide), le volume des réglages passe toujours par o.out
+  return { ctx: o.ctx, dest: roomOut(o.ctx, o.out, { rt60: 0.3, wet: 0.1 }) as GainNode, vol };
 }
 
 function noise(ctx: AudioContext): AudioBuffer {
@@ -35,18 +37,22 @@ function env(gain: GainNode, peak: number, attack: number, decay: number, t0: nu
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + decay);
 }
 
-/** Un coup sourd : une note grave qui tombe */
+/**
+ * Un coup sourd : un corps qui encaisse (une peau amortie, plusieurs modes qui s'éteignent chacun à leur rythme, et le
+ * bruit du choc), au lieu d'une seule note qui tombait. Même hauteur (entre f0 et f1), même durée, même force.
+ */
 function thump(ctx: AudioContext, dest: AudioNode, t0: number, f0: number, f1: number, peak: number, decay: number) {
-  const o = ctx.createOscillator();
-  o.type = "sine";
-  o.frequency.setValueAtTime(f0, t0);
-  o.frequency.exponentialRampToValueAtTime(f1, t0 + decay);
-  const g = ctx.createGain();
-  env(g, peak, 0.004, decay, t0);
-  o.connect(g).connect(dest);
-  o.start(t0);
-  o.stop(t0 + decay + 0.05);
+  const body: Body = {
+    ratios: [1, 1.52, 2.18, 2.95],
+    decays: [decay / 7, decay / 10, decay / 14, decay / 18],
+    amps: [1, 0.5, 0.3, 0.15],
+  };
+  // Calé sur la force de l'ancienne note (mesurée sur les 50 ms les plus fortes)
+  strike(ctx, dest, t0, body, Math.sqrt(f0 * f1), { gain: peak * 0.85, velocity: 0.85, hardness: 1600, click: 0.35 });
 }
+
+/** La garde qui pare : une petite lame de métal (les mêmes rapports que l'ancien tintement), claire et distincte */
+const GUARD: Body = { ratios: [1, 1.5, 2.22], decays: [0.07, 0.05, 0.03], amps: [1, 0.6, 0.35] };
 
 /** Un claquement : un souffle de bruit filtré */
 function slap(
@@ -118,20 +124,12 @@ export function shieldHit(power: number) {
   const { ctx, dest, vol } = o;
   const t0 = ctx.currentTime + 0.005;
   const v = vol * (0.35 + power * 0.3);
-  for (const [freq, k] of [
-    [1180, 1],
-    [1770, 0.6],
-    [2620, 0.35],
-  ] as const) {
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = freq * (0.97 + Math.random() * 0.06);
-    const g = ctx.createGain();
-    env(g, v * k * 0.5, 0.002, 0.22, t0);
-    osc.connect(g).connect(dest);
-    osc.start(t0);
-    osc.stop(t0 + 0.3);
-  }
+  strike(ctx, dest, t0, GUARD, 1180 * (0.97 + Math.random() * 0.06), {
+    gain: v * 0.42,
+    velocity: 0.6 + power * 0.4,
+    hardness: 7000,
+    click: 0.3,
+  });
   slap(ctx, dest, t0, 3200, 1.2, v * 0.4, 0.03);
 }
 
