@@ -16,7 +16,7 @@ import {
   type Visibility,
 } from "../shared/protocol.ts";
 import { REPORTS_PER_HOUR } from "../shared/report.ts";
-import { findUser, findUsers, recentGames, siteCounts } from "./admin.ts";
+import { findUser, findUsers, playStats, recentGames, siteCounts } from "./admin.ts";
 import {
   BANNED_MESSAGE,
   clearSessionCookie,
@@ -618,6 +618,9 @@ async function cutOff(c: Ctx, userId: string, reason: string) {
   const room = await hub(c).userRoom(userId);
   if (room) await (await roomStub(c, room.code)).adminKick(userId);
 }
+
+/** À quoi on joue : les parties des huit dernières semaines, par jeu et par semaine */
+app.get("/admin/play", withSession, withAdmin, async (c) => c.json(await playStats(c.env.DB)));
 
 app.get("/admin/overview", withSession, withAdmin, async (c) => {
   const [counts, snapshot, games, announcement] = await Promise.all([

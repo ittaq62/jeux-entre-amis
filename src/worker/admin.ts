@@ -1,4 +1,5 @@
 import type { AdminGame, AdminUser, GameId } from "../shared/protocol.ts";
+import { playSince, summarizePlay, type AdminPlay, type PlayRow } from "../shared/adminPlay.ts";
 import type { UserRow } from "./auth.ts";
 import { toPublic } from "./users.ts";
 
@@ -48,6 +49,21 @@ export async function siteCounts(db: D1Database) {
     .bind(now - 7 * DAY, now - DAY)
     .first<{ accounts: number; newThisWeek: number; banned: number; games: number; gamesToday: number; newReports: number }>();
   return row ?? { accounts: 0, newThisWeek: 0, banned: 0, games: 0, gamesToday: 0, newReports: 0 };
+}
+
+/** À quoi on joue : les parties terminées des huit dernières semaines, par jeu et par semaine (voir adminPlay.ts) */
+export async function playStats(db: D1Database, now = Date.now()): Promise<AdminPlay> {
+  const since = playSince(now);
+  const { results } = await db
+    .prepare(
+      `SELECT g.game AS game, CAST((?1 - g.ended_at) / ?2 AS INTEGER) AS week, COUNT(*) AS n,
+         AVG(g.ended_at - g.started_at) AS duration, AVG(g.player_count) AS players,
+         AVG((SELECT COUNT(*) FROM game_players p WHERE p.game_id = g.id AND p.is_bot = 0)) AS humans
+       FROM games g WHERE g.ended_at >= ?3 GROUP BY g.game, week`,
+    )
+    .bind(now, 7 * DAY, since)
+    .all<PlayRow>();
+  return summarizePlay(results, since);
 }
 
 export async function recentGames(db: D1Database, limit = 12): Promise<AdminGame[]> {
