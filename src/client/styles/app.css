@@ -1006,11 +1006,12 @@ a.shop-item {
   font-size: 14px;
 }
 
+/* Sous la lampe, au centre du feutre : un gris plus clair et un corps plus grand, pour rester lisible */
 .login-foot {
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   margin: 0;
-  color: var(--text-faint);
+  color: var(--text-soft);
 }
 
 /* Téléphone couché : l'éventail de cartes s'efface et le titre se serre, pour que le formulaire tienne avec le clavier */
@@ -1616,9 +1617,43 @@ a.shop-item {
   outline: none;
 }
 
+/* La recherche et le code d'une table, l'un sous l'autre à droite du bonjour */
+.home-tools {
+  flex: 0 1 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .home-search {
   position: relative;
-  flex: 0 1 380px;
+}
+
+.home-tools .join-code {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.home-tools .join-label {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.home-tools .join-input {
+  width: 116px;
+  min-height: 40px;
+  font-size: 19px;
+}
+
+.home-tools .join-row .btn {
+  min-height: 40px;
 }
 
 .home-search > svg {
@@ -1663,8 +1698,20 @@ a.shop-item {
 }
 
 @media (max-width: 760px) {
-  .home-search {
+  .home-tools {
     flex: 1 1 100%;
+  }
+
+  /* Au téléphone : la question au-dessus, le code et le bouton sur toute la largeur */
+  .home-tools .join-code {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .home-tools .join-input {
+    flex: 1;
+    width: auto;
   }
 }
 
@@ -3799,13 +3846,30 @@ a.shop-item {
   justify-content: center;
 }
 
+/* Amis : chaque liste dans son cadre, comme les réglages de « Mon compte » */
+.friends-block {
+  gap: 12px;
+}
+
+.friends-block h2 {
+  font-size: 22px;
+}
+
+.friends-block .empty {
+  margin: 0;
+}
+
+.friends-block .rows {
+  margin: 0;
+}
+
 /* Amis : la croix qui retire un ami, un peu à l'écart des boutons de sa table */
 .friend-remove {
   margin-left: 4px;
 }
 
 .invite-site .row-actions {
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 /* « Mon compte » : le pseudo et son bouton, espacés comme le reste du cadre */

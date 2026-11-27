@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "wouter";
 import { APP_NAME } from "../../shared/app.ts";
 import type { FriendEntry, PublicUser } from "../../shared/protocol.ts";
@@ -131,10 +131,10 @@ export function FriendsPage() {
           </form>
           {results.length > 0 && (
             <ul className="rows search-results">
-              {results.map((u) => {
+              {results.map((u, i) => {
                 const status = known.get(u.id);
                 return (
-                  <li key={u.id} className="row">
+                  <li key={u.id} className="row rise" style={{ "--i": i } as CSSProperties}>
                     <Link href={`/joueur/${encodeURIComponent(u.pseudo)}`} className="row-who">
                       <Avatar avatar={u.avatar} userId={u.id} photo={u.photo} size={36} />
                       <strong>
@@ -167,11 +167,11 @@ export function FriendsPage() {
         </section>
 
         {incoming.length > 0 && (
-          <section className="home-list">
+          <section className="home-list sheet panel friends-block">
             <h2>Demandes reçues</h2>
             <ul className="rows">
-              {incoming.map((f) => (
-                <li key={f.user.id} className="row">
+              {incoming.map((f, i) => (
+                <li key={f.user.id} className="row rise" style={{ "--i": i } as CSSProperties}>
                   <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={38} />
                     <strong>
@@ -192,7 +192,7 @@ export function FriendsPage() {
           </section>
         )}
 
-        <section className="home-list">
+        <section className="home-list sheet panel friends-block">
           <h2>
             Mes amis <span className="hint num">{accepted.length}</span>
           </h2>
@@ -204,11 +204,11 @@ export function FriendsPage() {
             </p>
           ) : (
             <ul className="rows">
-              {accepted.map((f) => {
+              {accepted.map((f, i) => {
                 const isOnline = f.user.id in online;
                 const room = online[f.user.id];
                 return (
-                  <li key={f.user.id} className="row">
+                  <li key={f.user.id} className="row rise" style={{ "--i": i } as CSSProperties}>
                     <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                       <span className="avatar-wrap">
                         <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={40} />
@@ -242,11 +242,11 @@ export function FriendsPage() {
         </section>
 
         {outgoing.length > 0 && (
-          <section className="home-list">
+          <section className="home-list sheet panel friends-block">
             <h2>Demandes envoyées</h2>
             <ul className="rows">
-              {outgoing.map((f) => (
-                <li key={f.user.id} className="row">
+              {outgoing.map((f, i) => (
+                <li key={f.user.id} className="row rise" style={{ "--i": i } as CSSProperties}>
                   <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                     <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={34} />
                     <strong>
@@ -315,7 +315,7 @@ function InviteToSite() {
     }
   }
   return (
-    <section className="home-list invite-site">
+    <section className="home-list sheet panel friends-block invite-site">
       <h2>Faire venir un ami</h2>
       <p className="empty">
         Il n'a pas encore de compte ? Envoie-lui le lien du site : son adresse email suffit pour s'inscrire, puis tu le retrouves ici par

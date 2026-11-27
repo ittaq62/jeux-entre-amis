@@ -173,7 +173,11 @@ export function HomePage() {
             </h1>
             <StreakChip />
           </div>
-          <GameSearch value={query} onChange={setQuery} />
+          {/* Chercher un jeu, ou rejoindre la table d'un ami : un code mène à n'importe quel jeu, un seul champ suffit */}
+          <div className="home-tools">
+            <GameSearch value={query} onChange={setQuery} />
+            <JoinCode id="join-code" busy={busy !== null} onJoin={(code) => void join(code)} />
+          </div>
         </div>
         <p className="visually-hidden" role="status">
           {searching
@@ -201,7 +205,6 @@ export function HomePage() {
               busy={busy}
               onQuick={(id) => void quickMatch(id)}
               onCreate={setCreateFor}
-              onJoin={(code) => void join(code)}
             />
           ))}
           {nothing && (
@@ -224,8 +227,8 @@ export function HomePage() {
                 </p>
               ) : (
                 <ul className="rows">
-                  {rooms.map((room) => (
-                    <RoomRow key={room.code} room={room} showGame={games.length > 1} friendNames={friendNames} />
+                  {rooms.map((room, i) => (
+                    <RoomRow key={room.code} index={i} room={room} showGame={games.length > 1} friendNames={friendNames} />
                   ))}
                 </ul>
               )}
@@ -244,11 +247,11 @@ export function HomePage() {
                 </p>
               ) : (
                 <ul className="rows">
-                  {sortedFriends.slice(0, 8).map((f) => {
+                  {sortedFriends.slice(0, 8).map((f, i) => {
                     const isOnline = f.user.id in online;
                     const room = online[f.user.id];
                     return (
-                      <li key={f.user.id} className="row">
+                      <li key={f.user.id} className="row rise" style={{ "--i": i } as CSSProperties}>
                         <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
                           <span className="avatar-wrap">
                             <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={36} />
@@ -325,7 +328,7 @@ function FriendsOnline({ friends, online }: { friends: FriendEntry[]; online: Re
         : `${first.user.pseudo} est en ligne`
       : `${first.user.pseudo} et ${others === 1 ? "un autre ami sont" : `${others} autres amis sont`} en ligne` + (busy ? `, ${busy}` : "");
   return (
-    <section className="home-online panel" aria-label="Amis en ligne">
+    <section className="home-online panel rise" aria-label="Amis en ligne">
       <span className="home-online-faces" aria-hidden="true">
         {here.slice(0, 5).map((f) => (
           <span key={f.user.id} className="avatar-wrap">
@@ -443,7 +446,6 @@ function GameSheet({
   busy,
   onQuick,
   onCreate,
-  onJoin,
 }: {
   game: HomeGame;
   hidden: boolean;
@@ -451,7 +453,6 @@ function GameSheet({
   busy: string | null;
   onQuick: (game: TableGame) => void;
   onCreate: (game: TableGame) => void;
-  onJoin: (code: string) => void;
 }) {
   const look = LOOK[game.id];
   const stage = useRef<HTMLDivElement>(null);
@@ -482,7 +483,6 @@ function GameSheet({
             {game.open}
           </button>
         </div>
-        <JoinCode id={`join-code-${game.id}`} busy={busy !== null} onJoin={onJoin} />
       </div>
     </section>
   );
@@ -532,7 +532,7 @@ function useStageMotion(stage: RefObject<HTMLDivElement | null>): "live" | "paus
   return state;
 }
 
-/** « Un ami t'a donné un code ? » : le même champ sur la fiche de chaque jeu. */
+/** « Un ami t'a donné un code ? » : en haut de l'accueil, sous la recherche ; le code mène à la table, quel qu'en soit le jeu. */
 function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (code: string) => void }) {
   const [code, setCode] = useState("");
   function submit(e: FormEvent) {
@@ -564,7 +564,19 @@ function JoinCode({ id, busy, onJoin }: { id: string; busy: boolean; onJoin: (co
   );
 }
 
-function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame: boolean; friendNames: Set<string> }) {
+function RoomRow({
+  room,
+  index,
+  showGame,
+  friendNames,
+}: {
+  room: RoomSummary;
+  /** Sa place dans la liste : les lignes apparaissent l'une après l'autre */
+  index: number;
+  showGame: boolean;
+  friendNames: Set<string>;
+}) {
+  const rise = { "--i": index } as CSSProperties;
   const seats = room.humans + room.bots;
   // Fermée en cours de route, elle ne se regarde que si l'un de ses joueurs est un ami (le serveur décide aussi)
   const links = (
@@ -586,7 +598,7 @@ function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame:
       .map((g) => GAME_NAMES[g])
       .join(", ");
     return (
-      <li className="row">
+      <li className="row rise" style={rise}>
         <span className="room-code">{room.code}</span>
         <span className="row-text">
           <strong>{room.hostName ? `Tournée de ${room.hostName}` : "Tournée ouverte"}</strong>
@@ -603,7 +615,7 @@ function RoomRow({ room, showGame, friendNames }: { room: RoomSummary; showGame:
   // « Bolides, Le Volcan » ; quand UNO est le seul jeu, sa variante suffit (« classique »)
   const what = showGame ? tableLabel(game, room.variant) : (variantName(game, room.variant) ?? GAME_NAMES[game]);
   return (
-    <li className="row">
+    <li className="row rise" style={rise}>
       <span className="room-code">{room.code}</span>
       <span className="row-text">
         <strong>{room.hostName ? `Table de ${room.hostName}` : "Table ouverte"}</strong>

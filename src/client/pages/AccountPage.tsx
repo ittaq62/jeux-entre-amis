@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation } from "wouter";
 import { PSEUDO_MAX, validatePseudo } from "../../shared/app.ts";
 import type { MeResponse } from "../../shared/protocol.ts";
@@ -103,7 +103,7 @@ export function AccountPage() {
           </Link>
         </div>
 
-        <section className="sheet panel">
+        <section className="sheet panel rise" style={{ "--i": 0 } as CSSProperties}>
           <h2>Profil</h2>
           {/* « Entrée » enregistre le pseudo */}
           <form
@@ -185,7 +185,7 @@ export function AccountPage() {
           </div>
         </section>
 
-        <section className="sheet panel">
+        <section className="sheet panel rise" style={{ "--i": 1 } as CSSProperties}>
           <h2>Son et confort</h2>
           {/* Le même réglage que sous le haut-parleur de l'en-tête et dans les menus de partie */}
           <div className="account-sound">
@@ -202,7 +202,7 @@ export function AccountPage() {
           </PrefRow>
         </section>
 
-        <section className="sheet panel">
+        <section className="sheet panel rise" style={{ "--i": 2 } as CSSProperties}>
           <h2>Compte</h2>
           <p className="hint">Connecté avec {user.email}</p>
           <div className="row-actions">
