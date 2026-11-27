@@ -294,13 +294,14 @@ export function ShopPage() {
                       </small>
                     </h3>
                     <div className="shop-grid">
-                      {items.map((item) => {
+                      {items.map((item, i) => {
                         const mine = has(item.id);
                         return (
                           <button
                             key={item.id}
                             type="button"
-                            className={`shop-item ${mine ? "is-mine" : ""} ${!mine && item.price > balance ? "is-dear" : ""}`}
+                            className={`shop-item rise ${mine ? "is-mine" : ""} ${!mine && item.price > balance ? "is-dear" : ""}`}
+                            style={{ "--i": i } as CSSProperties}
                             disabled={mine}
                             onClick={() => setBuying(item)}
                           >
