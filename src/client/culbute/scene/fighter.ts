@@ -13,6 +13,7 @@ import { STYLES } from "../../../shared/games/culbute/styles.ts";
 import { F_CREAM, F_FAST, F_INTANG, F_STOP } from "../../../shared/games/culbute/view.ts";
 import { hairGeometry, hatGroup } from "../../bolides/scene/pilot.ts";
 import type { RenderFighter } from "../runtime.ts";
+import { traceTeamMark, type TeamMark } from "../teamMarks.ts";
 import { cloth, dotsTexture, knitTexture, limb, loft, merge, mitten, shoe } from "./body.ts";
 import { accordionModel, itemModel, propModel, type Accordion, type Keep } from "./props.ts";
 
@@ -31,6 +32,8 @@ export interface FighterLook {
   outfit: HabitueId | "moi";
   /** La peau de sa tête, avec les traits de l'avatar (dessinée à part, elle arrive un peu après) */
   head?: HTMLCanvasElement | null;
+  /** En équipes, avec « Symboles de couleur » : la forme de son équipe (son repère la prend, à la place de la flèche) */
+  mark?: TeamMark;
 }
 
 type V3 = [number, number, number];
@@ -753,7 +756,7 @@ void main() { float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(mi
     this.trailColor.set(look.color).lerp(new THREE.Color(0xffffff), 0.55);
 
     // Son nom au-dessus de la tête, et un petit repère à sa couleur
-    this.marker = nameTag(look.me ? "Toi" : look.bot ? "" : look.name, look.color, keep);
+    this.marker = nameTag(look.me ? "Toi" : look.bot ? "" : look.name, look.color, keep, look.mark);
     this.marker.position.y = HEIGHT + 0.5;
     this.group.add(this.marker);
     this.quip = quipBubble(QUIPS[look.style], keep);
@@ -1335,22 +1338,30 @@ function starShape(r: number): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(s);
 }
 
-/** Le nom du combattant sur une petite étiquette à sa couleur, ou rien qu'un repère (un bot), toujours tournés vers nous */
-function nameTag(text: string, color: string, keep: Keep): THREE.Group {
+/**
+ * Le nom du combattant sur une petite étiquette à sa couleur, ou rien qu'un repère (un bot), toujours tournés vers nous.
+ * `mark` (en équipes, « Symboles de couleur ») : sous l'étiquette, la forme de l'équipe au lieu de la flèche, et bien
+ * plus grande qu'elle (la flèche ne fait que quelques pixels quand la caméra embrasse toute l'arène : une forme si
+ * petite ne se reconnaîtrait pas).
+ */
+function nameTag(text: string, color: string, keep: Keep, mark?: TeamMark): THREE.Group {
   const g = new THREE.Group();
   const c = document.createElement("canvas");
   c.width = 256;
-  c.height = 72;
+  c.height = mark ? 104 : 72;
   const ctx = c.getContext("2d")!;
-  // Le repère : une petite flèche à la couleur du joueur, cerclée de blanc
+  // Le repère : une petite flèche à la couleur du joueur (ou la forme de son équipe), cerclée de blanc
   ctx.fillStyle = color;
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(114, 50);
-  ctx.lineTo(142, 50);
-  ctx.lineTo(128, 68);
-  ctx.closePath();
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineWidth = mark ? 6 : 4;
+  if (mark) traceTeamMark(ctx, mark, 128, 74, 24);
+  else {
+    ctx.beginPath();
+    ctx.moveTo(114, 50);
+    ctx.lineTo(142, 50);
+    ctx.lineTo(128, 68);
+    ctx.closePath();
+  }
   ctx.stroke();
   ctx.fill();
   if (text) {
@@ -1372,7 +1383,10 @@ function nameTag(text: string, color: string, keep: Keep): THREE.Group {
   const tex = keep(new THREE.CanvasTexture(c));
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })));
-  sprite.scale.set(1.05, 0.295, 1);
+  // (la même échelle que l'étiquette seule : un dessin plus haut donne un repère plus haut, pas une étiquette écrasée)
+  sprite.scale.set(1.05, (0.295 * c.height) / 72, 1);
+  // Plus haut, le dessin s'allonge vers le bas : son centre descend d'autant, et l'étiquette reste où elle était
+  sprite.position.y = -((0.295 * (c.height - 72)) / 72) / 2;
   sprite.renderOrder = 10;
   g.add(sprite);
   return g;

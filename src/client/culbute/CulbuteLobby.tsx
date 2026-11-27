@@ -10,11 +10,13 @@ import { TOUR_TEAMS } from "../../shared/tour.ts";
 import { Check, Options } from "../components/ui.tsx";
 import { drawLock, RandomRulesField, tableDraw } from "../game/RandomRules.tsx";
 import { TableLobby, TableSize } from "../game/TableLobby.tsx";
+import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { loadSettings, type CulbuteSettings } from "./bindings.ts";
 import { CommandsPanel } from "./CommandsPanel.tsx";
 import { HowToPlay } from "./CulbuteHelp.tsx";
 import { FighterPicker, pickLabel, savedPick } from "./FighterPicker.tsx";
+import { TEAM_GLYPHS, TEAM_MARKS } from "./teamMarks.ts";
 
 const MODE_HINTS: Record<FightSettings["mode"], string> = {
   vies: "Chacun a ses vies ; on en perd une en sortant de l'arène. Le dernier qui en a encore gagne.",
@@ -59,6 +61,9 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
   const fighterOf = (id: string) => room.seats.find((x) => x.id === id)?.fighter;
   const { has } = useMyItems();
   const seat = room.seats.find((x) => x.id === room.you.seatId);
+  // « Symboles de couleur » : le nom de chaque équipe précédé de sa forme, celle que portent ses combattants (« ● Rouges »)
+  const marks = usePrefs((p) => p.colorblind);
+  const teamLabel = (t: 0 | 1) => (marks ? `${TEAM_GLYPHS[TEAM_MARKS[t]]} ${TOUR_TEAMS[t]}` : TOUR_TEAMS[t]);
 
   // Le combattant choisi sur cet appareil, repris en arrivant à la table, comme le fait le choix lui-même : il n'est
   // plus monté qu'avec l'onglet « Skin », et on ne doit pas avoir à l'ouvrir pour retrouver le sien
@@ -93,7 +98,7 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
       seatNote={(seat) => {
         const f = fighterOf(seat.id);
         const label = f ? pickLabel(f) : null;
-        return s.teams ? `${label ?? ""} · ${TOUR_TEAMS[room.teams[seat.id] ?? 0]}` : label;
+        return s.teams ? `${label ?? ""} · ${teamLabel((room.teams[seat.id] ?? 0) as 0 | 1)}` : label;
       }}
       summary={summary}
       aside={
@@ -105,8 +110,8 @@ export function CulbuteLobby({ room, send, ...rest }: Props) {
               value={mine ?? 0}
               onChange={(team) => send({ t: "team", team })}
               options={[
-                { value: 0, label: TOUR_TEAMS[0] },
-                { value: 1, label: TOUR_TEAMS[1] },
+                { value: 0, label: teamLabel(0) },
+                { value: 1, label: teamLabel(1) },
               ]}
             />
           </section>

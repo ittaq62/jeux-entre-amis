@@ -18,6 +18,7 @@ import { nextFrame } from "../lib/prepare.ts";
 import { play, preloadSounds, type SoundName } from "../lib/sound.ts";
 import { usePrefs } from "../stores/prefs.ts";
 import { useTourBridge } from "../tour/bridge.ts";
+import { teamMark } from "./teamMarks.ts";
 import { loadSettings, saveSettings, type CulbuteSettings } from "./bindings.ts";
 import { CommandsPanel } from "./CommandsPanel.tsx";
 import { CulbuteGameOver } from "./CulbuteGameOver.tsx";
@@ -60,13 +61,15 @@ function fightVariant(c: CulbuteConfig): string {
   return `Culbute, ${MODE_NAMES[c.mode].toLowerCase()}${detail}${c.teams ? ", en équipes" : ""}`;
 }
 
-export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[] {
+/** `marks` : « Symboles de couleur » ; en équipes, chacun porte alors aussi la forme de son équipe (voir teamMarks.ts) */
+export function looksFor(room: CulbuteRoomView, view: CulbuteView, marks = false): FighterLook[] {
   return view.fighters.map((f) => {
     const seat = room.seats.find((s) => s.id === f.id);
     const pick = seat?.fighter ?? { who: f.style };
     const color = view.config.teams
       ? (TOUR_TEAM_COLORS[f.team as 0 | 1] ?? PLAYER_COLORS[f.slot]!)
       : PLAYER_COLORS[f.slot % PLAYER_COLORS.length]!;
+    const mark = marks && view.config.teams ? teamMark(f.team) : undefined;
     if (pick.who === "moi" && seat) {
       return {
         slot: f.slot,
@@ -77,6 +80,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
         color,
         me: seat.id === room.you.seatId,
         outfit: "moi",
+        mark,
       };
     }
     const who = pick.who === "moi" ? f.style : pick.who;
@@ -90,6 +94,7 @@ export function looksFor(room: CulbuteRoomView, view: CulbuteView): FighterLook[
       me: seat?.id === room.you.seatId,
       bot: seat?.kind === "bot",
       outfit: who,
+      mark,
     };
   });
 }
@@ -328,7 +333,8 @@ export function CulbuteFight({
   const bridge = useTourBridge();
   const view = room.culbute!;
   const fightKey = `${view.arena}:${view.fighters.map((f) => `${f.id}-${f.style}`).join(",")}`;
-  const looks = useMemo(() => looksFor(room, view), [room, view]);
+  const colorMarks = usePrefs((s) => s.colorblind);
+  const looks = useMemo(() => looksFor(room, view, colorMarks), [room, view, colorMarks]);
   const looksKey = JSON.stringify(looks);
   const looksRef = useRef(looks);
   looksRef.current = looks;
@@ -533,7 +539,7 @@ export function CulbuteFight({
             return (
               <div
                 key={f.slot}
-                className={`cb-card-hud ${f.out ? "is-out" : ""} ${look.me ? "is-me" : ""}`}
+                className={`cb-card-hud ${f.out ? "is-out" : ""} ${look.me ? "is-me" : ""} ${look.mark ? `mark-${look.mark}` : ""}`}
                 style={{ "--c": look.color } as CSSProperties}
               >
                 <span className="cb-card-face">
@@ -606,6 +612,16 @@ export function CulbuteFight({
           <button className="menu-item" onClick={() => (setCommands(true), setMenu(false))}>
             <Icon name="target" size={18} /> Commandes
           </button>
+          {/* En équipes : chaque équipe a aussi sa forme (le réglage commun du site, comme au UNO et au billard) */}
+          {view.config.teams && (
+            <button
+              className="menu-item"
+              aria-pressed={colorMarks}
+              onClick={() => usePrefs.getState().set({ colorblind: !usePrefs.getState().colorblind })}
+            >
+              <Icon name="eye" size={18} /> Symboles de couleur{colorMarks ? " : oui" : ""}
+            </button>
+          )}
           {/* Le son commun à tous les jeux, et la musique propre au combat */}
           <MenuSound>
             <SoundToggle

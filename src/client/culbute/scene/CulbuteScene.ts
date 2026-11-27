@@ -19,6 +19,7 @@ import type { FightEvent, ItemKind } from "../../../shared/games/culbute/model.t
 import { headCanvas } from "../../bolides/scene/faces.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { reducedFeel } from "../../lib/feel.ts";
+import { traceTeamMark, type TeamMark } from "../teamMarks.ts";
 import { warmThree } from "../../lib/prepare.ts";
 import { AIM_CENTER } from "../controls.ts";
 import type { RenderFrame } from "../runtime.ts";
@@ -41,8 +42,11 @@ const WHITE = new THREE.Color(0xffffff);
 /** Sur un écran en hauteur, la largeur de l'arène qu'on garde au moins à l'écran autour des combattants, en mètres */
 const PORTRAIT_SPAN = 8;
 
-/** La bulle d'un combattant hors du cadre : un rond à sa couleur, cerclé de blanc, avec une pointe vers le haut */
-function bubbleTexture(color: string): THREE.CanvasTexture {
+/**
+ * La bulle d'un combattant hors du cadre : un rond à sa couleur, cerclé de blanc, avec une pointe vers le haut. En
+ * équipes, avec « Symboles de couleur » : à la forme de son équipe (un rond, ou un carré).
+ */
+function bubbleTexture(color: string, mark: TeamMark = "rond"): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const g = c.getContext("2d")!;
@@ -53,12 +57,10 @@ function bubbleTexture(color: string): THREE.CanvasTexture {
   g.lineTo(44, 34);
   g.closePath();
   g.fill();
-  g.beginPath();
-  g.arc(64, 70, 46, 0, Math.PI * 2);
+  traceTeamMark(g, mark, 64, 70, 46);
   g.fill();
   g.fillStyle = color;
-  g.beginPath();
-  g.arc(64, 70, 39, 0, Math.PI * 2);
+  traceTeamMark(g, mark, 64, 70, 39);
   g.fill();
   g.fillStyle = "rgba(255,255,255,0.35)";
   g.beginPath();
@@ -322,7 +324,7 @@ export class CulbuteScene {
       b.material.dispose();
     }
     this.bubbles = looks.map((l) => {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(l.color), transparent: true, depthTest: false }));
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(l.color, l.mark), transparent: true, depthTest: false }));
       sprite.visible = false;
       this.overlay.add(sprite);
       return sprite;

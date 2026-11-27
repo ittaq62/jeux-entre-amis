@@ -399,6 +399,15 @@ html:has(.cb-fight) body {
   overflow: hidden;
 }
 
+/* « Symboles de couleur » en équipes : les Bleus ont le visage et les vies carrés, les Rouges les gardent ronds */
+.cb-card-hud.mark-carre .cb-card-face {
+  border-radius: 22%;
+}
+
+.cb-card-hud.mark-carre .cb-stock {
+  border-radius: 2px;
+}
+
 .cb-card-text {
   display: grid;
   gap: 3px;
