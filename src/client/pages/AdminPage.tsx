@@ -408,8 +408,8 @@ function PlaySection() {
                 <strong>{TABLE_NAMES[g.game]}</strong>
                 <span className="hint">
                   {g.total} partie{g.total > 1 ? "s" : ""} · {shortDuration(g.avgSeconds)} en moyenne ·{" "}
-                  {g.avgPlayers.toLocaleString("fr-FR")} joueur{g.avgPlayers >= 2 ? "s" : ""} dont{" "}
-                  {g.avgHumans.toLocaleString("fr-FR")} humain{g.avgHumans >= 2 ? "s" : ""}
+                  {g.avgPlayers.toLocaleString("fr-FR")} joueur{g.avgPlayers >= 2 ? "s" : ""} dont {g.avgHumans.toLocaleString("fr-FR")}{" "}
+                  humain{g.avgHumans >= 2 ? "s" : ""}
                 </span>
               </span>
               <span className="admin-play-weeks" role="img" aria-label={`Par semaine : ${g.weeks.join(", ")}`}>
