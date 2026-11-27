@@ -79,6 +79,7 @@ import { ownedItems } from "./shop.ts";
 import { gameStub } from "./tourLink.ts";
 import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 import { gameOpenTo, openGames } from "./betaGames.ts";
+import { emptyTableDelay, LEFT_EMPTY_MS } from "./tableLife.ts";
 import { recordTour } from "./users.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -704,8 +705,8 @@ export class TourRoom extends DurableObject<Env> {
       if (member.userId === d.hostId) this.addTimer({ at: now + HOST_HANDOVER_MS, kind: "host", userId: member.userId });
     }
     if (this.connectedUsers(ws).size === 0) {
-      const minutes = d.status === "lobby" || d.status === "finished" ? 10 : 30;
-      this.addTimer({ at: now + minutes * 60_000, kind: "cleanup" });
+      // Plus personne : une minute avant ou après la tournée, trois pendant (le temps d'un écran éteint), pas dix ou trente
+      this.addTimer({ at: now + emptyTableDelay(d.status), kind: "cleanup" });
     }
     void this.hub.setUserRoom(att.userId, null).catch(() => {});
     // Un votant de moins : la moitié des prêts peut être atteinte
@@ -869,6 +870,8 @@ export class TourRoom extends DurableObject<Env> {
           }
         }
         if (userId === d.hostId) this.ensureHost(true);
+        // Le dernier présent quitte la tournée : elle ferme presque aussitôt
+        if (this.connectedUsers().size === 0) this.addTimer({ at: now + LEFT_EMPTY_MS, kind: "cleanup" });
         void this.hub.setUserRoom(userId, null).catch(() => {});
         if (await this.checkReady(now)) return;
         return this.afterChange(ws);

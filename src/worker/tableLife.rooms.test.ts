@@ -109,11 +109,17 @@ describe.each(GAMES)("$game", ({ Room, bots }) => {
     await finish(bench, room);
     await bench.send(host, { t: "rematch" });
     for (const ws of [host, ana, bob]) await bench.drop(ws);
-    now += 60_000;
+    // Leurs places se libèrent (25 s) : aucune partie ne part
+    now += 30_000;
     vi.setSystemTime(now);
     await room.alarm();
     expect(status(bench)).toBe("finished");
     expect(pickUntil(bench)).toBeNull();
+    // Puis la table vide ferme (une minute)
+    now += 31_000;
+    vi.setSystemTime(now);
+    await room.alarm();
+    expect(bench.data()).toBeNull();
   });
 
   it("deux demandent la revanche, l'hôte exclut le troisième : la revanche part", async () => {

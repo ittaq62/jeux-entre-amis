@@ -79,6 +79,7 @@ import { decide, friendForArrival, refuseSocket } from "./arrival.ts";
 import type { RoomInit } from "./room.ts";
 import { ownedItems } from "./shop.ts";
 import { isLive, replaceOlder } from "./sockets.ts";
+import { emptyTableDelay, LEFT_EMPTY_MS, nextHost } from "./tableLife.ts";
 import { abortToTour, reportToTour, TOUR_JOIN_MS, TOUR_LOCKED, TOUR_PICK_MS, TOUR_TABLE_LINGER_MS, tourChat } from "./tourLink.ts";
 import { recordGame, type EloResults, type EscarmoucheRecordStats } from "./users.ts";
 import { decodeHeaderJson } from "./util.ts";
@@ -551,7 +552,7 @@ export class EscarmoucheRoom extends DurableObject<Env> {
       else this.addTimer({ at: now + SEAT_RELEASE_MS, kind: "seatCleanup", seatId: seat.id });
     }
     if (this.connectedUsers(ws).size === 0) {
-      this.addTimer({ at: now + (d.status === "playing" ? 20 : 10) * 60_000, kind: "cleanup" });
+      this.addTimer({ at: now + emptyTableDelay(d.status), kind: "cleanup" });
     }
     // Un hôte sans place (il regardait) qui s'en va : la main passe à un joueur présent
     this.ensureHost();
@@ -639,18 +640,16 @@ export class EscarmoucheRoom extends DurableObject<Env> {
     }
   }
 
-  private ensureHost() {
+  /**
+   * L'hôte n'est plus là (sans place, ou `absent` : parti, remplacé par un bot) : la main passe à un joueur présent
+   * (voir tableLife.ts)
+   */
+  private ensureHost(absent?: string) {
     const d = this.data!;
-    if (d.seats.find((s) => s.userId === d.hostId)) return;
-    const connected = this.connectedUsers();
-    if (d.seats.length === 0 && connected.has(d.hostId)) return;
-    const next = d.seats.find((s) => s.kind === "human" && this.isConnected(s.userId)) ?? d.seats.find((s) => s.kind === "human");
-    const fallback = next?.userId ?? connected.keys().next().value;
-    if (fallback && fallback !== d.hostId) {
-      d.hostId = fallback;
-      const name = next?.name ?? connected.get(fallback)?.pseudo ?? "Quelqu'un";
-      this.systemChat(`${name} prend la main sur la table.`);
-    }
+    const next = nextHost(d.seats, d.hostId, this.connectedUsers(), absent);
+    if (!next) return;
+    d.hostId = next.id;
+    this.systemChat(`${next.name} prend la main sur la table.`);
   }
 
   // -------------------------------------------------------------------------
@@ -830,8 +829,11 @@ export class EscarmoucheRoom extends DurableObject<Env> {
             // déjà fermée
           }
         }
-        this.ensureHost();
+        // L'hôte qui s'en va passe la main tout de suite, même en pleine partie (sa place gardée pour un bot ne la retient plus)
+        this.ensureHost(userId);
         void this.setPresence(userId, null).catch(() => {});
+        // Plus personne : la table ferme presque aussitôt, au lieu de laisser ses bots jouer seuls
+        if (this.connectedUsers().size === 0) this.addTimer({ at: now + LEFT_EMPTY_MS, kind: "cleanup" });
         if (this.rematchReady()) return this.openAnnounce(now);
         return this.afterChange([], now, ws);
       }
@@ -1344,6 +1346,8 @@ export class EscarmoucheRoom extends DurableObject<Env> {
         seat.autoplay = "away";
         this.handOver(seat);
         this.systemChat(`${seat.name} s'est déconnecté : un bot se bat à sa place en attendant son retour.`);
+        // L'hôte coupé le temps qu'un bot le remplace : la main passe à un joueur présent
+        if (seat.userId === d.hostId) this.ensureHost(seat.userId);
         return true;
       }
       case "seatCleanup": {

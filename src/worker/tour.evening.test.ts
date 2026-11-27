@@ -231,6 +231,26 @@ describe("tournée : une soirée qui ne reste pas coincée", () => {
     expect(view().status).toBe("intermission");
   });
 
+  it("le dernier présent quitte la tournée : elle ferme quinze secondes plus tard, pas une demi-heure", async () => {
+    const { bench, host, later } = await tour();
+    await bench.send(host, { t: "addBot" });
+    await bench.send(host, { t: "settings", settings: { games: ["uno"] } });
+    await bench.send(host, { t: "start" });
+    await bench.send(host, { t: "leave" });
+    expect(bench.data()).not.toBeNull();
+    await later(16_000);
+    expect(bench.data()).toBeNull();
+  });
+
+  it("au salon de la tournée, l'hôte seul ferme l'onglet : elle ferme au bout d'une minute, pas de dix", async () => {
+    const { bench, host, later } = await tour();
+    await bench.drop(host);
+    await later(30_000);
+    expect(bench.data()).not.toBeNull();
+    await later(31_000);
+    expect(bench.data()).toBeNull();
+  });
+
   it("l'administrateur ferme la tournée pendant un jeu : la table du jeu ferme aussi", async () => {
     const { bench, room, host, table } = await tour();
     await bench.arrive(user("ana"));
