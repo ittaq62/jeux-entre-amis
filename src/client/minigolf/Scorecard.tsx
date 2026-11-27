@@ -8,6 +8,7 @@ import { totals } from "../../shared/games/minigolf/match.ts";
 import type { MinigolfClientMessage, MinigolfRoomView } from "../../shared/games/minigolf/net.ts";
 import { TOUR_TEAMS } from "../../shared/tour.ts";
 import { ReportButton } from "../components/ReportButton.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TourNextNote } from "../tour/TourNextNote.tsx";
@@ -216,6 +217,8 @@ export function Scorecard({
         </div>
         {final && (
           <>
+            {/* Ce que la soirée a de remarquable (« Basile te bat pour la 3e fois d'affilée ») ; rien sinon */}
+            {!adventure && <EveningLine game="minigolf" />}
             {inTour ? (
               <TourNextNote />
             ) : (
