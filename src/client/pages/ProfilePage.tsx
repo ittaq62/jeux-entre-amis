@@ -71,6 +71,9 @@ interface Profile {
   }[];
 }
 
+/** Les jeux dont l'en-tête du profil montre les points avant de replier les autres */
+const POINTS_SHOWN = 3;
+
 export function ProfilePage({ pseudo }: { pseudo: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
@@ -78,6 +81,8 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   const games = useSession((s) => s.games);
   const tourOn = useSession((s) => s.tour);
   const [shelf, setShelf] = useState<TableGame>("uno");
+  // Les points de tous les jeux, dépliés (sinon les trois jeux les plus fournis, au-delà de quatre)
+  const [allPoints, setAllPoints] = useState(false);
 
   const load = () =>
     api
@@ -96,6 +101,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
   useEffect(() => {
     setProfile(null);
     setError(null);
+    setAllPoints(false);
     void load();
   }, [pseudo]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -269,6 +275,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
       { game: "billard", label: "au billard", stats: billard, shown: showBillard },
     ] satisfies { game: GameId; label: string; stats: Pick<GameStats, "played" | "points" | "elo">; shown: boolean }[]
   ).filter((line) => line.shown && line.stats.played > 0);
+  // Au-delà de quatre jeux, la liste se replie sur les trois qui rapportent le plus : au téléphone, une douzaine de lignes
+  // repoussaient tout le reste du profil
+  const byPoints = [...pointLines].sort((a, b) => b.stats.points - a.stats.points);
+  const pointsFolded = !allPoints && byPoints.length > POINTS_SHOWN + 1;
+  const shownPoints = pointsFolded ? byPoints.slice(0, POINTS_SHOWN) : byPoints;
   const nt = naval.totals;
   const accuracy = (nt.shots ?? 0) > 0 ? Math.round(((nt.hits ?? 0) / nt.shots!) * 100) : 0;
 
@@ -296,7 +307,7 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
               À la table depuis {since}
               {stats.streak >= 2 && <>, {stats.streak} victoires d'affilée en ce moment</>}.
             </p>
-            {pointLines.map((line) => (
+            {shownPoints.map((line) => (
               <p key={line.game} className="profile-points">
                 <strong className="num">{line.stats.points.toLocaleString("fr-FR")}</strong> points{" "}
                 {pointLines.length === 1 && line.game === "uno" ? "au classement" : line.label}
@@ -305,6 +316,11 @@ export function ProfilePage({ pseudo }: { pseudo: string }) {
                 </span>
               </p>
             ))}
+            {pointsFolded && (
+              <button type="button" className="link-btn profile-points-more" onClick={() => setAllPoints(true)}>
+                et {byPoints.length - POINTS_SHOWN} autres jeux
+              </button>
+            )}
           </div>
           <div className="row-actions">
             {profile.friendship === "self" && (

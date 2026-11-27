@@ -3435,6 +3435,14 @@ a.shop-item {
   color: var(--text);
 }
 
+/* « et 5 autres jeux » : déplie les points de tous les jeux */
+.profile-points-more {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--gold);
+}
+
 .profile-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
