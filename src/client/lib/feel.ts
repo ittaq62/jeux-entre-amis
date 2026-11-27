@@ -39,6 +39,9 @@ let lastBuzz = 0;
 export function buzz(kind: keyof typeof BUZZ) {
   const t = typeof performance !== "undefined" ? performance.now() : Date.now();
   if (t - lastBuzz < 90) return;
+  // Avant le premier geste du joueur, le navigateur refuse (et le dit dans la console) : on n'essaie pas
+  const ua = typeof navigator !== "undefined" ? (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation : undefined;
+  if (ua && !ua.hasBeenActive) return;
   lastBuzz = t;
   vibrate([...BUZZ[kind]]);
 }

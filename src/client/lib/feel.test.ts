@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePrefs } from "../stores/prefs.ts";
-import { HitStop, Shake } from "./feel.ts";
+import { buzz, HitStop, Shake } from "./feel.ts";
 
-afterEach(() => usePrefs.setState({ reducedEffects: false }));
+afterEach(() => {
+  usePrefs.setState({ reducedEffects: false });
+  vi.unstubAllGlobals();
+});
 
 describe("les sensations de jeu communes", () => {
   it("la secousse monte d'un coup, retombe en moins d'une seconde, et reste dans son amplitude", () => {
@@ -40,5 +43,16 @@ describe("les sensations de jeu communes", () => {
     h.hit(500, 2000);
     expect(h.frozen(2119)).toBe(true);
     expect(h.frozen(2121)).toBe(false);
+  });
+
+  it("pas de vibration avant le premier geste du joueur (le navigateur la refuserait, avec une erreur)", () => {
+    const calls: unknown[] = [];
+    const vibrate = (p: unknown) => (calls.push(p), true);
+    vi.stubGlobal("navigator", { userActivation: { hasBeenActive: false }, vibrate });
+    buzz("fort");
+    expect(calls).toHaveLength(0);
+    vi.stubGlobal("navigator", { userActivation: { hasBeenActive: true }, vibrate });
+    buzz("fort");
+    expect(calls).toHaveLength(1);
   });
 });
