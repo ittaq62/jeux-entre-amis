@@ -25,6 +25,7 @@ import { DrawnRulesNote, drawnName } from "../game/RandomRules.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useSeatMemory } from "../game/seatMemory.ts";
+import { useYourTurnAlert } from "../lib/yourTurn.ts";
 
 interface Props {
   room: NavalRoomView;
@@ -91,6 +92,9 @@ export function NavalTable({ room, send, emotes, serverOffset, unread, onOpenCha
   useSeatMemory(room.seats);
   const me = g.you;
   const meP = me ? g.players.find((p) => p.id === me) : undefined;
+  // Onglet caché : le titre, l'icône et un son au retour disent que c'est à lui de tirer (ou de ranger sa flotte)
+  const relayed = Boolean(me && room.seats.find((s) => s.id === me)?.autoplay);
+  useYourTurnAlert(!relayed && meP !== undefined && ((g.phase === "battle" && g.turn === me) || (g.phase === "placement" && !meP.ready)));
   const { w, h } = useViewport();
   // Écran étroit : une seule grille à la fois. Écran bas (téléphone couché) : tout ce qui n'est pas la grille passe à côté.
   const phone = w < 760;

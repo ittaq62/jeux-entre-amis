@@ -31,6 +31,7 @@ import { DrawnRulesNote, drawnName } from "./RandomRules.tsx";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useSeatMemory } from "./seatMemory.ts";
+import { useYourTurnAlert } from "../lib/yourTurn.ts";
 
 interface TableProps {
   room: RoomView;
@@ -133,6 +134,8 @@ export function UnoTable({ room, send, emotes, serverOffset, unread, onOpenChat,
   }, [g.phase]);
 
   const myTurn = g.phase === "playing" && me !== null && g.turn === me && !mySeat?.autoplay;
+  // Onglet caché : le titre, l'icône et un son au retour disent que c'est à lui
+  useYourTurnAlert(myTurn);
   const playable = useMemo(() => new Set(g.playable), [g.playable]);
   // Interception : hors de son tour, le serveur met dans « playable » les cartes identiques à celle du dessus
   const canJump =

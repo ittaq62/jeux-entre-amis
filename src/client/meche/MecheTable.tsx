@@ -27,6 +27,7 @@ import { screenSize } from "../lib/viewport.ts";
 import { MenuSound, SoundButton } from "../components/SoundSettings.tsx";
 import { ReportButton } from "../components/ReportButton.tsx";
 import { useSeatMemory } from "../game/seatMemory.ts";
+import { useYourTurnAlert } from "../lib/yourTurn.ts";
 
 interface Props {
   room: MecheRoomView;
@@ -288,6 +289,8 @@ export function MecheTable({
   const seat = useCallback((id: string) => room.seats.find((s) => s.id === id), [room.seats]);
   const lit = g.phase === "lit";
   const mine = lit && g.holder === meId;
+  // Onglet caché : le titre, l'icône et un son au retour disent que la mèche est chez lui
+  useYourTurnAlert(mine && !seat(g.holder)?.autoplay, "La mèche !");
   const canType = me?.alive === true && g.phase !== "over";
   const holderName = seat(g.holder)?.name ?? "";
   const mode = g.settings.mode ?? "commune";
