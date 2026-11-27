@@ -177,11 +177,33 @@ export class EscSound {
   private verbIn: GainNode | null = null;
   private ear = { x: 0, y: 0, z: 0 };
   private ambience: { nodes: AudioNode[]; timer: number; unsubscribe: () => void } | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
+  private limiterOut: GainNode | null = null;
 
   constructor() {
     const a = audioOut();
     this.ctx = a?.ctx ?? null;
-    this.out = a?.out ?? null;
+    this.out = null;
+    if (a) {
+      // Tous les sons du combat passent par un limiteur : une fusillade à plusieurs (avec l'écho et une explosion) ne
+      // dépasse plus le plafond de la sortie et ne grésille pas. Il ne touche à rien tant que ça reste sous lui
+      const lim = a.ctx.createDynamicsCompressor();
+      lim.threshold.value = -2;
+      lim.knee.value = 4;
+      lim.ratio.value = 14;
+      lim.attack.value = 0.002;
+      lim.release.value = 0.14;
+      // Le compresseur du navigateur remonte tout de lui-même (son « gain de rattrapage » : 0,6 fois ce qu'il ôte à
+      // pleine échelle) : on le reprend juste après, pour que les sons calmes gardent leur niveau
+      const fullRange = -2 + 2 / 14;
+      const after = a.ctx.createGain();
+      after.gain.value = Math.pow(10, (fullRange * 0.6) / 20);
+      lim.connect(after).connect(a.out);
+      this.limiter = lim;
+      this.limiterOut = after;
+      this.out = a.ctx.createGain();
+      this.out.connect(lim);
+    }
     if (this.ctx) {
       this.build(this.ctx);
       this.buildVerb(this.ctx);
@@ -574,6 +596,9 @@ export class EscSound {
     }
     this.verbIn?.disconnect();
     this.verb?.disconnect();
+    this.out?.disconnect();
+    this.limiter?.disconnect();
+    this.limiterOut?.disconnect();
   }
 
   private make(len: number, fill: (data: Float32Array, sr: number) => void): AudioBuffer {
@@ -593,7 +618,8 @@ export class EscSound {
   private shot(spec: ShotSpec, far: boolean, variant: number) {
     const buf = this.make(spec.tail + (far ? 0.5 : 0.22), (d, sr) => d.set(shotSamples(spec, far, variant, sr).subarray(0, d.length)));
     const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = d[i]! * spec.gain;
+    // Au niveau des anciennes détonations (le léger écrêtage les rend plus denses : 2,5 dB de plus sinon)
+    for (let i = 0; i < d.length; i++) d[i] = d[i]! * spec.gain * 0.75;
     return buf;
   }
 
