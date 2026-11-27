@@ -79,4 +79,13 @@ export const BOLIDES_STARS: StarGame = {
     { id: "miroir", name: "le contre-la-montre en miroir", maps: TRACK_IDS.map((id) => chronoKey(`${id}-miroir`)) },
   ],
   milestones: [10, 30, 60],
+  feats: [
+    {
+      id: "bolides-champion",
+      title: "Champion des Bolides",
+      description: "Finir les quatre coupes du championnat sur le podium.",
+      maps: cupMaps.map((m) => m.id),
+      stars: 1,
+    },
+  ],
 };

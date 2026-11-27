@@ -8,6 +8,7 @@ import { TRACKS } from "../../shared/games/bolides/track.ts";
 import type { BolidesRoomView } from "../../shared/protocol.ts";
 import { rankingPoints } from "../../shared/ranking.ts";
 import { AdminBadge } from "../components/AdminBadge.tsx";
+import { EveningLine } from "../components/EveningLine.tsx";
 import { Avatar } from "../components/Avatar.tsx";
 import { EloLine } from "../game/EloLine.tsx";
 import { usePrefs } from "../stores/prefs.ts";
@@ -150,6 +151,7 @@ export function BolidesGameOver({ room, onRematch, onLobby, onLeave, onInspect }
         )}
 
         {/* En tournée, la feuille reste jusqu'à l'entracte (15 s), ou jusqu'à ce que tous les joueurs aient continué */}
+        <EveningLine game="bolides" />
         {inTour && <TourNextNote />}
         <div className="overlay-actions">
           {inTour ? null : room.you.isHost ? (
