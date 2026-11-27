@@ -275,20 +275,22 @@ const ballCache = new Map<string, HTMLCanvasElement>();
  * Une bille : une image en équirectangulaire (le tour de la bille en largeur, d'un pôle à l'autre en hauteur). Les
  * pleines de leur couleur, les rayées blanches avec un bandeau ; le numéro dans un rond blanc, des deux côtés.
  */
-export function ballCanvas(id: number, set: string, carom = false): HTMLCanvasElement {
-  const key = `${id}:${set}:${carom}`;
+export function ballCanvas(id: number, set: string, carom = false, marks = false): HTMLCanvasElement {
+  const key = `${id}:${set}:${carom}:${marks}`;
   const hit = ballCache.get(key);
   if (hit) return hit;
-  const c = drawBall(id, set, carom, 512);
+  const c = drawBall(id, set, carom, 512, marks);
   ballCache.set(key, c);
   return c;
 }
 
 /**
  * La même bille sur `W` de large (la moitié en hauteur), sans la garder : tout y est mesuré en fractions de l'image du
- * jeu (512), le bruit compris, pour qu'une vignette dessinée directement à sa taille soit la bille du jeu en petit
+ * jeu (512), le bruit compris, pour qu'une vignette dessinée directement à sa taille soit la bille du jeu en petit.
+ * `marks` (le réglage « Symboles de couleur ») : le numéro en grand, cerclé ; en carambole, un signe sur la jaune (des
+ * triangles) et sur la rouge (des ronds), pour ne pas les reconnaître à la couleur seule
  */
-export function drawBall(id: number, set: string, carom: boolean, W: number): HTMLCanvasElement {
+export function drawBall(id: number, set: string, carom: boolean, W: number, marks = false): HTMLCanvasElement {
   const H = Math.round(W / 2),
     s = W / 512;
   const [c, g] = canvas(W, H);
@@ -303,6 +305,26 @@ export function drawBall(id: number, set: string, carom: boolean, W: number): HT
     grd.addColorStop(1, "rgba(0,0,0,0.06)");
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H);
+    if (marks && id !== 0) {
+      // Quatre signes tout autour : des triangles sombres sur la jaune, des ronds clairs sur la rouge
+      for (const u of [0.125, 0.375, 0.625, 0.875]) {
+        const cx = u * W,
+          cy = H / 2,
+          r = 26 * s;
+        g.beginPath();
+        if (id === 1) {
+          g.fillStyle = "#3a2a08";
+          g.moveTo(cx, cy - r);
+          g.lineTo(cx + r * 0.95, cy + r * 0.7);
+          g.lineTo(cx - r * 0.95, cy + r * 0.7);
+          g.closePath();
+        } else {
+          g.fillStyle = "#fff6e8";
+          g.ellipse(cx, cy, r * 0.8, r * 0.8, 0, 0, Math.PI * 2);
+        }
+        g.fill();
+      }
+    }
   } else if (id === 0) {
     g.fillStyle = ivory;
     g.fillRect(0, 0, W, H);
@@ -365,20 +387,26 @@ export function drawBall(id: number, set: string, carom: boolean, W: number): HT
         }
       g.putImageData(img, 0, 0);
     }
-    // Le numéro, deux fois
+    // Le numéro, deux fois (en grand et cerclé avec « Symboles de couleur »)
+    const f = s * (marks ? 1.6 : 1);
     for (const u of [0.25, 0.75]) {
       const cx = u * W,
         cy = H / 2;
       g.fillStyle = ivory;
       g.beginPath();
-      g.ellipse(cx, cy, 34 * s, 34 * s, 0, 0, Math.PI * 2);
+      g.ellipse(cx, cy, 34 * f, 34 * f, 0, 0, Math.PI * 2);
       g.fill();
+      if (marks) {
+        g.strokeStyle = "#16161a";
+        g.lineWidth = 3 * f;
+        g.stroke();
+      }
       g.fillStyle = id === 8 && set === "neon" ? "#ff2bd6" : "#16161a";
-      g.font = `bold ${(id > 9 ? 34 : 40) * s}px "Libre Franklin Variable", Arial, sans-serif`;
+      g.font = `bold ${(id > 9 ? 34 : 40) * f}px "Libre Franklin Variable", Arial, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(String(id), cx, cy + 2 * s);
-      if (id === 6 || id === 9) g.fillRect(cx - 10 * s, cy + 21 * s, 20 * s, 3 * s);
+      g.fillText(String(id), cx, cy + 2 * f);
+      if (id === 6 || id === 9) g.fillRect(cx - 10 * f, cy + 21 * f, 20 * f, 3 * f);
     }
   }
   return c;

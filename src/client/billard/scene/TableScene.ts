@@ -14,6 +14,7 @@ import type { Table } from "../../../shared/games/billard/table.ts";
 import { AutoQuality } from "../../lib/autoQuality.ts";
 import { warmThree } from "../../lib/prepare.ts";
 import { releaseRenderer } from "../../lib/releaseGl.ts";
+import { usePrefs } from "../../stores/prefs.ts";
 import { BallSet } from "./balls.ts";
 import { CueStick } from "./cue.ts";
 import { mergeStatic, type Salle } from "./salles/common.ts";
@@ -189,7 +190,7 @@ export class TableScene {
     }
     this.ballIds = ballIds;
     this.ballSet = dress.set;
-    this.balls = new BallSet(table.kind, table.R, ballIds, dress.set, TOUCH);
+    this.balls = new BallSet(table.kind, table.R, ballIds, dress.set, TOUCH, usePrefs.getState().colorblind);
     this.scene.add(this.balls.group);
     this.makeEnv();
   }
@@ -272,7 +273,13 @@ export class TableScene {
     } else this.renderer.render(this.scene, this.camera);
   }
 
+  /** « Symboles de couleur » change en cours de partie : les billes suivent */
+  private unsubPrefs = usePrefs.subscribe((s, prev) => {
+    if (s.colorblind !== prev.colorblind) this.balls?.setMarks(s.colorblind);
+  });
+
   dispose() {
+    this.unsubPrefs();
     this.ro.disconnect();
     this.table?.dispose();
     this.balls?.dispose();

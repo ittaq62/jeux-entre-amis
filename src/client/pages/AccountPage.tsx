@@ -194,7 +194,10 @@ export function AccountPage() {
           <PrefRow label="Vibrations" desc="Sur les téléphones Android ; l'iPhone ne le permet pas.">
             <Check label="Vibrations" checked={prefs.haptics} onChange={(v) => prefs.set({ haptics: v })} />
           </PrefRow>
-          <PrefRow label="Symboles de couleur" desc="Un petit signe par couleur dans le coin des cartes, pour les daltoniens.">
+          <PrefRow
+            label="Symboles de couleur"
+            desc="Un petit signe par couleur dans le coin des cartes, et le numéro en grand sur les billes du billard, pour les daltoniens."
+          >
             <Check label="Symboles de couleur" checked={prefs.colorblind} onChange={(v) => prefs.set({ colorblind: v })} />
           </PrefRow>
           <PrefRow label="Effets réduits" desc="Pas de secousses ni de confettis.">

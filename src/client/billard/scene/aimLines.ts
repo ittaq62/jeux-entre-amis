@@ -77,6 +77,8 @@ export class AimLines {
   private bounce: Ribbon;
   private ghost: THREE.Mesh;
   private ghostMat: THREE.MeshBasicMaterial;
+  /** Une croix dans la fantôme quand la bille visée n'est pas permise (le rouge seul ne se lit pas pour tout le monde) */
+  private cross: THREE.Mesh[] = [];
   private markers: THREE.Mesh[] = [];
   private markerMat: THREE.MeshBasicMaterial;
   private markerOn: THREE.MeshBasicMaterial;
@@ -100,6 +102,15 @@ export class AimLines {
     this.ghost = new THREE.Mesh(new THREE.RingGeometry(R * 0.86, R, 40), this.ghostMat);
     this.ghost.rotation.x = -Math.PI / 2;
     this.ghost.renderOrder = 7;
+    const bar = new THREE.PlaneGeometry(R * 1.45, R * 0.2);
+    for (const a of [Math.PI / 4, -Math.PI / 4]) {
+      const m = new THREE.Mesh(bar, this.ghostMat);
+      m.rotation.z = a;
+      m.renderOrder = 7;
+      m.visible = false;
+      this.cross.push(m);
+      this.ghost.add(m);
+    }
     this.markerMat = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.35, depthWrite: false });
     this.markerOn = new THREE.MeshBasicMaterial({ color: "#ffd24a", transparent: true, opacity: 0.9, depthWrite: false });
     this.mats.push(this.markerMat, this.markerOn);
@@ -182,6 +193,7 @@ export class AimLines {
     this.ghost.visible = true;
     this.ghost.position.set(gx, 0.002, -gy);
     this.ghostMat.color.set(o.legal ? "#ffffff" : "#ff5a5a");
+    for (const m of this.cross) m.visible = !o.legal;
     const long = o.level === "longue";
     if (o.ball) {
       this.bounce.mesh.visible = false;
@@ -224,6 +236,7 @@ export class AimLines {
   dispose() {
     for (const r of [this.toGhost, this.objPath, this.cuePath, this.bounce]) r.dispose();
     this.ghost.geometry.dispose();
+    this.cross[0]?.geometry.dispose();
     this.markers[0]?.geometry.dispose();
     this.zone.geometry.dispose();
     for (const m of this.mats) m.dispose();

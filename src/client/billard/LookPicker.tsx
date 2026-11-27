@@ -20,6 +20,7 @@ import {
   type ShopThing,
 } from "../../shared/games/billard/looks.ts";
 import type { BillardClientMessage, BillardRoomView } from "../../shared/games/billard/net.ts";
+import { usePrefs } from "../stores/prefs.ts";
 import { useMyItems } from "../stores/shop.ts";
 import { cueCanvas, drawBall } from "./scene/textures.ts";
 
@@ -85,19 +86,20 @@ const ballUrls = new Map<string, string>();
  * fins) et encodée une seule fois ; la texture du jeu (512 × 256, veinée pixel par pixel pour le bois, le marbre et les
  * planètes) puis réduite coûtait plusieurs secondes de processeur à la boutique au téléphone
  */
-function ballImage(id: number, set: string, carom: boolean, size: number): string {
+function ballImage(id: number, set: string, carom: boolean, size: number, marks: boolean): string {
   const h = Math.max(32, Math.min(128, Math.ceil(size * 2.6)));
-  const key = `${id}|${set}|${carom ? 1 : 0}|${h}`;
+  const key = `${id}|${set}|${carom ? 1 : 0}|${h}|${marks ? 1 : 0}`;
   const hit = ballUrls.get(key);
   if (hit) return hit;
-  const url = drawBall(id, set, carom, h * 2).toDataURL();
+  const url = drawBall(id, set, carom, h * 2, marks).toDataURL();
   ballUrls.set(key, url);
   return url;
 }
 
 /** Une bille dessinée (son image posée sur un disque ombré et verni) */
 export function BallDot({ id, set, size = 22, carom = false }: { id: number; set: string; size?: number; carom?: boolean }) {
-  const url = useMemo(() => ballImage(id, set, carom, size), [id, set, carom, size]);
+  const marks = usePrefs((s) => s.colorblind);
+  const url = useMemo(() => ballImage(id, set, carom, size, marks), [id, set, carom, size, marks]);
   return (
     <span
       className="bl-ball-dot"

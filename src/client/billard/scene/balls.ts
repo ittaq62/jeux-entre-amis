@@ -50,8 +50,10 @@ export class BallSet {
     readonly kind: TableKind,
     readonly R: number,
     ids: readonly number[],
-    set: string,
+    private set: string,
     touch: boolean,
+    /** « Symboles de couleur » : les numéros en grand, les signes des billes de carambole */
+    private marks = false,
   ) {
     this.group.name = "billes";
     this.geo = touch ? new THREE.SphereGeometry(R, 24, 16) : new THREE.SphereGeometry(R, 32, 24);
@@ -63,7 +65,7 @@ export class BallSet {
 
   private add(id: number, set: string) {
     const carom = this.kind === "carambole";
-    const map = tex(ballCanvas(id, set, carom));
+    const map = tex(ballCanvas(id, set, carom, this.marks));
     this.maps.push(map);
     const metal = set === "metal" && !carom && id !== 0;
     const mat = new THREE.MeshPhysicalMaterial({
@@ -85,6 +87,26 @@ export class BallSet {
     shadow.renderOrder = 2;
     this.group.add(mesh, shadow);
     this.balls.set(id, { mesh, shadow, drop: null });
+  }
+
+  /** « Symboles de couleur » allumé ou éteint en cours de partie : les billes changent d'habit */
+  setMarks(on: boolean) {
+    if (on === this.marks) return;
+    this.marks = on;
+    const carom = this.kind === "carambole";
+    for (const [id, b] of this.balls) {
+      const mat = b.mesh.material as THREE.MeshPhysicalMaterial;
+      const old = mat.map;
+      const map = tex(ballCanvas(id, this.set, carom, on));
+      mat.map = map;
+      if (mat.emissiveMap) mat.emissiveMap = map;
+      mat.needsUpdate = true;
+      this.maps.push(map);
+      if (old) {
+        old.dispose();
+        this.maps = this.maps.filter((m) => m !== old);
+      }
+    }
   }
 
   /** Le reflet que voient les billes (la table d'au-dessus du tapis) */

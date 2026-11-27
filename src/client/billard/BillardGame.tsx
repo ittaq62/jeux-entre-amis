@@ -71,6 +71,7 @@ export function BillardGame({
   const runtime = useRef<BillardRuntime | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [menu, setMenu] = useState(false);
+  const colorblind = usePrefs((s) => s.colorblind);
   const [help, setHelp] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
@@ -377,6 +378,13 @@ export function BillardGame({
           )}
           <button className="menu-item" onClick={() => (setHelp(true), setMenu(false))}>
             <Icon name="info" size={18} /> Comment jouer
+          </button>
+          <button
+            className="menu-item"
+            aria-pressed={colorblind}
+            onClick={() => usePrefs.getState().set({ colorblind: !usePrefs.getState().colorblind })}
+          >
+            <Icon name="eye" size={18} /> Symboles de couleur{colorblind ? " : oui" : ""}
           </button>
           <MenuSound />
           <ReportButton
