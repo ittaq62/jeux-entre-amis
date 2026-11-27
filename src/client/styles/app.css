@@ -1625,6 +1625,95 @@ a.shop-item {
   margin-bottom: 0;
 }
 
+/* « Ce soir » : ta dernière table, les tables des amis, les amis en ligne, une tournée */
+.tonight {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px 14px;
+  margin: -8px 0 16px;
+}
+
+.tonight-title {
+  margin: 0;
+  font-size: 22px;
+}
+
+.tonight-rows {
+  margin: 0;
+}
+
+.tonight-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tonight-foot .home-online {
+  flex: 1 1 260px;
+  margin: 0;
+  padding: 0;
+}
+
+/* « Quoi de neuf » : les dernières nouveautés, jusqu'à « Vu » */
+.whats-new {
+  padding: 14px 20px 16px;
+  margin: 0 0 20px;
+}
+
+.whats-new-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.whats-new-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.whats-new-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.whats-new-list li {
+  display: flex;
+  gap: 12px;
+}
+
+.whats-new-date {
+  flex: none;
+  width: 52px;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 13px;
+  padding-top: 2px;
+}
+
+/* La pastille « Nouveau » d'un jeu arrivé depuis peu, au-dessus de son titre */
+.new-tag {
+  align-self: flex-start;
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #eecd84, #dcb365);
+  color: var(--gold-ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* Les amis en ligne, sous le bonjour */
 .home-online {
   display: flex;

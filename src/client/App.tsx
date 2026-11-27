@@ -5,6 +5,7 @@ import { ErrorBoundary, Unreachable } from "./components/ErrorScreen.tsx";
 import { InviteCards } from "./components/InviteCards.tsx";
 import { ReportHost } from "./components/ReportButton.tsx";
 import { Loading, Toasts } from "./components/ui.tsx";
+import { rememberTable } from "./lib/lastTable.ts";
 import { unlockAudio } from "./lib/sound.ts";
 import { HomePage } from "./pages/HomePage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
@@ -61,6 +62,12 @@ export function App() {
   }, [load]);
 
   useEffect(() => setHubNavigator(navigate), [navigate]);
+
+  // La dernière table ouverte : « Ta dernière table » dans le bloc « Ce soir » de l'accueil
+  useEffect(() => {
+    const table = /^\/salon\/([A-Za-z]{4})$/.exec(location);
+    if (table && user) rememberTable(table[1]!.toUpperCase());
+  }, [location, user]);
 
   // « Effets réduits » coupe aussi les apparitions des pages et des listes (styles/base.css)
   const reduced = usePrefs((s) => s.reducedEffects);

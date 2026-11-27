@@ -4,6 +4,7 @@ import { ROOM_CODE_LENGTH } from "../../shared/app.ts";
 import type { Card } from "../../shared/games/uno/cards.ts";
 import {
   GAME_NAMES,
+  TABLE_NAMES,
   type FriendEntry,
   type GameId,
   type PresenceRoom,
@@ -36,6 +37,11 @@ import { api, ApiError } from "../lib/api.ts";
 import { tableHref } from "../lib/arrival.ts";
 import { ALBUM_SEARCH, HOME_GAMES, matchesGame, searchWords, type HomeGame } from "../lib/homeGames.ts";
 import { readRoomCode, roomCodeProblem } from "../lib/roomCode.ts";
+import { forgetTable, lastTable } from "../lib/lastTable.ts";
+import { freshNews, isNewGame } from "../lib/news.ts";
+import { inviteDetails } from "../../shared/invite.ts";
+import type { PublicTable } from "../../shared/publicTable.ts";
+import { GameTicket } from "../tour/TourParts.tsx";
 import { tableLabel, variantName } from "../lib/variantLabel.ts";
 import { toast } from "../lib/toast.ts";
 import { usePrefs } from "../stores/prefs.ts";
@@ -189,7 +195,12 @@ export function HomePage() {
         </p>
 
         {/* Qui est là ce soir : la liste des amis est tout en bas, après les fiches des jeux */}
-        {!searching && <FriendsOnline friends={sortedFriends} online={online} />}
+        {!searching && (
+          <>
+            <Tonight friends={sortedFriends} online={online} tourOn={tourOn} onTour={() => setCreateFor("tour")} />
+            <WhatsNew visible={available.map((g) => g.id)} />
+          </>
+        )}
 
         {/* Masqués plutôt que retirés : ce qu'on efface réapparaît aussitôt, sans rejouer les animations */}
         <div hidden={!albumShown}>
@@ -310,9 +321,162 @@ export function HomePage() {
   );
 }
 
+/** La dernière table ouverte sur cet appareil, si elle est encore là (son résumé public), sinon null */
+function useLastTable(): PublicTable | null {
+  const [table, setTable] = useState<PublicTable | null>(null);
+  useEffect(() => {
+    const code = lastTable();
+    if (!code) return;
+    let alive = true;
+    api
+      .get<{ room: PublicTable }>(`/rooms/${code}/public`)
+      .then((r) => {
+        if (!alive) return;
+        if (r.room.status === "finished") forgetTable();
+        else setTable(r.room);
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) forgetTable();
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return table;
+}
+
+/** « Voisine joue à UNO », « Voisine attend à une table de Bowling », « Voisine est en tournée » */
+function friendActivity(room: PresenceRoom): string {
+  if (room.game === "tour") return "est en tournée";
+  return room.status === "playing" ? `joue à ${TABLE_NAMES[room.game]}` : `attend à une table de ${TABLE_NAMES[room.game]}`;
+}
+
 /**
- * Les amis en ligne, sous le bonjour : leurs visages, qui joue, et « Les voir » qui descend à la liste (avec ses boutons
- * Rejoindre et Regarder). Rien quand personne n'est en ligne.
+ * « Ce soir », en haut de l'accueil : ta dernière table (si elle est encore là), les tables où jouent tes amis (avec
+ * Rejoindre et Regarder), les autres amis en ligne et de quoi lancer une tournée. Rien s'il n'y a ni table ni ami en ligne.
+ */
+function Tonight({
+  friends,
+  online,
+  tourOn,
+  onTour,
+}: {
+  friends: FriendEntry[];
+  online: Record<string, PresenceRoom | null>;
+  tourOn: boolean;
+  onTour: () => void;
+}) {
+  const last = useLastTable();
+  const here = friends.filter((f) => f.user.id in online);
+  const atTables = here.filter((f) => online[f.user.id]).slice(0, 3);
+  if (!last && here.length === 0) return null;
+  return (
+    <section className="tonight panel rise" aria-label="Ce soir">
+      <h2 className="tonight-title">Ce soir</h2>
+      {(last || atTables.length > 0) && (
+        <ul className="rows tonight-rows">
+          {last && (
+            <li className="row">
+              <span className="row-who">
+                {last.game === "tour" ? (
+                  <span className="invite-card-tour" aria-hidden="true">
+                    <Icon name="trophy" size={20} />
+                  </span>
+                ) : (
+                  <GameTicket game={last.game} size="sm" />
+                )}
+                <span className="row-text">
+                  <strong>Ta dernière table</strong>
+                  <span className="hint">
+                    {TABLE_NAMES[last.game]} · {inviteDetails(last)}
+                  </span>
+                </span>
+              </span>
+              <Link href={tableHref(last.code)} className="btn btn-sm btn-primary">
+                Y retourner
+              </Link>
+            </li>
+          )}
+          {atTables.map((f) => {
+            const room = online[f.user.id]!;
+            return (
+              <li key={f.user.id} className="row">
+                <Link href={`/joueur/${encodeURIComponent(f.user.pseudo)}`} className="row-who">
+                  <span className="avatar-wrap">
+                    <Avatar avatar={f.user.avatar} userId={f.user.id} photo={f.user.photo} size={36} />
+                    <span className="dot presence-dot dot-playing" />
+                  </span>
+                  <span className="row-text">
+                    <strong>
+                      <PlayerName name={f.user.pseudo} admin={f.user.admin} />
+                    </strong>
+                    <span className="hint">{friendActivity(room)}</span>
+                  </span>
+                </Link>
+                <span className="row-actions">
+                  <TableLinks code={room.code} game={room.game} status={room.status} lateJoin={room.lateJoin} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="tonight-foot">
+        <FriendsOnline friends={friends} online={online} />
+        {tourOn && (
+          <button type="button" className="btn btn-sm" onClick={onTour}>
+            <Icon name="trophy" size={16} /> Lancer une tournée
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const NEWS_SEEN = "tablee:nouveautes-vues";
+
+/** « Quoi de neuf » : les dernières nouveautés du site, jusqu'à ce qu'on les marque vues (gardé sur l'appareil) */
+function WhatsNew({ visible }: { visible: TableGame[] }) {
+  const [seen, setSeen] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(NEWS_SEEN);
+    } catch {
+      return null;
+    }
+  });
+  const items = freshNews(visible, seen);
+  if (items.length === 0) return null;
+  const done = () => {
+    setSeen(items[0]!.id);
+    try {
+      localStorage.setItem(NEWS_SEEN, items[0]!.id);
+    } catch {
+      // Pas de stockage : l'encart reviendra à la prochaine visite
+    }
+  };
+  return (
+    <section className="whats-new panel rise" aria-label="Quoi de neuf" style={{ "--i": 1 } as CSSProperties}>
+      <div className="whats-new-head">
+        <h2>Quoi de neuf</h2>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={done}>
+          Vu
+        </button>
+      </div>
+      <ul className="whats-new-list">
+        {items.map((n) => (
+          <li key={n.id}>
+            <span className="whats-new-date">{new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+            <span>{n.text}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Les amis en ligne, au pied de « Ce soir » : leurs visages, combien jouent, et « Les voir » qui descend à la liste (avec
+ * ses boutons Rejoindre et Regarder). Rien quand personne n'est en ligne.
  */
 function FriendsOnline({ friends, online }: { friends: FriendEntry[]; online: Record<string, PresenceRoom | null> }) {
   const here = friends.filter((f) => f.user.id in online);
@@ -331,7 +495,7 @@ function FriendsOnline({ friends, online }: { friends: FriendEntry[]; online: Re
         : `${first.user.pseudo} est en ligne`
       : `${first.user.pseudo} et ${others === 1 ? "un autre ami sont" : `${others} autres amis sont`} en ligne` + (busy ? `, ${busy}` : "");
   return (
-    <section className="home-online panel rise" aria-label="Amis en ligne">
+    <section className="home-online" aria-label="Amis en ligne">
       <span className="home-online-faces" aria-hidden="true">
         {here.slice(0, 5).map((f) => (
           <span key={f.user.id} className="avatar-wrap">
@@ -470,6 +634,7 @@ function GameSheet({
         {look.art()}
       </div>
       <div className="game-sheet">
+        {isNewGame(game.id) && <span className="new-tag">Nouveau</span>}
         <h2 className={`game-name is-${game.id}`}>{look.title ? look.title() : game.name}</h2>
         {isBeta && (
           <p className="beta-note">
