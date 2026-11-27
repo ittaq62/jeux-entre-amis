@@ -105,7 +105,9 @@ Largement suffisantes pour une bande d'amis :
 
 ## Crédits
 
-Les effets sonores viennent de [Kenney](https://kenney.nl) (domaine public, CC0) et de [Mixkit](https://mixkit.co) (licence libre
+Les sons communs les plus simples (la bulle, le tic, les coups, le souffle, le buzzer, le succès, l'arrivée à table, la
+victoire et la défaite) sont fabriqués par `scripts/sons/naturels.py` : des bois, des lames et des chocs frappés dans une
+petite pièce, en plusieurs prises. Les autres effets sonores viennent de [Kenney](https://kenney.nl) (domaine public, CC0) et de [Mixkit](https://mixkit.co) (licence libre
 Mixkit), comme la musique de Briques et celle des entractes de la tournée (Mixkit, licence libre Mixkit). Polices : Young Serif, Libre Franklin, Big Shoulders et Great Vibes (licence OFL). UNO est une marque de Mattel : ce projet est un jeu amateur entre amis, sans lien avec Mattel, et ses cartes sont dessinées à la
 main.
 

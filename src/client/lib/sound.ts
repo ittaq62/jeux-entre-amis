@@ -146,17 +146,17 @@ const FILES: Record<SoundName, string[]> = {
   yourTurn: ["your-turn.mp3"],
   uno: ["uno.mp3"],
   caught: ["caught.mp3"],
-  hit: ["hit.mp3"],
-  bigHit: ["big-hit.mp3"],
+  hit: ["hit.mp3", "hit-2.mp3", "hit-3.mp3"],
+  bigHit: ["big-hit.mp3", "big-hit-2.mp3"],
   skip: ["skip.mp3"],
   reverse: ["reverse.mp3"],
-  wild: ["whoosh.mp3"],
+  wild: ["whoosh.mp3", "whoosh-2.mp3", "whoosh-3.mp3"],
   win: ["win.mp3"],
   lose: ["lose.mp3"],
   click: ["click.mp3"],
-  tick: ["tick.mp3"],
-  chat: ["pop.mp3"],
-  pop: ["pop.mp3"],
+  tick: ["tick.mp3", "tick-2.mp3", "tick-3.mp3"],
+  chat: ["pop.mp3", "pop-2.mp3", "pop-3.mp3"],
+  pop: ["pop.mp3", "pop-2.mp3", "pop-3.mp3"],
   eliminated: ["eliminated.mp3"],
   buzzer: ["buzzer.mp3"],
   achievement: ["achievement.mp3"],
@@ -170,7 +170,7 @@ const FILES: Record<SoundName, string[]> = {
   cardRare: ["card-rare.mp3"],
   cardEpic: ["card-epic.mp3"],
   cardLegend: ["card-legend.mp3"],
-  join: ["join.mp3"],
+  join: ["join.mp3", "join-2.mp3"],
   cannon: ["naval-cannon.mp3"],
   splash: ["naval-splash.mp3"],
   explosion: ["naval-hit.mp3"],
@@ -555,6 +555,8 @@ let master: GainNode | null = null;
 const buffers = new Map<string, AudioBuffer | null>();
 const loading = new Map<string, Promise<AudioBuffer | null>>();
 const lastPlayed = new Map<SoundName, number>();
+/** La dernière prise jouée de chaque son (pour ne pas rejouer la même) */
+const lastTake = new Map<SoundName, number>();
 
 /**
  * Une longue musique en boucle (plus de 20 s) pèse ses 40 Mo une fois décodée (en flottants, en stéréo) : sur un
@@ -697,7 +699,11 @@ export function play(name: SoundName, opts: { volume?: number; rate?: number; de
   const ac = context();
   if (!ac || !master) return;
   const files = FILES[name];
-  const file = files[Math.floor(Math.random() * files.length)]!;
+  // Plusieurs prises d'un même son : jamais deux fois de suite la même (une main ne frappe pas deux fois pareil)
+  let k = Math.floor(Math.random() * files.length);
+  if (files.length > 1 && k === lastTake.get(name)) k = (k + 1 + Math.floor(Math.random() * (files.length - 1))) % files.length;
+  lastTake.set(name, k);
+  const file = files[k]!;
   const asked = performance.now();
   void load(file).then((buffer) => {
     if (!buffer || !master) return;
@@ -710,7 +716,8 @@ export function play(name: SoundName, opts: { volume?: number; rate?: number; de
     source.buffer = buffer;
     source.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);
     const gain = ac.createGain();
-    gain.gain.value = effectsLevel(prefs) * (VOLUME[name] ?? 1) * (opts.volume ?? 1);
+    // Un peu plus fort ou plus doux à chaque fois (environ un décibel), comme la hauteur juste au-dessus
+    gain.gain.value = effectsLevel(prefs) * (VOLUME[name] ?? 1) * (opts.volume ?? 1) * (0.89 + Math.random() * 0.22);
     source.connect(gain).connect(master);
     source.start(ac.currentTime + (opts.delay ?? 0) / 1000);
   });
