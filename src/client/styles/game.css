@@ -88,8 +88,8 @@ html:has(.bolides-root) body {
     color var(--dur-fast);
 }
 
-/* Une touche dorée au survol, comme les lignes des listes du site */
-.menu-item:hover {
+/* Une touche dorée au survol, comme les lignes des listes du site ; une ligne « armée » (on confirme) garde son rouge */
+.menu-item:hover:not(.is-armed) {
   background: rgba(226, 189, 110, 0.08);
 }
 
