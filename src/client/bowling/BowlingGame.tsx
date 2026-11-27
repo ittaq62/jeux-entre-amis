@@ -25,6 +25,8 @@ import { nextFrame } from "../lib/prepare.ts";
 import { FirstSecondsPanel } from "../game/FirstSecondsPanel.tsx";
 import { GameLoading, loadingShown, type LoadingTheme } from "../game/GameLoading.tsx";
 import type { BowlingListeners } from "./useBowlingRoom.ts";
+import { Coach, coachDone } from "../lib/coach.tsx";
+import { BOWLING_COACH, bowlingHaptics } from "./coach.ts";
 
 interface Banner {
   key: number;
@@ -143,6 +145,7 @@ export function BowlingGame({
       onRoll: (sp, vol, g) => sfx.roll(sp, vol, g),
       onMoment: (m: Moment) => {
         sfx.moment(m);
+        bowlingHaptics(m, mySeat);
         if (m.k === "result" && !shown.current.has(m.rec.n)) {
           shown.current.add(m.rec.n);
           const cur = viewRef.current;
@@ -159,7 +162,11 @@ export function BowlingGame({
       onGesture: (g) => {
         if (typeof g === "string")
           setReadout(g === "back" ? "Recule d'abord : ton bras part en arrière." : "Pousse plus vite vers l'avant, et lâche aussitôt !");
-        else setReadout([`${kmh(g.v)} km/h`, spinName(g.s), slantName(g.dev)].filter(Boolean).join(" · "));
+        else {
+          setReadout([`${kmh(g.v)} km/h`, spinName(g.s), slantName(g.dev)].filter(Boolean).join(" · "));
+          // Un premier lancer réussi : la main du coach ne reviendra plus
+          coachDone("bowling");
+        }
       },
     });
     runtime.current = rt;
@@ -334,6 +341,8 @@ export function BowlingGame({
         </div>
       )}
 
+      {/* La main fantôme qui mime le geste, pendant les premiers tours */}
+      <Coach id="bowling" active={Boolean(myTurn && hud?.canThrow && !hud.swinging && !finished)} steps={BOWLING_COACH} />
       {myTurn && hud?.canThrow && !hud.swinging && (
         <>
           <div className="bw-grip" aria-hidden="true">
