@@ -14,7 +14,7 @@ vi.mock("cloudflare:workers", () => ({
 import { ghostTargets, ghostRun } from "../shared/games/bolides/ghost.ts";
 import type { BolidesRoomView } from "../shared/protocol.ts";
 import { BolidesRoom } from "./bolidesRoom.ts";
-import { memoryStore, progressStore, useProgressStore } from "./bolidesProgress.ts";
+import { memoryStore, useProgressStore, type ProgressStore } from "./bolidesProgress.ts";
 import { Bench, FakeState, fakeEnv, installWorkerGlobals, user, type FakeSocket } from "./roomHarness.ts";
 
 installWorkerGlobals();
@@ -35,7 +35,11 @@ interface Data {
 type Room = { finishGame(now: number): Promise<void>; startGame(now: number): Promise<void> };
 
 const open: { stopLoop?: () => void }[] = [];
-beforeEach(() => useProgressStore(memoryStore()));
+let store: ProgressStore;
+beforeEach(() => {
+  store = memoryStore();
+  useProgressStore(store);
+});
 afterEach(() => {
   for (const room of open.splice(0)) room.stopLoop?.();
 });
@@ -88,7 +92,7 @@ describe("Bolides : le championnat", () => {
     await cupRace(bench, host, room, 2);
     const solo = view(host).solo!;
     expect(solo.outcome).toMatchObject({ kind: "coupe", cup: "galet", rank: 1, stars: 3, before: 0, unlocked: "lanterne" });
-    expect((await progressStore().load("hote")).stars["coupe:galet"]).toBe(3);
+    expect((await store.load("hote")).stars["coupe:galet"]).toBe(3);
     expect(solo.progress!.stars["coupe:galet"]).toBe(3);
     // La coupe suivante se choisit maintenant
     await bench.send(host, { t: "settings", settings: { campaign: "lanterne" } });
@@ -152,7 +156,7 @@ describe("Bolides : le contre-la-montre", () => {
     const ms = Math.round((targets.argent + targets.or) / 2);
     const { host } = await chrono(ms, Math.round(ms / 3));
     expect(view(host).solo!.outcome).toMatchObject({ kind: "chrono", track: "vignes", ms, stars: 2, previous: null });
-    const p = await progressStore().load("hote");
+    const p = await store.load("hote");
     expect(p.stars["chrono:vignes"]).toBe(2);
     expect(p.best["chrono:vignes"]).toBe(ms);
   });
@@ -161,6 +165,6 @@ describe("Bolides : le contre-la-montre", () => {
     const fastest = Math.min(...ghostRun("vignes", "or", 3).laps);
     const { host } = await chrono(fastest * 2, Math.round(fastest * 0.7));
     expect(view(host).solo!.outcome).toMatchObject({ kind: "chrono", stars: 0, refused: true });
-    expect((await progressStore().load("hote")).stars["chrono:vignes"]).toBeUndefined();
+    expect((await store.load("hote")).stars["chrono:vignes"]).toBeUndefined();
   });
 });

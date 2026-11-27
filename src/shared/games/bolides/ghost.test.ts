@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { chronoStars, ghostAt, ghostRun, ghostTargets, simulateGhost } from "./ghost.ts";
-import { getTrack, locate, TRACK_IDS } from "./track.ts";
+import { BOLIDES_STARS, CHRONO_GOALS, STAR_TRACKS } from "./stars.ts";
+import { validRule } from "../../stars.ts";
+import { getTrack, locate, TRACK_IDS, TRACKS } from "./track.ts";
 
 describe("les fantômes du contre-la-montre", () => {
   it("refont exactement la même course : le serveur et le jeu voient le même fantôme", () => {
@@ -39,5 +41,17 @@ describe("les fantômes du contre-la-montre", () => {
       expect(Math.abs(locate(t, p.x, p.z).d)).toBeLessThan(t.wall);
     }
     expect(ghostAt(run, run.total + 1000)).toBeNull();
+  });
+
+  it("les seuils des étoiles du contre-la-montre sont bien les temps des fantômes (sinon, recopier ghostTargets ici)", () => {
+    for (const id of TRACK_IDS.flatMap((x) => [x, `${x}-miroir` as const])) {
+      const g = ghostTargets(id);
+      expect(CHRONO_GOALS[id], id).toEqual([g.bronze, g.argent, g.or]);
+    }
+    for (const m of BOLIDES_STARS.maps) expect(validRule(m.rule), m.id).toBe(true);
+    expect(BOLIDES_STARS.maps).toHaveLength(4 + 20);
+    // Les noms recopiés pour l'accueil suivent les vrais circuits
+    expect(STAR_TRACKS.map(([id]) => id)).toEqual(TRACK_IDS);
+    for (const [id, name] of STAR_TRACKS) expect(name).toBe(TRACKS[id].name);
   });
 });

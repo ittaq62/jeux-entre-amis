@@ -2,6 +2,7 @@
 // un podium dans la précédente. Madame Pinson, l'organisatrice, présente chaque coupe ; Mistral, le champion en titre,
 // attend le nouveau venu à chaque arrivée. Et le contre-la-montre : les fantômes de bronze, d'argent et d'or.
 
+import type { AvatarConfig } from "../../avatar.ts";
 import type { BotLevel } from "./bot.ts";
 import type { BaseTrackId } from "./track.ts";
 
@@ -182,6 +183,12 @@ export function totalStars(p: BolidesProgress): number {
 /** Le Mistral de chaque table : son nom et ses couleurs ne changent jamais */
 export const RIVAL_NAME = "Mistral";
 
+/** Les visages des personnages : Madame Pinson, cheveux gris et grand sourire ; Mistral, béret et sourire en coin */
+export const PORTRAITS: Record<Speaker, AvatarConfig> = {
+  pinson: { bg: 2, skin: 1, hair: 3, hairColor: 4, eyes: 0, mouth: 1, hat: 0, extra: 3 },
+  mistral: { bg: 0, skin: 3, hair: 1, hairColor: 0, eyes: 2, mouth: 4, hat: 1, extra: 0 },
+};
+
 /** Ce qui vient d'être gagné en solo à cette table, pour la scène de fin */
 export type SoloOutcome =
   | {
@@ -194,6 +201,9 @@ export type SoloOutcome =
       before: number;
       /** La coupe que ce podium vient d'ouvrir */
       unlocked: CupId | null;
+      /** Les points offerts pour les nouvelles étoiles, et les succès débloqués */
+      points?: number;
+      trophies?: string[];
     }
   | {
       kind: "chrono";
@@ -205,6 +215,8 @@ export type SoloOutcome =
       previous: number | null;
       /** Un tour bien plus rapide que le fantôme d'or : le temps n'est pas retenu */
       refused?: boolean;
+      points?: number;
+      trophies?: string[];
     };
 
 /** Ce que voit le joueur d'une table en solo : sa progression, les fantômes du circuit choisi, ce qu'il vient de gagner */

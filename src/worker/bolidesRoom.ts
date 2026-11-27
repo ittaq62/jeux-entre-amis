@@ -31,6 +31,7 @@ import {
   CUP_IDS,
   CUPS,
   EMPTY_PROGRESS,
+  PORTRAITS,
   RIVAL_NAME,
   chronoKey,
   cupKey,
@@ -526,7 +527,7 @@ export class BolidesRoom extends DurableObject<Env> {
         kind: "bot",
         userId: null,
         name,
-        avatar: seededAvatar(rival ? "Mistral, le champion" : `${name}-${d.code}`),
+        avatar: rival ? PORTRAITS.mistral : seededAvatar(`${name}-${d.code}`),
         photo: 0,
         autoplay: false,
         disconnectedAt: null,
@@ -547,7 +548,7 @@ export class BolidesRoom extends DurableObject<Env> {
     if (known) return known;
     if (!this.progressLoading.has(userId)) {
       this.progressLoading.add(userId);
-      void progressStore()
+      void progressStore(this.env)
         .load(userId)
         .then((p) => {
           this.progress.set(userId, p);
@@ -572,7 +573,7 @@ export class BolidesRoom extends DurableObject<Env> {
     const race = d.race;
     const human = d.seats.find((x) => x.kind === "human" && x.userId);
     if (!race || !human?.userId || d.tour) return;
-    const store = progressStore();
+    const store = progressStore(this.env);
     const s = race.settings;
     if (s.mode === "championnat" && d.cup?.campaign && d.cup.index + 1 >= d.cup.tracks.length) {
       const id = d.cup.campaign;
@@ -581,9 +582,19 @@ export class BolidesRoom extends DurableObject<Env> {
       const rank = order.findIndex(([x]) => x === human.id) + 1 || order.length;
       const stars = cupStars(rank);
       const before = (await store.load(human.userId)).stars[cupKey(id)] ?? 0;
-      this.progress.set(human.userId, await store.award(human.userId, cupKey(id), stars));
+      const won = await store.award(human.userId, cupKey(id), stars);
+      this.progress.set(human.userId, won.progress);
       const unlocked = before === 0 && stars > 0 ? (CUP_IDS.find((c) => CUPS[c].after === id) ?? null) : null;
-      d.solo = { kind: "coupe", cup: id, rank, stars, before, unlocked };
+      d.solo = {
+        kind: "coupe",
+        cup: id,
+        rank,
+        stars,
+        before,
+        unlocked,
+        points: won.result?.points ?? 0,
+        trophies: won.result?.unlocked ?? [],
+      };
       this.systemChat(
         stars > 0
           ? `${human.name} finit la ${def.name} ${rank === 1 ? "en tête" : `à la ${rank}e place`} : ${stars} étoile${stars > 1 ? "s" : ""}.`
@@ -599,7 +610,8 @@ export class BolidesRoom extends DurableObject<Env> {
       const fastest = Math.min(...ghostRun(race.track, "or", s.laps).laps);
       const refused = r.stats.bestLap > 0 && r.stats.bestLap < fastest * 0.85;
       const stars = refused ? 0 : chronoStars(race.track, r.finish, s.laps);
-      if (!refused) this.progress.set(human.userId, await store.award(human.userId, key, stars, r.finish));
+      const won = refused ? null : await store.award(human.userId, key, stars, r.finish);
+      if (won) this.progress.set(human.userId, won.progress);
       d.solo = {
         kind: "chrono",
         track: race.track,
@@ -608,6 +620,8 @@ export class BolidesRoom extends DurableObject<Env> {
         before: before.stars[key] ?? 0,
         previous: before.best[key] ?? null,
         ...(refused ? { refused: true } : {}),
+        points: won?.result?.points ?? 0,
+        trophies: won?.result?.unlocked ?? [],
       };
     }
   }
@@ -891,6 +905,8 @@ export class BolidesRoom extends DurableObject<Env> {
         if (d.status === "finished" && !d.tour) {
           const problem = this.startProblem();
           if (problem) return this.send(ws, { t: "error", message: problem });
+          // Seul au championnat ou au contre-la-montre : personne à attendre, la course suivante part tout de suite
+          if (this.mode() !== "course") return this.startGame(now, ws);
           return this.openAnnounce(now);
         }
         return this.startGame(now, ws);
