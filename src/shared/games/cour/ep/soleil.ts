@@ -121,7 +121,9 @@ function planBots(s: SoleilState, ctx: EpCtx) {
     s.bot.go[i] = s.headAt + react * 1000;
     // Il anticipe la fin du chant, plus ou moins bien ; parfois il est trop gourmand (ce que veut le metteur en scène)
     let stop = len + byLevel(lv, [0.06, -0.04, -0.14]) + gauss(ctx.rng) * byLevel(lv, [0.16, 0.1, 0.06]);
-    if (random(ctx.rng) < p) stop = len + between(ctx.rng, 0.48, 0.85);
+    // Trop gourmand : il court encore quand le regard commence pour de bon (après le demi-tour et la grâce), et se fait
+    // prendre quelle que soit la cadence du serveur (avant, il ne restait qu'une fenêtre de 90 ms pour le voir freiner)
+    if (random(ctx.rng) < p) stop = len + TURN_S + SOLEIL_GRACE + between(ctx.rng, 0.06, 0.4);
     // Tout près de la ligne, il fonce (il passe s'il peut, sinon il s'arrête comme les autres)
     s.bot.stop[i] = s.headAt + stop * 1000;
   }
@@ -167,8 +169,9 @@ export function soleilTick(s: SoleilState, ctx: EpCtx) {
     if (s.st[i] !== PLAYING) continue;
     const id = s.ids[i]!;
     if (ctx.auto(id)) {
-      // Le bot court pendant le chant, entre son départ et son arrêt prévus ; tout le reste du temps, il ne bouge pas
-      s.run[i] = s.head === "dos" || s.head === "tourne" ? now >= s.bot.go[i]! && now < s.bot.stop[i]! : false;
+      // Le bot court entre son départ et son arrêt prévus, même si le tournesol s'est déjà retourné (le gourmand) ;
+      // pendant que la tête revient (« retourne »), il attend le chant suivant
+      s.run[i] = s.head !== "retourne" && now >= s.bot.go[i]! && now < s.bot.stop[i]!;
       if (s.head === "dos" && s.z[i]! > SOLEIL_LEN - 3) s.run[i] = now >= s.bot.go[i]!;
     }
     const v0 = s.v[i]!;
