@@ -6,6 +6,7 @@ import { tableDraw } from "../game/RandomRules.tsx";
 import { useTourBridge } from "../tour/bridge.ts";
 import { TablePick } from "../tour/TablePick.tsx";
 import { CourGame } from "./CourGame.tsx";
+import { takeCampaignChapter } from "./campaignStart.ts";
 import { CourLobby } from "./CourLobby.tsx";
 import { LookPicker } from "./LookPicker.tsx";
 import { useCourRoom } from "./useCourRoom.ts";
@@ -19,6 +20,8 @@ export function CourRoom({ code }: { code: string }) {
   const [lobbyOpen, setLobbyOpen] = useState(false);
   const lastStatus = useRef(view?.status);
   const asked = useRef(false);
+  // Le chapitre demandé par la page de la campagne, repris une fois en arrivant ; on attend son départ (6 s au plus)
+  const [chapter, setChapter] = useState(() => takeCampaignChapter(code));
   const bridge = useTourBridge();
   const messages = bridge?.chat ?? chat;
   const unread = useUnread(messages, chatOpen, me?.id);
@@ -30,11 +33,12 @@ export function CourRoom({ code }: { code: string }) {
 
   // Un chapitre de la campagne, demandé par la page de la campagne : on le lance dès qu'on est assis à sa table
   useEffect(() => {
-    const chapter = new URLSearchParams(location.search).get("campagne");
     if (!chapter || !view || asked.current || view.status !== "lobby" || !view.you.isHost || !view.you.seatId) return;
     asked.current = true;
     send({ t: "campagne", chapter });
-  }, [view, send]);
+    // Si la salle refuse (quelqu'un d'autre s'est assis), le salon revient au lieu d'une attente sans fin
+    setTimeout(() => setChapter(null), 6000);
+  }, [view, send, chapter]);
 
   if (fatal) return <RoomError message={fatal} />;
   if (!view) return <Loading label={status === "reconnecting" ? "Retour dans la cour…" : "Arrivée sur l'île de Récré…"} />;
@@ -83,7 +87,7 @@ export function CourRoom({ code }: { code: string }) {
         )
       ) : announcing ? (
         pick
-      ) : new URLSearchParams(location.search).get("campagne") && view.status === "lobby" ? (
+      ) : chapter && view.status === "lobby" ? (
         <Loading label="La cloche sonne, l'épreuve commence…" />
       ) : (
         <CourLobby

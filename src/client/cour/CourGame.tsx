@@ -363,14 +363,21 @@ function FinalSheet({
   const order = useMemo(() => [...m.cands].sort((a, b) => (ranks[a.id] ?? 99) - (ranks[b.id] ?? 99)), [m.cands, ranks]);
   const shown = order.filter((c, k) => k < 8 || c.id === me || roster.find((r) => r.id === c.id)?.userId);
   const winner = roster.find((r) => r.id === m.winner);
+  // Sans finale (une épreuve seule, un chapitre de campagne), pas de Cloche d'or ni de finalistes : le meilleur score et
+  // ceux qui ont passé l'épreuve
+  const hasFinal = m.program.includes("polochons");
   const title = campaign
     ? (campaign.score ?? 0) > 0
       ? "Épreuve réussie !"
       : "Éliminé…"
     : m.winner === me
-      ? "Tu remportes la Cloche d'or !"
+      ? hasFinal
+        ? "Tu remportes la Cloche d'or !"
+        : "Tu fais le meilleur score !"
       : winner
-        ? `${winner.name} remporte la Cloche d'or`
+        ? hasFinal
+          ? `${winner.name} remporte la Cloche d'or`
+          : `Meilleur score : ${winner.name}`
         : "Fin du grand jeu";
   const roundName = (k: number) => (k >= 0 && m.program[k] ? EPREUVE_INFO[m.program[k]!].name : "");
   return (
@@ -398,9 +405,13 @@ function FinalSheet({
                   <strong>{c.id === me ? "Toi" : (info?.name ?? "?")}</strong>
                   <small>
                     {c.id === m.winner
-                      ? "La Cloche d'or"
+                      ? hasFinal
+                        ? "La Cloche d'or"
+                        : "meilleur score"
                       : c.alive
-                        ? "finaliste"
+                        ? hasFinal
+                          ? "finaliste"
+                          : "épreuve passée"
                         : `${OUT_WORDS[c.outHow ?? ""] ?? "éliminé"} · ${roundName(c.outRound)}`}
                   </small>
                 </span>

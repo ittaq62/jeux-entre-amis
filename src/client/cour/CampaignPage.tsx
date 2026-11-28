@@ -11,6 +11,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { toast } from "../lib/toast.ts";
 import { GameStarsTotal, MapStars, StarGoals } from "../stars/Stars.tsx";
 import { useGameStars } from "../stores/stars.ts";
+import { leaveCampaignChapter } from "./campaignStart.ts";
 import "./cour.css";
 
 export function CampaignPage() {
@@ -31,6 +32,7 @@ export function CampaignPage() {
     setBusy(chapter);
     try {
       const { code } = await api.post<{ code: string }>("/rooms", { visibility: "private", game: "cour" });
+      leaveCampaignChapter(code, chapter);
       navigate(`/salon/${code}?campagne=${chapter}`);
     } catch (err) {
       toast({ tone: "danger", title: err instanceof ApiError ? err.message : "La cour est fermée pour l'instant." });
