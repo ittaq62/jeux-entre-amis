@@ -275,7 +275,8 @@ export function ToqueGame({
   // Le chargement (voir shared/loadGate.ts), et la cinématique d'arrivée dans une nouvelle cuisine (la première fois)
   const [prep, setPrep] = useState({ share: 0, done: false });
   const campaign = view.config.mode === "service" && !room.tour;
-  const [story, setStory] = useState(() => campaign && !arrivalSeen(kitchen));
+  // (seulement pour ceux qui cuisinent : un spectateur arrive directement sur le service)
+  const [story, setStory] = useState(() => campaign && seated && !arrivalSeen(kitchen));
   const gateClock = useGateClock(room.gate, serverOffset);
   useLoadedSignal(room.gate, room.you.seatId, prep.done && !story, send);
   const live = prep.done && gateClock.passed && room.status === "playing";

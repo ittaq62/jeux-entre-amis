@@ -12,15 +12,17 @@ import { DishIcon } from "./FoodIcon.tsx";
 
 /** Où est chaque étape sur la carte (le dessin fait 1000 × 640) */
 const SPOTS: Record<KitchenId, [number, number]> = {
-  bistrot: [520, 172],
-  creperie: [218, 218],
-  cantine: [392, 300],
-  pizzeria: [812, 548],
-  brasserie: [640, 372],
-  chalet: [792, 352],
-  train: [668, 486],
-  guinguette: [606, 150],
-  banquet: [498, 410],
+  // Une boucle sans croisement : Paris, la Bretagne, la Loire, le Midi, Lyon, les Alpes, le train vers le nord-est, la
+  // Marne, et le banquet au cœur du pays
+  bistrot: [500, 160],
+  creperie: [215, 222],
+  cantine: [335, 330],
+  pizzeria: [565, 548],
+  brasserie: [645, 418],
+  chalet: [786, 352],
+  train: [752, 216],
+  guinguette: [632, 132],
+  banquet: [470, 338],
 };
 
 /** Le petit dessin de chaque étape, dans sa pastille */

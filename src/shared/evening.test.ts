@@ -49,6 +49,12 @@ describe("le sel d'une soirée : une ligne tirée des chiffres", () => {
     expect(atGame("Mèche")).toBe("à Mèche");
     expect(atGame("Culbute")).toBe("à Culbute");
     expect(atGame("Toque !")).toBe("à Toque !");
+    // Un nom qui finit par « ! » ne prend ni point ni second « ! »
+    expect(eveningLine({ ...base, gameName: "Toque !", rank: 1, winsInGame: 1 })).toBe("Ta toute première victoire à Toque !");
+    const lose = [1, 2, 3].map(() => ({ mine: 2, theirs: 1 }));
+    expect(eveningLine({ ...base, gameName: "Toque !", rivals: [{ name: "Basile", duels: lose }] })).toBe(
+      "Basile te bat pour la 3e fois d'affilée à Toque !",
+    );
     expect(atGame("Bowling")).toBe("au Bowling");
     expect(atGame("La Cour des Grands")).toBe("à La Cour des Grands");
     expect(atGame("La Tournée")).toBe("à la tournée");

@@ -49,6 +49,11 @@ export function atGame(name: string): string {
   return `au ${name}`;
 }
 
+/** La fin d'une phrase : pas de point ni de « ! » de plus après un nom de jeu qui finit déjà par « ! » (Toque !) */
+function close(text: string, mark: "." | " !"): string {
+  return text.endsWith("!") ? text : `${text}${mark}`;
+}
+
 /** La ligne du joueur, ou null s'il n'y a rien de remarquable */
 export function eveningLine(input: EveningInput): string | null {
   // Une série contre un même ami, la plus longue
@@ -59,10 +64,10 @@ export function eveningLine(input: EveningInput): string | null {
   }
   if (best) {
     return best.mine
-      ? `Tu bats ${best.name} pour la ${best.count}e fois d'affilée ${atGame(input.gameName)}.`
-      : `${best.name} te bat pour la ${best.count}e fois d'affilée ${atGame(input.gameName)}.`;
+      ? close(`Tu bats ${best.name} pour la ${best.count}e fois d'affilée ${atGame(input.gameName)}`, ".")
+      : close(`${best.name} te bat pour la ${best.count}e fois d'affilée ${atGame(input.gameName)}`, ".");
   }
-  if (input.rank === 1 && input.winsInGame === 1) return `Ta toute première victoire ${atGame(input.gameName)} !`;
+  if (input.rank === 1 && input.winsInGame === 1) return close(`Ta toute première victoire ${atGame(input.gameName)}`, " !");
   if (input.rank === 1 && input.winsTonight >= 2) return `Ta ${input.winsTonight}e victoire de la soirée.`;
   return null;
 }

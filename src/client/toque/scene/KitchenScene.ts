@@ -149,7 +149,7 @@ export class KitchenScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.className = "tq-canvas";
     this.renderer.info.autoReset = false;
     host.appendChild(this.renderer.domElement);

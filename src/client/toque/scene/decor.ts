@@ -242,8 +242,9 @@ export function buildDecor(k: Kitchen, theme: Theme, keep: Keep, touch: boolean)
       root.add(sea.mesh);
       ticks.push((c) => sea.tick(c));
       // La coque : une caisse de bois bleu qui s'enfonce dans l'eau, plus large que le pont
-      b.box(W + 0.6, 1.0, H + 0.6, "#2a4a6a", 0, -1.0, 0);
-      b.box(W + 0.7, 0.12, H + 0.7, "#e8e2d2", 0, -0.08, 0);
+      b.box(W + 0.6, 1.0, H + 0.6, "#2a4a6a", 0, -1.06, 0);
+      // Le liseré blanc du pont, juste sous le plancher de la cuisine (au-dessus, il cachait les planches)
+      b.box(W + 0.7, 0.12, H + 0.7, "#e8e2d2", 0, -0.15, 0);
       // La proue, pointue, à droite ; la poupe à gauche
       const bow = new THREE.ConeGeometry((H + 0.6) / 2, 2.6, 4, 1);
       bow.rotateZ(-Math.PI / 2);

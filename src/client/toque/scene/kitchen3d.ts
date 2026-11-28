@@ -118,9 +118,13 @@ export function buildKitchen3D(k: Kitchen, theme: Theme, kit: FoodKit, keep: Kee
   const minX = -k.W / 2;
   const minZ = -k.H / 2;
   let maxX = k.W / 2;
+  // La cuisine s'élargit seulement si un morceau qui touche le bord droit s'en écarte (le wagon du train) ; les tables
+  // qui glissent à l'intérieur (la cantine, le banquet) ne déplacent pas le mur
   for (let s = 1; s < k.moving.length; s++) {
     const m = k.motions[s];
     if (!m) continue;
+    const edge = k.cells.some((_, i) => k.section[i] === s && i % k.W === k.W - 1);
+    if (!edge) continue;
     for (const mv of m.moves) maxX = Math.max(maxX, k.W / 2 + mv.dx);
   }
 

@@ -143,7 +143,8 @@ export function ToqueGameOver({
             <dd className="num">{team.best}</dd>
           </div>
         </dl>
-        <EloLine result={room.results?.[room.you.userId]} />
+        {/* En brigade, pas d'Elo : les étoiles font les points */}
+        {view.duel && <EloLine result={room.results?.[room.you.userId]} />}
         <ol className="tq-over-chefs">
           {view.owners.map((o, i) => {
             const seat = room.seats.find((s) => s.id === o.seat);
