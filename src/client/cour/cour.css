@@ -112,6 +112,42 @@
   text-overflow: ellipsis;
 }
 
+/* Au téléphone debout, la barre du haut se serre : le compte sans le mot, le nom de l'épreuve sur une ligne */
+@media (max-width: 480px) {
+  .cg-top {
+    gap: 6px;
+  }
+
+  .cg-count {
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+
+  .cg-count strong {
+    font-size: 22px;
+  }
+
+  .cg-count-word {
+    display: none;
+  }
+
+  .cg-epname {
+    flex: 1 1 auto;
+    padding: 4px 9px 5px;
+  }
+
+  .cg-epname small {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cg-epname strong {
+    font-size: 16px;
+  }
+}
+
 /* Les cinématiques : de grands titres qui entrent, des lignes qui apparaissent une à une */
 .cg-cine {
   position: absolute;

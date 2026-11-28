@@ -160,7 +160,9 @@ export function CourGame({
       <header className="cg-top">
         <div className="cg-count">
           <strong className="num">{alive}</strong>
-          <small>/ {m.cands.length} candidats</small>
+          <small>
+            / {m.cands.length} <span className="cg-count-word">candidats</span>
+          </small>
         </div>
         {info && phase !== "intro" && phase !== "ff" && !finished && (
           <div className="cg-epname" style={{ "--ep": info.color } as React.CSSProperties}>
