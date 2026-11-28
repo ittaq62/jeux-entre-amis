@@ -48,6 +48,7 @@ describe("le sel d'une soirée : une ligne tirée des chiffres", () => {
     expect(atGame("Bataille navale")).toBe("à la bataille navale");
     expect(atGame("Mèche")).toBe("à Mèche");
     expect(atGame("Culbute")).toBe("à Culbute");
+    expect(atGame("Toque !")).toBe("à Toque !");
     expect(atGame("Bowling")).toBe("au Bowling");
     expect(atGame("La Cour des Grands")).toBe("à La Cour des Grands");
     expect(atGame("La Tournée")).toBe("à la tournée");
