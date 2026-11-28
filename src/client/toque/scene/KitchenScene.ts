@@ -104,6 +104,8 @@ export class KitchenScene {
   private chefs = new Map<number, ChefModel>();
   private rings = new Map<number, THREE.Mesh>();
   private tags = new Map<number, THREE.Sprite>();
+  /** Le nom au-dessus de chaque chef et l'anneau à ses pieds (pas sur une affiche) */
+  showNames = true;
   private items = new Map<number, ItemShown>();
   private stacks = new Map<number, { n: number; dirty: boolean; obj: THREE.Group }>();
   private bars: Bar[] = [];
@@ -547,12 +549,12 @@ export class KitchenScene {
       );
       const ring = this.rings.get(c.slot);
       if (ring) {
-        ring.visible = !fallen;
+        ring.visible = !fallen && this.showNames;
         ring.position.set(wx, 0.012, wz);
       }
       const tag = this.tags.get(c.slot);
       if (tag) {
-        tag.visible = !fallen;
+        tag.visible = !fallen && this.showNames;
         tag.position.set(wx, 1.55, wz);
       }
       if (c.act === ACT_SPRAY && !fallen) this.fx.spray(wx + c.fx * 0.35, 0.55, wz + c.fy * 0.35, c.fx, c.fy, dt);
@@ -660,10 +662,9 @@ export class KitchenScene {
       } else if (st.kind === Cell.Sink && w.wash[i]! > 0) this.bar(x, y + 0.45, z, w.wash[i]!, "#5aa8e0", null);
       if (burning) this.bar(x, y + 0.9, z, 1, "#f08a24", "fire", true);
     }
-    for (const b of this.bars) {
-      b.bg.visible = b.fill.visible = b.icon.visible = b.used && b.bg.visible;
-      if (!b.used) b.bg.visible = b.fill.visible = b.icon.visible = false;
-    }
+    // Les jauges de trop se cachent ; les autres gardent ce que bar() a montré (une icône seule pour le feu, une jauge sans
+    // icône pour la coupe : l'icône vide ne doit jamais se montrer, elle resterait au milieu de la cuisine)
+    for (const b of this.bars) if (!b.used) b.bg.visible = b.fill.visible = b.icon.visible = false;
     // Les éclats de ce qu'on coupe, et les bulles de la vaisselle
     for (const c of f.chefs) {
       if (c.out > 0) continue;
@@ -730,7 +731,6 @@ export class KitchenScene {
       const s = icon === "fire" ? 0.42 : 0.3;
       b.icon.scale.set(s, s, 1);
     }
-    if (!iconOnly) b.bg.visible = true;
   }
 
   private updateStacks(w: World, off: [number, number][]) {
